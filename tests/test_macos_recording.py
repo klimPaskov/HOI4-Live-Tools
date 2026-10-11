@@ -242,6 +242,30 @@ class MacRecordingTests(unittest.TestCase):
         source.write.assert_not_called()
         self.assertFalse(process.stdin.closed)
 
+    def test_running_metadata_reports_new_frames_before_shutdown(self):
+        a, process, source = self.prepare(), Process(), mock.Mock()
+        source.inspect.return_value = (0, 0, 4, 4)
+        source.frame.return_value = bytes(48)
+        now = [0.0]
+        def sleep(_seconds):
+            now[0] += 6
+        observed = []
+        original = recorder.write_json
+        def write(path, value):
+            if path.name == "recording.json" and value.get("status") == "running":
+                observed.append(dict(value))
+                if value.get("frames_written", 0) >= 2:
+                    recorder.request_stop(self.out, self.token)
+            return original(path, value)
+        with mock.patch.object(recorder, "budget_status", return_value=self.budget), \
+             mock.patch.object(recorder, "write_json", side_effect=write):
+            info = recorder.run(a, frame_source_factory=mock.Mock(return_value=source),
+                                popen=mock.Mock(return_value=process), sleep=sleep, monotonic=lambda: now[0])
+        self.assertEqual(info["status"], "stopped")
+        self.assertEqual([r["frames_written"] for r in observed], [1, 2])
+        self.assertIn("last_frame_epoch", observed[-1])
+        self.assertIn("supervisor_checked_epoch", observed[-1])
+
     def test_changed_frame_retries_with_gap_and_fresh_inspection(self):
         a, process, source = self.prepare(), Process(), mock.Mock()
         source.inspect.return_value = (0, 0, 4, 4)

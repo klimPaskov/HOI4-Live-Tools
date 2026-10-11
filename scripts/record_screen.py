@@ -354,8 +354,12 @@ def run(a, *, inspect=inspect_owned_window, popen=subprocess.Popen, sleep=time.s
             info.update(status="running", supervisor_pid=os.getpid(), ffmpeg_pid=process.pid,
                         pid=process.pid, capture_size=[w, h], client=list(client),
                         cmd=command, budget=budget, capture_started_epoch=time.time())
+            if source:
+                info["last_frame_epoch"] = time.time()
+            info["supervisor_checked_epoch"] = time.time()
             write_json(out / "recording.json", info)
             next_frame = monotonic()
+            last_status = next_frame
             frame_retries = 0
             gap_started = None
             while True:
@@ -411,10 +415,17 @@ def run(a, *, inspect=inspect_owned_window, popen=subprocess.Popen, sleep=time.s
                         gap_started = None
                     frame_retries = 0
                     info["frames_written"] = info.get("frames_written", 0) + 1
+                    info["last_frame_epoch"] = time.time()
                     next_frame = max(next_frame + 1.0 / options.fps, monotonic())
                     sleep(max(0, next_frame - monotonic()))
                 else:
                     sleep(POLL_SECONDS)
+                if monotonic() - last_status >= 5:
+                    # Status readers must be able to distinguish a live producer
+                    # from its stale startup metadata without capturing a frame.
+                    info["supervisor_checked_epoch"] = time.time()
+                    write_json(out / "recording.json", info)
+                    last_status = monotonic()
         info["status"] = "stopped"
     except BaseException as error:
         info.update(status="error", error=str(error))
