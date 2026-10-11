@@ -274,6 +274,33 @@ class FastClockTests(ClockCase):
 
 
 class ShutdownTests(unittest.TestCase):
+    def test_input_closes_before_releasing_desktop_lease(self):
+        import helpers
+        session = helpers.make_session()
+        events = []
+        session.input = mock.Mock()
+        session.input.close.side_effect = lambda: events.append("input")
+        session.lock = mock.Mock()
+        session.lock.release_all.side_effect = lambda: events.append("lease")
+        session.shutdown()
+        self.assertEqual(events, ["input", "lease"])
+
+    def test_running_worker_defers_input_and_lease_teardown(self):
+        import helpers
+        session = helpers.make_session()
+        run = mock.Mock()
+        run.done = threading.Event()
+        session.clock = run
+        session.input = mock.Mock()
+        session.lock = mock.Mock()
+        self.assertFalse(session.shutdown())
+        session.input.close.assert_not_called()
+        session.lock.release_all.assert_not_called()
+        run.done.set()
+        session.shutdown()
+        session.input.close.assert_called_once()
+        session.lock.release_all.assert_called_once()
+
     def test_a_background_run_is_stopped_when_the_session_shuts_down(self):
         import helpers
         from hoi4_live.session import Session

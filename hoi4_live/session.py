@@ -307,6 +307,22 @@ class Session:
                 run.join(20)
             except Exception:
                 pass
+            if not run.done.is_set():
+                log.warning("session shutdown deferred: background clock still owns resources")
+                return False
+        # Release only input held by this adapter, while it still owns the
+        # desktop lease. Never race a tool which is midway through an action.
+        if not self.ui_mutex.acquire(timeout=1):
+            log.warning("session shutdown deferred: input action still running")
+            return False
+        try:
+            close_input = getattr(self.input, "close", None)
+            if callable(close_input):
+                close_input()
+        except Exception:
+            log.exception("could not release session-held input during shutdown")
+        finally:
+            self.ui_mutex.release()
         try:
             if self._memory_process is not None:
                 self._memory_process.close()

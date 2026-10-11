@@ -57,6 +57,10 @@ class Native:
     def __init__(self):
         self._modules = None
         self._process_manager = None
+        from .. import perf
+        for method, key in (("geometry", "mac_geometry"), ("_shareable_window", "mac_sck_enumeration"),
+                            ("_screenkit", "mac_sck_capture"), ("_rgb", "mac_rgb")):
+            perf.instrument(self, [method], key)
 
     def _load(self):
         if self._modules is None:
@@ -323,9 +327,8 @@ class Native:
             rgb = rgb[top:top + height, left:left + width].copy()
         return rgb, selected
 
-    def _screenkit(self, info, geometry, timeout):
+    def _shareable_window(self, info, timeout):
         import ScreenCaptureKit as sc
-        q, _, _ = self._load()
         done = threading.Event()
         outcome = []
         def content_ready(content, error):
@@ -342,7 +345,12 @@ class Native:
                    int(w.owningApplication().processID()) == info["pid"]]
         if len(matches) != 1:
             raise unavailable("capture", "owned window disappeared from ScreenCaptureKit")
-        filt = sc.SCContentFilter.alloc().initWithDesktopIndependentWindow_(matches[0])
+        return matches[0]
+
+    def _screenkit(self, info, geometry, timeout):
+        import ScreenCaptureKit as sc
+        window = self._shareable_window(info, timeout)
+        filt = sc.SCContentFilter.alloc().initWithDesktopIndependentWindow_(window)
         config = sc.SCStreamConfiguration.alloc().init()
         frame_width = int(round(info["bounds"][2] * geometry.scale))
         frame_height = int(round(info["bounds"][3] * geometry.scale))
