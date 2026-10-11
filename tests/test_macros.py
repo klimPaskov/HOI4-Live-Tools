@@ -318,10 +318,11 @@ class GameModeTests(unittest.TestCase):
         session = mock.Mock()
         session.cfg.saves_dir = os.path.dirname(p)
         session._mode_cache = None
+        gamemode.begin_run(session, time.time() - 10)
         with self.assertRaises(ToolError) as cm:
             gamemode.check(session, "hoi4_console")
         self.assertEqual(cm.exception.details["error"], "ironman")
         old = time.time() - 7 * 3600
         os.utime(p, (old, old))
         session._mode_cache = None
-        self.assertTrue(gamemode.check(session, "hoi4_console")["ironman"])      # an old save says nothing
+        self.assertFalse(gamemode.check(session, "hoi4_console")["known"])      # an old save says nothing

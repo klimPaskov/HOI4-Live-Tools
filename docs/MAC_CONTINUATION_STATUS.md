@@ -81,7 +81,7 @@ hidden intelligence and reload-to-undo. META permits normal-UI metas and exploit
 it does not waive those prohibitions. The older `hoi4-live-campaign` skill's
 QA setup and repeated pause/save examples are not the procedure for these runs.
 
-## Actual local evidence and external blocker
+## Actual local evidence and current smoke testing
 
 The installed Mac binary is x86_64 **Case Green 1.18.0.0.858d (3bae)** on Apple
 Silicon. It is not the 1.19.2 Windows/reference build. Independent on-disk Mach-O
@@ -113,25 +113,62 @@ Homebrew CLI shim was broken; the working app-bundled CLI verified registration.
 The active chat may need a fresh server connection to expose newly registered
 tools. Do not publish the private config backup or raw smoke artifacts.
 
-Independent checkpoint validation passed **657 tests, 26 skipped**, plus
-compile/import and stdio smoke checks, including the final preflight and lease-inheritance assertions.
-Consult the latest test result recorded with the checkpoint for the final count.
-Skips include platform-specific and unavailable private-fixture cases. Hosted Windows
-runners do not have proprietary HOI4 font files: the complete glyph-assisted
-fixture assertions require those files, while separate OCR-only tests verify
-recognized values and explicit unknowns. Injected Mac identity tests use POSIX
-path semantics even when the test host is Windows. Native
-Vision recognized generated text; some Windows golden screenshots are not yet
-accurately recognized by Vision. Offline and synthetic checks are not live
-acceptance, recording evidence or proof of gameplay strength.
+The desktop was subsequently unlocked and live work resumed. A temporary macOS
+power assertion prevents idle sleep while testing; saved power preferences were
+not changed. The user now permits mods that support live play, while campaign
+gameplay rules remain vanilla. The current run enables only observational
+telemetry. Additional helpers require review before entering the campaign playset.
+
+The resumed builder smoke tests found and corrected these failures:
+
+- Fullscreen window focus/discovery mishandled a same-process title overlay and
+  windows on another Space. Ownership remains tied to creation and executable.
+- ScreenCaptureKit applied the window origin twice, shifting captures by 68
+  physical pixels and causing a menu misclick. The multiplayer menu opened;
+  no lobby was joined. Comparison with Quartz now shows aligned captures.
+- A recording supervisor died with its spawning process group. Its zero-byte
+  output was rejected. The corrected supervisor produced six live segments,
+  1,039 decoded frames at 3420 × 2146, approximately 173.5 seconds, with all
+  ffprobe checks passing and graceful stop verified. This is recording smoke
+  evidence, not campaign-duration throughput acceptance.
+- A pre-campaign relaunch inherited the user's restored playset. No campaign
+  began in that process. It was closed and original configuration restored;
+  launch now validates the reviewed campaign playset before starting.
+- Owned child-process exit now reaps the child instead of treating a zombie as
+  a running game. Configuration restoration followed verified exit.
+
+Germany's 1936 setup visibly showed Regular (Normal) difficulty, historical AI
+on and Ironman off. The ordinary Custom Game Rules → Reset → Apply action was
+verified, with evidence retained; individual rule values were not exhaustively
+read. START was issued and an own-country GER telemetry handshake appeared.
+The map date was independently read from a logical-resolution frame. A transient
+display loss interrupted the original startup call; the game remained paused on
+day one. Session capture/input now share logical client coordinates, while
+recording retains native backing pixels. Daily telemetry and in-game action
+verification are still being tested. This
+builder smoke run is not the clean Luna acceptance run.
+
+Focus observation now has bounded, generation-matched, closed daily batches for
+the current tree's completed IDs and progress bounds. Progress never establishes
+which focus is active. Current focus identity requires unique screen evidence;
+unreadable state remains unknown. Live daily runtime and script-overhead checks
+remain outstanding. Campaign selection requires an installed ID and verified
+Start requirements. Freshness checks reject unrelated stale save metadata.
+
+Latest local validation passed **709 tests, 26 skipped**, with a clean whitespace
+check. The last pushed checkpoint's four Windows/macOS × Python 3.9/3.13 CI jobs
+passed; the current smoke fixes still need their own cross-platform CI run.
+Skips include platform-specific and unavailable private-fixture cases. Hosted
+runners cannot prove native game behavior. No clean two-year run, complete
+showcase, validated Mac memory layout or release acceptance has been achieved.
 
 ## Resume from here
 
-1. The Mac desktop must be unlocked by the user before live work. Recheck native
-   session/display/permission capabilities before launching or changing settings.
-2. Start a fresh owned normal smoke run with the observational playset and
-   recording checks. Validate client bounds, Retina scale, input modifiers,
-   clipboard, OCR and real own-country telemetry on this installed build.
+1. Preserve exclusive game input ownership during the active builder smoke test.
+   Recheck session/display/permission capabilities at each owned launch.
+2. Complete the current normal smoke run's live daily telemetry, Retina/UI scale,
+   input, clipboard, OCR and action readback checks. Retain segmented recording
+   and incidents outside Git; restore configurations only after verified exit.
 3. Finish fresh ID-based focus/construction/production/army observations and
    verified daily execution; connect the FAIR reviewer to trusted observations.
    Prove shortages are repaired rather than merely reported. Preserve pending
@@ -146,6 +183,6 @@ acceptance, recording evidence or proof of gameplay strength.
    or failed run cannot be relabeled clean. Complete all three showcases after
    acceptance, then validate Windows regressions before release/pin changes.
 
-An unlocked desktop is a concrete external prerequisite. The unfinished governor,
-FAIR observation adapter and war automation are internal implementation gaps,
-not claims of external blockage or completed work.
+The earlier locked-desktop prerequisite is resolved. The unfinished governor,
+FAIR observation adapter and war automation remain internal implementation gaps,
+not external blockers or completed work.
