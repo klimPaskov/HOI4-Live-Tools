@@ -54,6 +54,4 @@ first prompt. Historical reports describe earlier stop times; the preserved
 - Preserve `wip/governor-memory`; release only tested changes. Version/changelog,
   audited archives and release pins for HOI4 Mod Setup/Agentic HOI4 Modding must
   agree. Windows downstream pins move only after the release is accepted.
-- Every new commit message ends with a blank line and:
-
-  `Co-Authored-By: Codex (gpt-6-astra) <noreply@openai.com>`
+- Never add Co-Authored-By, "Generated with" or any AI attribution line to commits or PRs: the user is the sole author.
