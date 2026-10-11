@@ -17,6 +17,33 @@ current Mac checkpoint.
 
 ## Current live and Linux checkpoint
 
+The latest Mac smoke uses **1.19.3**, after Steam updated the installed game from
+1.18 while it was closed. Exact executable checks refused the old checkpoint;
+its save remains preserved and was not loaded across builds. A fresh historical,
+Regular-difficulty Germany campaign reached 2 May 1936. The governor advanced
+76 days in 58.8 seconds, but research actions took 18–34 seconds and queues stayed
+idle. Basic Machine Tools and a later Construction I retry were verified through
+ordinary UI actions. This is diagnostic evidence, **not clean acceptance**.
+
+The recording stopped after 904 frames on a changed-window capture witness.
+The recorder now retries that explicit discarded-frame condition within a
+bounded budget and records every gap; ownership and permission failures still
+stop capture. Startup telemetry can identify the player from its current
+handshake without inventing daily metrics, and generation changes clear old
+observations. Automatic cursor parking is disabled. Per-call Mac capture-stage
+timings were added to guide further latency work without weakening verification.
+The integrated suite passed 922 tests with 35 skips; the preceding telemetry,
+clock and recorder commits passed Windows/macOS/Linux CI. These checks do not
+establish a clean live recording or a successful campaign.
+
+Clausewitz-MCP's pinned MIT source and provenance are now included as the engine
+foundation; shared read primitives are active on all three operating systems.
+The broader structured-state and command integration remains unfinished. See
+[the foundation plan](CLAUSEWITZ_FOUNDATION.md). Linux X11 input/capture has passed
+generated-window tests in Docker, but **Linux HOI4 has not been launched**.
+
+### Earlier 1.18 smoke checkpoint
+
 The Mac diagnostic campaign reached 22 June 1936 and has a recorded ordinary
 save for forward-only resume. It is **not clean acceptance**: earlier idle queues,
 failed actions and a recording gap remain in the incident record. A background
