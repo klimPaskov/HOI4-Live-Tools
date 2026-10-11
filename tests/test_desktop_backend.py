@@ -350,6 +350,73 @@ assert 'hoi4_live.platform.windows_capture' not in sys.modules
             _ = win32.user32
 
 
+class NativeAXWindowTests(unittest.TestCase):
+    def setUp(self):
+        self.info = {"pid": 41, "title": "Game", "bounds": (0, 34, 100, 100)}
+        self.attrs = {"app": {"AXWindows": [], "AXFocusedWindow": "window"},
+                      "window": {"AXRole": "AXWindow", "AXTitle": "Game", "AXFullScreen": True}}
+        self.rects = {"window": self.info["bounds"]}
+        self.native = Native()
+        self.native._load = lambda: (None, None, SimpleNamespace(AXUIElementCreateApplication=lambda pid: "app"))
+        self.native._attr = lambda element, name: self.attrs.get(element, {}).get(name)
+        self.native._ax_rect = lambda element: self.rects.get(element)
+        self.native._same_ax_element = lambda left, right: left == right
+
+    def test_background_focused_window_supplies_verified_fullscreen_geometry(self):
+        self.native.displays = lambda: [(1, Geometry(0, 0, 200, 200, 2))]
+        self.native.permission = lambda feature: None
+        self.assertEqual(self.native.geometry(self.info), Geometry(0, 34, 100, 100, 2))
+
+    def test_focused_fallback_requires_exact_role_title_and_bounds(self):
+        for key, wrong in (("AXRole", "AXApplication"), ("AXTitle", "Other")):
+            old = self.attrs["window"][key]
+            self.attrs["window"][key] = wrong
+            self.assertIsNone(self.native._ax_window(self.info))
+            self.attrs["window"][key] = old
+        self.rects["window"] = (5, 34, 100, 100)
+        self.assertIsNone(self.native._ax_window(self.info))
+
+    def test_duplicate_focused_proxy_does_not_create_ambiguity(self):
+        self.attrs["app"]["AXWindows"] = ["proxy"]
+        self.rects["proxy"] = self.info["bounds"]
+        self.native._same_ax_element = lambda left, right: True
+        self.assertEqual(self.native._ax_window(self.info), "proxy")
+
+    def test_distinct_matching_windows_remain_ambiguous(self):
+        self.attrs["app"]["AXWindows"] = ["other"]
+        self.rects["other"] = self.info["bounds"]
+        self.assertIsNone(self.native._ax_window(self.info))
+
+
+class NativeFrontmostTests(unittest.TestCase):
+    def test_each_query_reads_fresh_pid_and_errors_fail_closed(self):
+        import ctypes
+        native = Native()
+        state = {"pid": 41, "front_status": 0, "pid_status": 0}
+        def front(serial):
+            return state["front_status"]
+        def get_pid(serial, pid):
+            pid._obj.value = state["pid"]
+            return state["pid_status"]
+        native._process_manager = None, ctypes.c_uint64, front, get_pid
+        self.assertEqual(native._frontmost_pid(), 41)
+        state["pid"] = 42
+        self.assertEqual(native._frontmost_pid(), 42)
+        state["front_status"] = -1
+        self.assertIsNone(native._frontmost_pid())
+        state["front_status"] = 0
+        state["pid_status"] = -1
+        self.assertIsNone(native._frontmost_pid())
+        state["pid_status"] = 0
+        state["pid"] = 0
+        self.assertIsNone(native._frontmost_pid())
+
+    def test_missing_native_symbols_cannot_fall_back_to_cached_focus(self):
+        from unittest.mock import patch
+        with patch("ctypes.CDLL", side_effect=OSError("unavailable")):
+            self.assertIsNone(Native()._frontmost_pid())
+
+
 class NativeFocusSafetyTests(unittest.TestCase):
     def setUp(self):
         self.info = {"id": 500, "pid": 41, "title": "Game", "bounds": (0, 0, 100, 100)}
@@ -372,6 +439,7 @@ class NativeFocusSafetyTests(unittest.TestCase):
         self.native = Native()
         self.native._load = lambda: (self.q, self.appkit, self.ax)
         self.native.windows = lambda: self.window_list
+        self.native._frontmost_pid = lambda: self.front_pid
         self.native._attr = lambda element, name: object()
         self.native._ax_rect = lambda element: self.ax_rect
         self.native._ax_window = lambda info: None

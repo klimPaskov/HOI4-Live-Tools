@@ -290,11 +290,12 @@ class Session:
         return os.path.join(self.artifacts_dir, name)
 
     def park_cursor(self):
-        try:
-            fx, fy = self.cfg["input"]["park"]
-            self.input.park(fx, fy)
-        except ToolError:
-            pass
+        """Compatibility hook: leave the cursor at its last intentional position.
+
+        Automatic edge parking can scroll the map and surprises the user. A
+        tooltip/action must move only to its actual observed target.
+        """
+        return None
 
     # ------------------------------------------------------------------ lifecycle
     def shutdown(self):

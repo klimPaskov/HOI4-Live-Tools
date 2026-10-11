@@ -56,6 +56,7 @@ class Native:
     """All calls to the Apple frameworks. Constructors do not request permissions."""
     def __init__(self):
         self._modules = None
+        self._process_manager = None
 
     def _load(self):
         if self._modules is None:
@@ -166,10 +167,24 @@ class Native:
             return None
         return p.a, p.b, s.a, s.b
 
+    @staticmethod
+    def _same_ax_element(left, right):
+        if left is right:
+            return True
+        from CoreFoundation import CFEqual
+        return bool(CFEqual(left, right))
+
     def _ax_window(self, info):
         _, _, ax = self._load()
         application = ax.AXUIElementCreateApplication(info["pid"])
-        candidates = self._attr(application, "AXWindows") or []
+        candidates = list(self._attr(application, "AXWindows") or [])
+        # SDL can omit AXWindows while retaining its exact focused window even
+        # in the background. Reading this attribute must never activate the app.
+        focused = self._attr(application, "AXFocusedWindow")
+        if (focused is not None and self._attr(focused, "AXRole") == "AXWindow"
+                and info.get("title") and self._attr(focused, "AXTitle") == info["title"]
+                and not any(self._same_ax_element(focused, c) for c in candidates)):
+            candidates.append(focused)
         matched = []
         for candidate in candidates:
             bounds = self._ax_rect(candidate)
@@ -213,11 +228,33 @@ class Native:
         raise unavailable("window geometry", "the game does not expose a verified client-content rectangle",
                           "Use fullscreen on a single display; decorated window geometry must be verified first")
 
+    def _frontmost_pid(self):
+        # NSWorkspace's cached frontmostApplication can stay stale in a stdio
+        # worker without an AppKit run loop. Query Process Manager each time.
+        import ctypes
+        if self._process_manager is None:
+            class ProcessSerialNumber(ctypes.Structure):
+                _fields_ = [("high", ctypes.c_uint32), ("low", ctypes.c_uint32)]
+            try:
+                library = ctypes.CDLL("/System/Library/Frameworks/ApplicationServices.framework/ApplicationServices")
+                front, pid = library.GetFrontProcess, library.GetProcessPID
+                front.argtypes = [ctypes.POINTER(ProcessSerialNumber)]
+                front.restype = ctypes.c_int32
+                pid.argtypes = [ctypes.POINTER(ProcessSerialNumber), ctypes.POINTER(ctypes.c_int32)]
+                pid.restype = ctypes.c_int32
+                self._process_manager = library, ProcessSerialNumber, front, pid
+            except (OSError, AttributeError):
+                return None
+        _, serial_type, front, get_pid = self._process_manager
+        serial, pid = serial_type(), ctypes.c_int32()
+        if front(ctypes.byref(serial)) != 0 or get_pid(ctypes.byref(serial), ctypes.byref(pid)) != 0:
+            return None
+        return pid.value if pid.value > 0 else None
+
     def focused(self, info):
         self._require_desktop()
-        _, appkit, ax = self._load()
-        app = appkit.NSWorkspace.sharedWorkspace().frontmostApplication()
-        if app is None or int(app.processIdentifier()) != info["pid"]:
+        _, _, ax = self._load()
+        if self._frontmost_pid() != info["pid"]:
             return False
         # SDL titles can expose AXWindows/AXFocusedWindow as an AXApplication,
         # without any AX window geometry. Quartz still supplies the window-server
@@ -739,8 +776,8 @@ class Input:
         time.sleep(self.settle)
 
     def park(self, fx, fy):
-        w, h = self.window.size()
-        self.move(min(w - 1, int(w * fx)), min(h - 1, int(h * fy)))
+        """Legacy no-op: never move the user's cursor to an automatic edge."""
+        return None
 
     def key_down(self, name):
         name = self._key_name(name)

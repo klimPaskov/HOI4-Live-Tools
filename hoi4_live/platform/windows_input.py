@@ -194,10 +194,8 @@ class Input:
         time.sleep(self.settle)
 
     def park(self, fx, fy):
-        """Move the cursor to a neutral spot (fractions of the client size) so no tooltip covers the screen."""
-        w, h = self.window.size()
-        sx, sy = self.window.to_screen(min(w - 1, int(w * fx)), min(h - 1, int(h * fy)))
-        move_screen(sx, sy)
+        """Legacy no-op: never move the user's cursor to an automatic edge."""
+        return None
 
     # ------------------------------------------------------------------ keyboard
     def key(self, combo, times=1, delay=None):
