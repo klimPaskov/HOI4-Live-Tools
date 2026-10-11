@@ -15,10 +15,10 @@ jobs:
     runs-on: ${{ matrix.os }}
     env:
       HOI4_LIVE_MODE: test
-      HOI4_LIVE_CONFIG: ${{ runner.temp }}/absent-hoi4-config.json
-      HOI4_LIVE_GAME_DIR: ${{ runner.temp }}/absent-game
-      HOI4_LIVE_USER_DIR: ${{ runner.temp }}/hoi4-user
-      HOI4_LIVE_ARTIFACTS: ${{ runner.temp }}/hoi4-artifacts
+      HOI4_LIVE_CONFIG: ${{ github.workspace }}/../hoi4-ci/absent-hoi4-config.json
+      HOI4_LIVE_GAME_DIR: ${{ github.workspace }}/../hoi4-ci/absent-game
+      HOI4_LIVE_USER_DIR: ${{ github.workspace }}/../hoi4-ci/hoi4-user
+      HOI4_LIVE_ARTIFACTS: ${{ github.workspace }}/../hoi4-ci/hoi4-artifacts
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
