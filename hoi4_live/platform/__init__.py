@@ -14,6 +14,9 @@ def _detect():
     if sys.platform == "darwin":
         from .macos import MacOSPlatform
         return MacOSPlatform()
+    if sys.platform.startswith("linux"):
+        from .linux import LinuxPlatform
+        return LinuxPlatform()
     from .posix import PosixPlatform
     return PosixPlatform()
 

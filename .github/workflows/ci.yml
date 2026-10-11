@@ -10,7 +10,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest]
+        os: [windows-latest, ubuntu-latest, macos-latest]
         python: ['3.9', '3.13']
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15

@@ -7,7 +7,32 @@ not moved.
 
 Read this status before the older implementation-status paragraphs in
 [HANDOFF_MAC.md](HANDOFF_MAC.md). Those paragraphs describe the starting point.
-The remaining campaign requirements still apply.
+The remaining campaign requirements still apply. The latest user steering adds
+**Linux as a required live target alongside Windows and macOS**, and prioritizes
+structured observations, event-driven execution and low screenshot/pause overhead.
+Linux live control is unfinished; adding Linux CI does not establish it. New
+delegation uses GPT-6.1 Sol or GPT-6 Luna at max reasoning, with minimal concurrency;
+no further Astra agents are to be spawned. The existing builder is finishing its
+current Mac checkpoint.
+
+## Current live and Linux checkpoint
+
+The Mac diagnostic campaign reached 22 June 1936 and has a recorded ordinary
+save for forward-only resume. It is **not clean acceptance**: earlier idle queues,
+failed actions and a recording gap remain in the incident record. A background
+SDL window can expose `AXFocusedWindow` while omitting `AXWindows`; the backend
+now uses its exact role/title/geometry without activating the game, deduplicates
+AX proxies and retains ambiguity refusal. The resumed run must validate the fix
+live. No successful campaign has been completed.
+
+Linux now has native procfs identity/path discovery and bounded read-only memory
+foundations, with unsupported desktop capabilities reported explicitly. Linux
+CI was added alongside Windows and macOS. The local integrated Mac suite passed
+863 tests with 28 skips at this checkpoint; this does not establish Linux game
+control. The isolated Linux runtime and upstream reader were exercised against
+generated processes. See [the measured Clausewitz comparison](CLAUSEWITZ_COMPARISON.md)
+for latency, Rosetta limitations and outstanding live comparison gates. Linux
+HOI4 has not yet run. No native command adapter is validated on Mac or Linux.
 
 ## Implemented and checked offline
 
