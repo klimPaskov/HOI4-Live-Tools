@@ -41,6 +41,40 @@ the Mac. Work autonomously, never ask questions, and preserve unrelated work.
   restore the prior running state. Routine observations never pause. One agent
   owns game input; helpers must not compete for the same desktop.
 
+### Live speed (user requirement)
+
+The constant pausing seen in the Windows runs is not acceptable. Play must be
+live and very fast: the game keeps running at high speed while the model plans
+and while tools act; reads come from telemetry/memory, never by pausing; actions
+are posted while the game runs; the model is woken only by events, deadlines or
+real decisions. Measure and report pause count, pause seconds and real time per
+game year, and treat every avoidable pause as a defect.
+
+### Two play modes (user requirement)
+
+The MCP has two explicit modes, chosen per session and recorded in every log:
+
+1. **Fair mode (default): common HOI4 multiplayer game rules.** No exploits or
+   cheese that multiplayer house rules ban, for example no space marines (no
+   marine/para spam used to exploit combat width or terrain), no naval-invasion
+   or paratrooper exploit spam, no 1-width or other exploit templates, no
+   border-gore/peace-deal exploits, no AI-baiting tricks, no exploiting known
+   engine bugs. It must still play strongly and cleverly: encirclements and
+   pockets, concentrated breakthroughs, air superiority before offensives,
+   defensive lines and fallbacks, supply-aware planning, combined arms, sound
+   production and research priorities. Keep the banned-tactics list in one
+   reviewed file (e.g. `hoi4_live/policy/fair_mode.json`) and enforce it in the
+   tools (refuse or warn on banned orders/templates) so a small model cannot
+   drift into exploits.
+2. **Meta mode: metas and exploits allowed, still no cheating.** Competitive
+   metas and known exploits that a human player can perform through the normal
+   UI are allowed (space marines, exploit templates, invasion spam, AI
+   manipulation), but cheating stays forbidden in both modes: no console, debug,
+   eval/fire_event, save editing, hidden enemy intelligence, memory writes or
+   reload-to-undo.
+
+The showcase campaigns run in fair mode unless the user asks otherwise.
+
 ## Recorded showcase plan
 
 After acceptance, record complete campaigns from 1 January 1936 to a conclusive
@@ -406,13 +440,19 @@ This handoff publication did not change those downstream pins.
 ## First prompt to paste into Codex on the Mac
 
 ```text
-Work autonomously; never ask questions. You are the gpt-6-astra builder for the public HOI4 Live Tools repo https://github.com/klimPaskov/HOI4-Live-Tools. Read AGENTS.md and docs/HANDOFF_MAC.md first, then docs/handoff_2026-10-11_campaign_run3.md, docs/handoff_2026-10-11_redesign.md and the WIP static-layout evidence. Inspect git status, branches and history; preserve unrelated work. Create feat/macos-governor from origin/wip/governor-memory. The Windows game is reserved for other mod testing: develop and test on this Mac only.
+Work autonomously; never ask questions. You are the gpt-6-astra builder for the public HOI4 Live Tools repo https://github.com/klimPaskov/HOI4-Live-Tools. Read AGENTS.md and docs/HANDOFF_MAC.md first (especially "Live speed" and "Two play modes"), then docs/handoff_2026-10-11_campaign_run3.md, docs/handoff_2026-10-11_redesign.md and the WIP static-layout evidence. Inspect git status, branches and history; preserve unrelated work. Create feat/macos-governor from origin/wip/governor-memory. The Windows game is reserved for other mod testing: develop and test on this Mac only.
 
-Keep Python 3.9+ and stdio MCP, and support BOTH Windows and macOS. Finish the platform boundary for paths, process identity, window, capture, input/clipboard, OCR, launcher, read-only memory and recording. Remove eager Windows imports, add explicit capability/permission errors, OS-specific test markers and a Windows/macOS CI matrix. Set up the venv, MCP registration, observational telemetry and ffmpeg recording using the handoff. Study smerss/Clausewitz-MCP in a scratch clone; preserve its MIT attribution and discover Mac Mach-O/Itanium layouts independently. Do not assume Linux or Windows offsets are Mac offsets. Do not disable SIP, re-sign the game or run the agent as root; use telemetry/UI if task access is denied.
+Study the reference MCP https://github.com/smerss/Clausewitz-MCP closely (MIT; clone it into a scratch folder): how it reads live game state from process memory without pausing (RTTI walk, serializer field maps, offset tables), how it posts ordinary player commands through the game's own command queue (CCommandQueue::Post, same legality checks as clicks, batched per attach, read-only guard), its hoi4_wait_for event-driven waiting, per-day micro engine, combat planner and encirclement search. The macOS build uses the Itanium C++ ABI like that project's Linux target, so its discovery approach maps closely to the Mac; still discover Mac Mach-O layouts independently and never assume Linux or Windows offsets. Reuse ideas or code with MIT attribution in NOTICE.
 
-Complete the background governor so it executes the model's durable standing plan daily at high game speed while the model thinks. Provide a compact fresh digest, concrete one-call fixes, event-driven bounded waits, id-based verified actions, shortage repair and war automation including army assignment, fronts, supply, naval invasions and successful Sea Lion. Fix repeated pauses, failed selection and unreliable pixel verification. Keep retries idempotent, unknown data explicit, hidden enemy state excluded, owned-process boundaries enforced, and settings/playsets backed up and restored. Validate unfinished WIP honestly; do not claim existing research/popup routines cover the rejected economy/army plan sections.
+Keep Python 3.9+ and stdio MCP, and support BOTH Windows and macOS. Finish the platform boundary for paths, process identity, window, capture, input/clipboard, OCR, launcher, read-only memory, command posting and recording. Remove eager Windows imports, add explicit capability/permission errors, OS-specific test markers and a Windows/macOS CI matrix. Set up the venv, MCP registration, observational telemetry and ffmpeg recording using the handoff. Do not disable SIP, re-sign the game or run the agent as root; use telemetry/UI if task access is denied.
 
-Delegate live player acceptance to one gpt-6-luna subagent at medium reasoning, with exclusive input ownership; you remain the builder. First require a clean real-time Germany run from 1936-01-01 through 1938-01-01 without builder/human rescue. Then record full campaigns from 1936 to a conclusive end, about five hours each: Germany must achieve Anschluss, Czechoslovakia, Poland, Low Countries, France, successful Sea Lion capitulating the UK, Greater German Reich, USSR capitulated and all Allies defeated; Nationalist China must unify China including warlords/communists, expel and capitulate Japan, recover lost territory and become a top-tier power. Normal difficulty, vanilla rules, historical AI, observational telemetry only. No console/debug/eval/fire_event/save editing/hidden intel/reload-to-undo. Never touch an unrelated game. No needless pausing.
+Everything must be LIVE and VERY FAST: the constant pausing of the earlier runs is unacceptable. The game keeps running at high speed while the model plans and while tools act; reads come from telemetry/memory without pausing; actions are posted while the game runs; the model is woken only by events, deadlines or real decisions. Measure pause count, pause seconds and real time per game year, and treat every avoidable pause as a defect.
 
-Keep full ffmpeg recordings, calls.jsonl, journal, manifest and incident log outside Git for the demo video and teaser. Measure latency, governor coverage, action failures and pause reasons; turn failures into tooling fixes and a fresh acceptance run. Commit focused changes with a blank line followed by Co-Authored-By: Codex (gpt-6.1-sol) <noreply@openai.com>. Audit all pushed history and artifacts for secrets, personal paths, dumps, saves and private mod material; push only public development branches and tested tags. After both OS checks and acceptance pass, publish a release and document the exact version/URL/SHA-256/size for the Windows HOI4 Mod Setup app and Agentic HOI4 Modding pins. Continue until the acceptance and showcases are achieved or a concrete external prerequisite prevents progress; report evidence and remaining gaps honestly.
+Complete the background governor so it executes the model's durable standing plan daily at high game speed while the model thinks. Provide a compact fresh digest, concrete one-call fixes, event-driven bounded waits, id-based verified actions, shortage repair and war automation: army assignment and splitting, fronts, offensives, encirclements and pockets, fallback lines, supply, air superiority, naval superiority, naval invasions and a successful Sea Lion. Fix failed selection and unreliable pixel verification. Keep retries idempotent, unknown data explicit, hidden enemy state excluded, owned-process boundaries enforced, and settings/playsets backed up and restored. Validate unfinished WIP honestly.
+
+Implement two play modes, selected per session and logged: (1) FAIR mode, the default: common HOI4 multiplayer game rules, so no exploits or banned cheese (no space marines, no naval-invasion or paratrooper exploit spam, no exploit templates, no AI-baiting or engine-bug exploits), enforced by the tools from one reviewed policy file, while still playing strongly and cleverly (encirclements, concentrated breakthroughs, air superiority before offensives, defensive lines, combined arms, sound economy); (2) META mode: competitive metas and exploits a human can do through the normal UI are allowed. In BOTH modes cheating is forbidden: no console/debug/eval/fire_event, no save editing, no memory writes, no hidden enemy intelligence, no reload-to-undo. Showcases run in fair mode.
+
+Delegate live player acceptance to one gpt-6-luna subagent at medium reasoning, with exclusive input ownership; you remain the builder. First require a clean real-time Germany run in fair mode from 1936-01-01 through 1938-01-01 without builder/human rescue. Then record full fair-mode campaigns from 1936 to a conclusive end, about five hours each: Germany must achieve Anschluss, Czechoslovakia, Poland, Low Countries, France, successful Sea Lion capitulating the UK, Greater German Reich, USSR capitulated and all Allies defeated; Nationalist China must unify China including warlords/communists, expel and capitulate Japan, recover lost territory and become a top-tier power. Normal difficulty, vanilla rules, historical AI, observational telemetry only. Never touch an unrelated game.
+
+Keep full ffmpeg recordings, calls.jsonl, journal, manifest and incident log outside Git for the demo video and teaser. Measure latency, pauses, governor coverage and action failures; turn failures into tooling fixes and a fresh acceptance run. Commit focused changes with a blank line followed by Co-Authored-By: Codex (gpt-6-astra) <noreply@openai.com>. Audit all pushed history and artifacts for secrets, personal paths, dumps, saves and private mod material; push only public development branches and tested tags. After both OS checks and acceptance pass, publish a release and document the exact version/URL/SHA-256/size for the Windows HOI4 Mod Setup app and Agentic HOI4 Modding pins. Continue until the acceptance and showcases are achieved or a concrete external prerequisite prevents progress; report evidence and remaining gaps honestly.
 ```
