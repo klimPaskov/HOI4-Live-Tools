@@ -25,6 +25,8 @@ import os
 import re
 import time
 
+from .focus import FocusLedger, KINDS as FOCUS_KINDS
+
 LINE_RX = re.compile(r"^\[(\d\d):(\d\d):(\d\d)\]\[(\d{1,4})\.(\d{1,2})\.(\d{1,2})\.(\d{1,2})\]\[[^\]]*\]:\s*HOI4LIVE\s+(.+?)\s*$")
 STRING_VALUE = re.compile(r'(?<=":")(.*?)(?="(?:,"[A-Za-z0-9_]+":|\}))')
 DAILY_GROUPS = ("war",)
@@ -137,6 +139,9 @@ class TelemetryStore:
         self.schema = None
         self.rs_counts = {}                        # day counter -> set of technologies being researched
         self.techs = getattr(self, "techs", [])    # technology ids; the `tid` of kt and rs records indexes them
+        if not hasattr(self, "focus_ledger"):
+            self.focus_ledger = FocusLedger(self.history_days)
+        self.focus_ledger.clear()
 
     # ------------------------------------------------------------------ input
     def refresh(self):
@@ -190,7 +195,12 @@ class TelemetryStore:
                 # comes from the preceding own-country day record and must never
                 # survive a generation or schema boundary.
                 self.daily_metrics.clear()
+                self.focus_ledger.clear()
             self.generation, self.schema = rec["g"], schema
+        if k in FOCUS_KINDS:
+            self.focus_ledger.add(rec, self.day(tag) if tag else None)
+            self.last = rec
+            return
         if k == "day":
             hist = self.history[tag]
             if hist and isinstance(n, (int, float)) and n <= hist[-1].get("n", -1):
@@ -248,6 +258,7 @@ class TelemetryStore:
     def _rewind(self, n):
         """A save from before day n was loaded: forget history, events and ticks from day n on."""
         self.rewinds += 1
+        self.focus_ledger.clear()
         for x in [x for x in self.rs_counts if x >= n]:
             del self.rs_counts[x]
         for tag, hist in self.history.items():
@@ -287,6 +298,15 @@ class TelemetryStore:
     def set_catalog(self, techs):
         """The manifest's technology list (the telemetry's tid is an index into it)."""
         self.techs = list(techs or [])
+
+    def set_focus_catalog(self, focuses, generation):
+        self.focus_ledger.configure(focuses, generation)
+
+    def focus_snapshot(self, tag, day):
+        """Closed exact-day own-tree batch; active/current focus remains unknown."""
+        if self.focus_ledger.generation != self.generation:
+            return None
+        return self.focus_ledger.get(tag, day)
 
     def _tech_ids(self, rows):
         out = []
@@ -403,6 +423,11 @@ class TelemetryStore:
             return None
         n = d.get("n")
         out = {"tag": tag, "date": d["_date"], "n": n, "wall": d["_wall"], "day": _public(d)}
+        focus = self.focus_snapshot(tag, n)
+        if focus is not None:
+            out["focus"] = focus
+        elif self.focus_ledger.trees:
+            out["focus_unknown"] = "no complete focus batch for this country and day"
         for kind in ("pol", "fac", "subject", "res", "eq", "watch"):
             r = self.get(kind, tag)
             if r and r.get("n") == n:

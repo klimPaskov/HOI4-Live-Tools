@@ -210,6 +210,13 @@ def templates(spec):
     T["ev_control"] = ev("control", False) + state
     T["hello"] = [("k", S("hello")), ("v", N(str(SCHEMA))), ("g", S(gen)), ("t", S("[THIS.GetTag]")),
                   ("n", N("[?global.num_days|0]"))]
+    if spec.get("focuses"):
+        for kind in ("fb", "fc", "fp", "fe"):
+            T[kind] = _head(kind, gen) + [("tree", N("[?hoi4live_ft|0]"))]
+        T["fb"] += [("total", N("[?hoi4live_fn|0]"))]
+        T["fc"] += [("fid", N("[?hoi4live_fid|0]"))]
+        T["fp"] += [("fid", N("[?hoi4live_fid|0]")), ("low", N("[?hoi4live_fp|0]"))]
+        T["fe"] += [("completed", N("[?hoi4live_fc|0]")), ("progressed", N("[?hoi4live_fpc|0]"))]
     if spec.get("campaign", False):
         # Remove the expressions before localization/script generation: filtering
         # tool output alone would still collect exact foreign intelligence in logs.
@@ -484,6 +491,11 @@ hoi4live_telemetry_weekly = {
         text = text.replace("hoi4live_telemetry_states = {\n\tevery_owned_state = {\n",
                             "hoi4live_telemetry_states = {\n\tevery_owned_state = {\n"
                             "\t\tlimit = { is_controlled_by = ROOT }\n")
+    if spec.get("focuses"):
+        from .focus import effects
+        text = text.replace("\thoi4live_telemetry_tech = yes\n",
+                            "\thoi4live_telemetry_tech = yes\n\thoi4live_telemetry_focus = yes\n")
+        text += "\n" + effects(spec["focuses"])
     return text
 
 
@@ -648,7 +660,7 @@ def campaign_compatible(manifest):
 
 
 def generate(user_dir, game_dir, game_version=None, watch=None, resources=None, equipment=None, techs=None,
-             campaign=False):
+             campaign=False, focuses=None):
     """Write the mod; campaign builds never inherit watches or other enabled mods.
 
     QA builds preserve the previous watch list when watch is None. Campaign
@@ -682,10 +694,12 @@ def generate(user_dir, game_dir, game_version=None, watch=None, resources=None, 
     for name in techs:
         if not NAME_RX.match(name):
             raise ToolError(f"invalid technology id '{name}'")
+    from .focus import catalog, installed_catalog
+    focuses = catalog(focuses) if focuses is not None else (installed_catalog(game_dir, mods) if game_dir else {})
     stamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
-    digest = hashlib.sha1(json.dumps([watch, resources, equipment, techs, SCHEMA, campaign]).encode()).hexdigest()[:6]
+    digest = hashlib.sha1(json.dumps([watch, resources, equipment, techs, focuses, SCHEMA, campaign]).encode()).hexdigest()[:6]
     spec = {"generation": f"{stamp}-{digest}", "watch": watch, "resources": list(resources),
-            "equipment": list(equipment), "techs": list(techs), "campaign": campaign}
+            "equipment": list(equipment), "techs": list(techs), "focuses": focuses, "campaign": campaign}
     root = mod_dir(user_dir)
     files = {
         "descriptor.mod": descriptor_text(_major_minor(game_version)),
@@ -707,7 +721,8 @@ def generate(user_dir, game_dir, game_version=None, watch=None, resources=None, 
     manifest = {"mod": MOD_NAME, "schema": SCHEMA, "generation": spec["generation"],
                 "generated_at": datetime.datetime.now().isoformat(timespec="seconds"),
                 "watch": watch, "resources": spec["resources"], "equipment": spec["equipment"],
-                "techs": spec["techs"], "line_keys": sorted(lines), "files": written, "descriptor": descriptor_path(user_dir),
+                "techs": spec["techs"], "focuses": focuses, "focus_observation_version": 1,
+                "line_keys": sorted(lines), "files": written, "descriptor": descriptor_path(user_dir),
                 "game_version": game_version, "campaign": campaign,
                 "visibility": "player_visible_v1" if campaign else "qa_unrestricted"}
     with open(manifest_path(user_dir), "w", encoding="utf-8") as f:

@@ -32,7 +32,7 @@ def read_button(session, img=None):
     text = " ".join(l.text for l in res.lines).strip()
     if not text:
         return {"current": None, "text": "", "unread": True}
-    if NO_FOCUS_RX.search(text) or re.search(r"national\s*focus", text, re.I):
+    if NO_FOCUS_RX.fullmatch(text):
         return {"current": None, "text": text}
     return {"current": text, "text": text}
 
@@ -268,6 +268,30 @@ def placeholder_pattern(name):
     query = max(parts, key=len) or name
     rx = re.compile("^\s*" + ".+".join(re.escape(p) for p in parts) + "\s*$", re.I)
     return query, rx
+
+
+def title_focus_id(title, names):
+    """Resolve one observed title to a unique installed focus ID, without fuzziness.
+
+    Normalisation tolerates OCR spacing and established glyph confusions. A
+    dynamic localisation pattern needs a nonempty static part and must still be
+    unique across the entire tree. A similarity score is not identity evidence.
+    """
+    observed = panels.norm(title)
+    if not observed:
+        return None
+    matches = []
+    for fid, name in names.items():
+        if not isinstance(name, str) or not name:
+            continue
+        if "[" in name:
+            parts = [panels.norm(part) for part in re.split(r"\[[^\]]*\]", name)]
+            same = (any(parts) and re.fullmatch(".+".join(re.escape(part) for part in parts), observed))
+        else:
+            same = panels.norm(name) == observed
+        if same:
+            matches.append(fid)
+    return matches[0] if len(matches) == 1 else None
 
 
 def open_detail(session, name, max_cycles=10, search_text=None):

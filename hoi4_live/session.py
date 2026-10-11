@@ -190,6 +190,7 @@ class Session:
                 from .telemetry import modgen
                 man = modgen.read_manifest(self.cfg.user_dir) or {}
                 self._telemetry.set_catalog(man.get("techs"))
+                self._telemetry.set_focus_catalog(man.get("focuses"), man.get("generation"))
             except Exception as e:
                 log.warning("telemetry catalog not read: %s", e)
         try:
