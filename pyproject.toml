@@ -35,4 +35,4 @@ hoi4-live-tools = "hoi4_live.__main__:main"
 include = ["hoi4_live*"]
 
 [tool.setuptools.package-data]
-hoi4_live = ["ocr/ocr_host.ps1", "game/play_policy.json"]
+hoi4_live = ["ocr/ocr_host.ps1", "game/play_policy.json", "engine/clausewitz/LICENSE"]

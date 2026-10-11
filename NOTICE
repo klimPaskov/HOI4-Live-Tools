@@ -3,7 +3,7 @@ Copyright 2026 Klim Pashkov
 
 Licensed under the Apache License, Version 2.0 (see LICENSE).
 
-The release archive contains only this project's own code. The installer fetches these packages from PyPI into a
+The project includes MIT-licensed Clausewitz-MCP-derived code as described below. The installer fetches these packages from PyPI into a
 private virtual environment; each keeps its own license:
 
   numpy                    BSD-3-Clause
@@ -16,18 +16,21 @@ HOI4 Live Tools reads and drives Hearts of Iron IV, a trademark of Paradox Inter
 tool: no game file is copied or redistributed, and it is not affiliated with or endorsed by Paradox Interactive.
 Windows.Media.Ocr, used for screen text, is part of Windows.
 
-Design and research acknowledgments:
-  smerss/Clausewitz-MCP — https://github.com/smerss/Clausewitz-MCP (MIT).
-  Its documented safety lessons, known-mistake hints, RTTI/serializer research,
-  bounded waits and per-day automation informed this project's review and
-  governor/memory architecture. No upstream source code was copied in this
-  publication work. Any future source reuse must retain that project's MIT
-  copyright and permission notice and record file-level provenance.
+Upstream foundation and attribution:
+  smerss/Clausewitz-MCP — https://github.com/smerss/Clausewitz-MCP
+  Copyright (c) 2026 smerss. Licensed under MIT.
+  Pinned commit: 97c85437081904d5ad07bae1623ec58d1c0a5b9e.
 
-  Mac continuation research consulted commit
-  97c85437081904d5ad07bae1623ec58d1c0a5b9e: research/FINDINGS.md and
-  calling/{fieldmap,commands,turnloop,ragemicro,combat}.py. The reference's
-  batching, serializer discovery, verified-order cache and province-graph ideas
-  were reviewed; its Linux offsets, remote writes and native command calls were
-  not copied or executed. Queue acceptance alone does not prove an action is
-  available through ordinary player controls. Upstream MIT copyright: 2026 smerss.
+  third_party/clausewitz_mcp contains unchanged runtime Python source and the
+  original license. UPSTREAM.json records each original path and SHA-256. Binary
+  caches, generated game tables and research dumps are not included.
+
+  hoi4_live/engine/clausewitz/memory.py is derived from calling/mem.py's typed
+  read methods. It extracts portable primitives; native access is provided by
+  owned Windows/macOS/Linux adapters. The original MIT notice and permission
+  text are retained in hoi4_live/engine/clausewitz/LICENSE and shipped with it.
+
+  The structured game model, ordinary-command vocabulary, bounded turn waits,
+  verified-order cache and province-graph ideas inform the ongoing integration.
+  Upstream offsets and native commands are not independently validated on our
+  installed builds. Source inclusion does not enable them in campaign dispatch.

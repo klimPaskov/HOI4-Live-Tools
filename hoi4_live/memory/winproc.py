@@ -8,8 +8,9 @@ without accessing a running game.
 import ctypes
 import ntpath
 import os
-import struct
 from dataclasses import dataclass
+
+from ..engine.clausewitz.memory import ReadPrimitives
 
 
 PROCESS_VM_READ = 0x0010
@@ -100,7 +101,7 @@ def capture_launched_identity(launched_pid, expected_executable_path, api=None):
         api.close(handle)
 
 
-class ReadOnlyProcess:
+class ReadOnlyProcess(ReadPrimitives):
     def __init__(self, identity, *, owned=False, api=None, max_read_bytes=MAX_READ_BYTES):
         _validate_identity(identity)
         if owned is not True:
@@ -167,15 +168,6 @@ class ReadOnlyProcess:
         if not isinstance(data, bytes) or len(data) != size:
             raise MemoryReadError("partial process memory read rejected")
         return data
-
-    def u64(self, address):
-        return struct.unpack("<Q", self.read(address, 8))[0]
-
-    def i64(self, address):
-        return struct.unpack("<q", self.read(address, 8))[0]
-
-    def i32(self, address):
-        return struct.unpack("<i", self.read(address, 4))[0]
 
     def close(self):
         handle, self._handle = self._handle, None

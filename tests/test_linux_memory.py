@@ -202,7 +202,7 @@ class LinuxMemoryTests(unittest.TestCase):
                     api.open_memory(42)
                 self.assertEqual(caught.exception.details["capability"], "process memory")
                 self.assertIn("telemetry", caught.exception.details["remedy"])
-                self.assertEqual(opened.call_args.args[1] & os.O_ACCMODE, os.O_RDONLY)
+                self.assertEqual(opened.call_args.args[1] & (os.O_WRONLY | os.O_RDWR), 0)
 
     def test_native_pread_has_explicit_offset_and_rejects_partial(self):
         api = ProcMemoryAPI(process_api=Mock())

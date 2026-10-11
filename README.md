@@ -1,11 +1,14 @@
 # HOI4 Live Tools
 
 **Mac continuation:** open [docs/HANDOFF_MAC.md](docs/HANDOFF_MAC.md) first.
-Windows live control is implemented; Windows and macOS are both required targets.
-The macOS paths/process scaffold exists, but desktop, OCR, memory and complete
-server startup still need porting and live validation. The
+Windows, macOS and Linux are required targets. Current development is migrating
+to a Clausewitz-MCP foundation with our cross-platform adapters, durable campaign
+plans, FAIR/META policy, verification and recovery on top. See the
+[foundation and expansion status](docs/CLAUSEWITZ_FOUNDATION.md) and
+[measured comparison](docs/CLAUSEWITZ_COMPARISON.md). Mac live smoke tests have run;
+Linux game control and clean campaign acceptance remain unfinished. The preserved
 [`wip/governor-memory`](https://github.com/klimPaskov/HOI4-Live-Tools/tree/wip/governor-memory)
-branch preserves unfinished governor/memory work; it is not a stable release.
+branch is not a stable release.
 
 An MCP server that lets AI agents drive a running Hearts of Iron IV on Windows: launch and load games, read the
 screen (dates, popups, text, the top bar, tooltips, open panels, the map), run time while answering events, fire
@@ -391,3 +394,13 @@ scripts/       build_release.py (the release archive), mcp_client.py, exit_check
                phase3_extra.py, exit_check_phase4.py, campaign_demo.py (phase 5 example run)
 skills/        hoi4-live-campaign (the campaign playbook: the loop, which tool answers which situation)
 ```
+
+## Acknowledgement
+
+This project builds on [smerss/Clausewitz-MCP](https://github.com/smerss/Clausewitz-MCP),
+Copyright (c) 2026 smerss, licensed under MIT. Its game model, structured memory
+interface, player-command research and event-driven automation form the foundation
+for our ongoing cross-platform engine migration. Imported source retains the
+[MIT license](third_party/clausewitz_mcp/LICENSE) and
+[file-level provenance](third_party/clausewitz_mcp/UPSTREAM.json); active derived
+components also carry the license in their package. See [NOTICE](NOTICE).

@@ -8,9 +8,9 @@ decoding must use the independently verified target image architecture.
 
 import ctypes
 import posixpath
-import struct
 import sys
 
+from ..engine.clausewitz.memory import ReadPrimitives
 from ..errors import CapabilityUnavailable
 
 
@@ -56,7 +56,7 @@ def _identity_key(identity):
     return pid, created, path
 
 
-class ReadOnlyProcess:
+class ReadOnlyProcess(ReadPrimitives):
     def __init__(self, identity, *, owned=False, api=None, max_read_bytes=MAX_READ_BYTES):
         self._expected = _identity_key(identity)
         if owned is not True:
@@ -111,15 +111,6 @@ class ReadOnlyProcess:
         if not isinstance(data, bytes) or len(data) != size:
             raise MemoryReadError("partial process memory read rejected")
         return data
-
-    def u64(self, address):
-        return struct.unpack("<Q", self.read(address, 8))[0]
-
-    def i64(self, address):
-        return struct.unpack("<q", self.read(address, 8))[0]
-
-    def i32(self, address):
-        return struct.unpack("<i", self.read(address, 4))[0]
 
     def close(self):
         task, self._task = self._task, None

@@ -10,10 +10,10 @@ No ptrace attachment, writes, injected calls or game layouts are implemented.
 import errno
 import os
 import posixpath
-import struct
 import sys
 import threading
 
+from ..engine.clausewitz.memory import ReadPrimitives
 from ..errors import CapabilityUnavailable
 from .linux_process import LinuxProcessIdentity, ProcessAPI, capture_process_identity, creation_token
 
@@ -67,7 +67,7 @@ def _identity_key(identity):
             identity.start_ticks, identity.executable_device, identity.executable_inode)
 
 
-class ReadOnlyProcess:
+class ReadOnlyProcess(ReadPrimitives):
     def __init__(self, identity, *, owned=False, api=None, max_read_bytes=MAX_READ_BYTES):
         self._expected = _identity_key(identity)
         if owned is not True:
@@ -158,15 +158,6 @@ class ReadOnlyProcess:
                 results.append(data)
             self.validate_identity()
             return results
-
-    def u64(self, address):
-        return struct.unpack("<Q", self.read(address, 8))[0]
-
-    def i64(self, address):
-        return struct.unpack("<q", self.read(address, 8))[0]
-
-    def i32(self, address):
-        return struct.unpack("<i", self.read(address, 4))[0]
 
     def close(self):
         with self._mutex:

@@ -6,9 +6,10 @@ macOS and Linux. Linux game control remains unfinished.
 
 Reference: [smerss/Clausewitz-MCP](https://github.com/smerss/Clausewitz-MCP), commit
 `97c85437081904d5ad07bae1623ec58d1c0a5b9e`. See [NOTICE](../NOTICE) for attribution.
-No upstream source was copied into this repository. The reference checkout was
-executed separately against generated test processes, without game offsets,
-memory writes or injected game commands.
+The benchmark used a separate reference checkout against generated test processes,
+without game offsets, memory writes or injected game commands. Subsequent user
+steering selected it as the engine foundation; the pinned source and first active
+ported component are described in [the migration status](CLAUSEWITZ_FOUNDATION.md).
 
 ## Measured process reads
 
