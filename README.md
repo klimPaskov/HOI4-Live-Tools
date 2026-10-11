@@ -1,30 +1,20 @@
 # HOI4 Live Tools
 
-**Mac continuation:** open [docs/HANDOFF_MAC.md](docs/HANDOFF_MAC.md) first.
-Windows live control is implemented; Windows and macOS are both required targets.
-The macOS paths/process scaffold exists, but desktop, OCR, memory and complete
-server startup still need porting and live validation. The
-[`wip/governor-memory`](https://github.com/klimPaskov/HOI4-Live-Tools/tree/wip/governor-memory)
-branch preserves unfinished governor/memory work; it is not a stable release.
+[![Discord](https://img.shields.io/badge/Discord-Join%20Community-7289da?logo=discord&logoColor=white)](https://discord.gg/rAXesGcT2t)
+[![YouTube](https://img.shields.io/badge/YouTube-Chaos%20Redux-ff0000?logo=youtube&logoColor=white)](https://www.youtube.com/@ChaosRedux)
+[![Ko-fi](https://img.shields.io/badge/Ko--fi-Support%20the%20Project-ff5e5b?logo=kofi&logoColor=white)](https://ko-fi.com/klimpaskov)
+[![Download](https://img.shields.io/github/v/release/klimPaskov/HOI4-Live-Tools?label=Download&logo=github&color=2ea44f)](https://github.com/klimPaskov/HOI4-Live-Tools/releases/latest)
+[![Issues](https://img.shields.io/badge/Bugs%20%26%20Ideas-Issues-24292f?logo=github&logoColor=white)](https://github.com/klimPaskov/HOI4-Live-Tools/issues)
 
-An MCP server that lets AI agents drive a running Hearts of Iron IV on Windows: launch and load games, read the
-screen (dates, popups, text, the top bar, tooltips, open panels, the map), run time while answering events, fire
-events and effects through the console, save, query the plain-text save, read the error log, and know what is
-going on: a structured state model and a one-page briefing of the player's country. It serves two jobs:
+An MCP server that lets your coding agent play Hearts of Iron IV.
+It launches the game, loads a save, fires events, answers popups, runs time forward, reads the screen and error log, and captures what happened, so you can test a mod without sitting at the keyboard.
+It can also play a campaign through the real game interface: focuses, research, production, construction, politics, diplomacy and armies.
+The campaign playbook is in [skills/hoi4-live-campaign](skills/hoi4-live-campaign/SKILL.md).
 
-- **Feature testing** for mod developers: set up a state, trigger content, run time, capture every popup, read the
-  log delta and the save, and get a report, with no human at the keyboard.
-- **Campaign play**: an agent plays any country through the real interface: national focus, research,
-  production, construction, laws and advisors, decisions, diplomacy and trade (phase 3), and the military:
-  division templates, recruitment and deployment, armies, generals, front and offensive lines, fleet and air
-  missions (phase 4); and the campaign loop (phase 5): run time until something needs a decision, answer events by
-  policy, keep a journal, and follow the playbook in [skills/hoi4-live-campaign](skills/hoi4-live-campaign/SKILL.md).
+Live Tools works on Windows and was tested on HOI4 1.19.2. macOS support is in development.
+See [docs/STATUS.md](docs/STATUS.md) for what works and the known limits.
 
-Version 1.1.0: 43 baseline tools, exercised on Windows HOI4 1.19.2, including the telemetry companion mod the
-server generates. Recorded campaign attempts did not meet the showcase goals; see the
-[campaign handoff](docs/handoff_2026-10-11_campaign_run3.md). Raw evidence stays local.
-See [docs/STATUS.md](docs/STATUS.md) for what
-works, the exit-check evidence and known limits, and [docs/PLAN.md](docs/PLAN.md) for the roadmap.
+Part of the HOI4 modding toolkit: [HOI4 Mod Setup](https://github.com/klimPaskov/HOI4-Mod-Setup) installs it for you, [Agentic HOI4 Modding](https://github.com/klimPaskov/Agentic-HOI4-Modding) gives your agent modding skills, and [HOI4 Agent Tools](https://github.com/klimPaskov/hoi4-agent-tools) builds and previews mod content.
 
 ## Requirements
 
@@ -131,7 +121,7 @@ Full reference with every argument: [docs/tools.md](docs/tools.md) (generated fr
 
 | family | tool | what it does |
 |---|---|---|
-| session | `hoi4_status` | read-only situation: process, window, playset, mode, lock holder, recent saves, screen class, date, popups |
+| session | `hoi4_status` | show the current situation: process, window, playset, mode, lock holder, recent saves, screen class, date, popups |
 | | `hoi4_launch` | start the game (normal or `-debug`) with the current playset, wait for the main menu |
 | | `hoi4_new_game` | Single Player, bookmark, country by name, Play (test mode: `tag` to switch country) |
 | | `hoi4_load` | load any save through the game's own load screen (front end or pause menu); verifies the date |
@@ -229,7 +219,7 @@ next save shows it in `hoi4_state` and `hoi4_briefing`):
 Working efficiently: the game is slow to load (one to three minutes) and shared, so an agent reuses the running game and
 the loaded position (`hoi4_status` first), loads a save only to start or to change the position, saves only when a deep
 read is needed (about one save per briefing) and repeats a failed step on its own instead of restarting a whole
-sequence. The exit-check scripts follow this: `scripts/exit_check_phase4.py --reuse-game` plays on the running game.
+sequence.
 
 Playing on (campaign mode; the loop of the playbook: advance, read what stopped the run, act, record):
 
@@ -292,7 +282,7 @@ summary every week as `HOI4LIVE` lines in `game.log`, which the server reads inc
   `watch` (daily), `wc`, `we`, `wld`, `front`, `lost` (weekly), `ev` (events). See
   `hoi4_live/telemetry/modgen.py`.
 
-## Safety
+## Working on a shared desktop
 
 - **Desktop lock.** Every acting tool holds `%TEMP%\hoi4_live_desktop.lock` (`{pid, purpose, time}`) only while it
   acts; a holder that died or has not refreshed it for 10 minutes is stale. Hold it across a multi-step run with
@@ -341,20 +331,7 @@ python -m unittest discover -s . -p "test_*.py"
 Releases are built and checked as described in [docs/RELEASING.md](docs/RELEASING.md); how the HOI4 Mod Setup app and
 the Agentic HOI4 Modding package install and use the server is in [docs/integration.md](docs/integration.md).
 
-Tests cover the protocol (framing, lifecycle, errors, batches, cancellation), schema validation (every tool schema
-and documented example), save parsing (synthetic and real saves), popup detection on bundled screenshots plus a
-206-image regression set when available, top bar and console detection, the desktop lock and log deltas, and
-(phase 2) the telemetry mod's templates, playset edits and log parser, the save model, the briefing builder, the
-top-bar reader (OCR and the game's font), tooltip boxes, panel names and the window detector, and (phase 3) the
-script-file parsers and planners (constants and overrides, focus trees, technologies and the tech tree layout,
-decisions, laws, advisors, buildings, equipment, percentage gridbox widths), the save model's advisors and
-decisions, the briefing's handling of a previous briefing from an abandoned timeline, and the panel readers on
-live screenshots (tech tree calibration, advisor list, decisions panel, diplomacy actions, production lines), and
-the installer (client registrations, payload list, deterministic release archive), (phase 5) the popup policy (rules by title and text), the journal and its report, the stop conditions and suggested
-calls of `hoi4_advance` and the advance loop itself against a fake clock and telemetry feed, and (phase 4) the save's military model (templates, divisions, armies with their orders and generals, army groups,
-fleets, air wings), the army card boxes, plan lines, fleet cards and air counters on live screenshots, deployment
-spots, mission names and the battle plan toolbar layout. The top-bar and panel-reader tests need the Windows OCR
-host and the game's files.
+Tests cover the protocol, argument validation, save parsing, popup, top bar and console detection, the desktop lock, log deltas, the telemetry mod and its parsers, the state model and briefing, the script-file readers behind the campaign tools, the installer, the popup rules, the journal and the advance loop. The screen-reader tests need the Windows OCR host and the game's files.
 
 Layout:
 
@@ -374,20 +351,25 @@ hoi4_live/
   gamedata/    loc.py (localised names), scripts.py (idea slots, technology costs), scriptdb.py (effective script
                files, @constants, cached indexes), focus.py, tech.py (+ tech tree layout), decisions.py,
                politics.py (laws, advisors, slots), economy.py (buildings, equipment)
-  game/ (3)    panels.py (open/close, dialogs, text colours), focusview.py, researchview.py, productionview.py,
+  game/    panels.py (open/close, dialogs, text colours), focusview.py, researchview.py, productionview.py,
                constructionview.py, politicsview.py, decisionsview.py, diplomacyview.py (and trade)
-  tools/ (3)   campaign_common.py, politics_tools.py (focus, politics, decisions, diplomacy),
+  tools/   campaign_common.py, politics_tools.py (focus, politics, decisions, diplomacy),
                economy_tools.py (research, production, construction)
-  game/ (4)    armyview.py (army cards and panel, commanders, battle plan toolbar, plan lines), deployview.py
+  game/    armyview.py (army cards and panel, commanders, battle plan toolbar, plan lines), deployview.py
                (Recruit & Deploy, training lines, the division designer), navalairview.py (fleets, air wings, missions)
-  state/ (4)   military.py (templates, divisions, armies and orders, army groups, fleets, air wings from a save)
-  tools/ (4)   military_tools.py (hoi4_army, hoi4_orders, hoi4_navy_air)
-  state/ (5)   advance.py (stop conditions and suggested tool calls), journal.py (the campaign log and report)
-  tools/ (5)   campaign_loop_tools.py (hoi4_advance, hoi4_journal, the action-journal hook of the dispatcher);
+  state/   military.py (templates, divisions, armies and orders, army groups, fleets, air wings from a save)
+  tools/   military_tools.py (hoi4_army, hoi4_orders, hoi4_navy_air)
+  state/   advance.py (stop conditions and suggested tool calls), journal.py (the campaign log and report)
+  tools/   campaign_loop_tools.py (hoi4_advance, hoi4_journal, the action-journal hook of the dispatcher);
                game/popups.py holds the popup policy
   actions/     verify.py (the verified-action primitive for campaign actions)
 install.py     installer: private environment, per-user client registration, upgrade, uninstall
 scripts/       build_release.py (the release archive), mcp_client.py, exit_check_phase1.py, exit_check_phase2.py, phase2_extra.py, exit_check_phase3.py,
-               phase3_extra.py, exit_check_phase4.py, campaign_demo.py (phase 5 example run)
+               phase3_extra.py, exit_check_phase4.py, campaign_demo.py (example campaign run)
 skills/        hoi4-live-campaign (the campaign playbook: the loop, which tool answers which situation)
 ```
+
+## License
+
+Apache License 2.0; see [LICENSE](LICENSE) and [NOTICE](NOTICE).
+Hearts of Iron IV belongs to Paradox Interactive; this project is unaffiliated with Paradox Interactive.
