@@ -593,7 +593,8 @@ class Capturer:
         rgb, used = self.native.capture(before, g, self.timeout, method)
         after_geometry = self.window.geometry()
         if self.window._info != before or after_geometry != g:
-            raise ToolError("window changed during capture; discard this frame and retry")
+            raise ToolError("window changed during capture; discard this frame and retry",
+                            {"error": "capture_frame_changed"})
         width, height = g.pixels
         if rgb.dtype != np.uint8 or rgb.shape != (height, width, 3):
             raise unavailable("capture", "capture pixel dimensions do not match verified Retina geometry",

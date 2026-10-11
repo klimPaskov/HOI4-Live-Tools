@@ -14,7 +14,7 @@ from unittest import mock
 
 import numpy as np
 
-from hoi4_live.errors import CapabilityUnavailable
+from hoi4_live.errors import CapabilityUnavailable, ToolError
 from hoi4_live.platform.identity import ProcessIdentity
 from hoi4_live.platform.macos_recording import FrameSource
 from scripts import record_screen as recorder
@@ -241,6 +241,49 @@ class MacRecordingTests(unittest.TestCase):
         self.assertIn("PID reused", info["error"])
         source.write.assert_not_called()
         self.assertFalse(process.stdin.closed)
+
+    def test_changed_frame_retries_with_gap_and_fresh_inspection(self):
+        a, process, source = self.prepare(), Process(), mock.Mock()
+        source.inspect.return_value = (0, 0, 4, 4)
+        source.frame.side_effect = [bytes(48), ToolError("changed", {"error": "capture_frame_changed"}), bytes(48)]
+        def written(*_):
+            if source.write.call_count == 2:
+                recorder.request_stop(self.out, self.token)
+        source.write.side_effect = written
+        with mock.patch.object(recorder, "budget_status", return_value=self.budget):
+            info = recorder.run(a, frame_source_factory=mock.Mock(return_value=source),
+                                popen=mock.Mock(return_value=process), sleep=mock.Mock())
+        self.assertEqual(info["status"], "stopped")
+        self.assertEqual(info["frames_written"], 2)
+        self.assertFalse(info["continuous_capture"])
+        self.assertTrue(info["capture_gaps"][0]["recovered"])
+        self.assertEqual(info["capture_gaps"][0]["discarded_frames"], 1)
+        self.assertEqual(source.inspect.call_count, 3)
+
+    def test_changed_frame_retry_is_bounded(self):
+        a, process, source = self.prepare(), Process(), mock.Mock()
+        source.inspect.return_value = (0, 0, 4, 4)
+        changed = ToolError("changed", {"error": "capture_frame_changed"})
+        source.frame.side_effect = [bytes(48), changed, changed, changed]
+        with mock.patch.object(recorder, "budget_status", return_value=self.budget):
+            info = recorder.run(a, frame_source_factory=mock.Mock(return_value=source),
+                                popen=mock.Mock(return_value=process), sleep=mock.Mock())
+        self.assertEqual(info["status"], "error")
+        self.assertIn("retry budget", info["error"])
+        self.assertEqual(info["frames_written"], 1)
+        self.assertFalse(info["capture_gaps"][0]["recovered"])
+        self.assertEqual(source.frame.call_count, 4)
+
+    def test_permission_failure_after_first_frame_is_not_retried(self):
+        a, process, source = self.prepare(), Process(), mock.Mock()
+        source.inspect.return_value = (0, 0, 4, 4)
+        source.frame.side_effect = [bytes(48), CapabilityUnavailable("capture", "macos", "permission denied")]
+        with mock.patch.object(recorder, "budget_status", return_value=self.budget):
+            info = recorder.run(a, frame_source_factory=mock.Mock(return_value=source),
+                                popen=mock.Mock(return_value=process), sleep=mock.Mock())
+        self.assertEqual(info["status"], "error")
+        self.assertEqual(source.frame.call_count, 2)
+        self.assertNotIn("capture_gaps", info)
 
     def test_mac_budget_stop_sends_no_further_frame(self):
         a, source, process = self.prepare(), mock.Mock(), Process()

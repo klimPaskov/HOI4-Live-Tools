@@ -356,6 +356,8 @@ def run(a, *, inspect=inspect_owned_window, popen=subprocess.Popen, sleep=time.s
                         cmd=command, budget=budget, capture_started_epoch=time.time())
             write_json(out / "recording.json", info)
             next_frame = monotonic()
+            frame_retries = 0
+            gap_started = None
             while True:
                 if process.poll() is not None:
                     reason = "ffmpeg_exited"
@@ -376,8 +378,38 @@ def run(a, *, inspect=inspect_owned_window, popen=subprocess.Popen, sleep=time.s
                     reason = budget["reason"]
                     break
                 if source:
-                    frame = source.frame((w, h))
+                    try:
+                        frame = source.frame((w, h))
+                    except Exception as error:
+                        # Only this explicit post-capture witness mismatch is
+                        # retryable. Never retry ownership/permission failures,
+                        # substitute cached pixels, or move/focus the window.
+                        from hoi4_live.errors import ToolError
+                        if (not isinstance(error, ToolError) or
+                                error.details.get("error") != "capture_frame_changed"):
+                            raise
+                        frame_retries += 1
+                        if gap_started is None:
+                            gap_started = monotonic()
+                            info.setdefault("capture_gaps", []).append({
+                                "started_epoch": time.time(), "reason": "capture_frame_changed",
+                                "discarded_frames": 0, "recovered": False})
+                        gap = info["capture_gaps"][-1]
+                        gap["discarded_frames"] += 1
+                        gap["duration_s"] = round(monotonic() - gap_started, 3)
+                        info["continuous_capture"] = False
+                        write_json(out / "recording.json", info)
+                        if frame_retries >= 3 or len(info["capture_gaps"]) > 30:
+                            raise RuntimeError("Recording capture retry budget exhausted") from error
+                        sleep(0.1)
+                        continue  # Recheck stop, ownership, geometry and budget.
                     source.write(process.stdin, frame)
+                    if gap_started is not None:
+                        info["capture_gaps"][-1].update(recovered=True,
+                            duration_s=round(monotonic() - gap_started, 3), ended_epoch=time.time())
+                        write_json(out / "recording.json", info)
+                        gap_started = None
+                    frame_retries = 0
                     info["frames_written"] = info.get("frames_written", 0) + 1
                     next_frame = max(next_frame + 1.0 / options.fps, monotonic())
                     sleep(max(0, next_frame - monotonic()))
