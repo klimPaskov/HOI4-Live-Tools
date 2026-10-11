@@ -73,7 +73,8 @@ The MCP has two explicit modes, chosen per session and recorded in every log:
    eval/fire_event, save editing, hidden enemy intelligence, memory writes or
    reload-to-undo.
 
-The showcase campaigns run in fair mode unless the user asks otherwise.
+The Germany and Nationalist China showcase campaigns run in fair mode; the Poland
+showcase runs in meta mode (see the showcase plan).
 
 ## Recorded showcase plan
 
@@ -90,6 +91,19 @@ budget target, not evidence of success. Record failures honestly.
    and capitulate Japan; recover lost territory; finish as a top-tier power.
    Define measurable end-state metrics in the journal before starting (unified
    territory, remaining wars, industry, army and major-power status).
+3. **Poland, meta mode:** a third full campaign from 1 January 1936 to a
+   conclusive end with meta mode active, using competitive metas and exploits
+   extensively (still no cheating). Drive it from a meta-mode campaign playbook
+   skill (extend `skills/hoi4-live-campaign` with a meta playbook: Poland's
+   opening, space marines, exploit templates, invasion and AI-manipulation
+   tactics, each tagged meta-only so fair mode keeps refusing them). Goals:
+   survive and defeat Germany and the USSR, form the Intermarium or the
+   Polish-Lithuanian Commonwealth, and finish as a dominant power. Record it
+   like the others.
+
+Video plan: the Germany and China campaigns are edited together into one
+professional campaign video (plus the short teaser); the Poland meta campaign
+becomes its own video. Journal milestones with timestamps for both edits.
 
 Keep ffmpeg footage, `calls.jsonl`, the campaign journal, a run manifest (game
 build, DLC, difficulty, historical AI, enabled mods, model/reasoning, commit,
@@ -451,7 +465,7 @@ Complete the background governor so it executes the model's durable standing pla
 
 Implement two play modes, selected per session and logged: (1) FAIR mode, the default: common HOI4 multiplayer game rules, so no exploits or banned cheese (no space marines, no naval-invasion or paratrooper exploit spam, no exploit templates, no AI-baiting or engine-bug exploits), enforced by the tools from one reviewed policy file, while still playing strongly and cleverly (encirclements, concentrated breakthroughs, air superiority before offensives, defensive lines, combined arms, sound economy); (2) META mode: competitive metas and exploits a human can do through the normal UI are allowed. In BOTH modes cheating is forbidden: no console/debug/eval/fire_event, no save editing, no memory writes, no hidden enemy intelligence, no reload-to-undo. Showcases run in fair mode.
 
-Delegate live player acceptance to one gpt-6-luna subagent at medium reasoning, with exclusive input ownership; you remain the builder. First require a clean real-time Germany run in fair mode from 1936-01-01 through 1938-01-01 without builder/human rescue. Then record full fair-mode campaigns from 1936 to a conclusive end, about five hours each: Germany must achieve Anschluss, Czechoslovakia, Poland, Low Countries, France, successful Sea Lion capitulating the UK, Greater German Reich, USSR capitulated and all Allies defeated; Nationalist China must unify China including warlords/communists, expel and capitulate Japan, recover lost territory and become a top-tier power. Normal difficulty, vanilla rules, historical AI, observational telemetry only. Never touch an unrelated game.
+Delegate live player acceptance to one gpt-6-luna subagent at medium reasoning, with exclusive input ownership; you remain the builder. First require a clean real-time Germany run in fair mode from 1936-01-01 through 1938-01-01 without builder/human rescue. Then record full fair-mode campaigns from 1936 to a conclusive end, about five hours each: Germany must achieve Anschluss, Czechoslovakia, Poland, Low Countries, France, successful Sea Lion capitulating the UK, Greater German Reich, USSR capitulated and all Allies defeated; Nationalist China must unify China including warlords/communists, expel and capitulate Japan, recover lost territory and become a top-tier power. Then record a third full campaign as Poland in META mode, using metas and exploits extensively through a meta-mode campaign playbook skill (extend skills/hoi4-live-campaign; meta-only tactics stay refused in fair mode): defeat Germany and the USSR, form the Intermarium or the Commonwealth, finish dominant. Germany and China become one edited video, Poland its own video; journal timestamped milestones. Normal difficulty, vanilla rules, historical AI, observational telemetry only. Never touch an unrelated game.
 
 Keep full ffmpeg recordings, calls.jsonl, journal, manifest and incident log outside Git for the demo video and teaser. Measure latency, pauses, governor coverage and action failures; turn failures into tooling fixes and a fresh acceptance run. Commit focused changes and never add Co-Authored-By or any AI attribution line (the user is the sole author). Audit all pushed history and artifacts for secrets, personal paths, dumps, saves and private mod material; push only public development branches and tested tags. After both OS checks and acceptance pass, publish a release and document the exact version/URL/SHA-256/size for the Windows HOI4 Mod Setup app and Agentic HOI4 Modding pins. Continue until the acceptance and showcases are achieved or a concrete external prerequisite prevents progress; report evidence and remaining gaps honestly.
 ```
