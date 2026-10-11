@@ -151,21 +151,21 @@ class FastClockTests(ClockCase):
         run = clock_mod.AdvanceRun(self.session, self.args(), PopupPolicy.parse("choices"))
         self.assertEqual(run._idle_slots(None), 0)
 
-    def test_runs_the_budget_and_pauses(self):
+    def test_runs_the_budget_and_keeps_running(self):
         self.feed()
         run, res = self.run_loop(budget_days=5)
         self.assertEqual(res["reasons"][0]["code"], "done")
         self.assertGreaterEqual(res["days"], 5)
-        self.assertFalse(self.state["running"], "the clock is paused at the end")
+        self.assertTrue(self.state["running"], "routine deadlines leave the game running")
         self.assertTrue(res["end_date"].startswith("1936.1."))
 
-    def test_stop_condition_fires_on_the_day_and_pauses(self):
+    def test_stop_condition_fires_on_the_day_and_keeps_running(self):
         self.feed(script={103: {"techs": 11}})
         run, res = self.run_loop(budget_days=30, stop_on=["tech_done"], stop_on_used=["tech_done"])
         self.assertEqual(res["reasons"][0]["code"], "tech_done")
         self.assertLessEqual(res["days"], 4)
         self.assertEqual(res["changes"]["techs"], [10, 11])
-        self.assertFalse(self.state["running"])
+        self.assertTrue(self.state["running"])
 
     def test_event_with_a_choice_stops_the_run_and_stays_paused(self):
         self.feed()
@@ -182,7 +182,7 @@ class FastClockTests(ClockCase):
         self.assertEqual(res["reasons"][0]["code"], "popup")
         self.assertEqual(res["data"]["events_waiting"][0]["title"], "Choice")
         self.assertEqual(calls, ["running"])
-        self.assertIn("space", self.session.input.keys, "the clock is frozen before the window is read")
+        self.assertFalse(self.state["running"], "an unresolved choice pauses after it is read")
 
     def test_answered_events_do_not_stop_the_run(self):
         self.feed()

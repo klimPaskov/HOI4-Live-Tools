@@ -9,7 +9,7 @@ then only reads the telemetry file (a byte delta of game.log, no screen, no OCR)
     every ~1.5 s                       one screen grab: popups (the parchment detector) and the paused icon; the
                                        game pauses itself for event and notice windows, so a pause nobody asked
                                        for means a window to answer
-    at a stop                          pause by Space and check the icon
+    at a return                        keep running; pause only for blocking decisions or explicit stop
 
 A run can also go on in the background (`start()`): the agent keeps issuing actions (research, production,
 construction ...) while days pass, and collects the result later (`join()`). Keyboard and mouse sections of the
@@ -51,11 +51,14 @@ def set_running(session, want_running, tries=3, settle=4.0):
     """Space until the speed icon shows the wanted state. True when it does."""
     want = "running" if want_running else "paused"
     for _ in range(tries):
-        if icon_state(session) == want:
+        state = icon_state(session)
+        if state == want:
             return True
+        if state not in ("running", "paused"):
+            return False  # An obscured clock cannot authorize a toggle.
         session.input.key("space")
-        t0 = time.time()
-        while time.time() - t0 < settle:
+        t0 = time.monotonic()
+        while time.monotonic() - t0 < settle:
             time.sleep(0.25)
             if icon_state(session) == want:
                 return True
@@ -83,9 +86,19 @@ class AdvanceRun:
         self.done = threading.Event()
         self.result = None
         self.error = None
-        self.t_start = time.time()
+        self.t_start = time.monotonic()
         self.progress = {"state": "starting", "date": None, "days": 0}
         self.run = {"answered": [], "left_open": [], "notices": [], "reasons": [], "auto": []}
+        self.pause_events = []
+        self._pause_started = None
+        self._started_monotonic = time.monotonic()
+
+    def _pause_for_decision(self, reason):
+        """Only a confirmed transition counts as an agent-induced pause."""
+        if icon_state(self.s) == "running" and set_running(self.s, False):
+            self._pause_started = time.monotonic()
+            self.pause_events.append({"reason": reason, "started_after_s":
+                                      round(self._pause_started - self._started_monotonic, 3)})
 
     # ------------------------------------------------------------------ control
     def start(self):
@@ -120,7 +133,7 @@ class AdvanceRun:
                 try:
                     if self.s.lock.held_by_us():
                         with self.mutex:
-                            set_running(self.s, False)
+                            self._pause_for_decision("clock_error")
                 except Exception:
                     pass
                 raise
@@ -148,13 +161,13 @@ class AdvanceRun:
         last_n = n0 if n0 is not None else -1
         run = self.run
         run["start_date"] = a.get("start_date") or rec0["_date"]
-        t0 = time.time()
+        t0 = time.monotonic()
         speed = a.get("speed") or 5
         with self.mutex:
             ensure_speed(s, speed)
             if not set_running(s, True):
                 raise ToolError("could not start the game clock (speed icon did not change)")
-        last_day_wall = time.time()
+        last_day_wall = time.monotonic()
         last_look = 0.0
         last_rec = None
         last_idle = 0
@@ -187,7 +200,7 @@ class AdvanceRun:
                     self.first = first
                     last_rec = rec
                     last_n = rec["n"]
-                    last_day_wall = time.time()
+                    last_day_wall = time.monotonic()
                     continue
                 cur = adv.watch(rec)
                 reasons += adv.evaluate(prev, cur, wanted, thresholds, ())
@@ -213,7 +226,7 @@ class AdvanceRun:
                         last_focus_idle_n = rec["n"]
                 last_rec = rec
                 last_n = rec["n"]
-                last_day_wall = time.time()
+                last_day_wall = time.monotonic()
                 handled_pause = 0  # count consecutive unexplained pauses only
             queued = guard.drain(s)                    # notices closed by the guard before an action
             if queued:
@@ -238,22 +251,20 @@ class AdvanceRun:
                 run["reasons"] = [{"code": "done", "text": f"{budget} day(s) run" +
                                    (f" to {a['until']}" if a.get("until") else "")}]
                 break
-            if time.time() - t0 > a["max_seconds"]:
+            if time.monotonic() - t0 > a["max_seconds"]:
                 run["reasons"] = [{"code": "time_limit",
                                    "text": f"the {a['max_seconds']} s wall-clock limit was reached"}]
                 break
-            if time.time() - last_look < LOOK_EVERY:
+            if time.monotonic() - last_look < LOOK_EVERY:
                 continue
-            last_look = time.time()
+            last_look = time.monotonic()
             with self.mutex:
                 img = s.grab(focus=False)
             found = popups_mod.detect(img) if self.policy.mode != "ignore" or self.policy.rules else []
             if found:
                 with self.mutex:
-                    # Re-read under the mutex; an agent action may have changed
-                    # the clock since the detection frame was captured.
-                    if icon_state(s) == "running":
-                        s.input.key("space")
+                    # Declared choices are ordinary actions while time runs.
+                    # Read/answer first; only an unresolved decision needs a pause.
                     recs = game_popups.handle_all(s, self.policy, phase="running")
                 for p in recs:
                     if p.get("answered"):
@@ -262,11 +273,13 @@ class AdvanceRun:
                         run["left_open"].append(p)
                 if run["left_open"]:
                     run["reasons"] = [{"code": "popup", "text": f"{len(run['left_open'])} event(s) wait for an answer"}]
+                    with self.mutex:
+                        self._pause_for_decision("popup")
                     paused_by_us = True
                     break
                 with self.mutex:
                     set_running(s, True)
-                last_day_wall = time.time()
+                last_day_wall = time.monotonic()
                 continue
             state = icon_state(s, img)
             if state == "paused":
@@ -283,7 +296,9 @@ class AdvanceRun:
                             r = self.on_reasons(self, r) or []
                         if r:
                             run["reasons"] = r
-                            paused_by_us = True
+                            # A routine completion notice must not leave the
+                            # simulation paused while the model reads its result.
+                            set_running(s, True)
                             break
                     if not titles:
                         handled_pause += 1
@@ -302,13 +317,16 @@ class AdvanceRun:
                                        "text": "a peace conference is open (hoi4_peace status / take)"}]
                     paused_by_us = True
                     break
-            if time.time() - last_day_wall > NO_PROGRESS_S:
+            if time.monotonic() - last_day_wall > NO_PROGRESS_S:
                 run["reasons"] = [{"code": "no_progress", "text": f"no game day passed in {NO_PROGRESS_S} s"}]
                 break
-        # stop the clock (the agent decides next)
-        if not paused_by_us:
+        # A returned observation or deadline is not a reason to pause the game.
+        blocking = {"cancelled", "popup", "governor_decision", "governor_error",
+                    "standing_failed", "standing_queue_empty", "no_progress"}
+        codes = [r["code"] for r in run["reasons"]]
+        if not paused_by_us and any(code in blocking for code in codes):
             with self.mutex:
-                set_running(s, False)
+                self._pause_for_decision(next(code for code in codes if code in blocking))
         self.progress.update(state="stopped")
         return self._result(first, prev, tag)
 
@@ -349,7 +367,14 @@ class AdvanceRun:
                 "changes": changes, "answered": run["answered"], "events_waiting": run["left_open"],
                 "notices": run["notices"], "attention": attention, "suggestions": adv.suggestions(attention),
                 "stop_on": a.get("stop_on_used"), "popup_policy": self.policy.to_dict(),
-                "wall_s": round(time.time() - self.t_start, 1)}
+                "wall_s": round(time.monotonic() - self._started_monotonic, 1),
+                "agent_pause_count": len(self.pause_events),
+                "agent_pause_events": list(self.pause_events),
+                "agent_pause_seconds_in_run": round(time.monotonic() - self._pause_started, 3)
+                    if self._pause_started is not None else 0.0,
+                "agent_pause_ongoing": self._pause_started is not None}
+        data["wall_seconds_per_game_year"] = (round(data["wall_s"] * 365 / days_run, 2)
+                                             if days_run and days_run > 0 else None)
         if run["auto"]:
             data["standing_orders_done"] = run["auto"]
         return {"summary": summary, "data": data, "end_date": end_date, "start_date": start_date, "tag": tag,

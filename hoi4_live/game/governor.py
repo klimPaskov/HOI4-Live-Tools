@@ -9,6 +9,7 @@ their required live observations exist. A loaded durable plan never auto-starts.
 
 import copy
 import json
+import math
 import os
 import threading
 import time
@@ -19,6 +20,12 @@ from ..state.governor import StandingPlan, digest, wait_matches
 
 STRATEGIC_STOP = ["war_started", "war_ended", "territory_lost", "losing"]
 UNSUPPORTED = ("focus", "construction", "production", "army")
+UNAVAILABLE_OBSERVATIONS = {
+    "focus": "focus IDs, availability and current selection are not emitted",
+    "construction": "built levels exist weekly; queued levels and build availability are unknown",
+    "production": "idle factory count exists; production line IDs and assignments are unknown",
+    "army": "division count exists; assignment and safe selection are unknown",
+}
 
 
 def _require_owned(session):
@@ -33,6 +40,15 @@ def _integer(value):
     return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else None
 
 
+def _finite(value):
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return False
+    try:
+        return math.isfinite(value)
+    except OverflowError:
+        return False
+
+
 def _ids(rows, catalog, tag):
     """Decode only this player's complete, valid technology records."""
     result = set()
@@ -43,6 +59,46 @@ def _ids(rows, catalog, tag):
         if index is None or index >= len(catalog):
             return None
         result.add(catalog[index])
+    return result
+
+
+def _shortages(store, tag, day):
+    """Read only exact-day observed categories; never infer full inventory coverage.
+
+    Equipment telemetry covers selected archetypes and army targets, not every
+    deployment/garrison/upgrade need. Resource values describe observed balance,
+    not production-line penalties. Keep these narrower meanings explicit.
+    """
+    result = {}
+    for kind, suffix, name in (("eq", "_army", "equipment"), ("res", "_prod", "resources")):
+        record = store.get_at(kind, tag, day)
+        if not isinstance(record, dict) or record.get("t") != tag or _integer(record.get("n")) != day:
+            continue
+        rows = []
+        for key in sorted(record):
+            if not key.endswith(suffix):
+                continue
+            ident = key[:-len(suffix)]
+            fields = (ident, ident + "_army", ident + "_need") if kind == "eq" else (ident,)
+            values = [record.get(field) for field in fields]
+            if not all(_finite(value) for value in values):
+                continue
+            if kind == "eq":
+                stock, army, need = values
+                if min(values) < 0:
+                    continue
+                rows.append({"id": ident, "stockpile": stock, "in_armies": army,
+                             "army_target": need, "army_deficit": max(0, need - army - stock)})
+            else:
+                rows.append({"id": ident, "balance": values[0], "deficit": max(0, -values[0])})
+        if rows:
+            result[name] = rows
+            field = "army_deficit" if kind == "eq" else "deficit"
+            total = sum(row[field] for row in rows)
+            if _finite(total):
+                result["army_deficit" if kind == "eq" else "resource_deficit"] = total
+    if result:
+        result.update(source="telemetry", as_of_day=day, scope="observed_categories_only")
     return result
 
 
@@ -70,20 +126,28 @@ def telemetry_snapshot(session, tag=None):
         raise ToolError("governor telemetry timeline is incomplete or ambiguous")
     snapshot = {"day": latest_n - 1, "latest_day": latest_n, "completed_record_day": n,
                 "date": complete.get("_date"), "tag": tag,
-                "source": "telemetry", "as_of_day": n, "metrics": {}}
-    for target, source in (("idle_military_factories", "mil_free"), ("idle_civilian_factories", "civ_free")):
-        value = _integer(complete.get(source))
-        if value is not None:
-            snapshot["metrics"][target] = value
+                "source": "telemetry", "as_of_day": n, "metrics": {},
+                "unavailable_observations": dict(UNAVAILABLE_OBSERVATIONS)}
     if n != latest_n - 1:
         snapshot["research_unknown"] = "latest completed daily batch is missing; older fields are stale"
         return snapshot
-    # Economy equipment/resource records do not contain all requested deficit
-    # semantics; absence remains null in the reconciler rather than invented 0.
     catalog = getattr(store, "techs", None)
     generation = latest.get("g")
     hello = store.get("hello", tag)
     own_stream = all(t == tag or not rows for t, rows in histories.items())
+    validated_generation = (own_stream and isinstance(generation, str) and bool(generation)
+                            and complete.get("g") == generation
+                            and latest.get("v") == SCHEMA and complete.get("v") == SCHEMA
+                            and isinstance(hello, dict) and hello.get("g") == generation
+                            and hello.get("t") == tag and hello.get("v") == SCHEMA)
+    if validated_generation:
+        for target, source in (("idle_military_factories", "mil_free"), ("idle_civilian_factories", "civ_free")):
+            value = _integer(complete.get(source))
+            if value is not None:
+                snapshot["metrics"][target] = value
+        shortages = _shortages(store, tag, n)
+        if shortages:
+            snapshot["shortages"] = shortages
     groups = getattr(store, "groups", {})
     rs_group = groups.get("rs")
     tagged_rs = not rs_group or all(isinstance(r, dict) and r.get("t") == tag for r in rs_group.get("rows", []))
@@ -385,6 +449,7 @@ class Governor:
         with self.condition:
             return {"active": self._active, "configured": self.policy is not None,
                     "supported": ["research", "events"], "unsupported_state": list(UNSUPPORTED),
+                    "unavailable_observations": dict(UNAVAILABLE_OBSERVATIONS),
                     "plan": copy.deepcopy(self.policy.plan) if self.policy else None,
                     "snapshot": copy.deepcopy(self.snapshot), "last_stop": copy.deepcopy(self.last_stop),
                     "report": self.policy.report() if self.policy else None,

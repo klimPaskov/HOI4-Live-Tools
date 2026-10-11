@@ -14,7 +14,7 @@ offensive line for every army, through `hoi4_orders attack`, all by state id).
 
 import time
 
-from ..errors import ToolError
+from ..errors import ModeRefused, ToolError
 from ..game import saves
 from ..gamedata import mapdata
 from ..state import assemble, front, queries
@@ -35,6 +35,9 @@ def _enemies(sf, tag, only=None):
 
 def read_situation(session, tag, save="latest", fresh=False, enemies=None):
     """(situation dict with the map index under `_idx`, source note)."""
+    if fresh and getattr(session, "mode", "campaign") == "campaign":
+        raise ModeRefused("campaign front observations never save or pause; use existing save data with "
+                          "its reported date, or fresh telemetry")
     if fresh:
         saves.save(session, "hoi4live_front", True)
         save = "hoi4live_front"
@@ -83,7 +86,7 @@ def _brief(sit, armies_touch=4):
       "first). plan: the same plus one suggested order per army (nearest unclaimed objective, the enemy state "
       "beside the army nearest to it). order: execute the plan or your own `orders` "
       "[{army, front_target, target}] (state ids; front line against the owner of front_target, offensive line "
-      "through target, execute); every army is tried and failures listed. fresh=true saves the game first so the "
+      "through target, execute); every army is tried and failures listed. test-mode fresh=true saves the game first so the "
       "read is current (about 30 s); otherwise the newest save is used and its date is reported.",
       {"properties": {
           "action": {"type": "string", "enum": ["situation", "plan", "order"], "default": "situation"},

@@ -27,6 +27,9 @@ inherit those two fields from the snapshot. Section schemas:
   {state:bool}. True certifies the tool's entire selectable stack is unassigned
   or already belongs to that target army. No division-level targeting.
 * events: open [{id,index,title,text,options:[label]}]. Explicit policy only.
+* shortages: observed equipment [{id,army_deficit,...}] and resources
+  [{id,balance,deficit}], with scoped army_deficit/resource_deficit totals.
+  These observed-category totals do not establish complete national deficits.
 
 Unknown availability never authorizes a choice. No enemy state is inferred.
 ``reconcile`` proposes bounded calls; the owner executes under its own locks and
@@ -48,6 +51,7 @@ from ..protocol.schema import validate
 METRICS = ("idle_research_slots", "idle_military_factories", "idle_civilian_factories",
            "unassigned_divisions", "equipment_deficit", "resource_deficit")
 KINDS = ("events", "research", "focus", "construction", "production", "army")
+OBSERVATIONS = KINDS + ("shortages",)
 
 
 def _number(value):
@@ -328,6 +332,20 @@ class StandingPlan:
             if (_number(out["metrics"][metric]) or 0) > 0:
                 out["alerts"].append({"priority": 1, "code": metric, "value": out["metrics"][metric],
                                       "inspect": _call("hoi4_state", {"sections": ["economy", "production"], "screen": True})})
+        shortages = fresh_section(snapshot, "shortages", self.plan["max_age_days"])
+        if shortages:
+            for section, field, code in (("equipment", "army_deficit", "observed_army_equipment_deficit"),
+                                         ("resources", "deficit", "observed_resource_deficit")):
+                rows = shortages.get(section)
+                if not isinstance(rows, list):
+                    continue
+                for row in rows:
+                    if not isinstance(row, dict) or not isinstance(row.get("id"), str):
+                        continue
+                    value = _number(row.get(field))
+                    if value is not None and value > 0:
+                        out["alerts"].append({"priority": 1, "code": code, "id": row["id"], "value": value,
+                                              "inspect": _call("hoi4_state", {"sections": ["economy", "production"], "screen": True})})
         out["actions"] = candidates[:self.plan["max_actions"]]
         return self._finish(out, snapshot)
 
@@ -358,6 +376,10 @@ class StandingPlan:
                 self.state["first_day"] = day
             self.state["last_day"] = day
             self.state["observed_days"] += 1
+            sections = self.state.setdefault("section_samples", {})
+            for kind in OBSERVATIONS:
+                samples = sections.setdefault(kind, {"fresh": 0, "unknown_or_stale": 0})
+                samples["fresh" if fresh_section(snapshot, kind, 0) is not None else "unknown_or_stale"] += 1
             sample_metrics = self.metrics(snapshot)
             # Accepted old observations may guide policy, but cannot count as
             # measurements of an unobserved new day in campaign metrics.
@@ -387,6 +409,7 @@ class StandingPlan:
         out["missing_game_days"] = (out["game_days_elapsed"] + 1 - out["observed_days"]
                                     if out["game_days_elapsed"] is not None else None)
         out["coverage_note"] = "idle totals sum observed daily samples; missing days are not extrapolated"
+        out["section_coverage_note"] = "fresh counts require dated observations; they do not establish complete fields or verified automation"
         return out
 
     def _confirm(self, snapshot, fresh):
@@ -486,7 +509,7 @@ def wait_matches(snapshot, predicates, baseline=None, max_age_days=0):
             start, end = _day((baseline or {}).get("day")), _day(snapshot.get("day"))
             matched = start is not None and end is not None and end - start >= days
         elif set(predicate) == {"section", "field", "op", "value"}:
-            if predicate["section"] not in KINDS + ("metrics",) or not isinstance(predicate["field"], str):
+            if predicate["section"] not in OBSERVATIONS + ("metrics",) or not isinstance(predicate["field"], str):
                 raise ToolError("unknown wait section or field")
             op = predicate["op"]
             if op not in ("gte", "lte", "eq"):
@@ -521,6 +544,9 @@ def digest(result, snapshot=None, max_bytes=2048):
            "as_of_day": snapshot.get("as_of_day"), "metrics": result.get("metrics", {}),
            "alerts": copy.deepcopy(result.get("alerts", [])),
            "stop": list(result.get("stop_reasons", [])), "omitted_alerts": 0}
+    out["observations"] = {kind: "fresh" if fresh_section(snapshot, kind, 0) is not None
+                           else "stale" if isinstance(snapshot.get(kind), dict) else "unknown"
+                           for kind in OBSERVATIONS}
 
     def encoded():
         return json.dumps(out, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
@@ -533,6 +559,8 @@ def digest(result, snapshot=None, max_bytes=2048):
         out["omitted_stop_reasons"] = out.get("omitted_stop_reasons", 0) + 1
     if len(encoded().encode("utf-8")) > max_bytes:
         out["metrics"] = {key: result.get("metrics", {}).get(key) for key in METRICS}
+    if len(encoded().encode("utf-8")) > max_bytes:
+        out.pop("observations", None)
     if len(encoded().encode("utf-8")) > max_bytes:
         raise ToolError("digest essential fields exceed byte budget")
     return encoded()
