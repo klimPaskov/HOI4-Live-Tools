@@ -167,6 +167,8 @@ def hoi4_launch(session, args):
     if backup:
         session.config_owner_id = uuid.uuid4().hex
         backup.mark_game_starting(session.config_owner_id)
+    from ..game import gamemode
+    gamemode.begin_run(session, t0)
     try:
         pid = process.launch(cfg.game_dir, launch_args)
     except (OSError, ToolError):
@@ -175,8 +177,6 @@ def hoi4_launch(session, args):
             backup.restore()
         raise
     session.launched_pid = pid
-    from ..game import gamemode
-    gamemode.begin_run(session, t0)
     session.launched_identity = session.platform.capture_process_identity(pid, cfg.game_exe)
     if backup:
         backup.mark_game_started(session.config_owner_id)

@@ -66,6 +66,28 @@ def begin_run(session, started_wall=None):
     session._game_mode_started_wall = time.time() if started_wall is None else started_wall
     session._game_mode_save = None
     session._mode_cache = None
+    session._game_mode_baseline = _baseline_saves(session)
+
+
+def _baseline_saves(session):
+    """Exclude unchanged prelaunch files even on coarse wall clocks.
+
+    Metadata inventory is bounded; an unreadable or oversized directory leaves
+    automatic association unavailable, while a verified save/load still works.
+    """
+    baseline = set()
+    try:
+        with os.scandir(session.cfg.saves_dir) as entries:
+            for count, entry in enumerate(entries):
+                if count >= 4096:
+                    return None
+                if entry.name.lower().endswith(".hoi4"):
+                    baseline.add(_signature(entry.path))
+    except FileNotFoundError:
+        return baseline
+    except (OSError, AttributeError, TypeError):
+        return None
+    return baseline
 
 
 def _signature(path):
@@ -101,8 +123,13 @@ def current(session):
     if p is None:
         if (type(started) not in (int, float) or not math.isfinite(started) or not 0 < started <= now):
             return {"known": False, "reason": "no_current_run_save_evidence"}
+        baseline = getattr(session, "_game_mode_baseline", None)
+        if not isinstance(baseline, set):
+            return {"known": False, "reason": "prelaunch_save_inventory_unavailable"}
         p = newest_save(session)
         try:
+            if p and _signature(p) in baseline:
+                return {"known": False, "reason": "unchanged_prelaunch_save"}
             written = os.path.getmtime(p) if p else None
         except OSError:
             written = None

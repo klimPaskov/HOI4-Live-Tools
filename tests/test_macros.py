@@ -319,6 +319,7 @@ class GameModeTests(unittest.TestCase):
         session.cfg.saves_dir = os.path.dirname(p)
         session._mode_cache = None
         gamemode.begin_run(session, time.time() - 10)
+        gamemode.bind_save(session, p)
         with self.assertRaises(ToolError) as cm:
             gamemode.check(session, "hoi4_console")
         self.assertEqual(cm.exception.details["error"], "ironman")

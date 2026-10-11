@@ -24,8 +24,24 @@ class GameModeFreshnessTests(unittest.TestCase):
         gamemode.begin_run(self.session, time.time())
         self.assertFalse(gamemode.current(self.session)["known"])
 
+    def test_equal_timestamp_prelaunch_save_is_not_current(self):
+        written = os.path.getmtime(self.path)
+        gamemode.begin_run(self.session, written)
+        with mock.patch.object(gamemode.time, 'time', return_value=written + 1):
+            self.assertFalse(gamemode.current(self.session)["known"])
+
+    def test_unavailable_prelaunch_inventory_requires_verified_binding(self):
+        with mock.patch.object(gamemode.os, 'scandir', side_effect=PermissionError):
+            gamemode.begin_run(self.session, time.time() - 10)
+        self.assertFalse(gamemode.current(self.session)["known"])
+        gamemode.bind_save(self.session, str(self.path))
+        self.assertTrue(gamemode.current(self.session)["known"])
+
     def test_new_save_is_evidence_but_new_campaign_clears_it(self):
         gamemode.begin_run(self.session, time.time() - 10)
+        self.path.write_text('HOI4txt\nplayer="GER"\ndifficulty="normal"\n ironman=1\n# written after launch\n')
+        now = time.time() - 1
+        os.utime(self.path, (now, now))
         result = gamemode.current(self.session)
         self.assertTrue(result["known"])
         result["ironman"] = False
@@ -53,6 +69,9 @@ class GameModeFreshnessTests(unittest.TestCase):
 
     def test_torn_read_is_rejected(self):
         gamemode.begin_run(self.session, time.time() - 10)
+        self.path.write_text('HOI4txt\nplayer="GER"\n# new save\n')
+        now = time.time() - 1
+        os.utime(self.path, (now, now))
         original = gamemode.read_header
         def changed(path):
             result = original(path)
