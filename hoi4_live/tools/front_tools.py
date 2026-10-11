@@ -46,7 +46,8 @@ def read_situation(session, tag, save="latest", fresh=False, enemies=None):
         hdr = sf.header()
         who = _enemies(sf, tag, enemies)
         loc = cc.names(session, [f"STATE_{k}" for k in idx["states"]])
-        sit = front.situation(sf, tag, idx, who, loc)
+        sit = front.situation(sf, tag, idx, who, loc,
+                              include_enemy_details=getattr(session, "mode", "campaign") == "test")
     finally:
         queries.close_all()
     sit["_idx"] = idx
@@ -66,8 +67,10 @@ def _brief(sit, armies_touch=4):
                       "orders": [o["type"] + (f" ({o['operation']})" if o.get("operation") else "")
                                  for o in a["orders"]],
                       "stand": a["stand"][:4], "touch": a["touch"][:armies_touch]} for a in sit["armies"]]
-    out["fronts"] = {e: [f"{p['ours_name']} ({p['our_divisions']}) vs {p['theirs_name']} ({p['enemy_divisions']})"
-                         for p in sorted(v, key=lambda p: -p["enemy_divisions"])[:8]]
+    out["fronts"] = {e: [f"{p['ours_name']} ({p['our_divisions']}) vs {p['theirs_name']} "
+                         f"({p['enemy_divisions'] if p['enemy_divisions'] is not None else 'unknown'})"
+                         for p in sorted(v, key=lambda p: (p["enemy_divisions"] is None,
+                                                          -(p["enemy_divisions"] or 0), p["theirs"]))[:8]]
                      for e, v in sit["fronts"].items()}
     return out
 
@@ -75,7 +78,8 @@ def _brief(sit, armies_touch=4):
 @tool("hoi4_front",
       "The front from a save, by state id, and the orders for a whole theatre. situation: every army (divisions, "
       "strength, organisation, orders), the states it stands in, the enemy-held states beside it with the enemy "
-      "divisions there, the enemy's forces and the objectives (victory-point states still in enemy hands, nearest "
+      "divisions there in test mode only; campaign mode reads our units and public map control, with enemy "
+      "forces unknown. The objectives are victory-point states still in enemy hands, nearest "
       "first). plan: the same plus one suggested order per army (nearest unclaimed objective, the enemy state "
       "beside the army nearest to it). order: execute the plan or your own `orders` "
       "[{army, front_target, target}] (state ids; front line against the owner of front_target, offensive line "
@@ -114,7 +118,8 @@ def hoi4_front(session, args):
         return ToolResult(f"{tag} is at war with nobody in the save of {sit['as_of']}", {"as_of": sit["as_of"]})
     if a == "situation":
         brief = _brief(sit)
-        top = ", ".join(f"{e}: {v['divisions']} div" for e, v in sit["enemy"].items())
+        top = ", ".join(f"{e}: {v['divisions']} div" if v["divisions"] is not None else f"{e}: forces unknown"
+                        for e, v in sit["enemy"].items())
         return ToolResult(f"front as of {sit['as_of']}: {len(sit['armies'])} army(ies) vs {top}", brief)
     wanted = args.get("armies")
     if wanted:

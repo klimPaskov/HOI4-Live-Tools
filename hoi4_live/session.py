@@ -53,6 +53,11 @@ class Session:
         self.artifacts_dir = os.path.join(c.artifacts_dir, self.run_id)
         self.last_popups = []
         self.launched_pid = None
+        self.launched_identity = None
+        self.owned_process_only = os.environ.get("HOI4_LIVE_OWNED_ONLY", "0") == "1"
+        self._memory_process = None
+        self._memory_reader = None
+        self.governor = None
         self.calibration = {}
         self.ui_mutex = threading.RLock()       # keyboard and mouse sections: acting tools, the background clock
         self.clock = None                       # the latest AdvanceRun (hoi4_advance, hoi4_clock)
@@ -144,7 +149,51 @@ class Session:
         return self._telemetry
 
     def require_game(self):
-        return self.window.require()
+        hwnd = self.window.require()
+        if self.owned_process_only:
+            self.require_owned_game()
+        return hwnd
+
+    def require_owned_game(self):
+        """Validate our launch, including creation time, without reading game memory."""
+        from .memory.winproc import capture_launched_identity, MemoryReadError
+        identity = self.launched_identity
+        if identity is None or self.launched_pid != identity.pid:
+            raise ToolError("this session did not launch the game; wait for it to exit, then hoi4_launch",
+                            {"error": "unowned_process"})
+        # A second game must not redirect UI actions away from the owned instance.
+        if not self.window.find() or self.window.pid != identity.pid:
+            raise ToolError("the game window does not belong to this session's launch",
+                            {"error": "unowned_process"})
+        try:
+            current = capture_launched_identity(identity.pid, identity.executable_path)
+        except (OSError, MemoryReadError) as exc:
+            raise ToolError("owned game exited or its identity cannot be verified",
+                            {"error": "unowned_process"}) from exc
+        if current != identity:
+            raise ToolError("game PID was reused; refusing access", {"error": "unowned_process"})
+        return identity
+
+    def memory_snapshot(self, clock_only=False):
+        """Opt-in, read-only player snapshot. Never attaches to a discovered game."""
+        from .memory.winproc import ReadOnlyProcess, MemoryReadError
+        from .memory.reader import MemoryReader
+        from .memory.pe import load_rtti
+        identity = self.require_owned_game()
+        try:
+            if self._memory_process is None or self._memory_process.closed:
+                img, rtti = load_rtti(identity.executable_path)
+                proc = ReadOnlyProcess(identity, owned=True)
+                try:
+                    module = proc.module_info()
+                    reader = MemoryReader(proc, module.base, img.build_key, rtti, module_size=module.size)
+                except BaseException:
+                    proc.close()
+                    raise
+                self._memory_process, self._memory_reader = proc, reader
+            return self._memory_reader.clock_snapshot() if clock_only else self._memory_reader.snapshot()
+        except (OSError, MemoryReadError, ValueError) as exc:
+            raise ToolError(str(exc), {"error": "memory_unavailable", "fallback": "hoi4_briefing"}) from exc
 
     # ------------------------------------------------------------------ capture
     def grab(self, focus=None):
@@ -192,6 +241,12 @@ class Session:
                 run.join(20)
             except Exception:
                 pass
+        try:
+            if self._memory_process is not None:
+                self._memory_process.close()
+                self._memory_process = self._memory_reader = None
+        except Exception:
+            pass
         try:
             if self._ocr is not None:
                 self._ocr.close()

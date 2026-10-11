@@ -71,11 +71,12 @@ def ensure_speed(session, speed):
 class AdvanceRun:
     """One advance: the arguments of hoi4_advance, the loop, and its result."""
 
-    def __init__(self, session, args, policy, on_reasons=None, mutex=None):
+    def __init__(self, session, args, policy, on_reasons=None, mutex=None, on_day=None):
         self.s = session
         self.args = args
         self.policy = policy
         self.on_reasons = on_reasons
+        self.on_day = on_day
         self.mutex = mutex or session.ui_mutex
         self.cancel = threading.Event()
         self.thread = None
@@ -109,6 +110,27 @@ class AdvanceRun:
 
     # ------------------------------------------------------------------ the loop
     def execute(self):
+        # A background run outlives the dispatcher call which started it. Keep the
+        # desktop lease until it ends, including while no UI actions are needed.
+        with self.s.lock.hold("background campaign clock"):
+            try:
+                return self._execute()
+            except BaseException:
+                self.progress.update(state="failed")
+                try:
+                    if self.s.lock.held_by_us():
+                        with self.mutex:
+                            set_running(self.s, False)
+                except Exception:
+                    pass
+                raise
+            finally:
+                governor = getattr(self.s, "governor", None)
+                if governor is not None:
+                    governor.on_stop(self, self.run["reasons"] or
+                                     [{"code": "governor_error", "text": "clock ended unexpectedly"}])
+
+    def _execute(self):
         s, a = self.s, self.args
         store = s.telemetry
         tag = store.player()
@@ -140,12 +162,18 @@ class AdvanceRun:
         last_focus_idle_n = -10
         paused_by_us = False
         handled_pause = 0
+        last_heartbeat = time.monotonic()
         self.progress.update(state="running", date=run["start_date"])
         while True:
             if self.cancel.is_set():
                 run["reasons"] = [{"code": "cancelled", "text": "stopped by the agent"}]
                 break
             time.sleep(POLL)
+            if time.monotonic() - last_heartbeat >= 15:
+                if not s.lock.held_by_us():
+                    raise ToolError("desktop lease lost; campaign clock stopped")
+                s.lock.refresh()
+                last_heartbeat = time.monotonic()
             store = s.telemetry
             tag = tag or store.player()
             hist = store.history.get(tag) or ()
@@ -186,6 +214,7 @@ class AdvanceRun:
                 last_rec = rec
                 last_n = rec["n"]
                 last_day_wall = time.time()
+                handled_pause = 0  # count consecutive unexplained pauses only
             queued = guard.drain(s)                    # notices closed by the guard before an action
             if queued:
                 titles = [q["title"] for q in queued]
@@ -194,9 +223,14 @@ class AdvanceRun:
                 reasons += adv.evaluate(None, None, wanted, thresholds, titles)
             if new and n0 is not None:
                 self.progress.update(date=new[-1]["_date"], days=last_n - n0, n=last_n)
+                if self.on_day:
+                    # Reconcile once against the newest state, never replay old
+                    # snapshots after a slow UI action has advanced several days.
+                    reasons += self.on_day(self, new[-1]) or []
             if reasons and self.on_reasons:
                 reasons = self.on_reasons(self, reasons) or []
-            reasons = [r for r in reasons if r["code"] in stop_on or r["code"].startswith("standing_")]
+            reasons = [r for r in reasons if r["code"] in stop_on
+                       or r["code"].startswith(("standing_", "governor_"))]
             if reasons:
                 run["reasons"] = reasons
                 break
@@ -211,12 +245,15 @@ class AdvanceRun:
             if time.time() - last_look < LOOK_EVERY:
                 continue
             last_look = time.time()
-            img = s.grab()
+            with self.mutex:
+                img = s.grab(focus=False)
             found = popups_mod.detect(img) if self.policy.mode != "ignore" or self.policy.rules else []
             if found:
-                if icon_state(s, img) == "running":
-                    s.input.key("space")                   # freeze the clock while the window is read
                 with self.mutex:
+                    # Re-read under the mutex; an agent action may have changed
+                    # the clock since the detection frame was captured.
+                    if icon_state(s) == "running":
+                        s.input.key("space")
                     recs = game_popups.handle_all(s, self.policy, phase="running")
                 for p in recs:
                     if p.get("answered"):
@@ -240,6 +277,7 @@ class AdvanceRun:
                     for t in titles:
                         run["notices"].append({"title": t, "date": self.progress.get("date")})
                     if titles:
+                        handled_pause = 0
                         r = adv.evaluate(prev, prev, stop_on, thresholds, titles)
                         if r and self.on_reasons:
                             r = self.on_reasons(self, r) or []
@@ -247,14 +285,14 @@ class AdvanceRun:
                             run["reasons"] = r
                             paused_by_us = True
                             break
-                    handled_pause += 1
+                    if not titles:
+                        handled_pause += 1
                     if handled_pause > 6:
                         run["reasons"] = [{"code": "paused_by_game",
                                            "text": "the clock keeps stopping and nothing on screen explains it"}]
                         paused_by_us = True
                         break
                     set_running(s, True)
-                last_day_wall = time.time()
                 continue
             if state == "unknown":
                 # no top bar: a full-screen window. The peace conference is one we can answer.
@@ -275,6 +313,9 @@ class AdvanceRun:
         return self._result(first, prev, tag)
 
     def _standing_codes(self):
+        governor = getattr(self.s, "governor", None)
+        if governor is not None and governor.active():
+            return set()
         from ..state import standing
         out = set()
         for r in standing.get(self.s).rules.values():
@@ -284,7 +325,7 @@ class AdvanceRun:
     def _idle_slots(self, rec):
         """Idle research slots on the day of `rec`: slots minus busy ones (needs the rs lines of that day, which
         are complete once the next day record has arrived)."""
-        slots = rec.get("rslots")
+        slots = (rec or {}).get("rslots")
         if not isinstance(slots, (int, float)):
             return 0
         return max(0, int(slots) - self.s.telemetry.busy_slots(rec["n"]))

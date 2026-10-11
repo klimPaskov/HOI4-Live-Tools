@@ -112,7 +112,7 @@ def vp_value(idx, sid):
     return sum(st["vp"].values()) if st and st.get("vp") else 0
 
 
-def situation(sf, tag, idx, enemies, names=None, focus=None):
+def situation(sf, tag, idx, enemies, names=None, focus=None, include_enemy_details=True):
     """What the war looks like for `tag` against `enemies` (tags).
 
     armies      each army: name, divisions, orders (type/operation), executing, average strength and organisation,
@@ -124,13 +124,15 @@ def situation(sf, tag, idx, enemies, names=None, focus=None):
     objectives  enemy-held states with victory points, biggest first, with the distance (map pixels) from the
                 nearest of our armies
     unplaced    our divisions that stand in no state (at sea, in a transport) or in no army
+    When include_enemy_details=False, only our units and public map control/VPs
+    are read. Enemy counts are unknown (None), never inferred as zero.
     """
     names = names or {}
     own = owners(sf)
     ctrl = controllers(sf)
     control = state_control(idx, own, ctrl)
     ours = divisions_by_state(sf, tag, idx)
-    enemy_divs = {e: divisions_by_state(sf, e, idx) for e in enemies}
+    enemy_divs = {e: divisions_by_state(sf, e, idx) for e in enemies} if include_enemy_details else {}
     enemy_in_state = {}
     for e, by in enemy_divs.items():
         for sid, ds in by.items():
@@ -168,7 +170,8 @@ def situation(sf, tag, idx, enemies, names=None, focus=None):
                     e = enemy_in_state.get(nb, {"divisions": 0, "org": [], "tags": set()})
                     touch[nb] = {"state": nb, "name": sname(nb), "owner": control[nb]["owner"],
                                  "held_by": control[nb]["controller"],
-                                 "enemy_divisions": e["divisions"], "enemy_org": _avg(e["org"]), "from": sid}
+                                 "enemy_divisions": e["divisions"] if include_enemy_details else None,
+                                 "enemy_org": _avg(e["org"]) if include_enemy_details else None, "from": sid}
         main = max(stand.items(), key=lambda kv: kv[1])[0] if stand else None
         ordered = sorted(touch.values(), key=lambda t: (_dist(idx, main, t["state"]) if main else 0))
         armies.append({"name": a["name"], "divisions": a["divisions"], "orders": a["orders"],
@@ -190,9 +193,14 @@ def situation(sf, tag, idx, enemies, names=None, focus=None):
                 owner = control[nb]["controller"]
                 fronts.setdefault(owner, []).append({"ours": sid, "ours_name": sname(sid), "our_divisions": len(ds),
                                                      "theirs": nb, "theirs_name": sname(nb),
-                                                     "enemy_divisions": e["divisions"], "enemy_org": _avg(e["org"])})
+                                                     "enemy_divisions": e["divisions"] if include_enemy_details else None,
+                                                     "enemy_org": _avg(e["org"]) if include_enemy_details else None})
     enemy = {}
     for e in enemies:
+        if not include_enemy_details:
+            enemy[e] = {"divisions": None, "avg_strength": None, "avg_organisation": None,
+                        "top_states": [], "at_sea_or_unplaced": None}
+            continue
         by = enemy_divs.get(e) or {}
         allds = [d for ds in by.values() for d in ds]
         top = sorted(((s, len(ds)) for s, ds in by.items() if s is not None), key=lambda kv: -kv[1])[:8]
@@ -210,7 +218,7 @@ def situation(sf, tag, idx, enemies, names=None, focus=None):
         e = enemy_in_state.get(sid, {"divisions": 0})
         objectives.append({"state": sid, "name": sname(sid), "owner": control[sid]["owner"],
                            "vp": sum(st["vp"].values()), "distance": round(near) if near is not None else None,
-                           "enemy_divisions": e["divisions"]})
+                           "enemy_divisions": e["divisions"] if include_enemy_details else None})
     objectives.sort(key=lambda o: (-o["vp"], o["distance"] if o["distance"] is not None else 1e9))
     in_army = {d for a in mil["armies"] for d in a["division_ids"]}
     return {"tag": tag, "enemies": list(enemies), "armies": armies, "army_groups": mil["army_groups"],

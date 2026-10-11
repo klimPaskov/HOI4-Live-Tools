@@ -155,6 +155,9 @@ def hoi4_telemetry(session, args):
     snap = store.snapshot()
     if snap is None:
         raise ToolError("no telemetry records in game.log yet", telemetry_status(session))
+    if session.mode == "campaign":
+        from ..state.visibility import campaign_view
+        snap = campaign_view(snap, store.player())
     kinds = args.get("kinds")
     if kinds:
         keep = {"tag", "date", "n"}

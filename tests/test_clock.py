@@ -126,6 +126,31 @@ class ClockCase(unittest.TestCase):
 
 
 class FastClockTests(ClockCase):
+    def test_exception_pauses_and_releases_background_lease(self):
+        with mock.patch.object(clock_mod.guard, "drain", side_effect=RuntimeError("broken reader")):
+            with self.assertRaisesRegex(RuntimeError, "broken reader"):
+                self.run_loop()
+        self.assertFalse(self.state["running"])
+        self.session.lock.hold.assert_called_with("background campaign clock")
+        self.session.lock.hold.return_value.__exit__.assert_called()
+
+    def test_daily_hook_runs_once_for_newest_observation(self):
+        self.feed()
+        seen = []
+        def on_day(run, record):
+            seen.append(record["n"])
+            return [{"code": "governor_decision", "text": "new plan needed"}]
+        run = clock_mod.AdvanceRun(self.session, self.args(budget_days=30),
+                                   PopupPolicy.parse("choices"), on_day=on_day)
+        res = run.execute()
+        self.assertEqual(res["reasons"][0]["code"], "governor_decision")
+        self.assertEqual(len(seen), 1)
+        self.assertFalse(self.state["running"])
+
+    def test_missing_research_baseline_is_unknown(self):
+        run = clock_mod.AdvanceRun(self.session, self.args(), PopupPolicy.parse("choices"))
+        self.assertEqual(run._idle_slots(None), 0)
+
     def test_runs_the_budget_and_pauses(self):
         self.feed()
         run, res = self.run_loop(budget_days=5)

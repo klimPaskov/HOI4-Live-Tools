@@ -16,6 +16,7 @@ from ..errors import ToolError
 DETACHED_PROCESS = 0x00000008
 CREATE_NEW_PROCESS_GROUP = 0x00000200
 CREATE_BREAKAWAY_FROM_JOB = 0x01000000
+_LAUNCHES = {}  # retain handles so an unexpected exit has an observable exit code
 
 
 def game_version(game_dir):
@@ -73,11 +74,21 @@ def launch(game_dir, args):
             p = subprocess.Popen([exe] + list(args), cwd=game_dir, creationflags=flags | extra,
                                  stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                  close_fds=True)
+            _LAUNCHES[p.pid] = p
             return p.pid
         except OSError:
             if extra == 0:
                 raise
     return None
+
+
+def launch_status(pid):
+    """Status only for our retained launch handle, never an arbitrary/recycled PID."""
+    child = _LAUNCHES.get(pid)
+    if child is None:
+        return None
+    code = child.poll()
+    return {"pid": pid, "running": code is None, "exit_code": code}
 
 
 def running_pids(name=None):

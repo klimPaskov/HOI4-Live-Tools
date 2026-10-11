@@ -40,6 +40,10 @@ def hoi4_status(session, args):
         "planned_tools": PLANNED,
     }
     data["logs_note"] = "seconds since last write"
+    identity = getattr(session, "launched_identity", None)
+    data["owned_launch"] = ({"pid": identity.pid, "creation_time": identity.creation_time,
+                              "executable_path": identity.executable_path} if identity else None)
+    data["owned_launch_status"] = process.launch_status(getattr(session, "launched_pid", None))
     try:
         from ..game import gamemode
         gm = gamemode.current(session)
@@ -99,6 +103,8 @@ def hoi4_launch(session, args):
         return result("HOI4 is already running; nothing launched", already_running=True,
                       pids=process.running_pids())
     if session.window.find() and args["restart"]:
+        if getattr(session, "owned_process_only", False):
+            session.require_owned_game()
         menu.quit_to_desktop(session)
         pid = session.window.pid
         if not process.wait_exit(pid, 90):
@@ -108,7 +114,16 @@ def hoi4_launch(session, args):
     launch_args = list(cfg["launch"]["debug_args" if args["debug"] else "args"])
     pid = process.launch(cfg.game_dir, launch_args)
     session.launched_pid = pid
-    data = {"pid": pid, "args": launch_args, "debug": args["debug"]}
+    from ..memory.winproc import capture_launched_identity
+    session.launched_identity = capture_launched_identity(pid, cfg.game_exe)
+    if getattr(session, "_memory_process", None) is not None:
+        session._memory_process.close()
+    session._memory_process = session._memory_reader = None
+    session._telemetry = None
+    session.date_uncertain = True
+    data = {"pid": pid, "args": launch_args, "debug": args["debug"],
+            "owned_launch": {"pid": pid, "creation_time": session.launched_identity.creation_time,
+                             "executable_path": session.launched_identity.executable_path}}
     # window
     deadline = t0 + args["timeout_s"]
     while time.time() < deadline and not session.window.find():
@@ -244,6 +259,8 @@ def hoi4_shutdown(session, args):
     if not session.window.find():
         return result("HOI4 is not running")
     pid = session.window.pid
+    if getattr(session, "owned_process_only", False):
+        session.require_owned_game()
     if args["force"]:
         if pid != session.launched_pid:
             raise ToolError("force only terminates a game this server launched; quit it through the menu instead")

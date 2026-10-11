@@ -182,7 +182,13 @@ def _advance_fast(session, args, policy, stop_on):
                         {"state": "running", "progress": cur.progress})
     store = session.telemetry
     # the screen's date says which timeline the game is on: days logged after it belong to a game that was left
-    d0, _ = timectl.read_date(session)
+    try:
+        # Only this server's launch can use memory. The cheap clock reader avoids
+        # both country traversal and an OCR pause at the start of each advance.
+        memory_date = session.memory_snapshot(clock_only=True).get("date") if getattr(session, "launched_identity", None) else None
+    except ToolError:
+        memory_date = None  # unknown builds retain the existing screen fallback
+    d0 = {"hoi4": memory_date} if memory_date else timectl.read_date(session)[0]
     start_text = d0.get("hoi4") if "error" not in d0 else None
     if start_text:
         store.drop_after(start_text)
@@ -197,7 +203,11 @@ def _advance_fast(session, args, policy, stop_on):
     a["stop_on_used"] = stop_on
     a["stop_on"] = stop_on
     from ..state import standing
-    run = clock_mod.AdvanceRun(session, a, policy, on_reasons=standing.hook(session))
+    governor = getattr(session, "governor", None)
+    managed = governor is not None and governor.active()
+    run = clock_mod.AdvanceRun(session, a, policy,
+                              on_reasons=None if managed else standing.hook(session),
+                              on_day=governor.on_day if managed else None)
     session.clock = run
     if args.get("background"):
         run.start()
