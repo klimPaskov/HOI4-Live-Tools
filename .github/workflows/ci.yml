@@ -1,0 +1,30 @@
+name: Cross-platform Python
+on:
+  push:
+    branches: [master, 'feat/**', 'codex/**']
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  offline:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+        python: ['3.9', '3.13']
+    runs-on: ${{ matrix.os }}
+    env:
+      HOI4_LIVE_MODE: test
+      HOI4_LIVE_CONFIG: ${{ runner.temp }}/absent-hoi4-config.json
+      HOI4_LIVE_GAME_DIR: ${{ runner.temp }}/absent-game
+      HOI4_LIVE_USER_DIR: ${{ runner.temp }}/hoi4-user
+      HOI4_LIVE_ARTIFACTS: ${{ runner.temp }}/hoi4-artifacts
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -m pip install -e .
+      - run: python -m compileall -q hoi4_live scripts
+      - run: python -m unittest discover -s tests -v
+      - run: python scripts/protocol_smoke.py

@@ -15,6 +15,8 @@ from tests.test_memory_reader import IDENTITY, RTTI, fixture
 
 def session_stub(identity=IDENTITY, window_pid=None):
     session = Session.__new__(Session)
+    from hoi4_live.platform.windows import WindowsPlatform
+    session.platform = WindowsPlatform()
     session.launched_identity = identity
     session.launched_pid = identity.pid if identity else None
     session.window = SimpleNamespace(pid=IDENTITY.pid if window_pid is None else window_pid,
@@ -38,7 +40,7 @@ class SessionMemoryIntegration(unittest.TestCase):
                 else:
                     session.window.find.return_value = False
                 with patch("hoi4_live.memory.winproc.WindowsAPI", side_effect=AssertionError("native API forbidden")), \
-                     patch("hoi4_live.memory.winproc.capture_launched_identity") as capture, \
+                     patch("hoi4_live.platform.windows.WindowsPlatform.capture_process_identity") as capture, \
                      patch("hoi4_live.memory.winproc.ReadOnlyProcess") as process, \
                      patch("hoi4_live.memory.pe.load_rtti") as pe:
                     with self.assertRaises(ToolError) as caught:
@@ -52,7 +54,7 @@ class SessionMemoryIntegration(unittest.TestCase):
         session = session_stub()
         reused = dataclasses.replace(IDENTITY, creation_time=IDENTITY.creation_time + 1)
         with patch("hoi4_live.memory.winproc.WindowsAPI", side_effect=AssertionError("native API forbidden")), \
-             patch("hoi4_live.memory.winproc.capture_launched_identity", return_value=reused), \
+             patch("hoi4_live.platform.windows.WindowsPlatform.capture_process_identity", return_value=reused), \
              patch("hoi4_live.memory.winproc.ReadOnlyProcess") as process, \
              patch("hoi4_live.memory.pe.load_rtti") as pe:
             with self.assertRaises(ToolError) as caught:
@@ -69,7 +71,7 @@ class SessionMemoryIntegration(unittest.TestCase):
             self.assertIs(owned, True)
             return ReadOnlyProcess(identity, owned=owned, api=api)
         with patch("hoi4_live.memory.winproc.WindowsAPI", side_effect=AssertionError("native API forbidden")), \
-             patch("hoi4_live.memory.winproc.capture_launched_identity", return_value=IDENTITY) as capture, \
+             patch("hoi4_live.platform.windows.WindowsPlatform.capture_process_identity", return_value=IDENTITY) as capture, \
              patch("hoi4_live.memory.winproc.ReadOnlyProcess", side_effect=open_fake) as process, \
              patch("hoi4_live.memory.pe.load_rtti", return_value=(SimpleNamespace(build_key=VERIFIED_BUILD_KEY), RTTI)):
             try:
@@ -88,7 +90,7 @@ class SessionMemoryIntegration(unittest.TestCase):
         session = session_stub()
         api, _layout = fixture()
         with patch("hoi4_live.memory.winproc.WindowsAPI", side_effect=AssertionError("native API forbidden")), \
-             patch("hoi4_live.memory.winproc.capture_launched_identity", return_value=IDENTITY), \
+             patch("hoi4_live.platform.windows.WindowsPlatform.capture_process_identity", return_value=IDENTITY), \
              patch("hoi4_live.memory.winproc.ReadOnlyProcess", side_effect=lambda identity, owned: ReadOnlyProcess(identity, owned=owned, api=api)), \
              patch("hoi4_live.memory.pe.load_rtti", return_value=(SimpleNamespace(build_key="unknown"), RTTI)):
             with self.assertRaises(ToolError) as caught:
@@ -106,7 +108,7 @@ class SessionMemoryIntegration(unittest.TestCase):
         session._memory_process = process
         session._memory_reader = Mock()
         with process, patch("hoi4_live.memory.winproc.WindowsAPI", side_effect=AssertionError("native API forbidden")), \
-             patch("hoi4_live.memory.winproc.capture_launched_identity", return_value=dataclasses.replace(IDENTITY, creation_time=1)):
+             patch("hoi4_live.platform.windows.WindowsPlatform.capture_process_identity", return_value=dataclasses.replace(IDENTITY, creation_time=1)):
             with self.assertRaises(ToolError):
                 session.memory_snapshot()
         session._memory_reader.snapshot.assert_not_called()

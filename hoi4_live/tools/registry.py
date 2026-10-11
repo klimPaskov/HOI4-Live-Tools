@@ -21,6 +21,7 @@ of later phases so `hoi4_status` and docs can show the roadmap without exposing 
 import base64
 import io
 import json
+import functools
 
 from ..protocol.schema import check_schema
 
@@ -63,8 +64,34 @@ def tool(name, description, schema=None, family="misc", lock="acting", test_only
     def deco(fn):
         if name in _TOOLS:
             raise ValueError(f"duplicate tool {name}")
-        _TOOLS[name] = Tool(name, description, schema, fn, family, lock, test_only, examples, phase, annotations)
-        return fn
+        @functools.wraps(fn)
+        def guarded(session, args):
+            # Direct handler calls from background/compound tools share the
+            # campaign boundary with stdio dispatch. QA fixtures may inject a
+            # simpler session; production Session always supplies this method.
+            if hasattr(session, "authorize_tool"):
+                from ..protocol.schema import validate
+                args = validate(schema, args, "arguments")
+                session.authorize_tool(name, args, test_only)
+                from . import dispatch
+                dispatch._campaign_visibility(session, name, args)
+                if (getattr(session, "owned_process_only", False) and lock != "none"
+                        and name not in ("hoi4_launch", "hoi4_telemetry")):
+                    session.require_owned_game()
+                if test_only or name == "hoi4_save":
+                    from ..game import gamemode
+                    gamemode.check(session, name)
+                # Direct nested/background calls retain the same UI exclusion as
+                # stdio calls; both locks are reentrant within the owning session.
+                if lock == "acting":
+                    with session.ui_mutex, session.lock.hold(name):
+                        return fn(session, args)
+                if lock == "self":
+                    with session.ui_mutex:
+                        return fn(session, args)
+            return fn(session, args)
+        _TOOLS[name] = Tool(name, description, schema, guarded, family, lock, test_only, examples, phase, annotations)
+        return guarded
     return deco
 
 

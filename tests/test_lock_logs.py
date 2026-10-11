@@ -6,6 +6,7 @@ import shutil
 import tempfile
 import time
 import unittest
+from unittest import mock
 
 import helpers  # noqa: F401
 
@@ -25,7 +26,8 @@ class LockTests(unittest.TestCase):
     def test_acquire_release_contents(self):
         lk = DesktopLock(self.path, wait_seconds=0)
         with lk.hold("unit test"):
-            data = json.load(open(self.path, encoding="utf-8"))
+            with open(self.path, encoding="utf-8") as handle:
+                data = json.load(handle)
             self.assertEqual(data["pid"], os.getpid())
             self.assertEqual(data["purpose"], "unit test")
             self.assertIn("time", data)
@@ -40,22 +42,25 @@ class LockTests(unittest.TestCase):
         self.assertFalse(os.path.exists(self.path))
 
     def test_busy_by_live_other_process(self):
-        # pid 4 is the Windows System process: always alive, never ours
+        # Inject liveness rather than assume a platform-specific system PID.
         with open(self.path, "w", encoding="utf-8") as f:
             json.dump({"pid": 4, "purpose": "peer", "epoch": time.time()}, f)
-        lk = DesktopLock(self.path, wait_seconds=0)
+        backend = mock.Mock()
+        backend.pid_alive.return_value = True
+        lk = DesktopLock(self.path, wait_seconds=0, backend=backend)
         with self.assertRaises(LockBusy) as cm:
             lk.acquire("me")
         self.assertIn("peer", str(cm.exception))
         self.assertTrue(os.path.exists(self.path), "a live peer's lock must be left alone")
 
-    def test_stale_by_age(self):
+    def test_live_owner_never_expires_by_age(self):
         with open(self.path, "w", encoding="utf-8") as f:
             json.dump({"pid": 4, "purpose": "old", "epoch": time.time() - 3600}, f)
-        lk = DesktopLock(self.path, stale_seconds=600, wait_seconds=0)
-        lk.acquire("me")
-        self.assertEqual(json.load(open(self.path, encoding="utf-8"))["pid"], os.getpid())
-        lk.release()
+        backend = mock.Mock()
+        backend.pid_alive.return_value = True
+        lk = DesktopLock(self.path, stale_seconds=600, wait_seconds=0, backend=backend)
+        with self.assertRaises(LockBusy):
+            lk.acquire("me")
 
     def test_stale_by_dead_pid(self):
         with open(self.path, "w", encoding="utf-8") as f:

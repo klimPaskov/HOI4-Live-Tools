@@ -24,6 +24,6 @@ def make_session(tmpdir=None):
     from hoi4_live import config
     from hoi4_live.session import Session
     tmpdir = tmpdir or tempfile.mkdtemp(prefix="hoi4live_test_")
-    cfg = config.load(overrides={"lock": {"path": os.path.join(tmpdir, "test.lock"), "wait_seconds": 1},
+    cfg = config.load(overrides={"mode": "test", "lock": {"path": os.path.join(tmpdir, "test.lock"), "wait_seconds": 1},
                                  "artifacts_dir": os.path.join(tmpdir, "artifacts")})
     return Session(cfg)

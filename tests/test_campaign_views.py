@@ -3,6 +3,7 @@ label matching, the tech tree calibration, the advisor list, the decisions panel
 The OCR tests need the Windows OCR host; the calibration test needs the game files."""
 
 import os
+import sys
 import unittest
 
 import numpy as np
@@ -115,6 +116,7 @@ class CalibrationTests(unittest.TestCase):
         self.assertLessEqual(abs(oy + cy - 350), 8)
 
 
+@unittest.skipUnless(sys.platform == "win32", "screenshot text and word boxes calibrated against Windows OCR")
 class OcrViewTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

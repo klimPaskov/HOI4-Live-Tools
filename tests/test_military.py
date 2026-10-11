@@ -4,6 +4,9 @@ spots, mission names, the battle plan toolbar layout from the game's interface f
 and the Find view's name folding."""
 
 import os
+import tempfile
+from types import SimpleNamespace
+from unittest.mock import patch
 import unittest
 
 import numpy as np
@@ -193,19 +196,30 @@ class Names(unittest.TestCase):
         self.assertFalse(_words_in("United States", "w Mexico"))
 
     def test_battle_plan_toolbar_layout(self):
-        from helpers import make_session
         from hoi4_live.game import armyview
-        s = make_session()
-        try:
-            lay = armyview._bpt_layout(s)
+        with tempfile.TemporaryDirectory(prefix="hoi4live_toolbar_") as root:
+            interface = os.path.join(root, "interface")
+            os.makedirs(interface)
+            path = os.path.join(interface, "battleplantools.gui")
+            # A small public fixture from the layout contract; no installed game,
+            # user playset, permissions or native desktop Session is needed.
+            with open(path, "w", encoding="utf-8") as stream:
+                stream.write('guiTypes = { containerWindowType = {\n'
+                             'name = "battleplantools_window" position = { x = -270 y = -245 }\n'
+                             'show_position = { x = -270 y = -245 }\n'
+                             'buttonType = { name = "btn_order_draw_defence" position = { x = 239 y = 33 } }\n'
+                             'buttonType = { name = "btn_order_draw_offence" position = { x = 276 y = 33 } }\n'
+                             '} }\n')
+            s = SimpleNamespace(cfg=SimpleNamespace(game_dir=root, user_dir=root))
+            with patch.dict(armyview._BPT_CACHE, {}, clear=True):
+                lay = armyview._bpt_layout(s)
+            self.assertEqual(lay["source"], path)
             self.assertEqual(lay["buttons"]["front_line"], (239, 33))
             self.assertEqual(lay["buttons"]["offensive"], (276, 33))
             # at 1920x1080 the toolbar sits at the bottom centre: front line at x 944, y 883 (checked live)
             w, h = 1920, 1080
             wx, wy = lay["window"]
             self.assertEqual((w // 2 + wx + 239 + 15, h + wy + 33 + 15), (944, 883))
-        finally:
-            s.shutdown()
 
 
 if __name__ == "__main__":

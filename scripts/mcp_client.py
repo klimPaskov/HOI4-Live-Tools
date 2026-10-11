@@ -23,7 +23,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 class McpClient:
     def __init__(self, command=None, image_dir=None, transcript=None):
-        self.command = command or [os.path.join(ROOT, "hoi4-live-tools.cmd")]
+        self.command = command or [sys.executable, "-m", "hoi4_live"]
         self.image_dir = image_dir
         self.transcript = transcript
         self.next_id = 1
@@ -79,10 +79,10 @@ class McpClient:
         if params is not None:
             msg["params"] = params
         self.send(msg)
-        deadline = time.time() + timeout
+        deadline = time.monotonic() + timeout
         with self.cv:
             while rid not in self.responses:
-                left = deadline - time.time()
+                left = deadline - time.monotonic()
                 if left <= 0:
                     raise TimeoutError(f"{method} timed out")
                 self.cv.wait(left)

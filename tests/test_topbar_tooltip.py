@@ -1,6 +1,7 @@
 """Top-bar values (OCR plus the game's font glyphs) and tooltip boxes, on a screenshot of the live game."""
 
 import os
+import sys
 import unittest
 
 import numpy as np
@@ -49,6 +50,7 @@ class GlyphTests(unittest.TestCase):
             self.assertEqual(glyphs.read(img[y:y + h, x:x + w], fnt, charset=topbar.GLYPH_SETS["number"]), "0", cell)
 
 
+@unittest.skipUnless(sys.platform == "win32", "expected values calibrated against Windows OCR")
 class BarTests(unittest.TestCase):
     def test_read_bar(self):
         from hoi4_live.ocr.winocr import OcrHost

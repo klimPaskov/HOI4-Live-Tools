@@ -37,3 +37,14 @@ class GameNotRunning(ToolError):
 
 class ModeRefused(ToolError):
     """The session mode (campaign) forbids this test-mode action."""
+
+
+class CapabilityUnavailable(ToolError):
+    """A native feature is unsupported, unavailable or lacks permission."""
+
+    def __init__(self, feature, platform_name, reason, remedy=None):
+        details = {"error": "capability_unavailable", "capability": feature,
+                   "platform": platform_name, "reason": reason}
+        if remedy:
+            details["remedy"] = remedy
+        super().__init__("%s unavailable on %s: %s" % (feature, platform_name, reason), details)

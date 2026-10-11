@@ -4,6 +4,7 @@ stacked popups, popups over open panels, no-popup frames, and OCR reading of tit
 import glob
 import json
 import os
+import sys
 import unittest
 
 import numpy as np
@@ -107,14 +108,16 @@ def _ocr_available():
     try:
         from hoi4_live.ocr.winocr import OcrHost
         h = OcrHost()
-        h.recognize(np.full((40, 200, 3), 255, np.uint8))
-        h.close()
-        return True
+        try:
+            h.recognize(np.full((40, 200, 3), 255, np.uint8))
+            return True
+        finally:
+            h.close()
     except Exception:
         return False
 
 
-@unittest.skipUnless(os.name == "nt" and _ocr_available(), "Windows OCR not available")
+@unittest.skipUnless(sys.platform == "win32" and _ocr_available(), "Windows OCR not available")
 @needs_fixture("popups", "labels.json")
 class ReadPopupTests(unittest.TestCase):
     @classmethod

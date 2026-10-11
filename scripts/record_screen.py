@@ -1,16 +1,15 @@
 """Segmented capture of an explicitly owned HOI4 client, with a hidden supervisor.
 
-start OUT --owned-pid PID --owned-created FILETIME --owned-exe PATH --hwnd HWND --raw-root ROOT
+start OUT --owned-pid PID --owned-created EXACT_TIME --owned-exe PATH --window-id ID --raw-root ROOT
 stop OUT --token TOKEN
 
-The supervisor retains ffmpeg stdin for graceful q shutdown. Stop markers are
-session-bound; no stored PID is ever used to terminate a process.
+The supervisor retains ffmpeg stdin for graceful q (Windows) or EOF (Mac) shutdown.
+Stop markers are session-bound; no stored PID is ever used to terminate a process.
 """
 
 import argparse
 from dataclasses import asdict
 import json
-import ntpath
 import os
 from pathlib import Path
 import re
@@ -67,45 +66,71 @@ def validate_options(a):
         raise ValueError("Unknown encoder")
 
 
+def active_backend():
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from hoi4_live.platform import current
+    name = current().name
+    if name not in ("windows", "macos"):
+        from hoi4_live.errors import CapabilityUnavailable
+        raise CapabilityUnavailable("owned-window recording", name, "no recording backend is available")
+    return name
+
+
 def identity_from_args(a):
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-    from hoi4_live.memory.winproc import ProcessIdentity, _validate_identity
-    identity = ProcessIdentity(a.owned_pid, a.owned_created, a.owned_exe)
-    _validate_identity(identity)
+    backend = getattr(a, "backend", None) or active_backend()
+    if backend == "windows":
+        from hoi4_live.memory.winproc import ProcessIdentity, _validate_identity
+        identity = ProcessIdentity(a.owned_pid, a.owned_created, a.owned_exe)
+        _validate_identity(identity)
+    elif backend == "macos":
+        from hoi4_live.platform.identity import ProcessIdentity
+        if (type(a.owned_pid) is not int or a.owned_pid <= 0 or
+                type(a.owned_created) is not int or a.owned_created <= 0):
+            raise ValueError("An exact owned PID and process creation time are required")
+        if (not isinstance(a.owned_exe, str) or not os.path.isabs(a.owned_exe)
+                or os.path.basename(a.owned_exe) != "hoi4"):
+            raise ValueError("The owned executable must be an absolute path to hoi4")
+        identity = ProcessIdentity(a.owned_pid, a.owned_created, a.owned_exe)
+    else:
+        raise ValueError("Unknown recording backend")
     return identity
 
 
 def inspect_owned_window(identity, hwnd, process_api=None, window_api=None):
-    """Query only process metadata and window geometry; never request VM_READ."""
+    """Query metadata and geometry through the native boundary, never VM_READ."""
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-    from hoi4_live.memory.winproc import capture_launched_identity
-    if type(hwnd) is not int or hwnd <= 0:
-        raise ValueError("An explicit owned window handle is required")
-    actual = capture_launched_identity(identity.pid, identity.executable_path, api=process_api)
-    if (actual.pid != identity.pid or actual.creation_time != identity.creation_time
-            or ntpath.normcase(ntpath.normpath(actual.executable_path)) !=
-            ntpath.normcase(ntpath.normpath(identity.executable_path))):
-        raise RuntimeError("Owned game identity changed or PID was reused")
-    if window_api is None:
-        from hoi4_live.desktop import win32 as window_api
-    window_api.set_dpi_awareness()
-    if (not window_api.user32.IsWindow(hwnd) or not window_api.user32.IsWindowVisible(hwnd)
-            or window_api.user32.IsIconic(hwnd) or window_api.window_pid(hwnd) != identity.pid):
-        raise RuntimeError("Window is not the visible client of the owned game")
-    return tuple(window_api.client_rect(hwnd))
+    backend = "windows" if process_api is not None or window_api is not None else active_backend()
+    if backend == "windows":
+        from hoi4_live.platform.windows_recording import inspect_owned_window as inspect
+        return inspect(identity, hwnd, process_api, window_api)
+    from hoi4_live.platform.macos_recording import FrameSource
+    return FrameSource(identity, hwnd).inspect()
 
 
 def build_command(a, client, token, executable=None):
     validate_options(a)
     w, h = capture_size(a.size, client)
     if type(a.hwnd) is not int or a.hwnd <= 0:
-        raise ValueError("Owned HWND is required")
-    # FFmpeg gdigrab HWND input uses GetDC(hwnd)/GetClientRect. Offsets are
-    # client-relative, so moving the window cannot expose a desktop rectangle.
+        raise ValueError("Owned window ID is required")
+    backend = getattr(a, "backend", None) or active_backend()
+    if backend == "windows":
+        # gdigrab HWND uses GetDC/GetClientRect; offsets are client-relative.
+        capture = ["-f", "gdigrab", "-framerate", str(a.fps), "-draw_mouse", "1",
+                   "-offset_x", "0", "-offset_y", "0", "-video_size", "%dx%d" % (w, h),
+                   "-i", "hwnd=%d" % a.hwnd]
+    elif backend == "macos":
+        if a.encoder != "x264":
+            raise ValueError("macOS owned-window recording requires the x264 encoder")
+        # Only verified window RGB frames enter stdin. Wall timestamps preserve
+        # elapsed recording time if capture delivers fewer frames than requested.
+        capture = ["-f", "rawvideo", "-pixel_format", "rgb24", "-video_size", "%dx%d" % (w, h),
+                   "-framerate", str(a.fps), "-use_wallclock_as_timestamps", "1", "-i", "pipe:0",
+                   "-vsync", "cfr"]
+    else:
+        raise ValueError("Unknown recording backend")
     return [executable or ffmpeg_path(), "-hide_banner", "-loglevel", "warning", "-n",
-            "-f", "gdigrab", "-framerate", str(a.fps), "-draw_mouse", "1",
-            "-offset_x", "0", "-offset_y", "0", "-video_size", "%dx%d" % (w, h),
-            "-i", "hwnd=%d" % a.hwnd, *encoder_args(a), "-pix_fmt", "yuv420p",
+            *capture, *encoder_args(a), "-pix_fmt", "yuv420p",
             "-g", str(a.fps * 2), "-f", "segment", "-segment_time", str(a.segment),
             "-reset_timestamps", "1", "-strftime", "1", "-segment_format", "matroska",
             str(Path(a.out) / ("seg_" + token[:12] + "_%Y%m%d_%H%M%S.mkv"))]
@@ -195,13 +220,16 @@ def request_stop(out, token):
     return info
 
 
-def finish_process(process, timeout=10):
-    """Graceful q first; escalation operates exclusively on the actual Popen."""
+def finish_process(process, timeout=10, raw_input=False):
+    """Graceful q or raw-input EOF; escalation uses only the actual Popen."""
     escalation = None
     if process.poll() is None:
         try:
-            process.stdin.write(b"q\n")
-            process.stdin.flush()
+            if raw_input:
+                process.stdin.close()
+            else:
+                process.stdin.write(b"q\n")
+                process.stdin.flush()
         except (BrokenPipeError, OSError):
             pass
         try:
@@ -226,6 +254,7 @@ def supervisor_command(out, token):
 
 def start(a, *, inspect=inspect_owned_window, popen=subprocess.Popen, sleep=time.sleep):
     validate_options(a)
+    a.backend = getattr(a, "backend", None) or active_backend()
     identity = identity_from_args(a)
     client = inspect(identity, a.hwnd)
     capture_size(a.size, client)
@@ -244,7 +273,7 @@ def start(a, *, inspect=inspect_owned_window, popen=subprocess.Popen, sleep=time
             os.fsync(stream.fileno())
     except FileExistsError:
         raise RuntimeError("Another recording owns this raw root; stop its supervisor first")
-    info = {"version": 2, "token": token, "status": "starting", "started_epoch": time.time(),
+    info = {"version": 3, "backend": a.backend, "token": token, "status": "starting", "started_epoch": time.time(),
             "raw_root": str(root), "out": str(out), "owned_game": asdict(identity), "hwnd": a.hwnd,
             "client": list(client), "fps": a.fps, "crf": a.crf, "encoder": a.encoder,
             "size": a.size, "segment": a.segment, "cap_bytes": a.cap_bytes,
@@ -278,7 +307,8 @@ def start(a, *, inspect=inspect_owned_window, popen=subprocess.Popen, sleep=time
         raise
 
 
-def run(a, *, inspect=inspect_owned_window, popen=subprocess.Popen, sleep=time.sleep):
+def run(a, *, inspect=inspect_owned_window, popen=subprocess.Popen, sleep=time.sleep,
+        frame_source_factory=None, monotonic=time.monotonic):
     token, info = valid_token(a.token), read_info(a.out)
     if info.get("token") != token or info.get("status") != "starting":
         raise RuntimeError("Supervisor token or starting state does not match")
@@ -288,14 +318,22 @@ def run(a, *, inspect=inspect_owned_window, popen=subprocess.Popen, sleep=time.s
     check_lock(root, token)
     options = argparse.Namespace(**{k: info[k] for k in (
         "out", "fps", "crf", "encoder", "size", "segment", "hwnd", "cap_bytes", "headroom_bytes")})
+    options.backend = info.get("backend", "windows")
     options.owned_pid = info["owned_game"]["pid"]
     options.owned_created = info["owned_game"]["creation_time"]
     options.owned_exe = info["owned_game"]["executable_path"]
-    process, log, reason = None, None, "error"
+    process, log, source, reason = None, None, None, "error"
     try:
         validate_options(options)
         identity = identity_from_args(options)
-        client = inspect(identity, options.hwnd)
+        if options.backend == "macos":
+            if frame_source_factory is None:
+                from hoi4_live.platform.macos_recording import FrameSource
+                frame_source_factory = FrameSource
+            source = frame_source_factory(identity, options.hwnd)
+            client = source.inspect()
+        else:
+            client = inspect(identity, options.hwnd)
         w, h = capture_size(options.size, client)
         budget = budget_status(root, options.cap_bytes, options.headroom_bytes)
         if budget["reason"]:
@@ -303,14 +341,19 @@ def run(a, *, inspect=inspect_owned_window, popen=subprocess.Popen, sleep=time.s
         if stop_requested(out, token):
             reason = "stop_requested_before_capture"
         else:
+            first_frame = source.frame((w, h)) if source else None
             command = build_command(options, client, token)
             log = (out / "ffmpeg.log").open("ab")
             process = popen(command, stdin=subprocess.PIPE, stdout=log, stderr=log,
                             close_fds=True, creationflags=CREATE_NO_WINDOW if os.name == "nt" else 0)
+            if source:
+                source.write(process.stdin, first_frame)
+                info["frames_written"] = 1
             info.update(status="running", supervisor_pid=os.getpid(), ffmpeg_pid=process.pid,
                         pid=process.pid, capture_size=[w, h], client=list(client),
                         cmd=command, budget=budget, capture_started_epoch=time.time())
             write_json(out / "recording.json", info)
+            next_frame = monotonic()
             while True:
                 if process.poll() is not None:
                     reason = "ffmpeg_exited"
@@ -321,7 +364,7 @@ def run(a, *, inspect=inspect_owned_window, popen=subprocess.Popen, sleep=time.s
                     reason = "stop_requested"
                     break
                 check_lock(root, token)
-                current = inspect(identity, options.hwnd)
+                current = source.inspect() if source else inspect(identity, options.hwnd)
                 if current[2:] != client[2:]:
                     reason = "client_geometry_changed"
                     break
@@ -330,14 +373,21 @@ def run(a, *, inspect=inspect_owned_window, popen=subprocess.Popen, sleep=time.s
                 if budget["reason"]:
                     reason = budget["reason"]
                     break
-                sleep(POLL_SECONDS)
+                if source:
+                    frame = source.frame((w, h))
+                    source.write(process.stdin, frame)
+                    info["frames_written"] = info.get("frames_written", 0) + 1
+                    next_frame = max(next_frame + 1.0 / options.fps, monotonic())
+                    sleep(max(0, next_frame - monotonic()))
+                else:
+                    sleep(POLL_SECONDS)
         info["status"] = "stopped"
     except BaseException as error:
         info.update(status="error", error=str(error))
     finally:
         if process is not None:
             try:
-                code, escalation = finish_process(process)
+                code, escalation = finish_process(process, raw_input=source is not None)
                 info.update(ffmpeg_returncode=code, shutdown_escalation=escalation)
                 if escalation or (code and info["status"] != "error"):
                     info.update(status="error", error="ffmpeg shutdown: returncode=%s, escalation=%s" % (code, escalation))
@@ -377,9 +427,9 @@ def parser():
     ap.add_argument("--segment", type=int, default=900)
     ap.add_argument("--encoder", choices=["x264", "amf"], default="x264")
     ap.add_argument("--owned-pid", type=int)
-    ap.add_argument("--owned-created", type=int, help="Exact owned process creation FILETIME")
+    ap.add_argument("--owned-created", type=int, help="Exact process creation identity (Windows FILETIME; Mac microseconds)")
     ap.add_argument("--owned-exe")
-    ap.add_argument("--hwnd", type=lambda value: int(value, 0))
+    ap.add_argument("--window-id", "--hwnd", dest="hwnd", metavar="ID", type=lambda value: int(value, 0))
     ap.add_argument("--raw-root")
     ap.add_argument("--cap-bytes", type=int, default=DEFAULT_CAP)
     ap.add_argument("--headroom-bytes", type=int, default=DEFAULT_HEADROOM)
@@ -390,10 +440,12 @@ def parser():
 
 def main():
     a = parser().parse_args()
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from hoi4_live.errors import ToolError
     try:
         info = {"start": start, "run": run, "stop": stop}[a.cmd](a)
         return 1 if info.get("status") == "error" else 0
-    except (OSError, ValueError, RuntimeError) as error:
+    except (OSError, ValueError, RuntimeError, ToolError) as error:
         print(str(error), file=sys.stderr)
         return 1
 

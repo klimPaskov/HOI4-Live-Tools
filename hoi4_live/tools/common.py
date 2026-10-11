@@ -41,7 +41,10 @@ def change_ratio(a, b, region=None):
 def apply_mode(session, args):
     m = args.get("mode")
     if m:
-        session.mode = m
+        if hasattr(session, "set_mode"):
+            session.set_mode(m)
+        else:
+            session.mode = m
     return session.mode
 
 

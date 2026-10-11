@@ -20,6 +20,7 @@ that point belong to an abandoned timeline and are dropped.
 import collections
 import datetime
 import json
+import math
 import os
 import re
 import time
@@ -125,6 +126,7 @@ class TelemetryStore:
         self.latest = {}                         # kind -> {tag -> record}   (single-record kinds)
         self.groups = {}                         # kind -> {"n": n, "rows": [...]}
         self.history = collections.defaultdict(collections.deque)   # tag -> deque of day records
+        self.daily_metrics = {}                  # eq/res -> tag -> bounded {day counter: record}
         self.events = collections.deque(maxlen=self.max_events)
         self.lines = 0
         self.bad = 0
@@ -132,6 +134,7 @@ class TelemetryStore:
         self.restarts = 0
         self.rewinds = 0
         self.generation = None
+        self.schema = None
         self.rs_counts = {}                        # day counter -> set of technologies being researched
         self.techs = getattr(self, "techs", [])    # technology ids; the `tid` of kt and rs records indexes them
 
@@ -179,6 +182,15 @@ class TelemetryStore:
         k = rec["k"]
         n = rec.get("n")
         tag = rec.get("t")
+        if k in ("day", "hello") and isinstance(rec.get("g"), str) and rec["g"]:
+            schema = rec.get("v")
+            schema = schema if type(schema) is int and schema > 0 else None
+            if self.generation != rec["g"] or self.schema != schema:
+                # Eq/res omit generation/schema on the wire. Their provenance
+                # comes from the preceding own-country day record and must never
+                # survive a generation or schema boundary.
+                self.daily_metrics.clear()
+            self.generation, self.schema = rec["g"], schema
         if k == "day":
             hist = self.history[tag]
             if hist and isinstance(n, (int, float)) and n <= hist[-1].get("n", -1):
@@ -187,8 +199,7 @@ class TelemetryStore:
             hist.append(rec)
             while len(hist) > self.history_days:
                 hist.popleft()
-            if rec.get("g"):
-                self.generation = rec["g"]
+            self._prune_daily_metrics(tag)
         if k == "rs" and isinstance(n, (int, float)):
             tid = rec.get("tid")
             name = self.techs[int(tid)] if isinstance(tid, (int, float)) and 0 <= int(tid) < len(self.techs) else tid
@@ -199,8 +210,6 @@ class TelemetryStore:
             self.events.append(rec)
         elif k in SINGLE:
             self.latest.setdefault(k, {})[tag] = rec
-            if k == "hello" and rec.get("g"):
-                self.generation = rec["g"]
         else:
             g = self.groups.get(k)
             # one tick = the same day counter and the same moment (a reloaded save repeats a day counter later)
@@ -209,6 +218,32 @@ class TelemetryStore:
             g["rows"].append(rec)
             g["_wall"] = rec.get("_wall", 0)
         self.last = rec
+        if k in ("eq", "res"):
+            self._remember_daily_metrics(rec)
+
+    def _prune_daily_metrics(self, tag):
+        days = {record.get("n") for record in self.history.get(tag, ())}
+        for by_tag in self.daily_metrics.values():
+            records = by_tag.get(tag, {})
+            for old in [counter for counter in records if counter not in days]:
+                del records[old]
+
+    def _remember_daily_metrics(self, rec):
+        tag, counter = rec.get("t"), rec.get("n")
+        anchor = self.day(tag) if tag else None
+        if (anchor is None or not isinstance(counter, (int, float)) or isinstance(counter, bool)
+                or not math.isfinite(counter) or counter != int(counter)
+                or anchor.get("n") != counter or not self.generation or self.schema is None
+                or anchor.get("g") != self.generation or anchor.get("v") != self.schema
+                or anchor.get("_date") != rec.get("_date")
+                or rec.get("g", self.generation) != self.generation
+                or rec.get("v", self.schema) != self.schema
+                or type(rec.get("v", self.schema)) is not int):
+            return
+        record = dict(rec, _generation=self.generation, _schema=self.schema)
+        records = self.daily_metrics.setdefault(rec["k"], {}).setdefault(tag, {})
+        records[counter] = record
+        self._prune_daily_metrics(tag)
 
     def _rewind(self, n):
         """A save from before day n was loaded: forget history, events and ticks from day n on."""
@@ -217,6 +252,7 @@ class TelemetryStore:
             del self.rs_counts[x]
         for tag, hist in self.history.items():
             self.history[tag] = collections.deque(r for r in hist if r.get("n", 0) < n)
+            self._prune_daily_metrics(tag)
         self.events = collections.deque((e for e in self.events if e.get("n", 0) < n), maxlen=self.max_events)
         for k in [k for k, g in self.groups.items() if (g.get("n") or 0) >= n]:
             del self.groups[k]
@@ -298,6 +334,25 @@ class TelemetryStore:
     def get(self, kind, tag=None):
         tag = tag or self.player()
         return (self.latest.get(kind) or {}).get(tag)
+
+    def get_at(self, kind, tag, n):
+        """Exact retained eq/res batch for one country/day, or None if unavailable.
+
+        The caller establishes completion using a later day record. Never
+        substitutes a newer record, another country, or another generation.
+        Private provenance fields identify the bounding day's generation/schema.
+        A copy protects the stored batch from caller mutation.
+        """
+        if kind not in ("eq", "res") or not isinstance(tag, str) or not tag:
+            return None
+        if (not isinstance(n, (int, float)) or isinstance(n, bool)
+                or not math.isfinite(n) or n != int(n)):
+            return None
+        record = self.daily_metrics.get(kind, {}).get(tag, {}).get(n)
+        if (record is None or record.get("_generation") != self.generation
+                or record.get("_schema") != self.schema):
+            return None
+        return dict(record)
 
     def group(self, kind, current_n=None):
         """Rows of the latest tick of a multi-line kind; [] when that tick is older than current_n (for example

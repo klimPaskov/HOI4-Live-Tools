@@ -2,9 +2,9 @@
 
 import os
 import time
+import uuid
 
 from .. import __version__
-from ..desktop import win32
 from ..errors import ToolError
 from ..game import console, menu, process, saves, timectl, ui
 from ..perception import popups as popups_mod
@@ -29,6 +29,7 @@ def hoi4_status(session, args):
     data = {
         "server_version": __version__,
         "mode": session.mode,
+        "play_policy": session.play_policy.summary() if hasattr(session, "play_policy") else None,
         "game": {"running": bool(hwnd), "pids": process.running_pids(cfg["window"]["process_name"]),
                  "version": version, "game_dir": cfg.game_dir, "user_dir": cfg.user_dir},
         "playset": process.playset(cfg.user_dir),
@@ -99,23 +100,48 @@ def hoi4_status(session, args):
 def hoi4_launch(session, args):
     apply_mode(session, args)
     cfg = session.cfg
+    if process.running_pids(cfg["window"]["process_name"]) and not session.window.find():
+        raise ToolError("a game process is already running without a usable owned window; not launching another",
+                        {"error": "existing_process"})
     if session.window.find() and not args["restart"]:
         return result("HOI4 is already running; nothing launched", already_running=True,
                       pids=process.running_pids())
     if session.window.find() and args["restart"]:
-        if getattr(session, "owned_process_only", False):
-            session.require_owned_game()
+        session.require_owned_game()
         menu.quit_to_desktop(session)
         pid = session.window.pid
         if not process.wait_exit(pid, 90):
             raise ToolError("the running game did not exit through its menu; not relaunching")
+        if getattr(session, "config_session", None) is not None:
+            restored = session.restore_configs_after_exit()
+            if restored and restored["conflicts"]:
+                raise ToolError("configuration changed outside recorded writes; resolve preserved backup conflicts before relaunch",
+                                {"config_restore": restored})
     crashes_before = process.crash_dirs(cfg.user_dir)
     t0 = time.time()
     launch_args = list(cfg["launch"]["debug_args" if args["debug"] else "args"])
-    pid = process.launch(cfg.game_dir, launch_args)
+    if session.mode == "campaign":
+        session.play_policy.validate_launch_arguments(launch_args)
+    session.platform.preflight_game_launch()
+    backup = session.prepare_config_session() if session.mode == "campaign" else None
+    if backup:
+        session.config_owner_id = uuid.uuid4().hex
+        backup.mark_game_starting(session.config_owner_id)
+    try:
+        pid = process.launch(cfg.game_dir, launch_args)
+    except (OSError, ToolError):
+        if backup:
+            backup.mark_game_exited(session.config_owner_id)
+            backup.restore()
+        raise
     session.launched_pid = pid
-    from ..memory.winproc import capture_launched_identity
-    session.launched_identity = capture_launched_identity(pid, cfg.game_exe)
+    session.launched_identity = session.platform.capture_process_identity(pid, cfg.game_exe)
+    if backup:
+        backup.mark_game_started(session.config_owner_id)
+    if hasattr(session.window, "bind_identity"):
+        session.window.bind_identity(session.launched_identity)
+    elif hasattr(session.window, "expected_identity"):
+        session.window.expected_identity = session.launched_identity
     if getattr(session, "_memory_process", None) is not None:
         session._memory_process.close()
     session._memory_process = session._memory_reader = None
@@ -257,18 +283,24 @@ def hoi4_shutdown(session, args):
     if not args["confirm"]:
         raise ToolError("confirm must be true to quit the game", {"field": "confirm"})
     if not session.window.find():
-        return result("HOI4 is not running")
+        restored = None
+        if getattr(session, "config_session", None) is not None:
+            restored = session.restore_configs_after_exit()
+        return result("HOI4 is not running", config_restore=restored)
     pid = session.window.pid
-    if getattr(session, "owned_process_only", False):
-        session.require_owned_game()
+    session.require_owned_game()
     if args["force"]:
         if pid != session.launched_pid:
             raise ToolError("force only terminates a game this server launched; quit it through the menu instead")
         process.kill(pid)
-        return result(f"terminated pid {pid}", pid=pid)
+        exited = process.wait_exit(pid, 30)
+        restored = session.restore_configs_after_exit() if exited and getattr(session, "config_session", None) else None
+        return result(f"termination requested for pid {pid}", pid=pid, exited=exited, config_restore=restored)
     menu.quit_to_desktop(session)
     exited = process.wait_exit(pid, 120)
-    return result("game exited" if exited else "quit requested; the game is still closing", pid=pid, exited=exited)
+    restored = session.restore_configs_after_exit() if exited and getattr(session, "config_session", None) else None
+    return result("game exited" if exited else "quit requested; the game is still closing", pid=pid, exited=exited,
+                  config_restore=restored)
 
 
 @tool("hoi4_lock",
@@ -303,7 +335,7 @@ def hoi4_lock(session, args):
     elif a == "set_mode":
         if not args.get("mode"):
             raise ToolError("set_mode needs mode", {"field": "mode"})
-        session.mode = args["mode"]
+        apply_mode(session, args)
     elif a == "set_pace":
         from .. import perf
         p = args.get("pace")

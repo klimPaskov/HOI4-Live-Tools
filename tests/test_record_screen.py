@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -56,7 +57,7 @@ class RecorderTests(unittest.TestCase):
     def setUp(self):
         temporary = tempfile.TemporaryDirectory(prefix="hoi4_recorder_test_")
         self.addCleanup(temporary.cleanup)
-        self.raw = Path(temporary.name) / "raw"
+        self.raw = Path(temporary.name).resolve() / "raw"
         self.out = self.raw / "campaign"
         self.out.mkdir(parents=True)
         self.token = "a" * 32
@@ -67,6 +68,7 @@ class RecorderTests(unittest.TestCase):
             "start", str(self.out), "--raw-root", str(self.raw), "--owned-pid", "123",
             "--owned-created", str(self.identity.creation_time), "--owned-exe", self.identity.executable_path,
             "--hwnd", "0x99"])
+        self.a.backend = "windows"
 
     def prepare_run(self):
         info = {"version": 2, "status": "starting", "token": self.token, "out": str(self.out),
@@ -148,7 +150,7 @@ class RecorderTests(unittest.TestCase):
         self.assertFalse(process.terminated)
         self.assertFalse((self.raw / ".recording-active.json").exists())
         self.assertEqual(popen.call_args.kwargs["stdin"], subprocess.PIPE)
-        self.assertEqual(popen.call_args.kwargs["creationflags"], recorder.CREATE_NO_WINDOW)
+        self.assertEqual(popen.call_args.kwargs["creationflags"], recorder.CREATE_NO_WINDOW if os.name == "nt" else 0)
         self.assertEqual(recorder.read_info(self.out)["owned_game"]["creation_time"], self.identity.creation_time)
 
     def test_geometry_change_stops_capture(self):
@@ -214,7 +216,7 @@ class RecorderTests(unittest.TestCase):
 
         def popen(command, **kwargs):
             self.assertEqual(command[2], "run")
-            self.assertEqual(kwargs["creationflags"], recorder.CREATE_NO_WINDOW)
+            self.assertEqual(kwargs["creationflags"], recorder.CREATE_NO_WINDOW if os.name == "nt" else 0)
             info = recorder.read_info(self.out)
             self.assertEqual(command[-1], info["token"])
             info["status"] = "running"

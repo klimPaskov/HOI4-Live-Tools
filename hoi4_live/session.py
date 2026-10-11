@@ -10,9 +10,11 @@ import logging
 import os
 import threading
 import time
+import uuid
 
 from . import config as config_mod
 from . import perf
+from . import platform
 from .desktop.capture import Capturer
 from .desktop.images import save_artifact
 from .desktop.inputs import Input
@@ -29,17 +31,21 @@ class Cancelled(ToolError):
 
 
 class Session:
-    def __init__(self, cfg=None):
+    def __init__(self, cfg=None, backend=None):
         self.cfg = cfg or config_mod.get()
+        self.platform = backend or platform.current()
         c = self.cfg
         self.mode = c.mode if c.mode in ("test", "campaign") else "test"
-        self.lock = DesktopLock(c.lock_path, c["lock"]["stale_seconds"], c["lock"]["wait_seconds"])
+        self._campaign_latched = self.mode == "campaign"
+        from .game.play_policy import PlayPolicy
+        self.play_policy = PlayPolicy(getattr(c, "play_mode", "fair"), session_id=uuid.uuid4().hex)
+        self.lock = DesktopLock(c.lock_path, c["lock"]["stale_seconds"], c["lock"]["wait_seconds"], backend=self.platform)
         w = c["window"]
-        self.window = GameWindow(w["process_name"], w["title_prefix"], w["pin_client_to_origin"])
+        self.window = self.platform.make_window(w["process_name"], w["title_prefix"], w["pin_client_to_origin"])
         cap = c["capture"]
-        self.capturer = Capturer(self.window, cap["ffmpeg"], cap["method"], cap["output_idx"], cap["timeout_seconds"])
+        self.capturer = self.platform.make_capturer(self.window, cap["ffmpeg"], cap["method"], cap["output_idx"], cap["timeout_seconds"])
         i = c["input"]
-        self.input = Input(self.window, i["key_delay"], i["type_delay"], i["click_hold"], i["settle"])
+        self.input = self.platform.make_input(self.window, i["key_delay"], i["type_delay"], i["click_hold"], i["settle"])
         self.logs = Logs(c.logs_dir)
         perf.instrument(self.capturer, ["grab"], "grab")
         perf.instrument(self.input, ["click", "key", "type_text", "drag", "scroll", "move"], "input")
@@ -54,7 +60,9 @@ class Session:
         self.last_popups = []
         self.launched_pid = None
         self.launched_identity = None
-        self.owned_process_only = os.environ.get("HOI4_LIVE_OWNED_ONLY", "0") == "1"
+        self.config_session = None
+        self.config_owner_id = None
+        self.owned_process_only = self._campaign_latched or os.environ.get("HOI4_LIVE_OWNED_ONLY", "0") == "1"
         self._memory_process = None
         self._memory_reader = None
         self.governor = None
@@ -70,6 +78,48 @@ class Session:
         except OSError:
             pass
         atexit.register(self.shutdown)
+
+    def set_mode(self, mode):
+        from .errors import ModeRefused
+        if mode not in ("test", "campaign"):
+            raise ModeRefused("mode must be test or campaign")
+        if mode == "test" and self._campaign_latched:
+            raise ModeRefused("campaign sessions cannot return to test mode; use a separate QA session")
+        self.mode = mode
+        self._campaign_latched |= mode == "campaign"
+        if mode == "campaign":
+            self.owned_process_only = True
+        return mode
+
+    def authorize_tool(self, name, arguments, test_only=False):
+        if self.mode == "campaign" or self._campaign_latched or arguments.get("mode") == "campaign":
+            self.set_mode("campaign")
+            return self.play_policy.authorize(name, arguments, test_only=test_only)
+
+    def prepare_config_session(self):
+        """Take byte-exact backups before campaign launch or playset mutation."""
+        if self.config_session is None or self.config_session.manifest["state"] == "restored":
+            from .game.session_backup import ConfigSession
+            self.config_session = ConfigSession.begin(
+                self.cfg.user_dir, os.path.join(self.cfg.artifacts_dir, "config_backups"))
+        return self.config_session
+
+    def restore_configs_after_exit(self):
+        """Restore only when the retained owned launch has verifiably exited.
+
+        Unknown external/game rewrites remain conflicts, never blindly accepted
+        as owned writes. A recovery journal stays outside Git for those cases.
+        """
+        from .game import process
+        if self.config_session is None:
+            return None
+        state = process.launch_status(self.launched_pid)
+        if not state or state["running"] or process.running_pids(self.cfg["window"]["process_name"]):
+            raise ToolError("owned launch exit is not verified or another game is running; configuration preserved")
+        game = self.config_session.manifest.get("game")
+        if game and game["phase"] != "exited":
+            self.config_session.mark_game_exited(self.config_owner_id)
+        return self.config_session.restore()
 
     # ------------------------------------------------------------------ per-call context
     def begin_call(self, name, progress=None, cancel=None):
@@ -146,6 +196,15 @@ class Session:
             self._telemetry.refresh()
         except OSError as e:
             log.warning("telemetry refresh failed: %s", e)
+        if self.mode == "campaign":
+            from .telemetry import modgen
+            manifest = modgen.read_manifest(self.cfg.user_dir)
+            if not modgen.campaign_compatible(manifest):
+                raise ToolError("campaign telemetry is not installed; enable it while the game is closed",
+                                {"error": "campaign_telemetry_required"})
+            if self._telemetry.generation != manifest["generation"]:
+                raise ToolError("no fresh records from this campaign telemetry generation yet",
+                                {"error": "campaign_telemetry_not_active"})
         return self._telemetry
 
     def require_game(self):
@@ -156,7 +215,7 @@ class Session:
 
     def require_owned_game(self):
         """Validate our launch, including creation time, without reading game memory."""
-        from .memory.winproc import capture_launched_identity, MemoryReadError
+        from .memory.winproc import MemoryReadError
         identity = self.launched_identity
         if identity is None or self.launched_pid != identity.pid:
             raise ToolError("this session did not launch the game; wait for it to exit, then hoi4_launch",
@@ -166,7 +225,7 @@ class Session:
             raise ToolError("the game window does not belong to this session's launch",
                             {"error": "unowned_process"})
         try:
-            current = capture_launched_identity(identity.pid, identity.executable_path)
+            current = self.platform.capture_process_identity(identity.pid, identity.executable_path)
         except (OSError, MemoryReadError) as exc:
             raise ToolError("owned game exited or its identity cannot be verified",
                             {"error": "unowned_process"}) from exc
@@ -180,6 +239,11 @@ class Session:
         from .memory.reader import MemoryReader
         from .memory.pe import load_rtti
         identity = self.require_owned_game()
+        if self.platform.name != "windows":
+            from .errors import CapabilityUnavailable
+            raise CapabilityUnavailable("live memory layout", self.platform.name,
+                                        "no independently validated build/architecture layout is registered",
+                                        "Use fresh own-country telemetry and UI observations")
         try:
             if self._memory_process is None or self._memory_process.closed:
                 img, rtti = load_rtti(identity.executable_path)

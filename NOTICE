@@ -8,6 +8,7 @@ private virtual environment; each keeps its own license:
 
   numpy                    BSD-3-Clause
   Pillow                   MIT-CMU (HPND)
+  PyObjC                   MIT (macOS framework bindings)
   opencv-python-headless   Apache-2.0 (OpenCV); the wheel bundles FFmpeg under LGPL-2.1 and other components, see
                            the license files shipped in the wheel
 
@@ -22,3 +23,11 @@ Design and research acknowledgments:
   governor/memory architecture. No upstream source code was copied in this
   publication work. Any future source reuse must retain that project's MIT
   copyright and permission notice and record file-level provenance.
+
+  Mac continuation research consulted commit
+  97c85437081904d5ad07bae1623ec58d1c0a5b9e: research/FINDINGS.md and
+  calling/{fieldmap,commands,turnloop,ragemicro,combat}.py. The reference's
+  batching, serializer discovery, verified-order cache and province-graph ideas
+  were reviewed; its Linux offsets, remote writes and native command calls were
+  not copied or executed. Queue acceptance alone does not prove an action is
+  available through ordinary player controls. Upstream MIT copyright: 2026 smerss.

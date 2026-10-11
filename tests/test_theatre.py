@@ -6,6 +6,8 @@ import json
 import os
 import tempfile
 import unittest
+from types import SimpleNamespace
+from unittest.mock import patch
 
 import numpy as np
 from PIL import Image
@@ -53,18 +55,18 @@ def make_game(root):
 
 class MapData(unittest.TestCase):
     def setUp(self):
-        self.tmp = tempfile.mkdtemp(prefix="hoi4live_map_")
-        self.old = os.environ.get("LOCALAPPDATA")
-        os.environ["LOCALAPPDATA"] = self.tmp
+        temp = tempfile.TemporaryDirectory(prefix="hoi4live_map_")
+        self.addCleanup(temp.cleanup)
+        self.tmp = temp.name
+        backend = SimpleNamespace(local_data_dir=lambda: self.tmp)
+        cache_platform = patch("hoi4_live.gamedata.scriptdb.platform.current", return_value=backend)
+        cache_platform.start()
+        self.addCleanup(cache_platform.stop)
         mapdata._MEM.clear()
         make_game(self.tmp + "/game")
         self.idx = mapdata.index(self.tmp + "/game", [])
 
     def tearDown(self):
-        if self.old is None:
-            os.environ.pop("LOCALAPPDATA", None)
-        else:
-            os.environ["LOCALAPPDATA"] = self.old
         mapdata._MEM.clear()
 
     def test_states_anchor_vp_and_neighbours(self):
@@ -92,6 +94,11 @@ class MapData(unittest.TestCase):
     def test_index_is_cached_on_disk(self):
         files = [f for f in os.listdir(os.path.join(self.tmp, "hoi4_live", "script_index")) if f.startswith("mapdata_")]
         self.assertEqual(len(files), 1)
+        mapdata._MEM.clear()
+        with patch.object(mapdata, "_build", side_effect=AssertionError("cache should avoid rebuilding")):
+            # JSON object keys are strings after a disk round trip (including
+            # nested victory-point province IDs); compare serialized content.
+            self.assertEqual(mapdata.index(self.tmp + "/game", []), json.loads(json.dumps(self.idx)))
 
     def test_state_at_and_distance_helpers(self):
         self.assertEqual(mapdata.state_at(self.idx, self.idx["states"]["11"]["anchor"])[0], 11)
@@ -125,9 +132,13 @@ def save_text():
 
 class Front(unittest.TestCase):
     def setUp(self):
-        self.tmp = tempfile.mkdtemp(prefix="hoi4live_front_")
-        self.old = os.environ.get("LOCALAPPDATA")
-        os.environ["LOCALAPPDATA"] = self.tmp
+        temp = tempfile.TemporaryDirectory(prefix="hoi4live_front_")
+        self.addCleanup(temp.cleanup)
+        self.tmp = temp.name
+        backend = SimpleNamespace(local_data_dir=lambda: self.tmp)
+        cache_platform = patch("hoi4_live.gamedata.scriptdb.platform.current", return_value=backend)
+        cache_platform.start()
+        self.addCleanup(cache_platform.stop)
         mapdata._MEM.clear()
         make_game(self.tmp + "/game")
         self.idx = mapdata.index(self.tmp + "/game", [])
@@ -138,10 +149,6 @@ class Front(unittest.TestCase):
 
     def tearDown(self):
         self.sf.close()
-        if self.old is None:
-            os.environ.pop("LOCALAPPDATA", None)
-        else:
-            os.environ["LOCALAPPDATA"] = self.old
         mapdata._MEM.clear()
 
     def test_owners_and_controllers(self):

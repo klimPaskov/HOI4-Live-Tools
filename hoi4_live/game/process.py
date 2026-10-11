@@ -67,6 +67,7 @@ def launch(game_dir, args):
         # Detached from this process on POSIX; a macOS launch through `open` or the Steam URL is a Mac task.
         p = subprocess.Popen([exe] + list(args), cwd=game_dir, start_new_session=True, stdin=subprocess.DEVNULL,
                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, close_fds=True)
+        _LAUNCHES[p.pid] = p
         return p.pid
     flags = DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
     for extra in (CREATE_BREAKAWAY_FROM_JOB, 0):

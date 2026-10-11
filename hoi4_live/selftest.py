@@ -30,7 +30,8 @@ def run(cfg):
     try:
         settings = open(cfg.settings_path, encoding="utf-8", errors="replace").read()
         binary = "save_as_binary=yes" in settings
-        line("text saves", not binary, "save_as_binary=no" if not binary else "save_as_binary=yes: save queries need text saves")
+        line("save format", not binary or cfg.mode == "campaign",
+             "text saves" if not binary else "binary saves; QA save queries unavailable (campaign reads use telemetry)")
     except OSError as e:
         line("settings.txt", False, str(e))
     try:
@@ -44,9 +45,9 @@ def run(cfg):
         ImageDraw.Draw(im).text((10, 20), "HOI4 LIVE TOOLS 1936", fill=(0, 0, 0))
         res = h.recognize(np.asarray(im), scale=3)
         h.close()
-        line("windows ocr", True, f"{round(time.time() - t, 1)} s, read {res.text!r}")
+        line("native ocr", bool(res.text.strip()), f"{round(time.time() - t, 1)} s, read {res.text!r}")
     except Exception as e:
-        line("windows ocr", False, f"{type(e).__name__}: {e}")
+        line("native ocr", False, f"{type(e).__name__}: {e}")
     from .tools import registry
     line("tools", len(registry.all_tools()) > 0, f"{len(registry.all_tools())} registered")
     return 0 if ok else 1

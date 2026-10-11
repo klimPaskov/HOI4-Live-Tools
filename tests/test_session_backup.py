@@ -14,7 +14,7 @@ class ConfigSessionTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory(prefix="hoi4_config_session_")
         self.addCleanup(self.temporary.cleanup)
-        root = Path(self.temporary.name)
+        root = Path(self.temporary.name).resolve()
         self.user = root / "user"
         self.user.mkdir()
         self.backups = root / "backups"

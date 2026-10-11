@@ -116,7 +116,8 @@ class ProtocolTests(unittest.TestCase):
                             session=session)
         res = by_id(out)[2]["result"]
         self.assertTrue(res["isError"])
-        self.assertIn("campaign mode", res["content"][0]["text"])
+        self.assertEqual(res["structuredContent"]["error"], "play_policy_refused")
+        self.assertEqual(res["structuredContent"]["reason"], "test_only_tool")
 
     def test_cancellation_flag_reaches_tool(self):
         seen = {}
