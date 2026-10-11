@@ -191,9 +191,14 @@ class TelemetryStore:
             schema = rec.get("v")
             schema = schema if type(schema) is int and schema > 0 else None
             if self.generation != rec["g"] or self.schema != schema:
-                # Eq/res omit generation/schema on the wire. Their provenance
-                # comes from the preceding own-country day record and must never
-                # survive a generation or schema boundary.
+                # No observation from the previous generation may supply a
+                # country, day, queue or metric for this campaign. Preserve the
+                # file cursor and configured catalogs, but discard all batches.
+                self.latest.clear()
+                self.groups.clear()
+                self.history.clear()
+                self.events.clear()
+                self.rs_counts.clear()
                 self.daily_metrics.clear()
                 self.focus_ledger.clear()
             self.generation, self.schema = rec["g"], schema
@@ -339,12 +344,31 @@ class TelemetryStore:
 
     # ------------------------------------------------------------------ queries
     def player(self):
-        """Tag of the most recent `day` record."""
+        """Daily identity, or one current-generation human handshake before day one.
+
+        The generated hello is scoped to human countries. Multiple handshakes
+        cannot identify the local player, so that case stays unknown. This
+        fallback establishes identity only; day/snapshot remain unavailable.
+        Session callers separately verify the installed campaign manifest.
+        """
         best = None
         for tag, hist in self.history.items():
             if hist and (best is None or hist[-1]["_wall"] >= best[1]):
                 best = (tag, hist[-1]["_wall"])
-        return best[0] if best else None
+        if best:
+            return best[0]
+        candidates = []
+        for tag, rec in self.latest.get("hello", {}).items():
+            counter, wall = rec.get("n"), rec.get("_wall")
+            if (isinstance(tag, str) and re.fullmatch(r"[A-Z][A-Z0-9]{2}", tag)
+                    and self.generation and self.schema is not None
+                    and rec.get("g") == self.generation and rec.get("v") == self.schema
+                    and type(rec.get("v")) is int
+                    and type(counter) in (int, float) and math.isfinite(counter)
+                    and counter == int(counter)
+                    and type(wall) in (int, float) and math.isfinite(wall)):
+                candidates.append(tag)
+        return candidates[0] if len(candidates) == 1 else None
 
     def day(self, tag=None):
         tag = tag or self.player()

@@ -18,6 +18,36 @@ from hoi4_live.tools import campaign_loop_tools as loop
 from test_campaign_loop import day
 
 
+class ClockStateRetryTests(unittest.TestCase):
+    def test_transient_unknown_then_wanted_state_needs_no_input(self):
+        session = mock.Mock()
+        with mock.patch.object(clock_mod, "icon_state", side_effect=["unknown", "running"]), \
+             mock.patch.object(clock_mod.time, "sleep"):
+            self.assertTrue(clock_mod.set_running(session, True))
+        session.input.key.assert_not_called()
+
+    def test_persistent_unknown_is_bounded_and_never_toggles(self):
+        session = mock.Mock()
+        with mock.patch.object(clock_mod, "icon_state", return_value="unknown") as probe, \
+             mock.patch.object(clock_mod.time, "sleep"):
+            self.assertFalse(clock_mod.set_running(session, True))
+        self.assertEqual(probe.call_count, 3)
+        session.input.key.assert_not_called()
+
+    def test_only_confirmed_opposite_state_authorizes_toggle(self):
+        session = mock.Mock()
+        states = iter(["unknown", "paused", "running"])
+        def observe(_session):
+            state = next(states)
+            if state in ("unknown", "paused"):
+                session.input.key.assert_not_called()
+            return state
+        with mock.patch.object(clock_mod, "icon_state", side_effect=observe), \
+             mock.patch.object(clock_mod.time, "sleep"):
+            self.assertTrue(clock_mod.set_running(session, True))
+        session.input.key.assert_called_once_with("space")
+
+
 class FakeInput:
     def __init__(self):
         self.keys = []

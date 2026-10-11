@@ -74,6 +74,13 @@ def set_running(session, want_running, tries=3, settle=4.0):
     want = "running" if want_running else "paused"
     for _ in range(tries):
         state = icon_state(session)
+        # A transition frame can obscure the icon. Resample briefly without
+        # input; only a known opposite state may authorize a Space toggle.
+        for _sample in range(2):
+            if state in ("running", "paused"):
+                break
+            time.sleep(0.1)
+            state = icon_state(session)
         if state == want:
             return True
         if state not in ("running", "paused"):

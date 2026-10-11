@@ -6,6 +6,49 @@ from hoi4_live.telemetry.parser import TelemetryStore
 
 
 class DailyMetricHistoryTests(unittest.TestCase):
+    def hello(self, store, tag="GER", **extra):
+        row = {"k": "hello", "t": tag, "n": 1, "g": "G1", "v": 3,
+               "_date": "1936.1.1.12", "_wall": 1.0}
+        row.update(extra)
+        store.add(row)
+
+    def test_initial_handshake_identifies_country_without_inventing_metrics(self):
+        store = TelemetryStore()
+        self.hello(store)
+        self.assertEqual(store.player(), "GER")
+        self.assertIsNone(store.day())
+        self.assertIsNone(store.snapshot())
+        self.assertIsNone(store.researching_techs())
+        self.assertNotIn("last_day", store.status())
+        self.assertIsNone(store.get_at("eq", "GER", 1))
+
+    def test_invalid_or_ambiguous_handshake_does_not_identify_player(self):
+        for extra in ({"g": ""}, {"v": True}, {"v": None}, {"n": True},
+                      {"n": float("nan")}, {"_wall": float("inf")}, {"t": "Germany"}):
+            store = TelemetryStore()
+            self.hello(store, **extra)
+            self.assertIsNone(store.player(), extra)
+        store = TelemetryStore()
+        self.hello(store)
+        self.hello(store, tag="POL")
+        self.assertIsNone(store.player())
+
+    def test_generation_boundary_discards_every_old_observation(self):
+        store = TelemetryStore()
+        self.day(store, 1)
+        for kind in ("eq", "res", "pol", "st", "kt", "rs", "ev"):
+            store.add({"k": kind, "t": "GER", "n": 1, "tid": 0, "_wall": 1})
+        self.hello(store, tag="POL", g="G2")
+        self.assertEqual(store.player(), "POL")
+        self.assertIsNone(store.day("GER"))
+        self.assertIsNone(store.get("pol", "GER"))
+        self.assertIsNone(store.get("eq", "GER"))
+        self.assertIsNone(store.day_ago("GER"))
+        self.assertEqual(store.state_rows(), [])
+        self.assertIsNone(store.known_techs())
+        self.assertEqual(store.rs_counts, {})
+        self.assertEqual(store.recent_events(), [])
+
     def day(self, store, n, tag="GER", generation="G1", schema=3):
         row = {"k": "day", "t": tag, "n": n, "g": generation, "v": schema,
                "_date": "1936.1.{}.1".format(n), "_wall": float(n)}
