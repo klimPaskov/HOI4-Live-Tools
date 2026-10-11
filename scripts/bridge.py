@@ -3,6 +3,7 @@
     python scripts/bridge.py serve --port 8765 --call-log <calls.jsonl> [--image-dir <dir>]   (leave running)
     python scripts/bridge.py call hoi4_status '{"look": false}'  [--port 8765] [--timeout 1500]
     python scripts/bridge.py call hoi4_focus @args.json
+    python scripts/bridge.py cancel  # request cancellation; original call still reports its result
     python scripts/bridge.py stop
 
 The server is the real stdio MCP server (same protocol and tools as a coding client sees); the bridge only keeps
@@ -51,6 +52,9 @@ def serve(args):
 
         def do_POST(self):
             body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
+            if self.path == "/cancel":
+                self._send(client.cancel_active_tool())
+                return
             if self.path == "/stop":
                 self._send({"text": "stopping"})
                 stop.set()
@@ -99,13 +103,16 @@ def main():
     c.add_argument("args", nargs="?", default="{}")
     c.add_argument("--port", type=int, default=8765)
     c.add_argument("--timeout", type=int, default=1500)
-    st = sub.add_parser("stop")
-    st.add_argument("--port", type=int, default=8765)
+    for command in ("stop", "cancel"):
+        st = sub.add_parser(command)
+        st.add_argument("--port", type=int, default=8765)
     a = ap.parse_args()
     if a.cmd == "serve":
         serve(a)
     elif a.cmd == "stop":
         print(post(a.port, "/stop", {}, 10)["text"])
+    elif a.cmd == "cancel":
+        print(json.dumps(post(a.port, "/cancel", {}, 10)))
     else:
         raw = a.args
         if raw.startswith("@"):
