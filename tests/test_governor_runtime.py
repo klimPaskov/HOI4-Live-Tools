@@ -249,6 +249,37 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(self.session.reads, before)
         self.assertEqual(self.calls, [])
 
+    def test_generation_change_during_action_does_not_consume_plan(self):
+        self.configure()
+        self.runtime.start()
+        self.calls.clear()
+        def changed_generation(session, name, args, **kwargs):
+            session.store.add(dict(day(102), g="different-generation"))
+            session.store.add(dict(day(103), g="different-generation"))
+            return {"isError": False}
+        self.dispatch.side_effect = changed_generation
+        reasons = self.runtime.on_day(self.session.clock, {})
+        self.assertEqual(reasons[0]["code"], "governor_stopped")
+        self.assertIn("during governor action", reasons[0]["text"])
+        self.assertEqual(self.runtime.policy.state["attempts"], {})
+        self.assertFalse(self.runtime.active())
+
+    def test_refreshed_blocking_reason_is_returned_without_waiting_for_next_day(self):
+        self.configure()
+        self.runtime.start()
+        original = self.runtime.policy.reconcile
+        calls = []
+        def reconcile(snapshot):
+            result = original(snapshot)
+            calls.append(snapshot["day"])
+            if len(calls) == 2:
+                result["stop_reasons"] = ["decision:observed after action"]
+            return result
+        with mock.patch.object(self.runtime.policy, "reconcile", side_effect=reconcile):
+            reasons = self.runtime.on_day(self.session.clock, {})
+        self.assertEqual(reasons, [{"code": "governor_decision", "text": "decision:observed after action"}])
+        self.assertFalse(self.runtime.active())
+
     def test_telemetry_rewind_stops_and_requires_explicit_restart(self):
         self.configure()
         self.runtime.start()

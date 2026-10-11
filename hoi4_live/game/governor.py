@@ -423,15 +423,21 @@ class Governor:
                     actual_day = _integer((latest or {}).get("n"))
                     if actual_day is None:
                         raise ToolError("cannot date governor tool outcome")
-                    with self.condition:
-                        action_status = self.policy.record(action["id"], outcome, max(actual_day, action["day"]))
                     # A UI call may consume several game days. Replace its
                     # cached proposal with newly dated telemetry immediately;
                     # no second action is executed from this refreshed batch.
                     refreshed = self._read()
+                    store = self.session.telemetry
+                    refreshed_timeline = {"tag": refreshed["tag"], "generation": store.generation,
+                                          "restarts": store.restarts, "rewinds": store.rewinds}
+                    if refreshed_timeline != timeline:
+                        raise ToolError("telemetry timeline changed during governor action; outcome remains unverified")
                     with self.condition:
+                        action_status = self.policy.record(action["id"], outcome, max(actual_day, action["day"]))
                         self.snapshot = refreshed
                         self.result = self.policy.reconcile(refreshed)
+                        reasons = [{"code": "governor_" + reason.split(":", 1)[0], "text": reason}
+                                   for reason in self.result["stop_reasons"]]
                         self._save()
                         self.condition.notify_all()
                     run.run.setdefault("auto", []).append({"governor": True, "tool": action["tool"],
