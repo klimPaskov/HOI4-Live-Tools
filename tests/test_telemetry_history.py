@@ -6,6 +6,26 @@ from hoi4_live.telemetry.parser import TelemetryStore
 
 
 class DailyMetricHistoryTests(unittest.TestCase):
+    def test_stream_sequence_resolves_tied_timestamps_without_trusting_input(self):
+        store = TelemetryStore()
+        self.day(store, 1)
+        row = {"k": "kt", "t": "GER", "n": 2, "tid": 1, "_wall": 1,
+               "_sequence": -1}
+        store.add(row)
+        self.day(store, 2)
+        self.assertEqual(row["_sequence"], -1)
+        previous, closing = store.history["GER"]
+        scan = store.group("kt")[0]
+        self.assertLess(previous["_sequence"], scan["_sequence"])
+        self.assertLess(scan["_sequence"], closing["_sequence"])
+        self.assertEqual(scan["_wall"], previous["_wall"])
+        self.hello(store, g="G2")
+        self.assertGreater(store.get("hello")["_sequence"], closing["_sequence"])
+        self.assertEqual(store.group("kt"), [])
+        store.reset()
+        self.hello(store)
+        self.assertEqual(store.get("hello")["_sequence"], 1)
+
     def hello(self, store, tag="GER", **extra):
         row = {"k": "hello", "t": tag, "n": 1, "g": "G1", "v": 3,
                "_date": "1936.1.1.12", "_wall": 1.0}

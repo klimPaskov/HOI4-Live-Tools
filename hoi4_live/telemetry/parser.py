@@ -184,6 +184,11 @@ class TelemetryStore:
 
     def add(self, rec):
         self.lines += 1
+        # Log order resolves records sharing the game's one-second timestamp.
+        # Never trust a supplied sequence or mutate a caller's fixture/record.
+        # Reset also clears every observation, so sequence reuse cannot bridge
+        # a file restart. Generation boundaries retain this monotonic counter.
+        rec = dict(rec, _sequence=self.lines)
         k = rec["k"]
         n = rec.get("n")
         tag = rec.get("t")
