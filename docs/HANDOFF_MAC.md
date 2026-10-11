@@ -421,8 +421,7 @@ those need local recorded acceptance. Linux pure-parser checks are optional.
 ## Sync back to Windows
 
 Commit focused work and push to the public repository; preserve the WIP branch.
-Every new commit ends with a blank line and
-`Co-Authored-By: Codex (gpt-6.1-sol) <noreply@openai.com>` per the user's request.
+Never add Co-Authored-By or any AI attribution line to commits: the user is the sole author.
 Do not push `private/*`, mirror the repository, or publish all local refs.
 Keep logs/dumps/saves/recordings, credentials, personal paths and private mod
 material outside Git. Re-audit every reachable historical object and tag before
