@@ -52,7 +52,7 @@ class FakeSession:
         self.lock = FakeLock()
         self.ui_mutex = threading.RLock()
         self.window = SimpleNamespace(size=lambda: (1920, 1080))
-        self.cfg = SimpleNamespace(artifacts_dir=folder)
+        self.cfg = SimpleNamespace(artifacts_dir=folder, user_dir=folder)
         self.standing = StandingOrders()
         self.clock = None
         self.governor = None
@@ -60,8 +60,10 @@ class FakeSession:
         self.store = TelemetryStore()
         self.store.set_catalog(["known", "safe", "ahead", "scripted", "branch", "doctrine", "offscreen"])
         self.store.add(dict(k="hello", t="GER", g="test-generation", v=3, _wall=1))
+        self.store.add(day(98))
+        self.store.add(dict(k="kt", t="GER", n=99, tid=0, _wall=99, _date="1936.1.1.24"))
+        self.store.add(day(99))
         self.store.add(day(100))
-        self.store.add(dict(k="kt", t="GER", n=100, tid=0, _wall=100))
         self.store.add(dict(k="rs", t="GER", n=100, tid=0, _wall=100))
         self.store.add(day(101))
 
@@ -97,6 +99,10 @@ class RuntimeTests(unittest.TestCase):
         self.session = FakeSession(self.folder.name)
         self.runtime = Governor(self.session)
         self.session.governor = self.runtime
+        p = mock.patch("hoi4_live.telemetry.modgen.read_manifest", return_value={
+            "generation": "test-generation", "schema": 3, "techs": list(self.session.store.techs)})
+        self.manifest = p.start()
+        self.addCleanup(p.stop)
         p = mock.patch("hoi4_live.gamedata.tech.for_session", return_value=index())
         p.start()
         self.addCleanup(p.stop)
@@ -156,6 +162,26 @@ class RuntimeTests(unittest.TestCase):
         self.session.store.techs = []
         snap = telemetry_snapshot(self.session)
         self.assertNotIn("research", snap)
+
+    def test_manifest_catalog_mismatch_cannot_schedule_research(self):
+        self.manifest.return_value["techs"] = ["safe", "known"]
+        snap = telemetry_snapshot(self.session)
+        self.assertNotIn("available", snap["research"])
+        self.assertIn("manifest", snap["research_unknown"])
+
+    def test_scan_outside_closed_interval_cannot_schedule_research(self):
+        self.session.store.groups["kt"]["rows"][0]["_sequence"] = 9999
+        snap = telemetry_snapshot(self.session)
+        self.assertNotIn("available", snap["research"])
+        self.assertIn("unresolved", snap["research_unknown"])
+
+    def test_changed_closing_count_cannot_schedule_research(self):
+        for row in self.session.store.history["GER"]:
+            if row["n"] == 99:
+                row["techs"] = 2
+        snap = telemetry_snapshot(self.session)
+        self.assertNotIn("available", snap["research"])
+        self.assertIn("closing count", snap["research_unknown"])
 
     def test_telemetry_gap_never_exposes_old_idle_as_current(self):
         self.session.store.add(day(105))

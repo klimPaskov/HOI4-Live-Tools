@@ -49,19 +49,6 @@ def _finite(value):
         return False
 
 
-def _ids(rows, catalog, tag):
-    """Decode only this player's complete, valid technology records."""
-    result = set()
-    for row in rows:
-        if not isinstance(row, dict) or row.get("t") != tag:
-            return None
-        index = _integer(row.get("tid"))
-        if index is None or index >= len(catalog):
-            return None
-        result.add(catalog[index])
-    return result
-
-
 def _shortages(store, tag, day):
     """Read only exact-day observed categories; never infer full inventory coverage.
 
@@ -192,23 +179,20 @@ def telemetry_snapshot(session, tag=None):
         return snapshot
     research = {"idle": slots - len(active), "active": active}
     snapshot["research"] = research
-    kt = groups.get("kt")
-    known = None
-    scan_day = None
-    count = _integer(complete.get("techs"))
-    if count == 0:
-        known, scan_day = set(), n
-    elif isinstance(kt, dict):
-        scan_day = _integer(kt.get("n"))
-        if scan_day is not None and scan_day <= n and n - scan_day <= 8:
-            known = _ids(kt.get("rows", []), catalog, tag)
-            if known is not None and len(known) != count:
-                known = None
-    if known is None:
-        snapshot["research_unknown"] = "known technology scan incomplete, stale or count mismatch"
-        return snapshot
-    research.update(completed=sorted(known), known_as_of_day=scan_day)
+    from ..telemetry.modgen import read_manifest
+    from ..telemetry.research import closed_technology_scan
+    manifest = read_manifest(session.cfg.user_dir)
     idx = tech_data.for_session(session)
+    if (not isinstance(manifest, dict) or manifest.get("generation") != generation
+            or manifest.get("schema") != SCHEMA or manifest.get("techs") != catalog
+            or any(tid not in idx.get("techs", {}) for tid in catalog)):
+        snapshot["research_unknown"] = "technology catalog does not match the installed manifest"
+        return snapshot
+    known, proof = closed_technology_scan(store, tag, generation, SCHEMA, catalog, complete)
+    if known is None:
+        snapshot["research_unknown"] = proof["note"]
+        return snapshot
+    research.update(completed=known, known_as_of_day=proof["known_as_of_day"])
     _require_owned(session)
     width, height = session.window.size()
     try:
