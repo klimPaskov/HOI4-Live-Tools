@@ -1,0 +1,57 @@
+{
+  "game_dir": "auto",
+  "user_dir": "auto",
+  "artifacts_dir": "artifacts",
+  "mode": "test",
+  "save_prefix": "hoi4live_",
+  "lock": {
+    "path": "%TEMP%/hoi4_live_desktop.lock",
+    "stale_seconds": 600,
+    "wait_seconds": 20
+  },
+  "window": {
+    "process_name": "hoi4.exe",
+    "title_prefix": "Hearts of Iron IV",
+    "pin_client_to_origin": true
+  },
+  "capture": {
+    "method": "auto",
+    "ffmpeg": "ffmpeg",
+    "output_idx": "auto",
+    "timeout_seconds": 20
+  },
+  "input": {
+    "key_delay": 0.04,
+    "type_delay": 0.035,
+    "click_hold": 0.06,
+    "settle": 0.25,
+    "park": [0.553, 0.003]
+  },
+  "console": {
+    "toggle_key": "grave",
+    "slide_seconds": 1.2
+  },
+  "ocr": {
+    "language": "en-US",
+    "idle_shutdown_seconds": 600,
+    "request_timeout_seconds": 30
+  },
+  "screenshot": {
+    "max_width": 960,
+    "format": "png"
+  },
+  "launch": {
+    "args": [],
+    "debug_args": ["-debug"],
+    "timeout_seconds": 900
+  },
+  "timeouts": {
+    "load_seconds": 420,
+    "save_seconds": 180,
+    "log_idle_seconds": 8
+  },
+  "time": {
+    "poll_seconds": 0.8,
+    "popup_policy": "first"
+  }
+}

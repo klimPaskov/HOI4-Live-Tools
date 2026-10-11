@@ -1,0 +1,15 @@
+artifacts/
+__pycache__/
+*.pyc
+.pytest_cache/
+dist/
+.tmp*/
+# run evidence stays local (transcripts, screenshots, memory dumps); only the README is tracked
+docs/evidence/*
+!docs/evidence/README.md
+*.dmp
+*.hoi4
+*.dump
+*.bin
+.venv/
+*.egg-info/

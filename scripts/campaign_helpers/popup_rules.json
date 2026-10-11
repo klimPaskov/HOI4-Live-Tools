@@ -1,0 +1,1 @@
+[{"match": "Czecho|Sudeten|Poland|Polish|Danzig|Anschluss|Soviet|Molotov|Munich|peace conference|surrender|capitulat", "stop": true}, {"match": "requests sale|Yugoslavia", "option": "can.t spare|No"}, {"match": "Switzerland|Gustloff", "option": "No need"}, {"match": ".", "option": 0}]

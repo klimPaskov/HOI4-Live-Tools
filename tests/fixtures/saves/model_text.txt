@@ -1,0 +1,272 @@
+HOI4txt
+player="USA"
+ideology=democratic
+date="1936.3.1.12"
+version="Operation Postern v1.19.2.0.a729 (2bce)"
+states={
+	361={
+		buildings={
+			infrastructure={ level=4 partial_health=0 healthy_levels=4 }
+			industrial_complex={ level=5 partial_health=0 healthy_levels=5 }
+			arms_factory={ level=2 }
+		}
+		owner="USA"
+		manpower_pool={
+			available=4020
+			total=2121042
+		}
+		state_category="city"
+	}
+	375={
+		buildings={
+			industrial_complex={ level=3 }
+			dockyard={ level=1 }
+		}
+		owner="USA"
+		manpower_pool={
+			total=500000
+		}
+		demilitarized=no
+	}
+	482={
+		owner="MEX"
+	}
+}
+equipments={
+	infantry_equipment_1={
+		id={ id=4075 type=70 }
+		max_version=0
+		creator="USA"
+	}
+	support_equipment_1={
+		id={ id=4077 type=70 }
+		creator="USA"
+	}
+	ship_hull_cruiser_1={
+		id={ id=4090 type=70 }
+		creator="USA"
+	}
+}
+countries={
+	USA={
+		stability=0.75
+		war_support=0.1
+		command_power=20.5
+		research_slot=4
+		capital=361
+		major=yes
+		focus_tree="usa_focus"
+		num_ships=230
+		politics={
+			parties={
+				democratic={
+					popularity=90
+				}
+				communism={
+					popularity=10
+				}
+			}
+			ideas={
+				free_trade
+				disarmed_nation
+				great_depression
+				undisturbed_isolation
+			}
+			ruling_party=democratic
+			last_election="1932.11.8.1"
+			election_frequency=48
+			elections_allowed=yes
+			political_power=42.5
+		}
+		focus={
+			current="USA_great_depression"
+			progress=12
+			paused=no
+			completed={ USA_first_focus }
+		}
+		technology={
+			technologies={
+				basic_machine_tools={
+					research_points=30.5
+					date="1.1.1.1"
+				}
+				tech_support={
+					level=1
+					research_points=100
+					date="1936.1.1.12"
+				}
+				tech_engineers={
+					level=1
+					research_points=100
+					date="1936.1.1.12"
+				}
+				gwtank={
+					level=1
+					research_points=150
+					date="1936.2.20.12"
+				}
+			}
+			slots={
+				basic_machine_tools={
+					used_saved_points=1
+				}
+				empty={
+					points=11
+				}
+				empty={
+					points=11
+				}
+			}
+		}
+		production={
+			equipments={
+				equipment={
+					id={ id=4075 type=70 }
+					amount=500
+				}
+				equipment={
+					id={ id=4077 type=70 }
+					amount=20
+				}
+			}
+			military_lines={
+				id={ id=135 type=56 }
+				produced=0.1
+				active_factories=3
+				priority=0
+				amount=-1
+				cost=0.5
+				requested_factories=3
+				equipment_variant_index={ id=4075 type=70 }
+				factory_efficiencies={ 50.5 50.5 39.0 }
+				resources={
+					{ resource="steel" amount=2 need=0 }
+				}
+			}
+			naval_lines={
+				id={ id=140 type=56 }
+				active_factories=5
+				priority=1
+				cost=2000
+				requested_factories=5
+				equipment_variant_index={ id=4090 type=70 }
+				resources={
+					{ resource="chromium" amount=0 need=1 }
+				}
+			}
+			general_lines={
+				building={
+					id={ id=17 type=59 }
+					produced=1552.5
+					active_factories=15
+					priority=0
+					amount=1
+					cost=10800
+					building={ template="industrial_complex" location=375 }
+				}
+			}
+		}
+		units={
+			division={
+				location=1440
+				organisation=50
+				strength=200
+			}
+			division={
+				location=1441
+				organisation=60
+				strength=250
+			}
+		}
+		fuel_status={
+			fuel=49006.9
+			max_fuel=195520.6
+		}
+		convoys={
+			equipment={
+				equipment={
+					id={ id=848 type=70 }
+					amount=700
+				}
+			}
+		}
+		diplomacy={
+			active_relations={
+				PHI={
+					puppet={ autonomy_state="autonomy_colony" first="USA" second="PHI" start_date="1936.1.1.12" }
+				}
+				MEX={
+					war_relation={
+						first="USA"
+						second="MEX"
+						start_date="1936.2.10.12"
+						first_casualties=120
+						second_casualties=900
+						war_score_first_vs_second={ first="USA" second="MEX" equipment_damage=2.5 province_capture=10 }
+						war_score_second_vs_first={ first="MEX" second="USA" equipment_damage=0.5 }
+						first_was_instigator=yes
+					}
+				}
+			}
+		}
+		decision_status={
+			active_timed_decision={
+				decision="MTG_treaty_renew_mission"
+				days=19
+				state="active"
+			}
+			active_mission={
+				decision="USA_some_mission"
+				days=12
+				state="active"
+			}
+			decisions_taken={
+"USA_statehood_for_alaska" "USA_small_lobby_effort"
+			}
+			decision_to_remove={
+				decision="USA_statehood_for_alaska"
+				days=200
+			}
+		}
+		characters={
+			appointed_advisors={
+				{
+					slot="political_advisor"
+					character={ id=5276 type=73 }
+				}
+				{
+					slot="theorist"
+					character={ id=5300 type=73 }
+				}
+			}
+		}
+	}
+	MEX={
+		stability=0.4
+		politics={
+			ruling_party=neutrality
+			political_power=3
+		}
+	}
+}
+faction={
+	members={ "USA" "PHI" }
+	ideology="democratic"
+	template="faction_template_usa"
+}
+faction={
+	members={ "GER" }
+	ideology="fascism"
+}
+character_manager={
+	historical={
+		character={
+			id={ id=5276 type=73 }
+			token="USA_harold_ickes"
+		}
+		character={
+			id={ id=5300 type=73 }
+			token="USA_george_patton"
+		}
+	}
+}

@@ -1,0 +1,234 @@
+HOI4txt
+player="USA"
+ideology=democratic
+date="1936.1.3.12"
+difficulty="normal"
+version="Operation Postern v1.19.2.0.a729 (2bce)"
+save_version=33
+character_manager={
+	historical={
+		character={
+			id={ id=956 type=4713 }
+			token="USA_george_s_patton"
+			corps_commander={
+				id={ id=957 type=4713 }
+				name="USA_george_s_patton"
+				skill=4
+			}
+		}
+		character={
+			id={ id=960 type=4713 }
+			token="USA_omar_bradley"
+			corps_commander={
+				id={ id=961 type=4713 }
+				name="USA_omar_bradley"
+				skill=4
+			}
+		}
+	}
+}
+division_templates={
+	division_template={
+		id={ id=1 type=52 }
+		name="Swiss Citizen Militia"
+		country="SWI"
+		regiments={
+			militia={ x=0 y=0 }
+		}
+	}
+	division_template={
+		id={ id=203 type=52 }
+		name="Infantry Division"
+		country="USA"
+		regiments={
+			infantry={ x=0 y=0 }
+			infantry={ x=0 y=1 }
+			infantry={ x=1 y=0 }
+		}
+		support={
+			artillery={ x=0 y=0 }
+		}
+	}
+	division_template={
+		id={ id=210 type=52 }
+		name="Rio Grande Infantry"
+		country="USA"
+		is_locked=no
+		regiments={
+			infantry={ x=0 y=0 }
+			infantry={ x=1 y=0 }
+			infantry={ x=3 y=0 }
+			artillery_brigade={ x=2 y=0 }
+		}
+	}
+}
+countries={
+	USA={
+		units={
+			division={
+				id={ id=2242 type=51 }
+				location=5038
+				division_template_id={ id=203 type=52 }
+				division_name={
+					type=0
+					name_order=2
+				}
+				organisation=5.0909
+				strength=225.8
+				move_priority=front_order
+				execute_order=2
+			}
+			division={
+				id={ id=2243 type=51 }
+				location=2019
+				division_template_id={ id=203 type=52 }
+				division_name={
+					type=0
+					override="Texas Rangers"
+				}
+				organisation=52.8
+				strength=301
+				execute_order=2
+			}
+			division={
+				id={ id=2300 type=51 }
+				location=100
+				division_template_id={ id=210 type=52 }
+				division_name={
+					type=0
+					name_order=9
+				}
+				organisation=40
+				strength=200
+			}
+			fleet={
+				id={ id=57 type=61 }
+				name="Battle Force"
+				task_force={
+					id={ id=2275 type=51 }
+					name="Battleships, Battle Force"
+					location=1562
+					ship={
+						id={ id=2263 type=51 }
+						definition=battleship
+					}
+					ship={
+						id={ id=2264 type=51 }
+						definition=battleship
+					}
+					mission={
+						mission=1
+						regions={ 32 }
+					}
+				}
+				task_force={
+					id={ id=2276 type=51 }
+					name="Destroyer Flotilla 1"
+					location=1562
+					ship={
+						id={ id=2270 type=51 }
+						definition=destroyer
+					}
+					mission={
+						mission=0
+					}
+				}
+				task_force={
+					id={ id=2277 type=51 }
+					name="Cruiser Division 3"
+					location=1562
+					ship={
+						id={ id=2271 type=51 }
+						definition=light_cruiser
+					}
+					mission={
+						mission=0
+						is_in_regions=yes
+						hours_in_mission=3
+						accessible_regions={ 89 }
+					}
+				}
+			}
+		}
+		theatres={
+			theatre={
+				id={ id=66 type=67 }
+				orders_group={
+					id={ id=1 type=53 }
+					name="Army of the Rio Grande"
+					order_instance={
+						type=2
+						path={ 1562 12374 7986 }
+						instance_id=1
+						first="o_dark"
+						second="o_star"
+						prefix="o_operation"
+						can_execute=1
+					}
+					order_instance={
+						type=1
+						path={ 5061 2060 }
+						instance_id=4
+						first="o_dark"
+						second="o_star"
+						prefix="o_operation"
+					}
+					order_instance={
+						type=2
+						path={ 12835 2060 }
+						instance_id=3
+						virtual_creator=2
+					}
+					order_instance={
+						type=2
+						path={ 12835 2060 }
+						instance_id=2
+						virtual_order=yes
+					}
+					member={
+						unit={ id=2242 type=51 }
+					}
+					member={
+						unit={ id=2243 type=51 }
+					}
+					leader={ id=957 type=4713 }
+					execution_type=1
+				}
+				theater_group={
+					id={ id=32 type=68 }
+					name="Army Group 1"
+					orders_group={ id=1 type=53 }
+					leader={ id=961 type=4713 }
+				}
+			}
+		}
+	}
+}
+strategic_air={
+	USA={
+		air_wing_pool={
+			id={ id=2714 type=4713 }
+			definition=tac_bomber
+			air_base={ id=294 type=65 }
+			air_wings={
+				id={ id=199 type=69 }
+				count=60
+				mission={
+					type=1
+					active=yes
+					region={ id=31 type=40 }
+				}
+				name="1. Medium Bombardment Group"
+			}
+			air_wings={
+				id={ id=211 type=69 }
+				count=72
+				mission={
+					type=0
+					active=no
+				}
+				name="2. Medium Bombardment Group"
+			}
+		}
+	}
+}

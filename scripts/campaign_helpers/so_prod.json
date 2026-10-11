@@ -1,0 +1,1 @@
+{"action": "set", "name": "production", "when": ["production_idle"], "do": [{"tool": "hoi4_production", "args": {"action": "fill", "targets": [{"line": "3", "max": 8}, {"line": "2", "max": 5}, {"line": "6", "max": 3}, {"line": "7", "max": 3}, {"line": "1", "max": 16}]}}], "on_fail": "skip"}

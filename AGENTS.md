@@ -1,0 +1,48 @@
+# Codex instructions
+
+Read [docs/HANDOFF_MAC.md](docs/HANDOFF_MAC.md) first. It is the canonical Mac
+continuation brief, including setup, status, ordered work, acceptance and the
+first prompt. Historical reports describe earlier stop times; the preserved
+`wip/governor-memory` branch came later and is unfinished.
+
+- Work autonomously; never ask questions. Preserve unrelated changes and explain
+  concrete external blockers. Do not launch/control the shared Windows game for
+  the Mac continuation; it is reserved for separate mod testing.
+- Builder: gpt-6-astra. During Mac live acceptance, delegate to one gpt-6-luna
+  player at medium reasoning with exclusive input ownership. Offline helpers may
+  investigate independently, but never compete for the game or shared files.
+- Support Windows **and** macOS. Keep Python 3.9+ and stdio MCP. Put native APIs
+  behind `hoi4_live/platform/`; no WinDLL/WinRT eager imports in portable code.
+  stdout is protocol JSON only; logs go to stderr/files. Use capability errors,
+  backend injection, OS-specific markers and a Windows/macOS CI matrix.
+- Finish daily background standing-plan execution, compact fresh digests with
+  one-call fixes, event-driven waits, verified ID-based actions, shortage repair
+  and war/naval-invasion automation. Observations never pause; stop only for a
+  genuine blocking decision. Idempotent retries preserve unfinished plan entries.
+- Campaigns use Normal difficulty, vanilla rules, historical AI and observational
+  telemetry only. No console/debug/eval/fire_event, save editing, hidden enemy
+  intelligence or reload-to-undo. Test-mode features are for separate mod QA and
+  must remain inaccessible to campaign automation.
+- Check PID creation/executable ownership, not PID alone. Never take over or kill
+  a user's unrelated game. Back up settings/playsets and restore only after the
+  owned game exits. Task access denial must allow telemetry/UI fallback; do not
+  disable SIP, re-sign the game or run the whole agent as root.
+- Do not copy build offsets across platforms. Validate bounded read-only memory
+  against own-country telemetry/screen; unknown builds and stale/torn reads fail
+  explicitly. Native command posting is unproven; only verified ordinary player
+  actions may ever enter a campaign command adapter.
+- Run `python -m unittest discover -s tests -v` after meaningful changes, plus
+  targeted protocol/import/backend checks. Offline tests are not live evidence.
+  Acceptance is a clean two-year Luna run, then the full recorded Germany and
+  Nationalist China campaigns specified in the handoff. Log actual failures.
+- Keep recordings, calls.jsonl, journals, dumps, saves, credentials, private mod
+  data and personal paths outside Git. Audit **full reachable history** of every
+  pushed branch/tag. Never push `private/*`, `--all`, `--mirror` or arbitrary tags.
+- Attribute consulted ideas to smerss/Clausewitz-MCP in NOTICE. Retain upstream
+  MIT copyright/license and file provenance if code is later copied.
+- Preserve `wip/governor-memory`; release only tested changes. Version/changelog,
+  audited archives and release pins for HOI4 Mod Setup/Agentic HOI4 Modding must
+  agree. Windows downstream pins move only after the release is accepted.
+- Every new commit message ends with a blank line and:
+
+  `Co-Authored-By: Codex (gpt-6.1-sol) <noreply@openai.com>`

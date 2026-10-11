@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hoi4-live-tools"
+version = "1.1.0"
+description = "An MCP server that lets AI agents drive a running Hearts of Iron IV on Windows: launch, load, read the screen, play, test mods."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Klim Pashkov" }]
+keywords = ["hoi4", "hearts-of-iron-iv", "mcp", "modding", "testing", "agents"]
+classifiers = [
+  "Operating System :: Microsoft :: Windows",
+  "Programming Language :: Python :: 3",
+  "Topic :: Games/Entertainment",
+]
+dependencies = [
+  "numpy>=1.21",
+  "Pillow>=9.0",
+  "opencv-python-headless>=4.5",
+]
+
+[project.scripts]
+hoi4-live-tools = "hoi4_live.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["hoi4_live*"]
+
+[tool.setuptools.package-data]
+hoi4_live = ["ocr/ocr_host.ps1"]
