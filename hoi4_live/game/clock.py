@@ -33,12 +33,34 @@ from . import popups as game_popups
 from . import timectl
 
 POLL = 0.3
-# The "National Focus Completed" window stops the clock and the loop reads it, but a missed window must not leave the
-# focus slot empty for months: the days shown when a focus was started also raise focus_done (state/focustimer). A
-# second firing for the same focus is harmless with hoi4_focus if_idle=true, which defers while one still runs.
+# QA retains the legacy estimated timer. Campaign completion uses closed
+# catalog-bound telemetry batches; elapsed duration never proves completion.
 FOCUS_TIMER_TRIGGER = True
 LOOK_EVERY = 1.5
 NO_PROGRESS_S = 120
+
+
+def focus_completion_event(previous, current):
+    """Return a completion transition only inside one observed own-tree timeline."""
+    if not isinstance(previous, dict) or not isinstance(current, dict):
+        return None
+    for key in ("tag", "tree", "generation"):
+        if not isinstance(current.get(key), str) or not current[key] or previous.get(key) != current[key]:
+            return None
+    if (type(previous.get("day")) is not int or type(current.get("day")) is not int
+            or previous["day"] >= current["day"]
+            or previous.get("source") != "telemetry" or current.get("source") != "telemetry"):
+        return None
+    old, new = previous.get("completed"), current.get("completed")
+    if (not isinstance(old, list) or not isinstance(new, list)
+            or any(not isinstance(fid, str) or not fid for fid in old + new)
+            or not set(old).issubset(new)):
+        return None
+    completed = sorted(set(new) - set(old))
+    if completed:
+        return {"code": "focus_done", "text": "completed focuses: " + ", ".join(completed),
+                "focus_ids": completed, "source": "telemetry", "as_of_day": current["day"]}
+    return None
 
 
 def icon_state(session, img=None):
@@ -126,6 +148,11 @@ class AdvanceRun:
         # A background run outlives the dispatcher call which started it. Keep the
         # desktop lease until it ends, including while no UI actions are needed.
         with self.s.lock.hold("background campaign clock"):
+            stop_on = self.args.get("stop_on")
+            stop_on = adv.DEFAULT_STOP if stop_on is None else stop_on
+            if (getattr(self.s, "mode", None) == "campaign"
+                    and "focus_idle" in set(stop_on) | self._standing_codes()):
+                raise ToolError("focus_idle needs a verified UI observation; use the focus governor's ordinary preflight")
             try:
                 return self._execute()
             except BaseException:
@@ -153,6 +180,8 @@ class AdvanceRun:
                             "restart the game, let one day pass)", {"field": "telemetry"})
         stop_on = list(a["stop_on"]) if a.get("stop_on") is not None else list(adv.DEFAULT_STOP)
         thresholds = a.get("thresholds") or {}
+        campaign = getattr(s, "mode", None) == "campaign"
+        last_focus_batch = store.focus_snapshot(tag, rec0["n"] - 1) if campaign and rec0 else None
         # no record yet (a new game, or a loaded save): the first day record that arrives is the baseline
         n0 = rec0["n"] if rec0 else None
         budget = a["budget_days"]
@@ -213,12 +242,19 @@ class AdvanceRun:
                                         "text": f"{idle} research slot(s) idle ({rec['_date']})"})
                         last_idle_n = rec["n"]
                     last_idle = idle
-                if "focus_done" in wanted and FOCUS_TIMER_TRIGGER:
+                if campaign:
+                    batch = store.focus_snapshot(tag, rec["n"] - 1)
+                    event = focus_completion_event(last_focus_batch, batch)
+                    if event and "focus_done" in wanted:
+                        reasons.append(event)
+                    if batch is not None:
+                        last_focus_batch = batch
+                if not campaign and "focus_done" in wanted and FOCUS_TIMER_TRIGGER:
                     f = focustimer.due(self.s, rec["n"])
                     if f:
                         reasons.append({"code": "focus_done", "text": f"focus {f.get('name') or f.get('focus')} is "
                                                                       f"complete ({rec['_date']})"})
-                if "focus_idle" in wanted:
+                if not campaign and "focus_idle" in wanted:
                     f = focustimer.get(self.s)
                     idle = f is None or f.get("fired") or f.get("due_n") is None or rec["n"] >= f["due_n"]
                     if idle and rec["n"] - last_focus_idle_n >= 5:
@@ -233,7 +269,7 @@ class AdvanceRun:
                 titles = [q["title"] for q in queued]
                 for ttl in titles:
                     run["notices"].append({"title": ttl, "date": self.progress.get("date")})
-                reasons += adv.evaluate(None, None, wanted, thresholds, titles)
+                reasons += adv.evaluate(None, None, wanted - {"focus_done"} if campaign else wanted, thresholds, titles)
             if new and n0 is not None:
                 self.progress.update(date=new[-1]["_date"], days=last_n - n0, n=last_n)
                 if self.on_day:
@@ -291,7 +327,7 @@ class AdvanceRun:
                         run["notices"].append({"title": t, "date": self.progress.get("date")})
                     if titles:
                         handled_pause = 0
-                        r = adv.evaluate(prev, prev, stop_on, thresholds, titles)
+                        r = adv.evaluate(prev, prev, set(stop_on) - {"focus_done"} if campaign else stop_on, thresholds, titles)
                         if r and self.on_reasons:
                             r = self.on_reasons(self, r) or []
                         if r:

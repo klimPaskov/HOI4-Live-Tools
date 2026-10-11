@@ -8,9 +8,9 @@ stop conditions look at.
 
 STOP_CONDITIONS = {
     "tech_done": "a technology was researched (a research slot is free again)",
-    "focus_idle": "no national focus is running (checked every five days; a standing order can pick the next)",
+    "focus_idle": "requires verified UI idle evidence; campaign fast-clock callers should use focus governor preflight",
     "research_idle": "a research slot is idle (more slots than technologies in progress; from the telemetry)",
-    "focus_done": "a national focus was completed (the game's notice window)",
+    "focus_done": "a national focus was completed (closed own-country telemetry in campaigns)",
     "construction_done": "civilian factories became free (a construction finished or the queue ran dry)",
     "production_idle": "military factories became free (a production line ended or was removed)",
     "war_started": "the country is at war with more countries than before",

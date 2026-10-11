@@ -8,12 +8,12 @@ from .registry import ToolResult, tool
 @tool("hoi4_governor",
       "Declare a durable standing plan; status and digest read the cached observation. "
       "start requires campaign mode, a game launched by this session, a sticky desktop lease, "
-      "and completed own-country telemetry. Research and explicit popup policy are supported; "
-      "nonempty focus/construction/production/army plans are refused until live state is implemented. "
+      "and completed own-country telemetry. Research, verified focus preflight and explicit popup policy are supported; "
+      "nonempty construction/production/army plans are refused until live state is implemented. "
       "start runs the existing fast clock in the background. Restarts never resume automatically.",
       {"properties": {
           "action": {"type": "string", "enum": ["plan", "status", "digest", "start", "stop"], "default": "status"},
-          "plan": {"type": "object", "description": "version=1; research IDs, events mode/rules, retry bounds"},
+          "plan": {"type": "object", "description": "version=1; research/focus IDs, events mode/rules, retry bounds"},
           "days": {"type": "integer", "minimum": 1, "maximum": 730, "default": 90},
           "speed": {"type": "integer", "minimum": 1, "maximum": 5, "default": 5},
           "max_seconds": {"type": "integer", "minimum": 30, "maximum": 7200, "default": 900}}},

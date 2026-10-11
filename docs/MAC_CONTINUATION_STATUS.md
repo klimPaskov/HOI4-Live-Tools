@@ -46,8 +46,10 @@ The remaining campaign requirements still apply.
 - Governor digests include fresh, scoped equipment/resource shortages and explicit
   unknown sections, with daily observation coverage. Shortage alerts are
   observations and inspection suggestions, **not automatic repair**. Live plan
-  execution still supports research and declared events only; focus,
-  construction, production and army execution remain unfinished.
+  execution supports research, focus preflight and declared events. Focus plans
+  require closed current-tree telemetry and exact UI selection/readback; their
+  recheck schedule never claims the focus remains active. Construction,
+  production and army execution remain unfinished.
 - Mac read-only task-access and Mach-O analysis infrastructure is bounded and
   permission aware. No Mac build layout is registered as live validated. No
   native command posting or memory-writing campaign adapter exists.
@@ -145,19 +147,39 @@ The map date was independently read from a logical-resolution frame. A transient
 display loss interrupted the original startup call; the game remained paused on
 day one. Session capture/input now share logical client coordinates, while
 recording retains native backing pixels. Daily telemetry and in-game action
-verification are still being tested. This
-builder smoke run is not the clean Luna acceptance run.
+verification have now reached June 1936. This builder smoke run is not the clean
+Luna acceptance run; its initial empty queues and diagnostic pauses are recorded
+failures, not accepted play.
 
 Focus observation now has bounded, generation-matched, closed daily batches for
 the current tree's completed IDs and progress bounds. Progress never establishes
 which focus is active. Current focus identity requires unique screen evidence;
-unreadable state remains unknown. Live daily runtime and script-overhead checks
-remain outstanding. Campaign selection requires an installed ID and verified
-Start requirements. Freshness checks reject unrelated stale save metadata.
+unreadable state remains unknown. An actual 122-day sample contained 122 closed
+focus batches and no malformed records or generated-script errors; parsing its
+2,676 records took approximately 37 ms. This is a smoke sample, not a controlled
+measurement of game script overhead. Campaign selection requires an installed
+ID and verified Start requirements. Freshness checks reject unrelated stale
+save metadata.
 
-Latest local validation passed **709 tests, 26 skipped**, with a clean whitespace
-check. The last pushed checkpoint's four Windows/macOS × Python 3.9/3.13 CI jobs
-passed; the current smoke fixes still need their own cross-platform CI run.
+The UI selected `GER_the_four_year_plan`, and closed telemetry subsequently
+confirmed its completion on 8 June after 25 observed positive-progress days.
+Campaign clock completion now uses these actual ID transitions rather than an
+estimated duration or generic notice. A 37-day bounded advance took 29.3 seconds
+and left the game running with zero pauses inside that advance; a separate
+explicit diagnostic pause then stopped on 22 June. That distinction matters for
+whole-run pause accounting. Focus governor dispatch/retries and completion
+transitions pass offline tests but still need live integrated validation.
+
+The governor retains pending focus preferences after failed or ambiguous
+actions. Verified busy deferrals do not exhaust the retry budget. Progress can
+postpone ordinary UI rechecks; otherwise a seven-day recheck bounds stale
+selection evidence. Completion releases the next preference immediately. This
+schedule does not prove continuous focus occupancy or eliminate all idle time.
+
+Latest local validation passed **767 tests, 26 skipped**, plus compilation, stdio
+initialization/tool discovery/campaign refusal and a clean whitespace check. All
+four Windows/macOS × Python 3.9/3.13 jobs passed for `14135b7`; the new focus
+governor changes still need their own cross-platform CI run.
 Skips include platform-specific and unavailable private-fixture cases. Hosted
 runners cannot prove native game behavior. No clean two-year run, complete
 showcase, validated Mac memory layout or release acceptance has been achieved.

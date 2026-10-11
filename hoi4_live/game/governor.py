@@ -19,9 +19,9 @@ from ..state.governor import StandingPlan, digest, wait_matches
 
 
 STRATEGIC_STOP = ["war_started", "war_ended", "territory_lost", "losing"]
-UNSUPPORTED = ("focus", "construction", "production", "army")
+UNSUPPORTED = ("construction", "production", "army")
 UNAVAILABLE_OBSERVATIONS = {
-    "focus": "focus IDs, availability and current selection are not emitted",
+    "focus": "current selection and actual availability require ordinary UI preflight",
     "construction": "built levels exist weekly; queued levels and build availability are unknown",
     "production": "idle factory count exists; production line IDs and assignments are unknown",
     "army": "division count exists; assignment and safe selection are unknown",
@@ -102,6 +102,23 @@ def _shortages(store, tag, day):
     return result
 
 
+def _focus_observation(session, store, tag, day):
+    """Completed IDs are facts; structural candidates still require UI preflight."""
+    from ..gamedata import focus as focus_data
+    observed = store.focus_snapshot(tag, day)
+    if not observed:
+        return None
+    idx = focus_data.for_session(session)
+    focuses = focus_data.tree_focuses(idx, observed["tree"])
+    if not focuses or any(fid not in focuses for fid in observed["completed"]):
+        return None
+    result = dict(observed, as_of_day=day, selection_preflight=True,
+                  catalog_ids=sorted(focuses), availability_verified=False)
+    result["preflight_candidates"] = sorted(fid for fid, focus in focuses.items()
+        if focus_data.status(focus, observed["completed"]) == "available")
+    return result
+
+
 def telemetry_snapshot(session, tag=None):
     """Private runtime adapter. The caller has already verified ownership/lease.
 
@@ -141,6 +158,9 @@ def telemetry_snapshot(session, tag=None):
                             and isinstance(hello, dict) and hello.get("g") == generation
                             and hello.get("t") == tag and hello.get("v") == SCHEMA)
     if validated_generation:
+        focus = _focus_observation(session, store, tag, n)
+        if focus is not None:
+            snapshot["focus"] = focus
         for target, source in (("idle_military_factories", "mil_free"), ("idle_civilian_factories", "civ_free")):
             value = _integer(complete.get(source))
             if value is not None:
@@ -275,6 +295,7 @@ class Governor:
             if self._active:
                 self._guard()
                 self._supported(proposed)
+                self._check_focus_plan(proposed, self._read())
             self.policy = proposed
             self._revision += 1
             if self._active and self._run is not None:
@@ -290,7 +311,17 @@ class Governor:
         unsupported = [name for name in UNSUPPORTED if policy.plan[name]]
         if unsupported:
             raise ToolError("live governor state is not implemented for: " + ", ".join(unsupported),
-                            {"unsupported_state": unsupported, "supported": ["research", "events"]})
+                            {"unsupported_state": unsupported, "supported": ["research", "focus", "events"]})
+
+    @staticmethod
+    def _check_focus_plan(policy, snapshot):
+        if not policy.plan["focus"]:
+            return
+        focus = snapshot.get("focus", {})
+        if focus.get("selection_preflight") is not True:
+            raise ToolError("focus governor needs a complete current-tree telemetry batch")
+        if any(fid not in focus["catalog_ids"] for fid in policy.plan["focus"]):
+            raise ToolError("focus plan contains IDs outside the observed current tree")
 
     def _read(self):
         self._guard()
@@ -318,6 +349,7 @@ class Governor:
             snapshot = self._read()
             if self.policy.plan["research"] and "available" not in snapshot.get("research", {}):
                 raise ToolError("research governor needs a complete own-country technology scan", {"reason": snapshot.get("research_unknown")})
+            self._check_focus_plan(self.policy, snapshot)
             store = self.session.telemetry
             timeline = {"tag": snapshot["tag"], "generation": store.generation,
                         "restarts": store.restarts, "rewinds": store.rewinds}
@@ -371,8 +403,7 @@ class Governor:
                            for reason in self.result["stop_reasons"]]
                 self.condition.notify_all()
             for action in actions:
-                # Only one research action is currently proposed. This also
-                # prevents stale replay when future supported tools take days.
+                # Execute one action, then refresh; UI calls can consume game days.
                 with self.session.ui_mutex:
                     self._guard()
                     with self.condition:
@@ -384,7 +415,7 @@ class Governor:
                     if popups.detect(self.session.grab(focus=False)):
                         break
                     args = dict(action["args"])
-                    if action["tool"] == "hoi4_research":
+                    if action["tool"] in ("hoi4_research", "hoi4_focus"):
                         args["save"] = "telemetry"
                     outcome = dispatch.call(self.session, action["tool"], args)
                     self._guard()
@@ -393,7 +424,7 @@ class Governor:
                     if actual_day is None:
                         raise ToolError("cannot date governor tool outcome")
                     with self.condition:
-                        self.policy.record(action["id"], outcome, max(actual_day, action["day"]))
+                        action_status = self.policy.record(action["id"], outcome, max(actual_day, action["day"]))
                     # A UI call may consume several game days. Replace its
                     # cached proposal with newly dated telemetry immediately;
                     # no second action is executed from this refreshed batch.
@@ -404,7 +435,7 @@ class Governor:
                         self._save()
                         self.condition.notify_all()
                     run.run.setdefault("auto", []).append({"governor": True, "tool": action["tool"],
-                        "args": args, "ok": not outcome.get("isError"), "day": actual_day})
+                        "args": args, "ok": action_status != "failed", "status": action_status, "day": actual_day})
                     # Any slow action invalidates the rest of this batch.
                     break
             with self.condition:
@@ -448,7 +479,7 @@ class Governor:
         self._campaign()
         with self.condition:
             return {"active": self._active, "configured": self.policy is not None,
-                    "supported": ["research", "events"], "unsupported_state": list(UNSUPPORTED),
+                    "supported": ["research", "focus", "events"], "unsupported_state": list(UNSUPPORTED),
                     "unavailable_observations": dict(UNAVAILABLE_OBSERVATIONS),
                     "plan": copy.deepcopy(self.policy.plan) if self.policy else None,
                     "snapshot": copy.deepcopy(self.snapshot), "last_stop": copy.deepcopy(self.last_stop),

@@ -144,7 +144,8 @@ def hoi4_focus(session, args):
                     panels.close(session)
                     return ToolResult(f"deferred: {before['current']} is still in progress",
                                       {"action": "select", "focus": row and row["id"], "before": before["current"],
-                                       "changed": False, "deferred": True})
+                                       "changed": False, "deferred": True,
+                                       "verified_current_focus_id": current_id})
                 if not args["replace"]:
                     raise ToolError(f"a focus is in progress ({before['current']}); pass replace=true to cancel it "
                                     "first", {"current": before["current"]})

@@ -15,7 +15,10 @@ and ``tag``, and sections with explicit ``source`` and ``as_of_day``. Sections c
 inherit those two fields from the snapshot. Section schemas:
 
 * research: idle (count), completed/active/available (lists of technology IDs).
-* focus: idle (bool), completed/available (lists of focus IDs).
+* focus: completed IDs plus either observed idle/available, or catalog-bound
+  preflight_candidates with selection_preflight=true. The latter authorizes only
+  ordinary select(if_idle=true), which verifies current state and requirements.
+  Persisted focus_watch schedules rechecks; it is not an active-focus claim.
 * metrics: idle_military_factories, idle_civilian_factories, unassigned_divisions,
   equipment_deficit, resource_deficit (nonnegative counts; absent means unknown).
 * construction: items [{building,state,built,queued,available,free_slots}]. Targets
@@ -198,9 +201,25 @@ class StandingPlan:
         data = result.get("structuredContent") or {}
         failure = bool(result.get("isError")) or data.get("closed") is False
         deferred = bool(data.get("deferred"))
+        proposed = self._proposed[action_id]
+        watched_focus = None
+        if proposed["kind"] == "focus" and proposed["observation"].get("selection_preflight") is True:
+            requested = proposed["args"]["focus"]
+            watched_focus = data.get("verified_current_focus_id") if deferred else data.get("verified_focus_id")
+            catalog = proposed["observation"].get("catalog_ids", [])
+            if (watched_focus not in catalog or (not deferred and watched_focus != requested)):
+                failure = True
+                watched_focus = None
+            if watched_focus and not failure:
+                # This is dated UI evidence and a recheck schedule, not a claim
+                # that the focus remains active. Closed completion wakes sooner.
+                self.state["focus_watch"] = {"id": watched_focus, "verified_on_day": day,
+                    "next_check_day": day + 7, "generation": proposed["observation"].get("generation"),
+                    "tree": proposed["observation"].get("tree"), "progress_lower": None}
         status = "failed" if failure else "deferred" if deferred else "skipped" if data.get("skip") else "succeeded"
-        count = previous.get("count", 0) + 1
-        gap = self.plan["retry"]["backoff_days"] * (2 ** (count - 1)) if failure or deferred else 1
+        count = 0 if watched_focus and not failure else previous.get("count", 0) + 1
+        gap = (self.plan["retry"]["backoff_days"] * (2 ** (count - 1))
+               if (failure or deferred) and not watched_focus else 1)
         self.state["attempts"][action_id] = {"count": count, "last_day": day,
                                              "next_day": day + gap, "status": status,
                                              "kind": self._proposed[action_id]["kind"],
@@ -267,6 +286,31 @@ class StandingPlan:
         for kind, idle_type, tool, action, field in (("research", "count", "hoi4_research", "start", "tech"),
                                                       ("focus", "bool", "hoi4_focus", "select", "focus")):
             observation = fresh[kind]
+            if kind == "focus" and observation and observation.get("selection_preflight") is True:
+                completed = observation.get("completed")
+                choices = observation.get("preflight_candidates")
+                if not isinstance(completed, list) or not isinstance(choices, list):
+                    continue
+                watch = self.state.get("focus_watch")
+                if isinstance(watch, dict):
+                    if (watch.get("generation") != observation.get("generation")
+                            or watch.get("tree") != observation.get("tree") or watch.get("id") in completed):
+                        self.state.pop("focus_watch", None)
+                    else:
+                        progress = (observation.get("progress") or {}).get(watch.get("id"), {})
+                        low = _number(progress.get("lower_exclusive"))
+                        if low is not None and (watch.get("progress_lower") is None or low > watch["progress_lower"]):
+                            watch["progress_lower"] = low
+                            watch["next_check_day"] = day + 7
+                        next_check = _day(watch.get("next_check_day"))
+                        if next_check is not None and day < next_check:
+                            continue
+                for choice in self.plan[kind]:
+                    if choice not in completed and choice in choices:
+                        propose(kind, choice, tool, {"action": action, field: choice, "if_idle": True},
+                                "focus_selection_preflight")
+                        break
+                continue
             idle = observation.get("idle") if observation else None
             can_act = (_number(idle) is not None and idle > 0) if idle_type == "count" else idle is True
             if not can_act or not self.plan[kind]:
@@ -472,7 +516,8 @@ def daily_events(previous, current, max_age_days=0):
         if (kind == "focus" and idle is True) or (kind == "research" and _number(idle) is not None and idle > 0):
             events.append(kind + "_idle")
         monotonic = _day((previous or {}).get("day")) is not None and _day(current.get("day")) is not None and previous["day"] <= current["day"]
-        if before and monotonic and isinstance(now.get("completed"), list) and isinstance(before.get("completed"), list):
+        same_scope = (before and all(before.get(key) == now.get(key) for key in ("generation", "tree", "tag")))
+        if before and monotonic and same_scope and isinstance(now.get("completed"), list) and isinstance(before.get("completed"), list):
             if set(now["completed"]) - set(before["completed"]):
                 events.append("tech_done" if kind == "research" else "focus_done")
     metrics = fresh_section(current, "metrics", max_age_days)

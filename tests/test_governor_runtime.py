@@ -181,10 +181,10 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(self.calls, [])
 
     def test_start_rejects_unsupported_components_without_partial_activation(self):
-        self.configure(focus=["GER_a"])
+        self.configure(army=[{"state": "64", "army": "1"}])
         with self.assertRaises(ToolError) as error:
             self.runtime.start()
-        self.assertEqual(error.exception.details["unsupported_state"], ["focus"])
+        self.assertEqual(error.exception.details["unsupported_state"], ["army"])
         self.assertFalse(self.runtime.active())
         self.assertEqual(self.calls, [])
 
