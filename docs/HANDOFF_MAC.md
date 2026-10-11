@@ -1,5 +1,11 @@
 # Mac handoff: start here
 
+**Latest continuation:** read [Mac continuation checkpoint](MAC_CONTINUATION_STATUS.md)
+first for implemented Mac support, the locked-desktop smoke-test blocker, remaining
+internal gaps and the Germany/China FAIR plus Poland META assignment. Use the new
+[campaign playbook](../skills/hoi4-campaign-playbook/SKILL.md). The implementation
+status below records the original handoff and is superseded by that checkpoint.
+
 11 October 2026. Public source: <https://github.com/klimPaskov/HOI4-Live-Tools>.
 This is the single entry point for continuing with Codex on a Mac. Read the root
 [AGENTS.md](../AGENTS.md), then continue on `wip/governor-memory` or a feature

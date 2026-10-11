@@ -1,0 +1,4 @@
+interface:
+  display_name: "HOI4 Campaign Playbook"
+  short_description: "FAIR and META strategies for verified HOI4 campaigns"
+  default_prompt: "Use $hoi4-campaign-playbook to plan and run the assigned HOI4 campaign with verified actions and victory evidence."

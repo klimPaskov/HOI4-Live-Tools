@@ -5,6 +5,10 @@ continuation brief, including setup, status, ordered work, acceptance and the
 first prompt. Historical reports describe earlier stop times; the preserved
 `wip/governor-memory` branch came later and is unfinished.
 
+The latest checkpoint is [docs/MAC_CONTINUATION_STATUS.md](docs/MAC_CONTINUATION_STATUS.md).
+For campaign strategy and FAIR/META rules, read
+[skills/hoi4-campaign-playbook/SKILL.md](skills/hoi4-campaign-playbook/SKILL.md).
+
 - Work autonomously; never ask questions. Preserve unrelated changes and explain
   concrete external blockers. Do not launch/control the shared Windows game for
   the Mac continuation; it is reserved for separate mod testing.
@@ -45,4 +49,4 @@ first prompt. Historical reports describe earlier stop times; the preserved
   agree. Windows downstream pins move only after the release is accepted.
 - Every new commit message ends with a blank line and:
 
-  `Co-Authored-By: Codex (gpt-6.1-sol) <noreply@openai.com>`
+  `Co-Authored-By: Codex (gpt-6-astra) <noreply@openai.com>`
