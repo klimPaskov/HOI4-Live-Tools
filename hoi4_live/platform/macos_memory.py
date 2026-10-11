@@ -7,7 +7,7 @@ decoding must use the independently verified target image architecture.
 """
 
 import ctypes
-import os
+import posixpath
 import struct
 import sys
 
@@ -47,11 +47,11 @@ def _identity_key(identity):
         raise OwnershipError("an explicit launched PID is required")
     if type(created) is not int or created <= 0:
         raise OwnershipError("exact process creation time is required")
-    if not isinstance(path, str) or not os.path.isabs(path) or "\0" in path:
+    if not isinstance(path, str) or not posixpath.isabs(path) or "\0" in path:
         raise OwnershipError("absolute launched executable path is required")
     # Do not case-fold: macOS can use a case-sensitive volume.
-    path = os.path.normpath(path)
-    if os.path.basename(path) != "hoi4":
+    path = posixpath.normpath(path)
+    if posixpath.basename(path) != "hoi4":
         raise OwnershipError("the owned executable must be hoi4")
     return pid, created, path
 

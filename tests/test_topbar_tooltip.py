@@ -3,6 +3,7 @@
 import os
 import sys
 import unittest
+from unittest import mock
 
 import numpy as np
 from PIL import Image
@@ -53,18 +54,32 @@ class GlyphTests(unittest.TestCase):
 @unittest.skipUnless(sys.platform == "win32", "expected values calibrated against Windows OCR")
 class BarTests(unittest.TestCase):
     def test_read_bar(self):
+        gd = config.get().game_dir
+        if glyphs.font(gd) is None:
+            self.skipTest("complete top-bar reading requires installed game font hoi_18mbs")
+        self._check_bar(gd, missing=[])
+
+    def test_read_bar_without_game_fonts_reports_unknowns(self):
+        with mock.patch.object(glyphs, "font", return_value=None):
+            self._check_bar(None, missing=["war_support", "army_experience",
+                                         "navy_experience", "air_experience"])
+
+    def _check_bar(self, game_dir, missing):
         from hoi4_live.ocr.winocr import OcrHost
         ocr = OcrHost()
         try:
-            r = topbar.read_bar(usa_1936(), ocr, game_dir=config.get().game_dir)
+            r = topbar.read_bar(usa_1936(), ocr, game_dir=game_dir)
         finally:
             ocr.close()
         want = {"political_power": 13, "stability": 0.94, "war_support": 0.05, "manpower": 261620,
                 "factories": 160, "fuel": 29.0, "supply": 1.0, "convoys": 641, "command_power": 20,
                 "army_experience": 0, "navy_experience": 0, "air_experience": 0, "world_tension": 0.0}
+        for name in missing:
+            want[name] = None
+            self.assertIsNone(r[name]["via"])
         got = {k: r[k]["value"] for k in want}
         self.assertEqual(got, want)
-        self.assertEqual(r["_missing"], [])
+        self.assertEqual(r["_missing"], missing)
 
 
 class TooltipBoxTests(unittest.TestCase):

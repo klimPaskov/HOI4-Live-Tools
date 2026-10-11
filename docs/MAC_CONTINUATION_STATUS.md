@@ -113,10 +113,14 @@ Homebrew CLI shim was broken; the working app-bundled CLI verified registration.
 The active chat may need a fresh server connection to expose newly registered
 tools. Do not publish the private config backup or raw smoke artifacts.
 
-Independent checkpoint validation passed **655 tests, 24 skipped**, plus
+Independent checkpoint validation passed **657 tests, 26 skipped**, plus
 compile/import and stdio smoke checks, including the final preflight and lease-inheritance assertions.
 Consult the latest test result recorded with the checkpoint for the final count.
-Skips include platform-specific and unavailable private-fixture cases. Native
+Skips include platform-specific and unavailable private-fixture cases. Hosted Windows
+runners do not have proprietary HOI4 font files: the complete glyph-assisted
+fixture assertions require those files, while separate OCR-only tests verify
+recognized values and explicit unknowns. Injected Mac identity tests use POSIX
+path semantics even when the test host is Windows. Native
 Vision recognized generated text; some Windows golden screenshots are not yet
 accurately recognized by Vision. Offline and synthetic checks are not live
 acceptance, recording evidence or proof of gameplay strength.

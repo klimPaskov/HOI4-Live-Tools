@@ -1,6 +1,7 @@
 """Read-only libproc metadata, independent of task ports and VM access."""
 import ctypes
 import os
+import posixpath
 import sys
 
 from ..errors import CapabilityUnavailable
@@ -52,10 +53,10 @@ def capture_process_identity(pid, expected_executable_path=None, api=None):
     api = api or ProcessAPI()
     start = api.start_time(pid)
     image = api.image(pid)
-    if not os.path.isabs(image) or api.start_time(pid) != start:
+    if not posixpath.isabs(image) or api.start_time(pid) != start:
         raise OSError("process identity changed during query")
-    image = os.path.realpath(image)
+    image = posixpath.realpath(image)
     if expected_executable_path is not None:
-        if not os.path.isabs(expected_executable_path) or image != os.path.realpath(expected_executable_path):
+        if not posixpath.isabs(expected_executable_path) or image != posixpath.realpath(expected_executable_path):
             raise OSError("launched executable identity does not match")
     return ProcessIdentity(pid, start, image)

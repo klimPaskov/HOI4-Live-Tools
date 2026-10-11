@@ -11,6 +11,7 @@ import argparse
 from dataclasses import asdict
 import json
 import os
+import posixpath
 from pathlib import Path
 import re
 import shutil
@@ -88,8 +89,8 @@ def identity_from_args(a):
         if (type(a.owned_pid) is not int or a.owned_pid <= 0 or
                 type(a.owned_created) is not int or a.owned_created <= 0):
             raise ValueError("An exact owned PID and process creation time are required")
-        if (not isinstance(a.owned_exe, str) or not os.path.isabs(a.owned_exe)
-                or os.path.basename(a.owned_exe) != "hoi4"):
+        if (not isinstance(a.owned_exe, str) or not posixpath.isabs(a.owned_exe)
+                or posixpath.basename(a.owned_exe) != "hoi4"):
             raise ValueError("The owned executable must be an absolute path to hoi4")
         identity = ProcessIdentity(a.owned_pid, a.owned_created, a.owned_exe)
     else:
