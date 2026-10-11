@@ -285,6 +285,7 @@ def start(a, *, inspect=inspect_owned_window, popen=subprocess.Popen, sleep=time
         with (out / "supervisor.log").open("ab") as log:
             child = popen(supervisor_command(out, token), stdin=subprocess.DEVNULL,
                           stdout=log, stderr=log, close_fds=True,
+                          start_new_session=os.name != "nt",
                           creationflags=CREATE_NO_WINDOW if os.name == "nt" else 0)
         for _ in range(40):
             saved = read_info(out)

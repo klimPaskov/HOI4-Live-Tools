@@ -53,6 +53,7 @@ class MacOSPlatform(PosixPlatform):
     def make_window(self, *args, **kwargs):
         from .macos_desktop import GameWindow
         kwargs.setdefault("process_backend", self)
+        kwargs.setdefault("coordinate_space", "logical")
         return GameWindow(*args, **kwargs)
 
     def make_capturer(self, *args, **kwargs):

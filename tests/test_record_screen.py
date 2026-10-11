@@ -216,6 +216,7 @@ class RecorderTests(unittest.TestCase):
 
         def popen(command, **kwargs):
             self.assertEqual(command[2], "run")
+            self.assertEqual(kwargs["start_new_session"], os.name != "nt")
             self.assertEqual(kwargs["creationflags"], recorder.CREATE_NO_WINDOW if os.name == "nt" else 0)
             info = recorder.read_info(self.out)
             self.assertEqual(command[-1], info["token"])

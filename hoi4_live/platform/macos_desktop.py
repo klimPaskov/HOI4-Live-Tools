@@ -1,6 +1,7 @@
 """macOS desktop backend, with lazy PyObjC loading and injectable native services.
 
-Client coordinates are capture pixels. Quartz event coordinates are global
+Client coordinates are pixels in the selected capture space (logical for
+session tools, backing pixels for recordings). Quartz event coordinates are global
 logical points (including negative origins on secondary displays). Never reuse
 Windows DPI arithmetic here. Window content geometry is fail-closed: a fullscreen
 window, or an Accessibility content element with bounds, must establish it.
@@ -93,7 +94,7 @@ class Native:
 
     def windows(self):
         q, _, _ = self._load()
-        items = q.CGWindowListCopyWindowInfo(q.kCGWindowListOptionOnScreenOnly |
+        items = q.CGWindowListCopyWindowInfo(q.kCGWindowListOptionAll |
                                            q.kCGWindowListExcludeDesktopElements, q.kCGNullWindowID)
         result = []
         for item in items or []:
@@ -102,6 +103,7 @@ class Native:
                 continue
             result.append({"id": int(item[q.kCGWindowNumber]), "pid": int(item[q.kCGWindowOwnerPID]),
                            "title": str(item.get(q.kCGWindowName, "")),
+                           "onscreen": bool(item.get(q.kCGWindowIsOnscreen, False)),
                            "bounds": tuple(float(b[k]) for k in ("X", "Y", "Width", "Height"))})
         return result
 
@@ -221,15 +223,18 @@ class Native:
         # without any AX window geometry. Quartz still supplies the window-server
         # ordering and owning PID. Requiring the exact global front window ID
         # prevents another dialog/window of the same process receiving input.
-        windows = self.windows()
-        if not windows or windows[0]["id"] != info["id"] or windows[0]["pid"] != info["pid"]:
+        windows = [item for item in self.windows() if item.get("onscreen", True)]
+        if not windows or windows[0]["pid"] != info["pid"]:
             return False
         application = ax.AXUIElementCreateApplication(info["pid"])
         focused = self._attr(application, "AXFocusedWindow")
-        if focused is None:
-            return True
-        rect = self._ax_rect(focused)
-        return rect is None or all(abs(a - b) <= 1 for a, b in zip(rect, info["bounds"]))
+        rect = self._ax_rect(focused) if focused is not None else None
+        if rect is not None:
+            # macOS can place its fullscreen titlebar above the main CG window.
+            # Exact AX keyboard-focus geometry remains authoritative in that case;
+            # a different app's window above it is still refused by the PID check.
+            return all(abs(a - b) <= 1 for a, b in zip(rect, info["bounds"]))
+        return windows[0]["id"] == info["id"]
 
     def focus(self, info):
         self.permission("input")
@@ -264,7 +269,22 @@ class Native:
             selected = "quartz"
         if image is None:
             raise unavailable("capture", "window capture returned no image")
-        return self._rgb(image), selected
+        rgb = self._rgb(image)
+        if selected == "screencapturekit":
+            # Capture the full window, then crop in backing pixels. Supplying a
+            # window-local sourceRect shifts SCK pixels when the global origin is
+            # nonzero (observed +68 px for a Retina fullscreen window at y=34).
+            x, y, w, h = info["bounds"]
+            expected = (int(round(h * geometry.scale)), int(round(w * geometry.scale)), 3)
+            if rgb.shape != expected:
+                raise unavailable("capture", "ScreenCaptureKit full-window size changed")
+            left = int(round((geometry.x - x) * geometry.scale))
+            top = int(round((geometry.y - y) * geometry.scale))
+            width, height = geometry.pixels
+            if left < 0 or top < 0 or left + width > rgb.shape[1] or top + height > rgb.shape[0]:
+                raise unavailable("capture", "verified client rectangle is outside captured window")
+            rgb = rgb[top:top + height, left:left + width].copy()
+        return rgb, selected
 
     def _screenkit(self, info, geometry, timeout):
         import ScreenCaptureKit as sc
@@ -275,7 +295,7 @@ class Native:
             outcome.extend((content, error))
             done.set()
         sc.SCShareableContent.getShareableContentExcludingDesktopWindows_onScreenWindowsOnly_completionHandler_(
-            True, True, content_ready)
+            True, False, content_ready)
         if not done.wait(timeout):
             raise unavailable("capture", "ScreenCaptureKit window enumeration timed out")
         content, error = outcome
@@ -287,13 +307,13 @@ class Native:
             raise unavailable("capture", "owned window disappeared from ScreenCaptureKit")
         filt = sc.SCContentFilter.alloc().initWithDesktopIndependentWindow_(matches[0])
         config = sc.SCStreamConfiguration.alloc().init()
-        config.setWidth_(geometry.pixels[0])
-        config.setHeight_(geometry.pixels[1])
+        frame_width = int(round(info["bounds"][2] * geometry.scale))
+        frame_height = int(round(info["bounds"][3] * geometry.scale))
+        config.setWidth_(frame_width)
+        config.setHeight_(frame_height)
         config.setShowsCursor_(False)
         if hasattr(config, "setIgnoreShadowsSingleWindow_"):
             config.setIgnoreShadowsSingleWindow_(True)
-        x, y, _, _ = info["bounds"]
-        config.setSourceRect_(q.CGRectMake(geometry.x - x, geometry.y - y, geometry.width, geometry.height))
         done = threading.Event()
         outcome = []
         def image_ready(image, error):
@@ -370,8 +390,11 @@ class Native:
 
 class GameWindow:
     def __init__(self, process_name="hoi4", title_prefix="Hearts of Iron IV", pin=True,
-                 native=None, process_backend=None, expected_identity=None, window_id=None):
+                 native=None, process_backend=None, expected_identity=None, window_id=None, coordinate_space="pixels"):
         from . import current
+        if coordinate_space not in ("pixels", "logical"):
+            raise ValueError("coordinate_space must be pixels or logical")
+        self.coordinate_space = coordinate_space
         self.native = native or Native()
         self.process_backend = process_backend or current()
         self.process_name = process_name.lower()
@@ -397,6 +420,9 @@ class GameWindow:
     def find(self):
         pids = ([self._identity.pid] if self._identity is not None else self.process_ids())
         if self._identity is not None:
+            if self._identity.pid not in self.process_ids():
+                self.hwnd = self._info = None
+                return None
             actual = self._identity_for(self._identity.pid)
             if actual != self._identity:
                 self.hwnd = self._info = None
@@ -449,17 +475,30 @@ class GameWindow:
         Use to_screen/from_screen for conversion; adding a pixel to the origin
         is not valid on Retina. This tuple remains for legacy status reporting.
         """
-        g = self.geometry()
+        g = self.client_geometry()
         return g.x, g.y, *g.pixels
 
+    def client_geometry(self):
+        """Coordinate space shared by capture, OCR and input.
+
+        Native geometry always retains the backing scale for exact capture.
+        Session tools use logical client pixels so gui_scale=1 layout remains
+        the same across Retina and non-Retina displays. Recorders explicitly
+        retain backing pixels and never supply tool click coordinates.
+        """
+        g = self.geometry()
+        if self.coordinate_space == "logical":
+            return Geometry(g.x, g.y, g.width, g.height, 1.0)
+        return g
+
     def size(self):
-        return self.geometry().pixels
+        return self.client_geometry().pixels
 
     def to_screen(self, x, y, clamp=False):
-        return self.geometry().to_screen(x, y, clamp)
+        return self.client_geometry().to_screen(x, y, clamp)
 
     def from_screen(self, x, y):
-        return self.geometry().from_screen(x, y)
+        return self.client_geometry().from_screen(x, y)
 
     def title(self):
         self.require()
@@ -525,6 +564,11 @@ class Capturer:
         if not self.allow_blank and is_blank(rgb):
             raise unavailable("capture", "capture returned a blank frame; no usable game image")
         self.last_method = used
+        if self.window.coordinate_space == "logical" and g.scale != 1:
+            from PIL import Image
+            # Downsample only after validating complete native capture geometry.
+            size = (int(round(g.width)), int(round(g.height)))
+            rgb = np.asarray(Image.fromarray(rgb).resize(size, Image.LANCZOS))
         return rgb
 
     def capture_frame(self, method=None):

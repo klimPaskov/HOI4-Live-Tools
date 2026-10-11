@@ -132,6 +132,44 @@ assert 'hoi4_live.platform.windows_capture' not in sys.modules
         with self.assertRaises(ToolError):
             self.window.to_screen(float("nan"), 0)
 
+    def test_logical_coordinates_capture_and_input_share_retina_space(self):
+        self.window.coordinate_space = "logical"
+        self.assertEqual(self.window.size(), (400, 300))
+        self.assertEqual(self.window.to_screen(200, 100), (-800, 120))
+        self.assertEqual(self.window.from_screen(-800, 120), (200, 100))
+        self.assertEqual(Capturer(self.window).grab().shape, (300, 400, 3))
+        self.input.click(399, 299)
+        self.assertIn(("mouse", "down", (-601, 319), "left", 0, 1), self.native.events)
+        with self.assertRaises(ToolError):
+            self.input.click(400, 0)
+
+    def test_fractional_backing_scale_stays_out_of_logical_coordinates(self):
+        self.native.g = Geometry(-1000, -200, 400, 300, 1.5)
+        self.native.frame_shape = (450, 600, 3)
+        self.window.coordinate_space = "logical"
+        self.assertEqual(self.window.size(), (400, 300))
+        self.assertEqual(Capturer(self.window).grab().shape, (300, 400, 3))
+        self.assertEqual(self.window.to_screen(399, 299), (-601, 99))
+        self.assertEqual(self.window.from_screen(-601, 99), (399, 299))
+        self.native.frame_shape = (300, 400, 3)
+        with self.assertRaisesRegex(CapabilityUnavailable, "dimensions"):
+            Capturer(self.window).grab()
+
+    def test_mac_platform_defaults_logical_but_native_recorder_is_pixels(self):
+        from hoi4_live.platform.macos import MacOSPlatform
+        backend = MacOSPlatform()
+        window = backend.make_window(native=self.native, process_backend=self.processes,
+                                     expected_identity=IDENTITY, window_id=500)
+        self.assertEqual(window.coordinate_space, "logical")
+        self.assertEqual(window.size(), (400, 300))
+        self.assertEqual(self.window.coordinate_space, "pixels")
+        self.assertEqual(Capturer(self.window).grab().shape, (600, 800, 3))
+
+    def test_exited_owned_process_has_no_window(self):
+        self.processes.find_processes = lambda name: []
+        self.assertIsNone(self.window.find())
+        self.assertIsNone(self.window.hwnd)
+
     def test_pid_reuse_and_changed_executable_refused(self):
         for identity in (ProcessIdentity(41, 9999, IDENTITY.executable_path),
                          ProcessIdentity(41, IDENTITY.creation_time, "/fixture/other")):
@@ -345,6 +383,28 @@ class NativeFocusSafetyTests(unittest.TestCase):
         self.front_pid = 41
         self.window_list = [dict(self.info, id=501), self.info]
         self.assertFalse(self.native.focused(self.info))
+
+    def test_exact_ax_focus_survives_owned_fullscreen_titlebar(self):
+        self.ax_rect = self.info["bounds"]
+        self.window_list = [dict(self.info, id=501, title="", bounds=(0, 0, 100, 44)), self.info]
+        self.assertTrue(self.native.focused(self.info))
+        self.window_list[0] = dict(self.window_list[0], pid=42)
+        self.assertFalse(self.native.focused(self.info))
+
+    def test_focus_ignores_windows_on_another_space(self):
+        self.window_list = [dict(self.info, pid=42, id=501, onscreen=False), self.info]
+        self.assertTrue(self.native.focused(self.info))
+
+    def test_sck_full_window_pixels_are_cropped_to_verified_client(self):
+        frame = np.arange(8 * 8 * 3, dtype=np.uint8).reshape((8, 8, 3))
+        info = dict(self.info, bounds=(100, 34, 4, 4))
+        geometry = Geometry(101, 35, 2, 2, 2)
+        self.native.permission = lambda feature: None
+        self.native._screenkit = lambda *args: object()
+        self.native._rgb = lambda image: frame
+        pixels, method = self.native.capture(info, geometry, 1, "screencapturekit")
+        self.assertEqual(method, "screencapturekit")
+        np.testing.assert_array_equal(pixels, frame[2:6, 2:6])
 
     def test_known_mismatching_ax_window_is_not_overridden(self):
         self.ax_rect = (20, 20, 100, 100)

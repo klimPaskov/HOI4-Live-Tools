@@ -97,8 +97,13 @@ def running_pids(name=None):
 
 
 def wait_exit(pid, timeout=60):
-    t0 = time.time()
-    while time.time() - t0 < timeout:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        child = _LAUNCHES.get(pid)
+        # poll reaps an exited owned POSIX child. kill(pid, 0) alone still sees
+        # its zombie and otherwise waits until the timeout despite actual exit.
+        if child is not None and child.poll() is not None:
+            return True
         if not platform.current().pid_alive(pid):
             return True
         time.sleep(1)

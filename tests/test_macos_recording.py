@@ -1,5 +1,12 @@
 """Mac recording injection tests; never inspect or capture the real desktop."""
 import argparse
+import json
+import os
+import signal
+import subprocess
+import sys
+import textwrap
+import time
 from pathlib import Path
 import tempfile
 import unittest
@@ -68,6 +75,68 @@ class MacRecordingTests(unittest.TestCase):
         recorder.write_json(self.raw / ".recording-active.json", {"token": self.token})
         return argparse.Namespace(out=str(self.out), token=self.token)
 
+    @unittest.skipUnless(os.name == "posix", "POSIX session and SIGHUP lifecycle")
+    def test_supervisor_survives_wrapper_process_group_shutdown(self):
+        # A synthetic supervisor only writes metadata. No ffmpeg, native APIs,
+        # capture or game process is involved. The wrapper owns a fresh session,
+        # so its SIGHUP cannot reach this test runner or an unrelated process.
+        child = self.raw / "synthetic_supervisor.py"
+        child.write_text(textwrap.dedent("""\
+            import json, os, sys, time
+            from pathlib import Path
+            out = Path(sys.argv[1])
+            info_path = out / "recording.json"
+            info = json.loads(info_path.read_text())
+            info.update(status="running", supervisor_session=os.getsid(0))
+            temporary = out / "ready.json"
+            temporary.write_text(json.dumps(info))
+            temporary.replace(info_path)
+            deadline = time.monotonic() + 4
+            while not (out / "wrapper_shutdown").exists():
+                if time.monotonic() >= deadline:
+                    sys.exit(2)
+                time.sleep(.01)
+            time.sleep(.15)
+            (out / "survived.json").write_text(json.dumps({"session": os.getsid(0)}))
+            """), encoding="utf-8")
+        wrapper = self.raw / "synthetic_wrapper.py"
+        wrapper.write_text(textwrap.dedent("""\
+            import os, signal, sys
+            from pathlib import Path
+            sys.path.insert(0, sys.argv[1])
+            from scripts import record_screen as recorder
+            out, raw, child = sys.argv[2:]
+            options = recorder.parser().parse_args([
+                "start", out, "--raw-root", raw, "--owned-pid", "123",
+                "--owned-created", "7654321", "--owned-exe", "/Games/hoi4",
+                "--window-id", "42"])
+            options.backend = "macos"
+            recorder.budget_status = lambda *args: {"reason": None}
+            recorder.supervisor_command = lambda out, token: [sys.executable, child, str(out)]
+            recorder.start(options, inspect=lambda *args: (0, 0, 4, 4))
+            (Path(out) / "wrapper_shutdown").write_text(str(os.getsid(0)))
+            os.killpg(os.getpgrp(), signal.SIGHUP)
+            """), encoding="utf-8")
+        repo = Path(recorder.__file__).resolve().parent.parent
+        process = subprocess.Popen([sys.executable, str(wrapper), str(repo), str(self.out),
+                                    str(self.raw), str(child)], stdout=subprocess.PIPE,
+                                   stderr=subprocess.PIPE, start_new_session=True)
+        try:
+            _stdout, stderr = process.communicate(timeout=8)
+        finally:
+            if process.poll() is None:
+                process.kill()
+                process.wait(timeout=2)
+        self.assertEqual(process.returncode, -signal.SIGHUP, stderr.decode())
+        deadline = time.monotonic() + 3
+        proof = self.out / "survived.json"
+        while not proof.exists() and time.monotonic() < deadline:
+            time.sleep(.02)
+        self.assertTrue(proof.exists(), "supervisor died with its start wrapper")
+        recorded = recorder.read_info(self.out)
+        self.assertNotEqual(recorded["supervisor_session"], process.pid)
+        self.assertEqual(json.loads(proof.read_text())["session"], recorded["supervisor_session"])
+
     def test_mac_identity_requires_exact_creation_and_game_executable(self):
         self.assertEqual(recorder.identity_from_args(self.options), self.identity)
         self.options.owned_created = 1.5
@@ -112,6 +181,7 @@ class MacRecordingTests(unittest.TestCase):
         from hoi4_live.errors import ToolError
         native, backend = mock.Mock(), mock.Mock()
         backend.capture_process_identity.return_value = self.identity
+        backend.find_processes.return_value = [self.identity.pid]
         target = dict(id=42, pid=123, title="Hearts of Iron IV", bounds=(0, 0, 4, 4))
         native.windows.return_value = [dict(target, id=99), target]
         native.geometry.return_value = Geometry(0, 0, 4, 4, 1)
