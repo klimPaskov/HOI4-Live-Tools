@@ -5,6 +5,7 @@ import tempfile
 import threading
 import time
 import unittest
+from types import SimpleNamespace
 from unittest import mock
 
 import helpers  # noqa: F401
@@ -115,6 +116,17 @@ class LeaseTests(unittest.TestCase):
         self.assertTrue(os.path.exists(gate), 'gate inode must never be unlinked')
         with file_gate(gate, timeout=0):
             pass
+
+    def test_windows_empty_gate_never_writes_before_locking(self):
+        from hoi4_live.platform import filelock
+        native = SimpleNamespace(LK_NBLCK=2, LK_UNLCK=0, locking=mock.Mock())
+        gate = self.path + '.empty-gate'
+        with mock.patch.object(filelock.sys, 'platform', 'win32'), \
+             mock.patch.dict('sys.modules', {'msvcrt': native}), \
+             mock.patch.object(filelock.os, 'write', side_effect=PermissionError('byte held by contender')):
+            with file_gate(gate, timeout=0):
+                self.assertEqual(os.path.getsize(gate), 0)
+        self.assertEqual([call.args[1:] for call in native.locking.call_args_list], [(2, 1), (0, 1)])
 
 
     def test_windows_generic_identity_accepts_python_and_closes_query_handle(self):
