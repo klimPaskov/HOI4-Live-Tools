@@ -50,6 +50,12 @@ of speed or correctness.
   not prove the upstream command mechanism works.
 - Linux HOI4 has not been launched, and no Luna Linux campaign has occurred.
 
+The subsequent [Linux upstream preflight](CLAUSEWITZ_VALIDATION.md) passed real
+x86_64 register access, generated-child calls and stdio protocol checks. It also
+reproduced write-delegation, scratch-mapping and timeout-recovery failures.
+Two fixes exist only in the disclosed scratch validation branch. These tests do
+not satisfy the licensed-game or Luna live gates.
+
 The user cleared the previous Mac objective and authorized this replacement
 goal. The earlier campaign remains unaccepted; clearing its goal does not count
 as campaign completion.

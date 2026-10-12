@@ -55,4 +55,4 @@ For campaign strategy and FAIR/META rules, read
   agree. Windows downstream pins move only after the release is accepted.
 - Every new commit message ends with a blank line and:
 
-  `Co-Authored-By: Codex (gpt-6-astra) <noreply@openai.com>`
+  `Co-Authored-By: Codex (gpt-6.1-sol) <noreply@openai.com>`
