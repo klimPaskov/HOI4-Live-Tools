@@ -83,6 +83,8 @@ after spawning preserve the parent until its launched child exits.
 
 A private per-user launch lock prevents competing native supervisors. Existing
 instances of the installed executable are refused rather than adopted. The owner
+waits up to two seconds for the configured executable device/inode, creation
+and direct-parent checks before publishing the child identity. It then
 records actual child and parent identities, executable device/inode, verified
 build, endpoint version and a fresh nonce. Both peers verify ordinary-user socket
 credentials; the client also verifies the recorded owner's identity. Same-UID
@@ -121,10 +123,14 @@ Three additional cases passed for same-image exec, actual random-byte changes,
 and false boot/address/content witnesses. The twelve substantive kernel cases
 took 101 seconds under CPU emulation; their private helper is counted separately.
 
+Hosted Linux CI exposed a pre-exec child identity race after the first checkpoint.
+The launcher now waits for the configured image; a generated child blocked on a
+private pipe and then executing a different file verifies that readiness barrier.
+
 An isolated helper also lowered only its own soft process limit to refuse a new
 worker. The owner survived, drained its existing real nonce read, restored the
 limit and accepted later clients. The outer suite and live game kept their
-identities and limits. The final Linux ordinary suite passed 23 library checks,
+identities and limits. The final Linux ordinary suite passed 25 library checks,
 12 integration checks and the isolated Xvfb check; 13 opt-in kernel checks were
 excluded from that ordinary pass and ran separately as described above.
 

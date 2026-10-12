@@ -321,6 +321,17 @@ struct OwnedChild {
 }
 impl OwnedChild {
     fn spawn(command: &mut Command) -> Result<Self> {
+        // A spawned PID may still expose its pre-exec image briefly. Capture
+        // the intended file before launch; never publish that transitional
+        // parent image as the game's executable identity.
+        let executable = fs::canonicalize(command.get_program())?;
+        let executable_meta = fs::metadata(&executable)?;
+        if !executable_meta.is_file() {
+            return Err(Error::new(
+                "invalid_executable",
+                "Regular executable required",
+            ));
+        }
         // Refuse an unavailable pidfd API before creating a game process.
         // SAFETY: opening our own process descriptor has no game side effects.
         let probe = unsafe { libc::syscall(libc::SYS_pidfd_open, std::process::id() as i32, 0) };
@@ -346,12 +357,56 @@ impl OwnedChild {
         }
         // SAFETY: successful pidfd_open returns a new descriptor owned here.
         let pidfd = unsafe { <File as std::os::fd::FromRawFd>::from_raw_fd(fd as i32) };
-        Ok(Self {
+        let mut owned = Self {
             child,
             identity: None,
             pidfd,
             exited: false,
-        })
+        };
+        owned.await_executable(&executable, &executable_meta)?;
+        Ok(owned)
+    }
+    fn await_executable(&mut self, executable: &Path, expected: &fs::Metadata) -> Result<()> {
+        let deadline = Instant::now() + Duration::from_secs(2);
+        let mut creation = None;
+        loop {
+            if self.exited_without_reaping()? {
+                return Err(Error::new(
+                    "launch_exited",
+                    "Child exited before executable readiness",
+                ));
+            }
+            let identity = capture_identity(self.child.id() as i32)?;
+            let (_, parent, ticks) =
+                platform::parse_stat(&fs::read_to_string(format!("/proc/{}/stat", identity.pid))?)?;
+            let first = creation.get_or_insert(identity.start_ticks.clone());
+            if identity.uid != uid()
+                || parent != std::process::id() as i32
+                || first != &identity.start_ticks
+                || ticks != identity.start_ticks
+            {
+                return Err(Error::new(
+                    "ownership_changed",
+                    "Launched child ownership changed",
+                ));
+            }
+            let actual = fs::metadata(format!("/proc/{}/exe", identity.pid))?;
+            if identity.exe == executable.to_string_lossy()
+                && actual.dev() == expected.dev()
+                && actual.ino() == expected.ino()
+                && capture_identity(identity.pid)? == identity
+            {
+                self.identity = Some(identity);
+                return Ok(());
+            }
+            if Instant::now() >= deadline {
+                return Err(Error::new(
+                    "launch_not_ready",
+                    "Configured executable was not observed",
+                ));
+            }
+            thread::sleep(Duration::from_millis(5));
+        }
     }
     fn exited_without_reaping(&self) -> Result<bool> {
         let mut poll = libc::pollfd {

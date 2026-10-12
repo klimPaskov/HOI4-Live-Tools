@@ -20,7 +20,9 @@
   original Yama scope 1. Add a private boot/AT_RANDOM witness to refuse same-file
   exec at snapshot boundaries. Refuse failed worker creation without unwinding
   the owner or reaping during an active read; bounded socket connections avoid
-  indefinite client hangs. Campaign commands remain unavailable.
+  indefinite client hangs. Wait for the configured executable before publishing
+  a child identity, fixing a pre-exec race caught by hosted Linux CI. Campaign
+  commands remain unavailable.
 - Simplify README and preserve the existing Windows reference in a separate doc.
   Native commands, governor and Windows/macOS native adapters remain unfinished.
 

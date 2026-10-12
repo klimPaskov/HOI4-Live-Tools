@@ -718,3 +718,61 @@ fn worker_creation_refusal_preserves_owner_and_inflight_reads_then_recovers() {
     assert_eq!(actual.rlim_cur, original.rlim_cur);
     assert_eq!(actual.rlim_max, original.rlim_max);
 }
+
+#[test]
+fn generated_delayed_exec_child() {
+    if selected_helper(
+        "HOI4_DELAYED_EXEC_CHILD",
+        "launch::linux::tests::generated_delayed_exec_child",
+    )
+    .is_none()
+    {
+        return;
+    }
+    let mut release = [0; 1];
+    // Only the generated child's private pipe can release this ordinary exec.
+    assert_eq!(std::io::stdin().read(&mut release).unwrap(), 1);
+    panic!(
+        "Generated exec failed: {}",
+        Command::new("/bin/sleep").arg("120").exec()
+    );
+}
+
+#[test]
+fn executable_readiness_waits_for_the_configured_image() {
+    if !ordinary() {
+        return;
+    }
+    let mut command = Command::new(std::env::current_exe().unwrap());
+    command
+        .args([
+            "--exact",
+            "launch::linux::tests::generated_delayed_exec_child",
+            "--nocapture",
+        ])
+        .env("HOI4_DELAYED_EXEC_CHILD", nonce().unwrap())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    let mut child = OwnedChild::spawn(&mut command).unwrap();
+    let before = child.identity.clone().unwrap();
+    let mut input = child.child.stdin.take().unwrap();
+    let release = thread::spawn(move || {
+        thread::sleep(Duration::from_millis(50));
+        input.write_all(b"x").unwrap();
+    });
+    let executable = fs::canonicalize("/bin/sleep").unwrap();
+    child
+        .await_executable(&executable, &fs::metadata(&executable).unwrap())
+        .unwrap();
+    release.join().unwrap();
+    let after = child.identity.clone().unwrap();
+    assert_eq!(before.pid, after.pid);
+    assert_eq!(before.start_ticks, after.start_ticks);
+    assert_ne!(before.exe, after.exe);
+    assert_eq!(after.exe, executable.to_string_lossy());
+    let mut fixture = Fixture::new(child);
+    assert_eq!(fixture.status()["owned_live"], true);
+    fixture.close();
+    assert!(capture_identity(after.pid).is_err());
+}
