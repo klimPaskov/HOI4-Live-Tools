@@ -133,8 +133,8 @@ process-access setting returned to its original value 1; Rust then correctly
 returned `permission_denied` instead of cached state. The whole owned VM was
 paused to preserve the failed game and recorder without killing either. The
 simulation had reached April during subsequent reader tests; that unattended
-progress is not Luna campaign acceptance. Configuration backups remain pending
-the exact game's eventual exit.
+progress is not Luna campaign acceptance. Configuration backups remained pending
+the exact game's exit at that checkpoint.
 
 Static follow-up shows that Post performs virtual checks, allocation and logging
 before virtual backend submission. Blocking mutex calls exist in the logging
@@ -142,6 +142,51 @@ subsystem; the specific cause of this timeout is not proven. Arbitrary-thread
 posting while all other threads are stopped requires further scheduling and
 recovery proof. Increasing the timeout or blindly resuming workers is not a
 validated fix. Rust command posting remains unavailable pending that proof.
+
+## Owned Rust launch and incident preservation
+
+The failed native-post run was preserved in a private full-VM incident snapshot
+before shutdown. The snapshot job completed, and an offline archive check reported
+zero check errors with one leaked cluster; the archive was kept unchanged. It is
+diagnostic evidence, not a campaign checkpoint or a verified restore. External
+graphics helpers are outside that VM snapshot.
+
+After preservation, an exact owned OS termination request let the failed game
+exit with code 0. The recorder exceeded its initial shutdown deadline, then exited
+with code 123. The old supervisor exited and both settings/playset backup hashes
+matched their restored files. Six recording segments have probeable durations;
+the final segment lacks a duration and is not claimed as valid footage. No native
+command was retried, and the old adapter's quarantine remains intact.
+
+A fresh vanilla game now runs as the direct child of the public Rust preview's
+ordinary-user supervisor. Actual executable/build/header validation and bounded
+parent reads passed with the guest's original `ptrace_scope=1`, without an access
+lease. Two independent stdio `--connect` clients each made 20 capability requests
+and disconnected; the owner and game identities stayed unchanged. Guest-local
+capability medians were **3.6 ms** and **3.0 ms**. These are frontend capability
+checks, not campaign snapshots or command latency. The overview correctly refused
+the frontend as `campaign_unavailable`; every inspected game thread had tracer 0.
+
+The fresh run subsequently entered Germany through the normal single-player
+menus. A live Rust-owned snapshot confirmed **1936.01.01.12**, player `GER`,
+Normal difficulty (2), historical AI, paused initial speed 0 and four empty
+research slots. Its actual bounded reads took **13.6 ms** (85 calls, 945 bytes)
+under unchanged Yama 1. This is one initial campaign observation, not a latency
+distribution or Luna play. A private recording started before the normal Start
+click; a video packet was probeable. Final segment integrity remains unverified
+until recording closes.
+This game used the launcher before the latest exec-witness and worker hardening.
+Those changes have separate generated-process evidence and need another fresh
+owned-game check before command acceptance; the running owner was not replaced.
+
+The new launcher uses fresh isolated userdata, private peer-authenticated sockets,
+bounded client workers, pidfd-owned graceful shutdown and a single child reaper.
+Generated-process tests cover reconnects, disconnected/malformed clients, nonce
+and identity refusal, replacement-socket preservation and hung shutdown. The
+reader refreshes bounded mappings and captures a private boot/`AT_RANDOM` witness
+to refuse same-file exec across snapshot boundaries. These safeguards do not make
+running snapshots atomic or establish ordinary command safety. Setup and remaining
+limitations are in [the launcher preview](OWNED_LINUX_LAUNCHER.md).
 
 ## First Rust observation port
 

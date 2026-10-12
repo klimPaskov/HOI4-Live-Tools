@@ -20,3 +20,8 @@ The action journal and X11 keyboard fallback modules are new project code.
 X11 transport uses the MIT/Apache-2.0 licensed x11rb dependency. Keyboard bindings
 were checked against the installed game GUI definitions; no game files are
 redistributed. The fallback is not an enabled live MCP command adapter.
+
+The persistent Linux launcher, bounded socket connection and stdio framing, mutable mapping
+cache, boot/auxiliary-vector exec witness and generated-child fixtures are new
+project code. They do not derive an engine command interface or make the failed
+upstream posting experiment safe to replay.

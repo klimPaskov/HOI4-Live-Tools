@@ -30,9 +30,16 @@ A three-OS CI matrix runs shared protocol and fixture tests.
 
 ## Owned Linux observations
 
-Live binding currently requires `--session OWNED_RUN_MANIFEST`, produced by an
-owned game-launch supervisor. The automatic public launcher is not ported yet.
-A validation manifest must record these actual launch facts:
+The Linux preview can launch its own game with `--serve PRIVATE_CONFIG` and
+accept reconnecting stdio clients through `--connect RUN_DIRECTORY`. See
+[owned Linux launch setup](../docs/OWNED_LINUX_LAUNCHER.md). It requires an
+already owned X11 display and the exact verified game build below. The launcher
+and process-reader fixtures pass. The installed Linux game also ran under its
+actual Rust parent at unchanged Yama scope 1, with two reconnecting clients;
+this does not establish campaign acceptance.
+
+The diagnostic `--session OWNED_RUN_MANIFEST` path remains available. Its
+manifest records these actual launch facts:
 
 | Field | Meaning |
 | --- | --- |
@@ -43,6 +50,8 @@ A validation manifest must record these actual launch facts:
 
 The adapter checks the actual ordinary-user identities, parent relation,
 executable device/inode, full file hash, GNU build ID and mapped ELF header.
+It captures a private boot/`AT_RANDOM` witness and checks it at snapshot boundaries
+to refuse same-image exec address-space replacement.
 It does not discover or take over another running game. PID replacement fails
 explicitly, and observations check ownership and campaign anchors at both ends.
 Torn reads fail rather than return a cached or partially valid snapshot.
@@ -56,8 +65,9 @@ These offsets are not Windows or macOS offsets.
 Process-access denial returns `permission_denied`. The public runtime does not
 invoke sudo or change process-access settings. The private non-parent Linux
 validation environment used a disclosed, timed guest-local access lease; the
-future native launcher should retain normal parent access. Do not run the whole
-runtime as root.
+native launcher reads in the actual ordinary-user parent, including its worker
+threads. Generated-child tests exercised that access under unchanged Yama scope
+1. Do not run the whole runtime as root.
 
 ## Implemented tools
 
@@ -106,7 +116,7 @@ inside posting. Restoring CPU context and detaching threads does not undo engine
 side effects. The failed adapter is quarantined; the transaction must not be
 blindly repeated or ported as safe. See [the actual failure and measurements](../docs/CLAUSEWITZ_VALIDATION.md).
 
-Next steps are verified main-loop command scheduling, owned launch and recovery,
+Next steps are reliable installed-game controls, owned input leases and recovery,
 durable daily plans, idempotent research/focus/economy repairs, compact event
 digests, army and naval-invasion control, then independently validated Windows
 and macOS adapters. FAIR remains the campaign default; META strategy and mod-QA

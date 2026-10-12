@@ -7,7 +7,7 @@ use crate::{
 use serde_json::{json, Value};
 use std::time::{Duration, Instant};
 pub struct Server {
-    pub process: Option<Box<dyn Process>>,
+    pub process: Option<Box<dyn Process + Send + Sync>>,
     pub unavailable: Option<Error>,
 }
 fn tools() -> Value {

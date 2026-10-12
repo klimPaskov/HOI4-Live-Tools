@@ -6,7 +6,6 @@ use crate::error::{Error, Result};
 use std::{
     io,
     os::fd::AsRawFd,
-    os::unix::net::UnixStream,
     sync::Mutex,
     time::{Duration, Instant},
 };
@@ -125,7 +124,8 @@ impl X11Controls {
                 "Verified owned window class required",
             ));
         }
-        let socket = UnixStream::connect(format!("/tmp/.X11-unix/X{display}"))?;
+        let socket =
+            super::connect_socket(std::path::Path::new(&format!("/tmp/.X11-unix/X{display}")))?;
         let (stream, (family, address)) =
             DefaultStream::from_unix_stream(socket).map_err(xerror)?;
         let auth = x11rb_protocol::xauth::get_auth(family, &address, display)
@@ -337,6 +337,7 @@ impl X11Controls {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::os::unix::net::UnixStream;
     #[test]
     fn unresponsive_display_has_a_bounded_deadline() {
         let (socket, _peer) = UnixStream::pair().unwrap();

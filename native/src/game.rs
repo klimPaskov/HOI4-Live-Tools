@@ -43,7 +43,7 @@ fn address(data: Vec<u8>) -> Result<u64> {
 }
 pub fn snapshot(process: &dyn Process) -> Result<Value> {
     let start = Instant::now();
-    process.check()?;
+    process.begin_snapshot()?;
     let r = Reader::new(process);
     let base = process.image_base();
     let initial = roots(&r, base)?;

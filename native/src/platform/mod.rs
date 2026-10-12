@@ -11,7 +11,7 @@ pub struct Identity {
     pub exe: String,
     pub uid: u32,
 }
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Session {
     pub game: Identity,
     pub supervisor: Identity,
@@ -20,6 +20,9 @@ pub struct Session {
 }
 pub trait Process: ReadMemory {
     fn check(&self) -> Result<()>;
+    fn begin_snapshot(&self) -> Result<()> {
+        self.check()
+    }
     fn image_base(&self) -> u64;
     fn identity(&self) -> Option<&Identity> {
         None
@@ -28,8 +31,12 @@ pub trait Process: ReadMemory {
 #[cfg(target_os = "linux")]
 mod linux;
 #[cfg(target_os = "linux")]
+mod unix_socket;
+#[cfg(target_os = "linux")]
 pub mod x11;
-pub fn open(path: &Path) -> Result<Box<dyn Process>> {
+#[cfg(target_os = "linux")]
+pub(crate) use unix_socket::connect as connect_socket;
+pub fn open(path: &Path) -> Result<Box<dyn Process + Send + Sync>> {
     #[cfg(target_os = "linux")]
     {
         Ok(Box::new(linux::LinuxProcess::open(path)?))
@@ -44,7 +51,7 @@ pub fn open(path: &Path) -> Result<Box<dyn Process>> {
     }
 }
 #[cfg(target_os = "linux")]
-pub use linux::{elf_build_id, parse_stat};
+pub use linux::{capture_identity, elf_build_id, parse_stat, verify_executable};
 pub fn load_session(path: &Path) -> Result<Session> {
     let bytes = std::fs::read(path)?;
     if bytes.len() > 65536 {

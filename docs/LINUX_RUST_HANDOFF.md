@@ -86,7 +86,11 @@ scheduling under a running game, then port commands and durable automation.
 
 The subsequent Rust action journal and Linux keyboard transport have passed
 restart/quarantine and isolated Xvfb fixtures. They remain library components,
-not enabled live commands. Integrate exclusive owned input leases and live
-memory readback, implement the public owned launcher, and prove reliable running
-game controls before resuming Luna acceptance. Native Post still lacks a proved
-external scheduling/lifetime interface; do not retry the preserved failed game.
+not enabled live commands. The public Rust launcher now owns an actual Linux
+game under unchanged Yama scope 1; frontend reads, client reconnections and the
+initial Normal historical Germany snapshot passed. Its generated-process recovery
+tests are separate evidence.
+Integrate exclusive input leases and campaign readback, then prove reliable
+running-game controls before resuming Luna acceptance. Native Post still lacks a
+proved external scheduling/lifetime interface. The failed run was privately
+archived and exited through owned OS shutdown; its adapter stays quarantined.

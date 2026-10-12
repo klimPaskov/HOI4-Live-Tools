@@ -69,6 +69,8 @@ returns capability errors for unsupported builds. Native commands, the daily
 governor, and Windows/macOS process adapters are still unimplemented in Rust.
 The action-recovery library and Linux keyboard fallback have separate fixture
 tests; they are not enabled live command tools yet.
+The Linux preview also has a persistent [owned launcher](docs/OWNED_LINUX_LAUNCHER.md)
+with reconnectable clients and guarded graceful shutdown.
 The crate builds on macOS and cross-compiles to Linux; those builds do not prove
 Windows/macOS live compatibility.
 

@@ -12,6 +12,15 @@
 - Add durable action receipts with restart/replay quarantine and a Linux X11
   keyboard fallback building block. Recovery and isolated Xvfb transport fixtures
   pass; live command tools and governor integration remain disabled.
+- Add a persistent ordinary-user Linux launch supervisor, private authenticated
+  reconnectable stdio clients, pinned-child shutdown and mutable mapping checks.
+  Generated-child fixtures cover reconnect failures, hung termination, fresh
+  allocations, permission changes, partial reads, identity changes and exit.
+  Actual owned-game frontend reads and two client reconnects passed under the
+  original Yama scope 1. Add a private boot/AT_RANDOM witness to refuse same-file
+  exec at snapshot boundaries. Refuse failed worker creation without unwinding
+  the owner or reaping during an active read; bounded socket connections avoid
+  indefinite client hangs. Campaign commands remain unavailable.
 - Simplify README and preserve the existing Windows reference in a separate doc.
   Native commands, governor and Windows/macOS native adapters remain unfinished.
 
