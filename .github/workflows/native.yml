@@ -24,7 +24,7 @@ jobs:
         run: |
           if [ "$(cat /proc/sys/kernel/yama/ptrace_scope)" = "1" ]; then
             cargo test --manifest-path native/Cargo.toml --locked --lib \
-              --config 'target.x86_64-unknown-linux-gnu.rustflags=["-C","link-arg=--build-id=sha1"]' \
+              --config 'target.x86_64-unknown-linux-gnu.rustflags=["-C","link-arg=-Wl,--build-id=sha1"]' \
               platform::linux::tests::generated:: -- --ignored --nocapture --test-threads=1
           else
             echo 'Opt-in parent-reader evidence requires existing Yama scope 1; kernel policy unchanged.'
