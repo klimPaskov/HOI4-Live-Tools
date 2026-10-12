@@ -249,6 +249,36 @@ Reliable command scheduling, full routine coverage and the clean two-year run
 remain open acceptance gates; neither the smoke nor the Rust reader satisfies
 them.
 
+## Rust action and input foundations
+
+The next port checkpoint adds a durable ordinary-action journal and a Linux X11
+keyboard fallback building block. The journal commits a dispatch receipt before
+sending and verifies the desired state through an injected backend. Restarting
+returns an existing verified receipt or refuses an uncertain dispatch; changing
+the request ID cannot bypass process quarantine. Failed preflight remains
+retryable. Neither library is an enabled live MCP command tool yet.
+
+The separately owned, authenticated Xvfb transport fixture verified the three
+installed keyboard bindings (Space, keypad minus/plus), matching key releases,
+unchanged pointer position, and refusal on lost focus, a wrong window PID and
+held keys. The display connection also passed an unresponsive-server deadline
+test. All 21 Rust checks passed in the real Linux guest, including that opt-in
+fixture; 17 portable checks passed on macOS and Rust 1.86. Legacy Python passed
+952 tests with 37 explicit skips. These are transport/recovery fixtures, not
+HOI4 action readback or campaign acceptance.
+
+The failed game and recorder remained OS-stopped while these tests used a
+separate display. The guest process-access setting remained restored to its
+original value. No failed native transaction was retried.
+
+Further static review corrected a scheduling assumption: an earlier candidate
+was the in-game idler constructor, not its recurring update. The actual update
+reacquires its queue before normal engine-owned posting, but an external safe
+callback, lifetime and cancellation interface remains unproved. Logging and
+allocation remain reachable from Post. Arbitrary-thread calls are still
+quarantined; ordinary input fallback requires owned-lease integration and live
+state readback before it can become a command capability.
+
 ## Attribution
 
 The findings above refer to upstream `calling/{mem,process/linux,api,game,

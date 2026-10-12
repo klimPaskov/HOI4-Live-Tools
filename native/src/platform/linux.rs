@@ -243,6 +243,9 @@ impl Process for LinuxProcess {
     fn image_base(&self) -> u64 {
         self.base
     }
+    fn identity(&self) -> Option<&Identity> {
+        Some(&self.session.game)
+    }
 }
 impl ReadMemory for LinuxProcess {
     fn read(&self, address: u64, size: usize) -> Result<Vec<u8>> {

@@ -15,3 +15,8 @@ This first port exposes observations only. Native command execution remains in
 the disclosed private upstream validation adapter until its transaction and
 recovery semantics have been ported and tested. No raw process-write, injection,
 console or foreign-country interface is exposed by this Rust MCP.
+
+The action journal and X11 keyboard fallback modules are new project code.
+X11 transport uses the MIT/Apache-2.0 licensed x11rb dependency. Keyboard bindings
+were checked against the installed game GUI definitions; no game files are
+redistributed. The fallback is not an enabled live MCP command adapter.

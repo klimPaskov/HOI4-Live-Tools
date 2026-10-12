@@ -21,9 +21,14 @@ pub struct Session {
 pub trait Process: ReadMemory {
     fn check(&self) -> Result<()>;
     fn image_base(&self) -> u64;
+    fn identity(&self) -> Option<&Identity> {
+        None
+    }
 }
 #[cfg(target_os = "linux")]
 mod linux;
+#[cfg(target_os = "linux")]
+pub mod x11;
 pub fn open(path: &Path) -> Result<Box<dyn Process>> {
     #[cfg(target_os = "linux")]
     {

@@ -9,6 +9,9 @@
 - Measure Rust and guarded Python over the same persistent SSH path: 7.5 ms
   versus 294.9 ms median for 20 live overview samples each.
 - Retain Clausewitz-MCP MIT provenance; add Rust tests and a three-OS CI matrix.
+- Add durable action receipts with restart/replay quarantine and a Linux X11
+  keyboard fallback building block. Recovery and isolated Xvfb transport fixtures
+  pass; live command tools and governor integration remain disabled.
 - Simplify README and preserve the existing Windows reference in a separate doc.
   Native commands, governor and Windows/macOS native adapters remain unfinished.
 

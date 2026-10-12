@@ -67,6 +67,8 @@ The first [Rust runtime](native/README.md) provides owned-process snapshots and
 bounded waits over stdio MCP. It uses the current verified Linux ELF layout and
 returns capability errors for unsupported builds. Native commands, the daily
 governor, and Windows/macOS process adapters are still unimplemented in Rust.
+The action-recovery library and Linux keyboard fallback have separate fixture
+tests; they are not enabled live command tools yet.
 The crate builds on macOS and cross-compiles to Linux; those builds do not prove
 Windows/macOS live compatibility.
 

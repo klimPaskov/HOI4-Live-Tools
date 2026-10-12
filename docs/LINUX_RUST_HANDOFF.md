@@ -83,3 +83,10 @@ See [live evidence and the failure](CLAUSEWITZ_VALIDATION.md) before continuing.
 The older “Linux has not launched” paragraph above is historical direction-change
 evidence, superseded by this checkpoint. Next: prove safe ordinary command
 scheduling under a running game, then port commands and durable automation.
+
+The subsequent Rust action journal and Linux keyboard transport have passed
+restart/quarantine and isolated Xvfb fixtures. They remain library components,
+not enabled live commands. Integrate exclusive owned input leases and live
+memory readback, implement the public owned launcher, and prove reliable running
+game controls before resuming Luna acceptance. Native Post still lacks a proved
+external scheduling/lifetime interface; do not retry the preserved failed game.

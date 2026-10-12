@@ -3,9 +3,14 @@ use std::{
     io::{Read, Write},
     process::{Command, Stdio},
 };
+fn server_binary() -> std::path::PathBuf {
+    std::env::var_os("HOI4_NATIVE_FIXTURE_BINARY")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| env!("CARGO_BIN_EXE_hoi4-live-native").into())
+}
 #[test]
 fn stdio_is_json_and_notifications_have_no_reply() {
-    let mut child = Command::new(env!("CARGO_BIN_EXE_hoi4-live-native"))
+    let mut child = Command::new(server_binary())
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -47,7 +52,7 @@ fn stdio_is_json_and_notifications_have_no_reply() {
 }
 #[test]
 fn oversized_request_recovers_at_next_line() {
-    let mut child = Command::new(env!("CARGO_BIN_EXE_hoi4-live-native"))
+    let mut child = Command::new(server_binary())
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .spawn()

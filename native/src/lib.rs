@@ -1,3 +1,4 @@
+pub mod actions;
 pub mod calendar;
 pub mod error;
 pub mod game;
