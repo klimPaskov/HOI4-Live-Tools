@@ -11,6 +11,29 @@ without game offsets, memory writes or injected game commands. Subsequent user
 steering selected it as the engine foundation; the pinned source and first active
 ported component are described in [the migration status](CLAUSEWITZ_FOUNDATION.md).
 
+## Current licensed-game comparison — 12 October 2026
+
+The earlier sections below preserve the 11 October synthetic checkpoint. A
+licensed Linux game has since launched. One Luna medium player verified focus,
+four research assignments and a day of advancement; the final pause timed out
+and the adapter is quarantined. That failure prevents campaign acceptance.
+
+The first Rust reader was compared with the guarded upstream Python adapter in
+the same running German campaign, through persistent host stdio MCP connections
+over pinned localhost SSH. Each runtime returned 20 fresh own-country overviews.
+
+| Runtime | Median / maximum, ms | Boundary |
+| --- | ---: | --- |
+| Guarded upstream Python validation adapter | 294.9 / 390.1 | Persistent host stdio and SSH |
+| Rust native observation port | 7.5 / 13.3 | Persistent host stdio and SSH |
+
+Rust was about 40× faster for these snapshots, with no screenshot or suspension.
+The Python adapter includes per-read validation overhead; this does not benchmark
+unmodified upstream, prove faster commands, or establish completeness. Rust
+currently exposes observations and bounded waits only. Windows/macOS native
+adapters, commands and the governor remain unfinished. See [live evidence and
+limitations](CLAUSEWITZ_VALIDATION.md) and [the Rust preview](../native/README.md).
+
 ## Measured process reads
 
 Both readers ran against the same generated child process and checked every

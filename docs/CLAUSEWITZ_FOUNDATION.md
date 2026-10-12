@@ -19,6 +19,13 @@ its native handle, identity validation and bounded exact reads. No platform is
 automatically attached by importing the shared engine. This is the first active
 component, **not completion of the game-engine migration**.
 
+The first Rust observation port now lives in [`native/`](../native/README.md).
+It ports this foundation's typed reads, own-country focus/research semantics and
+calendar, with independently recovered current Linux build layouts. A real
+Luna smoke passed selected ordinary actions and one day of advancement, but its
+final pause timed out. The Rust command channel remains unavailable pending
+safe scheduling and recovery proof. See [actual live evidence](CLAUSEWITZ_VALIDATION.md).
+
 ## Expansion contract
 
 | Area | Foundation and required extension | Evidence required |

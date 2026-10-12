@@ -72,3 +72,14 @@ Keep game files, credentials, recordings, logs and private machine paths outside
 Git. Do not run the entire agent as root or change host SIP. Prepare and disclose
 any required guest-local process-access settings. Do not treat advertised
 upstream capabilities or offline tests as recorded live acceptance.
+
+## Current continuation checkpoint
+
+The licensed Linux game is installed and has run. One Luna medium player verified
+focus, four research assignments and unpause, then advanced Germany to
+2 January 1936. The final native pause timed out; that adapter remains quarantined.
+The first Rust read-only stdio runtime in `native/` now reads the actual campaign.
+See [live evidence and the failure](CLAUSEWITZ_VALIDATION.md) before continuing.
+The older “Linux has not launched” paragraph above is historical direction-change
+evidence, superseded by this checkpoint. Next: prove safe ordinary command
+scheduling under a running game, then port commands and durable automation.

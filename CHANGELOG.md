@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased native preview
+
+- Start a separate Rust stdio runtime with owned Linux process reads, bounded
+  focus/research/clock snapshots, explicit capability errors and server waits.
+- Verify selected upstream ordinary actions with one Luna medium player; record
+  the final pause timeout and quarantine. No clean campaign acceptance is claimed.
+- Measure Rust and guarded Python over the same persistent SSH path: 7.5 ms
+  versus 294.9 ms median for 20 live overview samples each.
+- Retain Clausewitz-MCP MIT provenance; add Rust tests and a three-OS CI matrix.
+- Simplify README and preserve the existing Windows reference in a separate doc.
+  Native commands, governor and Windows/macOS native adapters remain unfinished.
+
+The Python release version and downstream release pins remain unchanged.
+
 ## 1.1.0 - 2026-10-11
 
 Speed and long campaigns. 43 tools (new: `hoi4_clock`, `hoi4_standing`, `hoi4_peace`).

@@ -1,6 +1,11 @@
 # Mac handoff: start here
 
-**Latest continuation:** read [Mac continuation checkpoint](MAC_CONTINUATION_STATUS.md)
+**Current direction:** the user superseded Mac live testing with the
+[Linux-first Rust objective](LINUX_RUST_HANDOFF.md). Read that and the
+[current live evidence](CLAUSEWITZ_VALIDATION.md) before resuming. A partial Luna
+Linux smoke and the first Rust reader now exist; campaign acceptance is not passed.
+
+**Earlier Mac continuation:** read [Mac continuation checkpoint](MAC_CONTINUATION_STATUS.md)
 first for implemented Mac support, the locked-desktop smoke-test blocker, remaining
 internal gaps and the Germany/China FAIR plus Poland META assignment. Use the new
 [campaign playbook](../skills/hoi4-campaign-playbook/SKILL.md). The implementation

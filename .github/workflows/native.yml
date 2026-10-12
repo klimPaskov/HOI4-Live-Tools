@@ -1,0 +1,22 @@
+name: Native Rust
+on:
+  push:
+    branches: [master, 'codex/**']
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  offline:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - run: cargo fmt --manifest-path native/Cargo.toml --check
+      - run: cargo clippy --manifest-path native/Cargo.toml --all-targets --locked -- -D warnings
+      - run: cargo test --manifest-path native/Cargo.toml --locked
