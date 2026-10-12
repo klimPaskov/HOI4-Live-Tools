@@ -1,8 +1,14 @@
 # Codex instructions
 
-Read [docs/HANDOFF_MAC.md](docs/HANDOFF_MAC.md) first. It is the canonical Mac
-continuation brief, including setup, status, ordered work, acceptance and the
-first prompt. Historical reports describe earlier stop times; the preserved
+The latest user direction is [docs/LINUX_RUST_HANDOFF.md](docs/LINUX_RUST_HANDOFF.md).
+It supersedes the Mac live-testing order: stop those tests, verify Clausewitz-MCP
+on Linux with one Luna player at medium reasoning, then build the native Rust
+runtime and expand it for Linux, Windows and macOS. Preserve the legacy Python
+package while migrating. Do not resume the old Mac campaign objective.
+
+For the preserved Mac history, read [docs/HANDOFF_MAC.md](docs/HANDOFF_MAC.md).
+It records setup, status, ordered work, acceptance and the first prompt for that
+earlier phase. Historical reports describe earlier stop times; the preserved
 `wip/governor-memory` branch came later and is unfinished.
 
 The latest checkpoint is [docs/MAC_CONTINUATION_STATUS.md](docs/MAC_CONTINUATION_STATUS.md).

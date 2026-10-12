@@ -123,6 +123,7 @@ class ClockCase(unittest.TestCase):
     def tearDown(self):
         if self.feeder:
             self.feeder.stop_flag = True
+            self.feeder.join(timeout=1)
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def set_running(self, session, want, **kw):
@@ -190,10 +191,19 @@ class FastClockTests(ClockCase):
         self.assertTrue(res["end_date"].startswith("1936.1."))
 
     def test_stop_condition_fires_on_the_day_and_keeps_running(self):
-        self.feed(script={103: {"techs": 11}})
-        run, res = self.run_loop(budget_days=30, stop_on=["tech_done"], stop_on_used=["tech_done"])
+        # Publish one day per clock poll rather than racing a 20 ms feeder
+        # against the CI scheduler. This proves reaction to the first completed
+        # observation without assuming any real-time thread scheduling bound.
+        counter = [100]
+        def publish(_seconds):
+            if self.state["running"]:
+                counter[0] += 1
+                self.store.add(day(counter[0], "1936.1.4.24",
+                                   techs=11 if counter[0] >= 103 else 10))
+        with mock.patch.object(clock_mod.time, "sleep", side_effect=publish):
+            run, res = self.run_loop(budget_days=30, stop_on=["tech_done"], stop_on_used=["tech_done"])
         self.assertEqual(res["reasons"][0]["code"], "tech_done")
-        self.assertLessEqual(res["days"], 4)
+        self.assertEqual(res["days"], 3)
         self.assertEqual(res["changes"]["techs"], [10, 11])
         self.assertTrue(self.state["running"])
 

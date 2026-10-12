@@ -1,12 +1,14 @@
 # HOI4 Live Tools
 
-**Mac continuation:** open [docs/HANDOFF_MAC.md](docs/HANDOFF_MAC.md) first.
-Windows, macOS and Linux are required targets. Current development is migrating
-to a Clausewitz-MCP foundation with our cross-platform adapters, durable campaign
-plans, FAIR/META policy, verification and recovery on top. See the
+**Current development: Linux-first Rust runtime.** Read the
+[new objective and acceptance gates](docs/LINUX_RUST_HANDOFF.md).
+Mac screenshot-driven testing is stopped. The next gate is a real Linux HOI4 run
+using Clausewitz-MCP with one Luna player at medium reasoning, followed by a Rust
+port and expansion for Linux, Windows and macOS. See the
 [foundation and expansion status](docs/CLAUSEWITZ_FOUNDATION.md) and
-[measured comparison](docs/CLAUSEWITZ_COMPARISON.md). Mac live smoke tests have run;
-Linux game control and clean campaign acceptance remain unfinished. The preserved
+[measured comparison](docs/CLAUSEWITZ_COMPARISON.md). Linux game control, the Rust
+runtime and clean campaign acceptance remain unfinished. The setup below describes
+the existing Python/Windows release. The preserved
 [`wip/governor-memory`](https://github.com/klimPaskov/HOI4-Live-Tools/tree/wip/governor-memory)
 branch is not a stable release.
 
