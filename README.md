@@ -12,8 +12,8 @@ the existing Python/Windows release. The preserved
 [`wip/governor-memory`](https://github.com/klimPaskov/HOI4-Live-Tools/tree/wip/governor-memory)
 branch is not a stable release.
 
-[Linux upstream preflight](docs/CLAUSEWITZ_VALIDATION.md) records the working
-process/protocol checks, reproduced failures and remaining live-game requirements.
+[Linux validation](docs/CLAUSEWITZ_VALIDATION.md) records real-game process reads,
+protocol checks, startup failures and the pending ordinary-command/Luna gate.
 
 An MCP server that lets AI agents drive a running Hearts of Iron IV on Windows: launch and load games, read the
 screen (dates, popups, text, the top bar, tooltips, open panels, the map), run time while answering events, fire

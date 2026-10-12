@@ -1,5 +1,11 @@
 # Mac continuation checkpoint — 11 October 2026
 
+**Superseded by the [Linux-first objective](LINUX_RUST_HANDOFF.md) and
+[Linux validation checkpoint](CLAUSEWITZ_VALIDATION.md).** The licensed Linux
+game has since launched and process reads passed; ordinary commands, Luna play
+and the Rust runtime remain unaccepted. Statements below describe the earlier
+Mac checkpoint.
+
 This development checkpoint continues `wip/governor-memory` on
 `feat/macos-governor`. It is **not a release or campaign acceptance**. The original
 WIP is preserved; the published version and downstream Windows release pins have

@@ -2,7 +2,9 @@
 
 12 October 2026. This is preflight evidence for the
 [Linux-first migration](LINUX_RUST_HANDOFF.md), not HOI4 live acceptance.
-No Linux game has been launched and no Luna Linux campaign has occurred.
+The licensed Linux game has now launched and the upstream backend has read its
+live process. Ordinary commands and Luna play remain unverified; the game was
+still loading its GUI at the latest checkpoint.
 
 ## Reference and test environment
 
@@ -16,16 +18,59 @@ The owned full-system guest runs Ubuntu 24.04.5 LTS, x86_64 kernel
 6.8.0-142, Python 3.12.3, GCC 13.3.0 and NumPy 1.26.4. QEMU 11.1.2 uses TCG CPU
 emulation on the Mac host. This provides the actual Linux x86_64 register ABI
 missing from the earlier Rosetta container test. It does not establish usable
-HOI4 frame rate or campaign throughput. Guest `ptrace_scope=1` is unchanged;
-all process tests use children spawned by the test itself.
+HOI4 frame rate or campaign throughput. The generated-process preflight used
+children with `ptrace_scope=1`. The subsequent owned-game companion test
+temporarily used `ptrace_scope=0` inside the isolated guest, with an exact-process
+restoration monitor. The original setting was restored after that read test;
+future dispatch runs in the owned game launcher to retain parent access. No host
+process-access setting changed; the MCP and game run as an ordinary user.
 
 Anonymous official SteamCMD metadata for app `394360` lists Linux depot `394363`
 on public build `25205862` and the published `1.19.1.0` rollback. The response
 contains no `1.19.2` branch or corresponding advertised manifest. This does not
 prove an older licensed depot can never be obtained; it means the tested public
-metadata route did not supply the matching build. No game content was downloaded,
-and no host account credentials were read. A licensed matching installation, or
-independently recovered layouts for an available licensed build, remains required.
+metadata route did not supply the matching build. The user subsequently
+authenticated SteamCMD and installed the licensed public Linux build. Credentials
+and authentication output were not read or retained. Its independently inspected
+ELF build ID is `a4971c9e8ac9a6f2487dea109e01f9839ee59db7`; SHA-256 is
+`56fc2945cdbf2475a316db3285eb3458ae5d577db149db6dfdba6f004de3a88a`.
+Upstream's older offsets were not treated as compatible.
+
+## Licensed-game checkpoint
+
+The game launched windowed without mods after two startup problems were resolved:
+its default data-directory parent did not exist, then its generated borderless
+and multisample settings failed to create a software-rendered window. Creating
+the ordinary data-directory parents and using windowed mode without multisampling
+resolved those failures. No game binary, save or campaign rule was modified.
+
+A private guarded adapter uses upstream's process backend and MCP protocol,
+with current-build globals, fields and command layouts recovered independently
+from the installed ELF. It binds the recorded PID, creation time, executable,
+owner and parent supervisor. FAIR dispatch excludes console, raw calls, foreign
+country details and unverified subsystems. Observations use bounded reads and
+never attach to the game. Commands remain gated on confirmed Normal historical
+single-player setup and actual own-country state.
+
+At **17:49 UTC**, upstream initialize, ping, tool discovery, refusal of a debug
+console request and 20 observations passed against the owned game. Local Unix
+socket round trips measured **8.9 ms median**, **23.6 ms maximum**; these timings
+exclude SSH and model overhead. The game's tracer was zero after the reads.
+Game-state, idler and technology-database roots were still null during GUI
+loading. This proves real process access and protocol dispatch, not campaign
+observations, ordinary command execution or Luna acceptance.
+
+The x86 guest has no GPU acceleration on this ARM host. An independent hidden
+OpenGL raster fixture measured roughly **1.1 frames/s** at 1280×720 and **4.5
+frames/s** at 640×360 with llvmpipe. These are fixture measurements, not HOI4
+frame rate. A bounded startup stack sample found the main thread waiting while
+Mesa raster workers were active; the game continued changing loading backgrounds.
+After about 38 minutes of GUI loading, graceful shutdown exceeded its 20-second
+deadline. This pre-campaign process was suspended and preserved for diagnosis;
+it was not force-killed. A monitor will restore its backed-up configuration only
+after that exact process exits. Four recording segments passed ffprobe checks.
+Playable startup remains unresolved. Private recordings, layouts and diagnostics
+remain outside Git. No Rust engine code or Luna campaign has been started.
 
 ## Measured preflight
 
