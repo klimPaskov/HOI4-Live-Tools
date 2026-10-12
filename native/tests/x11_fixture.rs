@@ -5,13 +5,16 @@ use hoi4_live_native::{
     error::{Error, Result},
     memory::ReadMemory,
     platform::{
-        parse_stat,
+        capture_identity,
         x11::{ControlKey, X11Controls},
         Identity, Process,
     },
 };
 use std::{
-    fs,
+    fs::{self, OpenOptions},
+    io::Write,
+    os::unix::fs::{symlink, OpenOptionsExt},
+    path::{Path, PathBuf},
     time::{Duration, Instant},
 };
 use x11rb::{
@@ -30,11 +33,7 @@ use x11rb::{
 struct FixtureProcess(Identity);
 impl Process for FixtureProcess {
     fn check(&self) -> Result<()> {
-        let p = format!("/proc/{}", self.0.pid);
-        let (_, _, ticks) = parse_stat(&fs::read_to_string(format!("{p}/stat"))?)?;
-        if ticks != self.0.start_ticks
-            || fs::read_link(format!("{p}/exe"))?.to_string_lossy() != self.0.exe
-        {
+        if capture_identity(self.0.pid)? != self.0 {
             return Err(Error::new("ownership_changed", "Fixture process replaced"));
         }
         Ok(())
@@ -66,20 +65,23 @@ fn owned_xvfb_keyboard_controls() {
         number >= 100,
         "fixture must use separate high-numbered display"
     );
+    let server: Identity = serde_json::from_str(
+        &std::env::var("HOI4_NATIVE_X11_FIXTURE_SERVER").expect("owned display identity required"),
+    )
+    .unwrap();
+    let authority = PathBuf::from(
+        std::env::var_os("HOI4_NATIVE_X11_FIXTURE_AUTHORITY")
+            .expect("explicit owned display authority required"),
+    );
+    assert!(authority.is_absolute());
+    assert_eq!(capture_identity(server.pid).unwrap(), server);
     let (connection, screen) = x11rb::connect(Some(&format!(":{number}"))).unwrap();
     let root = connection.setup().roots[screen].root;
     let pid = std::process::id() as i32;
-    let (_, _, ticks) =
-        parse_stat(&fs::read_to_string(format!("/proc/{pid}/stat")).unwrap()).unwrap();
     // SAFETY: getuid has no arguments or memory effects.
     let uid = unsafe { libc::getuid() };
     assert_ne!(uid, 0);
-    let process = FixtureProcess(Identity {
-        pid,
-        start_ticks: ticks,
-        exe: std::env::current_exe().unwrap().to_string_lossy().into(),
-        uid,
-    });
+    let process = FixtureProcess(capture_identity(pid).unwrap());
     let window = connection.generate_id().unwrap();
     connection
         .create_window(
@@ -144,8 +146,104 @@ fn owned_xvfb_keyboard_controls() {
         .unwrap()
         .check()
         .unwrap();
-    let controls = X11Controls::open(&process, number, window, class).unwrap();
     let pointer = connection.query_pointer(root).unwrap().reply().unwrap();
+    // A freshly valid process identity for somebody other than this display
+    // must fail SO_PEERCRED, even while ambient XAUTHORITY points at valid auth.
+    assert_eq!(
+        X11Controls::open(&process, number, &process.0, &authority, window, class)
+            .err()
+            .unwrap()
+            .code,
+        "ownership_changed"
+    );
+    let mut stale_server = server.clone();
+    stale_server.start_ticks = "0".into();
+    assert_eq!(
+        X11Controls::open(&process, number, &stale_server, &authority, window, class)
+            .err()
+            .unwrap()
+            .code,
+        "ownership_changed"
+    );
+    let directory = authority.parent().unwrap();
+    let alias = directory.join("authority-alias");
+    symlink(&authority, &alias).unwrap();
+    for path in [
+        Path::new("authority"),
+        directory,
+        alias.as_path(),
+        &directory.join("missing-authority"),
+    ] {
+        assert_eq!(
+            X11Controls::open(&process, number, &server, path, window, class)
+                .err()
+                .unwrap()
+                .code,
+            "invalid_xauthority"
+        );
+    }
+    fs::remove_file(alias).unwrap();
+    let wrong_cookie = directory.join("wrong-cookie");
+    let mut bytes = fs::read(&authority).unwrap();
+    assert!(bytes.len() <= 64 << 10);
+    *bytes.last_mut().unwrap() ^= 0xff;
+    OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .open(&wrong_cookie)
+        .unwrap()
+        .write_all(&bytes)
+        .unwrap();
+    assert_eq!(
+        X11Controls::open(&process, number, &server, &wrong_cookie, window, class)
+            .err()
+            .unwrap()
+            .code,
+        "input_unavailable"
+    );
+    fs::remove_file(wrong_cookie).unwrap();
+    assert_eq!(
+        connection.get_input_focus().unwrap().reply().unwrap().focus,
+        window
+    );
+    while let Some(event) = connection.poll_for_event().unwrap() {
+        assert!(!matches!(event, Event::KeyPress(_) | Event::KeyRelease(_)));
+    }
+    let controls = X11Controls::open(&process, number, &server, &authority, window, class).unwrap();
+    // A refreshed completed decision, refused decision or expired authority
+    // must not send even the first key event to the owned fixture window.
+    assert!(!controls
+        .send_until_checked(
+            &process,
+            ControlKey::Pause,
+            Instant::now() + Duration::from_secs(5),
+            || Ok(false)
+        )
+        .unwrap());
+    assert_eq!(
+        controls
+            .send_until_checked(
+                &process,
+                ControlKey::Pause,
+                Instant::now() + Duration::from_secs(5),
+                || Err(Error::new("state_changed", "Fixture decision changed"))
+            )
+            .unwrap_err()
+            .code,
+        "state_changed"
+    );
+    assert_eq!(
+        controls
+            .send_until(&process, ControlKey::Pause, Instant::now())
+            .unwrap_err()
+            .code,
+        "input_lease_required"
+    );
+    connection.get_input_focus().unwrap().reply().unwrap();
+    while let Some(event) = connection.poll_for_event().unwrap() {
+        assert!(!matches!(event, Event::KeyPress(_) | Event::KeyRelease(_)));
+    }
     for key in [ControlKey::Pause, ControlKey::Slower, ControlKey::Faster] {
         controls.send(&process, key).unwrap();
         let start = Instant::now();

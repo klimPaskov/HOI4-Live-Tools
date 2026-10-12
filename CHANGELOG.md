@@ -23,6 +23,12 @@
   indefinite client hangs. Wait for the configured executable before publishing
   a child identity, fixing a pre-exec race caught by hosted Linux CI. Campaign
   commands remain unavailable.
+- Add opt-in owned Linux clock control, an exclusive expiring controller lease,
+  explicit Xauthority and display-peer verification, and fresh typed state
+  readback. Refuse queued input while busy; synchronize shutdown with key pairs.
+  Regression checks cover automatic pause, changing speed, stale no-op receipts,
+  expired authority and malformed final pause bytes. Same-campaign load generation
+  and full campaign acceptance remain unproved.
 - Simplify README and preserve the existing Windows reference in a separate doc.
   Native commands, governor and Windows/macOS native adapters remain unfinished.
 

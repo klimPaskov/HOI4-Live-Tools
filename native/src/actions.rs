@@ -22,7 +22,8 @@ const LINE_LIMIT: usize = 16 << 10;
 #[serde(deny_unknown_fields)]
 pub struct Epoch {
     pub game: Identity,
-    /// Owned-launch campaign identifier, changed on load/new-game transitions.
+    /// Verified owned-run context supplied by the adapter. A persisted game
+    /// identifier alone does not prove a fresh load/new-game generation.
     pub campaign: String,
     pub player: String,
 }
@@ -282,6 +283,10 @@ impl Journal {
         let before = backend.observe()?;
         check_state(epoch, &before)?;
         backend.preflight(&action, &before)?;
+        // Preflight may wait for transport or read a changing game. Verify the
+        // current state before recording a no-op or a dispatch decision.
+        let before = backend.observe()?;
+        check_state(epoch, &before)?;
         let mut record = Receipt {
             version: 1,
             id: id.into(),

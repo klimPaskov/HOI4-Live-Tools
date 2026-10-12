@@ -1,11 +1,12 @@
 //! Ordinary keyboard fallback building block, not an enabled MCP command tool.
 //! The owned launcher must supply an exclusive input lease and verified bindings;
 //! the action transaction must verify the resulting game state through memory.
-use super::{Identity, Process};
+use super::{xauthority, Identity, Process};
 use crate::error::{Error, Result};
 use std::{
     io,
     os::fd::AsRawFd,
+    path::Path,
     sync::Mutex,
     time::{Duration, Instant},
 };
@@ -37,8 +38,12 @@ impl ControlKey {
 struct BoundedStream {
     stream: DefaultStream,
     deadline: Mutex<Instant>,
+    server: Identity,
 }
 impl BoundedStream {
+    fn verify_peer(&self) -> Result<()> {
+        verify_display_peer(&self.stream, &self.server)
+    }
     fn remaining(&self) -> io::Result<Duration> {
         let remaining = self
             .deadline
@@ -84,8 +89,61 @@ impl Stream for BoundedStream {
     }
     fn write(&self, buf: &[u8], fds: &mut Vec<RawFdContainer>) -> io::Result<usize> {
         self.remaining()?;
+        // Check the actual connected peer for every transport write, including
+        // authorization setup, queued requests and partial-write retries.
+        self.verify_peer()
+            .map_err(|error| io::Error::new(io::ErrorKind::PermissionDenied, error))?;
         self.stream.write(buf, fds)
     }
+}
+fn verify_display_server(expected: &Identity) -> Result<()> {
+    // SAFETY: a side-effect-free real UID query; privileged display peers are
+    // never accepted by this ordinary-user private-display adapter.
+    let uid = unsafe { libc::getuid() };
+    if uid == 0 || expected.uid != uid || expected.pid <= 0 {
+        return Err(Error::new(
+            "ownership_changed",
+            "Configured display must belong to the same ordinary user",
+        ));
+    }
+    if super::capture_identity(expected.pid)? != *expected {
+        return Err(Error::new(
+            "ownership_changed",
+            "Configured display server identity changed",
+        ));
+    }
+    Ok(())
+}
+fn verify_display_peer(socket: &impl AsRawFd, expected: &Identity) -> Result<()> {
+    // SAFETY: initialized credential output and exact socket-option length;
+    // the borrowed live descriptor is neither closed nor changed.
+    let mut credentials: libc::ucred = unsafe { std::mem::zeroed() };
+    let mut length = std::mem::size_of_val(&credentials) as libc::socklen_t;
+    let result = unsafe {
+        libc::getsockopt(
+            socket.as_raw_fd(),
+            libc::SOL_SOCKET,
+            libc::SO_PEERCRED,
+            (&mut credentials as *mut libc::ucred).cast(),
+            &mut length,
+        )
+    };
+    if result != 0 {
+        return Err(Error::new(
+            "ownership_changed",
+            "Display peer credentials unavailable",
+        ));
+    }
+    if length as usize != std::mem::size_of_val(&credentials)
+        || credentials.pid != expected.pid
+        || credentials.uid != expected.uid
+    {
+        return Err(Error::new(
+            "ownership_changed",
+            "Connected display is not the configured server",
+        ));
+    }
+    verify_display_server(expected)
 }
 fn xerror(e: impl std::fmt::Display) -> Error {
     Error::new("input_unavailable", e.to_string())
@@ -105,6 +163,8 @@ impl X11Controls {
     pub fn open(
         process: &dyn Process,
         display: u16,
+        display_server: &Identity,
+        authority: &Path,
         window: u32,
         verified_class: &[u8],
     ) -> Result<Self> {
@@ -124,25 +184,30 @@ impl X11Controls {
                 "Verified owned window class required",
             ));
         }
-        let socket =
-            super::connect_socket(std::path::Path::new(&format!("/tmp/.X11-unix/X{display}")))?;
+        verify_display_server(display_server)?;
+        let socket = super::connect_socket(Path::new(&format!("/tmp/.X11-unix/X{display}")))?;
+        verify_display_peer(&socket, display_server)?;
         let (stream, (family, address)) =
             DefaultStream::from_unix_stream(socket).map_err(xerror)?;
-        let auth = x11rb_protocol::xauth::get_auth(family, &address, display)
-            .map_err(xerror)?
-            .ok_or_else(|| {
-                Error::new(
-                    "input_unavailable",
-                    "Private Xauthority authentication required",
-                )
-            })?;
+        if family != x11rb_protocol::xauth::Family::LOCAL {
+            return Err(Error::new(
+                "input_unavailable",
+                "Local X11 transport required",
+            ));
+        }
+        let cookie = xauthority::load_cookie(authority, &address, display)?;
         let stream = BoundedStream {
             stream,
             deadline: Mutex::new(Instant::now() + Duration::from_secs(2)),
+            server: display_server.clone(),
         };
-        let connection =
-            RustConnection::connect_to_stream_with_auth_info(stream, 0, auth.0, auth.1)
-                .map_err(xerror)?;
+        let connection = RustConnection::connect_to_stream_with_auth_info(
+            stream,
+            0,
+            xauthority::MIT_COOKIE_NAME.to_vec(),
+            cookie.to_vec(),
+        )
+        .map_err(xerror)?;
         let root = connection.setup().roots[0].root;
         connection
             .xtest_get_version(2, 2)
@@ -172,6 +237,7 @@ impl X11Controls {
         Ok(controls)
     }
     fn begin(&self) -> Result<()> {
+        self.connection.stream().verify_peer()?;
         *self.connection.stream().deadline.lock().map_err(xerror)? =
             Instant::now() + Duration::from_secs(2);
         Ok(())
@@ -314,8 +380,47 @@ impl X11Controls {
         process.check()?;
         Ok(code)
     }
+    pub fn preflight(&self, process: &dyn Process, key: &ControlKey) -> Result<()> {
+        self.check(process, key).map(|_| ())
+    }
     pub fn send(&self, process: &dyn Process, key: ControlKey) -> Result<()> {
+        self.send_until(process, key, Instant::now() + Duration::from_secs(5))
+    }
+    /// The supervisor reserves the bounded transport window inside its lease.
+    /// Expired authority must fail before either ordinary key event is queued.
+    pub fn send_until(
+        &self,
+        process: &dyn Process,
+        key: ControlKey,
+        lease_deadline: Instant,
+    ) -> Result<()> {
+        self.send_until_checked(process, key, lease_deadline, || Ok(true))
+            .map(|_| ())
+    }
+    /// Refresh the typed action decision after transport preflight, immediately
+    /// before queuing input. A completed target skips both key events.
+    pub fn send_until_checked(
+        &self,
+        process: &dyn Process,
+        key: ControlKey,
+        lease_deadline: Instant,
+        before_queue: impl FnOnce() -> Result<bool>,
+    ) -> Result<bool> {
         let code = self.check(process, &key)?;
+        self.connection.stream().verify_peer()?;
+        if !before_queue()? {
+            return Ok(false);
+        }
+        process.check()?;
+        self.connection.stream().verify_peer()?;
+        if lease_deadline.saturating_duration_since(Instant::now()) < Duration::from_secs(2) {
+            return Err(Error::new(
+                "input_lease_required",
+                "Insufficient live lease for bounded key delivery",
+            ));
+        }
+        *self.connection.stream().deadline.lock().map_err(xerror)? =
+            lease_deadline.min(Instant::now() + Duration::from_secs(2));
         // Both events are queued before waiting for any response, preventing a
         // synchronous error check from leaving the ordinary key held down.
         let press = self
@@ -330,7 +435,8 @@ impl X11Controls {
         press.check().map_err(xerror)?;
         release.check().map_err(xerror)?;
         process.check()?;
-        Ok(()) // Transport delivery is not a verified game action receipt.
+        self.connection.stream().verify_peer()?;
+        Ok(true) // Transport delivery is not a verified game action receipt.
     }
 }
 
@@ -345,6 +451,7 @@ mod tests {
         let stream = BoundedStream {
             stream,
             deadline: Mutex::new(Instant::now() + Duration::from_millis(20)),
+            server: super::super::capture_identity(std::process::id() as i32).unwrap(),
         };
         let start = Instant::now();
         assert_eq!(
@@ -352,5 +459,64 @@ mod tests {
             io::ErrorKind::TimedOut
         );
         assert!(start.elapsed() < Duration::from_secs(1));
+    }
+    #[test]
+    fn connected_display_peer_requires_exact_ordinary_identity() {
+        // SAFETY: read-only UID query; an ordinary private-display fixture.
+        if unsafe { libc::getuid() } == 0 {
+            eprintln!("SKIP: display identity fixture requires ordinary UID");
+            return;
+        }
+        let (socket, _peer) = UnixStream::pair().unwrap();
+        let identity = super::super::capture_identity(std::process::id() as i32).unwrap();
+        verify_display_peer(&socket, &identity).unwrap();
+        let mut wrong = identity.clone();
+        wrong.pid += 1;
+        assert_eq!(
+            verify_display_peer(&socket, &wrong).unwrap_err().code,
+            "ownership_changed"
+        );
+        let mut wrong = identity.clone();
+        wrong.uid += 1;
+        assert_eq!(
+            verify_display_peer(&socket, &wrong).unwrap_err().code,
+            "ownership_changed"
+        );
+        let mut stale = identity;
+        stale.start_ticks = "0".into();
+        assert_eq!(
+            verify_display_peer(&socket, &stale).unwrap_err().code,
+            "ownership_changed"
+        );
+    }
+    #[test]
+    fn changed_display_identity_blocks_a_later_transport_write() {
+        use std::io::Read;
+        // SAFETY: read-only UID query, no real display or keyboard input.
+        if unsafe { libc::getuid() } == 0 {
+            eprintln!("SKIP: display transport fixture requires ordinary UID");
+            return;
+        }
+        let (socket, mut peer) = UnixStream::pair().unwrap();
+        let (stream, _) = DefaultStream::from_unix_stream(socket).unwrap();
+        let mut stream = BoundedStream {
+            stream,
+            deadline: Mutex::new(Instant::now() + Duration::from_secs(2)),
+            server: super::super::capture_identity(std::process::id() as i32).unwrap(),
+        };
+        assert_eq!(stream.write(b"first", &mut Vec::new()).unwrap(), 5);
+        let mut bytes = [0; 5];
+        peer.read_exact(&mut bytes).unwrap();
+        assert_eq!(&bytes, b"first");
+        stream.server.start_ticks = "0".into();
+        assert_eq!(
+            stream.write(b"second", &mut Vec::new()).unwrap_err().kind(),
+            io::ErrorKind::PermissionDenied
+        );
+        peer.set_nonblocking(true).unwrap();
+        assert_eq!(
+            peer.read(&mut bytes).unwrap_err().kind(),
+            io::ErrorKind::WouldBlock
+        );
     }
 }

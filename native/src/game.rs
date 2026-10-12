@@ -11,6 +11,78 @@ use serde_json::{json, Value};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 pub const BUILD_ID: &str = "a4971c9e8ac9a6f2487dea109e01f9839ee59db7";
 pub const SHA256: &str = "56fc2945cdbf2475a316db3285eb3458ae5d577db149db6dfdba6f004de3a88a";
+/// Additional own-campaign context for ordinary clock input. The persisted
+/// playthrough ID distinguishes campaigns, but is not a load-generation token.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ClockContext {
+    pub playthrough_id: String,
+    pub player: String,
+    pub anchors: [u64; 3],
+    pub date_raw: i32,
+    pub difficulty: i32,
+    pub historical_raw: i32,
+    pub paused: bool,
+    pub speed: u8,
+}
+
+pub fn clock_context(process: &dyn Process) -> Result<ClockContext> {
+    process.begin_snapshot()?;
+    let r = Reader::new(process);
+    let base = process.image_base();
+    let initial = roots(&r, base)?;
+    let [gs, idler, _] = initial;
+    if r.u64(gs)? != base + 0x42c7598 || r.u64(idler)? != base + 0x42c9a88 {
+        return Err(Error::new(
+            "campaign_unavailable",
+            "Current in-game context required",
+        ));
+    }
+    // Current-build getter 0x200e720 returns GS+0x718. The generator and
+    // telemetry caller identify this string as playthrough_id. Serialization
+    // can restore it, so no claim is made that every reload changes it.
+    let playthrough_id = r.string(gs + 0x718)?;
+    if playthrough_id.len() != 36
+        || !playthrough_id.bytes().enumerate().all(|(i, b)| {
+            if [8, 13, 18, 23].contains(&i) {
+                b == b'-'
+            } else {
+                b.is_ascii_hexdigit()
+            }
+        })
+    {
+        return Err(Error::new(
+            "campaign_unavailable",
+            "Bounded playthrough identity unavailable",
+        ));
+    }
+    let historical_raw = r.i32(gs + 0x628)?;
+    let observed = snapshot(process)?;
+    let date_raw = observed["date"]["raw"].as_i64().unwrap() as i32;
+    if roots(&r, base)? != initial
+        || r.string(gs + 0x718)? != playthrough_id
+        || r.i32(gs + 0x628)? != historical_raw
+        || r.i32(gs + 0x460)? != date_raw
+        || r.i32(gs + 0x4b4)? != observed["speed"].as_i64().unwrap() as i32
+        || r.byte(idler + 0x6c1)? != u8::from(observed["paused"].as_bool().unwrap())
+        || r.i32(gs + 0x620)? != observed["difficulty"].as_i64().unwrap() as i32
+    {
+        return Err(Error::new(
+            "torn_read",
+            "Clock input context changed during observation",
+        ));
+    }
+    process.check()?;
+    Ok(ClockContext {
+        playthrough_id,
+        anchors: initial,
+        historical_raw,
+        date_raw,
+        player: observed["player"].as_str().unwrap().into(),
+        difficulty: observed["difficulty"].as_i64().unwrap() as i32,
+        paused: observed["paused"].as_bool().unwrap(),
+        speed: observed["speed"].as_u64().unwrap() as u8,
+    })
+}
 fn pointer(reader: &Reader<'_>, address: u64) -> Result<u64> {
     let value = reader.u64(address)?;
     if !(0x10000..=0x7fff_ffff_0000).contains(&value) {

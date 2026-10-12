@@ -5,9 +5,10 @@ parent. MCP clients connect over a private local socket, so closing or restartin
 a client does not relaunch the game or remove its owner. Observations execute in
 that parent process and never attach, suspend, capture screenshots or parse saves.
 
-This is development source. The three observation tools are available; native
-commands, input leases, daily automation, display provisioning and recording
-integration remain unfinished. Windows/macOS launch adapters return an explicit
+This is development source. Three observation tools are available. An explicit
+owned binding can additionally enable exclusive leases and ordinary clock keys.
+Engine commands, strategic actions, daily automation, display provisioning and
+recording integration remain unfinished. Windows/macOS launch adapters return an explicit
 unavailable error. See [current live evidence](CLAUSEWITZ_VALIDATION.md).
 
 ## Prerequisites
@@ -78,6 +79,51 @@ pidfd, and waits up to 20 seconds. It never force-kills a hung game. A timeout
 leaves the owner, endpoint and userdata available for diagnosis. SIGINT/SIGTERM
 to the owner requests the same graceful shutdown. Unexpected startup failures
 after spawning preserve the parent until its launched child exits.
+
+## Ordinary clock input
+
+After recording ordinary singleplayer menu setup, bind one already focused game
+window using a private `0600` JSON file. Binding does not activate a window or
+send input. It requires the current owned game identity, exact `WM_CLASS` bytes,
+Normal difficulty, historical AI and the selected own-player tag.
+
+| Binding field | Value |
+| --- | --- |
+| `game` | Actual game identity from this run's endpoint |
+| `controller` | Exclusive player identifier, e.g. `luna-linux-player` |
+| `player` | Own country tag, e.g. `GER` |
+| `window` | Verified owned X11 window ID |
+| `window_class` | Exact complete `WM_CLASS` property as a byte array |
+| `menu_evidence_ids` | IDs in the private recording/journal proving ordinary singleplayer setup |
+
+```sh
+native/target/release/hoi4-live-native --bind-input /absolute/private/run /absolute/private/input.json
+```
+
+The binding is immutable for that owner. Stop all builder input before binding.
+Menu evidence is an operator responsibility; the reader does not prove every
+multiplayer flag. The private binding records this limitation.
+
+The MCP then advertises `hoi4_input_lease` and `hoi4_time`. Acquire with
+`{"op":"acquire","holder":"luna-linux-player","seconds":300}`. Only the
+configured controller may acquire; the owner generates the returned token.
+Renew or release with that token. Leases expire after 30–900 seconds. Observations
+neither need a lease nor extend it. Competing acquisition and delayed stale
+tokens are refused.
+
+Send `hoi4_time` with `lease_token`, a stable `request_id`, and exactly one of
+`paused: true/false` or internal `speed: 0..4`. It uses Space or keypad minus/plus,
+checks focus and clear input state, refreshes its decision before queuing keys,
+and verifies memory state. It never moves the cursor. Failed preflight remains
+retryable. An uncertain dispatch quarantines new input, including a new request
+ID; losing a reply never causes automatic redispatch. Reusing a verified request
+ID returns its historical receipt, not a promise that state has stayed unchanged.
+
+The guard checks process identity, own country, game roots, persisted playthrough
+ID, Normal/historical settings and the observed date. Changes invalidate input.
+The persisted ID does **not** prove same-campaign load generation. Do not load or
+switch campaigns under this binding; use a fresh owned run. Full generation,
+strategic actions and campaign acceptance remain open gates.
 
 ## Ownership and recovery checks
 

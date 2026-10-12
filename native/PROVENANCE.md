@@ -11,7 +11,8 @@ source comments identifying this derivation. Other modules are new project code.
 Current Linux ELF layouts were recovered independently from the installed build;
 upstream 1.19.2 offsets were not copied as current-build evidence.
 
-This first port exposes observations only. Native command execution remains in
+The owned Linux preview exposes observations and optionally ordinary clock keys.
+Engine command execution remains quarantined in
 the disclosed private upstream validation adapter until its transaction and
 recovery semantics have been ported and tested. No raw process-write, injection,
 console or foreign-country interface is exposed by this Rust MCP.
@@ -19,9 +20,16 @@ console or foreign-country interface is exposed by this Rust MCP.
 The action journal and X11 keyboard fallback modules are new project code.
 X11 transport uses the MIT/Apache-2.0 licensed x11rb dependency. Keyboard bindings
 were checked against the installed game GUI definitions; no game files are
-redistributed. The fallback is not an enabled live MCP command adapter.
+redistributed. The optional clock adapter uses typed desired states, exclusive leases and memory
+readback; it never calls the failed engine posting path.
 
 The persistent Linux launcher, bounded socket connection and stdio framing, mutable mapping
 cache, boot/auxiliary-vector exec witness and generated-child fixtures are new
 project code. They do not derive an engine command interface or make the failed
 upstream posting experiment safe to replay.
+
+The explicit bounded Xauthority parser, display-peer checks, input authority and
+clock adapter are new project code. The parser implements the authentication
+record format; it does not copy dependency source. Current-build playthrough ID
+semantics were independently checked against the installed executable. That
+persisted ID is a campaign discriminator, not a proved load-generation token.

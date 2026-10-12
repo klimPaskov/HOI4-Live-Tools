@@ -54,8 +54,12 @@ impl Fixture {
             endpoint: json_read(&directory.join("endpoint.json")).unwrap(),
             reads: RwLock::new(()),
             accepting_reads: AtomicBool::new(true),
+            input_gate: Arc::new(RwLock::new(true)),
             alive: AtomicBool::new(true),
             closing,
+            commands: RwLock::new(None),
+            display: None,
+            directory: directory.clone(),
         });
         let path = directory.clone();
         let owner_shared = Arc::clone(&shared);

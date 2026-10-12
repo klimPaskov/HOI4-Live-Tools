@@ -84,20 +84,24 @@ The mode default is FAIR; a mode label alone is not proof of campaign settings.
 
 ## Command port and expansion
 
-The Rust MCP still exposes no command tools. Its new action library records a
+The owned Linux supervisor can optionally enable `hoi4_input_lease` and
+`hoi4_time` after an explicit verified window and campaign binding. See
+[clock input setup](../docs/OWNED_LINUX_LAUNCHER.md#ordinary-clock-input).
+The standalone observation server has no command adapter. The action library records a
 durable, exclusively locked receipt before dispatch, verifies the desired state
 through an injected observation backend, and preserves an uncertain dispatch
 across restarts. A new request ID cannot bypass quarantine. Failed preflight
 leaves an entry retryable; a verified receipt is returned without redispatch.
-These recovery fixtures pass; the library is not yet wired to a live command
-backend or daily governor.
+The clock backend uses this journal; the daily governor and strategic command
+adapters remain unfinished.
 
 The Linux X11 fallback building block sends only Space, keypad minus and keypad
 plus. It checks the owned process and window, focus, class and clear keyboard
 state. It never activates a window or moves the cursor, and display operations
 have a bounded deadline. Transport delivery is not a verified game action.
-It requires an exclusive owned input lease and installed-game binding validation
-before live integration. The separate authenticated Xvfb fixture proved key
+Each clock action requires an exclusive configured-controller lease and fresh
+own-campaign state checks. Authentication uses the explicit private Xauthority
+file and verifies the actual display peer before transport writes. The separate authenticated Xvfb fixture proved key
 press/release delivery, unchanged pointer position and refusal on focus loss,
 wrong window PID or held keys. It is **not** a HOI4 live test.
 

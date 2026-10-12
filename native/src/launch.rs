@@ -48,3 +48,17 @@ pub fn close(directory: &Path) -> Result<()> {
         ))
     }
 }
+pub fn bind_input(directory: &Path, config: &Path) -> Result<()> {
+    #[cfg(target_os = "linux")]
+    {
+        linux::bind_input(directory, config)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = (directory, config);
+        Err(Error::new(
+            "platform_unavailable",
+            "Ordinary native input adapter is unverified on this platform",
+        ))
+    }
+}

@@ -11,6 +11,10 @@ struct Fixture {
     torn: bool,
     checks: Cell<u32>,
     replaced: bool,
+    id_reads: Cell<u32>,
+    changed_id: bool,
+    pause_reads: Cell<u32>,
+    invalid_final_pause: bool,
 }
 impl Fixture {
     fn put(&mut self, a: u64, data: &[u8]) {
@@ -55,6 +59,10 @@ impl Fixture {
             torn: false,
             checks: Cell::new(0),
             replaced: false,
+            id_reads: Cell::new(0),
+            changed_id: false,
+            pause_reads: Cell::new(0),
+            invalid_final_pause: false,
         };
         let base = 0x10000;
         f.word(base + 0x44086a8, 0x30000);
@@ -77,6 +85,11 @@ impl Fixture {
         f.number(0x30518, 1);
         f.number(0x30620, 2);
         f.number(0x30628, 1);
+        let id = b"aabbccdd-1122-4344-8566-778899aabbcc";
+        f.region(0x30718, 32);
+        f.word(0x30718, 0x60000);
+        f.word(0x30720, id.len() as u64);
+        f.put(0x60000, id);
         f.put(0x326c1, &[1]);
         f.array(0x30340, 0x39000, 3);
         f.region(0x39000, 12);
@@ -108,6 +121,18 @@ impl Fixture {
 }
 impl ReadMemory for Fixture {
     fn read(&self, a: u64, n: usize) -> Result<Vec<u8>> {
+        if a == 0x326c1 {
+            self.pause_reads.set(self.pause_reads.get() + 1);
+            if self.invalid_final_pause && self.pause_reads.get() > 2 {
+                return Ok(vec![2]);
+            }
+        }
+        if a == 0x60000 {
+            self.id_reads.set(self.id_reads.get() + 1);
+            if self.changed_id && self.id_reads.get() > 1 {
+                return Ok(b"aabbccdd-1122-4344-8566-778899aabbcd".to_vec());
+            }
+        }
         if a == 0x30460 {
             self.clock_reads.set(self.clock_reads.get() + 1);
             if self.torn && self.clock_reads.get() > 1 {
@@ -157,4 +182,38 @@ fn replaced_process_refuses_snapshot() {
     let mut f = Fixture::new();
     f.replaced = true;
     assert_eq!(game::snapshot(&f).unwrap_err().code, "ownership_changed");
+}
+
+#[test]
+fn own_clock_context_has_a_bounded_campaign_identity() {
+    let fixture = Fixture::new();
+    let context = game::clock_context(&fixture).unwrap();
+    assert_eq!(context.player, "GER");
+    assert_eq!(
+        context.playthrough_id,
+        "aabbccdd-1122-4344-8566-778899aabbcc"
+    );
+    assert_eq!(context.historical_raw, 1);
+    assert!(context.paused);
+}
+
+#[test]
+fn invalid_final_pause_byte_cannot_masquerade_as_false() {
+    let mut fixture = Fixture::new();
+    fixture.put(0x326c1, &[0]);
+    fixture.invalid_final_pause = true;
+    assert_eq!(game::clock_context(&fixture).unwrap_err().code, "torn_read");
+}
+
+#[test]
+fn unchanged_string_header_does_not_hide_changed_campaign_contents() {
+    let mut fixture = Fixture::new();
+    fixture.changed_id = true;
+    assert_eq!(game::clock_context(&fixture).unwrap_err().code, "torn_read");
+    let mut fixture = Fixture::new();
+    fixture.number(0x30720, 4097);
+    assert_eq!(
+        game::clock_context(&fixture).unwrap_err().code,
+        "invalid_string"
+    );
 }

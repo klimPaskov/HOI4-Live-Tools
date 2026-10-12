@@ -324,6 +324,29 @@ allocation remain reachable from Post. Arbitrary-thread calls are still
 quarantined; ordinary input fallback requires owned-lease integration and live
 state readback before it can become a command capability.
 
+## Optional Rust clock adapter checkpoint
+
+The Linux owned supervisor now supports an explicit ordinary-menu/window binding,
+exclusive configured-controller leases and typed desired pause or internal speed.
+It verifies the private Xauthority file and actual X11 peer, focused owned window,
+clear input state and current own-campaign context. The decision is refreshed
+immediately before queuing each key pair. Pointer position is never changed.
+
+The real Linux ordinary suite passed 43 library checks, 16 integration checks and
+one isolated authenticated Xvfb test. Thirteen opt-in kernel checks were excluded
+from this pass; their separate evidence is recorded in the launcher document.
+The new cases cover automatic pause, changing speed, stale no-op receipts, busy
+input, shutdown between pairs, expired authority and invalid final pause bytes.
+Python 3.9 passed 952 tests with 37 explicit skips. The initial Python check used
+an unconfigured interpreter and failed on missing dependencies; the configured
+project environment supplied the complete passing run.
+
+These are transport and recovery fixtures, not installed-game clock acceptance.
+The fresh live run is in preparation. Input guards check a persisted playthrough
+ID, roots and observed timeline; this does not prove same-campaign load generation.
+Strategic commands, daily automation and full campaign acceptance remain open.
+The earlier failed engine posting adapter was never retried.
+
 ## Attribution
 
 The findings above refer to upstream `calling/{mem,process/linux,api,game,

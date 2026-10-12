@@ -1,6 +1,7 @@
 """Run the opt-in Rust transport fixture on its own authenticated Xvfb server."""
 import os
 import argparse
+import json
 from pathlib import Path
 import secrets
 import shutil
@@ -13,7 +14,12 @@ import time
 def identity(pid):
     root = Path("/proc") / str(pid)
     fields = (root / "stat").read_text().rsplit(") ", 1)[1].split()
-    return (pid, fields[19], str((root / "exe").resolve()), root.stat().st_uid)
+    result = {"pid": pid, "start_ticks": fields[19],
+              "exe": str((root / "exe").resolve(strict=True)), "uid": root.stat().st_uid}
+    after = (root / "stat").read_text().rsplit(") ", 1)[1].split()
+    if after[19] != result["start_ticks"] or after[1] != str(os.getpid()):
+        raise RuntimeError("Owned fixture process creation/parent identity changed")
+    return result
 
 
 def main():
@@ -42,15 +48,24 @@ def main():
             server = subprocess.Popen([xvfb_exe, f":{display}", "-screen", "0",
                                        "640x480x24", "-nolisten", "tcp", "-auth", str(auth)],
                                       stdin=subprocess.DEVNULL, stdout=log, stderr=log)
-            expected = identity(server.pid)
+            expected = None
+            creation_ticks = None
             try:
+                creation_ticks = identity(server.pid)["start_ticks"]
                 deadline = time.monotonic() + 5
                 while not Path(f"/tmp/.X11-unix/X{display}").exists():
                     if server.poll() is not None or time.monotonic() >= deadline:
                         raise RuntimeError("Owned fixture display did not start")
                     time.sleep(0.05)
+                expected = identity(server.pid)
+                if (expected["start_ticks"] != creation_ticks
+                        or expected["uid"] != os.getuid()
+                        or expected["exe"] != str(Path(xvfb_exe).resolve())):
+                    raise RuntimeError("Owned fixture Xvfb executable identity changed")
                 env = dict(os.environ, DISPLAY=f":{display}", XAUTHORITY=str(auth),
-                           HOI4_NATIVE_X11_FIXTURE_DISPLAY=str(display))
+                           HOI4_NATIVE_X11_FIXTURE_DISPLAY=str(display),
+                           HOI4_NATIVE_X11_FIXTURE_SERVER=json.dumps(expected),
+                           HOI4_NATIVE_X11_FIXTURE_AUTHORITY=str(auth))
                 # Keep the host cargo/runtime selection; never open a game or
                 # reuse the normal DISPLAY inherited from the user's shell.
                 command = ([str(args.test_binary.resolve()), "--ignored", "--nocapture"]
@@ -63,8 +78,14 @@ def main():
                     raise RuntimeError("X11 transport fixture failed")
             finally:
                 if server.poll() is None:
-                    if identity(server.pid) != expected:
+                    current = identity(server.pid)
+                    if (creation_ticks is None
+                            or current["start_ticks"] != creation_ticks
+                            or current["uid"] != os.getuid()
+                            or current["exe"] != str(Path(xvfb_exe).resolve())
+                            or (expected is not None and current != expected)):
                         raise RuntimeError("Fixture process identity changed; no signal sent")
+                    expected = current
                     server.terminate()
                     try:
                         server.wait(timeout=5)

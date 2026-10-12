@@ -10,12 +10,27 @@ pub struct Server {
     pub process: Option<Box<dyn Process + Send + Sync>>,
     pub unavailable: Option<Error>,
 }
-fn tools() -> Value {
-    json!({"tools":[
+/// Only an owned supervisor supplies a verified ordinary-input implementation.
+/// Standalone readers and unavailable platform adapters expose observations.
+pub trait Commands: Send + Sync {
+    fn tools(&self) -> Vec<Value>;
+    fn supports(&self, name: &str) -> bool;
+    fn call(&self, process: &dyn Process, name: &str, args: &Value) -> Result<Value>;
+    fn capabilities(&self) -> Value;
+}
+fn tools(commands: Option<&dyn Commands>) -> Value {
+    let mut value = json!({"tools":[
         {"name":"hoi4_capabilities","description":"Verified runtime capabilities and explicit platform/build limitations.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}},
         {"name":"hoi4_overview","description":"Fresh owned-country process snapshot. Pure bounded reads; never pauses.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}},
         {"name":"hoi4_wait_for","description":"Bounded server wait for own focus/research change or game date. Never pauses.","inputSchema":{"type":"object","properties":{"timeout_seconds":{"type":"integer","minimum":1,"maximum":50},"until_date":{"type":"array","items":{"type":"integer"},"minItems":3,"maxItems":3}},"additionalProperties":false}}
-    ]})
+    ]});
+    if let Some(commands) = commands {
+        value["tools"]
+            .as_array_mut()
+            .unwrap()
+            .extend(commands.tools());
+    }
+    value
 }
 fn content(value: Value) -> Value {
     json!({"content":[{"type":"text","text":serde_json::to_string(&value).unwrap()}]})
@@ -33,13 +48,13 @@ impl Server {
         })?;
         game::snapshot(p.as_ref())
     }
-    fn call(&self, name: &str, args: &Value) -> Result<Value> {
+    fn call(&self, name: &str, args: &Value, commands: Option<&dyn Commands>) -> Result<Value> {
         let object = args
             .as_object()
             .ok_or_else(|| Error::new("invalid_arguments", "Tool arguments must be an object"))?;
         match name {
             "hoi4_capabilities" if object.is_empty() => Ok(
-                json!({"runtime":"rust","platform":std::env::consts::OS,"owned_session_bound":self.process.is_some(),"unavailable":self.unavailable,"observations":["own_focus","own_research","clock","bounded_wait"],"commands":"unavailable: native transactions not yet ported","default_mode":"FAIR","mod_qa":"separate; unavailable in this runtime","windows_macos":"unverified native adapters"}),
+                json!({"runtime":"rust","platform":std::env::consts::OS,"owned_session_bound":self.process.is_some(),"unavailable":self.unavailable,"observations":["own_focus","own_research","clock","bounded_wait"],"commands":commands.map(|c| c.capabilities()).unwrap_or_else(|| json!("unavailable: no verified input binding")),"native_transactions":"unavailable: failed posting path quarantined","default_mode":"FAIR","mod_qa":"separate; unavailable in this runtime","windows_macos":"unverified native adapters"}),
             ),
             "hoi4_overview" if object.is_empty() => self.overview(),
             "hoi4_wait_for" => {
@@ -114,6 +129,12 @@ impl Server {
                     current = self.overview()?;
                 }
             }
+            _ if commands.is_some_and(|c| c.supports(name)) => {
+                let process = self.process.as_ref().ok_or_else(|| {
+                    Error::new("capability_unavailable", "Owned process required for input")
+                })?;
+                commands.unwrap().call(process.as_ref(), name, args)
+            }
             _ => Err(Error::new(
                 "capability_unavailable",
                 "Unknown tool or unsupported arguments; no raw/debug/action fallback",
@@ -121,6 +142,14 @@ impl Server {
         }
     }
     pub fn handle(&self, msg: Value) -> Option<Value> {
+        self.handle_with_commands(msg, None)
+    }
+    pub fn handle_with_commands(
+        &self,
+        msg: Value,
+        commands: Option<&dyn Commands>,
+    ) -> Option<Value> {
+        let commands = commands.filter(|_| self.process.is_some());
         let id = msg.get("id").cloned();
         let valid = msg.is_object()
             && msg.get("jsonrpc") == Some(&json!("2.0"))
@@ -137,12 +166,12 @@ impl Server {
                 json!({"protocolVersion":"2024-11-05","capabilities":{"tools":{}},"serverInfo":{"name":"hoi4-live-native","version":env!("CARGO_PKG_VERSION")}}),
             ),
             "ping" => Ok(json!({})),
-            "tools/list" => Ok(tools()),
+            "tools/list" => Ok(tools(commands)),
             "tools/call" => {
                 let name = msg["params"]["name"].as_str().unwrap_or("");
                 let empty = json!({});
                 let args = msg["params"].get("arguments").unwrap_or(&empty);
-                Ok(match self.call(name, args) {
+                Ok(match self.call(name, args, commands) {
                     Ok(v) => content(v),
                     Err(e) => {
                         let mut v = content(json!({"error":e}));

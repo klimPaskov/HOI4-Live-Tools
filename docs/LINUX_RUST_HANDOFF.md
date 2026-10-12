@@ -94,3 +94,12 @@ Integrate exclusive input leases and campaign readback, then prove reliable
 running-game controls before resuming Luna acceptance. Native Post still lacks a
 proved external scheduling/lifetime interface. The failed run was privately
 archived and exited through owned OS shutdown; its adapter stays quarantined.
+
+The optional Rust clock adapter now integrates an immutable owned window binding,
+expiring exclusive controller leases, explicit display authentication, desired
+pause/speed state, durable action receipts and fresh memory readback. Actual Linux
+fixtures passed, including nonblocking busy refusal, shutdown between key pairs,
+automatic pause/speed races and expired authority. Installed-game clock readback
+and a fresh Luna run still require live verification. Strategic actions and the
+clean two-year campaign remain unfinished; the failed native posting path is
+still quarantined.

@@ -29,8 +29,9 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
+mod clock;
 
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Display {
     number: u16,
@@ -283,6 +284,15 @@ pub fn connect(directory: &Path) -> Result<()> {
     })?;
     Ok(())
 }
+pub fn bind_input(directory: &Path, config: &Path) -> Result<()> {
+    let binding: Value = json_read(config)?;
+    let reply = request(directory, json!({"op":"bind_input","binding":binding}))?;
+    if reply.get("bound") != Some(&json!(true)) {
+        return Err(Error::new("input_binding_failed", reply.to_string()));
+    }
+    eprintln!("Owned ordinary clock input bound; campaign acceptance remains unverified");
+    Ok(())
+}
 pub fn close(directory: &Path) -> Result<()> {
     let reply = request(directory, json!({"op":"close"}))?;
     if reply.get("closed") != Some(&json!(true)) {
@@ -483,8 +493,12 @@ struct Shared {
     endpoint: Endpoint,
     reads: RwLock<()>,
     accepting_reads: AtomicBool,
+    input_gate: Arc<RwLock<bool>>,
     alive: AtomicBool,
     closing: SyncSender<CloseRequest>,
+    commands: RwLock<Option<Arc<dyn crate::protocol::Commands>>>,
+    display: Option<Display>,
+    directory: PathBuf,
 }
 fn service_client(stream: UnixStream, shared: Arc<Shared>) {
     let response = (|| -> Result<Value> {
@@ -509,9 +523,50 @@ fn service_client(stream: UnixStream, shared: Arc<Shared>) {
                         "Owned game is exiting or has exited",
                     ));
                 }
+                let commands = shared
+                    .commands
+                    .read()
+                    .map_err(|_| Error::new("input_unavailable", "Input binding lock poisoned"))?
+                    .clone();
                 Ok(
-                    json!({"reply":shared.server.handle(request.get("message").cloned().unwrap_or(Value::Null))}),
+                    json!({"reply":shared.server.handle_with_commands(request.get("message").cloned().unwrap_or(Value::Null), commands.as_deref())}),
                 )
+            }
+            Some("bind_input") => {
+                let _read = shared
+                    .reads
+                    .read()
+                    .map_err(|_| Error::new("ownership_changed", "Read gate poisoned"))?;
+                if !shared.accepting_reads.load(Ordering::Acquire) {
+                    return Err(Error::new("session_closed", "Owned game is exiting"));
+                }
+                let mut commands = shared
+                    .commands
+                    .write()
+                    .map_err(|_| Error::new("input_unavailable", "Input binding lock poisoned"))?;
+                if commands.is_some() {
+                    return Err(Error::new(
+                        "input_already_bound",
+                        "Never replace an active input binding",
+                    ));
+                }
+                let process = shared.server.process.as_ref().ok_or_else(|| {
+                    Error::new("input_unavailable", "Owned process reader required")
+                })?;
+                let display = shared.display.as_ref().ok_or_else(|| {
+                    Error::new("input_unavailable", "Owned display binding required")
+                })?;
+                let binding = serde_json::from_value(request["binding"].clone())
+                    .map_err(|e| Error::new("invalid_input_binding", e.to_string()))?;
+                let service = clock::ClockService::bind(
+                    process.as_ref(),
+                    display,
+                    binding,
+                    &shared.directory,
+                    shared.input_gate.clone(),
+                )?;
+                *commands = Some(Arc::new(service));
+                Ok(json!({"bound":true,"scope":"ordinary clock keys only"}))
             }
             Some("close") => {
                 let (sender, receiver) = mpsc::sync_channel(1);
@@ -628,19 +683,29 @@ fn run_owner(
         if (!pending.is_empty() || SIGNAL_CLOSE.swap(false, Ordering::Relaxed))
             && deadline.is_none()
         {
+            shared.accepting_reads.store(false, Ordering::Release);
+            // Drain an already queued bounded key pair before signalling the
+            // child; every later pair sees the disabled input gate.
+            *shared
+                .input_gate
+                .write()
+                .map_err(|_| Error::new("input_unavailable", "Input shutdown gate poisoned"))? =
+                false;
             if let Err(error) = child.terminate() {
                 // The exact child can exit between the pidfd poll and identity
                 // verification. Keep pending replies through exit monitoring;
                 // a failed signal never authorizes a numeric-PID fallback.
                 eprintln!("Owned termination not sent: {error}");
             }
-            shared.accepting_reads.store(false, Ordering::Release);
             deadline = Some(Instant::now() + Duration::from_secs(20));
         }
         if !child.exited {
             match child.exited_without_reaping() {
                 Ok(true) => {
                     shared.accepting_reads.store(false, Ordering::Release);
+                    *shared.input_gate.write().map_err(|_| {
+                        Error::new("input_unavailable", "Input exit gate poisoned")
+                    })? = false;
                     shared.alive.store(false, Ordering::Release);
                     // Drain every in-flight snapshot before reaping; PID reuse cannot
                     // authorize a later syscall by an observer worker.
@@ -933,10 +998,14 @@ pub fn serve(path: &Path) -> Result<()> {
         endpoint,
         reads: RwLock::new(()),
         accepting_reads: AtomicBool::new(true),
+        input_gate: Arc::new(RwLock::new(true)),
         alive: AtomicBool::new(true),
         closing,
+        commands: RwLock::new(None),
+        display: Some(config.display.clone()),
+        directory: directory.to_path_buf(),
     });
-    eprintln!("Owned Linux supervisor ready; command tools remain unavailable");
+    eprintln!("Owned Linux supervisor ready; optional input requires an explicit binding");
     run_owner(listener, socket_meta, directory, child, shared, receiver)
 }
 

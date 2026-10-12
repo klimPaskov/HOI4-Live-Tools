@@ -35,6 +35,8 @@ mod unix_socket;
 #[cfg(target_os = "linux")]
 pub mod x11;
 #[cfg(target_os = "linux")]
+mod xauthority;
+#[cfg(target_os = "linux")]
 pub(crate) use unix_socket::connect as connect_socket;
 pub fn open(path: &Path) -> Result<Box<dyn Process + Send + Sync>> {
     #[cfg(target_os = "linux")]

@@ -7,6 +7,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some("--session") => Some(PathBuf::from(
             args.next().ok_or("--session requires a manifest")?,
         )),
+        Some("--bind-input") => {
+            let directory =
+                PathBuf::from(args.next().ok_or("--bind-input requires run directory")?);
+            let config = PathBuf::from(
+                args.next()
+                    .ok_or("--bind-input requires private input config")?,
+            );
+            if args.next().is_some() {
+                return Err("Unexpected extra argument".into());
+            }
+            launch::bind_input(&directory, &config)?;
+            return Ok(());
+        }
         Some(mode @ ("--serve" | "--connect" | "--close")) => {
             let path = PathBuf::from(args.next().ok_or("Endpoint mode requires a path")?);
             if args.next().is_some() {
@@ -20,7 +33,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             return Ok(());
         }
         Some("--help") => {
-            eprintln!("hoi4-live-native [--session OWNED_RUN_MANIFEST]\nStdio MCP; observation tools only.\nLinux: --serve PRIVATE_CONFIG / --connect RUN_DIRECTORY / --close RUN_DIRECTORY.\nWindows/macOS launch adapters unverified.");
+            eprintln!("hoi4-live-native [--session OWNED_RUN_MANIFEST]\nStdio MCP; observations by default.\nLinux: --serve PRIVATE_CONFIG / --connect RUN_DIRECTORY / --close RUN_DIRECTORY.\nOptional: --bind-input RUN_DIRECTORY PRIVATE_INPUT_CONFIG (ordinary clock keys only).\nWindows/macOS launch/input adapters unverified.");
             return Ok(());
         }
         Some(_) => return Err("Unknown argument".into()),

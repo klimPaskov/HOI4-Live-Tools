@@ -39,6 +39,7 @@ struct Fake {
     lose_epoch: bool,
     dispatch_error: bool,
     no_change: bool,
+    flip_pause_preflight: bool,
 }
 impl Fake {
     fn new() -> Self {
@@ -62,6 +63,7 @@ impl Fake {
             lose_epoch: false,
             dispatch_error: false,
             no_change: false,
+            flip_pause_preflight: false,
         }
     }
 }
@@ -70,6 +72,9 @@ impl Backend for Fake {
         Ok(self.state.clone())
     }
     fn preflight(&mut self, _: &Action, _: &State) -> Result<()> {
+        if self.flip_pause_preflight {
+            self.state.paused = !self.state.paused;
+        }
         if self.preflight_error {
             Err(Error::new("focus_lost", "Focused window unavailable"))
         } else {
@@ -95,6 +100,28 @@ impl Backend for Fake {
     }
 }
 const TIMEOUT: Duration = Duration::from_millis(1);
+#[test]
+fn preflight_state_change_cannot_commit_a_stale_noop() {
+    let temp = Temp::new("preflight-change");
+    let mut backend = Fake::new();
+    backend.state.paused = true;
+    backend.flip_pause_preflight = true;
+    let epoch = backend.state.epoch.clone();
+    let mut journal = Journal::open(&temp.path()).unwrap();
+    let receipt = journal
+        .execute(
+            "pause",
+            &epoch,
+            Action::SetPaused(true),
+            &mut backend,
+            TIMEOUT,
+        )
+        .unwrap();
+    assert_eq!(receipt.status, Status::Verified);
+    assert!(receipt.dispatched);
+    assert!(receipt.observed.paused);
+    assert_eq!(backend.dispatches, 1);
+}
 #[test]
 fn verified_receipt_survives_restart_without_second_dispatch() {
     let temp = Temp::new("verified");

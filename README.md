@@ -67,12 +67,13 @@ The first [Rust runtime](native/README.md) provides owned-process snapshots and
 bounded waits over stdio MCP. It uses the current verified Linux ELF layout and
 returns capability errors for unsupported builds. Native commands, the daily
 governor, and Windows/macOS process adapters are still unimplemented in Rust.
-The action-recovery library and Linux keyboard fallback have separate fixture
-tests; they are not enabled live command tools yet.
+An explicit owned binding can enable ordinary clock keys with exclusive input
+leases, durable receipts and memory readback. Strategic action adapters remain
+unfinished; the previous engine posting failure stays quarantined.
 The Linux preview also has a persistent [owned launcher](docs/OWNED_LINUX_LAUNCHER.md)
 with reconnectable clients and guarded graceful shutdown.
-The crate builds on macOS and cross-compiles to Linux; those builds do not prove
-Windows/macOS live compatibility.
+Linux, Windows and macOS CI pass the portable code and platform fixtures.
+Those builds do not prove Windows/macOS live compatibility.
 
 ## Development
 

@@ -3,6 +3,7 @@ pub mod calendar;
 pub mod error;
 pub mod framing;
 pub mod game;
+pub mod input_lease;
 pub mod launch;
 pub mod memory;
 pub mod platform;
