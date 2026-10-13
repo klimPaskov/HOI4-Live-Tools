@@ -4,6 +4,7 @@ import argparse
 import json
 from pathlib import Path
 import secrets
+import signal
 import shutil
 import subprocess
 import sys
@@ -25,10 +26,21 @@ def identity(pid):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--test-binary", type=Path,
-                        help="Run an explicitly supplied cross-built x11_fixture test binary")
+                        help="Run a cross-built test binary (library binary for --owner-close-only)")
+    parser.add_argument("--close-only", action="store_true",
+                        help="Only WM close fixtures, with XTEST disabled on owned Xvfb")
+    parser.add_argument("--owner-close-only", action="store_true",
+                        help="Run full owner/reaper and actual ambiguous-wire library fixtures")
     args = parser.parse_args()
+    if args.close_only and args.owner_close_only:
+        parser.error("Choose close-only or owner-close-only")
+    close_mode = args.close_only or args.owner_close_only
     if sys.platform != "linux" or os.getuid() == 0:
         raise SystemExit("Fixture requires an ordinary Linux user")
+    if not hasattr(os, "pidfd_open") or not hasattr(signal, "pidfd_send_signal"):
+        raise SystemExit("Fixture requires pinned pidfd cleanup; no numeric-PID fallback")
+    probe = os.pidfd_open(os.getpid(), 0)
+    os.close(probe)
     xvfb_exe = shutil.which("Xvfb")
     xauth_exe = shutil.which("xauth")
     if not xvfb_exe or not xauth_exe:
@@ -45,12 +57,23 @@ def main():
                         "MIT-MAGIC-COOKIE-1", secrets.token_hex(16)],
                        check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         with (Path(directory) / "xvfb.log").open("ab") as log:
-            server = subprocess.Popen([xvfb_exe, f":{display}", "-screen", "0",
-                                       "640x480x24", "-nolisten", "tcp", "-auth", str(auth)],
+            server_command = [xvfb_exe, f":{display}", "-screen", "0", "640x480x24",
+                              "-nolisten", "tcp", "-auth", str(auth)]
+            if close_mode:
+                server_command.extend(["-extension", "XTEST"])
+            server = subprocess.Popen(server_command,
                                       stdin=subprocess.DEVNULL, stdout=log, stderr=log)
+            server_fd = None
             expected = None
             creation_ticks = None
             try:
+                try:
+                    server_fd = os.pidfd_open(server.pid, 0)
+                except OSError:
+                    print("Cannot pin fixture Xvfb; preserving parent until its exit",
+                          file=sys.stderr)
+                    server.wait()
+                    raise
                 creation_ticks = identity(server.pid)["start_ticks"]
                 deadline = time.monotonic() + 5
                 while not Path(f"/tmp/.X11-unix/X{display}").exists():
@@ -66,15 +89,32 @@ def main():
                            HOI4_NATIVE_X11_FIXTURE_DISPLAY=str(display),
                            HOI4_NATIVE_X11_FIXTURE_SERVER=json.dumps(expected),
                            HOI4_NATIVE_X11_FIXTURE_AUTHORITY=str(auth))
+                if close_mode:
+                    env["HOI4_NATIVE_X11_CLOSE_NO_XTEST"] = "1"
                 # Keep the host cargo/runtime selection; never open a game or
                 # reuse the normal DISPLAY inherited from the user's shell.
-                command = ([str(args.test_binary.resolve()), "--ignored", "--nocapture"]
+                test_args = ["--ignored", "--nocapture", "--test-threads=1"]
+                if args.close_only:
+                    test_args.extend(["--exact", "owned_xvfb_window_close"])
+                if args.owner_close_only:
+                    test_args.append("launch::linux::tests::window_close::owned_xvfb_window_close")
+                suite = ["--lib"] if args.owner_close_only else ["--test", "x11_fixture"]
+                command = ([str(args.test_binary.resolve())] + test_args
                            if args.test_binary else
                            ["cargo", "test", "--manifest-path",
                             str(Path(__file__).resolve().parents[1] / "Cargo.toml"),
-                            "--locked", "--test", "x11_fixture", "--", "--ignored", "--nocapture"])
-                result = subprocess.run(command, env=env, timeout=45)
-                if result.returncode:
+                            "--locked"] + suite + ["--"] + test_args)
+                runner = subprocess.Popen(command, env=env)
+                try:
+                    code = runner.wait(timeout=45)
+                except subprocess.TimeoutExpired:
+                    # Killing the suite can abandon its owned-child reaper.
+                    # Keep this parent/display until that exact runner exits.
+                    print("Fixture runner exceeded 45 seconds; preserving ownership; no kill",
+                          file=sys.stderr)
+                    runner.wait()
+                    raise
+                if code:
                     raise RuntimeError("X11 transport fixture failed")
             finally:
                 if server.poll() is None:
@@ -86,14 +126,19 @@ def main():
                             or (expected is not None and current != expected)):
                         raise RuntimeError("Fixture process identity changed; no signal sent")
                     expected = current
-                    server.terminate()
+                    try:
+                        signal.pidfd_send_signal(server_fd, signal.SIGTERM, None, 0)
+                    except ProcessLookupError:
+                        pass  # Exact pinned child exited between checks.
                     try:
                         server.wait(timeout=5)
                     except subprocess.TimeoutExpired:
                         if identity(server.pid) != expected:
                             raise RuntimeError("Fixture process identity changed; no signal sent")
-                        server.kill()
+                        signal.pidfd_send_signal(server_fd, signal.SIGKILL, None, 0)
                         server.wait(timeout=5)
+                if server_fd is not None:
+                    os.close(server_fd)
 
 
 if __name__ == "__main__":

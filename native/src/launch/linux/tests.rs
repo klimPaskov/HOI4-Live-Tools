@@ -19,7 +19,10 @@ impl Fixture {
             },
         )
     }
-    fn with_server(mut child: OwnedChild, server: Server) -> Self {
+    fn with_server(child: OwnedChild, server: Server) -> Self {
+        Self::with_display(child, server, None)
+    }
+    fn with_display(mut child: OwnedChild, server: Server, display: Option<Display>) -> Self {
         assert_ne!(uid(), 0, "Launcher fixtures require an ordinary user");
         child.identity = Some(capture_identity(child.child.id() as i32).unwrap());
         let directory =
@@ -59,7 +62,7 @@ impl Fixture {
             alive: AtomicBool::new(true),
             closing,
             commands: RwLock::new(None),
-            display: None,
+            display,
             directory: directory.clone(),
         });
         let path = directory.clone();
@@ -103,6 +106,8 @@ impl Fixture {
         }
     }
 }
+
+mod window_close;
 impl Drop for Fixture {
     fn drop(&mut self) {
         self.close();
@@ -953,4 +958,283 @@ fn executable_readiness_waits_for_the_configured_image() {
     assert_eq!(fixture.status()["owned_live"], true);
     fixture.close();
     assert!(capture_identity(after.pid).is_err());
+}
+
+fn window_target(game: Identity) -> WindowCloseTarget {
+    WindowCloseTarget {
+        game,
+        window: 123,
+        window_class: b"generated-close\0generated-close\0".to_vec(),
+    }
+}
+fn window_attempt(target: WindowCloseTarget, until: Instant) -> WindowCloseAttempt {
+    WindowCloseAttempt {
+        target,
+        until,
+        quiesced: false,
+        started: false,
+        delivery: CloseDelivery::NotQueued,
+        error: None,
+        pending: Vec::new(),
+    }
+}
+
+#[test]
+fn window_close_target_is_exact_and_bounded_before_queueing() {
+    let game = Identity {
+        pid: 13,
+        uid: 1000,
+        start_ticks: "19".into(),
+        exe: "/fixture".into(),
+    };
+    let target = window_target(game.clone());
+    target.validate(&game).unwrap();
+    for class in [
+        vec![],
+        b"partial".to_vec(),
+        b"one\0\0".to_vec(),
+        vec![b'a'; 257],
+        b"one\0two\0three\0".to_vec(),
+    ] {
+        let mut invalid = target.clone();
+        invalid.window_class = class;
+        assert_eq!(
+            invalid.validate(&game).unwrap_err().code,
+            "invalid_window_binding"
+        );
+    }
+    let mut changed = target.clone();
+    changed.game.start_ticks = "20".into();
+    assert!(changed.validate(&game).is_err());
+    changed = target.clone();
+    changed.window = 0;
+    assert!(changed.validate(&game).is_err());
+    let mut value = json!(target);
+    value["display"] = json!(120);
+    assert!(serde_json::from_value::<WindowCloseTarget>(value).is_err());
+    let mut value = json!(target);
+    value["game"]["extra"] = json!(true);
+    assert!(serde_json::from_value::<WindowCloseTarget>(value).is_err());
+}
+
+#[test]
+fn window_close_waits_for_whole_input_pair_and_never_replays_unknown_delivery() {
+    let game = Identity {
+        pid: 13,
+        uid: 1000,
+        start_ticks: "19".into(),
+        exe: "/fixture".into(),
+    };
+    let mut attempt = window_attempt(
+        window_target(game),
+        Instant::now() + Duration::from_secs(20),
+    );
+    let gate = RwLock::new(true);
+    let pair = gate.read().unwrap();
+    advance_window_close(&mut attempt, &gate, |_, _| {
+        panic!("Must not dispatch during key pair")
+    });
+    assert!(!attempt.started);
+    assert!(*pair);
+    drop(pair);
+    let mut calls = 0;
+    advance_window_close(&mut attempt, &gate, |_, until| {
+        calls += 1;
+        assert!(until <= attempt_deadline_for_test());
+        assert!(
+            !*gate.try_read().unwrap(),
+            "Writer is released, stored false remains"
+        );
+        CloseDispatch {
+            delivery: CloseDelivery::Unknown,
+            error: Some(Error::new("fixture_wire_error", "Uncertain send")),
+        }
+    });
+    assert_eq!(calls, 1);
+    assert!(attempt.quiesced);
+    assert_eq!(attempt.delivery, CloseDelivery::Unknown);
+    attempt.until = Instant::now() - Duration::from_millis(1);
+    for _ in 0..3 {
+        advance_window_close(&mut attempt, &gate, |_, _| {
+            panic!("Unknown send must not replay")
+        });
+    }
+    assert_eq!(
+        attempt.error.as_ref().unwrap()["code"],
+        "fixture_wire_error"
+    );
+    assert!(attempt.reply_ready(&None));
+}
+fn attempt_deadline_for_test() -> Instant {
+    // Dispatch gets at most two seconds, not a per-property renewed budget.
+    Instant::now() + Duration::from_secs(2)
+}
+
+#[test]
+fn window_close_expiry_still_disables_input_after_pair_release_without_dispatch() {
+    let game = Identity {
+        pid: 13,
+        uid: 1000,
+        start_ticks: "19".into(),
+        exe: "/fixture".into(),
+    };
+    let mut attempt = window_attempt(
+        window_target(game),
+        Instant::now() - Duration::from_millis(1),
+    );
+    let gate = RwLock::new(true);
+    let pair = gate.read().unwrap();
+    advance_window_close(&mut attempt, &gate, |_, _| {
+        panic!("Expired close must not dispatch")
+    });
+    assert!(attempt.started);
+    assert!(!attempt.quiesced);
+    assert_eq!(attempt.delivery, CloseDelivery::NotQueued);
+    drop(pair);
+    advance_window_close(&mut attempt, &gate, |_, _| {
+        panic!("Expired close must not dispatch")
+    });
+    assert!(attempt.quiesced);
+    assert!(!*gate.read().unwrap());
+}
+
+#[test]
+fn window_close_adapter_panic_is_unknown_and_never_unwinds_owner() {
+    let game = Identity {
+        pid: 13,
+        uid: 1000,
+        start_ticks: "19".into(),
+        exe: "/fixture".into(),
+    };
+    let mut attempt = window_attempt(
+        window_target(game),
+        Instant::now() + Duration::from_secs(20),
+    );
+    let gate = RwLock::new(true);
+    advance_window_close(&mut attempt, &gate, |_, _| {
+        panic!("Generated adapter panic")
+    });
+    assert_eq!(attempt.delivery, CloseDelivery::Unknown);
+    assert!(!*gate.read().unwrap());
+    advance_window_close(&mut attempt, &gate, |_, _| {
+        panic!("Never replay after caught panic")
+    });
+}
+
+struct WindowFixtureProcess {
+    identity: Identity,
+    checks: Arc<std::sync::atomic::AtomicUsize>,
+}
+impl crate::memory::ReadMemory for WindowFixtureProcess {
+    fn read(&self, _: u64, _: usize) -> Result<Vec<u8>> {
+        Err(Error::new(
+            "fixture_only",
+            "No game-memory payload in close fixture",
+        ))
+    }
+}
+impl platform::Process for WindowFixtureProcess {
+    fn check(&self) -> Result<()> {
+        self.checks.fetch_add(1, Ordering::Relaxed);
+        verify_identity(&self.identity)
+    }
+    fn image_base(&self) -> u64 {
+        0
+    }
+    fn identity(&self) -> Option<&Identity> {
+        Some(&self.identity)
+    }
+}
+
+#[test]
+fn refused_window_close_preserves_child_read_and_endpoint_without_replay() {
+    if !ordinary() {
+        return;
+    }
+    let mut command = Command::new("/bin/sleep");
+    command
+        .arg("120")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    let child = OwnedChild::spawn(&mut command).unwrap();
+    let identity = child.identity.clone().unwrap();
+    let checks = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let mut fixture = Fixture::with_server(
+        child,
+        Server {
+            process: Some(Box::new(WindowFixtureProcess {
+                identity: identity.clone(),
+                checks: checks.clone(),
+            })),
+            unavailable: None,
+        },
+    );
+    let target = window_target(identity.clone());
+    // A real outstanding reader remains pinned. Window close must not wait for
+    // its observation or accidentally reap/signal the still-running child.
+    let reading = fixture.shared.reads.read().unwrap();
+    let pair = fixture.shared.input_gate.read().unwrap();
+    let path = fixture.directory.clone();
+    let requested_target = target.clone();
+    let request_thread = thread::spawn(move || {
+        request(
+            &path,
+            json!({"op":"close_window","target":requested_target}),
+        )
+    });
+    let until = Instant::now() + Duration::from_secs(3);
+    while fixture.shared.accepting_reads.load(Ordering::Acquire) {
+        assert!(
+            Instant::now() < until,
+            "WM request did not enter owner queue"
+        );
+        thread::sleep(Duration::from_millis(5));
+    }
+    assert_eq!(checks.load(Ordering::Relaxed), 0);
+    assert_eq!(capture_identity(identity.pid).unwrap(), identity);
+    drop(pair);
+    let response = request_thread.join().unwrap().unwrap();
+    assert_eq!(response["closed"], false);
+    assert_eq!(response["window_close"]["delivery"], "not_queued");
+    assert_eq!(
+        response["window_close"]["error"]["code"],
+        "window_close_unavailable"
+    );
+    assert!(!fixture.owner.as_ref().unwrap().is_finished());
+    assert!(fixture.shared.alive.load(Ordering::Acquire));
+    assert!(!*fixture.shared.input_gate.read().unwrap());
+    assert_eq!(capture_identity(identity.pid).unwrap(), identity);
+    let original_checks = checks.load(Ordering::Relaxed);
+    assert_eq!(
+        original_checks, 1,
+        "Fresh reader check preceded display capability refusal"
+    );
+    for _ in 0..2 {
+        let repeated = request(
+            &fixture.directory,
+            json!({"op":"close_window","target":target}),
+        )
+        .unwrap();
+        assert_eq!(repeated, response);
+    }
+    assert_eq!(checks.load(Ordering::Relaxed), original_checks);
+    let mut changed = target.clone();
+    changed.window += 1;
+    assert_eq!(
+        request(
+            &fixture.directory,
+            json!({"op":"close_window","target":changed})
+        )
+        .unwrap()["error"]["code"],
+        "window_close_target_changed"
+    );
+    assert_eq!(fixture.status()["owned_live"], true);
+    assert!(!fixture.directory.join("exited.json").exists());
+    drop(reading);
+    // Only this separate explicit legacy fixture close is allowed to signal.
+    fixture.close();
+    let exited: Value = json_read(&fixture.directory.join("exited.json")).unwrap();
+    assert_eq!(exited["exit_code"], Value::Null);
+    assert_eq!(exited["signal"], libc::SIGTERM);
 }

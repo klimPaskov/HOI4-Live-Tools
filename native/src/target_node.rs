@@ -19,12 +19,23 @@ impl Catalog {
         exact(r, db, base + 0x42110c8)?;
         let templates = array(r, db + 0x48, 8192)?;
         let own = array(r, status + 0x88, 8192)?;
-        if templates.is_empty() || templates[0] != 0 || own.len() != templates.len() - 1 {
+        if templates.is_empty() || own.len() != templates.len() - 1 {
             return Err(Error::new(
                 "research_unavailable",
                 "Initialized canonical catalog required",
             ));
         }
+        // This build's constructor appends a nonnull TNullObject singleton at
+        // reserved index zero. It is not a usable positive definition. Validate
+        // its exact identity/type without reading its template payload.
+        let reserved = r.u64(base + 0x439f560)?;
+        if reserved == 0 || templates[0] != reserved {
+            return Err(Error::new(
+                "research_unavailable",
+                "Reserved technology singleton join required",
+            ));
+        }
+        exact(r, reserved, base + 0x4201c78)?;
         let mut keys = vec![String::new()];
         let mut matches = Vec::new();
         for (index, &template) in templates.iter().enumerate().skip(1) {

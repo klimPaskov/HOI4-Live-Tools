@@ -10,6 +10,20 @@ use std::{
 };
 
 pub(crate) fn connect(path: &Path) -> Result<UnixStream> {
+    connect_inner(path, None)
+}
+
+pub(crate) fn connect_until(path: &Path, deadline: Instant) -> Result<UnixStream> {
+    connect_inner(path, Some(deadline))
+}
+
+fn connect_inner(path: &Path, absolute: Option<Instant>) -> Result<UnixStream> {
+    if absolute.is_some_and(|deadline| Instant::now() >= deadline) {
+        return Err(Error::new(
+            "transport_timeout",
+            "Local connection deadline expired",
+        ));
+    }
     // SAFETY: the complete address is zero initialized before filling the path.
     let mut address: libc::sockaddr_un = unsafe { std::mem::zeroed() };
     let bytes = path.as_os_str().as_bytes();
@@ -56,7 +70,7 @@ pub(crate) fn connect(path: &Path) -> Result<UnixStream> {
         if error.raw_os_error() != Some(libc::EINPROGRESS) {
             return Err(error.into());
         }
-        let deadline = Instant::now() + Duration::from_secs(2);
+        let deadline = absolute.unwrap_or_else(|| Instant::now() + Duration::from_secs(2));
         loop {
             let remaining = deadline.saturating_duration_since(Instant::now());
             if remaining.is_zero() {
@@ -86,6 +100,12 @@ pub(crate) fn connect(path: &Path) -> Result<UnixStream> {
         }
     }
     let socket = UnixStream::from(fd);
+    if absolute.is_some_and(|deadline| Instant::now() >= deadline) {
+        return Err(Error::new(
+            "transport_timeout",
+            "Local connection deadline expired",
+        ));
+    }
     if let Some(error) = socket.take_error()? {
         return Err(error.into());
     }

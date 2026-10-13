@@ -2,7 +2,11 @@ use crate::{
     error::{Error, Result},
     framing,
     game::{BUILD_ID, SHA256},
-    platform::{self, capture_identity, Identity, Session},
+    platform::{
+        self, capture_identity,
+        x11_close::{CloseDelivery, CloseDispatch, X11WindowClose},
+        Identity, Session,
+    },
     protocol::Server,
 };
 use fs2::FileExt;
@@ -263,7 +267,10 @@ fn request(directory: &Path, value: Value) -> Result<Value> {
     )?;
     // No reconnect/retry: a lost reply may follow an accepted future action.
     let reply = read_value(&stream, Duration::from_secs(55))?;
-    if value.get("op") != Some(&json!("close")) {
+    if !matches!(
+        value.get("op").and_then(Value::as_str),
+        Some("close" | "close_window")
+    ) {
         verify_identity(&endpoint.server)?;
     }
     Ok(reply)
@@ -300,6 +307,14 @@ pub fn close(directory: &Path) -> Result<()> {
             "shutdown_pending",
             "Owned game did not exit; supervisor remains alive",
         ));
+    }
+    Ok(())
+}
+pub fn close_window(directory: &Path, config: &Path) -> Result<()> {
+    let target: WindowCloseTarget = json_read(config)?;
+    let reply = request(directory, json!({"op":"close_window","target":target}))?;
+    if reply.get("closed") != Some(&json!(true)) {
+        return Err(Error::new("shutdown_pending", reply.to_string()));
     }
     Ok(())
 }
@@ -485,8 +500,208 @@ impl Drop for OwnedChild {
         }
     }
 }
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+struct WindowCloseTarget {
+    #[serde(with = "CloseGameIdentity")]
+    game: Identity,
+    window: u32,
+    window_class: Vec<u8>,
+}
+#[derive(Deserialize, Serialize)]
+#[serde(remote = "Identity", deny_unknown_fields)]
+struct CloseGameIdentity {
+    pid: i32,
+    start_ticks: String,
+    exe: String,
+    uid: u32,
+}
+impl WindowCloseTarget {
+    fn validate(&self, expected: &Identity) -> Result<()> {
+        if self.game != *expected
+            || self.window == 0
+            || !platform::x11_close::valid_class(&self.window_class)
+        {
+            return Err(Error::new(
+                "invalid_window_binding",
+                "Exact owned game/window/class required",
+            ));
+        }
+        Ok(())
+    }
+}
+enum CloseKind {
+    Terminate,
+    Window(WindowCloseTarget),
+}
 struct CloseRequest {
+    kind: CloseKind,
+    until: Instant,
     reply: SyncSender<Value>,
+}
+struct WindowCloseAttempt {
+    target: WindowCloseTarget,
+    until: Instant,
+    quiesced: bool,
+    started: bool,
+    delivery: CloseDelivery,
+    error: Option<Value>,
+    pending: Vec<SyncSender<Value>>,
+}
+impl WindowCloseAttempt {
+    fn response(&self, exit: &Option<Value>) -> Value {
+        json!({"closed":exit.is_some(),"exit":exit,"window_close":{
+            "target_window":self.target.window,"attempted":self.started,
+            "delivery":self.delivery,"error":self.error,
+            "deadline_expired":Instant::now()>=self.until,
+            "timestamp_profile":"sdl_current_time","no_signal_fallback":true
+        }})
+    }
+    fn complete(&mut self, dispatch: CloseDispatch) {
+        self.started = true;
+        self.delivery = dispatch.delivery;
+        self.error = dispatch.error.map(|error| json!(error));
+    }
+    fn reply_ready(&self, exit: &Option<Value>) -> bool {
+        exit.is_some() || self.error.is_some() || Instant::now() >= self.until
+    }
+    fn replies(&mut self, exit: &Option<Value>) {
+        let reply = self.response(exit);
+        for sender in self.pending.drain(..) {
+            let _ = sender.send(reply.clone());
+        }
+    }
+}
+
+/// Quiescence, authentication and delivery share this attempt's one budget.
+/// Never unwind the owned child or renew/replay an expired attempt on a client
+/// reconnect. The gate is released before X11; its stored false value rejects
+/// all later key pairs, without acquiring clock state or controller leases.
+fn advance_window_close(
+    attempt: &mut WindowCloseAttempt,
+    input_gate: &RwLock<bool>,
+    dispatch: impl FnOnce(&WindowCloseTarget, Instant) -> CloseDispatch,
+) {
+    if !attempt.quiesced {
+        match input_gate.try_write() {
+            Ok(mut gate) => {
+                *gate = false;
+                attempt.quiesced = true;
+            }
+            Err(std::sync::TryLockError::WouldBlock) => {
+                if !attempt.started && Instant::now() >= attempt.until {
+                    attempt.complete(CloseDispatch::refused(Error::new(
+                        "window_close_timeout",
+                        "Close expired during quiescence; owned child preserved",
+                    )));
+                }
+                return;
+            }
+            Err(std::sync::TryLockError::Poisoned(_)) => {
+                if !attempt.started {
+                    attempt.complete(CloseDispatch::refused(Error::new(
+                        "input_unavailable",
+                        "Input shutdown gate poisoned; owned child preserved",
+                    )));
+                }
+                return;
+            }
+        }
+    }
+    // Even an expired/refused attempt keeps trying to disable later input after
+    // an already held key-pair permit is released, without retrying delivery.
+    if attempt.started {
+        return;
+    }
+    if Instant::now() >= attempt.until {
+        attempt.complete(CloseDispatch::refused(Error::new(
+            "window_close_timeout",
+            "Close expired before delivery; owned child preserved",
+        )));
+        return;
+    }
+    // A panic from the new display path must not leave this loop and invoke
+    // OwnedChild's legacy SIGTERM Drop policy. Any uncertain dispatch stays
+    // quarantined in the retained attempt instead of becoming a second send.
+    attempt.started = true;
+    let until = attempt.until.min(Instant::now() + Duration::from_secs(2));
+    let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        dispatch(&attempt.target, until)
+    }))
+    .unwrap_or_else(|_| CloseDispatch {
+        delivery: CloseDelivery::Unknown,
+        error: Some(Error::new(
+            "window_close_unavailable",
+            "Display close panicked; delivery unknown and owned child preserved",
+        )),
+    });
+    attempt.complete(outcome);
+}
+
+fn dispatch_window_close(
+    child: &OwnedChild,
+    shared: &Shared,
+    target: &WindowCloseTarget,
+    until: Instant,
+) -> CloseDispatch {
+    let opened = (|| -> Result<X11WindowClose> {
+        if Instant::now() >= until {
+            return Err(Error::new(
+                "window_close_timeout",
+                "Close wire budget expired",
+            ));
+        }
+        target.validate(&shared.endpoint.session.game)?;
+        if child.identity.as_ref() != Some(&target.game)
+            || child.child.id() as i32 != target.game.pid
+            || child.exited_without_reaping()?
+        {
+            return Err(Error::new(
+                "ownership_changed",
+                "Pinned owned child is unavailable",
+            ));
+        }
+        verify_identity(&target.game)?;
+        let (_, parent, ticks) = platform::parse_stat(&fs::read_to_string(format!(
+            "/proc/{}/stat",
+            target.game.pid
+        ))?)?;
+        if parent != std::process::id() as i32 || ticks != target.game.start_ticks {
+            return Err(Error::new(
+                "ownership_changed",
+                "Owned direct-child epoch changed",
+            ));
+        }
+        let process = shared.server.process.as_ref().ok_or_else(|| {
+            Error::new("window_close_unavailable", "Owned process reader required")
+        })?;
+        if process.identity() != Some(&target.game) {
+            return Err(Error::new(
+                "ownership_changed",
+                "Close reader differs from owned child",
+            ));
+        }
+        process.check()?;
+        let display = shared.display.as_ref().ok_or_else(|| {
+            Error::new(
+                "window_close_unavailable",
+                "Configured owned display required",
+            )
+        })?;
+        X11WindowClose::open_until(
+            process.as_ref(),
+            display.number,
+            &display.server,
+            &display.xauthority,
+            target.window,
+            &target.window_class,
+            until,
+        )
+    })();
+    match opened {
+        Ok(mut closer) => closer.request_once(shared.server.process.as_ref().unwrap().as_ref()),
+        Err(error) => CloseDispatch::refused(error),
+    }
 }
 struct Shared {
     server: Server,
@@ -568,11 +783,25 @@ fn service_client(stream: UnixStream, shared: Arc<Shared>) {
                 *commands = Some(Arc::new(service));
                 Ok(json!({"bound":true,"scope":"ordinary clock keys only"}))
             }
-            Some("close") => {
+            Some("close") | Some("close_window") => {
+                let kind = if request.get("op") == Some(&json!("close_window")) {
+                    let target: WindowCloseTarget =
+                        serde_json::from_value(request["target"].clone()).map_err(|error| {
+                            Error::new("invalid_window_binding", error.to_string())
+                        })?;
+                    target.validate(&shared.endpoint.session.game)?;
+                    CloseKind::Window(target)
+                } else {
+                    CloseKind::Terminate
+                };
                 let (sender, receiver) = mpsc::sync_channel(1);
                 shared
                     .closing
-                    .try_send(CloseRequest { reply: sender })
+                    .try_send(CloseRequest {
+                        kind,
+                        until: Instant::now() + Duration::from_secs(20),
+                        reply: sender,
+                    })
                     .map_err(|_| Error::new("endpoint_busy", "Shutdown request queue is full"))?;
                 receiver.recv_timeout(Duration::from_secs(22)).map_err(|_| {
                     Error::new("shutdown_pending", "Owner is still preserving the game")
@@ -676,6 +905,7 @@ fn run_owner(
     let mut pending: Vec<SyncSender<Value>> = Vec::new();
     let mut deadline = None;
     let mut exit_evidence = None;
+    let mut window_attempt: Option<WindowCloseAttempt> = None;
 
     loop {
         let mut index = 0;
@@ -689,7 +919,34 @@ fn run_owner(
             }
         }
         while let Ok(request) = closing.try_recv() {
-            pending.push(request.reply);
+            match request.kind {
+                CloseKind::Terminate => pending.push(request.reply),
+                CloseKind::Window(target) => match window_attempt.as_mut() {
+                    Some(attempt) if attempt.target != target => {
+                        let _ = request.reply.send(json!({"error":Error::new(
+                            "window_close_target_changed", "Never replace the retained close target"
+                        )}));
+                    }
+                    Some(attempt) => attempt.pending.push(request.reply),
+                    None => {
+                        shared.accepting_reads.store(false, Ordering::Release);
+                        window_attempt = Some(WindowCloseAttempt {
+                            target,
+                            until: request.until,
+                            quiesced: false,
+                            started: false,
+                            delivery: CloseDelivery::NotQueued,
+                            error: None,
+                            pending: vec![request.reply],
+                        });
+                    }
+                },
+            }
+        }
+        if let Some(attempt) = window_attempt.as_mut() {
+            advance_window_close(attempt, &shared.input_gate, |target, until| {
+                dispatch_window_close(&child, &shared, target, until)
+            });
         }
         if (!pending.is_empty() || SIGNAL_CLOSE.swap(false, Ordering::Relaxed))
             && deadline.is_none()
@@ -743,7 +1000,12 @@ fn run_owner(
                 Err(error) => eprintln!("Owned child status failed: {error}"),
             }
         }
-        if child.exited && deadline.is_some() {
+        if let Some(attempt) = window_attempt.as_mut() {
+            if attempt.reply_ready(&exit_evidence) {
+                attempt.replies(&exit_evidence);
+            }
+        }
+        if child.exited && (deadline.is_some() || window_attempt.is_some()) {
             for reply in pending.drain(..) {
                 let _ = reply.send(json!({"closed":true,"exit":exit_evidence}));
             }

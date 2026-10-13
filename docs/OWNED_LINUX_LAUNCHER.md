@@ -87,6 +87,39 @@ clean game exit. The same child reaper records `exit_code`, `signal`,
 response. A normal exit code 6 and termination by signal 6 are distinct outcomes.
 This evidence does not change the shutdown policy or resolve a game failure.
 
+## Explicit window-close preview
+
+An alternative owned lifecycle request sends one ICCCM `WM_DELETE_WINDOW`
+message to a supplied, verified game window:
+
+```sh
+native/target/release/hoi4-live-native --close-window /absolute/private/run /absolute/private/window.json
+```
+
+The private regular configuration is bounded to 64 KiB and contains only
+`game` (the endpoint's exact `pid`, string `start_ticks`, `exe` and `uid`),
+nonzero `window`, and complete `window_class` bytes, including both NUL
+terminators. The owner uses its configured authenticated display. It verifies
+process ownership, display peer, window PID/class, viewable InputOutput state,
+root and advertised WM protocol before sending. It never activates the window,
+moves the pointer or uses XTEST. Client properties are checked declarations,
+not cryptographic window ownership or protection from all same-user races.
+
+The immutable attempt has a 20-second owner deadline and a wire deadline of
+at most two seconds after preparation. It drains active reads, disables input
+and retains the attempt across client disconnection. Delivery is reported as
+`not_queued`, `unknown` or `server_confirmed`; a server acknowledgement does
+not prove application consumption or exit. Uncertain delivery is never replayed,
+and changing the retained target is refused. There is no automatic signal
+fallback. An ignored request or timeout preserves the child, owner and endpoint.
+The separate explicit `--close` signal policy above remains available.
+
+The sole child reaper supplies actual exit metadata. Command success establishes
+child exit, not exit code 0. Isolated Xvfb tests with XTEST disabled verified
+normal exit through the complete owner/reaper path and uncertain delivery after
+severed or withheld server replies, without a second request. These tests use
+generated clients; installed-game window-close acceptance remains pending.
+
 ## Ordinary clock input
 
 After recording ordinary singleplayer menu setup, bind one already focused game

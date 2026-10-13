@@ -18,7 +18,7 @@ use std::{
 
 /// Witness reads always reach the process. Request-local shared metadata/proofs
 /// may avoid duplicate reads, but their original bytes must pass finish below.
-struct Witnesses<'a> {
+pub(crate) struct Witnesses<'a> {
     process: &'a dyn Process,
     reads: RefCell<BTreeMap<(u64, usize), Vec<u8>>>,
 }
@@ -37,7 +37,13 @@ impl ReadMemory for Witnesses<'_> {
     }
 }
 impl Witnesses<'_> {
-    fn finish(&self) -> Result<(usize, usize)> {
+    pub(crate) fn new(process: &dyn Process) -> Witnesses<'_> {
+        Witnesses {
+            process,
+            reads: RefCell::new(BTreeMap::new()),
+        }
+    }
+    pub(crate) fn finish(&self) -> Result<(usize, usize)> {
         let reads = self.reads.borrow();
         let requests: Vec<_> = reads.keys().copied().collect();
         let result = self.process.read_many(&requests)?;

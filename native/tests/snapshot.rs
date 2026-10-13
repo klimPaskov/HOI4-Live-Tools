@@ -155,6 +155,11 @@ impl Fixture {
         self.word(0x36000, base + 0x42110c8);
         self.array(0x36048, 0x62000, 4);
         self.region(0x62000, 32);
+        // Actual constructor: slot zero is a typed nonnull reserved singleton,
+        // not a zero pointer or positive technology definition.
+        self.word(0x62000, 0x62500);
+        self.word(base + 0x439f560, 0x62500);
+        self.word(0x62500, base + 0x4201c78);
         // Canonical indices are independent of copied template+0x34 values.
         for (i, name) in ["tools1", "tools2", "construction1"].iter().enumerate() {
             let ptr = 0x63000 + i as u64 * 0x100;
@@ -847,6 +852,55 @@ fn input_geometry_is_diagnostic_and_uses_finalized_ratios() {
     assert_eq!(value["logical_pointer"], serde_json::json!([640.0, 20.0]));
     assert_eq!(value["input_mapping_verified"], false);
     assert_eq!(fixture.checks.get(), 2);
+}
+
+#[test]
+fn input_source_metadata_never_implies_receiver_payload_layout() {
+    let mut fixture = Fixture::new();
+    fixture.geometry();
+    let base = 0x10000;
+    fixture.word(0x32500, 0xe0000);
+    fixture.word(0xe0000, base + 0x435cee0);
+    fixture.word(base + 0x435cee0 - 16, 0);
+    fixture.word(base + 0x435cee0 - 8, base + 0x435c100);
+    fixture.word(base + 0x435c108, base + 0x350c000);
+    fixture.region(base + 0x350c000, 128);
+    fixture.put(base + 0x350c000, b"9CPdxMouse");
+    let value = gui::input_geometry(&fixture).unwrap();
+    assert_eq!(value["input_source"]["type_encoding"], "9CPdxMouse");
+    assert_eq!(value["input_source"]["field_layout_verified"], false);
+    assert_eq!(value["input_source"]["client_origin_verified"], false);
+    fixture.assert_not_read(&[0xe0008, 0xe00c8, 0xe014a]);
+    fixture.word(base + 0x435cee0 - 16, 8); // secondary primary is not accepted
+    let value = gui::input_geometry(&fixture).unwrap();
+    assert_eq!(value["input_source"]["type_metadata_available"], false);
+    assert_eq!(
+        value["input_source"]["type_encoding"],
+        serde_json::Value::Null
+    );
+    assert_eq!(value["input_mapping_verified"], false);
+}
+
+#[test]
+fn input_source_identity_and_metadata_are_final_snapshot_witnesses() {
+    for address in [0x32500, 0xe0000, 0x10000 + 0x350c000] {
+        let mut fixture = Fixture::new();
+        fixture.geometry();
+        let base = 0x10000;
+        fixture.word(0x32500, 0xe0000);
+        fixture.word(0xe0000, base + 0x435cee0);
+        fixture.word(base + 0x435cee0 - 16, 0);
+        fixture.word(base + 0x435cee0 - 8, base + 0x435c100);
+        fixture.word(base + 0x435c108, base + 0x350c000);
+        fixture.region(base + 0x350c000, 128);
+        fixture.put(base + 0x350c000, b"9CPdxMouse");
+        let mut bytes: Vec<_> = (0..if address == base + 0x350c000 { 128 } else { 8 })
+            .map(|i| fixture.data[&(address + i)])
+            .collect();
+        bytes[0] ^= 1;
+        fixture.fault = Some((address, 1, bytes));
+        assert_eq!(gui::input_geometry(&fixture).unwrap_err().code, "torn_read");
+    }
 }
 
 #[test]
@@ -2440,6 +2494,44 @@ fn target_catalog_sentinel_and_unrelated_definition_must_be_valid() {
         research_ui::node_detail(&f, "tools1").unwrap_err().code,
         "invalid_research_join"
     );
+}
+
+#[test]
+fn target_reserved_singleton_is_typed_and_never_reads_template_payload() {
+    let mut f = Fixture::new();
+    f.node_render_detail();
+    assert!(research_ui::node_detail(&f, "tools1").is_ok());
+    f.assert_not_read(&[0x62508, 0x62530, 0x62538]);
+    for (address, replacement, code) in [
+        (0x62000, 0, "research_unavailable"),
+        (0x10000 + 0x439f560, 0, "research_unavailable"),
+        (0x10000 + 0x439f560, 0x63000, "research_unavailable"),
+        (0x62500, 0x10000 + 0x4211038, "invalid_gui_type"),
+    ] {
+        let mut f = Fixture::new();
+        f.node_render_detail();
+        f.word(address, replacement);
+        assert_eq!(
+            research_ui::node_detail(&f, "tools1").unwrap_err().code,
+            code
+        );
+        f.assert_not_read(&[0x62508, 0x62530, 0x62538, 0xd3010, 0xf0138]);
+    }
+}
+
+#[test]
+fn target_reserved_global_pointer_and_primary_are_final_witnesses() {
+    for address in [0x10000 + 0x439f560, 0x62500] {
+        let mut f = Fixture::new();
+        f.node_render_detail();
+        let mut bytes: Vec<_> = (0..8).map(|i| f.data[&(address + i)]).collect();
+        bytes[0] ^= 1;
+        f.fault = Some((address, 1, bytes));
+        assert_eq!(
+            research_ui::node_detail(&f, "tools1").unwrap_err().code,
+            "torn_read"
+        );
+    }
 }
 #[test]
 fn target_catalog_and_complete_record_mutations_are_witnessed() {

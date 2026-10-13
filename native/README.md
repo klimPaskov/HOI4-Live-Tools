@@ -210,6 +210,18 @@ extension await a fresh installed-game check. The campaign remained at its
 initial date with no assignments, exited with code 0, and recording integrity
 passed. Client geometry, routing and strategic input remain unavailable.
 
+The first target-scoped installed-game query refused an incorrect NULL sentinel
+assumption before reading GUI payload. The corrected reader checks the actual
+nonnull typed singleton against its fresh global and primary type, without
+reading reserved payload. Full-node/catalog checks passed that run; the scoped
+hierarchy extension still needs a fresh installed-game check. Its owned close
+recorded normal exit code 6, which remains an incident.
+
+`hoi4_input_geometry` additionally reports `input_source.type_encoding` when
+bounded primary RTTI is available on the own idler receiver. This is metadata
+only: receiver layout, virtual getter and client origin stay unverified. Full
+snapshot witnesses cover all its bytes.
+
 The focus query accepts an ASCII key prefix `filter`, `offset` 0–4096 and `limit`
 1–100. It validates every own key before pagination, exact own-tree ownership and
 global database pointer membership. Global duplicates/nulls grant no ownership.
@@ -274,6 +286,12 @@ digests, army and naval-invasion control, then independently validated Windows
 and macOS adapters. FAIR remains the campaign default; META strategy and mod-QA
 abilities must retain distinct policy boundaries. No clean two-year run or full
 campaign has passed acceptance.
+
+The launcher also provides an explicit one-attempt `--close-window` lifecycle
+request. See [its target, deadlines and delivery semantics](../docs/OWNED_LINUX_LAUNCHER.md#explicit-window-close-preview).
+It sends no keys, does not focus or move the cursor, retains uncertain delivery
+without replay and has no automatic signal fallback. Isolated no-XTEST fixtures
+passed; actual game window-close acceptance remains pending.
 
 ## Provenance
 

@@ -12,7 +12,8 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 pub fn input_geometry(process: &dyn Process) -> Result<Value> {
     let start = Instant::now();
     process.begin_snapshot()?;
-    let r = Reader::new(process);
+    let observed = crate::research_ui::Witnesses::new(process);
+    let r = Reader::new(&observed);
     let base = process.image_base();
     let gs = r.u64(base + 0x44086a8)?;
     let idler = r.u64(base + 0x44085f8)?;
@@ -43,6 +44,17 @@ pub fn input_geometry(process: &dyn Process) -> Result<Value> {
             "GUI graphics owner link changed",
         ));
     }
+    // The exact idler's input binding setter stores its receiver at +500;
+    // ordinary GUI update passes that receiver to its virtual +c8. Metadata
+    // identifies the concrete implementation only; no receiver payload/getter
+    // layout or client-coordinate origin is inferred from the type name.
+    let input_source = r.u64(idler + 0x500)?;
+    let (source_type, metadata_available) =
+        match crate::research_ui::nullable_type(&r, base, input_source) {
+            Ok(value) => (value, input_source != 0),
+            Err(error) if error.code == "invalid_gui_type" => (Value::Null, false),
+            Err(error) => return Err(error),
+        };
     let pointer = r.read(graphics + 0x40, 8)?;
     let dimensions = r.read(graphics + 0x178, 16)?;
     let scales = r.read(graphics + 0x1d0, 16)?;
@@ -96,19 +108,22 @@ pub fn input_geometry(process: &dyn Process) -> Result<Value> {
     {
         return Err(Error::new("torn_read", "GUI input geometry changed"));
     }
+    let (end_calls, end_bytes) = observed.finish()?;
     process.check()?;
     Ok(json!({
         "source":"native own GUI diagnostics","build_id":game::BUILD_ID,
         "physical_dimensions":&dims[..2],"logical_dimensions":&dims[2..],
         "logical_per_physical":&ratios[..2],"physical_per_logical":&ratios[2..],
         "logical_pointer":point,
+        "input_source":{"materialized":input_source!=0,"type_encoding":source_type,"type_metadata_available":metadata_available,"field_layout_verified":false,"client_origin_verified":false},
         "input_mapping_verified":false,
         "unverified":["X11 client origin","HiDPI conversion","per-control scalar/pivot","effective hit routing"],
         "observation_paused_game":false,
         "freshness":{
             "observed_unix_ms":SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),
             "elapsed_ms":start.elapsed().as_secs_f64()*1000.0,
-            "read_calls":r.calls.get(),"read_bytes":r.bytes.get()
+            "read_calls_kind":"logical_read_requests",
+            "read_calls":r.calls.get()+end_calls as u64,"read_bytes":r.bytes.get()+end_bytes
         }
     }))
 }

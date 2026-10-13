@@ -766,6 +766,54 @@ removed; poisoned unrelated-GUI read spies and all ownership, ambiguity and
 mutation cases remain. Failure logs are preserved. Installed-game validation
 and target-specific latency are pending in a fresh immutable run.
 
+## Target-scoped installed-game refusal and correction — 13 October 2026
+
+A fresh recorded game running source `0618678` verified the unchanged full-node
+model: 411 keys and 423 structural associations, all pages and filters. Five
+RPC samples were 326.2, 333.3, 336.8, 449.0 and 505.5 ms (median 336.8 ms).
+Logical requests/bytes remained 26,686 / 299,776. The first target-scoped
+`support_weapons` query refused in 20.1 ms before reading target payload:
+its catalog guard incorrectly required index zero to be NULL. The independent
+public catalog query passed with 552 usable definitions in 59.2 ms RPC.
+No target-scoped hierarchy result passed this run, and the failure was retained.
+
+Independent current-build constructor/getter analysis established that index
+zero holds a nonnull typed null-object singleton. The corrected reader requires
+that entry to equal the fresh singleton global and have its exact primary type;
+it reads no reserved-object payload. Positive canonical IDs, complete current
+record ownership and final byte witnesses remain mandatory. Null, mismatched,
+aliased and mutated sentinel fixtures refuse. A fresh installed-game check is
+still required.
+
+Final Germany state stayed at 1936.01.01.12, Normal/historical, paused at speed 0,
+with no mods, focus or research assignments. Closed-tree queries refused in
+20.8/23.0 ms. All 14 threads had tracer 0 and Yama remained 1. The recording
+passed ffprobe: one 512×288 H.264 segment, 566 seconds, 6,928,231 bytes.
+Owned signal close completed, but the sole reaper recorded **normal exit code
+6**, no signal and no core dump. This is not a clean exit. The rendering log
+reported a failed read with EINTR; its causal relation to exit code 6 remains
+unproved. No Luna player was assigned to this diagnostic run.
+
+## Singleton, input metadata and window-close fixture gate
+
+The corrected source also adds metadata-only identification of the own idler's
+input receiver. It infers no receiver payload, virtual getter layout or client
+origin; full byte witnesses cover the diagnostic. The explicit owned window-close
+preview has fixed deadlines, retained uncertain delivery and no automatic signal
+fallback or replay. Four isolated no-XTEST runtime cases passed, including the
+complete owner/reaper success path and severed/withheld wire replies.
+
+Portable and Rust 1.86 suites each passed 164 tests. The optimized Linux standard
+suite passed 212 reported checks (211 substantive and one inert helper), with
+its game display identity and Yama 1 unchanged. Existing read-only kernel
+primitives were unchanged and their preceding 19-check gate was not repeated.
+Clippy, formatting, Linux/MSRV compilation and Python protocol smoke passed.
+A full Python run exposed a real background-clock deque mutation race. Taking
+a shallow history snapshot before filtering fixed it; a deterministic fixture
+verifies that concurrently appended records remain available on the next poll.
+The final Python suite passed 953 tests with 37 skips; the failed run is retained.
+These are source/fixture results, not new installed-game or campaign acceptance.
+
 ## Attribution
 
 The findings above refer to upstream `calling/{mem,process/linux,api,game,

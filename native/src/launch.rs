@@ -48,6 +48,21 @@ pub fn close(directory: &Path) -> Result<()> {
         ))
     }
 }
+/// An explicit one-attempt owned WM_DELETE_WINDOW request; no signal fallback.
+pub fn close_window(directory: &Path, config: &Path) -> Result<()> {
+    #[cfg(target_os = "linux")]
+    {
+        linux::close_window(directory, config)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = (directory, config);
+        Err(Error::new(
+            "platform_unavailable",
+            "Owned window shutdown is not verified on this platform",
+        ))
+    }
+}
 pub fn bind_input(directory: &Path, config: &Path) -> Result<()> {
     #[cfg(target_os = "linux")]
     {

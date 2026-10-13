@@ -40,6 +40,19 @@ LOOK_EVERY = 1.5
 NO_PROGRESS_S = 120
 
 
+def _records_since(store, tag, last_n):
+    """Read a stable queue snapshot while the telemetry producer keeps appending."""
+    history = store.history.get(tag)
+    if history is None:
+        return []
+    # deque.copy() copies the queue before Python record predicates run. An
+    # append during those predicates belongs to the next poll, not this iterator.
+    snapshot = history.copy()
+    if not snapshot or snapshot[-1].get("n", -1) <= last_n:
+        return []
+    return [record for record in snapshot if record.get("n", -1) > last_n]
+
+
 def focus_completion_event(previous, current):
     """Return a completion transition only inside one observed own-tree timeline."""
     if not isinstance(previous, dict) or not isinstance(current, dict):
@@ -225,8 +238,7 @@ class AdvanceRun:
                 last_heartbeat = time.monotonic()
             store = s.telemetry
             tag = tag or store.player()
-            hist = store.history.get(tag) or ()
-            new = [r for r in hist if r.get("n", -1) > last_n] if hist and hist[-1].get("n", -1) > last_n else []
+            new = _records_since(store, tag, last_n)
             reasons = []
             wanted = set(stop_on) | self._standing_codes()
             for rec in new:

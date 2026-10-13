@@ -35,16 +35,16 @@ impl ControlKey {
         }
     }
 }
-struct BoundedStream {
+pub(super) struct BoundedStream {
     stream: DefaultStream,
     deadline: Mutex<Instant>,
     server: Identity,
 }
 impl BoundedStream {
-    fn verify_peer(&self) -> Result<()> {
+    pub(super) fn verify_peer(&self) -> Result<()> {
         verify_display_peer(&self.stream, &self.server)
     }
-    fn remaining(&self) -> io::Result<Duration> {
+    pub(super) fn remaining(&self) -> io::Result<Duration> {
         let remaining = self
             .deadline
             .lock()
@@ -93,6 +93,8 @@ impl Stream for BoundedStream {
         // authorization setup, queued requests and partial-write retries.
         self.verify_peer()
             .map_err(|error| io::Error::new(io::ErrorKind::PermissionDenied, error))?;
+        // A fresh /proc peer check may itself consume the remaining budget.
+        self.remaining()?;
         self.stream.write(buf, fds)
     }
 }
@@ -148,6 +150,68 @@ fn verify_display_peer(socket: &impl AsRawFd, expected: &Identity) -> Result<()>
 fn xerror(e: impl std::fmt::Display) -> Error {
     Error::new("input_unavailable", e.to_string())
 }
+/// Shared private-display authentication. This does not check keyboard focus,
+/// load XTEST, bind a game window or reset the caller's absolute deadline.
+pub(super) fn connect_owned(
+    display: u16,
+    display_server: &Identity,
+    authority: &Path,
+    until: Instant,
+) -> Result<(RustConnection<BoundedStream>, u32)> {
+    if Instant::now() >= until {
+        return Err(Error::new("transport_timeout", "X11 deadline expired"));
+    }
+    verify_display_server(display_server)?;
+    let socket =
+        super::connect_socket_until(Path::new(&format!("/tmp/.X11-unix/X{display}")), until)?;
+    verify_display_peer(&socket, display_server)?;
+    let (stream, (family, address)) = DefaultStream::from_unix_stream(socket).map_err(xerror)?;
+    if family != x11rb_protocol::xauth::Family::LOCAL {
+        return Err(Error::new(
+            "input_unavailable",
+            "Local X11 transport required",
+        ));
+    }
+    let cookie = xauthority::load_cookie(authority, &address, display)?;
+    let stream = BoundedStream {
+        stream,
+        deadline: Mutex::new(until),
+        server: display_server.clone(),
+    };
+    stream.remaining().map_err(xerror)?;
+    let connection = RustConnection::connect_to_stream_with_auth_info(
+        stream,
+        0,
+        xauthority::MIT_COOKIE_NAME.to_vec(),
+        cookie.to_vec(),
+    )
+    .map_err(xerror)?;
+    let root = connection
+        .setup()
+        .roots
+        .first()
+        .ok_or_else(|| Error::new("input_unavailable", "X11 screen unavailable"))?
+        .root;
+    Ok((connection, root))
+}
+/// Reuse the strict loader only in the private generated forwarding-display
+/// fixture. This helper is absent from production; it does not connect a display
+/// or weaken the peer/auth/process checks on either real transport.
+#[cfg(test)]
+pub(crate) fn fixture_local_cookie(authority: &Path, display: u16) -> Result<(Vec<u8>, [u8; 16])> {
+    let (socket, _peer) = std::os::unix::net::UnixStream::pair()?;
+    let (_stream, (family, hostname)) = DefaultStream::from_unix_stream(socket).map_err(xerror)?;
+    if family != x11rb_protocol::xauth::Family::LOCAL {
+        return Err(Error::new(
+            "fixture_failed",
+            "Local fixture address required",
+        ));
+    }
+    Ok((
+        hostname.clone(),
+        xauthority::load_cookie(authority, &hostname, display)?,
+    ))
+}
 pub struct X11Controls {
     connection: RustConnection<BoundedStream>,
     root: u32,
@@ -184,31 +248,12 @@ impl X11Controls {
                 "Verified owned window class required",
             ));
         }
-        verify_display_server(display_server)?;
-        let socket = super::connect_socket(Path::new(&format!("/tmp/.X11-unix/X{display}")))?;
-        verify_display_peer(&socket, display_server)?;
-        let (stream, (family, address)) =
-            DefaultStream::from_unix_stream(socket).map_err(xerror)?;
-        if family != x11rb_protocol::xauth::Family::LOCAL {
-            return Err(Error::new(
-                "input_unavailable",
-                "Local X11 transport required",
-            ));
-        }
-        let cookie = xauthority::load_cookie(authority, &address, display)?;
-        let stream = BoundedStream {
-            stream,
-            deadline: Mutex::new(Instant::now() + Duration::from_secs(2)),
-            server: display_server.clone(),
-        };
-        let connection = RustConnection::connect_to_stream_with_auth_info(
-            stream,
-            0,
-            xauthority::MIT_COOKIE_NAME.to_vec(),
-            cookie.to_vec(),
-        )
-        .map_err(xerror)?;
-        let root = connection.setup().roots[0].root;
+        let (connection, root) = connect_owned(
+            display,
+            display_server,
+            authority,
+            Instant::now() + Duration::from_secs(2),
+        )?;
         connection
             .xtest_get_version(2, 2)
             .map_err(xerror)?

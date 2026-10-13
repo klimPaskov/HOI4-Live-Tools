@@ -102,3 +102,17 @@ protection/exec without modifying a game or changing kernel policy.
 Distinct Unix shutdown metadata and generated-child exit fixtures are new
 project code. They report the sole reaper's actual kernel wait result and do not
 change signal delivery, shutdown policy or diagnose the game rendering error.
+
+The reserved technology index-zero contract was independently recovered from
+current-build constructor, singleton writer and getter disassembly after an
+actual target-scoped refusal. Its exact typed singleton/global checks are new
+project code; no null-object payload or game file is redistributed. Own idler
+input-receiver primary RTTI is a metadata-only diagnostic with complete final
+witnesses, not a receiver layout or client-origin proof.
+
+The owned `WM_DELETE_WINDOW` transport and retained lifecycle attempt are new
+project code implementing ICCCM with the existing x11rb dependency. They do not
+copy SDL source, invoke an engine command or infer application consumption from
+a server reply. Generated-client/reaper and actual severed/withheld Xvfb wire
+fixtures are distinct from installed-game acceptance. Existing explicit signal
+shutdown remains a separate policy.

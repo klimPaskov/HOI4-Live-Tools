@@ -143,3 +143,15 @@ diagnostic pass 201 standard Linux fixtures, 160 portable/MSRV Rust tests and
 target scope excludes unrelated GUI payload and says so explicitly. Fresh live
 validation remains pending, and these diagnostics authorize no input. Finish
 verified strategic dispatch, then resume Luna acceptance.
+
+The fresh target-scoped run refused its first exact-ID query because the new
+reader incorrectly required a NULL catalog sentinel. Full-node reads and the
+552-definition public catalog passed; no scoped hierarchy result passed. The
+recording finalized, but actual normal exit code 6 remains an incident. A
+constructor-verified typed-singleton correction, metadata-only input receiver
+identification and explicit non-replaying window-close path now pass 164 portable
+and MSRV tests, 212 standard Linux checks (211 substantive), four isolated
+no-XTEST close cases, and 953 Python tests (37 skipped). Installed-game checks
+for these additions remain pending. See the detailed failure and fixture gates
+before a fresh immutable run. No strategic dispatch or campaign acceptance is
+established by these tests.
