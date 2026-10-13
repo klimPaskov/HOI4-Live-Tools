@@ -19,18 +19,28 @@ pub fn input_geometry(process: &dyn Process) -> Result<Value> {
     if r.u64(gs)? != base + 0x42c7598 || r.u64(idler)? != base + 0x42c9a88 {
         return Err(Error::new("campaign_unavailable", "In-game GUI required"));
     }
-    // The owner supplies this exact CGui to the ordinary technology view.
-    // CGui constructor stores CGraphics at +b8; the game-derived constructor
+    // CGameGui's constructor calls CGui at offset zero, then installs its own
+    // primary vptr. Requiring the transient base vptr refuses the actual game.
+    // CGui stores CGraphics at +b8; the game-derived graphics constructor
     // installs CGameGraphics, also published by the graphics global setter.
     let gui = r.u64(idler + 0x4f8)?;
     let graphics = r.u64(base + 0x4577890)?;
-    if r.u64(gui)? != base + 0x434c068
-        || r.u64(graphics)? != base + 0x42417f8
-        || r.u64(gui + 0xb8)? != graphics
-    {
+    if r.u64(gui)? != base + 0x42736f8 {
         return Err(Error::new(
             "gui_unavailable",
-            "Verified game GUI/graphics required",
+            "Exact primary CGameGui required",
+        ));
+    }
+    if r.u64(graphics)? != base + 0x42417f8 {
+        return Err(Error::new(
+            "gui_unavailable",
+            "Exact primary CGameGraphics required",
+        ));
+    }
+    if r.u64(gui + 0xb8)? != graphics {
+        return Err(Error::new(
+            "gui_unavailable",
+            "GUI graphics owner link changed",
         ));
     }
     let pointer = r.read(graphics + 0x40, 8)?;
@@ -77,7 +87,7 @@ pub fn input_geometry(process: &dyn Process) -> Result<Value> {
         || r.u64(idler)? != base + 0x42c9a88
         || r.u64(idler + 0x4f8)? != gui
         || r.u64(base + 0x4577890)? != graphics
-        || r.u64(gui)? != base + 0x434c068
+        || r.u64(gui)? != base + 0x42736f8
         || r.u64(gui + 0xb8)? != graphics
         || r.u64(graphics)? != base + 0x42417f8
         || r.read(graphics + 0x40, 8)? != pointer

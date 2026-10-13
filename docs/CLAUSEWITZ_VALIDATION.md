@@ -396,6 +396,58 @@ nested two complete snapshot brackets; the follow-up refactor shares a private
 typed body within one local bracket while retaining all structural and final
 ownership/exec checks. This change needs its own measured live evidence.
 
+## Optimized Rust follow-up — 13 October 2026
+
+A fresh owned run used the optimized release binary from commit `0493108`, at
+the same exact Linux game build, Normal historical vanilla Germany. One Luna
+medium player again held the exclusive input lease. The catalog returned
+`basic_machine_tools` among **552** loaded definitions; this is public metadata,
+not research eligibility. Its five post-test queries measured **61.1 ms median
+RPC** and **54.4 ms median reported snapshot time**. Twenty fresh paused
+overviews measured **15.8 ms median RPC**, **10.4 ms median reported time** and
+18.9 ms maximum RPC. Samples include persistent stdio/SSH, and the logical read
+counters still exclude backend/procfs work. Different launch/load conditions and
+the release profile prevent attributing the entire change to one refactor.
+
+| Verified clock operation | RPC time |
+| --- | ---: |
+| Speed 0 → 4 | 1.46 s |
+| Speed 4 → 3 | 0.35 s |
+| Speed 3 → 4 | 0.28 s |
+| Unpause | 0.17 s |
+| Final pause | 0.60 s |
+
+The bounded wait returned `torn_read` after 18.151 seconds. A fresh overview
+confirmed `1936.01.03.01`, running at speed 4, before Luna sent one finish-pause
+request. Its verified receipt and separate final overview confirmed
+`1936.01.03.06`, paused. Lease release succeeded, with zero remaining authority.
+No uncertain action was repeated. This is a bounded clock smoke with a wait
+failure and successful verified endpoint, **not a clean campaign acceptance**.
+
+The first GUI diagnostics refused the real game because the reader required
+base `CGui`, while independent constructor evidence shows ordinary `CGameGui`
+installs its derived primary vtable. The correction awaits a fresh owned run;
+client origin, control transforms and effective hit routing remain unproved.
+The own research reader also awaits installed-game validation. It exposes engine
+completed membership and signed active counters, with unverified units and no
+eligibility calls. Its paginated output retains complete validation before slicing.
+
+The subsequent wait fix retries only transient torn observations within its
+deadline. Payload and own-campaign context share one bracket; player,
+playthrough ID, roots, settings and nondecreasing timeline must agree with the
+baseline. Persistent instability and context changes return errors. A normal
+wall timeout reports the latest accepted sample and its age. The persisted ID
+still does not establish load generation. This fix has fixture evidence and
+requires a fresh live wait test.
+
+Pointer position matched before/after play; all inspected threads had tracer 0
+and Yama remained 1. No player screenshots, saves or cursor movement occurred.
+The initial static-menu recording stayed buffered; it was finalized successfully
+before Start. A replacement with zero-latency encoding and explicit segment
+flushing supplied a verified first packet before Start. Its two finalized
+512×288 segments passed ffprobe, with durations 600.0 and 57.666 seconds. All
+footage, calls, source manifests, incidents and journals remain private.
+
 ## Attribution
 
 The findings above refer to upstream `calling/{mem,process/linux,api,game,

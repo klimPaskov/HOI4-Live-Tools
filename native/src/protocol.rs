@@ -3,7 +3,7 @@ use crate::{
     error::{Error, Result},
     game, gui,
     platform::Process,
-    technology,
+    research, technology,
 };
 use serde_json::{json, Value};
 use std::time::{Duration, Instant};
@@ -23,6 +23,7 @@ fn tools(commands: Option<&dyn Commands>) -> Value {
     let mut value = json!({"tools":[
         {"name":"hoi4_capabilities","description":"Verified runtime capabilities and explicit platform/build limitations.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}},
         {"name":"hoi4_overview","description":"Fresh owned-country process snapshot. Pure bounded reads; never pauses.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}},
+        {"name":"hoi4_research","description":"Fresh own completed technology IDs with bounded pagination, and active raw research counters. Progress units, days remaining and eligibility remain unverified. Pure reads; never pauses.","inputSchema":{"type":"object","properties":{"offset":{"type":"integer","minimum":0,"maximum":8192},"limit":{"type":"integer","minimum":1,"maximum":100}},"additionalProperties":false}},
         {"name":"hoi4_input_geometry","description":"Read-only own GUI pointer, dimensions and scale diagnostics. Does not prove client origin, control geometry or click authorization.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}},
         {"name":"hoi4_technology_list","description":"Canonical loaded public technology IDs with bounded filtering/pagination. Catalog membership does not imply player research eligibility. Pure reads; never pauses.","inputSchema":{"type":"object","properties":{"filter":{"type":"string","maxLength":128},"offset":{"type":"integer","minimum":0,"maximum":8192},"limit":{"type":"integer","minimum":1,"maximum":100}},"additionalProperties":false}},
         {"name":"hoi4_wait_for","description":"Bounded server wait for own focus/research change or game date. Never pauses.","inputSchema":{"type":"object","properties":{"timeout_seconds":{"type":"integer","minimum":1,"maximum":50},"until_date":{"type":"array","items":{"type":"integer"},"minItems":3,"maxItems":3}},"additionalProperties":false}}
@@ -37,6 +38,77 @@ fn tools(commands: Option<&dyn Commands>) -> Value {
 }
 fn content(value: Value) -> Value {
     json!({"content":[{"type":"text","text":serde_json::to_string(&value).unwrap()}]})
+}
+fn page_bounds(object: &serde_json::Map<String, Value>) -> Result<(usize, usize)> {
+    let integer = |key: &str, default: u64, low: u64, high: u64| -> Result<usize> {
+        let value = object
+            .get(key)
+            .map(|v| {
+                v.as_u64()
+                    .ok_or_else(|| Error::new("invalid_arguments", "Pagination must be integers"))
+            })
+            .transpose()?
+            .unwrap_or(default);
+        if !(low..=high).contains(&value) {
+            return Err(Error::new("invalid_arguments", "Pagination exceeds bounds"));
+        }
+        Ok(value as usize)
+    };
+    Ok((
+        integer("offset", 0, 0, 8192)?,
+        integer("limit", 100, 1, 100)?,
+    ))
+}
+fn fresh_wait_read<T, F>(
+    start: Instant,
+    timeout: Duration,
+    rejected: &mut u64,
+    mut read: F,
+) -> Result<T>
+where
+    F: FnMut() -> Result<T>,
+{
+    loop {
+        if start.elapsed() >= timeout {
+            return Err(Error::new(
+                "unstable_observation",
+                "Fresh observation deadline reached; no further read or cached result",
+            ));
+        }
+        match read() {
+            Err(e) if e.code == "torn_read" => {
+                *rejected += 1;
+                let remaining = timeout.saturating_sub(start.elapsed());
+                if remaining.is_zero() {
+                    return Err(Error::new(
+                        "unstable_observation",
+                        "No stable snapshot within wait deadline; no stale result returned",
+                    ));
+                }
+                std::thread::sleep(remaining.min(Duration::from_millis(250)));
+            }
+            result => return result,
+        }
+    }
+}
+fn same_wait_context(
+    before: &game::ClockContext,
+    current: &game::ClockContext,
+    last_date: i32,
+) -> Result<()> {
+    if before.player != current.player
+        || before.playthrough_id != current.playthrough_id
+        || before.anchors != current.anchors
+        || before.difficulty != current.difficulty
+        || before.historical_raw != current.historical_raw
+        || current.date_raw < last_date
+    {
+        return Err(Error::new(
+            "wait_context_changed",
+            "Own campaign/player/anchors/settings/timeline changed during wait",
+        ));
+    }
+    Ok(())
 }
 impl Server {
     fn process(&self) -> Result<&dyn Process> {
@@ -65,6 +137,16 @@ impl Server {
                 json!({"runtime":"rust","platform":std::env::consts::OS,"owned_session_bound":self.process.is_some(),"unavailable":self.unavailable,"observations":["own_focus","own_research","clock","bounded_wait","technology_definitions","gui_input_diagnostics"],"commands":commands.map(|c| c.capabilities()).unwrap_or_else(|| json!("unavailable: no verified input binding")),"native_transactions":"unavailable: failed posting path quarantined","default_mode":"FAIR","mod_qa":"separate; unavailable in this runtime","windows_macos":"unverified native adapters"}),
             ),
             "hoi4_overview" if object.is_empty() => self.overview(),
+            "hoi4_research" => {
+                if object
+                    .keys()
+                    .any(|k| !["offset", "limit"].contains(&k.as_str()))
+                {
+                    return Err(Error::new("invalid_arguments", "Unknown research argument"));
+                }
+                let (offset, limit) = page_bounds(object)?;
+                research::page(self.process()?, offset, limit)
+            }
             "hoi4_input_geometry" if object.is_empty() => gui::input_geometry(self.process()?),
             "hoi4_technology_list" => {
                 if object
@@ -82,29 +164,7 @@ impl Server {
                     })
                     .transpose()?
                     .unwrap_or("");
-                let integer = |key: &str, default: u64, low: u64, high: u64| -> Result<usize> {
-                    let value = object
-                        .get(key)
-                        .map(|v| {
-                            v.as_u64().ok_or_else(|| {
-                                Error::new(
-                                    "invalid_arguments",
-                                    "Catalog pagination must be integers",
-                                )
-                            })
-                        })
-                        .transpose()?
-                        .unwrap_or(default);
-                    if !(low..=high).contains(&value) {
-                        return Err(Error::new(
-                            "invalid_arguments",
-                            "Catalog pagination exceeds bounds",
-                        ));
-                    }
-                    Ok(value as usize)
-                };
-                let offset = integer("offset", 0, 0, 8192)?;
-                let limit = integer("limit", 100, 1, 100)?;
+                let (offset, limit) = page_bounds(object)?;
                 if filter.chars().count() > 128 {
                     return Err(Error::new("invalid_arguments", "Filter exceeds bound"));
                 }
@@ -153,9 +213,15 @@ impl Server {
                 } else {
                     None
                 };
-                let before = self.overview()?;
-                let mut current = before.clone();
                 let start = Instant::now();
+                let timeout = Duration::from_secs(timeout);
+                let mut rejected = 0;
+                let (before, baseline) = fresh_wait_read(start, timeout, &mut rejected, || {
+                    game::wait_snapshot(self.process()?)
+                })?;
+                let mut current = before.clone();
+                let mut last_date = baseline.date_raw;
+                let mut current_received = Instant::now();
                 loop {
                     let mut reasons = Vec::new();
                     for field in ["focus", "research"] {
@@ -170,16 +236,28 @@ impl Server {
                     }) {
                         reasons.push("date_reached".into());
                     }
-                    if !reasons.is_empty() || start.elapsed() >= Duration::from_secs(timeout) {
+                    if !reasons.is_empty() || start.elapsed() >= timeout {
                         if reasons.is_empty() {
                             reasons.push("wall_timeout".into());
                         }
                         return Ok(
-                            json!({"reasons":reasons,"state":current,"elapsed_seconds":start.elapsed().as_secs_f64()}),
+                            json!({"reasons":reasons,"state":current,"elapsed_seconds":start.elapsed().as_secs_f64(),"rejected_torn_reads":rejected,"state_age_ms":current_received.elapsed().as_millis()}),
                         );
                     }
-                    std::thread::sleep(Duration::from_millis(250));
-                    current = self.overview()?;
+                    std::thread::sleep(
+                        Duration::from_millis(250).min(timeout.saturating_sub(start.elapsed())),
+                    );
+                    if start.elapsed() >= timeout {
+                        continue;
+                    }
+                    let (observed, context) =
+                        fresh_wait_read(start, timeout, &mut rejected, || {
+                            game::wait_snapshot(self.process()?)
+                        })?;
+                    same_wait_context(&baseline, &context, last_date)?;
+                    last_date = context.date_raw;
+                    current = observed;
+                    current_received = Instant::now();
                 }
             }
             _ if commands.is_some_and(|c| c.supports(name)) => {
@@ -241,5 +319,105 @@ impl Server {
                 json!({"jsonrpc":"2.0","id":id,"error":{"code":code,"message":message}})
             }
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn wait_retries_torn_reads_and_only_returns_a_fresh_snapshot() {
+        let mut calls = 0;
+        let mut rejected = 0;
+        let result = fresh_wait_read(
+            Instant::now(),
+            Duration::from_secs(2),
+            &mut rejected,
+            || {
+                calls += 1;
+                if calls == 1 {
+                    Err(Error::new("torn_read", "Fixture clock advanced"))
+                } else {
+                    Ok(json!({"date":"fresh"}))
+                }
+            },
+        )
+        .unwrap();
+        assert_eq!(result["date"], "fresh");
+        assert_eq!(calls, 2);
+        assert_eq!(rejected, 1);
+    }
+    #[test]
+    fn wait_deadline_never_returns_a_prior_snapshot_and_identity_errors_are_not_retried() {
+        let mut rejected = 0;
+        let mut calls = 0;
+        let error = fresh_wait_read::<Value, _>(
+            Instant::now(),
+            Duration::from_millis(1),
+            &mut rejected,
+            || {
+                calls += 1;
+                if calls == 1 {
+                    Err(Error::new("torn_read", "Fixture first sample torn"))
+                } else {
+                    Ok(json!({"date":"too late"}))
+                }
+            },
+        )
+        .unwrap_err();
+        assert_eq!(error.code, "unstable_observation");
+        assert_eq!(rejected, 1);
+        assert_eq!(calls, 1);
+        let mut calls = 0;
+        let error = fresh_wait_read::<Value, _>(
+            Instant::now(),
+            Duration::from_secs(1),
+            &mut rejected,
+            || {
+                calls += 1;
+                Err(Error::new("ownership_changed", "Fixture replacement"))
+            },
+        )
+        .unwrap_err();
+        assert_eq!(error.code, "ownership_changed");
+        assert_eq!(calls, 1);
+        assert_eq!(rejected, 1);
+    }
+    #[test]
+    fn wait_binds_context_and_monotonic_date_but_allows_ordinary_clock_changes() {
+        let before = game::ClockContext {
+            playthrough_id: "campaign".into(),
+            player: "GER".into(),
+            anchors: [1, 2, 3],
+            date_raw: 100,
+            difficulty: 2,
+            historical_raw: 1,
+            paused: true,
+            speed: 0,
+        };
+        let mut current = before.clone();
+        current.date_raw = 101;
+        current.paused = false;
+        current.speed = 4;
+        assert!(same_wait_context(&before, &current, 100).is_ok());
+        for field in 0..6 {
+            let mut changed = current.clone();
+            match field {
+                0 => changed.player = "FRA".into(),
+                1 => changed.playthrough_id = "other".into(),
+                2 => changed.anchors[1] = 9,
+                3 => changed.difficulty = 3,
+                4 => changed.historical_raw = 0,
+                _ => changed.date_raw = 99,
+            }
+            assert_eq!(
+                same_wait_context(&before, &changed, 100).unwrap_err().code,
+                "wait_context_changed"
+            );
+        }
+        assert_eq!(
+            same_wait_context(&before, &current, 102).unwrap_err().code,
+            "wait_context_changed"
+        );
     }
 }

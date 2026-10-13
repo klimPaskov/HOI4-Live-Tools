@@ -48,6 +48,7 @@ fn stdio_is_json_and_notifications_have_no_reply() {
         [
             "hoi4_capabilities",
             "hoi4_overview",
+            "hoi4_research",
             "hoi4_input_geometry",
             "hoi4_technology_list",
             "hoi4_wait_for"
@@ -75,6 +76,27 @@ fn invalid_catalog_query_is_refused_before_process_access() {
     ] {
         let reply=server.handle(json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"hoi4_technology_list","arguments":arguments}})).unwrap();
         assert_eq!(reply["result"]["isError"], true);
+        let value: Value =
+            serde_json::from_str(reply["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+        assert_eq!(value["error"]["code"], "invalid_arguments");
+    }
+}
+#[test]
+fn invalid_research_query_is_refused_before_process_access() {
+    use hoi4_live_native::protocol::Server;
+    let server = Server {
+        process: None,
+        unavailable: None,
+    };
+    for arguments in [
+        json!({"offset":-1}),
+        json!({"offset":8193}),
+        json!({"limit":0}),
+        json!({"limit":101}),
+        json!({"limit":true}),
+        json!({"country":"FRA"}),
+    ] {
+        let reply=server.handle(json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"hoi4_research","arguments":arguments}})).unwrap();
         let value: Value =
             serde_json::from_str(reply["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
         assert_eq!(value["error"]["code"], "invalid_arguments");

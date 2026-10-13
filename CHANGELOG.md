@@ -2,6 +2,13 @@
 
 ## Unreleased native preview
 
+- Add a fresh own research model with completed membership, canonical joins and
+  signed active counters; progress units and eligibility stay unavailable.
+  Correct the GUI diagnostic's derived `CGameGui` primary-type check after a
+  real installed-game refusal; the correction awaits live verification.
+- Retry only transient torn observations within server waits, bind their own
+  campaign context and refuse post-deadline retries or changed context. Record
+  the optimized Luna clock endpoint and wait failure; campaign acceptance remains open.
 - Start a separate Rust stdio runtime with owned Linux process reads, bounded
   focus/research/clock snapshots, explicit capability errors and server waits.
 - Verify selected upstream ordinary actions with one Luna medium player; record

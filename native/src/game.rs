@@ -29,7 +29,12 @@ pub fn clock_context(process: &dyn Process) -> Result<ClockContext> {
     process.begin_snapshot()?;
     let r = Reader::new(process);
     let base = process.image_base();
-    let initial = roots(&r, base)?;
+    let (_, context) = context_fields(&r, base)?;
+    process.check()?;
+    Ok(context)
+}
+fn context_fields(r: &Reader<'_>, base: u64) -> Result<(SnapshotFields, ClockContext)> {
+    let initial = roots(r, base)?;
     let [gs, idler, _] = initial;
     if r.u64(gs)? != base + 0x42c7598 || r.u64(idler)? != base + 0x42c9a88 {
         return Err(Error::new(
@@ -58,32 +63,35 @@ pub fn clock_context(process: &dyn Process) -> Result<ClockContext> {
     let historical_raw = r.i32(gs + 0x628)?;
     // Use the same local read bracket as the campaign identity. Calling the
     // public snapshot here would refresh maps and check ownership twice.
-    let observed = snapshot_fields(&r, base)?;
+    let observed = snapshot_fields(r, base)?;
     let date_raw = observed.date.raw;
-    if roots(&r, base)? != initial
+    if observed.anchors != initial
+        || observed.historical_raw != historical_raw
+        || roots(r, base)? != initial
         || r.string(gs + 0x718)? != playthrough_id
         || r.i32(gs + 0x628)? != historical_raw
         || r.i32(gs + 0x460)? != date_raw
         || r.i32(gs + 0x4b4)? != observed.speed
         || r.byte(idler + 0x6c1)? != u8::from(observed.paused)
         || r.i32(gs + 0x620)? != observed.difficulty
+        || r.i32(gs + 0x518)? != observed.tag_id
     {
         return Err(Error::new(
             "torn_read",
             "Clock input context changed during observation",
         ));
     }
-    process.check()?;
-    Ok(ClockContext {
+    let context = ClockContext {
         playthrough_id,
         anchors: initial,
         historical_raw,
         date_raw,
-        player: observed.player,
+        player: observed.player.clone(),
         difficulty: observed.difficulty,
         paused: observed.paused,
         speed: observed.speed as u8,
-    })
+    };
+    Ok((observed, context))
 }
 fn pointer(reader: &Reader<'_>, address: u64) -> Result<u64> {
     let value = reader.u64(address)?;
@@ -122,12 +130,25 @@ pub fn snapshot(process: &dyn Process) -> Result<Value> {
     let fields = snapshot_fields(&r, process.image_base())?;
     process.check()?;
     // Include the final ownership/exec check in reported snapshot time.
-    Ok(
-        json!({"source":"native process_vm_readv","owned":true,"build_id":BUILD_ID,"player":fields.player,"country":fields.country,"date":fields.date,"speed":fields.speed,"paused":fields.paused,"difficulty":fields.difficulty,"historical_ai":fields.historical_raw!=0,"focus":fields.focus,"research":fields.research,"default_mode":"FAIR","observation_paused_game":false,"capabilities_unverified":["native_commands","production","construction","army","diplomacy","progress_days","daily_governor"],"freshness":{"observed_unix_ms":SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),"elapsed_ms":start.elapsed().as_secs_f64()*1000.0,"read_calls":r.calls.get(),"read_bytes":r.bytes.get()}}),
-    )
+    Ok(snapshot_value(fields, &r, start))
+}
+/// The wait baseline and payload share one read/ownership bracket. A separate
+/// clock read beside an overview would not establish coherent campaign context.
+pub fn wait_snapshot(process: &dyn Process) -> Result<(Value, ClockContext)> {
+    let start = Instant::now();
+    process.begin_snapshot()?;
+    let r = Reader::new(process);
+    let (fields, context) = context_fields(&r, process.image_base())?;
+    process.check()?;
+    Ok((snapshot_value(fields, &r, start), context))
+}
+fn snapshot_value(fields: SnapshotFields, r: &Reader<'_>, start: Instant) -> Value {
+    json!({"source":"native process_vm_readv","owned":true,"build_id":BUILD_ID,"player":fields.player,"country":fields.country,"date":fields.date,"speed":fields.speed,"paused":fields.paused,"difficulty":fields.difficulty,"historical_ai":fields.historical_raw!=0,"focus":fields.focus,"research":fields.research,"default_mode":"FAIR","observation_paused_game":false,"capabilities_unverified":["native_commands","production","construction","army","diplomacy","progress_days","daily_governor"],"freshness":{"observed_unix_ms":SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),"elapsed_ms":start.elapsed().as_secs_f64()*1000.0,"read_calls":r.calls.get(),"read_bytes":r.bytes.get()}})
 }
 
 struct SnapshotFields {
+    anchors: [u64; 3],
+    tag_id: i32,
     player: String,
     country: String,
     date: calendar::Date,
@@ -253,6 +274,8 @@ fn snapshot_fields(r: &Reader<'_>, base: u64) -> Result<SnapshotFields> {
         || address(r.array_entry(gs + 0x310, country_index as usize, 8)?)? != country
         || pointer(r, country + 0x1348)? != progress
         || pointer(r, country + 0xf38)? != technology_status
+        || r.i32(gs + 0x620)? != difficulty
+        || r.i32(gs + 0x628)? != historical
     {
         return Err(Error::new(
             "torn_read",
@@ -260,6 +283,8 @@ fn snapshot_fields(r: &Reader<'_>, base: u64) -> Result<SnapshotFields> {
         ));
     }
     Ok(SnapshotFields {
+        anchors: initial,
+        tag_id,
         player: tag,
         country: name,
         date,

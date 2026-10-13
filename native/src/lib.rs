@@ -9,4 +9,5 @@ pub mod launch;
 pub mod memory;
 pub mod platform;
 pub mod protocol;
+pub mod research;
 pub mod technology;

@@ -80,6 +80,7 @@ threads. Generated-child tests exercised that access under unchanged Yama scope
 | --- | --- |
 | `hoi4_capabilities` | Platform, session binding and explicit missing features |
 | `hoi4_overview` | Fresh own focus/research IDs and clock; read metrics and unavailable fields |
+| `hoi4_research` | Own completed technology IDs, raw levels/thresholds and active signed counters; units remain unverified |
 | `hoi4_technology_list` | Bounded loaded technology IDs, filter and pagination; no eligibility inference |
 | `hoi4_input_geometry` | Own GUI pointer/dimension/scale diagnostics; client origin and click mapping remain unverified |
 | `hoi4_wait_for` | Bounded wait, 1–50 seconds, for own focus/research changes or `until_date: [year, month, day]` |
@@ -96,8 +97,23 @@ is called and no definition data is cached.
 GUI diagnostics return the actual finalized physical/logical dimensions, their
 ratios and the logical pointer, with explicit unverified client-origin, HiDPI,
 control-transform and hit-routing fields. They do not send input or authorize
-coordinate clicks. These two observation ports have fixture/static evidence;
-installed-game verification is still pending.
+coordinate clicks. The live optimized catalog resolved `basic_machine_tools`
+among 552 definitions in 88 ms over persistent stdio/SSH. The first GUI port
+refused the installed game's derived `CGameGui`; its corrected primary-type
+check has fixture/static evidence and awaits a fresh owned-game test.
+The own research model checks exact primary types, status/slot ownership and both
+canonical and own-array joins. Completed IDs come from the engine's membership
+list, rather than assuming every positive level is complete. Empty slots have
+null counters; active counters use the technology's signed 64-bit field.
+Normalized progress, days remaining and eligibility remain unavailable. This
+reader has static/fixture evidence; installed-game validation is pending.
+Completed output accepts `offset` and `limit` (1–100), and reports total count
+and next offset without skipping full model validation.
+Wait snapshots bind coherent own-campaign context, reject context/timeline
+changes and retry only torn observations inside the deadline. Persistent
+instability returns an error. Ordinary timeout output reports the latest accepted
+sample and its age; persisted identity is not load-generation proof. The wait
+correction still requires live validation after the reported torn-read incident.
 The mode default is FAIR; a mode label alone is not proof of campaign settings.
 
 ## Command port and expansion

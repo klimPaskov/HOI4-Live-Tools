@@ -3,7 +3,7 @@ use hoi4_live_native::{
     game, gui,
     memory::ReadMemory,
     platform::Process,
-    technology,
+    research, technology,
 };
 use std::{cell::Cell, collections::BTreeMap};
 struct Fixture {
@@ -24,6 +24,12 @@ struct Fixture {
     changed_catalog_name: bool,
     catalog_template_reads: Cell<u32>,
     relocated_catalog: bool,
+    fault: Option<(u64, usize, Vec<u8>)>,
+    fault_reads: Cell<usize>,
+    historical_reads: Cell<usize>,
+    inconsistent_historical_body: bool,
+    root_reads: Cell<usize>,
+    split_context_roots: bool,
 }
 impl Fixture {
     fn put(&mut self, a: u64, data: &[u8]) {
@@ -80,6 +86,12 @@ impl Fixture {
             changed_catalog_name: false,
             catalog_template_reads: Cell::new(0),
             relocated_catalog: false,
+            fault: None,
+            fault_reads: Cell::new(0),
+            historical_reads: Cell::new(0),
+            inconsistent_historical_body: false,
+            root_reads: Cell::new(0),
+            split_context_roots: false,
         };
         let base = 0x10000;
         f.word(base + 0x44086a8, 0x30000);
@@ -156,7 +168,7 @@ impl Fixture {
         let base = 0x10000;
         self.word(0x324f8, 0x70000);
         self.region(0x70000, 0xc0);
-        self.word(0x70000, base + 0x434c068);
+        self.word(0x70000, base + 0x42736f8);
         self.word(0x700b8, 0x71000);
         self.word(base + 0x4577890, 0x71000);
         self.region(0x71000, 0x200);
@@ -170,9 +182,60 @@ impl Fixture {
         self.put(0x71040, &640f32.to_le_bytes());
         self.put(0x71044, &20f32.to_le_bytes());
     }
+    fn own_research(&mut self) {
+        self.catalog();
+        let base = 0x10000;
+        self.word(0x28000, base + 0x42108f8);
+        self.word(0x28130, 0x20000);
+        self.number(0x28138, 1);
+        self.array(0x28088, 0x82000, 3);
+        self.region(0x82000, 24);
+        self.array(0x28040, 0x83000, 1);
+        self.word(0x83000, 0x81000);
+        for (i, (level, threshold)) in [(1, 2), (3, 3)].iter().enumerate() {
+            let pointer = 0x80000 + i as u64 * 0x1000;
+            let template = 0x63000 + i as u64 * 0x100;
+            self.region(pointer, 0x1a0);
+            self.word(pointer, base + 0x42107f8);
+            self.word(pointer + 0x158, 0x28000);
+            self.word(pointer + 0x160, template);
+            self.number(pointer + 0x174, *level);
+            self.number(template + 0x3cc, *threshold);
+            self.word(0x82000 + i as u64 * 8, pointer);
+        }
+        self.put(0x80198, &(-0x1234_5678_9abci64).to_le_bytes());
+        for i in 0..4 {
+            let slot = 0x2c000 + i * 0x100;
+            self.word(slot, base + 0x4210898);
+            self.word(slot + 0x10, 0x28000);
+            self.word(slot + 0x20, 999999);
+        }
+        self.word(0x2c018, 0x80000);
+    }
 }
 impl ReadMemory for Fixture {
     fn read(&self, a: u64, n: usize) -> Result<Vec<u8>> {
+        if a == 0x10000 + 0x44086a8 {
+            self.root_reads.set(self.root_reads.get() + 1);
+            if self.split_context_roots && (2..=3).contains(&self.root_reads.get()) {
+                return Ok(0x90000u64.to_le_bytes().to_vec());
+            }
+        }
+        if a == 0x30628 {
+            self.historical_reads.set(self.historical_reads.get() + 1);
+            if self.inconsistent_historical_body && (2..=3).contains(&self.historical_reads.get()) {
+                return Ok(0i32.to_le_bytes().to_vec());
+            }
+        }
+        if let Some((address, after, replacement)) = &self.fault {
+            if a == *address {
+                self.fault_reads.set(self.fault_reads.get() + 1);
+                if self.fault_reads.get() > *after {
+                    assert_eq!(replacement.len(), n);
+                    return Ok(replacement.clone());
+                }
+            }
+        }
         if a == 0x63000 {
             self.catalog_template_reads
                 .set(self.catalog_template_reads.get() + 1);
@@ -244,6 +307,138 @@ impl Process for Fixture {
     }
 }
 #[test]
+fn own_research_uses_completed_membership_and_active_i64_counter() {
+    let mut f = Fixture::new();
+    f.own_research();
+    let value = research::snapshot(&f).unwrap();
+    assert_eq!(value["researched"][0]["id"], "tools2");
+    assert_eq!(value["researched"][0]["level_raw"], 3);
+    assert_eq!(value["researched"][0]["completion_threshold_raw"], 3);
+    assert_eq!(value["researched"].as_array().unwrap().len(), 1);
+    assert_eq!(value["slots"][0]["researching"], "tools1");
+    assert_eq!(value["slots"][0]["progress_raw"], -0x1234_5678_9abci64);
+    assert!(value["slots"][0]["progress"].is_null());
+    assert!(value["slots"][1]["progress_raw"].is_null());
+    assert_eq!(f.checks.get(), 2);
+}
+#[test]
+fn research_pages_sorted_membership_and_distinguishes_known_empty() {
+    let mut f = Fixture::new();
+    f.own_research();
+    f.number(0x80174, 2);
+    f.array(0x28040, 0x83000, 2);
+    f.word(0x83008, 0x80000);
+    let first = research::page(&f, 0, 1).unwrap();
+    assert_eq!(first["researched_count"], 2);
+    assert_eq!(first["researched"][0]["id"], "tools1");
+    assert_eq!(first["next_offset"], 1);
+    let next = research::page(&f, 1, 1).unwrap();
+    assert_eq!(next["researched"][0]["id"], "tools2");
+    assert!(next["next_offset"].is_null());
+    assert_eq!(
+        research::page(&f, 2, 1).unwrap()["researched"],
+        serde_json::json!([])
+    );
+    f.array(0x28040, 0, 0);
+    assert_eq!(research::snapshot(&f).unwrap()["researched_count"], 0);
+}
+#[test]
+fn research_refuses_foreign_owners_and_inconsistent_canonical_joins() {
+    for address in [0x28130, 0x2c010, 0x80158, 0x80160, 0x82000] {
+        let mut f = Fixture::new();
+        f.own_research();
+        f.word(address, 0xdead0000);
+        assert!(
+            research::snapshot(&f).is_err(),
+            "accepted changed field {address:x}"
+        );
+    }
+    let mut f = Fixture::new();
+    f.own_research();
+    f.number(0x63030, 2);
+    assert_eq!(
+        research::snapshot(&f).unwrap_err().code,
+        "invalid_research_join"
+    );
+}
+#[test]
+fn research_refuses_duplicate_members_partial_completion_and_uninitialized_arrays() {
+    let mut f = Fixture::new();
+    f.own_research();
+    f.array(0x28040, 0x83000, 2);
+    f.word(0x83008, 0x81000);
+    assert_eq!(
+        research::snapshot(&f).unwrap_err().code,
+        "invalid_completed_research"
+    );
+    let mut f = Fixture::new();
+    f.own_research();
+    f.number(0x81174, 2);
+    assert_eq!(
+        research::snapshot(&f).unwrap_err().code,
+        "invalid_completed_research"
+    );
+    let mut f = Fixture::new();
+    f.own_research();
+    f.array(0x28088, 0x82000, 2);
+    assert_eq!(
+        research::snapshot(&f).unwrap_err().code,
+        "research_unavailable"
+    );
+    let mut f = Fixture::new();
+    f.own_research();
+    f.number(0x28090, 8193);
+    assert_eq!(research::snapshot(&f).unwrap_err().code, "invalid_array");
+}
+#[test]
+fn research_refuses_changed_counters_payloads_slots_and_relocated_lists() {
+    for (address, replacement) in [
+        (0x80198, 17i64.to_le_bytes().to_vec()),
+        (0x83000, 0x80000u64.to_le_bytes().to_vec()),
+        (
+            0x82000,
+            [0u64, 0x81000, 0]
+                .into_iter()
+                .flat_map(u64::to_le_bytes)
+                .collect(),
+        ),
+        (0x2c018, 0u64.to_le_bytes().to_vec()),
+        (0x28130, 0xdead0000u64.to_le_bytes().to_vec()),
+    ] {
+        let mut f = Fixture::new();
+        f.own_research();
+        f.fault = Some((address, 1, replacement));
+        assert!(
+            research::snapshot(&f).is_err(),
+            "accepted torn field {address:x}"
+        );
+    }
+    let mut f = Fixture::new();
+    f.own_research();
+    f.region(0x84000, 24);
+    f.word(0x84000, 0x80000);
+    f.word(0x84008, 0x81000);
+    let mut relocated = 0x84000u64.to_le_bytes().to_vec();
+    relocated.extend(3i32.to_le_bytes());
+    relocated.extend(3i32.to_le_bytes());
+    f.fault = Some((0x28088, 2, relocated));
+    assert_eq!(research::snapshot(&f).unwrap_err().code, "torn_read");
+}
+#[test]
+fn research_retains_final_process_check_and_refuses_wrong_primary_type() {
+    let mut f = Fixture::new();
+    f.own_research();
+    f.replaced = true;
+    assert_eq!(
+        research::snapshot(&f).unwrap_err().code,
+        "ownership_changed"
+    );
+    let mut f = Fixture::new();
+    f.own_research();
+    f.word(0x80000, 0x10000 + 0x4210868);
+    assert_eq!(research::snapshot(&f).unwrap_err().code, "invalid_type");
+}
+#[test]
 fn player_tag_index_uses_mapping_not_country_index() {
     let f = Fixture::new();
     let value = game::snapshot(&f).unwrap();
@@ -278,6 +473,34 @@ fn own_clock_context_has_a_bounded_campaign_identity() {
     assert_eq!(context.historical_raw, 1);
     assert!(context.paused);
     assert_eq!(fixture.checks.get(), 2);
+}
+#[test]
+fn wait_payload_and_campaign_witness_share_one_owned_bracket() {
+    let fixture = Fixture::new();
+    let (value, context) = game::wait_snapshot(&fixture).unwrap();
+    assert_eq!(value["player"], context.player);
+    assert_eq!(value["date"]["raw"], context.date_raw);
+    assert_eq!(value["paused"], context.paused);
+    assert_eq!(fixture.checks.get(), 2);
+    let mut changed = Fixture::new();
+    changed.inconsistent_historical_body = true;
+    assert_eq!(game::wait_snapshot(&changed).unwrap_err().code, "torn_read");
+    let mut changed = Fixture::new();
+    let copy: Vec<_> = (0..0x800)
+        .map(|i| changed.data.get(&(0x30000 + i)).copied().unwrap_or(0))
+        .collect();
+    changed.put(0x90000, &copy);
+    changed.split_context_roots = true;
+    assert_eq!(game::wait_snapshot(&changed).unwrap_err().code, "torn_read");
+    let mut changed = Fixture::new();
+    changed.changed_id = true;
+    assert_eq!(game::wait_snapshot(&changed).unwrap_err().code, "torn_read");
+    let mut changed = Fixture::new();
+    changed.replaced = true;
+    assert_eq!(
+        game::wait_snapshot(&changed).unwrap_err().code,
+        "ownership_changed"
+    );
 }
 
 #[test]
@@ -429,6 +652,12 @@ fn input_geometry_is_diagnostic_and_uses_finalized_ratios() {
 
 #[test]
 fn wrong_gui_type_inconsistent_scales_and_torn_geometry_fail() {
+    let mut fixture = Fixture::new();
+    fixture.geometry();
+    fixture.word(0x70000, 0x10000 + 0x434c068);
+    let refusal = gui::input_geometry(&fixture).unwrap_err();
+    assert_eq!(refusal.code, "gui_unavailable");
+    assert!(refusal.message.contains("CGameGui"));
     let mut fixture = Fixture::new();
     fixture.geometry();
     fixture.word(0x71000, 0x10000 + 0x43608e0);

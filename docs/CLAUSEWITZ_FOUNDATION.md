@@ -26,8 +26,9 @@ upstream Luna smoke passed selected ordinary actions and one day of advancement,
 but its final pause timed out; that native-posting adapter remains quarantined.
 A subsequent Rust Luna medium test passed ordinary X11 clock controls, advancement
 to 3 January 1936 and verified pause. Strategic controls remain unavailable.
-The Rust technology catalog and GUI coordinate diagnostics have static and fixture
-evidence; their installed-game validation is pending. See
+The optimized Rust catalog resolved public IDs in the installed game. The GUI
+diagnostic primary-type correction, own research model and campaign-bound wait
+fix have static/fixture evidence and await fresh installed-game validation. See
 [actual live evidence](CLAUSEWITZ_VALIDATION.md).
 
 ## Expansion contract
