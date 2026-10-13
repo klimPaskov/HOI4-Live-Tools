@@ -5004,3 +5004,101 @@ fn slot_geometry_full_orientation_and_final_witnesses_remain_required() {
         );
     }
 }
+
+fn owned_category_fixture() -> Fixture {
+    let mut f = owned_node_fixture();
+    let b = 0x10000;
+    for (p, t, n) in [
+        (0x210000, 0x42113f0, 0x10),
+        (0x211000, 0x42112c0, 0xd0),
+        (0x212000, 0x4347d58, 0xf00),
+        (0x213000, 0x4347d58, 0xf00),
+        (0x214000, 0x43470c8, 0x160),
+    ] {
+        f.region(p, n);
+        f.word(p, b + t);
+    }
+    f.word(b + 0x43a40e0, 0x210000);
+    f.array(0x360a8, 0x215000, 2);
+    f.word(0x215000, 0x210000);
+    f.word(0x215008, 0x211000);
+    f.string(0x211008, "industry_folder");
+    for p in [0x212000, 0x213000] {
+        f.word(p + 0x98, 0x70000);
+    }
+    f.word(0x214068, 0x70000);
+    f.word(0x214008, 0x213000);
+    f.number(0x2140c8, 0);
+    f.array(0xd0bb0, 0x216000, 2);
+    f.word(0x216000, 0x212000);
+    f.word(0x216008, 0x213000);
+    f.array(0xd0bc8, 0x217000, 2);
+    f.string(0x217000, "folder_tabs");
+    f.string(0x217020, "industry_folder");
+    f.array(0x2129a0, 0x218000, 1);
+    f.word(0x218000, 0x214000);
+    f.array(0x2129b8, 0x219000, 1);
+    // The real named tab key exceeds libstdc++'s inline-string capacity.
+    f.region(0x219000, 32);
+    f.word(0x219000, 0x21e000);
+    f.word(0x219008, 19);
+    f.word(0x219010, 19);
+    f.region(0x21e000, 20);
+    f.put(0x21e000, b"industry_folder_tab");
+    f.array(0x92d78, 0x21a000, 1);
+    f.word(0x21a000, 0x213000);
+    f.array(0x92d90, 0x21b000, 1);
+    f.word(0x21b000, 0x214000);
+    f.number(0x92e10, 0);
+    f.word(0x214080, b + 0x4347488);
+    f.word(0x214088, 0x21c000);
+    f.word(0x214090, 0x21c000);
+    f.number(0x214098, 1);
+    f.region(0x21c000, 0x20);
+    f.word(0x21c000, 0x92358);
+    f.word(0x92358, b + 0x424e0a8);
+    f.word(0x92380, 0x21d000);
+    f.word(0x92390, b + 0x15a5710);
+    f.word(0x92398, b + 0x15a56e0);
+    f.region(0x21d000, 0x18);
+    f.word(0x21d000, b + 0x1599270);
+    f.word(0x21d010, 0x92000);
+    f
+}
+#[test]
+fn own_category_body_joins_same_witnessed_campaign_and_selected_slot() {
+    let f = owned_category_fixture();
+    let (v, c) = research_ui::category_owned(&f, "industry_folder").unwrap();
+    assert_eq!(v["category"]["binding_available"], true);
+    assert_eq!(v["category"]["selected_folder_key"], "industry_folder");
+    assert_eq!(v["selected_slot"], 1);
+    assert_eq!(c.campaign.player, "GER");
+    assert_eq!(c.slots, [0x2c000, 0x2c100, 0x2c200, 0x2c300]);
+    assert_eq!(v["input_authorized"], false);
+    assert!(!v.to_string().contains(&0x21d000u64.to_string()));
+}
+#[test]
+fn category_context_gates_and_late_capture_and_slot_changes_refuse() {
+    let mut f = owned_category_fixture();
+    f.number(0x903d8, 5);
+    assert_eq!(
+        research_ui::category_snapshot(&f, "industry_folder")
+            .unwrap_err()
+            .code,
+        "gui_unavailable"
+    );
+    f.assert_not_read(&[0x360a8, 0x214068]);
+    for (address, length) in [(0x21d000, 8), (0x3b000, 32), (0x213098, 8)] {
+        let mut f = owned_category_fixture();
+        let mut bytes: Vec<_> = (0..length).map(|i| f.data[&(address + i)]).collect();
+        bytes[0] ^= 1;
+        f.fault = Some((address, 1, bytes));
+        assert_eq!(
+            research_ui::category_owned(&f, "industry_folder")
+                .unwrap_err()
+                .code,
+            "torn_read",
+            "{address:x}"
+        );
+    }
+}

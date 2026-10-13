@@ -1295,3 +1295,63 @@ passed **320 tests**; optimized actual Linux passed **381 reported checks**
 20.129 seconds; host/Linux Clippy, MSRV Linux compilation and formatting passed.
 These are fixture results. SelectSlot must pass a fresh recorded exclusive
 Luna run before it can count as installed-game action validation.
+
+
+## Recorded run 020: Luna selects research slots by ID
+
+A fresh immutable game used source `552681ea` and CLI SHA-256
+`f21d23c112f21e7029028b187518d8946ecb57c5e4d4927bbcf78049c4bb758b`.
+Normal historical vanilla Germany began paused at 1 January 1936, with all four
+slots empty. The builder prepared menus and opened the research panel once,
+then relinquished input; it selected no slot or technology. Recording had a
+verified first packet before the single campaign-start action.
+
+One Luna player at medium reasoning made four single-stage requests with separate
+durable IDs. SelectSlot 0 (**819 ms RPC**), View `support_weapons` (**659 ms**),
+Research (**955 ms**) and SelectSlot 1 (**545 ms**) all returned `Verified`,
+`current_state_verified=true` and `historical=false`. Separate UI and canonical
+reads confirmed slot 0 researching the requested technology and slot 1 empty
+and selected. No duplicate assignment, screenshot targeting, coordinates,
+callback execution, native post or builder rescue occurred. These four samples
+do not establish a general p50/p95 or upstream-command speedup.
+
+Ordinary speed 4, unpause and terminal pause verified. One server wait reached
+3 January at 01:00 in **20.348 seconds**, with zero rejected torn reads. Final
+state was **3 January at 07:00**, paused at speed 4; the own raw research counter
+increased from **101,000 to 303,000**. Other slots stayed empty and the completed
+count stayed 47. Counter units and event causality remain unverified. Luna
+released its lease and subsequent status showed zero remaining time.
+
+The **528.333-second H.264 recording** finalized and passed ffprobe. One owned
+WM close returned actual normal exit **0**, no signal/core dump, in **2.30 seconds**.
+Exact game/owner disappearance and terminal evidence were checked, and both old
+stdio clients closed. All three Rust and six Python CI jobs passed for the
+recorded source. No live binary was replaced.
+
+This validates own-slot selection and research assignment on the documented
+Linux build/profile. Automatic panel/category navigation, focus actions, daily
+plans, economic/army/naval commands, clean two-year acceptance and full campaigns
+remain unfinished.
+
+
+## Category-association reader: fixture checkpoint
+
+A new read-only folder-ID query checks canonical folder definitions, the exact
+reserved index-zero singleton, separate child-container/button name registries,
+dense tab/container indices and the tab-specific observer capture. The selected
+container and requested control must belong to the own registry. It reuses the
+full own selected-slot/campaign reader and its final witnesses; it does not
+switch a category or derive an input point. Unknown factory classes refuse.
+
+Review corrected an unproved index-zero skip and the order of selected-container
+ownership checks. Static tracing then sealed the singleton publication and its
+exact primary type. A parent fixture exposed a long tab key beyond inline-string
+capacity; its heap-string setup was corrected without changing production parsing.
+Nine module cases, two same-context/late-mutation cases and one protocol-shape
+case bring portable and MSRV suites to **332 passing tests**. Optimized actual
+Linux passed **393 reported checks** (392 substantive plus one inert helper),
+including five isolated X11 fixtures. Display ownership and ptrace policy were
+unchanged, and the preceding owned game remained exited. Python passed **953
+tests, 37 skipped**, in 20.323 seconds; host/Linux Clippy, MSRV Linux compilation
+and formatting passed. Installed-game category validation is pending; current-node
+membership alone never proves selected-category visibility.

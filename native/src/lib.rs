@@ -44,3 +44,5 @@ pub mod research_stage;
 
 mod focus_node_binding;
 mod slot_control;
+
+mod category_ui;

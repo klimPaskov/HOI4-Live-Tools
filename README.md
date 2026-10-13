@@ -22,7 +22,7 @@ assignment, with canonical slot readback and counter advancement through
 | --- | --- | --- |
 | Python / Windows | Baseline tools and recorded play attempts | Clean campaign acceptance; current development changes are unfinished |
 | Python / macOS | Platform work and limited diagnostic play | Reliable live acceptance; screenshot-driven testing is stopped |
-| Native / Linux | Own-country reads, focus/research catalogs, owned launch/reconnects, Luna clock test through 5 January and ID-based research smoke through 3 January 1936 | Automatic slot navigation, broader strategic actions, governor and campaign acceptance |
+| Native / Linux | Own-country reads, focus/research catalogs, owned launch/reconnects, Luna clock test through 5 January and ID-based slot/research smoke through 3 January 1936 | Panel/category navigation, broader strategic actions, governor and campaign acceptance |
 | Native / Windows and macOS | Portable protocol and fixture tests in CI | Independently verified process/build adapters and live tests |
 
 Read [the acceptance gates](docs/LINUX_RUST_HANDOFF.md),
@@ -83,9 +83,9 @@ exact-key diagnostics measured 116/120 ms. Scope, hardware and validation limits
 are documented in [the comparison](docs/CLAUSEWITZ_COMPARISON.md) and
 [live evidence](docs/CLAUSEWITZ_VALIDATION.md), including failures and clean exits.
 
-The research preview requires an already selected own empty slot. Automatic
-slot navigation, broader strategic action adapters, the Rust daily governor and
-Windows/macOS live adapters remain unfinished. Three-OS CI passes shared code and fixtures;
+The research preview starts from an open own panel and selects empty slots by
+ID. Panel/category navigation, broader strategic action adapters, the Rust daily
+governor and Windows/macOS live adapters remain unfinished. Three-OS CI passes shared code and fixtures;
 compilation is not live compatibility or campaign acceptance.
 
 ## Development

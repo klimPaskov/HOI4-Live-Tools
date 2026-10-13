@@ -288,3 +288,11 @@ slots and quarantines uncertain selection across restart. Fixture gates pass
 give Luna medium exclusive input for SelectSlot/View/Research and a subsequent
 empty-slot selection. Record the real result; panel/category navigation, focus
 actions and the daily governor remain to be implemented.
+
+
+Recorded run 020 passed that slot-selection gate with exclusive Luna medium
+input: SelectSlot 0, View/Research and SelectSlot 1 verified, followed by counter
+advancement through 3 January. All four strategic RPC samples were under one
+second; the recording passed ffprobe and one WM close returned normal exit 0.
+The builder opened only the initial panel. Implement panel/category navigation
+and focus/economic/daily plans next; keep the full acceptance objective intact.

@@ -51,6 +51,7 @@ fn stdio_is_json_and_notifications_have_no_reply() {
             "hoi4_research",
             "hoi4_input_geometry",
             "hoi4_research_slot_control",
+            "hoi4_research_category",
             "hoi4_research_ui",
             "hoi4_army",
             "hoi4_economy",
@@ -255,5 +256,23 @@ fn invalid_ui_wait_is_refused_before_process_access() {
         let value: Value =
             serde_json::from_str(reply["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
         assert_eq!(value["error"]["code"], "invalid_arguments");
+    }
+}
+
+#[test]
+fn category_arguments_refuse_before_process_access() {
+    let server = hoi4_live_native::protocol::Server {
+        process: None,
+        unavailable: None,
+    };
+    for args in [
+        json!({}),
+        json!({"folder_id":0}),
+        json!({"folder_id":""}),
+        json!({"folder_id":"industry_folder","index":0}),
+        json!({"folder_id":"bad\nkey"}),
+    ] {
+        let reply=server.handle(json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"hoi4_research_category","arguments":args}})).unwrap();
+        assert!(reply.to_string().contains("invalid_arguments"));
     }
 }

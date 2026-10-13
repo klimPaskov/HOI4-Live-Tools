@@ -345,11 +345,11 @@ pub struct UiContext {
     pub slots: Vec<u64>,
 }
 pub fn snapshot(process: &dyn Process) -> Result<Value> {
-    Ok(observe(process, false, false, None, None, false)?.0)
+    Ok(observe(process, false, false, None, None, false, None)?.0)
 }
 /// Dedicated diagnostic keeps current-node validation out of clock/UI waits.
 pub fn nodes(process: &dyn Process) -> Result<Value> {
-    let (value, _) = observe(process, false, true, None, None, false)?;
+    let (value, _) = observe(process, false, true, None, None, false, None)?;
     Ok(
         json!({"source":"native own current research nodes","build_id":game::BUILD_ID,
         "selected_slot":value["selected_slot"],"active_mode_raw":value["active_mode_raw"],
@@ -425,7 +425,7 @@ pub fn nodes_page(
     Ok(value)
 }
 pub(crate) fn wait_snapshot(process: &dyn Process) -> Result<(Value, UiContext)> {
-    let (value, context) = observe(process, true, false, None, None, false)?;
+    let (value, context) = observe(process, true, false, None, None, false, None)?;
     Ok((
         value,
         context.expect("Context requested by wait observation"),
@@ -438,6 +438,7 @@ fn observe(
     requested_detail: Option<&str>,
     requested_slot: Option<usize>,
     include_slot_geometry: bool,
+    requested_category: Option<&str>,
 ) -> Result<(Value, Option<UiContext>)> {
     let start = Instant::now();
     process.begin_snapshot()?;
@@ -634,6 +635,30 @@ fn observe(
     } else {
         None
     };
+    let category = if let Some(key) = requested_category {
+        if active != 6
+            || selected_index.is_none()
+            || display_tag < 0
+            || tree_state["visible_predicate"] != true
+            || panel_state["visible_predicate"] == true
+        {
+            return Err(Error::new(
+                "gui_unavailable",
+                "Own selected research tree required for category association",
+            ));
+        }
+        Some(crate::category_ui::observe(
+            &r,
+            base,
+            tree,
+            r.u64(tree + 0x2f8)?,
+            registry,
+            status,
+            key,
+        )?)
+    } else {
+        None
+    };
     let (end_calls, end_bytes) = observed.finish()?;
     process.check()?;
     let context = campaign.map(|campaign| UiContext {
@@ -641,10 +666,11 @@ fn observe(
         anchors: [country, status, registry, manager, view, tree],
         slots: slots.clone(),
     });
-    Ok((
-        json!({"source":"native own research UI diagnostics","build_id":game::BUILD_ID,"owned":true,"own_slot_count":slots.len(),"widget_count":widgets.len(),"widgets_complete":widgets.len()==slots.len(),"slot_identity":"own array index in current process/status snapshot; not a persistent ID","selected_slot":selected_index,"active_mode_raw":active,"panel":panel_state,"ordinary_tree":tree_state,"slots":output,"technology_info":info,"current_nodes":nodes,"input_authorized":false,"unverified":["effective ancestor visibility and clipping","sprite hit predicates","topmost hit routing","physical client conversion"],"observation_paused_game":false,"freshness":{"observed_unix_ms":SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),"elapsed_ms":start.elapsed().as_secs_f64()*1000.0,"read_calls_kind":"logical_read_requests","read_calls":r.calls.get()+end_calls as u64,"read_bytes":r.bytes.get()+end_bytes}}),
-        context,
-    ))
+    let mut value = json!({"source":"native own research UI diagnostics","build_id":game::BUILD_ID,"owned":true,"own_slot_count":slots.len(),"widget_count":widgets.len(),"widgets_complete":widgets.len()==slots.len(),"slot_identity":"own array index in current process/status snapshot; not a persistent ID","selected_slot":selected_index,"active_mode_raw":active,"panel":panel_state,"ordinary_tree":tree_state,"slots":output,"technology_info":info,"current_nodes":nodes,"input_authorized":false,"unverified":["effective ancestor visibility and clipping","sprite hit predicates","topmost hit routing","physical client conversion"],"observation_paused_game":false,"freshness":{"observed_unix_ms":SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),"elapsed_ms":start.elapsed().as_secs_f64()*1000.0,"read_calls_kind":"logical_read_requests","read_calls":r.calls.get()+end_calls as u64,"read_bytes":r.bytes.get()+end_bytes}});
+    if let Some(category) = category {
+        value["category"] = category;
+    }
+    Ok((value, context))
 }
 
 fn observe_target(
@@ -858,6 +884,7 @@ fn slot_control_result(
         None,
         Some(slot),
         include_geometry,
+        None,
     )?;
     if slot >= value["own_slot_count"].as_u64().unwrap_or(0) as usize {
         return Err(Error::new("invalid_index", "Own research slot absent"));
@@ -867,6 +894,20 @@ fn slot_control_result(
         json!({"source":"native own research slot control diagnostic","build_id":game::BUILD_ID,"owned":true,"slot":slot,"slot_identity":"own current array index; not persistent","descriptor":descriptor,"selected_slot":value["selected_slot"],"active_mode_raw":value["active_mode_raw"],"panel":value["panel"],"ordinary_tree":value["ordinary_tree"],"freshness":value["freshness"],"client_rectangle_available":false,"input_authorized":false,"observation_paused_game":false}),
         context,
     ))
+}
+
+/// Public category association only; it neither switches a tab nor derives input.
+pub fn category_snapshot(process: &dyn Process, key: &str) -> Result<Value> {
+    Ok(category_owned(process, key)?.0)
+}
+#[doc(hidden)]
+pub fn category_owned(process: &dyn Process, key: &str) -> Result<(Value, UiContext)> {
+    validate_detail_key(key)?;
+    let (v, context) = observe(process, true, false, None, None, false, Some(key))?;
+    let result = json!({"source":"native own research category association","build_id":game::BUILD_ID,"owned":true,
+        "category":v["category"],"selected_slot":v["selected_slot"],"freshness":v["freshness"],
+        "input_authorized":false,"observation_paused_game":false});
+    Ok((result, context.expect("Own category context requested")))
 }
 
 #[cfg(test)]

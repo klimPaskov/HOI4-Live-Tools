@@ -198,7 +198,8 @@ for each stage, and `lease_token`. `select_slot` requires an open own panel
 and verifies the selected empty own tree; View/Research require that tree.
 Selection retains the planned technology ID in its durable target. It accepts
 no coordinates and performs no automatic panel or category navigation.
-The new SelectSlot adapter is fixture-tested and awaits recorded live validation. Each stage derives its point from fresh internal observations and
+Recorded run 020 verified SelectSlot 0, View/Research and SelectSlot 1 with
+exclusive Luna medium input and independent own-state readback. Each stage derives its point from fresh internal observations and
 pins campaign, own status and full slot identities. A final read-only check
 follows X11 preparation. It attempts at most one motion/left-button pair.
 

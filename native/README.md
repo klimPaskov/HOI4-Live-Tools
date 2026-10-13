@@ -77,6 +77,7 @@ anchors do not establish a load-generation token.
 | `hoi4_input_geometry` | GUI dimensions, scale, pointer and conditional source-window diagnostics; no click authority |
 | `hoi4_research_ui` | Own slot/widget joins, selected slot, retained Info windows and typed controls |
 | `hoi4_research_slot_control` | One own slot's independently verified callback and control metadata; no input authority |
+| `hoi4_research_category` | One public folder ID, named own tab and dense selection/callback association; read-only and awaiting live validation |
 | `hoi4_research_node_detail` | One exact own key's binding, raw renderer/cache and typed hierarchy diagnostics |
 | `hoi4_research_nodes` | Paged current own-tree keys and conditional control associations |
 | `hoi4_focus_list` | Own canonical focus keys and selected detail diagnostics; no start authority |
@@ -165,8 +166,10 @@ Luna medium player opened and assigned `support_weapons` by ID. Separate reads
 confirmed slot 0 and its advancing counter through 3 January 1936. View and
 Research RPCs took 774 and 851 ms. The recorded source required the
 own empty slot tree to be selected first. A new `select_slot` stage can derive
-the ordinary slot control from an open own panel; its shared renderer/context
-checks have fixture evidence and await a fresh recorded run. Automatic panel
+the ordinary slot control from an open own panel. Recorded run 020 verified
+Luna selecting slots 0 and 1, assigning research, and advancing its counter
+through 3 January; all four strategic RPC samples were under one second.
+Automatic panel
 opening and technology-category navigation remain unfinished.
 Its internal observation adapter checks the requested own key/slot and fresh
 renderer, callback, hierarchy and SDL/X11 associations before candidate maths.
