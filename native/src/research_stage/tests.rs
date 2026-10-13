@@ -409,6 +409,16 @@ fn late_noop_cannot_claim_fresh_success_and_terminal_capacity_is_reserved() {
     );
     assert_eq!(j.file.metadata().unwrap().len(), 0);
     f = Fake::new();
+    // Windows append-only handles intentionally cannot resize files. Replace
+    // only this generated fixture handle with a writable, exclusively locked
+    // handle to prepare the full-capacity condition; production open is unchanged.
+    FileExt::unlock(&j.file).unwrap();
+    j.file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(scratch.journal())
+        .unwrap();
+    j.file.try_lock_exclusive().unwrap();
     j.file.set_len(LIMIT - LINE as u64).unwrap();
     assert_eq!(
         execute(
