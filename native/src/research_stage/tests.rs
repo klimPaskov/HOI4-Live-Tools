@@ -966,6 +966,7 @@ fn category_unknown_intent_restart_blocks_every_stage_id() {
     let mut j = Journal::open(&sc.journal()).unwrap();
     let mut f = Fake::new();
     f.last = category_state(Some("electronics_folder"));
+    f.expire_after_dispatch = true;
     assert!(execute(
         &mut j,
         "unknowncat",
@@ -973,7 +974,7 @@ fn category_unknown_intent_restart_blocks_every_stage_id() {
         &a,
         &g,
         &mut f,
-        Duration::from_millis(20)
+        Duration::from_secs(5)
     )
     .is_err());
     assert_eq!(f.dispatches, 1);

@@ -1657,3 +1657,12 @@ refusal; production research deadlines remain unchanged.
 These are fixture checks. A fresh immutable Luna run is still needed for the
 clock changes; focus actions, governor execution and full campaigns remain
 unaccepted.
+
+CI for `152bdf3` passed all six Python jobs and the Linux/macOS Rust jobs.
+Windows passed the corrected timeout test but exposed the same pre-dispatch
+scheduling assumption in the category restart fixture: its 20 ms budget expired
+before the expected input. The follow-up fixture uses the same finite
+post-dispatch expiration mechanism. Its 21 research-stage checks passed on host
+stable and Rust1.86; Python passed 953 tests, 37 skipped. Production code and the
+running immutable game binary were unchanged. Windows CI verification remains
+pending for this follow-up.
