@@ -114,6 +114,11 @@ predicate: `until_research_ui: {"view":"tree","selected_slot":0}`. A slot index
 is tied to the current owned array, not a persistent ID. Local window predicates
 are not effective visibility or input routing.
 
+Wait reads check the original deadline before starting and after completion.
+A successful blocking read returned at or after that deadline is refused rather
+than labeled a reached target. Identity errors remain immediate and never retry;
+retry sleeps consume only the remaining budget. Reads do not pause the game.
+
 ## GUI diagnostics
 
 Readers require exact current-build primary types, own registry/status links,

@@ -72,13 +72,30 @@ fn fresh_wait_read<T, F>(
     start: Instant,
     timeout: Duration,
     rejected: &mut u64,
-    mut read: F,
+    read: F,
 ) -> Result<T>
 where
     F: FnMut() -> Result<T>,
 {
+    fresh_wait_read_with(
+        start,
+        timeout,
+        rejected,
+        read,
+        Instant::now,
+        std::thread::sleep,
+    )
+}
+fn fresh_wait_read_with<T>(
+    start: Instant,
+    timeout: Duration,
+    rejected: &mut u64,
+    mut read: impl FnMut() -> Result<T>,
+    mut now: impl FnMut() -> Instant,
+    mut sleep: impl FnMut(Duration),
+) -> Result<T> {
     loop {
-        if start.elapsed() >= timeout {
+        if now().saturating_duration_since(start) >= timeout {
             return Err(Error::new(
                 "unstable_observation",
                 "Fresh observation deadline reached; no further read or cached result",
@@ -87,14 +104,20 @@ where
         match read() {
             Err(e) if e.code == "torn_read" => {
                 *rejected += 1;
-                let remaining = timeout.saturating_sub(start.elapsed());
+                let remaining = timeout.saturating_sub(now().saturating_duration_since(start));
                 if remaining.is_zero() {
                     return Err(Error::new(
                         "unstable_observation",
                         "No stable snapshot within wait deadline; no stale result returned",
                     ));
                 }
-                std::thread::sleep(remaining.min(Duration::from_millis(250)));
+                sleep(remaining.min(Duration::from_millis(250)));
+            }
+            Ok(_) if now().saturating_duration_since(start) >= timeout => {
+                return Err(Error::new(
+                    "unstable_observation",
+                    "Snapshot completed after wait deadline; no late target accepted",
+                ));
             }
             result => return result,
         }
@@ -653,6 +676,116 @@ impl Server {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::cell::Cell;
+
+    #[test]
+    fn wait_refuses_a_successful_read_completed_at_or_after_its_deadline() {
+        for late in [Duration::from_secs(1), Duration::from_secs(2)] {
+            let start = Instant::now();
+            let now = Cell::new(start);
+            let reads = Cell::new(0);
+            let mut rejected = 0;
+            let error = fresh_wait_read_with(
+                start,
+                Duration::from_secs(1),
+                &mut rejected,
+                || {
+                    reads.set(reads.get() + 1);
+                    now.set(start + late);
+                    Ok(json!({"date":"target_reached_too_late"}))
+                },
+                || now.get(),
+                |_| panic!("A late successful read must not retry or sleep"),
+            )
+            .unwrap_err();
+            assert_eq!(error.code, "unstable_observation");
+            assert_eq!(reads.get(), 1);
+            assert_eq!(rejected, 0);
+        }
+    }
+
+    #[test]
+    fn wait_torn_retry_retains_original_budget_and_caps_its_sleep() {
+        let start = Instant::now();
+        let now = Cell::new(start);
+        let reads = Cell::new(0);
+        let slept = Cell::new(Duration::ZERO);
+        let mut rejected = 0;
+        let error = fresh_wait_read_with::<Value>(
+            start,
+            Duration::from_millis(300),
+            &mut rejected,
+            || {
+                reads.set(reads.get() + 1);
+                now.set(start + Duration::from_millis(280));
+                Err(Error::new("torn_read", "Own clock changed"))
+            },
+            || now.get(),
+            |delay| {
+                slept.set(slept.get() + delay);
+                now.set(now.get() + delay);
+            },
+        )
+        .unwrap_err();
+        assert_eq!(error.code, "unstable_observation");
+        assert_eq!(reads.get(), 1);
+        assert_eq!(rejected, 1);
+        assert_eq!(slept.get(), Duration::from_millis(20));
+    }
+
+    #[test]
+    fn wait_accepts_only_a_timely_fresh_sample_after_a_torn_retry() {
+        let start = Instant::now();
+        let now = Cell::new(start);
+        let reads = Cell::new(0);
+        let mut rejected = 0;
+        let value = fresh_wait_read_with(
+            start,
+            Duration::from_secs(1),
+            &mut rejected,
+            || {
+                reads.set(reads.get() + 1);
+                now.set(now.get() + Duration::from_millis(100));
+                if reads.get() == 1 {
+                    Err(Error::new("torn_read", "Own clock changed"))
+                } else {
+                    Ok(json!({"date":"fresh_timely_target"}))
+                }
+            },
+            || now.get(),
+            |delay| now.set(now.get() + delay),
+        )
+        .unwrap();
+        assert_eq!(value["date"], "fresh_timely_target");
+        assert_eq!(reads.get(), 2);
+        assert_eq!(rejected, 1);
+        assert_eq!(now.get() - start, Duration::from_millis(450));
+    }
+
+    #[test]
+    fn wait_preserves_a_late_identity_error_without_retry_or_cached_success() {
+        let start = Instant::now();
+        let now = Cell::new(start);
+        let reads = Cell::new(0);
+        let mut rejected = 0;
+        let error = fresh_wait_read_with::<Value>(
+            start,
+            Duration::from_secs(1),
+            &mut rejected,
+            || {
+                reads.set(reads.get() + 1);
+                now.set(start + Duration::from_secs(2));
+                Err(Error::new("ownership_changed", "Own process was replaced"))
+            },
+            || now.get(),
+            |_| panic!("Identity errors must not sleep or retry"),
+        )
+        .unwrap_err();
+        assert_eq!(error.code, "ownership_changed");
+        assert_eq!(reads.get(), 1);
+        assert_eq!(rejected, 0);
+    }
+
     #[test]
     fn wait_retries_torn_reads_and_only_returns_a_fresh_snapshot() {
         let mut calls = 0;

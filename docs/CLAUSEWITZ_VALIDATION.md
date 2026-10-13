@@ -1710,3 +1710,27 @@ release proof, recordings and sanitized calls remain private. Both clients close
 
 This successful bounded Rust run does not explain run024's missing clock witness.
 No clean two-year run, live focus/governor acceptance or full campaign has passed.
+
+## Server-wait deadline regression
+
+Wait observations now check the original budget after a successful read as well
+as before starting it. A snapshot completed at or after the deadline returns
+`unstable_observation`; it cannot report a reached target. Torn-read retries and
+their sleeps consume the same budget. Ownership errors remain immediate and
+are never retried. This does not forcibly interrupt a blocking OS read, pause the
+game or introduce any input.
+
+Four deterministic clock-injection regressions cover late success, capped retry
+sleep, timely recovery and preservation of a late ownership error. The complete
+host Rust suite passed **448 tests**; all seven protocol-unit checks passed on
+Rust1.86. The optimized actual Linux bundle passed **531 reported checks**
+(529 substantive plus two inert helpers), including five isolated X11 cases.
+Nested helper output is not counted again. Source hashes matched all76 manifest
+files; the previous game/owner remained exited and display ownership/Yama1 were
+unchanged. Host/Linux Clippy, Rust1.86 Linux compilation and formatting passed.
+The local Python working-tree suite passed953 tests,37 skipped, in19.305 seconds;
+that checkout includes preserved Python WIP outside this Rust change.
+
+These are offline/kernel regression checks. The new wait behavior has not yet
+been exercised in a fresh installed-game run. Focus/governor service integration
+and the full campaign gates remain unfinished.

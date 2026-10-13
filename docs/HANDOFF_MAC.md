@@ -2,8 +2,10 @@
 
 **Current direction:** the user superseded Mac live testing with the
 [Linux-first Rust objective](LINUX_RUST_HANDOFF.md). Read that and the
-[current live evidence](CLAUSEWITZ_VALIDATION.md) before resuming. A partial Luna
-Linux smoke and the first Rust reader now exist; campaign acceptance is not passed.
+[current live evidence](CLAUSEWITZ_VALIDATION.md) before resuming. Recorded Linux
+Luna runs have verified Rust clock controls and four-slot research through
+5 January 1936. Focus and daily execution remain in development; campaign
+acceptance is not passed.
 
 **Earlier Mac continuation:** read [Mac continuation checkpoint](MAC_CONTINUATION_STATUS.md)
 first for implemented Mac support, the locked-desktop smoke-test blocker, remaining

@@ -4,6 +4,17 @@ User direction, 12 October 2026: stop the Mac screenshot-driven live tests and
 replace the primary runtime with a fast Rust MCP based on Clausewitz-MCP.
 Linux is the first live target; Windows and macOS remain required platforms.
 
+**Current continuation:** recorded run025 passed exclusive Luna medium clock
+controls, all four research assignments and advancement through 5 January 1936.
+Recording passed ffprobe; one owned window close returned normal exit0, and both
+game and owner are absent. Run024's clock uncertainty remains unexplained.
+The failed upstream native-posting adapter stays quarantined. Continue with
+verified ordinary focus actions and durable daily execution, then economic,
+army and naval adapters and independent Windows/macOS live support. All nine
+cross-platform CI jobs passed at `aa94c9e`; this does not prove native gameplay
+on every platform. No clean two-year or full campaign has passed. Detailed
+failures and evidence remain in [live validation](CLAUSEWITZ_VALIDATION.md).
+
 ## Ordered acceptance gates
 
 1. Stop and preserve the owned Mac diagnostic run, recordings and settings.
@@ -337,3 +348,8 @@ and freshly validating clock scheduling, joining the focus producers to the
 shared controller, then wiring daily execution and remaining domain adapters.
 Windows/macOS native live support, clean two-year acceptance and the Germany,
 China and Poland campaigns remain required. Keep the full goal active.
+
+Run025 subsequently passed the fixed-budget Rust clock/research smoke described
+at the top of this brief. The preceding run024 paragraph is preserved historical
+evidence, not the current clock-validation result. Focus and daily service
+integration remain the next live gates.
