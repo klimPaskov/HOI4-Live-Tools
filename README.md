@@ -71,8 +71,10 @@ governor, and Windows/macOS process adapters are still unimplemented in Rust.
 An explicit owned binding can enable ordinary clock keys with exclusive input
 leases, durable receipts and memory readback. Strategic action adapters remain
 unfinished; the previous engine posting failure stays quarantined.
-The live clock test used no screenshots or cursor movement: pause took 1.27 seconds
-and single-step speed changes took about one second under x86 CPU emulation.
+The latest Luna medium clock test reached 3 January with verified pause and
+receipt replay. It used no player screenshots or cursor movement: pause took
+0.76 seconds and fresh overview reads measured 15.7 ms median RPC under x86 CPU
+emulation. [Live evidence](docs/CLAUSEWITZ_VALIDATION.md) records limits and failures.
 The Linux preview also has a persistent [owned launcher](docs/OWNED_LINUX_LAUNCHER.md)
 with reconnectable clients and guarded graceful shutdown.
 Linux, Windows and macOS CI pass the portable code and platform fixtures.

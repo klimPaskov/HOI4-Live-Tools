@@ -50,6 +50,7 @@ fn stdio_is_json_and_notifications_have_no_reply() {
             "hoi4_overview",
             "hoi4_research",
             "hoi4_input_geometry",
+            "hoi4_research_ui",
             "hoi4_technology_list",
             "hoi4_wait_for"
         ]
@@ -100,6 +101,24 @@ fn invalid_research_query_is_refused_before_process_access() {
         let value: Value =
             serde_json::from_str(reply["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
         assert_eq!(value["error"]["code"], "invalid_arguments");
+    }
+}
+#[test]
+fn research_ui_refuses_selector_or_action_arguments_before_process_access() {
+    use hoi4_live_native::protocol::Server;
+    let server = Server {
+        process: None,
+        unavailable: None,
+    };
+    for arguments in [
+        json!({"country":"FRA"}),
+        json!({"click":true}),
+        json!({"slot":0}),
+    ] {
+        let reply = server.handle(json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"hoi4_research_ui","arguments":arguments}})).unwrap();
+        let v: Value =
+            serde_json::from_str(reply["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+        assert_eq!(v["error"]["code"], "invalid_arguments");
     }
 }
 #[test]

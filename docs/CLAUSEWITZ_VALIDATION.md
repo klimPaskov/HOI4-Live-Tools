@@ -448,6 +448,52 @@ flushing supplied a verified first packet before Start. Its two finalized
 512×288 segments passed ffprobe, with durations 600.0 and 57.666 seconds. All
 footage, calls, source manifests, incidents and journals remain private.
 
+## Own research and corrected GUI live check — 13 October 2026
+
+A fresh optimized run used commit `633524e` and the same exact Linux game build.
+Ordinary singleplayer setup selected Normal historical vanilla Germany. The
+recording's first packet was verified before Start. Own reads returned **47
+completed technology IDs** with level/threshold 1 and four empty slots. This
+validates the initial completed-membership model; active signed counters and
+their units still need an actual research assignment and later observation.
+
+The corrected GUI reader accepted the game's derived primary type and returned
+physical **512×288**, logical **2560×1440**, scale **5** and logical pointer
+`[1280, 40]`. This agrees with the stationary client pointer `[256, 8]` at one
+point. It does not establish a general client conversion, control geometry or
+hit routing. `input_mapping_verified` remains false.
+
+One Luna medium player held exclusive clock input. Speed 0→4, 4→3, 3→4,
+unpause and final pause all returned verified receipts. Replaying the first
+fully verified speed request returned the same receipt in **15.5 ms**. The
+durable journal retained one dispatch/verified transition for that request,
+with no additional action record. No uncertain request was repeated.
+
+The campaign-bound server wait reached **1936.01.03.01** in **19.595 seconds**,
+with **zero rejected torn reads**. This is a passed live wait, but does not
+exercise the transient-retry branch; that branch retains separate fixture
+evidence. Unpause took 0.223 seconds and pause 0.756 seconds over persistent
+stdio/SSH. A separate overview confirmed **1936.01.03.06**, paused at speed 4.
+The lease was released and status reported zero remaining authority.
+
+Twenty fresh paused overviews measured **15.7 ms median RPC**, **9.9 ms median
+reported snapshot time** and **71.3 ms maximum RPC**. Ten own research queries
+measured **27.0 / 19.3 ms** median RPC/reported time; ten GUI diagnostics measured
+**14.2 / 9.2 ms**. The guest uses QEMU TCG and these timings are not native Linux
+hardware throughput. Each overview reported 87 logical reads / 953 bytes after
+the added settings witnesses; backend/procfs work remains outside those counters.
+
+Pointer coordinates matched before and after play, every inspected thread had
+tracer 0 and Yama stayed 1. No player screenshots, save reads or cursor movement
+occurred. Both finalized 512×288 recording segments passed ffprobe, with
+durations **600.0 and 38.0 seconds**. Calls, journal, source manifests and footage
+remain private. This is bounded clock/model validation; strategic play, the clean
+two-year test and complete campaign acceptance remain unfinished.
+
+A subsequent read-only own research UI diagnostic has fixture evidence only.
+It checks slot/widget ownership, selected-slot membership, primary type metadata
+and repeated structural witnesses. Its descriptors do not authorize clicks.
+
 ## Attribution
 
 The findings above refer to upstream `calling/{mem,process/linux,api,game,

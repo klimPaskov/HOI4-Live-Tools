@@ -10,4 +10,5 @@ pub mod memory;
 pub mod platform;
 pub mod protocol;
 pub mod research;
+pub mod research_ui;
 pub mod technology;

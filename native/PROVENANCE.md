@@ -45,3 +45,9 @@ The own research reader ports completed-membership and slot API concepts with
 independently verified primary vtables, own-country links, canonical ID joins,
 completion thresholds and signed 64-bit active counters. It excludes upstream
 guessed progress units and eligibility calls.
+
+The own research UI diagnostic is new project code. Its widget, selected-slot,
+view, container and button ownership/type fields were recovered independently
+from the exact installed ELF and ordinary GUI definitions. No game files are
+redistributed. Bounded primary RTTI observations classify actual renderer
+metadata; they do not establish field layouts or ordinary click eligibility.

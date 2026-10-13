@@ -37,11 +37,13 @@ already owned X11 display and the exact verified game build below. The launcher
 and process-reader fixtures pass. The installed Linux game also ran under its
 actual Rust parent at unchanged Yama scope 1, with two reconnecting clients;
 this does not establish campaign acceptance.
-The subsequent Luna medium clock test passed speed changes, unpause, advancement
-to 3 January 1936 and pause. It used actual memory readback, with no screenshots,
-cursor movement or process suspension. Pause took 1.27 seconds over persistent
-stdio/SSH; single-step speed changes took about one second. The guest's Yama scope
-stayed 1 and all inspected game threads had tracer 0.
+The latest optimized Luna medium clock test passed speed changes, receipt replay,
+unpause, a server wait to 3 January 1936 and verified pause. The wait took 19.60
+seconds; unpause took 0.22 seconds and pause 0.76 seconds over persistent stdio/SSH.
+Twenty fresh overviews measured 15.7 ms median RPC, with a 71.3 ms maximum in this
+emulated guest. No player screenshots, cursor movement or process suspension
+occurred. Yama stayed 1 and all inspected game threads had tracer 0.
+These are bounded clock checks; strategic and campaign acceptance remain open.
 
 The diagnostic `--session OWNED_RUN_MANIFEST` path remains available. Its
 manifest records these actual launch facts:
@@ -59,7 +61,9 @@ It captures a private boot/`AT_RANDOM` witness and checks it at snapshot boundar
 to refuse same-image exec address-space replacement.
 It does not discover or take over another running game. PID replacement fails
 explicitly, and observations check ownership and campaign anchors at both ends.
-Torn reads fail rather than return a cached or partially valid snapshot.
+Torn reads fail rather than return a cached or partially valid snapshot. Server
+waits can retry transient torn reads within their deadline, with campaign context
+and a nondecreasing accepted timeline pinned to the initial stable sample.
 
 The only live-tested layout is Linux x86_64 build ID
 `a4971c9e8ac9a6f2487dea109e01f9839ee59db7`, SHA-256
@@ -83,6 +87,7 @@ threads. Generated-child tests exercised that access under unchanged Yama scope
 | `hoi4_research` | Own completed technology IDs, raw levels/thresholds and active signed counters; units remain unverified |
 | `hoi4_technology_list` | Bounded loaded technology IDs, filter and pagination; no eligibility inference |
 | `hoi4_input_geometry` | Own GUI pointer/dimension/scale diagnostics; client origin and click mapping remain unverified |
+| `hoi4_research_ui` | Read-only own slot/widget joins and button/render type diagnostics; no click authorization; live validation pending |
 | `hoi4_wait_for` | Bounded wait, 1–50 seconds, for own focus/research changes or `until_date: [year, month, day]` |
 
 The game uses a 365-day calendar, including February 28 in 1936. Its current-build

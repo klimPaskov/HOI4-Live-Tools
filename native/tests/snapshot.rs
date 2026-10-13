@@ -3,7 +3,7 @@ use hoi4_live_native::{
     game, gui,
     memory::ReadMemory,
     platform::Process,
-    research, technology,
+    research, research_ui, technology,
 };
 use std::{cell::Cell, collections::BTreeMap};
 struct Fixture {
@@ -211,6 +211,71 @@ impl Fixture {
             self.word(slot + 0x20, 999999);
         }
         self.word(0x2c018, 0x80000);
+    }
+    fn research_ui(&mut self) {
+        self.own_research();
+        self.geometry();
+        let base = 0x10000;
+        self.word(0x326b8, 0x90000);
+        self.region(0x90000, 0x400);
+        self.word(0x90180, 0x32000);
+        self.word(0x900f0, 0x91000);
+        self.word(0x900f8, 0x92000);
+        self.number(0x903d8, 5);
+        self.region(0x91000, 0x400);
+        self.region(0x92000, 0xe30);
+        self.word(0x91000, base + 0x424dc38);
+        self.word(0x92000, base + 0x424de40);
+        self.word(0x912f0, 0x32000);
+        self.word(0x922f0, 0x32000);
+        self.number(0x92e24, 6);
+        self.word(0x92e08, 0x2c100);
+        self.array(0x91308, 0x93000, 4);
+        self.region(0x93000, 32);
+        for i in 0..4 {
+            let widget = 0x94000 + i * 0x1000;
+            let container = 0xa0000 + i * 0x2000;
+            self.region(widget, 0x300);
+            self.word(widget, base + 0x424e7d8);
+            self.word(widget + 0x2a8, 0x70000);
+            self.word(widget + 0x2b0, 0x91000);
+            self.word(widget + 0x2b8, 0x2c000 + i * 0x100);
+            self.word(widget + 0x10, container);
+            self.word(0x93000 + i * 8, widget);
+            self.region(container, 0xf00);
+            self.word(container, base + 0x4347d58);
+            self.put(container + 0xa5, &[8]);
+        }
+        self.word(0x912f8, 0xa0000);
+        self.array(0xa0958, 0xb0000, 1);
+        self.word(0xb0000, 0xb1000);
+        self.region(0xb1000, 0x100);
+        self.word(0xb10e8, 0xb2000);
+        self.region(0xb2000, 8);
+        for (object, name, vptr, info, text) in [
+            (
+                0xb1000,
+                "CButtonStandard",
+                base + 0x43470c8,
+                base + 0x4350000,
+                base + 0x38afd74,
+            ),
+            (
+                0xb2000,
+                "CFrameAnimatedSprite",
+                base + 0x434b370,
+                base + 0x4351000,
+                base + 0x38b4750,
+            ),
+        ] {
+            self.word(object, vptr);
+            self.word(vptr - 16, 0);
+            self.word(vptr - 8, info);
+            self.region(info, 16);
+            self.word(info + 8, text);
+            self.region(text, 128);
+            self.put(text, format!("{}{name}", name.len()).as_bytes());
+        }
     }
 }
 impl ReadMemory for Fixture {
@@ -683,4 +748,152 @@ fn wrong_gui_type_inconsistent_scales_and_torn_geometry_fail() {
         gui::input_geometry(&fixture).unwrap_err().code,
         "ownership_changed"
     );
+}
+
+#[test]
+fn research_ui_reports_owned_widgets_and_diagnostic_types_without_input() {
+    let mut f = Fixture::new();
+    f.research_ui();
+    let v = research_ui::snapshot(&f).unwrap();
+    assert_eq!(v["own_slot_count"], 4);
+    assert_eq!(v["widget_count"], 4);
+    assert_eq!(v["selected_slot"], 1);
+    assert_eq!(v["active_mode_raw"], 5);
+    assert_eq!(v["panel"]["visible_predicate"], true);
+    assert_eq!(v["ordinary_tree"]["materialized"], false);
+    assert_eq!(
+        v["slots"][0]["buttons_observed"][0]["type_encoding"],
+        "15CButtonStandard"
+    );
+    assert_eq!(
+        v["slots"][0]["buttons_observed"][0]["render_type_encoding"],
+        "20CFrameAnimatedSprite"
+    );
+    assert_eq!(
+        v["slots"][0]["buttons_observed"][0]["geometry_verified"],
+        false
+    );
+    assert_eq!(v["input_authorized"], false);
+    assert_eq!(f.checks.get(), 2);
+}
+#[test]
+fn research_ui_distinguishes_hidden_unmaterialized_and_incomplete_widgets() {
+    let mut f = Fixture::new();
+    f.research_ui();
+    f.number(0xa0ef8, 2);
+    assert_eq!(
+        research_ui::snapshot(&f).unwrap()["panel"]["visible_predicate"],
+        false
+    );
+    f.array(0x91308, 0, 0);
+    f.word(0x92e08, 0);
+    let v = research_ui::snapshot(&f).unwrap();
+    assert_eq!(v["widget_count"], 0);
+    assert_eq!(v["widgets_complete"], false);
+    assert!(v["selected_slot"].is_null());
+    assert_eq!(v["own_slot_count"], 4);
+}
+#[test]
+fn research_ui_refuses_foreign_and_wrong_slot_or_view_joins() {
+    for (address, value, code) in [
+        (0x92e20, 2, "foreign_ui_context"),
+        (0x90180, 0xdead0000, "invalid_gui_owner"),
+        (0x922f0, 0xdead0000, "invalid_gui_owner"),
+        (0x92e24, 7, "invalid_gui_owner"),
+        (0x92e08, 0xdead0000, "invalid_research_owner"),
+        (0x942b8, 0x2c100, "invalid_research_join"),
+        (0x942b0, 0x92000, "invalid_research_join"),
+        (0x942a8, 0xdead0000, "invalid_research_join"),
+        (0x93008, 0x94000, "invalid_research_join"),
+        (0x2c010, 0xdead0000, "invalid_research_owner"),
+    ] {
+        let mut f = Fixture::new();
+        f.research_ui();
+        if [0x92e20, 0x92e24].contains(&address) {
+            f.number(address, value as i32);
+        } else {
+            f.word(address, value);
+        }
+        assert_eq!(research_ui::snapshot(&f).unwrap_err().code, code);
+    }
+}
+#[test]
+fn research_ui_checks_counts_before_payload_and_rejects_secondary_metadata() {
+    for (address, value, code) in [
+        (0x91310, 33, "invalid_array"),
+        (0xa0960, 65, "invalid_array"),
+        (0x10000 + 0x43470c8 - 16, 8, "invalid_gui_type"),
+        (0x10000 + 0x4350000 + 8, 0x90000, "invalid_gui_type"),
+        (
+            0x10000 + 0x43470c8 - 8,
+            0x10000 + 0x439e7a0,
+            "invalid_gui_type",
+        ),
+        (
+            0x10000 + 0x4350000 + 8,
+            0x10000 + 0x436f150,
+            "invalid_gui_type",
+        ),
+    ] {
+        let mut f = Fixture::new();
+        f.research_ui();
+        if [0x91310, 0xa0960].contains(&address) {
+            f.number(address, value as i32);
+        } else {
+            f.word(address, value);
+        }
+        assert_eq!(research_ui::snapshot(&f).unwrap_err().code, code);
+    }
+}
+#[test]
+fn research_ui_checks_final_headers_payload_owners_visibility_and_types() {
+    for (address, size, value) in [
+        (0x326b8, 8, 0xdead0000u64.to_le_bytes().to_vec()),
+        (0x90180, 8, 0xdead0000u64.to_le_bytes().to_vec()),
+        (0x903d8, 4, 6i32.to_le_bytes().to_vec()),
+        (0x93000, 32, vec![0; 32]),
+        (0x942b8, 8, 0x2c100u64.to_le_bytes().to_vec()),
+        (0x942a8, 8, 0xdead0000u64.to_le_bytes().to_vec()),
+        (0xa0ef8, 4, 2i32.to_le_bytes().to_vec()),
+        (0xb10ac, 4, 3i32.to_le_bytes().to_vec()),
+        (0xb10e8, 8, 0u64.to_le_bytes().to_vec()),
+        (0x10000 + 0x38b4750, 128, vec![0; 128]),
+    ] {
+        let mut f = Fixture::new();
+        f.research_ui();
+        f.fault = Some((address, if address == 0xa0ef8 { 2 } else { 1 }, value));
+        assert!(size > 0);
+        assert_eq!(
+            research_ui::snapshot(&f).unwrap_err().code,
+            "torn_read",
+            "changed field {address:x}"
+        );
+    }
+    let mut f = Fixture::new();
+    f.research_ui();
+    f.replaced = true;
+    assert_eq!(
+        research_ui::snapshot(&f).unwrap_err().code,
+        "ownership_changed"
+    );
+}
+
+#[test]
+fn research_ui_unknown_primary_table_never_implies_button_layout() {
+    let mut f = Fixture::new();
+    f.research_ui();
+    let table = 0x10000 + 0x4347400;
+    f.word(0xb1000, table);
+    f.word(table - 16, 0);
+    f.word(table - 8, 0x10000 + 0x4350000);
+    for (address, size) in [(0xb10ac, 4), (0xb10e8, 8)] {
+        for n in 0..size {
+            f.data.remove(&(address + n));
+        }
+    }
+    let v = research_ui::snapshot(&f).unwrap();
+    let button = &v["slots"][0]["buttons_observed"][0];
+    assert_eq!(button["type_encoding"], "15CButtonStandard");
+    assert!(button.get("disabled_raw").is_none());
+    assert!(button.get("render_type_encoding").is_none());
 }

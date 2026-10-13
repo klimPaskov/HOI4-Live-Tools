@@ -2,13 +2,19 @@
 
 ## Unreleased native preview
 
+- Add bounded own research UI diagnostics with exact widget/slot joins, primary
+  button/render metadata and repeated structural witnesses. No click points or
+  input authorization are exposed; installed-game validation is pending.
+
 - Add a fresh own research model with completed membership, canonical joins and
   signed active counters; progress units and eligibility stay unavailable.
   Correct the GUI diagnostic's derived `CGameGui` primary-type check after a
-  real installed-game refusal; the correction awaits live verification.
+  real installed-game refusal. Own completed membership and GUI dimensions now
+  pass installed-game checks; active progress units and click mapping stay unverified.
 - Retry only transient torn observations within server waits, bind their own
   campaign context and refuse post-deadline retries or changed context. Record
-  the optimized Luna clock endpoint and wait failure; campaign acceptance remains open.
+  the optimized Luna clock endpoint and wait failure, then a fresh passed wait
+  and verified pause. Campaign acceptance remains open.
 - Start a separate Rust stdio runtime with owned Linux process reads, bounded
   focus/research/clock snapshots, explicit capability errors and server waits.
 - Verify selected upstream ordinary actions with one Luna medium player; record
@@ -44,7 +50,8 @@
 - Port a bounded loaded technology-ID catalog with filtering/pagination and
   complete list/definition readbacks. Add own GUI pointer/dimension/scale
   diagnostics with unverified click mapping explicit. Neither invokes eligibility,
-  exposes raw addresses or sends input; installed-game verification is pending.
+  exposes raw addresses or sends input; the installed catalog and GUI scale pass
+  live observations without proving input conversion.
 - Simplify README and preserve the existing Windows reference in a separate doc.
   Strategic commands, governor and Windows/macOS native adapters remain unfinished.
 
