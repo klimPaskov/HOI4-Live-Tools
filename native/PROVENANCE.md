@@ -67,6 +67,15 @@ selection supplies no start-control binding. Current-node membership and local
 window state do not establish visibility, hit routing or eligibility. These are
 bounded read-only models, with no engine callbacks or strategic input adapter.
 
+`node_binding.rs` is new project code from independent current-build constructor,
+listener registration/dispatch and callback-capture disassembly. It associates
+an exact owned control's data with the own canonical technology without calling
+the callback. Unknown control types receive no inferred layout. Corrected
+record-byte-16 extraction and byte-32 decoy tests follow the actual recorded
+node-reader failure and independent register tracking; upstream offsets do not
+serve as evidence for these fields. Full snapshot witnesses cover the binding
+before filtered/paged output. Structural associations are not input authority.
+
 Distinct Unix shutdown metadata and generated-child exit fixtures are new
 project code. They report the sole reaper's actual kernel wait result and do not
 change signal delivery, shutdown policy or diagnose the game rendering error.

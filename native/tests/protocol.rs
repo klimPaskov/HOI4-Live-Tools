@@ -141,6 +141,13 @@ fn own_focus_and_node_queries_refuse_invalid_arguments_before_process_access() {
         ("hoi4_focus_list", json!({"filter":"GER;start"})),
         ("hoi4_research_nodes", json!({"click":true})),
         ("hoi4_research_nodes", json!({"country":"FRA"})),
+        ("hoi4_research_nodes", json!({"offset":513})),
+        ("hoi4_research_nodes", json!({"limit":0})),
+        ("hoi4_research_nodes", json!({"limit":101})),
+        ("hoi4_research_nodes", json!({"limit":true})),
+        ("hoi4_research_nodes", json!({"filter":null})),
+        ("hoi4_research_nodes", json!({"filter":"bad;key"})),
+        ("hoi4_research_nodes", json!({"filter":"x".repeat(129)})),
         ("hoi4_research_nodes", json!({"slot":0})),
     ] {
         let reply = server.handle(json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":name,"arguments":arguments}})).unwrap();

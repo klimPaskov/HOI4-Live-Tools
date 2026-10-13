@@ -15,3 +15,5 @@ pub mod research_ui;
 pub mod technology;
 
 pub(crate) mod technology_nodes;
+
+mod node_binding;

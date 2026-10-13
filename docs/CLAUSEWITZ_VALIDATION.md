@@ -604,6 +604,35 @@ exit. Recordings, source manifests, calls, UI diagnostics, intent/readback and
 shutdown incidents remain private. Strategic adapters, the clean two-year run
 and full campaign acceptance remain unfinished.
 
+## Subsequent focus validation and node failure
+
+A fresh owned Normal historical Germany run returned all 438 own canonical
+focus keys across five pages. The first query took 81.5 ms RPC / 67.6 ms server;
+the five full-model page queries took 56–74 ms RPC. Filtering resolved the actual
+key `GER_remilitarize_the_rhineland`; the older guessed `GER_rhineland` matched
+nothing. No eligibility was inferred from catalog membership.
+
+An ordinary view-only card click opened `GER_bribe_senior_officers`. The reader
+joined its own detail and GUI registry and read the exact named Start control:
+disabled raw state 3. Closing first left a retained detail during animation,
+then the detail array became empty. No focus was started.
+
+Research slot navigation again passed: the server confirmed own slot 0 and the
+visible ordinary tree in 285.7 ms, without repeated input. The new node query
+then failed its exact type check in 22.3 ms. Static review found a register
+tracking error: the 40-byte inline record stores the saved item at byte 16;
+byte 32 holds a subsequently overwritten context register. The earlier synthetic
+fixtures mirrored the wrong assumption. The extraction is corrected with
+distinct context decoys, but corrected installed-game validation remains open.
+Exact type and own-country checks have not been relaxed.
+
+The campaign remained paused on 1 January with no assigned focus or research.
+Two recording segments passed ffprobe (600 and 337 seconds). Owned shutdown
+returned successfully, while the game's sole reaper recorded normal exit code
+6, no terminating signal and no core dump. This confirms the earlier exit-code
+distinction; it does not resolve the nonzero shutdown cause. No Luna player or
+strategic campaign acceptance is claimed for this diagnostic run.
+
 ## Attribution
 
 The findings above refer to upstream `calling/{mem,process/linux,api,game,

@@ -36,6 +36,8 @@ Upstream foundation and attribution:
   those typed reads, own-country focus/research semantics, process interface and
   calendar. native/PROVENANCE.md records source files; native/LICENSE.clausewitz
   retains the MIT notice. Current Linux layouts were recovered independently.
+  The node_binding module independently observes ordinary control/callback data
+  associations; it grants no input authority and executes no engine callback.
 
   Private Linux validation proved selected ordinary actions, but a running-game
   pause timed out. Rust command transactions remain unavailable. Source

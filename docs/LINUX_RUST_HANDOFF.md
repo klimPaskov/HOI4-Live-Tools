@@ -114,6 +114,9 @@ through the ordinary visible button and verified the canonical technology in
 memory. Production ID-based strategic dispatch is still unfinished. New own
 focus catalog and current technology-node observations passed 142 optimized
 Linux fixtures, alongside 101 portable Rust tests and 952 Python tests (37
-skipped). Their new fields still require installed-game validation. Shutdown
+skipped). A subsequent recorded run verified all 438 own focus keys and selected
+detail/closing state. Its research-node query refused an incorrect record offset;
+the corrected byte-16 reader, bounded pages and own control/callback associations
+require a fresh run. Exact type checks remain mandatory. Shutdown
 evidence now distinguishes a normal exit code from a signal; the earlier game
 exit code 6 remains an unresolved incident, not a clean exit.

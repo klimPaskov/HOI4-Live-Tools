@@ -88,7 +88,7 @@ threads. Generated-child tests exercised that access under unchanged Yama scope
 | `hoi4_technology_list` | Bounded loaded technology IDs, filter and pagination; no eligibility inference |
 | `hoi4_input_geometry` | Own GUI pointer/dimension/scale diagnostics; client origin and click mapping remain unverified |
 | `hoi4_research_ui` | Own slot/widget joins, selected slot, technology detail and exact button/render diagnostics; no click authorization |
-| `hoi4_research_nodes` | Current open own-tree nodes joined to public technology keys; visibility, eligibility and routing unavailable |
+| `hoi4_research_nodes` | Paged current own-tree keys and conditional ordinary-control associations; visibility, eligibility and routing unavailable |
 | `hoi4_focus_list` | Own canonical focus keys with prefix filtering/pagination and selected detail diagnostics; no start authorization |
 | `hoi4_wait_for` | Bounded wait, 1–50 seconds, for own focus/research changes, a date or research UI predicates |
 
@@ -162,6 +162,16 @@ then validates both current inline vectors, node ownership, canonical database
 and own-status membership and unique public keys. Policy bounds permit capacity
 2048 per vector and 512 aggregate records. Unknown node GUI classes supply type
 metadata only. Membership does not establish visibility or a click target.
+Queries accept an ASCII key prefix, offset 0–512 and limit 1–100 (default 25).
+The full model is validated before filtering or paging. Current records use
+the independently recovered item at byte 16; byte 32 is unrelated context.
+Exact owned containers and Drag controls can supply a bounded callback/data
+association. The container and control must belong to the own GUI registry.
+Control data must equal the canonical own technology, and its single live listener must
+match the independently recovered own-tree callback capture. Other layouts
+remain unavailable. This structural association never authorizes input or
+supplies coordinates. Node, technology and template type failures identify the
+stage with bounded metadata, without exposing process addresses.
 
 The focus query accepts an ASCII key prefix `filter`, `offset` 0–4096 and `limit`
 1–100. It validates every own key before pagination, exact own-tree ownership and
@@ -171,8 +181,11 @@ ordinary `start` control supplies raw disabled state and flags; null selection
 supplies no binding. Literal local visibility and a stricter animation predicate
 are reported separately. Own capacity is capped at 4096, global membership at
 20,000, detail windows at 32, named controls at 256 and keys/names at 256 bytes.
-Hidden branch visibility, eligibility and input remain unavailable. These node
-and focus additions have fixture evidence and await installed-game validation.
+Hidden branch visibility, eligibility and input remain unavailable. A recorded
+installed-game run verified all 438 own focus keys and selected detail/closing
+state. That run exposed the incorrect research-node record offset in the
+previous source. The corrected reader and callback association still require
+a fresh installed-game run; see the [failure evidence](../docs/CLAUSEWITZ_VALIDATION.md).
 The mode default is FAIR; a mode label alone is not proof of campaign settings.
 
 ## Command port and expansion

@@ -26,7 +26,7 @@ fn tools(commands: Option<&dyn Commands>) -> Value {
         {"name":"hoi4_research","description":"Fresh own completed technology IDs with bounded pagination, and active raw research counters. Progress units, days remaining and eligibility remain unverified. Pure reads; never pauses.","inputSchema":{"type":"object","properties":{"offset":{"type":"integer","minimum":0,"maximum":8192},"limit":{"type":"integer","minimum":1,"maximum":100}},"additionalProperties":false}},
         {"name":"hoi4_input_geometry","description":"Read-only own GUI pointer, dimensions and scale diagnostics. Does not prove client origin, control geometry or click authorization.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}},
         {"name":"hoi4_research_ui","description":"Bounded own research slot widgets, selected slot, canonical technology Info windows, named ordinary research button state and exact render diagnostics. No eligibility, hit routing or input authorization.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}},
-        {"name":"hoi4_research_nodes","description":"Bounded current node records of the open own ordinary research tree, joined to canonical public technology keys. Membership does not prove visibility, eligibility or click routing. Pure reads; never pauses.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}},
+        {"name":"hoi4_research_nodes","description":"Current own-tree nodes joined to public technology keys and conditional ordinary-control diagnostics. Full model validated before prefix filtering/pagination; default page 25. Visibility, eligibility and click routing unavailable. Pure reads; never pauses.","inputSchema":{"type":"object","properties":{"filter":{"type":"string","maxLength":128},"offset":{"type":"integer","minimum":0,"maximum":512},"limit":{"type":"integer","minimum":1,"maximum":100}},"additionalProperties":false}},
         {"name":"hoi4_focus_list","description":"Bounded own canonical focus keys and own selected detail windows. All own memberships and keys validated before pagination; branch visibility, eligibility and input authorization unavailable. Pure reads; never pauses.","inputSchema":{"type":"object","properties":{"filter":{"type":"string","maxLength":128},"offset":{"type":"integer","minimum":0,"maximum":4096},"limit":{"type":"integer","minimum":1,"maximum":100}},"additionalProperties":false}},
         {"name":"hoi4_technology_list","description":"Canonical loaded public technology IDs with bounded filtering/pagination. Catalog membership does not imply player research eligibility. Pure reads; never pauses.","inputSchema":{"type":"object","properties":{"filter":{"type":"string","maxLength":128},"offset":{"type":"integer","minimum":0,"maximum":8192},"limit":{"type":"integer","minimum":1,"maximum":100}},"additionalProperties":false}},
         {"name":"hoi4_wait_for","description":"Bounded server wait for own focus/research change, game date, or research UI view predicates and optional selected own slot. UI matches do not authorize input. Never pauses.","inputSchema":{"type":"object","properties":{"timeout_seconds":{"type":"integer","minimum":1,"maximum":50},"until_date":{"type":"array","items":{"type":"integer"},"minItems":3,"maxItems":3},"until_research_ui":{"type":"object","properties":{"view":{"type":"string","enum":["panel","tree"]},"selected_slot":{"type":"integer","minimum":0,"maximum":31}},"required":["view"],"additionalProperties":false}},"additionalProperties":false}}
@@ -277,13 +277,40 @@ impl Server {
                 research_ui::snapshot(self.process()?)
             }
             "hoi4_research_nodes" => {
-                if !object.is_empty() {
+                if object
+                    .keys()
+                    .any(|k| !["filter", "offset", "limit"].contains(&k.as_str()))
+                {
                     return Err(Error::new(
                         "invalid_arguments",
-                        "Research nodes accept no arguments",
+                        "Unknown current node argument",
                     ));
                 }
-                research_ui::nodes(self.process()?)
+                let (offset, parsed_limit) = page_bounds(object)?;
+                let limit = if object.contains_key("limit") {
+                    parsed_limit
+                } else {
+                    25
+                };
+                let filter = object
+                    .get("filter")
+                    .map(|v| {
+                        v.as_str().ok_or_else(|| {
+                            Error::new("invalid_arguments", "Node filter must be a string")
+                        })
+                    })
+                    .transpose()?;
+                if offset > 512
+                    || filter.is_some_and(|v| {
+                        v.len() > 128 || !v.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
+                    })
+                {
+                    return Err(Error::new(
+                        "invalid_arguments",
+                        "Current node query exceeds bounds",
+                    ));
+                }
+                research_ui::nodes_page(self.process()?, offset, limit, filter)
             }
             "hoi4_focus_list" => {
                 if object

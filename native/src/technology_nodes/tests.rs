@@ -41,7 +41,7 @@ impl Memory {
         self.header(TREE + 0xdd8, RECORDS, ids.len() as i32);
         self.put(RECORDS, &vec![0; 40 * ids.len()]);
         for (i, item) in ids.iter().enumerate() {
-            self.u64(RECORDS + i as u64 * 40 + 32, *item);
+            self.u64(RECORDS + i as u64 * 40 + 16, *item);
         }
     }
     fn unknown_gui(&mut self) -> u64 {
@@ -249,4 +249,18 @@ fn public_node_keys_refuse_control_bytes_and_ambiguous_canonical_definitions() {
     m.header(STATUS + 0x88, 0x28000000, 2);
     m.u64(0x28000008, tech);
     assert_eq!(observe(&m).unwrap_err().code, "invalid_research_id");
+}
+
+#[test]
+fn context_at_record_32_is_not_a_technology_item() {
+    let mut m = Memory::fixture();
+    m.u64(RECORDS + 32, 0xdead0000); // Deliberately unreadable context.
+    m.header(TREE + 0xdf0, RECORDS + 40, 1);
+    m.put(RECORDS + 40, &[0; 40]);
+    m.u64(RECORDS + 40 + 16, ITEM);
+    m.u64(RECORDS + 40 + 32, TREE); // Readable, different primary type.
+    let value = observe(&m).unwrap();
+    assert_eq!(value["record_count"], 2);
+    assert_eq!(value["node_count"], 1);
+    assert_eq!(value["nodes"][0]["definition_index"], 1);
 }

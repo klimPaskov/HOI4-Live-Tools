@@ -9,20 +9,45 @@ use crate::{
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
 
+fn stage_type(
+    r: &Reader<'_>,
+    base: u64,
+    pointer: u64,
+    expected: u64,
+    stage: &'static str,
+) -> Result<()> {
+    if pointer == 0 || pointer % 8 != 0 {
+        return Err(Error::new(stage, "Null or unaligned owned node path"));
+    }
+    let table = r
+        .u64(pointer)
+        .map_err(|e| Error::new(stage, format!("Primary read unavailable ({})", e.code)))?;
+    if table == base + expected {
+        return Ok(());
+    }
+    let diagnostic = match nullable_type(r, base, pointer) {
+        Ok(name) => format!("Observed primary type {name}"),
+        Err(e) => format!("Primary metadata unavailable ({})", e.code),
+    };
+    Err(Error::new(stage, diagnostic))
+}
+
 /// Caller must use its fresh Witnesses Reader and call Witnesses::finish after
 /// this helper; it must already establish own mode6, displayed tag and slot.
-/// registry is contextual only: unknown item GUI types provide no owner layout.
+/// Registry ownership is checked only for exact known container layouts.
 pub(crate) fn current_nodes(
     r: &Reader<'_>,
     base: u64,
     tree: u64,
     own_status: u64,
-    _registry: u64,
+    registry: u64,
 ) -> Result<Value> {
     exact(r, tree, base + 0x424de40)?;
     exact(r, own_status, base + 0x42108f8)?;
     let mut records = Vec::new();
     // Current inline records, NOT the embedded callback objects at 5e0/868.
+    // The factory item is saved then reloaded into +0x10. +0x20 stores
+    // a context register overwritten after the factory call; it is not an item.
     for offset in [0xdd8, 0xdf0] {
         let (header, data, count) = r.array_header(tree + offset)?;
         let cap = i32::from_le_bytes(header[8..12].try_into().unwrap()) as usize;
@@ -37,7 +62,7 @@ pub(crate) fn current_nodes(
             records.extend(
                 payload
                     .chunks_exact(40)
-                    .map(|entry| u64::from_le_bytes(entry[32..40].try_into().unwrap())),
+                    .map(|entry| u64::from_le_bytes(entry[16..24].try_into().unwrap())),
             );
         }
     }
@@ -45,11 +70,12 @@ pub(crate) fn current_nodes(
     let mut ids: BTreeMap<i32, Value> = BTreeMap::new();
     let mut catalog = None;
     let mut public_keys = BTreeMap::new();
+    let mut bindings: BTreeMap<i32, Vec<Value>> = BTreeMap::new();
     for item in records.iter().copied() {
         if !items.insert(item) {
             continue;
         }
-        exact(r, item, base + 0x424e2e0)?;
+        stage_type(r, base, item, 0x424e2e0, "node_item_type_unavailable")?;
         if r.u64(item + 0x30)? != tree {
             return Err(Error::new(
                 "invalid_gui_owner",
@@ -57,7 +83,13 @@ pub(crate) fn current_nodes(
             ));
         }
         let technology = r.u64(item + 0xc8)?;
-        exact(r, technology, base + 0x42107f8)?;
+        stage_type(
+            r,
+            base,
+            technology,
+            0x42107f8,
+            "node_technology_type_unavailable",
+        )?;
         // Foreign ownership refused before reading template or GUI payload.
         if r.u64(technology + 0x158)? != own_status {
             return Err(Error::new(
@@ -79,7 +111,13 @@ pub(crate) fn current_nodes(
             catalog = Some((templates, own));
         }
         let template = r.u64(technology + 0x160)?;
-        exact(r, template, base + 0x4211038)?;
+        stage_type(
+            r,
+            base,
+            template,
+            0x4211038,
+            "node_template_type_unavailable",
+        )?;
         let id = r.i32(template + 0x30)?;
         let (templates, own) = catalog.as_ref().unwrap();
         if id <= 0
@@ -105,6 +143,9 @@ pub(crate) fn current_nodes(
             ));
         }
         public_keys.insert(key.clone(), id);
+        let item_gui = r.u64(item + 0x10)?;
+        let binding = crate::node_binding::observe(r, base, tree, item_gui, technology, registry)?;
+        bindings.entry(id).or_default().push(binding);
         let gui =
             json!({"id": key, "gui_type_encoding": nullable_type(r, base, r.u64(item + 0x10)?)?});
         if let Some(previous) = ids.get(&id) {
@@ -123,7 +164,7 @@ pub(crate) fn current_nodes(
         .map(|(id, gui)| {
             json!({
                 "id": gui["id"], "definition_index": id, "gui_type_encoding": gui["gui_type_encoding"], "visibility":"unavailable",
-                "eligibility":"unavailable", "input_authorized":false
+                "eligibility":"unavailable", "ordinary_control_bindings":bindings.remove(&id).unwrap_or_default(), "input_authorized":false
             })
         })
         .collect();

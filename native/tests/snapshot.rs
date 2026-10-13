@@ -370,8 +370,10 @@ impl Fixture {
         self.put(0xd00a5, &[8]);
         self.array(0x92dd8, 0xd2000, 2);
         self.region(0xd2000, 80);
-        self.word(0xd2020, 0xd3000);
-        self.word(0xd2048, 0xd3000);
+        self.word(0xd2010, 0xd3000);
+        self.word(0xd2020, 0x92000); // Context, not the item.
+        self.word(0xd2038, 0xd3000);
+        self.word(0xd2048, 0xdead0000); // Unreadable context, never dereferenced.
         self.array(0x92df0, 0, 0);
         self.region(0xd3000, 0xd0);
         self.word(0xd3000, base + 0x424e2e0);
@@ -1524,5 +1526,270 @@ fn current_node_tool_requires_open_own_tree_before_node_payload() {
     assert_eq!(
         research_ui::nodes(&f).unwrap_err().code,
         "invalid_research_owner"
+    );
+}
+
+#[test]
+fn current_node_pages_bound_output_without_skipping_full_validation() {
+    let mut f = Fixture::new();
+    f.current_research_nodes();
+    let page = research_ui::nodes_page(&f, 0, 1, Some("tool")).unwrap();
+    assert_eq!(page["current_nodes"]["node_count"], 1);
+    assert_eq!(page["current_nodes"]["filtered_count"], 1);
+    assert_eq!(page["current_nodes"]["nodes"][0]["id"], "tools1");
+    let empty = research_ui::nodes_page(&f, 1, 1, None).unwrap();
+    assert_eq!(empty["current_nodes"]["nodes"].as_array().unwrap().len(), 0);
+    assert!(empty["current_nodes"]["next_offset"].is_null());
+    assert_eq!(empty["current_nodes"]["node_count"], 1);
+    f.word(0xd3030, 0x92008);
+    assert_eq!(
+        research_ui::nodes_page(&f, 1, 1, Some("absent"))
+            .unwrap_err()
+            .code,
+        "invalid_gui_owner"
+    );
+}
+#[test]
+fn invalid_current_node_page_never_enters_process() {
+    let f = Fixture::new();
+    for (offset, limit, prefix) in [
+        (513, 1, None),
+        (0, 0, None),
+        (0, 101, None),
+        (0, 1, Some("bad;key")),
+    ] {
+        assert_eq!(
+            research_ui::nodes_page(&f, offset, limit, prefix)
+                .unwrap_err()
+                .code,
+            "invalid_arguments"
+        );
+    }
+    assert_eq!(f.checks.get(), 0);
+}
+
+impl Fixture {
+    fn node_binding(&mut self) {
+        self.current_research_nodes();
+        let base = 0x10000;
+        self.word(0xd3010, 0xd4000);
+        self.region(0xd4000, 0x980);
+        self.word(0xd4000, base + 0x4347d58);
+        self.word(0xd4098, 0x70000);
+        self.word(base + 0x4347d58 - 16, 0);
+        self.word(base + 0x4347d58 - 8, base + 0x4355100);
+        self.region(base + 0x4355100, 16);
+        self.word(base + 0x4355108, base + 0x350d100);
+        self.region(base + 0x350d100, 128);
+        self.put(base + 0x350d100, b"16CContainerWindow");
+        self.array(0xd4958, 0xd4800, 1);
+        self.word(0xd4800, 0xd5000);
+        self.region(0xd5000, 0x120);
+        self.word(0xd5000, base + 0x4346b10);
+        self.word(base + 0x4346b10 - 16, 0);
+        self.word(base + 0x4346b10 - 8, base + 0x4355000);
+        self.region(base + 0x4355000, 16);
+        self.word(base + 0x4355008, base + 0x350d000);
+        self.region(base + 0x350d000, 128);
+        self.put(base + 0x350d000, b"11CButtonDrag");
+        self.word(0xd5008, 0x80000);
+        self.word(0xd5068, 0x70000);
+        self.word(0xd5080, base + 0x4346ea8);
+        self.word(0xd5088, 0xd6000);
+        self.word(0xd5090, 0xd6000);
+        self.number(0xd5098, 1);
+        self.region(0xd6000, 32);
+        self.word(0xd6000, 0x925e0);
+        self.word(0x925e0, base + 0x424e0a8);
+        self.word(0x92608, 0xd7000);
+        self.word(0x92618, base + 0x15a5710);
+        self.word(0x92620, base + 0x15a56e0);
+        self.region(0xd7000, 24);
+        self.word(0xd7000, base + 0x1599290);
+        self.word(0xd7010, 0x92000);
+    }
+}
+#[test]
+fn node_control_binding_is_conditional_and_pointer_free() {
+    let mut f = Fixture::new();
+    f.node_binding();
+    let v = research_ui::nodes(&f).unwrap();
+    let b = &v["current_nodes"]["nodes"][0]["ordinary_control_bindings"][0];
+    assert_eq!(b["binding_verified"], true);
+    assert_eq!(b["input_authorized"], false);
+    assert_eq!(b["coordinates"], "unavailable");
+    assert!(!v.to_string().contains(&0xd5000u64.to_string()));
+}
+#[test]
+fn node_wrong_control_data_refuses_before_callback() {
+    let mut f = Fixture::new();
+    f.node_binding();
+    f.word(0xd5008, 0x80008);
+    f.data.remove(&0xd5080);
+    assert_eq!(
+        research_ui::nodes(&f).unwrap_err().code,
+        "invalid_research_join"
+    );
+}
+#[test]
+fn node_override_and_wrong_callback_never_claim_binding() {
+    for (a, v) in [
+        (0xd50a0, 0xdead0000),
+        (0x92620, 0x10000 + 0x1599290),
+        (0xd7010, 0x92008),
+    ] {
+        let mut f = Fixture::new();
+        f.node_binding();
+        f.word(a, v);
+        let v = research_ui::nodes(&f).unwrap();
+        assert_eq!(
+            v["current_nodes"]["nodes"][0]["ordinary_control_bindings"][0]["binding_verified"],
+            false
+        );
+    }
+}
+#[test]
+fn node_null_and_unknown_layout_are_diagnostic_only() {
+    let mut f = Fixture::new();
+    f.node_binding();
+    f.word(0xd3010, 0);
+    let v = research_ui::nodes(&f).unwrap();
+    assert_eq!(
+        v["current_nodes"]["nodes"][0]["ordinary_control_bindings"][0]["reason"],
+        "gui_unmaterialized"
+    );
+    let mut f = Fixture::new();
+    f.node_binding();
+    f.word(0xd4000, 0x10000 + 0x4346b10);
+    for a in 0xd4958..0xd4968 {
+        f.data.remove(&a);
+    }
+    let v = research_ui::nodes(&f).unwrap();
+    assert_eq!(
+        v["current_nodes"]["nodes"][0]["ordinary_control_bindings"][0]["binding_verified"],
+        false
+    );
+}
+#[test]
+fn node_binding_fields_use_production_final_witnesses() {
+    for (a, n) in [
+        (0xd4098, 8),
+        (0xd5068, 8),
+        (0xd5008, 8),
+        (0xd5088, 8),
+        (0xd5098, 4),
+        (0xd6010, 8),
+        (0x92620, 8),
+        (0xd7010, 8),
+    ] {
+        let mut f = Fixture::new();
+        f.node_binding();
+        let mut replacement: Vec<_> = (0..n).map(|i| f.data[&(a + i)]).collect();
+        replacement[0] ^= 1;
+        f.fault = Some((a, 1, replacement));
+        assert_eq!(research_ui::nodes(&f).unwrap_err().code, "torn_read");
+    }
+}
+#[test]
+fn node_malformed_listener_is_refused() {
+    let mut f = Fixture::new();
+    f.node_binding();
+    f.word(0xd6010, 0xd6000);
+    assert_eq!(
+        research_ui::nodes(&f).unwrap_err().code,
+        "invalid_gui_binding"
+    );
+}
+#[test]
+fn repeated_key_controls_retain_separate_binding_observations() {
+    let mut f = Fixture::new();
+    f.node_binding();
+    f.region(0xd8000, 0xd0);
+    f.word(0xd8000, 0x10000 + 0x424e2e0);
+    f.word(0xd8030, 0x92000);
+    f.word(0xd80c8, 0x80000);
+    f.word(0xd8010, 0xd4000);
+    f.word(0xd2038, 0xd8000);
+    let v = research_ui::nodes(&f).unwrap();
+    assert_eq!(v["current_nodes"]["node_count"], 1);
+    assert_eq!(
+        v["current_nodes"]["nodes"][0]["ordinary_control_bindings"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+}
+#[test]
+fn binding_never_relaxes_key_or_node_owner() {
+    let mut f = Fixture::new();
+    f.node_binding();
+    f.string(0x63008, "bad\nkey");
+    assert_eq!(
+        research_ui::nodes(&f).unwrap_err().code,
+        "invalid_research_id"
+    );
+    let mut f = Fixture::new();
+    f.node_binding();
+    f.word(0xd3030, 0x92008);
+    assert_eq!(
+        research_ui::nodes(&f).unwrap_err().code,
+        "invalid_gui_owner"
+    );
+}
+
+#[test]
+fn corrected_record_offset_and_stage_diagnostics_do_not_relax_types() {
+    let mut f = Fixture::new();
+    f.node_binding();
+    // +32 decoys are deliberately unreadable objects; +16 is actual item.
+    assert_eq!(
+        research_ui::nodes(&f).unwrap()["current_nodes"]["node_count"],
+        1
+    );
+    f.word(0xd3000, 0x10000 + 0x4347d58);
+    let error = research_ui::nodes(&f).unwrap_err();
+    assert_eq!(error.code, "node_item_type_unavailable");
+    assert!(error.message.contains("CContainerWindow"));
+    assert!(!error.message.contains("0xd3000"));
+    let mut f = Fixture::new();
+    f.node_binding();
+    f.word(0x80000, 0x10000 + 0x4347d58);
+    // Existing Info observation may refuse first; isolate current node helper
+    // by an empty Info list, preserving production owner/snapshot guards.
+    f.array(0x92dc0, 0, 0);
+    assert_eq!(
+        research_ui::nodes(&f).unwrap_err().code,
+        "node_technology_type_unavailable"
+    );
+}
+
+#[test]
+fn node_foreign_registry_refused_before_unmapped_control_array() {
+    let mut f = Fixture::new();
+    f.node_binding();
+    f.word(0xd4098, 0xdead0000);
+    for address in 0xd4958..0xd4968 {
+        f.data.remove(&address);
+    }
+    assert_eq!(
+        research_ui::nodes(&f).unwrap_err().code,
+        "invalid_gui_owner"
+    );
+}
+
+#[test]
+fn node_foreign_control_registry_refuses_before_data_render_or_callback() {
+    let mut f = Fixture::new();
+    f.node_binding();
+    f.word(0xd5068, 0xdead0000);
+    for (start, length) in [(0xd5008, 8), (0xd5080, 8), (0xd5110, 8)] {
+        for address in start..start + length {
+            f.data.remove(&address);
+        }
+    }
+    assert_eq!(
+        research_ui::nodes(&f).unwrap_err().code,
+        "invalid_gui_owner"
     );
 }

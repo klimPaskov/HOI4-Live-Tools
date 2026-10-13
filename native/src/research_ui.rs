@@ -331,6 +331,52 @@ pub fn nodes(process: &dyn Process) -> Result<Value> {
         "owned":true,"input_authorized":false,"observation_paused_game":false}),
     )
 }
+/// Validate the whole current own model, then bound the public output page.
+pub fn nodes_page(
+    process: &dyn Process,
+    offset: usize,
+    limit: usize,
+    prefix: Option<&str>,
+) -> Result<Value> {
+    if offset > 512
+        || !(1..=100).contains(&limit)
+        || prefix.is_some_and(|s| {
+            s.len() > 128 || !s.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
+        })
+    {
+        return Err(Error::new(
+            "invalid_arguments",
+            "Current node query exceeds bounds",
+        ));
+    }
+    let mut value = nodes(process)?;
+    let current = value["current_nodes"]
+        .as_object_mut()
+        .ok_or_else(|| Error::new("invalid_node_page", "Current node model unavailable"))?;
+    let all = current
+        .remove("nodes")
+        .and_then(|v| v.as_array().cloned())
+        .ok_or_else(|| Error::new("invalid_node_page", "Current node list unavailable"))?;
+    let filtered: Vec<_> = all
+        .into_iter()
+        .filter(|node| {
+            prefix.is_none_or(|p| node["id"].as_str().is_some_and(|id| id.starts_with(p)))
+        })
+        .collect();
+    let count = filtered.len();
+    let page: Vec<_> = filtered.into_iter().skip(offset).take(limit).collect();
+    let next = if offset + page.len() < count {
+        Some(offset + page.len())
+    } else {
+        None
+    };
+    current.insert("nodes".into(), json!(page));
+    current.insert("filtered_count".into(), json!(count));
+    current.insert("offset".into(), json!(offset));
+    current.insert("limit".into(), json!(limit));
+    current.insert("next_offset".into(), json!(next));
+    Ok(value)
+}
 pub(crate) fn wait_snapshot(process: &dyn Process) -> Result<(Value, UiContext)> {
     let (value, context) = observe(process, true, false)?;
     Ok((
