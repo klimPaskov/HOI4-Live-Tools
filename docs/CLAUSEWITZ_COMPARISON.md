@@ -34,6 +34,21 @@ currently exposes observations and bounded waits only. Windows/macOS native
 adapters, commands and the governor remain unfinished. See [live evidence and
 limitations](CLAUSEWITZ_VALIDATION.md) and [the Rust preview](../native/README.md).
 
+## Current owned Rust clock checkpoint — 13 October 2026
+
+A subsequent Luna medium test passed ordinary clock controls and advancement to
+3 January 1936, including pause. Pause took 1.27 seconds; single-step speed changes
+took 1.01–1.05 seconds through persistent stdio/SSH. Strategic actions and full
+campaign acceptance remain unfinished; native engine posting stays quarantined.
+
+Twenty paused overviews on the newer Rust supervisor measured **67.1 ms median
+RPC**, with **56.4 ms median reported snapshot time**, under x86 CPU emulation.
+The supervisor now checks private exec witnesses and current mappings. The 85
+logical reads / 945 bytes exclude witness bytes and procfs work. These samples
+have different ownership and load conditions from the 7.5 ms comparison above;
+they are not a matched regression or a new upstream speedup claim. See
+[the recorded evidence](CLAUSEWITZ_VALIDATION.md#passed-luna-rust-clock-test--13-october-2026).
+
 ## Measured process reads
 
 Both readers ran against the same generated child process and checked every

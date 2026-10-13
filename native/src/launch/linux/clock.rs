@@ -202,7 +202,19 @@ fn allowed(args: &serde_json::Map<String, Value>, keys: &[&str]) -> Result<()> {
 impl Commands for ClockService {
     fn tools(&self) -> Vec<Value> {
         vec![
-            json!({"name":"hoi4_input_lease","description":"Exclusive configured-controller lease for ordinary clock input; observations do not need a lease.","inputSchema":{"type":"object","properties":{"op":{"type":"string","enum":["acquire","renew","release","status"]},"holder":{"type":"string"},"lease_token":{"type":"string"},"seconds":{"type":"integer","minimum":30,"maximum":900}},"required":["op"],"additionalProperties":false}}),
+            json!({
+                "name":"hoi4_input_lease",
+                "description":"Exclusive configured-controller lease for ordinary clock input. Acquire uses holder; renew/release use only lease_token, without holder. Status takes only op. Observations do not need a lease.",
+                "inputSchema":{
+                    "type":"object",
+                    "oneOf":[
+                        {"properties":{"op":{"const":"acquire"},"holder":{"type":"string"},"seconds":{"type":"integer","minimum":30,"maximum":900}},"required":["op","holder"],"additionalProperties":false},
+                        {"properties":{"op":{"const":"renew"},"lease_token":{"type":"string"},"seconds":{"type":"integer","minimum":30,"maximum":900}},"required":["op","lease_token"],"additionalProperties":false},
+                        {"properties":{"op":{"const":"release"},"lease_token":{"type":"string"}},"required":["op","lease_token"],"additionalProperties":false},
+                        {"properties":{"op":{"const":"status"}},"required":["op"],"additionalProperties":false}
+                    ]
+                }
+            }),
             json!({"name":"hoi4_time","description":"Set desired pause or internal speed 0..4 through ordinary stationary keys and fresh memory readback. Supply exactly one target and a stable request_id; uncertain dispatches are never replayed.","inputSchema":{"type":"object","properties":{"paused":{"type":"boolean"},"speed":{"type":"integer","minimum":0,"maximum":4},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["request_id","lease_token"],"additionalProperties":false}}),
         ]
     }

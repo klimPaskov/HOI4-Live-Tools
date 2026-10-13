@@ -1,12 +1,13 @@
 # Clausewitz-MCP Linux validation
 
-12 October 2026. This records preflight and partial licensed-game evidence for
+Updated 13 October 2026. This records preflight and partial licensed-game evidence for
 the [Linux-first migration](LINUX_RUST_HANDOFF.md). One **gpt-6-luna player at
 medium reasoning** used the guarded upstream MCP in an actual Linux Germany
 campaign. Focus, four research assignments, unpause and one day of advancement
 were verified. The final pause command timed out during posting; the adapter
-is quarantined. This is **not campaign acceptance or a successful campaign**.
-The Rust observation port has now begun.
+is quarantined. A subsequent fresh Rust run passed Luna's ordinary clock test
+through 3 January 1936, including verified pause. These are **bounded live tests,
+not campaign acceptance or a successful campaign**. The Rust port is underway.
 
 ## Reference and test environment
 
@@ -195,7 +196,7 @@ research, current-build calendar and Linux process interface. Its stdio tools
 are `hoi4_capabilities`, `hoi4_overview` and `hoi4_wait_for`. Observations do not
 attach, suspend, write, capture screenshots or parse saves. Unsupported builds
 and unavailable subsystems return explicit errors. Windows/macOS native process
-adapters, commands and the daily governor are still unimplemented.
+adapters, strategic commands and the daily governor are still unimplemented.
 
 A statically linked Linux x86_64 binary built on the Mac read the actual running
 campaign. Twenty guest-local stdio snapshots measured **4.8 ms median**,
@@ -341,11 +342,59 @@ Python 3.9 passed 952 tests with 37 explicit skips. The initial Python check use
 an unconfigured interpreter and failed on missing dependencies; the configured
 project environment supplied the complete passing run.
 
-These are transport and recovery fixtures, not installed-game clock acceptance.
-The fresh live run is in preparation. Input guards check a persisted playthrough
-ID, roots and observed timeline; this does not prove same-campaign load generation.
-Strategic commands, daily automation and full campaign acceptance remain open.
-The earlier failed engine posting adapter was never retried.
+Those are transport and recovery fixtures, separate from the subsequent installed-
+game clock test below. Input guards check a persisted playthrough ID, roots and
+observed timeline; this does not prove same-campaign load generation. Strategic
+commands, daily automation and full campaign acceptance remain open. The earlier
+failed engine posting adapter was never retried.
+
+## Passed Luna Rust clock test — 13 October 2026
+
+A fresh game ran under the public Rust supervisor from commit
+`5b594ef969e99c64bd5bb0c8eebee0cc92d905f8`, with the exact Linux build above.
+One **gpt-6-luna player at medium reasoning** held the exclusive input lease.
+Ordinary singleplayer setup selected 1936 Germany, Normal difficulty and
+historical AI, with a fresh vanilla playset and no mods. Recording began before
+Start; the player used the actual persistent Rust stdio MCP over localhost SSH.
+
+| Verified operation | RPC time |
+| --- | ---: |
+| Speed 0 → 4 while paused | 2.72 s |
+| Speed 4 → 3 | 1.05 s |
+| Speed 3 → 4 | 1.01 s |
+| Unpause | 0.86 s |
+| Wait until 3 January 1936 | 19.94 s |
+| Pause at test endpoint | 1.27 s |
+
+The server wait reached `1936.01.03.01` in 19.834 seconds. Final separate readback
+confirmed `1936.01.03.10`, paused, speed 4, player GER, Normal and historical AI.
+All actions used fresh process state and ordinary Space/keypad keys. The player
+made no screenshot/save reads or cursor movements. Pointer position matched
+before and after; all inspected game threads had tracer 0 and Yama stayed 1.
+This was a clock test: focus and research remained idle, with no strategic actions
+or two-year/full-campaign acceptance claim. Receipt replay was not exercised live.
+
+The first lease release included `holder`, which the strict per-operation parser
+rejected before process access or mutation. The advertised schema had not made
+that distinction clear. A corrected release containing only `op` and
+`lease_token` succeeded, and status reported zero remaining lease time. The failed
+call remains in the private journal; it sent no game input. The schema now lists
+separate allowed fields for acquire, renew, release and status.
+
+Both recording segments finalized after owned recorder shutdown and passed
+ffprobe with positive duration and 512×288 video. The recorder returned 255 after
+the requested stop; the owned game remained running and paused. Source manifests,
+recording integrity, call receipts and the player journal are private evidence.
+
+After the player released its lease, 20 fresh paused overviews measured **67.1 ms
+median RPC** and **56.4 ms median reported snapshot time** in this emulated guest.
+Each overview reported 85 logical reads / 945 bytes; those counters exclude
+backend exec-witness bytes and procfs work. These samples use a newer ownership
+mechanism and different load conditions than the earlier 7.5 ms Rust comparison.
+They do not demonstrate a speedup over that older run. Clock context previously
+nested two complete snapshot brackets; the follow-up refactor shares a private
+typed body within one local bracket while retaining all structural and final
+ownership/exec checks. This change needs its own measured live evidence.
 
 ## Attribution
 

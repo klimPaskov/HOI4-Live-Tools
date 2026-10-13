@@ -56,15 +56,17 @@ pub fn clock_context(process: &dyn Process) -> Result<ClockContext> {
         ));
     }
     let historical_raw = r.i32(gs + 0x628)?;
-    let observed = snapshot(process)?;
-    let date_raw = observed["date"]["raw"].as_i64().unwrap() as i32;
+    // Use the same local read bracket as the campaign identity. Calling the
+    // public snapshot here would refresh maps and check ownership twice.
+    let observed = snapshot_fields(&r, base)?;
+    let date_raw = observed.date.raw;
     if roots(&r, base)? != initial
         || r.string(gs + 0x718)? != playthrough_id
         || r.i32(gs + 0x628)? != historical_raw
         || r.i32(gs + 0x460)? != date_raw
-        || r.i32(gs + 0x4b4)? != observed["speed"].as_i64().unwrap() as i32
-        || r.byte(idler + 0x6c1)? != u8::from(observed["paused"].as_bool().unwrap())
-        || r.i32(gs + 0x620)? != observed["difficulty"].as_i64().unwrap() as i32
+        || r.i32(gs + 0x4b4)? != observed.speed
+        || r.byte(idler + 0x6c1)? != u8::from(observed.paused)
+        || r.i32(gs + 0x620)? != observed.difficulty
     {
         return Err(Error::new(
             "torn_read",
@@ -77,10 +79,10 @@ pub fn clock_context(process: &dyn Process) -> Result<ClockContext> {
         anchors: initial,
         historical_raw,
         date_raw,
-        player: observed["player"].as_str().unwrap().into(),
-        difficulty: observed["difficulty"].as_i64().unwrap() as i32,
-        paused: observed["paused"].as_bool().unwrap(),
-        speed: observed["speed"].as_u64().unwrap() as u8,
+        player: observed.player,
+        difficulty: observed.difficulty,
+        paused: observed.paused,
+        speed: observed.speed as u8,
     })
 }
 fn pointer(reader: &Reader<'_>, address: u64) -> Result<u64> {
@@ -117,8 +119,30 @@ pub fn snapshot(process: &dyn Process) -> Result<Value> {
     let start = Instant::now();
     process.begin_snapshot()?;
     let r = Reader::new(process);
-    let base = process.image_base();
-    let initial = roots(&r, base)?;
+    let fields = snapshot_fields(&r, process.image_base())?;
+    process.check()?;
+    // Include the final ownership/exec check in reported snapshot time.
+    Ok(
+        json!({"source":"native process_vm_readv","owned":true,"build_id":BUILD_ID,"player":fields.player,"country":fields.country,"date":fields.date,"speed":fields.speed,"paused":fields.paused,"difficulty":fields.difficulty,"historical_ai":fields.historical_raw!=0,"focus":fields.focus,"research":fields.research,"default_mode":"FAIR","observation_paused_game":false,"capabilities_unverified":["native_commands","production","construction","army","diplomacy","progress_days","daily_governor"],"freshness":{"observed_unix_ms":SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),"elapsed_ms":start.elapsed().as_secs_f64()*1000.0,"read_calls":r.calls.get(),"read_bytes":r.bytes.get()}}),
+    )
+}
+
+struct SnapshotFields {
+    player: String,
+    country: String,
+    date: calendar::Date,
+    speed: i32,
+    paused: bool,
+    difficulty: i32,
+    historical_raw: i32,
+    focus: Value,
+    research: Vec<Value>,
+}
+
+// The caller owns the complete begin_snapshot/check bracket. This body keeps
+// all structural readbacks and fresh bytes; it has no shared active/cached state.
+fn snapshot_fields(r: &Reader<'_>, base: u64) -> Result<SnapshotFields> {
+    let initial = roots(r, base)?;
     let [gs, idler, _] = initial;
     if r.u64(gs)? != base + 0x42c7598 || r.u64(idler)? != base + 0x42c9a88 {
         return Err(Error::new(
@@ -150,7 +174,7 @@ pub fn snapshot(process: &dyn Process) -> Result<Value> {
     }
     let country = address(r.array_entry(gs + 0x310, country_index as usize, 8)?)?;
     r.object_type(country, "CCountry")?;
-    let tag_db = pointer(&r, base + 0x43f3eb8)?;
+    let tag_db = pointer(r, base + 0x43f3eb8)?;
     // Reads only the player tag/name; foreign-country detail is never traversed.
     let (tag_header, tag_data, tag_count) = r.array_header(tag_db)?;
     if tag_id as usize >= tag_count {
@@ -170,7 +194,7 @@ pub fn snapshot(process: &dyn Process) -> Result<Value> {
         ));
     }
     let name = r.string(country + 0x10)?;
-    let progress = pointer(&r, country + 0x1348)?;
+    let progress = pointer(r, country + 0x1348)?;
     r.object_type(progress, "CNationalFocusProgress")?;
     let current = r.u64(progress + 0x10)?;
     let focus = if current == 0 {
@@ -179,7 +203,7 @@ pub fn snapshot(process: &dyn Process) -> Result<Value> {
         r.object_type(current, "CNationalFocus")?;
         json!({"key":r.string(current+0x18)?,"name":r.string(current+0x60)?})
     };
-    let technology_status = pointer(&r, country + 0xf38)?;
+    let technology_status = pointer(r, country + 0xf38)?;
     r.object_type(technology_status, "CTechnologyStatus")?;
     let slots = r.pointer_array(technology_status + 0xa0)?;
     if slots.len() > 32 {
@@ -198,7 +222,7 @@ pub fn snapshot(process: &dyn Process) -> Result<Value> {
             Value::Null
         } else {
             r.object_type(technology, "CTechnology")?;
-            let template = pointer(&r, technology + 0x160)?;
+            let template = pointer(r, technology + 0x160)?;
             r.object_type(template, "CTechnologyTemplate")?;
             json!(r.string(template + 8)?)
         };
@@ -218,7 +242,7 @@ pub fn snapshot(process: &dyn Process) -> Result<Value> {
             }
         }
     }
-    if roots(&r, base)? != initial
+    if roots(r, base)? != initial
         || r.i32(gs + 0x460)? != raw
         || r.i32(gs + 0x518)? != tag_id
         || r.u64(progress + 0x10)? != current
@@ -227,16 +251,23 @@ pub fn snapshot(process: &dyn Process) -> Result<Value> {
         || r.byte(idler + 0x6c1)? != paused
         || integer(r.array_entry(gs + 0x340, tag_id as usize, 4)?) != country_index
         || address(r.array_entry(gs + 0x310, country_index as usize, 8)?)? != country
-        || pointer(&r, country + 0x1348)? != progress
-        || pointer(&r, country + 0xf38)? != technology_status
+        || pointer(r, country + 0x1348)? != progress
+        || pointer(r, country + 0xf38)? != technology_status
     {
         return Err(Error::new(
             "torn_read",
             "Campaign anchors changed during observation",
         ));
     }
-    process.check()?;
-    Ok(
-        json!({"source":"native process_vm_readv","owned":true,"build_id":BUILD_ID,"player":tag,"country":name,"date":date,"speed":speed,"paused":paused==1,"difficulty":difficulty,"historical_ai":historical!=0,"focus":focus,"research":research,"default_mode":"FAIR","observation_paused_game":false,"capabilities_unverified":["native_commands","production","construction","army","diplomacy","progress_days","daily_governor"],"freshness":{"observed_unix_ms":SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),"elapsed_ms":start.elapsed().as_secs_f64()*1000.0,"read_calls":r.calls.get(),"read_bytes":r.bytes.get()}}),
-    )
+    Ok(SnapshotFields {
+        player: tag,
+        country: name,
+        date,
+        speed,
+        paused: paused == 1,
+        difficulty,
+        historical_raw: historical,
+        focus,
+        research,
+    })
 }

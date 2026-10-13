@@ -7,16 +7,17 @@ with Windows and macOS as required targets.
 ## Current status
 
 The existing **1.1.0 Python release** has been exercised on Windows. The native
-runtime is in development. One Luna player at medium reasoning verified focus,
-research and time advancement in a real licensed Linux game. Its final pause
-command timed out, so campaign acceptance remains failed. The first Rust
-observation runtime has started; there is no Rust release yet.
+runtime is in development. A Luna player at medium reasoning verified upstream
+focus and research, then encountered a native posting timeout. That adapter stays
+quarantined. A subsequent Rust test passed ordinary speed, unpause, time advancement
+and pause through 3 January 1936, using memory readback and stationary keys.
+Full campaign acceptance remains unfinished; there is no Rust release yet.
 
 | Runtime | Verified | Remaining |
 | --- | --- | --- |
 | Python / Windows | Baseline tools and recorded play attempts | Clean campaign acceptance; current development changes are unfinished |
 | Python / macOS | Platform work and limited diagnostic play | Reliable live acceptance; screenshot-driven testing is stopped |
-| Native / Linux | Upstream ordinary actions and one-day Luna smoke; Rust own-country snapshots | Reliable running-game command scheduling, governor and campaign acceptance |
+| Native / Linux | Own-country reads, owned launch/reconnects, Luna ordinary clock test through 3 January 1936 | Strategic action adapters, governor and campaign acceptance |
 | Native / Windows and macOS | Architecture and reference research | Independently verified build adapters and live tests |
 
 Read [the acceptance gates](docs/LINUX_RUST_HANDOFF.md),
@@ -65,11 +66,13 @@ explicitly on unsupported builds and unavailable capabilities. See the
 
 The first [Rust runtime](native/README.md) provides owned-process snapshots and
 bounded waits over stdio MCP. It uses the current verified Linux ELF layout and
-returns capability errors for unsupported builds. Native commands, the daily
+returns capability errors for unsupported builds. Engine posting, the daily
 governor, and Windows/macOS process adapters are still unimplemented in Rust.
 An explicit owned binding can enable ordinary clock keys with exclusive input
 leases, durable receipts and memory readback. Strategic action adapters remain
 unfinished; the previous engine posting failure stays quarantined.
+The live clock test used no screenshots or cursor movement: pause took 1.27 seconds
+and single-step speed changes took about one second under x86 CPU emulation.
 The Linux preview also has a persistent [owned launcher](docs/OWNED_LINUX_LAUNCHER.md)
 with reconnectable clients and guarded graceful shutdown.
 Linux, Windows and macOS CI pass the portable code and platform fixtures.

@@ -107,7 +107,10 @@ multiplayer flag. The private binding records this limitation.
 The MCP then advertises `hoi4_input_lease` and `hoi4_time`. Acquire with
 `{"op":"acquire","holder":"luna-linux-player","seconds":300}`. Only the
 configured controller may acquire; the owner generates the returned token.
-Renew or release with that token. Leases expire after 30–900 seconds. Observations
+Renew with `{"op":"renew","lease_token":"RETURNED_TOKEN","seconds":300}`
+or release with `{"op":"release","lease_token":"RETURNED_TOKEN"}`. Do not
+include `holder` in renew/release. Status is `{"op":"status"}`. Leases expire
+after 30–900 seconds. Observations
 neither need a lease nor extend it. Competing acquisition and delayed stale
 tokens are refused.
 
@@ -124,6 +127,12 @@ ID, Normal/historical settings and the observed date. Changes invalidate input.
 The persisted ID does **not** prove same-campaign load generation. Do not load or
 switch campaigns under this binding; use a fresh owned run. Full generation,
 strategic actions and campaign acceptance remain open gates.
+
+The recorded Luna medium clock test passed speed changes, unpause, a server wait
+to 3 January 1936 and verified pause under unchanged Yama 1. It used no screenshots
+or cursor movement. This verifies the installed-game clock adapter on that build;
+it does not verify strategic actions or a complete campaign. See the
+[actual calls and measurements](CLAUSEWITZ_VALIDATION.md#passed-luna-rust-clock-test--13-october-2026).
 
 ## Ownership and recovery checks
 

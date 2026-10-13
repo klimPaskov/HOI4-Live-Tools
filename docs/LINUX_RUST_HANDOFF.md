@@ -100,6 +100,10 @@ expiring exclusive controller leases, explicit display authentication, desired
 pause/speed state, durable action receipts and fresh memory readback. Actual Linux
 fixtures passed, including nonblocking busy refusal, shutdown between key pairs,
 automatic pause/speed races and expired authority. Installed-game clock readback
-and a fresh Luna run still require live verification. Strategic actions and the
-clean two-year campaign remain unfinished; the failed native posting path is
-still quarantined.
+and a fresh Luna run have now passed: speed changes, unpause, a server wait to
+3 January 1936 and verified pause, using stationary ordinary keys and actual
+memory readback. No screenshots, cursor movement, process suspension or
+kernel-policy changes occurred. Both recording segments finalized and passed
+ffprobe. This is bounded clock validation; strategic actions and the clean
+two-year campaign remain unfinished. The failed native posting path stays
+quarantined. See the latest live evidence before continuing.

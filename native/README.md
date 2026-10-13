@@ -37,6 +37,11 @@ already owned X11 display and the exact verified game build below. The launcher
 and process-reader fixtures pass. The installed Linux game also ran under its
 actual Rust parent at unchanged Yama scope 1, with two reconnecting clients;
 this does not establish campaign acceptance.
+The subsequent Luna medium clock test passed speed changes, unpause, advancement
+to 3 January 1936 and pause. It used actual memory readback, with no screenshots,
+cursor movement or process suspension. Pause took 1.27 seconds over persistent
+stdio/SSH; single-step speed changes took about one second. The guest's Yama scope
+stayed 1 and all inspected game threads had tracer 0.
 
 The diagnostic `--session OWNED_RUN_MANIFEST` path remains available. Its
 manifest records these actual launch facts:
@@ -120,7 +125,7 @@ inside posting. Restoring CPU context and detaching threads does not undo engine
 side effects. The failed adapter is quarantined; the transaction must not be
 blindly repeated or ported as safe. See [the actual failure and measurements](../docs/CLAUSEWITZ_VALIDATION.md).
 
-Next steps are reliable installed-game controls, owned input leases and recovery,
+Next steps are strategic installed-game controls, broader recovery,
 durable daily plans, idempotent research/focus/economy repairs, compact event
 digests, army and naval-invasion control, then independently validated Windows
 and macOS adapters. FAIR remains the campaign default; META strategy and mod-QA

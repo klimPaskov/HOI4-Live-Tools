@@ -195,6 +195,21 @@ fn own_clock_context_has_a_bounded_campaign_identity() {
     );
     assert_eq!(context.historical_raw, 1);
     assert!(context.paused);
+    assert_eq!(fixture.checks.get(), 2);
+}
+
+#[test]
+fn clock_context_retains_final_ownership_and_clock_readback() {
+    let mut fixture = Fixture::new();
+    fixture.replaced = true;
+    assert_eq!(
+        game::clock_context(&fixture).unwrap_err().code,
+        "ownership_changed"
+    );
+    assert_eq!(fixture.checks.get(), 2);
+    let mut fixture = Fixture::new();
+    fixture.torn = true;
+    assert_eq!(game::clock_context(&fixture).unwrap_err().code, "torn_read");
 }
 
 #[test]

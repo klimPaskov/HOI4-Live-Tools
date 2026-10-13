@@ -29,8 +29,13 @@
   Regression checks cover automatic pause, changing speed, stale no-op receipts,
   expired authority and malformed final pause bytes. Same-campaign load generation
   and full campaign acceptance remain unproved.
+- Pass a recorded Luna medium Linux Rust clock test through 3 January 1936,
+  including desired speed, unpause, server wait and verified pause. No screenshot,
+  cursor movement or kernel-policy change occurred. Publish per-operation lease
+  schemas after a rejected release argument; remove nested clock snapshot brackets
+  while retaining structural and final ownership/exec checks.
 - Simplify README and preserve the existing Windows reference in a separate doc.
-  Native commands, governor and Windows/macOS native adapters remain unfinished.
+  Strategic commands, governor and Windows/macOS native adapters remain unfinished.
 
 The Python release version and downstream release pins remain unchanged.
 
