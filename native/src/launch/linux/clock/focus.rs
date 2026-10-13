@@ -89,7 +89,7 @@ pub(super) fn call(
     let args = parse(args)?;
     owner.daily.input_check()?;
     drop(input_permit(&owner.input_gate)?);
-    let mut state = try_state(&owner.state)?;
+    let mut state = owner.input_state()?;
     let epoch = state.guard.epoch.clone();
     state.authority.authorize(args.token, &epoch)?;
     if state.journal.blocks_game(&epoch.game)

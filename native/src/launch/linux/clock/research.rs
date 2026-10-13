@@ -99,7 +99,7 @@ pub(super) fn call(
     let id = string(args, "request_id")?;
     let token = string(args, "lease_token")?;
     drop(input_permit(&owner.input_gate)?);
-    let mut state = try_state(&owner.state)?;
+    let mut state = owner.input_state()?;
     let epoch = state.guard.epoch.clone();
     state.authority.authorize(token, &epoch)?;
     if state.journal.blocks_game(&epoch.game) {

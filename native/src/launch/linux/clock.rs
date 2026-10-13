@@ -134,6 +134,9 @@ pub(super) struct ClockService {
     daily: daily::Controller,
 }
 impl ClockService {
+    fn input_state(&self) -> Result<MutexGuard<'_, ControlState>> {
+        crate::daily_worker::input_state(&self.state, || self.daily.input_check())
+    }
     pub(super) fn bind(
         process: &dyn Process,
         display: &Display,
@@ -410,7 +413,7 @@ impl Commands for ClockService {
         };
         self.daily.input_check()?;
         drop(input_permit(&self.input_gate)?);
-        let mut state = try_state(&self.state)?;
+        let mut state = self.input_state()?;
         if state
             .focus
             .as_ref()

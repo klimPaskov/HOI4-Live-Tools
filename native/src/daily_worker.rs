@@ -10,6 +10,24 @@ use std::{
     },
     thread::{self, JoinHandle},
 };
+/// Recheck uncertainty after controller acquisition. A publication between the
+/// optimistic check and try_lock must not authorize a manual input operation.
+pub(crate) fn input_state<'a, T>(
+    state: &'a std::sync::Mutex<T>,
+    mut check: impl FnMut() -> Result<()>,
+) -> Result<std::sync::MutexGuard<'a, T>> {
+    check()?;
+    let guard = state.try_lock().map_err(|e| match e {
+        std::sync::TryLockError::WouldBlock => {
+            Error::new("input_busy", "Shared controller is in use")
+        }
+        std::sync::TryLockError::Poisoned(_) => {
+            Error::new("action_uncertain", "Shared controller is poisoned")
+        }
+    })?;
+    check()?;
+    Ok(guard)
+}
 pub(crate) struct Lifecycle {
     stop: Arc<AtomicBool>,
     wake: Arc<Wakeup>,
@@ -51,6 +69,55 @@ impl Drop for Lifecycle {
 mod tests {
     use super::*;
     use std::time::Duration;
+    #[test]
+    fn quarantine_published_between_precheck_and_lock_refuses_manual_work() {
+        let state = Arc::new(std::sync::Mutex::new(0));
+        let blocked = Arc::new(AtomicBool::new(false));
+        let (send, recv) = std::sync::mpsc::channel();
+        let (released, waited) = std::sync::mpsc::channel();
+        let s = state.clone();
+        let b = blocked.clone();
+        let worker = thread::spawn(move || {
+            recv.recv().unwrap();
+            let guard = s.lock().unwrap();
+            b.store(true, Ordering::Release);
+            drop(guard);
+            released.send(()).unwrap();
+        });
+        let mut first = true;
+        let result = input_state(&state, || {
+            if blocked.load(Ordering::Acquire) {
+                return Err(Error::new("action_uncertain", "Generated quarantine"));
+            }
+            if first {
+                first = false;
+                send.send(()).unwrap();
+                waited.recv_timeout(Duration::from_secs(1)).unwrap();
+            }
+            Ok(())
+        });
+        assert_eq!(result.unwrap_err().code, "action_uncertain");
+        worker.join().unwrap();
+        assert_eq!(*state.lock().unwrap(), 0);
+    }
+    #[test]
+    fn manual_input_lock_is_nonblocking_and_poison_is_uncertain() {
+        let state = std::sync::Mutex::new(0);
+        let guard = state.lock().unwrap();
+        assert_eq!(
+            input_state(&state, || Ok(())).unwrap_err().code,
+            "input_busy"
+        );
+        drop(guard);
+        let _ = std::panic::catch_unwind(|| {
+            let _guard = state.lock().unwrap();
+            panic!("Generated controller panic");
+        });
+        assert_eq!(
+            input_state(&state, || Ok(())).unwrap_err().code,
+            "action_uncertain"
+        );
+    }
     #[test]
     fn condvar_shutdown_joins_without_controller_lock() {
         let stop = Arc::new(AtomicBool::new(false));

@@ -103,7 +103,7 @@ impl Controller {
                     old.life.stop()?;
                 }
                 let until = Instant::now() + Duration::from_secs(5);
-                let mut state = try_state(&owner.state)?;
+                let mut state = owner.input_state()?;
                 let epoch = state.guard.epoch.clone();
                 let lease_end = state.authority.authorize(&token, &epoch)?;
                 let until = until.min(lease_end);

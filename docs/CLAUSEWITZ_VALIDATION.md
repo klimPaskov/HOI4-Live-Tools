@@ -1781,3 +1781,24 @@ Production focus deadlines are unchanged.
 These are fixture/kernel results. Focus dispatch and the daily worker have not
 yet passed an installed-game run. Full daily automation, Windows/macOS native
 adapters, clean two-year acceptance and all full campaigns remain unfinished.
+
+All nine CI jobs subsequently passed at `5aaceba`: three native Rust platforms
+and Python3.9/3.13 on each platform. These remain offline results.
+
+### Daily quarantine acquisition race
+
+Review found that publishing daily quarantine while holding the controller was
+insufficient: a manual call could read the flag before publication, then acquire
+the controller after the worker released it. Clock, research, focus and worker
+start now check uncertainty again after acquiring the common controller. A
+deterministic channel/barrier regression reproduces publication between those
+steps and verifies refusal without manual work. Busy acquisition remains
+nonblocking; a poisoned controller reports uncertainty.
+
+Rust1.86 host passed **474 tests**; host/Linux Clippy, Rust1.86 Linux compilation,
+formatting and the local Python suite (**953 tests, 37 skipped**,22.539 seconds)
+passed. Actual Linux fixtures for this correction are pending. The already
+launched run026 keeps its original immutable `5aaceba` binary and has the daily
+worker disabled before input binding. It will test focus/clock only; worker
+validation requires a separate fresh binary and game. No hot-swap or campaign
+acceptance is claimed.
