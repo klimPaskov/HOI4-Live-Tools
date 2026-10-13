@@ -34,6 +34,10 @@
   cursor movement or kernel-policy change occurred. Publish per-operation lease
   schemas after a rejected release argument; remove nested clock snapshot brackets
   while retaining structural and final ownership/exec checks.
+- Port a bounded loaded technology-ID catalog with filtering/pagination and
+  complete list/definition readbacks. Add own GUI pointer/dimension/scale
+  diagnostics with unverified click mapping explicit. Neither invokes eligibility,
+  exposes raw addresses or sends input; installed-game verification is pending.
 - Simplify README and preserve the existing Windows reference in a separate doc.
   Strategic commands, governor and Windows/macOS native adapters remain unfinished.
 

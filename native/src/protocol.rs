@@ -1,8 +1,9 @@
 use crate::{
     calendar,
     error::{Error, Result},
-    game,
+    game, gui,
     platform::Process,
+    technology,
 };
 use serde_json::{json, Value};
 use std::time::{Duration, Instant};
@@ -22,6 +23,8 @@ fn tools(commands: Option<&dyn Commands>) -> Value {
     let mut value = json!({"tools":[
         {"name":"hoi4_capabilities","description":"Verified runtime capabilities and explicit platform/build limitations.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}},
         {"name":"hoi4_overview","description":"Fresh owned-country process snapshot. Pure bounded reads; never pauses.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}},
+        {"name":"hoi4_input_geometry","description":"Read-only own GUI pointer, dimensions and scale diagnostics. Does not prove client origin, control geometry or click authorization.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}},
+        {"name":"hoi4_technology_list","description":"Canonical loaded public technology IDs with bounded filtering/pagination. Catalog membership does not imply player research eligibility. Pure reads; never pauses.","inputSchema":{"type":"object","properties":{"filter":{"type":"string","maxLength":128},"offset":{"type":"integer","minimum":0,"maximum":8192},"limit":{"type":"integer","minimum":1,"maximum":100}},"additionalProperties":false}},
         {"name":"hoi4_wait_for","description":"Bounded server wait for own focus/research change or game date. Never pauses.","inputSchema":{"type":"object","properties":{"timeout_seconds":{"type":"integer","minimum":1,"maximum":50},"until_date":{"type":"array","items":{"type":"integer"},"minItems":3,"maxItems":3}},"additionalProperties":false}}
     ]});
     if let Some(commands) = commands {
@@ -36,17 +39,22 @@ fn content(value: Value) -> Value {
     json!({"content":[{"type":"text","text":serde_json::to_string(&value).unwrap()}]})
 }
 impl Server {
+    fn process(&self) -> Result<&dyn Process> {
+        self.process
+            .as_ref()
+            .map(|p| p.as_ref() as &dyn Process)
+            .ok_or_else(|| {
+                Error::new(
+                    "capability_unavailable",
+                    self.unavailable
+                        .as_ref()
+                        .map(ToString::to_string)
+                        .unwrap_or_else(|| "No owned session manifest; use --session".into()),
+                )
+            })
+    }
     fn overview(&self) -> Result<Value> {
-        let p = self.process.as_ref().ok_or_else(|| {
-            Error::new(
-                "capability_unavailable",
-                self.unavailable
-                    .as_ref()
-                    .map(ToString::to_string)
-                    .unwrap_or_else(|| "No owned session manifest; use --session".into()),
-            )
-        })?;
-        game::snapshot(p.as_ref())
+        game::snapshot(self.process()?)
     }
     fn call(&self, name: &str, args: &Value, commands: Option<&dyn Commands>) -> Result<Value> {
         let object = args
@@ -54,9 +62,54 @@ impl Server {
             .ok_or_else(|| Error::new("invalid_arguments", "Tool arguments must be an object"))?;
         match name {
             "hoi4_capabilities" if object.is_empty() => Ok(
-                json!({"runtime":"rust","platform":std::env::consts::OS,"owned_session_bound":self.process.is_some(),"unavailable":self.unavailable,"observations":["own_focus","own_research","clock","bounded_wait"],"commands":commands.map(|c| c.capabilities()).unwrap_or_else(|| json!("unavailable: no verified input binding")),"native_transactions":"unavailable: failed posting path quarantined","default_mode":"FAIR","mod_qa":"separate; unavailable in this runtime","windows_macos":"unverified native adapters"}),
+                json!({"runtime":"rust","platform":std::env::consts::OS,"owned_session_bound":self.process.is_some(),"unavailable":self.unavailable,"observations":["own_focus","own_research","clock","bounded_wait","technology_definitions","gui_input_diagnostics"],"commands":commands.map(|c| c.capabilities()).unwrap_or_else(|| json!("unavailable: no verified input binding")),"native_transactions":"unavailable: failed posting path quarantined","default_mode":"FAIR","mod_qa":"separate; unavailable in this runtime","windows_macos":"unverified native adapters"}),
             ),
             "hoi4_overview" if object.is_empty() => self.overview(),
+            "hoi4_input_geometry" if object.is_empty() => gui::input_geometry(self.process()?),
+            "hoi4_technology_list" => {
+                if object
+                    .keys()
+                    .any(|k| !["filter", "offset", "limit"].contains(&k.as_str()))
+                {
+                    return Err(Error::new("invalid_arguments", "Unknown catalog argument"));
+                }
+                let filter = object
+                    .get("filter")
+                    .map(|v| {
+                        v.as_str().ok_or_else(|| {
+                            Error::new("invalid_arguments", "Filter must be a string")
+                        })
+                    })
+                    .transpose()?
+                    .unwrap_or("");
+                let integer = |key: &str, default: u64, low: u64, high: u64| -> Result<usize> {
+                    let value = object
+                        .get(key)
+                        .map(|v| {
+                            v.as_u64().ok_or_else(|| {
+                                Error::new(
+                                    "invalid_arguments",
+                                    "Catalog pagination must be integers",
+                                )
+                            })
+                        })
+                        .transpose()?
+                        .unwrap_or(default);
+                    if !(low..=high).contains(&value) {
+                        return Err(Error::new(
+                            "invalid_arguments",
+                            "Catalog pagination exceeds bounds",
+                        ));
+                    }
+                    Ok(value as usize)
+                };
+                let offset = integer("offset", 0, 0, 8192)?;
+                let limit = integer("limit", 100, 1, 100)?;
+                if filter.chars().count() > 128 {
+                    return Err(Error::new("invalid_arguments", "Filter exceeds bound"));
+                }
+                technology::catalog(self.process()?, filter, offset, limit)
+            }
             "hoi4_wait_for" => {
                 if object
                     .keys()

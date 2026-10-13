@@ -52,10 +52,19 @@ impl<'a> Reader<'a> {
         Ok(self.read(a, 1)?[0])
     }
     pub fn string(&self, a: u64) -> Result<String> {
+        self.string_bounded(a, 4096)
+    }
+    pub fn string_bounded(&self, a: u64, limit: usize) -> Result<String> {
+        if limit > 4096 {
+            return Err(Error::new(
+                "invalid_string",
+                "String acceptance bound exceeds reader limit",
+            ));
+        }
         let header = self.read(a, 32)?;
         let ptr = u64::from_le_bytes(header[..8].try_into().unwrap());
         let size = u64::from_le_bytes(header[8..16].try_into().unwrap());
-        if size > 4096 || (ptr == a + 16 && size > 15) {
+        if size > limit as u64 || (ptr == a + 16 && size > 15) {
             return Err(Error::new("invalid_string", "Invalid bounded SSO string"));
         }
         let bytes = if ptr == a + 16 {

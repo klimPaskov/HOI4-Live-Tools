@@ -1,8 +1,9 @@
 use hoi4_live_native::{
     error::{Error, Result},
-    game,
+    game, gui,
     memory::ReadMemory,
     platform::Process,
+    technology,
 };
 use std::{cell::Cell, collections::BTreeMap};
 struct Fixture {
@@ -15,6 +16,14 @@ struct Fixture {
     changed_id: bool,
     pause_reads: Cell<u32>,
     invalid_final_pause: bool,
+    catalog_reads: Cell<u32>,
+    changed_catalog: bool,
+    geometry_reads: Cell<u32>,
+    changed_geometry: bool,
+    catalog_name_reads: Cell<u32>,
+    changed_catalog_name: bool,
+    catalog_template_reads: Cell<u32>,
+    relocated_catalog: bool,
 }
 impl Fixture {
     fn put(&mut self, a: u64, data: &[u8]) {
@@ -63,6 +72,14 @@ impl Fixture {
             changed_id: false,
             pause_reads: Cell::new(0),
             invalid_final_pause: false,
+            catalog_reads: Cell::new(0),
+            changed_catalog: false,
+            geometry_reads: Cell::new(0),
+            changed_geometry: false,
+            catalog_name_reads: Cell::new(0),
+            changed_catalog_name: false,
+            catalog_template_reads: Cell::new(0),
+            relocated_catalog: false,
         };
         let base = 0x10000;
         f.word(base + 0x44086a8, 0x30000);
@@ -118,9 +135,74 @@ impl Fixture {
         }
         f
     }
+    fn catalog(&mut self) {
+        let base = 0x10000;
+        self.region(0x36000, 0x100);
+        self.word(0x36000, base + 0x42110c8);
+        self.array(0x36048, 0x62000, 4);
+        self.region(0x62000, 32);
+        // Canonical indices are independent of copied template+0x34 values.
+        for (i, name) in ["tools1", "tools2", "construction1"].iter().enumerate() {
+            let ptr = 0x63000 + i as u64 * 0x100;
+            self.region(ptr, 0x80);
+            self.word(0x62008 + i as u64 * 8, ptr);
+            self.word(ptr, base + 0x4211038);
+            self.string(ptr + 8, name);
+            self.number(ptr + 0x30, i as i32 + 1);
+            self.number(ptr + 0x34, 999);
+        }
+    }
+    fn geometry(&mut self) {
+        let base = 0x10000;
+        self.word(0x324f8, 0x70000);
+        self.region(0x70000, 0xc0);
+        self.word(0x70000, base + 0x434c068);
+        self.word(0x700b8, 0x71000);
+        self.word(base + 0x4577890, 0x71000);
+        self.region(0x71000, 0x200);
+        self.word(0x71000, base + 0x42417f8);
+        for (i, v) in [512, 288, 1280, 720].iter().enumerate() {
+            self.number(0x71178 + i as u64 * 4, *v);
+        }
+        for (i, v) in [2.5f32, 2.5, 0.4, 0.4].iter().enumerate() {
+            self.put(0x711d0 + i as u64 * 4, &v.to_le_bytes());
+        }
+        self.put(0x71040, &640f32.to_le_bytes());
+        self.put(0x71044, &20f32.to_le_bytes());
+    }
 }
 impl ReadMemory for Fixture {
     fn read(&self, a: u64, n: usize) -> Result<Vec<u8>> {
+        if a == 0x63000 {
+            self.catalog_template_reads
+                .set(self.catalog_template_reads.get() + 1);
+        }
+        if a == 0x36048 && self.relocated_catalog && self.catalog_template_reads.get() > 0 {
+            let mut bytes = 0x62100u64.to_le_bytes().to_vec();
+            bytes.extend(4i32.to_le_bytes());
+            bytes.extend(4i32.to_le_bytes());
+            assert_eq!(bytes.len(), n);
+            return Ok(bytes);
+        }
+        if a == 0x64000 {
+            self.catalog_name_reads
+                .set(self.catalog_name_reads.get() + 1);
+            if self.changed_catalog_name && self.catalog_name_reads.get() > 1 {
+                return Ok(vec![b'z'; n]);
+            }
+        }
+        if a == 0x71040 {
+            self.geometry_reads.set(self.geometry_reads.get() + 1);
+            if self.changed_geometry && self.geometry_reads.get() > 1 {
+                return Ok(vec![0; n]);
+            }
+        }
+        if a == 0x62000 {
+            self.catalog_reads.set(self.catalog_reads.get() + 1);
+            if self.changed_catalog && self.catalog_reads.get() > 1 {
+                return Ok(vec![0; n]);
+            }
+        }
         if a == 0x326c1 {
             self.pause_reads.set(self.pause_reads.get() + 1);
             if self.invalid_final_pause && self.pause_reads.get() > 2 {
@@ -230,5 +312,146 @@ fn unchanged_string_header_does_not_hide_changed_campaign_contents() {
     assert_eq!(
         game::clock_context(&fixture).unwrap_err().code,
         "invalid_string"
+    );
+}
+
+#[test]
+fn technology_catalog_filters_pages_and_uses_primary_ids() {
+    let mut fixture = Fixture::new();
+    fixture.catalog();
+    let first = technology::catalog(&fixture, "TOOLS", 0, 1).unwrap();
+    assert_eq!(first["definition_count"], 3);
+    assert_eq!(first["count"], 2);
+    assert_eq!(first["technologies"], serde_json::json!(["tools1"]));
+    assert_eq!(first["next_offset"], 1);
+    assert_eq!(fixture.checks.get(), 2);
+    let next = technology::catalog(&fixture, "tools", 1, 1).unwrap();
+    assert_eq!(next["technologies"], serde_json::json!(["tools2"]));
+    assert!(next["next_offset"].is_null());
+    assert!(
+        technology::catalog(&fixture, "no_match", 0, 100).unwrap()["technologies"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
+fn malformed_and_changed_catalogs_return_no_page() {
+    let mut fixture = Fixture::new();
+    fixture.catalog();
+    fixture.number(0x63030, 2);
+    assert_eq!(
+        technology::catalog(&fixture, "", 0, 100).unwrap_err().code,
+        "invalid_catalog"
+    );
+    let mut fixture = Fixture::new();
+    fixture.catalog();
+    fixture.string(0x63108, "tools1");
+    assert_eq!(
+        technology::catalog(&fixture, "", 0, 100).unwrap_err().code,
+        "invalid_catalog"
+    );
+    let mut fixture = Fixture::new();
+    fixture.catalog();
+    fixture.changed_catalog = true;
+    assert_eq!(
+        technology::catalog(&fixture, "", 0, 100).unwrap_err().code,
+        "torn_read"
+    );
+    let mut fixture = Fixture::new();
+    fixture.catalog();
+    let name = b"long_technology_identifier";
+    fixture.region(0x63008, 32);
+    fixture.word(0x63008, 0x64000);
+    fixture.word(0x63010, name.len() as u64);
+    fixture.put(0x64000, name);
+    fixture.changed_catalog_name = true;
+    assert_eq!(
+        technology::catalog(&fixture, "", 0, 100).unwrap_err().code,
+        "torn_read"
+    );
+    let mut fixture = Fixture::new();
+    fixture.catalog();
+    fixture.replaced = true;
+    assert_eq!(
+        technology::catalog(&fixture, "", 0, 100).unwrap_err().code,
+        "ownership_changed"
+    );
+}
+
+#[test]
+fn oversized_catalog_is_refused_before_pointer_payload() {
+    let mut fixture = Fixture::new();
+    fixture.catalog();
+    fixture.array(0x36048, 0x62000, 8193);
+    assert_eq!(
+        technology::catalog(&fixture, "", 0, 100).unwrap_err().code,
+        "invalid_array"
+    );
+    assert_eq!(fixture.catalog_reads.get(), 0);
+    let mut fixture = Fixture::new();
+    fixture.catalog();
+    fixture.region(0x63008, 32);
+    fixture.word(0x63008, 0x64000);
+    fixture.word(0x63010, 257);
+    assert_eq!(
+        technology::catalog(&fixture, "", 0, 100).unwrap_err().code,
+        "invalid_string"
+    );
+    assert_eq!(fixture.catalog_name_reads.get(), 0);
+}
+
+#[test]
+fn relocated_catalog_with_identical_entries_is_a_changed_snapshot() {
+    let mut fixture = Fixture::new();
+    fixture.catalog();
+    let bytes: Vec<_> = (0..32).map(|i| fixture.data[&(0x62000 + i)]).collect();
+    fixture.put(0x62100, &bytes);
+    fixture.relocated_catalog = true;
+    assert_eq!(
+        technology::catalog(&fixture, "", 0, 100).unwrap_err().code,
+        "torn_read"
+    );
+}
+
+#[test]
+fn input_geometry_is_diagnostic_and_uses_finalized_ratios() {
+    let mut fixture = Fixture::new();
+    fixture.geometry();
+    let value = gui::input_geometry(&fixture).unwrap();
+    assert_eq!(value["physical_dimensions"], serde_json::json!([512, 288]));
+    assert_eq!(value["logical_dimensions"], serde_json::json!([1280, 720]));
+    assert_eq!(value["logical_pointer"], serde_json::json!([640.0, 20.0]));
+    assert_eq!(value["input_mapping_verified"], false);
+    assert_eq!(fixture.checks.get(), 2);
+}
+
+#[test]
+fn wrong_gui_type_inconsistent_scales_and_torn_geometry_fail() {
+    let mut fixture = Fixture::new();
+    fixture.geometry();
+    fixture.word(0x71000, 0x10000 + 0x43608e0);
+    assert_eq!(
+        gui::input_geometry(&fixture).unwrap_err().code,
+        "gui_unavailable"
+    );
+    let mut fixture = Fixture::new();
+    fixture.geometry();
+    fixture.put(0x711d0, &3.0f32.to_le_bytes());
+    assert_eq!(
+        gui::input_geometry(&fixture).unwrap_err().code,
+        "invalid_gui_geometry"
+    );
+    let mut fixture = Fixture::new();
+    fixture.geometry();
+    fixture.changed_geometry = true;
+    assert_eq!(gui::input_geometry(&fixture).unwrap_err().code, "torn_read");
+    let mut fixture = Fixture::new();
+    fixture.geometry();
+    fixture.replaced = true;
+    assert_eq!(
+        gui::input_geometry(&fixture).unwrap_err().code,
+        "ownership_changed"
     );
 }

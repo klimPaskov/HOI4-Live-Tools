@@ -45,10 +45,40 @@ fn stdio_is_json_and_notifications_have_no_reply() {
         .collect();
     assert_eq!(
         names,
-        ["hoi4_capabilities", "hoi4_overview", "hoi4_wait_for"]
+        [
+            "hoi4_capabilities",
+            "hoi4_overview",
+            "hoi4_input_geometry",
+            "hoi4_technology_list",
+            "hoi4_wait_for"
+        ]
     );
     assert_eq!(replies[3]["result"]["isError"], true);
     assert_eq!(replies[4]["result"]["isError"], true);
+}
+
+#[test]
+fn invalid_catalog_query_is_refused_before_process_access() {
+    use hoi4_live_native::protocol::Server;
+    let server = Server {
+        process: None,
+        unavailable: None,
+    };
+    for arguments in [
+        json!({"filter":true}),
+        json!({"offset":-1}),
+        json!({"limit":0}),
+        json!({"limit":101}),
+        json!({"offset":8193}),
+        json!({"filter":"x".repeat(129)}),
+        json!({"unknown":1}),
+    ] {
+        let reply=server.handle(json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"hoi4_technology_list","arguments":arguments}})).unwrap();
+        assert_eq!(reply["result"]["isError"], true);
+        let value: Value =
+            serde_json::from_str(reply["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+        assert_eq!(value["error"]["code"], "invalid_arguments");
+    }
 }
 #[test]
 fn oversized_request_recovers_at_next_line() {

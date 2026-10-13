@@ -80,11 +80,24 @@ threads. Generated-child tests exercised that access under unchanged Yama scope
 | --- | --- |
 | `hoi4_capabilities` | Platform, session binding and explicit missing features |
 | `hoi4_overview` | Fresh own focus/research IDs and clock; read metrics and unavailable fields |
+| `hoi4_technology_list` | Bounded loaded technology IDs, filter and pagination; no eligibility inference |
+| `hoi4_input_geometry` | Own GUI pointer/dimension/scale diagnostics; client origin and click mapping remain unverified |
 | `hoi4_wait_for` | Bounded wait, 1–50 seconds, for own focus/research changes or `until_date: [year, month, day]` |
 
 The game uses a 365-day calendar, including February 28 in 1936. Its current-build
 raw clock includes a 5000-year epoch; displayed hours range from 1 to 24.
 Research progress and time remaining have not been normalized and return null.
+Catalog queries accept `filter`, `offset` and `limit` (1–100). They validate the
+canonical definition list and every returned definition's type/index/key, then
+recheck the complete list and definition fields. A catalog entry is public
+metadata, not proof that the own country can research it. No eligibility function
+is called and no definition data is cached.
+
+GUI diagnostics return the actual finalized physical/logical dimensions, their
+ratios and the logical pointer, with explicit unverified client-origin, HiDPI,
+control-transform and hit-routing fields. They do not send input or authorize
+coordinate clicks. These two observation ports have fixture/static evidence;
+installed-game verification is still pending.
 The mode default is FAIR; a mode label alone is not proof of campaign settings.
 
 ## Command port and expansion

@@ -22,9 +22,13 @@ component, **not completion of the game-engine migration**.
 The first Rust observation port now lives in [`native/`](../native/README.md).
 It ports this foundation's typed reads, own-country focus/research semantics and
 calendar, with independently recovered current Linux build layouts. A real
-Luna smoke passed selected ordinary actions and one day of advancement, but its
-final pause timed out. The Rust command channel remains unavailable pending
-safe scheduling and recovery proof. See [actual live evidence](CLAUSEWITZ_VALIDATION.md).
+upstream Luna smoke passed selected ordinary actions and one day of advancement,
+but its final pause timed out; that native-posting adapter remains quarantined.
+A subsequent Rust Luna medium test passed ordinary X11 clock controls, advancement
+to 3 January 1936 and verified pause. Strategic controls remain unavailable.
+The Rust technology catalog and GUI coordinate diagnostics have static and fixture
+evidence; their installed-game validation is pending. See
+[actual live evidence](CLAUSEWITZ_VALIDATION.md).
 
 ## Expansion contract
 

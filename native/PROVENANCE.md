@@ -6,7 +6,7 @@ commit `97c85437081904d5ad07bae1623ec58d1c0a5b9e`, specifically
 `calling/{mem,process/linux,api,game}.py`. Copyright (c) 2026 smerss.
 The original MIT license is retained in `LICENSE.clausewitz`.
 
-Rust modules `memory.rs`, `game.rs`, `calendar.rs` and `platform/linux.rs` carry
+Rust modules `memory.rs`, `game.rs`, `calendar.rs`, `technology.rs` and `platform/linux.rs` carry
 source comments identifying this derivation. Other modules are new project code.
 Current Linux ELF layouts were recovered independently from the installed build;
 upstream 1.19.2 offsets were not copied as current-build evidence.
@@ -33,3 +33,10 @@ clock adapter are new project code. The parser implements the authentication
 record format; it does not copy dependency source. Current-build playthrough ID
 semantics were independently checked against the installed executable. That
 persisted ID is a campaign discriminator, not a proved load-generation token.
+
+The technology catalog ports the upstream public-definition API concept while
+using the independently recovered canonical database array and primary ID. It
+excludes the upstream speculative folder array and old ID offset. The GUI
+coordinate diagnostic module is new project code with independently recovered
+current-build type, root, dimension and ratio witnesses; it supplies no click
+adapter or client-origin claim. Both use fresh read-only snapshots.
