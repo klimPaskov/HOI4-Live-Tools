@@ -147,6 +147,86 @@ fn codec(geometry: &Value, profile: &OwnedClientProfile) -> Result<ClientCodec> 
         reviewed_builtin_client_origin: profile.reviewed_builtin_client_origin,
     })
 }
+fn sprite_surface(render: &Value) -> Result<Surface> {
+    required(
+        &render["field_layout_verified"],
+        true,
+        "Exact Sprite fields required",
+    )?;
+    if render["render_type_encoding"] != "7CSprite"
+        || render["resource_type_encoding"] != "11CSpriteType"
+    {
+        return Err(unavailable("Exact Sprite renderer/resource required"));
+    }
+    let raw = &render["raw"];
+    if uint(&raw["visibility_flag"])? != 1 {
+        return Err(unavailable("Locally visible node required"));
+    }
+    let cache = &render["resource_cache"];
+    required(
+        &cache["cache_equivalent"],
+        true,
+        "Sprite resource cache required",
+    )?;
+    required(
+        &cache["no_mask_rejection_branch"],
+        true,
+        "Unmasked Sprite branch required",
+    )?;
+    let clip = raw["physical_scaled_clip"]
+        .as_array()
+        .filter(|v| v.len() == 4)
+        .ok_or_else(|| unavailable("Physical clip required"))?;
+    Ok(Surface::ExactSpriteNode(SpriteNode {
+        common: common(
+            raw,
+            "cached_world_translation",
+            "pivot_dimensions",
+            "local_scalar",
+            &render["parent_chain"],
+        )?,
+        texture: pair(&cache["texture_dimensions"], int)?,
+        grid: pair(&cache["grid"], int)?,
+        orientation: uint(&cache["orientation_raw"])?,
+        orientation_full_width: true,
+        cache_equivalent: true,
+        no_mask_rejection_branch: true,
+        physical_clip: Some([
+            int(&clip[0])?,
+            int(&clip[1])?,
+            int(&clip[2])?,
+            int(&clip[3])?,
+        ]),
+    }))
+}
+fn slot_surface(detail: &Value, slot: u32) -> Result<Surface> {
+    if detail["owned"] != true
+        || detail["build_id"] != game::BUILD_ID
+        || detail["slot"].as_u64() != Some(u64::from(slot))
+        || detail["descriptor"]["slot"].as_u64() != Some(u64::from(slot))
+        || detail["active_mode_raw"] != 5
+        || detail["panel"]["materialized"] != true
+        || detail["panel"]["visible_predicate"] != true
+        || !matches!(
+            (
+                detail["ordinary_tree"]["materialized"].as_bool(),
+                detail["ordinary_tree"]["visible_predicate"].as_bool()
+            ),
+            (Some(true), Some(false)) | (Some(false), None)
+        )
+    {
+        return Err(unavailable(
+            "Fresh own ordinary research panel and requested slot required",
+        ));
+    }
+    let binding = &detail["descriptor"]["ordinary_selection_binding"];
+    required(
+        &binding["binding_verified"],
+        true,
+        "Exact own slot callback binding required",
+    )?;
+    sprite_surface(&binding["render_diagnostic"])
+}
 fn surface(detail: &Value, key: &str, slot: u32, stage: Stage) -> Result<Surface> {
     required(&detail["owned"], true, "Own technology detail required")?;
     if detail["build_id"] != game::BUILD_ID
@@ -169,56 +249,7 @@ fn surface(detail: &Value, key: &str, slot: u32, stage: Stage) -> Result<Surface
                 ));
             }
             let render = &detail["detail"]["render_diagnostic"];
-            required(
-                &render["field_layout_verified"],
-                true,
-                "Exact Sprite fields required",
-            )?;
-            if render["render_type_encoding"] != "7CSprite"
-                || render["resource_type_encoding"] != "11CSpriteType"
-            {
-                return Err(unavailable("Exact Sprite renderer/resource required"));
-            }
-            let raw = &render["raw"];
-            if uint(&raw["visibility_flag"])? != 1 {
-                return Err(unavailable("Locally visible node required"));
-            }
-            let cache = &render["resource_cache"];
-            required(
-                &cache["cache_equivalent"],
-                true,
-                "Sprite resource cache required",
-            )?;
-            required(
-                &cache["no_mask_rejection_branch"],
-                true,
-                "Unmasked Sprite branch required",
-            )?;
-            let clip = raw["physical_scaled_clip"]
-                .as_array()
-                .filter(|v| v.len() == 4)
-                .ok_or_else(|| unavailable("Physical clip required"))?;
-            Ok(Surface::ExactSpriteNode(SpriteNode {
-                common: common(
-                    raw,
-                    "cached_world_translation",
-                    "pivot_dimensions",
-                    "local_scalar",
-                    &render["parent_chain"],
-                )?,
-                texture: pair(&cache["texture_dimensions"], int)?,
-                grid: pair(&cache["grid"], int)?,
-                orientation: uint(&cache["orientation_raw"])?,
-                orientation_full_width: true,
-                cache_equivalent: true,
-                no_mask_rejection_branch: true,
-                physical_clip: Some([
-                    int(&clip[0])?,
-                    int(&clip[1])?,
-                    int(&clip[2])?,
-                    int(&clip[3])?,
-                ]),
-            }))
+            sprite_surface(render)
         }
         Stage::Research => {
             if uint(&info["matching_locally_visible_count"])? != 1 {
@@ -305,6 +336,25 @@ pub fn observe_owned(
 ) -> Result<(PointCandidate, research_ui::UiContext)> {
     let (detail, context) = research_ui::node_detail_owned(process, key)?;
     let surface = surface(&detail, key, slot, stage)?;
+    let geometry = gui::input_geometry(process)?;
+    let codec = codec(&geometry, profile)?;
+    process.check()?;
+    Ok((
+        research_attempt::point_candidate(&surface, &codec)?,
+        context,
+    ))
+}
+
+/// A prepared slot point retains all diagnostic authority limits. The owner
+/// additionally pins canonical emptiness and revalidates before ordinary input.
+#[doc(hidden)]
+pub fn observe_slot_owned(
+    process: &dyn Process,
+    slot: u32,
+    profile: &OwnedClientProfile,
+) -> Result<(PointCandidate, research_ui::UiContext)> {
+    let (detail, context) = research_ui::slot_control_owned(process, slot as usize)?;
+    let surface = slot_surface(&detail, slot)?;
     let geometry = gui::input_geometry(process)?;
     let codec = codec(&geometry, profile)?;
     process.check()?;

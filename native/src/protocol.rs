@@ -25,7 +25,7 @@ fn tools(commands: Option<&dyn Commands>) -> Value {
         {"name":"hoi4_overview","description":"Fresh owned-country process snapshot. Pure bounded reads; never pauses.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}},
         {"name":"hoi4_research","description":"Fresh own completed technology IDs with bounded pagination, and active raw research counters. Progress units, days remaining and eligibility remain unverified. Pure reads; never pauses.","inputSchema":{"type":"object","properties":{"offset":{"type":"integer","minimum":0,"maximum":8192},"limit":{"type":"integer","minimum":1,"maximum":100}},"additionalProperties":false}},
         {"name":"hoi4_input_geometry","description":"Read-only own GUI pointer, dimensions and scale diagnostics. Does not prove client origin, control geometry or click authorization.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}},
-        {"name":"hoi4_research_slot_control","description":"One own research slot by current array index: conditional ordinary callback binding and raw typed renderer diagnostics. No guessed Background name, coordinates or input authorization.","inputSchema":{"type":"object","properties":{"slot":{"type":"integer","minimum":0,"maximum":31}},"required":["slot"],"additionalProperties":false}},
+        {"name":"hoi4_research_slot_control","description":"One own research slot by current array index: conditional ordinary callback binding and raw typed renderer diagnostics. Optional include_geometry adds bounded Sprite cache and typed hierarchy observations. No guessed Background name, coordinates or input authorization.","inputSchema":{"type":"object","properties":{"slot":{"type":"integer","minimum":0,"maximum":31},"include_geometry":{"type":"boolean"}},"required":["slot"],"additionalProperties":false}},
         {"name":"hoi4_research_ui","description":"Bounded own research slot widgets, selected slot, canonical technology Info windows, named ordinary research button state and exact render diagnostics. No eligibility, hit routing or input authorization.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}},
         {"name":"hoi4_army","description":"Bounded own-country divisions with observation-scoped full handles, selected own location joins and raw signed strength/organisation. No persistent IDs, normalized units, enemies or actions.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}},
         {"name":"hoi4_economy","description":"Own-country named factory trigger counts, civilian project capacity and signed fixed-point political power. Pure reads; UI totals, stability, war support and shortages unavailable.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}},
@@ -273,16 +273,33 @@ impl Server {
             }
             "hoi4_input_geometry" if object.is_empty() => gui::input_geometry(self.process()?),
             "hoi4_research_slot_control" => {
-                if object.len() != 1 || !object.contains_key("slot") {
+                if !object.contains_key("slot")
+                    || object
+                        .keys()
+                        .any(|k| !matches!(k.as_str(), "slot" | "include_geometry"))
+                {
                     return Err(Error::new(
                         "invalid_arguments",
-                        "One own slot argument required",
+                        "Own slot and optional include_geometry arguments required",
                     ));
                 }
                 let slot = object["slot"].as_u64().filter(|v| *v < 32).ok_or_else(|| {
                     Error::new("invalid_arguments", "Bounded own slot integer required")
                 })?;
-                research_ui::slot_control_snapshot(self.process()?, slot as usize)
+                let geometry = object
+                    .get("include_geometry")
+                    .map(|v| {
+                        v.as_bool().ok_or_else(|| {
+                            Error::new("invalid_arguments", "include_geometry must be boolean")
+                        })
+                    })
+                    .transpose()?
+                    .unwrap_or(false);
+                if geometry {
+                    research_ui::slot_control_geometry(self.process()?, slot as usize)
+                } else {
+                    research_ui::slot_control_snapshot(self.process()?, slot as usize)
+                }
             }
             "hoi4_research_ui" => {
                 if !object.is_empty() {

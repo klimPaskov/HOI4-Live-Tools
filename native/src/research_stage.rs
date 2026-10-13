@@ -22,6 +22,7 @@ use std::{
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub enum Stage {
+    SelectSlot,
     View,
     Research,
 }
@@ -45,6 +46,10 @@ pub struct OwnState {
     pub epoch: Epoch,
     pub selected_slot: Option<u32>,
     pub tree_visible: bool,
+    /// Older View/Research receipts did not store this diagnostic; it is never
+    /// inferred true when reopening their journal.
+    #[serde(default)]
+    pub panel_visible: Option<bool>,
     /// Complete own-slot canonical assignments, never inferred from UI labels.
     pub researching: Vec<Option<String>>,
     /// All locally visible own Info windows. Null means unknown selection.
@@ -95,6 +100,13 @@ impl OwnState {
     }
     fn reached(&self, target: &Target) -> bool {
         match target.stage {
+            Stage::SelectSlot => {
+                self.tree_visible
+                    && self.panel_visible == Some(false)
+                    && self.selected_slot == Some(target.slot)
+                    && self.researching[target.slot as usize].is_none()
+                    && self.visible_info.is_empty()
+            }
             Stage::Research => {
                 self.researching[target.slot as usize].as_deref() == Some(&target.technology)
             }
@@ -106,6 +118,19 @@ impl OwnState {
         }
     }
     pub(crate) fn preflight(&self, target: &Target) -> Result<()> {
+        if target.stage == Stage::SelectSlot {
+            if self.panel_visible != Some(true)
+                || self.tree_visible
+                || self.researching[target.slot as usize].is_some()
+                || !self.visible_info.is_empty()
+            {
+                return Err(error(
+                    "research_precondition",
+                    "Open own panel, empty requested slot and no Info required",
+                ));
+            }
+            return Ok(());
+        }
         if !self.tree_visible
             || self.selected_slot != Some(target.slot)
             || self.researching[target.slot as usize].is_some()
@@ -116,6 +141,7 @@ impl OwnState {
             ));
         }
         let info_ok = match target.stage {
+            Stage::SelectSlot => unreachable!("Selection handled above"),
             Stage::View => self.visible_info.is_empty(),
             Stage::Research => self.visible_info.as_slice() == [Some(target.technology.clone())],
         };

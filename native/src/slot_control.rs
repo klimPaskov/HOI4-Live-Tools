@@ -16,6 +16,27 @@ pub(crate) fn observe(
     slot: u64,
     registry: u64,
 ) -> Result<Value> {
+    observe_inner(r, base, widget, view, slot, registry, false)
+}
+pub(crate) fn observe_geometry(
+    r: &Reader<'_>,
+    base: u64,
+    widget: u64,
+    view: u64,
+    slot: u64,
+    registry: u64,
+) -> Result<Value> {
+    observe_inner(r, base, widget, view, slot, registry, true)
+}
+fn observe_inner(
+    r: &Reader<'_>,
+    base: u64,
+    widget: u64,
+    view: u64,
+    slot: u64,
+    registry: u64,
+    include_geometry: bool,
+) -> Result<Value> {
     // Caller has already verified the complete own status/slot/view model.
     exact(r, widget, base + 0x424e7d8)?;
     exact(r, view, base + 0x424dc38)?;
@@ -185,8 +206,14 @@ pub(crate) fn observe(
             details["cache_currency_verified"] = json!(false);
         }
     }
+    let render_diagnostic = if include_geometry {
+        let mut reuse = crate::node_reuse::Reuse::new(base, view);
+        crate::node_detail::sprite_diagnostic(r, &mut reuse, container, button, registry)?
+    } else {
+        json!({"reason":"not_requested","field_layout_verified":false,"input_authorized":false})
+    };
     Ok(
-        json!({"binding_verified":true,"meaning":"one registered ordinary callback targets this own slot widget","control_type_encoding":encoding,"registered_names":registered,"named_association_observed":!registered.is_empty(),"constructor_resource_literal":"research_slot_entry","background_name_inferred":false,"render_type_encoding":render_type,"render_details":details,"client_rectangle_available":false,"effective_routing_verified":false,"input_authorized":false}),
+        json!({"binding_verified":true,"meaning":"one registered ordinary callback targets this own slot widget","control_type_encoding":encoding,"registered_names":registered,"named_association_observed":!registered.is_empty(),"constructor_resource_literal":"research_slot_entry","background_name_inferred":false,"render_type_encoding":render_type,"render_details":details,"render_diagnostic":render_diagnostic,"client_rectangle_available":false,"effective_routing_verified":false,"input_authorized":false}),
     )
 }
 

@@ -55,6 +55,7 @@ fn state() -> OwnState {
         epoch: epoch(),
         selected_slot: Some(0),
         tree_visible: true,
+        panel_visible: Some(false),
         researching: vec![None, None, None, None],
         visible_info: vec![Some("support_weapons".into())],
     }
@@ -153,6 +154,141 @@ fn execute(
     timeout: Duration,
 ) -> Result<Execution> {
     j.execute(id, t, &"a".repeat(32), a, g, f, timeout)
+}
+
+fn panel_state() -> OwnState {
+    let mut s = state();
+    s.tree_visible = false;
+    s.panel_visible = Some(true);
+    s.selected_slot = Some(1);
+    s.visible_info.clear();
+    s
+}
+fn selected_empty_state() -> OwnState {
+    let mut s = state();
+    s.visible_info.clear();
+    s
+}
+#[test]
+fn selection_verifies_empty_canonical_slot_and_replays_without_input() {
+    let scratch = Scratch::new();
+    let a = authority();
+    let g = RwLock::new(true);
+    let mut j = Journal::open(&scratch.journal()).unwrap();
+    let mut f = Fake::new();
+    f.observations = VecDeque::from([
+        Ok(panel_state()),
+        Ok(panel_state()),
+        Ok(selected_empty_state()),
+    ]);
+    f.delivery = Delivery::ServerConfirmed;
+    let r = execute(
+        &mut j,
+        "select-0",
+        target(Stage::SelectSlot),
+        &a,
+        &g,
+        &mut f,
+        Duration::from_secs(1),
+    )
+    .unwrap();
+    assert!(r.current_state_verified && !r.historical);
+    assert_eq!(f.dispatches, 1);
+    assert_eq!(r.receipt.observed.selected_slot, Some(0));
+    assert!(r.receipt.observed.researching.iter().all(Option::is_none));
+    drop(j);
+    let mut j = Journal::open(&scratch.journal()).unwrap();
+    let r = execute(
+        &mut j,
+        "select-0",
+        target(Stage::SelectSlot),
+        &a,
+        &g,
+        &mut f,
+        Duration::from_secs(1),
+    )
+    .unwrap();
+    assert!(r.historical && !r.current_state_verified);
+    assert_eq!(f.dispatches, 1);
+}
+#[test]
+fn selection_refuses_nonempty_late_slot_and_unresolved_delivery_survives_restart() {
+    let scratch = Scratch::new();
+    let a = authority();
+    let g = RwLock::new(true);
+    let mut j = Journal::open(&scratch.journal()).unwrap();
+    let mut occupied = panel_state();
+    occupied.researching[0] = Some("infantry_weapons2".into());
+    let mut f = Fake::new();
+    f.observations = VecDeque::from([Ok(panel_state()), Ok(occupied)]);
+    assert_eq!(
+        execute(
+            &mut j,
+            "select-late",
+            target(Stage::SelectSlot),
+            &a,
+            &g,
+            &mut f,
+            Duration::from_secs(1)
+        )
+        .unwrap_err()
+        .code,
+        "research_precondition"
+    );
+    assert_eq!(f.dispatches, 0);
+    assert_eq!(j.file.metadata().unwrap().len(), 0);
+    f.last = panel_state();
+    assert_eq!(
+        execute(
+            &mut j,
+            "select-uncertain",
+            target(Stage::SelectSlot),
+            &a,
+            &g,
+            &mut f,
+            Duration::from_secs(1)
+        )
+        .unwrap_err()
+        .code,
+        "action_uncertain"
+    );
+    assert_eq!(f.dispatches, 1);
+    drop(j);
+    let mut j = Journal::open(&scratch.journal()).unwrap();
+    for stage in [Stage::SelectSlot, Stage::View, Stage::Research] {
+        assert_eq!(
+            execute(
+                &mut j,
+                "new-stage",
+                target(stage),
+                &a,
+                &g,
+                &mut f,
+                Duration::from_secs(1)
+            )
+            .unwrap_err()
+            .code,
+            "action_uncertain"
+        );
+    }
+    assert_eq!(f.dispatches, 1);
+}
+#[test]
+fn legacy_receipts_do_not_infer_a_visible_panel_and_selection_preserves_info() {
+    let mut value = serde_json::to_value(panel_state()).unwrap();
+    value.as_object_mut().unwrap().remove("panel_visible");
+    let old: OwnState = serde_json::from_value(value).unwrap();
+    assert_eq!(old.panel_visible, None);
+    assert!(old.preflight(&target(Stage::SelectSlot)).is_err());
+    let mut missing = selected_empty_state();
+    missing.panel_visible = None;
+    assert!(!missing.reached(&target(Stage::SelectSlot)));
+    let mut info = panel_state();
+    info.visible_info = vec![None];
+    assert!(info.preflight(&target(Stage::SelectSlot)).is_err());
+    let mut selected = selected_empty_state();
+    selected.researching[0] = Some("support_weapons".into());
+    assert!(!selected.reached(&target(Stage::SelectSlot)));
 }
 #[test]
 fn unknown_delivery_three_readbacks_verify_once_and_replay_is_historical() {

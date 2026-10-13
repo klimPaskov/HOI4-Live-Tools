@@ -39,8 +39,8 @@ impl Service {
     }
 }
 pub(super) fn tool() -> Value {
-    json!({"name":"hoi4_research_attempt","description":"Preview: one ordinary ID-derived View or Research stage for the already selected own empty slot. Requires explicit owner profile, exclusive lease and stable stage request ID. Canonical readback verifies state; uncertain attempts are never replayed. No coordinates, engine calls or automatic UI navigation.",
-    "inputSchema":{"type":"object","properties":{"stage":{"enum":["view","research"]},"technology_id":{"type":"string","minLength":1,"maxLength":256},"slot":{"type":"integer","minimum":0,"maximum":31},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["stage","technology_id","slot","request_id","lease_token"],"additionalProperties":false}})
+    json!({"name":"hoi4_research_attempt","description":"Preview: one ordinary ID-derived SelectSlot, View or Research stage for an own empty slot. SelectSlot requires an open own research panel; View/Research require its selected tree. Requires explicit owner profile, exclusive lease and stable stage request ID. Canonical readback verifies state; uncertain attempts are never replayed. No coordinates or engine calls.",
+    "inputSchema":{"type":"object","properties":{"stage":{"enum":["select_slot","view","research"]},"technology_id":{"type":"string","minLength":1,"maxLength":256},"slot":{"type":"integer","minimum":0,"maximum":31},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["stage","technology_id","slot","request_id","lease_token"],"additionalProperties":false}})
 }
 pub(super) fn call(
     owner: &ClockService,
@@ -58,6 +58,7 @@ pub(super) fn call(
         ],
     )?;
     let selected_stage = match string(args, "stage")? {
+        "select_slot" => stage::Stage::SelectSlot,
         "view" => stage::Stage::View,
         "research" => stage::Stage::Research,
         _ => return Err(Error::new("invalid_arguments", "Unknown research stage")),
@@ -219,6 +220,7 @@ fn own_state(epoch: Epoch, research: &Value, ui: &Value) -> Result<stage::OwnSta
         epoch,
         selected_slot,
         tree_visible: active == 6 && tree && !panel,
+        panel_visible: Some(active == 5 && panel && !tree),
         researching,
         visible_info,
     })
@@ -254,17 +256,25 @@ impl stage::Backend for ResearchBackend<'_> {
     ) -> Result<crate::research_attempt::PointCandidate> {
         self.target = Some(target.clone());
         self.guard.observe(self.process)?;
-        let which = match target.stage {
-            stage::Stage::View => candidate::Stage::View,
-            stage::Stage::Research => candidate::Stage::Research,
+        let (point, context) = match target.stage {
+            stage::Stage::SelectSlot => {
+                candidate::observe_slot_owned(self.process, target.slot, self.profile)?
+            }
+            stage::Stage::View | stage::Stage::Research => {
+                let which = if target.stage == stage::Stage::View {
+                    candidate::Stage::View
+                } else {
+                    candidate::Stage::Research
+                };
+                candidate::observe_owned(
+                    self.process,
+                    &target.technology,
+                    target.slot,
+                    which,
+                    self.profile,
+                )?
+            }
         };
-        let (point, context) = candidate::observe_owned(
-            self.process,
-            &target.technology,
-            target.slot,
-            which,
-            self.profile,
-        )?;
         self.guard.accept_context(self.process, &context.campaign)?;
         if self.scope.as_ref() != Some(&([context.anchors[0], context.anchors[1]], context.slots)) {
             return Err(Error::new(

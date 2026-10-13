@@ -4913,8 +4913,94 @@ fn targeted_slot_is_current_own_index_not_persistent_identity() {
         serde_json::json!({"slot":-1}),
         serde_json::json!({"slot":32}),
         serde_json::json!({"slot":0,"other":true}),
+        serde_json::json!({"slot":0,"include_geometry":1}),
     ] {
         let v=server.handle(serde_json::json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"hoi4_research_slot_control","arguments":args}})).unwrap();
         assert!(v.to_string().contains("invalid_arguments"));
+    }
+}
+
+fn owned_slot_geometry_fixture() -> Fixture {
+    let mut f = owned_node_fixture();
+    f.registered_slot_control();
+    // Reuse supported Sprite semantics, with an independent slot callback and
+    // hierarchy. The technology button-data field is deliberately unreadable.
+    for (from, to, length) in [(0xf0000, 0xb2000, 0x180), (0xf1000, 0xb3000, 0x1f0)] {
+        let bytes: Vec<_> = (0..length).map(|i| f.data[&(from + i)]).collect();
+        f.put(to, &bytes);
+    }
+    f.word(0xb2138, 0xb1000);
+    f.word(0xb2168, 0xb3000);
+    f.hierarchy_fixture();
+    f.word(0xa0e70, 0xf3000);
+    f.word(0xa0e78, 0xf4000);
+    f.word(0xf5100, 0xb2000);
+    for address in 0xb1008..0xb1010 {
+        f.data.remove(&address);
+    }
+    f
+}
+
+#[test]
+fn slot_geometry_uses_slot_callback_and_same_owned_context_without_technology_data() {
+    let f = owned_slot_geometry_fixture();
+    let (v, context) = research_ui::slot_control_owned(&f, 0).unwrap();
+    let binding = &v["descriptor"]["ordinary_selection_binding"];
+    assert_eq!(binding["binding_verified"], true);
+    assert_eq!(binding["render_diagnostic"]["field_layout_verified"], true);
+    assert_eq!(
+        binding["render_diagnostic"]["resource_cache"]["diagnostic_dimensions"],
+        serde_json::json!([300, 60])
+    );
+    assert_eq!(
+        binding["render_diagnostic"]["parent_chain"]["graphics_root_closed"],
+        true
+    );
+    assert_eq!(context.campaign.player, "GER");
+    assert_eq!(context.anchors[..2], [0x20000, 0x28000]);
+    assert_eq!(context.slots, [0x2c000, 0x2c100, 0x2c200, 0x2c300]);
+    assert_eq!(v["input_authorized"], false);
+    assert_eq!(binding["input_authorized"], false);
+    assert!(!f.tracked_reads.borrow().contains_key(&0xb1008));
+}
+
+#[test]
+fn slot_geometry_requires_callback_scope_before_resource_or_hierarchy() {
+    let mut f = owned_slot_geometry_fixture();
+    f.word(0xe1010, 0x94008);
+    let v = research_ui::slot_control_geometry(&f, 0).unwrap();
+    assert_eq!(
+        v["descriptor"]["ordinary_selection_binding"]["reason"],
+        "different_slot_callback_capture"
+    );
+    f.assert_not_read(&[0xb2168, 0xb3090, 0xa0e70]);
+    let mut f = owned_slot_geometry_fixture();
+    f.word(0xb2138, 0xb1008);
+    assert_eq!(
+        research_ui::slot_control_geometry(&f, 0).unwrap_err().code,
+        "invalid_gui_owner"
+    );
+    f.assert_not_read(&[0xb3090, 0xa0e70]);
+}
+
+#[test]
+fn slot_geometry_full_orientation_and_final_witnesses_remain_required() {
+    let mut f = owned_slot_geometry_fixture();
+    f.number(0xb310c, 0x100);
+    let v = research_ui::slot_control_geometry(&f, 0).unwrap();
+    let cache =
+        &v["descriptor"]["ordinary_selection_binding"]["render_diagnostic"]["resource_cache"];
+    assert_eq!(cache["orientation_raw"], 0x100);
+    assert!(cache["diagnostic_dimensions"].is_null());
+    for (address, length) in [(0xb310c, 4), (0xb2138, 8), (0xf5100, 8), (0x3b000, 32)] {
+        let mut f = owned_slot_geometry_fixture();
+        let mut changed: Vec<_> = (0..length).map(|i| f.data[&(address + i)]).collect();
+        changed[0] ^= 1;
+        f.fault = Some((address, 1, changed));
+        assert_eq!(
+            research_ui::slot_control_owned(&f, 0).unwrap_err().code,
+            "torn_read",
+            "{address:x}"
+        );
     }
 }

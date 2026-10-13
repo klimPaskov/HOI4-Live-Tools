@@ -55,6 +55,35 @@ fn internally_typed_sprite_and_text_match_independent_expected_points() {
             && !research.effective_routing_verified
     );
 }
+
+#[test]
+fn own_panel_slot_surface_requires_independent_binding_and_known_window_states() {
+    let base = detail(false);
+    let d = json!({"owned":true,"build_id":game::BUILD_ID,"slot":2,"active_mode_raw":5,
+        "panel":{"materialized":true,"visible_predicate":true},
+        "ordinary_tree":{"materialized":false,"visible_predicate":null},
+        "descriptor":{"slot":2,"ordinary_selection_binding":{"binding_verified":true,
+            "render_diagnostic":base["detail"]["render_diagnostic"]}}});
+    let s = slot_surface(&d, 2).unwrap();
+    let p =
+        research_attempt::point_candidate(&s, &codec(&geometry(), &profile()).unwrap()).unwrap();
+    assert_eq!(p.client_pixel, [37, 70]);
+    for (path, value) in [
+        ("/slot", json!(1)),
+        ("/descriptor/slot", json!(1)),
+        ("/active_mode_raw", json!(6)),
+        ("/panel/materialized", json!(false)),
+        ("/ordinary_tree/materialized", json!(true)),
+        (
+            "/descriptor/ordinary_selection_binding/binding_verified",
+            json!(false),
+        ),
+    ] {
+        let mut changed = d.clone();
+        *changed.pointer_mut(path).unwrap() = value;
+        assert!(slot_surface(&changed, 2).is_err(), "{path}");
+    }
+}
 #[test]
 fn own_key_slot_build_and_unknown_fields_fail_before_geometry() {
     for (path, value) in [

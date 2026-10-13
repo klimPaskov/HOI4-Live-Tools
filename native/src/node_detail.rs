@@ -46,6 +46,27 @@ pub(crate) fn observe(
             "Detail control own registry/data join required",
         ));
     }
+    sprite_diagnostic(r, reuse, gui, button, registry)
+}
+
+/// Shared renderer semantics only. Callers must independently prove the control
+/// callback/data association; a renderer never establishes what its button does.
+pub(crate) fn sprite_diagnostic(
+    r: &Reader<'_>,
+    reuse: &mut Reuse,
+    gui: u64,
+    button: u64,
+    registry: u64,
+) -> Result<Value> {
+    let base = reuse.base();
+    exact(r, gui, base + 0x4347d58)?;
+    exact(r, button, base + 0x4346b10)?;
+    if r.u64(gui + 0x98)? != registry || r.u64(button + 0x68)? != registry {
+        return Err(Error::new(
+            "invalid_gui_owner",
+            "Own container and Drag registry required before renderer payload",
+        ));
+    }
     let render = r.u64(button + 0x110)?;
     let mut out = json!({"render_type_encoding":reuse.nullable_type(r,render)?,"field_layout_verified":false,"client_rectangle_available":false,"input_authorized":false,"effective_routing_verified":false});
     if render == 0 || r.u64(render)? != base + 0x4356e08 {

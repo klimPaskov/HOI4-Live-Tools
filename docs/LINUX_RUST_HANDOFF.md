@@ -278,3 +278,13 @@ CI jobs passed after a Windows test-only capacity-fixture correction. Next remov
 the builder's initial slot-navigation prerequisite through verified own-slot
 actions, add focus/economic/army plans and resume the clean two-year gate.
 This bounded run is not campaign acceptance; native posting stays quarantined.
+
+
+The next Rust preview adds ID-based own-slot selection with shared typed Sprite
+geometry and a same-reader ownership context. The durable stage refuses occupied
+slots and quarantines uncertain selection across restart. Fixture gates pass
+320 portable/MSRV and 381 reported actual Linux checks (380 substantive), plus
+953 Python tests with 37 skips. Prepare only the initial research panel, then
+give Luna medium exclusive input for SelectSlot/View/Research and a subsequent
+empty-slot selection. Record the real result; panel/category navigation, focus
+actions and the daily governor remain to be implemented.

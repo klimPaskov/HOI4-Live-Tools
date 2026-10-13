@@ -192,10 +192,13 @@ exclusive Luna medium input: exact-ID selection/assignment, independent canonica
 slot readback and counter advancement. Automatic slot navigation and campaign
 acceptance remain unfinished. See [the bounded live gate](CLAUSEWITZ_VALIDATION.md#recorded-run-019-exclusive-luna-medium-rust-research-smoke).
 
-`hoi4_research_attempt` takes `technology_id`, the already selected own `slot`,
-`stage` (`view` or `research`), a separate stable `request_id` for each stage,
-and `lease_token`. It accepts no coordinates and performs no automatic panel
-navigation. Each stage derives its point from fresh internal observations and
+`hoi4_research_attempt` takes the planned `technology_id`, own `slot`,
+`stage` (`select_slot`, `view` or `research`), a separate stable `request_id`
+for each stage, and `lease_token`. `select_slot` requires an open own panel
+and verifies the selected empty own tree; View/Research require that tree.
+Selection retains the planned technology ID in its durable target. It accepts
+no coordinates and performs no automatic panel or category navigation.
+The new SelectSlot adapter is fixture-tested and awaits recorded live validation. Each stage derives its point from fresh internal observations and
 pins campaign, own status and full slot identities. A final read-only check
 follows X11 preparation. It attempts at most one motion/left-button pair.
 

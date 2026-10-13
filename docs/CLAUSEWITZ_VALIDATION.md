@@ -1266,3 +1266,32 @@ macOS runner cancellation before any steps; it was not a Python test failure.
 This passes the narrow research/clock gate. Automatic research-slot navigation,
 focus actions, daily plans, economy/army/naval commands, clean two-year acceptance
 and the full Germany/China/Poland campaigns remain unfinished.
+
+
+## Owned slot-selection fixture gate
+
+The next source adds an ordinary `select_slot` stage to the research preview.
+It requires an open own panel, canonical emptiness, no visible Info and the
+independently proved slot-specific callback. Slot geometry uses the existing
+Sprite resource/cache and typed reciprocal hierarchy reader; technology-node
+observation retains its separate technology-data join. The internal slot adapter
+returns the same witnessed body and campaign/slot context. Public diagnostics
+keep all frame, routing and input-authority flags false.
+
+The stage borrows the existing controller, lease, gate, durable journal and
+final OS/canonical preflight. Success requires the exact empty own slot selected
+in the ordinary tree and clear input. An uncertain selection blocks every new
+stage and clock action across restart. Older receipts keep missing panel
+visibility unknown; it cannot satisfy a selection precondition or receipt. Panel opening and category navigation remain unfinished.
+
+Seven additional cases cover independent slot-vs-technology bindings, renderer
+ownership, full-width orientation, same-reader context, late mutations, occupied
+slots and restart/replay handling. A generated test's initial two-millisecond
+budget expired before dispatch, correctly returning local refusal. Its fixture
+budget was changed to one second to exercise uncertain post-dispatch recovery;
+production deadlines stayed unchanged. Portable and Rust 1.86 suites each
+passed **320 tests**; optimized actual Linux passed **381 reported checks**
+(380 substantive plus one helper). Python passed **953 tests, 37 skipped**, in
+20.129 seconds; host/Linux Clippy, MSRV Linux compilation and formatting passed.
+These are fixture results. SelectSlot must pass a fresh recorded exclusive
+Luna run before it can count as installed-game action validation.

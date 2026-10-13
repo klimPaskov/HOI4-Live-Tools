@@ -345,11 +345,11 @@ pub struct UiContext {
     pub slots: Vec<u64>,
 }
 pub fn snapshot(process: &dyn Process) -> Result<Value> {
-    Ok(observe(process, false, false, None, None)?.0)
+    Ok(observe(process, false, false, None, None, false)?.0)
 }
 /// Dedicated diagnostic keeps current-node validation out of clock/UI waits.
 pub fn nodes(process: &dyn Process) -> Result<Value> {
-    let (value, _) = observe(process, false, true, None, None)?;
+    let (value, _) = observe(process, false, true, None, None, false)?;
     Ok(
         json!({"source":"native own current research nodes","build_id":game::BUILD_ID,
         "selected_slot":value["selected_slot"],"active_mode_raw":value["active_mode_raw"],
@@ -425,7 +425,7 @@ pub fn nodes_page(
     Ok(value)
 }
 pub(crate) fn wait_snapshot(process: &dyn Process) -> Result<(Value, UiContext)> {
-    let (value, context) = observe(process, true, false, None, None)?;
+    let (value, context) = observe(process, true, false, None, None, false)?;
     Ok((
         value,
         context.expect("Context requested by wait observation"),
@@ -437,6 +437,7 @@ fn observe(
     include_nodes: bool,
     requested_detail: Option<&str>,
     requested_slot: Option<usize>,
+    include_slot_geometry: bool,
 ) -> Result<(Value, Option<UiContext>)> {
     let start = Instant::now();
     process.begin_snapshot()?;
@@ -595,7 +596,18 @@ fn observe(
             button_output.push(value);
         }
         let ordinary_selection = if requested_slot == Some(index) {
-            crate::slot_control::observe(&r, base, *widget, view, slots[index], registry)?
+            if include_slot_geometry {
+                crate::slot_control::observe_geometry(
+                    &r,
+                    base,
+                    *widget,
+                    view,
+                    slots[index],
+                    registry,
+                )?
+            } else {
+                crate::slot_control::observe(&r, base, *widget, view, slots[index], registry)?
+            }
         } else {
             json!({"binding_verified":false,"reason":"not_requested","input_authorized":false})
         };
@@ -815,20 +827,46 @@ fn observe_target(
 
 /// Targeted output only; full own panel model and final witnesses remain shared.
 pub fn slot_control_snapshot(process: &dyn Process, slot: usize) -> Result<Value> {
+    Ok(slot_control_result(process, slot, false, false)?.0)
+}
+pub fn slot_control_geometry(process: &dyn Process, slot: usize) -> Result<Value> {
+    Ok(slot_control_result(process, slot, false, true)?.0)
+}
+/// The trusted internal adapter receives the same witnessed body and ownership
+/// context. Public diagnostics cannot promote their false authority flags.
+#[doc(hidden)]
+pub fn slot_control_owned(process: &dyn Process, slot: usize) -> Result<(Value, UiContext)> {
+    let (value, context) = slot_control_result(process, slot, true, true)?;
+    Ok((value, context.expect("Owned slot context requested")))
+}
+fn slot_control_result(
+    process: &dyn Process,
+    slot: usize,
+    include_context: bool,
+    include_geometry: bool,
+) -> Result<(Value, Option<UiContext>)> {
     if slot >= 32 {
         return Err(Error::new(
             "invalid_arguments",
             "Bounded own slot index required",
         ));
     }
-    let value = observe(process, false, false, None, Some(slot))?.0;
+    let (value, context) = observe(
+        process,
+        include_context,
+        false,
+        None,
+        Some(slot),
+        include_geometry,
+    )?;
     if slot >= value["own_slot_count"].as_u64().unwrap_or(0) as usize {
         return Err(Error::new("invalid_index", "Own research slot absent"));
     }
     let descriptor=value["slots"].as_array().and_then(|v|v.iter().find(|v|v["slot"].as_u64()==Some(slot as u64))).cloned().unwrap_or(json!({"slot":slot,"ordinary_selection_binding":{"binding_verified":false,"reason":"widget_unmaterialized","input_authorized":false}}));
-    Ok(
+    Ok((
         json!({"source":"native own research slot control diagnostic","build_id":game::BUILD_ID,"owned":true,"slot":slot,"slot_identity":"own current array index; not persistent","descriptor":descriptor,"selected_slot":value["selected_slot"],"active_mode_raw":value["active_mode_raw"],"panel":value["panel"],"ordinary_tree":value["ordinary_tree"],"freshness":value["freshness"],"client_rectangle_available":false,"input_authorized":false,"observation_paused_game":false}),
-    )
+        context,
+    ))
 }
 
 #[cfg(test)]

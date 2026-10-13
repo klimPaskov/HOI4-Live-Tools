@@ -163,8 +163,11 @@ ID-derived selection and assignment. An explicit owner profile can now enable
 the bounded `hoi4_research_attempt` preview. In recorded run 019, an exclusive
 Luna medium player opened and assigned `support_weapons` by ID. Separate reads
 confirmed slot 0 and its advancing counter through 3 January 1936. View and
-Research RPCs took 774 and 851 ms. The current preview requires the own empty
-slot tree to be selected first; automatic slot navigation remains unfinished.
+Research RPCs took 774 and 851 ms. The recorded source required the
+own empty slot tree to be selected first. A new `select_slot` stage can derive
+the ordinary slot control from an open own panel; its shared renderer/context
+checks have fixture evidence and await a fresh recorded run. Automatic panel
+opening and technology-category navigation remain unfinished.
 Its internal observation adapter checks the requested own key/slot and fresh
 renderer, callback, hierarchy and SDL/X11 associations before candidate maths.
 The owner supplies the reviewed origin profile; player arguments cannot supply
