@@ -36,6 +36,97 @@ fn point_source(r: &Reader<'_>, base: u64, receiver: u64) -> Result<Value> {
     )
 }
 
+fn source_pointer(pointer: u64) -> Result<u64> {
+    if !(0x10000..=0x7fff_ffff_0000).contains(&pointer) {
+        return Err(Error::new(
+            "invalid_input_source",
+            "Bounded input subsystem pointer required",
+        ));
+    }
+    Ok(pointer)
+}
+fn source_window(r: &Reader<'_>, base: u64, dimensions: &[i32]) -> Result<Value> {
+    let unavailable = |reason| json!({"association_available":false,"reason":reason,"owned_os_window_verified":false});
+    let video = r.u64(base + 0x463bbf8)?;
+    if video == 0 {
+        return Ok(unavailable("active_video_unavailable"));
+    }
+    source_pointer(video)?;
+    // Nonpolymorphic SDL objects: independently recovered constructor callback
+    // fingerprint, not an RTTI name or a guessed layout for another driver.
+    for (offset, function) in [(0x48, 0x307d430), (0x58, 0x307e0d0), (0x228, 0x30f5d30)] {
+        if r.u64(video + offset)? != base + function {
+            return Ok(unavailable("x11_driver_layout_unavailable"));
+        }
+    }
+    let window = r.u64(base + 0x463b958)?;
+    if window == 0 {
+        return Ok(unavailable("input_window_focus_unavailable"));
+    }
+    source_pointer(window)?;
+    if r.u64(window)? != video + 0x2d8 {
+        return Err(Error::new(
+            "invalid_input_source",
+            "Active SDL window magic required",
+        ));
+    }
+    let size = [r.i32(window + 0x28)?, r.i32(window + 0x2c)?];
+    if size.iter().any(|value| !(1..=16384).contains(value)) {
+        return Err(Error::new(
+            "invalid_input_source",
+            "Bounded input window dimensions required",
+        ));
+    }
+    let driver = r.u64(video + 0x5a8)?;
+    let data = r.u64(window + 0xd8)?;
+    source_pointer(driver)?;
+    source_pointer(data)?;
+    if r.u64(data)? != window || r.u64(data + 0xe0)? != driver {
+        return Err(Error::new(
+            "invalid_input_source",
+            "Reciprocal X11 input window driver association required",
+        ));
+    }
+    let count = r.i32(driver + 0x2c)?;
+    let entries = r.u64(driver + 0x30)?;
+    let capacity = r.i32(driver + 0x38)?;
+    source_pointer(entries)?;
+    if count < 1 || capacity < count || entries % 8 != 0 {
+        return Err(Error::new(
+            "invalid_input_source",
+            "Valid complete input window registry required",
+        ));
+    }
+    if capacity > 128 {
+        return Ok(unavailable("input_window_registry_policy_bound"));
+    }
+    let pointers = r.read(entries, count as usize * 8)?;
+    if pointers
+        .chunks_exact(8)
+        .filter(|bytes| u64::from_le_bytes((*bytes).try_into().unwrap()) == data)
+        .count()
+        != 1
+    {
+        return Err(Error::new(
+            "invalid_input_source",
+            "Unique input window registry membership required",
+        ));
+    }
+    // Only the selected entry is dereferenced. Native XID is a diagnostic until
+    // the OS backend independently verifies its PID/class/display ownership.
+    let xid = r.u64(data + 8)?;
+    if xid == 0 || xid > u32::MAX as u64 {
+        return Err(Error::new(
+            "invalid_input_source",
+            "Bounded native input window ID required",
+        ));
+    }
+    let relative = [r.i32(base + 0x463b984)?, r.i32(base + 0x463b988)?];
+    Ok(
+        json!({"association_available":true,"association_scope":"builtin input focus and reciprocal X11 driver registry","native_window_id":xid,"window_dimensions":size,"graphics_dimensions_match":size==dimensions[..2],"relative_mode_raw":relative,"normal_absolute_mode":relative==[0,0],"owned_os_window_verified":false,"client_origin_verified":false,"fresh_event_verified":false}),
+    )
+}
+
 pub fn input_geometry(process: &dyn Process) -> Result<Value> {
     let start = Instant::now();
     process.begin_snapshot()?;
@@ -139,6 +230,7 @@ pub fn input_geometry(process: &dyn Process) -> Result<Value> {
         }
         source_point["source_logical_point"] = json!(logical);
         source_point["logical_cache_equivalent"] = json!(logical == point);
+        source_point["window_association"] = source_window(&r, base, &dims)?;
     }
     if r.u64(base + 0x44086a8)? != gs
         || r.u64(base + 0x44085f8)? != idler

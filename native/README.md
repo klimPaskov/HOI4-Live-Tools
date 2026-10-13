@@ -230,6 +230,16 @@ requires the exact receiver/getter and built-in dynamic implementation before
 source coordinates. Raw source units/origin, event completion and click routing
 remain unverified. Both additions await a fresh installed-game check.
 
+The optional point diagnostic also follows a constructor-proved active SDL video
+fingerprint, input-window magic and reciprocal X11 driver registry. It reports the
+selected native window ID, dimensions and raw relative-mode flags only after
+unique membership in a complete registry bounded to capacity 128. Other entry
+payloads and the opaque display are never read. An unsupported driver or valid
+policy overrun is explicitly unavailable; malformed links, pointers and torn
+witnesses refuse. `owned_os_window_verified`, `client_origin_verified` and
+`fresh_event_verified` remain false. This association awaits installed-game
+validation and does not authorize input.
+
 The focus query accepts an ASCII key prefix `filter`, `offset` 0–4096 and `limit`
 1–100. It validates every own key before pagination, exact own-tree ownership and
 global database pointer membership. Global duplicates/nulls grant no ownership.

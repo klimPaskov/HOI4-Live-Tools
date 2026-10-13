@@ -920,8 +920,422 @@ impl Fixture {
         self.word(base + 0x4391098, base + 0x301a3a0);
         self.number(base + 0x463b960, 256);
         self.number(base + 0x463b964, 8);
+        self.word(base + 0x463bbf8, 0); // no inferred window association
+    }
+
+    fn builtin_mouse_window(&mut self) {
+        self.builtin_mouse_point();
+        // Constructor/accessor-proved fields only. Sparse objects intentionally
+        // have no SDL display, list links or unrelated window payload.
+        let base = 0x10000;
+        self.word(base + 0x463bbf8, MOUSE_VIDEO);
+        self.word(MOUSE_VIDEO + 0x48, base + 0x307d430);
+        self.word(MOUSE_VIDEO + 0x58, base + 0x307e0d0);
+        self.word(MOUSE_VIDEO + 0x228, base + 0x30f5d30);
+        self.word(base + 0x463b958, MOUSE_WINDOW);
+        self.word(MOUSE_WINDOW, MOUSE_VIDEO + 0x2d8);
+        self.number(MOUSE_WINDOW + 0x28, 512);
+        self.number(MOUSE_WINDOW + 0x2c, 288);
+        self.word(MOUSE_VIDEO + 0x5a8, MOUSE_DRIVER);
+        self.word(MOUSE_WINDOW + 0xd8, MOUSE_DATA);
+        self.word(MOUSE_DATA, MOUSE_WINDOW);
+        self.word(MOUSE_DATA + 0xe0, MOUSE_DRIVER);
+        self.word(MOUSE_DATA + 8, 0x4a0007);
+        self.number(MOUSE_DRIVER + 0x2c, 3);
+        self.word(MOUSE_DRIVER + 0x30, MOUSE_ENTRIES);
+        self.number(MOUSE_DRIVER + 0x38, 3);
+        self.word(MOUSE_ENTRIES, 0xdead0000);
+        self.word(MOUSE_ENTRIES + 8, MOUSE_DATA);
+        self.word(MOUSE_ENTRIES + 16, u64::MAX);
+        self.number(base + 0x463b984, 0);
+        self.number(base + 0x463b988, 0);
+    }
+
+    fn forbid_bytes(&mut self, address: u64, size: usize) {
+        for offset in 0..size {
+            self.data.remove(&(address + offset as u64));
+        }
     }
 }
+
+const MOUSE_VIDEO: u64 = 0x150000;
+const MOUSE_WINDOW: u64 = 0x160000;
+const MOUSE_DRIVER: u64 = 0x170000;
+const MOUSE_DATA: u64 = 0x180000;
+const MOUSE_ENTRIES: u64 = 0x190000;
+
+#[test]
+fn builtin_mouse_window_reports_selected_metadata_without_input_authority() {
+    let mut f = Fixture::new();
+    f.builtin_mouse_window();
+    let v = gui::input_geometry(&f).unwrap();
+    let point = &v["input_source"]["point_diagnostic"];
+    let window = &point["window_association"];
+    assert_eq!(window["association_available"], true);
+    assert_eq!(window["native_window_id"], 0x4a0007);
+    assert_eq!(window["window_dimensions"], serde_json::json!([512, 288]));
+    assert_eq!(window["graphics_dimensions_match"], true);
+    assert_eq!(window["relative_mode_raw"], serde_json::json!([0, 0]));
+    assert_eq!(window["normal_absolute_mode"], true);
+    for key in [
+        "owned_os_window_verified",
+        "client_origin_verified",
+        "fresh_event_verified",
+    ] {
+        assert_eq!(window[key], false, "Association cannot grant {key}");
+    }
+    assert_eq!(point["fresh_event_verified"], false);
+    assert_eq!(v["input_source"]["field_layout_verified"], false);
+    assert_eq!(v["input_source"]["client_origin_verified"], false);
+    assert_eq!(v["input_mapping_verified"], false);
+    assert_eq!(v["observation_paused_game"], false);
+    assert!(window.get("input_authorized").is_none());
+    assert_eq!(f.checks.get(), 2);
+    // A complete membership scan is allowed; neither opaque display nor the
+    // poisoned foreign/noncanonical entries may become a payload traversal.
+    f.assert_not_read(&[
+        MOUSE_DRIVER,
+        MOUSE_VIDEO + 0x2c8,
+        MOUSE_WINDOW + 0xe0,
+        MOUSE_WINDOW + 0xe8,
+        MOUSE_DATA + 0x10,
+        0xdead0000,
+        u64::MAX,
+        0xe014a,
+    ]);
+}
+
+#[test]
+fn builtin_mouse_window_preserves_raw_relative_flags_and_dimension_mismatch() {
+    for flags in [[1, 0], [0, 1], [-7, i32::MAX]] {
+        let mut f = Fixture::new();
+        f.builtin_mouse_window();
+        f.number(0x10000 + 0x463b984, flags[0]);
+        f.number(0x10000 + 0x463b988, flags[1]);
+        f.number(MOUSE_WINDOW + 0x28, 513);
+        let v = gui::input_geometry(&f).unwrap();
+        let window = &v["input_source"]["point_diagnostic"]["window_association"];
+        assert_eq!(window["association_available"], true);
+        assert_eq!(window["relative_mode_raw"], serde_json::json!(flags));
+        assert_eq!(window["normal_absolute_mode"], false);
+        assert_eq!(window["graphics_dimensions_match"], false);
+        assert_eq!(window["owned_os_window_verified"], false);
+        assert_eq!(v["input_mapping_verified"], false);
+    }
+}
+
+#[test]
+fn builtin_mouse_window_is_not_read_for_an_unaccepted_point_getter() {
+    for address in [0x10000 + 0x435cee0 + 0xc8, 0x10000 + 0x4391098] {
+        let mut f = Fixture::new();
+        f.builtin_mouse_window();
+        f.word(address, 0xdead0000);
+        f.forbid_bytes(0x10000 + 0x463bbf8, 8);
+        let v = gui::input_geometry(&f).unwrap();
+        let point = &v["input_source"]["point_diagnostic"];
+        assert_eq!(point["getter_source_layout_verified"], false);
+        assert!(point.get("window_association").is_none());
+        f.assert_not_read(&[
+            0x10000 + 0x463bbf8,
+            0x10000 + 0x463b958,
+            MOUSE_VIDEO + 0x48,
+            MOUSE_WINDOW,
+            MOUSE_DRIVER + 0x2c,
+            MOUSE_DATA,
+            MOUSE_ENTRIES,
+        ]);
+    }
+}
+
+#[test]
+fn unsupported_mouse_window_driver_does_not_read_window_or_driver_payload() {
+    for offset in [0x48, 0x58, 0x228] {
+        let mut f = Fixture::new();
+        f.builtin_mouse_window();
+        f.word(MOUSE_VIDEO + offset, 0xdead0000);
+        f.forbid_bytes(0x10000 + 0x463b958, 8);
+        f.forbid_bytes(MOUSE_VIDEO + 0x5a8, 8);
+        let v = gui::input_geometry(&f).unwrap();
+        let window = &v["input_source"]["point_diagnostic"]["window_association"];
+        assert_eq!(window["association_available"], false);
+        assert_eq!(window["reason"], "x11_driver_layout_unavailable");
+        assert_eq!(window["owned_os_window_verified"], false);
+        assert!(window.get("native_window_id").is_none());
+        f.assert_not_read(&[
+            0x10000 + 0x463b958,
+            MOUSE_VIDEO + 0x5a8,
+            MOUSE_WINDOW,
+            MOUSE_DATA,
+            MOUSE_ENTRIES,
+        ]);
+    }
+}
+
+#[test]
+fn absent_mouse_window_focus_or_video_is_unavailable_without_payload_reads() {
+    for (address, reason) in [
+        (0x10000 + 0x463bbf8, "active_video_unavailable"),
+        (0x10000 + 0x463b958, "input_window_focus_unavailable"),
+    ] {
+        let mut f = Fixture::new();
+        f.builtin_mouse_window();
+        f.word(address, 0);
+        f.forbid_bytes(MOUSE_WINDOW, 8);
+        let v = gui::input_geometry(&f).unwrap();
+        let window = &v["input_source"]["point_diagnostic"]["window_association"];
+        assert_eq!(window["association_available"], false);
+        assert_eq!(window["reason"], reason);
+        f.assert_not_read(&[MOUSE_WINDOW, MOUSE_DATA, MOUSE_ENTRIES]);
+        if address == 0x10000 + 0x463bbf8 {
+            f.assert_not_read(&[MOUSE_VIDEO + 0x48, 0x10000 + 0x463b958]);
+        }
+    }
+}
+
+#[test]
+fn mouse_window_magic_and_reciprocal_links_refuse_before_registry_payload() {
+    for address in [MOUSE_WINDOW, MOUSE_DATA, MOUSE_DATA + 0xe0] {
+        let mut f = Fixture::new();
+        f.builtin_mouse_window();
+        f.word(address, 0xdead0000);
+        f.forbid_bytes(MOUSE_DRIVER + 0x2c, 4);
+        assert_eq!(
+            gui::input_geometry(&f).unwrap_err().code,
+            "invalid_input_source",
+            "Broken association at {address:x}"
+        );
+        f.assert_not_read(&[MOUSE_DRIVER + 0x2c, MOUSE_ENTRIES, MOUSE_DATA + 8]);
+        if address == MOUSE_WINDOW {
+            f.assert_not_read(&[
+                MOUSE_WINDOW + 0x28,
+                MOUSE_WINDOW + 0x2c,
+                MOUSE_WINDOW + 0xd8,
+                MOUSE_VIDEO + 0x5a8,
+            ]);
+        }
+    }
+}
+
+#[test]
+fn mouse_window_registry_accepts_the_full_128_entry_policy_boundary() {
+    let mut f = Fixture::new();
+    f.builtin_mouse_window();
+    f.number(MOUSE_DRIVER + 0x2c, 128);
+    f.number(MOUSE_DRIVER + 0x38, 128);
+    for index in 0..128 {
+        f.word(
+            MOUSE_ENTRIES + index * 8,
+            if index == 127 { MOUSE_DATA } else { u64::MAX },
+        );
+    }
+    let v = gui::input_geometry(&f).unwrap();
+    let window = &v["input_source"]["point_diagnostic"]["window_association"];
+    assert_eq!(window["association_available"], true);
+    assert_eq!(window["native_window_id"], 0x4a0007);
+    f.assert_not_read(&[u64::MAX]);
+}
+
+#[test]
+fn mouse_window_registry_oversize_is_unavailable_without_array_or_id_reads() {
+    for count in [1, 129, i32::MAX] {
+        let mut f = Fixture::new();
+        f.builtin_mouse_window();
+        f.number(MOUSE_DRIVER + 0x2c, count);
+        f.number(MOUSE_DRIVER + 0x38, count.max(129));
+        f.forbid_bytes(MOUSE_ENTRIES, 24);
+        f.forbid_bytes(MOUSE_DATA + 8, 8);
+        let v = gui::input_geometry(&f).unwrap();
+        let window = &v["input_source"]["point_diagnostic"]["window_association"];
+        assert_eq!(window["association_available"], false);
+        assert_eq!(window["reason"], "input_window_registry_policy_bound");
+        assert!(window.get("native_window_id").is_none());
+        f.assert_not_read(&[
+            MOUSE_ENTRIES,
+            MOUSE_DATA + 8,
+            0x10000 + 0x463b984,
+            0x10000 + 0x463b988,
+        ]);
+    }
+}
+
+#[test]
+fn mouse_window_registry_rejects_malformed_headers_before_oversize_policy() {
+    for (count, capacity, entries) in [
+        (0, 129, MOUSE_ENTRIES),
+        (-1, 129, MOUSE_ENTRIES),
+        (130, 129, MOUSE_ENTRIES),
+        (1, -1, MOUSE_ENTRIES),
+        (1, 129, 0),
+        (1, 129, 0xffff),
+        (1, 129, u64::MAX),
+        (1, 129, 0x7fff_ffff_0008),
+        (1, 129, MOUSE_ENTRIES + 1),
+    ] {
+        let mut f = Fixture::new();
+        f.builtin_mouse_window();
+        f.number(MOUSE_DRIVER + 0x2c, count);
+        f.number(MOUSE_DRIVER + 0x38, capacity);
+        f.word(MOUSE_DRIVER + 0x30, entries);
+        f.forbid_bytes(MOUSE_ENTRIES, 24);
+        assert_eq!(
+            gui::input_geometry(&f).unwrap_err().code,
+            "invalid_input_source",
+            "Malformed registry ({count}, {capacity}, {entries:x})"
+        );
+        f.assert_not_read(&[entries, MOUSE_ENTRIES, MOUSE_DATA + 8]);
+    }
+}
+
+#[test]
+fn mouse_window_registry_requires_exactly_one_selected_entry_before_native_id() {
+    for entries in [
+        [0xdead0000, u64::MAX, 0xdead0008],
+        [MOUSE_DATA, 0xdead0000, MOUSE_DATA],
+    ] {
+        let mut f = Fixture::new();
+        f.builtin_mouse_window();
+        for (index, entry) in entries.iter().enumerate() {
+            f.word(MOUSE_ENTRIES + index as u64 * 8, *entry);
+        }
+        f.forbid_bytes(MOUSE_DATA + 8, 8);
+        assert_eq!(
+            gui::input_geometry(&f).unwrap_err().code,
+            "invalid_input_source"
+        );
+        f.assert_not_read(&[MOUSE_DATA + 8, 0xdead0000, u64::MAX, 0xdead0008]);
+    }
+    let mut f = Fixture::new();
+    f.builtin_mouse_window();
+    // A readable prefix containing the selected member cannot substitute for
+    // the required complete array, even when its own reciprocal links match.
+    f.word(MOUSE_ENTRIES, MOUSE_DATA);
+    f.forbid_bytes(MOUSE_ENTRIES + 16, 8);
+    assert_eq!(gui::input_geometry(&f).unwrap_err().code, "unexpected_read");
+    f.assert_not_read(&[MOUSE_DATA + 8]);
+}
+
+#[test]
+fn mouse_window_dimensions_and_native_xid_enforce_their_observation_bounds() {
+    for dimension in [0, -1, 16385, i32::MIN, i32::MAX] {
+        for offset in [0x28, 0x2c] {
+            let mut f = Fixture::new();
+            f.builtin_mouse_window();
+            f.number(MOUSE_WINDOW + offset, dimension);
+            f.forbid_bytes(MOUSE_VIDEO + 0x5a8, 8);
+            assert_eq!(
+                gui::input_geometry(&f).unwrap_err().code,
+                "invalid_input_source"
+            );
+            f.assert_not_read(&[MOUSE_VIDEO + 0x5a8, MOUSE_ENTRIES, MOUSE_DATA + 8]);
+        }
+    }
+    for xid in [0, u32::MAX as u64 + 1, u64::MAX] {
+        let mut f = Fixture::new();
+        f.builtin_mouse_window();
+        f.word(MOUSE_DATA + 8, xid);
+        f.forbid_bytes(0x10000 + 0x463b984, 4);
+        assert_eq!(
+            gui::input_geometry(&f).unwrap_err().code,
+            "invalid_input_source"
+        );
+        f.assert_not_read(&[0x10000 + 0x463b984, 0x10000 + 0x463b988]);
+    }
+    for dimension in [1, 16384] {
+        let mut f = Fixture::new();
+        f.builtin_mouse_window();
+        f.number(MOUSE_WINDOW + 0x28, dimension);
+        f.number(MOUSE_WINDOW + 0x2c, dimension);
+        f.word(MOUSE_DATA + 8, u32::MAX as u64);
+        let v = gui::input_geometry(&f).unwrap();
+        let window = &v["input_source"]["point_diagnostic"]["window_association"];
+        assert_eq!(window["association_available"], true);
+        assert_eq!(window["native_window_id"], u32::MAX);
+        assert_eq!(window["graphics_dimensions_match"], false);
+        assert_eq!(window["owned_os_window_verified"], false);
+    }
+}
+
+#[test]
+fn mouse_window_pointers_refuse_noncanonical_and_overflowing_dereferences() {
+    for address in [
+        0x10000 + 0x463bbf8,
+        0x10000 + 0x463b958,
+        MOUSE_VIDEO + 0x5a8,
+        MOUSE_WINDOW + 0xd8,
+        MOUSE_DRIVER + 0x30,
+    ] {
+        for pointer in [0xffff, 0x7fff_ffff_0008, u64::MAX - 7, u64::MAX] {
+            let mut f = Fixture::new();
+            f.builtin_mouse_window();
+            f.word(address, pointer);
+            assert_eq!(
+                gui::input_geometry(&f).unwrap_err().code,
+                "invalid_input_source",
+                "Pointer {pointer:x} from field {address:x}"
+            );
+            f.assert_not_read(&[pointer]);
+        }
+    }
+}
+
+#[test]
+fn mouse_window_revalidates_every_required_association_field_and_array_byte() {
+    for (address, size) in [
+        (0x10000 + 0x463bbf8, 8),
+        (MOUSE_VIDEO + 0x48, 8),
+        (MOUSE_VIDEO + 0x58, 8),
+        (MOUSE_VIDEO + 0x228, 8),
+        (0x10000 + 0x463b958, 8),
+        (MOUSE_WINDOW, 8),
+        (MOUSE_WINDOW + 0x28, 4),
+        (MOUSE_WINDOW + 0x2c, 4),
+        (MOUSE_VIDEO + 0x5a8, 8),
+        (MOUSE_WINDOW + 0xd8, 8),
+        (MOUSE_DATA, 8),
+        (MOUSE_DATA + 0xe0, 8),
+        (MOUSE_DRIVER + 0x2c, 4),
+        (MOUSE_DRIVER + 0x30, 8),
+        (MOUSE_DRIVER + 0x38, 4),
+        (MOUSE_DATA + 8, 8),
+        (0x10000 + 0x463b984, 4),
+        (0x10000 + 0x463b988, 4),
+    ] {
+        let mut f = Fixture::new();
+        f.builtin_mouse_window();
+        let mut bytes: Vec<_> = (0..size).map(|i| f.data[&(address + i)]).collect();
+        bytes[0] ^= 1;
+        f.fault = Some((address, 1, bytes));
+        assert_eq!(
+            gui::input_geometry(&f).unwrap_err().code,
+            "torn_read",
+            "Changed required association field {address:x}"
+        );
+        assert!(f.fault_reads.get() >= 2);
+    }
+    // Mutating an unrelated member changes the complete membership witness
+    // even while the selected pointer remains present exactly once.
+    for byte in [0, 8, 16, 23] {
+        let mut f = Fixture::new();
+        f.builtin_mouse_window();
+        let mut bytes: Vec<_> = (0..24).map(|i| f.data[&(MOUSE_ENTRIES + i)]).collect();
+        bytes[byte] ^= 1;
+        f.fault = Some((MOUSE_ENTRIES, 1, bytes));
+        assert_eq!(gui::input_geometry(&f).unwrap_err().code, "torn_read");
+    }
+}
+
+#[test]
+fn mouse_window_metadata_still_requires_the_final_process_ownership_check() {
+    let mut f = Fixture::new();
+    f.builtin_mouse_window();
+    f.replaced = true;
+    assert_eq!(
+        gui::input_geometry(&f).unwrap_err().code,
+        "ownership_changed"
+    );
+    assert_eq!(f.checks.get(), 2);
+}
+
 #[test]
 fn builtin_point_source_proves_arithmetic_but_never_origin_or_fresh_event() {
     let mut f = Fixture::new();

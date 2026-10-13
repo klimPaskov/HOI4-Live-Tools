@@ -869,6 +869,33 @@ Display identity and Yama 1 stayed unchanged. Python passed 953 tests with
 The new optional hierarchy and point-source outputs still need a fresh immutable
 installed-game check. The preceding installed-game close evidence used `b34899a`.
 
+## Source-window association fixture gate
+
+The next conditional diagnostic joins the constructor-proved built-in receiver
+and point source to active-video callbacks, current window magic, reciprocal X11
+driverdata and unique selected membership in a complete registry capped at 128.
+It reports a native window ID, dimensions and raw relative-mode flags; unrelated
+entry payloads and display internals are never read. Unsupported branches and
+valid policy overruns are unavailable; malformed pointers, links or headers and
+changed witnesses refuse. OS ownership, client origin, fresh events and input
+mapping remain explicitly unverified.
+
+Portable and Rust 1.86 suites passed 185 tests, including 119 snapshot cases.
+The actual optimized Linux suite passed 239 reported checks (238 substantive
+and one inert helper), under unchanged display ownership and Yama 1. Python
+passed 953 tests with 37 skips; Clippy, formatting, MSRV Linux compilation and
+protocol smoke passed. The unchanged close transport's separate four no-XTEST
+cases passed at the preceding 225-check gate and were not repeated here.
+
+An independent offsetof probe against the exact distro header version matching
+the installed Xlib confirmed XEvent size 192, XMotionEvent size 96, native window
+offset 32 and signed coordinate offsets 64/68. Header packages were extracted
+privately without installing system packages. The
+[X.Org specification](https://www.x.org/releases/X11R7.5/doc/libX11/libX11.html)
+supports event-window-relative motion coordinates. This ABI evidence and the
+fixtures do not establish fresh-event acknowledgment, backing scale or canonical
+control routing. Installed-game association validation remains pending.
+
 ## Attribution
 
 The findings above refer to upstream `calling/{mem,process/linux,api,game,

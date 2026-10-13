@@ -129,3 +129,13 @@ Optional hierarchy size refusal distinguishes bounded traversal policy from
 malformed structure, preserves completed reciprocal joins only and witnesses all
 observed headers. No limits are increased. Linux endpoint preflight and raw-byte
 boundary/socket tests are new project code using libc's local pathname ABI.
+
+The optional source-window observer is new code from independent current-build
+SDL constructor/accessor, X11 driver callback, driverdata registry and point
+producer disassembly. It copies no SDL source and dereferences only the selected
+registry entry. The external event ABI was separately checked with an offsetof
+probe compiled against the same-version distro Xlib header as the installed
+library, extracted in private scratch without installing packages. The
+[X.Org Xlib specification](https://www.x.org/releases/X11R7.5/doc/libX11/libX11.html)
+supports window-relative motion-coordinate semantics; constructor joins alone
+still do not prove OS ownership, backing scale, fresh events or input routing.

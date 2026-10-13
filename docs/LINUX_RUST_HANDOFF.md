@@ -166,3 +166,10 @@ tests, 225 standard Linux checks (224 substantive), four no-XTEST close cases an
 953 Python tests (37 skipped). Its new observation outputs await a fresh
 immutable game. Finish verified strategic input before the next Luna acceptance;
 no two-year or full campaign has passed.
+
+A conditional source-window association now passes 185 portable/MSRV and 239
+standard Linux checks (238 substantive), including 119 snapshot tests. It verifies
+built-in driver callbacks, window magic and reciprocal complete-registry membership,
+while OS ownership, origin, event and input authority remain false. The exact Xlib
+header ABI was independently compiled and checked. Its installed-game validation
+is the next fresh-run gate; prior close transport fixtures remain distinct evidence.
