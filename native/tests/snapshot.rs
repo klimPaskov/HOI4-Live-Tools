@@ -7,6 +7,7 @@ use hoi4_live_native::{
 };
 use std::{cell::Cell, collections::BTreeMap};
 struct Fixture {
+    tracked_reads: std::cell::RefCell<BTreeMap<u64, usize>>,
     data: BTreeMap<u64, u8>,
     clock_reads: Cell<u32>,
     torn: bool,
@@ -69,6 +70,7 @@ impl Fixture {
     }
     fn new() -> Self {
         let mut f = Self {
+            tracked_reads: std::cell::RefCell::new(BTreeMap::new()),
             data: BTreeMap::new(),
             clock_reads: Cell::new(0),
             torn: false,
@@ -411,6 +413,7 @@ impl Fixture {
 }
 impl ReadMemory for Fixture {
     fn read(&self, a: u64, n: usize) -> Result<Vec<u8>> {
+        *self.tracked_reads.borrow_mut().entry(a).or_default() += 1;
         if a == 0x10000 + 0x44086a8 {
             self.root_reads.set(self.root_reads.get() + 1);
             if self.split_context_roots && (2..=3).contains(&self.root_reads.get()) {
@@ -1792,4 +1795,111 @@ fn node_foreign_control_registry_refuses_before_data_render_or_callback() {
         research_ui::nodes(&f).unwrap_err().code,
         "invalid_gui_owner"
     );
+}
+
+#[test]
+fn request_reuse_backend_read_measurement() {
+    let mut f = Fixture::new();
+    f.node_binding();
+    f.region(0xd8000, 0xd0);
+    f.word(0xd8000, 0x10000 + 0x424e2e0);
+    f.word(0xd8030, 0x92000);
+    f.word(0xd80c8, 0x80000);
+    f.word(0xd8010, 0xd4000);
+    f.word(0xd2038, 0xd8000);
+    let value = research_ui::nodes(&f).unwrap();
+    assert_eq!(value["current_nodes"]["node_count"], 1);
+    let reads = f.tracked_reads.borrow();
+    println!("metadata_table_reads={} callback_manager_reads={} object_control_reads={} rpc_read_calls={}",reads[&(0x10000+0x4346b10-16)],reads[&0x92618],reads[&0xd5000],value["freshness"]["read_calls"]);
+    // Measured unmodified baseline on this fixture: 3/3/5/404.
+    assert_eq!(reads[&(0x10000 + 0x4346b10 - 16)], 2);
+    assert_eq!(reads[&0x92618], 2);
+    assert_eq!(reads[&0xd5000], 5);
+    assert!(value["freshness"]["read_calls"].as_u64().unwrap() < 404);
+}
+
+impl Fixture {
+    fn reused_two_controls(&mut self) {
+        self.node_binding();
+        for (from, to, size) in [
+            (0xd4000, 0xd9000, 0x980),
+            (0xd5000, 0xda000, 0x120),
+            (0xd6000, 0xdb000, 32),
+        ] {
+            let bytes: Vec<_> = (0..size).map(|i| self.data[&(from + i)]).collect();
+            self.put(to, &bytes);
+        }
+        self.array(0xd9958, 0xd9800, 1);
+        self.word(0xd9800, 0xda000);
+        self.word(0xda088, 0xdb000);
+        self.word(0xda090, 0xdb000);
+        self.region(0xd8000, 0xd0);
+        self.word(0xd8000, 0x10000 + 0x424e2e0);
+        self.word(0xd8030, 0x92000);
+        self.word(0xd80c8, 0x80000);
+        self.word(0xd8010, 0xd9000);
+        self.word(0xd2038, 0xd8000);
+    }
+}
+#[test]
+fn reused_metadata_and_capture_keep_final_production_witnesses() {
+    for (a, n) in [
+        (0x10000 + 0x4346b10 - 16, 8),
+        (0x10000 + 0x4355008, 8),
+        (0x10000 + 0x350d000, 128),
+        (0x92618, 8),
+        (0x92620, 8),
+        (0x92608, 8),
+        (0xd7000, 8),
+        (0xd7008, 8),
+        (0xd7010, 8),
+    ] {
+        let mut f = Fixture::new();
+        f.reused_two_controls();
+        let mut replacement: Vec<_> = (0..n).map(|i| f.data[&(a + i)]).collect();
+        replacement[0] ^= 1;
+        f.fault = Some((a, 1, replacement));
+        assert_eq!(
+            research_ui::nodes(&f).unwrap_err().code,
+            "torn_read",
+            "field {a:x}"
+        );
+    }
+}
+#[test]
+fn reused_proof_never_reuses_later_object_owner_or_control_data() {
+    for (a, v, code) in [
+        (0xd8030, 0x92008, "invalid_gui_owner"),
+        (0xd9098, 0xdead0000, "invalid_gui_owner"),
+        (0xda068, 0xdead0000, "invalid_gui_owner"),
+        (0xda008, 0x80008, "invalid_research_join"),
+        (0xd8000, 0x10000 + 0x4347d58, "node_item_type_unavailable"),
+    ] {
+        let mut f = Fixture::new();
+        f.reused_two_controls();
+        f.word(a, v);
+        assert_eq!(research_ui::nodes(&f).unwrap_err().code, code);
+    }
+    let mut f = Fixture::new();
+    f.reused_two_controls();
+    f.word(0xda000, 0x10000 + 0x4347d58);
+    let v = research_ui::nodes(&f).unwrap();
+    assert_eq!(
+        v["current_nodes"]["nodes"][0]["ordinary_control_bindings"][1]["binding_verified"],
+        false
+    );
+}
+#[test]
+fn request_local_reuse_does_not_survive_requests() {
+    let mut f = Fixture::new();
+    f.reused_two_controls();
+    research_ui::nodes(&f).unwrap();
+    f.word(0xd7010, 0x92008);
+    let v = research_ui::nodes(&f).unwrap();
+    for b in v["current_nodes"]["nodes"][0]["ordinary_control_bindings"]
+        .as_array()
+        .unwrap()
+    {
+        assert_eq!(b["binding_verified"], false);
+    }
 }

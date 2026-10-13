@@ -66,6 +66,7 @@ pub(crate) fn current_nodes(
             );
         }
     }
+    let mut reuse = crate::node_reuse::Reuse::new(base, tree);
     let mut items = BTreeSet::new();
     let mut ids: BTreeMap<i32, Value> = BTreeMap::new();
     let mut catalog = None;
@@ -144,10 +145,10 @@ pub(crate) fn current_nodes(
         }
         public_keys.insert(key.clone(), id);
         let item_gui = r.u64(item + 0x10)?;
-        let binding = crate::node_binding::observe(r, base, tree, item_gui, technology, registry)?;
+        let binding = crate::node_binding::observe(r, item_gui, technology, registry, &mut reuse)?;
         bindings.entry(id).or_default().push(binding);
         let gui =
-            json!({"id": key, "gui_type_encoding": nullable_type(r, base, r.u64(item + 0x10)?)?});
+            json!({"id": key, "gui_type_encoding": reuse.nullable_type(r, r.u64(item + 0x10)?)?});
         if let Some(previous) = ids.get(&id) {
             if previous != &gui {
                 return Err(Error::new(

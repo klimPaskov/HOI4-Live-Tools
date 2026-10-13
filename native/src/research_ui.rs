@@ -16,7 +16,8 @@ use std::{
     time::{Instant, SystemTime, UNIX_EPOCH},
 };
 
-/// Every request reads fresh bytes. Retained bytes are witnesses, never a cache.
+/// Witness reads always reach the process. Request-local shared metadata/proofs
+/// may avoid duplicate reads, but their original bytes must pass finish below.
 struct Witnesses<'a> {
     process: &'a dyn Process,
     reads: RefCell<BTreeMap<(u64, usize), Vec<u8>>>,
@@ -96,7 +97,9 @@ fn window(r: &Reader<'_>, base: u64, pointer: u64, registry: u64) -> Result<Valu
 /// Type metadata is diagnostic only. No field layout follows from an unknown
 /// name. Tables/typeinfo must lie in this ELF's data.rel.ro; names in rodata.
 fn type_encoding(r: &Reader<'_>, base: u64, object: u64) -> Result<String> {
-    let table = r.u64(object)?;
+    primary_type_encoding(r, base, r.u64(object)?)
+}
+pub(crate) fn primary_type_encoding(r: &Reader<'_>, base: u64, table: u64) -> Result<String> {
     let in_section = |p: u64, size: u64, low: u64, high: u64| {
         p >= base + low && p.checked_add(size).is_some_and(|end| end <= base + high)
     };

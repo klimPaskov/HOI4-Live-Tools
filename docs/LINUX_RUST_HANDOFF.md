@@ -117,6 +117,10 @@ Linux fixtures, alongside 101 portable Rust tests and 952 Python tests (37
 skipped). A subsequent recorded run verified all 438 own focus keys and selected
 detail/closing state. Its research-node query refused an incorrect record offset;
 the corrected byte-16 reader, bounded pages and own control/callback associations
-require a fresh run. Exact type checks remain mandatory. Shutdown
-evidence now distinguishes a normal exit code from a signal; the earlier game
-exit code 6 remains an unresolved incident, not a clean exit.
+then passed a fresh recorded run: all 411 own keys and 423 structural bindings.
+The default page took 409 ms RPC / 360 ms server before request-local reuse.
+Closed-tree queries refused promptly. Exact type checks remain mandatory;
+structural binding does not authorize input. This run exited with code 0 and
+both recordings passed ffprobe. Earlier game exit code 6 remains an unresolved
+incident; a later clean exit does not explain it. Next, measure request-local
+read reuse in a fresh immutable process and finish verified strategic dispatch.

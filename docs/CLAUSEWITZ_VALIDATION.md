@@ -623,7 +623,7 @@ then failed its exact type check in 22.3 ms. Static review found a register
 tracking error: the 40-byte inline record stores the saved item at byte 16;
 byte 32 holds a subsequently overwritten context register. The earlier synthetic
 fixtures mirrored the wrong assumption. The extraction is corrected with
-distinct context decoys, but corrected installed-game validation remains open.
+distinct context decoys. The subsequent corrected live check is recorded below.
 Exact type and own-country checks have not been relaxed.
 
 The campaign remained paused on 1 January with no assigned focus or research.
@@ -632,6 +632,34 @@ returned successfully, while the game's sole reaper recorded normal exit code
 6, no terminating signal and no core dump. This confirms the earlier exit-code
 distinction; it does not resolve the nonzero shutdown cause. No Luna player or
 strategic campaign acceptance is claimed for this diagnostic run.
+
+## Corrected current-node validation — 13 October 2026
+
+A fresh owned run used `a81455b`, the same verified Linux build and Normal
+historical vanilla Germany. Recording supplied a verified first packet before
+Start. The corrected reader returned **411 canonical own technology keys from
+423 records**, and all **423 ordinary structural control associations** passed.
+Five full-model pages, prefix filters and the final short page agreed. Each
+query validated all records before filtering or paging; no own-country or exact
+type check was relaxed. These observations include materialized folders and do
+not prove that every node is currently visible or selectable.
+
+The default 25-node page took **409.2 ms RPC / 360.0 ms server**, with **34,276
+reads and 512,416 bytes**. Five 100-node pages took 326–559 ms RPC. These timings
+include the emulated guest and persistent SSH path and precede request-local
+shared-proof reuse. The own focus query returned 438 keys in 61.4 ms RPC.
+The stationary-pointer tree wait took 21.0 ms RPC; after one ordinary Escape,
+the closed-tree node query correctly returned `gui_unavailable` in 15.1 ms.
+
+Final own state remained paused at 1936.01.01.12 with no focus or research
+assignments. Escape cleared the research views but did not open the quit menu;
+that diagnostic limitation is preserved. Recording finalized before owned OS
+shutdown. Both 512×288 segments passed ffprobe (600.0 and 231.333 seconds), and
+the sole game reaper recorded **exit code 0, no signal and no core dump**.
+Yama remained 1 and all 14 inspected game threads had tracer 0 before close.
+Earlier nonzero shutdowns remain unexplained. This run had no Luna player and
+provides no strategic-input or campaign acceptance. Calls, source manifests,
+recordings and terminal evidence remain private.
 
 ## Attribution
 

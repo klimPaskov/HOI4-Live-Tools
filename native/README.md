@@ -172,6 +172,11 @@ match the independently recovered own-tree callback capture. Other layouts
 remain unavailable. This structural association never authorizes input or
 supplies coordinates. Node, technology and template type failures identify the
 stage with bounded metadata, without exposing process addresses.
+Within a request, validated shared primary RTTI and the two own-tree callback
+captures can be reused. Every object primary, owner, control payload and listener
+is read afresh, and all reused proof bytes are rechecked before returning the
+model. No proof survives a request. This reduces duplicate reads; it does not
+establish an atomic snapshot or event acknowledgement.
 
 The focus query accepts an ASCII key prefix `filter`, `offset` 0–4096 and `limit`
 1–100. It validates every own key before pagination, exact own-tree ownership and
@@ -184,8 +189,13 @@ are reported separately. Own capacity is capped at 4096, global membership at
 Hidden branch visibility, eligibility and input remain unavailable. A recorded
 installed-game run verified all 438 own focus keys and selected detail/closing
 state. That run exposed the incorrect research-node record offset in the
-previous source. The corrected reader and callback association still require
-a fresh installed-game run; see the [failure evidence](../docs/CLAUSEWITZ_VALIDATION.md).
+previous source. A fresh recorded run then validated all 411 current own
+technology keys and 423 ordinary structural control associations. Its default
+page took 409 ms RPC / 360 ms server, with 34,276 reads; this is the baseline
+before request-local reuse. Closing the tree correctly refused further node
+queries. The game exited with code 0 and both recording segments passed ffprobe.
+Visibility, geometry, routing and strategic input remain unverified; see the
+[live evidence](../docs/CLAUSEWITZ_VALIDATION.md).
 The mode default is FAIR; a mode label alone is not proof of campaign settings.
 
 ## Command port and expansion

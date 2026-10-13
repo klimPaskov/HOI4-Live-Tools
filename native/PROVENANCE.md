@@ -76,6 +76,12 @@ node-reader failure and independent register tracking; upstream offsets do not
 serve as evidence for these fields. Full snapshot witnesses cover the binding
 before filtered/paged output. Structural associations are not input authority.
 
+`node_reuse.rs` is new project code that reuses bounded shared type metadata and
+two independently recovered own-tree callback proofs within one node request.
+Object identity and ownership remain fresh reads; final snapshot witnesses
+recheck every reused proof byte. No process state is cached across requests.
+It supplies no atomicity, visibility, event acknowledgement or input authority.
+
 Distinct Unix shutdown metadata and generated-child exit fixtures are new
 project code. They report the sole reaper's actual kernel wait result and do not
 change signal delivery, shutdown policy or diagnose the game rendering error.

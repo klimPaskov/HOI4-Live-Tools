@@ -2,17 +2,18 @@
 use crate::{
     error::{Error, Result},
     memory::Reader,
-    research_ui::{array, nullable_type},
+    research_ui::array,
 };
 use serde_json::{json, Value};
 pub(crate) fn observe(
     r: &Reader<'_>,
-    base: u64,
-    tree: u64,
     gui: u64,
     technology: u64,
     registry: u64,
+    reuse: &mut crate::node_reuse::Reuse,
 ) -> Result<Value> {
+    let base = reuse.base();
+    let tree = reuse.tree();
     let mut out = json!({"binding_verified":false,"reason":"layout_unavailable","control_type_encoding":null,"coordinates":"unavailable","input_authorized":false});
     if gui == 0 {
         out["reason"] = json!("gui_unmaterialized");
@@ -32,7 +33,7 @@ pub(crate) fn observe(
         out["reason"] = json!("control_unmaterialized");
         return Ok(out);
     };
-    out["control_type_encoding"] = nullable_type(r, base, button)?;
+    out["control_type_encoding"] = reuse.nullable_type(r, button)?;
     if button == 0 || r.u64(button)? != base + 0x4346b10 {
         return Ok(out);
     }
@@ -44,7 +45,7 @@ pub(crate) fn observe(
         ));
     }
     // Exact Drag constructor/getter only; render metadata never implies layout.
-    out["render_type_encoding"] = nullable_type(r, base, r.u64(button + 0x110)?)?;
+    out["render_type_encoding"] = reuse.nullable_type(r, r.u64(button + 0x110)?)?;
     if r.u64(button + 8)? != technology {
         return Err(Error::new(
             "invalid_research_join",
@@ -88,31 +89,12 @@ pub(crate) fn observe(
             unknown = true;
         }
         if [tree + 0x5e0, tree + 0x868].contains(&target) && r.u64(target)? == base + 0x424e0a8 {
-            let method = if target == tree + 0x5e0 {
-                0x1599290
-            } else {
-                0x15994c0
-            };
-            if r.u64(target + 0x38)? != base + 0x15a5710
-                || r.u64(target + 0x40)? != base + 0x15a56e0
-            {
-                unknown = true;
-            } else {
-                let capture = r.u64(target + 0x28)?;
-                if capture == 0 || capture % 8 != 0 {
-                    return Err(Error::new(
-                        "invalid_gui_binding",
-                        "Malformed callback capture",
-                    ));
-                }
-                if r.u64(capture)? != base + method
-                    || r.u64(capture + 8)? != 0
-                    || r.u64(capture + 0x10)? != tree
-                {
-                    unknown = true;
-                } else if removed == 0 {
+            if reuse.callback(r, target)? {
+                if removed == 0 {
                     matched = true;
                 }
+            } else {
+                unknown = true;
             }
         } else {
             unknown = true;
