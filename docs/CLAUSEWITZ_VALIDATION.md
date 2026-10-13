@@ -1412,3 +1412,61 @@ and kernel policy stayed unchanged. Python passed **953 tests, 37 skipped**, in
 19.994 seconds. Host/Linux Clippy and MSRV Linux compilation passed. Corrected
 panel opening, category geometry/selection and focus geometry remain pending
 installed-game validation; focus actions and daily plans remain unfinished.
+
+
+## Recorded run 022: panel opening and no-input completion
+
+Fresh immutable source `d7f9d8b` / CLI SHA-256
+`7fa7b3b6786a7bf9084aeee434cd258447ea8b5a1510e91d37865e90f33ba43a`
+started Normal historical vanilla Germany, paused at 1 January 1936. Recording
+had a verified first packet before one Start. The builder prepared menus only;
+fresh native reads confirmed mode 23 with closed own research views and no Info.
+It opened no panel or slot. One Luna medium player then owned input exclusively.
+
+OpenPanel (**468 ms RPC**), SelectSlot 0 (**503 ms**), View support weapons
+(**624 ms**), Research (**700 ms**) and SelectSlot 1 (**528 ms**) returned Verified
+with current own-state readback. A distinct OpenPanel repeat took **68 ms**,
+returned delivery null and verified the already open state without a second key.
+All six were fresh completions, not historical receipt replays. Causality flags
+remain false; these single samples do not establish general p50/p95 performance.
+
+Read-only industry/electronics category queries both verified associations with
+**Standard** controls, selected infantry folder/index0, and unavailable geometry.
+No category was switched, and no unsupported fields were guessed. The next
+reader now reuses the separately proved Standard Sprite path and local disabled
+state; its new geometry still needs installed-game validation.
+
+Speed4, unpause, one wait and terminal pause verified. The wait reached
+3 January at 01:00 in **16.860 seconds**, with zero torn reads; final state was
+3 January at 20:00, paused at speed 4. Own raw research rose **101,000→303,000**
+and the completed count stayed 47; counter units remain unverified. A tokenless
+lease-release request was rejected before mutation; the corrected release and
+status confirmed zero remaining time. This validation-only argument error is
+preserved with the actual calls.
+
+The **530-second H.264 recording** passed ffprobe. One owned WM close returned
+actual normal exit **0**, no signal/core dump, in **2.18 seconds**. Exact game/owner
+disappearance was checked and both stdio clients closed. All nine CI jobs passed
+for the recorded source. No live binary was replaced or failed input replayed.
+
+This passes bounded panel/slot/research control, not clean two-year acceptance
+or a full campaign. Category input, focus actions, daily plans, economic/army/
+naval commands and Windows/macOS native live adapters remain unfinished.
+
+## Durable category-selection fixture gate
+
+The new explicit folder-ID stage shares the existing controller, lease, journal
+and one ordinary point dispatcher. Old receipt fields default unknown. It reads
+full newer own UI/Info and selected-slot emptiness under final witnesses, then
+rejects contradictions with canonical own assignments; older empty/no-Info
+evidence cannot overwrite newer occupancy or Info. Separate snapshots still
+do not supply atomicity, frame or event-causality proof.
+
+Exact Standard tabs use their own renderer/state fields; unknown/disabled states
+refuse candidates, while Drag never borrows those fields. A review caught the
+initial stale-evidence gap and fixtures now prove zero dispatch for newer Info
+and occupancy. Combined host and Rust 1.86 suites passed **368 tests**; optimized
+actual Linux passed **430 reported checks** (429 substantive plus one inert
+helper). Python passed **953 tests, 37 skipped**, in 20.024 seconds. Host/Linux
+Clippy and MSRV Linux compilation passed. These are fixture results; category
+selection and Standard geometry await a fresh exclusive Luna run.

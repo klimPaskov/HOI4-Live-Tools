@@ -252,7 +252,7 @@ impl Commands for ClockService {
             || (name == "hoi4_research_attempt" && self.research_enabled)
     }
     fn capabilities(&self) -> Value {
-        json!({"transport":"ordinary authenticated X11 input","actions":["set_paused","set_speed"],"research_preview":{"enabled":self.research_enabled,"scope":"one OpenPanel, SelectSlot, View or Research stage for own empty slot","installed_game_validation":"SelectSlot/View/Research passed run 020; OpenPanel awaits live validation; full campaign acceptance pending"},"lease":"exclusive configured controller","native_posting":false,"cursor_movement":self.research_enabled,"load_generation":"unverified; campaign identity, anchors and observed timeline checked","full_campaign_acceptance":false})
+        json!({"transport":"ordinary authenticated X11 input","actions":["set_paused","set_speed"],"research_preview":{"enabled":self.research_enabled,"scope":"one OpenPanel, SelectSlot, SelectCategory, View or Research stage for own empty slot","installed_game_validation":"OpenPanel/SelectSlot/View/Research passed run 022; SelectCategory awaits live validation; full campaign acceptance pending"},"lease":"exclusive configured controller","native_posting":false,"cursor_movement":self.research_enabled,"load_generation":"unverified; campaign identity, anchors and observed timeline checked","full_campaign_acceptance":false})
     }
     fn call(&self, process: &dyn Process, name: &str, arguments: &Value) -> Result<Value> {
         let args = arguments

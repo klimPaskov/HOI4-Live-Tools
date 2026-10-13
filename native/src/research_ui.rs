@@ -438,7 +438,7 @@ fn observe(
     requested_detail: Option<&str>,
     requested_slot: Option<usize>,
     include_slot_geometry: bool,
-    requested_category: Option<(&str, bool)>,
+    requested_category: Option<(&str, bool, bool)>,
 ) -> Result<(Value, Option<UiContext>)> {
     let start = Instant::now();
     process.begin_snapshot()?;
@@ -635,7 +635,7 @@ fn observe(
     } else {
         None
     };
-    let category = if let Some((key, geometry)) = requested_category {
+    let category = if let Some((key, geometry, command_body)) = requested_category {
         if active != 6
             || selected_index.is_none()
             || display_tag < 0
@@ -652,15 +652,11 @@ fn observe(
         } else {
             crate::category_ui::observe
         };
-        Some(observe(
-            &r,
-            base,
-            tree,
-            r.u64(tree + 0x2f8)?,
-            registry,
-            status,
-            key,
-        )?)
+        let mut category = observe(&r, base, tree, r.u64(tree + 0x2f8)?, registry, status, key)?;
+        if command_body {
+            category["selected_slot_empty"] = json!(r.u64(selected + 0x18)? == 0);
+        }
+        Some(category)
     } else {
         None
     };
@@ -923,12 +919,32 @@ pub fn category_with_geometry_owned(
         None,
         None,
         false,
-        Some((key, geometry)),
+        Some((key, geometry, false)),
     )?;
     let result = json!({"source":"native own research category association","build_id":game::BUILD_ID,"owned":true,
         "category":v["category"],"selected_slot":v["selected_slot"],"freshness":v["freshness"],
         "input_authorized":false,"observation_paused_game":false});
     Ok((result, context.expect("Own category context requested")))
+}
+
+/// Private command evidence: complete UI/Info body and selected-slot emptiness
+/// share the category observation's final Witnesses. Public defaults unchanged.
+#[doc(hidden)]
+pub fn category_command_owned(process: &dyn Process, key: &str) -> Result<(Value, UiContext)> {
+    validate_detail_key(key)?;
+    let (body, context) = observe(
+        process,
+        true,
+        false,
+        None,
+        None,
+        false,
+        Some((key, false, true)),
+    )?;
+    Ok((
+        body,
+        context.expect("Own category command context requested"),
+    ))
 }
 
 #[cfg(test)]

@@ -42,6 +42,7 @@ fn target(stage: Stage) -> Target {
         epoch: epoch(),
         stage,
         technology: "support_weapons".into(),
+        folder_id: None,
         slot: 0,
     }
 }
@@ -54,6 +55,7 @@ fn state() -> OwnState {
     OwnState {
         epoch: epoch(),
         selected_slot: Some(0),
+        selected_folder: None,
         tree_visible: true,
         panel_visible: Some(false),
         active_mode: Some(6),
@@ -858,4 +860,197 @@ fn uncertain_panel_shortcut_blocks_all_stages_after_restart() {
         );
     }
     assert_eq!(f.dispatches, 1);
+}
+fn category_target() -> Target {
+    let mut t = target(Stage::SelectCategory);
+    t.technology.clear();
+    t.folder_id = Some("industry_folder".into());
+    t
+}
+fn category_state(folder: Option<&str>) -> OwnState {
+    let mut s = selected_empty_state();
+    s.selected_folder = folder.map(str::to_owned);
+    s
+}
+#[test]
+fn category_once_exact_readback_and_durable_idempotent() {
+    let sc = Scratch::new();
+    let a = authority();
+    let g = RwLock::new(true);
+    let mut j = Journal::open(&sc.journal()).unwrap();
+    let mut f = Fake::new();
+    f.observations = VecDeque::from([
+        Ok(category_state(Some("electronics_folder"))),
+        Ok(category_state(Some("electronics_folder"))),
+        Ok(category_state(Some("industry_folder"))),
+    ]);
+    f.delivery = Delivery::ServerConfirmed;
+    let r = execute(
+        &mut j,
+        "category",
+        category_target(),
+        &a,
+        &g,
+        &mut f,
+        Duration::from_secs(1),
+    )
+    .unwrap();
+    assert!(r.current_state_verified);
+    assert_eq!(f.dispatches, 1);
+    drop(j);
+    let mut j = Journal::open(&sc.journal()).unwrap();
+    let r = execute(
+        &mut j,
+        "category",
+        category_target(),
+        &a,
+        &g,
+        &mut f,
+        Duration::from_secs(1),
+    )
+    .unwrap();
+    assert!(r.historical);
+    assert_eq!(f.dispatches, 1);
+}
+#[test]
+fn category_unknown_and_late_slot_info_or_folder_state_refuse() {
+    for (i, mut late) in [
+        category_state(None),
+        category_state(Some("electronics_folder")),
+        category_state(Some("electronics_folder")),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        if i == 1 {
+            late.researching[0] = Some("support_weapons".into());
+        }
+        if i == 2 {
+            late.visible_info.push(None);
+        }
+        let sc = Scratch::new();
+        let a = authority();
+        let g = RwLock::new(true);
+        let mut j = Journal::open(&sc.journal()).unwrap();
+        let mut f = Fake::new();
+        f.observations = VecDeque::from([Ok(category_state(Some("electronics_folder"))), Ok(late)]);
+        assert!(execute(
+            &mut j,
+            "latecat",
+            category_target(),
+            &a,
+            &g,
+            &mut f,
+            Duration::from_millis(100)
+        )
+        .is_err());
+        assert_eq!(f.dispatches, 0);
+    }
+}
+#[test]
+fn category_unknown_intent_restart_blocks_every_stage_id() {
+    let sc = Scratch::new();
+    let a = authority();
+    let g = RwLock::new(true);
+    let mut j = Journal::open(&sc.journal()).unwrap();
+    let mut f = Fake::new();
+    f.last = category_state(Some("electronics_folder"));
+    assert!(execute(
+        &mut j,
+        "unknowncat",
+        category_target(),
+        &a,
+        &g,
+        &mut f,
+        Duration::from_millis(20)
+    )
+    .is_err());
+    assert_eq!(f.dispatches, 1);
+    drop(j);
+    let mut j = Journal::open(&sc.journal()).unwrap();
+    assert!(j.blocks_game(&epoch().game));
+    for stage in [
+        Stage::OpenPanel,
+        Stage::SelectSlot,
+        Stage::View,
+        Stage::Research,
+        Stage::SelectCategory,
+    ] {
+        let t = if stage == Stage::SelectCategory {
+            category_target()
+        } else {
+            target(stage)
+        };
+        assert!(execute(
+            &mut j,
+            "another",
+            t,
+            &a,
+            &g,
+            &mut f,
+            Duration::from_millis(20)
+        )
+        .is_err());
+    }
+    assert_eq!(f.dispatches, 1);
+}
+#[test]
+fn category_folder_validation_and_old_receipt_defaults() {
+    for folder in [None, Some(""), Some("../foreign"), Some("a\n")] {
+        let mut t = category_target();
+        t.folder_id = folder.map(str::to_owned);
+        assert!(t.validate_key().is_err());
+    }
+    for stage in [
+        Stage::OpenPanel,
+        Stage::SelectSlot,
+        Stage::View,
+        Stage::Research,
+    ] {
+        let mut v = serde_json::to_value(target(stage)).unwrap();
+        v.as_object_mut().unwrap().remove("folder_id");
+        let t: Target = serde_json::from_value(v).unwrap();
+        assert_eq!(t.folder_id, None);
+        t.validate_key().unwrap();
+    }
+    let mut v = serde_json::to_value(state()).unwrap();
+    v.as_object_mut().unwrap().remove("selected_folder");
+    let s: OwnState = serde_json::from_value(v).unwrap();
+    assert_eq!(s.selected_folder, None);
+}
+
+#[test]
+fn newer_category_info_or_occupancy_evidence_blocks_before_dispatch() {
+    let old = category_state(Some("electronics_folder"));
+    for occupied in [false, true] {
+        let mut latest = old.clone();
+        if !occupied {
+            latest.visible_info.push(None);
+        }
+        let joined = join_category_body(
+            &old,
+            latest,
+            &category_target(),
+            !occupied,
+            "electronics_folder",
+        );
+        assert!(joined.is_err());
+        let sc = Scratch::new();
+        let a = authority();
+        let g = RwLock::new(true);
+        let mut j = Journal::open(&sc.journal()).unwrap();
+        let mut f = Fake::new();
+        f.observations = VecDeque::from([Ok(old.clone()), joined]);
+        assert!(execute(
+            &mut j,
+            "newer-category",
+            category_target(),
+            &a,
+            &g,
+            &mut f,
+            Duration::from_millis(100)
+        )
+        .is_err());
+        assert_eq!(f.dispatches, 0);
+    }
 }

@@ -312,3 +312,12 @@ The next source requires independently proved no-managed-view sentinel 23 and
 adds read-only category candidates plus opt-in focus geometry. Combined fixtures
 pass; start a fresh immutable run for Luna OpenPanel/SelectSlot/View/Research.
 Never reuse or replace run 021's binary to hide the canceled preflight.
+
+
+Recorded run 022 verified exclusive Luna medium OpenPanel/no-input repeat,
+SelectSlot/View/Research and a second empty-slot selection, then Jan 3 clock
+advancement. Recording passed; one WM close exited normally with code 0 and exact owned
+processes are gone. Actual category tabs were Standard, with geometry unavailable
+in that recorded source. The next Standard reader and durable SelectCategory
+stage pass combined fixtures. Next: a fresh immutable recorded Luna category
+selection gate, then focus actions and daily plans; full campaigns remain pending.

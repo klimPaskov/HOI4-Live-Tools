@@ -39,8 +39,8 @@ impl Service {
     }
 }
 pub(super) fn tool() -> Value {
-    json!({"name":"hoi4_research_attempt","description":"Preview: one ordinary OpenPanel shortcut or ID-derived SelectSlot, View or Research stage for an own empty slot. OpenPanel requires known closed views in the no-managed-view sentinel; SelectSlot requires an open own panel; View/Research require its selected tree. Requires explicit owner profile, exclusive lease and stable stage request ID. Canonical readback verifies state; uncertain attempts are never replayed. No coordinates or engine calls.",
-    "inputSchema":{"type":"object","properties":{"stage":{"enum":["open_panel","select_slot","view","research"]},"technology_id":{"type":"string","minLength":1,"maxLength":256},"slot":{"type":"integer","minimum":0,"maximum":31},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["stage","technology_id","slot","request_id","lease_token"],"additionalProperties":false}})
+    json!({"name":"hoi4_research_attempt","description":"Preview: one ordinary OpenPanel shortcut or ID-derived SelectSlot, SelectCategory, View or Research stage for an own empty slot. OpenPanel requires known closed views in the no-managed-view sentinel; SelectSlot requires an open own panel; SelectCategory requires an explicit public folder ID and its selected empty own tree with no Info; it makes no technology-to-folder claim. View/Research require its selected tree. Requires explicit owner profile, exclusive lease and stable stage request ID. Canonical readback verifies state; uncertain attempts are never replayed. No coordinates or engine calls.",
+    "inputSchema":{"type":"object","properties":{"stage":{"enum":["open_panel","select_slot","select_category","view","research"]},"folder_id":{"type":"string","minLength":1,"maxLength":256},"technology_id":{"type":"string","minLength":1,"maxLength":256},"slot":{"type":"integer","minimum":0,"maximum":31},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["stage","slot","request_id","lease_token"],"oneOf":[{"properties":{"stage":{"const":"select_category"}},"required":["folder_id"],"not":{"required":["technology_id"]}},{"properties":{"stage":{"enum":["open_panel","select_slot","view","research"]}},"required":["technology_id"],"not":{"required":["folder_id"]}}],"additionalProperties":false}})
 }
 pub(super) fn call(
     owner: &ClockService,
@@ -50,6 +50,7 @@ pub(super) fn call(
     allowed(
         args,
         &[
+            "folder_id",
             "stage",
             "technology_id",
             "slot",
@@ -60,12 +61,34 @@ pub(super) fn call(
     let selected_stage = match string(args, "stage")? {
         "open_panel" => stage::Stage::OpenPanel,
         "select_slot" => stage::Stage::SelectSlot,
+        "select_category" => stage::Stage::SelectCategory,
         "view" => stage::Stage::View,
         "research" => stage::Stage::Research,
         _ => return Err(Error::new("invalid_arguments", "Unknown research stage")),
     };
-    let key = string(args, "technology_id")?;
-    research_ui::validate_detail_key(key)?;
+    let folder_id = if selected_stage == stage::Stage::SelectCategory {
+        if args.contains_key("technology_id") {
+            return Err(Error::new(
+                "invalid_arguments",
+                "SelectCategory accepts only folder ID",
+            ));
+        }
+        let f = string(args, "folder_id")?;
+        research_ui::validate_detail_key(f)?;
+        Some(f.to_owned())
+    } else {
+        if args.contains_key("folder_id") {
+            return Err(Error::new("invalid_arguments", "Unexpected folder ID"));
+        }
+        None
+    };
+    let key = if selected_stage == stage::Stage::SelectCategory {
+        ""
+    } else {
+        let k = string(args, "technology_id")?;
+        research_ui::validate_detail_key(k)?;
+        k
+    };
     let slot = args
         .get("slot")
         .and_then(Value::as_u64)
@@ -101,6 +124,7 @@ pub(super) fn call(
         epoch,
         stage: selected_stage,
         technology: key.into(),
+        folder_id,
         slot,
     };
     let mut backend = ResearchBackend {
@@ -111,7 +135,7 @@ pub(super) fn call(
         display: service.display,
         authority: &service.authority,
         last_transport: None,
-        target: None,
+        target: Some(target.clone()),
         scope: None,
     };
     let execution = service.journal.execute(
@@ -223,6 +247,7 @@ fn own_state(epoch: Epoch, research: &Value, ui: &Value) -> Result<stage::OwnSta
     Ok(stage::OwnState {
         epoch,
         selected_slot,
+        selected_folder: None,
         tree_visible: active == 6 && tree && !panel,
         panel_visible: Some(active == 5 && panel && !tree),
         active_mode: Some(i32::try_from(active).map_err(|_| bad())?),
@@ -259,7 +284,8 @@ impl stage::Backend for ResearchBackend<'_> {
         Ok(())
     }
     fn observe(&mut self) -> Result<stage::OwnState> {
-        let (state, context) = observed_state(self.process, self.guard)?;
+        let (state, context) =
+            observed_target_state(self.process, self.guard, self.target.as_ref())?;
         pin_scope(&mut self.scope, &context)?;
         Ok(state)
     }
@@ -280,6 +306,15 @@ impl stage::Backend for ResearchBackend<'_> {
             stage::Stage::SelectSlot => {
                 candidate::observe_slot_owned(self.process, target.slot, self.profile)?
             }
+            stage::Stage::SelectCategory => candidate::observe_category_owned(
+                self.process,
+                target
+                    .folder_id
+                    .as_deref()
+                    .ok_or_else(|| Error::new("invalid_arguments", "Folder ID required"))?,
+                target.slot,
+                self.profile,
+            )?,
             stage::Stage::View | stage::Stage::Research => {
                 let which = if target.stage == stage::Stage::View {
                     candidate::Stage::View
@@ -333,7 +368,7 @@ impl stage::Backend for ResearchBackend<'_> {
                 ControlKey::ResearchPanel,
                 deadline,
                 || {
-                    let (fresh, context) = observed_state(process, guard)?;
+                    let (fresh, context) = observed_target_state(process, guard, Some(&target))?;
                     pin_scope(&mut scope, &context)?;
                     fresh.validate(&target)?;
                     fresh.preflight(&target)?;
@@ -376,7 +411,7 @@ impl stage::Backend for ResearchBackend<'_> {
             }
             Ok(mut click) => {
                 let result = click.dispatch_once_checked(|| {
-                    let (fresh, context) = observed_state(process, guard)?;
+                    let (fresh, context) = observed_target_state(process, guard, Some(&target))?;
                     pin_scope(&mut scope, &context)?;
                     fresh.validate(&target)?;
                     fresh.preflight(&target)
@@ -430,6 +465,59 @@ fn observed_state(
     }
     let state = own_state(guard.epoch.clone(), &research, &ui)?;
     Ok((state, ui_context))
+}
+
+fn observed_target_state(
+    process: &dyn Process,
+    guard: &mut Guard,
+    target: Option<&stage::Target>,
+) -> Result<(stage::OwnState, research_ui::UiContext)> {
+    let (mut state, context) = observed_state(process, guard)?;
+    if let Some(t) = target.filter(|t| t.stage == stage::Stage::SelectCategory) {
+        let (category, c) = research_ui::category_command_owned(
+            process,
+            t.folder_id
+                .as_deref()
+                .ok_or_else(|| Error::new("invalid_arguments", "Folder ID required"))?,
+        )?;
+        guard.accept_context(process, &c.campaign)?;
+        if c != context {
+            return Err(Error::new(
+                "torn_read",
+                "Category and own research contexts differ",
+            ));
+        }
+        if category["owned"] != true
+            || category["build_id"] != game::BUILD_ID
+            || category["selected_slot"].as_u64() != Some(u64::from(t.slot))
+            || category["category"]["binding_available"] != true
+        {
+            return Err(Error::new(
+                "research_precondition",
+                "Exact own category association required",
+            ));
+        }
+        let selected = category["category"]["selected_folder_key"]
+            .as_str()
+            .ok_or_else(|| Error::new("research_precondition", "Selected folder unknown"))?;
+        let empty = category["category"]["selected_slot_empty"]
+            .as_bool()
+            .ok_or_else(|| {
+                Error::new("research_precondition", "Selected slot emptiness unknown")
+            })?;
+        // Use latest complete UI body, not the older Info/window state.
+        let (canonical, canonical_context) = research::owned_snapshot(process)?;
+        guard.accept_context(process, &canonical_context.campaign)?;
+        if canonical_context.own != c.anchors[..2] || canonical_context.slots != c.slots {
+            return Err(Error::new(
+                "torn_read",
+                "Canonical/category slot identities changed",
+            ));
+        }
+        let latest = own_state(guard.epoch.clone(), &canonical, &category)?;
+        state = stage::join_category_body(&state, latest, t, empty, selected)?;
+    }
+    Ok((state, context))
 }
 
 #[cfg(test)]

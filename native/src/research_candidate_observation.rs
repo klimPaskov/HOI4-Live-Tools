@@ -377,11 +377,22 @@ fn category_surface(detail: &Value, key: &str, slot: u32) -> Result<Surface> {
     if category["folder_key"] != key
         || category["binding_available"] != true
         || category["selected_slot_empty"] != true
-        || category["control_type_encoding"] != "11CButtonDrag"
     {
         return Err(unavailable(
-            "Exact requested category Drag binding and own empty slot required",
+            "Exact requested category binding and own empty slot required",
         ));
+    }
+    match category["control_type_encoding"].as_str() {
+        Some("11CButtonDrag") => {}
+        Some("15CButtonStandard") => {
+            let state = int(&category["standard_state_raw"])?;
+            if !(0..=2).contains(&state) || category["standard_disabled_predicate"] != false {
+                return Err(unavailable(
+                    "Standard category disabled/state branch unavailable",
+                ));
+            }
+        }
+        _ => return Err(unavailable("Exact category control layout required")),
     }
     let flags = uint(&category["raw_flags"])?;
     // Local active/hide-suppression branches only, never topmost/eligibility.

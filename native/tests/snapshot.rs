@@ -5112,9 +5112,9 @@ fn category_geometry_preserves_context_and_unknown_layout_limits() {
     assert_eq!(v["category"]["binding_available"], true);
     assert_eq!(
         v["category"]["sprite_diagnostic"]["reason"],
-        "standard_sprite_diagnostic_unavailable"
+        "renderer_layout_unavailable"
     );
-    f.assert_not_read(&[0x2140e8, 0x214110]);
+    f.assert_not_read(&[0x214110]);
     f.word(0x214000, 0x10000 + 0x4346b10);
     f.word(0x214080, 0x10000 + 0x4346ea8);
     let (v, _) = research_ui::category_with_geometry_owned(&f, "industry_folder", true).unwrap();
@@ -5133,6 +5133,32 @@ fn category_geometry_final_witness_refuses_changed_renderer_identity() {
     f.fault = Some((0x214110, 1, 0x21f000u64.to_le_bytes().to_vec()));
     assert_eq!(
         research_ui::category_with_geometry_owned(&f, "industry_folder", true)
+            .unwrap_err()
+            .code,
+        "torn_read"
+    );
+}
+
+#[test]
+fn category_command_body_observes_new_info_and_selected_assignment_under_witnesses() {
+    let mut f = owned_category_fixture();
+    f.word(0x2c118, 0);
+    let (old, c) = research_ui::category_command_owned(&f, "industry_folder").unwrap();
+    assert_eq!(old["category"]["selected_slot_empty"], true);
+    assert_eq!(old["technology_info"]["visible_count"], 0);
+    f.target_info(0);
+    let (new, n) = research_ui::category_command_owned(&f, "industry_folder").unwrap();
+    assert_eq!(n, c);
+    assert_eq!(new["technology_info"]["visible_count"], 1);
+    assert_eq!(new["category"]["selected_slot_empty"], true);
+    f.word(0x2c118, 0x80000);
+    let (new, _) = research_ui::category_command_owned(&f, "industry_folder").unwrap();
+    assert_eq!(new["category"]["selected_slot_empty"], false);
+    let mut f = owned_category_fixture();
+    f.word(0x2c118, 0);
+    f.fault = Some((0x2c118, 1, 0x80000u64.to_le_bytes().to_vec()));
+    assert_eq!(
+        research_ui::category_command_owned(&f, "industry_folder")
             .unwrap_err()
             .code,
         "torn_read"

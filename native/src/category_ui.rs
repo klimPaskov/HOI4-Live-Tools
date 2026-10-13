@@ -245,12 +245,17 @@ fn observe_inner(
     if !include_geometry {
         return Ok(out);
     }
-    out["sprite_diagnostic"] = if table != base + 0x4346b10 {
-        // Shared sprite_diagnostic is constructor-proved only for exact Drag110.
-        // Standard rendererE8 is not substituted or read.
-        json!({"reason":"standard_sprite_diagnostic_unavailable","field_layout_verified":false,"client_rectangle_available":false,"input_authorized":false})
+    let mut reuse = crate::node_reuse::Reuse::new(base, tree);
+    out["sprite_diagnostic"] = if table == base + 0x43470c8 {
+        let state = r.i32(button + 0xac)?;
+        if !(0..=3).contains(&state) {
+            return Err(refuse("Standard category state enum bound"));
+        }
+        out["standard_state_raw"] = json!(state);
+        out["standard_disabled_predicate"] = json!(state == 3);
+        crate::node_detail::standard_sprite_diagnostic(r, &mut reuse, tabs, button, registry)?
     } else {
-        let mut reuse = crate::node_reuse::Reuse::new(base, tree);
+        // Exact Drag keeps its own110 renderer. AC is not Standard's enum.
         crate::node_detail::sprite_diagnostic(r, &mut reuse, tabs, button, registry)?
     };
     Ok(out)
@@ -587,9 +592,9 @@ mod tests {
         let v = f.geometry().unwrap();
         assert_eq!(
             v["sprite_diagnostic"]["reason"],
-            "standard_sprite_diagnostic_unavailable"
+            "renderer_layout_unavailable"
         );
-        assert!(!f.reads.borrow().contains_key(&0x600e8));
+        assert!(f.reads.borrow().contains_key(&0x600e8));
         assert!(!f.reads.borrow().contains_key(&0x60110));
     }
     #[test]
@@ -654,5 +659,66 @@ mod tests {
         let mut f = Fixture::new();
         f.fault = Some((0xb0018, 0xdead0000u64.to_le_bytes().to_vec()));
         assert_eq!(f.geometry().unwrap_err().code, "torn_read");
+    }
+    impl Fixture {
+        fn standard_sprite(&mut self) {
+            self.sprite();
+            self.word(0x60000, 0x10000 + 0x43470c8);
+            self.word(0x60080, 0x10000 + 0x4347488);
+            self.word(0x600e8, 0xf0000);
+        }
+    }
+    #[test]
+    fn standard_category_sprite_uses_e8_and_exposes_own_enum_only() {
+        let mut f = Fixture::new();
+        f.standard_sprite();
+        let v = f.geometry().unwrap();
+        assert_eq!(v["sprite_diagnostic"]["field_layout_verified"], true);
+        assert_eq!(v["standard_state_raw"], 0);
+        assert_eq!(v["standard_disabled_predicate"], false);
+        assert!(!f.reads.borrow().contains_key(&0x60110));
+        let mut f = Fixture::new();
+        f.sprite();
+        let v = f.geometry().unwrap();
+        assert!(v.get("standard_state_raw").is_none());
+        assert!(!f.reads.borrow().contains_key(&0x600ac));
+    }
+    #[test]
+    fn standard_disabled_and_malformed_state_remain_distinct() {
+        let mut f = Fixture::new();
+        f.standard_sprite();
+        f.put(0x600ac, &3i32.to_le_bytes());
+        assert_eq!(f.geometry().unwrap()["standard_disabled_predicate"], true);
+        let mut f = Fixture::new();
+        f.standard_sprite();
+        f.put(0x600ac, &4i32.to_le_bytes());
+        assert!(f.geometry().is_err());
+        assert!(!f.reads.borrow().contains_key(&0x600e8));
+    }
+    #[test]
+    fn standard_wrong_e8_owner_resource_and_final_mutations() {
+        let mut f = Fixture::new();
+        f.standard_sprite();
+        f.word(0xf0138, 0x60008);
+        assert_eq!(f.geometry().unwrap_err().code, "invalid_gui_owner");
+        assert!(!f.reads.borrow().contains_key(&0xf0168));
+        let mut f = Fixture::new();
+        f.standard_sprite();
+        f.word(0xf1000, 0x10000 + 0x4356e08);
+        assert_eq!(
+            f.geometry().unwrap()["sprite_diagnostic"]["reason"],
+            "resource_layout_unavailable"
+        );
+        assert!(!f.reads.borrow().contains_key(&0xf1090));
+        for (a, b) in [
+            (0x600e8, 0xf0008u64.to_le_bytes().to_vec()),
+            (0x600ac, 3i32.to_le_bytes().to_vec()),
+            (0xf0168, 0xf1008u64.to_le_bytes().to_vec()),
+        ] {
+            let mut f = Fixture::new();
+            f.standard_sprite();
+            f.fault = Some((a, b));
+            assert_eq!(f.geometry().unwrap_err().code, "torn_read");
+        }
     }
 }

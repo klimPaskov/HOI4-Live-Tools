@@ -24,6 +24,7 @@ use std::{
 pub enum Stage {
     OpenPanel,
     SelectSlot,
+    SelectCategory,
     View,
     Research,
 }
@@ -39,6 +40,8 @@ pub struct Target {
     pub epoch: Epoch,
     pub stage: Stage,
     pub technology: String,
+    #[serde(default)]
+    pub folder_id: Option<String>,
     pub slot: u32,
 }
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -46,6 +49,8 @@ pub struct Target {
 pub struct OwnState {
     pub epoch: Epoch,
     pub selected_slot: Option<u32>,
+    #[serde(default)]
+    pub selected_folder: Option<String>,
     pub tree_visible: bool,
     /// Older View/Research receipts did not store this diagnostic; it is never
     /// inferred true when reopening their journal.
@@ -75,6 +80,31 @@ fn key(value: &str) -> Result<()> {
     }
     Ok(())
 }
+impl Target {
+    fn validate_key(&self) -> Result<()> {
+        if self.stage == Stage::SelectCategory {
+            if !self.technology.is_empty() {
+                return Err(error(
+                    "invalid_arguments",
+                    "SelectCategory does not bind technology to folder",
+                ));
+            }
+            key(self
+                .folder_id
+                .as_deref()
+                .ok_or_else(|| error("invalid_arguments", "Explicit folder ID required"))?)?;
+        } else {
+            key(&self.technology)?;
+            if self.folder_id.is_some() {
+                return Err(error(
+                    "invalid_arguments",
+                    "Folder ID belongs only to SelectCategory",
+                ));
+            }
+        }
+        Ok(())
+    }
+}
 impl OwnState {
     pub(crate) fn validate(&self, target: &Target) -> Result<()> {
         if self.epoch != target.epoch
@@ -90,6 +120,10 @@ impl OwnState {
                 "ownership_changed",
                 "Research own context or slot changed",
             ));
+        }
+        target.validate_key()?;
+        if let Some(folder) = &self.selected_folder {
+            key(folder)?;
         }
         for id in self
             .researching
@@ -116,6 +150,15 @@ impl OwnState {
                     && self.selected_slot == Some(target.slot)
                     && self.researching[target.slot as usize].is_none()
                     && self.visible_info.is_empty()
+            }
+            Stage::SelectCategory => {
+                self.active_mode == Some(6)
+                    && self.tree_visible
+                    && self.panel_visible == Some(false)
+                    && self.selected_slot == Some(target.slot)
+                    && self.researching[target.slot as usize].is_none()
+                    && self.visible_info.is_empty()
+                    && self.selected_folder.as_deref() == target.folder_id.as_deref()
             }
             Stage::Research => {
                 self.researching[target.slot as usize].as_deref() == Some(&target.technology)
@@ -155,6 +198,22 @@ impl OwnState {
             }
             return Ok(());
         }
+        if target.stage == Stage::SelectCategory {
+            if self.active_mode != Some(6)
+                || !self.tree_visible
+                || self.panel_visible != Some(false)
+                || self.selected_slot != Some(target.slot)
+                || self.researching[target.slot as usize].is_some()
+                || !self.visible_info.is_empty()
+                || self.selected_folder.is_none()
+            {
+                return Err(error(
+                    "research_precondition",
+                    "Known own folder, selected empty own slot and no Info required",
+                ));
+            }
+            return Ok(());
+        }
         if !self.tree_visible
             || self.selected_slot != Some(target.slot)
             || self.researching[target.slot as usize].is_some()
@@ -165,7 +224,9 @@ impl OwnState {
             ));
         }
         let info_ok = match target.stage {
-            Stage::OpenPanel | Stage::SelectSlot => unreachable!("Selection handled above"),
+            Stage::OpenPanel | Stage::SelectSlot | Stage::SelectCategory => {
+                unreachable!("Selection handled above")
+            }
             Stage::View => self.visible_info.is_empty(),
             Stage::Research => self.visible_info.as_slice() == [Some(target.technology.clone())],
         };
@@ -178,6 +239,34 @@ impl OwnState {
         Ok(())
     }
 }
+/// Reject contradictory newer command-body evidence before any ordinary input.
+#[cfg(any(target_os = "linux", test))]
+pub(crate) fn join_category_body(
+    old: &OwnState,
+    mut latest: OwnState,
+    target: &Target,
+    selected_empty: bool,
+    folder: &str,
+) -> Result<OwnState> {
+    old.validate(target)?;
+    latest.validate(target)?;
+    key(folder)?;
+    if target.stage != Stage::SelectCategory
+        || old.selected_slot != latest.selected_slot
+        || old.researching != latest.researching
+        || old.visible_info != latest.visible_info
+        || selected_empty != old.researching[target.slot as usize].is_none()
+    {
+        return Err(error(
+            "torn_read",
+            "Newer category body contradicts canonical own state",
+        ));
+    }
+    latest.selected_folder = Some(folder.to_owned());
+    latest.preflight(target)?;
+    Ok(latest)
+}
+
 #[derive(Clone, Debug)]
 pub enum Candidate {
     /// Fixed ordinary shortcut; no coordinates or arbitrary key arguments.
@@ -345,7 +434,7 @@ impl Journal {
             let receipt: Receipt = serde_json::from_slice(&line)
                 .map_err(|_| error("invalid_journal", "Malformed research receipt"))?;
             request_id(&receipt.request_id)?;
-            key(&receipt.target.technology)?;
+            receipt.target.validate_key()?;
             receipt.observed.validate(&receipt.target)?;
             if receipt.version != 1
                 || (receipt.status == Status::Verified
@@ -442,7 +531,7 @@ impl Journal {
         timeout: Duration,
     ) -> Result<Execution> {
         request_id(id)?;
-        key(&target.technology)?;
+        target.validate_key()?;
         if timeout.is_zero() || timeout > Duration::from_secs(10) || target.slot >= 32 {
             return Err(error(
                 "invalid_arguments",

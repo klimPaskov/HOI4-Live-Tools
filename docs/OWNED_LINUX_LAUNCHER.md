@@ -197,7 +197,7 @@ acceptance remain unfinished. See [the bounded live gate](CLAUSEWITZ_VALIDATION.
 for each stage, and `lease_token`. The new `open_panel` stage requires known
 closed own views with no managed view selected and sends one ordinary `W` pair without
 pointer movement. An already open panel verifies without toggling it. This stage
-awaits recorded live validation. `select_slot` requires an open own panel
+passed recorded run 022. `select_slot` requires an open own panel
 and verifies the selected empty own tree; View/Research require that tree.
 Selection retains the planned technology ID in its durable target. It accepts
 no coordinates and performs no category navigation.
@@ -287,3 +287,13 @@ it. The initial fixture run explicitly failed on missing metadata; the build
 was corrected without weakening the production whitelist. Allow longer harness
 deadlines under CPU emulation: the initial nine serial kernel cases took about a
 minute.
+
+
+The new `select_category` stage uses `folder_id` instead of `technology_id` and
+requires a selected empty own tree with no Info. It verifies the exact public
+folder selection; it makes no technology-to-folder relationship claim. Its
+newer full UI/Info and slot-emptiness observation shares final witnesses and
+rejects contradictions with canonical assignments before input. Standard tabs
+use their separately proved renderer/state fields; Drag fields stay separate.
+The stage is fixture-tested and awaits a fresh recorded live run. Unknown input
+remains quarantined across restart.

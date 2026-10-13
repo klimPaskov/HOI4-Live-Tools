@@ -218,3 +218,27 @@ fn category_owner_profile_is_not_inferred_from_sprite() {
     p.reviewed_builtin_client_origin = false;
     assert!(research_attempt::point_candidate(&s, &codec(&geometry(), &p).unwrap()).is_err());
 }
+
+#[test]
+fn standard_category_point_requires_exact_nondisabled_enum_and_profile() {
+    let mut d = category_detail();
+    d["category"]["control_type_encoding"] = json!("15CButtonStandard");
+    d["category"]["standard_state_raw"] = json!(0);
+    d["category"]["standard_disabled_predicate"] = json!(false);
+    let s = category_surface(&d, "industry_folder", 0).unwrap();
+    let p =
+        research_attempt::point_candidate(&s, &codec(&geometry(), &profile()).unwrap()).unwrap();
+    assert_eq!(p.client_pixel, [37, 70]);
+    assert!(!p.input_authorized);
+    for state in [-1, 3, 4] {
+        let mut v = d.clone();
+        v["category"]["standard_state_raw"] = json!(state);
+        assert!(category_surface(&v, "industry_folder", 0).is_err());
+    }
+    let mut v = d.clone();
+    v["category"]["standard_disabled_predicate"] = json!(true);
+    assert!(category_surface(&v, "industry_folder", 0).is_err());
+    let mut p = profile();
+    p.os_binding_verified = false;
+    assert!(research_attempt::point_candidate(&s, &codec(&geometry(), &p).unwrap()).is_err());
+}

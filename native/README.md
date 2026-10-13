@@ -169,9 +169,10 @@ own empty slot tree to be selected first. A new `select_slot` stage can derive
 the ordinary slot control from an open own panel. Recorded run 020 verified
 Luna selecting slots 0 and 1, assigning research, and advancing its counter
 through 3 January; all four strategic RPC samples were under one second.
-The new `open_panel` stage uses ordinary `W` from known closed views in normal
-map context with no managed view selected; it is fixture-tested and awaits recorded live validation. Category
-navigation remains unfinished.
+Recorded run 022 verified ordinary `W` panel opening from known closed own views
+with no managed view selected, followed by slot selection and research. A distinct
+repeat request verified without another key. The new `select_category` stage and
+Standard-tab geometry pass fixtures and await recorded live validation.
 Its internal observation adapter checks the requested own key/slot and fresh
 renderer, callback, hierarchy and SDL/X11 associations before candidate maths.
 The owner supplies the reviewed origin profile; player arguments cannot supply
