@@ -192,7 +192,15 @@ and resource-cache fields. Unsupported classes remain metadata-only. Parent
 ownership is unproved, so it reports the first parent's type without traversing
 its payload. Cached dimensions, local visibility and a matching Info window do
 not establish a client rectangle, effective visibility, routing or a fresh event.
-These new diagnostic fields still require installed-game validation.
+A fresh recorded Linux run validated raw sprite/cache fields for
+`support_weapons` and `basic_machine_tools`, including exact own-control links
+and first-parent `C2dPositionObject` metadata. The diagnostic distinguished a
+visible `support_weapons2` Info window from an absent `support_weapons` window,
+then observed the former close. Both node tools refused after tree closure.
+The view-only clicks included a background miss and a different technology than
+intended; they do not prove ID-based selection. The campaign remained at its
+initial date with no assignments, exited with code 0, and recording integrity
+passed. Client geometry, routing and strategic input remain unavailable.
 
 The focus query accepts an ASCII key prefix `filter`, `offset` 0–4096 and `limit`
 1–100. It validates every own key before pagination, exact own-tree ownership and

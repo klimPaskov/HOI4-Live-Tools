@@ -70,8 +70,16 @@ speedup claim. All five full-model pages and exact key-set comparison passed.
 Both runs left focus/research empty and the game paused at 1936.01.01.12, then
 exited with code 0. The second recording passed ffprobe at 371.333 seconds.
 No Luna player or strategic-input acceptance is claimed for these diagnostics.
-Vectored final-witness batching and one-ID render diagnostics are the next
-development slice; their installed-game measurement remains pending.
+A third fresh run validated vectored final-witness batching and the same exact
+key set. Five default-page RPC samples ranged from 335.1 to 450.6 ms, with a
+362.5 ms median and 280.5–382.5 ms server times. Logical reads and bytes remained
+26,686 / 299,776; these metrics count requests rather than syscalls. The samples
+overlap the previous run and do not establish a major speedup. Exact-ID raw
+sprite/cache diagnostics and typed own Info state also passed. The game exited
+with code 0, and its 565-second recording passed ffprobe. Two builder view-only
+clicks included a background miss and a different technology than intended;
+readback identified both. No ID-based action adapter or Luna acceptance is
+claimed for this run.
 
 ## Measured process reads
 

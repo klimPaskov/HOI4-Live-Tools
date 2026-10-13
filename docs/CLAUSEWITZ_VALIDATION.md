@@ -698,8 +698,46 @@ reader refused with `io_error` during replacement. Waiting for the replacement's
 nonce-checked ready/pid message fixed the tests; both then returned the expected
 `ownership_changed`. Production guards were unchanged, and failed logs are
 preserved. These generated-process and synthetic UI checks are separate from
-installed-game evidence. Live raw-field validation and batching latency remain
-pending in a fresh immutable game process.
+installed-game evidence.
+
+## Recorded vectored reader and exact-ID diagnostics — 13 October 2026
+
+A fresh owned Linux game used the immutable tested binary from source
+`c4c8404`. Normal historical vanilla Germany, no mods, was recorded before the
+single Start action. All 411 current technology keys and 423 structural control
+associations matched the prior two runs; all five pages and both filters passed.
+Five default-page RPC samples were 450.6, 362.5, 423.1, 351.3 and 335.1 ms
+(median 362.5 ms), with server times 382.5, 305.7, 361.1, 293.7 and 280.5 ms.
+Logical requests/bytes remained 26,686 / 299,776, now explicitly labelled as
+logical metrics. Different fresh processes and host load prevent a controlled
+speedup claim.
+
+Exact `support_weapons` and `basic_machine_tools` queries each resolved one
+bound own item and verified CSprite/CSpriteType raw fields, finite scalars,
+cache dimensions and the no-mask branch. Their first parent was an exact
+`C2dPositionObject` primary; no parent payload was traversed. Cached world
+translations were negative and remained raw diagnostics, never client points.
+Their RPC times were 325.2 and 305.4 ms. Rectangle, routing and input authority
+stayed false.
+
+A builder view-only click landed in the background gap: immediate and later
+readback both found no Info window. A newly observed icon click then selected
+`support_weapons2` rather than the intended `support_weapons`; canonical readback
+identified the mismatch and its disabled Research button. No assignment was
+attempted. The exact-ID diagnostic correctly reported one locally visible Info
+window for the actual selected key and zero for the intended key, then zero
+after one Escape closed the Info window. A separate Escape closed the tree;
+the node query refused with `gui_unavailable` in 19.0 ms and the one-ID
+diagnostic in 24.1 ms. This validates the diagnostic and refusal behavior,
+not an ID-based selection adapter or fresh event acknowledgement.
+
+Final state remained 1936.01.01.12, paused at speed 0, with no focus or research
+assignments. All 14 game threads had TracerPid 0; Yama remained 1. The recording
+finalized as one 512×288 H.264 segment, 565 seconds, 6,882,761 bytes, and passed
+ffprobe. Explicit owned close returned success; the sole reaper recorded actual
+exit code 0, no signal and no core dump. No Luna player was assigned to this
+diagnostic run. Earlier exit-code-6 incidents remain unresolved, and strategic
+dispatch, the daily governor and campaign acceptance are unfinished.
 
 ## Attribution
 

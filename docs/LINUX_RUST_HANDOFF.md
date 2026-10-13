@@ -128,7 +128,13 @@ fell 22% and bytes 41%, while measured latency improved modestly and varied.
 It also exited cleanly. Bounded vectored final-witness reads and a one-ID raw
 renderer/detail-state diagnostic now pass 176 standard Linux fixtures and 19
 generated-child checks (18 substantive cases plus the helper), as well as 135
-portable/MSRV Rust and 952 Python tests (37 skipped). Their installed-game
-validation is next. The first kernel trial exposed two tests that checked exec
+portable/MSRV Rust and 952 Python tests (37 skipped). A fresh recorded game
+validated the same 411 keys/423 associations, exact-ID raw sprite/cache fields
+and typed own Info open/closed state. Its default-page RPC median was 363 ms;
+samples overlap the prior run, so no major speedup is established. A background
+click and a different technology than intended were detected by readback; no
+ID-based strategic input is accepted. Closed-tree queries refused, the game
+exited with code 0, and its 565-second recording passed ffprobe. The first kernel
+trial exposed two tests that checked exec
 before its ready handshake; corrected tests passed without relaxing production
 guards. Finish verified strategic dispatch, then resume Luna acceptance.
