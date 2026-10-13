@@ -27,7 +27,7 @@ fn tools(commands: Option<&dyn Commands>) -> Value {
         {"name":"hoi4_input_geometry","description":"Read-only own GUI pointer, dimensions and scale diagnostics. Does not prove client origin, control geometry or click authorization.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}},
         {"name":"hoi4_research_ui","description":"Bounded own research slot widgets, selected slot and primary button/render type diagnostics. No hit routing or input authorization.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}},
         {"name":"hoi4_technology_list","description":"Canonical loaded public technology IDs with bounded filtering/pagination. Catalog membership does not imply player research eligibility. Pure reads; never pauses.","inputSchema":{"type":"object","properties":{"filter":{"type":"string","maxLength":128},"offset":{"type":"integer","minimum":0,"maximum":8192},"limit":{"type":"integer","minimum":1,"maximum":100}},"additionalProperties":false}},
-        {"name":"hoi4_wait_for","description":"Bounded server wait for own focus/research change or game date. Never pauses.","inputSchema":{"type":"object","properties":{"timeout_seconds":{"type":"integer","minimum":1,"maximum":50},"until_date":{"type":"array","items":{"type":"integer"},"minItems":3,"maxItems":3}},"additionalProperties":false}}
+        {"name":"hoi4_wait_for","description":"Bounded server wait for own focus/research change, game date, or research UI view predicates and optional selected own slot. UI matches do not authorize input. Never pauses.","inputSchema":{"type":"object","properties":{"timeout_seconds":{"type":"integer","minimum":1,"maximum":50},"until_date":{"type":"array","items":{"type":"integer"},"minItems":3,"maxItems":3},"until_research_ui":{"type":"object","properties":{"view":{"type":"string","enum":["panel","tree"]},"selected_slot":{"type":"integer","minimum":0,"maximum":31}},"required":["view"],"additionalProperties":false}},"additionalProperties":false}}
     ]});
     if let Some(commands) = commands {
         value["tools"]
@@ -111,6 +111,83 @@ fn same_wait_context(
     }
     Ok(())
 }
+struct UiTarget {
+    tree: bool,
+    selected_slot: Option<u64>,
+}
+impl UiTarget {
+    fn parse(value: &Value) -> Result<Self> {
+        let object = value.as_object().ok_or_else(|| {
+            Error::new(
+                "invalid_arguments",
+                "Research UI wait target must be an object",
+            )
+        })?;
+        if object
+            .keys()
+            .any(|k| !["view", "selected_slot"].contains(&k.as_str()))
+        {
+            return Err(Error::new(
+                "invalid_arguments",
+                "Unknown research UI wait field",
+            ));
+        }
+        let tree = match object.get("view").and_then(Value::as_str) {
+            Some("panel") => false,
+            Some("tree") => true,
+            _ => {
+                return Err(Error::new(
+                    "invalid_arguments",
+                    "Research UI view must be panel or tree",
+                ))
+            }
+        };
+        let selected_slot = object
+            .get("selected_slot")
+            .map(|v| {
+                v.as_u64().filter(|n| *n < 32).ok_or_else(|| {
+                    Error::new(
+                        "invalid_arguments",
+                        "Selected own slot must be an integer 0..31",
+                    )
+                })
+            })
+            .transpose()?;
+        Ok(Self {
+            tree,
+            selected_slot,
+        })
+    }
+    fn reached(&self, value: &Value) -> bool {
+        let (visible, hidden, mode) = if self.tree {
+            ("ordinary_tree", "panel", 6)
+        } else {
+            ("panel", "ordinary_tree", 5)
+        };
+        value["active_mode_raw"] == mode
+            && value[visible]["materialized"] == true
+            && value[visible]["visible_predicate"] == true
+            && (value[hidden]["materialized"] == false
+                || value[hidden]["visible_predicate"] == false)
+            && self
+                .selected_slot
+                .is_none_or(|v| value["selected_slot"].as_u64() == Some(v))
+    }
+}
+fn same_ui_context(
+    before: &research_ui::UiContext,
+    current: &research_ui::UiContext,
+    last_date: i32,
+) -> Result<()> {
+    same_wait_context(&before.campaign, &current.campaign, last_date)?;
+    if before.anchors != current.anchors || before.slots != current.slots {
+        return Err(Error::new(
+            "wait_context_changed",
+            "Own research UI or slot identities changed during wait",
+        ));
+    }
+    Ok(())
+}
 impl Server {
     fn process(&self) -> Result<&dyn Process> {
         self.process
@@ -128,6 +205,45 @@ impl Server {
     }
     fn overview(&self) -> Result<Value> {
         game::snapshot(self.process()?)
+    }
+    fn wait_ui(&self, target: UiTarget, timeout: Duration) -> Result<Value> {
+        let start = Instant::now();
+        let mut rejected = 0;
+        let (mut current, baseline) = fresh_wait_read(start, timeout, &mut rejected, || {
+            research_ui::wait_snapshot(self.process()?)
+        })?;
+        if target
+            .selected_slot
+            .is_some_and(|slot| slot as usize >= baseline.slots.len())
+        {
+            return Err(Error::new(
+                "invalid_arguments",
+                "Selected slot exceeds fresh own slot count",
+            ));
+        }
+        let mut last_date = baseline.campaign.date_raw;
+        let mut current_received = Instant::now();
+        loop {
+            let reached = target.reached(&current);
+            if reached || start.elapsed() >= timeout {
+                return Ok(
+                    json!({"reasons":[if reached {"research_ui_reached"} else {"wall_timeout"}],"state":current,"condition_meaning":"active view and local visibility predicates; no hit routing or input authorization","elapsed_seconds":start.elapsed().as_secs_f64(),"rejected_torn_reads":rejected,"state_age_ms":current_received.elapsed().as_millis()}),
+                );
+            }
+            std::thread::sleep(
+                Duration::from_millis(250).min(timeout.saturating_sub(start.elapsed())),
+            );
+            if start.elapsed() >= timeout {
+                continue;
+            }
+            let (value, context) = fresh_wait_read(start, timeout, &mut rejected, || {
+                research_ui::wait_snapshot(self.process()?)
+            })?;
+            same_ui_context(&baseline, &context, last_date)?;
+            last_date = context.campaign.date_raw;
+            current = value;
+            current_received = Instant::now();
+        }
     }
     fn call(&self, name: &str, args: &Value, commands: Option<&dyn Commands>) -> Result<Value> {
         let object = args
@@ -181,10 +297,9 @@ impl Server {
                 technology::catalog(self.process()?, filter, offset, limit)
             }
             "hoi4_wait_for" => {
-                if object
-                    .keys()
-                    .any(|k| k != "timeout_seconds" && k != "until_date")
-                {
+                if object.keys().any(|k| {
+                    !["timeout_seconds", "until_date", "until_research_ui"].contains(&k.as_str())
+                }) {
                     return Err(Error::new("invalid_arguments", "Unknown wait argument"));
                 }
                 let timeout = if let Some(v) = object.get("timeout_seconds") {
@@ -198,6 +313,19 @@ impl Server {
                         "invalid_arguments",
                         "Timeout must be 1..50 seconds",
                     ));
+                }
+                let ui_target = object
+                    .get("until_research_ui")
+                    .map(UiTarget::parse)
+                    .transpose()?;
+                if ui_target.is_some() && object.contains_key("until_date") {
+                    return Err(Error::new(
+                        "invalid_arguments",
+                        "Choose one date or research UI wait target",
+                    ));
+                }
+                if let Some(target) = ui_target {
+                    return self.wait_ui(target, Duration::from_secs(timeout));
                 }
                 let target = if let Some(v) = object.get("until_date") {
                     let v = v.as_array().filter(|a| a.len() == 3).ok_or_else(|| {

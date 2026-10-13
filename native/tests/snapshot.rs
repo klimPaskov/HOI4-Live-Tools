@@ -251,7 +251,11 @@ impl Fixture {
         self.word(0xb0000, 0xb1000);
         self.region(0xb1000, 0x100);
         self.word(0xb10e8, 0xb2000);
-        self.region(0xb2000, 8);
+        self.region(0xb2000, 0x1c0);
+        self.number(0xb2034, 3);
+        self.word(0xb2168, 0xb3000);
+        self.word(0xb21b0, 0xb3000);
+        self.region(0xb3000, 8);
         for (object, name, vptr, info, text) in [
             (
                 0xb1000,
@@ -267,10 +271,62 @@ impl Fixture {
                 base + 0x4351000,
                 base + 0x38b4750,
             ),
+            (
+                0xb3000,
+                "CFrameAnimatedSpriteType",
+                base + 0x434b668,
+                base + 0x4352000,
+                base + 0x3507000,
+            ),
         ] {
             self.word(object, vptr);
             self.word(vptr - 16, 0);
             self.word(vptr - 8, info);
+            self.region(info, 16);
+            self.word(info + 8, text);
+            self.region(text, 128);
+            self.put(text, format!("{}{name}", name.len()).as_bytes());
+        }
+    }
+    fn research_drag(&mut self) {
+        self.research_ui();
+        let base = 0x10000;
+        self.region(0xb1000, 0x120);
+        self.word(0xb1000, base + 0x4346b10);
+        self.word(base + 0x4346b10 - 16, 0);
+        self.word(base + 0x4346b10 - 8, base + 0x4350000);
+        self.region(base + 0x38afd74, 128);
+        self.put(base + 0x38afd74, b"11CButtonDrag");
+        self.word(0xb1110, 0xb2000);
+        self.number(0xb10ac, 4);
+        // Position data is deliberately unreadable as a pointer. The exact
+        // Drag layout must not read the Standard renderer field at +e8.
+        for address in 0xb10e8..0xb10f0 {
+            self.data.remove(&address);
+        }
+    }
+    fn research_wait(&mut self) {
+        self.research_drag();
+        let base = 0x10000;
+        // Real tables are near each other. Keep synthetic RTTI/names separate
+        // rather than placing fake name buffers inside another real table.
+        for (i, (a, name, vt)) in [
+            (0x28000, "CTechnologyStatus", 0x42108f8),
+            (0x2c000, "CResearchSlot", 0x4210898),
+            (0x2c100, "CResearchSlot", 0x4210898),
+            (0x2c200, "CResearchSlot", 0x4210898),
+            (0x2c300, "CResearchSlot", 0x4210898),
+            (0x80000, "CTechnology", 0x42107f8),
+            (0x63000, "CTechnologyTemplate", 0x4211038),
+        ]
+        .iter()
+        .enumerate()
+        {
+            let info = base + 0x4353000 + i as u64 * 0x100;
+            let text = base + 0x3508000 + i as u64 * 0x100;
+            self.word(*a, base + vt);
+            self.word(base + vt - 16, 0);
+            self.word(base + vt - 8, info);
             self.region(info, 16);
             self.word(info + 8, text);
             self.region(text, 128);
@@ -774,6 +830,13 @@ fn research_ui_reports_owned_widgets_and_diagnostic_types_without_input() {
         false
     );
     assert_eq!(v["input_authorized"], false);
+    let renderer = &v["slots"][0]["buttons_observed"][0]["render_details"];
+    assert_eq!(renderer["current_frame_raw"], 3);
+    assert_eq!(renderer["resources_same"], true);
+    assert_eq!(
+        renderer["hit_resource_type_encoding"],
+        "24CFrameAnimatedSpriteType"
+    );
     assert_eq!(f.checks.get(), 2);
 }
 #[test]
@@ -857,6 +920,9 @@ fn research_ui_checks_final_headers_payload_owners_visibility_and_types() {
         (0xa0ef8, 4, 2i32.to_le_bytes().to_vec()),
         (0xb10ac, 4, 3i32.to_le_bytes().to_vec()),
         (0xb10e8, 8, 0u64.to_le_bytes().to_vec()),
+        (0xb2034, 4, 1u32.to_le_bytes().to_vec()),
+        (0xb2168, 8, 0u64.to_le_bytes().to_vec()),
+        (0xb21b0, 8, 0u64.to_le_bytes().to_vec()),
         (0x10000 + 0x38b4750, 128, vec![0; 128]),
     ] {
         let mut f = Fixture::new();
@@ -896,4 +962,219 @@ fn research_ui_unknown_primary_table_never_implies_button_layout() {
     assert_eq!(button["type_encoding"], "15CButtonStandard");
     assert!(button.get("disabled_raw").is_none());
     assert!(button.get("render_type_encoding").is_none());
+}
+
+#[test]
+fn research_ui_exact_drag_uses_its_renderer_and_reports_state_without_enable_claim() {
+    let mut f = Fixture::new();
+    f.research_drag();
+    let v = research_ui::snapshot(&f).unwrap();
+    let button = &v["slots"][0]["buttons_observed"][0];
+    assert_eq!(button["type_encoding"], "11CButtonDrag");
+    assert_eq!(button["state_raw"], 4);
+    assert!(button.get("disabled_raw").is_none());
+    assert_eq!(button["render_type_encoding"], "20CFrameAnimatedSprite");
+    assert_eq!(button["geometry_verified"], false);
+    assert_eq!(v["input_authorized"], false);
+    f.word(0xb1110, 0);
+    assert!(
+        research_ui::snapshot(&f).unwrap()["slots"][0]["buttons_observed"][0]
+            ["render_type_encoding"]
+            .is_null()
+    );
+}
+
+#[test]
+fn research_ui_drag_end_witnesses_refuse_state_or_renderer_changes() {
+    for (address, value) in [
+        (0xb10ac, 2i32.to_le_bytes().to_vec()),
+        (0xb1110, 0u64.to_le_bytes().to_vec()),
+    ] {
+        let mut f = Fixture::new();
+        f.research_drag();
+        f.fault = Some((address, 1, value));
+        assert_eq!(research_ui::snapshot(&f).unwrap_err().code, "torn_read");
+    }
+    let mut f = Fixture::new();
+    f.research_drag();
+    let table = 0x10000 + 0x4347400;
+    f.word(0xb1000, table);
+    f.word(table - 16, 0);
+    f.word(table - 8, 0x10000 + 0x4350000);
+    for (address, size) in [(0xb10ac, 4), (0xb1110, 8)] {
+        for n in 0..size {
+            f.data.remove(&(address + n));
+        }
+    }
+    let v = research_ui::snapshot(&f).unwrap();
+    let button = &v["slots"][0]["buttons_observed"][0];
+    assert_eq!(button["type_encoding"], "11CButtonDrag");
+    assert!(button.get("state_raw").is_none());
+    assert!(button.get("render_type_encoding").is_none());
+}
+
+#[test]
+fn research_ui_instant_and_unknown_renderers_do_not_borrow_frame_layout() {
+    let mut f = Fixture::new();
+    f.research_drag();
+    let base = 0x10000;
+    let table = base + 0x434c5b0;
+    f.word(0xb2000, table);
+    f.word(table - 16, 0);
+    f.word(table - 8, base + 0x4351000);
+    f.word(0xb2160, 0xb3000);
+    for address in (0xb2168..0xb2170).chain(0xb21b0..0xb21b8) {
+        f.data.remove(&address);
+    }
+    let v = research_ui::snapshot(&f).unwrap();
+    let details = &v["slots"][0]["buttons_observed"][0]["render_details"];
+    assert_eq!(details["current_frame_raw"], 3);
+    assert_eq!(
+        details["hit_resource_type_encoding"],
+        "24CFrameAnimatedSpriteType"
+    );
+    assert!(details.get("resources_same").is_none());
+    let table = base + 0x434b400;
+    f.word(0xb2000, table);
+    f.word(table - 16, 0);
+    f.word(table - 8, base + 0x4351000);
+    for (address, size) in [(0xb2034, 4), (0xb2160, 8)] {
+        for n in 0..size {
+            f.data.remove(&(address + n));
+        }
+    }
+    let v = research_ui::snapshot(&f).unwrap();
+    assert_eq!(
+        v["slots"][0]["buttons_observed"][0]["render_details"]["field_layout_verified"],
+        false
+    );
+}
+
+struct UiWaitFixture {
+    fixture: std::sync::Mutex<Fixture>,
+    snapshots: std::sync::atomic::AtomicUsize,
+    second_snapshot_changes: Vec<(u64, Vec<u8>)>,
+}
+impl ReadMemory for UiWaitFixture {
+    fn read(&self, a: u64, n: usize) -> Result<Vec<u8>> {
+        self.fixture.lock().unwrap().read(a, n)
+    }
+}
+impl Process for UiWaitFixture {
+    fn image_base(&self) -> u64 {
+        0x10000
+    }
+    fn check(&self) -> Result<()> {
+        self.fixture.lock().unwrap().check()
+    }
+    fn begin_snapshot(&self) -> Result<()> {
+        let n = self
+            .snapshots
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let mut f = self.fixture.lock().unwrap();
+        if n == 1 {
+            for (address, bytes) in &self.second_snapshot_changes {
+                f.put(*address, bytes);
+            }
+        }
+        f.check()
+    }
+}
+fn ui_wait_reply(
+    f: Fixture,
+    changes: Vec<(u64, Vec<u8>)>,
+    target: serde_json::Value,
+    timeout: u64,
+) -> serde_json::Value {
+    let server = hoi4_live_native::protocol::Server {
+        process: Some(Box::new(UiWaitFixture {
+            fixture: std::sync::Mutex::new(f),
+            snapshots: std::sync::atomic::AtomicUsize::new(0),
+            second_snapshot_changes: changes,
+        })),
+        unavailable: None,
+    };
+    let reply = server.handle(serde_json::json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"hoi4_wait_for","arguments":{"timeout_seconds":timeout,"until_research_ui":target}}})).unwrap();
+    serde_json::from_str(reply["result"]["content"][0]["text"].as_str().unwrap()).unwrap()
+}
+
+#[test]
+fn ui_wait_observes_a_delayed_view_transition_without_input_or_process_pause() {
+    let mut f = Fixture::new();
+    f.research_wait();
+    let changes = vec![
+        (0x903d8, 6i32.to_le_bytes().to_vec()),
+        (0xa00a5, vec![0]),
+        (0x922f8, 0xa2000u64.to_le_bytes().to_vec()),
+    ];
+    let v = ui_wait_reply(
+        f,
+        changes,
+        serde_json::json!({"view":"tree","selected_slot":1}),
+        10,
+    );
+    assert_eq!(v["reasons"][0], "research_ui_reached");
+    assert_eq!(v["state"]["selected_slot"], 1);
+    assert_eq!(v["state"]["ordinary_tree"]["visible_predicate"], true);
+    assert_eq!(v["state"]["input_authorized"], false);
+    assert_eq!(v["state"]["observation_paused_game"], false);
+}
+
+#[test]
+fn ui_wait_refuses_changed_slot_identity_even_when_every_own_join_is_valid() {
+    let mut f = Fixture::new();
+    f.research_wait();
+    let mut slots = Vec::new();
+    for slot in [0x2c100u64, 0x2c000, 0x2c200, 0x2c300] {
+        slots.extend(slot.to_le_bytes());
+    }
+    let changes = vec![
+        (0x3b000, slots),
+        (0x942b8, 0x2c100u64.to_le_bytes().to_vec()),
+        (0x952b8, 0x2c000u64.to_le_bytes().to_vec()),
+    ];
+    let v = ui_wait_reply(f, changes, serde_json::json!({"view":"tree"}), 10);
+    assert_eq!(v["error"]["code"], "wait_context_changed");
+    assert!(v.get("state").is_none());
+}
+
+#[test]
+fn ui_wait_distinguishes_reached_predicates_unavailable_slots_and_wall_timeout() {
+    let mut f = Fixture::new();
+    f.research_wait();
+    let v = ui_wait_reply(
+        f,
+        Vec::new(),
+        serde_json::json!({"view":"panel","selected_slot":1}),
+        10,
+    );
+    assert_eq!(v["reasons"][0], "research_ui_reached");
+    let mut f = Fixture::new();
+    f.research_wait();
+    let v = ui_wait_reply(
+        f,
+        Vec::new(),
+        serde_json::json!({"view":"panel","selected_slot":4}),
+        10,
+    );
+    assert_eq!(v["error"]["code"], "invalid_arguments");
+    let mut f = Fixture::new();
+    f.research_wait();
+    let v = ui_wait_reply(f, Vec::new(), serde_json::json!({"view":"tree"}), 1);
+    assert_eq!(v["reasons"][0], "wall_timeout");
+    assert_eq!(v["state"]["panel"]["visible_predicate"], true);
+    assert!(v["state_age_ms"].as_u64().is_some());
+}
+
+#[test]
+fn ui_wait_requires_positive_own_tag_before_any_country_payload_read() {
+    let mut f = Fixture::new();
+    f.research_wait();
+    f.number(0x30518, 0);
+    for address in 0x39000..0x3900c {
+        f.data.remove(&address);
+    }
+    let v = ui_wait_reply(f, Vec::new(), serde_json::json!({"view":"tree"}), 10);
+    assert_eq!(v["error"]["code"], "player_unavailable");
+    assert!(v.get("state").is_none());
 }

@@ -33,6 +33,11 @@ pub fn clock_context(process: &dyn Process) -> Result<ClockContext> {
     process.check()?;
     Ok(context)
 }
+/// The caller owns the begin/end process bracket and any encompassing field
+/// witnesses. Used to bind UI observations to the same fresh campaign read.
+pub(crate) fn context_from_reader(r: &Reader<'_>, base: u64) -> Result<ClockContext> {
+    Ok(context_fields(r, base)?.1)
+}
 fn context_fields(r: &Reader<'_>, base: u64) -> Result<(SnapshotFields, ClockContext)> {
     let initial = roots(r, base)?;
     let [gs, idler, _] = initial;

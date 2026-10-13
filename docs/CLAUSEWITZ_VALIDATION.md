@@ -490,9 +490,43 @@ durations **600.0 and 38.0 seconds**. Calls, journal, source manifests and foota
 remain private. This is bounded clock/model validation; strategic play, the clean
 two-year test and complete campaign acceptance remain unfinished.
 
-A subsequent read-only own research UI diagnostic has fixture evidence only.
-It checks slot/widget ownership, selected-slot membership, primary type metadata
-and repeated structural witnesses. Its descriptors do not authorize clicks.
+The owned shutdown request later ended this game with exit code 6. Its log
+reported a rendering-connection error; the specific cause is unproved. The
+recordings had already finalized, and their passed integrity checks and the
+clock receipts remain valid. The shutdown incident is preserved privately.
+
+## Own research UI navigation — 13 October 2026
+
+A fresh owned run used `730bc98`, Normal historical vanilla Germany and the
+same exact Linux game build. Its recording supplied a verified first packet
+before Start. Initial own-country reads confirmed 1936.01.01.12, paused, 47
+completed technologies and four empty slots.
+
+The read-only UI probe checked all four slot/widget ownership joins and found
+one `CButtonDrag` per slot. The ordinary `w` shortcut opened the research panel:
+active mode 5 and its local visible predicate matched. A bounded visual
+diagnostic located the normal slot rows. Builder diagnostic clicks selected
+own slots 0–3 and opened the ordinary tree, verified by selected-slot membership,
+mode 6 and the tree's visible predicate. No technology was assigned and the
+campaign clock stayed paused at its initial date. These are navigation checks,
+not Luna strategic play or campaign acceptance.
+
+Two immediate harness assertions failed during UI transitions. In one case
+slot 1 was already selected while mode 5 remained; a later fresh read confirmed
+mode 6 without another click. The second occurred before a requested panel
+finished opening, so no subsequent click was sent. Both failures are preserved.
+The remaining navigation checks used bounded fresh observations to await the
+transition, with no repeated input. This motivates the new server-side UI wait,
+which still needs live validation.
+
+Pointer reads agreed with client `[50,70]`, `[50,110]` and `[50,130]` at the
+observed scale 5. This is evidence at those points in the tested window,
+not a universal control transform or hit-test proof. The probe's
+`input_authorized` remains false. Independent constructor/getter analysis found
+the drag renderer at `+110`; standard buttons use `+e8`, and drag state is not
+a boolean disabled flag. The new exact renderer/resource diagnostics retain
+fixture evidence pending a fresh installed-game check. Recordings, calls,
+source manifests and failed assertions remain private.
 
 ## Attribution
 

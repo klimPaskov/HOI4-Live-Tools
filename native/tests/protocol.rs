@@ -167,3 +167,30 @@ fn invalid_wait_is_refused_before_process_access() {
         assert_ne!(value["error"]["code"], "capability_unavailable");
     }
 }
+
+#[test]
+fn invalid_ui_wait_is_refused_before_process_access() {
+    use hoi4_live_native::protocol::Server;
+    let server = Server {
+        process: None,
+        unavailable: None,
+    };
+    for arguments in [
+        json!({"until_research_ui":null}),
+        json!({"until_research_ui":{}}),
+        json!({"until_research_ui":{"view":"foreign"}}),
+        json!({"until_research_ui":{"view":"tree","selected_slot":null}}),
+        json!({"until_research_ui":{"view":"panel","selected_slot":32}}),
+        json!({"until_research_ui":{"view":"tree","selected_slot":-1}}),
+        json!({"until_research_ui":{"view":"tree","selected_slot":true}}),
+        json!({"until_research_ui":{"view":"tree","selected_slot":1.0}}),
+        json!({"until_research_ui":{"view":"tree","click":true}}),
+        json!({"until_research_ui":{"view":"tree"},"until_date":[1936,1,2]}),
+    ] {
+        let reply=server.handle(json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"hoi4_wait_for","arguments":arguments}})).unwrap();
+        assert_eq!(reply["result"]["isError"], true);
+        let value: Value =
+            serde_json::from_str(reply["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+        assert_eq!(value["error"]["code"], "invalid_arguments");
+    }
+}

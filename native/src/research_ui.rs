@@ -131,8 +131,56 @@ fn type_encoding(r: &Reader<'_>, base: u64, object: u64) -> Result<String> {
     }
     Ok(String::from_utf8(bytes[..end].to_vec()).unwrap())
 }
+fn nullable_type(r: &Reader<'_>, base: u64, object: u64) -> Result<Value> {
+    if object == 0 {
+        Ok(Value::Null)
+    } else {
+        Ok(json!(type_encoding(r, base, object)?))
+    }
+}
+fn render_details(r: &Reader<'_>, base: u64, object: u64) -> Result<Value> {
+    let table = r.u64(object)?;
+    if ![base + 0x434c5b0, base + 0x434b370].contains(&table) {
+        // Even a matching RTTI name never supplies a renderer field layout.
+        return Ok(json!({"field_layout_verified":false}));
+    }
+    let frame = u32::from_le_bytes(r.read(object + 0x34, 4)?.try_into().unwrap());
+    let hit_resource = r.u64(
+        object
+            + if table == base + 0x434c5b0 {
+                0x160
+            } else {
+                0x1b0
+            },
+    )?;
+    let mut value = json!({"current_frame_raw":frame,"hit_resource_type_encoding":nullable_type(r,base,hit_resource)?,"geometry_verified":false});
+    if table == base + 0x434b370 {
+        // Different getters use +168 and +1b0. The factory constructor stores
+        // the same direct resource object in both; observe equality afresh.
+        let dimension_resource = r.u64(object + 0x168)?;
+        value["dimension_resource_type_encoding"] = nullable_type(r, base, dimension_resource)?;
+        value["resources_same"] = json!(dimension_resource == hit_resource);
+    }
+    Ok(value)
+}
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct UiContext {
+    pub campaign: game::ClockContext,
+    pub anchors: [u64; 6],
+    pub slots: Vec<u64>,
+}
 pub fn snapshot(process: &dyn Process) -> Result<Value> {
+    Ok(observe(process, false)?.0)
+}
+pub(crate) fn wait_snapshot(process: &dyn Process) -> Result<(Value, UiContext)> {
+    let (value, context) = observe(process, true)?;
+    Ok((
+        value,
+        context.expect("Context requested by wait observation"),
+    ))
+}
+fn observe(process: &dyn Process, include_context: bool) -> Result<(Value, Option<UiContext>)> {
     let start = Instant::now();
     process.begin_snapshot()?;
     let observed = Witnesses {
@@ -154,6 +202,13 @@ pub fn snapshot(process: &dyn Process) -> Result<Value> {
             "Positive own country tag required",
         ));
     }
+    // Enforce positive own scope before the broader campaign reader traverses
+    // country payloads. Repeated tag reads share the same field witnesses.
+    let campaign = if include_context {
+        Some(game::context_from_reader(&r, base)?)
+    } else {
+        None
+    };
     let index = i32::from_le_bytes(
         r.array_entry(gs + 0x340, tag as usize, 4)?
             .try_into()
@@ -259,14 +314,23 @@ pub fn snapshot(process: &dyn Process) -> Result<Value> {
         for button in buttons.iter().take(8) {
             let encoding = type_encoding(&r, base, *button)?;
             let mut value = json!({"type_encoding":encoding,"geometry_verified":false});
-            if r.u64(*button)? == base + 0x43470c8 {
+            let table = r.u64(*button)?;
+            let render = if table == base + 0x43470c8 {
                 value["disabled_raw"] = json!(r.i32(button + 0xac)?);
-                let render = r.u64(button + 0xe8)?;
-                value["render_type_encoding"] = if render == 0 {
-                    Value::Null
-                } else {
-                    json!(type_encoding(&r, base, render)?)
-                };
+                Some(r.u64(button + 0xe8)?)
+            } else if table == base + 0x4346b10 {
+                // CButtonDrag's constructor/getter use +110. Its +e8 is
+                // position data, and +ac is a state machine, not disabled.
+                value["state_raw"] = json!(r.i32(button + 0xac)?);
+                Some(r.u64(button + 0x110)?)
+            } else {
+                None
+            };
+            if let Some(render) = render {
+                value["render_type_encoding"] = nullable_type(&r, base, render)?;
+                if render != 0 {
+                    value["render_details"] = render_details(&r, base, render)?;
+                }
             }
             button_output.push(value);
         }
@@ -274,7 +338,13 @@ pub fn snapshot(process: &dyn Process) -> Result<Value> {
     }
     let (end_calls, end_bytes) = observed.finish()?;
     process.check()?;
-    Ok(
+    let context = campaign.map(|campaign| UiContext {
+        campaign,
+        anchors: [country, status, registry, manager, view, tree],
+        slots: slots.clone(),
+    });
+    Ok((
         json!({"source":"native own research UI diagnostics","build_id":game::BUILD_ID,"owned":true,"own_slot_count":slots.len(),"widget_count":widgets.len(),"widgets_complete":widgets.len()==slots.len(),"slot_identity":"own array index in current process/status snapshot; not a persistent ID","selected_slot":selected_index,"active_mode_raw":active,"panel":panel_state,"ordinary_tree":tree_state,"slots":output,"input_authorized":false,"unverified":["effective ancestor visibility and clipping","sprite hit predicates","topmost hit routing","physical client conversion"],"observation_paused_game":false,"freshness":{"observed_unix_ms":SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),"elapsed_ms":start.elapsed().as_secs_f64()*1000.0,"read_calls":r.calls.get()+end_calls as u64,"read_bytes":r.bytes.get()+end_bytes}}),
-    )
+        context,
+    ))
 }

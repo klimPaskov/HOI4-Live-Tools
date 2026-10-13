@@ -87,8 +87,8 @@ threads. Generated-child tests exercised that access under unchanged Yama scope
 | `hoi4_research` | Own completed technology IDs, raw levels/thresholds and active signed counters; units remain unverified |
 | `hoi4_technology_list` | Bounded loaded technology IDs, filter and pagination; no eligibility inference |
 | `hoi4_input_geometry` | Own GUI pointer/dimension/scale diagnostics; client origin and click mapping remain unverified |
-| `hoi4_research_ui` | Read-only own slot/widget joins and button/render type diagnostics; no click authorization; live validation pending |
-| `hoi4_wait_for` | Bounded wait, 1–50 seconds, for own focus/research changes or `until_date: [year, month, day]` |
+| `hoi4_research_ui` | Read-only own slot/widget joins, selected slot and exact button/render diagnostics; no click authorization |
+| `hoi4_wait_for` | Bounded wait, 1–50 seconds, for own focus/research changes, a date or research UI predicates |
 
 The game uses a 365-day calendar, including February 28 in 1936. Its current-build
 raw clock includes a 5000-year epoch; displayed hours range from 1 to 24.
@@ -103,22 +103,36 @@ GUI diagnostics return the actual finalized physical/logical dimensions, their
 ratios and the logical pointer, with explicit unverified client-origin, HiDPI,
 control-transform and hit-routing fields. They do not send input or authorize
 coordinate clicks. The live optimized catalog resolved `basic_machine_tools`
-among 552 definitions in 88 ms over persistent stdio/SSH. The first GUI port
-refused the installed game's derived `CGameGui`; its corrected primary-type
-check has fixture/static evidence and awaits a fresh owned-game test.
+among 552 definitions in 88 ms over persistent stdio/SSH. The corrected
+`CGameGui` reader passed in the installed game; measured pointer agreement
+remains specific to the tested window and points, not universal click mapping.
 The own research model checks exact primary types, status/slot ownership and both
 canonical and own-array joins. Completed IDs come from the engine's membership
 list, rather than assuming every positive level is complete. Empty slots have
 null counters; active counters use the technology's signed 64-bit field.
 Normalized progress, days remaining and eligibility remain unavailable. This
-reader has static/fixture evidence; installed-game validation is pending.
+reader returned 47 completed IDs and four empty slots in the installed game.
+An actual active counter still needs validation.
 Completed output accepts `offset` and `limit` (1–100), and reports total count
 and next offset without skipping full model validation.
 Wait snapshots bind coherent own-campaign context, reject context/timeline
 changes and retry only torn observations inside the deadline. Persistent
 instability returns an error. Ordinary timeout output reports the latest accepted
 sample and its age; persisted identity is not load-generation proof. The wait
-correction still requires live validation after the reported torn-read incident.
+correction passed a fresh Luna clock wait, with no torn reads in that run;
+the retry branch retains separate fixture evidence.
+The own research UI reader identified all four slot widgets and their
+`CButtonDrag` controls. Ordinary diagnostic clicks selected each own slot and
+opened its tree, confirmed through memory. These were view-navigation checks,
+not research assignments or proof of a production click adapter. Exact drag
+renderer/resource diagnostics have fixture evidence and await a fresh live check.
+For a bounded UI wait, use `until_research_ui: {"view": "tree",
+"selected_slot": 0}` with `timeout_seconds`. The view is `panel` or `tree`;
+the optional slot is a current own-array index, not a persistent ID. Choose a UI
+target or `until_date`, not both. Campaign, UI and slot identities remain pinned
+across the wait. A match means active mode and local window visibility
+predicates agree; it does not establish clipping, topmost routing or input
+authorization. The new UI wait still needs live validation.
 The mode default is FAIR; a mode label alone is not proof of campaign settings.
 
 ## Command port and expansion
