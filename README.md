@@ -67,34 +67,23 @@ explicitly on unsupported builds and unavailable capabilities. See the
 
 ## Rust development preview
 
-The first [Rust runtime](native/README.md) provides owned-process snapshots and
-bounded waits over stdio MCP. It uses the current verified Linux ELF layout and
-returns capability errors for unsupported builds. Engine posting, the daily
-governor, and Windows/macOS process adapters are still unimplemented in Rust.
-An explicit owned binding can enable ordinary clock keys with exclusive input
-leases, durable receipts and memory readback. Strategic action adapters remain
-unfinished; the previous engine posting failure stays quarantined.
-Luna medium clock tests passed verified pause, receipt replay and a wait to
-5 January with active own research. A builder ordinary-button diagnostic
-established that assignment; a production research adapter remains unfinished.
-Fresh overviews measured 15.7 ms median RPC under x86 CPU emulation. Luna used
-no screenshots or cursor movement. [Live evidence](docs/CLAUSEWITZ_VALIDATION.md)
-records the distinct test limits, wrapper incident, earlier nonzero shutdowns
-and the subsequent clean exits. Request-local shared-proof reuse preserved all
-411 keys and 423 bindings while reducing reads by 22% and bytes by 41% in a fresh
-game. Bounded final-witness batching and exact-ID raw diagnostics have since
-passed live checks; latency gains remain modest and variable. A newer scoped
-reader exposed an incorrect catalog sentinel guard, now corrected in fixture-tested
-source. Its next run reached a hierarchy policy bound, preserved as a failure;
-new source reports valid policy overruns as incomplete optional diagnostics.
-Fresh exact-ID queries and the source-window association have passed live checks,
-with 116/120 ms median RPC for two narrower queries. Strategic input remains
-unfinished. See the
-[measured comparison](docs/CLAUSEWITZ_COMPARISON.md).
-The Linux preview also has a persistent [owned launcher](docs/OWNED_LINUX_LAUNCHER.md)
-with reconnectable clients and guarded graceful shutdown.
-Linux, Windows and macOS CI pass the portable code and platform fixtures.
-Those builds do not prove Windows/macOS live compatibility.
+The [Rust preview](native/README.md) provides exact-build owned-process snapshots,
+bounded server waits and optional ordinary clock controls with exclusive leases,
+durable receipts and canonical state readback. Its persistent
+[Linux launcher](docs/OWNED_LINUX_LAUNCHER.md) supports reconnecting clients and
+guarded graceful shutdown. It replaces save/screenshot dependence in this
+observation path.
+
+Recorded Linux checks include Luna medium clock play through 5 January 1936,
+own research-counter advancement, focus/research catalogs and narrower exact-ID
+queries. Fresh overviews measured 15.7 ms median RPC under x86 CPU emulation;
+exact-key diagnostics measured 116/120 ms. Scope, hardware and validation limits
+are documented in [the comparison](docs/CLAUSEWITZ_COMPARISON.md) and
+[live evidence](docs/CLAUSEWITZ_VALIDATION.md), including failures and clean exits.
+
+Strategic action adapters, the Rust daily governor and Windows/macOS live
+adapters remain unfinished. Three-OS CI passes shared code and fixtures;
+compilation is not live compatibility or campaign acceptance.
 
 ## Development
 
