@@ -223,3 +223,20 @@ Corrected full-word source passed 229 portable/MSRV tests and 286 actual standar
 Linux checks (285 substantive), plus 953 Python tests with 37 skips and the
 compiler/protocol checks. It is a separate tested binary; run 017 retains source
 9ffac46. Do not use that earlier run's derived dimensions for actions.
+
+
+Recorded run 017 verified own economy observations, complete owned-root closure
+and unchanged full technology keys. Its actual Research renderer was CTextSprite,
+so the old geometry branch refused. One observed-screen Research attempt verified
+canonical slot assignment; no ID-based adapter or Luna acceptance is claimed.
+Both videos finalized and one WM close returned actual normal exit code 0.
+The next own-division and separate Text/Frame raw readers require a fresh immutable
+installed-game comparison. Text leaf support keeps the ancestor whitelist and
+all input/routing authority boundaries intact.
+
+
+The combined own-army and Text/Frame source passed 252 portable/MSRV tests and
+309 actual standard Linux checks (308 substantive), plus 953 Python tests with
+37 skips and all compiler/protocol checks. Continue with one fresh immutable
+recorded run to compare own divisions and the actual Text Research control,
+then verified ordinary ID-based actions and exclusive Luna medium acceptance.

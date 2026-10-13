@@ -83,6 +83,14 @@ pub(crate) fn observe(
     registry: u64,
 ) -> Result<Value> {
     let base = reuse.base();
+    // Text is supported ONLY as the constructor-proved leaf, not as an ancestor.
+    let leaf = r.u64(render)?;
+    if !TYPES.iter().any(|table| leaf == base + table) && leaf != base + 0x43593d8 {
+        return Err(Error::new(
+            "invalid_gui_hierarchy",
+            "Exact supported hierarchy leaf required",
+        ));
+    }
     exact(r, registry, base + 0x42736f8)?;
     exact(r, container, base + 0x4347d58)?;
     if r.u64(container + 0x98)? != registry {

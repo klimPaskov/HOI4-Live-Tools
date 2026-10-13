@@ -859,14 +859,16 @@ fn owned_xvfb_pointer_ambiguous_wire_never_replays_or_claims_game_action() {
         drop(captured);
         let events = child.events();
         assert_eq!(events["forbidden"], 0);
-        assert_eq!(
-            events["events"].as_array().unwrap().len(),
-            if matches!(fault, WireFault::Sever) {
-                1
-            } else {
-                3
-            }
-        );
+        let observed = events["events"].as_array().unwrap();
+        if matches!(fault, WireFault::Sever) {
+            // The relay records one write, then closes before a server reply.
+            // The X server may discard the pending request on disconnect:
+            // zero or one actual motion is consistent with unknown delivery.
+            assert!(observed.len() <= 1);
+            assert!(observed.iter().all(|event| event["kind"] == "motion"));
+        } else {
+            assert_eq!(observed.len(), 3);
+        }
         if matches!(fault, WireFault::Unresponsive) {
             assert!(
                 proxy.withheld.load(Ordering::Acquire) > 0,

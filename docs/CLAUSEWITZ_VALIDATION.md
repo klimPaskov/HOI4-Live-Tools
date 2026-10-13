@@ -1073,3 +1073,72 @@ formatting, host/Linux Clippy, MSRV Linux all-target compilation and protocol
 smoke passed. The first new fixture used a nonexistent output field in its
 assertion; correcting that test's field name required no production change.
 These corrected-source checks remain separate from immutable live run 017.
+
+
+## Recorded own-economy, root closure and actual Research renderer
+
+Fresh run 017 retained immutable source `9ffac46`, Normal historical Germany and
+no mods. Its video packet was verified before the single campaign-start click.
+All observations left the initial pause state unchanged. Own economy returned
+35 civilian, 28 military and 10 naval factory trigger counts, project capacity
+20 and signed PP 232400/100000. Precise comparison with UI totals remains
+pending; trigger semantics are not relabeled as a general factory total.
+
+The owned graphics root closed through its 4,142-entry array. The visible
+`support_weapons` path returned a consistent conditional unit cache; hidden
+`basic_machine_tools` correctly returned unavailable traversal-cache status.
+Exact-key RPC medians were **131/159 ms** across five samples each. The full
+model retained all **411 keys and 423 associations**, with median **366 ms**,
+26,686 logical reads and 299,776 bytes. The scopes and concurrent emulation
+conditions differ; no equivalent-model speedup is established.
+
+One observed-screen view-only selection returned the correct support-weapons
+Info. Its named ordinary Standard control, alias and void callback verified,
+but its actual renderer was **CTextSprite**, outside the implemented renderer
+branches. This is a concrete unsupported class, not a successful hit model.
+The running binary's derived dimensions remained unaccepted after the separate
+orientation-width correction. A single observed-screen Research click then
+assigned the requested canonical technology to own slot 0: two readback samples
+confirmed it, the raw counter was 101000, and the other three slots stayed empty.
+There was no replay, engine call, production ID-based adapter or Luna run.
+
+Both H.264 512×288 video segments finalized and passed ffprobe: **600 seconds**
+and **116.333 seconds**. One ordinary WM close produced actual normal exit code
+**0**, no signal/core dump, in **2.18 seconds**. Exact game and owner were absent,
+and the old stdio client closed. This is bounded diagnostic evidence; campaign
+acceptance and precise economy UI comparison remain pending.
+
+## Own-division snapshot and separate renderer diagnostics
+
+The next source adds a no-argument own-division snapshot. It validates the own
+country list and owner before unit payload, preserves both opaque handle words
+and joins only each own location's selected province-catalog entry. Handles are
+scoped to this owned process/campaign observation; generation and persistent-ID
+semantics remain unavailable. Signed strength/organisation are lossless decimal
+strings with no guessed absolute units. No foreign-unit, full-map or registry
+traversal and no army action are introduced.
+
+Frame and actual Text renderers have distinct raw diagnostics after reciprocal
+Standard/control/resource gates. Text uses its own count, cache and transform
+fields; it is not unwrapped as Frame. Bounded common fields and an explicit Text
+leaf gate permit typed reciprocal hierarchy observation while keeping the
+ancestor whitelist unchanged. Unknown types stop before payload. No font/text
+contents, origin calculation, client rectangle, frame acknowledgement, effective
+routing or input authority are exposed by these readers.
+
+The prior Linux CI failed a forwarding-fixture assertion that required one
+received motion after a write followed by immediate disconnect. A captured wire
+write with no server reply permits zero or one observed motion. The corrected
+test retains exactly one captured motion request, no buttons/reconnect/replay,
+unknown delivery and no game-action claim; the withheld-reply case still requires
+three actual events. Production transport guards were unchanged.
+
+
+The combined source passed **252 portable/MSRV tests**, including 170 snapshot
+cases and eight independent own-army cases. The actual optimized Linux suite
+passed **309 reported checks** (308 substantive and one inert helper), including
+all five isolated X11 cases. Python passed **953 tests with 37 skips** in 19.985
+seconds; formatting, host/Linux Clippy, MSRV Linux all-target compilation and
+protocol smoke passed. Own-army and new Text/Frame outputs still await a fresh
+immutable game; these fixtures do not establish their live comparison or an
+ID-based strategic command.

@@ -187,3 +187,20 @@ reader was based on an incorrect static claim and is superseded. Both raw
 readers now retain the full unsigned word; nonzero high bytes cannot silently
 select an ordinary diagnostic dimension branch. This does not turn cached
 resource data into a hit rectangle or authorize input.
+
+
+`army.rs` consults Clausewitz-MCP's own-unit and ordinary movement vocabulary.
+The current ELF independently proves the own-country list, complete two-word
+handle consumed by movement and own-location join through the GS indexed
+province getter. The observer reads only own divisions and selected location
+entries. Handles are scoped to that owned process/campaign observation; registry
+generation, persistent identities and action eligibility are not inferred.
+Signed strength/organisation values remain lossless raw strings with no guessed
+absolute units. No foreign-unit, full-map or registry traversal occurs.
+
+The actual matching Research control used `CTextSprite`, whose constructor,
+resource and dimension/hit methods differ from Frame renderers. Its dedicated
+raw branch checks reciprocal control ownership and exact Text resource before
+payload. It does not unwrap Frame resources or inspect text/font contents.
+Remaining geometry is explicit; cached facts and static maths do not prove a
+current frame, effective routing or a successful assignment.

@@ -3944,6 +3944,9 @@ impl Fixture {
         self.number(0xcb0a4, 369);
         self.number(0xcb0a8, 34);
         self.word(0xcb1a0, u64::MAX);
+        if !instant {
+            self.ordinary_info_geometry_fixture();
+        }
     }
 }
 #[test]
@@ -3958,7 +3961,9 @@ fn ordinary_info_v2_exact_frame_and_instant_local_cache_only() {
         assert_eq!(v["resource_cache"]["texture_width_raw"], 369);
         assert_eq!(v["geometry_available"], false);
         assert_eq!(v["input_authorized"], false);
-        f.assert_not_read(&[0xc8070, 0xc80b0, 0xcb170, 0xcb1d0]);
+        if instant {
+            f.assert_not_read(&[0xc8070]);
+        }
         if instant {
             f.assert_not_read(&[0xc8168, 0xc816c, 0xc81b0]);
         } else {
@@ -4139,5 +4144,344 @@ fn ordinary_info_frame_orientation_preserves_full_word_metadata() {
         assert_eq!(v["resource_cache"]["orientation_raw"], 0xff161101u32);
         assert_eq!(v["input_authorized"], false);
         assert_eq!(v["geometry_available"], false);
+    }
+}
+
+impl Fixture {
+    fn ordinary_info_geometry_fixture(&mut self) {
+        for a in 0xc8000..0xc81d0 {
+            self.data.entry(a).or_insert(0);
+        }
+        for a in [0xc8120, 0xc8124, 0xc812c, 0xc8130] {
+            self.number(a, 0);
+        }
+        self.word(0xc3e70, 0xf3000);
+        self.word(0xc3e78, 0xf4000);
+        self.word(0xc8108, 0xf4000);
+        self.array(0xf40c0, 0xf5100, 2);
+        self.word(0xf5108, 0xc8000);
+        self.put(0xc8114, &1.0f32.to_le_bytes());
+        self.put(0xc80b0, &100.0f32.to_le_bytes());
+        self.put(0xc80b4, &(-80.0f32).to_le_bytes());
+        self.word(0xcb170, 0xdead0000);
+    }
+}
+#[test]
+fn ordinary_info_geometry_raw_exact_frame_no_input_or_origin_claim() {
+    let mut f = Fixture::new();
+    f.ordinary_info_cache_v2(false);
+    let v = ordinary_info_value(&f);
+    let g = &v["frame_raw_geometry"];
+    assert_eq!(g["scalar_raw"], 1.0);
+    assert_eq!(g["no_mask_rejection_branch"], true);
+    assert_eq!(g["hit_origin_calculated"], false);
+    assert_eq!(g["input_authorized"], false);
+    assert_eq!(g["client_rectangle_available"], false);
+    f.assert_not_read(&[0xdead0000, 0xc8034, 0xcb098]);
+}
+#[test]
+fn ordinary_info_geometry_instant_and_csprite_do_not_borrow_frame_inputs() {
+    let mut f = Fixture::new();
+    f.ordinary_info_cache_v2(true);
+    assert!(ordinary_info_value(&f)["frame_raw_geometry"].is_null());
+    f.assert_not_read(&[
+        0xc8114, 0xc80b0, 0xc8120, 0xcb111, 0xcb170, 0xcb1d0, 0xc3e70,
+    ]);
+    let mut f = Fixture::new();
+    f.ordinary_info_research();
+    assert!(ordinary_info_value(&f)["frame_raw_geometry"].is_null());
+    f.assert_not_read(&[0xc8114, 0xc80b0, 0xc8120, 0xc3e70]);
+}
+#[test]
+fn ordinary_info_geometry_bad_alias_and_resource_precede_raw_inputs() {
+    for alias in [false, true] {
+        let mut f = Fixture::new();
+        f.ordinary_info_cache_v2(false);
+        if alias {
+            f.word(0xc8168, 0xdead0000);
+        } else {
+            f.word(0xcb000, 0x10000 + 0x4357160);
+        }
+        assert!(ordinary_info_value(&f)["frame_raw_geometry"].is_null());
+        f.assert_not_read(&[0xc8114, 0xc80b0, 0xcb111, 0xc3e70]);
+    }
+}
+#[test]
+fn ordinary_info_geometry_nonfinite_bounds_and_owner_refused() {
+    for value in [f32::NAN, f32::INFINITY, 1_000_001.0] {
+        let mut f = Fixture::new();
+        f.ordinary_info_cache_v2(false);
+        f.put(0xc8114, &value.to_le_bytes());
+        assert_eq!(
+            research_ui::node_detail(&f, "tools1").unwrap_err().code,
+            "invalid_gui_geometry"
+        );
+    }
+    let mut f = Fixture::new();
+    f.ordinary_info_cache_v2(false);
+    f.word(0xc8138, 0xdead0000);
+    assert_eq!(
+        research_ui::node_detail(&f, "tools1").unwrap_err().code,
+        "invalid_gui_owner"
+    );
+    f.assert_not_read(&[0xc8114, 0xcb111]);
+    let mut f = Fixture::new();
+    f.ordinary_info_cache_v2(false);
+    f.number(0xc8120, -1);
+    assert_eq!(
+        research_ui::node_detail(&f, "tools1").unwrap_err().code,
+        "invalid_gui_geometry"
+    );
+}
+#[test]
+fn ordinary_info_geometry_orientation_high_bytes_and_mask_are_raw_not_hit_authority() {
+    let mut f = Fixture::new();
+    f.ordinary_info_cache_v2(false);
+    f.number(0xcb10c, 256);
+    f.put(0xcb1d0, &[1]);
+    let v = ordinary_info_value(&f);
+    assert_eq!(v["resource_cache"]["orientation_raw"], 256);
+    assert_eq!(v["frame_raw_geometry"]["no_mask_rejection_branch"], false);
+    assert_eq!(v["frame_raw_geometry"]["hit_origin_calculated"], false);
+}
+#[test]
+fn ordinary_info_geometry_final_mutations_and_hierarchy_join_refuse() {
+    for (a, n) in [
+        (0xc8114, 4),
+        (0xc80b0, 4),
+        (0xc80b4, 4),
+        (0xc8120, 4),
+        (0xc8124, 4),
+        (0xc812c, 4),
+        (0xc8130, 4),
+        (0xcb111, 1),
+        (0xcb170, 8),
+        (0xcb1d0, 1),
+        (0xc3e70, 8),
+    ] {
+        let mut f = Fixture::new();
+        f.ordinary_info_cache_v2(false);
+        let mut bytes: Vec<_> = (0..n).map(|i| f.data[&(a + i)]).collect();
+        bytes[n as usize - 1] ^= 1;
+        f.fault = Some((a, 1, bytes));
+        assert_eq!(
+            research_ui::node_detail(&f, "tools1").unwrap_err().code,
+            "torn_read",
+            "{a:x}"
+        );
+    }
+    let mut f = Fixture::new();
+    f.ordinary_info_cache_v2(false);
+    f.word(0xf5108, 0xdead0000);
+    assert_eq!(
+        research_ui::node_detail(&f, "tools1").unwrap_err().code,
+        "invalid_gui_hierarchy"
+    );
+}
+
+impl Fixture {
+    fn ordinary_info_text_raw(&mut self) {
+        self.ordinary_info_research();
+        for (object, table, ti, name, text) in [
+            (0xc8000, 0x43593d8, 0x435a100, "11CTextSprite", 0x3511000),
+            (
+                0xcc000,
+                0x4359740,
+                0x435a200,
+                "15CTextSpriteType",
+                0x3511100,
+            ),
+        ] {
+            self.word(object, 0x10000 + table);
+            self.word(0x10000 + table - 16, 0);
+            self.word(0x10000 + table - 8, 0x10000 + ti);
+            self.region(0x10000 + ti, 16);
+            self.word(0x10000 + ti + 8, 0x10000 + text);
+            self.region(0x10000 + text, 128);
+            self.put(0x10000 + text, name.as_bytes());
+        }
+        self.word(0xc8168, 0xcc000);
+        self.number(0xcc08c, 3);
+        self.number(0xc8228, 369);
+        self.number(0xc822c, 34);
+        self.number(0xc8238, 3);
+        self.put(0xc8110, &0.0f32.to_le_bytes());
+        self.ordinary_info_geometry_fixture();
+    }
+}
+#[test]
+fn ordinary_info_text_exact_raw_fields_no_frame_or_projection() {
+    let mut f = Fixture::new();
+    f.ordinary_info_text_raw();
+    let v = ordinary_info_value(&f);
+    let t = &v["text_raw_diagnostic"];
+    assert_eq!(v["renderer_type_encoding"], "11CTextSprite");
+    assert_eq!(t["raw_fields_available"], true);
+    assert_eq!(t["resource_count_raw"], 3);
+    assert_eq!(t["renderer_width_raw"], 369);
+    assert_eq!(t["frame_unwrapping_verified"], false);
+    assert_eq!(t["hit_projection_available"], false);
+    assert_eq!(t["input_authorized"], false);
+    f.assert_not_read(&[0xc8160, 0xc81b0, 0xc8034, 0xcc090, 0xcc170, 0xcc1d0]);
+}
+#[test]
+fn ordinary_info_text_foreign_owner_stops_before_resource() {
+    let mut f = Fixture::new();
+    f.ordinary_info_text_raw();
+    f.word(0xc8138, 0xdead0000);
+    assert_eq!(
+        research_ui::node_detail(&f, "tools1").unwrap_err().code,
+        "invalid_gui_owner"
+    );
+    f.assert_not_read(&[0xc8168, 0xcc08c, 0xc8228]);
+}
+#[test]
+fn ordinary_info_text_wrong_resource_metadata_only() {
+    let mut f = Fixture::new();
+    f.ordinary_info_text_raw();
+    f.word(0xcc000, 0x10000 + 0x434b668);
+    assert_eq!(
+        ordinary_info_value(&f)["text_raw_diagnostic"]["resource_layout_verified"],
+        false
+    );
+    f.assert_not_read(&[0xcc08c, 0xc8228, 0xc822c, 0xc8238, 0xc8110]);
+}
+#[test]
+fn ordinary_info_text_bounds_and_nonfinite_unavailable() {
+    for (a, val) in [
+        (0xcc08c, 0),
+        (0xcc08c, -1),
+        (0xc8228, -1),
+        (0xc822c, 65537),
+        (0xc8238, 0),
+    ] {
+        let mut f = Fixture::new();
+        f.ordinary_info_text_raw();
+        f.number(a, val);
+        assert_eq!(
+            ordinary_info_value(&f)["text_raw_diagnostic"]["reason"],
+            "text_raw_fields_out_of_bounds"
+        );
+    }
+    for val in [f32::NAN, f32::INFINITY, 1_000_001.0] {
+        let mut f = Fixture::new();
+        f.ordinary_info_text_raw();
+        f.put(0xc8110, &val.to_le_bytes());
+        assert_eq!(
+            ordinary_info_value(&f)["text_raw_diagnostic"]["raw_fields_available"],
+            false
+        );
+    }
+}
+#[test]
+fn ordinary_info_text_every_new_field_final_mutation_refused() {
+    for (a, n) in [
+        (0xc8168, 8),
+        (0xcc000, 8),
+        (0xcc08c, 4),
+        (0xc8228, 4),
+        (0xc822c, 4),
+        (0xc8238, 4),
+        (0xc8110, 4),
+    ] {
+        let mut f = Fixture::new();
+        f.ordinary_info_text_raw();
+        let mut bytes: Vec<_> = (0..n).map(|i| f.data[&(a + i)]).collect();
+        bytes[n as usize - 1] ^= 1;
+        f.fault = Some((a, 1, bytes));
+        assert_eq!(
+            research_ui::node_detail(&f, "tools1").unwrap_err().code,
+            "torn_read",
+            "{a:x}"
+        );
+    }
+}
+#[test]
+fn ordinary_info_text_read_failure_refuses_and_other_branches_unchanged() {
+    let mut f = Fixture::new();
+    f.ordinary_info_text_raw();
+    f.data.remove(&0xcc08f);
+    assert_eq!(
+        research_ui::node_detail(&f, "tools1").unwrap_err().code,
+        "unexpected_read"
+    );
+    for kind in 0..3 {
+        let mut f = Fixture::new();
+        if kind == 0 {
+            f.ordinary_info_research();
+        } else {
+            f.ordinary_info_cache_v2(kind == 2);
+        }
+        assert!(ordinary_info_value(&f)["text_raw_diagnostic"].is_null());
+        f.assert_not_read(&[0xc8228, 0xc822c, 0xc8238, 0xcc08c]);
+    }
+}
+
+#[test]
+fn ordinary_info_text_v2_base_fields_and_typed_leaf_not_ancestor_whitelist() {
+    let mut f = Fixture::new();
+    f.ordinary_info_text_raw();
+    let t = &ordinary_info_value(&f)["text_raw_diagnostic"];
+    assert_eq!(t["scalar_raw"], 1.0);
+    assert_eq!(
+        t["cache_translation_raw"],
+        serde_json::json!([100.0, -80.0])
+    );
+    assert_eq!(t["anchor_raw"], serde_json::json!([0, 0]));
+    assert_eq!(t["hit_projection_available"], false);
+    assert_eq!(t["parent_chain"]["status"], "closed_to_owned_graphics_root");
+    let mut f = Fixture::new();
+    f.ordinary_info_text_raw();
+    f.word(0xc8108, 0xf6000);
+    f.word(0xf6000, 0x10000 + 0x43593d8);
+    let t = &ordinary_info_value(&f)["text_raw_diagnostic"];
+    assert_eq!(t["parent_chain"]["status"], "unknown_ancestor");
+    f.assert_not_read(&[0xf6070, 0xf6138, 0xf60c0]);
+}
+#[test]
+fn ordinary_info_text_v2_common_bounds_nonfinite_and_high_unsigned_anchor() {
+    for a in [0xc8114, 0xc80b0, 0xc80b4] {
+        let mut f = Fixture::new();
+        f.ordinary_info_text_raw();
+        f.put(a, &f32::NAN.to_le_bytes());
+        assert_eq!(
+            ordinary_info_value(&f)["text_raw_diagnostic"]["reason"],
+            "text_common_fields_out_of_bounds"
+        );
+        f.assert_not_read(&[0xc3e70]);
+    }
+    for a in [0xc8120, 0xc8124, 0xc812c, 0xc8130] {
+        let mut f = Fixture::new();
+        f.ordinary_info_text_raw();
+        f.number(a, -1);
+        assert_eq!(
+            ordinary_info_value(&f)["text_raw_diagnostic"]["reason"],
+            "text_common_fields_out_of_bounds"
+        );
+    }
+}
+#[test]
+fn ordinary_info_text_v2_common_bytes_and_hierarchy_final_mutation_refuse() {
+    for (a, n) in [
+        (0xc8114, 4),
+        (0xc80b0, 4),
+        (0xc80b4, 4),
+        (0xc8120, 4),
+        (0xc8124, 4),
+        (0xc812c, 4),
+        (0xc8130, 4),
+        (0xc3e70, 8),
+        (0xc8108, 8),
+    ] {
+        let mut f = Fixture::new();
+        f.ordinary_info_text_raw();
+        let mut bytes: Vec<_> = (0..n).map(|i| f.data[&(a + i)]).collect();
+        bytes[n as usize - 1] ^= 1;
+        f.fault = Some((a, 1, bytes));
+        assert_eq!(
+            research_ui::node_detail(&f, "tools1").unwrap_err().code,
+            "torn_read",
+            "{a:x}"
+        );
     }
 }

@@ -71,6 +71,7 @@ anchors do not establish a load-generation token.
 | `hoi4_capabilities` | Platform, owned-session binding and explicit missing features |
 | `hoi4_overview` | Own focus/research IDs and clock, freshness and unavailable fields |
 | `hoi4_research` | Own completed technologies and active signed counters; normalized progress remains unavailable |
+| `hoi4_army` | Own divisions with full snapshot-scoped handles, selected province joins and lossless raw status; live comparison pending |
 | `hoi4_economy` | Own named factory trigger counts, civilian project capacity and exact signed political-power units; live comparison pending |
 | `hoi4_technology_list` | Canonical loaded technology IDs with filtering/pagination; no eligibility inference |
 | `hoi4_input_geometry` | GUI dimensions, scale, pointer and conditional source-window diagnostics; no click authority |
@@ -184,8 +185,10 @@ RPC medians were 116/120 ms for a narrower model, versus 313 ms for full nodes;
 those scopes are not an equivalent-model speed comparison.
 
 New owned-root/cache diagnostics have passed portable/MSRV and actual Linux
-fixtures but await a fresh immutable installed-game check. The new Research-button
-and economy readers also require installed-game comparison. Detailed test counts,
+fixtures. A fresh recorded game verified owned-root closure and conditional cache
+checks, and observed own economy counts. Precise economy UI comparison remains
+pending. Its Research button used a separate text renderer; the new text/Frame
+and own-division diagnostics await a fresh immutable installed-game check. Detailed test counts,
 failures, recordings and measurement limits are in [live validation](../docs/CLAUSEWITZ_VALIDATION.md)
 and [the comparison](../docs/CLAUSEWITZ_COMPARISON.md).
 
