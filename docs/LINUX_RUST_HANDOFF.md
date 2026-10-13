@@ -209,3 +209,17 @@ relaxing guards. The pointer library registers no raw MCP command and never
 claims game-state verification. Compare the new observations in a fresh immutable
 recorded game, integrate ordinary ID-based actions with canonical readback, then
 resume the exclusive Luna medium player. Campaign acceptance is still pending.
+
+
+Correction to the preceding checkpoint: the byte-orientation static claim was
+wrong. Exact dimension/hit/mask methods read a full four-byte field. The source
+now restores full-word diagnostics and witnesses high-byte changes. Run 017
+launched with the earlier immutable binary, so its derived dimensions cannot
+support actions; do not hot-swap it or count prior fixtures as live proof of the
+correction. Keep the explicit correction in the live-evidence history.
+
+
+Corrected full-word source passed 229 portable/MSRV tests and 286 actual standard
+Linux checks (285 substantive), plus 953 Python tests with 37 skips and the
+compiler/protocol checks. It is a separate tested binary; run 017 retains source
+9ffac46. Do not use that earlier run's derived dimensions for actions.

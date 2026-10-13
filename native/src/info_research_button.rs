@@ -203,7 +203,7 @@ pub(crate) fn observe(
         out["resource_layout_verified"] = json!(true);
         let frames = r.i32(resource + 0x90)?;
         let grid = r.i32(resource + 0x94)?;
-        let orientation = r.byte(resource + 0x10c)?;
+        let orientation = u32::from_le_bytes(r.read(resource + 0x10c, 4)?.try_into().unwrap());
         let handle = i64::from_le_bytes(r.read(resource + 0x1a0, 8)?.try_into().unwrap());
         let lazy = r.byte(resource + 0x1d3)?;
         out["resource_cache"] = json!({"scope":"local_cached_resource_facts",

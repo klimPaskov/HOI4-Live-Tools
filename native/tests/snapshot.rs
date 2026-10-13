@@ -4054,7 +4054,7 @@ fn ordinary_info_v2_resource_io_and_final_mutation_refuse() {
         (0xcb000, 8),
         (0xcb090, 4),
         (0xcb094, 4),
-        (0xcb10c, 1),
+        (0xcb10c, 4),
         (0xcb1a0, 8),
         (0xcb1d3, 1),
         (0xcb0a4, 4),
@@ -4107,13 +4107,37 @@ fn raw_sprite_cache_handle_high_bytes_are_final_witnesses() {
 }
 
 #[test]
-fn raw_sprite_orientation_is_one_byte_not_adjacent_flags() {
+fn raw_sprite_orientation_requires_full_word_for_dimensions() {
     let mut f = Fixture::new();
     f.node_render_detail();
     f.put(0xf110d, &[17, 22, 255]);
     let v = research_ui::node_detail(&f, "tools1").unwrap();
     let cache = &v["detail"]["render_diagnostic"]["resource_cache"];
-    assert_eq!(cache["orientation_raw"], 0);
-    assert_eq!(cache["diagnostic_dimensions"], serde_json::json!([300, 60]));
+    assert_eq!(cache["orientation_raw"], 0xff161100u32);
+    assert!(cache["diagnostic_dimensions"].is_null());
     assert_eq!(v["input_authorized"], false);
+}
+
+#[test]
+fn raw_sprite_orientation_high_bytes_are_final_witnesses() {
+    let mut f = Fixture::new();
+    f.node_render_detail();
+    f.fault = Some((0xf110c, 1, 0x01000000u32.to_le_bytes().to_vec()));
+    assert_eq!(
+        research_ui::node_detail(&f, "tools1").unwrap_err().code,
+        "torn_read"
+    );
+}
+
+#[test]
+fn ordinary_info_frame_orientation_preserves_full_word_metadata() {
+    for instant in [false, true] {
+        let mut f = Fixture::new();
+        f.ordinary_info_cache_v2(instant);
+        f.put(0xcb10c, &0xff161101u32.to_le_bytes());
+        let v = ordinary_info_value(&f);
+        assert_eq!(v["resource_cache"]["orientation_raw"], 0xff161101u32);
+        assert_eq!(v["input_authorized"], false);
+        assert_eq!(v["geometry_available"], false);
+    }
 }

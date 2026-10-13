@@ -1044,3 +1044,32 @@ isolated X11 cases. The owned game/display remained separate, Yama scope remaine
 37 skipped**, in 18.923 seconds. Formatting, host/Linux Clippy and MSRV Linux
 all-target compilation passed. Installed-game comparison and strategic assignment
 remain pending; no clean two-year run or full campaign is established.
+
+
+## Correction: resource orientation is a full word
+
+The byte-orientation claim in the preceding checkpoint was incorrect. Further
+exact-build disassembly showed that the dimension helper, hit-bound method and
+mask method all read four bytes at `+0x10c`; no byte orientation getter was
+proved. The original claim and its fixture are retained as a failed evidence
+interpretation, rather than reclassified as a separate valid getter. Source now
+reads the full unsigned word in both resource diagnostics. A high-byte boundary
+case leaves plain-sprite derived dimensions unavailable, and high-byte mutation
+must fail the final witness. Frame/Instant diagnostics retain the full raw value
+without calculating a hit rectangle.
+
+Fresh recorded run 017 had already launched with immutable source `9ffac46`
+before this correction. Its derived dimensions are not accepted for actions;
+the binary will not be replaced inside that run. Economy, ownership and separate
+transport checks remain distinct evidence. Corrected-source test and live gates
+are reported separately below when actually completed.
+
+
+The corrected source passed **229 portable/MSRV tests** and **286 actual
+standard Linux checks** (285 substantive and one inert helper), including 155
+snapshot cases. Final-word mutations and neighboring-byte values passed their
+regression guards. Python passed **953 tests with 37 skips** in 20.829 seconds;
+formatting, host/Linux Clippy, MSRV Linux all-target compilation and protocol
+smoke passed. The first new fixture used a nonexistent output field in its
+assertion; correcting that test's field name required no production change.
+These corrected-source checks remain separate from immutable live run 017.

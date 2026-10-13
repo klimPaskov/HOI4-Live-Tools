@@ -75,7 +75,7 @@ pub(crate) fn observe(
     let hierarchy = crate::node_hierarchy::observe(r, reuse, gui, render, registry)?;
     let grid = [r.i32(resource + 0x90)?, r.i32(resource + 0x94)?];
     let dimensions = [r.i32(resource + 0xa4)?, r.i32(resource + 0xa8)?];
-    let orientation = r.byte(resource + 0x10c)?;
+    let orientation = unsigned(r, resource + 0x10c)?;
     let handle = i64::from_le_bytes(r.read(resource + 0x1a0, 8)?.try_into().unwrap());
     let lazy = r.byte(resource + 0x1d3)?;
     let reject = r.byte(resource + 0x111)?;

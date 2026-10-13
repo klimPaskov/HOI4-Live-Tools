@@ -179,3 +179,11 @@ constructors, resource aliases and cached Frame resource getters. They read no
 texture or mask payload and calculate no client rectangle. The lazy-handle
 comparison uses the recovered full 64-bit sentinel; the earlier plain-sprite
 raw diagnostic's narrower width was corrected with boundary/mutation fixtures.
+
+
+A subsequent review corrected the orientation proof: dimension, hit-bound and
+mask methods all read the four-byte field at `+0x10c`. The intervening byte-only
+reader was based on an incorrect static claim and is superseded. Both raw
+readers now retain the full unsigned word; nonzero high bytes cannot silently
+select an ordinary diagnostic dimension branch. This does not turn cached
+resource data into a hit rectangle or authorize input.
