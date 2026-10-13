@@ -2501,7 +2501,7 @@ impl Fixture {
         self.number(0xf1094, 3);
         self.number(0xf10a4, 600);
         self.number(0xf10a8, 180);
-        self.number(0xf11a0, -1);
+        self.word(0xf11a0, u64::MAX);
         self.word(0xf1170, 0xdead0000);
         self.hierarchy_fixture();
     }
@@ -3917,4 +3917,203 @@ fn ordinary_info_disabled_state_does_not_claim_eligibility_or_input() {
     assert_eq!(v["input_authorized"], false);
     assert_eq!(v["eligibility"], "unavailable");
     assert_eq!(v["effective_routing_verified"], false);
+}
+
+impl Fixture {
+    fn ordinary_info_cache_v2(&mut self, instant: bool) {
+        self.ordinary_info_research();
+        self.word(
+            0xc8000,
+            0x10000 + if instant { 0x434c5b0 } else { 0x434b370 },
+        );
+        if instant {
+            let table = 0x10000 + 0x434c5b0;
+            self.word(table - 16, 0);
+            self.word(table - 8, 0x10000 + 0x4356400);
+            self.region(0x10000 + 0x4356400, 16);
+            self.word(0x10000 + 0x4356408, 0x10000 + 0x350e400);
+            self.region(0x10000 + 0x350e400, 128);
+            self.put(0x10000 + 0x350e400, b"14CInstantSprite");
+        }
+        self.word(0xc8000 + if instant { 0x160 } else { 0x1b0 }, 0xcb000);
+        self.word(0xc8000 + if instant { 8 } else { 0x168 }, 0xcb000);
+        self.region(0xcb000, 0x1d4);
+        self.word(0xcb000, 0x10000 + 0x434b668);
+        self.number(0xcb090, 3);
+        self.number(0xcb094, 1);
+        self.number(0xcb0a4, 369);
+        self.number(0xcb0a8, 34);
+        self.word(0xcb1a0, u64::MAX);
+    }
+}
+#[test]
+fn ordinary_info_v2_exact_frame_and_instant_local_cache_only() {
+    for instant in [false, true] {
+        let mut f = Fixture::new();
+        f.ordinary_info_cache_v2(instant);
+        let v = ordinary_info_value(&f);
+        assert_eq!(v["resource_alias_matches"], true);
+        assert_eq!(v["resource_layout_verified"], true);
+        assert_eq!(v["resource_cache"]["handle_raw"], -1);
+        assert_eq!(v["resource_cache"]["texture_width_raw"], 369);
+        assert_eq!(v["geometry_available"], false);
+        assert_eq!(v["input_authorized"], false);
+        f.assert_not_read(&[0xc8070, 0xc80b0, 0xcb170, 0xcb1d0]);
+        if instant {
+            f.assert_not_read(&[0xc8168, 0xc816c, 0xc81b0]);
+        } else {
+            f.assert_not_read(&[0xc8160]);
+        }
+    }
+}
+#[test]
+fn ordinary_info_v2_alias_mismatch_stops_before_resource_metadata() {
+    for instant in [false, true] {
+        let mut f = Fixture::new();
+        f.ordinary_info_cache_v2(instant);
+        f.word(0xc8000 + if instant { 8 } else { 0x168 }, 0xdead0000);
+        assert_eq!(
+            ordinary_info_value(&f)["reason"],
+            "resource_alias_unavailable"
+        );
+        f.assert_not_read(&[0xcb000, 0xcb090, 0xdead0000]);
+    }
+}
+#[test]
+fn ordinary_info_v2_foreign_control_precedes_resources() {
+    let mut f = Fixture::new();
+    f.ordinary_info_cache_v2(false);
+    f.word(0xc8138, 0xdead0000);
+    assert_eq!(
+        research_ui::node_detail(&f, "tools1").unwrap_err().code,
+        "invalid_gui_owner"
+    );
+    f.assert_not_read(&[0xc81b0, 0xc8168, 0xcb000]);
+}
+#[test]
+fn ordinary_info_v2_other_resource_class_metadata_only() {
+    let mut f = Fixture::new();
+    f.ordinary_info_cache_v2(true);
+    f.word(0xcb000, 0x10000 + 0x4357160);
+    assert_eq!(
+        ordinary_info_value(&f)["reason"],
+        "resource_layout_unavailable"
+    );
+    f.assert_not_read(&[0xcb090, 0xcb094, 0xcb1a0, 0xcb0a4]);
+}
+#[test]
+fn ordinary_info_v2_full_signed_handle_cache_gate() {
+    for (handle, lazy, equivalent) in [
+        (u64::MAX, 1, false),
+        (0x00000000ffffffff, 1, true),
+        (u64::MAX, 0, true),
+    ] {
+        let mut f = Fixture::new();
+        f.ordinary_info_cache_v2(false);
+        f.word(0xcb1a0, handle);
+        f.put(0xcb1d3, &[lazy]);
+        let v = ordinary_info_value(&f);
+        assert_eq!(v["resource_cache"]["getter_cache_equivalent"], equivalent);
+        if !equivalent {
+            assert!(v["resource_cache"]["texture_width_raw"].is_null());
+            f.assert_not_read(&[0xcb0a4, 0xcb0a8]);
+        }
+        if handle == 0xffffffff {
+            assert_eq!(v["resource_cache"]["handle_raw"], 4294967295i64);
+        }
+    }
+}
+#[test]
+fn ordinary_info_v2_invalid_grid_and_texture_bounded() {
+    for (a, value, reason) in [
+        (0xcb090, 0, "resource_grid_out_of_bounds"),
+        (0xcb094, 4097, "resource_grid_out_of_bounds"),
+        (0xcb0a4, 65537, "resource_texture_out_of_bounds"),
+    ] {
+        let mut f = Fixture::new();
+        f.ordinary_info_cache_v2(false);
+        f.number(a, value);
+        assert_eq!(ordinary_info_value(&f)["reason"], reason);
+        if a == 0xcb090 || a == 0xcb094 {
+            f.assert_not_read(&[0xcb0a4, 0xcb0a8]);
+        }
+    }
+}
+#[test]
+fn ordinary_info_v2_resource_io_and_final_mutation_refuse() {
+    let mut f = Fixture::new();
+    f.ordinary_info_cache_v2(false);
+    f.data.remove(&0xcb1a7);
+    assert_eq!(
+        research_ui::node_detail(&f, "tools1").unwrap_err().code,
+        "unexpected_read"
+    );
+    for (a, n) in [
+        (0xc81b0, 8),
+        (0xc8168, 8),
+        (0xcb000, 8),
+        (0xcb090, 4),
+        (0xcb094, 4),
+        (0xcb10c, 1),
+        (0xcb1a0, 8),
+        (0xcb1d3, 1),
+        (0xcb0a4, 4),
+        (0xcb0a8, 4),
+    ] {
+        let mut f = Fixture::new();
+        f.ordinary_info_cache_v2(false);
+        let mut bytes: Vec<_> = (0..n).map(|i| f.data[&(a + i)]).collect();
+        bytes[n as usize - 1] ^= 1;
+        f.fault = Some((a, 1, bytes));
+        assert_eq!(
+            research_ui::node_detail(&f, "tools1").unwrap_err().code,
+            "torn_read",
+            "{a:x}"
+        );
+    }
+}
+
+#[test]
+fn raw_sprite_cache_handle_is_full_signed_width() {
+    for (handle, lazy, equivalent) in [
+        (-1i64, 1, false),
+        (4294967295, 1, true),
+        (-4294967296, 1, true),
+        (-1, 0, true),
+    ] {
+        let mut f = Fixture::new();
+        f.node_render_detail();
+        f.put(0xf11a0, &handle.to_le_bytes());
+        f.put(0xf11d3, &[lazy]);
+        let v = research_ui::node_detail(&f, "tools1").unwrap();
+        let cache = &v["detail"]["render_diagnostic"]["resource_cache"];
+        assert_eq!(cache["handle_raw"], handle);
+        assert_eq!(cache["cache_equivalent"], equivalent);
+        assert_eq!(cache["diagnostic_dimensions"].is_null(), !equivalent);
+        assert_eq!(v["input_authorized"], false);
+    }
+}
+
+#[test]
+fn raw_sprite_cache_handle_high_bytes_are_final_witnesses() {
+    let mut f = Fixture::new();
+    f.node_render_detail();
+    f.put(0xf11a0, &4294967303i64.to_le_bytes());
+    f.fault = Some((0xf11a0, 1, 8589934599i64.to_le_bytes().to_vec()));
+    assert_eq!(
+        research_ui::node_detail(&f, "tools1").unwrap_err().code,
+        "torn_read"
+    );
+}
+
+#[test]
+fn raw_sprite_orientation_is_one_byte_not_adjacent_flags() {
+    let mut f = Fixture::new();
+    f.node_render_detail();
+    f.put(0xf110d, &[17, 22, 255]);
+    let v = research_ui::node_detail(&f, "tools1").unwrap();
+    let cache = &v["detail"]["render_diagnostic"]["resource_cache"];
+    assert_eq!(cache["orientation_raw"], 0);
+    assert_eq!(cache["diagnostic_dimensions"], serde_json::json!([300, 60]));
+    assert_eq!(v["input_authorized"], false);
 }

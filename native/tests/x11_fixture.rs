@@ -39,6 +39,9 @@ use x11rb::{
     wrapper::ConnectionExt as _,
 };
 
+#[path = "x11_fixture/pointer.rs"]
+mod pointer;
+
 struct FixtureProcess(Identity);
 impl Process for FixtureProcess {
     fn check(&self) -> Result<()> {
@@ -71,7 +74,7 @@ fn generated_wm_client() {
     let (nonce, mode) = payload.split_once(':').unwrap();
     assert_eq!(nonce.len(), 32);
     assert!(nonce.bytes().all(|byte| byte.is_ascii_hexdigit()));
-    assert!(matches!(mode, "ignore" | "exit"));
+    assert!(matches!(mode, "ignore" | "exit" | "pointer"));
     assert_ne!(unsafe { libc::getuid() }, 0);
     // SAFETY: a watchdog confined to this exact generated process; no parent,
     // VM setting or game signal is changed. EOF normally exits it well earlier.
@@ -97,7 +100,12 @@ fn generated_wm_client() {
                 EventMask::KEY_PRESS
                     | EventMask::KEY_RELEASE
                     | EventMask::BUTTON_PRESS
-                    | EventMask::BUTTON_RELEASE,
+                    | EventMask::BUTTON_RELEASE
+                    | if mode == "pointer" {
+                        EventMask::POINTER_MOTION
+                    } else {
+                        EventMask::NO_EVENT
+                    },
             ),
         )
         .unwrap()
@@ -166,6 +174,12 @@ fn generated_wm_client() {
     let mut forbidden = 0;
     loop {
         while let Some(event) = connection.poll_for_event().unwrap() {
+            if mode == "pointer" {
+                if let Some(event) = pointer::pointer_event(&event) {
+                    events.push(event);
+                    continue;
+                }
+            }
             match event {
                 Event::ClientMessage(event) => {
                     events.push(serde_json::json!({"format":event.format,"window":event.window,
@@ -194,6 +208,12 @@ fn generated_wm_client() {
                 // into this connection before the following drain/report.
                 connection.get_input_focus().unwrap().reply().unwrap();
                 while let Some(event) = connection.poll_for_event().unwrap() {
+                    if mode == "pointer" {
+                        if let Some(event) = pointer::pointer_event(&event) {
+                            events.push(event);
+                            continue;
+                        }
+                    }
                     match event {
                         Event::ClientMessage(event) => {
                             events.push(serde_json::json!({"format":event.format,

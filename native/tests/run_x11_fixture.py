@@ -31,9 +31,11 @@ def main():
                         help="Only WM close fixtures, with XTEST disabled on owned Xvfb")
     parser.add_argument("--owner-close-only", action="store_true",
                         help="Run full owner/reaper and actual ambiguous-wire library fixtures")
+    parser.add_argument("--pointer-only", action="store_true",
+                        help="Only private generated pointer delivery/refusal/wire fixtures")
     args = parser.parse_args()
-    if args.close_only and args.owner_close_only:
-        parser.error("Choose close-only or owner-close-only")
+    if sum((args.close_only, args.owner_close_only, args.pointer_only)) > 1:
+        parser.error("Choose one isolated fixture mode")
     close_mode = args.close_only or args.owner_close_only
     if sys.platform != "linux" or os.getuid() == 0:
         raise SystemExit("Fixture requires an ordinary Linux user")
@@ -98,6 +100,8 @@ def main():
                     test_args.extend(["--exact", "owned_xvfb_window_close"])
                 if args.owner_close_only:
                     test_args.append("launch::linux::tests::window_close::owned_xvfb_window_close")
+                if args.pointer_only:
+                    test_args.append("pointer::owned_xvfb_pointer")
                 suite = ["--lib"] if args.owner_close_only else ["--test", "x11_fixture"]
                 command = ([str(args.test_binary.resolve())] + test_args
                            if args.test_binary else

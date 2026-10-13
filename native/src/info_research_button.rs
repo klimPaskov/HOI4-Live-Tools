@@ -167,7 +167,8 @@ pub(crate) fn observe(
     out["callback_binding_verified"] = json!(true);
     let render = r.u64(button + 0xe8)?;
     out["renderer_type_encoding"] = metadata(r, &mut reuse, render)?;
-    if render == 0 || r.u64(render)? != base + 0x4356e08 {
+    let primary = if render == 0 { 0 } else { r.u64(render)? };
+    if ![base + 0x4356e08, base + 0x434b370, base + 0x434c5b0].contains(&primary) {
         out["reason"] = json!("renderer_layout_unavailable");
         return Ok(out);
     }
@@ -176,10 +177,56 @@ pub(crate) fn observe(
     if r.u64(render + 0x138)? != button {
         return Err(Error::new(
             "invalid_gui_owner",
-            "CSprite must belong to own ordinary Standard",
+            "Renderer must belong to own ordinary Standard",
         ));
     }
     out["renderer_control_join_verified"] = json!(true);
+    if primary != base + 0x4356e08 {
+        let (resource_offset, alias_offset) = if primary == base + 0x434b370 {
+            (0x1b0, 0x168)
+        } else {
+            (0x160, 8)
+        };
+        let resource = r.u64(render + resource_offset)?;
+        let alias_matches = r.u64(render + alias_offset)? == resource;
+        out["resource_alias_matches"] = json!(alias_matches);
+        if !alias_matches {
+            out["reason"] = json!("resource_alias_unavailable");
+            return Ok(out);
+        }
+        out["resource_type_encoding"] = metadata(r, &mut reuse, resource)?;
+        if resource == 0 || r.u64(resource)? != base + 0x434b668 {
+            out["reason"] = json!("resource_layout_unavailable");
+            return Ok(out);
+        }
+        pointer(resource)?;
+        out["resource_layout_verified"] = json!(true);
+        let frames = r.i32(resource + 0x90)?;
+        let grid = r.i32(resource + 0x94)?;
+        let orientation = r.byte(resource + 0x10c)?;
+        let handle = i64::from_le_bytes(r.read(resource + 0x1a0, 8)?.try_into().unwrap());
+        let lazy = r.byte(resource + 0x1d3)?;
+        out["resource_cache"] = json!({"scope":"local_cached_resource_facts",
+            "frame_count_raw":frames,"grid_other_raw":grid,"orientation_raw":orientation,
+            "handle_raw":handle,"lazy_raw":lazy,"getter_cache_equivalent":false,
+            "texture_width_raw":null,"texture_height_raw":null});
+        if !(1..=4096).contains(&frames) || !(1..=4096).contains(&grid) {
+            out["reason"] = json!("resource_grid_out_of_bounds");
+            return Ok(out);
+        }
+        let equivalent = lazy == 0 || handle != -1;
+        out["resource_cache"]["getter_cache_equivalent"] = json!(equivalent);
+        if equivalent {
+            let width = r.i32(resource + 0xa4)?;
+            let height = r.i32(resource + 0xa8)?;
+            if !(1..=65536).contains(&width) || !(1..=65536).contains(&height) {
+                out["reason"] = json!("resource_texture_out_of_bounds");
+                return Ok(out);
+            }
+            out["resource_cache"]["texture_width_raw"] = json!(width);
+            out["resource_cache"]["texture_height_raw"] = json!(height);
+        }
+    }
     out["available"] = json!(true);
     out["reason"] = json!("ordinary_void_callback_and_renderer_join");
     Ok(out)

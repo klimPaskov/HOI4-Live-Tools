@@ -1003,3 +1003,44 @@ The findings above refer to upstream `calling/{mem,process/linux,api,game,
 commands,combat,ragemicro,turnloop}.py` and `mcp/server.py` at the pinned commit.
 Clausewitz-MCP is Copyright (c) 2026 smerss, MIT licensed. See [NOTICE](../NOTICE)
 and [the retained provenance](../third_party/clausewitz_mcp/UPSTREAM.json).
+
+
+## Bounded pointer transport and renderer widths
+
+The next source slice adds a separate Linux X11 pointer library for one motion,
+left-button press and release. It checks the owned process/window, authenticated
+peer, actual keyboard focus, clear input state, client geometry, parent chain,
+translated origin and fresh root bounds. Preparation, repeated guards, dispatch
+and reply share one fixed deadline. Every possible wire write makes delivery
+uncertain until acknowledged; severed or withheld replies never trigger replay.
+Server acknowledgement always retains `game_action_verified: false`. No raw
+pointer MCP command is registered; a strategic adapter still needs the exclusive
+input gate, durable attempt and canonical game-state readback.
+
+The first actual isolated Linux run refused both new pointer tests before input:
+x11rb retained the three requests in its output buffer rather than the helper's
+local queue. Explicitly flushing into that local-only queue before arming dispatch
+fixed the issue. The corrected isolated tests and final combined suite passed.
+Tests covered a moved bordered parent, resize, changed PID/class/focus, exactly
+one translated motion/button pair, partial delivery and withheld acknowledgement.
+Root-bound arithmetic was tested separately; no actual game or root-screen resize
+was used by these fixtures. Keyboard and authentication bodies remain unchanged.
+
+Matching Research-button diagnostics now distinguish exact Frame and Instant
+renderer constructors and reciprocal resource aliases. Instant scale fields are
+floats, never resource pointers. Only the exact Frame resource permits bounded
+raw grid and cached-dimension fields, with the recovered lazy-cache condition.
+Plain-sprite diagnostics also correct the handle sentinel to signed 64 bits and
+orientation to one byte. Neighboring-byte and high-handle mutations are covered.
+An initial orientation fixture had the wrong expected synthetic cell dimensions;
+correcting that test preserved the production guards. These observations compute
+no click rectangle and establish no current-frame, routing or action authority.
+
+Portable and Rust 1.86 suites each passed **227 tests**, including 153 snapshot
+cases. The actual optimized Linux suite passed **284 reported checks** (283
+substantive and one inert X11 helper), including eight economy cases and five
+isolated X11 cases. The owned game/display remained separate, Yama scope remained
+1, and the previous exact game and owner were absent. Python passed **953 tests,
+37 skipped**, in 18.923 seconds. Formatting, host/Linux Clippy and MSRV Linux
+all-target compilation passed. Installed-game comparison and strategic assignment
+remain pending; no clean two-year run or full campaign is established.

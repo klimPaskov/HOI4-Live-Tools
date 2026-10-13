@@ -20,6 +20,9 @@ use x11rb::{
     utils::RawFdContainer,
 };
 
+mod pointer;
+pub use pointer::{LeftClick, PointerDelivery, PointerDispatch, PointerDisplay};
+
 pub enum ControlKey {
     Pause,
     Slower,

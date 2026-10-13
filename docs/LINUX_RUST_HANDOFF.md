@@ -198,3 +198,14 @@ substantive), plus 953 Python tests with 37 skips. Economy retains named trigger
 semantics and exact signed PP units; UI totals and shortages remain unavailable.
 Button associations authorize no input. The fresh recorded-run gate must compare
 both additions against the installed game before Luna strategic acceptance.
+
+
+The bounded pointer transport and Frame/Instant resource diagnostics now pass
+227 portable/MSRV and 284 actual standard Linux checks (283 substantive), plus
+953 Python tests with 37 skips. The first Linux pointer fixture refused locally
+because requests had not left x11rb's buffer; a local-only flush fixed it before
+any game input. Full-width handles and byte orientation were corrected without
+relaxing guards. The pointer library registers no raw MCP command and never
+claims game-state verification. Compare the new observations in a fresh immutable
+recorded game, integrate ordinary ID-based actions with canonical readback, then
+resume the exclusive Luna medium player. Campaign acceptance is still pending.

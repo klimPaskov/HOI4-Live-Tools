@@ -127,6 +127,10 @@ Only a unique locally visible matching own Info can supply the ordinary Research
 button's named Standard/void-callback and renderer-ownership diagnostics.
 Standard's renderer field and void callback differ from the node Drag control;
 unknown variants remain unavailable. This reader sends no input.
+Exact Frame and Instant branches also report class-specific resource aliases.
+Only a verified Frame resource supplies bounded local grid, orientation and
+signed 64-bit handle/cache facts; pending lazy caches remain unavailable.
+These facts do not calculate a click point or establish frame freshness.
 
 The economy tool requires exact own-country/tag and production/politics owner
 joins before payload. Factory values retain their recovered named-trigger
@@ -148,6 +152,12 @@ Clock transport sends only Space and keypad minus/plus. It checks exact process,
 window PID/class, focus, clear keys/modifiers and the authenticated display peer.
 It never activates a window or moves the cursor. Bounded X11 delivery is separate
 from authoritative game-state readback.
+
+The separate Linux pointer library permits one bounded motion/left-button pair
+for a future verified adapter. It pins client/root geometry and ownership,
+reports uncertain delivery without replay and does not focus, park or scroll.
+It registers no raw-click MCP tool. Isolated client and severed-reply tests
+validate transport only; strategic game-state verification remains separate.
 
 The launcher also has an explicit one-attempt `--close-window` request. It sends
 no keys and has no automatic signal fallback or replay. See [shutdown semantics](../docs/OWNED_LINUX_LAUNCHER.md#explicit-window-close-preview).

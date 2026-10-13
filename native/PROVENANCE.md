@@ -167,3 +167,15 @@ fixed-point conversion. Its military/civilian adjustments are part of those
 specific triggers, not borrowed upstream field interpretations. Counts retain
 that narrow meaning; no UI total, idle-builder or final stability formula is
 inferred. The module invokes no getters and reads no foreign-country payload.
+
+The pointer transport is new project code using x11rb's XTEST APIs and the
+existing owned peer/authentication primitives. Shared keyboard/auth bodies
+remain unchanged. Its local request queue must be flushed before dispatch;
+the first actual fixture refusal exposed that buffering requirement. Bounded
+delivery and uncertain-reply handling do not establish a game action.
+
+Additional Standard renderer diagnostics distinguish exact Frame/Instant
+constructors, resource aliases and cached Frame resource getters. They read no
+texture or mask payload and calculate no client rectangle. The lazy-handle
+comparison uses the recovered full 64-bit sentinel; the earlier plain-sprite
+raw diagnostic's narrower width was corrected with boundary/mutation fixtures.
