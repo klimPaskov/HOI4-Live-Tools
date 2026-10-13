@@ -1222,3 +1222,47 @@ zero-event final-check refusal and all five isolated X11 cases. Python passed
 and stdio smoke passed. These are fixture gates. The next fresh immutable
 recorded game must verify this owner adapter with exclusive Luna medium input;
 no clean two-year run or full campaign is established.
+
+
+## Recorded run 019: exclusive Luna medium Rust research smoke
+
+On 13 October 2026, a fresh immutable Linux game used source `4b7bdecc` and CLI
+SHA-256 `7aa02849b63919c4d22dde2caba7433e1808cb7ad9b1466b80294687f6036e00`.
+Germany used Normal difficulty, historical AI and no mods. Recording had a
+verified first packet before the single campaign-start action. The builder
+prepared only the menus and selected empty own slot 0, then bound the optional
+research profile and relinquished input to one Luna player at medium reasoning.
+
+Luna resolved `support_weapons` from the own technology-node list, then made
+one View request and one Research request with separate durable IDs. Both
+returned `Verified`, `current_state_verified=true`, and `historical=false`.
+Independent own-state reads confirmed the requested technology in slot 0.
+The RPCs took **774 ms** and **851 ms**, respectively, in the emulated VM.
+This is a two-action sample, not a general latency benchmark. No screenshots,
+raw coordinate arguments, external callbacks or native posts were used by Luna.
+
+Speed 4, unpause and terminal pause verified through ordinary keys. One server
+wait reached **3 January 1936 at 01:00** in **20.646 seconds**, with zero rejected
+torn reads. Final state was **3 January at 05:00**, paused at speed 4. Slot 0's
+signed engine counter increased from **101,000 to 303,000**; its units remain
+unverified. Slots 1–3 stayed empty and completed technologies stayed at 47.
+The exclusive lease was released and subsequent status showed zero remaining
+time. Transport receipts still distinguish X11 delivery from game causality;
+`game_action_verified` and `event_causality_verified` remain false.
+
+The **311-second H.264 recording** finalized and passed ffprobe. One owned WM
+close returned actual normal exit **0**, with no signal or core dump, in
+**2.63 seconds**. Exact game/owner disappearance and terminal evidence were
+checked. No command was replayed and no live binary was replaced.
+
+The Windows capacity fixture initially failed because an append-only handle
+cannot resize a file. A test-only writable, exclusively locked handle fixed
+fixture preparation; production journal opening stayed unchanged. Source
+`e8ec158a` then passed all three Rust CI jobs and all six Python CI jobs. Local
+Rust tests, targeted MSRV stage tests, Clippy and **953 Python tests (37 skipped)**
+also passed. The preceding Python workflow had five successful jobs and one
+macOS runner cancellation before any steps; it was not a Python test failure.
+
+This passes the narrow research/clock gate. Automatic research-slot navigation,
+focus actions, daily plans, economy/army/naval commands, clean two-year acceptance
+and the full Germany/China/Poland campaigns remain unfinished.

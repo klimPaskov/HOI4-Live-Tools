@@ -267,3 +267,14 @@ fresh immutable recorded Germany game, prepare only the initial own empty slot
 and give Luna medium exclusive input for ID-derived selection/assignment and
 clock advancement. This remains a bounded strategic gate; daily plans, broader
 commands and campaign acceptance are unfinished. Native posting stays quarantined.
+
+
+Recorded run 019 passed the owned research preview with one exclusive Luna medium
+player: exact-ID View/Research verified by canonical slot state, then the counter
+advanced through 3 January using ordinary clock control and a server wait. Both
+research RPCs were under one second in this two-action sample. Recording passed
+ffprobe and one WM close returned actual normal exit 0. Three Rust and six Python
+CI jobs passed after a Windows test-only capacity-fixture correction. Next remove
+the builder's initial slot-navigation prerequisite through verified own-slot
+actions, add focus/economic/army plans and resume the clean two-year gate.
+This bounded run is not campaign acceptance; native posting stays quarantined.
