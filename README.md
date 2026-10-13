@@ -86,9 +86,9 @@ exact-key diagnostics measured 116/120 ms. Scope, hardware and validation limits
 are documented in [the comparison](docs/CLAUSEWITZ_COMPARISON.md) and
 [live evidence](docs/CLAUSEWITZ_VALIDATION.md), including failures and clean exits.
 
-The research preview opens the own panel, selects empty slots and attempts
-explicit folder navigation with verified state readback. Category navigation
-still has a recorded deadline failure. Broader strategic adapters, the Rust daily
+The research preview opens the own panel, selects empty slots and navigates
+folders with verified state readback. Recorded run 024 verified category cycles
+and all four assignments, then stopped on uncertain clock input. Broader strategic adapters, the Rust daily
 governor and Windows/macOS live adapters remain unfinished. Three-OS CI tests
 shared code and fixtures; compilation is not live compatibility or campaign acceptance.
 

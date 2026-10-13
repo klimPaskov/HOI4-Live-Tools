@@ -1623,3 +1623,37 @@ fixture pins the original file open, then verifies a distinct current inode,
 unchanged complete old-reader bytes and changed complete current bytes. Production
 storage guards were not relaxed. Initial failing logs and the original immutable
 bundle remain preserved privately.
+
+## Fixed clock budgets and Linux executable readiness
+
+Clock operations now retain one ten-second budget from call entry, capped by the
+original lease. Each delivered key retains the existing 1.5-second witness budget.
+Deadline checks run before and after observations, before final queueing and
+before accepting a target. Blocking reads cannot be forcibly interrupted, but a
+late result cannot authorize input or success. Required intermediate speed
+witnesses remain unchanged. This does not explain run024's missing witness or
+establish reliable gameplay control.
+
+The first kernel fixture bundle failed executable readiness on an immediate
+`/proc/<pid>/exe` NotFound during a generated threaded exec. The owned child was
+preserved through its natural exit; original logs and bundle remain private.
+An isolated tighter sampler subsequently reproduced genuine readlink/metadata
+NotFound transitions. The corrected readiness path pins parent, user and creation
+independently of the image, retries only those two executable-image NotFound
+operations and requires two matching path/device/inode observations before
+publishing identity. The original two-second deadline remains fixed. Permission
+errors, other I/O failures, stale ownership and late results refuse.
+
+The corrected optimized bundle passed **527 reported checks** on the actual Linux
+kernel: **525 substantive plus two inert helpers**, including five isolated X11
+cases. Nested helper output is not counted again. The previous exact game and
+owner remained absent; display ownership and Yama1 stayed unchanged. Host stable
+and Rust1.86 suites each passed **444 tests**; Python passed **953 tests, 37
+skipped**, in 19.814 seconds. Host/Linux Clippy, Rust1.86 Linux compilation and
+formatting passed. The research-stage timeout fixture now consumes its finite
+deadline after recording dispatch, avoiding a CI scheduling-dependent pre-input
+refusal; production research deadlines remain unchanged.
+
+These are fixture checks. A fresh immutable Luna run is still needed for the
+clock changes; focus actions, governor execution and full campaigns remain
+unaccepted.

@@ -88,6 +88,7 @@ struct Fake {
     candidate: Candidate,
     crash: bool,
     slow: Duration,
+    expire_after_dispatch: bool,
     input_idle: bool,
 }
 impl Fake {
@@ -101,6 +102,7 @@ impl Fake {
             candidate: Candidate::Point(point()),
             crash: false,
             slow: Duration::ZERO,
+            expire_after_dispatch: false,
             input_idle: true,
         }
     }
@@ -139,10 +141,18 @@ impl Backend for Fake {
     fn candidate(&mut self, _: &Target) -> Result<Candidate> {
         Ok(self.candidate.clone())
     }
-    fn dispatch_once(&mut self, _: &Candidate, _: Instant) -> Delivery {
+    fn dispatch_once(&mut self, _: &Candidate, deadline: Instant) -> Delivery {
         self.dispatches += 1;
         if self.crash {
             panic!("simulated loss after possible input");
+        }
+        if self.expire_after_dispatch {
+            // Consume the actual journal deadline only AFTER the fixture has
+            // recorded possible input. File sync/scheduler cost before dispatch
+            // must not accidentally turn this readback test into NotQueued.
+            thread::sleep(
+                deadline.saturating_duration_since(Instant::now()) + Duration::from_millis(1),
+            );
         }
         self.delivery
     }
@@ -402,6 +412,7 @@ fn timeout_and_foreign_readback_quarantine_without_input_replay() {
         let a = authority();
         let g = RwLock::new(true);
         let mut f = Fake::new();
+        f.expire_after_dispatch = !foreign;
         if foreign {
             let mut s = state();
             s.epoch.player = "CHI".into();
@@ -416,7 +427,7 @@ fn timeout_and_foreign_readback_quarantine_without_input_replay() {
                 &a,
                 &g,
                 &mut f,
-                Duration::from_millis(45)
+                Duration::from_secs(5)
             )
             .unwrap_err()
             .code,

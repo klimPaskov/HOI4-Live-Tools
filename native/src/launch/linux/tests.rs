@@ -1338,3 +1338,202 @@ fn refused_window_close_preserves_child_read_and_endpoint_without_replay() {
     assert_eq!(exited["exit_code"], Value::Null);
     assert_eq!(exited["signal"], libc::SIGTERM);
 }
+
+// Private scoped generated-process diagnostics. No game/display/backend access.
+#[test]
+fn generated_short_delayed_exec_child() {
+    if selected_helper(
+        "HOI4_SHORT_EXEC_CHILD",
+        "launch::linux::tests::generated_short_delayed_exec_child",
+    )
+    .is_none()
+    {
+        return;
+    }
+    let mut release = [0; 1];
+    assert_eq!(std::io::stdin().read(&mut release).unwrap(), 1);
+    panic!(
+        "Generated exec failed: {}",
+        Command::new("/bin/sleep").arg("2").exec()
+    );
+}
+fn private_ready_child() -> OwnedChild {
+    let mut c = Command::new("/bin/sleep");
+    c.arg("5");
+    OwnedChild::spawn(&mut c).unwrap()
+}
+fn private_finish(mut c: OwnedChild) {
+    c.terminate().unwrap();
+    c.child.wait().unwrap();
+    c.exited = true;
+}
+#[test]
+fn readiness_stage_notfound_retries_against_real_pinned_child() {
+    if !ordinary() {
+        return;
+    }
+    for stage in ["exe_readlink", "exe_metadata"] {
+        let mut c = private_ready_child();
+        let mut calls = 0;
+        let exe = fs::canonicalize("/bin/sleep").unwrap();
+        let meta = fs::metadata(&exe).unwrap();
+        c.await_executable_observed(&exe, &meta, &mut |pid| {
+            calls += 1;
+            if calls == 1 {
+                Err((stage, std::io::Error::from_raw_os_error(libc::ENOENT)))
+            } else {
+                readiness_image(pid)
+            }
+        })
+        .unwrap();
+        assert_eq!(calls, 3);
+        assert_eq!(c.identity.as_ref().unwrap().exe, exe.to_string_lossy());
+        private_finish(c);
+    }
+}
+#[test]
+fn readiness_nontransient_image_errors_do_not_retry() {
+    if !ordinary() {
+        return;
+    }
+    for (stage, errno, code) in [
+        ("exe_readlink", libc::EACCES, "permission_denied"),
+        ("exe_metadata", libc::EIO, "io_error"),
+        ("exe_path_encoding", libc::ENOENT, "io_error"),
+    ] {
+        let mut c = private_ready_child();
+        let mut calls = 0;
+        let exe = fs::canonicalize("/bin/sleep").unwrap();
+        let e = c
+            .await_executable_observed(&exe, &fs::metadata(&exe).unwrap(), &mut |_| {
+                calls += 1;
+                Err((stage, std::io::Error::from_raw_os_error(errno)))
+            })
+            .unwrap_err();
+        assert_eq!(e.code, code);
+        assert!(e.message.contains(stage));
+        assert_eq!(calls, 1);
+        private_finish(c);
+    }
+}
+#[test]
+fn readiness_prior_creation_uid_and_pid_are_not_reset() {
+    if !ordinary() {
+        return;
+    }
+    for field in 0..3 {
+        let mut c = private_ready_child();
+        let original = c.identity.clone().unwrap();
+        let id = c.identity.as_mut().unwrap();
+        match field {
+            0 => id.start_ticks.push('0'),
+            1 => id.uid += 1,
+            _ => id.pid += 1,
+        };
+        let mut calls = 0;
+        let exe = fs::canonicalize("/bin/sleep").unwrap();
+        let e = c
+            .await_executable_observed(&exe, &fs::metadata(&exe).unwrap(), &mut |pid| {
+                calls += 1;
+                readiness_image(pid)
+            })
+            .unwrap_err();
+        assert_eq!(e.code, "ownership_changed");
+        assert_eq!(calls, 0);
+        c.identity = Some(original);
+        private_finish(c);
+    }
+}
+#[test]
+fn readiness_exact_device_inode_and_second_image_are_required() {
+    if !ordinary() {
+        return;
+    }
+    for field in 0..3 {
+        let mut c = private_ready_child();
+        let mut calls = 0;
+        let exe = fs::canonicalize("/bin/sleep").unwrap();
+        c.await_executable_observed(&exe, &fs::metadata(&exe).unwrap(), &mut |pid| {
+            calls += 1;
+            let mut i = readiness_image(pid)?;
+            if (field < 2 && calls == 1) || (field == 2 && calls == 2) {
+                match field {
+                    0 => i.device += 1,
+                    1 => i.inode += 1,
+                    _ => i.path = "/unconfigured/image".into(),
+                }
+            }
+            Ok(i)
+        })
+        .unwrap();
+        assert!(calls >= 3);
+        private_finish(c);
+    }
+}
+#[test]
+fn readiness_late_image_cannot_publish_success() {
+    if !ordinary() {
+        return;
+    }
+    let mut c = private_ready_child();
+    let before = c.identity.clone();
+    let exe = fs::canonicalize("/bin/sleep").unwrap();
+    let e = c
+        .await_executable_observed(&exe, &fs::metadata(&exe).unwrap(), &mut |pid| {
+            thread::sleep(Duration::from_millis(2100));
+            readiness_image(pid)
+        })
+        .unwrap_err();
+    assert_eq!(e.code, "launch_not_ready");
+    assert_eq!(c.identity, before);
+    private_finish(c);
+}
+#[test]
+fn readiness_threaded_exec_collects_actual_image_operation_failures() {
+    if !ordinary() {
+        return;
+    }
+    let mut genuine = 0;
+    for iteration in 0..12 {
+        let mut cmd = Command::new(std::env::current_exe().unwrap());
+        cmd.args([
+            "--exact",
+            "launch::linux::tests::generated_short_delayed_exec_child",
+            "--nocapture",
+        ])
+        .env("HOI4_SHORT_EXEC_CHILD", nonce().unwrap())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+        let mut child = OwnedChild::spawn(&mut cmd).unwrap();
+        let before = child.identity.clone().unwrap();
+        let mut input = child.child.stdin.take().unwrap();
+        let release = thread::spawn(move || {
+            thread::sleep(Duration::from_millis(50));
+            input.write_all(b"x").unwrap();
+        });
+        let exe = fs::canonicalize("/bin/sleep").unwrap();
+        let result=child.await_executable_observed(&exe,&fs::metadata(&exe).unwrap(),&mut |pid| {
+            // Diagnostic-only tighter read-only sampling of generated exec.
+            // Production observer retains 5ms polling; its exact timing is not reproduced.
+            let sample_until=Instant::now()+Duration::from_millis(100);
+            let result=loop {
+                let result=readiness_image(pid);
+                match &result {
+                    Ok(image) if image.path!=exe.to_string_lossy()&&Instant::now()<sample_until=>continue,
+                    _=>break result,
+                }
+            };
+            if let Err((stage,e))=&result {eprintln!("ACTUAL_EXEC_OBSERVATION iteration={iteration} stage={stage} errno={:?} kind={:?}",e.raw_os_error(),e.kind());genuine+=1;}
+            result
+        });
+        release.join().unwrap();
+        result.unwrap();
+        let after = child.identity.clone().unwrap();
+        assert_eq!(before.pid, after.pid);
+        assert_eq!(before.start_ticks, after.start_ticks);
+        assert_eq!(after.exe, exe.to_string_lossy());
+        private_finish(child);
+    }
+    eprintln!("ACTUAL_EXEC_OBSERVATION summary generated_execs=12 real_image_errors={genuine}; zero_errors_does_not_disprove_race");
+}

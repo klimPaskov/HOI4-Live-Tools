@@ -13,6 +13,7 @@ use crate::{
 };
 use std::sync::{Arc, Mutex, MutexGuard, RwLock, RwLockReadGuard, TryLockError};
 
+mod readback;
 mod research;
 
 #[derive(Deserialize)]
@@ -39,6 +40,16 @@ struct Guard {
 }
 impl Guard {
     fn observe(&mut self, process: &dyn Process) -> Result<State> {
+        self.observe_scoped(process, None)
+    }
+    fn observe_until(&mut self, process: &dyn Process, deadline: Instant) -> Result<State> {
+        readback::observe_until(deadline, || self.observe_scoped(process, Some(deadline)))
+    }
+    fn observe_scoped(
+        &mut self,
+        process: &dyn Process,
+        deadline: Option<Instant>,
+    ) -> Result<State> {
         if self.invalidated {
             return Err(Error::new(
                 "input_binding_invalidated",
@@ -51,10 +62,18 @@ impl Guard {
         }
         let mut retries = 0;
         let observed = loop {
-            match game::clock_context(process) {
+            let observed = match deadline {
+                Some(until) => readback::observe_until(until, || game::clock_context(process)),
+                None => game::clock_context(process),
+            };
+            match observed {
                 Err(e) if e.code == "torn_read" && retries < 2 => {
                     retries += 1;
-                    thread::sleep(Duration::from_millis(2));
+                    let delay = deadline.map_or(Duration::from_millis(2), |until| {
+                        Duration::from_millis(2)
+                            .min(until.saturating_duration_since(Instant::now()))
+                    });
+                    thread::sleep(delay);
                 }
                 result => break result?,
             }
@@ -252,9 +271,10 @@ impl Commands for ClockService {
             || (name == "hoi4_research_attempt" && self.research_enabled)
     }
     fn capabilities(&self) -> Value {
-        json!({"transport":"ordinary authenticated X11 input","actions":["set_paused","set_speed"],"research_preview":{"enabled":self.research_enabled,"scope":"one OpenPanel, SelectSlot, SelectCategory, View or Research stage for own empty slot","installed_game_validation":"OpenPanel/SelectSlot/View/Research passed run 022; SelectCategory awaits live validation; full campaign acceptance pending"},"lease":"exclusive configured controller","native_posting":false,"cursor_movement":self.research_enabled,"load_generation":"unverified; campaign identity, anchors and observed timeline checked","full_campaign_acceptance":false})
+        json!({"transport":"ordinary authenticated X11 input","actions":["set_paused","set_speed"],"research_preview":{"enabled":self.research_enabled,"scope":"one OpenPanel, SelectSlot, SelectCategory, View or Research stage for own empty slot","installed_game_validation":"Panel, category navigation and four research assignments passed bounded run 024; later clock input uncertain; full campaign acceptance pending"},"lease":"exclusive configured controller","native_posting":false,"cursor_movement":self.research_enabled,"load_generation":"unverified; campaign identity, anchors and observed timeline checked","full_campaign_acceptance":false})
     }
     fn call(&self, process: &dyn Process, name: &str, arguments: &Value) -> Result<Value> {
+        let call_started = Instant::now();
         let args = arguments
             .as_object()
             .ok_or_else(|| Error::new("invalid_arguments", "Input arguments must be an object"))?;
@@ -369,8 +389,9 @@ impl Commands for ClockService {
             ));
         }
         let epoch = state.guard.epoch.clone();
-        let deadline = state.authority.authorize(token, &epoch)?;
-        state.guard.observe(process)?;
+        let deadline =
+            readback::operation_deadline(call_started, state.authority.authorize(token, &epoch)?);
+        state.guard.observe_until(process, deadline)?;
         let ControlState {
             guard,
             journal,
@@ -384,7 +405,13 @@ impl Commands for ClockService {
             deadline,
             input_gate: &self.input_gate,
         };
-        let receipt = journal.execute(id, &epoch, action, &mut backend, Duration::from_secs(10))?;
+        let receipt = journal.execute(
+            id,
+            &epoch,
+            action,
+            &mut backend,
+            readback::OPERATION_TIMEOUT,
+        )?;
         serde_json::to_value(receipt).map_err(|e| Error::new("receipt_failed", e.to_string()))
     }
 }
@@ -479,13 +506,7 @@ fn deliver_clock_step(
 
 impl ClockBackend<'_> {
     fn live_lease(&self) -> Result<()> {
-        if Instant::now() >= self.deadline {
-            return Err(Error::new(
-                "input_lease_required",
-                "Input lease expired before delivery",
-            ));
-        }
-        Ok(())
+        readback::ensure_live(self.deadline)
     }
     fn step(&mut self, action: &Action) -> Result<bool> {
         self.live_lease()?;
@@ -497,7 +518,7 @@ impl ClockBackend<'_> {
                 action,
                 || {
                     self.live_lease()?;
-                    self.guard.observe(process)
+                    self.guard.observe_until(process, deadline)
                 },
                 |key, before_queue| {
                     controls.send_until_checked(process, key, deadline, before_queue)
@@ -512,25 +533,13 @@ impl ClockBackend<'_> {
         }
     }
     fn wait_change(&mut self, reached: impl Fn(&State) -> bool) -> Result<State> {
-        let deadline = Instant::now() + Duration::from_millis(1500);
-        loop {
-            let observed = self.observe()?;
-            if reached(&observed) {
-                return Ok(observed);
-            }
-            if Instant::now() >= deadline {
-                return Err(Error::new(
-                    "input_readback_failed",
-                    "Delivered key had no target witness; never resend blindly",
-                ));
-            }
-            thread::sleep(Duration::from_millis(20));
-        }
+        let deadline = readback::step_deadline(self.deadline, Instant::now());
+        readback::wait_change(deadline, || self.observe(), reached)
     }
 }
 impl Backend for ClockBackend<'_> {
     fn observe(&mut self) -> Result<State> {
-        self.guard.observe(self.process)
+        self.guard.observe_until(self.process, self.deadline)
     }
     fn preflight(&mut self, action: &Action, before: &State) -> Result<()> {
         self.live_lease()?;
@@ -598,6 +607,79 @@ mod tests {
             paused,
             speed,
         }
+    }
+
+    #[test]
+    fn final_queue_observation_cannot_return_a_late_noop_or_send_a_key() {
+        let start = Instant::now();
+        let deadline = start + Duration::from_secs(10);
+        let now = std::cell::Cell::new(start);
+        let observations = std::cell::Cell::new(0);
+        let pairs = std::cell::Cell::new(0);
+        let error = deliver_clock_step(
+            &Action::SetPaused(false),
+            || {
+                readback::fixture_observe_until(
+                    deadline,
+                    || {
+                        observations.set(observations.get() + 1);
+                        if observations.get() == 2 {
+                            now.set(deadline);
+                            Ok(state(false, 0)) // Target reached too late in final callback.
+                        } else {
+                            Ok(state(true, 0))
+                        }
+                    },
+                    || now.get(),
+                )
+            },
+            |_, before_queue| {
+                let ready = before_queue()?;
+                if ready {
+                    pairs.set(pairs.get() + 1);
+                }
+                Ok(ready)
+            },
+        )
+        .unwrap_err();
+        assert_eq!(error.code, "input_lease_required");
+        assert_eq!(observations.get(), 2);
+        assert_eq!(pairs.get(), 0);
+    }
+
+    #[test]
+    fn final_action_target_does_not_replace_delivered_intermediate_field_witness() {
+        let start = Instant::now();
+        let now = std::cell::Cell::new(start);
+        let pairs = std::cell::Cell::new(0);
+        let mut states = VecDeque::from([state(true, 0), state(true, 0)]);
+        let step = deliver_clock_step(
+            &Action::SetSpeed(4),
+            || Ok(states.pop_front().unwrap()),
+            |_, before_queue| {
+                let ready = before_queue()?;
+                if ready {
+                    pairs.set(pairs.get() + 1);
+                }
+                Ok(ready)
+            },
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(step, ClockStep::Faster(1));
+        let error = readback::fixture_wait_change(
+            start + Duration::from_millis(1500),
+            || {
+                now.set(now.get() + Duration::from_millis(800));
+                Ok(state(true, 4))
+            },
+            |fresh| step.reached(fresh),
+            || now.get(),
+            |d| now.set(now.get() + d),
+        )
+        .unwrap_err();
+        assert_eq!(error.code, "input_readback_failed");
+        assert_eq!(pairs.get(), 1); // No attempt to deliver a replacement key.
     }
 
     #[test]

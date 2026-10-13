@@ -45,6 +45,11 @@ launches its own game with `--serve PRIVATE_CONFIG`; stdio clients reconnect wit
 `--connect RUN_DIRECTORY`. It requires an explicitly owned authenticated X11
 display and refuses to discover or take over an unrelated game.
 
+Executable readiness retains the child's creation/parent/user pin through
+transient Linux `exec` link disappearance. Only executable-link `NotFound` is
+retried within the original two-second deadline; success requires two matching
+path/device/inode observations. Permission errors and ownership changes refuse.
+
 The only live-tested game layout is Linux x86_64:
 
 - GNU build ID: `a4971c9e8ac9a6f2487dea109e01f9839ee59db7`.
@@ -162,6 +167,10 @@ restart and blocks replay, including attempts with a new request ID.
 
 Clock transport sends only Space and keypad minus/plus. It checks exact process,
 window PID/class, focus, clear keys/modifiers and the authenticated display peer.
+Clock actions use one ten-second deadline capped by the original lease. Each
+delivered key still requires its exact intermediate state within 1.5 seconds;
+reads returned after either deadline cannot verify success. Blocking OS reads
+are not forcibly interrupted. Uncertain input remains quarantined without replay.
 It never activates a window or moves the cursor. Bounded X11 delivery is separate
 from authoritative game-state readback.
 

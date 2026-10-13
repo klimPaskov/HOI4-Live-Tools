@@ -336,6 +336,56 @@ fn duplicate_game(executable: &Path) -> Result<()> {
     }
     Ok(())
 }
+// Readiness keeps stable ownership independent of transient exe-link observations.
+// No generic erased Error/message retry: only these image operations carry raw IO.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct ReadinessAnchor {
+    pid: i32,
+    parent: i32,
+    uid: u32,
+    start_ticks: String,
+}
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct ReadinessImage {
+    path: String,
+    device: u64,
+    inode: u64,
+}
+type ImageResult = std::result::Result<ReadinessImage, (&'static str, std::io::Error)>;
+fn readiness_io_error(stage: &'static str, io: std::io::Error) -> Error {
+    let mut error: Error = io.into();
+    error.message = format!("Executable readiness {stage}: {}", error.message);
+    error
+}
+fn readiness_anchor(pid: i32) -> Result<ReadinessAnchor> {
+    let path = PathBuf::from(format!("/proc/{pid}"));
+    let (_, parent, start_ticks) = platform::parse_stat(&fs::read_to_string(path.join("stat"))?)?;
+    Ok(ReadinessAnchor {
+        pid,
+        parent,
+        uid: fs::metadata(path)?.uid(),
+        start_ticks,
+    })
+}
+fn readiness_image(pid: i32) -> ImageResult {
+    let path = PathBuf::from(format!("/proc/{pid}/exe"));
+    let exe = fs::read_link(&path).map_err(|e| ("exe_readlink", e))?;
+    let meta = fs::metadata(&path).map_err(|e| ("exe_metadata", e))?;
+    let path = exe.into_os_string().into_string().map_err(|_| {
+        (
+            "exe_path_encoding",
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Executable path is not UTF-8",
+            ),
+        )
+    })?;
+    Ok(ReadinessImage {
+        path,
+        device: meta.dev(),
+        inode: meta.ino(),
+    })
+}
 /// A pinned child and its only reaper. Unexpected owner errors preserve the
 /// parent until the launched child exits, even when graceful shutdown hangs.
 struct OwnedChild {
@@ -392,45 +442,115 @@ impl OwnedChild {
         Ok(owned)
     }
     fn await_executable(&mut self, executable: &Path, expected: &fs::Metadata) -> Result<()> {
+        self.await_executable_observed(executable, expected, &mut readiness_image)
+    }
+    fn readiness_live(&self, deadline: Instant) -> Result<()> {
+        if Instant::now() >= deadline {
+            return Err(Error::new(
+                "launch_not_ready",
+                "Configured executable readiness deadline reached",
+            ));
+        }
+        if self.exited_without_reaping()? {
+            return Err(Error::new(
+                "launch_exited",
+                "Child exited before executable readiness",
+            ));
+        }
+        if Instant::now() >= deadline {
+            return Err(Error::new(
+                "launch_not_ready",
+                "Configured executable readiness deadline reached",
+            ));
+        }
+        Ok(())
+    }
+    fn readiness_anchor_checked(
+        &self,
+        first: &mut Option<ReadinessAnchor>,
+        deadline: Instant,
+    ) -> Result<ReadinessAnchor> {
+        self.readiness_live(deadline)?;
+        let current = readiness_anchor(self.child.id() as i32)?;
+        self.readiness_live(deadline)?;
+        if current.uid != uid()
+            || current.parent != std::process::id() as i32
+            || first.as_ref().is_some_and(|old| old != &current)
+        {
+            return Err(Error::new(
+                "ownership_changed",
+                "Launched child ownership changed",
+            ));
+        }
+        if first.is_none() {
+            *first = Some(current.clone());
+        }
+        Ok(current)
+    }
+    fn await_executable_observed(
+        &mut self,
+        executable: &Path,
+        expected: &fs::Metadata,
+        image: &mut dyn FnMut(i32) -> ImageResult,
+    ) -> Result<()> {
         let deadline = Instant::now() + Duration::from_secs(2);
-        let mut creation = None;
+        // An already established creation pin must not be reset by a second wait.
+        let mut first = self.identity.as_ref().map(|id| ReadinessAnchor {
+            pid: id.pid,
+            parent: std::process::id() as i32,
+            uid: id.uid,
+            start_ticks: id.start_ticks.clone(),
+        });
+        let expected_image = ReadinessImage {
+            path: executable.to_string_lossy().into_owned(),
+            device: expected.dev(),
+            inode: expected.ino(),
+        };
         loop {
-            if self.exited_without_reaping()? {
-                return Err(Error::new(
-                    "launch_exited",
-                    "Child exited before executable readiness",
-                ));
+            let anchor = self.readiness_anchor_checked(&mut first, deadline)?;
+            let before = image(anchor.pid);
+            self.readiness_live(deadline)?;
+            self.readiness_anchor_checked(&mut first, deadline)?;
+            let before = match before {
+                Ok(value) => value,
+                Err((stage, e))
+                    if e.kind() == std::io::ErrorKind::NotFound
+                        && matches!(stage, "exe_readlink" | "exe_metadata") =>
+                {
+                    thread::sleep(
+                        Duration::from_millis(5)
+                            .min(deadline.saturating_duration_since(Instant::now())),
+                    );
+                    continue;
+                }
+                Err((stage, e)) => return Err(readiness_io_error(stage, e)),
+            };
+            if before == expected_image {
+                let after = image(anchor.pid);
+                self.readiness_live(deadline)?;
+                self.readiness_anchor_checked(&mut first, deadline)?;
+                match after {
+                    Ok(value) if value == before => {
+                        self.readiness_live(deadline)?;
+                        self.identity = Some(Identity {
+                            pid: anchor.pid,
+                            uid: anchor.uid,
+                            start_ticks: anchor.start_ticks,
+                            exe: value.path,
+                        });
+                        return Ok(());
+                    }
+                    Ok(_) => {}
+                    Err((stage, e))
+                        if e.kind() == std::io::ErrorKind::NotFound
+                            && matches!(stage, "exe_readlink" | "exe_metadata") => {}
+                    Err((stage, e)) => return Err(readiness_io_error(stage, e)),
+                }
             }
-            let identity = capture_identity(self.child.id() as i32)?;
-            let (_, parent, ticks) =
-                platform::parse_stat(&fs::read_to_string(format!("/proc/{}/stat", identity.pid))?)?;
-            let first = creation.get_or_insert(identity.start_ticks.clone());
-            if identity.uid != uid()
-                || parent != std::process::id() as i32
-                || first != &identity.start_ticks
-                || ticks != identity.start_ticks
-            {
-                return Err(Error::new(
-                    "ownership_changed",
-                    "Launched child ownership changed",
-                ));
-            }
-            let actual = fs::metadata(format!("/proc/{}/exe", identity.pid))?;
-            if identity.exe == executable.to_string_lossy()
-                && actual.dev() == expected.dev()
-                && actual.ino() == expected.ino()
-                && capture_identity(identity.pid)? == identity
-            {
-                self.identity = Some(identity);
-                return Ok(());
-            }
-            if Instant::now() >= deadline {
-                return Err(Error::new(
-                    "launch_not_ready",
-                    "Configured executable was not observed",
-                ));
-            }
-            thread::sleep(Duration::from_millis(5));
+            self.readiness_live(deadline)?;
+            thread::sleep(
+                Duration::from_millis(5).min(deadline.saturating_duration_since(Instant::now())),
+            );
         }
     }
     fn exited_without_reaping(&self) -> Result<bool> {
