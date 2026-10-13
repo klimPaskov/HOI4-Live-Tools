@@ -677,7 +677,7 @@ fn canonical_assignment_without_input_idle_stays_quarantined() {
 
 fn closed_map_state() -> OwnState {
     let mut s = panel_state();
-    s.active_mode = Some(0);
+    s.active_mode = Some(23);
     s.panel_visible = Some(false);
     s.selected_slot = None;
     s
@@ -741,6 +741,9 @@ fn panel_unknown_mode_info_occupied_and_wrong_input_kind_refuse() {
     let mut states = vec![];
     let mut s = closed_map_state();
     s.active_mode = None;
+    states.push(s);
+    let mut s = closed_map_state();
+    s.active_mode = Some(0);
     states.push(s);
     let mut s = closed_map_state();
     s.active_mode = Some(7);

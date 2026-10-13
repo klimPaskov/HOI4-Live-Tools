@@ -37,6 +37,7 @@ pub(crate) fn observe(
     registry: u64,
     keys: &BTreeMap<u64, String>,
     key: &str,
+    include_geometry: bool,
 ) -> Result<Value> {
     let definition = keys
         .iter()
@@ -119,6 +120,9 @@ pub(crate) fn observe(
             continue;
         }
         let mut c = json!({"name":name,"binding_verified":false,"type_encoding":null,"reason":"control_layout_unavailable","input_authorized":false});
+        if include_geometry {
+            c["render_diagnostic"] = json!({"available":false,"reason":"focus_geometry_binding_unavailable","input_authorized":false,"client_rectangle_available":false});
+        }
         if *child == 0 {
             controls.push(c);
             continue;
@@ -157,6 +161,11 @@ pub(crate) fn observe(
                     ));
                 }
                 c["renderer_control_join_verified"] = json!(true);
+                if include_geometry {
+                    c["render_diagnostic"] = crate::focus_geometry::observe(
+                        r, &mut reuse, window, *child, registry, primary, render,
+                    )?;
+                }
             }
         }
         controls.push(c);

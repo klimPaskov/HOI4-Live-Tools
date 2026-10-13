@@ -304,3 +304,11 @@ prepare menus only, and let exclusive Luna medium input open the panel itself
 before SelectSlot/View/Research. Observe category association/geometry by ID
 without switching tabs. Keep unknown input quarantined and never hot-swap a
 live binary. Category input, focus actions and daily plans remain unfinished.
+
+
+Run 021 was canceled before campaign start/input binding after review disproved
+the OpenPanel fixture's mode-zero assumption. It exited normally with code 0.
+The next source requires independently proved no-managed-view sentinel 23 and
+adds read-only category candidates plus opt-in focus geometry. Combined fixtures
+pass; start a fresh immutable run for Luna OpenPanel/SelectSlot/View/Research.
+Never reuse or replace run 021's binary to hide the canceled preflight.

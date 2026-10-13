@@ -96,6 +96,9 @@ fn observe_inner(
     if r.u64(slot + 0x10)? != own_status {
         return Err(refuse("Foreign selected research slot"));
     }
+    if include_geometry {
+        out["selected_slot_empty"] = json!(r.u64(slot + 0x18)? == 0);
+    }
     container(r, base, root, registry)?;
     let db = r.u64(base + 0x439f450)?;
     exact(r, db, base + 0x42110c8)?;
@@ -639,5 +642,17 @@ mod tests {
         f.sprite();
         f.word(0xf4108, 0xf3008);
         assert_eq!(f.geometry().unwrap_err().code, "invalid_gui_position");
+    }
+    #[test]
+    fn selected_emptiness_geometry_only_and_final_witness() {
+        let f = Fixture::new();
+        assert!(f.observe().unwrap().get("selected_slot_empty").is_none());
+        assert_eq!(f.geometry().unwrap()["selected_slot_empty"], true);
+        let mut f = Fixture::new();
+        f.word(0xb0018, 0xdead0000);
+        assert_eq!(f.geometry().unwrap()["selected_slot_empty"], false);
+        let mut f = Fixture::new();
+        f.fault = Some((0xb0018, 0xdead0000u64.to_le_bytes().to_vec()));
+        assert_eq!(f.geometry().unwrap_err().code, "torn_read");
     }
 }

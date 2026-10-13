@@ -68,6 +68,39 @@ pub(crate) fn sprite_diagnostic(
         ));
     }
     let render = r.u64(button + 0x110)?;
+    sprite_render_diagnostic(r, reuse, gui, button, registry, render, false)
+}
+
+/// Exact Standard uses E8, not Drag110. Semantic binding remains caller-owned.
+pub(crate) fn standard_sprite_diagnostic(
+    r: &Reader<'_>,
+    reuse: &mut Reuse,
+    gui: u64,
+    button: u64,
+    registry: u64,
+) -> Result<Value> {
+    let base = reuse.base();
+    exact(r, gui, base + 0x4347d58)?;
+    exact(r, button, base + 0x43470c8)?;
+    if r.u64(gui + 0x98)? != registry || r.u64(button + 0x68)? != registry {
+        return Err(Error::new(
+            "invalid_gui_owner",
+            "Own Standard/container registry required",
+        ));
+    }
+    let render = r.u64(button + 0xe8)?;
+    sprite_render_diagnostic(r, reuse, gui, button, registry, render, true)
+}
+fn sprite_render_diagnostic(
+    r: &Reader<'_>,
+    reuse: &mut Reuse,
+    gui: u64,
+    button: u64,
+    registry: u64,
+    render: u64,
+    standard: bool,
+) -> Result<Value> {
+    let base = reuse.base();
     let mut out = json!({"render_type_encoding":reuse.nullable_type(r,render)?,"field_layout_verified":false,"client_rectangle_available":false,"input_authorized":false,"effective_routing_verified":false});
     if render == 0 || r.u64(render)? != base + 0x4356e08 {
         out["reason"] = json!("renderer_layout_unavailable");
@@ -76,7 +109,11 @@ pub(crate) fn sprite_diagnostic(
     if r.u64(render + 0x138)? != button {
         return Err(Error::new(
             "invalid_gui_owner",
-            "Renderer must belong to own bound Drag",
+            if standard {
+                "Renderer must belong to own bound Standard"
+            } else {
+                "Renderer must belong to own bound Drag"
+            },
         ));
     }
     let resource = r.u64(render + 0x168)?;

@@ -277,3 +277,27 @@ fn category_arguments_refuse_before_process_access() {
         assert!(reply.to_string().contains("invalid_arguments"));
     }
 }
+#[test]
+fn focus_geometry_flag_is_optional_strict_boolean_before_process_access() {
+    let server = hoi4_live_native::protocol::Server {
+        process: None,
+        unavailable: None,
+    };
+    for args in [
+        json!({"focus_id":"GER_rhineland","include_geometry":null}),
+        json!({"focus_id":"GER_rhineland","include_geometry":0}),
+        json!({"focus_id":"GER_rhineland","include_geometry":"true"}),
+        json!({"focus_id":"GER_rhineland","include_geometry":true,"other":1}),
+    ] {
+        let reply=server.handle(json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"hoi4_focus_node_detail","arguments":args}})).unwrap();
+        assert!(reply.to_string().contains("invalid_arguments"));
+    }
+    for args in [
+        json!({"focus_id":"GER_rhineland"}),
+        json!({"focus_id":"GER_rhineland","include_geometry":false}),
+        json!({"focus_id":"GER_rhineland","include_geometry":true}),
+    ] {
+        let reply=server.handle(json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"hoi4_focus_node_detail","arguments":args}})).unwrap();
+        assert!(!reply.to_string().contains("invalid_arguments"));
+    }
+}

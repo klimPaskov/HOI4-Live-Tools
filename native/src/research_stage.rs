@@ -129,7 +129,7 @@ impl OwnState {
     }
     pub(crate) fn preflight(&self, target: &Target) -> Result<()> {
         if target.stage == Stage::OpenPanel {
-            if self.active_mode != Some(0)
+            if self.active_mode != Some(23)
                 || self.panel_visible != Some(false)
                 || self.tree_visible
                 || !self.visible_info.is_empty()
@@ -137,7 +137,7 @@ impl OwnState {
             {
                 return Err(error(
                     "research_precondition",
-                    "Known closed own research views in normal map mode required",
+                    "Known closed own research views with no managed view selected required",
                 ));
             }
             return Ok(());

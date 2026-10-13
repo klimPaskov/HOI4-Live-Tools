@@ -81,7 +81,7 @@ anchors do not establish a load-generation token.
 | `hoi4_research_node_detail` | One exact own key's binding, raw renderer/cache and typed hierarchy diagnostics |
 | `hoi4_research_nodes` | Paged current own-tree keys and conditional control associations |
 | `hoi4_focus_list` | Own canonical focus keys and selected detail diagnostics; no start authority |
-| `hoi4_focus_node_detail` | One own focus key's current-item/control associations; no geometry or action authority |
+| `hoi4_focus_node_detail` | One own focus key's current-item/control associations; opt-in raw Sprite/Text diagnostics, awaiting live validation |
 | `hoi4_wait_for` | Server wait, 1–50 seconds, for a date, focus/research changes or research UI predicates |
 
 Catalog queries accept `filter`, `offset` and `limit` (1–100). Research completed
@@ -170,7 +170,7 @@ the ordinary slot control from an open own panel. Recorded run 020 verified
 Luna selecting slots 0 and 1, assigning research, and advancing its counter
 through 3 January; all four strategic RPC samples were under one second.
 The new `open_panel` stage uses ordinary `W` from known closed views in normal
-map mode; it is fixture-tested and awaits recorded live validation. Category
+map context with no managed view selected; it is fixture-tested and awaits recorded live validation. Category
 navigation remains unfinished.
 Its internal observation adapter checks the requested own key/slot and fresh
 renderer, callback, hierarchy and SDL/X11 associations before candidate maths.

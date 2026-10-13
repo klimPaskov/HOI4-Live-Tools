@@ -363,3 +363,51 @@ pub fn observe_slot_owned(
         context,
     ))
 }
+
+/// Category navigation candidate only. Owner must revalidate lease/campaign and
+/// OS/profile before any separate normal action; no dispatch exists here.
+fn category_surface(detail: &Value, key: &str, slot: u32) -> Result<Surface> {
+    if detail["owned"] != true
+        || detail["build_id"] != game::BUILD_ID
+        || detail["selected_slot"].as_u64() != Some(u64::from(slot))
+    {
+        return Err(unavailable("Fresh selected own category slot required"));
+    }
+    let category = &detail["category"];
+    if category["folder_key"] != key
+        || category["binding_available"] != true
+        || category["selected_slot_empty"] != true
+        || category["control_type_encoding"] != "11CButtonDrag"
+    {
+        return Err(unavailable(
+            "Exact requested category Drag binding and own empty slot required",
+        ));
+    }
+    let flags = uint(&category["raw_flags"])?;
+    // Local active/hide-suppression branches only, never topmost/eligibility.
+    if flags & (1 << 11) == 0 || flags & (1 << 12) != 0 {
+        return Err(unavailable("Category local active/hide branch unavailable"));
+    }
+    sprite_surface(&category["sprite_diagnostic"])
+}
+#[doc(hidden)]
+pub fn observe_category_owned(
+    process: &dyn Process,
+    key: &str,
+    slot: u32,
+    profile: &OwnedClientProfile,
+) -> Result<(PointCandidate, research_ui::UiContext)> {
+    research_ui::validate_detail_key(key)?;
+    let (detail, context) = research_ui::category_with_geometry_owned(process, key, true)?;
+    let surface = category_surface(&detail, key, slot)?;
+    if slot as usize >= context.slots.len() {
+        return Err(unavailable("Selected category slot context bound"));
+    }
+    let geometry = gui::input_geometry(process)?;
+    let codec = codec(&geometry, profile)?;
+    process.check()?;
+    Ok((
+        research_attempt::point_candidate(&surface, &codec)?,
+        context,
+    ))
+}

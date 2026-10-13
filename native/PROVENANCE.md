@@ -231,3 +231,18 @@ and `slot_control`; research-node layouts are not guessed for those classes.
 Same-body campaign witnesses, sampled slot identity joins and owner checks before
 payload do not claim atomicity or load-generation proof. External engine posting
 remains quarantined.
+
+
+The category association/candidate and opt-in focus geometry are new project
+code from independent current-build constructor, named-control, dense-index and
+callback-capture proof. The category reader checks the exact reserved singleton
+and shares final own campaign/slot witnesses. Exact Standard Sprite observation
+uses its separately proved renderer offset and shares only the already-validated
+Sprite payload body; it never borrows Drag control fields. Text retains its
+distinct resource proof. Deep focus geometry remains opt-in.
+
+The ordinary research-panel shortcut was checked against installed GUI metadata
+and its top-bar observer route. A fixture's unproved mode-zero assumption was
+corrected after constructor/getter/toggle recovery proved the no-managed-view
+sentinel 23. Static routing and sentinel checks do not establish modal absence,
+keyboard consumption or event causality. No game files are redistributed.

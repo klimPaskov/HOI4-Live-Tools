@@ -39,7 +39,7 @@ impl Service {
     }
 }
 pub(super) fn tool() -> Value {
-    json!({"name":"hoi4_research_attempt","description":"Preview: one ordinary OpenPanel shortcut or ID-derived SelectSlot, View or Research stage for an own empty slot. OpenPanel requires known closed views in normal map mode; SelectSlot requires an open own panel; View/Research require its selected tree. Requires explicit owner profile, exclusive lease and stable stage request ID. Canonical readback verifies state; uncertain attempts are never replayed. No coordinates or engine calls.",
+    json!({"name":"hoi4_research_attempt","description":"Preview: one ordinary OpenPanel shortcut or ID-derived SelectSlot, View or Research stage for an own empty slot. OpenPanel requires known closed views in the no-managed-view sentinel; SelectSlot requires an open own panel; View/Research require its selected tree. Requires explicit owner profile, exclusive lease and stable stage request ID. Canonical readback verifies state; uncertain attempts are never replayed. No coordinates or engine calls.",
     "inputSchema":{"type":"object","properties":{"stage":{"enum":["open_panel","select_slot","view","research"]},"technology_id":{"type":"string","minLength":1,"maxLength":256},"slot":{"type":"integer","minimum":0,"maximum":31},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["stage","technology_id","slot","request_id","lease_token"],"additionalProperties":false}})
 }
 pub(super) fn call(
@@ -534,11 +534,11 @@ mod tests {
     #[test]
     fn normal_map_panel_opening_requires_consistent_raw_visibility() {
         let (r, mut u) = values();
-        u["active_mode_raw"] = json!(0);
+        u["active_mode_raw"] = json!(23);
         assert!(own_state(epoch(), &r, &u).is_err());
         u["ordinary_tree"]["visible_predicate"] = json!(false);
         let state = own_state(epoch(), &r, &u).unwrap();
-        assert_eq!(state.active_mode, Some(0));
+        assert_eq!(state.active_mode, Some(23));
         assert_eq!(state.panel_visible, Some(false));
         assert!(!state.tree_visible);
         u["panel"] = json!({"materialized":true,"visible_predicate":true});

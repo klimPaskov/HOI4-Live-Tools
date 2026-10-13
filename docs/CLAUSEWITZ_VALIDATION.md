@@ -1381,3 +1381,34 @@ in 19.378 seconds. Host/Linux Clippy and MSRV Linux compilation passed. All thre
 Rust and six Python CI jobs passed for the preceding category commit `3e43476`.
 Panel opening and category geometry still await installed-game validation; this
 checkpoint does not validate category input or campaign acceptance.
+
+
+## Run 021 canceled before campaign start; corrected observer gate
+
+Review of prior own UI observations caught an unproved fixture assumption in
+`cdf2ae8`: mode 0 was labeled the closed map context. Independent constructor,
+getter and toggle tracing instead proves **23 is the no-managed-view sentinel**;
+0 is a real view index. The future OpenPanel guard now requires 23 plus fresh
+closed own views, no Info and canonical empty slot. It does not claim absence
+of every modal or establish keyboard consumption from static routing.
+
+Fresh immutable run 021 was canceled during frontend loading before campaign
+start or input binding. One owned WM close returned actual normal exit **0**,
+with no signal/core dump, in **1.97 seconds**. Exact game/owner disappearance was
+checked. Its binary was never replaced, no Luna action ran, and this is no
+installed-game OpenPanel acceptance. The assumption and cancellation evidence
+are preserved privately. All nine CI jobs passed for its source.
+
+The corrected source also adds a private category-point candidate using the
+existing Sprite/codec maths and witnessed selected-slot emptiness. It has no
+dispatch or input authority. Opt-in exact focus-node queries now expose separate
+Standard Sprite/Text diagnostics after their own callback/owner checks. Standard
+uses its independently proved renderer offset; the old Drag wrapper stays
+unchanged. Default focus list/node/start metadata and reads stay unchanged.
+
+Combined host and Rust 1.86 suites passed **358 tests**. Optimized actual Linux
+passed **420 reported checks** (419 substantive plus one inert helper); ownership
+and kernel policy stayed unchanged. Python passed **953 tests, 37 skipped**, in
+19.994 seconds. Host/Linux Clippy and MSRV Linux compilation passed. Corrected
+panel opening, category geometry/selection and focus geometry remain pending
+installed-game validation; focus actions and daily plans remain unfinished.

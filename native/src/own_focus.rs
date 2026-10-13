@@ -91,8 +91,9 @@ fn named_start(
     panel: u64,
     registry: u64,
     selected_key: &str,
-    visible: bool,
+    mode: (bool, bool),
 ) -> Result<Value> {
+    let (visible, include_geometry) = mode;
     // Exact CContainerWindow virtual88 uses these paired registries.
     let children = pointers(r, window + 0x9a0, 256)?;
     let (h, data, n) = r.array_header(window + 0x9b8)?;
@@ -130,7 +131,15 @@ fn named_start(
             let state = r.i32(child + 0xac)?;
             let flags = u32::from_le_bytes(r.read(child + 0x74, 4)?.try_into().unwrap());
             let binding = if visible {
-                crate::focus_start_binding::observe(r, base, panel, *child, registry, selected_key)?
+                crate::focus_start_binding::observe(
+                    r,
+                    base,
+                    panel,
+                    *child,
+                    registry,
+                    selected_key,
+                    include_geometry,
+                )?
             } else {
                 json!({"available":false,"reason":"detail_not_locally_visible","input_authorized":false})
             };
@@ -150,6 +159,7 @@ fn snapshot_model(
     limit: usize,
     prefix: Option<&str>,
     requested: Option<&str>,
+    include_geometry: bool,
 ) -> Result<Value> {
     if limit == 0
         || limit > 100
@@ -265,7 +275,13 @@ fn snapshot_model(
     }
     let node_association = if let Some(key) = requested {
         Some(crate::focus_node_binding::observe(
-            &r, base, view, registry, &keys, key,
+            &r,
+            base,
+            view,
+            registry,
+            &keys,
+            key,
+            include_geometry,
         )?)
     } else {
         None
@@ -322,7 +338,7 @@ fn snapshot_model(
                     panel,
                     registry,
                     key.as_deref().unwrap(),
-                    visible && animation_clear,
+                    (visible && animation_clear, include_geometry),
                 )?
             };
             json!({"materialized":true,"detail_visibility_flag":visible,"conservative_container_visibility":visible&&animation_clear,"start":control})
@@ -344,12 +360,12 @@ pub fn snapshot(
     limit: usize,
     prefix: Option<&str>,
 ) -> Result<Value> {
-    snapshot_model(process, offset, limit, prefix, None)
+    snapshot_model(process, offset, limit, prefix, None, false)
 }
 /// Exact own public focus key, read-only current item/control association.
 pub fn node_detail(process: &dyn Process, key: &str) -> Result<Value> {
     validate_key(key)?;
-    snapshot_model(process, 0, 1, Some(key), Some(key))
+    snapshot_model(process, 0, 1, Some(key), Some(key), false)
 }
 pub(crate) fn validate_key(key: &str) -> Result<()> {
     if key.is_empty()
@@ -362,4 +378,14 @@ pub(crate) fn validate_key(key: &str) -> Result<()> {
         ));
     }
     Ok(())
+}
+
+/// Opt-in deep renderer diagnostics; default node/list readers remain metadata-only.
+pub fn node_detail_with_geometry(
+    process: &dyn Process,
+    key: &str,
+    include_geometry: bool,
+) -> Result<Value> {
+    validate_key(key)?;
+    snapshot_model(process, 0, 1, Some(key), Some(key), include_geometry)
 }

@@ -46,3 +46,5 @@ mod focus_node_binding;
 mod slot_control;
 
 mod category_ui;
+
+mod focus_geometry;

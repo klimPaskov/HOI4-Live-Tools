@@ -299,7 +299,7 @@ fn frame_raw_geometry(
 
 // Exact ctor2f75ad0/table43593d8 and Text resource4359740 only.
 // Proof RESEARCH-TEXT-SPRITE-BLOCKER-PROOF b6808fbd4532ea3bf8cc833feff4ec50d603f490bdd4e69d02a22c3e4aa0afae.
-fn text_raw(
+pub(crate) fn text_raw(
     r: &Reader<'_>,
     reuse: &mut Reuse,
     render: u64,

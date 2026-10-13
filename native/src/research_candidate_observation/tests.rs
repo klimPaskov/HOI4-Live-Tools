@@ -163,3 +163,58 @@ fn stale_sizes_bad_pairs_and_relative_mode_refuse() {
         assert!(codec(&g, &profile()).is_err(), "{path}");
     }
 }
+
+fn category_detail() -> Value {
+    let d = detail(false);
+    json!({"owned":true,"build_id":game::BUILD_ID,"selected_slot":0,"category":{"folder_key":"industry_folder","selected_slot_empty":true,"binding_available":true,"control_type_encoding":"11CButtonDrag","raw_flags":2048,"sprite_diagnostic":d["detail"]["render_diagnostic"]}})
+}
+#[test]
+fn category_reuses_sprite_and_codec_without_authority() {
+    let d = category_detail();
+    let p = research_attempt::point_candidate(
+        &category_surface(&d, "industry_folder", 0).unwrap(),
+        &codec(&geometry(), &profile()).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(p.client_pixel, [37, 70]);
+    assert!(!p.input_authorized && !p.current_frame_verified && !p.effective_routing_verified);
+}
+#[test]
+fn category_scope_type_emptiness_and_raw_flags_fail_closed() {
+    for (path, value) in [
+        ("/owned", json!(false)),
+        ("/build_id", json!("other")),
+        ("/selected_slot", json!(1)),
+        ("/category/folder_key", json!("electronics_folder")),
+        ("/category/binding_available", json!(false)),
+        ("/category/selected_slot_empty", json!(false)),
+        (
+            "/category/control_type_encoding",
+            json!("15CButtonStandard"),
+        ),
+        ("/category/raw_flags", json!(0)),
+        ("/category/raw_flags", json!(6144)),
+    ] {
+        let mut d = category_detail();
+        *d.pointer_mut(path).unwrap() = value;
+        assert!(
+            category_surface(&d, "industry_folder", 0).is_err(),
+            "{path}"
+        );
+    }
+}
+#[test]
+fn category_rejects_unknown_or_incomplete_hierarchy_and_mask_branch() {
+    for(path,value)in[("/category/sprite_diagnostic/parent_chain/graphics_root_closed",json!(false)),("/category/sprite_diagnostic/parent_chain/status",json!("unknown_ancestor")),("/category/sprite_diagnostic/parent_chain/unit_cache_diagnostic/cache_consistent_under_observed_unit_branch",json!(false)),("/category/sprite_diagnostic/resource_cache/no_mask_rejection_branch",json!(false)),("/category/sprite_diagnostic/raw/visibility_flag",json!(0))]{let mut d=category_detail();*d.pointer_mut(path).unwrap()=value;assert!(category_surface(&d,"industry_folder",0).is_err(),"{path}");}
+}
+#[test]
+fn category_owner_profile_is_not_inferred_from_sprite() {
+    let d = category_detail();
+    let s = category_surface(&d, "industry_folder", 0).unwrap();
+    let mut p = profile();
+    p.os_binding_verified = false;
+    assert!(research_attempt::point_candidate(&s, &codec(&geometry(), &p).unwrap()).is_err());
+    let mut p = profile();
+    p.reviewed_builtin_client_origin = false;
+    assert!(research_attempt::point_candidate(&s, &codec(&geometry(), &p).unwrap()).is_err());
+}

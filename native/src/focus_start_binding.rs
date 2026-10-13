@@ -23,11 +23,15 @@ pub(crate) fn observe(
     button: u64,
     registry: u64,
     key: &str,
+    include_geometry: bool,
 ) -> Result<Value> {
     let mut out = json!({"available":false,"reason":"event_binding_unavailable","selected_own_key":key,
  "callback_route_verified":false,"renderer_control_join_verified":false,"renderer_type_encoding":null,
  "readback_meaning":"fresh_own_progress_active_focus_equals_requested_canonical_focus",
  "input_authorized":false,"effective_routing_verified":false,"eligibility_available":false,"client_rectangle_available":false});
+    if include_geometry {
+        out["render_diagnostic"] = json!({"available":false,"reason":"focus_geometry_binding_unavailable","input_authorized":false,"client_rectangle_available":false});
+    }
     if r.u64(button + 0x68)? != registry {
         return Err(Error::new(
             "invalid_focus_owner",
@@ -148,6 +152,12 @@ pub(crate) fn observe(
         ));
     }
     out["renderer_control_join_verified"] = json!(true);
+    if include_geometry {
+        let container = r.u64(panel + 0x7c8)?;
+        out["render_diagnostic"] = crate::focus_geometry::observe(
+            r, &mut reuse, container, button, registry, primary, renderer,
+        )?;
+    }
     out["available"] = json!(true);
     out["reason"] = json!("own_selected_event_start_and_noop_listener_verified");
     Ok(out)

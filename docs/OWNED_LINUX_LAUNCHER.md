@@ -195,7 +195,7 @@ acceptance remain unfinished. See [the bounded live gate](CLAUSEWITZ_VALIDATION.
 `hoi4_research_attempt` takes the planned `technology_id`, own `slot`,
 `stage` (`select_slot`, `view` or `research`), a separate stable `request_id`
 for each stage, and `lease_token`. The new `open_panel` stage requires known
-closed own views in normal map mode and sends one ordinary `W` pair without
+closed own views with no managed view selected and sends one ordinary `W` pair without
 pointer movement. An already open panel verifies without toggling it. This stage
 awaits recorded live validation. `select_slot` requires an open own panel
 and verifies the selected empty own tree; View/Research require that tree.
