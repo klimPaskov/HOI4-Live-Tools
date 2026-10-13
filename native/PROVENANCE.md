@@ -11,6 +11,23 @@ source comments identifying this derivation. Other modules are new project code.
 Current Linux ELF layouts were recovered independently from the installed build;
 upstream 1.19.2 offsets were not copied as current-build evidence.
 
+`politics_focus.rs` is new project code from independently decoded own-country
+accessor, paired child/button registries and the ordinary politics-to-focus
+callback. It observes these associations without executing them. The fixed `Q`
+transport names the politics shortcut; it is not a direct focus shortcut.
+`focus_stage.rs` adapts this project's durable research-stage policy. It remains
+a library without a live backend or MCP registration. Local focus readiness
+requires the literal shown flag and both transition channels settled at zero;
+unknown or moving windows cannot clear local blockers. No game assets are
+redistributed and local flags never supply routing or input authority.
+
+`daily_governor.rs` and its submodules are new project code informed by the
+existing Python governor and standing-plan concepts. Typed future plan fields
+do not implement economy, army or naval actions. The current research receipt
+converter accepts only fresh verified assignment results. The worker, shared
+controller integration and safe plan-update API remain unfinished; non-Unix
+private storage returns an explicit capability error.
+
 The owned Linux preview exposes observations and optionally ordinary clock keys.
 The failed engine posting path remains permanently quarantined in
 the disclosed private upstream validation adapter. No raw process-write, injection,

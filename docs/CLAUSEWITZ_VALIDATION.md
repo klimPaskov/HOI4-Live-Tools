@@ -1553,3 +1553,73 @@ stayed unchanged. Python passed **953 tests, 37 skipped**, in 22.830 seconds.
 Host/Linux Clippy, MSRV Linux compilation, formatting and diff checks passed.
 These are fixture/kernel checks; focus actions, a reliable repeated category
 cycle and campaign acceptance remain unfinished.
+
+## Recorded run 024: category cycle and four assignments
+
+Immutable source `a8dd857` / CLI SHA-256
+`1b527594f9ab09e1740aac3afe9047d8cccb89aaa61f5711507e8518a5eee73d`
+started Normal historical vanilla Germany, no mods or DLC. Recording had a
+verified first packet before one Start. A builder menu command reached its SSH
+deadline during loading; its delivery remains unknown and it was not replayed.
+Fresh native reads confirmed Germany, Jan1 at 12:00, paused, all four slots
+empty, focus null, mode23 and closed own research views before input binding.
+
+One exclusive Luna medium player completed **20 fresh Verified research stages**.
+Industry, a distinct same-folder no-input completion, electronics and infantry
+passed in **2,917 / 261 / 2,473 / 1,029 ms RPC**. Later industry/electronics
+switches passed in **877 / 798 / 819 ms**. All four assignments were verified:
+support weapons, basic machine tools, electronic mechanical engineering and
+construction1. Event-causality and game-action flags remain false. These samples
+validate this exact bounded run, not general p50/p95 speed or an upstream
+performance advantage.
+
+The speed4 request then returned `action_uncertain` in **5,149 ms**:
+`Delivered key had no target witness; never resend blindly`. No further gameplay
+input, clock retry, wait, pause or observation request followed. Required lease
+release/status confirmed zero remaining time. Final clock state remains unknown;
+the unresolved durable Dispatching receipt is preserved. No elapsed campaign
+progress, clean two-year run or full victory is established.
+
+Both H.264 segments finalized and passed ffprobe: **600.000 + 347.666 seconds**,
+**10,402,449 bytes**, 512×288. One owned WM close returned actual normal exit
+**0**, no signal/core dump, in **3.056 seconds**. Both exact game and owner were
+absent afterward, Yama remained1, journals and lease proof were preserved, and
+both clients closed. The binary was never replaced during the run.
+
+Category navigation and four-slot assignment passed here. Reliable clock input,
+live focus actions, daily execution, economic/army/naval commands, Windows/macOS
+native adapters and the required campaigns remain open gates.
+
+## Focus and daily-plan library fixture checkpoint
+
+The new own-politics observer validates the positive own-country accessor,
+complete paired child/button registries and exact ordinary politics-to-focus
+callback before optional renderer diagnostics. Fixed Q transport means politics,
+not direct focus. The focus-stage library borrows input authority, persists
+intent before one dispatch and quarantines unresolved input across stages and
+restart; no live backend or MCP focus action is registered. Positive local
+hidden/shown facts require the literal flag plus both transition channels at0.
+Transition1 or unknown values cannot supply readiness or clear blocker counts.
+
+The daily-plan core retains typed entries, executes at most once per advancing
+verified day, persists intent atomically, checks shared uncertainty and accepts
+only matching fresh completion receipts. Its research converter excludes
+panel/slot/category/view receipts and historical replay. The owned worker,
+shared-controller wiring, safe plan updates and focus/economy/army/naval receipt
+adapters remain unfinished. Non-Unix storage explicitly reports unavailable.
+Typed future plan fields are not implemented gameplay commands.
+
+Host stable and Rust1.86 suites passed **444 tests**. Optimized actual Linux
+passed **506 reported checks** (505 substantive plus one inert helper), including
+five isolated X11 cases with Q press/release and stationary pointer. The nested
+helper print is not counted twice. Python passed **953 tests, 37 skipped**, in
+20.054 seconds. Host/Linux Clippy, MSRV Linux compilation and formatting passed.
+The previous exact game/owner remained absent and Yama1/display ownership stayed
+unchanged. These are offline/kernel fixtures, not focus or governor live evidence.
+
+The first Linux bundle failed one authored atomic-replacement assertion because
+ext4 reused an earlier unlinked inode across multiple replacements. The corrected
+fixture pins the original file open, then verifies a distinct current inode,
+unchanged complete old-reader bytes and changed complete current bytes. Production
+storage guards were not relaxed. Initial failing logs and the original immutable
+bundle remain preserved privately.

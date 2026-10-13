@@ -321,3 +321,19 @@ processes are gone. Actual category tabs were Standard, with geometry unavailabl
 in that recorded source. The next Standard reader and durable SelectCategory
 stage pass combined fixtures. Next: a fresh immutable recorded Luna category
 selection gate, then focus actions and daily plans; full campaigns remain pending.
+
+Run024 subsequently passed the complete industry/electronics/infantry category
+cycle, a distinct same-folder no-input completion and all four research
+assignments with one exclusive Luna medium player. The later speed4 request
+returned action_uncertain because no target witness followed delivered input;
+no gameplay retry or post-failure observation request followed. The lease was
+released, recording passed ffprobe and one owned WM close returned normal exit0.
+Both exact owned processes are gone. Preserve that unresolved clock journal;
+the final clock state is unknown. This is bounded research acceptance only.
+
+New focus-stage, own-politics and daily-plan libraries remain offline
+prerequisites. No focus action or governor worker is enabled. Continue by fixing
+and freshly validating clock scheduling, joining the focus producers to the
+shared controller, then wiring daily execution and remaining domain adapters.
+Windows/macOS native live support, clean two-year acceptance and the Germany,
+China and Poland campaigns remain required. Keep the full goal active.

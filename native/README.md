@@ -30,6 +30,14 @@ return a capability error. Logs and setup errors go to stderr.
 Three-OS CI validates shared code. It does not establish Windows/macOS live
 compatibility. Layouts must be recovered and verified separately for each build.
 
+The focus-stage and daily-plan libraries are development prerequisites with
+injected backends, not enabled MCP commands. They retain unfinished entries,
+quarantine uncertain input and distinguish fresh verification from historical
+receipts. Daily planning still needs the owned worker, shared lease/journal
+integration and a safe plan-update API. Economy, army and naval plan fields have
+no action adapters. Private daily storage currently supports Unix only; other
+platforms return an explicit capability error.
+
 ## Connect an owned Linux game
 
 Follow [owned Linux launch setup](../docs/OWNED_LINUX_LAUNCHER.md). The supervisor
@@ -77,7 +85,7 @@ anchors do not establish a load-generation token.
 | `hoi4_input_geometry` | GUI dimensions, scale, pointer and conditional source-window diagnostics; no click authority |
 | `hoi4_research_ui` | Own slot/widget joins, selected slot, retained Info windows and typed controls |
 | `hoi4_research_slot_control` | One own slot's independently verified callback and control metadata; no input authority |
-| `hoi4_research_category` | One public folder ID, named own tab and dense selection/callback association; optional Sprite diagnostics, read-only and awaiting live validation |
+| `hoi4_research_category` | One public folder ID, named own tab and dense selection/callback association; optional Sprite diagnostics, read-only |
 | `hoi4_research_node_detail` | One exact own key's binding, raw renderer/cache and typed hierarchy diagnostics |
 | `hoi4_research_nodes` | Paged current own-tree keys and conditional control associations |
 | `hoi4_focus_list` | Own canonical focus keys and selected detail diagnostics; no start authority |
@@ -171,8 +179,10 @@ Luna selecting slots 0 and 1, assigning research, and advancing its counter
 through 3 January; all four strategic RPC samples were under one second.
 Recorded run 022 verified ordinary `W` panel opening from known closed own views
 with no managed view selected, followed by slot selection and research. A distinct
-repeat request verified without another key. The new `select_category` stage and
-Standard-tab geometry pass fixtures and await recorded live validation.
+repeat request verified without another key. Recorded run024 verified a complete
+industry/electronics/infantry cycle, a same-folder no-input request, and all four
+research assignments. Its later speed-change request became uncertain, so
+reliable combined clock/research play remains unfinished.
 Its internal observation adapter checks the requested own key/slot and fresh
 renderer, callback, hierarchy and SDL/X11 associations before candidate maths.
 The owner supplies the reviewed origin profile; player arguments cannot supply
@@ -231,8 +241,9 @@ point sequence; Frame diagnostics still await a matching installed-game branch. 
 failures, recordings and measurement limits are in [live validation](../docs/CLAUSEWITZ_VALIDATION.md)
 and [the comparison](../docs/CLAUSEWITZ_COMPARISON.md).
 
-Strategic ID-based actions, durable daily plans, economic/army/naval-invasion
-control, recovery and independent Windows/macOS adapters remain unfinished.
+Research ID stages have bounded live evidence. Focus actions, durable daily
+execution, economic/army/naval-invasion control, recovery and independent
+Windows/macOS adapters remain unfinished.
 FAIR is the campaign default; META strategy and mod QA retain separate boundaries.
 No clean two-year Luna run or full campaign has passed acceptance. Follow the
 [Linux acceptance gates](../docs/LINUX_RUST_HANDOFF.md).

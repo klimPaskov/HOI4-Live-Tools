@@ -15,6 +15,15 @@ impl LocalWindow {
     fn animating(&self) -> bool {
         self.animation.contains(&2)
     }
+    // Literal show/hide state is independently written at A5 bit3. Neither
+    // animation channel may be transition1, transition2, or unknown to call it
+    // settled. No ancestor visibility or input-route assertion follows.
+    fn settled_visibility(&self) -> Option<bool> {
+        (self.animation == [0, 0]).then_some(self.visible)
+    }
+    fn counts_known(&self) -> bool {
+        self.animation.iter().all(|v| matches!(v, 0 | 2))
+    }
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[doc(hidden)]
@@ -29,7 +38,18 @@ impl FocusUiFacts {
         (0..=23).contains(&self.mode).then_some(self.mode == 13)
     }
     pub fn focus_view_local_ready(&self) -> Option<bool> {
-        self.focus.as_ref().map(|w| w.visible && !w.animating())
+        self.focus
+            .as_ref()
+            .and_then(LocalWindow::settled_visibility)
+    }
+    /// Positive own literal-hidden AND both animation channels settled.
+    /// None means unmaterialized or any nonzero/unknown transition state.
+    /// This does not prove global-modal clearance or effective event routing.
+    pub fn focus_view_local_hidden(&self) -> Option<bool> {
+        self.focus
+            .as_ref()
+            .and_then(LocalWindow::settled_visibility)
+            .map(|v| !v)
     }
     pub fn focus_detail_local_counts(&self) -> Option<[usize; 2]> {
         counts(&self.details)
@@ -45,6 +65,9 @@ fn counts(v: &[Option<LocalWindow>]) -> Option<[usize; 2]> {
     let mut c = [0, 0];
     for w in v {
         let w = w.as_ref()?;
+        if !w.counts_known() {
+            return None;
+        }
         c[0] += usize::from(w.visible);
         c[1] += usize::from(w.animating());
     }
@@ -162,3 +185,6 @@ pub(crate) fn observe(
         research,
     })
 }
+
+#[cfg(test)]
+mod local_state_tests;

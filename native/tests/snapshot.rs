@@ -7,6 +7,464 @@ use hoi4_live_native::{
 };
 use std::{cell::Cell, collections::BTreeMap};
 
+// Own-politics diagnostics: synthetic named registries and generated observer
+// captures, with ordinary overview/position fixtures reused independently.
+const POLITICS: u64 = 0x210000;
+const FOCUS: u64 = 0x220000;
+const POLITICS_WINDOW: u64 = 0x230000;
+const OPENER_CAPTURE: u64 = 0x241000;
+const OPENER_LINK: u64 = 0x242000;
+const CHILD_NAMES: u64 = 0x243000;
+const CHILD_VALUES: u64 = 0x244000;
+const OPENER_NAMES: u64 = 0x245000;
+const OPENER_NAME_TEXT: u64 = 0x246000;
+const OPENER_VALUES: u64 = 0x247000;
+
+fn politics_focus_fixture() -> Fixture {
+    let mut f = owned_node_fixture();
+    let b = 0x10000;
+    f.number(0x20008, 1);
+    f.word(b + 0x42c9a88 + 0xc0, b + 0x20811a0);
+    f.number(0x903d8, 12);
+    f.word(0x90128, POLITICS);
+    f.word(0x90130, FOCUS);
+    f.region(POLITICS, 0x600);
+    f.word(POLITICS, b + 0x42546e8);
+    f.word(POLITICS + 0x38, 0x90000);
+    f.word(POLITICS + 0x2f0, 0x32000);
+    f.word(POLITICS + 0x2f8, POLITICS_WINDOW);
+    f.region(FOCUS, 0x1200);
+    f.word(FOCUS, b + 0x4249c70);
+    f.word(FOCUS + 0x2f0, 0x32000);
+    f.word(FOCUS + 0x11d8, 0x20000);
+    f.region(POLITICS_WINDOW, 0xf00);
+    f.word(POLITICS_WINDOW, b + 0x4347d58);
+    f.word(POLITICS_WINDOW + 0x98, 0x70000);
+    f.put(POLITICS_WINDOW + 0xa5, &[8]);
+    f.array(POLITICS_WINDOW + 0xbb0, CHILD_VALUES, 1);
+    f.word(CHILD_VALUES, 0xd4000);
+    f.array(POLITICS_WINDOW + 0xbc8, CHILD_NAMES, 1);
+    f.string(CHILD_NAMES, "active_goal");
+    f.put(0xd40a5, &[8]);
+    f.number(0xd4eb0, 0);
+    f.number(0xd4ef8, 0);
+    f.array(0xd49a0, OPENER_VALUES, 1);
+    f.word(OPENER_VALUES, 0xd5000);
+    f.array(0xd49b8, OPENER_NAMES, 1);
+    let name = b"add_national_goal_button";
+    f.region(OPENER_NAMES, 32);
+    f.word(OPENER_NAMES, OPENER_NAME_TEXT);
+    f.word(OPENER_NAMES + 8, name.len() as u64);
+    f.word(OPENER_NAMES + 16, name.len() as u64);
+    f.put(OPENER_NAME_TEXT, name);
+    f.word(0xd5000, b + 0x43470c8);
+    f.word(0xd5080, b + 0x4347488);
+    f.word(0xd5088, OPENER_LINK);
+    f.word(0xd5090, OPENER_LINK);
+    f.number(0xd5098, 1);
+    f.word(0xd50a0, 0);
+    f.number(0xd50ac, 0);
+    f.put(0xd5074, &0x8100_0000u32.to_le_bytes());
+    f.word(0xd50e8, 0xf0000);
+    f.region(OPENER_LINK, 32);
+    f.word(OPENER_LINK, POLITICS + 0x300);
+    f.word(POLITICS + 0x300, b + 0x4254880);
+    f.word(POLITICS + 0x308, OPENER_CAPTURE);
+    f.word(POLITICS + 0x318, b + 0x1693160);
+    f.word(POLITICS + 0x320, b + 0x1693130);
+    f.region(OPENER_CAPTURE, 24);
+    f.word(OPENER_CAPTURE, b + 0x1686aa0);
+    f.word(OPENER_CAPTURE + 0x10, POLITICS);
+    // Standard association cannot depend on Drag renderer110 or tech data+8.
+    for a in (0xd5008..0xd5010).chain(0xd5110..0xd5118) {
+        f.data.remove(&a);
+    }
+    f
+}
+
+fn politics_forbid(f: &mut Fixture, start: u64, size: usize) {
+    for a in start..start + size as u64 {
+        f.data.remove(&a);
+    }
+}
+
+#[test]
+fn politics_focus_positive_owned_route_is_metadata_not_input_authority() {
+    let f = politics_focus_fixture();
+    let (v, context) = hoi4_live_native::politics_focus::owned_snapshot(&f, true).unwrap();
+    assert_eq!(context.campaign().player, "GER");
+    assert_eq!(context.mode_raw(), 12);
+    assert_eq!(
+        context.anchors(),
+        [0x20000, 0x90000, 0x70000, POLITICS, FOCUS, POLITICS_WINDOW]
+    );
+    assert_eq!(v["callback_route_verified"], true);
+    assert_eq!(v["target_managed_mode"], 13);
+    assert_eq!(v["flags_raw"], 0x8100_0000u32);
+    assert_eq!(
+        v["render_diagnostic"]["parent_chain"]["status"],
+        "closed_to_owned_graphics_root"
+    );
+    assert_eq!(
+        v["render_diagnostic"]["resource_cache"]["diagnostic_dimensions"],
+        serde_json::json!([300, 60])
+    );
+    for flag in [
+        "input_authorized",
+        "current_frame_verified",
+        "effective_routing_verified",
+        "global_modal_clear_verified",
+        "client_rectangle_available",
+    ] {
+        assert_eq!(v[flag], false, "{flag}");
+    }
+    assert_eq!(f.checks.get(), 2);
+    assert!(!v.to_string().contains(&POLITICS.to_string()));
+    assert!(!v.to_string().contains(&OPENER_CAPTURE.to_string()));
+}
+
+#[test]
+fn politics_focus_no_geometry_and_disabled_state_never_claim_eligibility() {
+    let mut f = politics_focus_fixture();
+    f.number(0xd50ac, 3);
+    politics_forbid(&mut f, 0xd50e8, 8);
+    let (v, _) = hoi4_live_native::politics_focus::owned_snapshot(&f, false).unwrap();
+    assert_eq!(v["available"], true);
+    assert_eq!(v["disabled_raw"], 3);
+    assert_eq!(v["input_authorized"], false);
+    assert!(v.get("render_diagnostic").is_none());
+}
+
+#[test]
+fn politics_focus_inactive_hidden_or_null_root_skips_named_payload() {
+    for case in 0..5 {
+        let mut f = politics_focus_fixture();
+        match case {
+            0 => f.number(0x903d8, 23),
+            1 => f.number(0x903d8, 13),
+            2 => f.put(POLITICS_WINDOW + 0xa5, &[0]),
+            3 => f.number(POLITICS_WINDOW + 0xef8, 2),
+            _ => f.word(POLITICS + 0x2f8, 0),
+        }
+        politics_forbid(&mut f, POLITICS_WINDOW + 0xbb0, 40);
+        politics_forbid(&mut f, 0xd50e8, 8);
+        let (v, _) = hoi4_live_native::politics_focus::owned_snapshot(&f, true).unwrap();
+        assert_eq!(v["available"], false, "case{case}");
+        assert!(!f.tracked_reads.borrow().contains_key(&CHILD_VALUES));
+    }
+}
+
+#[test]
+fn politics_focus_foreign_joins_refuse_before_names_or_renderer() {
+    for (address, value, code, forbidden) in [
+        (
+            POLITICS + 0x2f0,
+            0x32008,
+            "invalid_gui_owner",
+            POLITICS_WINDOW + 0xbb0,
+        ),
+        (
+            POLITICS + 0x38,
+            0x90008,
+            "invalid_gui_owner",
+            POLITICS_WINDOW + 0xbb0,
+        ),
+        (
+            FOCUS + 0x2f0,
+            0x32008,
+            "foreign_focus_scope",
+            POLITICS_WINDOW + 0xbb0,
+        ),
+        (
+            FOCUS + 0x11d8,
+            0xdead0000,
+            "foreign_focus_scope",
+            POLITICS_WINDOW + 0xbb0,
+        ),
+        (
+            POLITICS_WINDOW + 0x98,
+            0xdead0000,
+            "invalid_gui_owner",
+            POLITICS_WINDOW + 0xbb0,
+        ),
+        (0xd4098, 0xdead0000, "invalid_gui_owner", 0xd49a0),
+        (0xd5068, 0xdead0000, "invalid_gui_owner", 0xd50e8),
+        (
+            OPENER_CAPTURE + 0x10,
+            POLITICS + 8,
+            "invalid_gui_owner",
+            0xd50e8,
+        ),
+    ] {
+        let mut f = politics_focus_fixture();
+        f.word(address, value);
+        politics_forbid(&mut f, forbidden, 8);
+        assert_eq!(
+            hoi4_live_native::politics_focus::owned_snapshot(&f, true)
+                .unwrap_err()
+                .code,
+            code,
+            "field{address:x}"
+        );
+        assert!(!f.tracked_reads.borrow().contains_key(&forbidden));
+    }
+}
+
+#[test]
+fn politics_focus_unverified_callback_variants_skip_renderer() {
+    for (address, value) in [
+        (0xd5080, 0x10000 + 0x4346ea8),
+        (0xd50a0, OPENER_CAPTURE),
+        (POLITICS + 0x300, 0x10000 + 0x424e0a8),
+        (POLITICS + 0x318, 0x10000 + 0x1693168),
+        (POLITICS + 0x320, 0x10000 + 0x1693138),
+        (POLITICS + 0x328, OPENER_CAPTURE),
+        (OPENER_CAPTURE, 0x10000 + 0x1686aa8),
+        (OPENER_CAPTURE + 8, 8),
+    ] {
+        let mut f = politics_focus_fixture();
+        f.word(address, value);
+        politics_forbid(&mut f, 0xd50e8, 8);
+        let (v, _) = hoi4_live_native::politics_focus::owned_snapshot(&f, true).unwrap();
+        assert_eq!(
+            v["reason"], "callback_binding_unavailable",
+            "field{address:x}"
+        );
+        assert!(!f.tracked_reads.borrow().contains_key(&0xd50e8));
+    }
+}
+
+#[test]
+fn politics_focus_bad_lists_and_registry_bounds_stop_before_geometry() {
+    for (address, value, expected) in [
+        (0xd5098, -1, "invalid_gui_binding"),
+        (0xd5098, 17, "invalid_gui_binding"),
+        (POLITICS_WINDOW + 0xbb8, 257, "invalid_array"),
+        (POLITICS_WINDOW + 0xbd0, 257, "invalid_gui_registry"),
+        (POLITICS_WINDOW + 0xbd4, 0, "invalid_gui_registry"),
+    ] {
+        let mut f = politics_focus_fixture();
+        f.number(address, value);
+        politics_forbid(&mut f, 0xd50e8, 8);
+        assert_eq!(
+            hoi4_live_native::politics_focus::owned_snapshot(&f, true)
+                .unwrap_err()
+                .code,
+            expected,
+            "field{address:x}"
+        );
+        assert!(!f.tracked_reads.borrow().contains_key(&0xd50e8));
+    }
+    for address in [OPENER_LINK + 8, OPENER_LINK + 0x10, 0xd5090] {
+        let mut f = politics_focus_fixture();
+        f.word(address, OPENER_LINK);
+        if address == 0xd5090 {
+            f.word(address, OPENER_LINK + 8);
+        }
+        assert_eq!(
+            hoi4_live_native::politics_focus::owned_snapshot(&f, false)
+                .unwrap_err()
+                .code,
+            "invalid_gui_binding"
+        );
+    }
+}
+
+#[test]
+fn politics_focus_complete_named_membership_and_no_global_fallback() {
+    let mut f = politics_focus_fixture();
+    f.array(POLITICS_WINDOW + 0xbb0, CHILD_VALUES, 2);
+    f.word(CHILD_VALUES + 8, 0xdead0000);
+    f.array(POLITICS_WINDOW + 0xbc8, CHILD_NAMES, 2);
+    f.string(CHILD_NAMES + 32, "active_goal");
+    assert_eq!(
+        hoi4_live_native::politics_focus::owned_snapshot(&f, true)
+            .unwrap_err()
+            .code,
+        "invalid_gui_registry"
+    );
+
+    let mut f = politics_focus_fixture();
+    f.string(CHILD_NAMES, "unknown_child");
+    politics_forbid(&mut f, 0xd49a0, 16);
+    let (v, _) = hoi4_live_native::politics_focus::owned_snapshot(&f, true).unwrap();
+    assert_eq!(v["reason"], "named_container_unavailable");
+    // No guessed registry fallback or button-pair reuse for child containers.
+    assert!(!f
+        .tracked_reads
+        .borrow()
+        .contains_key(&(POLITICS_WINDOW + 0x9a0)));
+
+    let mut f = politics_focus_fixture();
+    f.array(0xd49a0, OPENER_VALUES, 2);
+    f.word(OPENER_VALUES + 8, 0xdead0000);
+    f.array(0xd49b8, OPENER_NAMES, 2);
+    f.region(OPENER_NAMES + 32, 32);
+    f.word(OPENER_NAMES + 32, 0xdead0000);
+    f.word(OPENER_NAMES + 40, 20);
+    f.word(OPENER_NAMES + 48, 20);
+    // Even an unmatched later name must be observed; no early first-match exit.
+    assert_eq!(
+        hoi4_live_native::politics_focus::owned_snapshot(&f, false)
+            .unwrap_err()
+            .code,
+        "unexpected_read"
+    );
+}
+
+#[test]
+fn politics_focus_unknown_types_never_read_guessed_payload() {
+    for case in 0..3 {
+        let mut f = politics_focus_fixture();
+        match case {
+            0 => {
+                f.word(0xd5000, 0x10000 + 0x4346b10);
+                politics_forbid(&mut f, 0xd5068, 8);
+            }
+            1 => {
+                f.word(0xf0000, 0x10000 + 0x4346b10);
+                politics_forbid(&mut f, 0xf0138, 8);
+            }
+            _ => {
+                f.word(0xf1000, 0x10000 + 0x4346b10);
+                politics_forbid(&mut f, 0xf1090, 8);
+            }
+        }
+        let (v, _) = hoi4_live_native::politics_focus::owned_snapshot(&f, true).unwrap();
+        match case {
+            0 => assert_eq!(v["reason"], "standard_layout_unavailable"),
+            1 => assert_eq!(
+                v["render_diagnostic"]["reason"],
+                "renderer_layout_unavailable"
+            ),
+            _ => assert_eq!(
+                v["render_diagnostic"]["reason"],
+                "resource_layout_unavailable"
+            ),
+        }
+        assert_eq!(v["input_authorized"], false);
+    }
+}
+
+#[test]
+fn politics_focus_positive_tag_and_accessor_precede_all_ui_payload() {
+    let mut f = politics_focus_fixture();
+    f.number(0x30518, 0);
+    politics_forbid(&mut f, 0x30340, 16);
+    politics_forbid(&mut f, 0x326b8, 8);
+    assert_eq!(
+        hoi4_live_native::politics_focus::owned_snapshot(&f, true)
+            .unwrap_err()
+            .code,
+        "player_unavailable"
+    );
+    let mut f = politics_focus_fixture();
+    f.word(0x10000 + 0x42c9a88 + 0xc0, 0x10000 + 0x20811a8);
+    politics_forbid(&mut f, 0x30340, 16);
+    assert_eq!(
+        hoi4_live_native::politics_focus::owned_snapshot(&f, true)
+            .unwrap_err()
+            .code,
+        "invalid_gui_owner"
+    );
+}
+
+#[test]
+fn politics_focus_final_witnesses_cover_scope_names_glue_and_geometry() {
+    for (a, n) in [
+        (0x10000 + 0x44086a8, 8),
+        (0x10000 + 0x42c9a88 + 0xc0, 8),
+        (0x30518, 4),
+        (0x3a010, 8),
+        (0x326b8, 8),
+        (0x324f8, 8),
+        (0x90180, 8),
+        (0x90128, 8),
+        (0x90130, 8),
+        (0x903d8, 4),
+        (POLITICS, 8),
+        (POLITICS + 0x38, 8),
+        (POLITICS + 0x2f0, 8),
+        (POLITICS + 0x2f8, 8),
+        (FOCUS + 0x11d8, 8),
+        (POLITICS_WINDOW + 0x98, 8),
+        (POLITICS_WINDOW + 0xa5, 1),
+        (POLITICS_WINDOW + 0xef8, 4),
+        (POLITICS_WINDOW + 0xbb0, 16),
+        (POLITICS_WINDOW + 0xbc8, 16),
+        (CHILD_VALUES, 8),
+        (CHILD_NAMES, 32),
+        (0xd49a0, 16),
+        (0xd49b8, 16),
+        (OPENER_VALUES, 8),
+        (OPENER_NAMES, 32),
+        (OPENER_NAME_TEXT, 24),
+        (0xd5080, 8),
+        (0xd5088, 8),
+        (0xd5098, 4),
+        (0xd50a0, 8),
+        (OPENER_LINK, 8),
+        (OPENER_LINK + 8, 8),
+        (OPENER_LINK + 0x10, 8),
+        (OPENER_LINK + 0x18, 1),
+        (POLITICS + 0x300, 8),
+        (POLITICS + 0x308, 8),
+        (POLITICS + 0x318, 8),
+        (POLITICS + 0x320, 8),
+        (POLITICS + 0x328, 0x260),
+        (OPENER_CAPTURE, 8),
+        (OPENER_CAPTURE + 8, 8),
+        (OPENER_CAPTURE + 0x10, 8),
+        (0xd50ac, 4),
+        (0xd5074, 4),
+        (0xd50e8, 8),
+        (0xf0138, 8),
+        (0xf0168, 8),
+        (0xf00b0, 4),
+        (0xf0114, 4),
+        (0xf10a4, 4),
+        (0xf110c, 4),
+        (0xd4e70, 8),
+        (0xf5100, 8),
+    ] {
+        let f = politics_focus_fixture();
+        let mut changed: Vec<_> = (0..n).map(|i| f.data[&(a + i as u64)]).collect();
+        // Inline payload is witnessed as part of its complete32-byte header.
+        changed[if a == CHILD_NAMES { 16 } else { 0 }] ^= 1;
+        let p = OwnedContextFixture {
+            fixture: f,
+            armed: Cell::new(false),
+            context_started: Cell::new(false),
+            tag_reads: Cell::new(0),
+            final_mutation: Some((a, changed)),
+            finishing: Cell::new(false),
+        };
+        let error = match hoi4_live_native::politics_focus::owned_snapshot(&p, true) {
+            Err(error) => error,
+            Ok(_) => panic!("Final field{a:x}/{n} mutation was not witnessed"),
+        };
+        assert_eq!(error.code, "torn_read", "final field{a:x}");
+    }
+}
+
+#[test]
+fn politics_focus_noncanonical_links_refuse_without_dereference() {
+    for field in [0x90128, POLITICS + 0x2f8, OPENER_VALUES, POLITICS + 0x308] {
+        for value in [0xffff, 0x7fff_ffff_0008, u64::MAX - 7] {
+            let mut f = politics_focus_fixture();
+            f.word(field, value);
+            assert_eq!(
+                hoi4_live_native::politics_focus::owned_snapshot(&f, true)
+                    .unwrap_err()
+                    .code,
+                "invalid_gui_owner",
+                "field{field:x}/value{value:x}"
+            );
+            assert!(!f.tracked_reads.borrow().contains_key(&value));
+        }
+    }
+}
+
 // The research context path also checks the game's ordinary overview types.
 // Synthetic RTTI/name buffers live separately from the nearby primary tables.
 fn owned_research_fixture() -> Fixture {

@@ -856,6 +856,7 @@ fn owned_xvfb_keyboard_controls() {
         (ControlKey::Pause, 0x20),
         (ControlKey::Slower, 0xffad),
         (ControlKey::Faster, 0xffab),
+        (ControlKey::PoliticsPanel, 0x71),
         (ControlKey::ResearchPanel, 0x77),
     ] {
         controls.send(&process, key).unwrap();

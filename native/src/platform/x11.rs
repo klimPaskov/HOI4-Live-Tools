@@ -24,6 +24,8 @@ mod pointer;
 pub use pointer::{LeftClick, PointerDelivery, PointerDispatch, PointerDisplay};
 
 pub enum ControlKey {
+    /// The installed player-flag shortcut opens politics, never direct focus.
+    PoliticsPanel,
     ResearchPanel,
     Pause,
     Slower,
@@ -33,6 +35,7 @@ pub enum ControlKey {
 impl ControlKey {
     fn symbol(&self) -> u32 {
         match self {
+            Self::PoliticsPanel => 0x71,
             Self::ResearchPanel => 0x77,
             Self::Pause => 0x20,
             Self::Slower => 0xffad,

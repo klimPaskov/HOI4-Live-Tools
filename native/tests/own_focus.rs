@@ -1275,10 +1275,7 @@ fn focus_ui_animation_and_null_are_explicitly_distinct_from_clear() {
     let mut f = Fake::new();
     f.own_focus_ui_fixture();
     f.int(0x260ef8, 2);
-    assert_eq!(
-        f.ui().ui_facts.unwrap().focus_view_local_ready(),
-        Some(false)
-    );
+    assert_eq!(f.ui().ui_facts.unwrap().focus_view_local_ready(), None);
     let mut f = Fake::new();
     f.own_focus_ui_fixture();
     f.word(VIEW + 0x2f8, 0);
@@ -1417,5 +1414,53 @@ fn focus_node_geometry_state_flags_are_bounded_and_final_witnesses() {
         f.focus_geometry_fixture(0x232000, 0x234000, false);
         f.torn = Some(a);
         assert_eq!(f.geometry_result().unwrap_err().code, "torn_read");
+    }
+}
+
+#[test]
+fn focus_ui_transition_one_and_unknown_never_supply_ready_or_clear_counts() {
+    for state in [1, -1, 3] {
+        for offset in [0xeb0, 0xef8] {
+            let mut f = Fake::new();
+            f.own_focus_ui_fixture();
+            f.int(0x260000 + offset, state);
+            let u = f.ui().ui_facts.unwrap();
+            assert_eq!(u.focus_view_local_ready(), None);
+            assert_eq!(u.focus_view_local_hidden(), None);
+            let mut f = Fake::new();
+            f.own_focus_ui_fixture();
+            f.put(WIN + 0xa5, &[0]);
+            f.int(WIN + offset, state);
+            assert_eq!(f.ui().ui_facts.unwrap().focus_detail_local_counts(), None);
+            let mut f = Fake::new();
+            f.own_focus_ui_fixture();
+            f.research_info_fixture();
+            f.int(0x264000 + offset, state);
+            assert_eq!(
+                f.ui().ui_facts.unwrap().own_research_info_local_counts(),
+                None
+            );
+            assert!(f.untouched(0x262a98, 8));
+        }
+    }
+}
+#[test]
+fn focus_ui_positive_literal_hidden_and_transition_witnesses() {
+    let mut f = Fake::new();
+    f.own_focus_ui_fixture();
+    f.put(0x2600a5, &[0]);
+    let u = f.ui().ui_facts.unwrap();
+    assert_eq!(u.focus_view_local_hidden(), Some(true));
+    assert_eq!(u.focus_view_local_ready(), Some(false));
+    for at in [0x2600a5, 0x260eb0, 0x260ef8] {
+        let mut f = Fake::new();
+        f.own_focus_ui_fixture();
+        f.torn = Some(at);
+        assert_eq!(
+            own_focus::command_owned(&f, "GER_rhineland", false)
+                .unwrap_err()
+                .code,
+            "torn_read"
+        );
     }
 }

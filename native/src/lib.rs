@@ -52,3 +52,11 @@ mod focus_geometry;
 mod focus_ui_facts;
 
 mod focus_candidate_observation;
+
+pub mod focus_stage;
+
+#[doc(hidden)]
+pub mod politics_focus;
+
+// Durable daily-plan prerequisite; owner worker/adapters are not registered.
+pub mod daily_governor;
