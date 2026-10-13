@@ -205,16 +205,17 @@ visible `support_weapons2` Info window from an absent `support_weapons` window,
 then observed the former close. Both node tools refused after tree closure.
 The view-only clicks included a background miss and a different technology than
 intended; they do not prove ID-based selection. That run used the earlier full
-GUI validation and first-parent metadata only; the target scope and typed ancestor
-extension await a fresh installed-game check. The campaign remained at its
+GUI validation and first-parent metadata only; the later run below verifies the
+newer target scope and explicitly incomplete typed hierarchy. The campaign remained at its
 initial date with no assignments, exited with code 0, and recording integrity
 passed. Client geometry, routing and strategic input remain unavailable.
 
 The first target-scoped installed-game query refused an incorrect NULL sentinel
 assumption before reading GUI payload. The corrected reader checks the actual
 nonnull typed singleton against its fresh global and primary type, without
-reading reserved payload. Full-node/catalog checks passed that run; the scoped
-hierarchy extension still needs a fresh installed-game check. Its owned close
+reading reserved payload. Full-node/catalog checks passed that run; a subsequent
+run completed the scoped model with an explicit hierarchy policy boundary.
+Its earlier owned close
 recorded normal exit code 6, which remains an incident.
 
 `hoi4_input_geometry` additionally reports `input_source.type_encoding` when
@@ -228,7 +229,11 @@ those limits and reports a valid overrun as an explicitly incomplete optional
 subtree; malformed structure still refuses. The conditional point diagnostic
 requires the exact receiver/getter and built-in dynamic implementation before
 source coordinates. Raw source units/origin, event completion and click routing
-remain unverified. Both additions await a fresh installed-game check.
+remain unverified. Both additions passed a subsequent fresh installed-game
+check, including final witnesses. The scoped query reports six checked ancestors and an explicit
+policy boundary at the graphics root, whose 4,142 children remain uninspected.
+Median RPC was 116/120 ms for two exact keys; the full-node model took 313 ms.
+Their different validation scopes prevent equivalent-model speedup claims.
 
 The optional point diagnostic also follows a constructor-proved active SDL video
 fingerprint, input-window magic and reciprocal X11 driver registry. It reports the
@@ -237,8 +242,9 @@ unique membership in a complete registry bounded to capacity 128. Other entry
 payloads and the opaque display are never read. An unsupported driver or valid
 policy overrun is explicitly unavailable; malformed links, pointers and torn
 witnesses refuse. `owned_os_window_verified`, `client_origin_verified` and
-`fresh_event_verified` remain false. This association awaits installed-game
-validation and does not authorize input.
+`fresh_event_verified` remain false. A fresh installed-game check matched its
+window ID, dimensions, raw point and zero relative modes against independent
+X11 properties. It remains a diagnostic and does not authorize input.
 
 The focus query accepts an ASCII key prefix `filter`, `offset` 0–4096 and `limit`
 1–100. It validates every own key before pagination, exact own-tree ownership and

@@ -87,7 +87,9 @@ passed live checks; latency gains remain modest and variable. A newer scoped
 reader exposed an incorrect catalog sentinel guard, now corrected in fixture-tested
 source. Its next run reached a hierarchy policy bound, preserved as a failure;
 new source reports valid policy overruns as incomplete optional diagnostics.
-Strategic input remains unfinished. See the
+Fresh exact-ID queries and the source-window association have passed live checks,
+with 116/120 ms median RPC for two narrower queries. Strategic input remains
+unfinished. See the
 [measured comparison](docs/CLAUSEWITZ_COMPARISON.md).
 The Linux preview also has a persistent [owned launcher](docs/OWNED_LINUX_LAUNCHER.md)
 with reconnectable clients and guarded graceful shutdown.

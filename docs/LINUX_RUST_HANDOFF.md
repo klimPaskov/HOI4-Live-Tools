@@ -173,3 +173,13 @@ built-in driver callbacks, window magic and reciprocal complete-registry members
 while OS ownership, origin, event and input authority remain false. The exact Xlib
 header ABI was independently compiled and checked. Its installed-game validation
 is the next fresh-run gate; prior close transport fixtures remain distinct evidence.
+
+The subsequent fresh game passed complete scoped-ID snapshots and the conditional
+source-window observation, corroborated by independent X11 properties. Exact-key
+RPC medians were 116/120 ms, versus 313 ms for full-node queries with different
+scope. Six reciprocal ancestors passed; the owned root's 4,142 children remained
+explicitly outside the current bounded hierarchy. One observed-screen view-only
+selection returned the correct canonical key; no research was assigned. Closed
+queries refused, both recording segments finalized, and one WM close returned
+actual normal exit code 0. This is diagnostic acceptance only. Strategic actions,
+daily plans, the clean two-year Luna run and full campaigns remain unfinished.

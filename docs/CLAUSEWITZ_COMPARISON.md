@@ -89,6 +89,15 @@ hierarchy bound; refusal latency is not successful-query performance. The run
 verified receiver metadata and ordinary window close, with actual exit code 0
 and a valid 360.333-second recording.
 
+A subsequent fresh run validated narrower exact-ID queries: medians 116.3 ms
+for support weapons and 120.2 ms for machine tools, versus 312.7 ms for its
+full-node default page. The queries have different declared scopes; these numbers
+show their observed cost, not equivalent-model speedup. Exact-ID requests validate
+all current-record ownership and target GUI fields, excluding unrelated GUI
+payloads. The source-window/OS comparison passed at 34.1 ms RPC. The run stayed
+at its initial date with no assignments, verified one ordinary view-only selection,
+finalized both recording segments and exited normally after one WM close.
+
 ## Measured process reads
 
 Both readers ran against the same generated child process and checked every

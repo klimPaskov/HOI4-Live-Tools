@@ -896,6 +896,54 @@ supports event-window-relative motion coordinates. This ABI evidence and the
 fixtures do not establish fresh-event acknowledgment, backing scale or canonical
 control routing. Installed-game association validation remains pending.
 
+## Recorded scoped IDs and source-window association — 13 October 2026
+
+A fresh owned Linux game used immutable source `e4ca810`, Normal historical
+vanilla Germany with no mods. Its first video packet preceded the single Start.
+The built-in receiver/getter, dynamic implementation and reciprocal X11 window
+association passed live validation. An independent read-only OS comparison
+matched native window ID 4194326, dimensions 512×288, zero relative-mode flags,
+raw point 256/8 and logical point 1280/40. That comparison took 34.1 ms RPC;
+the initial geometry query took 48.5 ms RPC / 41.1 ms server, with 95 logical
+reads and 984 bytes. This corroborates one current window/profile; event,
+origin, routing and production-input fields stay false.
+
+The corrected target-scoped reader completed all five samples for each key,
+including final witnesses. `support_weapons` RPC samples were 215.1, 133.3,
+113.9, 116.3 and 114.5 ms (median 116.3 ms); server times were 104.3–197.8 ms.
+`basic_machine_tools` samples were 115.7, 120.2, 122.9, 120.2 and 122.4 ms
+(median 120.2 ms), with 106.1–111.7 ms server times. Each used 10,903 logical
+requests, with 185,562 and 186,266 bytes respectively. The declared scope
+validates all current-record ownership but excludes unrelated GUI payloads;
+`full_gui_model_validated` remains false. These are successful narrower queries,
+not a matched speedup over the previous complete-GUI diagnostic.
+
+Six typed reciprocal position ancestors and own Container joins passed. The
+observer then stopped before the owned graphics root's child payload: capacity
+5,395 and count 4,142 exceed its 2,048/4,096 policies. It retained prior verified
+entries (53/97), reported the exact boundary and left root closure and input
+false. This is an explicitly incomplete hierarchy result, not malformed data
+or permission to widen every array bound.
+
+The full-node model again matched 411 keys and 423 associations, all pages and
+filters. Five RPC samples were 308.0, 304.8, 312.7, 333.5 and 319.2 ms (median
+312.7 ms), with 255.8–285.0 ms server times and unchanged 26,686 requests /
+299,776 bytes. Separate processes, load and scope still limit comparisons.
+
+One builder view-only selection from the observed screen selected the intended
+`support_weapons`; canonical readback reported one matching visible Info window
+in 119.4 ms, then zero after one Escape in 124.6 ms. Research was not assigned.
+A separate Escape closed the tree; node/detail calls refused in 22.1/19.4 ms.
+Final state stayed at 1936.01.01.12, paused at speed 0, with focus and all four
+research slots empty. No Luna player or strategic adapter was used in this run.
+
+All 14 inspected threads had tracer 0; Yama remained 1. Both 512×288 H.264
+segments passed ffprobe: 600 and 339 seconds, 6,975,543 and 4,289,564 bytes.
+One owned WM close completed in 2.28 seconds; the sole reaper recorded exit code
+0, no signal and no core dump, without signal fallback or replay. Earlier exit
+code 6 remains unexplained. Clean two-year and full campaign acceptance remain
+unfinished. Calls, source manifest, footage and actual failures stay private.
+
 ## Attribution
 
 The findings above refer to upstream `calling/{mem,process/linux,api,game,
