@@ -187,8 +187,10 @@ The owner may add `"research_profile": "linux_builtin_absolute_512x288_v1"`
 to the private binding after corroborating its owned client. This narrow profile
 requires a 512×288 client, 2560×1440 logical graphics and the verified builtin
 absolute SDL/X11 association. Other profiles are unavailable. Omission preserves
-clock-only input. The assembled owner adapter has fixture evidence; its next
-fresh recorded game remains the installed-game validation gate.
+clock-only input. Recorded run 019 passed the assembled owner adapter with
+exclusive Luna medium input: exact-ID selection/assignment, independent canonical
+slot readback and counter advancement. Automatic slot navigation and campaign
+acceptance remain unfinished. See [the bounded live gate](CLAUSEWITZ_VALIDATION.md#recorded-run-019-exclusive-luna-medium-rust-research-smoke).
 
 `hoi4_research_attempt` takes `technology_id`, the already selected own `slot`,
 `stage` (`view` or `research`), a separate stable `request_id` for each stage,

@@ -98,6 +98,23 @@ payloads. The source-window/OS comparison passed at 34.1 ms RPC. The run stayed
 at its initial date with no assignments, verified one ordinary view-only selection,
 finalized both recording segments and exited normally after one WM close.
 
+## Owned ID-based research checkpoint — 13 October 2026
+
+Recorded run 019 used the Rust owned supervisor in the x86 emulated Linux VM.
+One exclusive Luna medium player made a single View request and a single Research
+request for `support_weapons`, at **774 ms** and **851 ms RPC**, respectively.
+Both verified current canonical own state. Separate reads confirmed assignment
+and counter advancement through 3 January; one server wait took 20.646 seconds.
+The recorder finalized and the owned game exited normally with code 0.
+
+These two samples are successful end-to-end research observations, not p50/p95
+estimates or a matched comparison against upstream command latency. They include
+fresh own-state/context checks, durable intent, typed renderer/hierarchy reads,
+ordinary pointer delivery and bounded readback. The adapter requires a selected
+empty own slot; automatic navigation and broader strategic automation remain
+unfinished. Delivery receipts do not establish event causality. See
+[the recorded gate and limits](CLAUSEWITZ_VALIDATION.md#recorded-run-019-exclusive-luna-medium-rust-research-smoke).
+
 ## Measured process reads
 
 Both readers ran against the same generated child process and checked every

@@ -25,11 +25,13 @@ calendar, with independently recovered current Linux build layouts. A real
 upstream Luna smoke passed selected ordinary actions and one day of advancement,
 but its final pause timed out; that native-posting adapter remains quarantined.
 A subsequent Rust Luna medium test passed ordinary X11 clock controls, advancement
-to 3 January 1936 and verified pause. Strategic controls remain unavailable.
-The optimized Rust catalog resolved public IDs in the installed game. The GUI
-diagnostic primary-type correction, own research model and campaign-bound wait
-fix have static/fixture evidence and await fresh installed-game validation. See
-[actual live evidence](CLAUSEWITZ_VALIDATION.md).
+to 3 January 1936 and verified pause. Recorded run 019 then passed two Rust
+ID-based research stages with exclusive Luna medium input, independent canonical
+slot readback and research-counter advancement. This narrow preview requires the
+empty own slot tree to be selected first. Automatic navigation, broader strategic
+controls and the daily governor remain unfinished. Catalogs and targeted typed
+renderer diagnostics have recorded installed-game evidence; they alone grant no
+input authority. See [actual live evidence](CLAUSEWITZ_VALIDATION.md).
 
 ## Expansion contract
 
