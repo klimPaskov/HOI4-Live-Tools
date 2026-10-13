@@ -81,6 +81,14 @@ clicks included a background miss and a different technology than intended;
 readback identified both. No ID-based action adapter or Luna acceptance is
 claimed for this run.
 
+A fourth fresh run again matched all keys and associations, with five RPC
+samples 323.4–353.3 ms (median 331.5 ms) and server times 270.7–291.7 ms.
+Logical reads and bytes stayed unchanged. These overlapping emulated-game samples
+still do not establish a controlled speedup. Its first new scoped query refused a
+hierarchy bound; refusal latency is not successful-query performance. The run
+verified receiver metadata and ordinary window close, with actual exit code 0
+and a valid 360.333-second recording.
+
 ## Measured process reads
 
 Both readers ran against the same generated child process and checked every

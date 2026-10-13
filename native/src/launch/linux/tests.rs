@@ -108,6 +108,106 @@ impl Fixture {
 }
 
 mod window_close;
+
+struct LaunchPathFixture {
+    directory: PathBuf,
+    config: PathBuf,
+}
+impl LaunchPathFixture {
+    fn new(socket_bytes: usize, unicode: bool) -> Self {
+        assert!(ordinary());
+        let directory = PathBuf::from(format!("/tmp/h4-run-path-{}", nonce().unwrap()));
+        fs::DirBuilder::new()
+            .mode(0o700)
+            .create(&directory)
+            .unwrap();
+        let prefix = std::os::unix::ffi::OsStrExt::as_bytes(directory.as_os_str()).len() + 1;
+        // `/control.sock` is 13 pathname bytes, independently of character count.
+        let count = socket_bytes - prefix - 13;
+        let name = if unicode {
+            format!("{}{}", "é".repeat(count / 2), "a".repeat(count % 2))
+        } else {
+            "a".repeat(count)
+        };
+        let run = directory.join(name);
+        let socket = run.join("control.sock");
+        assert_eq!(
+            std::os::unix::ffi::OsStrExt::as_bytes(socket.as_os_str()).len(),
+            socket_bytes
+        );
+        let config = directory.join("config.json");
+        // This independent ELF is not the game. Valid arguments must still
+        // reach/refuse the existing production build guard, never spawn it.
+        json_new(&config,json!({"executable":std::env::current_exe().unwrap(),"run_directory":run,
+            "display":{"number":99,"server":{"pid":std::process::id(),"uid":uid(),"exe":"/not-a-display","start_ticks":"0"},
+            "xauthority":directory.join("never-opened-authority")},"settings_seed":directory.join("never-opened-seed")})).unwrap();
+        Self { directory, config }
+    }
+    fn entries(&self) -> Vec<std::ffi::OsString> {
+        let mut names: Vec<_> = fs::read_dir(&self.directory)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .collect();
+        names.sort();
+        names
+    }
+    fn run(&self) -> PathBuf {
+        json_read::<Value>(&self.config).unwrap()["run_directory"]
+            .as_str()
+            .unwrap()
+            .into()
+    }
+}
+impl Drop for LaunchPathFixture {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.directory);
+    }
+}
+
+fn refuse_long_launch(unicode: bool) {
+    if !ordinary() {
+        return;
+    }
+    let fixture = LaunchPathFixture::new(108, unicode);
+    let before = fixture.entries();
+    let bytes = fs::read(&fixture.config).unwrap();
+    let error = super::serve(&fixture.config).unwrap_err();
+    assert_eq!(
+        error.code, "invalid_endpoint",
+        "Path error precedes executable/build/display/lock effects"
+    );
+    assert!(error.message.contains("107 bytes plus the terminating NUL"));
+    assert_eq!(fixture.entries(), before);
+    assert_eq!(fs::read(&fixture.config).unwrap(), bytes);
+    assert!(!fixture.run().exists());
+    assert!(!fixture.run().join("userdata").exists());
+    assert!(!fixture.run().join("game.log").exists());
+    assert!(!fixture.run().join("control.sock").exists());
+    assert!(!fixture.run().join("session.json").exists());
+}
+#[test]
+fn overlength_launch_endpoint_refuses_before_run_userdata_or_game_effects() {
+    refuse_long_launch(false);
+}
+#[test]
+fn unicode_launch_endpoint_uses_bytes_before_filesystem_effects() {
+    refuse_long_launch(true);
+}
+#[test]
+fn maximum_launch_endpoint_passes_path_check_but_keeps_build_guard() {
+    if !ordinary() {
+        return;
+    }
+    let fixture = LaunchPathFixture::new(107, false);
+    let before = fixture.entries();
+    let error = super::serve(&fixture.config).unwrap_err();
+    assert_eq!(
+        error.code, "unsupported_build",
+        "107-byte pathname is valid; independent fixture ELF remains refused"
+    );
+    assert_eq!(fixture.entries(), before);
+    assert!(!fixture.run().exists());
+}
 impl Drop for Fixture {
     fn drop(&mut self) {
         self.close();

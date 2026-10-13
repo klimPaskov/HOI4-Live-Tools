@@ -82,8 +82,13 @@ no screenshots or cursor movement. [Live evidence](docs/CLAUSEWITZ_VALIDATION.md
 records the distinct test limits, wrapper incident, earlier nonzero shutdowns
 and the subsequent clean exits. Request-local shared-proof reuse preserved all
 411 keys and 423 bindings while reducing reads by 22% and bytes by 41% in a fresh
-game. Latency improvement was modest and variable; the next optimization batches
-final witness syscalls. See the [measured comparison](docs/CLAUSEWITZ_COMPARISON.md).
+game. Bounded final-witness batching and exact-ID raw diagnostics have since
+passed live checks; latency gains remain modest and variable. A newer scoped
+reader exposed an incorrect catalog sentinel guard, now corrected in fixture-tested
+source. Its next run reached a hierarchy policy bound, preserved as a failure;
+new source reports valid policy overruns as incomplete optional diagnostics.
+Strategic input remains unfinished. See the
+[measured comparison](docs/CLAUSEWITZ_COMPARISON.md).
 The Linux preview also has a persistent [owned launcher](docs/OWNED_LINUX_LAUNCHER.md)
 with reconnectable clients and guarded graceful shutdown.
 Linux, Windows and macOS CI pass the portable code and platform fixtures.

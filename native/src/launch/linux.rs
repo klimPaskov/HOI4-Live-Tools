@@ -1087,6 +1087,11 @@ pub fn serve(path: &Path) -> Result<()> {
             "Launch paths must be absolute",
         ));
     }
+    // Refuse the complete endpoint path before build/display/lock checks or
+    // creating the run directory, userdata, logs or the game process. Keep the
+    // typed contract shared with reconnects instead of leaking SUN_LEN I/O.
+    let socket = config.run_directory.join("control.sock");
+    platform::validate_socket_path(&socket)?;
     let executable = config.executable.canonicalize()?;
     let executable_meta = fs::metadata(&executable)?;
     platform::verify_executable(&executable)?;
@@ -1219,7 +1224,7 @@ pub fn serve(path: &Path) -> Result<()> {
                 .env("VTEST_SOCKET_NAME", config.gpu_transport.as_ref().unwrap());
         }
     }
-    let listener = UnixListener::bind(directory.join("control.sock"))?;
+    let listener = UnixListener::bind(&socket)?;
     fs::set_permissions(
         directory.join("control.sock"),
         fs::Permissions::from_mode(0o600),

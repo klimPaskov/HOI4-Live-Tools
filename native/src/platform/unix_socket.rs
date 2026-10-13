@@ -17,6 +17,33 @@ pub(crate) fn connect_until(path: &Path, deadline: Instant) -> Result<UnixStream
     connect_inner(path, Some(deadline))
 }
 
+fn address() -> libc::sockaddr_un {
+    // SAFETY: this C ABI structure contains only an integer family and byte
+    // array; an all-zero value is valid and performs no native operation.
+    unsafe { std::mem::zeroed() }
+}
+
+/// Ordinary pathname sockets only. The native sun_path includes its terminating
+/// NUL, so the whole raw absolute pathname must use fewer bytes than that array.
+/// Validate before any directory creation, socket allocation or bind/connect.
+pub(crate) fn validate_path(path: &Path) -> Result<()> {
+    let bytes = path.as_os_str().as_bytes();
+    if !path.is_absolute() || bytes.is_empty() || bytes.contains(&0) {
+        return Err(Error::new(
+            "invalid_endpoint",
+            "Absolute NUL-free local socket pathname required",
+        ));
+    }
+    let capacity = address().sun_path.len();
+    if bytes.len() >= capacity {
+        return Err(Error::new("invalid_endpoint",format!(
+            "Local socket pathname uses {} bytes; maximum is {} bytes plus the terminating NUL in sun_path[{}]. Choose a shorter endpoint directory",
+            bytes.len(),capacity-1,capacity
+        )));
+    }
+    Ok(())
+}
+
 fn connect_inner(path: &Path, absolute: Option<Instant>) -> Result<UnixStream> {
     if absolute.is_some_and(|deadline| Instant::now() >= deadline) {
         return Err(Error::new(
@@ -24,16 +51,9 @@ fn connect_inner(path: &Path, absolute: Option<Instant>) -> Result<UnixStream> {
             "Local connection deadline expired",
         ));
     }
-    // SAFETY: the complete address is zero initialized before filling the path.
-    let mut address: libc::sockaddr_un = unsafe { std::mem::zeroed() };
+    validate_path(path)?;
+    let mut address = address();
     let bytes = path.as_os_str().as_bytes();
-    if !path.is_absolute()
-        || bytes.is_empty()
-        || bytes.len() >= address.sun_path.len()
-        || bytes.contains(&0)
-    {
-        return Err(Error::new("invalid_endpoint", "Invalid local socket path"));
-    }
     address.sun_family = libc::AF_UNIX as libc::sa_family_t;
     for (target, byte) in address.sun_path.iter_mut().zip(bytes) {
         *target = *byte as libc::c_char;
@@ -114,3 +134,6 @@ fn connect_inner(path: &Path, absolute: Option<Instant>) -> Result<UnixStream> {
     socket.set_nonblocking(false)?;
     Ok(socket)
 }
+
+#[cfg(test)]
+mod tests;

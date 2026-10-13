@@ -866,6 +866,7 @@ fn input_source_metadata_never_implies_receiver_payload_layout() {
     fixture.word(base + 0x435c108, base + 0x350c000);
     fixture.region(base + 0x350c000, 128);
     fixture.put(base + 0x350c000, b"9CPdxMouse");
+    fixture.word(base + 0x435cee0 + 0xc8, 0); // explicitly unsupported getter
     let value = gui::input_geometry(&fixture).unwrap();
     assert_eq!(value["input_source"]["type_encoding"], "9CPdxMouse");
     assert_eq!(value["input_source"]["field_layout_verified"], false);
@@ -894,6 +895,7 @@ fn input_source_identity_and_metadata_are_final_snapshot_witnesses() {
         fixture.word(base + 0x435c108, base + 0x350c000);
         fixture.region(base + 0x350c000, 128);
         fixture.put(base + 0x350c000, b"9CPdxMouse");
+        fixture.word(base + 0x435cee0 + 0xc8, 0); // explicitly unsupported getter
         let mut bytes: Vec<_> = (0..if address == base + 0x350c000 { 128 } else { 8 })
             .map(|i| fixture.data[&(address + i)])
             .collect();
@@ -901,6 +903,93 @@ fn input_source_identity_and_metadata_are_final_snapshot_witnesses() {
         fixture.fault = Some((address, 1, bytes));
         assert_eq!(gui::input_geometry(&fixture).unwrap_err().code, "torn_read");
     }
+}
+
+impl Fixture {
+    fn builtin_mouse_point(&mut self) {
+        self.geometry();
+        let base = 0x10000;
+        self.word(0x32500, 0xe0000);
+        self.word(0xe0000, base + 0x435cee0);
+        self.word(base + 0x435cee0 - 16, 0);
+        self.word(base + 0x435cee0 - 8, base + 0x435c100);
+        self.word(base + 0x435c108, base + 0x350c000);
+        self.region(base + 0x350c000, 128);
+        self.put(base + 0x350c000, b"9CPdxMouse");
+        self.word(base + 0x435cee0 + 0xc8, base + 0x2fad780);
+        self.word(base + 0x4391098, base + 0x301a3a0);
+        self.number(base + 0x463b960, 256);
+        self.number(base + 0x463b964, 8);
+    }
+}
+#[test]
+fn builtin_point_source_proves_arithmetic_but_never_origin_or_fresh_event() {
+    let mut f = Fixture::new();
+    f.builtin_mouse_point();
+    let v = gui::input_geometry(&f).unwrap();
+    let p = &v["input_source"]["point_diagnostic"];
+    assert_eq!(p["getter_source_layout_verified"], true);
+    assert_eq!(p["source_point_raw"], serde_json::json!([256, 8]));
+    assert_eq!(p["source_logical_point"], serde_json::json!([640.0, 20.0]));
+    assert_eq!(p["logical_cache_equivalent"], true);
+    assert_eq!(p["fresh_event_verified"], false);
+    assert_eq!(v["input_source"]["client_origin_verified"], false);
+    assert_eq!(v["input_mapping_verified"], false);
+    f.assert_not_read(&[0xe014a, 0xe00c8, 0x10000 + 0x463b958]);
+    // Signed source coordinates and float32 truncation, rather than integer
+    // products or config-only scale, follow the independently decoded consumer.
+    f.number(0x10000 + 0x463b960, -3);
+    f.number(0x10000 + 0x463b964, 7);
+    let v = gui::input_geometry(&f).unwrap();
+    assert_eq!(
+        v["input_source"]["point_diagnostic"]["source_logical_point"],
+        serde_json::json!([-7.0, 17.0])
+    );
+    assert_eq!(
+        v["input_source"]["point_diagnostic"]["logical_cache_equivalent"],
+        false
+    );
+}
+#[test]
+fn unsupported_point_getter_or_dynamic_replacement_never_reads_global_payload() {
+    let base = 0x10000;
+    for (address, reason) in [
+        (base + 0x435cee0 + 0xc8, "receiver_getter_unavailable"),
+        (base + 0x4391098, "builtin_point_source_unavailable"),
+    ] {
+        let mut f = Fixture::new();
+        f.builtin_mouse_point();
+        f.word(address, 0xdead0000);
+        let v = gui::input_geometry(&f).unwrap();
+        assert_eq!(
+            v["input_source"]["point_diagnostic"]["getter_source_layout_verified"],
+            false
+        );
+        assert_eq!(v["input_source"]["point_diagnostic"]["reason"], reason);
+        f.assert_not_read(&[base + 0x463b960, base + 0x463b964]);
+    }
+}
+#[test]
+fn builtin_point_source_witnesses_slot_and_both_coordinates() {
+    for (address, length) in [
+        (0x10000 + 0x4391098, 8),
+        (0x10000 + 0x463b960, 4),
+        (0x10000 + 0x463b964, 4),
+    ] {
+        let mut f = Fixture::new();
+        f.builtin_mouse_point();
+        let mut replacement: Vec<_> = (0..length).map(|i| f.data[&(address + i)]).collect();
+        replacement[0] ^= 1;
+        f.fault = Some((address, 1, replacement));
+        assert_eq!(gui::input_geometry(&f).unwrap_err().code, "torn_read");
+    }
+    let mut f = Fixture::new();
+    f.builtin_mouse_point();
+    f.number(0x10000 + 0x463b960, i32::MIN);
+    assert_eq!(
+        gui::input_geometry(&f).unwrap_err().code,
+        "invalid_gui_geometry"
+    );
 }
 
 #[test]
@@ -2381,10 +2470,106 @@ fn v2_alternate_root_and_child_capacity_bound_are_explicit() {
     f.node_render_detail();
     f.number(0xf40c8, 2049);
     f.data.remove(&0xf5100);
+    let v = research_ui::node_detail(&f, "tools1").unwrap();
+    let h = &v["detail"]["render_diagnostic"]["parent_chain"];
+    assert_eq!(h["status"], "unavailable_policy_bound");
+    assert_eq!(h["container_position_joins_verified"], true);
+    assert_eq!(h["payload_hops"], 0);
+    assert_eq!(h["policy_boundary"]["capacity"], 2049);
+    assert_eq!(h["policy_boundary"]["count"], 1);
+    assert_eq!(h["policy_boundary"]["inspected_entries_before_attempt"], 1);
+    f.assert_not_read(&[0xf5100]);
+}
+
+#[test]
+fn hierarchy_container_policy_refusal_has_no_join_or_payload_claim() {
+    for count in [0, 1] {
+        let mut f = Fixture::new();
+        f.node_render_detail();
+        f.array(0xf30c0, 0x180000, count);
+        f.number(0xf30c8, 2049);
+        let v = research_ui::node_detail(&f, "tools1").unwrap();
+        assert_eq!(
+            v["validation_scope"],
+            "requested_node_with_complete_current_record_ownership"
+        );
+        let h = &v["detail"]["render_diagnostic"]["parent_chain"];
+        assert_eq!(h["status"], "unavailable_policy_bound");
+        assert_eq!(h["container_position_joins_verified"], false);
+        assert_eq!(h["observed_ancestors"], 0);
+        assert_eq!(
+            h["policy_boundary"]["stage"],
+            "container_position_membership"
+        );
+        assert_eq!(h["policy_boundary"]["count"], count);
+        assert_eq!(h["policy_boundary"]["inspected_entries_before_attempt"], 0);
+        assert_eq!(h["graphics_root_closed"], false);
+        assert_eq!(h["input_authorized"], false);
+        f.assert_not_read(&[0x180000, 0xf0108]);
+    }
+}
+#[test]
+fn hierarchy_aggregate_policy_refusal_preserves_only_completed_ancestors() {
+    let mut f = Fixture::new();
+    f.node_render_detail();
+    f.region(0x180000, 2048 * 8);
+    f.word(0x180000, 0xf0000);
+    f.array(0xf40c0, 0x180000, 2048);
+    // This individually valid root header would exceed the aggregate budget;
+    // its child payload is intentionally unmapped and must never be read.
+    f.array(0x712b0, 0x190000, 2048);
+    let v = research_ui::node_detail(&f, "tools1").unwrap();
+    let h = &v["detail"]["render_diagnostic"]["parent_chain"];
+    assert_eq!(h["status"], "unavailable_policy_bound");
+    assert_eq!(h["container_position_joins_verified"], true);
+    assert_eq!(h["payload_hops"], 2);
+    assert_eq!(h["policy_boundary"]["role"], "owned_graphics_root_1f0");
+    assert_eq!(h["policy_boundary"]["capacity"], 2048);
+    assert_eq!(h["policy_boundary"]["count"], 2048);
     assert_eq!(
-        research_ui::node_detail(&f, "tools1").unwrap_err().code,
-        "invalid_gui_hierarchy_bound"
+        h["policy_boundary"]["inspected_entries_before_attempt"],
+        2050
     );
+    assert_eq!(h["graphics_root_closed"], false);
+    assert_eq!(h["effective_routing_verified"], false);
+    f.assert_not_read(&[0x190000]);
+}
+#[test]
+fn oversized_hierarchy_headers_never_hide_alignment_or_structure_errors() {
+    for (data, capacity, count, code) in [
+        (0x180003, 2049, 1, "invalid_gui_hierarchy"),
+        (0x180000, 20001, 1, "invalid_array"),
+        (0x180000, 2049, -1, "invalid_array"),
+        (0x180000, 2049, 2050, "invalid_array"),
+    ] {
+        let mut f = Fixture::new();
+        f.node_render_detail();
+        f.array(0xf30c0, data, count);
+        f.number(0xf30c8, capacity);
+        assert_eq!(
+            research_ui::node_detail(&f, "tools1").unwrap_err().code,
+            code
+        );
+        f.assert_not_read(&[data]);
+    }
+}
+#[test]
+fn policy_unavailable_hierarchy_still_witnesses_the_refused_header_and_owner() {
+    for address in [0xf30c0, 0xd4098] {
+        let mut f = Fixture::new();
+        f.node_render_detail();
+        f.array(0xf30c0, 0x180000, 1);
+        f.number(0xf30c8, 2049);
+        let length = if address == 0xf30c0 { 16 } else { 8 };
+        let mut replacement: Vec<_> = (0..length).map(|i| f.data[&(address + i)]).collect();
+        replacement[0] ^= 1;
+        f.fault = Some((address, 1, replacement));
+        assert_eq!(
+            research_ui::node_detail(&f, "tools1").unwrap_err().code,
+            "torn_read"
+        );
+        f.assert_not_read(&[0x180000]);
+    }
 }
 
 impl Fixture {

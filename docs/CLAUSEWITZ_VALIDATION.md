@@ -814,6 +814,61 @@ verifies that concurrently appended records remain available on the next poll.
 The final Python suite passed 953 tests with 37 skips; the failed run is retained.
 These are source/fixture results, not new installed-game or campaign acceptance.
 
+## Recorded receiver and window-close check — 13 October 2026
+
+The first launch attempt refused an overlength Unix socket pathname before
+spawning a game. Its partial private userdata and error were preserved. A fresh
+shorter-path run then used immutable source `b34899a`, Normal historical vanilla
+Germany with no mods, and recording started before the single campaign Start.
+
+Own receiver primary metadata identified `CPdxMouse`. The diagnostic reported
+512×288 physical and 2560×1440 logical dimensions, inverse ratios 5/5, and logical
+pointer 1280/40 after parking the ordinary client pointer at 256/8. This validates
+metadata and the observed arithmetic, not client-origin or event authority.
+Independent analysis corrected an earlier getter label: its tail callee returns
+packed coordinates. A new conditional point-source diagnostic checks the exact
+receiver/getter and built-in dynamic implementation before reading signed source
+coordinates. Replacement or unsupported implementations remain unavailable;
+client origin, window association and event acknowledgment stay unverified.
+
+All 411 keys and 423 associations matched prior full-node results. Five RPC
+samples were 323.4, 331.5, 335.3, 353.3 and 322.7 ms (median 331.5 ms), with
+270.7–291.7 ms server times and unchanged 26,686 logical requests / 299,776 bytes.
+The first exact-ID query passed the corrected catalog preflight, then refused
+`invalid_gui_hierarchy_bound` in 86.3 ms before child payload. It did not complete
+its target model or final witness pass. The actual capacity was unavailable in
+that source, and the failed result is retained.
+
+The next source keeps capacity 2,048 and aggregate 4,096 limits. A structurally
+valid policy overrun now produces an explicitly incomplete hierarchy subtree
+with bounded counts and completed joins only. Alignment, header, ownership,
+reciprocal-link, cycle, read and torn-witness errors still refuse the result.
+No uninspected payload is read and no geometry/input authority is added.
+
+One Escape closed the tree; node/detail calls refused in 42.8/21.6 ms. Final
+state remained paused at 1936.01.01.12, speed 0, with focus and all research empty.
+All 14 threads had tracer 0 and Yama remained 1. Recording passed ffprobe: one
+512×288 H.264 segment, 360.333 seconds, 4,586,610 bytes. One explicit owned
+`WM_DELETE_WINDOW` request completed in 2.31 seconds; the sole reaper recorded
+exit code 0, no signal and no core dump. No signal fallback or replay occurred.
+The close client did not persist its successful wire-delivery classification;
+actual exit is the recorded result. This proves that ordinary close path on the
+installed build, without explaining earlier exit-code-6 incidents. No Luna
+player, strategic dispatch or campaign acceptance is claimed for this run.
+
+## Optional hierarchy, point-source and endpoint fixture gate
+
+The combined source passed 171 portable and Rust 1.86 tests, including 105
+snapshot cases. The optimized Linux standard suite passed 225 reported checks
+(224 substantive and one inert helper), including six new path cases, and all
+four isolated no-XTEST close cases passed again. Actual boundary tests accept
+107 pathname bytes plus NUL, reject 108 with a typed error, handle raw byte
+lengths and refuse overlength launch paths before creating run/userdata files.
+Display identity and Yama 1 stayed unchanged. Python passed 953 tests with
+37 skips; formatting, Clippy, MSRV Linux compilation and protocol smoke passed.
+The new optional hierarchy and point-source outputs still need a fresh immutable
+installed-game check. The preceding installed-game close evidence used `b34899a`.
+
 ## Attribution
 
 The findings above refer to upstream `calling/{mem,process/linux,api,game,

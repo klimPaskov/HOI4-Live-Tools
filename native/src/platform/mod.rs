@@ -42,6 +42,8 @@ mod xauthority;
 pub(crate) use unix_socket::connect as connect_socket;
 #[cfg(target_os = "linux")]
 pub(crate) use unix_socket::connect_until as connect_socket_until;
+#[cfg(target_os = "linux")]
+pub(crate) use unix_socket::validate_path as validate_socket_path;
 pub fn open(path: &Path) -> Result<Box<dyn Process + Send + Sync>> {
     #[cfg(target_os = "linux")]
     {

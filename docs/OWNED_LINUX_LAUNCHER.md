@@ -23,6 +23,9 @@ unavailable error. See [current live evidence](CLAUSEWITZ_VALIDATION.md).
   display configuration; it does not provision or discover a desktop.
 - An existing private run parent directory, owned by the runtime user, mode
   `0700`. Each launch uses a new run directory. Configuration files use `0600`.
+- On Linux, the complete `run_directory/control.sock` pathname must fit 107 raw
+  bytes plus its terminating NUL. The launcher checks it before creating userdata;
+  choose a short private path. This is a Linux pathname-socket limit.
 
 The launcher does not invoke sudo, change Yama, alter the game binary or install
 mods. A parent relationship does not override every kernel security policy;
@@ -118,7 +121,10 @@ The sole child reaper supplies actual exit metadata. Command success establishes
 child exit, not exit code 0. Isolated Xvfb tests with XTEST disabled verified
 normal exit through the complete owner/reaper path and uncertain delivery after
 severed or withheld server replies, without a second request. These tests use
-generated clients; installed-game window-close acceptance remains pending.
+generated clients. A fresh recorded installed-game check subsequently verified
+one window-close request in 2.31 seconds, with actual exit code 0, no signal and
+no core dump. No signal fallback or replay occurred; previous nonzero signal-close
+incidents remain unexplained. See [the recorded result](CLAUSEWITZ_VALIDATION.md#recorded-receiver-and-window-close-check--13-october-2026).
 
 ## Ordinary clock input
 

@@ -9,14 +9,28 @@ use serde_json::{json, Value};
 use std::collections::BTreeSet;
 const POSITION: u64 = 0x43484f0;
 const TYPES: [u64; 4] = [POSITION, 0x4356e08, 0x434b370, 0x434c5b0];
-fn membership(r: &Reader<'_>, parent: u64, child: u64, total: &mut usize) -> Result<usize> {
+enum Membership {
+    Verified(usize),
+    PolicyUnavailable(Value),
+}
+fn membership(r: &Reader<'_>, parent: u64, child: u64, total: &mut usize) -> Result<Membership> {
     let (header, data, count) = r.array_header(parent + 0xc0)?;
     let capacity = i32::from_le_bytes(header[8..12].try_into().unwrap()) as usize;
-    if capacity > 2048 || (count > 0 && data % 8 != 0) || count > 4096 - *total {
+    // Malformed structure is never an optional policy refusal, even when its
+    // otherwise valid size would also exceed our conservative traversal cap.
+    if count > 0 && data % 8 != 0 {
         return Err(Error::new(
-            "invalid_gui_hierarchy_bound",
-            "Hierarchy child-array bound exceeded",
+            "invalid_gui_hierarchy",
+            "Aligned nonempty hierarchy child array required",
         ));
+    }
+    if capacity > 2048 || count > 4096 - *total {
+        return Ok(Membership::PolicyUnavailable(json!({
+            "capacity":capacity,"count":count,
+            "inspected_entries_before_attempt":*total,
+            "capacity_limit":2048,"aggregate_entry_limit":4096,
+            "child_payload_read":false
+        })));
     }
     *total += count;
     let payload = if count == 0 {
@@ -36,7 +50,19 @@ fn membership(r: &Reader<'_>, parent: u64, child: u64, total: &mut usize) -> Res
         ));
     }
     // Sibling pointers are compared only; never dereferenced.
-    Ok(count)
+    Ok(Membership::Verified(count))
+}
+fn summary(
+    chain: Vec<Value>,
+    status: &str,
+    container_verified: bool,
+    policy: Option<Value>,
+) -> Value {
+    let payload_hops = chain
+        .iter()
+        .filter(|node| node["payload_read"] == true)
+        .count();
+    json!({"limit":16,"observed_ancestors":chain.len(),"payload_hops":payload_hops,"chain":chain,"status":status,"policy_boundary":policy,"graphics_root_closed":status=="closed_to_owned_graphics_root","container_position_joins_verified":container_verified,"gui_hierarchy_provenance":"typed reciprocal links plus constructor positions/owned graphics anchor; incomplete when a boundary is reported","ancestor_own_country_semantics":"unproved","client_rectangle_available":false,"effective_routing_verified":false,"input_authorized":false})
 }
 pub(crate) fn observe(
     r: &Reader<'_>,
@@ -83,7 +109,17 @@ pub(crate) fn observe(
             "Container E78 parent must match E70",
         ));
     }
-    membership(r, positions[0], positions[1], &mut total)?;
+    if let Membership::PolicyUnavailable(mut policy) =
+        membership(r, positions[0], positions[1], &mut total)?
+    {
+        policy["stage"] = json!("container_position_membership");
+        return Ok(summary(
+            Vec::new(),
+            "unavailable_policy_bound",
+            false,
+            Some(policy),
+        ));
+    }
     // Constructor-positive positions need no control138: null is legitimate.
     let mut child = render;
     let mut seen = BTreeSet::from([render]);
@@ -118,7 +154,6 @@ pub(crate) fn observe(
             };
             break;
         }
-        let count = membership(r, parent, child, &mut total)?;
         let role = if parent == roots[0] {
             "owned_graphics_root_1f0"
         } else if parent == roots[1] {
@@ -130,6 +165,20 @@ pub(crate) fn observe(
         } else {
             "exact_reciprocal_gui_ancestor"
         };
+        let count = match membership(r, parent, child, &mut total)? {
+            Membership::Verified(count) => count,
+            Membership::PolicyUnavailable(mut policy) => {
+                policy["stage"] = json!("ancestor_membership");
+                policy["type_encoding"] = encoding;
+                policy["role"] = json!(role);
+                return Ok(summary(
+                    chain,
+                    "unavailable_policy_bound",
+                    true,
+                    Some(policy),
+                ));
+            }
+        };
         chain.push(json!({"type_encoding":encoding,"role":role,"payload_read":true,"reciprocal_child_membership":true,"child_count_raw":count}));
         if roots.contains(&parent) {
             status = "closed_to_owned_graphics_root";
@@ -137,11 +186,5 @@ pub(crate) fn observe(
         }
         child = parent;
     }
-    let payload_hops = chain
-        .iter()
-        .filter(|node| node["payload_read"] == true)
-        .count();
-    Ok(
-        json!({"limit":16,"observed_ancestors":chain.len(),"payload_hops":payload_hops,"chain":chain,"status":status,"graphics_root_closed":status=="closed_to_owned_graphics_root","container_position_joins_verified":true,"gui_hierarchy_provenance":"typed reciprocal links plus constructor positions/owned graphics anchor","ancestor_own_country_semantics":"unproved","client_rectangle_available":false,"effective_routing_verified":false,"input_authorized":false}),
-    )
+    Ok(summary(chain, status, true, None))
 }

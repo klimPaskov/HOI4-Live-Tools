@@ -155,3 +155,14 @@ no-XTEST close cases, and 953 Python tests (37 skipped). Installed-game checks
 for these additions remain pending. See the detailed failure and fixture gates
 before a fresh immutable run. No strategic dispatch or campaign acceptance is
 established by these tests.
+
+A fresh recorded shorter-path run verified CPdxMouse metadata and the same full
+411-key/423-association model. Its first scoped query passed catalog preflight,
+then refused a hierarchy policy bound; the complete scoped result remains
+unaccepted. One ordinary WM window-close request produced actual exit code 0
+in 2.31 seconds, with no signal fallback or replay; recording passed ffprobe.
+New optional hierarchy/point-source/path preflight code passes 171 portable/MSRV
+tests, 225 standard Linux checks (224 substantive), four no-XTEST close cases and
+953 Python tests (37 skipped). Its new observation outputs await a fresh
+immutable game. Finish verified strategic input before the next Luna acceptance;
+no two-year or full campaign has passed.

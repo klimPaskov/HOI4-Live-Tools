@@ -222,6 +222,14 @@ bounded primary RTTI is available on the own idler receiver. This is metadata
 only: receiver layout, virtual getter and client origin stay unverified. Full
 snapshot witnesses cover all its bytes.
 
+A subsequent run passed receiver metadata and full-node reads but refused the
+first scoped query at a hierarchy size policy boundary. New source preserves
+those limits and reports a valid overrun as an explicitly incomplete optional
+subtree; malformed structure still refuses. The conditional point diagnostic
+requires the exact receiver/getter and built-in dynamic implementation before
+source coordinates. Raw source units/origin, event completion and click routing
+remain unverified. Both additions await a fresh installed-game check.
+
 The focus query accepts an ASCII key prefix `filter`, `offset` 0–4096 and `limit`
 1–100. It validates every own key before pagination, exact own-tree ownership and
 global database pointer membership. Global duplicates/nulls grant no ownership.
@@ -291,7 +299,9 @@ The launcher also provides an explicit one-attempt `--close-window` lifecycle
 request. See [its target, deadlines and delivery semantics](../docs/OWNED_LINUX_LAUNCHER.md#explicit-window-close-preview).
 It sends no keys, does not focus or move the cursor, retains uncertain delivery
 without replay and has no automatic signal fallback. Isolated no-XTEST fixtures
-passed; actual game window-close acceptance remains pending.
+passed; a subsequent recorded game also accepted one request and exited with
+code 0 in 2.31 seconds, with no signal fallback or replay. Earlier exit-code-6
+incidents remain unexplained.
 
 ## Provenance
 

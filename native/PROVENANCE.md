@@ -116,3 +116,16 @@ copy SDL source, invoke an engine command or infer application consumption from
 a server reply. Generated-client/reaper and actual severed/withheld Xvfb wire
 fixtures are distinct from installed-game acceptance. Existing explicit signal
 shutdown remains a separate policy.
+
+The conditional packed-point source diagnostic follows independently decoded
+CPdxMouse constructors, its primary getter and overwritten-argument tail callee,
+the dynamic API initializer and built-in signed coordinate producer. An earlier
+static semantic label was corrected after the actual receiver observation.
+The dynamic function slot is freshly checked, never invoked; unknown/replaced
+implementations supply no inferred global layout. Coordinates are raw diagnostics,
+not a client origin, motion acknowledgment or input adapter.
+
+Optional hierarchy size refusal distinguishes bounded traversal policy from
+malformed structure, preserves completed reciprocal joins only and witnesses all
+observed headers. No limits are increased. Linux endpoint preflight and raw-byte
+boundary/socket tests are new project code using libc's local pathname ABI.
