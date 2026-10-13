@@ -1355,3 +1355,29 @@ unchanged, and the preceding owned game remained exited. Python passed **953
 tests, 37 skipped**, in 20.323 seconds; host/Linux Clippy, MSRV Linux compilation
 and formatting passed. Installed-game category validation is pending; current-node
 membership alone never proves selected-category visibility.
+
+
+## Panel-opening and category-geometry fixture gate
+
+A fixed ordinary `W` stage now shares the research lease, mutex, durable journal
+and final own-state/OS checks. It requires known closed own research views in
+normal map mode, an empty requested slot and no Info. Contradictory mode/window
+visibility refuses. An already open panel verifies without a toggle. Fresh panel
+readback and clear input are required; uncertain delivery blocks all later
+research stages and clock input across restart. The shortcut never moves the
+pointer and exposes no arbitrary key argument.
+
+An optional category Sprite diagnostic reuses the existing typed renderer,
+resource/cache and bounded hierarchy reader only after complete own category
+association proof. Exact Drag is supported; Standard geometry remains explicitly
+unavailable. Default category responses and reads stay unchanged. Raw geometry
+never supplies frame, routing or input authority.
+
+Portable and Rust 1.86 suites each passed **345 tests**. Optimized actual Linux
+passed **407 reported checks** (406 substantive plus one inert helper), including
+unchanged-display isolated X11 fixtures that check the `W` keysym, matching key
+pairs, clear keys and stationary pointer. Python passed **953 tests, 37 skipped**,
+in 19.378 seconds. Host/Linux Clippy and MSRV Linux compilation passed. All three
+Rust and six Python CI jobs passed for the preceding category commit `3e43476`.
+Panel opening and category geometry still await installed-game validation; this
+checkpoint does not validate category input or campaign acceptance.

@@ -26,7 +26,7 @@ fn tools(commands: Option<&dyn Commands>) -> Value {
         {"name":"hoi4_research","description":"Fresh own completed technology IDs with bounded pagination, and active raw research counters. Progress units, days remaining and eligibility remain unverified. Pure reads; never pauses.","inputSchema":{"type":"object","properties":{"offset":{"type":"integer","minimum":0,"maximum":8192},"limit":{"type":"integer","minimum":1,"maximum":100}},"additionalProperties":false}},
         {"name":"hoi4_input_geometry","description":"Read-only own GUI pointer, dimensions and scale diagnostics. Does not prove client origin, control geometry or click authorization.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}},
         {"name":"hoi4_research_slot_control","description":"One own research slot by current array index: conditional ordinary callback binding and raw typed renderer diagnostics. Optional include_geometry adds bounded Sprite cache and typed hierarchy observations. No guessed Background name, coordinates or input authorization.","inputSchema":{"type":"object","properties":{"slot":{"type":"integer","minimum":0,"maximum":31},"include_geometry":{"type":"boolean"}},"required":["slot"],"additionalProperties":false}},
-        {"name":"hoi4_research_category","description":"Read-only exact public folder ID association with the current own research tree, named tab, dense selection index and ordinary callback. No tab switch, geometry or input authorization.","inputSchema":{"type":"object","properties":{"folder_id":{"type":"string","minLength":1,"maxLength":256}},"required":["folder_id"],"additionalProperties":false}},
+        {"name":"hoi4_research_category","description":"Read-only exact public folder ID association with the current own research tree, named tab, dense selection index and ordinary callback. No tab switch, geometry or input authorization.","inputSchema":{"type":"object","properties":{"folder_id":{"type":"string","minLength":1,"maxLength":256},"include_geometry":{"type":"boolean"}},"required":["folder_id"],"additionalProperties":false}},
         {"name":"hoi4_research_ui","description":"Bounded own research slot widgets, selected slot, canonical technology Info windows, named ordinary research button state and exact render diagnostics. No eligibility, hit routing or input authorization.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}},
         {"name":"hoi4_army","description":"Bounded own-country divisions with observation-scoped full handles, selected own location joins and raw signed strength/organisation. No persistent IDs, normalized units, enemies or actions.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}},
         {"name":"hoi4_economy","description":"Own-country named factory trigger counts, civilian project capacity and signed fixed-point political power. Pure reads; UI totals, stability, war support and shortages unavailable.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}},
@@ -303,8 +303,14 @@ impl Server {
                 }
             }
             "hoi4_research_category" => {
-                if object.len() != 1 {
-                    return Err(Error::new("invalid_arguments", "One folder_id required"));
+                if object
+                    .keys()
+                    .any(|k| k != "folder_id" && k != "include_geometry")
+                {
+                    return Err(Error::new(
+                        "invalid_arguments",
+                        "Folder ID and optional geometry flag only",
+                    ));
                 }
                 let key = object
                     .get("folder_id")
@@ -313,7 +319,17 @@ impl Server {
                     .ok_or_else(|| {
                         Error::new("invalid_arguments", "Bounded public folder ID required")
                     })?;
-                research_ui::category_snapshot(self.process()?, key)
+                let geometry = match object.get("include_geometry") {
+                    None => false,
+                    Some(Value::Bool(v)) => *v,
+                    _ => {
+                        return Err(Error::new(
+                            "invalid_arguments",
+                            "Boolean geometry flag required",
+                        ))
+                    }
+                };
+                Ok(research_ui::category_with_geometry_owned(self.process()?, key, geometry)?.0)
             }
             "hoi4_research_ui" => {
                 if !object.is_empty() {

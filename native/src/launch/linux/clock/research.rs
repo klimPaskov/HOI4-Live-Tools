@@ -39,8 +39,8 @@ impl Service {
     }
 }
 pub(super) fn tool() -> Value {
-    json!({"name":"hoi4_research_attempt","description":"Preview: one ordinary ID-derived SelectSlot, View or Research stage for an own empty slot. SelectSlot requires an open own research panel; View/Research require its selected tree. Requires explicit owner profile, exclusive lease and stable stage request ID. Canonical readback verifies state; uncertain attempts are never replayed. No coordinates or engine calls.",
-    "inputSchema":{"type":"object","properties":{"stage":{"enum":["select_slot","view","research"]},"technology_id":{"type":"string","minLength":1,"maxLength":256},"slot":{"type":"integer","minimum":0,"maximum":31},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["stage","technology_id","slot","request_id","lease_token"],"additionalProperties":false}})
+    json!({"name":"hoi4_research_attempt","description":"Preview: one ordinary OpenPanel shortcut or ID-derived SelectSlot, View or Research stage for an own empty slot. OpenPanel requires known closed views in normal map mode; SelectSlot requires an open own panel; View/Research require its selected tree. Requires explicit owner profile, exclusive lease and stable stage request ID. Canonical readback verifies state; uncertain attempts are never replayed. No coordinates or engine calls.",
+    "inputSchema":{"type":"object","properties":{"stage":{"enum":["open_panel","select_slot","view","research"]},"technology_id":{"type":"string","minLength":1,"maxLength":256},"slot":{"type":"integer","minimum":0,"maximum":31},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["stage","technology_id","slot","request_id","lease_token"],"additionalProperties":false}})
 }
 pub(super) fn call(
     owner: &ClockService,
@@ -58,6 +58,7 @@ pub(super) fn call(
         ],
     )?;
     let selected_stage = match string(args, "stage")? {
+        "open_panel" => stage::Stage::OpenPanel,
         "select_slot" => stage::Stage::SelectSlot,
         "view" => stage::Stage::View,
         "research" => stage::Stage::Research,
@@ -203,6 +204,9 @@ fn own_state(epoch: Epoch, research: &Value, ui: &Value) -> Result<stage::OwnSta
     let tree = visible(&ui["ordinary_tree"])?;
     let panel = visible(&ui["panel"])?;
     let active = ui["active_mode_raw"].as_i64().ok_or_else(bad)?;
+    if (panel && active != 5) || (tree && active != 6) || (panel && tree) {
+        return Err(bad());
+    }
     let windows = ui["technology_info"]["windows"]
         .as_array()
         .filter(|v| v.len() <= 64)
@@ -221,6 +225,7 @@ fn own_state(epoch: Epoch, research: &Value, ui: &Value) -> Result<stage::OwnSta
         selected_slot,
         tree_visible: active == 6 && tree && !panel,
         panel_visible: Some(active == 5 && panel && !tree),
+        active_mode: Some(i32::try_from(active).map_err(|_| bad())?),
         researching,
         visible_info,
     })
@@ -228,9 +233,17 @@ fn own_state(epoch: Epoch, research: &Value, ui: &Value) -> Result<stage::OwnSta
 impl stage::Backend for ResearchBackend<'_> {
     fn confirm_input_idle(
         &mut self,
-        point: &crate::research_attempt::PointCandidate,
+        candidate: &stage::Candidate,
         deadline: Instant,
     ) -> Result<()> {
+        let stage::Candidate::Point(point) = candidate else {
+            if Instant::now() >= deadline {
+                return Err(Error::new("research_deadline", "Input idle deadline ended"));
+            }
+            return self
+                .controls
+                .preflight(self.process, &ControlKey::ResearchPanel);
+        };
         // Preparation is read-only and requires clear keys/modifiers/buttons.
         // Dropping the prepared value sends no pointer event.
         let _probe = self.controls.prepare_left_click_until(
@@ -250,13 +263,20 @@ impl stage::Backend for ResearchBackend<'_> {
         pin_scope(&mut self.scope, &context)?;
         Ok(state)
     }
-    fn candidate(
-        &mut self,
-        target: &stage::Target,
-    ) -> Result<crate::research_attempt::PointCandidate> {
+    fn candidate(&mut self, target: &stage::Target) -> Result<stage::Candidate> {
         self.target = Some(target.clone());
         self.guard.observe(self.process)?;
+        if target.stage == stage::Stage::OpenPanel {
+            let (fresh, context) = observed_state(self.process, self.guard)?;
+            pin_scope(&mut self.scope, &context)?;
+            fresh.validate(target)?;
+            fresh.preflight(target)?;
+            self.controls
+                .preflight(self.process, &ControlKey::ResearchPanel)?;
+            return Ok(stage::Candidate::OpenPanel);
+        }
         let (point, context) = match target.stage {
+            stage::Stage::OpenPanel => unreachable!("Fixed shortcut handled above"),
             stage::Stage::SelectSlot => {
                 candidate::observe_slot_owned(self.process, target.slot, self.profile)?
             }
@@ -282,11 +302,11 @@ impl stage::Backend for ResearchBackend<'_> {
                 "Candidate own status or full slot identities changed",
             ));
         }
-        Ok(point)
+        Ok(stage::Candidate::Point(point))
     }
     fn dispatch_once(
         &mut self,
-        point: &crate::research_attempt::PointCandidate,
+        candidate: &stage::Candidate,
         deadline: Instant,
     ) -> stage::Delivery {
         if let Err(error) = self.guard.observe(self.process) {
@@ -299,6 +319,46 @@ impl stage::Backend for ResearchBackend<'_> {
         let guard = &mut *self.guard;
         let process = self.process;
         let mut scope = self.scope.clone();
+        let stage::Candidate::Point(point) = candidate else {
+            if target.stage != stage::Stage::OpenPanel {
+                return stage::Delivery::NotQueued;
+            }
+            if let Err(error) = self.controls.preflight(process, &ControlKey::ResearchPanel) {
+                self.last_transport = Some(json!({"delivery":"not_queued","error":error}));
+                return stage::Delivery::NotQueued;
+            }
+            let mut input_may_queue = false;
+            let result = self.controls.send_until_checked(
+                process,
+                ControlKey::ResearchPanel,
+                deadline,
+                || {
+                    let (fresh, context) = observed_state(process, guard)?;
+                    pin_scope(&mut scope, &context)?;
+                    fresh.validate(&target)?;
+                    fresh.preflight(&target)?;
+                    input_may_queue = true;
+                    Ok(true)
+                },
+            );
+            let (delivery, diagnostic) = match result {
+                Ok(true) => (
+                    stage::Delivery::ServerConfirmed,
+                    json!({"delivery":"server_confirmed","ordinary_key":"W","game_action_verified":false,"event_causality_verified":false}),
+                ),
+                Ok(false) => (stage::Delivery::NotQueued, json!({"delivery":"not_queued"})),
+                Err(error) if !input_may_queue => (
+                    stage::Delivery::NotQueued,
+                    json!({"delivery":"not_queued","error":error}),
+                ),
+                Err(error) => (
+                    stage::Delivery::Unknown,
+                    json!({"delivery":"unknown","error":error}),
+                ),
+            };
+            self.last_transport = Some(diagnostic);
+            return delivery;
+        };
         let prepared = self.controls.prepare_left_click_until(
             self.process,
             PointerDisplay {
@@ -470,5 +530,18 @@ mod tests {
         );
         assert!(serde_json::from_value::<Profile>(json!("generic")).is_err());
         assert!(tool()["inputSchema"]["properties"].get("x").is_none());
+    }
+    #[test]
+    fn normal_map_panel_opening_requires_consistent_raw_visibility() {
+        let (r, mut u) = values();
+        u["active_mode_raw"] = json!(0);
+        assert!(own_state(epoch(), &r, &u).is_err());
+        u["ordinary_tree"]["visible_predicate"] = json!(false);
+        let state = own_state(epoch(), &r, &u).unwrap();
+        assert_eq!(state.active_mode, Some(0));
+        assert_eq!(state.panel_visible, Some(false));
+        assert!(!state.tree_visible);
+        u["panel"] = json!({"materialized":true,"visible_predicate":true});
+        assert!(own_state(epoch(), &r, &u).is_err());
     }
 }

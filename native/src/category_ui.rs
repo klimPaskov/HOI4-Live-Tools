@@ -50,6 +50,31 @@ pub(crate) fn observe(
     own_status: u64,
     key: &str,
 ) -> Result<Value> {
+    observe_inner(r, base, tree, root, registry, own_status, key, false)
+}
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn observe_geometry(
+    r: &Reader<'_>,
+    base: u64,
+    tree: u64,
+    root: u64,
+    registry: u64,
+    own_status: u64,
+    key: &str,
+) -> Result<Value> {
+    observe_inner(r, base, tree, root, registry, own_status, key, true)
+}
+#[allow(clippy::too_many_arguments)]
+fn observe_inner(
+    r: &Reader<'_>,
+    base: u64,
+    tree: u64,
+    root: u64,
+    registry: u64,
+    own_status: u64,
+    key: &str,
+    include_geometry: bool,
+) -> Result<Value> {
     let mut out = json!({"folder_key":key,"selected_folder_key":null,"selected_index":null,"binding_available":false,"control_type_encoding":null,"raw_flags":null,"reason":"category_unavailable","client_rectangle_available":false,"geometry_available":false,"current_frame_verified":false,"effective_routing_verified":false,"input_authorized":false});
     if key.is_empty() || key.len() > 256 || key.chars().any(char::is_control) {
         return Err(refuse("Invalid category key"));
@@ -214,6 +239,17 @@ pub(crate) fn observe(
     }
     out["binding_available"] = json!(true);
     out["reason"] = json!("exact_ordinary_category_association");
+    if !include_geometry {
+        return Ok(out);
+    }
+    out["sprite_diagnostic"] = if table != base + 0x4346b10 {
+        // Shared sprite_diagnostic is constructor-proved only for exact Drag110.
+        // Standard rendererE8 is not substituted or read.
+        json!({"reason":"standard_sprite_diagnostic_unavailable","field_layout_verified":false,"client_rectangle_available":false,"input_authorized":false})
+    } else {
+        let mut reuse = crate::node_reuse::Reuse::new(base, tree);
+        crate::node_detail::sprite_diagnostic(r, &mut reuse, tabs, button, registry)?
+    };
     Ok(out)
 }
 #[cfg(test)]
@@ -467,5 +503,141 @@ mod tests {
         assert!(f.observe().is_err());
         assert!(f.reads.borrow().contains_key(&0x51098));
         assert!(!f.reads.borrow().contains_key(&0x60068));
+    }
+    impl Fixture {
+        fn geometry(&self) -> Result<Value> {
+            let w = Witnesses::new(self);
+            let r = Reader::new(&w);
+            let v = super::observe_geometry(
+                &r,
+                0x10000,
+                0x20000,
+                0x30000,
+                0x80000,
+                0x70000,
+                "industry_folder",
+            )?;
+            w.finish()?;
+            Ok(v)
+        }
+        fn metadata(&mut self, table: u64, info: u64, name: u64, text: &str) {
+            self.region(table - 16, 24);
+            self.word(table - 8, info);
+            self.region(info, 16);
+            self.word(info + 8, name);
+            self.region(name, 128);
+            self.put(name, text.as_bytes());
+        }
+        fn sprite(&mut self) {
+            let b = 0x10000;
+            self.region(0xf0000, 0x1b0);
+            self.word(0x60110, 0xf0000);
+            self.word(0xf0000, b + 0x4356e08);
+            self.word(0xf0138, 0x60000);
+            self.metadata(b + 0x4356e08, b + 0x4357900, b + 0x350a000, "7CSprite");
+            self.region(0xf1000, 0x1f0);
+            self.word(0xf0168, 0xf1000);
+            self.word(0xf1000, b + 0x4357160);
+            self.metadata(b + 0x4357160, b + 0x4357910, b + 0x350a100, "11CSpriteType");
+            self.put(0xf0114, &1.0f32.to_le_bytes());
+            for a in [0xf1090, 0xf1094, 0xf10a4, 0xf10a8] {
+                self.put(a, &1i32.to_le_bytes());
+            }
+            self.region(0xf2000, 0x500);
+            self.word(b + 0x4577890, 0xf2000);
+            self.word(0xf2000, b + 0x42417f8);
+            self.word(0x800b8, 0xf2000);
+            self.word(0xf21f0, b + 0x43484f0);
+            self.word(0xf2350, b + 0x43484f0);
+            self.region(0x40e70, 16);
+            self.word(0x40e70, 0xf3000);
+            self.word(0x40e78, 0xf4000);
+            self.region(0xf3000, 0x160);
+            self.region(0xf4000, 0x160);
+            self.word(0xf3000, b + 0x43484f0);
+            self.word(0xf4000, b + 0x43484f0);
+            self.word(0xf4108, 0xf3000);
+            self.array(0xf30c0, 0xf5000, 1);
+            self.word(0xf5000, 0xf4000);
+        }
+    }
+    #[test]
+    fn geometry_opt_in_preserves_association_and_raw_limits() {
+        let mut f = Fixture::new();
+        f.sprite();
+        let v = f.geometry().unwrap();
+        assert_eq!(v["binding_available"], true);
+        assert_eq!(v["sprite_diagnostic"]["field_layout_verified"], true);
+        assert_eq!(
+            v["sprite_diagnostic"]["parent_chain"]["status"],
+            "detached_ancestor"
+        );
+        assert_eq!(v["input_authorized"], false);
+        assert_eq!(v["geometry_available"], false);
+        assert!(f.observe().unwrap().get("sprite_diagnostic").is_none());
+    }
+    #[test]
+    fn standard_geometry_has_no_borrowed_drag_fields() {
+        let mut f = Fixture::new();
+        f.word(0x60000, 0x10000 + 0x43470c8);
+        f.word(0x60080, 0x10000 + 0x4347488);
+        let v = f.geometry().unwrap();
+        assert_eq!(
+            v["sprite_diagnostic"]["reason"],
+            "standard_sprite_diagnostic_unavailable"
+        );
+        assert!(!f.reads.borrow().contains_key(&0x600e8));
+        assert!(!f.reads.borrow().contains_key(&0x60110));
+    }
+    #[test]
+    fn invalid_callback_precedes_render_read() {
+        let mut f = Fixture::new();
+        f.word(0x600a0, 0xdead0000);
+        let v = f.geometry().unwrap();
+        assert_eq!(v["binding_available"], false);
+        assert!(!f.reads.borrow().contains_key(&0x60110));
+    }
+    #[test]
+    fn wrong_sprite_owner_precedes_resource_payload() {
+        let mut f = Fixture::new();
+        f.sprite();
+        f.word(0xf0138, 0x60008);
+        assert_eq!(f.geometry().unwrap_err().code, "invalid_gui_owner");
+        assert!(!f.reads.borrow().contains_key(&0xf0168));
+    }
+    #[test]
+    fn sprite_metadata_and_cache_survive_final_witness() {
+        for (a, bytes) in [
+            (0xf0138, 0x60008u64.to_le_bytes().to_vec()),
+            (0xf0114, 2.0f32.to_le_bytes().to_vec()),
+            (
+                0x10000 + 0x4356e08 - 8,
+                (0x10000 + 0x4357920u64).to_le_bytes().to_vec(),
+            ),
+        ] {
+            let mut f = Fixture::new();
+            f.sprite();
+            f.fault = Some((a, bytes));
+            assert_eq!(f.geometry().unwrap_err().code, "torn_read");
+        }
+    }
+    #[test]
+    fn null_render_is_unavailable_not_zero_geometry() {
+        let f = Fixture::new();
+        let v = f.geometry().unwrap();
+        assert_eq!(v["binding_available"], true);
+        assert_eq!(v["sprite_diagnostic"]["field_layout_verified"], false);
+        assert_eq!(v["sprite_diagnostic"]["render_type_encoding"], Value::Null);
+    }
+    #[test]
+    fn malformed_numeric_and_reciprocal_fields_refuse() {
+        let mut f = Fixture::new();
+        f.sprite();
+        f.put(0xf0114, &f32::NAN.to_le_bytes());
+        assert_eq!(f.geometry().unwrap_err().code, "invalid_gui_geometry");
+        let mut f = Fixture::new();
+        f.sprite();
+        f.word(0xf4108, 0xf3008);
+        assert_eq!(f.geometry().unwrap_err().code, "invalid_gui_position");
     }
 }

@@ -296,3 +296,11 @@ advancement through 3 January. All four strategic RPC samples were under one
 second; the recording passed ffprobe and one WM close returned normal exit 0.
 The builder opened only the initial panel. Implement panel/category navigation
 and focus/economic/daily plans next; keep the full acceptance objective intact.
+
+
+The next fixed `open_panel` stage and optional category Sprite diagnostic pass
+portable/MSRV and actual Linux fixtures. Launch a fresh immutable recorded run,
+prepare menus only, and let exclusive Luna medium input open the panel itself
+before SelectSlot/View/Research. Observe category association/geometry by ID
+without switching tabs. Keep unknown input quarantined and never hot-swap a
+live binary. Category input, focus actions and daily plans remain unfinished.

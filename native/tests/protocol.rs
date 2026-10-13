@@ -271,6 +271,7 @@ fn category_arguments_refuse_before_process_access() {
         json!({"folder_id":""}),
         json!({"folder_id":"industry_folder","index":0}),
         json!({"folder_id":"bad\nkey"}),
+        json!({"folder_id":"industry_folder","include_geometry":0}),
     ] {
         let reply=server.handle(json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"hoi4_research_category","arguments":args}})).unwrap();
         assert!(reply.to_string().contains("invalid_arguments"));

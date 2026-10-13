@@ -5102,3 +5102,39 @@ fn category_context_gates_and_late_capture_and_slot_changes_refuse() {
         );
     }
 }
+
+#[test]
+fn category_geometry_preserves_context_and_unknown_layout_limits() {
+    let mut f = owned_category_fixture();
+    let (v, c) = research_ui::category_with_geometry_owned(&f, "industry_folder", true).unwrap();
+    assert_eq!(c.campaign.player, "GER");
+    assert_eq!(c.slots, [0x2c000, 0x2c100, 0x2c200, 0x2c300]);
+    assert_eq!(v["category"]["binding_available"], true);
+    assert_eq!(
+        v["category"]["sprite_diagnostic"]["reason"],
+        "standard_sprite_diagnostic_unavailable"
+    );
+    f.assert_not_read(&[0x2140e8, 0x214110]);
+    f.word(0x214000, 0x10000 + 0x4346b10);
+    f.word(0x214080, 0x10000 + 0x4346ea8);
+    let (v, _) = research_ui::category_with_geometry_owned(&f, "industry_folder", true).unwrap();
+    assert_eq!(
+        v["category"]["sprite_diagnostic"]["field_layout_verified"],
+        false
+    );
+    assert_eq!(v["category"]["input_authorized"], false);
+    assert_eq!(v["category"]["geometry_available"], false);
+}
+#[test]
+fn category_geometry_final_witness_refuses_changed_renderer_identity() {
+    let mut f = owned_category_fixture();
+    f.word(0x214000, 0x10000 + 0x4346b10);
+    f.word(0x214080, 0x10000 + 0x4346ea8);
+    f.fault = Some((0x214110, 1, 0x21f000u64.to_le_bytes().to_vec()));
+    assert_eq!(
+        research_ui::category_with_geometry_owned(&f, "industry_folder", true)
+            .unwrap_err()
+            .code,
+        "torn_read"
+    );
+}

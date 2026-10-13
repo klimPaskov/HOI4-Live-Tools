@@ -194,10 +194,13 @@ acceptance remain unfinished. See [the bounded live gate](CLAUSEWITZ_VALIDATION.
 
 `hoi4_research_attempt` takes the planned `technology_id`, own `slot`,
 `stage` (`select_slot`, `view` or `research`), a separate stable `request_id`
-for each stage, and `lease_token`. `select_slot` requires an open own panel
+for each stage, and `lease_token`. The new `open_panel` stage requires known
+closed own views in normal map mode and sends one ordinary `W` pair without
+pointer movement. An already open panel verifies without toggling it. This stage
+awaits recorded live validation. `select_slot` requires an open own panel
 and verifies the selected empty own tree; View/Research require that tree.
 Selection retains the planned technology ID in its durable target. It accepts
-no coordinates and performs no automatic panel or category navigation.
+no coordinates and performs no category navigation.
 Recorded run 020 verified SelectSlot 0, View/Research and SelectSlot 1 with
 exclusive Luna medium input and independent own-state readback. Each stage derives its point from fresh internal observations and
 pins campaign, own status and full slot identities. A final read-only check

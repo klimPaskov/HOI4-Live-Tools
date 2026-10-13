@@ -24,6 +24,7 @@ mod pointer;
 pub use pointer::{LeftClick, PointerDelivery, PointerDispatch, PointerDisplay};
 
 pub enum ControlKey {
+    ResearchPanel,
     Pause,
     Slower,
     Faster,
@@ -32,6 +33,7 @@ pub enum ControlKey {
 impl ControlKey {
     fn symbol(&self) -> u32 {
         match self {
+            Self::ResearchPanel => 0x77,
             Self::Pause => 0x20,
             Self::Slower => 0xffad,
             Self::Faster => 0xffab,

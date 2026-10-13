@@ -438,7 +438,7 @@ fn observe(
     requested_detail: Option<&str>,
     requested_slot: Option<usize>,
     include_slot_geometry: bool,
-    requested_category: Option<&str>,
+    requested_category: Option<(&str, bool)>,
 ) -> Result<(Value, Option<UiContext>)> {
     let start = Instant::now();
     process.begin_snapshot()?;
@@ -635,7 +635,7 @@ fn observe(
     } else {
         None
     };
-    let category = if let Some(key) = requested_category {
+    let category = if let Some((key, geometry)) = requested_category {
         if active != 6
             || selected_index.is_none()
             || display_tag < 0
@@ -647,7 +647,12 @@ fn observe(
                 "Own selected research tree required for category association",
             ));
         }
-        Some(crate::category_ui::observe(
+        let observe = if geometry {
+            crate::category_ui::observe_geometry
+        } else {
+            crate::category_ui::observe
+        };
+        Some(observe(
             &r,
             base,
             tree,
@@ -902,8 +907,24 @@ pub fn category_snapshot(process: &dyn Process, key: &str) -> Result<Value> {
 }
 #[doc(hidden)]
 pub fn category_owned(process: &dyn Process, key: &str) -> Result<(Value, UiContext)> {
+    category_with_geometry_owned(process, key, false)
+}
+#[doc(hidden)]
+pub fn category_with_geometry_owned(
+    process: &dyn Process,
+    key: &str,
+    geometry: bool,
+) -> Result<(Value, UiContext)> {
     validate_detail_key(key)?;
-    let (v, context) = observe(process, true, false, None, None, false, Some(key))?;
+    let (v, context) = observe(
+        process,
+        true,
+        false,
+        None,
+        None,
+        false,
+        Some((key, geometry)),
+    )?;
     let result = json!({"source":"native own research category association","build_id":game::BUILD_ID,"owned":true,
         "category":v["category"],"selected_slot":v["selected_slot"],"freshness":v["freshness"],
         "input_authorized":false,"observation_paused_game":false});

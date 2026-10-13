@@ -22,6 +22,7 @@ use std::{
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub enum Stage {
+    OpenPanel,
     SelectSlot,
     View,
     Research,
@@ -50,6 +51,8 @@ pub struct OwnState {
     /// inferred true when reopening their journal.
     #[serde(default)]
     pub panel_visible: Option<bool>,
+    #[serde(default)]
+    pub active_mode: Option<i32>,
     /// Complete own-slot canonical assignments, never inferred from UI labels.
     pub researching: Vec<Option<String>>,
     /// All locally visible own Info windows. Null means unknown selection.
@@ -100,6 +103,13 @@ impl OwnState {
     }
     fn reached(&self, target: &Target) -> bool {
         match target.stage {
+            Stage::OpenPanel => {
+                self.active_mode == Some(5)
+                    && self.panel_visible == Some(true)
+                    && !self.tree_visible
+                    && self.visible_info.is_empty()
+                    && self.researching[target.slot as usize].is_none()
+            }
             Stage::SelectSlot => {
                 self.tree_visible
                     && self.panel_visible == Some(false)
@@ -118,6 +128,20 @@ impl OwnState {
         }
     }
     pub(crate) fn preflight(&self, target: &Target) -> Result<()> {
+        if target.stage == Stage::OpenPanel {
+            if self.active_mode != Some(0)
+                || self.panel_visible != Some(false)
+                || self.tree_visible
+                || !self.visible_info.is_empty()
+                || self.researching[target.slot as usize].is_some()
+            {
+                return Err(error(
+                    "research_precondition",
+                    "Known closed own research views in normal map mode required",
+                ));
+            }
+            return Ok(());
+        }
         if target.stage == Stage::SelectSlot {
             if self.panel_visible != Some(true)
                 || self.tree_visible
@@ -141,7 +165,7 @@ impl OwnState {
             ));
         }
         let info_ok = match target.stage {
-            Stage::SelectSlot => unreachable!("Selection handled above"),
+            Stage::OpenPanel | Stage::SelectSlot => unreachable!("Selection handled above"),
             Stage::View => self.visible_info.is_empty(),
             Stage::Research => self.visible_info.as_slice() == [Some(target.technology.clone())],
         };
@@ -154,13 +178,19 @@ impl OwnState {
         Ok(())
     }
 }
+#[derive(Clone, Debug)]
+pub enum Candidate {
+    /// Fixed ordinary shortcut; no coordinates or arbitrary key arguments.
+    OpenPanel,
+    Point(PointCandidate),
+}
 pub trait Backend {
     fn observe(&mut self) -> Result<OwnState>;
-    fn candidate(&mut self, target: &Target) -> Result<PointCandidate>;
-    /// Exactly one ordinary motion/left-button attempt; no activation or replay.
-    fn dispatch_once(&mut self, candidate: &PointCandidate, deadline: Instant) -> Delivery;
+    fn candidate(&mut self, target: &Target) -> Result<Candidate>;
+    /// Exactly one fixed shortcut or motion/left-button attempt; no activation or replay.
+    fn dispatch_once(&mut self, candidate: &Candidate, deadline: Instant) -> Delivery;
     /// Read-only acknowledgement of clear input; never compensate/release.
-    fn confirm_input_idle(&mut self, candidate: &PointCandidate, deadline: Instant) -> Result<()>;
+    fn confirm_input_idle(&mut self, candidate: &Candidate, deadline: Instant) -> Result<()>;
 }
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub enum Status {
@@ -474,23 +504,34 @@ impl Journal {
         before.preflight(&target)?;
         live(authority, token, &target, deadline, gate)?;
         let candidate = backend.candidate(&target)?;
-        if candidate.input_authorized
-            || candidate.current_frame_verified
-            || candidate.effective_routing_verified
-            || candidate
-                .expected_client
-                .iter()
-                .any(|v| !(1..=16384).contains(v))
-            || candidate
-                .client_pixel
-                .iter()
-                .zip(candidate.expected_client)
-                .any(|(v, n)| *v < 0 || *v >= i32::from(n))
-        {
-            return Err(error(
-                "research_precondition",
-                "Candidate cannot assert frame/routing/input authority",
-            ));
+        match &candidate {
+            Candidate::OpenPanel if target.stage == Stage::OpenPanel => {}
+            Candidate::Point(point) if target.stage != Stage::OpenPanel => {
+                if point.input_authorized
+                    || point.current_frame_verified
+                    || point.effective_routing_verified
+                    || point
+                        .expected_client
+                        .iter()
+                        .any(|v| !(1..=16384).contains(v))
+                    || point
+                        .client_pixel
+                        .iter()
+                        .zip(point.expected_client)
+                        .any(|(v, n)| *v < 0 || *v >= i32::from(n))
+                {
+                    return Err(error(
+                        "research_precondition",
+                        "Candidate cannot assert frame/routing/input authority",
+                    ));
+                }
+            }
+            _ => {
+                return Err(error(
+                    "research_precondition",
+                    "Candidate differs from stage input kind",
+                ))
+            }
         }
         live(authority, token, &target, deadline, gate)?;
         let fresh = backend.observe()?;

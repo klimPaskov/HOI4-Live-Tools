@@ -56,6 +56,7 @@ fn state() -> OwnState {
         selected_slot: Some(0),
         tree_visible: true,
         panel_visible: Some(false),
+        active_mode: Some(6),
         researching: vec![None, None, None, None],
         visible_info: vec![Some("support_weapons".into())],
     }
@@ -82,7 +83,7 @@ struct Fake {
     calls: usize,
     dispatches: usize,
     delivery: Delivery,
-    candidate: PointCandidate,
+    candidate: Candidate,
     crash: bool,
     slow: Duration,
     input_idle: bool,
@@ -95,7 +96,7 @@ impl Fake {
             calls: 0,
             dispatches: 0,
             delivery: Delivery::Unknown,
-            candidate: point(),
+            candidate: Candidate::Point(point()),
             crash: false,
             slow: Duration::ZERO,
             input_idle: true,
@@ -114,7 +115,7 @@ impl Fake {
     }
 }
 impl Backend for Fake {
-    fn confirm_input_idle(&mut self, _: &PointCandidate, _: Instant) -> Result<()> {
+    fn confirm_input_idle(&mut self, _: &Candidate, _: Instant) -> Result<()> {
         if self.input_idle {
             Ok(())
         } else {
@@ -133,10 +134,10 @@ impl Backend for Fake {
             Ok(self.last.clone())
         }
     }
-    fn candidate(&mut self, _: &Target) -> Result<PointCandidate> {
+    fn candidate(&mut self, _: &Target) -> Result<Candidate> {
         Ok(self.candidate.clone())
     }
-    fn dispatch_once(&mut self, _: &PointCandidate, _: Instant) -> Delivery {
+    fn dispatch_once(&mut self, _: &Candidate, _: Instant) -> Delivery {
         self.dispatches += 1;
         if self.crash {
             panic!("simulated loss after possible input");
@@ -160,6 +161,7 @@ fn panel_state() -> OwnState {
     let mut s = state();
     s.tree_visible = false;
     s.panel_visible = Some(true);
+    s.active_mode = Some(5);
     s.selected_slot = Some(1);
     s.visible_info.clear();
     s
@@ -255,7 +257,12 @@ fn selection_refuses_nonempty_late_slot_and_unresolved_delivery_survives_restart
     assert_eq!(f.dispatches, 1);
     drop(j);
     let mut j = Journal::open(&scratch.journal()).unwrap();
-    for stage in [Stage::SelectSlot, Stage::View, Stage::Research] {
+    for stage in [
+        Stage::OpenPanel,
+        Stage::SelectSlot,
+        Stage::View,
+        Stage::Research,
+    ] {
         assert_eq!(
             execute(
                 &mut j,
@@ -443,10 +450,14 @@ fn preflight_gate_lease_and_invalid_candidate_leave_plan_retryable() {
             a.release(&"a".repeat(32), &epoch()).unwrap();
         }
         if case == 2 {
-            f.candidate.client_pixel = [-1, 35];
+            if let Candidate::Point(p) = &mut f.candidate {
+                p.client_pixel = [-1, 35];
+            }
         }
         if case == 3 {
-            f.candidate.expected_client = [0, 288];
+            if let Candidate::Point(p) = &mut f.candidate {
+                p.expected_client = [0, 288];
+            }
         }
         if case == 4 {
             f.last.visible_info = vec![Some("other_technology".into())];
@@ -661,5 +672,187 @@ fn canonical_assignment_without_input_idle_stays_quarantined() {
         .code,
         "action_uncertain"
     );
+    assert_eq!(f.dispatches, 1);
+}
+
+fn closed_map_state() -> OwnState {
+    let mut s = panel_state();
+    s.active_mode = Some(0);
+    s.panel_visible = Some(false);
+    s.selected_slot = None;
+    s
+}
+#[test]
+fn panel_shortcut_opens_once_and_already_open_never_toggles() {
+    let scratch = Scratch::new();
+    let mut j = Journal::open(&scratch.journal()).unwrap();
+    let a = authority();
+    let g = RwLock::new(true);
+    let mut f = Fake::new();
+    f.candidate = Candidate::OpenPanel;
+    f.delivery = Delivery::ServerConfirmed;
+    f.observations = VecDeque::from([
+        Ok(closed_map_state()),
+        Ok(closed_map_state()),
+        Ok(panel_state()),
+    ]);
+    let t = target(Stage::OpenPanel);
+    let first = execute(
+        &mut j,
+        "open",
+        t.clone(),
+        &a,
+        &g,
+        &mut f,
+        Duration::from_secs(1),
+    )
+    .unwrap();
+    assert!(first.current_state_verified && !first.historical);
+    assert_eq!(f.dispatches, 1);
+    drop(j);
+    let mut j = Journal::open(&scratch.journal()).unwrap();
+    let old = execute(
+        &mut j,
+        "open",
+        t.clone(),
+        &a,
+        &g,
+        &mut f,
+        Duration::from_secs(1),
+    )
+    .unwrap();
+    assert!(old.historical && !old.current_state_verified);
+    let noop = execute(
+        &mut j,
+        "open-again",
+        t,
+        &a,
+        &g,
+        &mut f,
+        Duration::from_secs(1),
+    )
+    .unwrap();
+    assert!(noop.current_state_verified && !noop.historical);
+    assert_eq!(noop.receipt.delivery, None);
+    assert_eq!(f.dispatches, 1);
+}
+#[test]
+fn panel_unknown_mode_info_occupied_and_wrong_input_kind_refuse() {
+    let mut states = vec![];
+    let mut s = closed_map_state();
+    s.active_mode = None;
+    states.push(s);
+    let mut s = closed_map_state();
+    s.active_mode = Some(7);
+    states.push(s);
+    let mut s = closed_map_state();
+    s.panel_visible = None;
+    states.push(s);
+    let mut s = closed_map_state();
+    s.visible_info = vec![Some("support_weapons".into())];
+    states.push(s);
+    let mut s = closed_map_state();
+    s.researching[0] = Some("support_weapons".into());
+    states.push(s);
+    for s in states {
+        assert!(s.preflight(&target(Stage::OpenPanel)).is_err());
+        assert!(!s.reached(&target(Stage::OpenPanel)));
+    }
+    let scratch = Scratch::new();
+    let mut j = Journal::open(&scratch.journal()).unwrap();
+    let a = authority();
+    let g = RwLock::new(true);
+    let mut f = Fake::new();
+    f.last = closed_map_state();
+    assert_eq!(
+        execute(
+            &mut j,
+            "wrong-kind",
+            target(Stage::OpenPanel),
+            &a,
+            &g,
+            &mut f,
+            Duration::from_secs(1)
+        )
+        .unwrap_err()
+        .code,
+        "research_precondition"
+    );
+    assert_eq!(f.dispatches, 0);
+    assert_eq!(j.file.metadata().unwrap().len(), 0);
+}
+#[test]
+fn late_panel_change_refuses_without_consuming_retry() {
+    let scratch = Scratch::new();
+    let mut j = Journal::open(&scratch.journal()).unwrap();
+    let a = authority();
+    let g = RwLock::new(true);
+    let mut f = Fake::new();
+    f.candidate = Candidate::OpenPanel;
+    f.observations = VecDeque::from([Ok(closed_map_state()), Ok(panel_state())]);
+    assert_eq!(
+        execute(
+            &mut j,
+            "late-panel",
+            target(Stage::OpenPanel),
+            &a,
+            &g,
+            &mut f,
+            Duration::from_secs(1)
+        )
+        .unwrap_err()
+        .code,
+        "research_precondition"
+    );
+    assert_eq!(f.dispatches, 0);
+    assert_eq!(j.file.metadata().unwrap().len(), 0);
+}
+#[test]
+fn uncertain_panel_shortcut_blocks_all_stages_after_restart() {
+    let scratch = Scratch::new();
+    let mut j = Journal::open(&scratch.journal()).unwrap();
+    let a = authority();
+    let g = RwLock::new(true);
+    let mut f = Fake::new();
+    f.candidate = Candidate::OpenPanel;
+    f.last = closed_map_state();
+    assert_eq!(
+        execute(
+            &mut j,
+            "unknown-panel",
+            target(Stage::OpenPanel),
+            &a,
+            &g,
+            &mut f,
+            Duration::from_secs(1)
+        )
+        .unwrap_err()
+        .code,
+        "action_uncertain"
+    );
+    assert_eq!(f.dispatches, 1);
+    drop(j);
+    let mut j = Journal::open(&scratch.journal()).unwrap();
+    for stage in [
+        Stage::OpenPanel,
+        Stage::SelectSlot,
+        Stage::View,
+        Stage::Research,
+    ] {
+        assert_eq!(
+            execute(
+                &mut j,
+                "next",
+                target(stage),
+                &a,
+                &g,
+                &mut f,
+                Duration::from_secs(1)
+            )
+            .unwrap_err()
+            .code,
+            "action_uncertain"
+        );
+    }
     assert_eq!(f.dispatches, 1);
 }

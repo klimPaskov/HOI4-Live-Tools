@@ -852,7 +852,12 @@ fn owned_xvfb_keyboard_controls() {
     while let Some(event) = connection.poll_for_event().unwrap() {
         assert!(!matches!(event, Event::KeyPress(_) | Event::KeyRelease(_)));
     }
-    for key in [ControlKey::Pause, ControlKey::Slower, ControlKey::Faster] {
+    for (key, symbol) in [
+        (ControlKey::Pause, 0x20),
+        (ControlKey::Slower, 0xffad),
+        (ControlKey::Faster, 0xffab),
+        (ControlKey::ResearchPanel, 0x77),
+    ] {
         controls.send(&process, key).unwrap();
         let start = Instant::now();
         let mut pressed = None;
@@ -867,6 +872,12 @@ fn owned_xvfb_keyboard_controls() {
         }
         assert!(pressed.is_some());
         assert_eq!(pressed, released);
+        let mapping = connection
+            .get_keyboard_mapping(pressed.unwrap(), 1)
+            .unwrap()
+            .reply()
+            .unwrap();
+        assert!(mapping.keysyms.contains(&symbol));
     }
     let after = connection.query_pointer(root).unwrap().reply().unwrap();
     assert_eq!(
