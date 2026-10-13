@@ -969,6 +969,34 @@ close cases remain separate unchanged-transport evidence. These new hierarchy
 and cache outputs still require a fresh immutable installed-game run; they do
 not establish strategic dispatch or campaign acceptance.
 
+## Ordinary Research button and own economy fixture gate
+
+The exact-ID reader now inspects only its unique locally visible matching own
+Info's named Research control. It checks Standard ownership, the normal alias,
+bounded reciprocal listeners, the independently recovered first void callback
+capture and conditional renderer ownership. Standard's renderer offset and
+void callback differ from the node Drag's. Unsupported variants remain
+unavailable; no geometry, eligibility, confirmation reader or action is added.
+Fifteen new snapshot fixtures cover those distinctions, guard order and mutations.
+
+The new no-argument `hoi4_economy` reader resolves only the own country and
+verifies exact country/tag, production and political-status owner joins before
+payload. It returns three named factory trigger counts, separate civilian
+project capacity and signed political-power units as an exact rational. The
+current-build formulas and fixed-point divisor were recovered independently;
+upstream offsets and property interpretations were not copied. UI factory
+totals, idle builders, shortages and final stability/war support remain unavailable.
+Eight separate fixtures exercise arithmetic, negative PP, boundaries, owner/type
+refusal, final witnesses, context changes and argument validation.
+
+Portable and Rust 1.86 suites each passed 217 tests. The actual optimized Linux
+suite passed 271 reported checks (270 substantive and one inert X11 helper),
+including 143 snapshot and eight economy cases. Display ownership and Yama 1
+remained unchanged. Python passed 953 tests with 37 skips; formatting, Clippy,
+MSRV Linux compilation and protocol smoke passed. These new outputs require a
+fresh installed-game comparison. Strategic actions and campaign acceptance
+remain unfinished.
+
 ## Attribution
 
 The findings above refer to upstream `calling/{mem,process/linux,api,game,

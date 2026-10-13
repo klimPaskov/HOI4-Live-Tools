@@ -191,3 +191,10 @@ owned graphics roots receive the separate bounded policy. Conditional cache
 consistency does not establish current-frame freshness or input routing. These
 outputs await a fresh immutable installed-game run. Continue with ordinary
 ID-based strategic actions and canonical state readback, then Luna acceptance.
+
+The next matching Info/Standard void-callback diagnostic and own-only economy
+tool pass 217 portable/MSRV tests and 271 actual standard Linux checks (270
+substantive), plus 953 Python tests with 37 skips. Economy retains named trigger
+semantics and exact signed PP units; UI totals and shortages remain unavailable.
+Button associations authorize no input. The fresh recorded-run gate must compare
+both additions against the installed game before Luna strategic acceptance.

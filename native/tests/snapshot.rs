@@ -357,6 +357,7 @@ impl Fixture {
         self.string(0xc6020, "research");
         self.region(0xc5000, 0x120);
         self.word(0xc5000, base + 0x43470c8);
+        self.word(0xc5068, 0x70000); // Exact Standard constructor owner.
         self.number(0xc50ac, 3);
         self.put(0xc5074, &0x1234_0800u32.to_le_bytes());
         // Another named registry has no readable payload here. It must not
@@ -3207,7 +3208,19 @@ fn target_info_null_and_visible_target_have_no_button_authority() {
             v["own_info_postcondition"]["fresh_transition_verified"],
             false
         );
-        f.assert_not_read(&[0xc1ac0, 0xc1ab0, 0xc39a0, 0xc39b8]);
+        f.assert_not_read(&[0xc1ac0, 0xc1ab0]);
+        if selected == 0 {
+            f.assert_not_read(&[0xc39a0, 0xc39b8]);
+        } else {
+            assert_eq!(
+                v["own_info_postcondition"]["ordinary_research_button"]["reason"],
+                "named_control_unavailable"
+            );
+            assert_eq!(
+                v["own_info_postcondition"]["ordinary_research_button"]["input_authorized"],
+                false
+            );
+        }
     }
 }
 #[test]
@@ -3586,4 +3599,322 @@ fn hidden_constructor_positions_with_children_still_publish_unit_cache() {
         research_ui::node_detail(&f, "tools1").unwrap_err().code,
         "invalid_gui_hierarchy"
     );
+}
+
+impl Fixture {
+    fn ordinary_info_research(&mut self) {
+        self.node_render_detail();
+        self.target_info(0x80000);
+        self.array(0xc39a0, 0xc7500, 1);
+        self.word(0xc7500, 0xc5000);
+        self.array(0xc39b8, 0xc7000, 1);
+        self.string(0xc7000, "research");
+        self.word(0xc1ac0, 0xc5000);
+        self.word(0xc1ab0, 0xc5000);
+        self.region(0xc5000, 0x110);
+        self.word(0xc5000, 0x10000 + 0x43470c8);
+        self.word(0xc5068, 0x70000);
+        self.word(0xc5080, 0x10000 + 0x4347488);
+        self.word(0xc5088, 0xc6000);
+        self.word(0xc5090, 0xc6000);
+        self.number(0xc5098, 1);
+        self.region(0xc6000, 32);
+        self.word(0xc6000, 0xc12c8);
+        self.word(0xc12c8, 0x10000 + 0x430bd18);
+        self.word(0xc12d0, 0xc9000); // FIRST VOID capture +8
+        self.word(0xc12e0, 0x10000 + 0x2916700); // manager +18
+        self.word(0xc12e8, 0x10000 + 0x29166d0); // invoker +20
+        self.region(0xc9000, 24);
+        self.word(0xc9000, 0x10000 + 0x290cce0);
+        self.word(0xc9010, 0xc1000);
+        self.word(0xc50e8, 0xc8000);
+        self.word(0xc8000, 0x10000 + 0x4356e08);
+        self.word(0xc8138, 0xc5000);
+        // NO button+110, CSprite resource/local/geometry fields or Ctrl capture.
+        self.word(0xc12f0, 0xdead0000); // Ctrl capture +28: never dereferenced
+    }
+}
+fn ordinary_info_value(f: &Fixture) -> serde_json::Value {
+    research_ui::node_detail(f, "tools1").unwrap()["own_info_postcondition"]
+        ["ordinary_research_button"]
+        .clone()
+}
+#[test]
+fn ordinary_info_void_standard_renderer_metadata_without_unproved_fields() {
+    let mut f = Fixture::new();
+    f.ordinary_info_research();
+    let v = ordinary_info_value(&f);
+    assert_eq!(v["available"], true);
+    assert_eq!(v["callback_binding_verified"], true);
+    assert_eq!(v["renderer_type_encoding"], "7CSprite");
+    assert_eq!(v["renderer_control_join_verified"], true);
+    assert_eq!(v["input_authorized"], false);
+    assert_eq!(v["eligibility"], "unavailable");
+    assert_eq!(v["geometry_available"], false);
+    f.assert_not_read(&[
+        0xc5110, 0xc8168, 0xc8070, 0xc80b0, 0xc12f0, 0xdead0000, 0x92e18,
+    ]);
+    assert!(!v.to_string().contains(&0xc5000u64.to_string()));
+}
+#[test]
+fn ordinary_info_hidden_or_other_selected_has_no_control_payload() {
+    for other in [false, true] {
+        let mut f = Fixture::new();
+        f.ordinary_info_research();
+        if other {
+            f.word(0xc1a98, 0x81000);
+        } else {
+            f.put(0xc30a5, &[0]);
+        }
+        assert!(
+            research_ui::node_detail(&f, "tools1").unwrap()["own_info_postcondition"]
+                ["ordinary_research_button"]
+                .is_null()
+        );
+        f.assert_not_read(&[0xc39a0, 0xc39b8, 0xc1ac0, 0xc5068]);
+    }
+}
+#[test]
+fn ordinary_info_wrong_alias_and_name_stop_before_control_payload() {
+    let mut f = Fixture::new();
+    f.ordinary_info_research();
+    f.word(0xc1ab0, 0xdead0000);
+    assert_eq!(
+        ordinary_info_value(&f)["reason"],
+        "ordinary_branch_unavailable"
+    );
+    f.assert_not_read(&[0xdead0000, 0xc5088, 0xc12d0, 0xc50e8]);
+    let mut f = Fixture::new();
+    f.ordinary_info_research();
+    f.string(0xc7000, "research_MIO");
+    assert_eq!(
+        ordinary_info_value(&f)["reason"],
+        "named_control_unavailable"
+    );
+    f.assert_not_read(&[0xc1ac0, 0xc5068, 0xc12d0]);
+}
+#[test]
+fn ordinary_info_duplicate_name_and_wrong_ac0_are_structural_refusals() {
+    let mut f = Fixture::new();
+    f.ordinary_info_research();
+    f.array(0xc39a0, 0xc7500, 2);
+    f.word(0xc7508, 0xc5000);
+    f.array(0xc39b8, 0xc7000, 2);
+    f.string(0xc7020, "research");
+    assert_eq!(
+        research_ui::node_detail(&f, "tools1").unwrap_err().code,
+        "invalid_gui_registry"
+    );
+    f.assert_not_read(&[0xc5068, 0xc12d0]);
+    let mut f = Fixture::new();
+    f.ordinary_info_research();
+    f.word(0xc1ac0, 0xdead0000);
+    assert_eq!(
+        research_ui::node_detail(&f, "tools1").unwrap_err().code,
+        "invalid_gui_registry"
+    );
+    f.assert_not_read(&[0xc5068, 0xdead0000]);
+}
+#[test]
+fn ordinary_info_unknown_control_does_not_borrow_drag_or_standard_fields() {
+    let mut f = Fixture::new();
+    f.ordinary_info_research();
+    f.word(0xc5000, 0x10000 + 0x4346b10);
+    let v = ordinary_info_value(&f);
+    assert_eq!(v["reason"], "control_layout_unavailable");
+    f.assert_not_read(&[0xc5068, 0xc50ac, 0xc50e8, 0xc5110, 0xc5088]);
+}
+#[test]
+fn ordinary_info_registry_and_render_owner_before_payload() {
+    let mut f = Fixture::new();
+    f.ordinary_info_research();
+    f.word(0xc5068, 0x70008);
+    assert_eq!(
+        research_ui::node_detail(&f, "tools1").unwrap_err().code,
+        "invalid_gui_owner"
+    );
+    f.assert_not_read(&[0xc5088, 0xc12d0, 0xc50e8]);
+    let mut f = Fixture::new();
+    f.ordinary_info_research();
+    f.word(0xc8138, 0xc5008);
+    assert_eq!(
+        research_ui::node_detail(&f, "tools1").unwrap_err().code,
+        "invalid_gui_owner"
+    );
+    f.assert_not_read(&[0xc8168, 0xc8070]);
+}
+#[test]
+fn ordinary_info_override_and_removed_listener_never_inspect_capture() {
+    let mut f = Fixture::new();
+    f.ordinary_info_research();
+    f.word(0xc50a0, 0xdead0000);
+    assert_eq!(
+        ordinary_info_value(&f)["reason"],
+        "single_observer_override"
+    );
+    f.assert_not_read(&[0xdead0000, 0xc5088, 0xc12d0, 0xc50e8]);
+    let mut f = Fixture::new();
+    f.ordinary_info_research();
+    f.put(0xc6018, &[1]);
+    assert_eq!(
+        research_ui::node_detail(&f, "tools1").unwrap_err().code,
+        "invalid_gui_binding"
+    );
+    f.assert_not_read(&[0xc12c8, 0xc12d0, 0xc50e8]);
+}
+#[test]
+fn ordinary_info_listener_structure_and_unknown_target_stop_before_callback() {
+    for (a, value) in [(0xc6008, 0xc6000), (0xc6010, 0xc6000), (0xc5090, 0xc6020)] {
+        let mut f = Fixture::new();
+        f.ordinary_info_research();
+        f.word(a, value);
+        assert_eq!(
+            research_ui::node_detail(&f, "tools1").unwrap_err().code,
+            "invalid_gui_binding"
+        );
+        f.assert_not_read(&[0xc12c8, 0xc12d0, 0xc50e8]);
+    }
+    let mut f = Fixture::new();
+    f.ordinary_info_research();
+    f.word(0xc6000, 0xdead0000);
+    assert_eq!(ordinary_info_value(&f)["reason"], "callback_unavailable");
+    f.assert_not_read(&[0xdead0000, 0xc12c8, 0xc12d0]);
+}
+#[test]
+fn ordinary_info_wrong_callback_primary_and_ctrl_variant_are_unavailable() {
+    let mut f = Fixture::new();
+    f.ordinary_info_research();
+    f.word(0xc12c8, 0x10000 + 0x424e0a8);
+    assert_eq!(
+        ordinary_info_value(&f)["reason"],
+        "callback_layout_unavailable"
+    );
+    f.assert_not_read(&[0xc12e0, 0xc12d0, 0xc9000, 0xc50e8]);
+    let mut f = Fixture::new();
+    f.ordinary_info_research();
+    f.word(0xc12e0, 0x10000 + 0x2916840); // Ctrl manager, wrong first field
+    f.word(0xc1300, 0x10000 + 0x2916840);
+    f.word(0xc1308, 0x10000 + 0x2916810);
+    assert_eq!(
+        ordinary_info_value(&f)["reason"],
+        "callback_variant_unavailable"
+    );
+    f.assert_not_read(&[0xc12d0, 0xc12f0, 0xc9000, 0xc50e8]);
+}
+#[test]
+fn ordinary_info_foreign_capture_owner_refused_before_member() {
+    let mut f = Fixture::new();
+    f.ordinary_info_research();
+    f.word(0xc9010, 0xc2000);
+    assert_eq!(
+        research_ui::node_detail(&f, "tools1").unwrap_err().code,
+        "invalid_gui_owner"
+    );
+    f.assert_not_read(&[0xc9000, 0xc9008, 0xc2000, 0xc50e8]);
+}
+#[test]
+fn ordinary_info_wrong_member_extra_callback_and_unknown_renderer_are_unavailable() {
+    let mut f = Fixture::new();
+    f.ordinary_info_research();
+    f.word(0xc9000, 0x10000 + 0x290cd20);
+    assert_eq!(
+        ordinary_info_value(&f)["reason"],
+        "callback_member_unavailable"
+    );
+    f.assert_not_read(&[0xc50e8]);
+    let mut f = Fixture::new();
+    f.ordinary_info_research();
+    f.word(0xc14a0, 0x10000 + 0x2916700);
+    assert_eq!(
+        ordinary_info_value(&f)["reason"],
+        "callback_variant_unavailable"
+    );
+    f.assert_not_read(&[0xc12d0, 0xc9010]);
+    let mut f = Fixture::new();
+    f.ordinary_info_research();
+    f.word(0xc8000, 0x10000 + 0x4346b10);
+    let v = ordinary_info_value(&f);
+    assert_eq!(v["callback_binding_verified"], true);
+    assert_eq!(v["reason"], "renderer_layout_unavailable");
+    f.assert_not_read(&[0xc8138, 0xc8168, 0xc5110]);
+}
+#[test]
+fn ordinary_info_io_failures_and_final_mutations_refuse_whole_result() {
+    let mut f = Fixture::new();
+    f.ordinary_info_research();
+    f.data.remove(&0xc9010);
+    assert_eq!(
+        research_ui::node_detail(&f, "tools1").unwrap_err().code,
+        "unexpected_read"
+    );
+    for (a, n) in [
+        (0xc39a0, 16),
+        (0xc39b8, 16),
+        (0xc7500, 8),
+        (0xc7000, 32),
+        (0xc1ac0, 8),
+        (0xc1ab0, 8),
+        (0xc5068, 8),
+        (0xc5080, 8),
+        (0xc5098, 4),
+        (0xc6008, 8),
+        (0xc6018, 1),
+        (0xc12e0, 8),
+        (0xc12e8, 8),
+        (0xc12d0, 8),
+        (0xc9010, 8),
+        (0xc9000, 8),
+        (0xc50e8, 8),
+        (0xc8138, 8),
+    ] {
+        let mut f = Fixture::new();
+        f.ordinary_info_research();
+        let mut bytes: Vec<_> = (0..n).map(|i| f.data[&(a + i)]).collect();
+        bytes[0] ^= 1;
+        f.fault = Some((a, 1, bytes));
+        assert_eq!(
+            research_ui::node_detail(&f, "tools1").unwrap_err().code,
+            "torn_read",
+            "{a:x}"
+        );
+    }
+}
+#[test]
+fn ordinary_info_ambiguous_matching_windows_before_any_named_controls() {
+    let mut f = Fixture::new();
+    f.ordinary_info_research();
+    let copy: Vec<_> = (0..0xb00).map(|i| f.data[&(0xc1000 + i)]).collect();
+    f.put(0xca000, &copy);
+    f.array(0x92dc0, 0xc0000, 2);
+    f.word(0xc0008, 0xca000);
+    assert_eq!(
+        research_ui::node_detail(&f, "tools1").unwrap_err().code,
+        "ambiguous_gui_detail"
+    );
+    f.assert_not_read(&[0xc39a0, 0xc39b8, 0xc5068, 0xc12d0]);
+}
+#[test]
+fn ordinary_info_multiple_valid_listeners_do_not_choose_one_callback() {
+    let mut f = Fixture::new();
+    f.ordinary_info_research();
+    f.region(0xc6020, 32);
+    f.word(0xc6010, 0xc6020);
+    f.word(0xc6028, 0xc6000);
+    f.word(0xc6020, 0xc12c8);
+    f.word(0xc5090, 0xc6020);
+    f.number(0xc5098, 2);
+    assert_eq!(ordinary_info_value(&f)["reason"], "callback_unavailable");
+    f.assert_not_read(&[0xc12c8, 0xc12d0, 0xc50e8]);
+}
+#[test]
+fn ordinary_info_disabled_state_does_not_claim_eligibility_or_input() {
+    let mut f = Fixture::new();
+    f.ordinary_info_research();
+    f.number(0xc50ac, 3);
+    let v = ordinary_info_value(&f);
+    assert_eq!(v["disabled_state3"], true);
+    assert_eq!(v["callback_binding_verified"], true);
+    assert_eq!(v["input_authorized"], false);
+    assert_eq!(v["eligibility"], "unavailable");
+    assert_eq!(v["effective_routing_verified"], false);
 }

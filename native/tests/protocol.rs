@@ -51,6 +51,7 @@ fn stdio_is_json_and_notifications_have_no_reply() {
             "hoi4_research",
             "hoi4_input_geometry",
             "hoi4_research_ui",
+            "hoi4_economy",
             "hoi4_research_node_detail",
             "hoi4_research_nodes",
             "hoi4_focus_list",

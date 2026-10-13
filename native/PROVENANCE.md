@@ -151,3 +151,19 @@ library, extracted in private scratch without installing packages. The
 [X.Org Xlib specification](https://www.x.org/releases/X11R7.5/doc/libX11/libX11.html)
 supports window-relative motion-coordinate semantics; constructor joins alone
 still do not prove OS ownership, backing scale, fresh events or input routing.
+
+`info_research_button.rs` is new code from independently recovered ordinary
+Info/Standard constructors, the named Research control, embedded observer list
+and first void callback capture. It deliberately distinguishes Standard's
+renderer field from Drag's and the void callback from the tree's control-argument
+callback. Only a unique locally visible matching own Info is inspected; unsupported
+renderer classes remain metadata-only. No callback, getter or engine command is
+invoked. These associations do not establish eligibility or assignment.
+
+`economy.rs` uses the own-country API concept consulted in Clausewitz-MCP,
+with independently recovered current-build country/status primaries, owner
+joins, named factory triggers, civilian project getter and political-power
+fixed-point conversion. Its military/civilian adjustments are part of those
+specific triggers, not borrowed upstream field interpretations. Counts retain
+that narrow meaning; no UI total, idle-builder or final stability formula is
+inferred. The module invokes no getters and reads no foreign-country payload.

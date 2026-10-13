@@ -71,6 +71,7 @@ anchors do not establish a load-generation token.
 | `hoi4_capabilities` | Platform, owned-session binding and explicit missing features |
 | `hoi4_overview` | Own focus/research IDs and clock, freshness and unavailable fields |
 | `hoi4_research` | Own completed technologies and active signed counters; normalized progress remains unavailable |
+| `hoi4_economy` | Own named factory trigger counts, civilian project capacity and exact signed political-power units; live comparison pending |
 | `hoi4_technology_list` | Canonical loaded technology IDs with filtering/pagination; no eligibility inference |
 | `hoi4_input_geometry` | GUI dimensions, scale, pointer and conditional source-window diagnostics; no click authority |
 | `hoi4_research_ui` | Own slot/widget joins, selected slot, retained Info windows and typed controls |
@@ -122,6 +123,16 @@ native window ID, dimensions and relative-mode flags. Independent OS comparison
 corroborated one installed-game profile. Client origin, effective clipping,
 topmost routing, fresh events and strategic input authority remain unverified.
 A local visible Info window or disabled-button flag is not assignment proof.
+Only a unique locally visible matching own Info can supply the ordinary Research
+button's named Standard/void-callback and renderer-ownership diagnostics.
+Standard's renderer field and void callback differ from the node Drag control;
+unknown variants remain unavailable. This reader sends no input.
+
+The economy tool requires exact own-country/tag and production/politics owner
+joins before payload. Factory values retain their recovered named-trigger
+semantics. Civilian project capacity is separate from idle builders. Political
+power reports signed raw units and an exact rational at 100,000 units per point.
+UI factory totals, shortages and final stability/war support remain unavailable.
 
 ## Ordinary controls and lifecycle
 
@@ -163,7 +174,8 @@ RPC medians were 116/120 ms for a narrower model, versus 313 ms for full nodes;
 those scopes are not an equivalent-model speed comparison.
 
 New owned-root/cache diagnostics have passed portable/MSRV and actual Linux
-fixtures but await a fresh immutable installed-game check. Detailed test counts,
+fixtures but await a fresh immutable installed-game check. The new Research-button
+and economy readers also require installed-game comparison. Detailed test counts,
 failures, recordings and measurement limits are in [live validation](../docs/CLAUSEWITZ_VALIDATION.md)
 and [the comparison](../docs/CLAUSEWITZ_COMPARISON.md).
 

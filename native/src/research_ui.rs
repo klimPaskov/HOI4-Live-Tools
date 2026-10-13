@@ -205,7 +205,7 @@ fn render_details(r: &Reader<'_>, base: u64, object: u64) -> Result<Value> {
 
 /// Exact CContainerWindow's button lookup uses these paired arrays. Its other
 /// named registry at +a60/+a78 is a different operation and is not consulted.
-fn named_research_button(r: &Reader<'_>, container: u64) -> Result<u64> {
+pub(crate) fn named_research_button(r: &Reader<'_>, container: u64) -> Result<u64> {
     let buttons = array(r, container + 0x9a0, 256)?;
     let (header, names, count) = r.array_header(container + 0x9b8)?;
     let capacity = i32::from_le_bytes(header[8..12].try_into().unwrap()) as usize;
@@ -732,6 +732,7 @@ fn observe_target(process: &dyn Process, key: &str) -> Result<Value> {
     let entries = array(&r, tree + 0xdc0, 64)?;
     let mut unique = std::collections::BTreeSet::new();
     let mut visible = 0;
+    let mut matching_info = None;
     for info in entries {
         exact(&r, info, base + 0x430bbf0)?;
         if !unique.insert(info) || r.u64(info + 0xa78)? != idler || r.u64(info + 0xa80)? != tree {
@@ -749,6 +750,7 @@ fn observe_target(process: &dyn Process, key: &str) -> Result<Value> {
             let state = window(&r, base, r.u64(info + 0xa88)?, registry)?;
             if state["visible_predicate"] == true {
                 visible += 1;
+                matching_info = Some(info);
             }
         }
     }
@@ -758,12 +760,24 @@ fn observe_target(process: &dyn Process, key: &str) -> Result<Value> {
             "Multiple visible own details for requested key",
         ));
     }
+    // Resolve all own Info selections and ambiguity before ordinary-control payload.
+    let ordinary = if let Some(info) = matching_info {
+        Some(crate::info_research_button::observe(
+            &r,
+            base,
+            info,
+            r.u64(info + 0xa88)?,
+            registry,
+        )?)
+    } else {
+        None
+    };
     let (end_calls, end_bytes) = observed.finish()?;
     process.check()?;
     Ok(
         json!({"source":"native own research node detail","build_id":game::BUILD_ID,"owned":true,"id":key,
         "validation_scope":"requested_node_with_complete_current_record_ownership","full_gui_model_validated":false,
-        "detail":detail,"own_info_postcondition":{"matching_locally_visible_count":visible,"requested_detail_locally_visible":visible==1,"fresh_transition_verified":false},
+        "detail":detail,"own_info_postcondition":{"matching_locally_visible_count":visible,"requested_detail_locally_visible":visible==1,"fresh_transition_verified":false,"ordinary_research_button":ordinary},
         "selected_slot":selected_index,"client_rectangle_available":false,"effective_routing_verified":false,"input_authorized":false,"observation_paused_game":false,
         "freshness":{"observed_unix_ms":SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),"elapsed_ms":start.elapsed().as_secs_f64()*1000.0,"read_calls_kind":"logical_read_requests","read_calls":r.calls.get()+end_calls as u64,"read_bytes":r.bytes.get()+end_bytes}}),
     )
