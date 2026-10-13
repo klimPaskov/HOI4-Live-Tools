@@ -115,6 +115,17 @@ empty own slot; automatic navigation and broader strategic automation remain
 unfinished. Delivery receipts do not establish event causality. See
 [the recorded gate and limits](CLAUSEWITZ_VALIDATION.md#recorded-run-019-exclusive-luna-medium-rust-research-smoke).
 
+## Recorded clock and research checkpoint — run 025
+
+Recorded run 025 passed clock-first controls, all four research
+assignments and a second unpause/wait/pause cycle through 5 January. Its 17
+fresh Verified research-stage samples ranged 101–1,560 ms RPC, including an
+already-selected no-input category. Speed4 took 2,206 ms; initial unpause 304 ms
+and pause 1,013 ms. These samples validate the exact owned emulated Linux run;
+they do not establish a general latency distribution or an upstream command
+advantage. Run024's earlier clock uncertainty remains unexplained. See
+[the full result and recording checks](CLAUSEWITZ_VALIDATION.md#recorded-run-025-clock-and-four-slot-research-passed).
+
 ## Measured process reads
 
 Both readers ran against the same generated child process and checked every

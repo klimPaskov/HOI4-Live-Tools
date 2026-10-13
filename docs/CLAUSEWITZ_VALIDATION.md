@@ -1666,3 +1666,47 @@ post-dispatch expiration mechanism. Its 21 research-stage checks passed on host
 stable and Rust1.86; Python passed 953 tests, 37 skipped. Production code and the
 running immutable game binary were unchanged. Windows CI verification remains
 pending for this follow-up.
+
+The follow-up `aa94c9e` subsequently passed **all nine CI jobs**: Rust on Linux,
+Windows and macOS, plus Python 3.9/3.13 on each platform. This verifies shared code
+and offline fixtures, not Windows/macOS native gameplay adapters.
+
+## Recorded run 025: clock and four-slot research passed
+
+Immutable source `152bdf3` / CLI SHA-256
+`5b605702768bccbec06e20582f26128d503c59dbab61c5044cfb7eabf03445b6`
+launched the exact licensed Linux build with no mods or DLC. Startup reported
+427,730 ms in the x86 emulated guest. One initial read-only client initialize
+preceded endpoint creation and returned NotFound; a fresh client connected after
+independent ownership verification. No gameplay input was involved or replayed.
+
+Recording's first packet was verified before one campaign Start. Native reads
+confirmed Normal historical Germany, 1 January at 12:00, paused speed0, focus null,
+four empty research slots and closed own research views in mode23. One exclusive
+Luna medium player then passed speed4 (**2,206 ms RPC**), unpause (**304 ms**),
+a server wait to 3 January at 01:00 (**36.971 seconds**, zero torn reads), and
+pause (**1,013 ms**), before opening research.
+
+All **17 research stages** returned fresh Verified receipts. The four canonical
+assignments were support weapons, basic machine tools, electronic mechanical
+engineering and construction1. Stage RPC samples ranged **101–1,560 ms**;
+the fastest was an already-selected category with no input. These are individual
+samples, not a general performance distribution or matched upstream comparison.
+Event-causality and transport game-action flags remain false; canonical current
+state was verified by the stage adapter.
+
+With the research panel still open, unpause, a wait to 5 January and pause also
+passed. One torn read was rejected during that wait. Final own overview was
+**1936.01.05.11, paused, speed4**. Each assigned raw research counter increased
+from **303,000 to 505,000**; units remain unknown, and completed count stayed 47.
+Release/status confirmed zero remaining lease time. No game screenshots, map
+movement or root/helper input occurred during Luna's gameplay ownership.
+
+The H.264 recording finalized and passed ffprobe: **452.666 seconds**,
+**7,040,840 bytes**, 512×288 at 3fps. One owned WM close returned actual normal
+exit **0**, no signal/core dump, in **2.515 seconds**. Both exact game and owner
+were absent afterward; Yama1 and display ownership stayed unchanged. Journals,
+release proof, recordings and sanitized calls remain private. Both clients closed.
+
+This successful bounded Rust run does not explain run024's missing clock witness.
+No clean two-year run, live focus/governor acceptance or full campaign has passed.

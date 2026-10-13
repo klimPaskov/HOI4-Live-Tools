@@ -241,6 +241,12 @@ including research-counter advancement. Recorded builder diagnostics validated
 RPC medians were 116/120 ms for a narrower model, versus 313 ms for full nodes;
 those scopes are not an equivalent-model speed comparison.
 
+Recorded run 025 passed clock-first control, all four research assignments, then
+unpause/advancement/pause with the research panel open. All 17 research stages
+verified fresh canonical state. The recording passed ffprobe and the owned game
+exited normally with code 0. Earlier run024 uncertainty remains unexplained;
+this bounded run does not establish campaign or governor acceptance.
+
 New owned-root/cache diagnostics have passed portable/MSRV and actual Linux
 fixtures. A fresh recorded game verified owned-root closure and conditional cache
 checks, and observed own economy counts. Precise economy UI comparison remains
