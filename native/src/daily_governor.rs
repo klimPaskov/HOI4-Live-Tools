@@ -1,10 +1,10 @@
 //! Private prerequisite for durable daily routine. No process reader, pause,
 //! engine callback, input transport, MCP command or strategic chooser lives here.
 #[cfg(unix)]
-mod store;
+pub(crate) mod store;
 #[cfg(not(unix))]
 #[path = "daily_governor/store_unsupported.rs"]
-mod store;
+pub(crate) mod store;
 mod types;
 use crate::error::{Error, Result};
 use serde::{Deserialize, Serialize};
@@ -64,6 +64,10 @@ struct JournalRecord {
     before_sequence: u64,
     terminal: Option<bool>,
     after_sequence: Option<u64>,
+    // Legacy records bind to the then-immutable plan revision. Updates pin it
+    // before changing the plan so historical request identities stay valid.
+    #[serde(default)]
+    plan_revision: Option<u64>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -94,7 +98,10 @@ fn reason(s: &str) -> String {
     s.chars().filter(|c| !c.is_control()).take(160).collect()
 }
 fn request_id(plan: &Plan, entry: &Entry, number: u64) -> Result<String> {
-    let encoded = serde_json::to_vec(&(&plan.scope, plan.revision, entry, number))
+    request_id_revision(plan, entry, number, plan.revision)
+}
+fn request_id_revision(plan: &Plan, entry: &Entry, number: u64, revision: u64) -> Result<String> {
+    let encoded = serde_json::to_vec(&(&plan.scope, revision, entry, number))
         .map_err(|e| types::invalid(&e.to_string()))?;
     Ok(format!("{:x}", Sha256::digest(encoded)))
 }
@@ -123,11 +130,14 @@ impl Governor {
             let mut counts: BTreeMap<&String, u64> = BTreeMap::new();
             let mut seen = std::collections::BTreeSet::new();
             for record in &state.journal {
+                let revision = record.plan_revision.unwrap_or(plan.revision);
                 if record.request_id.len() != 64
                     || !record.request_id.bytes().all(|b| b.is_ascii_hexdigit())
                     || !state.entries.contains_key(&record.entry_id)
                     || record.before_sequence == 0
                     || !(1936 * 365..2001 * 365).contains(&record.day)
+                    || revision == 0
+                    || revision > plan.revision
                 {
                     return Err(types::invalid("Invalid journal record binding"));
                 }
@@ -149,7 +159,8 @@ impl Governor {
                         .find(|e| e.id == record.entry_id)
                         .unwrap();
                     if !seen.insert(&record.request_id)
-                        || record.request_id != request_id(&plan, entry, *number)?
+                        || record.request_id
+                            != request_id_revision(&plan, entry, *number, revision)?
                     {
                         return Err(types::invalid("Reused or nonmatching request identity"));
                     }
@@ -165,6 +176,7 @@ impl Governor {
                     if previous.entry_id != record.entry_id
                         || previous.day != record.day
                         || previous.before_sequence != record.before_sequence
+                        || previous.plan_revision.unwrap_or(plan.revision) != revision
                         || (record.terminal == Some(true)
                             && !record
                                 .after_sequence
@@ -363,8 +375,70 @@ impl Governor {
         }
         Ok(day)
     }
+    #[cfg(target_os = "linux")]
+    pub(crate) fn blocks_work(&self) -> bool {
+        self.poisoned
+            || self.state.quarantine.is_some()
+            || self
+                .state
+                .entries
+                .values()
+                .any(|e| matches!(e, EntryState::Intent { .. }))
+    }
+    #[cfg(target_os = "linux")]
+    pub(crate) fn last_day(&self) -> Option<i64> {
+        self.state.last_day
+    }
+    #[cfg(target_os = "linux")]
+    pub(crate) fn last_sequence(&self) -> u64 {
+        self.state.last_sequence.unwrap_or(0)
+    }
     pub fn entry_state(&self, id: &str) -> Option<&EntryState> {
         self.state.entries.get(id)
+    }
+    /// Trusted owner-only plan update. The caller checks the shared controller,
+    /// lease, fresh scope and ALL input journals before exposing this through MCP.
+    /// Existing work/specifications and evidence cannot be removed or replaced;
+    /// additions, ordering and bounded policy limits may change. This performs
+    /// no input and does not reset a consumed day, sequence or quarantine.
+    /// Returns false for an exact idempotent retry of the current plan.
+    pub fn update_plan(&mut self, next: Plan) -> Result<bool> {
+        self.check()?;
+        next.validate()?;
+        if next == self.state.plan {
+            return Ok(false);
+        }
+        if next.scope != self.state.plan.scope {
+            return Err(Error::new("ownership_changed", "Plan update scope differs"));
+        }
+        if next.revision <= self.state.plan.revision {
+            return Err(Error::new("plan_conflict", "Plan revision must advance"));
+        }
+        for old in &self.state.plan.entries {
+            if !next.entries.iter().any(|entry| entry == old) {
+                return Err(Error::new(
+                    "plan_conflict",
+                    "Plan update must retain every existing entry and its specification",
+                ));
+            }
+        }
+        let previous_revision = self.state.plan.revision;
+        for record in &mut self.state.journal {
+            record.plan_revision.get_or_insert(previous_revision);
+        }
+        for entry in &next.entries {
+            self.state
+                .entries
+                .entry(entry.id.clone())
+                .or_insert(EntryState::Pending {
+                    attempts: 0,
+                    reason: None,
+                    reason_day: None,
+                });
+        }
+        self.state.plan = next;
+        self.persist()?;
+        Ok(true)
     }
     /// One bounded routine batch per newly observed day. A clock notification
     /// should call this; callers must NOT manufacture daily model polling.
@@ -502,6 +576,7 @@ impl Governor {
                     before_sequence: attempt.before_sequence,
                     terminal: None,
                     after_sequence: None,
+                    plan_revision: Some(self.state.plan.revision),
                 });
                 self.state.entries.insert(
                     entry.id.clone(),
@@ -546,6 +621,7 @@ impl Governor {
                             before_sequence: attempt.before_sequence,
                             terminal: Some(false),
                             after_sequence: None,
+                            plan_revision: Some(self.state.plan.revision),
                         });
                         self.state.entries.insert(
                             entry.id.clone(),
@@ -590,6 +666,7 @@ impl Governor {
                             before_sequence: attempt.before_sequence,
                             terminal: Some(true),
                             after_sequence: Some(observed.sequence),
+                            plan_revision: Some(self.state.plan.revision),
                         });
                         self.state.last_date = Some(observed.date_raw);
                         self.state.last_sequence = Some(observed.sequence);

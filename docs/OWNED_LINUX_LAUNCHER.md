@@ -229,6 +229,58 @@ Verified retries return explicitly historical receipts. This does not establish
 atomic frame/routing authority, confirmation-dialog support, daily automation
 or campaign acceptance.
 
+## Focus and daily previews
+
+The private owned input binding can separately enable
+`"focus_profile": "linux_builtin_absolute_512x288_v1"` and
+`"daily_prepared_research": true`. Both default off. The daily preview also
+requires the research profile. These are owner settings, not player-supplied
+geometry; they require the same reviewed 512×288 client and 2560×1440 logical
+profile used by research. Their installed-game acceptance is pending.
+
+`hoi4_focus_attempt` accepts `stage`, `focus_id`, `request_id` and `lease_token`.
+Stages are `open_politics`, `open_focus`, `view` and `start`. Each attempts at
+most one ordinary event and verifies canonical own state. Unsupported renderers,
+unsettled roots and incomplete local blocker observations refuse. Intent is
+persisted first; uncertain input blocks clock, research, focus and daily work.
+No new token can bypass that quarantine.
+
+Start the daily preview with an existing exclusive lease and an explicit plan:
+
+```json
+{
+  "op": "start",
+  "lease_token": "<existing private lease>",
+  "plan": {
+    "version": 1,
+    "revision": 1,
+    "entries": [{
+      "id": "research-slot-0",
+      "intent": {"kind": "Research", "technology_id": "support_weapons", "slot": 0}
+    }],
+    "max_actions_per_day": 1,
+    "max_observation_age_ms": 2000,
+    "review_day": null
+  }
+}
+```
+
+The player cannot supply trusted process/campaign scope. Entry IDs and technology
+IDs are explicit and bounded; requested slots must belong to the own current
+array. The worker does not navigate panels or select targets yet: prepare the
+exact own slot and matching Info using research stages before starting it.
+Only fresh Research completion can finish that entry. Unavailable domains remain
+unfinished. The worker neither acquires nor renews its lease automatically.
+
+Use `{"op":"digest"}` for fresh own counts and the last batch, or
+`{"op":"stop"}` to join the worker. Digests stay within 2 KB and label prior
+verification as historical. Stop does not pause the game or clear uncertainty.
+Private sequence and plan files preserve chronology across restarts. Library
+plan updates preserve existing entries and completion evidence, require an
+increased revision and reject unresolved input; service update wiring remains
+unfinished. This prepared-research preview is not full daily automation or
+campaign acceptance.
+
 ## Ownership and recovery checks
 
 A private per-user launch lock prevents competing native supervisors. Existing

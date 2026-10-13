@@ -104,6 +104,8 @@ struct Fake {
     crash: bool,
     slow: Duration,
     post_delay: Duration,
+    expire_readback: bool,
+    dispatched_deadline: Option<Instant>,
 }
 impl Fake {
     fn new(stage: Stage) -> Self {
@@ -121,6 +123,8 @@ impl Fake {
             crash: false,
             slow: Duration::ZERO,
             post_delay: Duration::ZERO,
+            expire_readback: false,
+            dispatched_deadline: None,
         }
     }
     fn sequence(stage: Stage, a: OwnState, b: OwnState) -> Self {
@@ -131,6 +135,14 @@ impl Fake {
 }
 impl Backend for Fake {
     fn observe(&mut self) -> Result<OwnState> {
+        if self.expire_readback && self.dispatches > 0 {
+            thread::sleep(
+                self.dispatched_deadline
+                    .unwrap()
+                    .saturating_duration_since(Instant::now())
+                    + Duration::from_millis(1),
+            );
+        }
         thread::sleep(
             self.slow
                 + if self.dispatches > 0 {
@@ -151,8 +163,9 @@ impl Backend for Fake {
     fn candidate(&mut self, _: &Target) -> Result<Candidate> {
         Ok(self.candidate.clone())
     }
-    fn dispatch_once(&mut self, _: &Candidate, _: Instant) -> Delivery {
+    fn dispatch_once(&mut self, _: &Candidate, deadline: Instant) -> Delivery {
         self.dispatches += 1;
+        self.dispatched_deadline = Some(deadline);
         if self.crash {
             panic!("simulated crash after intent");
         }
@@ -363,10 +376,8 @@ fn postdispatch_input_idle_or_expired_readback_stays_quarantined() {
         let g = RwLock::new(true);
         let mut f = Fake::sequence(Stage::Start, view(), started());
         f.idle = idle;
-        if idle {
-            f.post_delay = Duration::from_millis(200);
-        }
-        let timeout = Duration::from_millis(100);
+        f.expire_readback = idle;
+        let timeout = Duration::from_secs(5);
         assert!(run(
             &mut j,
             "uncertain",

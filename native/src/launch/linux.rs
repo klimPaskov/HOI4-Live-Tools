@@ -899,6 +899,7 @@ fn service_client(stream: UnixStream, shared: Arc<Shared>) {
                     binding,
                     &shared.directory,
                     shared.input_gate.clone(),
+                    Arc::downgrade(&shared),
                 )?;
                 let capabilities = crate::protocol::Commands::capabilities(&service);
                 *commands = Some(Arc::new(service));

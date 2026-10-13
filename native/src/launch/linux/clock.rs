@@ -13,6 +13,8 @@ use crate::{
 };
 use std::sync::{Arc, Mutex, MutexGuard, RwLock, RwLockReadGuard, TryLockError};
 
+mod daily;
+mod focus;
 mod readback;
 mod research;
 
@@ -30,6 +32,11 @@ pub(super) struct Binding {
     /// Owner-only opt-in for the narrow recorded client/origin profile.
     #[serde(default)]
     research_profile: Option<research::Profile>,
+    /// Independent explicit owner opt-in; no focus action is enabled by default.
+    #[serde(default)]
+    focus_profile: Option<focus::Profile>,
+    #[serde(default)]
+    daily_prepared_research: bool,
 }
 struct Guard {
     epoch: Epoch,
@@ -111,17 +118,20 @@ impl Guard {
 }
 struct ControlState {
     // One mutex covers lease, campaign guard and both keyboard/pointer access.
-    // A future ordinary research adapter borrows this exact controller.
+    // Ordinary research and focus adapters borrow this exact controller.
     controls: X11Controls,
     guard: Guard,
     authority: InputAuthority,
     journal: Journal,
     research: Option<research::Service>,
+    focus: Option<focus::Service>,
 }
 pub(super) struct ClockService {
-    state: Mutex<ControlState>,
+    state: Arc<Mutex<ControlState>>,
     input_gate: Arc<RwLock<bool>>,
     research_enabled: bool,
+    focus_enabled: bool,
+    daily: daily::Controller,
 }
 impl ClockService {
     pub(super) fn bind(
@@ -130,6 +140,7 @@ impl ClockService {
         binding: Binding,
         directory: &Path,
         input_gate: Arc<RwLock<bool>>,
+        owner: std::sync::Weak<Shared>,
     ) -> Result<Self> {
         drop(input_permit(&input_gate)?);
         if process.identity() != Some(&binding.game)
@@ -177,14 +188,20 @@ impl ClockService {
             .research_profile
             .map(|profile| research::Service::bind(profile, binding.window, display, directory))
             .transpose()?;
+        let focus = binding
+            .focus_profile
+            .map(|profile| focus::Service::bind(profile, binding.window, display, directory))
+            .transpose()?;
         json_new(
             &directory.join("input-binding.json"),
-            json!({"version":1,"game":binding.game,"controller":binding.controller,"player":binding.player,"window":binding.window,"menu_evidence_ids":binding.menu_evidence_ids,"epoch":epoch,"scope":"ordinary clock keys; optional ID research preview","research_profile":binding.research_profile,"load_generation":"unverified: persisted identity, anchor and timeline checks only"}),
+            json!({"version":1,"game":binding.game,"controller":binding.controller,"player":binding.player,"window":binding.window,"menu_evidence_ids":binding.menu_evidence_ids,"epoch":epoch,"scope":"ordinary clock keys; optional ID research/focus previews","research_profile":binding.research_profile,"focus_profile":binding.focus_profile,"daily_prepared_research":binding.daily_prepared_research,"load_generation":"unverified: persisted identity, anchor and timeline checks only"}),
         )?;
         Ok(Self {
+            daily: daily::Controller::new(binding.daily_prepared_research, owner, directory),
             input_gate,
             research_enabled: research.is_some(),
-            state: Mutex::new(ControlState {
+            focus_enabled: focus.is_some(),
+            state: Arc::new(Mutex::new(ControlState {
                 controls,
                 guard: Guard {
                     epoch,
@@ -196,7 +213,8 @@ impl ClockService {
                 authority,
                 journal,
                 research,
-            }),
+                focus,
+            })),
         })
     }
 }
@@ -264,22 +282,36 @@ impl Commands for ClockService {
         if self.research_enabled {
             tools.push(research::tool());
         }
+        if self.focus_enabled {
+            tools.push(focus::tool());
+        }
+        if self.daily.enabled() {
+            tools.push(daily::Controller::tool());
+        }
         tools
     }
     fn supports(&self, name: &str) -> bool {
         matches!(name, "hoi4_input_lease" | "hoi4_time")
             || (name == "hoi4_research_attempt" && self.research_enabled)
+            || (name == "hoi4_focus_attempt" && self.focus_enabled)
+            || (name == "hoi4_daily_governor" && self.daily.enabled())
     }
     fn capabilities(&self) -> Value {
-        json!({"transport":"ordinary authenticated X11 input","actions":["set_paused","set_speed"],"research_preview":{"enabled":self.research_enabled,"scope":"one OpenPanel, SelectSlot, SelectCategory, View or Research stage for own empty slot","installed_game_validation":"Panel, category navigation and four research assignments passed bounded run 024; later clock input uncertain; full campaign acceptance pending"},"lease":"exclusive configured controller","native_posting":false,"cursor_movement":self.research_enabled,"load_generation":"unverified; campaign identity, anchors and observed timeline checked","full_campaign_acceptance":false})
+        json!({"transport":"ordinary authenticated X11 input","actions":["set_paused","set_speed"],"research_preview":{"enabled":self.research_enabled,"scope":"one OpenPanel, SelectSlot, SelectCategory, View or Research stage for own empty slot","installed_game_validation":"Clock cycles, four assignments and advancement to5January passed bounded run025; run024 uncertainty unexplained; full campaign acceptance pending"},"focus_preview":{"enabled":self.focus_enabled,"scope":"one own OpenPolitics/OpenFocus/View/Start ordinary stage; exact Sprite point branches only","installed_game_validation":"unavailable: new focus integration awaiting installed-game validation"},"daily_prepared_research":{"enabled":self.daily.enabled(),"navigation_implemented":false,"scope":"fresh digest and prepared Research only; live worker acceptance pending"},"lease":"exclusive configured controller","native_posting":false,"cursor_movement":self.research_enabled||self.focus_enabled,"load_generation":"unverified; campaign identity, anchors and observed timeline checked","full_campaign_acceptance":false})
     }
     fn call(&self, process: &dyn Process, name: &str, arguments: &Value) -> Result<Value> {
         let call_started = Instant::now();
         let args = arguments
             .as_object()
             .ok_or_else(|| Error::new("invalid_arguments", "Input arguments must be an object"))?;
+        if name == "hoi4_daily_governor" {
+            return self.daily.call(self, process, args);
+        }
         if name == "hoi4_research_attempt" {
             return research::call(self, process, args);
+        }
+        if name == "hoi4_focus_attempt" {
+            return focus::call(self, process, args);
         }
         // Validate all shapes before process access or lease mutation.
         if name == "hoi4_input_lease" {
@@ -376,16 +408,21 @@ impl Commands for ClockService {
                 ))
             }
         };
+        self.daily.input_check()?;
         drop(input_permit(&self.input_gate)?);
         let mut state = try_state(&self.state)?;
         if state
-            .research
+            .focus
             .as_ref()
-            .is_some_and(|r| r.journal.blocks_game(&state.guard.epoch.game))
+            .is_some_and(|f| f.journal.blocks_game(&state.guard.epoch.game))
+            || state
+                .research
+                .as_ref()
+                .is_some_and(|r| r.journal.blocks_game(&state.guard.epoch.game))
         {
             return Err(Error::new(
                 "action_uncertain",
-                "Unresolved pointer attempt blocks clock input",
+                "Unresolved research/focus attempt blocks clock input",
             ));
         }
         let epoch = state.guard.epoch.clone();

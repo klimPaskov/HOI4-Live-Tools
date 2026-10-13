@@ -1464,3 +1464,10 @@ fn focus_ui_positive_literal_hidden_and_transition_witnesses() {
         );
     }
 }
+
+// Exercise the production focus-state join on every host with generated own maps.
+use hoi4_live_native::{actions, error, focus_stage, game, platform, politics_focus};
+#[allow(dead_code)]
+#[path = "../src/launch/linux/clock/focus/state.rs"]
+mod state;
+include!("support/focus_service_cases.rs");

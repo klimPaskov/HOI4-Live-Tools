@@ -47,6 +47,7 @@ pub(super) fn call(
     process: &dyn Process,
     args: &serde_json::Map<String, Value>,
 ) -> Result<Value> {
+    owner.daily.input_check()?;
     allowed(
         args,
         &[
@@ -107,19 +108,6 @@ pub(super) fn call(
             "Unresolved clock input blocks pointer input",
         ));
     }
-    let ControlState {
-        controls,
-        guard,
-        authority,
-        research,
-        ..
-    } = &mut *state;
-    let service = research.as_mut().ok_or_else(|| {
-        Error::new(
-            "capability_unavailable",
-            "Owner did not opt in to research preview",
-        )
-    })?;
     let target = stage::Target {
         epoch,
         stage: selected_stage,
@@ -127,6 +115,50 @@ pub(super) fn call(
         folder_id,
         slot,
     };
+    let (execution, transport) = execute_internal(
+        &mut state,
+        process,
+        &owner.input_gate,
+        token,
+        id,
+        target,
+        Instant::now() + Duration::from_secs(5),
+    )?;
+    Ok(json!({"execution":execution,"transport":transport,"full_campaign_acceptance":false}))
+}
+
+/// Borrow the already-held shared controller once. Never re-enter RPC/call.
+pub(super) fn execute_internal(
+    state: &mut ControlState,
+    process: &dyn Process,
+    gate: &RwLock<bool>,
+    token: &str,
+    id: &str,
+    target: stage::Target,
+    until: Instant,
+) -> Result<(stage::Execution, Option<Value>)> {
+    if state.journal.blocks_game(&target.epoch.game)
+        || state
+            .focus
+            .as_ref()
+            .is_some_and(|f| f.journal.blocks_game(&target.epoch.game))
+    {
+        return Err(Error::new(
+            "action_uncertain",
+            "Unresolved clock/focus input blocks research",
+        ));
+    }
+    state.authority.authorize(token, &target.epoch)?;
+    let ControlState {
+        controls,
+        guard,
+        authority,
+        research,
+        ..
+    } = state;
+    let service = research
+        .as_mut()
+        .ok_or_else(|| Error::new("capability_unavailable", "Research profile unavailable"))?;
     let mut backend = ResearchBackend {
         process,
         controls,
@@ -138,18 +170,20 @@ pub(super) fn call(
         target: Some(target.clone()),
         scope: None,
     };
-    let execution = service.journal.execute(
-        id,
-        target,
-        token,
-        authority,
-        &owner.input_gate,
-        &mut backend,
-        Duration::from_secs(5),
-    )?;
-    Ok(
-        json!({"execution":execution,"transport":backend.last_transport,"full_campaign_acceptance":false}),
-    )
+    let timeout = until
+        .saturating_duration_since(Instant::now())
+        .min(Duration::from_secs(5));
+    if timeout.is_zero() {
+        return Err(Error::new(
+            "input_not_queued",
+            "Research budget ended before journal execution",
+        ));
+    }
+    let execution =
+        service
+            .journal
+            .execute(id, target, token, authority, gate, &mut backend, timeout)?;
+    Ok((execution, backend.last_transport))
 }
 
 struct ResearchBackend<'a> {
@@ -448,7 +482,7 @@ fn pin_scope(
     Ok(())
 }
 
-fn observed_state(
+pub(super) fn observed_state(
     process: &dyn Process,
     guard: &mut Guard,
 ) -> Result<(stage::OwnState, research_ui::UiContext)> {

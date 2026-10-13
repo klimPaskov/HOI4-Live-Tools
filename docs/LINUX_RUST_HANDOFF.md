@@ -8,10 +8,12 @@ Linux is the first live target; Windows and macOS remain required platforms.
 controls, all four research assignments and advancement through 5 January 1936.
 Recording passed ffprobe; one owned window close returned normal exit0, and both
 game and owner are absent. Run024's clock uncertainty remains unexplained.
-The failed upstream native-posting adapter stays quarantined. Continue with
-verified ordinary focus actions and durable daily execution, then economic,
+The failed upstream native-posting adapter stays quarantined. Opt-in focus
+stages and a shared-controller daily prepared-research worker now pass fixtures;
+verify them in a fresh immutable recorded Luna run, then finish automatic
+navigation and plan-update service wiring, followed by economic,
 army and naval adapters and independent Windows/macOS live support. All nine
-cross-platform CI jobs passed at `aa94c9e`; this does not prove native gameplay
+cross-platform CI jobs passed at `9697051`; this does not prove native gameplay
 on every platform. No clean two-year or full campaign has passed. Detailed
 failures and evidence remain in [live validation](CLAUSEWITZ_VALIDATION.md).
 

@@ -12,7 +12,7 @@ const LIMIT: u64 = 1 << 20;
 #[cfg(unix)]
 use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
 
-pub(super) struct Store {
+pub(crate) struct Store {
     path: PathBuf,
     lock_path: PathBuf,
     _lock: File,
@@ -46,7 +46,7 @@ fn parent(path: &Path) -> Result<&Path> {
         .ok_or_else(|| invalid("Absolute private plan path required"))
 }
 impl Store {
-    pub(super) fn open(path: &Path) -> Result<(Self, Option<Vec<u8>>)> {
+    pub(crate) fn open(path: &Path) -> Result<(Self, Option<Vec<u8>>)> {
         #[cfg(not(unix))]
         {
             let _ = path;
@@ -156,7 +156,7 @@ impl Store {
             ))
         }
     }
-    pub(super) fn check(&self) -> Result<()> {
+    pub(crate) fn check(&self) -> Result<()> {
         let current = self.read_current()?.map(|b| Sha256::digest(b).into());
         if current != self.fingerprint {
             return Err(Error::new(
@@ -166,7 +166,7 @@ impl Store {
         }
         Ok(())
     }
-    pub(super) fn replace(&mut self, bytes: &[u8]) -> Result<()> {
+    pub(crate) fn replace(&mut self, bytes: &[u8]) -> Result<()> {
         if bytes.len() as u64 > LIMIT {
             return Err(invalid("Plan state exceeds bound"));
         }

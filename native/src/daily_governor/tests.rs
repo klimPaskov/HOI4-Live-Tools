@@ -192,6 +192,192 @@ impl Backend for Fake {
 fn run(g: &mut Governor, b: &mut Fake) -> Result<DailyResult> {
     g.run_day(b, 10000, Instant::now() + Duration::from_secs(1))
 }
+#[cfg(unix)]
+fn extended(mut p: Plan) -> Plan {
+    p.revision += 1;
+    p.entries.push(Entry {
+        id: "research-2".into(),
+        intent: Intent::Research {
+            technology_id: "construction1".into(),
+            slot: 1,
+        },
+    });
+    p
+}
+
+#[test]
+#[cfg(unix)]
+fn plan_update_preserves_completed_evidence_and_same_day_consumption_across_restart() {
+    let t = Temp::new();
+    let p = plan();
+    let mut b = Fake::new(&p);
+    let mut g = Governor::open(&t.path(), p.clone()).unwrap();
+    run(&mut g, &mut b).unwrap();
+    let old = serde_json::to_value(g.entry_state("research-1")).unwrap();
+    let next = extended(p);
+    assert!(g.update_plan(next.clone()).unwrap());
+    assert_eq!(
+        serde_json::to_value(g.entry_state("research-1")).unwrap(),
+        old
+    );
+    assert!(!g.update_plan(next.clone()).unwrap());
+    assert!(!run(&mut g, &mut b).unwrap().advanced);
+    assert_eq!(b.sends, 2);
+    drop(g);
+    let mut g = Governor::open(&t.path(), next).unwrap();
+    assert_eq!(
+        serde_json::to_value(g.entry_state("research-1")).unwrap(),
+        old
+    );
+    b.day(2);
+    assert_eq!(run(&mut g, &mut b).unwrap().verified, vec!["research-2"]);
+    assert_eq!(b.sends, 3);
+}
+
+#[test]
+#[cfg(unix)]
+fn plan_update_retains_notqueued_attempts_and_pins_legacy_request_revisions() {
+    let t = Temp::new();
+    let p = plan();
+    let mut b = Fake::new(&p);
+    b.mode = Mode::NotQueued;
+    let mut g = Governor::open(&t.path(), p.clone()).unwrap();
+    run(&mut g, &mut b).unwrap();
+    // Old immutable-plan files have no explicit per-record revision.
+    for record in &mut g.state.journal {
+        record.plan_revision = None;
+    }
+    g.persist().unwrap();
+    drop(g);
+    let mut g = Governor::open(&t.path(), p.clone()).unwrap();
+    let next = extended(p);
+    g.update_plan(next.clone()).unwrap();
+    assert!(g.state.journal.iter().all(|r| r.plan_revision == Some(1)));
+    assert!(matches!(
+        g.entry_state("research-1"),
+        Some(EntryState::Pending { attempts: 1, .. })
+    ));
+    drop(g);
+    let mut g = Governor::open(&t.path(), next.clone()).unwrap();
+    b.day(2);
+    b.mode = Mode::Verified;
+    assert_eq!(run(&mut g, &mut b).unwrap().verified.len(), 3);
+    assert_eq!(b.sends, 5);
+    drop(g);
+    let g = Governor::open(&t.path(), next).unwrap();
+    assert!(matches!(
+        g.entry_state("research-1"),
+        Some(EntryState::Complete { .. })
+    ));
+}
+
+#[test]
+#[cfg(unix)]
+fn invalid_plan_updates_change_neither_saved_bytes_nor_pending_entries() {
+    let t = Temp::new();
+    let p = plan();
+    let mut g = Governor::open(&t.path(), p.clone()).unwrap();
+    let saved = fs::read(t.path()).unwrap();
+    for case in 0..5 {
+        let mut next = extended(p.clone());
+        match case {
+            0 => {
+                next.entries.remove(0);
+            }
+            1 => {
+                next.entries[0].intent = Intent::Focus {
+                    focus_id: "different_focus".into(),
+                }
+            }
+            2 => next.scope.epoch.game.start_ticks = "789".into(),
+            3 => next.revision = p.revision,
+            _ => next.max_actions_per_day = 0,
+        }
+        assert!(g.update_plan(next).is_err());
+        assert_eq!(fs::read(t.path()).unwrap(), saved);
+        assert_eq!(g.state.plan, p);
+        assert_eq!(g.state.entries.len(), 2);
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn plan_updates_reorder_and_change_limits_without_resetting_existing_work() {
+    let t = Temp::new();
+    let p = plan();
+    let mut b = Fake::new(&p);
+    b.ready = Readiness::Deferred("own view not ready".into());
+    let mut g = Governor::open(&t.path(), p.clone()).unwrap();
+    run(&mut g, &mut b).unwrap();
+    let before = serde_json::to_value(&g.state.entries).unwrap();
+    let mut next = p;
+    next.revision = 4;
+    next.entries.reverse();
+    next.max_actions_per_day = 1;
+    next.max_observation_age_ms = 500;
+    next.review_day = None;
+    g.update_plan(next.clone()).unwrap();
+    assert_eq!(serde_json::to_value(&g.state.entries).unwrap(), before);
+    drop(g);
+    let mut g = Governor::open(&t.path(), next).unwrap();
+    b.day(2);
+    b.ready = Readiness::Ready;
+    assert_eq!(run(&mut g, &mut b).unwrap().verified, vec!["focus-1"]);
+    assert_eq!(b.sends, 1);
+    assert!(matches!(
+        g.entry_state("research-1"),
+        Some(EntryState::Pending { attempts: 0, .. })
+    ));
+}
+
+#[test]
+#[cfg(unix)]
+fn uncertain_input_and_persistence_identity_loss_block_plan_updates() {
+    for uncertain in [true, false] {
+        let t = Temp::new();
+        let p = plan();
+        let mut b = Fake::new(&p);
+        let mut g = Governor::open(&t.path(), p.clone()).unwrap();
+        if uncertain {
+            b.mode = Mode::Uncertain;
+            assert!(run(&mut g, &mut b).is_err());
+        } else {
+            // The lock inode is pinned for the lifetime of the writer. Data
+            // files legitimately change inode on the Store's atomic replace.
+            let lock = t.root.join("plan.json.lock");
+            fs::rename(&lock, t.root.join("displaced.lock")).unwrap();
+            fs::write(&lock, []).unwrap();
+            fs::set_permissions(&lock, fs::Permissions::from_mode(0o600)).unwrap();
+        }
+        assert!(g.update_plan(extended(p.clone())).is_err());
+        assert_eq!(g.state.plan, p);
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn forged_or_mismatched_historical_plan_revisions_refuse_restart() {
+    for forged in [0, 3, 2, 4] {
+        let t = Temp::new();
+        let p = plan();
+        let mut b = Fake::new(&p);
+        let mut g = Governor::open(&t.path(), p.clone()).unwrap();
+        run(&mut g, &mut b).unwrap();
+        let next = extended(p);
+        g.update_plan(next.clone()).unwrap();
+        drop(g);
+        let mut state: Value = serde_json::from_slice(&fs::read(t.path()).unwrap()).unwrap();
+        if forged == 4 {
+            state["journal"][0]["plan_revision"] = json!(2);
+            state["journal"][1]["plan_revision"] = json!(2);
+        } else {
+            state["journal"][1]["plan_revision"] = json!(forged);
+        }
+        fs::write(t.path(), serde_json::to_vec(&state).unwrap()).unwrap();
+        assert!(Governor::open(&t.path(), next).is_err());
+    }
+}
+
 #[test]
 #[cfg(unix)]
 fn completed_current_receipts_are_idempotent_across_restart_and_days() {

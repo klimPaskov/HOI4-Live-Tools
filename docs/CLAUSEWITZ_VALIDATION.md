@@ -1734,3 +1734,50 @@ that checkout includes preserved Python WIP outside this Rust change.
 These are offline/kernel regression checks. The new wait behavior has not yet
 been exercised in a fresh installed-game run. Focus/governor service integration
 and the full campaign gates remain unfinished.
+
+## Focus service and prepared-research daily worker
+
+The owned binding now separately enables ordinary focus stages and a daily
+prepared-research worker. Both default off. Focus stages use settled own roots,
+canonical ID joins, complete local blocker facts and supported Sprite geometry;
+they share the existing lease, controller and uncertainty journals. Local facts
+do not establish global modal clearance, current-frame or routing authority.
+Unsupported renderers and unknown readiness refuse.
+
+The worker uses the same read/controller gates and a weak owner reference.
+Shutdown joins outside the controller; last-owner drop cannot self-join. It
+probes unchanged days without rewriting the plan, persists observation sequence
+before publication and executes only on advancing verified days. Research can
+run only when the exact own slot/Info is already prepared, or its canonical
+assignment already matches. Navigation receipts cannot finish an entry. Other
+domains remain retained as unavailable. Lease renewal and automatic navigation
+are not implemented. A failed daily witness after Research verification publishes
+quarantine while the common controller is still held, preventing manual input
+from entering that gap.
+
+The plan-update library preserves every existing entry specification, attempts,
+completion evidence and chronology. Changes require an increased revision;
+identical retries do nothing. Historical requests retain their original revision
+when reopened. Uncertainty, lost storage ownership, replacement/deletion and
+forged revision/hash combinations refuse. Service update wiring is still pending.
+
+Rust1.86 host passed **472 tests**. Host/Linux Clippy, Rust1.86 Linux compilation,
+optimized cross-linking and formatting passed. The immutable optimized bundle
+passed **560 reported checks** on the actual Linux kernel (**558 substantive plus
+two inert helpers**), including five isolated X11 cases. Nested helper output is
+not counted twice. All83 source files have a private hash manifest. The previous
+owned game/owner remained exited; display identity and Yama1 stayed unchanged.
+The local Python working-tree suite passed **953 tests, 37 skipped**, in22.278
+seconds, including preserved Python WIP outside this Rust change.
+
+An authored plan-update test initially expected identical data-file replacement
+to fail. Atomic data replacement is allowed; storage ownership is pinned through
+the private lock and parent. The corrected test displaces the pinned lock inode
+and verifies refusal. Initial failure evidence is preserved; production storage
+guards were unchanged. The focus timeout fixture now expires its finite budget
+after dispatch is recorded, avoiding scheduling-dependent pre-input refusal.
+Production focus deadlines are unchanged.
+
+These are fixture/kernel results. Focus dispatch and the daily worker have not
+yet passed an installed-game run. Full daily automation, Windows/macOS native
+adapters, clean two-year acceptance and all full campaigns remain unfinished.

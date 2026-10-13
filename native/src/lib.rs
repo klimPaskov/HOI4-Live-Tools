@@ -60,3 +60,9 @@ pub mod politics_focus;
 
 // Durable daily-plan prerequisite; owner worker/adapters are not registered.
 pub mod daily_governor;
+
+#[doc(hidden)]
+pub mod daily_observation;
+
+#[cfg(any(target_os = "linux", test))]
+mod daily_worker;

@@ -16,9 +16,9 @@ technology keys, with 423 structural control associations. Those associations
 do not authorize strategic input.
 A fresh Rust run also passed Luna medium ID-based research selection and
 assignment, with canonical slot readback and counter advancement through
-3 January. The latest run verified a complete research-category cycle,
-a same-category no-op and all four research assignments. Its speed-change request
-then lacked a readback witness and was quarantined without retry. Full campaign
+3 January. Recorded run025 then verified clock controls, all four research
+assignments and advancement to 5 January. An earlier speed-change request lacked
+a readback witness and remains quarantined without retry. Full campaign
 acceptance remains unfinished; there is no Rust release yet.
 
 | Runtime | Verified | Remaining |
@@ -89,8 +89,10 @@ are documented in [the comparison](docs/CLAUSEWITZ_COMPARISON.md) and
 The research preview opens the own panel, selects empty slots and navigates
 folders with verified state readback. Recorded run 025 passed ordinary clock
 control, four research assignments and advancement to 5 January 1936. The earlier
-run 024 clock uncertainty remains unexplained. Broader strategic adapters, the Rust daily
-governor and Windows/macOS live adapters remain unfinished. Three-OS CI tests
+run 024 clock uncertainty remains unexplained. Opt-in focus stages and a daily
+worker for already-prepared research now pass fixtures; their installed-game
+validation is pending. Automatic navigation, broader strategic adapters and
+Windows/macOS live adapters remain unfinished. Three-OS CI tests
 shared code and fixtures; compilation is not live compatibility or campaign acceptance.
 
 ## Development

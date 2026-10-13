@@ -24,19 +24,20 @@ return a capability error. Logs and setup errors go to stderr.
 
 | Platform | Current native support |
 | --- | --- |
-| Linux x86_64 | Owned launch/reconnects, exact-build reads, waits, clock keys and an opt-in research preview |
+| Linux x86_64 | Owned launch/reconnects, exact-build reads, waits, clock keys, research, and opt-in focus/daily previews |
 | Windows / macOS | Portable protocol and fixtures; native live adapters return explicit unavailable errors |
 
 Three-OS CI validates shared code. It does not establish Windows/macOS live
 compatibility. Layouts must be recovered and verified separately for each build.
 
-The focus-stage and daily-plan libraries are development prerequisites with
-injected backends, not enabled MCP commands. They retain unfinished entries,
-quarantine uncertain input and distinguish fresh verification from historical
-receipts. Daily planning still needs the owned worker, shared lease/journal
-integration and a safe plan-update API. Economy, army and naval plan fields have
-no action adapters. Private daily storage currently supports Unix only; other
-platforms return an explicit capability error.
+Focus stages and a daily prepared-research worker now have optional owned MCP
+services. Their installed-game validation is pending. They share the clock and
+research controller, lease, shutdown gate and uncertainty journals. The worker
+retains unfinished entries and requires fresh assignment receipts; navigation
+receipts cannot complete research work. Safe plan updates exist in the library
+but are not yet exposed by the service. Automatic research navigation and daily
+focus, economy, army and naval adapters remain unfinished. Private daily storage
+supports Unix only; other platforms return an explicit capability error.
 
 ## Connect an owned Linux game
 
@@ -207,14 +208,23 @@ receipts are labeled historical. See [preview setup](../docs/OWNED_LINUX_LAUNCHE
 
 Selected own focus details also expose a bounded start-binding diagnostic. It
 distinguishes the event start callback from the separate no-op listener. This
-metadata grants no action authority; focus selection and start dispatch remain
-unfinished.
+metadata grants no action authority; the separate opt-in service supplies the
+lease, journal and verified ordinary dispatch boundary.
 
-The private focus point preparer now shares canonical own-focus, active-progress,
-campaign and local UI witnesses. It consumes producer-only mode, owned-container
-and complete own-window blocker facts, then reuses the supported Sprite maths.
-Unknown facts and unsupported renderers refuse. These local facts do not prove
-global modal clearance or routing. No focus action tool is registered yet.
+The optional `hoi4_focus_attempt` service provides `open_politics`, `open_focus`,
+`view` and `start` stages for an exact own focus ID. Its point preparer shares
+canonical own-focus, active-progress, campaign and local UI witnesses. It requires
+settled own roots and complete local blocker facts, then uses supported Sprite
+geometry. Unknown facts and unsupported renderers refuse. These facts do not
+prove global modal clearance or routing. Installed-game focus dispatch is pending.
+
+The optional `hoi4_daily_governor` service starts a durable explicit plan, returns
+a fresh compact digest, or stops its worker without changing game time. It can
+execute Research only when the requested own slot and matching Info are already
+prepared, or verify an existing matching assignment. It probes unchanged days
+without rewriting the plan and executes a batch only on an advancing day.
+Other domains remain retained with an unavailable reason. See the
+[focus and daily setup](../docs/OWNED_LINUX_LAUNCHER.md#focus-and-daily-previews).
 
 The separate Linux pointer library permits one bounded motion/left-button pair
 for a future verified adapter. It pins client/root geometry and ownership,

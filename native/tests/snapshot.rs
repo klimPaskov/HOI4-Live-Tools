@@ -5770,3 +5770,5 @@ fn unified_category_read_count_measurement_per_verification_phase() {
     println!("UNIFIED_CATEGORY_LOGICAL_READS={logical}; FORMER_LOWER_BOUND={former_lower_bound}");
     assert!(logical < former_lower_bound);
 }
+
+include!("support/daily_observation_cases.rs");
