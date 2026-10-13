@@ -276,6 +276,35 @@ fn owned_xvfb_pointer_transport_checks_stale_target_and_records_one_pair() {
             .unwrap();
         focus(&connection, root, window);
     }
+    // The ordinary-stage checker runs after preparation but before even motion.
+    let checked = std::cell::Cell::new(0);
+    let mut refused_stage = controls
+        .prepare_left_click_until(
+            &process,
+            display.pointer_transport(),
+            [17, 19],
+            [160, 120],
+            Instant::now() + Duration::from_secs(2),
+        )
+        .unwrap();
+    let refusal = refused_stage.dispatch_once_checked(|| {
+        checked.set(checked.get() + 1);
+        Err(hoi4_live_native::error::Error::new(
+            "stage_changed",
+            "Generated stage changed",
+        ))
+    });
+    assert_eq!(checked.get(), 1);
+    assert_eq!(refusal.delivery, PointerDelivery::NotQueued);
+    assert_eq!(refusal.error.unwrap().code, "stage_changed");
+    assert_eq!(
+        refused_stage
+            .dispatch_once_checked(|| panic!("No second checker/attempt"))
+            .error
+            .unwrap()
+            .code,
+        "pointer_already_attempted"
+    );
     let before = child.events();
     assert_eq!(before["events"], serde_json::json!([]));
     assert_eq!(before["forbidden"], 0);

@@ -141,6 +141,7 @@ Normal difficulty, historical AI and the selected own-player tag.
 | `window` | Verified owned X11 window ID |
 | `window_class` | Exact complete `WM_CLASS` property as a byte array |
 | `menu_evidence_ids` | IDs in the private recording/journal proving ordinary singleplayer setup |
+| `research_profile` | Optional owner-reviewed `linux_builtin_absolute_512x288_v1`; omission keeps clock-only input |
 
 ```sh
 native/target/release/hoi4-live-native --bind-input /absolute/private/run /absolute/private/input.json
@@ -179,6 +180,30 @@ to 3 January 1936 and verified pause under unchanged Yama 1. It used no screensh
 or cursor movement. This verifies the installed-game clock adapter on that build;
 it does not verify strategic actions or a complete campaign. See the
 [actual calls and measurements](CLAUSEWITZ_VALIDATION.md#passed-luna-rust-clock-test--13-october-2026).
+
+## Ordinary research preview
+
+The owner may add `"research_profile": "linux_builtin_absolute_512x288_v1"`
+to the private binding after corroborating its owned client. This narrow profile
+requires a 512×288 client, 2560×1440 logical graphics and the verified builtin
+absolute SDL/X11 association. Other profiles are unavailable. Omission preserves
+clock-only input. The assembled owner adapter has fixture evidence; its next
+fresh recorded game remains the installed-game validation gate.
+
+`hoi4_research_attempt` takes `technology_id`, the already selected own `slot`,
+`stage` (`view` or `research`), a separate stable `request_id` for each stage,
+and `lease_token`. It accepts no coordinates and performs no automatic panel
+navigation. Each stage derives its point from fresh internal observations and
+pins campaign, own status and full slot identities. A final read-only check
+follows X11 preparation. It attempts at most one motion/left-button pair.
+
+Intent is durable before possible input. Unknown delivery gets bounded canonical
+readback, never another event. Success also requires clear input state; uncertain
+attempts survive restart and block new tokens/stages and clock actions. Known
+local refusal leaves the plan unfinished and permits a fresh attempt token.
+Verified retries return explicitly historical receipts. This does not establish
+atomic frame/routing authority, confirmation-dialog support, daily automation
+or campaign acceptance.
 
 ## Ownership and recovery checks
 

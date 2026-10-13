@@ -6,6 +6,350 @@ use hoi4_live_native::{
     research, research_ui, technology,
 };
 use std::{cell::Cell, collections::BTreeMap};
+
+// The research context path also checks the game's ordinary overview types.
+// Synthetic RTTI/name buffers live separately from the nearby primary tables.
+fn owned_research_fixture() -> Fixture {
+    let mut f = Fixture::new();
+    f.own_research();
+    let base = 0x10000;
+    for (i, (table, name)) in [
+        (0x42108f8, "CTechnologyStatus"),
+        (0x4210898, "CResearchSlot"),
+        (0x42107f8, "CTechnology"),
+        (0x4211038, "CTechnologyTemplate"),
+    ]
+    .iter()
+    .enumerate()
+    {
+        let info = base + 0x435d000 + i as u64 * 0x100;
+        let text = base + 0x350d000 + i as u64 * 0x100;
+        f.word(base + table - 8, info);
+        f.region(info, 16);
+        f.word(info + 8, text);
+        f.region(text, 128);
+        f.put(text, format!("{}{name}", name.len()).as_bytes());
+    }
+    f
+}
+
+struct OwnedContextFixture {
+    fixture: Fixture,
+    armed: Cell<bool>,
+    context_started: Cell<bool>,
+    tag_reads: Cell<usize>,
+    final_mutation: Option<(u64, Vec<u8>)>,
+    finishing: Cell<bool>,
+}
+
+fn owned_node_fixture() -> Fixture {
+    let mut f = Fixture::new();
+    f.node_render_detail();
+    for (i, (table, name)) in [
+        (0x42108f8, "CTechnologyStatus"),
+        (0x4210898, "CResearchSlot"),
+        (0x42107f8, "CTechnology"),
+        (0x4211038, "CTechnologyTemplate"),
+    ]
+    .iter()
+    .enumerate()
+    {
+        let info = 0x10000 + 0x435f000 + i as u64 * 0x100;
+        let text = 0x10000 + 0x350f000 + i as u64 * 0x100;
+        f.word(0x10000 + table - 8, info);
+        f.region(info, 16);
+        f.word(info + 8, text);
+        f.region(text, 128);
+        f.put(text, format!("{}{name}", name.len()).as_bytes());
+    }
+    f
+}
+#[test]
+fn owned_node_detail_carries_same_requested_body_campaign_and_slot_ids() {
+    let f = owned_node_fixture();
+    let (value, context) = research_ui::node_detail_owned(&f, "tools1").unwrap();
+    assert_eq!(value["id"], "tools1");
+    assert_eq!(context.campaign.player, "GER");
+    assert_eq!(context.anchors[..2], [0x20000, 0x28000]);
+    assert_eq!(context.slots, [0x2c000, 0x2c100, 0x2c200, 0x2c300]);
+    assert_eq!(f.checks.get(), 2);
+}
+#[test]
+fn owned_node_detail_refuses_inner_tag_and_final_slot_mutations() {
+    let mut f = OwnedContextFixture::new();
+    f.fixture = owned_node_fixture();
+    f.armed.set(true);
+    assert_eq!(
+        research_ui::node_detail_owned(&f, "tools1")
+            .unwrap_err()
+            .code,
+        "torn_read"
+    );
+    let mut f = OwnedContextFixture::new();
+    f.fixture = owned_node_fixture();
+    f.final_mutation = Some((0x3b000, vec![0; 32]));
+    assert_eq!(
+        research_ui::node_detail_owned(&f, "tools1")
+            .unwrap_err()
+            .code,
+        "torn_read"
+    );
+}
+impl OwnedContextFixture {
+    fn new() -> Self {
+        Self {
+            fixture: owned_research_fixture(),
+            armed: Cell::new(false),
+            context_started: Cell::new(false),
+            tag_reads: Cell::new(0),
+            final_mutation: None,
+            finishing: Cell::new(false),
+        }
+    }
+}
+impl ReadMemory for OwnedContextFixture {
+    fn read(&self, address: u64, size: usize) -> Result<Vec<u8>> {
+        if self.armed.get() && address == 0x30718 {
+            self.context_started.set(true);
+        }
+        if self.armed.get() && self.context_started.get() && address == 0x30518 {
+            self.tag_reads.set(self.tag_reads.get() + 1);
+            // Positive outer GER tag, then a foreign tag at the body/context
+            // join, then GER again. No foreign-country payload is readable.
+            if self.tag_reads.get() == 1 {
+                assert_eq!(size, 4);
+                return Ok(2i32.to_le_bytes().to_vec());
+            }
+        }
+        if self.finishing.get() {
+            if let Some((changed, bytes)) = &self.final_mutation {
+                if address == *changed {
+                    assert_eq!(size, bytes.len());
+                    return Ok(bytes.clone());
+                }
+            }
+        }
+        self.fixture.read(address, size)
+    }
+    fn read_many(&self, requests: &[(u64, usize)]) -> Result<Vec<Vec<u8>>> {
+        hoi4_live_native::memory::validate_read_batch(requests)?;
+        let previous = self.finishing.replace(true);
+        let result = requests.iter().map(|&(a, n)| self.read(a, n)).collect();
+        self.finishing.set(previous);
+        result
+    }
+}
+impl Process for OwnedContextFixture {
+    fn image_base(&self) -> u64 {
+        self.fixture.image_base()
+    }
+    fn check(&self) -> Result<()> {
+        self.fixture.check()
+    }
+}
+
+#[test]
+fn owned_research_context_pairs_canonical_slots_with_same_body_ownership() {
+    let f = owned_research_fixture();
+    let (value, context) = research::owned_snapshot(&f).unwrap();
+    assert_eq!(context.campaign.player, "GER");
+    assert_eq!(context.campaign.anchors, [0x30000, 0x32000, 0x36000]);
+    assert_eq!(context.own, [0x20000, 0x28000]);
+    assert_eq!(context.slots, [0x2c000, 0x2c100, 0x2c200, 0x2c300]);
+    assert_eq!(value["slots"][0]["researching"], "tools1");
+    assert_eq!(value["slots"][0]["progress_raw"], -0x1234_5678_9abci64);
+    assert_eq!(f.checks.get(), 2); // One owned process bracket, no nested begin.
+}
+
+#[test]
+fn owned_research_refuses_inner_foreign_context_between_outer_ger_samples() {
+    let f = OwnedContextFixture::new();
+    assert_eq!(game::clock_context(&f).unwrap().player, "GER");
+    f.armed.set(true);
+    assert_eq!(research::owned_snapshot(&f).unwrap_err().code, "torn_read");
+    assert_eq!(game::clock_context(&f).unwrap().player, "GER");
+    assert!(!f.fixture.tracked_reads.borrow().contains_key(&0xdead0000));
+}
+
+#[test]
+fn owned_research_rechecks_slot_identity_header_and_assignment_at_finish() {
+    for (address, changed) in [
+        (0x2c018, 0u64.to_le_bytes().to_vec()),
+        (
+            0x3b000,
+            [0x2c100u64, 0x2c000, 0x2c200, 0x2c300]
+                .into_iter()
+                .flat_map(u64::to_le_bytes)
+                .collect(),
+        ),
+        (
+            0x280a0,
+            [
+                0x85000u64.to_le_bytes().as_slice(),
+                4i32.to_le_bytes().as_slice(),
+                4i32.to_le_bytes().as_slice(),
+            ]
+            .concat(),
+        ),
+    ] {
+        let mut f = OwnedContextFixture::new();
+        // A relocated array has identical slot values. Header identity must
+        // still refuse the relocation; payload equality alone is insufficient.
+        let original = (0..32)
+            .map(|i| f.fixture.data[&(0x3b000 + i)])
+            .collect::<Vec<_>>();
+        f.fixture.put(0x85000, &original);
+        f.final_mutation = Some((address, changed));
+        assert_eq!(
+            research::owned_snapshot(&f).unwrap_err().code,
+            "torn_read",
+            "field {address:x}"
+        );
+    }
+}
+
+#[test]
+fn owned_research_checks_positive_scope_before_broader_context_payload() {
+    let mut f = owned_research_fixture();
+    f.number(0x30518, 0);
+    for address in 0x39000..0x3900c {
+        f.data.remove(&address);
+    }
+    assert_eq!(
+        research::owned_snapshot(&f).unwrap_err().code,
+        "player_unavailable"
+    );
+    assert!(!f.tracked_reads.borrow().contains_key(&0x39000));
+    assert!(!f.tracked_reads.borrow().contains_key(&0x30718));
+}
+
+#[test]
+fn owned_research_checks_technology_owner_before_broader_context_payload() {
+    let mut f = owned_research_fixture();
+    f.word(0x80158, 0xdead0000);
+    // A foreign own-slot pointer must stop at owner+158, before either the
+    // template pointer or the broader clock context's technology-name path.
+    for address in (0x80160..0x80168).chain(0x30718..0x30738) {
+        f.data.remove(&address);
+    }
+    assert_eq!(
+        research::owned_snapshot(&f).unwrap_err().code,
+        "invalid_research_owner"
+    );
+    assert!(!f.tracked_reads.borrow().contains_key(&0x80160));
+    assert!(!f.tracked_reads.borrow().contains_key(&0x30718));
+}
+
+#[test]
+fn research_public_page_does_not_require_new_context_payloads() {
+    let mut f = Fixture::new();
+    f.own_research();
+    for (address, size) in [
+        (0x30718, 32),
+        (0x60000, 36),
+        (0x30620, 4),
+        (0x30628, 4),
+        (0x30460, 4),
+        (0x10000 + 0x43f3eb8, 8),
+    ] {
+        for a in address..address + size {
+            f.data.remove(&a);
+        }
+    }
+    let value = research::page(&f, 0, 1).unwrap();
+    assert_eq!(value["researched"][0]["id"], "tools2");
+    assert_eq!(value["slots"][0]["researching"], "tools1");
+    assert!(!f.tracked_reads.borrow().contains_key(&0x30718));
+    assert_eq!(f.checks.get(), 2);
+}
+
+#[test]
+fn game_context_refuses_foreign_status_before_slot_array_payload() {
+    for tag_fault in [false, true] {
+        let mut f = Fixture::new();
+        if tag_fault {
+            f.number(0x28138, 2);
+        } else {
+            f.word(0x28130, 0xdead0000);
+        }
+        for address in 0x280a0..0x280b0 {
+            f.data.remove(&address);
+        }
+        assert_eq!(
+            game::clock_context(&f).unwrap_err().code,
+            "invalid_research_owner"
+        );
+        assert!(!f.tracked_reads.borrow().contains_key(&0x280a0));
+    }
+}
+
+#[test]
+fn game_context_refuses_foreign_slot_before_active_technology_pointer() {
+    let mut f = Fixture::new();
+    f.word(0x2c010, 0xdead0000);
+    for address in 0x2c018..0x2c020 {
+        f.data.remove(&address);
+    }
+    assert_eq!(
+        game::snapshot(&f).unwrap_err().code,
+        "invalid_research_owner"
+    );
+    assert!(!f.tracked_reads.borrow().contains_key(&0x2c018));
+}
+
+#[test]
+fn game_context_refuses_foreign_active_tech_before_unmapped_template_pointer() {
+    let mut f = owned_research_fixture();
+    f.word(0x80158, 0xdead0000);
+    for address in 0x80160..0x80168 {
+        f.data.remove(&address);
+    }
+    assert_eq!(
+        game::clock_context(&f).unwrap_err().code,
+        "invalid_research_owner"
+    );
+    assert!(!f.tracked_reads.borrow().contains_key(&0x80160));
+}
+
+#[test]
+fn game_context_bounds_active_key_before_forbidden_heap_payload() {
+    let mut f = owned_research_fixture();
+    f.region(0x63008, 32);
+    f.word(0x63008, 0xfe000);
+    f.word(0x63010, 257);
+    assert_eq!(game::snapshot(&f).unwrap_err().code, "invalid_string");
+    assert!(!f.tracked_reads.borrow().contains_key(&0xfe000));
+}
+
+#[test]
+fn game_context_rechecks_new_owner_witnesses_at_snapshot_boundary() {
+    for (address, changed) in [
+        (0x28130, 0xdead0000u64.to_le_bytes().to_vec()),
+        (0x28138, 2i32.to_le_bytes().to_vec()),
+        (0x2c010, 0xdead0000u64.to_le_bytes().to_vec()),
+        (0x80158, 0xdead0000u64.to_le_bytes().to_vec()),
+    ] {
+        let mut f = owned_research_fixture();
+        f.fault = Some((address, 1, changed));
+        assert_eq!(
+            game::snapshot(&f).unwrap_err().code,
+            "torn_read",
+            "owner field {address:x}"
+        );
+    }
+}
+
+#[test]
+fn game_context_requires_positive_own_tag_before_country_mapping() {
+    let mut f = Fixture::new();
+    f.number(0x30518, 0);
+    for address in 0x30340..0x30350 {
+        f.data.remove(&address);
+    }
+    assert_eq!(game::snapshot(&f).unwrap_err().code, "player_unavailable");
+    assert!(!f.tracked_reads.borrow().contains_key(&0x30340));
+}
+
 struct Fixture {
     tracked_reads: std::cell::RefCell<BTreeMap<u64, usize>>,
     data: BTreeMap<u64, u8>,
@@ -139,12 +483,15 @@ impl Fixture {
         f.object(0x2a000, "CNationalFocusProgress", 0x50100);
         f.word(0x20f38, 0x28000);
         f.object(0x28000, "CTechnologyStatus", 0x50200);
+        f.word(0x28130, 0x20000);
+        f.number(0x28138, 1);
         f.array(0x280a0, 0x3b000, 4);
         f.region(0x3b000, 32);
         for i in 0..4 {
             let a = 0x2c000 + i * 0x100;
             f.region(a, 64);
             f.object(a, "CResearchSlot", 0x50300);
+            f.word(a + 0x10, 0x28000);
             f.word(0x3b000 + i * 8, a);
         }
         f
@@ -4483,5 +4830,91 @@ fn ordinary_info_text_v2_common_bytes_and_hierarchy_final_mutation_refuse() {
             "torn_read",
             "{a:x}"
         );
+    }
+}
+
+impl Fixture {
+    fn registered_slot_control(&mut self) {
+        self.research_plain_sprite();
+        let b = 0x10000;
+        self.word(0xb1068, 0x70000);
+        self.word(0xb1080, b + 0x4346ea8);
+        self.word(0xb1088, 0xe0000);
+        self.word(0xb1090, 0xe0000);
+        self.number(0xb1098, 1);
+        self.word(0xb10a0, 0);
+        self.region(0xe0000, 0x20);
+        self.word(0xe0000, 0x94020);
+        self.word(0x94020, b + 0x424ea18);
+        self.word(0x94028, 0xe1000);
+        self.word(0x94038, b + 0x15b7be0);
+        self.word(0x94040, b + 0x15b7bb0);
+        self.region(0xe1000, 0x18);
+        self.word(0xe1000, b + 0x15b35e0);
+        self.word(0xe1010, 0x94000);
+        self.word(0xb2138, 0xb1000);
+    }
+}
+#[test]
+fn targeted_slot_control_uses_same_production_own_model_and_witnesses() {
+    let mut f = Fixture::new();
+    f.registered_slot_control();
+    let v = research_ui::slot_control_snapshot(&f, 0).unwrap();
+    assert_eq!(
+        v["descriptor"]["ordinary_selection_binding"]["binding_verified"],
+        true
+    );
+    assert_eq!(v["selected_slot"], 1);
+    assert_eq!(v["input_authorized"], false);
+    assert!(!f.tracked_reads.borrow().contains_key(&0xb1008));
+    assert!(!f.tracked_reads.borrow().contains_key(&0xb10ac));
+    assert!(!f.tracked_reads.borrow().contains_key(&0xb10e8));
+    f.fault = Some((0xe1000, 1, vec![0; 8]));
+    f.fault_reads.set(0);
+    assert_eq!(
+        research_ui::slot_control_snapshot(&f, 0).unwrap_err().code,
+        "torn_read"
+    );
+}
+#[test]
+fn targeted_slot_foreign_registry_refuses_before_renderer_payload() {
+    let mut f = Fixture::new();
+    f.registered_slot_control();
+    f.word(0xb1068, 0x70008);
+    for a in 0xb1110..0xb1118 {
+        f.data.remove(&a);
+    }
+    assert_eq!(
+        research_ui::slot_control_snapshot(&f, 0).unwrap_err().code,
+        "invalid_gui_owner"
+    );
+    assert!(!f.tracked_reads.borrow().contains_key(&0xb1110));
+    assert!(!f.tracked_reads.borrow().contains_key(&0xb10ac));
+}
+#[test]
+fn targeted_slot_is_current_own_index_not_persistent_identity() {
+    let mut f = Fixture::new();
+    f.registered_slot_control();
+    assert_eq!(
+        research_ui::slot_control_snapshot(&f, 32).unwrap_err().code,
+        "invalid_arguments"
+    );
+    assert!(f.tracked_reads.borrow().is_empty());
+    assert_eq!(
+        research_ui::slot_control_snapshot(&f, 4).unwrap_err().code,
+        "invalid_index"
+    );
+    let server = hoi4_live_native::protocol::Server {
+        process: None,
+        unavailable: None,
+    };
+    for args in [
+        serde_json::json!({}),
+        serde_json::json!({"slot":-1}),
+        serde_json::json!({"slot":32}),
+        serde_json::json!({"slot":0,"other":true}),
+    ] {
+        let v=server.handle(serde_json::json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"hoi4_research_slot_control","arguments":args}})).unwrap();
+        assert!(v.to_string().contains("invalid_arguments"));
     }
 }

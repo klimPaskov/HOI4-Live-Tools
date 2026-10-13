@@ -172,7 +172,7 @@ pub(crate) fn nullable_type(r: &Reader<'_>, base: u64, object: u64) -> Result<Va
         Ok(json!(type_encoding(r, base, object)?))
     }
 }
-fn render_details(r: &Reader<'_>, base: u64, object: u64) -> Result<Value> {
+pub(crate) fn render_details(r: &Reader<'_>, base: u64, object: u64) -> Result<Value> {
     let table = r.u64(object)?;
     if ![base + 0x434c5b0, base + 0x434b370, base + 0x4356e08].contains(&table) {
         // Even a matching RTTI name never supplies a renderer field layout.
@@ -338,17 +338,18 @@ fn technology_info(
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct UiContext {
+#[doc(hidden)]
+pub struct UiContext {
     pub campaign: game::ClockContext,
     pub anchors: [u64; 6],
     pub slots: Vec<u64>,
 }
 pub fn snapshot(process: &dyn Process) -> Result<Value> {
-    Ok(observe(process, false, false, None)?.0)
+    Ok(observe(process, false, false, None, None)?.0)
 }
 /// Dedicated diagnostic keeps current-node validation out of clock/UI waits.
 pub fn nodes(process: &dyn Process) -> Result<Value> {
-    let (value, _) = observe(process, false, true, None)?;
+    let (value, _) = observe(process, false, true, None, None)?;
     Ok(
         json!({"source":"native own current research nodes","build_id":game::BUILD_ID,
         "selected_slot":value["selected_slot"],"active_mode_raw":value["active_mode_raw"],
@@ -359,7 +360,13 @@ pub fn nodes(process: &dyn Process) -> Result<Value> {
 /// One exact own ID; complete current-record ownership, target GUI only.
 pub fn node_detail(process: &dyn Process, key: &str) -> Result<Value> {
     validate_detail_key(key)?;
-    observe_target(process, key)
+    Ok(observe_target(process, key, false)?.0)
+}
+#[doc(hidden)]
+pub fn node_detail_owned(process: &dyn Process, key: &str) -> Result<(Value, UiContext)> {
+    validate_detail_key(key)?;
+    let (value, context) = observe_target(process, key, true)?;
+    Ok((value, context.expect("Owned detail context requested")))
 }
 
 pub(crate) fn validate_detail_key(key: &str) -> Result<()> {
@@ -418,7 +425,7 @@ pub fn nodes_page(
     Ok(value)
 }
 pub(crate) fn wait_snapshot(process: &dyn Process) -> Result<(Value, UiContext)> {
-    let (value, context) = observe(process, true, false, None)?;
+    let (value, context) = observe(process, true, false, None, None)?;
     Ok((
         value,
         context.expect("Context requested by wait observation"),
@@ -429,6 +436,7 @@ fn observe(
     include_context: bool,
     include_nodes: bool,
     requested_detail: Option<&str>,
+    requested_slot: Option<usize>,
 ) -> Result<(Value, Option<UiContext>)> {
     let start = Instant::now();
     process.begin_snapshot()?;
@@ -560,7 +568,10 @@ fn observe(
         }
         let buttons = array(&r, container + 0x958, 64)?;
         let mut button_output = Vec::new();
-        for button in buttons.iter().take(8) {
+        for button in buttons
+            .iter()
+            .take(if requested_slot.is_some() { 0 } else { 8 })
+        {
             let encoding = type_encoding(&r, base, *button)?;
             let mut value = json!({"type_encoding":encoding,"geometry_verified":false});
             let table = r.u64(*button)?;
@@ -583,7 +594,12 @@ fn observe(
             }
             button_output.push(value);
         }
-        output.push(json!({"slot":index,"container":container_state,"button_count":buttons.len(),"buttons_observed":button_output,"button_sample_limit":8,"input_authorized":false}));
+        let ordinary_selection = if requested_slot == Some(index) {
+            crate::slot_control::observe(&r, base, *widget, view, slots[index], registry)?
+        } else {
+            json!({"binding_verified":false,"reason":"not_requested","input_authorized":false})
+        };
+        output.push(json!({"ordinary_selection_binding":ordinary_selection,"slot":index,"container":container_state,"button_count":buttons.len(),"buttons_observed":button_output,"button_sample_limit":8,"input_authorized":false}));
     }
     let info = technology_info(&r, base, idler, tree, status, registry)?;
     let nodes = if include_nodes {
@@ -619,7 +635,11 @@ fn observe(
     ))
 }
 
-fn observe_target(process: &dyn Process, key: &str) -> Result<Value> {
+fn observe_target(
+    process: &dyn Process,
+    key: &str,
+    include_context: bool,
+) -> Result<(Value, Option<UiContext>)> {
     let start = Instant::now();
     process.begin_snapshot()?;
     let observed = Witnesses {
@@ -643,7 +663,11 @@ fn observe_target(process: &dyn Process, key: &str) -> Result<Value> {
     }
     // Enforce positive own scope before the broader campaign reader traverses
     // country payloads. Repeated tag reads share the same field witnesses.
-
+    let campaign = if include_context {
+        Some(game::context_from_reader(&r, base)?)
+    } else {
+        None
+    };
     let index = i32::from_le_bytes(
         r.array_entry(gs + 0x340, tag as usize, 4)?
             .try_into()
@@ -774,12 +798,36 @@ fn observe_target(process: &dyn Process, key: &str) -> Result<Value> {
     };
     let (end_calls, end_bytes) = observed.finish()?;
     process.check()?;
-    Ok(
+    let context = campaign.map(|campaign| UiContext {
+        campaign,
+        anchors: [country, status, registry, manager, view, tree],
+        slots,
+    });
+    Ok((
         json!({"source":"native own research node detail","build_id":game::BUILD_ID,"owned":true,"id":key,
         "validation_scope":"requested_node_with_complete_current_record_ownership","full_gui_model_validated":false,
         "detail":detail,"own_info_postcondition":{"matching_locally_visible_count":visible,"requested_detail_locally_visible":visible==1,"fresh_transition_verified":false,"ordinary_research_button":ordinary},
         "selected_slot":selected_index,"client_rectangle_available":false,"effective_routing_verified":false,"input_authorized":false,"observation_paused_game":false,
         "freshness":{"observed_unix_ms":SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),"elapsed_ms":start.elapsed().as_secs_f64()*1000.0,"read_calls_kind":"logical_read_requests","read_calls":r.calls.get()+end_calls as u64,"read_bytes":r.bytes.get()+end_bytes}}),
+        context,
+    ))
+}
+
+/// Targeted output only; full own panel model and final witnesses remain shared.
+pub fn slot_control_snapshot(process: &dyn Process, slot: usize) -> Result<Value> {
+    if slot >= 32 {
+        return Err(Error::new(
+            "invalid_arguments",
+            "Bounded own slot index required",
+        ));
+    }
+    let value = observe(process, false, false, None, Some(slot))?.0;
+    if slot >= value["own_slot_count"].as_u64().unwrap_or(0) as usize {
+        return Err(Error::new("invalid_index", "Own research slot absent"));
+    }
+    let descriptor=value["slots"].as_array().and_then(|v|v.iter().find(|v|v["slot"].as_u64()==Some(slot as u64))).cloned().unwrap_or(json!({"slot":slot,"ordinary_selection_binding":{"binding_verified":false,"reason":"widget_unmaterialized","input_authorized":false}}));
+    Ok(
+        json!({"source":"native own research slot control diagnostic","build_id":game::BUILD_ID,"owned":true,"slot":slot,"slot_identity":"own current array index; not persistent","descriptor":descriptor,"selected_slot":value["selected_slot"],"active_mode_raw":value["active_mode_raw"],"panel":value["panel"],"ordinary_tree":value["ordinary_tree"],"freshness":value["freshness"],"client_rectangle_available":false,"input_authorized":false,"observation_paused_game":false}),
     )
 }
 

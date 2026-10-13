@@ -13,6 +13,8 @@ use crate::{
 };
 use std::sync::{Arc, Mutex, MutexGuard, RwLock, RwLockReadGuard, TryLockError};
 
+mod research;
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct Binding {
@@ -24,6 +26,9 @@ pub(super) struct Binding {
     /// IDs of the owned recording/journal's ordinary singleplayer setup evidence.
     /// This is operator evidence, not a native proof of multiplayer flags.
     menu_evidence_ids: Vec<String>,
+    /// Owner-only opt-in for the narrow recorded client/origin profile.
+    #[serde(default)]
+    research_profile: Option<research::Profile>,
 }
 struct Guard {
     epoch: Epoch,
@@ -54,6 +59,16 @@ impl Guard {
                 result => break result?,
             }
         };
+        self.accept_context(process, &observed)
+    }
+    fn accept_context(&mut self, process: &dyn Process, observed: &ClockContext) -> Result<State> {
+        if self.invalidated || process.identity() != Some(&self.epoch.game) {
+            self.invalidated = true;
+            return Err(Error::new(
+                "input_binding_invalidated",
+                "Owned campaign context is unavailable",
+            ));
+        }
         if observed.playthrough_id != self.playthrough
             || observed.player != self.epoch.player
             || observed.anchors != self.anchors
@@ -76,14 +91,18 @@ impl Guard {
     }
 }
 struct ControlState {
+    // One mutex covers lease, campaign guard and both keyboard/pointer access.
+    // A future ordinary research adapter borrows this exact controller.
+    controls: X11Controls,
     guard: Guard,
     authority: InputAuthority,
     journal: Journal,
+    research: Option<research::Service>,
 }
 pub(super) struct ClockService {
-    controls: X11Controls,
     state: Mutex<ControlState>,
     input_gate: Arc<RwLock<bool>>,
+    research_enabled: bool,
 }
 impl ClockService {
     pub(super) fn bind(
@@ -135,14 +154,19 @@ impl ClockService {
         };
         let authority = InputAuthority::new(binding.controller.clone(), epoch.clone())?;
         let journal = Journal::open(&directory.join("clock-actions.jsonl"))?;
+        let research = binding
+            .research_profile
+            .map(|profile| research::Service::bind(profile, binding.window, display, directory))
+            .transpose()?;
         json_new(
             &directory.join("input-binding.json"),
-            json!({"version":1,"game":binding.game,"controller":binding.controller,"player":binding.player,"window":binding.window,"menu_evidence_ids":binding.menu_evidence_ids,"epoch":epoch,"scope":"ordinary clock keys only","load_generation":"unverified: persisted identity, anchor and timeline checks only"}),
+            json!({"version":1,"game":binding.game,"controller":binding.controller,"player":binding.player,"window":binding.window,"menu_evidence_ids":binding.menu_evidence_ids,"epoch":epoch,"scope":"ordinary clock keys; optional ID research preview","research_profile":binding.research_profile,"load_generation":"unverified: persisted identity, anchor and timeline checks only"}),
         )?;
         Ok(Self {
-            controls,
             input_gate,
+            research_enabled: research.is_some(),
             state: Mutex::new(ControlState {
+                controls,
                 guard: Guard {
                     epoch,
                     anchors: observed.anchors,
@@ -152,6 +176,7 @@ impl ClockService {
                 },
                 authority,
                 journal,
+                research,
             }),
         })
     }
@@ -201,7 +226,7 @@ fn allowed(args: &serde_json::Map<String, Value>, keys: &[&str]) -> Result<()> {
 }
 impl Commands for ClockService {
     fn tools(&self) -> Vec<Value> {
-        vec![
+        let mut tools = vec![
             json!({
                 "name":"hoi4_input_lease",
                 "description":"Exclusive configured-controller lease for ordinary clock input. Acquire uses holder; renew/release use only lease_token, without holder. Status takes only op. Observations do not need a lease.",
@@ -216,18 +241,26 @@ impl Commands for ClockService {
                 }
             }),
             json!({"name":"hoi4_time","description":"Set desired pause or internal speed 0..4 through ordinary stationary keys and fresh memory readback. Supply exactly one target and a stable request_id; uncertain dispatches are never replayed.","inputSchema":{"type":"object","properties":{"paused":{"type":"boolean"},"speed":{"type":"integer","minimum":0,"maximum":4},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["request_id","lease_token"],"additionalProperties":false}}),
-        ]
+        ];
+        if self.research_enabled {
+            tools.push(research::tool());
+        }
+        tools
     }
     fn supports(&self, name: &str) -> bool {
         matches!(name, "hoi4_input_lease" | "hoi4_time")
+            || (name == "hoi4_research_attempt" && self.research_enabled)
     }
     fn capabilities(&self) -> Value {
-        json!({"transport":"ordinary authenticated X11 keys","actions":["set_paused","set_speed"],"lease":"exclusive configured controller","native_posting":false,"cursor_movement":false,"load_generation":"unverified; campaign identity, anchors and observed timeline checked","full_campaign_acceptance":false})
+        json!({"transport":"ordinary authenticated X11 input","actions":["set_paused","set_speed"],"research_preview":{"enabled":self.research_enabled,"scope":"one View or Research stage for selected own empty slot","installed_game_validation":"pending for this owner integration"},"lease":"exclusive configured controller","native_posting":false,"cursor_movement":self.research_enabled,"load_generation":"unverified; campaign identity, anchors and observed timeline checked","full_campaign_acceptance":false})
     }
     fn call(&self, process: &dyn Process, name: &str, arguments: &Value) -> Result<Value> {
         let args = arguments
             .as_object()
             .ok_or_else(|| Error::new("invalid_arguments", "Input arguments must be an object"))?;
+        if name == "hoi4_research_attempt" {
+            return research::call(self, process, args);
+        }
         // Validate all shapes before process access or lease mutation.
         if name == "hoi4_input_lease" {
             let op = string(args, "op")?;
@@ -325,13 +358,28 @@ impl Commands for ClockService {
         };
         drop(input_permit(&self.input_gate)?);
         let mut state = try_state(&self.state)?;
+        if state
+            .research
+            .as_ref()
+            .is_some_and(|r| r.journal.blocks_game(&state.guard.epoch.game))
+        {
+            return Err(Error::new(
+                "action_uncertain",
+                "Unresolved pointer attempt blocks clock input",
+            ));
+        }
         let epoch = state.guard.epoch.clone();
         let deadline = state.authority.authorize(token, &epoch)?;
         state.guard.observe(process)?;
-        let ControlState { guard, journal, .. } = &mut *state;
+        let ControlState {
+            guard,
+            journal,
+            controls,
+            ..
+        } = &mut *state;
         let mut backend = ClockBackend {
             process,
-            controls: &self.controls,
+            controls,
             guard,
             deadline,
             input_gate: &self.input_gate,

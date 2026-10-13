@@ -35,3 +35,12 @@ pub mod economy;
 pub mod research_attempt;
 
 pub mod army;
+
+mod focus_start_binding;
+
+pub mod research_candidate_observation;
+
+pub mod research_stage;
+
+mod focus_node_binding;
+mod slot_control;

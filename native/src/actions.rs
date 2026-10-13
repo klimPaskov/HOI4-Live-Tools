@@ -87,6 +87,13 @@ pub struct Journal {
     poisoned: bool,
 }
 impl Journal {
+    pub(crate) fn blocks_game(&self, game: &Identity) -> bool {
+        self.poisoned
+            || self
+                .receipts
+                .values()
+                .any(|r| r.status == Status::Dispatching && &r.epoch.game == game)
+    }
     /// Private per-session journal. The caller owns its parent directory. File
     /// locking gives a single writer, with automatic release on process exit.
     pub fn open(path: &Path) -> Result<Self> {
@@ -270,11 +277,7 @@ impl Journal {
         }
         // An uncertain command blocks new IDs too; otherwise callers could
         // bypass the replay guard by inventing another request ID.
-        if self
-            .receipts
-            .values()
-            .any(|r| r.status == Status::Dispatching && r.epoch.game == epoch.game)
-        {
+        if self.blocks_game(&epoch.game) {
             return Err(Error::new(
                 "action_uncertain",
                 "Owned process has an unresolved dispatch; input remains quarantined",

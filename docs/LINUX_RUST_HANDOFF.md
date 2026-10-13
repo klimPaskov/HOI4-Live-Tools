@@ -256,3 +256,14 @@ Linux checks (314 substantive), 953 Python tests with 37 skips and compiler/
 protocol checks. It registers no input command. Finish the borrowed lease/gate,
 durable one-stage tokens and bounded readback service, then integrate the owner
 and give the exclusive Luna medium player verified strategic tools.
+
+
+The optional owned research-stage adapter now passes 313 portable/MSRV tests,
+374 actual Linux checks (373 substantive) and 953 Python tests with 37 skips.
+It shares the clock controller and lease, pins witnessed own-slot identities,
+persists one intent per stage and verifies canonical state plus clear input.
+Read-only focus-node and slot-control diagnostics are also integrated. Run one
+fresh immutable recorded Germany game, prepare only the initial own empty slot
+and give Luna medium exclusive input for ID-derived selection/assignment and
+clock advancement. This remains a bounded strategic gate; daily plans, broader
+commands and campaign acceptance are unfinished. Native posting stays quarantined.

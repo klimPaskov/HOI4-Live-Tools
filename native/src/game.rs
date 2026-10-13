@@ -188,7 +188,7 @@ fn snapshot_fields(r: &Reader<'_>, base: u64) -> Result<SnapshotFields> {
         ));
     }
     let tag_id = r.i32(gs + 0x518)?;
-    if !(0..4096).contains(&tag_id) {
+    if !(1..4096).contains(&tag_id) {
         return Err(Error::new("player_unavailable", "Invalid player tag index"));
     }
     let country_index = integer(r.array_entry(gs + 0x340, tag_id as usize, 4)?);
@@ -231,6 +231,12 @@ fn snapshot_fields(r: &Reader<'_>, base: u64) -> Result<SnapshotFields> {
     };
     let technology_status = pointer(r, country + 0xf38)?;
     r.object_type(technology_status, "CTechnologyStatus")?;
+    if r.u64(technology_status + 0x130)? != country || r.i32(technology_status + 0x138)? != tag_id {
+        return Err(Error::new(
+            "invalid_research_owner",
+            "Own research status country and positive tag required",
+        ));
+    }
     let slots = r.pointer_array(technology_status + 0xa0)?;
     if slots.len() > 32 {
         return Err(Error::new(
@@ -242,15 +248,27 @@ fn snapshot_fields(r: &Reader<'_>, base: u64) -> Result<SnapshotFields> {
     let mut slot_tokens = Vec::new();
     for (index, slot) in slots.iter().copied().enumerate() {
         r.object_type(slot, "CResearchSlot")?;
+        if r.u64(slot + 0x10)? != technology_status {
+            return Err(Error::new(
+                "invalid_research_owner",
+                "Own research slot required before active technology",
+            ));
+        }
         let technology = r.u64(slot + 0x18)?;
         slot_tokens.push(technology);
         let id = if technology == 0 {
             Value::Null
         } else {
             r.object_type(technology, "CTechnology")?;
+            if r.u64(technology + 0x158)? != technology_status {
+                return Err(Error::new(
+                    "invalid_research_owner",
+                    "Own active technology required before template payload",
+                ));
+            }
             let template = pointer(r, technology + 0x160)?;
             r.object_type(template, "CTechnologyTemplate")?;
-            json!(r.string(template + 8)?)
+            json!(r.string_bounded(template + 8, 256)?)
         };
         research.push(json!({"slot":index,"researching":id,"progress":null,"days_remaining":null}));
     }
@@ -258,11 +276,17 @@ fn snapshot_fields(r: &Reader<'_>, base: u64) -> Result<SnapshotFields> {
     let historical = r.i32(gs + 0x628)?;
     // Check ownership and anchors at snapshot boundaries, rather than spawning
     // per-field identity probes. A changed observation is refused, never cached.
+    if r.u64(technology_status + 0x130)? != country || r.i32(technology_status + 0x138)? != tag_id {
+        return Err(Error::new("torn_read", "Own research status changed"));
+    }
     let end_slots = r.pointer_array(technology_status + 0xa0)?;
     let mut slots_changed = end_slots != slots;
     if !slots_changed {
         for (slot, token) in slots.iter().zip(slot_tokens) {
-            if r.u64(*slot + 0x18)? != token {
+            if r.u64(*slot + 0x10)? != technology_status
+                || r.u64(*slot + 0x18)? != token
+                || (token != 0 && r.u64(token + 0x158)? != technology_status)
+            {
                 slots_changed = true;
                 break;
             }

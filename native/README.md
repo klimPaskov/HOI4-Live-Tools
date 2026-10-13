@@ -1,6 +1,6 @@
 # Native Rust development preview
 
-Linux-first HOI4 process observations and ordinary clock controls, based on
+Linux-first HOI4 process observations and ordinary controls, based on
 Clausewitz-MCP. This is development source; there is no Rust release or completed
 campaign acceptance yet.
 
@@ -24,7 +24,7 @@ return a capability error. Logs and setup errors go to stderr.
 
 | Platform | Current native support |
 | --- | --- |
-| Linux x86_64 | Owned launch/reconnects, exact-build process reads, bounded waits and optional ordinary clock keys |
+| Linux x86_64 | Owned launch/reconnects, exact-build reads, waits, clock keys and an opt-in research preview |
 | Windows / macOS | Portable protocol and fixtures; native live adapters return explicit unavailable errors |
 
 Three-OS CI validates shared code. It does not establish Windows/macOS live
@@ -76,9 +76,11 @@ anchors do not establish a load-generation token.
 | `hoi4_technology_list` | Canonical loaded technology IDs with filtering/pagination; no eligibility inference |
 | `hoi4_input_geometry` | GUI dimensions, scale, pointer and conditional source-window diagnostics; no click authority |
 | `hoi4_research_ui` | Own slot/widget joins, selected slot, retained Info windows and typed controls |
+| `hoi4_research_slot_control` | One own slot's independently verified callback and control metadata; no input authority |
 | `hoi4_research_node_detail` | One exact own key's binding, raw renderer/cache and typed hierarchy diagnostics |
 | `hoi4_research_nodes` | Paged current own-tree keys and conditional control associations |
 | `hoi4_focus_list` | Own canonical focus keys and selected detail diagnostics; no start authority |
+| `hoi4_focus_node_detail` | One own focus key's current-item/control associations; no geometry or action authority |
 | `hoi4_wait_for` | Server wait, 1–50 seconds, for a date, focus/research changes or research UI predicates |
 
 Catalog queries accept `filter`, `offset` and `limit` (1–100). Research completed
@@ -157,7 +159,21 @@ from authoritative game-state readback.
 The portable research-point library computes conditional Sprite/Text interior
 candidates with explicit scale/profile guards. It does not register input
 commands or grant frame/routing authority. A recorded builder diagnostic verified
-ID-derived selection and assignment; production dispatch remains unfinished.
+ID-derived selection and assignment. An explicit owner profile can now enable
+the bounded `hoi4_research_attempt` preview; its owner integration still needs a
+fresh recorded game before it can count as live command validation.
+Its internal observation adapter checks the requested own key/slot and fresh
+renderer, callback, hierarchy and SDL/X11 associations before candidate maths.
+The owner supplies the reviewed origin profile; player arguments cannot supply
+coordinates. Clock and pointer operations share one controller lock, lease and
+shutdown gate. Intent persists before input; unresolved delivery blocks new IDs
+and stages. Canonical readback plus clear input is required for success; replayed
+receipts are labeled historical. See [preview setup](../docs/OWNED_LINUX_LAUNCHER.md#ordinary-research-preview).
+
+Selected own focus details also expose a bounded start-binding diagnostic. It
+distinguishes the event start callback from the separate no-op listener. This
+metadata grants no action authority; focus selection and start dispatch remain
+unfinished.
 
 The separate Linux pointer library permits one bounded motion/left-button pair
 for a future verified adapter. It pins client/root geometry and ownership,

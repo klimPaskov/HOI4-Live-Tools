@@ -108,12 +108,15 @@ impl Fixture {
         f.object(0x2a000, "CNationalFocusProgress", 0x50100);
         f.word(0x20f38, 0x28000);
         f.object(0x28000, "CTechnologyStatus", 0x50200);
+        f.word(0x28130, 0x20000);
+        f.number(0x28138, 1);
         f.array(0x280a0, 0x3b000, 4);
         f.region(0x3b000, 32);
         for i in 0..4 {
             let a = 0x2c000 + i * 0x100;
             f.region(a, 64);
             f.object(a, "CResearchSlot", 0x50300);
+            f.word(a + 0x10, 0x28000);
             f.word(0x3b000 + i * 8, a);
         }
         f

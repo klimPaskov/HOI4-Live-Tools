@@ -84,7 +84,15 @@ fn unique(values: &[u64]) -> Result<BTreeSet<u64>> {
     }
     Ok(set)
 }
-fn named_start(r: &Reader<'_>, base: u64, window: u64) -> Result<Value> {
+fn named_start(
+    r: &Reader<'_>,
+    base: u64,
+    window: u64,
+    panel: u64,
+    registry: u64,
+    selected_key: &str,
+    visible: bool,
+) -> Result<Value> {
     // Exact CContainerWindow virtual88 uses these paired registries.
     let children = pointers(r, window + 0x9a0, 256)?;
     let (h, data, n) = r.array_header(window + 0x9b8)?;
@@ -113,10 +121,21 @@ fn named_start(r: &Reader<'_>, base: u64, window: u64) -> Result<Value> {
                 ));
             }
             exact(r, *child, base + 0x43470c8)?;
+            if r.u64(child + 0x68)? != registry {
+                return Err(Error::new(
+                    "invalid_focus_owner",
+                    "Named start must belong to own registry before control payload",
+                ));
+            }
             let state = r.i32(child + 0xac)?;
             let flags = u32::from_le_bytes(r.read(child + 0x74, 4)?.try_into().unwrap());
+            let binding = if visible {
+                crate::focus_start_binding::observe(r, base, panel, *child, registry, selected_key)?
+            } else {
+                json!({"available":false,"reason":"detail_not_locally_visible","input_authorized":false})
+            };
             start = Some(
-                json!({"materialized":true,"disabled":state==3,"disabled_state_raw":state,"flags74_raw":flags}),
+                json!({"materialized":true,"disabled":state==3,"disabled_state_raw":state,"flags74_raw":flags,"ordinary_binding":binding}),
             );
         }
     }
@@ -125,11 +144,12 @@ fn named_start(r: &Reader<'_>, base: u64, window: u64) -> Result<Value> {
 /// Caller must open a Process with the verified build/session contract. This
 /// module has no native call or input capability. Pagination bounds output only;
 /// all keys/memberships are validated before a page can be returned.
-pub fn snapshot(
+fn snapshot_model(
     process: &dyn Process,
     offset: usize,
     limit: usize,
     prefix: Option<&str>,
+    requested: Option<&str>,
 ) -> Result<Value> {
     if limit == 0
         || limit > 100
@@ -243,6 +263,13 @@ pub fn snapshot(
             output.push(json!({"key":key}));
         }
     }
+    let node_association = if let Some(key) = requested {
+        Some(crate::focus_node_binding::observe(
+            &r, base, view, registry, &keys, key,
+        )?)
+    } else {
+        None
+    };
     let panels = pointers(&r, view + 0x1180, 32)?;
     unique(&panels)?;
     let mut details = Vec::new();
@@ -266,6 +293,10 @@ pub fn snapshot(
             }
             keys.get(&selected).cloned()
         };
+        if requested.is_some_and(|target| key.as_deref() != Some(target)) {
+            details.push(json!({"selected_key":key,"window_payload_read":false}));
+            continue;
+        }
         let window = r.u64(panel + 0x7c8)?;
         let observed = if window == 0 {
             json!({"materialized":false,"detail_visibility_flag":null,"conservative_container_visibility":null,"start":{"materialized":false}})
@@ -284,7 +315,15 @@ pub fn snapshot(
                 // null selection supplies no binding for a start control.
                 json!({"materialized":false,"binding":"unavailable: no selected focus"})
             } else {
-                named_start(&r, base, window)?
+                named_start(
+                    &r,
+                    base,
+                    window,
+                    panel,
+                    registry,
+                    key.as_deref().unwrap(),
+                    visible && animation_clear,
+                )?
             };
             json!({"materialized":true,"detail_visibility_flag":visible,"conservative_container_visibility":visible&&animation_clear,"start":control})
         };
@@ -295,6 +334,32 @@ pub fn snapshot(
     let (end_calls, end_bytes) = w.finish()?;
     process.check()?;
     Ok(
-        json!({"source":"native own focus catalog and UI diagnostics","build_id":game::BUILD_ID,"owned":true,"catalog_count":own.len(),"filtered_count":total,"offset":offset,"limit":limit,"next_offset":if offset.saturating_add(page.len())<total {Some(offset+page.len())}else{None},"focuses":page,"details":details,"numeric_ids_available":false,"eligibility_available":false,"input_authorized":false,"branch_visibility_available":false,"observation_paused_game":false,"freshness":{"observed_unix_ms":SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),"elapsed_ms":start.elapsed().as_secs_f64()*1000.0,"read_calls":r.calls.get()+end_calls as u64,"read_bytes":r.bytes.get()+end_bytes}}),
+        json!({"source":"native own focus catalog and UI diagnostics","build_id":game::BUILD_ID,"owned":true,"catalog_count":own.len(),"filtered_count":total,"offset":offset,"limit":limit,"next_offset":if offset.saturating_add(page.len())<total {Some(offset+page.len())}else{None},"focuses":page,"details":details,"node_association":node_association,"numeric_ids_available":false,"eligibility_available":false,"input_authorized":false,"branch_visibility_available":false,"observation_paused_game":false,"freshness":{"observed_unix_ms":SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),"elapsed_ms":start.elapsed().as_secs_f64()*1000.0,"read_calls":r.calls.get()+end_calls as u64,"read_bytes":r.bytes.get()+end_bytes}}),
     )
+}
+
+pub fn snapshot(
+    process: &dyn Process,
+    offset: usize,
+    limit: usize,
+    prefix: Option<&str>,
+) -> Result<Value> {
+    snapshot_model(process, offset, limit, prefix, None)
+}
+/// Exact own public focus key, read-only current item/control association.
+pub fn node_detail(process: &dyn Process, key: &str) -> Result<Value> {
+    validate_key(key)?;
+    snapshot_model(process, 0, 1, Some(key), Some(key))
+}
+pub(crate) fn validate_key(key: &str) -> Result<()> {
+    if key.is_empty()
+        || key.len() > 128
+        || !key.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
+    {
+        return Err(Error::new(
+            "invalid_argument",
+            "Exact bounded focus key required",
+        ));
+    }
+    Ok(())
 }

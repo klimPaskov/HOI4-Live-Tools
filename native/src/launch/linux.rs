@@ -780,8 +780,9 @@ fn service_client(stream: UnixStream, shared: Arc<Shared>) {
                     &shared.directory,
                     shared.input_gate.clone(),
                 )?;
+                let capabilities = crate::protocol::Commands::capabilities(&service);
                 *commands = Some(Arc::new(service));
-                Ok(json!({"bound":true,"scope":"ordinary clock keys only"}))
+                Ok(json!({"bound":true,"capabilities":capabilities}))
             }
             Some("close") | Some("close_window") => {
                 let kind = if request.get("op") == Some(&json!("close_window")) {

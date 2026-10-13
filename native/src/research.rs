@@ -6,6 +6,7 @@ use crate::{
     game,
     memory::Reader,
     platform::Process,
+    research_ui::Witnesses,
 };
 use serde_json::{json, Value};
 use std::{
@@ -134,7 +135,34 @@ impl Model<'_, '_> {
 pub fn snapshot(process: &dyn Process) -> Result<Value> {
     page(process, 0, 100)
 }
+/// Internal ownership evidence; never serialize these process-local addresses
+/// as public action IDs. The owner must compare this context with its binding.
+#[doc(hidden)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ResearchContext {
+    pub campaign: game::ClockContext,
+    pub own: [u64; 2],
+    pub slots: Vec<u64>,
+}
+/// Canonical own slots and campaign evidence from one witnessed process bracket.
+/// All completed membership is validated; its returned page is bounded to one.
+#[doc(hidden)]
+pub fn owned_snapshot(process: &dyn Process) -> Result<(Value, ResearchContext)> {
+    let (value, context) = observe(process, 0, 1, true)?;
+    Ok((
+        value,
+        context.ok_or_else(|| Error::new("research_unavailable", "Owned context missing"))?,
+    ))
+}
 pub fn page(process: &dyn Process, offset: usize, limit: usize) -> Result<Value> {
+    Ok(observe(process, offset, limit, false)?.0)
+}
+fn observe(
+    process: &dyn Process,
+    offset: usize,
+    limit: usize,
+    include_context: bool,
+) -> Result<(Value, Option<ResearchContext>)> {
     if offset > 8192 || !(1..=100).contains(&limit) {
         return Err(Error::new(
             "invalid_arguments",
@@ -143,7 +171,13 @@ pub fn page(process: &dyn Process, offset: usize, limit: usize) -> Result<Value>
     }
     let start = Instant::now();
     process.begin_snapshot()?;
-    let r = Reader::new(process);
+    // The public page keeps its existing direct reader/readbacks. Only the
+    // internal owner path brackets context and body with production witnesses.
+    let observed = include_context.then(|| Witnesses::new(process));
+    let r = match observed.as_ref() {
+        Some(witnesses) => Reader::new(witnesses),
+        None => Reader::new(process),
+    };
     let base = process.image_base();
     let gs = r.u64(base + 0x44086a8)?;
     let idler = r.u64(base + 0x44085f8)?;
@@ -284,19 +318,47 @@ pub fn page(process: &dyn Process, offset: usize, limit: usize) -> Result<Value>
             "Own research model anchors changed",
         ));
     }
+    // Validate the entire canonical own body before the broader context reader
+    // can traverse active technology/template strings. Shared witnesses also
+    // refuse changed slot/owner/header bytes before a new payload is followed.
+    let campaign = include_context
+        .then(|| game::context_from_reader(&r, base))
+        .transpose()?;
+    if campaign
+        .as_ref()
+        .is_some_and(|c| c.anchors != [gs, idler, db])
+    {
+        return Err(Error::new(
+            "torn_read",
+            "Research body and campaign roots differ",
+        ));
+    }
+    let (end_calls, end_bytes) = observed
+        .as_ref()
+        .map(Witnesses::finish)
+        .transpose()?
+        .unwrap_or((0, 0));
     process.check()?;
+    let context = campaign.map(|campaign| ResearchContext {
+        campaign,
+        own: [country, status],
+        slots: slots.pointers,
+    });
     completed_output.sort_by(|a, b| a["id"].as_str().cmp(&b["id"].as_str()));
     let count = completed_output.len();
     let page: Vec<_> = completed_output.iter().skip(offset).take(limit).collect();
     let next = offset.saturating_add(page.len());
-    Ok(json!({
-        "source":"native own research","build_id":game::BUILD_ID,"owned":true,
-        "researched":page,"researched_count":count,"offset":offset,
-        "next_offset":if next < count { Some(next) } else { None },"slots":slot_output,
-        "completion_meaning":"engine completed-membership array",
-        "progress_raw_units":"unverified; signed engine counter",
-        "eligibility":"unavailable","observation_paused_game":false,
-        "freshness":{"observed_unix_ms":SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),
-            "elapsed_ms":start.elapsed().as_secs_f64()*1000.0,"read_calls":r.calls.get(),"read_bytes":r.bytes.get()}
-    }))
+    Ok((
+        json!({
+            "source":"native own research","build_id":game::BUILD_ID,"owned":true,
+            "researched":page,"researched_count":count,"offset":offset,
+            "next_offset":if next < count { Some(next) } else { None },"slots":slot_output,
+            "completion_meaning":"engine completed-membership array",
+            "progress_raw_units":"unverified; signed engine counter",
+            "eligibility":"unavailable","observation_paused_game":false,
+            "freshness":{"observed_unix_ms":SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),
+                "elapsed_ms":start.elapsed().as_secs_f64()*1000.0,"read_calls":r.calls.get()+end_calls as u64,"read_bytes":r.bytes.get()+end_bytes}
+        }),
+        context,
+    ))
 }

@@ -428,6 +428,13 @@ impl LeftClick<'_> {
     /// One attempt, including refusal. Never retry, park, focus, compensate or
     /// release a possibly held button after uncertain transport/ownership.
     pub fn dispatch_once(&mut self) -> PointerDispatch {
+        self.dispatch_once_checked(|| Ok(()))
+    }
+    /// Read-only stage check after preparation, before possible pointer input.
+    pub fn dispatch_once_checked(
+        &mut self,
+        mut before_queue: impl FnMut() -> Result<()>,
+    ) -> PointerDispatch {
         if self.attempted {
             return PointerDispatch {
                 delivery: self.delivery,
@@ -486,6 +493,7 @@ impl LeftClick<'_> {
             // queueing is still enabled. No pointer bytes reach the socket.
             connection.flush().map_err(xerror)?;
             // Nothing above this point delivered pointer input.
+            before_queue()?;
             connection.stream().armed.set(true);
             let delivery = (|| -> Result<()> {
                 connection.stream().send_queue()?;

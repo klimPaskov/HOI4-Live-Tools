@@ -124,6 +124,7 @@ impl Fake {
         s.int(WIN + 0x9c0, 1);
         s.int(WIN + 0x9c4, 1);
         s.string(0x216000, "start");
+        s.word(BUTTON + 0x68, GUI);
         s
     }
     fn result(&self) -> Result<serde_json::Value> {
@@ -394,4 +395,355 @@ fn changed_selection_and_control_state_on_final_witness_refused() {
         f.torn = Some(address);
         assert_eq!(f.result().unwrap_err().code, "torn_read");
     }
+}
+
+impl Fake {
+    fn start_binding(&mut self) {
+        self.word(BUTTON + 0x80, 0x4347488);
+        self.word(BUTTON + 0x88, 0x220000);
+        self.word(BUTTON + 0x90, 0x220020);
+        self.int(BUTTON + 0x98, 2);
+        self.region(0x220000, 64);
+        self.word(0x220000, PANEL + 0x2a8);
+        self.word(0x220010, 0x220020);
+        self.word(0x220020, PANEL + 0x530);
+        self.word(0x220028, 0x220000);
+        for (glue, off, cap, manager, invoker, member) in [
+            (
+                PANEL + 0x2a8,
+                0x28,
+                0x221000,
+                0x283a060,
+                0x283a030,
+                0x282ffe0,
+            ),
+            (
+                PANEL + 0x530,
+                0x228,
+                0x221020,
+                0x283a100,
+                0x283a0d0,
+                0x2839080,
+            ),
+        ] {
+            self.word(glue, 0x4302598);
+            self.word(glue + off, cap);
+            self.word(glue + off + 0x10, manager);
+            self.word(glue + off + 0x18, invoker);
+            self.region(cap, 24);
+            self.word(cap, member);
+            self.word(cap + 0x10, PANEL);
+        }
+        self.word(BUTTON + 0xe8, 0x222000);
+        self.region(0x222000, 0x140);
+        self.word(0x222000, 0x43593d8);
+        self.word(0x222138, BUTTON);
+        self.word(0x43593c8, 0);
+        self.word(0x43593d0, 0x43596f8);
+        self.region(0x43596f8, 16);
+        self.word(0x4359700, 0x350e700);
+        self.region(0x350e700, 128);
+        self.put(0x350e700, b"11CTextSprite");
+    }
+    fn binding(&self) -> serde_json::Value {
+        self.result().unwrap()["details"][0]["window"]["start"]["ordinary_binding"].clone()
+    }
+}
+#[test]
+fn focus_start_event_and_noop_two_listeners_verified_no_authority() {
+    let mut f = Fake::new();
+    f.start_binding();
+    let v = f.binding();
+    assert_eq!(v["available"], true);
+    assert_eq!(v["callback_route_verified"], true);
+    assert_eq!(v["selected_own_key"], "GER_rhineland");
+    assert_eq!(v["input_authorized"], false);
+    assert_eq!(v["renderer_type_encoding"], "11CTextSprite");
+    assert!(f.untouched(0x222168, 8));
+}
+#[test]
+fn focus_start_foreign_button_and_capture_owners_refused_before_payload() {
+    let mut f = Fake::new();
+    f.start_binding();
+    f.word(BUTTON + 0x68, 0xdead0000);
+    assert_eq!(f.result().unwrap_err().code, "invalid_focus_owner");
+    assert!(f.untouched(BUTTON + 0x80, 8));
+    assert!(f.untouched(BUTTON + 0xac, 4));
+    let mut f = Fake::new();
+    f.start_binding();
+    f.word(0x221010, 0xdead0000);
+    assert_eq!(f.result().unwrap_err().code, "invalid_focus_owner");
+    assert!(f.untouched(0x221000, 8));
+    assert!(f.untouched(BUTTON + 0xe8, 8));
+}
+#[test]
+fn focus_start_wrong_event_variant_and_unknown_target_no_capture_reads() {
+    let mut f = Fake::new();
+    f.start_binding();
+    f.word(PANEL + 0x2a8 + 0x38, 0x2916700);
+    assert_eq!(f.binding()["reason"], "event_variant_unavailable");
+    assert!(f.untouched(0x221000, 24));
+    let mut f = Fake::new();
+    f.start_binding();
+    f.word(0x220020, 0xdead0000);
+    assert_eq!(f.binding()["callback_route_verified"], false);
+    assert!(f.untouched(0xdead0000, 8));
+    assert!(f.untouched(PANEL + 0x2a8, 8));
+}
+#[test]
+fn focus_start_listener_bounds_removed_override_and_member_variant() {
+    let mut f = Fake::new();
+    f.start_binding();
+    f.int(BUTTON + 0x98, 17);
+    assert_eq!(f.result().unwrap_err().code, "invalid_focus_binding");
+    let mut f = Fake::new();
+    f.start_binding();
+    f.put(0x220018, &[1]);
+    assert_eq!(f.result().unwrap_err().code, "invalid_focus_binding");
+    let mut f = Fake::new();
+    f.start_binding();
+    f.word(BUTTON + 0xa0, 0xdead0000);
+    assert_eq!(f.binding()["reason"], "observer_override_unavailable");
+    assert!(f.untouched(0x220000, 32));
+    let mut f = Fake::new();
+    f.start_binding();
+    f.word(0x221008, 8);
+    assert_eq!(f.binding()["reason"], "event_member_unavailable");
+    assert!(f.untouched(BUTTON + 0xe8, 8));
+}
+#[test]
+fn focus_start_unknown_renderer_metadata_only_and_hidden_no_binding() {
+    let mut f = Fake::new();
+    f.start_binding();
+    f.word(0x222000, 0x43593e0);
+    f.word(0x43593d8, 0);
+    f.word(0x43593d0 + 8, 0x43596f8);
+    // malformed/unknown primary metadata explicitly unavailable, no layout payload.
+    let v = f.binding();
+    assert_eq!(v["callback_route_verified"], true);
+    assert_eq!(v["renderer_control_join_verified"], false);
+    assert!(f.untouched(0x222138, 8));
+    let mut f = Fake::new();
+    f.start_binding();
+    f.put(WIN + 0xa5, &[0]);
+    assert_eq!(f.binding()["reason"], "detail_not_locally_visible");
+    assert!(f.untouched(BUTTON + 0x80, 8));
+}
+#[test]
+fn focus_start_each_structural_capture_renderer_byte_final_witness() {
+    for a in [
+        BUTTON + 0x68,
+        BUTTON + 0x80,
+        BUTTON + 0xa0,
+        BUTTON + 0x98,
+        0x220000,
+        0x220028,
+        0x220018,
+        PANEL + 0x2a8,
+        PANEL + 0x2e0,
+        PANEL + 0x2e8,
+        0x221010,
+        0x221000,
+        PANEL + 0x768,
+        PANEL + 0x770,
+        0x221030,
+        0x221020,
+        BUTTON + 0xe8,
+        0x222138,
+    ] {
+        let mut f = Fake::new();
+        f.start_binding();
+        f.torn = Some(a);
+        assert_eq!(f.result().unwrap_err().code, "torn_read", "{a:x}");
+    }
+}
+#[test]
+fn focus_start_extra_callback_variant_unavailable_before_capture() {
+    let mut f = Fake::new();
+    f.start_binding();
+    f.word(PANEL + 0x2a8 + 0x18, 0xdead0000);
+    assert_eq!(
+        f.binding()["reason"],
+        "additional_event_variant_unavailable"
+    );
+    assert!(f.untouched(0x221000, 24));
+    assert!(f.untouched(0xdead0000, 8));
+}
+
+impl Fake {
+    fn focus_nodes(&mut self) {
+        self.array(VIEW + 0x1138, 0x230000, &[0x231000]);
+        self.region(0x231000, 0x2d0);
+        self.word(0x231000, 0x4249b90);
+        self.word(0x2312b0, VIEW);
+        self.word(0x231020, F);
+        self.word(0x231010, 0x232000);
+        self.region(0x232000, 0xf00);
+        self.word(0x232000, 0x4347d58);
+        self.word(0x232098, GUI);
+        self.array(0x2329a0, 0x233000, &[0x234000]);
+        self.region(0x2329b8, 16);
+        self.word(0x2329b8, 0x233100);
+        self.int(0x2329c0, 1);
+        self.int(0x2329c4, 1);
+        self.string(0x233100, "symbol");
+        self.word(0x43470b8, 0);
+        self.word(0x43470c0, 0x4357000);
+        self.region(0x4357000, 16);
+        self.word(0x4357008, 0x350f000);
+        self.region(0x350f000, 128);
+        self.put(0x350f000, b"15CButtonStandard");
+        self.word(0x4346b00, 1);
+        self.region(0x234000, 0x110);
+        self.word(0x234000, 0x43470c8);
+        self.word(0x234068, GUI);
+        self.word(0x2312b8, 0x234000);
+        self.word(0x234080, 0x4347488);
+        self.region(0x235000, 32);
+        self.word(0x234088, 0x235000);
+        self.word(0x234090, 0x235000);
+        self.int(0x234098, 1);
+        self.word(0x235000, 0x231028);
+        self.word(0x231028, 0x424a860);
+        for (off, cap, member) in [(8, 0x236000, 0x150b440), (0x148, 0x236020, 0x150b5f0)] {
+            self.region(cap, 24);
+            self.word(cap, member);
+            self.word(cap + 0x10, 0x231000);
+            self.word(0x231028 + off, cap);
+            self.word(0x231028 + off + 0x10, 0x1527740);
+            self.word(0x231028 + off + 0x18, 0x1527710);
+        }
+    }
+    fn node_result(&self) -> Result<serde_json::Value> {
+        own_focus::node_detail(self, "GER_rhineland")
+    }
+}
+#[test]
+fn focus_exact_node_key_complete_join_and_ordinary_callbacks_no_input() {
+    let mut f = Fake::new();
+    f.focus_nodes();
+    let v = f.node_result().unwrap();
+    let n = &v["node_association"];
+    assert_eq!(n["materialized"], true);
+    assert_eq!(n["controls"][0]["binding_verified"], true);
+    assert_eq!(n["input_authorized"], false);
+    assert_eq!(n["requested_key"], "GER_rhineland");
+    assert!(f.untouched(0x231030 + 0x1d0, 8));
+}
+#[test]
+fn focus_nodes_wrong_later_owner_refuses_before_target_gui() {
+    let mut f = Fake::new();
+    f.focus_nodes();
+    f.array(VIEW + 0x1138, 0x230000, &[0x231000, 0x237000]);
+    f.region(0x237000, 0x2d0);
+    f.word(0x237000, 0x4249b90);
+    f.word(0x2372b0, 0xdead0000);
+    assert_eq!(f.node_result().unwrap_err().code, "foreign_focus_scope");
+    assert!(f.untouched(0x231010, 8));
+    assert!(f.untouched(0x237020, 8));
+}
+#[test]
+fn focus_nodes_duplicate_requested_and_foreign_definition_refuse() {
+    let mut f = Fake::new();
+    f.focus_nodes();
+    f.array(VIEW + 0x1138, 0x230000, &[0x231000, 0x237000]);
+    f.region(0x237000, 0x2d0);
+    f.word(0x237000, 0x4249b90);
+    f.word(0x2372b0, VIEW);
+    f.word(0x237020, F);
+    assert_eq!(f.node_result().unwrap_err().code, "ambiguous_focus_node");
+    assert!(f.untouched(0x231010, 8));
+    f.word(0x237020, 0xdead0000);
+    assert_eq!(f.node_result().unwrap_err().code, "invalid_focus_node");
+    assert!(f.untouched(0xdead0000, 8));
+}
+#[test]
+fn focus_nodes_unsupported_control_and_callback_variants_metadata_only() {
+    let mut f = Fake::new();
+    f.focus_nodes();
+    f.word(0x234000, 0x4346b10);
+    assert_eq!(
+        f.node_result().unwrap()["node_association"]["controls"][0]["binding_verified"],
+        false
+    );
+    assert!(f.untouched(0x234068, 8));
+    let mut f = Fake::new();
+    f.focus_nodes();
+    f.word(0x231040, 0x2916700);
+    assert_eq!(
+        f.node_result().unwrap()["node_association"]["controls"][0]["binding_verified"],
+        false
+    );
+    assert!(f.untouched(0x236000, 24));
+}
+#[test]
+fn focus_nodes_callback_owner_foreign_and_symbol_alias_refuse() {
+    let mut f = Fake::new();
+    f.focus_nodes();
+    f.word(0x236010, 0xdead0000);
+    assert_eq!(f.node_result().unwrap_err().code, "invalid_focus_owner");
+    assert!(f.untouched(0x236000, 8));
+    let mut f = Fake::new();
+    f.focus_nodes();
+    f.word(0x2312b8, 0xdead0000);
+    assert_eq!(f.node_result().unwrap_err().code, "invalid_focus_node");
+    assert!(f.untouched(0x235000, 32));
+}
+#[test]
+fn focus_nodes_final_catalog_record_and_callback_witnesses() {
+    for a in [
+        VIEW + 0x1138,
+        0x230000,
+        0x231000,
+        0x2312b0,
+        0x231020,
+        0x231010,
+        0x232098,
+        0x233000,
+        0x2312b8,
+        0x235000,
+        0x231040,
+        0x236010,
+        F + 0x18,
+    ] {
+        let mut f = Fake::new();
+        f.focus_nodes();
+        f.torn = Some(a);
+        assert_eq!(f.node_result().unwrap_err().code, "torn_read", "{a:x}");
+    }
+}
+#[test]
+fn focus_node_query_noop_snapshot_path_and_exact_key_refusal() {
+    let f = Fake::new();
+    assert!(f.result().unwrap()["node_association"].is_null());
+    assert!(f.untouched(VIEW + 0x1138, 16));
+    let f = Fake::new();
+    assert_eq!(
+        own_focus::node_detail(&f, "GER_rhine").unwrap_err().code,
+        "focus_unavailable"
+    );
+    assert!(f.untouched(VIEW + 0x1138, 16));
+}
+#[test]
+fn focus_nodes_valid_unrelated_item_never_reads_its_gui_payload() {
+    let mut f = Fake::new();
+    f.focus_nodes();
+    f.region(0x238000, 0x1800);
+    f.word(0x238000, 0x42024d0);
+    f.word(0x238160, TREE);
+    f.string(0x238018, "GER_other");
+    f.array(TREE + 0x30, 0x212000, &[F, 0x238000]);
+    f.array(DB + 0x58, 0x213000, &[F, 0x238000]);
+    f.array(VIEW + 0x1138, 0x230000, &[0x231000, 0x237000]);
+    f.region(0x237000, 0x2d0);
+    f.word(0x237000, 0x4249b90);
+    f.word(0x2372b0, VIEW);
+    f.word(0x237020, 0x238000);
+    f.word(0x237010, 0xdead0000);
+    assert_eq!(
+        f.node_result().unwrap()["node_association"]["current_item_count"],
+        2
+    );
+    assert!(f.untouched(0x237010, 8));
+    assert!(f.untouched(0xdead0000, 8));
 }

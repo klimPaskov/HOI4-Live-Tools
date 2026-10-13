@@ -1195,3 +1195,30 @@ Python passed **953 tests, 37 skipped**, in 22.069 seconds; formatting, host/Lin
 Clippy, MSRV Linux all-target compilation and protocol smoke passed. Fixtures
 remain separate from run 018's earlier immutable binary. Next integrate leases,
 durable one-attempt tokens and bounded canonical verification before Luna play.
+
+
+## Owned ordinary research preview fixture gate
+
+The assembled Rust owner now optionally registers a one-stage ID-based research
+preview for the corroborated 512×288 builtin client profile. It borrows the clock
+controller, lease and shutdown gate; routing never waits for the transaction
+mutex. Fresh witnessed research/UI/candidate contexts are joined by own status
+and full slot identities, pinned for the attempt. Ownership is checked before
+active technology payloads. A final read-only stage check follows X11 preparation.
+Durable intent precedes possible input; unknown delivery gets bounded canonical
+readback without another event. Clear input is required before terminal success,
+and historical receipts are labeled. No external callback or engine post occurs.
+
+Read-only focus-node and requested-slot callback diagnostics use independently
+proved class-specific bindings. They grant no geometry or input authority.
+Review caught and fixed deadline, receipt-transition, capacity, nullable-window,
+context-join, scope-pin and guard-order gaps. Fixture-only owner omissions and
+an incorrect mutation length were corrected without weakening guards.
+
+Portable and Rust 1.86 suites each passed **313 tests**. Optimized actual Linux
+passed **374 reported checks** (373 substantive and one inert helper), including
+zero-event final-check refusal and all five isolated X11 cases. Python passed
+**953 tests, 37 skipped**, in 20.619 seconds; host Clippy, MSRV Linux compilation
+and stdio smoke passed. These are fixture gates. The next fresh immutable
+recorded game must verify this owner adapter with exclusive Luna medium input;
+no clean two-year run or full campaign is established.

@@ -50,12 +50,14 @@ fn stdio_is_json_and_notifications_have_no_reply() {
             "hoi4_overview",
             "hoi4_research",
             "hoi4_input_geometry",
+            "hoi4_research_slot_control",
             "hoi4_research_ui",
             "hoi4_army",
             "hoi4_economy",
             "hoi4_research_node_detail",
             "hoi4_research_nodes",
             "hoi4_focus_list",
+            "hoi4_focus_node_detail",
             "hoi4_technology_list",
             "hoi4_wait_for"
         ]

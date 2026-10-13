@@ -25,12 +25,14 @@ fn tools(commands: Option<&dyn Commands>) -> Value {
         {"name":"hoi4_overview","description":"Fresh owned-country process snapshot. Pure bounded reads; never pauses.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}},
         {"name":"hoi4_research","description":"Fresh own completed technology IDs with bounded pagination, and active raw research counters. Progress units, days remaining and eligibility remain unverified. Pure reads; never pauses.","inputSchema":{"type":"object","properties":{"offset":{"type":"integer","minimum":0,"maximum":8192},"limit":{"type":"integer","minimum":1,"maximum":100}},"additionalProperties":false}},
         {"name":"hoi4_input_geometry","description":"Read-only own GUI pointer, dimensions and scale diagnostics. Does not prove client origin, control geometry or click authorization.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}},
+        {"name":"hoi4_research_slot_control","description":"One own research slot by current array index: conditional ordinary callback binding and raw typed renderer diagnostics. No guessed Background name, coordinates or input authorization.","inputSchema":{"type":"object","properties":{"slot":{"type":"integer","minimum":0,"maximum":31}},"required":["slot"],"additionalProperties":false}},
         {"name":"hoi4_research_ui","description":"Bounded own research slot widgets, selected slot, canonical technology Info windows, named ordinary research button state and exact render diagnostics. No eligibility, hit routing or input authorization.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}},
         {"name":"hoi4_army","description":"Bounded own-country divisions with observation-scoped full handles, selected own location joins and raw signed strength/organisation. No persistent IDs, normalized units, enemies or actions.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}},
         {"name":"hoi4_economy","description":"Own-country named factory trigger counts, civilian project capacity and signed fixed-point political power. Pure reads; UI totals, stability, war support and shortages unavailable.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}},
         {"name":"hoi4_research_node_detail","description":"One exact own current technology key: complete current-record ownership checks, target-only raw renderer/hierarchy and own detail-state diagnostics. Unrelated GUI is outside scope; no client rectangle or input authorization.","inputSchema":{"type":"object","properties":{"technology_id":{"type":"string","minLength":1,"maxLength":256}},"required":["technology_id"],"additionalProperties":false}},
         {"name":"hoi4_research_nodes","description":"Current own-tree nodes joined to public technology keys and conditional ordinary-control diagnostics. Full model validated before prefix filtering/pagination; default page 25. Visibility, eligibility and click routing unavailable. Pure reads; never pauses.","inputSchema":{"type":"object","properties":{"filter":{"type":"string","maxLength":128},"offset":{"type":"integer","minimum":0,"maximum":512},"limit":{"type":"integer","minimum":1,"maximum":100}},"additionalProperties":false}},
         {"name":"hoi4_focus_list","description":"Bounded own canonical focus keys and own selected detail windows. All own memberships and keys validated before pagination; branch visibility, eligibility and input authorization unavailable. Pure reads; never pauses.","inputSchema":{"type":"object","properties":{"filter":{"type":"string","maxLength":128},"offset":{"type":"integer","minimum":0,"maximum":4096},"limit":{"type":"integer","minimum":1,"maximum":100}},"additionalProperties":false}},
+        {"name":"hoi4_focus_node_detail","description":"Exact own focus key joined to complete current-item ownership and only the requested control/callback metadata. No input, geometry or eligibility authority.","inputSchema":{"type":"object","properties":{"focus_id":{"type":"string","minLength":1,"maxLength":128}},"required":["focus_id"],"additionalProperties":false}},
         {"name":"hoi4_technology_list","description":"Canonical loaded public technology IDs with bounded filtering/pagination. Catalog membership does not imply player research eligibility. Pure reads; never pauses.","inputSchema":{"type":"object","properties":{"filter":{"type":"string","maxLength":128},"offset":{"type":"integer","minimum":0,"maximum":8192},"limit":{"type":"integer","minimum":1,"maximum":100}},"additionalProperties":false}},
         {"name":"hoi4_wait_for","description":"Bounded server wait for own focus/research change, game date, or research UI view predicates and optional selected own slot. UI matches do not authorize input. Never pauses.","inputSchema":{"type":"object","properties":{"timeout_seconds":{"type":"integer","minimum":1,"maximum":50},"until_date":{"type":"array","items":{"type":"integer"},"minItems":3,"maxItems":3},"until_research_ui":{"type":"object","properties":{"view":{"type":"string","enum":["panel","tree"]},"selected_slot":{"type":"integer","minimum":0,"maximum":31}},"required":["view"],"additionalProperties":false}},"additionalProperties":false}}
     ]});
@@ -256,7 +258,7 @@ impl Server {
             .ok_or_else(|| Error::new("invalid_arguments", "Tool arguments must be an object"))?;
         match name {
             "hoi4_capabilities" if object.is_empty() => Ok(
-                json!({"runtime":"rust","platform":std::env::consts::OS,"owned_session_bound":self.process.is_some(),"unavailable":self.unavailable,"observations":["own_division_snapshot_identifiers","own_economy_trigger_counts","own_focus","own_research","clock","bounded_wait","technology_definitions","gui_input_diagnostics","own_research_ui_diagnostics","own_current_research_nodes","own_research_node_detail_diagnostics","own_focus_catalog_ui"],"commands":commands.map(|c| c.capabilities()).unwrap_or_else(|| json!("unavailable: no verified input binding")),"native_transactions":"unavailable: failed posting path quarantined","default_mode":"FAIR","mod_qa":"separate; unavailable in this runtime","windows_macos":"unverified native adapters"}),
+                json!({"runtime":"rust","platform":std::env::consts::OS,"owned_session_bound":self.process.is_some(),"unavailable":self.unavailable,"observations":["own_research_slot_callback_diagnostics","own_division_snapshot_identifiers","own_economy_trigger_counts","own_focus","own_research","clock","bounded_wait","technology_definitions","gui_input_diagnostics","own_research_ui_diagnostics","own_current_research_nodes","own_research_node_detail_diagnostics","own_focus_catalog_ui"],"commands":commands.map(|c| c.capabilities()).unwrap_or_else(|| json!("unavailable: no verified input binding")),"native_transactions":"unavailable: failed posting path quarantined","default_mode":"FAIR","mod_qa":"separate; unavailable in this runtime","windows_macos":"unverified native adapters"}),
             ),
             "hoi4_overview" if object.is_empty() => self.overview(),
             "hoi4_research" => {
@@ -270,6 +272,18 @@ impl Server {
                 research::page(self.process()?, offset, limit)
             }
             "hoi4_input_geometry" if object.is_empty() => gui::input_geometry(self.process()?),
+            "hoi4_research_slot_control" => {
+                if object.len() != 1 || !object.contains_key("slot") {
+                    return Err(Error::new(
+                        "invalid_arguments",
+                        "One own slot argument required",
+                    ));
+                }
+                let slot = object["slot"].as_u64().filter(|v| *v < 32).ok_or_else(|| {
+                    Error::new("invalid_arguments", "Bounded own slot integer required")
+                })?;
+                research_ui::slot_control_snapshot(self.process()?, slot as usize)
+            }
             "hoi4_research_ui" => {
                 if !object.is_empty() {
                     return Err(Error::new(
@@ -345,6 +359,19 @@ impl Server {
                     ));
                 }
                 research_ui::nodes_page(self.process()?, offset, limit, filter)
+            }
+            "hoi4_focus_node_detail" => {
+                if object.len() != 1 || !object.contains_key("focus_id") {
+                    return Err(Error::new(
+                        "invalid_arguments",
+                        "Exactly one canonical focus_id required",
+                    ));
+                }
+                let key = object["focus_id"]
+                    .as_str()
+                    .ok_or_else(|| Error::new("invalid_arguments", "focus_id must be a string"))?;
+                own_focus::validate_key(key)?;
+                own_focus::node_detail(self.process()?, key)
             }
             "hoi4_focus_list" => {
                 if object

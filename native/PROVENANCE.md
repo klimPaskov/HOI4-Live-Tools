@@ -214,3 +214,20 @@ research-action vocabulary attributed above, performs no engine/process calls
 or input and grants no frame/routing authority. A builder ID-derived sequence
 corroborated both point models by canonical state readback; production dispatch
 still needs its owned lease, gate and durable attempt service.
+
+`research_candidate_observation.rs` is independent project integration of fresh
+own-only diagnostics with those typed point candidates. It accepts the immutable
+owner's client profile, never player coordinates, and preserves unavailable
+frame/routing authority. `focus_start_binding.rs` independently recovers the
+selected own focus's event capture and distinct no-op listener from the exact
+Linux constructor, registration and invoker paths. It reads bounded ownership
+and callback metadata only; it invokes neither callbacks nor engine commands.
+
+`research_stage.rs` and the Linux `clock/research.rs` adapter are project code.
+They combine durable one-stage attempts, the existing exclusive controller and
+ordinary X11 transport with fresh canonical readback. Independently recovered
+focus-node and slot-widget callback records are observed in `focus_node_binding`
+and `slot_control`; research-node layouts are not guessed for those classes.
+Same-body campaign witnesses, sampled slot identity joins and owner checks before
+payload do not claim atomicity or load-generation proof. External engine posting
+remains quarantined.
