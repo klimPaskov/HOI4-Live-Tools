@@ -31,4 +31,7 @@ mod info_research_button;
 
 pub mod economy;
 
+// Ordinary research candidate building block; no protocol input registration.
+pub mod research_attempt;
+
 pub mod army;

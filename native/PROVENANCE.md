@@ -204,3 +204,13 @@ raw branch checks reciprocal control ownership and exact Text resource before
 payload. It does not unwrap Frame resources or inspect text/font contents.
 Remaining geometry is explicit; cached facts and static maths do not prove a
 current frame, effective routing or a successful assignment.
+
+
+`research_attempt.rs` is new project code implementing bounded conditional point
+math from independently recovered Sprite/Text dimension, origin and hit methods.
+Text's sine/cosine imports and cache writers were resolved from exact ELF
+relocations; only zero transform is supported. The library consults the ordinary
+research-action vocabulary attributed above, performs no engine/process calls
+or input and grants no frame/routing authority. A builder ID-derived sequence
+corroborated both point models by canonical state readback; production dispatch
+still needs its owned lease, gate and durable attempt service.

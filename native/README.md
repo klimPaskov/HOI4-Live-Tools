@@ -71,7 +71,7 @@ anchors do not establish a load-generation token.
 | `hoi4_capabilities` | Platform, owned-session binding and explicit missing features |
 | `hoi4_overview` | Own focus/research IDs and clock, freshness and unavailable fields |
 | `hoi4_research` | Own completed technologies and active signed counters; normalized progress remains unavailable |
-| `hoi4_army` | Own divisions with full snapshot-scoped handles, selected province joins and lossless raw status; live comparison pending |
+| `hoi4_army` | Own divisions with full snapshot-scoped handles, selected province joins and lossless raw status; recorded structural reads, units unverified |
 | `hoi4_economy` | Own named factory trigger counts, civilian project capacity and exact signed political-power units; live comparison pending |
 | `hoi4_technology_list` | Canonical loaded technology IDs with filtering/pagination; no eligibility inference |
 | `hoi4_input_geometry` | GUI dimensions, scale, pointer and conditional source-window diagnostics; no click authority |
@@ -154,6 +154,11 @@ window PID/class, focus, clear keys/modifiers and the authenticated display peer
 It never activates a window or moves the cursor. Bounded X11 delivery is separate
 from authoritative game-state readback.
 
+The portable research-point library computes conditional Sprite/Text interior
+candidates with explicit scale/profile guards. It does not register input
+commands or grant frame/routing authority. A recorded builder diagnostic verified
+ID-derived selection and assignment; production dispatch remains unfinished.
+
 The separate Linux pointer library permits one bounded motion/left-button pair
 for a future verified adapter. It pins client/root geometry and ownership,
 reports uncertain delivery without replay and does not focus, park or scroll.
@@ -187,8 +192,9 @@ those scopes are not an equivalent-model speed comparison.
 New owned-root/cache diagnostics have passed portable/MSRV and actual Linux
 fixtures. A fresh recorded game verified owned-root closure and conditional cache
 checks, and observed own economy counts. Precise economy UI comparison remains
-pending. Its Research button used a separate text renderer; the new text/Frame
-and own-division diagnostics await a fresh immutable installed-game check. Detailed test counts,
+pending. Its Research button used a separate text renderer. A subsequent recorded run
+verified the Text and own-division structural diagnostics and an ID-derived
+point sequence; Frame diagnostics still await a matching installed-game branch. Detailed test counts,
 failures, recordings and measurement limits are in [live validation](../docs/CLAUSEWITZ_VALIDATION.md)
 and [the comparison](../docs/CLAUSEWITZ_COMPARISON.md).
 

@@ -240,3 +240,19 @@ The combined own-army and Text/Frame source passed 252 portable/MSRV tests and
 37 skips and all compiler/protocol checks. Continue with one fresh immutable
 recorded run to compare own divisions and the actual Text Research control,
 then verified ordinary ID-based actions and exclusive Luna medium acceptance.
+
+
+Recorded run 018 passed own-division snapshots (30 unique IDs, all selected
+location joins; 54 ms RPC median) and the actual Text Research diagnostics.
+An ID-derived builder sequence computed Sprite and Text interior points from
+Rust observations, selected the requested Info and verified canonical slot
+assignment after one Research event. No screenshot targeting or replay occurred
+in that sequence. The diagnostic OS wrapper was private Python; production Rust
+strategic dispatch and Luna acceptance remain unfinished. Both videos finalized,
+normal game exit was 0, and old client authority was closed.
+
+The pure Rust point building block passed 258 portable/MSRV tests, 315 actual
+Linux checks (314 substantive), 953 Python tests with 37 skips and compiler/
+protocol checks. It registers no input command. Finish the borrowed lease/gate,
+durable one-stage tokens and bounded readback service, then integrate the owner
+and give the exclusive Luna medium player verified strategic tools.

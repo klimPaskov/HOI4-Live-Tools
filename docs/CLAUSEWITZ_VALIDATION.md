@@ -1142,3 +1142,56 @@ seconds; formatting, host/Linux Clippy, MSRV Linux all-target compilation and
 protocol smoke passed. Own-army and new Text/Frame outputs still await a fresh
 immutable game; these fixtures do not establish their live comparison or an
 ID-based strategic command.
+
+
+## Recorded own divisions and ID-derived research points
+
+Fresh run 018 used immutable source `e557fe4`, Normal historical Germany and no
+mods. The first video packet preceded the single campaign-start click. All reads
+preserved the initial pause state. Six initial observation tools passed, including
+the new own-division reader: **30 unique full handles**, all with valid selected
+province joins. Five samples retained the same IDs and count, with RPC median
+**53.9 ms**. Raw strength/organisation units and precise UI comparisons remain
+unverified; a successful structural read does not prove those missing meanings.
+
+The actual named Research Standard used exact CTextSprite/CTextSpriteType. Its
+reciprocal owner, resource, bounded cache, zero transform and typed own-root
+hierarchy passed. Width/height were 123/36, resource count and hit divisor both
+1, scalar 1, cached translation 634/-47 and anchors 512/288. Conditional cache
+consistency passed; frame and effective-routing authority remained false.
+
+A separate builder diagnostic then closed Info, resolved `support_weapons` by
+its canonical own key and computed the conservative local interior from fresh
+Rust observations. Sprite origin 150/313 and center 186/349 quantized to client
+**37/70**; one ordinary OS attempt selected the correct Info. Text origin 890/155
+and center 951/173 quantized to client **190/35**; one Research attempt assigned
+the canonical technology to own slot 0. Three bounded readback samples confirmed
+it, the counter was 101000, and the other slots remained empty. This sequence
+used no screenshot-derived coordinates, callback invocation, forced command or
+replay. It used a private Python diagnostic around Rust MCP observations and
+ordinary OS input; the production Rust command adapter is still unfinished.
+
+Both H.264 512×288 video segments finalized and passed ffprobe: **600 seconds**
+and **476.333 seconds**. One WM close returned actual normal exit **0**, no signal
+or core dump, in **2.38 seconds**. Exact game/owner were absent and the old stdio
+client closed. No Luna run, clean two-year acceptance or full campaign occurred.
+
+## Portable research-point building block
+
+The next source adds pure typed Rust candidate maths for the supported Sprite
+and zero-angle Text branches. It preserves float32 origin/height/sign handling,
+full-word orientation, resource/cache/mask guards, strict interiors, physical
+quantization, clipping and owned SDL/X11 scale/window checks. An explicit
+owner-reviewed origin profile is required; diagnostics cannot infer approval
+from false authority fields. Every candidate retains frame, effective-routing
+and input-authority flags false. No process read, input, raw-click MCP tool or
+owner command registration is added by this library.
+
+Six independent cases cover both successful coordinate examples, the recorded
+Text control, unsupported/mixed branches and narrow targets/invalid mappings.
+Portable and Rust 1.86 suites each passed **258 tests**. The optimized actual
+Linux suite passed **315 reported checks** (314 substantive and one inert helper).
+Python passed **953 tests, 37 skipped**, in 22.069 seconds; formatting, host/Linux
+Clippy, MSRV Linux all-target compilation and protocol smoke passed. Fixtures
+remain separate from run 018's earlier immutable binary. Next integrate leases,
+durable one-attempt tokens and bounded canonical verification before Luna play.
