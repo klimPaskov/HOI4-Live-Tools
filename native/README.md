@@ -88,6 +88,7 @@ threads. Generated-child tests exercised that access under unchanged Yama scope
 | `hoi4_technology_list` | Bounded loaded technology IDs, filter and pagination; no eligibility inference |
 | `hoi4_input_geometry` | Own GUI pointer/dimension/scale diagnostics; client origin and click mapping remain unverified |
 | `hoi4_research_ui` | Own slot/widget joins, selected slot, technology detail and exact button/render diagnostics; no click authorization |
+| `hoi4_research_node_detail` | One exact own technology key's conditional raw renderer/cache fields and own detail state; no client rectangle or input authority |
 | `hoi4_research_nodes` | Paged current own-tree keys and conditional ordinary-control associations; visibility, eligibility and routing unavailable |
 | `hoi4_focus_list` | Own canonical focus keys with prefix filtering/pagination and selected detail diagnostics; no start authorization |
 | `hoi4_wait_for` | Bounded wait, 1–50 seconds, for own focus/research changes, a date or research UI predicates |
@@ -177,6 +178,21 @@ captures can be reused. Every object primary, owner, control payload and listene
 is read afresh, and all reused proof bytes are rechecked before returning the
 model. No proof survives a request. This reduces duplicate reads; it does not
 establish an atomic snapshot or event acknowledgement.
+Final research-UI witnesses use bounded vectored Linux reads, with ownership,
+exec and current mapping checks before and after the batch. A short read or
+failed final check discards the entire result. Other backends retain a scalar
+fallback. `freshness.read_calls` counts logical requests, not kernel syscalls;
+`read_calls_kind` makes that distinction explicit. Batches are capped at 65,536
+requests, 1 MiB per range and 32 MiB total, with at most 128 iovecs per syscall.
+
+The one-ID diagnostic requires `technology_id` and an open own tree. It validates
+the full model before an exact key match and refuses multiple distinct bound
+items. Only an exact owned Drag/CSprite/CSpriteType branch supplies raw renderer
+and resource-cache fields. Unsupported classes remain metadata-only. Parent
+ownership is unproved, so it reports the first parent's type without traversing
+its payload. Cached dimensions, local visibility and a matching Info window do
+not establish a client rectangle, effective visibility, routing or a fresh event.
+These new diagnostic fields still require installed-game validation.
 
 The focus query accepts an ASCII key prefix `filter`, `offset` 0–4096 and `limit`
 1–100. It validates every own key before pagination, exact own-tree ownership and

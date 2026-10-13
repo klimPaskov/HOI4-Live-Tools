@@ -661,6 +661,46 @@ Earlier nonzero shutdowns remain unexplained. This run had no Luna player and
 provides no strategic-input or campaign acceptance. Calls, source manifests,
 recordings and terminal evidence remain private.
 
+## Request-local reuse live comparison — 13 October 2026
+
+A fresh recorded run used `28e0967` and the same Normal historical vanilla
+Germany setup. All 411 keys matched the preceding run exactly, and all 423
+structural associations remained verified. Prefix filters, five full-model
+pages and closed-tree refusal passed. Default-page logical reads fell from
+34,276 to 26,686 and bytes from 512,416 to 299,776. Five RPC samples ranged from
+344.3 to 423.8 ms, median 383.2 ms; the preceding single sample was 409.2 ms.
+Different fresh processes and host load limit the latency comparison. See the
+[measured comparison](CLAUSEWITZ_COMPARISON.md#current-node-query-comparison--13-october-2026).
+
+The final campaign stayed paused at 1936.01.01.12 with no focus or research
+assignments. One Escape closed the research tree; the node query then refused
+with `gui_unavailable` in 20.8 ms. Recording finalized before owned shutdown,
+passed ffprobe at 371.333 seconds, and the sole reaper recorded exit code 0,
+no signal and no core dump. All 14 inspected threads had tracer 0 and Yama
+remained 1. This run did not query the focus catalog, use a Luna player or
+establish strategic-input/campaign acceptance. Its private evidence is retained.
+
+## Bounded vectored reader and one-ID diagnostic fixture gate
+
+The next source slice batches final research-UI witness reads on Linux while
+preserving every recorded byte comparison and process/exec/mapping brackets.
+A dedicated exact-key diagnostic exposes conditional raw renderer/cache fields
+and typed own Info state; it still supplies no client rectangle or input authority.
+All 176 standard optimized Linux fixtures and 19 generated-child checks passed
+under ordinary UID and unchanged Yama 1. The latter include 18 substantive cases
+and the private helper; six new cases exercise vectored bytes, partial reads,
+mapping/protection changes and same-image exec. Portable/MSRV Rust tests passed
+135 cases; Python passed 952 with 37 skips.
+
+The first kernel trial passed 17 checks and failed two expected error-category
+assertions: the fixtures consumed an acknowledgement sent before exec, so the
+reader refused with `io_error` during replacement. Waiting for the replacement's
+nonce-checked ready/pid message fixed the tests; both then returned the expected
+`ownership_changed`. Production guards were unchanged, and failed logs are
+preserved. These generated-process and synthetic UI checks are separate from
+installed-game evidence. Live raw-field validation and batching latency remain
+pending in a fresh immutable game process.
+
 ## Attribution
 
 The findings above refer to upstream `calling/{mem,process/linux,api,game,

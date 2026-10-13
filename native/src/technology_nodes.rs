@@ -42,6 +42,26 @@ pub(crate) fn current_nodes(
     own_status: u64,
     registry: u64,
 ) -> Result<Value> {
+    current_nodes_impl(r, base, tree, own_status, registry, None)
+}
+pub(crate) fn current_node_detail(
+    r: &Reader<'_>,
+    base: u64,
+    tree: u64,
+    own_status: u64,
+    registry: u64,
+    key: &str,
+) -> Result<Value> {
+    current_nodes_impl(r, base, tree, own_status, registry, Some(key))
+}
+fn current_nodes_impl(
+    r: &Reader<'_>,
+    base: u64,
+    tree: u64,
+    own_status: u64,
+    registry: u64,
+    requested: Option<&str>,
+) -> Result<Value> {
     exact(r, tree, base + 0x424de40)?;
     exact(r, own_status, base + 0x42108f8)?;
     let mut records = Vec::new();
@@ -67,6 +87,8 @@ pub(crate) fn current_nodes(
         }
     }
     let mut reuse = crate::node_reuse::Reuse::new(base, tree);
+    let mut target_seen = false;
+    let mut target_items = Vec::new();
     let mut items = BTreeSet::new();
     let mut ids: BTreeMap<i32, Value> = BTreeMap::new();
     let mut catalog = None;
@@ -146,6 +168,12 @@ pub(crate) fn current_nodes(
         public_keys.insert(key.clone(), id);
         let item_gui = r.u64(item + 0x10)?;
         let binding = crate::node_binding::observe(r, item_gui, technology, registry, &mut reuse)?;
+        if requested == Some(key.as_str()) {
+            target_seen = true;
+            if binding["binding_verified"] == true {
+                target_items.push((item, technology));
+            }
+        }
         bindings.entry(id).or_default().push(binding);
         let gui =
             json!({"id": key, "gui_type_encoding": reuse.nullable_type(r, r.u64(item + 0x10)?)?});
@@ -160,6 +188,31 @@ pub(crate) fn current_nodes(
             ids.insert(id, gui);
         }
     }
+    // No target geometry read until ALL current own nodes/joins have passed.
+    let detail = if let Some(key) = requested {
+        if !target_seen {
+            return Err(Error::new(
+                "node_unavailable",
+                "Exact own current node key unavailable",
+            ));
+        }
+        if target_items.len() > 1 {
+            return Err(Error::new(
+                "ambiguous_gui_node",
+                "Multiple distinct bound items for requested key",
+            ));
+        }
+        let geometry = if let Some(&(item, technology)) = target_items.first() {
+            crate::node_detail::observe(r, &mut reuse, item, technology, registry)?
+        } else {
+            json!({"reason":"ordinary_binding_unavailable","client_rectangle_available":false,"input_authorized":false})
+        };
+        Some(
+            json!({"id":key,"distinct_bound_items":target_items.len(),"render_diagnostic":geometry,"client_rectangle_available":false,"input_authorized":false}),
+        )
+    } else {
+        None
+    };
     let nodes: Vec<_> = ids
         .into_iter()
         .map(|(id, gui)| {
@@ -169,10 +222,12 @@ pub(crate) fn current_nodes(
             })
         })
         .collect();
-    Ok(
-        json!({"record_count":records.len(), "node_count":nodes.len(), "nodes":nodes,
-        "effective_hit_routing_verified":false,"input_authorized":false}),
-    )
+    let mut value = json!({"record_count":records.len(), "node_count":nodes.len(), "nodes":nodes,
+        "effective_hit_routing_verified":false,"input_authorized":false});
+    if let Some(detail) = detail {
+        value["detail"] = detail;
+    }
+    Ok(value)
 }
 
 #[cfg(test)]

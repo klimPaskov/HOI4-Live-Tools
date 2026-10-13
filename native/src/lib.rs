@@ -19,3 +19,5 @@ pub(crate) mod technology_nodes;
 mod node_binding;
 
 mod node_reuse;
+
+mod node_detail;

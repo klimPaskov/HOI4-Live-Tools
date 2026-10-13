@@ -2,8 +2,42 @@
 // Copyright (c) 2026 smerss, MIT; see ../LICENSE.clausewitz.
 use crate::error::{Error, Result};
 use std::cell::Cell;
+pub const READ_BATCH_COUNT: usize = 65_536;
+pub fn validate_read_batch(requests: &[(u64, usize)]) -> Result<usize> {
+    if requests.len() > READ_BATCH_COUNT {
+        return Err(Error::new("read_bound", "Read batch count exceeds bound"));
+    }
+    let mut total = 0usize;
+    for &(address, size) in requests {
+        total = total
+            .checked_add(size)
+            .ok_or_else(|| Error::new("read_bound", "Batch byte overflow"))?;
+        if size > 1 << 20
+            || total > 32 << 20
+            || !(0x10000..=0x7fff_ffff_0000).contains(&address)
+            || address.checked_add(size as u64).is_none()
+        {
+            return Err(Error::new("read_bound", "Invalid bounded read batch"));
+        }
+    }
+    Ok(total)
+}
 pub trait ReadMemory {
     fn read(&self, address: u64, size: usize) -> Result<Vec<u8>>;
+    /// Ordered all-or-error results; fallback keeps portable injected backends.
+    /// Validate the complete batch before touching any payload. No cached bytes.
+    fn read_many(&self, requests: &[(u64, usize)]) -> Result<Vec<Vec<u8>>> {
+        validate_read_batch(requests)?;
+        let mut results = Vec::with_capacity(requests.len());
+        for &(address, size) in requests {
+            let bytes = self.read(address, size)?;
+            if bytes.len() != size {
+                return Err(Error::new("short_read", "Incomplete batch read"));
+            }
+            results.push(bytes);
+        }
+        Ok(results)
+    }
 }
 pub struct Reader<'a> {
     memory: &'a dyn ReadMemory,
@@ -199,5 +233,68 @@ mod tests {
     fn empty_array_is_known_empty() {
         let f = array(0, 0, false);
         assert!(Reader::new(&f).pointer_array(0x10000).unwrap().is_empty());
+    }
+}
+
+#[cfg(test)]
+mod batch_tests {
+    use super::*;
+    struct Fake {
+        calls: Cell<usize>,
+        short: bool,
+    }
+    impl ReadMemory for Fake {
+        fn read(&self, _: u64, size: usize) -> Result<Vec<u8>> {
+            self.calls.set(self.calls.get() + 1);
+            Ok(vec![
+                7;
+                if self.short {
+                    size.saturating_sub(1)
+                } else {
+                    size
+                }
+            ])
+        }
+    }
+    #[test]
+    fn fallback_preserves_order_and_zero_lengths() {
+        let f = Fake {
+            calls: Cell::new(0),
+            short: false,
+        };
+        assert_eq!(
+            f.read_many(&[(0x10000, 2), (0x10010, 0), (0x10020, 3)])
+                .unwrap(),
+            vec![vec![7; 2], vec![], vec![7; 3]]
+        );
+        assert_eq!(f.calls.get(), 3);
+    }
+    #[test]
+    fn full_batch_validation_precedes_fallback_payload() {
+        for requests in [
+            vec![(0x10000, 4), (u64::MAX, 8)],
+            vec![(0x10000, (1 << 20) + 1)],
+            vec![(0x10000, 1 << 20); 33],
+            vec![(0x10000, 0); READ_BATCH_COUNT + 1],
+        ] {
+            let f = Fake {
+                calls: Cell::new(0),
+                short: false,
+            };
+            assert_eq!(f.read_many(&requests).unwrap_err().code, "read_bound");
+            assert_eq!(f.calls.get(), 0);
+        }
+    }
+    #[test]
+    fn short_fallback_discards_whole_batch() {
+        let f = Fake {
+            calls: Cell::new(0),
+            short: true,
+        };
+        assert_eq!(
+            f.read_many(&[(0x10000, 4), (0x10010, 3)]).unwrap_err().code,
+            "short_read"
+        );
+        assert_eq!(f.calls.get(), 1);
     }
 }

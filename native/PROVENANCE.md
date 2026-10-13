@@ -82,6 +82,16 @@ Object identity and ownership remain fresh reads; final snapshot witnesses
 recheck every reused proof byte. No process state is cached across requests.
 It supplies no atomicity, visibility, event acknowledgement or input authority.
 
+`node_detail.rs` is new project code from independently recovered current-build
+renderer/resource getters and ownership links. It exposes one own ID's raw
+fields and existing typed Info state. Unknown parent layouts are not traversed;
+no game assets, pixel textures or input adapter are included.
+
+Bounded vectored Linux reads and final witness batching are new project code.
+They preserve ordered all-or-error reads, current mappings, ownership and exec
+witnesses around each batch. Generated children test partial reads and changed
+protection/exec without modifying a game or changing kernel policy.
+
 Distinct Unix shutdown metadata and generated-child exit fixtures are new
 project code. They report the sole reaper's actual kernel wait result and do not
 change signal delivery, shutdown policy or diagnose the game rendering error.

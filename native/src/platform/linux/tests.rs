@@ -777,4 +777,142 @@ mod generated {
         assert!(process.begin_snapshot().is_err());
         assert!(process.check().is_err());
     }
+    #[test]
+    #[ignore = "Generated owned ordinary x86_64 Linux child only; scope1 unchanged"]
+    fn vectored_child_more_than_one_chunk_matches_scalar_bytes() {
+        let fixture = Fixture::spawn();
+        let process = fixture.reader();
+        let requests = vec![(fixture.address, 32); 257];
+        let expected = process.read(fixture.address, 32).unwrap();
+        let results = process.read_many(&requests).unwrap();
+        assert_eq!(results.len(), 257);
+        assert!(results.iter().all(|bytes| *bytes == expected));
+        process.check().unwrap();
+    }
+    #[test]
+    #[ignore = "Generated owned ordinary x86_64 Linux child only; scope1 unchanged"]
+    fn vectored_kernel_partial_read_is_error_never_prefix_success() {
+        let mut fixture = Fixture::spawn();
+        let boundary = fixture.address + fixture.payload as u64 - fixture.page as u64;
+        fixture.command("lastpage-noaccess");
+        assert_eq!(
+            read_many_remote(
+                fixture.child.id() as i32,
+                &[(fixture.address, 32), (boundary - 4, 8)]
+            )
+            .unwrap_err()
+            .code,
+            "short_read"
+        );
+        let process = fixture.reader();
+        assert_eq!(
+            process
+                .read_many(&[(fixture.address, 32), (boundary - 4, 8)])
+                .unwrap_err()
+                .code,
+            "unmapped_read"
+        );
+    }
+    #[test]
+    #[ignore = "Generated owned ordinary x86_64 Linux child only; scope1 unchanged"]
+    fn vectored_new_mapping_permissions_unmap_and_bad_batch_refuse() {
+        let mut fixture = Fixture::spawn();
+        let process = fixture.reader();
+        let added = fixture.command("add")["address"].as_u64().unwrap();
+        assert_eq!(
+            process.read_many(&[(added, 32)]).unwrap()[0],
+            process.read(fixture.address, 32).unwrap()
+        );
+        assert_eq!(
+            process
+                .read_many(&[(fixture.address, 32), (u64::MAX, 8)])
+                .unwrap_err()
+                .code,
+            "read_bound"
+        );
+        fixture.command("noaccess");
+        assert_eq!(
+            process
+                .read_many(&[(fixture.address, 32)])
+                .unwrap_err()
+                .code,
+            "unmapped_read"
+        );
+        fixture.command("readonly");
+        assert!(process.read_many(&[(fixture.address, 32)]).is_ok());
+        fixture.command("unmap");
+        assert_eq!(
+            process
+                .read_many(&[(fixture.address, 32)])
+                .unwrap_err()
+                .code,
+            "unmapped_read"
+        );
+    }
+    #[test]
+    #[ignore = "Generated owned ordinary x86_64 Linux child only; scope1 unchanged"]
+    fn vectored_creation_and_same_elf_exec_refuse() {
+        let mut fixture = Fixture::spawn();
+        let mut process = fixture.reader();
+        let original = process.session.game.start_ticks.clone();
+        process.session.game.start_ticks.push('0');
+        assert_eq!(
+            process
+                .read_many(&[(fixture.address, 32)])
+                .unwrap_err()
+                .code,
+            "ownership_changed"
+        );
+        process.session.game.start_ticks = original;
+        fixture.command("exec-self");
+        // The command reply precedes exec. Require the replacement's nonce-
+        // checked ready reply before asserting its stable refusal category.
+        let ready = fixture.response();
+        assert_eq!(ready["event"], "ready");
+        assert_eq!(ready["pid"].as_u64(), Some(u64::from(fixture.child.id())));
+        assert_eq!(
+            process
+                .read_many(&[(fixture.address, 32)])
+                .unwrap_err()
+                .code,
+            "ownership_changed"
+        );
+    }
+    #[test]
+    #[ignore = "Generated owned ordinary x86_64 Linux child only; scope1 unchanged"]
+    fn vectored_final_bracket_discards_real_bytes_after_mapping_change() {
+        let mut fixture = Fixture::spawn();
+        let process = fixture.reader();
+        let requests = [(fixture.address, 32)];
+        let real_bytes = read_many_remote(fixture.child.id() as i32, &requests);
+        assert!(real_bytes.is_ok());
+        fixture.command("noaccess");
+        assert_eq!(
+            process
+                .finish_read_many(&requests, real_bytes)
+                .unwrap_err()
+                .code,
+            "unmapped_read"
+        );
+    }
+    #[test]
+    #[ignore = "Generated owned ordinary x86_64 Linux child only; scope1 unchanged"]
+    fn vectored_final_bracket_discards_real_bytes_after_exec() {
+        let mut fixture = Fixture::spawn();
+        let process = fixture.reader();
+        let requests = [(fixture.address, 32)];
+        let real_bytes = read_many_remote(fixture.child.id() as i32, &requests);
+        assert!(real_bytes.is_ok());
+        fixture.command("exec-self");
+        let ready = fixture.response();
+        assert_eq!(ready["event"], "ready");
+        assert_eq!(ready["pid"].as_u64(), Some(u64::from(fixture.child.id())));
+        assert_eq!(
+            process
+                .finish_read_many(&requests, real_bytes)
+                .unwrap_err()
+                .code,
+            "ownership_changed"
+        );
+    }
 }

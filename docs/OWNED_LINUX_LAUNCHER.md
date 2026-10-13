@@ -5,7 +5,8 @@ parent. MCP clients connect over a private local socket, so closing or restartin
 a client does not relaunch the game or remove its owner. Observations execute in
 that parent process and never attach, suspend, capture screenshots or parse saves.
 
-This is development source. Six observation tools are available. An explicit
+This is development source. Read-only tools cover own state, focus/research
+catalogs, GUI diagnostics and bounded waits. An explicit
 owned binding can additionally enable exclusive leases and ordinary clock keys.
 Engine commands, strategic actions, daily automation, display provisioning and
 recording integration remain unfinished. Windows/macOS launch adapters return an explicit

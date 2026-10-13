@@ -49,6 +49,30 @@ have different ownership and load conditions from the 7.5 ms comparison above;
 they are not a matched regression or a new upstream speedup claim. See
 [the recorded evidence](CLAUSEWITZ_VALIDATION.md#passed-luna-rust-clock-test--13-october-2026).
 
+## Current node-query comparison — 13 October 2026
+
+Two fresh owned Normal historical vanilla Germany runs validated the same
+411 own current technology keys and 423 structural control associations.
+The second build reused shared RTTI and own-tree callback proofs within each
+request while retaining fresh object fields and final witnesses.
+
+| Measure | Before reuse | After reuse |
+| --- | ---: | ---: |
+| Logical reads per default page | 34,276 | 26,686 |
+| Bytes read per default page | 512,416 | 299,776 |
+| Default-page RPC latency | 409.2 ms, one baseline sample | 383.2 ms median of five samples |
+
+The new RPC samples ranged from 344.3 to 423.8 ms, with server times 289.2–351.6
+ms. Read traffic fell 22% by count and 41% by bytes. The latency samples come
+from separate fresh processes under emulation, with different host load; they
+support a modest, variable improvement, not a controlled throughput or upstream
+speedup claim. All five full-model pages and exact key-set comparison passed.
+Both runs left focus/research empty and the game paused at 1936.01.01.12, then
+exited with code 0. The second recording passed ffprobe at 371.333 seconds.
+No Luna player or strategic-input acceptance is claimed for these diagnostics.
+Vectored final-witness batching and one-ID render diagnostics are the next
+development slice; their installed-game measurement remains pending.
+
 ## Measured process reads
 
 Both readers ran against the same generated child process and checked every

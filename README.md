@@ -10,15 +10,18 @@ The existing **1.1.0 Python release** has been exercised on Windows. The native
 runtime is in development. A Luna player at medium reasoning verified upstream
 focus and research, then encountered a native posting timeout. That adapter stays
 quarantined. A subsequent Rust test passed ordinary speed, unpause, time advancement
-and pause through 3 January 1936, using memory readback and stationary keys.
+and pause through 5 January 1936, using memory readback and stationary keys.
+Recorded builder checks also validated 438 own focus keys and 411 current
+technology keys, with 423 structural control associations. Those associations
+do not authorize strategic input.
 Full campaign acceptance remains unfinished; there is no Rust release yet.
 
 | Runtime | Verified | Remaining |
 | --- | --- | --- |
 | Python / Windows | Baseline tools and recorded play attempts | Clean campaign acceptance; current development changes are unfinished |
 | Python / macOS | Platform work and limited diagnostic play | Reliable live acceptance; screenshot-driven testing is stopped |
-| Native / Linux | Own-country reads, owned launch/reconnects, Luna ordinary clock test through 3 January 1936 | Strategic action adapters, governor and campaign acceptance |
-| Native / Windows and macOS | Architecture and reference research | Independently verified build adapters and live tests |
+| Native / Linux | Own-country reads, focus/research catalogs, owned launch/reconnects, Luna clock test through 5 January 1936 | Strategic action adapters, governor and campaign acceptance |
+| Native / Windows and macOS | Portable protocol and fixture tests in CI | Independently verified process/build adapters and live tests |
 
 Read [the acceptance gates](docs/LINUX_RUST_HANDOFF.md),
 [Linux validation evidence](docs/CLAUSEWITZ_VALIDATION.md) and
@@ -76,7 +79,11 @@ Luna medium clock tests passed verified pause, receipt replay and a wait to
 established that assignment; a production research adapter remains unfinished.
 Fresh overviews measured 15.7 ms median RPC under x86 CPU emulation. Luna used
 no screenshots or cursor movement. [Live evidence](docs/CLAUSEWITZ_VALIDATION.md)
-records the distinct test limits, wrapper incident and nonzero shutdown results.
+records the distinct test limits, wrapper incident, earlier nonzero shutdowns
+and the subsequent clean exits. Request-local shared-proof reuse preserved all
+411 keys and 423 bindings while reducing reads by 22% and bytes by 41% in a fresh
+game. Latency improvement was modest and variable; the next optimization batches
+final witness syscalls. See the [measured comparison](docs/CLAUSEWITZ_COMPARISON.md).
 The Linux preview also has a persistent [owned launcher](docs/OWNED_LINUX_LAUNCHER.md)
 with reconnectable clients and guarded graceful shutdown.
 Linux, Windows and macOS CI pass the portable code and platform fixtures.

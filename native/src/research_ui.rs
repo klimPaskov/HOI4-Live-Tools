@@ -39,13 +39,29 @@ impl ReadMemory for Witnesses<'_> {
 impl Witnesses<'_> {
     fn finish(&self) -> Result<(usize, usize)> {
         let reads = self.reads.borrow();
+        let requests: Vec<_> = reads.keys().copied().collect();
+        let result = self.process.read_many(&requests)?;
+        if result.len() != reads.len() {
+            return Err(Error::new(
+                "short_read",
+                "Witness batch response count mismatch",
+            ));
+        }
         let mut bytes = 0;
-        for ((address, size), prior) in reads.iter() {
-            if self.process.read(*address, *size)? != *prior {
+        for (((_, size), prior), current) in reads.iter().zip(result.iter()) {
+            if current.len() != *size {
+                return Err(Error::new(
+                    "short_read",
+                    "Witness batch response length mismatch",
+                ));
+            }
+            if current != prior {
                 return Err(Error::new("torn_read", "Research UI witness changed"));
             }
             bytes += size;
         }
+        // Logical read/byte metrics unchanged; actual kernel syscalls are NOT
+        // these counts. Linux uses <=128 iovs/chunk plus identity witness reads.
         Ok((reads.len(), bytes))
     }
 }
@@ -322,17 +338,51 @@ pub(crate) struct UiContext {
     pub slots: Vec<u64>,
 }
 pub fn snapshot(process: &dyn Process) -> Result<Value> {
-    Ok(observe(process, false, false)?.0)
+    Ok(observe(process, false, false, None)?.0)
 }
 /// Dedicated diagnostic keeps current-node validation out of clock/UI waits.
 pub fn nodes(process: &dyn Process) -> Result<Value> {
-    let (value, _) = observe(process, false, true)?;
+    let (value, _) = observe(process, false, true, None)?;
     Ok(
         json!({"source":"native own current research nodes","build_id":game::BUILD_ID,
         "selected_slot":value["selected_slot"],"active_mode_raw":value["active_mode_raw"],
         "current_nodes":value["current_nodes"],"freshness":value["freshness"],
         "owned":true,"input_authorized":false,"observation_paused_game":false}),
     )
+}
+/// One exact own ID, full model first. Rendering and result state only.
+pub fn node_detail(process: &dyn Process, key: &str) -> Result<Value> {
+    validate_detail_key(key)?;
+    let (value, _) = observe(process, false, true, Some(key))?;
+    let visible = value["technology_info"]["windows"]
+        .as_array()
+        .map(|windows| {
+            windows
+                .iter()
+                .filter(|info| {
+                    info["technology"] == key && info["window"]["visible_predicate"] == true
+                })
+                .count()
+        })
+        .unwrap_or(0);
+    if visible > 1 {
+        return Err(Error::new(
+            "ambiguous_gui_detail",
+            "Multiple visible own details for requested key",
+        ));
+    }
+    Ok(
+        json!({"source":"native own research node detail","build_id":game::BUILD_ID,"owned":true,"id":key,"detail":value["current_nodes"]["detail"],"own_info_postcondition":{"matching_locally_visible_count":visible,"requested_detail_locally_visible":visible==1,"fresh_transition_verified":false},"selected_slot":value["selected_slot"],"freshness":value["freshness"],"client_rectangle_available":false,"input_authorized":false,"observation_paused_game":false}),
+    )
+}
+pub(crate) fn validate_detail_key(key: &str) -> Result<()> {
+    if key.is_empty() || key.len() > 256 || key.chars().any(char::is_control) {
+        return Err(Error::new(
+            "invalid_arguments",
+            "One bounded exact technology ID required",
+        ));
+    }
+    Ok(())
 }
 /// Validate the whole current own model, then bound the public output page.
 pub fn nodes_page(
@@ -381,7 +431,7 @@ pub fn nodes_page(
     Ok(value)
 }
 pub(crate) fn wait_snapshot(process: &dyn Process) -> Result<(Value, UiContext)> {
-    let (value, context) = observe(process, true, false)?;
+    let (value, context) = observe(process, true, false, None)?;
     Ok((
         value,
         context.expect("Context requested by wait observation"),
@@ -391,6 +441,7 @@ fn observe(
     process: &dyn Process,
     include_context: bool,
     include_nodes: bool,
+    requested_detail: Option<&str>,
 ) -> Result<(Value, Option<UiContext>)> {
     let start = Instant::now();
     process.begin_snapshot()?;
@@ -560,9 +611,11 @@ fn observe(
                 "Selected own ordinary research tree must be open",
             ));
         }
-        Some(crate::technology_nodes::current_nodes(
-            &r, base, tree, status, registry,
-        )?)
+        Some(if let Some(key) = requested_detail {
+            crate::technology_nodes::current_node_detail(&r, base, tree, status, registry, key)?
+        } else {
+            crate::technology_nodes::current_nodes(&r, base, tree, status, registry)?
+        })
     } else {
         None
     };
@@ -574,7 +627,81 @@ fn observe(
         slots: slots.clone(),
     });
     Ok((
-        json!({"source":"native own research UI diagnostics","build_id":game::BUILD_ID,"owned":true,"own_slot_count":slots.len(),"widget_count":widgets.len(),"widgets_complete":widgets.len()==slots.len(),"slot_identity":"own array index in current process/status snapshot; not a persistent ID","selected_slot":selected_index,"active_mode_raw":active,"panel":panel_state,"ordinary_tree":tree_state,"slots":output,"technology_info":info,"current_nodes":nodes,"input_authorized":false,"unverified":["effective ancestor visibility and clipping","sprite hit predicates","topmost hit routing","physical client conversion"],"observation_paused_game":false,"freshness":{"observed_unix_ms":SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),"elapsed_ms":start.elapsed().as_secs_f64()*1000.0,"read_calls":r.calls.get()+end_calls as u64,"read_bytes":r.bytes.get()+end_bytes}}),
+        json!({"source":"native own research UI diagnostics","build_id":game::BUILD_ID,"owned":true,"own_slot_count":slots.len(),"widget_count":widgets.len(),"widgets_complete":widgets.len()==slots.len(),"slot_identity":"own array index in current process/status snapshot; not a persistent ID","selected_slot":selected_index,"active_mode_raw":active,"panel":panel_state,"ordinary_tree":tree_state,"slots":output,"technology_info":info,"current_nodes":nodes,"input_authorized":false,"unverified":["effective ancestor visibility and clipping","sprite hit predicates","topmost hit routing","physical client conversion"],"observation_paused_game":false,"freshness":{"observed_unix_ms":SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),"elapsed_ms":start.elapsed().as_secs_f64()*1000.0,"read_calls_kind":"logical_read_requests","read_calls":r.calls.get()+end_calls as u64,"read_bytes":r.bytes.get()+end_bytes}}),
         context,
     ))
+}
+
+#[cfg(test)]
+mod vectored_finish_tests {
+    use super::*;
+    use std::cell::Cell;
+    struct Fake {
+        scalar: Cell<usize>,
+        batch: Cell<usize>,
+        mode: u8,
+    }
+    impl ReadMemory for Fake {
+        fn read(&self, _: u64, n: usize) -> Result<Vec<u8>> {
+            self.scalar.set(self.scalar.get() + 1);
+            Ok(vec![1; n])
+        }
+        fn read_many(&self, requests: &[(u64, usize)]) -> Result<Vec<Vec<u8>>> {
+            self.batch.set(self.batch.get() + 1);
+            let mut values: Vec<_> = requests.iter().map(|(_, n)| vec![1; *n]).collect();
+            match self.mode {
+                1 => values[1][0] = 2,
+                2 => {
+                    values.pop();
+                }
+                3 => {
+                    values[0].pop();
+                }
+                _ => {}
+            }
+            Ok(values)
+        }
+    }
+    impl Process for Fake {
+        fn check(&self) -> Result<()> {
+            Ok(())
+        }
+        fn image_base(&self) -> u64 {
+            0
+        }
+    }
+    #[test]
+    fn finish_uses_batch_and_keeps_logical_counts() {
+        let f = Fake {
+            scalar: Cell::new(0),
+            batch: Cell::new(0),
+            mode: 0,
+        };
+        let w = Witnesses {
+            process: &f,
+            reads: RefCell::new(BTreeMap::new()),
+        };
+        w.read(0x10000, 4).unwrap();
+        w.read(0x10010, 8).unwrap();
+        assert_eq!(w.finish().unwrap(), (2, 12));
+        assert_eq!(f.scalar.get(), 2);
+        assert_eq!(f.batch.get(), 1);
+    }
+    #[test]
+    fn final_mutation_and_malformed_batch_fail_whole_model() {
+        for (mode, code) in [(1, "torn_read"), (2, "short_read"), (3, "short_read")] {
+            let f = Fake {
+                scalar: Cell::new(0),
+                batch: Cell::new(0),
+                mode,
+            };
+            let w = Witnesses {
+                process: &f,
+                reads: RefCell::new(BTreeMap::new()),
+            };
+            w.read(0x10000, 4).unwrap();
+            w.read(0x10010, 8).unwrap();
+            assert_eq!(w.finish().unwrap_err().code, code);
+        }
+    }
 }

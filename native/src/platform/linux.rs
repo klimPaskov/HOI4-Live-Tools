@@ -245,6 +245,62 @@ fn read_exact_remote(pid: i32, address: u64, data: &mut [u8]) -> Result<()> {
     }
     Ok(())
 }
+// Internal generated-child tests can exercise a kernel short read directly.
+// Production calls are bracketed by ownership/exec/maps checks in read_many.
+fn read_many_remote(pid: i32, requests: &[(u64, usize)]) -> Result<Vec<Vec<u8>>> {
+    crate::memory::validate_read_batch(requests)?;
+    if pid <= 0 {
+        return Err(Error::new("read_bound", "Positive owned PID required"));
+    }
+    let mut output: Vec<Vec<u8>> = requests.iter().map(|(_, size)| vec![0; *size]).collect();
+    for (request_chunk, buffer_chunk) in requests.chunks(128).zip(output.chunks_mut(128)) {
+        let mut local = Vec::with_capacity(request_chunk.len());
+        let mut remote = Vec::with_capacity(request_chunk.len());
+        let mut expected = 0usize;
+        for (&(address, size), bytes) in request_chunk.iter().zip(buffer_chunk.iter_mut()) {
+            if size == 0 {
+                continue;
+            }
+            let address = usize::try_from(address)
+                .map_err(|_| Error::new("read_bound", "Remote pointer width"))?;
+            local.push(libc::iovec {
+                iov_base: bytes.as_mut_ptr().cast(),
+                iov_len: size,
+            });
+            remote.push(libc::iovec {
+                iov_base: address as *mut libc::c_void,
+                iov_len: size,
+            });
+            expected += size;
+        }
+        if local.is_empty() {
+            continue;
+        }
+        // SAFETY: all allocated local Vecs retain length/storage through the call;
+        // <=128 disjoint valid local buffers, matching remote lengths, flags0.
+        // Remote pointers are used only by the read syscall, never Rust derefs.
+        let count = unsafe {
+            libc::process_vm_readv(
+                pid,
+                local.as_ptr(),
+                local.len() as _,
+                remote.as_ptr(),
+                remote.len() as _,
+                0,
+            )
+        };
+        if count < 0 {
+            return Err(std::io::Error::last_os_error().into());
+        }
+        if count as usize != expected {
+            return Err(Error::new(
+                "short_read",
+                "Incomplete vectored read; whole batch discarded",
+            ));
+        }
+    }
+    Ok(output)
+}
 fn exec_witness(pid: i32) -> Result<ExecWitness> {
     let boot = boot_id()?;
     let address = random_address(pid)?;
@@ -536,6 +592,33 @@ impl Process for LinuxProcess {
     }
 }
 impl ReadMemory for LinuxProcess {
+    fn read_many(&self, requests: &[(u64, usize)]) -> Result<Vec<Vec<u8>>> {
+        crate::memory::validate_read_batch(requests)?;
+        // No public selectable PID, build relaxation or stale map cache reuse.
+        self.begin_snapshot()?;
+        let mapped = |regions: &[Region]| {
+            requests.iter().all(|&(address, size)| {
+                size == 0
+                    || regions
+                        .iter()
+                        .any(|m| m.readable && m.start <= address && address + size as u64 <= m.end)
+            })
+        };
+        if !mapped(
+            &self
+                .regions
+                .read()
+                .map_err(|_| Error::new("invalid_maps", "Mapping cache poisoned"))?,
+        ) {
+            return Err(Error::new(
+                "unmapped_read",
+                "Batch outside readable mapped regions",
+            ));
+        }
+        let primary = read_many_remote(self.session.game.pid, requests);
+        self.finish_read_many(requests, primary)
+    }
+
     fn read(&self, address: u64, size: usize) -> Result<Vec<u8>> {
         if size == 0 {
             return Ok(Vec::new());
@@ -580,5 +663,49 @@ impl ReadMemory for LinuxProcess {
         Ok(data)
     }
 }
+
+impl LinuxProcess {
+    // Isolated final bracket also gives generated tests a deterministic seam:
+    // they can exec/protect their child after a real read, before verification.
+    fn finish_read_many(
+        &self,
+        requests: &[(u64, usize)],
+        primary: Result<Vec<Vec<u8>>>,
+    ) -> Result<Vec<Vec<u8>>> {
+        let mapped = |regions: &[Region]| {
+            requests.iter().all(|&(address, size)| {
+                size == 0
+                    || regions
+                        .iter()
+                        .any(|m| m.readable && m.start <= address && address + size as u64 <= m.end)
+            })
+        };
+        // Even a kernel failure gets the independent ownership/exec/maps bracket.
+        let after = self.begin_snapshot().and_then(|()| {
+            if mapped(
+                &self
+                    .regions
+                    .read()
+                    .map_err(|_| Error::new("invalid_maps", "Mapping cache poisoned"))?,
+            ) {
+                Ok(())
+            } else {
+                Err(Error::new("unmapped_read", "Batch mappings changed"))
+            }
+        });
+        match (primary, after) {
+            (Ok(bytes), Ok(())) => Ok(bytes),
+            (Err(mut first), Err(second)) => {
+                first
+                    .message
+                    .push_str(&format!("; final verification: {second}"));
+                Err(first)
+            }
+            (Err(first), Ok(())) => Err(first),
+            (Ok(_), Err(second)) => Err(second),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests;

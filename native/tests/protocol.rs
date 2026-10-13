@@ -51,6 +51,7 @@ fn stdio_is_json_and_notifications_have_no_reply() {
             "hoi4_research",
             "hoi4_input_geometry",
             "hoi4_research_ui",
+            "hoi4_research_node_detail",
             "hoi4_research_nodes",
             "hoi4_focus_list",
             "hoi4_technology_list",
@@ -154,6 +155,29 @@ fn own_focus_and_node_queries_refuse_invalid_arguments_before_process_access() {
         let value: Value =
             serde_json::from_str(reply["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
         assert_eq!(value["error"]["code"], "invalid_arguments");
+    }
+}
+
+#[test]
+fn node_detail_rejects_unknown_and_malformed_args_before_process_access() {
+    let server = hoi4_live_native::protocol::Server {
+        process: None,
+        unavailable: None,
+    };
+    for args in [
+        json!({}),
+        json!({"technology_id":null}),
+        json!({"technology_id":true}),
+        json!({"technology_id":""}),
+        json!({"technology_id":"bad\nkey"}),
+        json!({"technology_id":"x".repeat(257)}),
+        json!({"technology_id":"tools1","click":true}),
+        json!({"technology_id":"tools1","country":"FRA"}),
+    ] {
+        let reply=server.handle(json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"hoi4_research_node_detail","arguments":args}})).unwrap();
+        let v: Value =
+            serde_json::from_str(reply["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+        assert_eq!(v["error"]["code"], "invalid_arguments");
     }
 }
 #[test]

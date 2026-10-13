@@ -122,5 +122,13 @@ The default page took 409 ms RPC / 360 ms server before request-local reuse.
 Closed-tree queries refused promptly. Exact type checks remain mandatory;
 structural binding does not authorize input. This run exited with code 0 and
 both recordings passed ffprobe. Earlier game exit code 6 remains an unresolved
-incident; a later clean exit does not explain it. Next, measure request-local
-read reuse in a fresh immutable process and finish verified strategic dispatch.
+incident; a later clean exit does not explain it. A second fresh run confirmed
+the identical key set and associations after request-local reuse: logical reads
+fell 22% and bytes 41%, while measured latency improved modestly and varied.
+It also exited cleanly. Bounded vectored final-witness reads and a one-ID raw
+renderer/detail-state diagnostic now pass 176 standard Linux fixtures and 19
+generated-child checks (18 substantive cases plus the helper), as well as 135
+portable/MSRV Rust and 952 Python tests (37 skipped). Their installed-game
+validation is next. The first kernel trial exposed two tests that checked exec
+before its ready handshake; corrected tests passed without relaxing production
+guards. Finish verified strategic dispatch, then resume Luna acceptance.
