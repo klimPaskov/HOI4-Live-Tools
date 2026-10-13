@@ -556,6 +556,54 @@ argument returned `invalid_arguments`. Neither caused repeated input. Calls,
 recordings and source manifests remain private. Exact plain-sprite resource
 diagnostics and strategic input still require further live validation.
 
+## Research detail and active-counter check — 13 October 2026
+
+A fresh owned run used `780da62`, the same exact Linux build and Normal
+historical vanilla Germany. Recording supplied a verified first packet before
+Start. All four exact plain-sprite renderers resolved their direct resource to
+`CSpriteType`. One ordinary slot selection was followed by a coherent own-tree
+wait in 19.5 ms RPC, with no repeated input. These are observations at the tested
+window and points, not general hit-routing or coordinate authorization.
+
+Two view-only technology selections validated the new detail reader.
+`support_weapons2` had a disabled ordinary Research control; `support_weapons`
+had raw state 0 and the positively named ordinary control matched its callback
+binding. Canonical IDs came from both database and own-status joins. Closing the
+first detail changed its observed visibility without discarding its identity.
+
+A builder diagnostic then clicked the visible ordinary Research button once.
+Fresh memory confirmed `support_weapons` in own slot 0, with raw counter
+101,000; the other three slots stayed empty and the clock stayed paused at the
+initial date. This was ordinary GUI validation, using a bounded visual setup
+diagnostic. It was not a production ID-based command or Luna research assignment.
+The Rust diagnostic still reports `input_authorized: false`.
+
+One Luna medium player then held exclusive ordinary-clock input. Speed 4,
+unpause and final pause returned verified receipts. The original server wait
+reached 1936.01.05.01 in **39.582 seconds RPC / 39.540 seconds server time**,
+with zero torn-read retries. The player's tool wrapper initially discarded the
+ongoing command's session ID at its 30-second yield; the persistent protocol log
+later supplied the successful original response. An unnecessary additional
+read-only wait returned the same date predicate. Both the original incident and
+its correction remain in the private journal; the original wrapper process exit
+status is unavailable. No uncertain action was repeated.
+
+Final independent reads confirmed 1936.01.05.06, paused at speed 4, and the same
+slot-0 technology with raw counter **505,000**. Completed membership stayed at
+47 and the other slots stayed empty. This proves an active counter changes
+during play; normalized units, progress and remaining days remain unverified.
+The lease was released, status reported zero remaining time, pointer coordinates
+matched before/after Luna play, every inspected thread had tracer 0 and Yama
+stayed 1. Luna used no screenshots or cursor movement.
+
+Both finalized 512×288 recordings passed ffprobe, with durations 600.0 and
+518.333 seconds. The subsequent owned shutdown request completed, but the game
+again returned normal exit status 6. Its rendering-client error is preserved;
+the exact cause remains unproved. A completed close request is not a clean game
+exit. Recordings, source manifests, calls, UI diagnostics, intent/readback and
+shutdown incidents remain private. Strategic adapters, the clean two-year run
+and full campaign acceptance remain unfinished.
+
 ## Attribution
 
 The findings above refer to upstream `calling/{mem,process/linux,api,game,

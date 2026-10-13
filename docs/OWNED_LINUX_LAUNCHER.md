@@ -80,6 +80,12 @@ leaves the owner, endpoint and userdata available for diagnosis. SIGINT/SIGTERM
 to the owner requests the same graceful shutdown. Unexpected startup failures
 after spawning preserve the parent until its launched child exits.
 
+A successful close confirms that the owned child exited; it does not imply a
+clean game exit. The same child reaper records `exit_code`, `signal`,
+`core_dumped` and a formatted `wait_status` in `exited.json` and the close
+response. A normal exit code 6 and termination by signal 6 are distinct outcomes.
+This evidence does not change the shutdown policy or resolve a game failure.
+
 ## Ordinary clock input
 
 After recording ordinary singleplayer menu setup, bind one already focused game

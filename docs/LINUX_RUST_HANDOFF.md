@@ -107,3 +107,13 @@ kernel-policy changes occurred. Both recording segments finalized and passed
 ffprobe. This is bounded clock validation; strategic actions and the clean
 two-year campaign remain unfinished. The failed native posting path stays
 quarantined. See the latest live evidence before continuing.
+
+The next bounded Luna run reached 5 January with an active research counter
+increasing in the assigned own slot. A builder diagnostic selected that research
+through the ordinary visible button and verified the canonical technology in
+memory. Production ID-based strategic dispatch is still unfinished. New own
+focus catalog and current technology-node observations passed 142 optimized
+Linux fixtures, alongside 101 portable Rust tests and 952 Python tests (37
+skipped). Their new fields still require installed-game validation. Shutdown
+evidence now distinguishes a normal exit code from a signal; the earlier game
+exit code 6 remains an unresolved incident, not a clean exit.

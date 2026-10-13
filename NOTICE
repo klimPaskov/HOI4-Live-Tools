@@ -32,7 +32,7 @@ Upstream foundation and attribution:
 
   The structured game model, ordinary-command vocabulary, bounded turn waits,
   verified-order cache and province-graph ideas inform the ongoing integration.
-  native/src/{memory,game,calendar,technology,research,research_ui}.rs and native/src/platform/linux.rs port
+  native/src/{memory,game,calendar,technology,research,research_ui,technology_nodes,own_focus}.rs and native/src/platform/linux.rs port
   those typed reads, own-country focus/research semantics, process interface and
   calendar. native/PROVENANCE.md records source files; native/LICENSE.clausewitz
   retains the MIT notice. Current Linux layouts were recovered independently.

@@ -358,6 +358,26 @@ impl Fixture {
             self.data.remove(&address);
         }
     }
+    fn current_research_nodes(&mut self) {
+        self.research_ui();
+        let base = 0x10000;
+        self.number(0x903d8, 6);
+        self.put(0xa00a5, &[0]);
+        self.word(0x922f8, 0xd0000);
+        self.region(0xd0000, 0xf00);
+        self.word(0xd0000, base + 0x4347d58);
+        self.word(0xd0098, 0x70000);
+        self.put(0xd00a5, &[8]);
+        self.array(0x92dd8, 0xd2000, 2);
+        self.region(0xd2000, 80);
+        self.word(0xd2020, 0xd3000);
+        self.word(0xd2048, 0xd3000);
+        self.array(0x92df0, 0, 0);
+        self.region(0xd3000, 0xd0);
+        self.word(0xd3000, base + 0x424e2e0);
+        self.word(0xd3030, 0x92000);
+        self.word(0xd30c8, 0x80000);
+    }
     fn research_wait(&mut self) {
         self.research_drag();
         let base = 0x10000;
@@ -1454,4 +1474,55 @@ fn ui_wait_requires_positive_own_tag_before_any_country_payload_read() {
     let v = ui_wait_reply(f, Vec::new(), serde_json::json!({"view":"tree"}), 10);
     assert_eq!(v["error"]["code"], "player_unavailable");
     assert!(v.get("state").is_none());
+}
+
+#[test]
+fn current_node_tool_uses_canonical_public_keys_and_actual_snapshot_boundary() {
+    let mut f = Fixture::new();
+    f.current_research_nodes();
+    let v = research_ui::nodes(&f).unwrap();
+    assert_eq!(v["current_nodes"]["record_count"], 2);
+    assert_eq!(v["current_nodes"]["node_count"], 1);
+    assert_eq!(v["current_nodes"]["nodes"][0]["id"], "tools1");
+    assert_eq!(v["current_nodes"]["nodes"][0]["definition_index"], 1);
+    assert_eq!(v["selected_slot"], 1);
+    assert_eq!(v["input_authorized"], false);
+    assert_eq!(f.checks.get(), 2);
+    for (address, size) in [
+        (0xd2000, 80),
+        (0xd3030, 8),
+        (0xd30c8, 8),
+        (0x63030, 4),
+        (0x63008, 32),
+    ] {
+        let mut f = Fixture::new();
+        f.current_research_nodes();
+        let mut replacement: Vec<_> = (0..size).map(|i| f.data[&(address + i as u64)]).collect();
+        replacement[0] ^= 1;
+        f.fault = Some((address, 1, replacement));
+        assert_eq!(research_ui::nodes(&f).unwrap_err().code, "torn_read");
+    }
+}
+
+#[test]
+fn current_node_tool_requires_open_own_tree_before_node_payload() {
+    for mode in [5, 23] {
+        let mut f = Fixture::new();
+        f.current_research_nodes();
+        f.number(0x903d8, mode);
+        for address in 0x92dd8..0x92de8 {
+            f.data.remove(&address);
+        }
+        assert_eq!(research_ui::nodes(&f).unwrap_err().code, "gui_unavailable");
+    }
+    let mut f = Fixture::new();
+    f.current_research_nodes();
+    f.word(0x80158, 0xdead0000);
+    for address in 0x80160..0x80168 {
+        f.data.remove(&address);
+    }
+    assert_eq!(
+        research_ui::nodes(&f).unwrap_err().code,
+        "invalid_research_owner"
+    );
 }

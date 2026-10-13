@@ -1,5 +1,6 @@
 use super::*;
 use std::io::BufRead;
+use std::sync::atomic::AtomicI32;
 use std::sync::Mutex;
 
 struct Fixture {
@@ -115,6 +116,179 @@ fn ordinary() -> bool {
     } else {
         true
     }
+}
+
+const WAIT_EVIDENCE_CHILD: &str = "launch::linux::tests::generated_wait_evidence_child";
+const WAIT_EVIDENCE_ENV: &str = "HOI4_GENERATED_WAIT_EVIDENCE_CHILD";
+static WAIT_EVIDENCE_EXIT_CODE: AtomicI32 = AtomicI32::new(0);
+
+extern "C" fn generated_wait_exit(_: libc::c_int) {
+    // SAFETY: this handler is installed only in the exact private reexec child.
+    // The x86_64 atomic load is lock-free and _exit is async-signal-safe.
+    unsafe { libc::_exit(WAIT_EVIDENCE_EXIT_CODE.load(Ordering::Relaxed)) }
+}
+
+#[test]
+fn generated_wait_evidence_child() {
+    let Ok(payload) = std::env::var(WAIT_EVIDENCE_ENV) else {
+        return;
+    };
+    let (fixture_nonce, mode) = payload.split_once(':').unwrap();
+    assert!(fixture_nonce.len() == 32 && fixture_nonce.bytes().all(|v| v.is_ascii_hexdigit()));
+    let handler = match mode {
+        "exit0" => {
+            WAIT_EVIDENCE_EXIT_CODE.store(0, Ordering::Relaxed);
+            generated_wait_exit as *const () as libc::sighandler_t
+        }
+        "exit6" => {
+            WAIT_EVIDENCE_EXIT_CODE.store(6, Ordering::Relaxed);
+            generated_wait_exit as *const () as libc::sighandler_t
+        }
+        "signal" => libc::SIG_DFL,
+        _ => panic!("Unexpected private wait fixture mode"),
+    };
+    // SAFETY: only this reexec fixture's disposition changes; suite parent,
+    // game and display processes are untouched. Production still sends SIGTERM.
+    assert_ne!(
+        unsafe { libc::signal(libc::SIGTERM, handler) },
+        libc::SIG_ERR
+    );
+    println!("wait-evidence-ready:{fixture_nonce}");
+    std::io::stdout().flush().unwrap();
+    let mut byte = [0];
+    // EOF is a safe escape if the private parent disappears. Successful cases
+    // exit through caught/default SIGTERM after the nonce handshake above.
+    let _ = std::io::stdin().read(&mut byte);
+    std::process::exit(97);
+}
+
+/// Fixture-only startup ownership. Release the private EOF escape before the
+/// production OwnedChild Drop runs, including on an unexpected unwind.
+struct WaitEvidenceStartup(Option<OwnedChild>);
+impl WaitEvidenceStartup {
+    fn close_stdin(&mut self) {
+        if let Some(child) = self.0.as_mut() {
+            drop(child.child.stdin.take());
+        }
+    }
+    fn into_child(mut self) -> Result<OwnedChild> {
+        self.0
+            .take()
+            .ok_or_else(|| Error::new("fixture_failed", "Startup child missing"))
+    }
+}
+impl Drop for WaitEvidenceStartup {
+    fn drop(&mut self) {
+        self.close_stdin();
+    }
+}
+
+fn wait_evidence_ready(ready: &mut UnixStream, marker: &[u8]) -> Result<()> {
+    let deadline = Instant::now() + Duration::from_secs(3);
+    let mut seen = Vec::new();
+    // Libtest may prefix the marker. Bound total bytes and every blocking read
+    // by one absolute deadline; no unbounded read_line startup wait.
+    for _ in 0..4096 {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            return Err(Error::new(
+                "fixture_startup_timeout",
+                "Private wait fixture did not become ready",
+            ));
+        }
+        ready.set_read_timeout(Some(remaining))?;
+        let mut byte = [0];
+        ready.read_exact(&mut byte)?;
+        seen.push(byte[0]);
+        if seen.ends_with(marker) {
+            return Ok(());
+        }
+    }
+    Err(Error::new(
+        "fixture_startup_bound",
+        "Private wait fixture handshake exceeded byte bound",
+    ))
+}
+
+fn wait_evidence_child(mode: &str) -> Result<OwnedChild> {
+    if !matches!(mode, "exit0" | "exit6" | "signal") {
+        return Err(Error::new("fixture_failed", "Unknown private wait mode"));
+    }
+    let fixture_nonce = nonce()?;
+    let marker = format!("wait-evidence-ready:{fixture_nonce}\n");
+    let (mut ready, output) = UnixStream::pair()?;
+    let mut command = Command::new(std::env::current_exe()?);
+    command
+        .args([
+            "--exact",
+            WAIT_EVIDENCE_CHILD,
+            "--nocapture",
+            "--test-threads=1",
+        ])
+        .env(WAIT_EVIDENCE_ENV, format!("{fixture_nonce}:{mode}"))
+        .stdin(Stdio::piped())
+        .stdout(Stdio::from(std::os::fd::OwnedFd::from(output)))
+        .stderr(Stdio::null());
+    let mut startup = WaitEvidenceStartup(Some(OwnedChild::spawn(&mut command)?));
+    if let Err(error) = wait_evidence_ready(&mut ready, marker.as_bytes()) {
+        // Explicitly release stdin before preserved ownership is dropped and
+        // before the caller can raise a test failure. Drop also covers unwind.
+        startup.close_stdin();
+        return Err(error);
+    }
+    startup.into_child()
+}
+
+fn assert_owned_wait_evidence(
+    mode: &str,
+    expected_code: Option<i32>,
+    expected_signal: Option<i32>,
+) {
+    if !ordinary() {
+        return;
+    }
+    let child = wait_evidence_child(mode).unwrap();
+    let mut fixture = Fixture::new(child);
+    let response = request(&fixture.directory, json!({"op":"close"})).unwrap();
+    fixture.owner.take().unwrap().join().unwrap().unwrap();
+    let record: Value = json_read(&fixture.directory.join("exited.json")).unwrap();
+    assert_eq!(response["closed"], true);
+    assert_eq!(record["game"], json!(fixture.endpoint.session.game));
+    assert_eq!(record["reason"], "owned child exited");
+    let exit = &response["exit"];
+    for key in ["exit_code", "signal", "core_dumped", "wait_status"] {
+        assert_eq!(
+            exit[key], record[key],
+            "Response differs from sole-reaper record: {key}"
+        );
+    }
+    assert_eq!(exit["exit_code"], json!(expected_code));
+    assert_eq!(exit["signal"], json!(expected_signal));
+    // SIGTERM never carries the default core-dump action. No core limit or
+    // VM/global signal setting is changed by these fixtures.
+    assert_eq!(exit["core_dumped"], false);
+    let actual_wait = exit["wait_status"].as_str().unwrap();
+    if let Some(code) = expected_code {
+        assert_eq!(actual_wait, format!("exit status: {code}"));
+    } else {
+        assert!(actual_wait.starts_with("signal: 15"), "{actual_wait}");
+    }
+    assert!(capture_identity(fixture.endpoint.session.game.pid).is_err());
+}
+
+#[test]
+fn owned_close_preserves_normal_exit_zero_evidence() {
+    assert_owned_wait_evidence("exit0", Some(0), None);
+}
+
+#[test]
+fn owned_close_preserves_normal_exit_six_without_signal_conflation() {
+    assert_owned_wait_evidence("exit6", Some(6), None);
+}
+
+#[test]
+fn owned_close_preserves_signal_termination_without_exit_code() {
+    assert_owned_wait_evidence("signal", None, Some(libc::SIGTERM));
 }
 
 #[test]

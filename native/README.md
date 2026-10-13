@@ -37,7 +37,7 @@ already owned X11 display and the exact verified game build below. The launcher
 and process-reader fixtures pass. The installed Linux game also ran under its
 actual Rust parent at unchanged Yama scope 1, with two reconnecting clients;
 this does not establish campaign acceptance.
-The latest optimized Luna medium clock test passed speed changes, receipt replay,
+An optimized Luna medium clock test passed speed changes, receipt replay,
 unpause, a server wait to 3 January 1936 and verified pause. The wait took 19.60
 seconds; unpause took 0.22 seconds and pause 0.76 seconds over persistent stdio/SSH.
 Twenty fresh overviews measured 15.7 ms median RPC, with a 71.3 ms maximum in this
@@ -87,7 +87,9 @@ threads. Generated-child tests exercised that access under unchanged Yama scope
 | `hoi4_research` | Own completed technology IDs, raw levels/thresholds and active signed counters; units remain unverified |
 | `hoi4_technology_list` | Bounded loaded technology IDs, filter and pagination; no eligibility inference |
 | `hoi4_input_geometry` | Own GUI pointer/dimension/scale diagnostics; client origin and click mapping remain unverified |
-| `hoi4_research_ui` | Read-only own slot/widget joins, selected slot and exact button/render diagnostics; no click authorization |
+| `hoi4_research_ui` | Own slot/widget joins, selected slot, technology detail and exact button/render diagnostics; no click authorization |
+| `hoi4_research_nodes` | Current open own-tree nodes joined to public technology keys; visibility, eligibility and routing unavailable |
+| `hoi4_focus_list` | Own canonical focus keys with prefix filtering/pagination and selected detail diagnostics; no start authorization |
 | `hoi4_wait_for` | Bounded wait, 1–50 seconds, for own focus/research changes, a date or research UI predicates |
 
 The game uses a 365-day calendar, including February 28 in 1936. Its current-build
@@ -112,7 +114,11 @@ list, rather than assuming every positive level is complete. Empty slots have
 null counters; active counters use the technology's signed 64-bit field.
 Normalized progress, days remaining and eligibility remain unavailable. This
 reader returned 47 completed IDs and four empty slots in the installed game.
-An actual active counter still needs validation.
+An ordinary builder Research-button diagnostic assigned `support_weapons` and
+verified raw counter 101,000. Luna subsequently advanced to 5 January and paused;
+the same counter became 505,000 while completed membership remained unchanged.
+This validates an active changing counter, not its normalized units or a
+production strategic adapter.
 Completed output accepts `offset` and `limit` (1–100), and reports total count
 and next offset without skipping full model validation.
 Wait snapshots bind coherent own-campaign context, reject context/timeline
@@ -127,8 +133,8 @@ opened its tree, confirmed through memory. These were view-navigation checks,
 not research assignments or proof of a production click adapter. A subsequent
 live check read each drag's renderer at its exact field and identified plain
 `CSprite` objects. That class safely returned unavailable field layout under
-the earlier whitelist; its independently recovered direct-resource layout now
-has fixture evidence and awaits a fresh live check.
+the earlier whitelist. Its direct-resource layout then passed in a fresh game,
+with all four exact plain sprites resolving their resource to `CSpriteType`.
 For a bounded UI wait, use `until_research_ui: {"view": "tree",
 "selected_slot": 0}` with `timeout_seconds`. The view is `panel` or `tree`;
 the optional slot is a current own-array index, not a persistent ID. Choose a UI
@@ -145,8 +151,28 @@ type; raw disabled state and selected-control alias remain diagnostics.
 Containers must belong to the owned GUI registry. Null selections and absent
 containers are explicit unavailable states. Reader policies cap Info capacity
 at 64, paired button/name capacity at 256, technology arrays at 8192 and names
-and keys at 256 bytes; larger data is refused. These additions have fixture
-evidence and await live validation. They supply no assignment adapter.
+and keys at 256 bytes; larger data is refused. These additions passed a live
+disabled future-tech detail, an enabled own detail, closing visibility readback
+and an ordinary builder Research-button diagnostic. They supply no assignment
+adapter; `input_authorized` remains false.
+
+The dedicated current-node query keeps its extra traversal out of ordinary clock
+and UI waits. It requires the open own ordinary tree and a selected own slot,
+then validates both current inline vectors, node ownership, canonical database
+and own-status membership and unique public keys. Policy bounds permit capacity
+2048 per vector and 512 aggregate records. Unknown node GUI classes supply type
+metadata only. Membership does not establish visibility or a click target.
+
+The focus query accepts an ASCII key prefix `filter`, `offset` 0–4096 and `limit`
+1–100. It validates every own key before pagination, exact own-tree ownership and
+global database pointer membership. Global duplicates/nulls grant no ownership.
+Selected detail windows must belong to the own view and GUI registry. The named
+ordinary `start` control supplies raw disabled state and flags; null selection
+supplies no binding. Literal local visibility and a stricter animation predicate
+are reported separately. Own capacity is capped at 4096, global membership at
+20,000, detail windows at 32, named controls at 256 and keys/names at 256 bytes.
+Hidden branch visibility, eligibility and input remain unavailable. These node
+and focus additions have fixture evidence and await installed-game validation.
 The mode default is FAIR; a mode label alone is not proof of campaign settings.
 
 ## Command port and expansion

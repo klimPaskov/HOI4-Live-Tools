@@ -1,7 +1,7 @@
 use crate::{
     calendar,
     error::{Error, Result},
-    game, gui,
+    game, gui, own_focus,
     platform::Process,
     research, research_ui, technology,
 };
@@ -26,6 +26,8 @@ fn tools(commands: Option<&dyn Commands>) -> Value {
         {"name":"hoi4_research","description":"Fresh own completed technology IDs with bounded pagination, and active raw research counters. Progress units, days remaining and eligibility remain unverified. Pure reads; never pauses.","inputSchema":{"type":"object","properties":{"offset":{"type":"integer","minimum":0,"maximum":8192},"limit":{"type":"integer","minimum":1,"maximum":100}},"additionalProperties":false}},
         {"name":"hoi4_input_geometry","description":"Read-only own GUI pointer, dimensions and scale diagnostics. Does not prove client origin, control geometry or click authorization.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}},
         {"name":"hoi4_research_ui","description":"Bounded own research slot widgets, selected slot, canonical technology Info windows, named ordinary research button state and exact render diagnostics. No eligibility, hit routing or input authorization.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}},
+        {"name":"hoi4_research_nodes","description":"Bounded current node records of the open own ordinary research tree, joined to canonical public technology keys. Membership does not prove visibility, eligibility or click routing. Pure reads; never pauses.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}},
+        {"name":"hoi4_focus_list","description":"Bounded own canonical focus keys and own selected detail windows. All own memberships and keys validated before pagination; branch visibility, eligibility and input authorization unavailable. Pure reads; never pauses.","inputSchema":{"type":"object","properties":{"filter":{"type":"string","maxLength":128},"offset":{"type":"integer","minimum":0,"maximum":4096},"limit":{"type":"integer","minimum":1,"maximum":100}},"additionalProperties":false}},
         {"name":"hoi4_technology_list","description":"Canonical loaded public technology IDs with bounded filtering/pagination. Catalog membership does not imply player research eligibility. Pure reads; never pauses.","inputSchema":{"type":"object","properties":{"filter":{"type":"string","maxLength":128},"offset":{"type":"integer","minimum":0,"maximum":8192},"limit":{"type":"integer","minimum":1,"maximum":100}},"additionalProperties":false}},
         {"name":"hoi4_wait_for","description":"Bounded server wait for own focus/research change, game date, or research UI view predicates and optional selected own slot. UI matches do not authorize input. Never pauses.","inputSchema":{"type":"object","properties":{"timeout_seconds":{"type":"integer","minimum":1,"maximum":50},"until_date":{"type":"array","items":{"type":"integer"},"minItems":3,"maxItems":3},"until_research_ui":{"type":"object","properties":{"view":{"type":"string","enum":["panel","tree"]},"selected_slot":{"type":"integer","minimum":0,"maximum":31}},"required":["view"],"additionalProperties":false}},"additionalProperties":false}}
     ]});
@@ -251,7 +253,7 @@ impl Server {
             .ok_or_else(|| Error::new("invalid_arguments", "Tool arguments must be an object"))?;
         match name {
             "hoi4_capabilities" if object.is_empty() => Ok(
-                json!({"runtime":"rust","platform":std::env::consts::OS,"owned_session_bound":self.process.is_some(),"unavailable":self.unavailable,"observations":["own_focus","own_research","clock","bounded_wait","technology_definitions","gui_input_diagnostics","own_research_ui_diagnostics"],"commands":commands.map(|c| c.capabilities()).unwrap_or_else(|| json!("unavailable: no verified input binding")),"native_transactions":"unavailable: failed posting path quarantined","default_mode":"FAIR","mod_qa":"separate; unavailable in this runtime","windows_macos":"unverified native adapters"}),
+                json!({"runtime":"rust","platform":std::env::consts::OS,"owned_session_bound":self.process.is_some(),"unavailable":self.unavailable,"observations":["own_focus","own_research","clock","bounded_wait","technology_definitions","gui_input_diagnostics","own_research_ui_diagnostics","own_current_research_nodes","own_focus_catalog_ui"],"commands":commands.map(|c| c.capabilities()).unwrap_or_else(|| json!("unavailable: no verified input binding")),"native_transactions":"unavailable: failed posting path quarantined","default_mode":"FAIR","mod_qa":"separate; unavailable in this runtime","windows_macos":"unverified native adapters"}),
             ),
             "hoi4_overview" if object.is_empty() => self.overview(),
             "hoi4_research" => {
@@ -273,6 +275,46 @@ impl Server {
                     ));
                 }
                 research_ui::snapshot(self.process()?)
+            }
+            "hoi4_research_nodes" => {
+                if !object.is_empty() {
+                    return Err(Error::new(
+                        "invalid_arguments",
+                        "Research nodes accept no arguments",
+                    ));
+                }
+                research_ui::nodes(self.process()?)
+            }
+            "hoi4_focus_list" => {
+                if object
+                    .keys()
+                    .any(|k| !["filter", "offset", "limit"].contains(&k.as_str()))
+                {
+                    return Err(Error::new("invalid_arguments", "Unknown focus argument"));
+                }
+                let (offset, limit) = page_bounds(object)?;
+                let filter = object
+                    .get("filter")
+                    .map(|value| {
+                        value.as_str().ok_or_else(|| {
+                            Error::new("invalid_arguments", "Focus filter must be a string")
+                        })
+                    })
+                    .transpose()?;
+                if offset > 4096
+                    || filter.is_some_and(|value| {
+                        value.len() > 128
+                            || !value
+                                .bytes()
+                                .all(|b| b.is_ascii_alphanumeric() || b == b'_')
+                    })
+                {
+                    return Err(Error::new(
+                        "invalid_arguments",
+                        "Focus query exceeds bounds",
+                    ));
+                }
+                own_focus::snapshot(self.process()?, offset, limit, filter)
             }
             "hoi4_technology_list" => {
                 if object

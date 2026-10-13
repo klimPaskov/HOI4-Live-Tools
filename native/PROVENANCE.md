@@ -6,7 +6,7 @@ commit `97c85437081904d5ad07bae1623ec58d1c0a5b9e`, specifically
 `calling/{mem,process/linux,api,game}.py`. Copyright (c) 2026 smerss.
 The original MIT license is retained in `LICENSE.clausewitz`.
 
-Rust modules `memory.rs`, `game.rs`, `calendar.rs`, `technology.rs`, `research.rs`, `research_ui.rs` and `platform/linux.rs` carry
+Rust modules `memory.rs`, `game.rs`, `calendar.rs`, `technology.rs`, `research.rs`, `research_ui.rs`, `technology_nodes.rs`, `own_focus.rs` and `platform/linux.rs` carry
 source comments identifying this derivation. Other modules are new project code.
 Current Linux ELF layouts were recovered independently from the installed build;
 upstream 1.19.2 offsets were not copied as current-build evidence.
@@ -57,3 +57,16 @@ and getter recovery for the current build. Technology Info windows require
 own-tree/status/catalog membership and a positively named ordinary research
 control from the exact container registry. Raw disabled/alias/visibility fields
 do not establish eligibility or input authorization.
+
+Current technology-node and own-focus catalog/detail diagnostics use the same
+derived canonical own-country semantics. Their node vectors, focus database/tree
+membership, UI ownership and named control layouts were independently recovered
+from the installed Linux ELF. Global focus database pointers supply membership
+only; duplicate/null global entries do not grant own-tree ownership. Null detail
+selection supplies no start-control binding. Current-node membership and local
+window state do not establish visibility, hit routing or eligibility. These are
+bounded read-only models, with no engine callbacks or strategic input adapter.
+
+Distinct Unix shutdown metadata and generated-child exit fixtures are new
+project code. They report the sole reaper's actual kernel wait result and do not
+change signal delivery, shutdown policy or diagnose the game rendering error.

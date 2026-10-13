@@ -48,7 +48,7 @@ impl Witnesses<'_> {
         Ok((reads.len(), bytes))
     }
 }
-fn exact(r: &Reader<'_>, pointer: u64, vptr: u64) -> Result<()> {
+pub(crate) fn exact(r: &Reader<'_>, pointer: u64, vptr: u64) -> Result<()> {
     if pointer % 8 != 0 || r.u64(pointer)? != vptr {
         return Err(Error::new(
             "invalid_gui_type",
@@ -57,7 +57,7 @@ fn exact(r: &Reader<'_>, pointer: u64, vptr: u64) -> Result<()> {
     }
     Ok(())
 }
-fn array(r: &Reader<'_>, address: u64, bound: usize) -> Result<Vec<u64>> {
+pub(crate) fn array(r: &Reader<'_>, address: u64, bound: usize) -> Result<Vec<u64>> {
     let (header, data, count) = r.array_header(address)?;
     let capacity = i32::from_le_bytes(header[8..12].try_into().unwrap()) as usize;
     if capacity > bound || (count > 0 && data % 8 != 0) {
@@ -140,7 +140,7 @@ fn type_encoding(r: &Reader<'_>, base: u64, object: u64) -> Result<String> {
     }
     Ok(String::from_utf8(bytes[..end].to_vec()).unwrap())
 }
-fn nullable_type(r: &Reader<'_>, base: u64, object: u64) -> Result<Value> {
+pub(crate) fn nullable_type(r: &Reader<'_>, base: u64, object: u64) -> Result<Value> {
     if object == 0 {
         Ok(Value::Null)
     } else {
@@ -319,16 +319,30 @@ pub(crate) struct UiContext {
     pub slots: Vec<u64>,
 }
 pub fn snapshot(process: &dyn Process) -> Result<Value> {
-    Ok(observe(process, false)?.0)
+    Ok(observe(process, false, false)?.0)
+}
+/// Dedicated diagnostic keeps current-node validation out of clock/UI waits.
+pub fn nodes(process: &dyn Process) -> Result<Value> {
+    let (value, _) = observe(process, false, true)?;
+    Ok(
+        json!({"source":"native own current research nodes","build_id":game::BUILD_ID,
+        "selected_slot":value["selected_slot"],"active_mode_raw":value["active_mode_raw"],
+        "current_nodes":value["current_nodes"],"freshness":value["freshness"],
+        "owned":true,"input_authorized":false,"observation_paused_game":false}),
+    )
 }
 pub(crate) fn wait_snapshot(process: &dyn Process) -> Result<(Value, UiContext)> {
-    let (value, context) = observe(process, true)?;
+    let (value, context) = observe(process, true, false)?;
     Ok((
         value,
         context.expect("Context requested by wait observation"),
     ))
 }
-fn observe(process: &dyn Process, include_context: bool) -> Result<(Value, Option<UiContext>)> {
+fn observe(
+    process: &dyn Process,
+    include_context: bool,
+    include_nodes: bool,
+) -> Result<(Value, Option<UiContext>)> {
     let start = Instant::now();
     process.begin_snapshot()?;
     let observed = Witnesses {
@@ -485,6 +499,24 @@ fn observe(process: &dyn Process, include_context: bool) -> Result<(Value, Optio
         output.push(json!({"slot":index,"container":container_state,"button_count":buttons.len(),"buttons_observed":button_output,"button_sample_limit":8,"input_authorized":false}));
     }
     let info = technology_info(&r, base, idler, tree, status, registry)?;
+    let nodes = if include_nodes {
+        if active != 6
+            || selected_index.is_none()
+            || display_tag < 0
+            || tree_state["visible_predicate"] != true
+            || panel_state["visible_predicate"] == true
+        {
+            return Err(Error::new(
+                "gui_unavailable",
+                "Selected own ordinary research tree must be open",
+            ));
+        }
+        Some(crate::technology_nodes::current_nodes(
+            &r, base, tree, status, registry,
+        )?)
+    } else {
+        None
+    };
     let (end_calls, end_bytes) = observed.finish()?;
     process.check()?;
     let context = campaign.map(|campaign| UiContext {
@@ -493,7 +525,7 @@ fn observe(process: &dyn Process, include_context: bool) -> Result<(Value, Optio
         slots: slots.clone(),
     });
     Ok((
-        json!({"source":"native own research UI diagnostics","build_id":game::BUILD_ID,"owned":true,"own_slot_count":slots.len(),"widget_count":widgets.len(),"widgets_complete":widgets.len()==slots.len(),"slot_identity":"own array index in current process/status snapshot; not a persistent ID","selected_slot":selected_index,"active_mode_raw":active,"panel":panel_state,"ordinary_tree":tree_state,"slots":output,"technology_info":info,"input_authorized":false,"unverified":["effective ancestor visibility and clipping","sprite hit predicates","topmost hit routing","physical client conversion"],"observation_paused_game":false,"freshness":{"observed_unix_ms":SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),"elapsed_ms":start.elapsed().as_secs_f64()*1000.0,"read_calls":r.calls.get()+end_calls as u64,"read_bytes":r.bytes.get()+end_bytes}}),
+        json!({"source":"native own research UI diagnostics","build_id":game::BUILD_ID,"owned":true,"own_slot_count":slots.len(),"widget_count":widgets.len(),"widgets_complete":widgets.len()==slots.len(),"slot_identity":"own array index in current process/status snapshot; not a persistent ID","selected_slot":selected_index,"active_mode_raw":active,"panel":panel_state,"ordinary_tree":tree_state,"slots":output,"technology_info":info,"current_nodes":nodes,"input_authorized":false,"unverified":["effective ancestor visibility and clipping","sprite hit predicates","topmost hit routing","physical client conversion"],"observation_paused_game":false,"freshness":{"observed_unix_ms":SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),"elapsed_ms":start.elapsed().as_secs_f64()*1000.0,"read_calls":r.calls.get()+end_calls as u64,"read_bytes":r.bytes.get()+end_bytes}}),
         context,
     ))
 }

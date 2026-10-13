@@ -51,6 +51,8 @@ fn stdio_is_json_and_notifications_have_no_reply() {
             "hoi4_research",
             "hoi4_input_geometry",
             "hoi4_research_ui",
+            "hoi4_research_nodes",
+            "hoi4_focus_list",
             "hoi4_technology_list",
             "hoi4_wait_for"
         ]
@@ -119,6 +121,32 @@ fn research_ui_refuses_selector_or_action_arguments_before_process_access() {
         let v: Value =
             serde_json::from_str(reply["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
         assert_eq!(v["error"]["code"], "invalid_arguments");
+    }
+}
+
+#[test]
+fn own_focus_and_node_queries_refuse_invalid_arguments_before_process_access() {
+    use hoi4_live_native::protocol::Server;
+    let server = Server {
+        process: None,
+        unavailable: None,
+    };
+    for (name, arguments) in [
+        ("hoi4_focus_list", json!({"country":"FRA"})),
+        ("hoi4_focus_list", json!({"offset":4097})),
+        ("hoi4_focus_list", json!({"limit":101})),
+        ("hoi4_focus_list", json!({"limit":true})),
+        ("hoi4_focus_list", json!({"filter":null})),
+        ("hoi4_focus_list", json!({"filter":"x".repeat(129)})),
+        ("hoi4_focus_list", json!({"filter":"GER;start"})),
+        ("hoi4_research_nodes", json!({"click":true})),
+        ("hoi4_research_nodes", json!({"country":"FRA"})),
+        ("hoi4_research_nodes", json!({"slot":0})),
+    ] {
+        let reply = server.handle(json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":name,"arguments":arguments}})).unwrap();
+        let value: Value =
+            serde_json::from_str(reply["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+        assert_eq!(value["error"]["code"], "invalid_arguments");
     }
 }
 #[test]

@@ -16,7 +16,7 @@ use std::{
         unix::{
             fs::{DirBuilderExt, FileTypeExt, MetadataExt, OpenOptionsExt, PermissionsExt},
             net::{UnixListener, UnixStream},
-            process::CommandExt,
+            process::{CommandExt, ExitStatusExt},
         },
     },
     path::{Path, PathBuf},
@@ -654,6 +654,16 @@ fn nonce() -> Result<String> {
     File::open("/dev/urandom")?.read_exact(&mut bytes)?;
     Ok(bytes.iter().map(|byte| format!("{byte:02x}")).collect())
 }
+/// Terminal evidence comes from the existing sole reaper, never from a signal
+/// we requested, a shell status, or a previously saved exit record.
+fn unix_wait_evidence(status: &std::process::ExitStatus) -> Value {
+    json!({
+        "exit_code":status.code(),
+        "signal":status.signal(),
+        "core_dumped":status.core_dumped(),
+        "wait_status":status.to_string()
+    })
+}
 fn run_owner(
     listener: UnixListener,
     socket_meta: fs::Metadata,
@@ -665,6 +675,7 @@ fn run_owner(
     let mut workers: Vec<thread::JoinHandle<()>> = Vec::new();
     let mut pending: Vec<SyncSender<Value>> = Vec::new();
     let mut deadline = None;
+    let mut exit_evidence = None;
 
     loop {
         let mut index = 0;
@@ -712,11 +723,14 @@ fn run_owner(
                     if let Ok(_drained) = shared.reads.try_write() {
                         match child.child.try_wait() {
                             Ok(Some(status)) => {
+                                let evidence = unix_wait_evidence(&status);
+                                let mut record = evidence.clone();
+                                record["game"] = json!(shared.endpoint.session.game);
+                                record["reason"] = json!("owned child exited");
+                                exit_evidence = Some(evidence);
                                 child.exited = true;
-                                if let Err(error) = json_new(
-                                    &directory.join("exited.json"),
-                                    json!({"game":shared.endpoint.session.game,"exit_code":status.code(),"reason":"owned child exited"}),
-                                ) {
+                                if let Err(error) = json_new(&directory.join("exited.json"), record)
+                                {
                                     eprintln!("{error}");
                                 }
                             }
@@ -731,7 +745,7 @@ fn run_owner(
         }
         if child.exited && deadline.is_some() {
             for reply in pending.drain(..) {
-                let _ = reply.send(json!({"closed":true}));
+                let _ = reply.send(json!({"closed":true,"exit":exit_evidence}));
             }
             break;
         }
