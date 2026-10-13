@@ -235,6 +235,17 @@ policy boundary at the graphics root, whose 4,142 children remain uninspected.
 Median RPC was 116/120 ms for two exact keys; the full-node model took 313 ms.
 Their different validation scopes prevent equivalent-model speedup claims.
 
+The next source gives only the independently owned graphics roots a separate
+8,192-entry capacity/aggregate policy, covering that measured root. Other
+ancestors retain limits of 2,048/4,096; the shared aggregate includes preceding
+entries. Only sibling pointers are compared. Complete root closure still does
+not establish routing or input authority.
+For a closed typed reciprocal chain, an optional diagnostic compares sampled
+unit-scale translations with renderer caches using the recovered float32
+calculation and traversal flags. A match is conditional cache consistency,
+not current-frame freshness. Incomplete, nonunit or skipped paths remain
+explicitly unavailable; all action-authority fields stay false.
+
 The optional point diagnostic also follows a constructor-proved active SDL video
 fingerprint, input-window magic and reciprocal X11 driver registry. It reports the
 selected native window ID, dimensions and raw relative-mode flags only after

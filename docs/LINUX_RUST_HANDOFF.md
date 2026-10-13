@@ -183,3 +183,11 @@ selection returned the correct canonical key; no research was assigned. Closed
 queries refused, both recording segments finalized, and one WM close returned
 actual normal exit code 0. This is diagnostic acceptance only. Strategic actions,
 daily plans, the clean two-year Luna run and full campaigns remain unfinished.
+
+The next owned-root policy and conditional unit-scale cache diagnostic pass
+194 portable/MSRV tests, 248 standard Linux checks (247 substantive) and 953
+Python tests (37 skipped). Ordinary ancestor limits remain unchanged; only exact
+owned graphics roots receive the separate bounded policy. Conditional cache
+consistency does not establish current-frame freshness or input routing. These
+outputs await a fresh immutable installed-game run. Continue with ordinary
+ID-based strategic actions and canonical state readback, then Luna acceptance.

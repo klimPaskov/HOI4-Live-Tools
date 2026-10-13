@@ -2856,6 +2856,7 @@ fn v2_known_renderer_ancestors_read_only_proved_base_links() {
         f.region(base + 0x350e400, 128);
         f.put(base + 0x350e400, name.as_bytes());
         f.region(node, 0x138);
+        f.put(node + 0x144, &[0]);
         f.word(node, base + table);
         f.word(node + 0x108, 0xf4000);
         f.array(node + 0xc0, 0xf8200, 1);
@@ -2931,15 +2932,15 @@ fn hierarchy_aggregate_policy_refusal_preserves_only_completed_ancestors() {
     f.array(0xf40c0, 0x180000, 2048);
     // This individually valid root header would exceed the aggregate budget;
     // its child payload is intentionally unmapped and must never be read.
-    f.array(0x712b0, 0x190000, 2048);
+    f.array(0x712b0, 0x190000, 6143);
     let v = research_ui::node_detail(&f, "tools1").unwrap();
     let h = &v["detail"]["render_diagnostic"]["parent_chain"];
     assert_eq!(h["status"], "unavailable_policy_bound");
     assert_eq!(h["container_position_joins_verified"], true);
     assert_eq!(h["payload_hops"], 2);
     assert_eq!(h["policy_boundary"]["role"], "owned_graphics_root_1f0");
-    assert_eq!(h["policy_boundary"]["capacity"], 2048);
-    assert_eq!(h["policy_boundary"]["count"], 2048);
+    assert_eq!(h["policy_boundary"]["capacity"], 6143);
+    assert_eq!(h["policy_boundary"]["count"], 6143);
     assert_eq!(
         h["policy_boundary"]["inspected_entries_before_attempt"],
         2050
@@ -3367,4 +3368,222 @@ fn target_missing_current_membership_and_unbound_duplicate_policy() {
         "ambiguous_gui_node"
     );
     f.assert_not_read(&[0xf0138]);
+}
+
+#[test]
+fn owned_root_accepts_actual_size_and_boundary_without_sibling_payloads() {
+    for (cap, count) in [(5395i32, 4142), (8192, 8189)] {
+        let mut f = Fixture::new();
+        f.node_render_detail();
+        f.region(0x180000, count * 8);
+        f.word(0x180000, 0xf3000);
+        for i in 1..count {
+            f.word(0x180000 + i as u64 * 8, 0xdead0000);
+        }
+        f.array(0x712b0, 0x180000, count as i32);
+        f.put(0x712b8, &cap.to_le_bytes());
+        let v = research_ui::node_detail(&f, "tools1").unwrap();
+        let h = &v["detail"]["render_diagnostic"]["parent_chain"];
+        assert_eq!(h["graphics_root_closed"], true);
+        assert_eq!(h["input_authorized"], false);
+        f.assert_not_read(&[0xdead0000]);
+    }
+}
+#[test]
+fn root_policy_refuses_unmapped_payload_and_witnesses_header() {
+    for (cap, count) in [(8193i32, 1), (8192, 8190)] {
+        let mut f = Fixture::new();
+        f.node_render_detail();
+        f.array(0x712b0, 0x180000, count);
+        f.put(0x712b8, &cap.to_le_bytes());
+        let v = research_ui::node_detail(&f, "tools1").unwrap();
+        let h = &v["detail"]["render_diagnostic"]["parent_chain"];
+        assert_eq!(
+            h["policy_boundary"]["policy_scope"],
+            "exact_owned_graphics_root"
+        );
+        assert_eq!(h["graphics_root_closed"], false);
+        f.assert_not_read(&[0x180000]);
+        f.fault = Some((0x712b0, 1, vec![0; 16]));
+        assert_eq!(
+            research_ui::node_detail(&f, "tools1").unwrap_err().code,
+            "torn_read"
+        );
+    }
+}
+#[test]
+fn root_array_all_bytes_are_final_witnesses() {
+    let mut f = Fixture::new();
+    f.node_render_detail();
+    f.region(0x180000, 4142 * 8);
+    f.word(0x180000, 0xf3000);
+    f.array(0x712b0, 0x180000, 4142);
+    let mut bytes = vec![0; 4142 * 8];
+    bytes[..8].copy_from_slice(&0xf3000u64.to_le_bytes());
+    bytes[4142 * 8 - 1] = 1;
+    f.fault = Some((0x180000, 1, bytes));
+    assert_eq!(
+        research_ui::node_detail(&f, "tools1").unwrap_err().code,
+        "torn_read"
+    );
+}
+#[test]
+fn same_primary_foreign_position_never_gets_root_policy() {
+    let mut f = Fixture::new();
+    f.node_render_detail();
+    f.region(0x170000, 0x160);
+    f.word(0x170000, 0x10000 + 0x43484f0);
+    f.word(0xf3108, 0x170000);
+    f.array(0x1700c0, 0x180000, 4142);
+    let v = research_ui::node_detail(&f, "tools1").unwrap();
+    let h = &v["detail"]["render_diagnostic"]["parent_chain"];
+    assert_eq!(h["policy_boundary"]["policy_scope"], "ordinary_ancestor");
+    assert_eq!(h["policy_boundary"]["capacity_limit"], 2048);
+    f.assert_not_read(&[0x180000]);
+}
+
+#[test]
+fn larger_root_policy_preserves_unique_membership_and_alignment() {
+    for duplicate in [false, true] {
+        let mut f = Fixture::new();
+        f.node_render_detail();
+        f.region(0x180000, 4142 * 8);
+        if duplicate {
+            f.word(0x180000, 0xf3000);
+            f.word(0x180008, 0xf3000);
+        }
+        f.array(0x712b0, 0x180000, 4142);
+        assert_eq!(
+            research_ui::node_detail(&f, "tools1").unwrap_err().code,
+            "invalid_gui_hierarchy"
+        );
+    }
+    let mut f = Fixture::new();
+    f.node_render_detail();
+    f.array(0x712b0, 0x180003, 8193);
+    assert_eq!(
+        research_ui::node_detail(&f, "tools1").unwrap_err().code,
+        "invalid_gui_hierarchy"
+    );
+    f.assert_not_read(&[0x180003]);
+}
+
+impl Fixture {
+    fn unit_chain(&mut self) {
+        for (i, node) in [0x711f0u64, 0xf3000, 0xf4000, 0xf0000]
+            .into_iter()
+            .enumerate()
+        {
+            self.put(node + 0x70, &1.0f32.to_le_bytes());
+            self.put(node + 0x74, &(-2.0f32).to_le_bytes());
+            self.put(node + 0x114, &1.0f32.to_le_bytes());
+            self.put(node + 0x144, &[1]);
+            self.put(node + 0x128, &[1]);
+            self.put(node + 0x80, &1.0f32.to_le_bytes());
+            self.put(node + 0x94, &1.0f32.to_le_bytes());
+            self.put(node + 0xb0, &((i + 1) as f32).to_le_bytes());
+            self.put(node + 0xb4, &(-2.0 * (i + 1) as f32).to_le_bytes());
+        }
+    }
+}
+#[test]
+fn unit_cache_consistency_is_conditional_not_currency() {
+    let mut f = Fixture::new();
+    f.node_render_detail();
+    f.unit_chain();
+    let v = research_ui::node_detail(&f, "tools1").unwrap();
+    let d = &v["detail"]["render_diagnostic"]["parent_chain"]["unit_cache_diagnostic"];
+    assert_eq!(d["status"], "conditional_cache_consistent");
+    assert_eq!(d["current_frame_verified"], false);
+    assert_eq!(d["input_authorized"], false);
+    f.put(0xf00b0, &99.0f32.to_le_bytes());
+    let v = research_ui::node_detail(&f, "tools1").unwrap();
+    assert_eq!(
+        v["detail"]["render_diagnostic"]["parent_chain"]["unit_cache_diagnostic"]["status"],
+        "cache_mismatch"
+    );
+}
+#[test]
+fn unit_cache_nonunit_nonfinite_and_skipped_root_are_unavailable() {
+    for (a, bytes, status) in [
+        (
+            0xf3114,
+            2.0f32.to_le_bytes(),
+            "unavailable_nonunit_or_nonfinite",
+        ),
+        (
+            0xf3070,
+            f32::NAN.to_le_bytes(),
+            "unavailable_nonunit_or_nonfinite",
+        ),
+    ] {
+        let mut f = Fixture::new();
+        f.node_render_detail();
+        f.unit_chain();
+        f.put(a, &bytes);
+        let v = research_ui::node_detail(&f, "tools1").unwrap();
+        assert_eq!(
+            v["detail"]["render_diagnostic"]["parent_chain"]["unit_cache_diagnostic"]["status"],
+            status
+        );
+    }
+    let mut f = Fixture::new();
+    f.node_render_detail();
+    f.unit_chain();
+    f.put(0x71334, &[0]);
+    f.put(0x71318, &[0]);
+    for a in 0x712a0..0x712a8 {
+        f.data.remove(&a);
+    }
+    let v = research_ui::node_detail(&f, "tools1").unwrap();
+    assert_eq!(
+        v["detail"]["render_diagnostic"]["parent_chain"]["unit_cache_diagnostic"]["status"],
+        "unavailable_observed_traversal_flags"
+    );
+    f.assert_not_read(&[0x712a0]);
+}
+#[test]
+fn unit_cache_fields_are_final_witnesses() {
+    for (a, n) in [
+        (0xf3070, 4),
+        (0xf3114, 4),
+        (0xf3128, 1),
+        (0xf3134, 1),
+        (0xf3144, 1),
+        (0xf3080, 4),
+        (0xf3094, 4),
+        (0xf30b0, 4),
+    ] {
+        let mut f = Fixture::new();
+        f.node_render_detail();
+        f.unit_chain();
+        let mut bytes = (0..n).map(|i| f.data[&(a + i)]).collect::<Vec<_>>();
+        bytes[0] ^= 1;
+        f.fault = Some((a, 1, bytes));
+        assert_eq!(
+            research_ui::node_detail(&f, "tools1").unwrap_err().code,
+            "torn_read"
+        );
+    }
+}
+
+#[test]
+fn hidden_constructor_positions_with_children_still_publish_unit_cache() {
+    let mut f = Fixture::new();
+    f.node_render_detail();
+    f.unit_chain();
+    for node in [0x711f0u64, 0xf3000, 0xf4000] {
+        f.put(node + 0x144, &[0]);
+    }
+    let v = research_ui::node_detail(&f, "tools1").unwrap();
+    assert_eq!(
+        v["detail"]["render_diagnostic"]["parent_chain"]["unit_cache_diagnostic"]["status"],
+        "conditional_cache_consistent"
+    );
+    // A negative count on the leaf is malformed, not a policy/unavailable branch.
+    f.put(0xf00cc, &(-1i32).to_le_bytes());
+    assert_eq!(
+        research_ui::node_detail(&f, "tools1").unwrap_err().code,
+        "invalid_gui_hierarchy"
+    );
 }

@@ -944,6 +944,31 @@ One owned WM close completed in 2.28 seconds; the sole reaper recorded exit code
 code 6 remains unexplained. Clean two-year and full campaign acceptance remain
 unfinished. Calls, source manifest, footage and actual failures stay private.
 
+## Owned-root and conditional cache fixture gate
+
+The next source separates the measured graphics root from ordinary ancestors.
+Only exact owned embedded graphics roots permit capacity and aggregate limits of
+8,192, including preceding inspected entries. Ordinary ancestors retain
+2,048/4,096. Complete pointer arrays are witnessed; sibling payloads are never
+dereferenced. Fixtures cover the actual 5,395/4,142 size, exact aggregate boundary,
+unmapped overruns, duplicate/missing membership and final-byte mutation.
+
+A closed typed reciprocal chain also supplies an optional unit-scale cache
+diagnostic. Recovered root seeds, float32 translation addition and sampled
+visibility/descent branches determine whether cache comparison is available.
+Matching caches do not prove a current frame, atomic publication, routing or
+event acknowledgement. Nonunit, nonfinite, skipped and incomplete branches
+remain explicitly unavailable; input authority stays false.
+
+Portable and Rust 1.86 suites each passed 194 tests, including 128 snapshot
+cases. The actual optimized Linux suite passed 248 reported checks (247
+substantive and one inert X11 helper), with display ownership and Yama 1
+unchanged. Python passed 953 tests with 37 skips; formatting, Clippy,
+MSRV Linux compilation and protocol smoke passed. The preceding four no-XTEST
+close cases remain separate unchanged-transport evidence. These new hierarchy
+and cache outputs still require a fresh immutable installed-game run; they do
+not establish strategic dispatch or campaign acceptance.
+
 ## Attribution
 
 The findings above refer to upstream `calling/{mem,process/linux,api,game,

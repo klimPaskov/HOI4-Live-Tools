@@ -13,7 +13,13 @@ enum Membership {
     Verified(usize),
     PolicyUnavailable(Value),
 }
-fn membership(r: &Reader<'_>, parent: u64, child: u64, total: &mut usize) -> Result<Membership> {
+fn membership(
+    r: &Reader<'_>,
+    parent: u64,
+    child: u64,
+    total: &mut usize,
+    owned_root: bool,
+) -> Result<Membership> {
     let (header, data, count) = r.array_header(parent + 0xc0)?;
     let capacity = i32::from_le_bytes(header[8..12].try_into().unwrap()) as usize;
     // Malformed structure is never an optional policy refusal, even when its
@@ -24,11 +30,16 @@ fn membership(r: &Reader<'_>, parent: u64, child: u64, total: &mut usize) -> Res
             "Aligned nonempty hierarchy child array required",
         ));
     }
-    if capacity > 2048 || count > 4096 - *total {
+    let (capacity_limit, aggregate_limit, scope) = if owned_root {
+        (8192, 8192, "exact_owned_graphics_root")
+    } else {
+        (2048, 4096, "ordinary_ancestor")
+    };
+    if capacity > capacity_limit || *total > aggregate_limit || count > aggregate_limit - *total {
         return Ok(Membership::PolicyUnavailable(json!({
             "capacity":capacity,"count":count,
             "inspected_entries_before_attempt":*total,
-            "capacity_limit":2048,"aggregate_entry_limit":4096,
+            "capacity_limit":capacity_limit,"aggregate_entry_limit":aggregate_limit,"policy_scope":scope,
             "child_payload_read":false
         })));
     }
@@ -62,7 +73,7 @@ fn summary(
         .iter()
         .filter(|node| node["payload_read"] == true)
         .count();
-    json!({"limit":16,"observed_ancestors":chain.len(),"payload_hops":payload_hops,"chain":chain,"status":status,"policy_boundary":policy,"graphics_root_closed":status=="closed_to_owned_graphics_root","container_position_joins_verified":container_verified,"gui_hierarchy_provenance":"typed reciprocal links plus constructor positions/owned graphics anchor; incomplete when a boundary is reported","ancestor_own_country_semantics":"unproved","client_rectangle_available":false,"effective_routing_verified":false,"input_authorized":false})
+    json!({"limit":16,"observed_ancestors":chain.len(),"payload_hops":payload_hops,"chain":chain,"status":status,"policy_boundary":policy,"unit_cache_diagnostic":{"status":"unavailable_incomplete_hierarchy","current_frame_verified":false,"input_authorized":false},"graphics_root_closed":status=="closed_to_owned_graphics_root","container_position_joins_verified":container_verified,"gui_hierarchy_provenance":"typed reciprocal links plus constructor positions/owned graphics anchor; incomplete when a boundary is reported","ancestor_own_country_semantics":"unproved","client_rectangle_available":false,"effective_routing_verified":false,"input_authorized":false})
 }
 pub(crate) fn observe(
     r: &Reader<'_>,
@@ -110,7 +121,7 @@ pub(crate) fn observe(
         ));
     }
     if let Membership::PolicyUnavailable(mut policy) =
-        membership(r, positions[0], positions[1], &mut total)?
+        membership(r, positions[0], positions[1], &mut total, false)?
     {
         policy["stage"] = json!("container_position_membership");
         return Ok(summary(
@@ -121,6 +132,7 @@ pub(crate) fn observe(
         ));
     }
     // Constructor-positive positions need no control138: null is legitimate.
+    let mut typed_path = vec![render];
     let mut child = render;
     let mut seen = BTreeSet::from([render]);
     let mut chain = Vec::new();
@@ -165,7 +177,7 @@ pub(crate) fn observe(
         } else {
             "exact_reciprocal_gui_ancestor"
         };
-        let count = match membership(r, parent, child, &mut total)? {
+        let count = match membership(r, parent, child, &mut total, roots.contains(&parent))? {
             Membership::Verified(count) => count,
             Membership::PolicyUnavailable(mut policy) => {
                 policy["stage"] = json!("ancestor_membership");
@@ -179,12 +191,19 @@ pub(crate) fn observe(
                 ));
             }
         };
-        chain.push(json!({"type_encoding":encoding,"role":role,"payload_read":true,"reciprocal_child_membership":true,"child_count_raw":count}));
+        chain.push(json!({"type_encoding":encoding,"role":role,"payload_read":true,"reciprocal_child_membership":true,"child_count_raw":count,"membership_policy_scope":if roots.contains(&parent){"exact_owned_graphics_root"}else{"ordinary_ancestor"},"capacity_limit":if roots.contains(&parent){8192}else{2048},"aggregate_entry_limit":if roots.contains(&parent){8192}else{4096},"inspected_entries_after":total}));
+        typed_path.push(parent);
         if roots.contains(&parent) {
             status = "closed_to_owned_graphics_root";
             break;
         }
         child = parent;
     }
-    Ok(summary(chain, status, true, None))
+    let mut result = summary(chain, status, true, None);
+    result["unit_cache_diagnostic"] = if status == "closed_to_owned_graphics_root" {
+        crate::node_unit_cache::observe(r, &typed_path)?
+    } else {
+        json!({"status":"unavailable_incomplete_hierarchy","current_frame_verified":false,"input_authorized":false})
+    };
+    Ok(result)
 }

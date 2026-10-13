@@ -127,8 +127,20 @@ not a client origin, motion acknowledgment or input adapter.
 
 Optional hierarchy size refusal distinguishes bounded traversal policy from
 malformed structure, preserves completed reciprocal joins only and witnesses all
-observed headers. No limits are increased. Linux endpoint preflight and raw-byte
+observed headers. Its initial implementation retained the original limits. Linux endpoint preflight and raw-byte
 boundary/socket tests are new project code using libc's local pathname ABI.
+
+The separate owned-root policy follows the installed-game measurement of 4,142
+children with capacity 5,395. Only exact embedded graphics roots, after independent
+global/registry/type checks, permit capacity and aggregate limits of 8,192;
+ordinary ancestors retain 2,048/4,096. Pointer comparisons do not dereference
+sibling payloads. This is project policy, not an upstream engine array limit.
+
+`node_unit_cache.rs` is new code from independent current-build traversal and
+cache-store recovery. A closed typed reciprocal path can report conditional
+float32 unit-scale cache consistency under sampled branch flags. It does not
+establish the current traversal phase, cache currency, atomic publication,
+event acknowledgement or input authority. No traversal scratch data is used.
 
 The optional source-window observer is new code from independent current-build
 SDL constructor/accessor, X11 driver callback, driverdata registry and point
