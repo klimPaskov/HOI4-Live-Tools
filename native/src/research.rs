@@ -179,10 +179,28 @@ fn observe(
         None => Reader::new(process),
     };
     let base = process.image_base();
+    let (mut value, context) = observe_from_reader(&r, base, offset, limit, include_context)?;
+    let (end_calls, end_bytes) = observed
+        .as_ref()
+        .map(Witnesses::finish)
+        .transpose()?
+        .unwrap_or((0, 0));
+    process.check()?;
+    value["freshness"] = json!({"observed_unix_ms":SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),"elapsed_ms":start.elapsed().as_secs_f64()*1000.0,"read_calls":r.calls.get()+end_calls as u64,"read_bytes":r.bytes.get()+end_bytes});
+    Ok((value, context))
+}
+/// Unchanged canonical validation core; caller owns witnesses/process bracket.
+pub(crate) fn observe_from_reader(
+    r: &Reader<'_>,
+    base: u64,
+    offset: usize,
+    limit: usize,
+    include_context: bool,
+) -> Result<(Value, Option<ResearchContext>)> {
     let gs = r.u64(base + 0x44086a8)?;
     let idler = r.u64(base + 0x44085f8)?;
-    exact(&r, gs, base + 0x42c7598)?;
-    exact(&r, idler, base + 0x42c9a88)?;
+    exact(r, gs, base + 0x42c7598)?;
+    exact(r, idler, base + 0x42c9a88)?;
     let tag = r.i32(gs + 0x518)?;
     if !(1..4096).contains(&tag) {
         return Err(Error::new(
@@ -190,17 +208,17 @@ fn observe(
             "Positive own country tag required",
         ));
     }
-    let index_witness = selected(&r, gs + 0x340, tag as usize, 4)?;
+    let index_witness = selected(r, gs + 0x340, tag as usize, 4)?;
     let index = i32::from_le_bytes(index_witness.value[..].try_into().unwrap());
     if index < 0 {
         return Err(Error::new("player_unavailable", "Own country index absent"));
     }
-    let country_witness = selected(&r, gs + 0x310, index as usize, 8)?;
+    let country_witness = selected(r, gs + 0x310, index as usize, 8)?;
     let country = u64::from_le_bytes(country_witness.value[..].try_into().unwrap());
     r.object_type(country, "CCountry")?;
     let country_vptr = r.u64(country)?;
     let status = r.u64(country + 0xf38)?;
-    exact(&r, status, base + 0x42108f8)?;
+    exact(r, status, base + 0x42108f8)?;
     if r.u64(status + 0x130)? != country || r.i32(status + 0x138)? != tag {
         return Err(Error::new(
             "invalid_research_owner",
@@ -208,11 +226,11 @@ fn observe(
         ));
     }
     let db = r.u64(base + 0x439f450)?;
-    exact(&r, db, base + 0x42110c8)?;
-    let templates = array(&r, db + 0x48, 8192)?;
-    let own = array(&r, status + 0x88, 8192)?;
-    let completed = array(&r, status + 0x40, 8192)?;
-    let slots = array(&r, status + 0xa0, 32)?;
+    exact(r, db, base + 0x42110c8)?;
+    let templates = array(r, db + 0x48, 8192)?;
+    let own = array(r, status + 0x88, 8192)?;
+    let completed = array(r, status + 0x40, 8192)?;
+    let slots = array(r, status + 0xa0, 32)?;
     if templates.pointers.is_empty() || own.pointers.len() != templates.pointers.len() - 1 {
         return Err(Error::new(
             "research_unavailable",
@@ -220,7 +238,7 @@ fn observe(
         ));
     }
     let model = Model {
-        r: &r,
+        r,
         base,
         status,
         templates: &templates,
@@ -245,7 +263,7 @@ fn observe(
     let mut slot_ids = BTreeSet::new();
     let mut slot_pointers = BTreeSet::new();
     for (index, slot) in slots.pointers.iter().copied().enumerate() {
-        exact(&r, slot, base + 0x4210898)?;
+        exact(r, slot, base + 0x4210898)?;
         if !slot_pointers.insert(slot) || r.u64(slot + 0x10)? != status {
             return Err(Error::new(
                 "invalid_research_owner",
@@ -289,7 +307,7 @@ fn observe(
         }
     }
     for (slot, current) in slot_witnesses {
-        exact(&r, slot, base + 0x4210898)?;
+        exact(r, slot, base + 0x4210898)?;
         if r.u64(slot + 0x10)? != status || r.u64(slot + 0x18)? != current {
             return Err(Error::new("torn_read", "Own research slot changed"));
         }
@@ -300,18 +318,18 @@ fn observe(
         || r.u64(gs)? != base + 0x42c7598
         || r.u64(idler)? != base + 0x42c9a88
         || r.i32(gs + 0x518)? != tag
-        || selected(&r, gs + 0x340, tag as usize, 4)? != index_witness
-        || selected(&r, gs + 0x310, index as usize, 8)? != country_witness
+        || selected(r, gs + 0x340, tag as usize, 4)? != index_witness
+        || selected(r, gs + 0x310, index as usize, 8)? != country_witness
         || r.u64(country)? != country_vptr
         || r.u64(country + 0xf38)? != status
         || r.u64(status)? != base + 0x42108f8
         || r.u64(status + 0x130)? != country
         || r.i32(status + 0x138)? != tag
         || r.u64(db)? != base + 0x42110c8
-        || array(&r, db + 0x48, 8192)? != templates
-        || array(&r, status + 0x88, 8192)? != own
-        || array(&r, status + 0x40, 8192)? != completed
-        || array(&r, status + 0xa0, 32)? != slots
+        || array(r, db + 0x48, 8192)? != templates
+        || array(r, status + 0x88, 8192)? != own
+        || array(r, status + 0x40, 8192)? != completed
+        || array(r, status + 0xa0, 32)? != slots
     {
         return Err(Error::new(
             "torn_read",
@@ -322,7 +340,7 @@ fn observe(
     // can traverse active technology/template strings. Shared witnesses also
     // refuse changed slot/owner/header bytes before a new payload is followed.
     let campaign = include_context
-        .then(|| game::context_from_reader(&r, base))
+        .then(|| game::context_from_reader(r, base))
         .transpose()?;
     if campaign
         .as_ref()
@@ -333,12 +351,6 @@ fn observe(
             "Research body and campaign roots differ",
         ));
     }
-    let (end_calls, end_bytes) = observed
-        .as_ref()
-        .map(Witnesses::finish)
-        .transpose()?
-        .unwrap_or((0, 0));
-    process.check()?;
     let context = campaign.map(|campaign| ResearchContext {
         campaign,
         own: [country, status],
@@ -356,8 +368,6 @@ fn observe(
             "completion_meaning":"engine completed-membership array",
             "progress_raw_units":"unverified; signed engine counter",
             "eligibility":"unavailable","observation_paused_game":false,
-            "freshness":{"observed_unix_ms":SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),
-                "elapsed_ms":start.elapsed().as_secs_f64()*1000.0,"read_calls":r.calls.get()+end_calls as u64,"read_bytes":r.bytes.get()+end_bytes}
         }),
         context,
     ))

@@ -1470,3 +1470,86 @@ actual Linux passed **430 reported checks** (429 substantive plus one inert
 helper). Python passed **953 tests, 37 skipped**, in 20.024 seconds. Host/Linux
 Clippy and MSRV Linux compilation passed. These are fixture results; category
 selection and Standard geometry await a fresh exclusive Luna run.
+
+## Recorded run 023: category success and verification deadline failure
+
+Immutable source `9599e7f` / CLI SHA-256
+`611db16b1ea1d181f02d99161a398ddce603876f230b3a517c28578bec6f60dc`
+started Normal historical vanilla Germany with no mods or DLC. A first recording
+packet was verified before one Start. The builder prepared menus only; native
+reads confirmed 1 January 1936 at 12:00, paused, all four slots empty and own
+research views closed in mode 23. Loading took several minutes; one read-only
+capture and its copy timed out. Start was never retried.
+
+One exclusive Luna medium player verified OpenPanel (**745 ms RPC**), SelectSlot0
+(**1,119 ms**), View support weapons (**1,864 ms**) and Research (**2,800 ms**).
+Industry/electronics reads verified Standard fields, callback associations and
+the bounded cache/hierarchy diagnostics. Raw frame/routing/input-authority flags
+remained false. Luna initially skipped category input based on these flags; that
+phase is preserved separately, including the contract clarification.
+
+Speed4 and unpause verified, but a Jan5 wait ended at its **50.003-second wall
+deadline**, still on Jan1 at 20:00, with zero torn reads. Terminal pause and
+overview showed Jan1 at 21:00. Support's raw counter remained **101,000** and the
+completed count stayed 47; units are unverified. This is no multi-day acceptance.
+The lease was released and status confirmed zero remaining time.
+
+A separately authorized second phase used the same player, immutable binary,
+paused campaign and recording. No category input had previously failed or been
+attempted. A fresh lease and own-state preflight preceded SelectSlot1
+(**3,500 ms**), industry-folder selection (**3,667 ms**) and a distinct same-folder
+request (**453 ms**). All three returned fresh Verified state. The repeat had
+delivery null and sent no input; causality flags remained false.
+
+The single electronics-folder attempt then returned `action_uncertain`:
+**Readback completed after bounded deadline**, at **5,139 ms RPC**. All further
+input stopped. No retry, replacement token or post-failure game observation was
+used to convert this into success. The resulting folder remains unknown; its
+durable Intent is preserved. The lease was released and status again showed zero.
+These samples are not general p50/p95 estimates or an upstream speed comparison.
+
+Both H.264 segments finalized and passed ffprobe: **600.000 + 433.333 seconds**,
+**10,908,339 bytes**, 512×288 at 3 fps. One owned WM close returned actual normal
+exit **0**, no signal/core dump, in **3.45 seconds**. Exact game and owner
+disappearance, current lease proof and unchanged Yama1 were checked; both stdio
+clients closed. All nine CI jobs had passed for this recorded source. No live
+binary was replaced.
+
+Industry selection/no-input completion is corroborated on this exact profile.
+Reliable complete category navigation remains unfinished. Focus actions, daily
+plans, economics/army/naval commands, Windows/macOS native live adapters, clean
+two-year acceptance and full campaigns remain open gates.
+
+## Unified category reader and focus prerequisites: fixture checkpoint
+
+Category verification now obtains the complete canonical own research model and
+full category/UI body under one Reader and final witness set. It retains all
+completed-membership, active-slot, canonical-key, owner/type/root and repeated
+field checks. Default public research/UI/category outputs and read paths stay
+unchanged. Generated late Info, slot and root mutations refuse with zero stage
+dispatch. The deadline remains five seconds; run 023's uncertainty is not erased.
+
+The exact former four-body sequence measured **1,649 logical reads**, versus
+**684** for the unified bracket, a **58.5% reduction** on the same generated
+fixture. These are logical requests, including final witnesses, rather than
+kernel syscall counts or live latency. The parent also checks against a
+conservative public-path baseline. Installed-game verification of the optimization
+remains pending.
+
+New private focus preparation retains the canonical own catalog, active-progress
+owner, campaign and selected-detail witnesses. Producer-only facts cover the
+known managed mode, typed own root/container flags and complete own focus-detail
+and research-Info local blockers. Unknown/foreign scope refuses; no selected
+foreign technology payload or global modal-clear claim is introduced. Sprite
+points share existing maths. Hidden nonmatching detail bodies remain omitted;
+complete producer counts supply their local blocker facts. No focus input tool
+or dispatcher is enabled.
+
+Combined portable and Rust 1.86 suites passed **396 tests**. Optimized actual
+Linux passed **458 reported checks** (457 substantive plus one inert helper),
+including five isolated X11 cases. The nested helper print is not counted again.
+The preceding exact game/owner remained exited; display ownership and Yama1
+stayed unchanged. Python passed **953 tests, 37 skipped**, in 22.830 seconds.
+Host/Linux Clippy, MSRV Linux compilation, formatting and diff checks passed.
+These are fixture/kernel checks; focus actions, a reliable repeated category
+cycle and campaign acceptance remain unfinished.

@@ -5151,7 +5151,7 @@ fn category_command_body_observes_new_info_and_selected_assignment_under_witness
     assert_eq!(n, c);
     assert_eq!(new["technology_info"]["visible_count"], 1);
     assert_eq!(new["category"]["selected_slot_empty"], true);
-    f.word(0x2c118, 0x80000);
+    f.word(0x2c118, 0x81000);
     let (new, _) = research_ui::category_command_owned(&f, "industry_folder").unwrap();
     assert_eq!(new["category"]["selected_slot_empty"], false);
     let mut f = owned_category_fixture();
@@ -5163,4 +5163,152 @@ fn category_command_body_observes_new_info_and_selected_assignment_under_witness
             .code,
         "torn_read"
     );
+}
+
+#[test]
+fn unified_category_preserves_complete_canonical_completed_and_slot_guards() {
+    let mut f = owned_category_fixture();
+    f.word(0x2c118, 0);
+    let (v, c) = research_ui::category_command_owned(&f, "industry_folder").unwrap();
+    assert_eq!(v["canonical_research"]["researched_count"], 1);
+    assert_eq!(
+        v["canonical_research"]["slots"][1]["researching"],
+        serde_json::Value::Null
+    );
+    assert_eq!(c.slots.len(), 4);
+    let mut f = owned_category_fixture();
+    f.number(0x81174, 0);
+    assert_eq!(
+        research_ui::category_command_owned(&f, "industry_folder")
+            .unwrap_err()
+            .code,
+        "invalid_completed_research"
+    );
+    f.assert_not_read(&[0x92dc0, 0x214068]);
+    let mut f = owned_category_fixture();
+    f.word(0x2c118, 0x80000);
+    assert_eq!(
+        research_ui::category_command_owned(&f, "industry_folder")
+            .unwrap_err()
+            .code,
+        "invalid_research_join"
+    );
+}
+#[test]
+fn unified_category_late_info_slot_and_root_mutations_prevent_dispatch() {
+    use hoi4_live_native::{
+        actions::Epoch,
+        input_lease::InputAuthority,
+        platform::Identity,
+        research_stage::{Backend, Candidate, Delivery, Journal, OwnState, Stage, Target},
+    };
+    use std::sync::RwLock;
+    use std::time::{Duration, Instant};
+    struct Gate<'a> {
+        f: &'a Fixture,
+        sends: usize,
+    }
+    impl Backend for Gate<'_> {
+        fn observe(&mut self) -> Result<OwnState> {
+            research_ui::category_command_owned(self.f, "industry_folder")?;
+            panic!("Poisoned observation must refuse before stage state")
+        }
+        fn candidate(&mut self, _: &Target) -> Result<Candidate> {
+            panic!("No candidate after refused observation")
+        }
+        fn dispatch_once(&mut self, _: &Candidate, _: Instant) -> Delivery {
+            self.sends += 1;
+            Delivery::Unknown
+        }
+        fn confirm_input_idle(&mut self, _: &Candidate, _: Instant) -> Result<()> {
+            Ok(())
+        }
+    }
+    for (i, (a, bytes)) in [
+        (0xc1a78, 0xdead0000u64.to_le_bytes().to_vec()),
+        (0x2c118, 0x81000u64.to_le_bytes().to_vec()),
+        (0x10000 + 0x44085f8, 0x32008u64.to_le_bytes().to_vec()),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let mut f = owned_category_fixture();
+        f.word(0x2c118, 0);
+        f.target_info(0);
+        f.fault = Some((a, 1, bytes));
+        let epoch = Epoch {
+            game: Identity {
+                pid: 120,
+                start_ticks: "456".into(),
+                exe: "/fixture/game".into(),
+                uid: 1000,
+            },
+            campaign: "fixture".into(),
+            player: "GER".into(),
+        };
+        let mut authority = InputAuthority::new("test".into(), epoch.clone()).unwrap();
+        let token = "a".repeat(32);
+        authority
+            .acquire("test", token.clone(), 300, &epoch)
+            .unwrap();
+        let directory = std::env::temp_dir().join(format!(
+            "hoi4-category-mutation-{}-{i}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir(&directory).unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&directory, std::fs::Permissions::from_mode(0o700)).unwrap();
+        }
+        let path = directory.join("journal");
+        let mut journal = Journal::open(&path).unwrap();
+        let mut gate = Gate { f: &f, sends: 0 };
+        let target = Target {
+            epoch,
+            stage: Stage::SelectCategory,
+            technology: String::new(),
+            folder_id: Some("industry_folder".into()),
+            slot: 1,
+        };
+        assert_eq!(
+            journal
+                .execute(
+                    "mutation",
+                    target,
+                    &token,
+                    &authority,
+                    &RwLock::new(true),
+                    &mut gate,
+                    Duration::from_secs(5)
+                )
+                .unwrap_err()
+                .code,
+            "torn_read"
+        );
+        assert_eq!(gate.sends, 0);
+        drop(journal);
+        std::fs::remove_file(path).unwrap();
+        std::fs::remove_dir(directory).unwrap();
+    }
+}
+#[test]
+fn unified_category_read_count_measurement_per_verification_phase() {
+    let f = owned_category_fixture();
+    research_ui::category_command_owned(&f, "industry_folder").unwrap();
+    let logical: usize = f.tracked_reads.borrow().values().sum();
+    let reference = owned_category_fixture();
+    // These public paths exclude the old UI wait's extra campaign reads and
+    // selected-empty byte, so this conservatively undercounts the former work.
+    research::owned_snapshot(&reference).unwrap();
+    research_ui::snapshot(&reference).unwrap();
+    research_ui::category_owned(&reference, "industry_folder").unwrap();
+    research::owned_snapshot(&reference).unwrap();
+    let former_lower_bound: usize = reference.tracked_reads.borrow().values().sum();
+    println!("UNIFIED_CATEGORY_LOGICAL_READS={logical}; FORMER_LOWER_BOUND={former_lower_bound}");
+    assert!(logical < former_lower_bound);
 }

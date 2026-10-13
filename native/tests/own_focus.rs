@@ -974,3 +974,448 @@ fn focus_geometry_default_list_and_node_keep_metadata_shape_and_reads() {
         .get("render_diagnostic")
         .is_none());
 }
+impl Fake {
+    fn command_context_fixture(&mut self) {
+        self.focus_nodes();
+        self.word(0x439f450, 0x251000);
+        self.word(0x43f3eb8, 0x252000);
+        self.array(0x252000, 0x253000, &[0, 0]);
+        self.string(0x253020, "GER");
+        self.string(CO + 0x10, "Germany");
+        self.region(GS + 0x718, 32);
+        self.word(GS + 0x718, 0x250000);
+        self.word(GS + 0x720, 36);
+        self.region(0x250000, 64);
+        self.put(0x250000, b"00000000-0000-0000-0000-000000000001");
+        self.int(GS + 0x460, 60759371);
+        self.int(GS + 0x4b4, 0);
+        self.put(ID + 0x6c1, &[1]);
+        self.int(GS + 0x620, 1);
+        self.int(GS + 0x628, 1);
+        self.region(0x254000, 0x100);
+        self.word(0x254000, 0x4202638);
+        self.word(0x254008, CO);
+        self.word(CO + 0x1348, 0x254000);
+        self.region(0x255000, 0x200);
+        self.word(0x255000, 0x42108f8);
+        self.word(0x255130, CO);
+        self.int(0x255138, 1);
+        self.word(CO + 0xf38, 0x255000);
+        for (table, ti, text, name) in [
+            (0x4202638, 0x256000, 0x257000, "CNationalFocusProgress"),
+            (0x42108f8, 0x256020, 0x257100, "CTechnologyStatus"),
+            (0x42024d0, 0x256040, 0x257200, "CNationalFocus"),
+        ] {
+            self.word(table - 8, ti);
+            self.region(ti, 16);
+            self.word(ti + 8, text);
+            self.region(text, 128);
+            self.put(text, format!("{}{name}", name.len()).as_bytes());
+        }
+        self.string(F + 0x60, "Rhineland");
+    }
+}
+#[test]
+fn focus_command_same_reader_context_and_default_paths_unchanged() {
+    let mut f = Fake::new();
+    f.command_context_fixture();
+    let (body, c) = own_focus::command_owned(&f, "GER_rhineland", false).unwrap();
+    assert_eq!(c.anchors, [CO, 0x254000, TREE, VIEW, GUI, MAN, 0x255000]);
+    assert_eq!(c.campaign.player, "GER");
+    assert_eq!(c.selected, vec![[PANEL, F]]);
+    assert_eq!(c.active_key, None);
+    assert_eq!(body["command_observation"]["input_authorized"], false);
+    assert!(f.untouched(0x232e70, 8));
+    let f = Fake::new();
+    assert!(f.result().unwrap().get("command_observation").is_none());
+    assert!(f.untouched(CO + 0x1348, 8));
+    assert!(f.untouched(GS + 0x718, 32));
+}
+#[test]
+fn focus_command_active_focus_own_catalog_and_progress_owner_before_payload() {
+    let mut f = Fake::new();
+    f.command_context_fixture();
+    f.word(0x254010, F);
+    let (_, c) = own_focus::command_owned(&f, "GER_rhineland", false).unwrap();
+    assert_eq!(c.active_key.as_deref(), Some("GER_rhineland"));
+    let mut f = Fake::new();
+    f.command_context_fixture();
+    f.word(0x254008, 0xdead0000);
+    assert_eq!(
+        own_focus::command_owned(&f, "GER_rhineland", false)
+            .unwrap_err()
+            .code,
+        "invalid_focus_owner"
+    );
+    assert!(f.untouched(0x254010, 8));
+    let mut f = Fake::new();
+    f.command_context_fixture();
+    f.word(0x254010, 0xdead0000);
+    assert_eq!(
+        own_focus::command_owned(&f, "GER_rhineland", false)
+            .unwrap_err()
+            .code,
+        "invalid_focus_owner"
+    );
+    assert!(f.untouched(0xdead0000, 8));
+    assert!(f.untouched(GS + 0x718, 32));
+}
+#[test]
+fn focus_command_late_progress_selection_type_registry_and_clock_witnesses() {
+    for a in [
+        CO + 0x1348,
+        0x254000,
+        0x254008,
+        0x254010,
+        PANEL + 0x7d0,
+        PANEL + 0x7b8,
+        VIEW + 0x2f0,
+        WIN + 0x98,
+        BUTTON + 0x68,
+        GS + 0x718,
+        GS + 0x460,
+        GS + 0x628,
+        CO + 0x1338,
+    ] {
+        let mut f = Fake::new();
+        f.command_context_fixture();
+        f.torn = Some(a);
+        assert_eq!(
+            own_focus::command_owned(&f, "GER_rhineland", false)
+                .unwrap_err()
+                .code,
+            "torn_read",
+            "{a:x}"
+        );
+    }
+}
+#[test]
+fn focus_command_positive_tag_scope_before_payload_and_wrong_progress_type() {
+    let mut f = Fake::new();
+    f.command_context_fixture();
+    f.int(GS + 0x518, 0);
+    assert_eq!(
+        own_focus::command_owned(&f, "GER_rhineland", false)
+            .unwrap_err()
+            .code,
+        "player_unavailable"
+    );
+    assert!(f.untouched(CO, 8));
+    assert!(f.untouched(CO + 0x1348, 8));
+    let mut f = Fake::new();
+    f.command_context_fixture();
+    f.word(0x254000, 0x42024d0);
+    assert_eq!(
+        own_focus::command_owned(&f, "GER_rhineland", false)
+            .unwrap_err()
+            .code,
+        "invalid_focus_type"
+    );
+    assert!(f.untouched(0x254008, 8));
+}
+
+#[test]
+fn focus_command_matching_detail_scope_anchor_and_ambiguity() {
+    let mut f = Fake::new();
+    f.command_context_fixture();
+    let (_, c) = own_focus::command_owned(&f, "GER_rhineland", false).unwrap();
+    assert_eq!(c.matching_details, vec![[PANEL, F, WIN]]);
+    let bytes: Vec<_> = (0..0x800).map(|i| f.data[&(PANEL + i)]).collect();
+    f.put(0x258000, &bytes);
+    f.array(VIEW + 0x1180, 0x214000, &[PANEL, 0x258000]);
+    assert_eq!(
+        own_focus::command_owned(&f, "GER_rhineland", false)
+            .unwrap_err()
+            .code,
+        "ambiguous_focus_detail"
+    );
+}
+#[test]
+fn focus_command_exact_key_before_progress_and_owned_slot_scope() {
+    let mut f = Fake::new();
+    f.command_context_fixture();
+    assert_eq!(
+        own_focus::command_owned(&f, "GER_unknown", false)
+            .unwrap_err()
+            .code,
+        "focus_unavailable"
+    );
+    assert!(f.untouched(CO + 0x1348, 8));
+    let mut f = Fake::new();
+    f.command_context_fixture();
+    f.region(0x259000, 0x60);
+    f.word(0x259000, 0x4210898);
+    f.word(0x259010, 0x255000);
+    f.array(0x2550a0, 0x25a000, &[0x259000]);
+    f.word(0x4210890, 0x256060);
+    f.region(0x256060, 16);
+    f.word(0x256068, 0x257300);
+    f.region(0x257300, 128);
+    f.put(0x257300, b"13CResearchSlot");
+    let (_, c) = own_focus::command_owned(&f, "GER_rhineland", false).unwrap();
+    assert_eq!(c.slots, vec![0x259000]);
+    f.reads.borrow_mut().clear();
+    f.torn = Some(0x259000);
+    assert_eq!(
+        own_focus::command_owned(&f, "GER_rhineland", false)
+            .unwrap_err()
+            .code,
+        "torn_read"
+    );
+}
+#[test]
+fn focus_command_optin_geometry_shares_context_final_witnesses() {
+    let mut f = Fake::new();
+    f.command_context_fixture();
+    f.focus_geometry_fixture(0x232000, 0x234000, false);
+    let (v, c) = own_focus::command_owned(&f, "GER_rhineland", true).unwrap();
+    assert_eq!(
+        v["node_association"]["controls"][0]["render_diagnostic"]["field_layout_verified"],
+        true
+    );
+    assert!(c.campaign.paused);
+    assert_eq!(v["input_authorized"], false);
+    let mut f = Fake::new();
+    f.command_context_fixture();
+    f.focus_geometry_fixture(0x232000, 0x234000, false);
+    f.torn = Some(0x2451a7);
+    assert_eq!(
+        own_focus::command_owned(&f, "GER_rhineland", true)
+            .unwrap_err()
+            .code,
+        "torn_read"
+    );
+}
+
+#[test]
+fn focus_command_duplicate_slot_scope_refused_before_slot_payload() {
+    let mut f = Fake::new();
+    f.command_context_fixture();
+    f.array(0x2550a0, 0x25a000, &[0x259000, 0x259000]);
+    // Deliberately unmapped slot. Neither direct context nor ClockContext may
+    // dereference it before the duplicate-pointer scope check.
+    assert_eq!(
+        own_focus::command_owned(&f, "GER_rhineland", false)
+            .unwrap_err()
+            .code,
+        "invalid_focus_context"
+    );
+    assert!(f.untouched(0x259000, 0x60));
+    assert!(f.untouched(GS + 0x718, 32));
+}
+#[test]
+fn focus_command_duplicate_panel_pointer_refused_before_selected_payload() {
+    let mut f = Fake::new();
+    f.command_context_fixture();
+    f.array(VIEW + 0x1180, 0x214000, &[PANEL, PANEL]);
+    assert_eq!(
+        own_focus::command_owned(&f, "GER_rhineland", false)
+            .unwrap_err()
+            .code,
+        "invalid_focus_catalog"
+    );
+    assert!(f.untouched(PANEL + 0x7b8, 8));
+    assert!(f.untouched(PANEL + 0x7d0, 8));
+}
+
+impl Fake {
+    fn own_focus_ui_fixture(&mut self) {
+        self.command_context_fixture();
+        self.int(MAN + 0x3d8, 13);
+        self.region(0x260000, 0xf00);
+        self.word(0x260000, 0x4347d58);
+        self.word(0x260098, GUI);
+        self.put(0x2600a5, &[8]);
+        self.word(VIEW + 0x2f8, 0x260000);
+        self.region(0x261000, 0xe00);
+        self.word(0x261000, 0x424de40);
+        self.word(0x2612f0, ID);
+        self.int(0x261e20, 1);
+        self.int(0x261e24, 6);
+        self.word(MAN + 0xf8, 0x261000);
+    }
+    fn ui(&self) -> hoi4_live_native::own_focus::FocusContext {
+        own_focus::command_owned(self, "GER_rhineland", false)
+            .unwrap()
+            .1
+    }
+    fn research_info_fixture(&mut self) {
+        self.array(0x261dc0, 0x263000, &[0x262000]);
+        self.region(0x262000, 0xb00);
+        self.word(0x262000, 0x430bbf0);
+        self.word(0x262a78, ID);
+        self.word(0x262a80, 0x261000);
+        self.word(0x262a88, 0x264000);
+        self.region(0x264000, 0xf00);
+        self.word(0x264000, 0x4347d58);
+        self.word(0x264098, GUI);
+        // Poison selected technology. GUI blocker reads must not touch it or payload.
+        self.word(0x262a98, 0xdead0000);
+    }
+}
+#[test]
+fn focus_ui_producer_local_mode_visibility_and_complete_counts_not_modal_claim() {
+    let mut f = Fake::new();
+    f.own_focus_ui_fixture();
+    let c = f.ui();
+    let u = c.ui_facts.unwrap();
+    assert_eq!(u.focus_mode_selected(), Some(true));
+    assert_eq!(u.focus_view_local_ready(), Some(true));
+    assert_eq!(u.focus_detail_local_counts(), Some([1, 0]));
+    assert_eq!(u.own_research_info_local_counts(), Some([0, 0]));
+    assert_eq!(u.local_summary()["global_modal_clear_available"], false);
+    let f = Fake::new();
+    f.result().unwrap();
+    assert!(f.untouched(MAN + 0x3d8, 4));
+    assert!(f.untouched(VIEW + 0x2f8, 8));
+    assert!(f.untouched(MAN + 0xf8, 8));
+}
+#[test]
+fn focus_ui_animation_and_null_are_explicitly_distinct_from_clear() {
+    let mut f = Fake::new();
+    f.own_focus_ui_fixture();
+    f.int(0x260ef8, 2);
+    assert_eq!(
+        f.ui().ui_facts.unwrap().focus_view_local_ready(),
+        Some(false)
+    );
+    let mut f = Fake::new();
+    f.own_focus_ui_fixture();
+    f.word(VIEW + 0x2f8, 0);
+    assert_eq!(f.ui().ui_facts.unwrap().focus_view_local_ready(), None);
+    let mut f = Fake::new();
+    f.own_focus_ui_fixture();
+    f.word(PANEL + 0x7c8, 0);
+    assert_eq!(f.ui().ui_facts.unwrap().focus_detail_local_counts(), None);
+    let mut f = Fake::new();
+    f.own_focus_ui_fixture();
+    f.int(MAN + 0x3d8, 99);
+    assert_eq!(f.ui().ui_facts.unwrap().focus_mode_selected(), None);
+}
+#[test]
+fn focus_ui_complete_nonmatching_details_are_inspected_for_local_flags_only() {
+    let mut f = Fake::new();
+    f.own_focus_ui_fixture();
+    f.region(0x265000, 0x1800);
+    f.word(0x265000, 0x42024d0);
+    f.word(0x265160, TREE);
+    f.string(0x265018, "GER_other");
+    f.array(TREE + 0x30, 0x212000, &[F, 0x265000]);
+    f.array(DB + 0x58, 0x213000, &[F, 0x265000]);
+    f.region(0x266000, 0x800);
+    f.word(0x266000, 0x43023f8);
+    f.word(0x2667b8, ID);
+    f.word(0x2667c0, VIEW);
+    f.word(0x2667d0, 0x265000);
+    f.word(0x2667c8, 0x267000);
+    f.region(0x267000, 0xf00);
+    f.word(0x267000, 0x4347d58);
+    f.word(0x267098, GUI);
+    f.put(0x2670a5, &[8]);
+    f.array(VIEW + 0x1180, 0x214000, &[PANEL, 0x266000]);
+    assert_eq!(
+        f.ui().ui_facts.unwrap().focus_detail_local_counts(),
+        Some([2, 0])
+    );
+    assert!(f.untouched(0x2679a0, 16));
+}
+#[test]
+fn focus_ui_research_info_owns_scope_before_flags_no_selected_tech_payload() {
+    let mut f = Fake::new();
+    f.own_focus_ui_fixture();
+    f.research_info_fixture();
+    assert_eq!(
+        f.ui().ui_facts.unwrap().own_research_info_local_counts(),
+        Some([0, 0])
+    );
+    assert!(f.untouched(0x262a98, 8));
+    assert!(f.untouched(0xdead0000, 8));
+    let mut f = Fake::new();
+    f.own_focus_ui_fixture();
+    f.research_info_fixture();
+    f.put(0x2640a5, &[8]);
+    assert_eq!(
+        f.ui().ui_facts.unwrap().own_research_info_local_counts(),
+        Some([1, 0])
+    );
+    let mut f = Fake::new();
+    f.own_focus_ui_fixture();
+    f.research_info_fixture();
+    f.word(0x262a78, 0xdead0000);
+    assert_eq!(
+        own_focus::command_owned(&f, "GER_rhineland", false)
+            .unwrap_err()
+            .code,
+        "invalid_focus_owner"
+    );
+    assert!(f.untouched(0x262a88, 8));
+    assert!(f.untouched(0x2640a5, 1));
+    let mut f = Fake::new();
+    f.own_focus_ui_fixture();
+    f.research_info_fixture();
+    f.int(0x261e20, 2);
+    assert_eq!(
+        f.ui().ui_facts.unwrap().own_research_info_local_counts(),
+        None
+    );
+    assert!(f.untouched(0x261dc0, 16));
+}
+#[test]
+fn focus_ui_own_registry_type_and_late_flags_are_final_witnesses() {
+    let mut f = Fake::new();
+    f.own_focus_ui_fixture();
+    f.word(0x260098, 0xdead0000);
+    assert_eq!(
+        own_focus::command_owned(&f, "GER_rhineland", false)
+            .unwrap_err()
+            .code,
+        "invalid_focus_owner"
+    );
+    assert!(f.untouched(0x2600a5, 1));
+    for a in [
+        MAN + 0x3d8,
+        VIEW + 0x2f8,
+        0x260000,
+        0x260098,
+        0x2600a5,
+        0x260eb0,
+        0x260ef8,
+        MAN + 0xf8,
+        0x2612f0,
+        0x261e20,
+        0x261e24,
+        0x261dc0,
+        0x262a78,
+        0x262a88,
+        0x2640a5,
+    ] {
+        let mut f = Fake::new();
+        f.own_focus_ui_fixture();
+        f.research_info_fixture();
+        f.torn = Some(a);
+        assert_eq!(
+            own_focus::command_owned(&f, "GER_rhineland", false)
+                .unwrap_err()
+                .code,
+            "torn_read",
+            "{a:x}"
+        );
+    }
+}
+
+#[test]
+fn focus_node_geometry_state_flags_are_bounded_and_final_witnesses() {
+    let mut f = Fake::new();
+    f.focus_nodes();
+    f.focus_geometry_fixture(0x232000, 0x234000, false);
+    f.int(0x2340ac, 4);
+    assert_eq!(f.geometry_result().unwrap_err().code, "invalid_focus_node");
+    assert!(f.untouched(0x2340e8, 8));
+    for a in [0x2340ac, 0x234074] {
+        let mut f = Fake::new();
+        f.focus_nodes();
+        f.focus_geometry_fixture(0x232000, 0x234000, false);
+        f.torn = Some(a);
+        assert_eq!(f.geometry_result().unwrap_err().code, "torn_read");
+    }
+}

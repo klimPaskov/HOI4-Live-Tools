@@ -2,6 +2,14 @@
 
 ## Unreleased native preview
 
+- Add witnessed own-focus command context, local UI facts and private Sprite
+  point preparation. Keep public defaults unchanged; focus dispatch remains
+  unavailable. Record one successful industry-category switch/no-op and a later
+  electronics verification timeout, with durable quarantine and no retry.
+- Combine category verification's canonical research and UI evidence under one
+  witness set. Reduce generated logical reads by 58.5% while retaining validation,
+  deadlines and replay policy; live latency verification remains pending.
+
 - Add bounded own research UI diagnostics with exact widget/slot joins, primary
   button/render metadata and repeated structural witnesses. No click points or
   input authorization are exposed; installed-game validation is pending.

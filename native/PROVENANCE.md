@@ -12,9 +12,8 @@ Current Linux ELF layouts were recovered independently from the installed build;
 upstream 1.19.2 offsets were not copied as current-build evidence.
 
 The owned Linux preview exposes observations and optionally ordinary clock keys.
-Engine command execution remains quarantined in
-the disclosed private upstream validation adapter until its transaction and
-recovery semantics have been ported and tested. No raw process-write, injection,
+The failed engine posting path remains permanently quarantined in
+the disclosed private upstream validation adapter. No raw process-write, injection,
 console or foreign-country interface is exposed by this Rust MCP.
 
 The action journal and X11 keyboard fallback modules are new project code.
@@ -246,3 +245,18 @@ and its top-bar observer route. A fixture's unproved mode-zero assumption was
 corrected after constructor/getter/toggle recovery proved the no-managed-view
 sentinel 23. Static routing and sentinel checks do not establish modal absence,
 keyboard consumption or event causality. No game files are redistributed.
+
+The hidden own-focus command context and local UI fact producer are new project
+code. They retain the complete own canonical catalog, active-progress owner,
+campaign, selected-detail and final byte witnesses. The producer checks typed
+own focus containers and own research Info blockers without reading selected
+foreign technology payloads. Local mode/visibility/animation facts never mean
+global modal clearance or effective routing. The private Sprite point preparer
+shares the existing maths and consumes producer-only facts; it has no caller UI
+booleans, dispatcher or MCP registration. Focus actions remain unverified.
+
+The category command reader now shares the unchanged canonical research
+validation core with its full UI body under one final witness set. This is
+independent project integration of the attributed own-research semantics above;
+it changes no public default, engine call, deadline or replay policy. Generated
+read-count reductions are separate from live timing evidence.

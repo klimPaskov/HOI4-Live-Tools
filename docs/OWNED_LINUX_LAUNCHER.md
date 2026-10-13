@@ -189,8 +189,9 @@ requires a 512×288 client, 2560×1440 logical graphics and the verified builtin
 absolute SDL/X11 association. Other profiles are unavailable. Omission preserves
 clock-only input. Recorded run 019 passed the assembled owner adapter with
 exclusive Luna medium input: exact-ID selection/assignment, independent canonical
-slot readback and counter advancement. Automatic slot navigation and campaign
-acceptance remain unfinished. See [the bounded live gate](CLAUSEWITZ_VALIDATION.md#recorded-run-019-exclusive-luna-medium-rust-research-smoke).
+slot readback and counter advancement. Later runs verified panel opening and
+empty-slot navigation. Full campaign acceptance remains unfinished. See
+[live evidence](CLAUSEWITZ_VALIDATION.md).
 
 `hoi4_research_attempt` takes the planned `technology_id`, own `slot`,
 `stage` (`select_slot`, `view` or `research`), a separate stable `request_id`
@@ -200,11 +201,25 @@ pointer movement. An already open panel verifies without toggling it. This stage
 passed recorded run 022. `select_slot` requires an open own panel
 and verifies the selected empty own tree; View/Research require that tree.
 Selection retains the planned technology ID in its durable target. It accepts
-no coordinates and performs no category navigation.
+no coordinates.
 Recorded run 020 verified SelectSlot 0, View/Research and SelectSlot 1 with
 exclusive Luna medium input and independent own-state readback. Each stage derives its point from fresh internal observations and
 pins campaign, own status and full slot identities. A final read-only check
 follows X11 preparation. It attempts at most one motion/left-button pair.
+
+The `select_category` stage uses explicit `folder_id` instead of `technology_id`
+and requires a selected empty own tree with no Info. It verifies the public
+folder selection and makes no technology-to-folder relationship claim. Newer
+full UI/Info and slot-emptiness evidence shares final witnesses and rejects
+contradictions with canonical assignments. Standard tabs use their own renderer
+and state fields; Drag fields stay separate.
+
+Raw category diagnostics retain false frame/routing/input-authority flags even
+when their typed Sprite fields are available. These flags never authorize a
+click. The opt-in action adapter separately checks its owned profile, candidate,
+lease and current state. Run 023 verified industry selection and a no-input
+completion, then quarantined an electronics switch that exceeded the five-second
+deadline. Do not retry an uncertain attempt.
 
 Intent is durable before possible input. Unknown delivery gets bounded canonical
 readback, never another event. Success also requires clear input state; uncertain
@@ -287,13 +302,3 @@ it. The initial fixture run explicitly failed on missing metadata; the build
 was corrected without weakening the production whitelist. Allow longer harness
 deadlines under CPU emulation: the initial nine serial kernel cases took about a
 minute.
-
-
-The new `select_category` stage uses `folder_id` instead of `technology_id` and
-requires a selected empty own tree with no Info. It verifies the exact public
-folder selection; it makes no technology-to-folder relationship claim. Its
-newer full UI/Info and slot-emptiness observation shares final witnesses and
-rejects contradictions with canonical assignments before input. Standard tabs
-use their separately proved renderer/state fields; Drag fields stay separate.
-The stage is fixture-tested and awaits a fresh recorded live run. Unknown input
-remains quarantined across restart.

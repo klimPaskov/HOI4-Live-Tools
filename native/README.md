@@ -186,6 +186,12 @@ distinguishes the event start callback from the separate no-op listener. This
 metadata grants no action authority; focus selection and start dispatch remain
 unfinished.
 
+The private focus point preparer now shares canonical own-focus, active-progress,
+campaign and local UI witnesses. It consumes producer-only mode, owned-container
+and complete own-window blocker facts, then reuses the supported Sprite maths.
+Unknown facts and unsupported renderers refuse. These local facts do not prove
+global modal clearance or routing. No focus action tool is registered yet.
+
 The separate Linux pointer library permits one bounded motion/left-button pair
 for a future verified adapter. It pins client/root geometry and ownership,
 reports uncertain delivery without replay and does not focus, park or scroll.

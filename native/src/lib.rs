@@ -48,3 +48,7 @@ mod slot_control;
 mod category_ui;
 
 mod focus_geometry;
+
+mod focus_ui_facts;
+
+mod focus_candidate_observation;

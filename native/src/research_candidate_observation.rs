@@ -99,7 +99,7 @@ fn common(
         },
     })
 }
-fn codec(geometry: &Value, profile: &OwnedClientProfile) -> Result<ClientCodec> {
+pub(crate) fn codec(geometry: &Value, profile: &OwnedClientProfile) -> Result<ClientCodec> {
     if geometry["build_id"] != game::BUILD_ID {
         return Err(unavailable("Verified game build required"));
     }
@@ -147,7 +147,7 @@ fn codec(geometry: &Value, profile: &OwnedClientProfile) -> Result<ClientCodec> 
         reviewed_builtin_client_origin: profile.reviewed_builtin_client_origin,
     })
 }
-fn sprite_surface(render: &Value) -> Result<Surface> {
+pub(crate) fn sprite_surface(render: &Value) -> Result<Surface> {
     required(
         &render["field_layout_verified"],
         true,

@@ -146,6 +146,19 @@ pub(crate) fn observe(
         if ok {
             c["reason"] = json!("ordinary_selection_void_and_ui_state_callback_verified");
             c["disabled_state3"] = json!(r.i32(child + 0xac)? == 3);
+            if include_geometry {
+                let state = r.i32(child + 0xac)?;
+                if !(0..=3).contains(&state) {
+                    return Err(Error::new(
+                        "invalid_focus_node",
+                        "Standard focus state bound",
+                    ));
+                }
+                c["disabled_state_raw"] = json!(state);
+                c["flags74_raw"] = json!(u32::from_le_bytes(
+                    r.read(child + 0x74, 4)?.try_into().unwrap()
+                ));
+            }
             let render = r.u64(child + 0xe8)?;
             c["renderer_type_encoding"] = metadata(r, &mut reuse, render)?;
             let primary = if render == 0 { 0 } else { r.u64(render)? };

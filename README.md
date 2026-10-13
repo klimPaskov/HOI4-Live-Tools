@@ -16,13 +16,16 @@ technology keys, with 423 structural control associations. Those associations
 do not authorize strategic input.
 A fresh Rust run also passed Luna medium ID-based research selection and
 assignment, with canonical slot readback and counter advancement through
-3 January. Full campaign acceptance remains unfinished; there is no Rust release yet.
+3 January. The latest run also verified an industry-category switch and a
+same-category no-op; an electronics switch exceeded its verification deadline
+and was quarantined without retry. Full campaign acceptance remains unfinished;
+there is no Rust release yet.
 
 | Runtime | Verified | Remaining |
 | --- | --- | --- |
 | Python / Windows | Baseline tools and recorded play attempts | Clean campaign acceptance; current development changes are unfinished |
 | Python / macOS | Platform work and limited diagnostic play | Reliable live acceptance; screenshot-driven testing is stopped |
-| Native / Linux | Own-country reads, focus/research catalogs, owned launch/reconnects, Luna clock test through 5 January and ID-based panel/slot/research smoke through 3 January 1936 | Category navigation, broader strategic actions, governor and campaign acceptance |
+| Native / Linux | Own-country reads, focus/research catalogs, owned launch/reconnects, bounded Luna clock and panel/slot/research tests, one industry-category switch | Reliable complete category navigation, broader strategic actions, governor and campaign acceptance |
 | Native / Windows and macOS | Portable protocol and fixture tests in CI | Independently verified process/build adapters and live tests |
 
 Read [the acceptance gates](docs/LINUX_RUST_HANDOFF.md),
@@ -83,10 +86,11 @@ exact-key diagnostics measured 116/120 ms. Scope, hardware and validation limits
 are documented in [the comparison](docs/CLAUSEWITZ_COMPARISON.md) and
 [live evidence](docs/CLAUSEWITZ_VALIDATION.md), including failures and clean exits.
 
-The research preview opens the own panel from a known closed view and selects
-empty slots by ID. Category navigation, broader strategic action adapters, the Rust daily
-governor and Windows/macOS live adapters remain unfinished. Three-OS CI passes shared code and fixtures;
-compilation is not live compatibility or campaign acceptance.
+The research preview opens the own panel, selects empty slots and attempts
+explicit folder navigation with verified state readback. Category navigation
+still has a recorded deadline failure. Broader strategic adapters, the Rust daily
+governor and Windows/macOS live adapters remain unfinished. Three-OS CI tests
+shared code and fixtures; compilation is not live compatibility or campaign acceptance.
 
 ## Development
 

@@ -160,7 +160,8 @@ fn snapshot_model(
     prefix: Option<&str>,
     requested: Option<&str>,
     include_geometry: bool,
-) -> Result<Value> {
+    command_context: bool,
+) -> Result<(Value, Option<FocusContext>)> {
     if limit == 0
         || limit > 100
         || offset > 4096
@@ -273,6 +274,75 @@ fn snapshot_model(
             output.push(json!({"key":key}));
         }
     }
+    if command_context && requested.is_some_and(|key| !keys.values().any(|value| value == key)) {
+        return Err(Error::new(
+            "focus_unavailable",
+            "Exact own canonical focus required",
+        ));
+    }
+    let mut context = if command_context {
+        let progress = r.u64(country + 0x1348)?;
+        exact(&r, progress, base + 0x4202638)?;
+        if r.u64(progress + 8)? != country {
+            return Err(Error::new(
+                "invalid_focus_owner",
+                "Own focus progress required before active payload",
+            ));
+        }
+        let active = r.u64(progress + 0x10)?;
+        let active_key = if active == 0 {
+            None
+        } else {
+            Some(keys.get(&active).cloned().ok_or_else(|| {
+                Error::new(
+                    "invalid_focus_owner",
+                    "Active focus outside own canonical catalog",
+                )
+            })?)
+        };
+        let status = r.u64(country + 0xf38)?;
+        exact(&r, status, base + 0x42108f8)?;
+        if r.u64(status + 0x130)? != country || r.i32(status + 0x138)? != tag {
+            return Err(Error::new(
+                "invalid_focus_owner",
+                "Own status context required",
+            ));
+        }
+        let slots = pointers(&r, status + 0xa0, 32)?;
+        // Reject aliased scope anchors before dereferencing any slot payload.
+        let slot_set: BTreeSet<_> = slots.iter().copied().collect();
+        if slot_set.len() != slots.len() {
+            return Err(Error::new(
+                "invalid_focus_context",
+                "Duplicate own slot pointers",
+            ));
+        }
+        for slot in &slots {
+            exact(&r, *slot, base + 0x4210898)?;
+            if r.u64(slot + 0x10)? != status {
+                return Err(Error::new(
+                    "invalid_focus_owner",
+                    "Own slot context required",
+                ));
+            }
+        }
+        let campaign = game::context_from_reader(&r, base)?;
+        if campaign.anchors[..2] != [gs, idler] {
+            return Err(Error::new("torn_read", "Focus campaign roots contradicted"));
+        }
+        Some(FocusContext {
+            campaign,
+            anchors: [country, progress, tree, view, registry, manager, status],
+            slots,
+            active_focus: active,
+            active_key,
+            selected: vec![],
+            matching_details: vec![],
+            ui_facts: None,
+        })
+    } else {
+        None
+    };
     let node_association = if let Some(key) = requested {
         Some(crate::focus_node_binding::observe(
             &r,
@@ -298,6 +368,9 @@ fn snapshot_model(
             ));
         }
         let selected = r.u64(panel + 0x7d0)?;
+        if let Some(c) = context.as_mut() {
+            c.selected.push([panel, selected]);
+        }
         let key = if selected == 0 {
             None
         } else {
@@ -314,6 +387,9 @@ fn snapshot_model(
             continue;
         }
         let window = r.u64(panel + 0x7c8)?;
+        if let Some(c) = context.as_mut() {
+            c.matching_details.push([panel, selected, window]);
+        }
         let observed = if window == 0 {
             json!({"materialized":false,"detail_visibility_flag":null,"conservative_container_visibility":null,"start":{"materialized":false}})
         } else {
@@ -345,13 +421,43 @@ fn snapshot_model(
         };
         details.push(json!({"selected_key":key,"window":observed}));
     }
+    if let Some(c) = context.as_mut() {
+        c.ui_facts = Some(crate::focus_ui_facts::observe(
+            &r, base, idler, manager, view, registry, tag,
+        )?);
+    }
+    if command_context
+        && details
+            .iter()
+            .filter(|row| {
+                row["selected_key"].as_str() == requested
+                    && row["window"]["conservative_container_visibility"] == true
+            })
+            .count()
+            > 1
+    {
+        return Err(Error::new(
+            "ambiguous_focus_detail",
+            "Multiple visible matching own focus details",
+        ));
+    }
+    if let Some(c) = context.as_ref() {
+        if r.u64(country + 0x1348)? != c.anchors[1]
+            || r.u64(c.anchors[1] + 8)? != country
+            || r.u64(c.anchors[1] + 0x10)? != c.active_focus
+        {
+            return Err(Error::new("torn_read", "Focus progress context changed"));
+        }
+    }
     let total = output.len();
     let page: Vec<_> = output.into_iter().skip(offset).take(limit).collect();
     let (end_calls, end_bytes) = w.finish()?;
     process.check()?;
-    Ok(
-        json!({"source":"native own focus catalog and UI diagnostics","build_id":game::BUILD_ID,"owned":true,"catalog_count":own.len(),"filtered_count":total,"offset":offset,"limit":limit,"next_offset":if offset.saturating_add(page.len())<total {Some(offset+page.len())}else{None},"focuses":page,"details":details,"node_association":node_association,"numeric_ids_available":false,"eligibility_available":false,"input_authorized":false,"branch_visibility_available":false,"observation_paused_game":false,"freshness":{"observed_unix_ms":SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),"elapsed_ms":start.elapsed().as_secs_f64()*1000.0,"read_calls":r.calls.get()+end_calls as u64,"read_bytes":r.bytes.get()+end_bytes}}),
-    )
+    let mut body = json!({"source":"native own focus catalog and UI diagnostics","build_id":game::BUILD_ID,"owned":true,"catalog_count":own.len(),"filtered_count":total,"offset":offset,"limit":limit,"next_offset":if offset.saturating_add(page.len())<total {Some(offset+page.len())}else{None},"focuses":page,"details":details,"node_association":node_association,"numeric_ids_available":false,"eligibility_available":false,"input_authorized":false,"branch_visibility_available":false,"observation_paused_game":false,"freshness":{"observed_unix_ms":SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),"elapsed_ms":start.elapsed().as_secs_f64()*1000.0,"read_calls":r.calls.get()+end_calls as u64,"read_bytes":r.bytes.get()+end_bytes}});
+    if let Some(c) = context.as_ref() {
+        body["command_observation"] = json!({"active_key":c.active_key,"requested_key":requested,"same_reader_clock_context":true,"eligibility_available":false,"input_authorized":false});
+    }
+    Ok((body, context))
 }
 
 pub fn snapshot(
@@ -360,12 +466,12 @@ pub fn snapshot(
     limit: usize,
     prefix: Option<&str>,
 ) -> Result<Value> {
-    snapshot_model(process, offset, limit, prefix, None, false)
+    Ok(snapshot_model(process, offset, limit, prefix, None, false, false)?.0)
 }
 /// Exact own public focus key, read-only current item/control association.
 pub fn node_detail(process: &dyn Process, key: &str) -> Result<Value> {
     validate_key(key)?;
-    snapshot_model(process, 0, 1, Some(key), Some(key), false)
+    Ok(snapshot_model(process, 0, 1, Some(key), Some(key), false, false)?.0)
 }
 pub(crate) fn validate_key(key: &str) -> Result<()> {
     if key.is_empty()
@@ -387,5 +493,31 @@ pub fn node_detail_with_geometry(
     include_geometry: bool,
 ) -> Result<Value> {
     validate_key(key)?;
-    snapshot_model(process, 0, 1, Some(key), Some(key), include_geometry)
+    Ok(snapshot_model(process, 0, 1, Some(key), Some(key), include_geometry, false)?.0)
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[doc(hidden)]
+pub struct FocusContext {
+    pub campaign: game::ClockContext,
+    /// Own country, progress, tree, view, registry, manager and research status.
+    pub anchors: [u64; 7],
+    pub slots: Vec<u64>,
+    pub active_focus: u64,
+    pub active_key: Option<String>,
+    pub selected: Vec<[u64; 2]>,
+    pub matching_details: Vec<[u64; 3]>,
+    pub ui_facts: Option<crate::focus_ui_facts::FocusUiFacts>,
+}
+/// Same witnessed reader for a future ordinary focus stage, never an action.
+#[doc(hidden)]
+pub fn command_owned(
+    process: &dyn Process,
+    key: &str,
+    include_geometry: bool,
+) -> Result<(Value, FocusContext)> {
+    validate_key(key)?;
+    let (body, context) =
+        snapshot_model(process, 0, 1, Some(key), Some(key), include_geometry, true)?;
+    Ok((body, context.expect("Command focus context requested")))
 }

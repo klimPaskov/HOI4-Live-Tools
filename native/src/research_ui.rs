@@ -461,10 +461,21 @@ fn observe(
             "Positive own country tag required",
         ));
     }
+    let canonical_command = if requested_category.is_some_and(|(_, _, command)| command) {
+        Some(crate::research::observe_from_reader(&r, base, 0, 1, true)?)
+    } else {
+        None
+    };
     // Enforce positive own scope before the broader campaign reader traverses
     // country payloads. Repeated tag reads share the same field witnesses.
     let campaign = if include_context {
-        Some(game::context_from_reader(&r, base)?)
+        Some(
+            if let Some((_, Some(context))) = canonical_command.as_ref() {
+                context.campaign.clone()
+            } else {
+                game::context_from_reader(&r, base)?
+            },
+        )
     } else {
         None
     };
@@ -660,6 +671,17 @@ fn observe(
     } else {
         None
     };
+    if let Some((_, Some(canonical))) = canonical_command.as_ref() {
+        if canonical.own != [country, status]
+            || canonical.slots != slots
+            || Some(&canonical.campaign) != campaign.as_ref()
+        {
+            return Err(Error::new(
+                "torn_read",
+                "Unified category canonical/UI scope differs",
+            ));
+        }
+    }
     let (end_calls, end_bytes) = observed.finish()?;
     process.check()?;
     let context = campaign.map(|campaign| UiContext {
@@ -670,6 +692,9 @@ fn observe(
     let mut value = json!({"source":"native own research UI diagnostics","build_id":game::BUILD_ID,"owned":true,"own_slot_count":slots.len(),"widget_count":widgets.len(),"widgets_complete":widgets.len()==slots.len(),"slot_identity":"own array index in current process/status snapshot; not a persistent ID","selected_slot":selected_index,"active_mode_raw":active,"panel":panel_state,"ordinary_tree":tree_state,"slots":output,"technology_info":info,"current_nodes":nodes,"input_authorized":false,"unverified":["effective ancestor visibility and clipping","sprite hit predicates","topmost hit routing","physical client conversion"],"observation_paused_game":false,"freshness":{"observed_unix_ms":SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),"elapsed_ms":start.elapsed().as_secs_f64()*1000.0,"read_calls_kind":"logical_read_requests","read_calls":r.calls.get()+end_calls as u64,"read_bytes":r.bytes.get()+end_bytes}});
     if let Some(category) = category {
         value["category"] = category;
+    }
+    if let Some((canonical, _)) = canonical_command {
+        value["canonical_research"] = canonical;
     }
     Ok((value, context))
 }

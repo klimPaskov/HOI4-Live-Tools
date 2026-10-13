@@ -472,52 +472,37 @@ fn observed_target_state(
     guard: &mut Guard,
     target: Option<&stage::Target>,
 ) -> Result<(stage::OwnState, research_ui::UiContext)> {
-    let (mut state, context) = observed_state(process, guard)?;
     if let Some(t) = target.filter(|t| t.stage == stage::Stage::SelectCategory) {
-        let (category, c) = research_ui::category_command_owned(
+        let (body, context) = research_ui::category_command_owned(
             process,
             t.folder_id
                 .as_deref()
                 .ok_or_else(|| Error::new("invalid_arguments", "Folder ID required"))?,
         )?;
-        guard.accept_context(process, &c.campaign)?;
-        if c != context {
-            return Err(Error::new(
-                "torn_read",
-                "Category and own research contexts differ",
-            ));
-        }
-        if category["owned"] != true
-            || category["build_id"] != game::BUILD_ID
-            || category["selected_slot"].as_u64() != Some(u64::from(t.slot))
-            || category["category"]["binding_available"] != true
+        guard.accept_context(process, &context.campaign)?;
+        if body["owned"] != true
+            || body["build_id"] != game::BUILD_ID
+            || body["selected_slot"].as_u64() != Some(u64::from(t.slot))
+            || body["category"]["binding_available"] != true
         {
             return Err(Error::new(
                 "research_precondition",
                 "Exact own category association required",
             ));
         }
-        let selected = category["category"]["selected_folder_key"]
+        let selected = body["category"]["selected_folder_key"]
             .as_str()
             .ok_or_else(|| Error::new("research_precondition", "Selected folder unknown"))?;
-        let empty = category["category"]["selected_slot_empty"]
+        let empty = body["category"]["selected_slot_empty"]
             .as_bool()
             .ok_or_else(|| {
                 Error::new("research_precondition", "Selected slot emptiness unknown")
             })?;
-        // Use latest complete UI body, not the older Info/window state.
-        let (canonical, canonical_context) = research::owned_snapshot(process)?;
-        guard.accept_context(process, &canonical_context.campaign)?;
-        if canonical_context.own != c.anchors[..2] || canonical_context.slots != c.slots {
-            return Err(Error::new(
-                "torn_read",
-                "Canonical/category slot identities changed",
-            ));
-        }
-        let latest = own_state(guard.epoch.clone(), &canonical, &category)?;
-        state = stage::join_category_body(&state, latest, t, empty, selected)?;
+        let latest = own_state(guard.epoch.clone(), &body["canonical_research"], &body)?;
+        let state = stage::join_category_body(&latest, latest.clone(), t, empty, selected)?;
+        return Ok((state, context));
     }
-    Ok((state, context))
+    observed_state(process, guard)
 }
 
 #[cfg(test)]
