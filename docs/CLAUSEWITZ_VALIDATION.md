@@ -739,6 +739,33 @@ exit code 0, no signal and no core dump. No Luna player was assigned to this
 diagnostic run. Earlier exit-code-6 incidents remain unresolved, and strategic
 dispatch, the daily governor and campaign acceptance are unfinished.
 
+## Target scope and typed hierarchy fixture gate
+
+The next development slice retains full-node validation and adds a narrower
+exact-ID path. It resolves the requested public key across the complete bounded
+catalog and validates every current item's type, ownership and canonical join
+before target GUI work. Unrelated GUI bindings are outside that declared model.
+The result explicitly reports its validation scope and
+`full_gui_model_validated:false`; no proof is cached across requests.
+
+A typed ancestor diagnostic checks constructor-created own Container positions,
+reciprocal parent/child membership and independently proved graphics roots.
+Unknown ancestor primaries stop before payload; null position control pointers
+are permitted. Bounds are 16 ancestor steps, 2,048 child capacity per header and
+4,096 aggregate entries. Hierarchy provenance does not establish own-country
+semantics of every ancestor, geometry projection, visibility, routing or input.
+
+All 201 standard optimized Linux fixtures passed under the ordinary UID and
+unchanged Yama 1. Portable and Rust 1.86 tests passed 160 cases each; Python
+passed 952 with 37 skips. Existing 19 generated-child kernel checks passed at
+the preceding vectored-reader gate; they were not rerun for these unchanged
+kernel primitives. The first combined host/MSRV trial passed 94 snapshot cases
+and failed one metric assertion comparing a target with raw hierarchy work
+against a full-node query without that work. That non-comparable assertion was
+removed; poisoned unrelated-GUI read spies and all ownership, ambiguity and
+mutation cases remain. Failure logs are preserved. Installed-game validation
+and target-specific latency are pending in a fresh immutable run.
+
 ## Attribution
 
 The findings above refer to upstream `calling/{mem,process/linux,api,game,

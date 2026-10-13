@@ -137,4 +137,9 @@ ID-based strategic input is accepted. Closed-tree queries refused, the game
 exited with code 0, and its 565-second recording passed ffprobe. The first kernel
 trial exposed two tests that checked exec
 before its ready handshake; corrected tests passed without relaxing production
-guards. Finish verified strategic dispatch, then resume Luna acceptance.
+guards. The next target-scoped exact-ID reader and typed reciprocal hierarchy
+diagnostic pass 201 standard Linux fixtures, 160 portable/MSRV Rust tests and
+952 Python tests (37 skipped). Full-node validation remains unchanged; the
+target scope excludes unrelated GUI payload and says so explicitly. Fresh live
+validation remains pending, and these diagnostics authorize no input. Finish
+verified strategic dispatch, then resume Luna acceptance.

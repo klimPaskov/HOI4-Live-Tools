@@ -1945,6 +1945,7 @@ impl Fixture {
         self.number(0xf10a8, 180);
         self.number(0xf11a0, -1);
         self.word(0xf1170, 0xdead0000);
+        self.hierarchy_fixture();
     }
 }
 #[test]
@@ -1959,7 +1960,7 @@ fn one_exact_own_node_raw_geometry_never_exposes_client_rectangle() {
     );
     assert_eq!(
         v["detail"]["render_diagnostic"]["parent_chain"]["payload_hops"],
-        0
+        3
     );
     assert_eq!(v["client_rectangle_available"], false);
     assert_eq!(v["input_authorized"], false);
@@ -2081,7 +2082,7 @@ fn ancestor_metadata_never_supplies_ownership_or_payload_layout() {
     let v = research_ui::node_detail(&f, "tools1").unwrap();
     assert_eq!(
         v["detail"]["render_diagnostic"]["parent_chain"]["status"],
-        "parent_ownership_unproved"
+        "unknown_ancestor"
     );
     assert_eq!(
         v["detail"]["render_diagnostic"]["parent_chain"]["payload_hops"],
@@ -2091,7 +2092,7 @@ fn ancestor_metadata_never_supplies_ownership_or_payload_layout() {
     let v = research_ui::node_detail(&f, "tools1").unwrap();
     assert_eq!(
         v["detail"]["render_diagnostic"]["parent_chain"]["status"],
-        "parent_primary_layout_unproved"
+        "unknown_primary_metadata"
     );
 }
 #[test]
@@ -2133,4 +2134,546 @@ fn unknown_resource_is_metadata_only_without_geometry_payload_reads() {
         v["detail"]["render_diagnostic"]["field_layout_verified"],
         false
     );
+}
+
+impl Fixture {
+    fn hierarchy_fixture(&mut self) {
+        let base = 0x10000;
+        let table = 0x43484f0;
+        self.word(base + table - 16, 0);
+        self.word(base + table - 8, base + 0x4356200);
+        self.region(base + 0x4356200, 16);
+        self.word(base + 0x4356208, base + 0x350e200);
+        self.region(base + 0x350e200, 128);
+        self.put(base + 0x350e200, b"17C2dPositionObject");
+        for node in [0xf3000, 0xf4000, 0x711f0, 0x71350] {
+            self.region(node, 0x160);
+            self.word(node, base + table);
+        }
+        self.word(0xd4e70, 0xf3000);
+        self.word(0xd4e78, 0xf4000);
+        self.word(0xf4108, 0xf3000);
+        self.array(0xf30c0, 0xf5000, 1);
+        self.word(0xf5000, 0xf4000);
+        self.word(0xf0108, 0xf4000);
+        self.array(0xf40c0, 0xf5100, 1);
+        self.word(0xf5100, 0xf0000);
+        self.word(0xf3108, 0x711f0);
+        self.array(0x712b0, 0xf5200, 1);
+        self.word(0xf5200, 0xf3000);
+        // Legitimate null138 is not a registry; forbid even reading it on positions.
+        for node in [0xf3000, 0xf4000, 0x711f0, 0x71350] {
+            for a in node + 0x138..node + 0x140 {
+                self.data.remove(&a);
+            }
+        }
+    }
+}
+#[test]
+fn v2_typed_reciprocal_hierarchy_is_gui_provenance_only() {
+    let mut f = Fixture::new();
+    f.node_render_detail();
+    let v = research_ui::node_detail(&f, "tools1").unwrap();
+    let h = &v["detail"]["render_diagnostic"]["parent_chain"];
+    assert_eq!(h["status"], "closed_to_owned_graphics_root");
+    assert_eq!(h["payload_hops"], 3);
+    assert_eq!(h["ancestor_own_country_semantics"], "unproved");
+    assert_eq!(h["client_rectangle_available"], false);
+    assert_eq!(h["input_authorized"], false);
+}
+#[test]
+fn v2_hierarchy_refuses_position_root_registry_and_reciprocal_defects() {
+    for (address, value, code) in [
+        (0xd4e70, 0, "invalid_gui_position"),
+        (0xd4e78, 0xf3000, "invalid_gui_position"),
+        (0xf4108, 0x71350, "invalid_gui_position"),
+        (0x700b8, 0x71008, "invalid_gui_owner"),
+        (0x711f0, 0x10000 + 0x4356e08, "invalid_gui_type"),
+        (0xf5100, 0xdead0000, "invalid_gui_hierarchy"),
+    ] {
+        let mut f = Fixture::new();
+        f.node_render_detail();
+        f.word(address, value);
+        assert_eq!(
+            research_ui::node_detail(&f, "tools1").unwrap_err().code,
+            code
+        );
+    }
+}
+#[test]
+fn v2_unknown_ancestor_stops_before_all_payload() {
+    let mut f = Fixture::new();
+    f.node_render_detail();
+    f.word(0xf0108, 0xf2000);
+    f.word(0xf2000, 0x10000 + 0x4346b10);
+    let v = research_ui::node_detail(&f, "tools1").unwrap();
+    let h = &v["detail"]["render_diagnostic"]["parent_chain"];
+    assert_eq!(h["status"], "unknown_ancestor");
+    assert_eq!(h["payload_hops"], 0);
+    assert_eq!(h["graphics_root_closed"], false);
+}
+#[test]
+fn v2_cycle_and_bad_signed_child_headers_refuse() {
+    let mut f = Fixture::new();
+    f.node_render_detail();
+    f.word(0xf3108, 0xf4000);
+    f.array(0xf40c0, 0xf5100, 2);
+    f.word(0xf5108, 0xf3000);
+    assert_eq!(
+        research_ui::node_detail(&f, "tools1").unwrap_err().code,
+        "invalid_gui_hierarchy"
+    );
+    let mut f = Fixture::new();
+    f.node_render_detail();
+    f.number(0xf40cc, -1);
+    assert_eq!(
+        research_ui::node_detail(&f, "tools1").unwrap_err().code,
+        "invalid_array"
+    );
+}
+#[test]
+fn v2_hierarchy_end_witnesses_cover_all_typed_links_and_anchors() {
+    for (a, n) in [
+        (0xd4e70, 8),
+        (0xd4e78, 8),
+        (0xf4108, 8),
+        (0xf40c0, 16),
+        (0xf5100, 8),
+        (0xf3108, 8),
+        (0x712b0, 16),
+        (0xf5200, 8),
+        (0x10000 + 0x4577890, 8),
+        (0x700b8, 8),
+        (0x711f0, 8),
+    ] {
+        let mut f = Fixture::new();
+        f.node_render_detail();
+        let mut replacement: Vec<_> = (0..n).map(|i| f.data[&(a + i)]).collect();
+        replacement[0] ^= 1;
+        f.fault = Some((a, 1, replacement));
+        assert_eq!(
+            research_ui::node_detail(&f, "tools1").unwrap_err().code,
+            "torn_read",
+            "field {a:x}"
+        );
+    }
+}
+#[test]
+fn v2_depth_limit_never_projects_or_reads_seventeenth_payload() {
+    let mut f = Fixture::new();
+    f.node_render_detail();
+    let mut child = 0xf0000;
+    for i in 0..16u64 {
+        let node = 0x100000 + i * 0x200;
+        f.region(node, 0x160);
+        f.word(node, 0x10000 + 0x43484f0);
+        f.word(child + 0x108, node);
+        let data = 0x110000 + i * 0x20;
+        f.array(node + 0xc0, data, 1);
+        f.word(data, child);
+        child = node;
+    }
+    f.word(child + 0x108, 0xdead0000);
+    let v = research_ui::node_detail(&f, "tools1").unwrap();
+    let h = &v["detail"]["render_diagnostic"]["parent_chain"];
+    assert_eq!(h["status"], "depth_limit");
+    assert_eq!(h["observed_ancestors"], 16);
+    assert_eq!(h["graphics_root_closed"], false);
+}
+
+#[test]
+fn v2_known_renderer_ancestors_read_only_proved_base_links() {
+    for (table, name) in [
+        (0x4356e08, "7CSprite"),
+        (0x434b370, "20CFrameAnimatedSprite"),
+        (0x434c5b0, "14CInstantSprite"),
+    ] {
+        let mut f = Fixture::new();
+        f.node_render_detail();
+        let base = 0x10000;
+        let node = 0xf8000;
+        f.word(base + table - 16, 0);
+        f.word(base + table - 8, base + 0x4356400);
+        f.region(base + 0x4356400, 16);
+        f.word(base + 0x4356408, base + 0x350e400);
+        f.region(base + 0x350e400, 128);
+        f.put(base + 0x350e400, name.as_bytes());
+        f.region(node, 0x138);
+        f.word(node, base + table);
+        f.word(node + 0x108, 0xf4000);
+        f.array(node + 0xc0, 0xf8200, 1);
+        f.word(0xf8200, 0xf0000);
+        f.word(0xf0108, node);
+        f.word(0xf5100, node);
+        let v = research_ui::node_detail(&f, "tools1").unwrap();
+        let h = &v["detail"]["render_diagnostic"]["parent_chain"];
+        assert_eq!(h["status"], "closed_to_owned_graphics_root");
+        assert_eq!(h["payload_hops"], 4);
+        assert_eq!(h["chain"][0]["type_encoding"], name);
+    }
+}
+#[test]
+fn v2_alternate_root_and_child_capacity_bound_are_explicit() {
+    let mut f = Fixture::new();
+    f.node_render_detail();
+    f.word(0xf3108, 0x71350);
+    f.array(0x71410, 0xf5200, 1);
+    assert_eq!(
+        research_ui::node_detail(&f, "tools1").unwrap()["detail"]["render_diagnostic"]
+            ["parent_chain"]["chain"][2]["role"],
+        "owned_graphics_root_350"
+    );
+    let mut f = Fixture::new();
+    f.node_render_detail();
+    f.number(0xf40c8, 2049);
+    f.data.remove(&0xf5100);
+    assert_eq!(
+        research_ui::node_detail(&f, "tools1").unwrap_err().code,
+        "invalid_gui_hierarchy_bound"
+    );
+}
+
+impl Fixture {
+    fn target_later_item(&mut self) {
+        self.region(0xd8000, 0xd0);
+        self.word(0xd8000, 0x10000 + 0x424e2e0);
+        self.word(0xd8030, 0x92000);
+        self.word(0xd80c8, 0x81000);
+        self.word(0xd8010, 0xdead0000); // unrelated GUI intentionally unreadable
+        self.word(0xd2038, 0xd8000);
+    }
+    fn target_info(&mut self, selected: u64) {
+        self.array(0x92dc0, 0xc0000, 1);
+        self.word(0xc0000, 0xc1000);
+        self.region(0xc1000, 0xb00);
+        self.word(0xc1000, 0x10000 + 0x430bbf0);
+        self.word(0xc1a78, 0x32000);
+        self.word(0xc1a80, 0x92000);
+        self.word(0xc1a98, selected);
+        self.word(0xc1a88, 0xc3000);
+        self.region(0xc3000, 0xf00);
+        self.word(0xc3000, 0x10000 + 0x4347d58);
+        self.word(0xc3098, 0x70000);
+        self.put(0xc30a5, &[8]);
+    }
+    fn assert_not_read(&self, addresses: &[u64]) {
+        let reads = self.tracked_reads.borrow();
+        for a in addresses {
+            assert!(!reads.contains_key(a), "Forbidden read {a:x}");
+        }
+    }
+}
+#[test]
+fn target_scope_skips_poisoned_unrelated_gui_and_slot_widgets() {
+    let mut f = Fixture::new();
+    f.node_render_detail();
+    f.target_later_item();
+    f.word(0x91308, 0xdead0000); // whole widget vector is outside target model
+    let v = research_ui::node_detail(&f, "tools1").unwrap();
+    assert_eq!(
+        v["validation_scope"],
+        "requested_node_with_complete_current_record_ownership"
+    );
+    assert_eq!(v["full_gui_model_validated"], false);
+    assert_eq!(v["detail"]["distinct_current_items"], 2);
+    f.assert_not_read(&[0xd8010, 0xdead0000, 0x91308, 0x94000, 0xb1000]);
+    assert!(research_ui::nodes(&f).is_err()); // full model is deliberately unchanged
+}
+#[test]
+fn target_later_foreign_owner_refused_before_payload_and_geometry() {
+    for (address, replacement, error, forbidden) in [
+        (0xd8030, 0x92008, "invalid_gui_owner", 0xd80c8),
+        (0x81158, 0x28008, "invalid_research_owner", 0x81160),
+    ] {
+        let mut f = Fixture::new();
+        f.node_render_detail();
+        f.target_later_item();
+        f.word(address, replacement);
+        assert_eq!(
+            research_ui::node_detail(&f, "tools1").unwrap_err().code,
+            error
+        );
+        f.assert_not_read(&[forbidden, 0xd3010, 0xf0138, 0xd8010]);
+    }
+}
+#[test]
+fn target_later_canonical_mismatch_not_ignored() {
+    let mut f = Fixture::new();
+    f.node_render_detail();
+    f.target_later_item();
+    f.word(0x81160, 0x63000);
+    assert_eq!(
+        research_ui::node_detail(&f, "tools1").unwrap_err().code,
+        "invalid_research_join"
+    );
+    f.assert_not_read(&[0xd3010, 0xf0138]);
+}
+#[test]
+fn target_global_duplicate_key_outside_current_records_refused() {
+    let mut f = Fixture::new();
+    f.node_render_detail();
+    f.string(0x63208, "tools1");
+    assert_eq!(
+        research_ui::node_detail(&f, "tools1").unwrap_err().code,
+        "invalid_research_id"
+    );
+    f.assert_not_read(&[0xd3010, 0xf0138]);
+}
+#[test]
+fn target_catalog_sentinel_and_unrelated_definition_must_be_valid() {
+    for (a, value, code) in [
+        (0x62000, 0x63000, "research_unavailable"),
+        (0x63200, 0x10000 + 0x42107f8, "invalid_gui_type"),
+    ] {
+        let mut f = Fixture::new();
+        f.node_render_detail();
+        f.word(a, value);
+        assert_eq!(
+            research_ui::node_detail(&f, "tools1").unwrap_err().code,
+            code
+        );
+    }
+    let mut f = Fixture::new();
+    f.node_render_detail();
+    f.number(0x63230, 2);
+    assert_eq!(
+        research_ui::node_detail(&f, "tools1").unwrap_err().code,
+        "invalid_research_join"
+    );
+}
+#[test]
+fn target_catalog_and_complete_record_mutations_are_witnessed() {
+    for (a, n) in [
+        (0x36048, 16),
+        (0x62000, 32),
+        (0x63208, 32),
+        (0x63230, 4),
+        (0x28088, 16),
+        (0x82000, 24),
+        (0x92dd8, 16),
+        (0xd2000, 80),
+        (0x92df0, 16),
+    ] {
+        let mut f = Fixture::new();
+        f.node_render_detail();
+        let mut bytes: Vec<_> = (0..n).map(|i| f.data[&(a + i)]).collect();
+        bytes[0] ^= 1;
+        f.fault = Some((a, 1, bytes));
+        assert_eq!(
+            research_ui::node_detail(&f, "tools1").unwrap_err().code,
+            "torn_read",
+            "{a:x}"
+        );
+    }
+}
+#[test]
+fn target_later_unrelated_owner_mutation_is_witnessed() {
+    let mut f = Fixture::new();
+    f.node_render_detail();
+    f.target_later_item();
+    f.fault = Some((0xd8030, 1, 0x92008u64.to_le_bytes().to_vec()));
+    assert_eq!(
+        research_ui::node_detail(&f, "tools1").unwrap_err().code,
+        "torn_read"
+    );
+}
+#[test]
+fn target_in_second_vector_and_pointer_dedup_remain_complete() {
+    let mut f = Fixture::new();
+    f.node_render_detail();
+    f.array(0x92dd8, 0, 0);
+    f.array(0x92df0, 0xd2000, 2);
+    let v = research_ui::node_detail(&f, "tools1").unwrap();
+    assert_eq!(v["detail"]["record_count"], 2);
+    assert_eq!(v["detail"]["distinct_bound_items"], 1);
+}
+#[test]
+fn target_info_skips_hidden_other_selection_control_and_container() {
+    let mut f = Fixture::new();
+    f.node_render_detail();
+    f.target_info(0x81000);
+    f.word(0xc1a88, 0xdead0000);
+    let v = research_ui::node_detail(&f, "tools1").unwrap();
+    assert_eq!(
+        v["own_info_postcondition"]["matching_locally_visible_count"],
+        0
+    );
+    f.assert_not_read(&[0xc1a88, 0xdead0000, 0xc1ac0, 0xc1ab0]);
+}
+#[test]
+fn target_info_null_and_visible_target_have_no_button_authority() {
+    for (selected, expected) in [(0, 0), (0x80000, 1)] {
+        let mut f = Fixture::new();
+        f.node_render_detail();
+        f.target_info(selected);
+        let v = research_ui::node_detail(&f, "tools1").unwrap();
+        assert_eq!(
+            v["own_info_postcondition"]["matching_locally_visible_count"],
+            expected
+        );
+        assert_eq!(
+            v["own_info_postcondition"]["fresh_transition_verified"],
+            false
+        );
+        f.assert_not_read(&[0xc1ac0, 0xc1ab0, 0xc39a0, 0xc39b8]);
+    }
+}
+#[test]
+fn target_info_foreign_scope_refused_before_selected_payload() {
+    let mut f = Fixture::new();
+    f.node_render_detail();
+    f.target_info(0x80000);
+    f.word(0xc1a78, 0x32008);
+    assert_eq!(
+        research_ui::node_detail(&f, "tools1").unwrap_err().code,
+        "invalid_gui_owner"
+    );
+    f.assert_not_read(&[0xc1a98, 0xc1a88]);
+    let mut f = Fixture::new();
+    f.node_render_detail();
+    f.target_info(0x81000);
+    f.word(0x81158, 0x28008);
+    assert_eq!(
+        research_ui::node_detail(&f, "tools1").unwrap_err().code,
+        "invalid_research_owner"
+    );
+    f.assert_not_read(&[0x81160, 0xc1a88]);
+}
+#[test]
+fn target_info_ambiguity_and_mutation_refused() {
+    let mut f = Fixture::new();
+    f.node_render_detail();
+    f.target_info(0x80000);
+    let copy: Vec<_> = (0..0xb00).map(|i| f.data[&(0xc1000 + i)]).collect();
+    f.put(0xc2000, &copy);
+    f.array(0x92dc0, 0xc0000, 2);
+    f.word(0xc0008, 0xc2000);
+    assert_eq!(
+        research_ui::node_detail(&f, "tools1").unwrap_err().code,
+        "ambiguous_gui_detail"
+    );
+    for (a, n) in [(0x92dc0, 16), (0xc1a98, 8), (0xc30a5, 1)] {
+        let mut f = Fixture::new();
+        f.node_render_detail();
+        f.target_info(0x80000);
+        let mut bytes: Vec<_> = (0..n).map(|i| f.data[&(a + i)]).collect();
+        bytes[0] ^= 1;
+        f.fault = Some((a, 1, bytes));
+        assert_eq!(
+            research_ui::node_detail(&f, "tools1").unwrap_err().code,
+            "torn_read"
+        );
+    }
+}
+#[test]
+fn target_final_process_identity_check_is_retained() {
+    let mut f = Fixture::new();
+    f.node_render_detail();
+    f.replaced = true;
+    assert_eq!(
+        research_ui::node_detail(&f, "tools1").unwrap_err().code,
+        "ownership_changed"
+    );
+}
+#[test]
+fn target_differential_serialized_contract() {
+    let mut values = Vec::new();
+    for bound in [false, true] {
+        let mut f = Fixture::new();
+        f.node_render_detail();
+        if !bound {
+            f.word(0xd3010, 0);
+        }
+        let value = research_ui::node_detail(&f, "tools1").unwrap();
+        println!(
+            "DIFFERENTIAL_READS bound={bound} logical={}",
+            f.tracked_reads.borrow().values().sum::<usize>()
+        );
+        let mut detail = value["detail"].clone();
+        detail.as_object_mut().unwrap().remove("record_count");
+        detail
+            .as_object_mut()
+            .unwrap()
+            .remove("distinct_current_items");
+        values.push(serde_json::json!({"detail":detail,"selected_slot":value["selected_slot"],"own_info_postcondition":value["own_info_postcondition"],"input_authorized":value["input_authorized"],"client_rectangle_available":value["client_rectangle_available"]}));
+    }
+    println!("DIFFERENTIAL={}", serde_json::Value::Array(values));
+}
+#[test]
+fn target_context_gates_precede_catalog_and_current_payload() {
+    for (a, v, code) in [
+        (0x903d8, 5, "gui_unavailable"),
+        (0x92e20, 2, "foreign_ui_context"),
+        (0x92e20, -1, "gui_unavailable"),
+        (0x30518, 0, "player_unavailable"),
+    ] {
+        let mut f = Fixture::new();
+        f.node_render_detail();
+        f.number(a, v);
+        assert_eq!(
+            research_ui::node_detail(&f, "tools1").unwrap_err().code,
+            code,
+            "{a:x}"
+        );
+        f.assert_not_read(&[0x36048, 0x92dd8, 0xd3010]);
+    }
+    let mut f = Fixture::new();
+    f.node_render_detail();
+    f.word(0x92e08, 0xdead0000);
+    assert_eq!(
+        research_ui::node_detail(&f, "tools1").unwrap_err().code,
+        "invalid_research_owner"
+    );
+    f.assert_not_read(&[0xdead0000, 0x92dd8, 0xd3010]);
+}
+#[test]
+fn target_later_exact_types_checked_before_ownership_payload() {
+    let mut f = Fixture::new();
+    f.node_render_detail();
+    f.target_later_item();
+    f.word(0xd8000, 0x10000 + 0x4347d58);
+    assert_eq!(
+        research_ui::node_detail(&f, "tools1").unwrap_err().code,
+        "invalid_gui_type"
+    );
+    f.assert_not_read(&[0xd8030, 0xd80c8, 0xd3010]);
+    let mut f = Fixture::new();
+    f.node_render_detail();
+    f.target_later_item();
+    f.word(0x81000, 0x10000 + 0x4211038);
+    assert_eq!(
+        research_ui::node_detail(&f, "tools1").unwrap_err().code,
+        "invalid_gui_type"
+    );
+    f.assert_not_read(&[0x81158, 0x81160, 0xd3010]);
+}
+#[test]
+fn target_missing_current_membership_and_unbound_duplicate_policy() {
+    let mut f = Fixture::new();
+    f.node_render_detail();
+    f.array(0x92dd8, 0, 0);
+    assert_eq!(
+        research_ui::node_detail(&f, "tools1").unwrap_err().code,
+        "node_unavailable"
+    );
+    let mut f = Fixture::new();
+    f.node_render_detail();
+    f.target_later_item();
+    f.word(0xd80c8, 0x80000);
+    f.word(0xd8010, 0xd4000); // same valid binding on distinct item
+    assert_eq!(
+        research_ui::node_detail(&f, "tools1").unwrap_err().code,
+        "ambiguous_gui_node"
+    );
+    f.assert_not_read(&[0xf0138]);
+    let mut f = Fixture::new();
+    f.node_render_detail();
+    f.target_later_item();
+    f.word(0xd80c8, 0x80000);
+    f.word(0xd8010, 0); // conflicting target GUI type, preserves old refusal
+    assert_eq!(
+        research_ui::node_detail(&f, "tools1").unwrap_err().code,
+        "ambiguous_gui_node"
+    );
+    f.assert_not_read(&[0xf0138]);
 }

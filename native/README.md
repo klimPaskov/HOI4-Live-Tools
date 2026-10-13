@@ -185,20 +185,28 @@ fallback. `freshness.read_calls` counts logical requests, not kernel syscalls;
 `read_calls_kind` makes that distinction explicit. Batches are capped at 65,536
 requests, 1 MiB per range and 32 MiB total, with at most 128 iovecs per syscall.
 
-The one-ID diagnostic requires `technology_id` and an open own tree. It validates
-the full model before an exact key match and refuses multiple distinct bound
-items. Only an exact owned Drag/CSprite/CSpriteType branch supplies raw renderer
-and resource-cache fields. Unsupported classes remain metadata-only. Parent
-ownership is unproved, so it reports the first parent's type without traversing
-its payload. Cached dimensions, local visibility and a matching Info window do
-not establish a client rectangle, effective visibility, routing or a fresh event.
+The one-ID diagnostic requires `technology_id` and an open own tree. Its narrower
+scope validates public-key uniqueness and every current record's type, ownership
+and canonical join before reading target GUI bindings. Unrelated GUI payloads
+are outside this model; `validation_scope` and `full_gui_model_validated:false`
+make that boundary explicit. Full-node queries retain their original validation.
+Multiple distinct bound target items refuse. Only an exact owned
+Drag/CSprite/CSpriteType branch supplies raw renderer and resource-cache fields.
+Unsupported classes remain metadata-only. A bounded typed ancestor diagnostic
+checks reciprocal parent/child links, own Container constructor positions and
+owned graphics roots, stopping before unknown ancestor payloads. GUI hierarchy
+provenance does not establish country ownership of every ancestor. Cached
+dimensions, local visibility and a matching Info window do not establish a
+client rectangle, effective visibility, routing or a fresh event.
 A fresh recorded Linux run validated raw sprite/cache fields for
 `support_weapons` and `basic_machine_tools`, including exact own-control links
 and first-parent `C2dPositionObject` metadata. The diagnostic distinguished a
 visible `support_weapons2` Info window from an absent `support_weapons` window,
 then observed the former close. Both node tools refused after tree closure.
 The view-only clicks included a background miss and a different technology than
-intended; they do not prove ID-based selection. The campaign remained at its
+intended; they do not prove ID-based selection. That run used the earlier full
+GUI validation and first-parent metadata only; the target scope and typed ancestor
+extension await a fresh installed-game check. The campaign remained at its
 initial date with no assignments, exited with code 0, and recording integrity
 passed. Client geometry, routing and strategic input remain unavailable.
 

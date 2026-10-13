@@ -84,8 +84,15 @@ It supplies no atomicity, visibility, event acknowledgement or input authority.
 
 `node_detail.rs` is new project code from independently recovered current-build
 renderer/resource getters and ownership links. It exposes one own ID's raw
-fields and existing typed Info state. Unknown parent layouts are not traversed;
-no game assets, pixel textures or input adapter are included.
+fields and existing typed Info state. `node_hierarchy.rs` follows independently
+proved exact renderer layouts and reciprocal links, constructor-created own
+Container positions and owned graphics roots. Unknown ancestor payloads are not
+traversed; hierarchy provenance is separate from ancestor country semantics.
+`target_node.rs` is new project code for a narrower one-ID validation model:
+complete public-key resolution and current-record canonical ownership, with GUI
+binding/rendering only for target items. Every observed byte remains witnessed;
+full-node validation is unchanged. No game assets, pixel textures, projection
+or input adapter are included.
 
 Bounded vectored Linux reads and final witness batching are new project code.
 They preserve ordered all-or-error reads, current mappings, ownership and exec

@@ -350,31 +350,12 @@ pub fn nodes(process: &dyn Process) -> Result<Value> {
         "owned":true,"input_authorized":false,"observation_paused_game":false}),
     )
 }
-/// One exact own ID, full model first. Rendering and result state only.
+/// One exact own ID; complete current-record ownership, target GUI only.
 pub fn node_detail(process: &dyn Process, key: &str) -> Result<Value> {
     validate_detail_key(key)?;
-    let (value, _) = observe(process, false, true, Some(key))?;
-    let visible = value["technology_info"]["windows"]
-        .as_array()
-        .map(|windows| {
-            windows
-                .iter()
-                .filter(|info| {
-                    info["technology"] == key && info["window"]["visible_predicate"] == true
-                })
-                .count()
-        })
-        .unwrap_or(0);
-    if visible > 1 {
-        return Err(Error::new(
-            "ambiguous_gui_detail",
-            "Multiple visible own details for requested key",
-        ));
-    }
-    Ok(
-        json!({"source":"native own research node detail","build_id":game::BUILD_ID,"owned":true,"id":key,"detail":value["current_nodes"]["detail"],"own_info_postcondition":{"matching_locally_visible_count":visible,"requested_detail_locally_visible":visible==1,"fresh_transition_verified":false},"selected_slot":value["selected_slot"],"freshness":value["freshness"],"client_rectangle_available":false,"input_authorized":false,"observation_paused_game":false}),
-    )
+    observe_target(process, key)
 }
+
 pub(crate) fn validate_detail_key(key: &str) -> Result<()> {
     if key.is_empty() || key.len() > 256 || key.chars().any(char::is_control) {
         return Err(Error::new(
@@ -630,6 +611,156 @@ fn observe(
         json!({"source":"native own research UI diagnostics","build_id":game::BUILD_ID,"owned":true,"own_slot_count":slots.len(),"widget_count":widgets.len(),"widgets_complete":widgets.len()==slots.len(),"slot_identity":"own array index in current process/status snapshot; not a persistent ID","selected_slot":selected_index,"active_mode_raw":active,"panel":panel_state,"ordinary_tree":tree_state,"slots":output,"technology_info":info,"current_nodes":nodes,"input_authorized":false,"unverified":["effective ancestor visibility and clipping","sprite hit predicates","topmost hit routing","physical client conversion"],"observation_paused_game":false,"freshness":{"observed_unix_ms":SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),"elapsed_ms":start.elapsed().as_secs_f64()*1000.0,"read_calls_kind":"logical_read_requests","read_calls":r.calls.get()+end_calls as u64,"read_bytes":r.bytes.get()+end_bytes}}),
         context,
     ))
+}
+
+fn observe_target(process: &dyn Process, key: &str) -> Result<Value> {
+    let start = Instant::now();
+    process.begin_snapshot()?;
+    let observed = Witnesses {
+        process,
+        reads: RefCell::new(BTreeMap::new()),
+    };
+    let r = Reader::new(&observed);
+    let base = process.image_base();
+    let gs = r.u64(base + 0x44086a8)?;
+    let idler = r.u64(base + 0x44085f8)?;
+    exact(&r, gs, base + 0x42c7598)?;
+    exact(&r, idler, base + 0x42c9a88)?;
+    let registry = r.u64(idler + 0x4f8)?;
+    exact(&r, registry, base + 0x42736f8)?;
+    let tag = r.i32(gs + 0x518)?;
+    if !(1..4096).contains(&tag) {
+        return Err(Error::new(
+            "player_unavailable",
+            "Positive own country tag required",
+        ));
+    }
+    // Enforce positive own scope before the broader campaign reader traverses
+    // country payloads. Repeated tag reads share the same field witnesses.
+
+    let index = i32::from_le_bytes(
+        r.array_entry(gs + 0x340, tag as usize, 4)?
+            .try_into()
+            .unwrap(),
+    );
+    if index < 0 {
+        return Err(Error::new("player_unavailable", "Own country index absent"));
+    }
+    let country = u64::from_le_bytes(
+        r.array_entry(gs + 0x310, index as usize, 8)?
+            .try_into()
+            .unwrap(),
+    );
+    r.object_type(country, "CCountry")?;
+    let status = r.u64(country + 0xf38)?;
+    exact(&r, status, base + 0x42108f8)?;
+    if r.u64(status + 0x130)? != country || r.i32(status + 0x138)? != tag {
+        return Err(Error::new(
+            "invalid_research_owner",
+            "Own research status required",
+        ));
+    }
+    let slots = array(&r, status + 0xa0, 32)?;
+    let mut unique = std::collections::BTreeSet::new();
+    for slot in &slots {
+        exact(&r, *slot, base + 0x4210898)?;
+        if !unique.insert(*slot) || r.u64(slot + 0x10)? != status {
+            return Err(Error::new(
+                "invalid_research_owner",
+                "Unique own research slot required",
+            ));
+        }
+    }
+    let manager = r.u64(idler + 0x6b8)?;
+    if r.u64(manager + 0x180)? != idler {
+        return Err(Error::new(
+            "invalid_gui_owner",
+            "Research interface owner changed",
+        ));
+    }
+    let view = r.u64(manager + 0xf0)?;
+    let tree = r.u64(manager + 0xf8)?;
+    exact(&r, view, base + 0x424dc38)?;
+    exact(&r, tree, base + 0x424de40)?;
+    if r.u64(view + 0x2f0)? != idler || r.u64(tree + 0x2f0)? != idler || r.i32(tree + 0xe24)? != 6 {
+        return Err(Error::new(
+            "invalid_gui_owner",
+            "Ordinary own research views required",
+        ));
+    }
+    let display_tag = r.i32(tree + 0xe20)?;
+    if display_tag > 0 && display_tag != tag {
+        return Err(Error::new(
+            "foreign_ui_context",
+            "Own displayed research country required",
+        ));
+    }
+    let selected = r.u64(tree + 0xe08)?;
+    let selected_index = if selected == 0 {
+        None
+    } else {
+        Some(slots.iter().position(|v| *v == selected).ok_or_else(|| {
+            Error::new(
+                "invalid_research_owner",
+                "Selected slot is outside own research",
+            )
+        })?)
+    };
+    let active = r.i32(manager + 0x3d8)?;
+    let panel_state = window(&r, base, r.u64(view + 0x2f8)?, registry)?;
+    let tree_state = window(&r, base, r.u64(tree + 0x2f8)?, registry)?;
+
+    if active != 6
+        || selected_index.is_none()
+        || display_tag < 0
+        || tree_state["visible_predicate"] != true
+        || panel_state["visible_predicate"] == true
+    {
+        return Err(Error::new(
+            "gui_unavailable",
+            "Selected own ordinary research tree must be open",
+        ));
+    }
+    let catalog = crate::target_node::Catalog::load(&r, base, status, key)?;
+    let detail = crate::target_node::observe(&r, base, tree, status, registry, key, &catalog)?;
+    let entries = array(&r, tree + 0xdc0, 64)?;
+    let mut unique = std::collections::BTreeSet::new();
+    let mut visible = 0;
+    for info in entries {
+        exact(&r, info, base + 0x430bbf0)?;
+        if !unique.insert(info) || r.u64(info + 0xa78)? != idler || r.u64(info + 0xa80)? != tree {
+            return Err(Error::new(
+                "invalid_gui_owner",
+                "Unique own technology info window required",
+            ));
+        }
+        let technology = r.u64(info + 0xa98)?;
+        if technology == 0 {
+            continue;
+        }
+        catalog.validate(&r, base, status, technology)?;
+        if technology == catalog.technology {
+            let state = window(&r, base, r.u64(info + 0xa88)?, registry)?;
+            if state["visible_predicate"] == true {
+                visible += 1;
+            }
+        }
+    }
+    if visible > 1 {
+        return Err(Error::new(
+            "ambiguous_gui_detail",
+            "Multiple visible own details for requested key",
+        ));
+    }
+    let (end_calls, end_bytes) = observed.finish()?;
+    process.check()?;
+    Ok(
+        json!({"source":"native own research node detail","build_id":game::BUILD_ID,"owned":true,"id":key,
+        "validation_scope":"requested_node_with_complete_current_record_ownership","full_gui_model_validated":false,
+        "detail":detail,"own_info_postcondition":{"matching_locally_visible_count":visible,"requested_detail_locally_visible":visible==1,"fresh_transition_verified":false},
+        "selected_slot":selected_index,"client_rectangle_available":false,"effective_routing_verified":false,"input_authorized":false,"observation_paused_game":false,
+        "freshness":{"observed_unix_ms":SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),"elapsed_ms":start.elapsed().as_secs_f64()*1000.0,"read_calls_kind":"logical_read_requests","read_calls":r.calls.get()+end_calls as u64,"read_bytes":r.bytes.get()+end_bytes}}),
+    )
 }
 
 #[cfg(test)]

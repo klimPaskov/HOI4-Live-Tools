@@ -72,14 +72,7 @@ pub(crate) fn observe(
     for off in [0x148, 0x14c, 0x150, 0x154] {
         clip.push(r.i32(render + off)?);
     }
-    let parent = r.u64(render + 0x108)?;
-    // No parent ownership/backpointer/layout has been independently proved.
-    // Read primary metadata only, then stop. No parent payload or projection.
-    let (parent_type, parent_metadata_available) = match reuse.nullable_type(r, parent) {
-        Ok(value) => (value, true),
-        Err(error) if error.code == "invalid_gui_type" => (Value::Null, false),
-        Err(error) => return Err(error),
-    };
+    let hierarchy = crate::node_hierarchy::observe(r, reuse, gui, render, registry)?;
     let grid = [r.i32(resource + 0x90)?, r.i32(resource + 0x94)?];
     let dimensions = [r.i32(resource + 0xa4)?, r.i32(resource + 0xa8)?];
     let orientation = r.i32(resource + 0x10c)?;
@@ -120,6 +113,6 @@ pub(crate) fn observe(
     out["reason"] = json!("raw_cached_geometry_only");
     out["raw"] = json!({"local_translation":local,"cached_world_translation":world,"local_scalar":scalar,"pivot_dimensions":pivot,"fallback_dimensions":[r.i32(render+0x12c)?,r.i32(render+0x130)?],"frame":unsigned(r,render+0x34)?,"visibility_flag":r.byte(render+0x144)?,"clipping_flag":r.byte(render+0x145)?,"physical_scaled_clip":clip});
     out["resource_cache"] = json!({"grid":grid,"texture_dimensions":dimensions,"orientation_raw":orientation,"lazy_flag":lazy,"handle_raw":handle,"reject_flag":reject,"texture_present":present,"mask_flag":mask,"cache_equivalent":cache_equivalent,"diagnostic_dimensions":computed,"mask_sampling_required":reject==0&&present&&mask!=0,"no_mask_rejection_branch":reject==0&&present&&mask==0});
-    out["parent_chain"] = json!({"limit":16,"payload_hops":0,"first_parent_type_encoding":parent_type,"status":if parent==0 {"no_parent_observed_root_unproved"}else if !parent_metadata_available {"parent_primary_layout_unproved"}else{"parent_ownership_unproved"}});
+    out["parent_chain"] = hierarchy;
     Ok(out)
 }

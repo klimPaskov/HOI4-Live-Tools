@@ -12,6 +12,7 @@ pub mod platform;
 pub mod protocol;
 pub mod research;
 pub mod research_ui;
+mod target_node;
 pub mod technology;
 
 pub(crate) mod technology_nodes;
@@ -21,3 +22,5 @@ mod node_binding;
 mod node_reuse;
 
 mod node_detail;
+
+mod node_hierarchy;
