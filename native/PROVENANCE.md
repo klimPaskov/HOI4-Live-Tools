@@ -6,7 +6,7 @@ commit `97c85437081904d5ad07bae1623ec58d1c0a5b9e`, specifically
 `calling/{mem,process/linux,api,game}.py`. Copyright (c) 2026 smerss.
 The original MIT license is retained in `LICENSE.clausewitz`.
 
-Rust modules `memory.rs`, `game.rs`, `calendar.rs`, `technology.rs`, `research.rs` and `platform/linux.rs` carry
+Rust modules `memory.rs`, `game.rs`, `calendar.rs`, `technology.rs`, `research.rs`, `research_ui.rs` and `platform/linux.rs` carry
 source comments identifying this derivation. Other modules are new project code.
 Current Linux ELF layouts were recovered independently from the installed build;
 upstream 1.19.2 offsets were not copied as current-build evidence.
@@ -46,8 +46,14 @@ independently verified primary vtables, own-country links, canonical ID joins,
 completion thresholds and signed 64-bit active counters. It excludes upstream
 guessed progress units and eligibility calls.
 
-The own research UI diagnostic is new project code. Its widget, selected-slot,
+The own research UI diagnostic uses the same derived own canonical technology
+joins. Its UI implementation is new project code. Its widget, selected-slot,
 view, container and button ownership/type fields were recovered independently
 from the exact installed ELF and ordinary GUI definitions. No game files are
 redistributed. Bounded primary RTTI observations classify actual renderer
 metadata; they do not establish field layouts or ordinary click eligibility.
+Exact renderer field layouts are accepted only after independent constructor
+and getter recovery for the current build. Technology Info windows require
+own-tree/status/catalog membership and a positively named ordinary research
+control from the exact container registry. Raw disabled/alias/visibility fields
+do not establish eligibility or input authorization.

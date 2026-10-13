@@ -244,6 +244,7 @@ impl Fixture {
             self.word(0x93000 + i * 8, widget);
             self.region(container, 0xf00);
             self.word(container, base + 0x4347d58);
+            self.word(container + 0x98, 0x70000);
             self.put(container + 0xa5, &[8]);
         }
         self.word(0x912f8, 0xa0000);
@@ -302,6 +303,58 @@ impl Fixture {
         // Position data is deliberately unreadable as a pointer. The exact
         // Drag layout must not read the Standard renderer field at +e8.
         for address in 0xb10e8..0xb10f0 {
+            self.data.remove(&address);
+        }
+    }
+    fn research_plain_sprite(&mut self) {
+        self.research_drag();
+        let base = 0x10000;
+        for (object, table, info, text, name) in [
+            (0xb2000, 0x4356e08, 0x4351000, 0x38b4750, "7CSprite"),
+            (0xb3000, 0x4357160, 0x4352000, 0x3507000, "11CSpriteType"),
+        ] {
+            self.word(object, base + table);
+            self.word(base + table - 16, 0);
+            self.word(base + table - 8, base + info);
+            self.region(base + text, 128);
+            self.put(base + text, name.as_bytes());
+        }
+        // The plain primary uses its direct resource at +168. Neither the
+        // Instant +160 nor Frame +1b0 field exists in this fixture.
+        for address in (0xb2160..0xb2168).chain(0xb21b0..0xb21b8) {
+            self.data.remove(&address);
+        }
+    }
+    fn research_info(&mut self) {
+        self.research_ui();
+        let base = 0x10000;
+        self.array(0x92dc0, 0xc0000, 1);
+        self.word(0xc0000, 0xc1000);
+        self.region(0xc1000, 0xb00);
+        self.word(0xc1000, base + 0x430bbf0);
+        self.word(0xc1a78, 0x32000);
+        self.word(0xc1a80, 0x92000);
+        self.word(0xc1a98, 0x80000);
+        self.word(0xc1a88, 0xc3000);
+        self.word(0xc1ac0, 0xc5000);
+        self.word(0xc1ab0, 0xc5000);
+        self.region(0xc3000, 0xf00);
+        self.word(0xc3000, base + 0x4347d58);
+        self.word(0xc3098, 0x70000);
+        self.put(0xc30a5, &[8]);
+        self.array(0xc39a0, 0xc7000, 2);
+        self.array(0xc39b8, 0xc6000, 2);
+        self.word(0xc7000, 0xc8000);
+        self.word(0xc7008, 0xc5000);
+        self.string(0xc6000, "close");
+        self.string(0xc6020, "research");
+        self.region(0xc5000, 0x120);
+        self.word(0xc5000, base + 0x43470c8);
+        self.number(0xc50ac, 3);
+        self.put(0xc5074, &0x1234_0800u32.to_le_bytes());
+        // Another named registry has no readable payload here. It must not
+        // be used in place of the actual virtual +88 button lookup.
+        for address in (0xc3a60..0xc3a70).chain(0xc3a78..0xc3a88) {
             self.data.remove(&address);
         }
     }
@@ -867,6 +920,7 @@ fn research_ui_refuses_foreign_and_wrong_slot_or_view_joins() {
         (0x942b8, 0x2c100, "invalid_research_join"),
         (0x942b0, 0x92000, "invalid_research_join"),
         (0x942a8, 0xdead0000, "invalid_research_join"),
+        (0xa0098, 0xdead0000, "invalid_gui_owner"),
         (0x93008, 0x94000, "invalid_research_join"),
         (0x2c010, 0xdead0000, "invalid_research_owner"),
     ] {
@@ -1048,6 +1102,229 @@ fn research_ui_instant_and_unknown_renderers_do_not_borrow_frame_layout() {
         v["slots"][0]["buttons_observed"][0]["render_details"]["field_layout_verified"],
         false
     );
+}
+
+#[test]
+fn research_ui_plain_sprite_uses_direct_resource_without_other_renderer_fields() {
+    let mut f = Fixture::new();
+    f.research_plain_sprite();
+    let v = research_ui::snapshot(&f).unwrap();
+    let button = &v["slots"][0]["buttons_observed"][0];
+    assert_eq!(button["render_type_encoding"], "7CSprite");
+    let details = &button["render_details"];
+    assert_eq!(details["current_frame_raw"], 3);
+    assert_eq!(details["hit_resource_type_encoding"], "11CSpriteType");
+    assert!(details.get("resources_same").is_none());
+    assert_eq!(details["geometry_verified"], false);
+    assert_eq!(v["input_authorized"], false);
+    f.word(0xb2168, 0);
+    assert!(
+        research_ui::snapshot(&f).unwrap()["slots"][0]["buttons_observed"][0]["render_details"]
+            ["hit_resource_type_encoding"]
+            .is_null()
+    );
+}
+
+#[test]
+fn research_ui_plain_sprite_witnesses_changes_and_rejects_name_only_layouts() {
+    for (address, value) in [
+        (0xb2034, 4u32.to_le_bytes().to_vec()),
+        (0xb2168, 0u64.to_le_bytes().to_vec()),
+        (0xb3000, 0u64.to_le_bytes().to_vec()),
+    ] {
+        let mut f = Fixture::new();
+        f.research_plain_sprite();
+        f.fault = Some((address, 1, value));
+        assert_eq!(research_ui::snapshot(&f).unwrap_err().code, "torn_read");
+    }
+    let mut f = Fixture::new();
+    f.research_plain_sprite();
+    let table = 0x10000 + 0x4356e80;
+    f.word(0xb2000, table);
+    f.word(table - 16, 0);
+    f.word(table - 8, 0x10000 + 0x4351000);
+    for (address, size) in [(0xb2034, 4), (0xb2168, 8)] {
+        for n in 0..size {
+            f.data.remove(&(address + n));
+        }
+    }
+    let v = research_ui::snapshot(&f).unwrap();
+    let button = &v["slots"][0]["buttons_observed"][0];
+    assert_eq!(button["render_type_encoding"], "7CSprite");
+    assert_eq!(button["render_details"]["field_layout_verified"], false);
+}
+
+#[test]
+fn research_info_reports_canonical_selection_and_ordinary_button_without_eligibility() {
+    let mut f = Fixture::new();
+    f.research_info();
+    let v = research_ui::snapshot(&f).unwrap();
+    let infos = &v["technology_info"];
+    assert_eq!(infos["count"], 1);
+    assert_eq!(infos["visible_count"], 1);
+    let info = &infos["windows"][0];
+    assert_eq!(info["technology"], "tools1"); // Template+34 deliberately is 999.
+    assert_eq!(info["eligibility"], "unavailable");
+    let button = &info["ordinary_research_button"];
+    assert_eq!(button["disabled_predicate"], true);
+    assert_eq!(button["flags_raw"], 0x1234_0800u32);
+    assert_eq!(button["selected_control_alias_matches"], true);
+    assert_eq!(button["input_authorized"], false);
+    f.word(0xc1ab0, 0xc9000); // Special branch alias is not ordinary control.
+    f.number(0xc50ac, 0);
+    f.number(0xc3eb0, 2);
+    let v = research_ui::snapshot(&f).unwrap();
+    assert_eq!(v["technology_info"]["visible_count"], 0);
+    let button = &v["technology_info"]["windows"][0]["ordinary_research_button"];
+    assert_eq!(button["disabled_predicate"], false);
+    assert_eq!(button["selected_control_alias_matches"], false);
+    assert_eq!(button["input_authorized"], false);
+}
+
+#[test]
+fn research_info_retained_empty_selection_and_unmaterialized_window_are_explicit() {
+    let mut f = Fixture::new();
+    f.research_info();
+    f.word(0xc1a88, 0);
+    let v = research_ui::snapshot(&f).unwrap();
+    assert_eq!(v["technology_info"]["windows"][0]["technology"], "tools1");
+    assert_eq!(
+        v["technology_info"]["windows"][0]["window"]["materialized"],
+        false
+    );
+    assert_eq!(
+        v["technology_info"]["windows"][0]["ordinary_research_button"]["materialized"],
+        false
+    );
+    f.word(0xc1a98, 0);
+    // Empty retained objects require neither a database nor a guessed control.
+    for address in (0xc1ab0..0xc1ab8)
+        .chain(0xc1ac0..0xc1ac8)
+        .chain((0x10000 + 0x439f450)..(0x10000 + 0x439f458))
+    {
+        f.data.remove(&address);
+    }
+    let v = research_ui::snapshot(&f).unwrap();
+    let info = &v["technology_info"]["windows"][0];
+    assert!(info["technology"].is_null());
+    assert!(info["ordinary_research_button"].is_null());
+    assert_eq!(info["eligibility"], "unavailable");
+}
+
+#[test]
+fn research_info_refuses_foreign_objects_wrong_catalog_and_misbound_controls() {
+    for (address, value, code) in [
+        (0xc1a78, 0xdead0000, "invalid_gui_owner"),
+        (0xc1a80, 0xdead0000, "invalid_gui_owner"),
+        (0xc3098, 0xdead0000, "invalid_gui_owner"),
+        (0x80158, 0xdead0000, "invalid_research_owner"),
+        (0x62008, 0x63100, "invalid_research_join"),
+        (0x82000, 0x81000, "invalid_research_join"),
+        (0xc1a98, 0x63000, "invalid_gui_type"),
+        (0xc7008, 0xc8000, "invalid_gui_registry"),
+        (0xc1ac0, 0xc8000, "invalid_gui_registry"),
+        (0xc5000, 0x10000 + 0x4346b10, "invalid_gui_type"),
+    ] {
+        let mut f = Fixture::new();
+        f.research_info();
+        f.word(address, value);
+        if address == 0x80158 {
+            for a in 0x80160..0x80168 {
+                f.data.remove(&a);
+            }
+        }
+        if address == 0xc3098 {
+            for a in 0xc39a0..0xc39c8 {
+                f.data.remove(&a);
+            }
+        }
+        assert_eq!(
+            research_ui::snapshot(&f).unwrap_err().code,
+            code,
+            "{address:x}"
+        );
+    }
+}
+
+#[test]
+fn research_info_bounds_and_unique_named_lookup_precede_untrusted_payloads() {
+    let mut f = Fixture::new();
+    f.research_info();
+    f.array(0x92dc0, 0xdead0000, 65);
+    assert_eq!(research_ui::snapshot(&f).unwrap_err().code, "invalid_array");
+    let mut f = Fixture::new();
+    f.research_info();
+    f.array(0x92dc0, 0xc0000, 2);
+    f.word(0xc0008, 0xc1000);
+    assert_eq!(
+        research_ui::snapshot(&f).unwrap_err().code,
+        "invalid_gui_owner"
+    );
+    let mut f = Fixture::new();
+    f.research_info();
+    f.array(0xc39b8, 0xdead0000, 257);
+    assert_eq!(
+        research_ui::snapshot(&f).unwrap_err().code,
+        "invalid_gui_registry"
+    );
+    let mut f = Fixture::new();
+    f.research_info();
+    f.string(0xc6000, "research");
+    assert_eq!(
+        research_ui::snapshot(&f).unwrap_err().code,
+        "invalid_gui_registry"
+    );
+    let mut f = Fixture::new();
+    f.research_info();
+    f.string(0xc6020, "other");
+    assert_eq!(
+        research_ui::snapshot(&f).unwrap_err().code,
+        "gui_unavailable"
+    );
+}
+
+#[test]
+fn research_info_end_witnesses_cover_selection_registry_controls_and_catalog() {
+    for (address, value) in [
+        (
+            0x92dc0,
+            [
+                0u64.to_le_bytes().as_slice(),
+                1i32.to_le_bytes().as_slice(),
+                1i32.to_le_bytes().as_slice(),
+            ]
+            .concat(),
+        ),
+        (0xc0000, 0u64.to_le_bytes().to_vec()),
+        (0xc1a78, 0u64.to_le_bytes().to_vec()),
+        (0xc1a98, 0u64.to_le_bytes().to_vec()),
+        (0xc1a88, 0u64.to_le_bytes().to_vec()),
+        (0xc3098, 0u64.to_le_bytes().to_vec()),
+        (
+            0xc39b8,
+            [
+                0u64.to_le_bytes().as_slice(),
+                2i32.to_le_bytes().as_slice(),
+                2i32.to_le_bytes().as_slice(),
+            ]
+            .concat(),
+        ),
+        (0xc1ab0, 0u64.to_le_bytes().to_vec()),
+        (0xc50ac, 0i32.to_le_bytes().to_vec()),
+        (0xc5074, 0u32.to_le_bytes().to_vec()),
+        (0x80158, 0u64.to_le_bytes().to_vec()),
+        (0x80160, 0u64.to_le_bytes().to_vec()),
+        (0x63030, 2i32.to_le_bytes().to_vec()),
+    ] {
+        let mut f = Fixture::new();
+        f.research_info();
+        f.fault = Some((address, 1, value));
+        assert_eq!(
+            research_ui::snapshot(&f).unwrap_err().code,
+            "torn_read",
+            "{address:x}"
+        );
+    }
 }
 
 struct UiWaitFixture {

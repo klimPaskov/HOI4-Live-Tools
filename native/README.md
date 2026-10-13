@@ -124,15 +124,29 @@ the retry branch retains separate fixture evidence.
 The own research UI reader identified all four slot widgets and their
 `CButtonDrag` controls. Ordinary diagnostic clicks selected each own slot and
 opened its tree, confirmed through memory. These were view-navigation checks,
-not research assignments or proof of a production click adapter. Exact drag
-renderer/resource diagnostics have fixture evidence and await a fresh live check.
+not research assignments or proof of a production click adapter. A subsequent
+live check read each drag's renderer at its exact field and identified plain
+`CSprite` objects. That class safely returned unavailable field layout under
+the earlier whitelist; its independently recovered direct-resource layout now
+has fixture evidence and awaits a fresh live check.
 For a bounded UI wait, use `until_research_ui: {"view": "tree",
 "selected_slot": 0}` with `timeout_seconds`. The view is `panel` or `tree`;
 the optional slot is a current own-array index, not a persistent ID. Choose a UI
 target or `until_date`, not both. Campaign, UI and slot identities remain pinned
 across the wait. A match means active mode and local window visibility
 predicates agree; it does not establish clipping, topmost routing or input
-authorization. The new UI wait still needs live validation.
+authorization. The UI wait passed in the installed game: one ordinary slot click
+was followed by a verified tree/slot match in 289 ms, without repeated input.
+A separate one-second wrong-view wait returned its latest stable sample and age.
+The UI reader also reports retained ordinary technology Info windows. Nonnull
+selections require canonical database and own-status membership. The named
+`research` control must match its ordinary callback binding and exact button
+type; raw disabled state and selected-control alias remain diagnostics.
+Containers must belong to the owned GUI registry. Null selections and absent
+containers are explicit unavailable states. Reader policies cap Info capacity
+at 64, paired button/name capacity at 256, technology arrays at 8192 and names
+and keys at 256 bytes; larger data is refused. These additions have fixture
+evidence and await live validation. They supply no assignment adapter.
 The mode default is FAIR; a mode label alone is not proof of campaign settings.
 
 ## Command port and expansion

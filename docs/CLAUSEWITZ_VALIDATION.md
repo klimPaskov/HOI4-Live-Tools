@@ -516,8 +516,8 @@ slot 1 was already selected while mode 5 remained; a later fresh read confirmed
 mode 6 without another click. The second occurred before a requested panel
 finished opening, so no subsequent click was sent. Both failures are preserved.
 The remaining navigation checks used bounded fresh observations to await the
-transition, with no repeated input. This motivates the new server-side UI wait,
-which still needs live validation.
+transition, with no repeated input. This motivated the server-side UI wait
+validated in the subsequent run below.
 
 Pointer reads agreed with client `[50,70]`, `[50,110]` and `[50,130]` at the
 observed scale 5. This is evidence at those points in the tested window,
@@ -527,6 +527,34 @@ the drag renderer at `+110`; standard buttons use `+e8`, and drag state is not
 a boolean disabled flag. The new exact renderer/resource diagnostics retain
 fixture evidence pending a fresh installed-game check. Recordings, calls,
 source manifests and failed assertions remain private.
+
+## Passed research UI wait — 13 October 2026
+
+A fresh owned run used `0ada7e1`, the same exact Linux build and Normal
+historical vanilla Germany. Recording had a verified first packet before Start.
+Initial own-country reads again confirmed 1936.01.01.12, paused, 47 completed
+technologies and four empty slots. Each exact drag renderer field identified
+`CSprite`; its unknown field layout correctly remained unavailable under that
+build's renderer whitelist. No resource fields were borrowed from another class.
+
+One ordinary `w` opened the panel. A server wait matched mode 5 and the panel's
+local visibility. After a fresh panel precheck, one diagnostic slot-0 click was
+followed by `until_research_ui: {"view": "tree", "selected_slot": 0}`. The wait
+returned the verified tree, selected own slot and coherent visibility predicates
+in **288.5 ms RPC / 280.4 ms server time**, with no torn-read retries or repeated
+input. A separate one-second wait for the closed panel returned `wall_timeout`
+in **1.009 seconds RPC**, reporting its latest accepted sample's age of 193 ms.
+These timings include the emulated Linux guest and persistent SSH stdio path;
+they are bounded UI tests, not a native-hardware throughput benchmark.
+
+The final own-country snapshot remained paused at the initial date with all
+four slots empty. No research was assigned. The pointer read matched client
+`[50,70]` at the observed scale 5; this does not authorize a general control
+transform. Two builder diagnostic refusals are retained: an initial observation
+during campaign loading returned `campaign_unavailable`, and a misspelled wait
+argument returned `invalid_arguments`. Neither caused repeated input. Calls,
+recordings and source manifests remain private. Exact plain-sprite resource
+diagnostics and strategic input still require further live validation.
 
 ## Attribution
 

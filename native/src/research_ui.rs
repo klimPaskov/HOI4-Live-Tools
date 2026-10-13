@@ -1,5 +1,8 @@
 //! Bounded own research panel diagnostics, independently recovered for the
 //! verified Linux build. Descriptors never authorize input or claim hit routing.
+// Own canonical technology joins derive from research.rs/Clausewitz-MCP
+// calling/game.py semantics. Copyright (c) 2026 smerss, MIT;
+// see ../LICENSE.clausewitz. UI layouts are independently recovered.
 use crate::{
     error::{Error, Result},
     game,
@@ -73,11 +76,17 @@ fn array(r: &Reader<'_>, address: u64, bound: usize) -> Result<Vec<u64>> {
         .map(|v| u64::from_le_bytes(v.try_into().unwrap()))
         .collect())
 }
-fn window(r: &Reader<'_>, base: u64, pointer: u64) -> Result<Value> {
+fn window(r: &Reader<'_>, base: u64, pointer: u64, registry: u64) -> Result<Value> {
     if pointer == 0 {
         return Ok(json!({"materialized":false,"visible_predicate":null}));
     }
     exact(r, pointer, base + 0x4347d58)?;
+    if r.u64(pointer + 0x98)? != registry {
+        return Err(Error::new(
+            "invalid_gui_owner",
+            "Research container must belong to own GUI registry",
+        ));
+    }
     let flags = r.byte(pointer + 0xa5)?;
     let states = [r.i32(pointer + 0xef8)?, r.i32(pointer + 0xeb0)?];
     Ok(
@@ -140,7 +149,7 @@ fn nullable_type(r: &Reader<'_>, base: u64, object: u64) -> Result<Value> {
 }
 fn render_details(r: &Reader<'_>, base: u64, object: u64) -> Result<Value> {
     let table = r.u64(object)?;
-    if ![base + 0x434c5b0, base + 0x434b370].contains(&table) {
+    if ![base + 0x434c5b0, base + 0x434b370, base + 0x4356e08].contains(&table) {
         // Even a matching RTTI name never supplies a renderer field layout.
         return Ok(json!({"field_layout_verified":false}));
     }
@@ -149,8 +158,13 @@ fn render_details(r: &Reader<'_>, base: u64, object: u64) -> Result<Value> {
         object
             + if table == base + 0x434c5b0 {
                 0x160
-            } else {
+            } else if table == base + 0x434b370 {
                 0x1b0
+            } else {
+                // Exact primary CSprite: the plain sprite factory passes its
+                // direct resource to the base constructor; getter +2c0 uses
+                // +168. This is independently verified, not a name fallback.
+                0x168
             },
     )?;
     let mut value = json!({"current_frame_raw":frame,"hit_resource_type_encoding":nullable_type(r,base,hit_resource)?,"geometry_verified":false});
@@ -162,6 +176,140 @@ fn render_details(r: &Reader<'_>, base: u64, object: u64) -> Result<Value> {
         value["resources_same"] = json!(dimension_resource == hit_resource);
     }
     Ok(value)
+}
+
+/// Exact CContainerWindow's button lookup uses these paired arrays. Its other
+/// named registry at +a60/+a78 is a different operation and is not consulted.
+fn named_research_button(r: &Reader<'_>, container: u64) -> Result<u64> {
+    let buttons = array(r, container + 0x9a0, 256)?;
+    let (header, names, count) = r.array_header(container + 0x9b8)?;
+    let capacity = i32::from_le_bytes(header[8..12].try_into().unwrap()) as usize;
+    if capacity > 256 || count != buttons.len() || (count > 0 && names % 8 != 0) {
+        return Err(Error::new(
+            "invalid_gui_registry",
+            "Bounded paired research button/name arrays required",
+        ));
+    }
+    if count > 0 {
+        r.read(names, count * 32)?;
+    }
+    let mut found = None;
+    for (index, button) in buttons.iter().enumerate() {
+        if r.string_bounded(names + index as u64 * 32, 256)? == "research"
+            && found.replace(*button).is_some()
+        {
+            return Err(Error::new(
+                "invalid_gui_registry",
+                "Unique ordinary research button name required",
+            ));
+        }
+    }
+    found.ok_or_else(|| {
+        Error::new(
+            "gui_unavailable",
+            "Named ordinary research button unavailable",
+        )
+    })
+}
+
+/// Only entries reached through the ordinary own tree are inspected. The
+/// engine can retain multiple info windows, including hidden ones; no single
+/// selected/eligible target follows merely from vector membership.
+fn technology_info(
+    r: &Reader<'_>,
+    base: u64,
+    idler: u64,
+    tree: u64,
+    status: u64,
+    registry: u64,
+) -> Result<Value> {
+    let entries = array(r, tree + 0xdc0, 64)?;
+    if entries.is_empty() {
+        return Ok(json!({"count":0,"visible_count":0,"windows":[]}));
+    }
+    let mut catalog: Option<(Vec<u64>, Vec<u64>)> = None;
+    let mut unique = std::collections::BTreeSet::new();
+    let mut output = Vec::new();
+    let mut visible_count = 0;
+    for info in &entries {
+        exact(r, *info, base + 0x430bbf0)?;
+        if !unique.insert(*info) || r.u64(info + 0xa78)? != idler || r.u64(info + 0xa80)? != tree {
+            return Err(Error::new(
+                "invalid_gui_owner",
+                "Unique own ordinary technology info window required",
+            ));
+        }
+        let container = r.u64(info + 0xa88)?;
+        let container_state = window(r, base, container, registry)?;
+        if container_state["visible_predicate"] == true {
+            visible_count += 1;
+        }
+        let technology = r.u64(info + 0xa98)?;
+        if technology == 0 {
+            // The updater explicitly permits a retained empty Info object.
+            // It supplies no candidate ID or ordinary-button authority.
+            output.push(json!({"technology":null,"window":container_state,"ordinary_research_button":null,"eligibility":"unavailable","input_authorized":false}));
+            continue;
+        }
+        exact(r, technology, base + 0x42107f8)?;
+        // Refuse foreign technology before traversing its template/payload.
+        if r.u64(technology + 0x158)? != status {
+            return Err(Error::new(
+                "invalid_research_owner",
+                "Info technology must belong to own research status",
+            ));
+        }
+        if catalog.is_none() {
+            let db = r.u64(base + 0x439f450)?;
+            exact(r, db, base + 0x42110c8)?;
+            let templates = array(r, db + 0x48, 8192)?;
+            let own = array(r, status + 0x88, 8192)?;
+            if templates.is_empty() || own.len() != templates.len() - 1 {
+                return Err(Error::new(
+                    "research_unavailable",
+                    "Initialized own technology catalog required",
+                ));
+            }
+            catalog = Some((templates, own));
+        }
+        let (templates, own) = catalog.as_ref().unwrap();
+        let template = r.u64(technology + 0x160)?;
+        exact(r, template, base + 0x4211038)?;
+        let id = r.i32(template + 0x30)?;
+        if id <= 0
+            || templates.get(id as usize) != Some(&template)
+            || own.get(id as usize - 1) != Some(&technology)
+        {
+            return Err(Error::new(
+                "invalid_research_join",
+                "Canonical own info technology join required",
+            ));
+        }
+        let key = r.string_bounded(template + 8, 256)?;
+        if key.is_empty() || key.chars().any(char::is_control) {
+            return Err(Error::new(
+                "invalid_research_id",
+                "Bounded public technology key required",
+            ));
+        }
+        let ordinary = if container == 0 {
+            json!({"materialized":false})
+        } else {
+            let button = named_research_button(r, container)?;
+            if button != r.u64(info + 0xac0)? {
+                return Err(Error::new(
+                    "invalid_gui_registry",
+                    "Named research button must match ordinary callback control",
+                ));
+            }
+            exact(r, button, base + 0x43470c8)?;
+            let disabled = r.i32(button + 0xac)?;
+            let flags = u32::from_le_bytes(r.read(button + 0x74, 4)?.try_into().unwrap());
+            json!({"materialized":true,"selected_control_alias_matches":r.u64(info + 0xab0)?==button,"disabled_raw":disabled,"disabled_predicate":disabled==3,"flags_raw":flags,"input_authorized":false})
+        };
+        output.push(json!({"technology":key,"window":container_state,"ordinary_research_button":ordinary,"eligibility":"unavailable","input_authorized":false}));
+    }
+    Ok(json!({"count":entries.len(),"visible_count":visible_count,"windows":output}))
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -278,8 +426,8 @@ fn observe(process: &dyn Process, include_context: bool) -> Result<(Value, Optio
         })?)
     };
     let active = r.i32(manager + 0x3d8)?;
-    let panel_state = window(&r, base, r.u64(view + 0x2f8)?)?;
-    let tree_state = window(&r, base, r.u64(tree + 0x2f8)?)?;
+    let panel_state = window(&r, base, r.u64(view + 0x2f8)?, registry)?;
+    let tree_state = window(&r, base, r.u64(tree + 0x2f8)?, registry)?;
     let widgets = array(&r, view + 0x308, 32)?;
     if widgets.len() > slots.len() {
         return Err(Error::new(
@@ -302,7 +450,7 @@ fn observe(process: &dyn Process, include_context: bool) -> Result<(Value, Optio
             ));
         }
         let container = r.u64(widget + 0x10)?;
-        let container_state = window(&r, base, container)?;
+        let container_state = window(&r, base, container, registry)?;
         if container == 0 {
             return Err(Error::new(
                 "gui_unavailable",
@@ -336,6 +484,7 @@ fn observe(process: &dyn Process, include_context: bool) -> Result<(Value, Optio
         }
         output.push(json!({"slot":index,"container":container_state,"button_count":buttons.len(),"buttons_observed":button_output,"button_sample_limit":8,"input_authorized":false}));
     }
+    let info = technology_info(&r, base, idler, tree, status, registry)?;
     let (end_calls, end_bytes) = observed.finish()?;
     process.check()?;
     let context = campaign.map(|campaign| UiContext {
@@ -344,7 +493,7 @@ fn observe(process: &dyn Process, include_context: bool) -> Result<(Value, Optio
         slots: slots.clone(),
     });
     Ok((
-        json!({"source":"native own research UI diagnostics","build_id":game::BUILD_ID,"owned":true,"own_slot_count":slots.len(),"widget_count":widgets.len(),"widgets_complete":widgets.len()==slots.len(),"slot_identity":"own array index in current process/status snapshot; not a persistent ID","selected_slot":selected_index,"active_mode_raw":active,"panel":panel_state,"ordinary_tree":tree_state,"slots":output,"input_authorized":false,"unverified":["effective ancestor visibility and clipping","sprite hit predicates","topmost hit routing","physical client conversion"],"observation_paused_game":false,"freshness":{"observed_unix_ms":SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),"elapsed_ms":start.elapsed().as_secs_f64()*1000.0,"read_calls":r.calls.get()+end_calls as u64,"read_bytes":r.bytes.get()+end_bytes}}),
+        json!({"source":"native own research UI diagnostics","build_id":game::BUILD_ID,"owned":true,"own_slot_count":slots.len(),"widget_count":widgets.len(),"widgets_complete":widgets.len()==slots.len(),"slot_identity":"own array index in current process/status snapshot; not a persistent ID","selected_slot":selected_index,"active_mode_raw":active,"panel":panel_state,"ordinary_tree":tree_state,"slots":output,"technology_info":info,"input_authorized":false,"unverified":["effective ancestor visibility and clipping","sprite hit predicates","topmost hit routing","physical client conversion"],"observation_paused_game":false,"freshness":{"observed_unix_ms":SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),"elapsed_ms":start.elapsed().as_secs_f64()*1000.0,"read_calls":r.calls.get()+end_calls as u64,"read_bytes":r.bytes.get()+end_bytes}}),
         context,
     ))
 }
