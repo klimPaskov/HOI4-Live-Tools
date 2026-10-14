@@ -189,12 +189,7 @@ pub(super) fn execute_internal(
         &mut backend,
         remaining(until)?,
     )?;
-    if Instant::now() >= until {
-        return Err(Error::new(
-            "action_uncertain",
-            "Focus result arrived after original absolute deadline",
-        ));
-    }
+    service.journal.finish_before_deadline(&execution, until)?;
     Ok((execution, backend.last_transport))
 }
 
@@ -237,6 +232,43 @@ pub(super) fn observed_state(
 ) -> Result<(stage::OwnState, crate::own_focus::FocusContext)> {
     let o = observed(process, guard, target, &mut None, false)?;
     Ok((o.state, o.context))
+}
+
+pub(super) fn observed_bound(
+    process: &dyn Process,
+    guard: &mut Guard,
+    target: &stage::Target,
+) -> Result<(
+    stage::OwnState,
+    crate::own_focus::FocusContext,
+    crate::daily_focus_navigation::OwnBinding,
+)> {
+    let o = observed(process, guard, target, &mut None, false)?;
+    let binding =
+        crate::daily_focus_navigation::OwnBinding::from_context(&o.context, &o.politics_context)?;
+    Ok((o.state, o.context, binding))
+}
+#[allow(dead_code)] // Prospective caller must classify immediately after execute.
+pub(super) fn failure_evidence(
+    state: &ControlState,
+    id: &str,
+    target: &stage::Target,
+    error: &Error,
+) -> stage::FailureEvidence {
+    if state.journal.blocks_game(&target.epoch.game)
+        || state
+            .research
+            .as_ref()
+            .is_some_and(|r| r.journal.blocks_game(&target.epoch.game))
+    {
+        return stage::FailureEvidence::Unknown;
+    }
+    state
+        .focus
+        .as_ref()
+        .map_or(stage::FailureEvidence::Unknown, |s| {
+            s.journal.failure_evidence(id, target, error)
+        })
 }
 
 fn politics_point(

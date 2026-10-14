@@ -36,7 +36,13 @@ and counter advancement through3January. Run036 verified exact focus selection
 and one ordinary Start with canonical active-focus readback. The compact selected
 detail reports the correct Start object, avoiding the fields-present player parsing
 failure in run035. A borrowed Focus executor and separate durable preparation
-ledger are now offline foundations; the daily Focus capability remains disabled.
+ledger now support a default-off daily Focus preview. It requires owner
+`daily_focus: true`, the existing Focus profile and `focus_permission: true`
+in every start/update request. A running worker rejects permission changes;
+stop/restart retains its histories and consumed shared budget. Worker live
+validation remains pending. Different active focus IDs retain a pending head
+without navigation or budget use. Focus stages have a fixed ten-second batch
+ceiling, research five seconds, both clamped to the lease.
 They share the clock and
 research controller, lease, shutdown gate and uncertainty journals. The worker
 retains unfinished entries and requires fresh assignment receipts; navigation
@@ -44,9 +50,15 @@ receipts cannot complete research work. It prepares each research stage separate
 and supports idempotent plan updates. Several research entries may complete on
 one day within the durable assignment limit. Ordered research queues now retain
 one pending head per slot and wait for fresh empty-slot evidence; refill after
-an actual technology finishes still awaits live validation. Daily focus, economy,
-army and naval adapters remain unfinished. Private daily storage
+an actual technology finishes still awaits live validation. Combined focus/research
+UI handoff, economy, army and naval adapters remain unfinished. Private daily storage
 supports Unix only; other platforms return an explicit capability error.
+
+Late Focus results retain verified evidence and separately record quarantine.
+A committed marker blocks reopening and new input. Failed persistence poisons
+the live controller; an unchanged old file cannot prove an uncommitted marker.
+Replacing the owner does not authorize adopting an orphaned game or clearing
+uncertainty.
 
 The independent `graph_kernel` library provides bounded connected components
 and multi-source breadth-first search over supplied public/generated topology.

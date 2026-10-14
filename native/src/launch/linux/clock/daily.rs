@@ -19,6 +19,11 @@ struct Spec {
     max_actions_per_day: u8,
     max_observation_age_ms: u64,
     review_day: Option<i64>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    focus_permission: bool,
+}
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 impl Spec {
     fn plan(&self, scope: core::Scope) -> core::Plan {
@@ -38,18 +43,28 @@ struct Active {
     producer: Arc<Producer>,
     report: Arc<Mutex<Value>>,
     governor: Arc<Mutex<core::Governor>>,
+    focus_permission: bool,
 }
 pub(super) struct Controller {
     enabled: bool,
+    research_enabled: bool,
+    focus_enabled: bool,
     owner: Weak<Shared>,
     directory: PathBuf,
     active: Mutex<Option<Active>>,
     blocked: Arc<AtomicBool>,
 }
 impl Controller {
-    pub(super) fn new(enabled: bool, owner: Weak<Shared>, directory: &Path) -> Self {
+    pub(super) fn new(
+        research_enabled: bool,
+        focus_enabled: bool,
+        owner: Weak<Shared>,
+        directory: &Path,
+    ) -> Self {
         Self {
-            enabled,
+            enabled: research_enabled || focus_enabled,
+            research_enabled,
+            focus_enabled,
             owner,
             directory: directory.to_owned(),
             active: Mutex::new(None),
@@ -69,8 +84,14 @@ impl Controller {
     pub(super) fn enabled(&self) -> bool {
         self.enabled
     }
+    pub(super) fn focus_enabled(&self) -> bool {
+        self.focus_enabled
+    }
+    pub(super) fn research_enabled(&self) -> bool {
+        self.research_enabled
+    }
     pub(super) fn tool() -> Value {
-        json!({"name":"hoi4_daily_governor","description":"Optional owned daily automatic research refill worker and fresh compact digest. Start requires the existing exclusive lease and explicit typed plan. Navigation uses separately journaled verified stages; only Research completes an entry. Other action domains remain unavailable. Unknown/uncertain input is never replayed. Stop does not pause the game.","inputSchema":{"type":"object","oneOf":[{"properties":{"op":{"enum":["start","update"]},"lease_token":{"type":"string"},"plan":{"type":"object"}},"required":["op","lease_token","plan"],"additionalProperties":false},{"properties":{"op":{"enum":["digest","stop"]}},"required":["op"],"additionalProperties":false}]}})
+        json!({"name":"hoi4_daily_governor","description":"Optional owned daily automatic research refill worker and fresh compact digest. Start requires the existing exclusive lease and explicit typed plan. Navigation uses separately journaled verified stages; only fresh Research or separately opted-in Focus Start completes an assignment. Focus requires default-off owner daily_focus plus plan.focus_permission and existing profile. Economy, army and naval domains remain unavailable. Unknown/uncertain input is never replayed. Stop does not pause the game.","inputSchema":{"type":"object","oneOf":[{"properties":{"op":{"enum":["start","update"]},"lease_token":{"type":"string"},"plan":{"type":"object"}},"required":["op","lease_token","plan"],"additionalProperties":false},{"properties":{"op":{"enum":["digest","stop"]}},"required":["op"],"additionalProperties":false}]}})
     }
     pub(super) fn call(
         &self,
@@ -106,6 +127,11 @@ impl Controller {
                 let until = Instant::now() + Duration::from_secs(5);
                 let mut state = try_state(&owner.state)?;
                 self.input_check()?;
+                crate::daily_focus_navigation::capability(
+                    self.focus_enabled,
+                    spec.focus_permission,
+                    state.focus.is_some(),
+                )?;
                 let epoch = state.guard.epoch.clone();
                 let lease_end = state.authority.authorize(&token, &epoch)?;
                 let until = until.min(lease_end);
@@ -153,12 +179,28 @@ impl Controller {
                         "Unresolved navigation cannot restart",
                     ));
                 }
+                // Always load Focus uncertainty, even when permission is off.
+                let focus_navigation = crate::daily_focus_navigation::Navigator::open(
+                    &self.directory.join("daily-focus-navigation.json"),
+                    state.guard.epoch.clone(),
+                    &governor.plan().entries,
+                )?;
+                if focus_navigation.blocked() {
+                    self.blocked.store(true, Ordering::Release);
+                    return Err(Error::new(
+                        "action_uncertain",
+                        "Unresolved Focus preparation cannot restart",
+                    ));
+                }
+                let focus_initial = focus_navigation.latest();
+                let focus_permission = spec.focus_permission;
+                let research_permission = self.research_enabled;
                 let governor = Arc::new(Mutex::new(governor));
                 drop(state);
                 let stop = Arc::new(AtomicBool::new(false));
                 let wake = Arc::new(core::Wakeup::default());
                 let report = Arc::new(Mutex::new(
-                    json!({"running":true,"last_batch":null,"last_error":navigation.latest_refusal(),"last_preparation_refusal":navigation.latest_refusal(),"last_stage_failure":navigation.latest_stage_failure()}),
+                    json!({"running":true,"last_batch":null,"last_error":navigation.latest_refusal(),"last_preparation_refusal":navigation.latest_refusal(),"last_stage_failure":navigation.latest_stage_failure(),"focus":focus_initial,"focus_wait":focus_initial["wait"],"focus_permission":focus_permission}),
                 ));
                 let control = owner.state.clone();
                 let gate = owner.input_gate.clone();
@@ -170,7 +212,7 @@ impl Controller {
                 let r = report.clone();
                 let g = governor.clone();
                 let handle=thread::Builder::new().name("owned-daily-governor".into()).spawn(move||{
- let outcome=std::panic::catch_unwind(std::panic::AssertUnwindSafe(||worker(&g,navigation,&p,&control,&gate,&weak,&token,&s,&w,&r,&blocked)));
+ let outcome=std::panic::catch_unwind(std::panic::AssertUnwindSafe(||worker(&g,navigation,focus_navigation,focus_permission,research_permission,&p,&control,&gate,&weak,&token,&s,&w,&r,&blocked)));
  if outcome.is_err(){blocked.store(true,Ordering::Release);if let Ok(mut report)=r.lock(){report["last_error"]=json!({"code":"daily_quarantined","reason":"Worker panic; durable intent requires review"});}}
  if crate::daily_worker::retained_quarantine(&g,|gov|gov.blocks_work()){blocked.store(true,Ordering::Release);}s.store(true,Ordering::Release);if let Ok(mut report)=r.lock(){report["running"]=json!(false);}
  })?;
@@ -179,9 +221,10 @@ impl Controller {
                     producer,
                     report,
                     governor,
+                    focus_permission,
                 });
                 Ok(
-                    json!({"started":true,"scope":"own research refills within durable daily assignment budget","navigation_implemented":true,"other_action_domains_implemented":false,"full_campaign_acceptance":false}),
+                    json!({"started":true,"scope":"owned assignments within durable shared daily budget","focus_implemented":focus_permission,"navigation_implemented":true,"other_action_domains_implemented":false,"full_campaign_acceptance":false}),
                 )
             }
             "update" => {
@@ -197,6 +240,9 @@ impl Controller {
                 let active = active
                     .as_ref()
                     .ok_or_else(|| Error::new("capability_unavailable", "No started plan"))?;
+                if spec.focus_permission != active.focus_permission {
+                    return Err(Error::new("plan_conflict","Focus permission is fixed for this worker; stop/restart requires explicit reviewed capability"));
+                }
                 let mut state = try_state(&owner.state)?;
                 self.input_check()?;
                 state.authority.authorize(token, &state.guard.epoch)?;
@@ -239,8 +285,16 @@ impl Controller {
                         })
                     })
                     .unwrap_or((Value::Null, Value::Null, Value::Null));
+                let focus_wait = active
+                    .as_ref()
+                    .and_then(|a| a.report.try_lock().ok().map(|r| r["focus_wait"].clone()))
+                    .unwrap_or(Value::Null);
+                let focus = active
+                    .as_ref()
+                    .and_then(|a| a.report.try_lock().ok().map(|r| r["focus"].clone()))
+                    .unwrap_or(Value::Null);
                 Ok(
-                    json!({"worker_stopped":true,"game_time_changed":false,"uncertainty_retained":self.blocked.load(Ordering::Acquire),"last_error":last_error,"last_preparation_refusal":last_preparation_refusal,"last_stage_failure":last_stage_failure}),
+                    json!({"focus":focus,"latest_focus_wait_historical":focus_wait,"worker_stopped":true,"game_time_changed":false,"uncertainty_retained":self.blocked.load(Ordering::Acquire),"last_error":last_error,"last_preparation_refusal":last_preparation_refusal,"last_stage_failure":last_stage_failure}),
                 )
             }
             "digest" => {
@@ -348,6 +402,9 @@ fn unresolved(state: &ControlState) -> bool {
 fn worker(
     governor: &Mutex<core::Governor>,
     mut navigation: crate::daily_navigation::Navigator,
+    mut focus_navigation: crate::daily_focus_navigation::Navigator,
+    focus_permission: bool,
+    research_permission: bool,
     producer: &Producer,
     state: &Mutex<ControlState>,
     gate: &RwLock<bool>,
@@ -386,7 +443,11 @@ fn worker(
             // released promptly; the existing pre-action check remains below.
             {
                 let state = try_state(state)?;
-                if blocked.load(Ordering::Acquire) || unresolved(&state) || navigation.blocked() {
+                if blocked.load(Ordering::Acquire)
+                    || unresolved(&state)
+                    || navigation.blocked()
+                    || focus_navigation.blocked()
+                {
                     blocked.store(true, Ordering::Release);
                     return Err(Error::new(
                         "action_uncertain",
@@ -398,18 +459,33 @@ fn worker(
             let raw = producer.probe_clock(process, Instant::now() + Duration::from_secs(1))?;
             let mut governor = try_state(governor)?;
             let day = (i64::from(raw) - 43_800_000).div_euclid(24);
-            let heads: Vec<_> = governor
-                .pending_research(day)
-                .into_iter()
-                .filter(|e| !navigation.refused_today(&e.id, day))
-                .collect();
-            if !governor.budget_available(day) || heads.is_empty() {
+            let heads: Vec<_> = if research_permission {
+                governor
+                    .pending_research(day)
+                    .into_iter()
+                    .filter(|e| !navigation.refused_today(&e.id, day))
+                    .collect()
+            } else {
+                vec![]
+            };
+            let focus_entry = if focus_permission {
+                governor
+                    .pending_focus(day)
+                    .filter(|e| !focus_navigation.refused_today(e, day))
+            } else {
+                None
+            };
+            if heads.is_empty() && focus_entry.is_none() {
                 return Ok(None);
             }
             let mut state = try_state(state)?;
-            state.authority.authorize(token, &state.guard.epoch)?;
-            let until = Instant::now() + Duration::from_secs(5);
-            if unresolved(&state) || navigation.blocked() {
+            let lease_end = state.authority.authorize(token, &state.guard.epoch)?;
+            // Separate absolute ceilings share one batch origin. Focus matches
+            // the existing manual ceiling; Research never inherits that time.
+            let batch_started = Instant::now();
+            let until = (batch_started + Duration::from_secs(5)).min(lease_end);
+            let focus_until = (batch_started + Duration::from_secs(10)).min(lease_end);
+            if unresolved(&state) || navigation.blocked() || focus_navigation.blocked() {
                 blocked.store(true, Ordering::Release);
                 return Err(Error::new(
                     "action_uncertain",
@@ -423,6 +499,81 @@ fn worker(
                 }
                 return Err(e);
             }
+            if !governor.budget_available(day) {
+                let observation = (|| -> Result<()> {
+                    if let Some(entry) = &focus_entry {
+                        let core::Intent::Focus { focus_id } = &entry.intent else {
+                            unreachable!()
+                        };
+                        let target = crate::focus_stage::Target {
+                            epoch: state.guard.epoch.clone(),
+                            stage: crate::focus_stage::Stage::Start,
+                            focus_id: focus_id.clone(),
+                        };
+                        let (own, context, binding) =
+                            focus::observed_bound(process, &mut state.guard, &target)?;
+                        focus_scope(&context, &governor.plan().scope)?;
+                        if Instant::now() >= focus_until {
+                            return Err(Error::new(
+                                "focus_deadline",
+                                "Read-only Focus wait exceeded original deadline",
+                            ));
+                        }
+                        if matches!(
+                            crate::daily_focus_navigation::next(&own, &target)?,
+                            crate::daily_focus_navigation::Next::Wait
+                        ) {
+                            report_focus_wait(
+                                report,
+                                &mut focus_navigation,
+                                entry,
+                                &own,
+                                &context,
+                                binding,
+                            )?;
+                        }
+                    }
+                    Ok(())
+                })();
+                if focus_navigation.blocked() || governor.blocks_work() {
+                    blocked.store(true, Ordering::Release);
+                }
+                observation?;
+                return Ok(None);
+            }
+            let mut focus_waited = false;
+            if focus_precedes(
+                &governor.plan().entries,
+                focus_entry.as_ref(),
+                heads.first(),
+            ) {
+                let result = run_focus(
+                    &mut governor,
+                    &mut focus_navigation,
+                    producer,
+                    &mut state,
+                    process,
+                    gate,
+                    token,
+                    focus_until,
+                    day,
+                    focus_entry.as_ref().expect("focus head"),
+                    report,
+                );
+                if focus_navigation.blocked() || governor.blocks_work() {
+                    blocked.store(true, Ordering::Release);
+                }
+                match result {
+                    Ok(FocusRun::Wait) => {
+                        focus_waited = true;
+                    }
+                    Ok(FocusRun::Done(value)) => return Ok(value),
+                    Err(e) => return Err(e),
+                }
+            }
+            if heads.is_empty() {
+                return Ok(None);
+            }
             // Re-read complete own canonical/UI state under the common lock.
             // Occupied queue heads defer without a permanent day refusal. Later
             // entries for that slot remain blocked; other slots can progress.
@@ -431,9 +582,32 @@ fn worker(
                 .guard
                 .accept_context(process, &probe.context().campaign)?;
             // A day change defers this batch; original budget/day anchors remain.
-            if (i64::from(probe.context().campaign.date_raw) - 43_800_000).div_euclid(24) != day
-                || probe.all_heads_occupied(&heads)?
-            {
+            if (i64::from(probe.context().campaign.date_raw) - 43_800_000).div_euclid(24) != day {
+                return Ok(None);
+            }
+            if probe.all_heads_occupied(&heads)? {
+                if let Some(entry) = focus_entry.as_ref().filter(|_| !focus_waited) {
+                    let result = run_focus(
+                        &mut governor,
+                        &mut focus_navigation,
+                        producer,
+                        &mut state,
+                        process,
+                        gate,
+                        token,
+                        focus_until,
+                        day,
+                        entry,
+                        report,
+                    );
+                    if focus_navigation.blocked() || governor.blocks_work() {
+                        blocked.store(true, Ordering::Release);
+                    }
+                    return result.map(|r| match r {
+                        FocusRun::Wait => None,
+                        FocusRun::Done(value) => value,
+                    });
+                }
                 return Ok(None);
             }
             // Probe is never reused as UI/action/completion authority.
@@ -573,6 +747,7 @@ fn worker(
                 token,
                 until,
                 last: None,
+                focus: None,
             };
             let result = governor.continue_entry(
                 &mut backend,
@@ -588,8 +763,12 @@ fn worker(
             }
             result.map(Some)
         })();
+        if let Ok(mut r) = report.lock() {
+            r["focus"] = focus_navigation.latest();
+        }
         let possible_input = blocked.load(Ordering::Acquire)
             || navigation.blocked()
+            || focus_navigation.blocked()
             || crate::daily_worker::retained_quarantine(governor, |g| g.blocks_work());
         let disposition = crate::daily_worker::disposition(run.as_ref().err(), possible_input);
         if let Ok(mut report) = report.lock() {
@@ -638,6 +817,11 @@ struct DailyBackend<'a> {
     token: &'a str,
     until: Instant,
     last: Option<Produced>,
+    focus: Option<FocusAttempt<'a>>,
+}
+struct FocusAttempt<'a> {
+    navigation: &'a mut crate::daily_focus_navigation::Navigator,
+    revision: u64,
 }
 impl core::Backend for DailyBackend<'_> {
     fn unresolved_input(&mut self) -> Result<bool> {
@@ -653,6 +837,36 @@ impl core::Backend for DailyBackend<'_> {
         Ok(observation)
     }
     fn readiness(&mut self, entry: &core::Entry, _: &core::Observation) -> Result<core::Readiness> {
+        if let core::Intent::Focus { focus_id } = &entry.intent {
+            if self.focus.is_none() {
+                return Ok(core::Readiness::Unavailable(
+                    "Daily Focus not enabled".into(),
+                ));
+            }
+            let target = crate::focus_stage::Target {
+                epoch: self.state.guard.epoch.clone(),
+                stage: crate::focus_stage::Stage::Start,
+                focus_id: focus_id.clone(),
+            };
+            let (own, context, _) =
+                focus::observed_bound(self.process, &mut self.state.guard, &target)?;
+            if let Some(p) = &self.last {
+                join_focus_canonical(&context, p)?;
+                if context.campaign.date_raw < p.context.campaign.date_raw {
+                    return Err(Error::new(
+                        "torn_read",
+                        "Focus readiness chronology regressed",
+                    ));
+                }
+            }
+            return match crate::daily_focus_navigation::next(&own, &target)? {
+                crate::daily_focus_navigation::Next::Wait => Ok(core::Readiness::WaitingForFocus),
+                crate::daily_focus_navigation::Next::Start => Ok(core::Readiness::Ready),
+                _ => Ok(core::Readiness::Deferred(
+                    "Own Focus Start detail must be prepared".into(),
+                )),
+            };
+        }
         let core::Intent::Research {
             technology_id,
             slot,
@@ -699,6 +913,9 @@ impl core::Backend for DailyBackend<'_> {
         _: &core::Observation,
         until: Instant,
     ) -> Result<core::Outcome> {
+        if matches!(attempt.entry.intent, core::Intent::Focus { .. }) {
+            return self.attempt_focus(attempt, until.min(self.until));
+        }
         let core::Intent::Research {
             technology_id,
             slot,
@@ -739,6 +956,302 @@ impl core::Backend for DailyBackend<'_> {
         Ok(core::Outcome::Verified(Box::new(r)))
     }
 }
+fn focus_scope(context: &crate::own_focus::FocusContext, scope: &core::Scope) -> Result<()> {
+    if context.campaign.player != scope.epoch.player
+        || context.campaign.anchors != scope.anchors
+        || [context.anchors[0], context.anchors[6]] != [scope.own_country, scope.own_status]
+    {
+        return Err(Error::new(
+            "ownership_changed",
+            "Full Focus own country/status/campaign scope changed",
+        ));
+    }
+    Ok(())
+}
+fn report_focus_wait(
+    report: &Mutex<Value>,
+    navigation: &mut crate::daily_focus_navigation::Navigator,
+    entry: &core::Entry,
+    own: &crate::focus_stage::OwnState,
+    context: &crate::own_focus::FocusContext,
+    binding: crate::daily_focus_navigation::OwnBinding,
+) -> Result<()> {
+    let crate::focus_stage::ActiveFocus::Active(active) = &own.active_focus else {
+        return Err(Error::new(
+            "focus_unavailable",
+            "Positive active Focus wait required",
+        ));
+    };
+    navigation.record_wait(entry, active, context.campaign.date_raw, binding)?;
+    let stamp = crate::daily_observation::unix_ms()?;
+    if let Ok(mut r) = report.lock() {
+        r["focus_wait"] = json!({"entry_id":entry.id,"active_focus_id":active,"date_raw":context.campaign.date_raw,"observed_unix_ms":stamp,"source":"native witnessed own focus","historical":true,"navigation_attempted":false,"assignment_budget_consumed":false});
+    }
+    Ok(())
+}
+fn focus_precedes(
+    entries: &[core::Entry],
+    focus: Option<&core::Entry>,
+    research: Option<&core::Entry>,
+) -> bool {
+    let Some(focus) = focus else { return false };
+    let position = |entry: &core::Entry| {
+        entries
+            .iter()
+            .position(|e| e.id == entry.id)
+            .unwrap_or(usize::MAX)
+    };
+    research.is_none_or(|r| position(focus) < position(r))
+}
+enum FocusRun {
+    Wait,
+    Done(Option<core::DailyResult>),
+}
+#[allow(clippy::too_many_arguments)]
+fn run_focus(
+    governor: &mut core::Governor,
+    navigation: &mut crate::daily_focus_navigation::Navigator,
+    producer: &Producer,
+    state: &mut ControlState,
+    process: &dyn Process,
+    gate: &RwLock<bool>,
+    token: &str,
+    until: Instant,
+    day: i64,
+    entry: &core::Entry,
+    report: &Mutex<Value>,
+) -> Result<FocusRun> {
+    let core::Intent::Focus { focus_id } = &entry.intent else {
+        return Err(Error::new("invalid_plan", "Focus head required"));
+    };
+    state.authority.authorize(token, &state.guard.epoch)?;
+    if unresolved(state) || navigation.blocked() {
+        return Err(Error::new(
+            "action_uncertain",
+            "Shared/Focus preparation input unresolved",
+        ));
+    }
+    let target = crate::focus_stage::Target {
+        epoch: state.guard.epoch.clone(),
+        stage: crate::focus_stage::Stage::Start,
+        focus_id: focus_id.clone(),
+    };
+    let result = (|| -> Result<_> {
+        let (own, context, binding) = focus::observed_bound(process, &mut state.guard, &target)?;
+        focus_scope(&context, &governor.plan().scope)?;
+        if matches!(
+            crate::daily_focus_navigation::next(&own, &target)?,
+            crate::daily_focus_navigation::Next::Wait
+        ) {
+            report_focus_wait(report, navigation, entry, &own, &context, binding.clone())?;
+        }
+        if Instant::now() >= until {
+            return Err(Error::new(
+                "focus_deadline",
+                "Focus observation exceeded original deadline",
+            ));
+        }
+        if (i64::from(context.campaign.date_raw) - 43_800_000).div_euclid(24) != day {
+            return Ok(None);
+        }
+        Ok(Some((
+            crate::daily_focus_navigation::next(&own, &target)?,
+            binding,
+        )))
+    })();
+    let (next, binding) = match result {
+        Ok(Some(value)) => value,
+        Ok(None) => return Ok(FocusRun::Wait),
+        Err(e) => {
+            navigation.refuse_read_only(entry, day, &e)?;
+            return Err(e);
+        }
+    };
+    match next {
+        crate::daily_focus_navigation::Next::Wait => Ok(FocusRun::Wait),
+        crate::daily_focus_navigation::Next::Stage(stage) => {
+            let target = crate::focus_stage::Target { stage, ..target };
+            let id = navigation.begin(
+                entry.clone(),
+                target.clone(),
+                day,
+                governor.plan().revision,
+                binding,
+            )?;
+            let result =
+                focus::execute_internal(state, process, gate, token, &id, target.clone(), until);
+            match result {
+                Ok((execution, _)) => {
+                    let (_, _, after) = focus::observed_bound(process, &mut state.guard, &target)?;
+                    navigation.verified(&execution, &after)?;
+                    if Instant::now() >= until {
+                        let error = Error::new(
+                            "action_uncertain",
+                            "Focus preparation receipt exceeded original deadline",
+                        );
+                        if let Err(storage) = navigation.quarantine_after_verified(&error) {
+                            return Err(Error::new(
+                                "action_uncertain",
+                                format!(
+                                    "{}; terminal uncertainty persistence failed: {}",
+                                    error.message, storage
+                                ),
+                            ));
+                        }
+                        return Err(error);
+                    }
+                    if let Ok(mut r) = report.lock() {
+                        r["focus"] = navigation.latest();
+                    }
+                    Ok(FocusRun::Done(None))
+                }
+                Err(e) => {
+                    let evidence = focus::failure_evidence(state, &id, &target, &e);
+                    navigation.failed(&e, evidence)?;
+                    Err(e)
+                }
+            }
+        }
+        crate::daily_focus_navigation::Next::Start => {
+            let revision = governor.plan().revision;
+            let mut backend = DailyBackend {
+                process,
+                state,
+                producer,
+                gate,
+                token,
+                until,
+                last: None,
+                focus: Some(FocusAttempt {
+                    navigation,
+                    revision,
+                }),
+            };
+            governor
+                .continue_entry(
+                    &mut backend,
+                    &entry.id,
+                    crate::daily_observation::unix_ms()?,
+                    until,
+                )
+                .map(|value| FocusRun::Done(Some(value)))
+        }
+    }
+}
+fn join_focus_canonical(context: &crate::own_focus::FocusContext, p: &Produced) -> Result<()> {
+    let a = &context.campaign;
+    let b = &p.context.campaign;
+    if a.player != b.player
+        || a.playthrough_id != b.playthrough_id
+        || a.anchors != b.anchors
+        || a.difficulty != b.difficulty
+        || a.historical_raw != b.historical_raw
+        || [context.anchors[0], context.anchors[6]] != p.context.own
+        || context.slots != p.context.slots
+    {
+        return Err(Error::new(
+            "torn_read",
+            "Full Focus and canonical daily own scopes disagree",
+        ));
+    }
+    Ok(())
+}
+impl DailyBackend<'_> {
+    fn attempt_focus(&mut self, attempt: &core::Attempt, until: Instant) -> Result<core::Outcome> {
+        let core::Intent::Focus { focus_id } = &attempt.entry.intent else {
+            return Err(Error::new("invalid_plan", "Focus attempt required"));
+        };
+        if self.focus.is_none() {
+            return Ok(core::Outcome::NotQueued(
+                "Daily Focus permission unavailable".into(),
+            ));
+        }
+        let target = crate::focus_stage::Target {
+            epoch: attempt.scope.epoch.clone(),
+            stage: crate::focus_stage::Stage::Start,
+            focus_id: focus_id.clone(),
+        };
+        let (own, before, before_binding) =
+            match focus::observed_bound(self.process, &mut self.state.guard, &target) {
+                Ok(value) => value,
+                Err(e) if !unresolved(self.state) => {
+                    return Ok(core::Outcome::NotQueued(e.code.into()))
+                }
+                Err(e) => return Err(e),
+            };
+        if let Some(p) = &self.last {
+            join_focus_canonical(&before, p)?;
+            if before.campaign.date_raw < p.context.campaign.date_raw {
+                return Err(Error::new("torn_read", "Focus Start chronology regressed"));
+            }
+        }
+        if !matches!(
+            crate::daily_focus_navigation::next(&own, &target)?,
+            crate::daily_focus_navigation::Next::Start
+        ) {
+            return Ok(core::Outcome::NotQueued(
+                "Fresh own Focus Start precondition changed".into(),
+            ));
+        }
+        let execution = match focus::execute_internal(
+            self.state,
+            self.process,
+            self.gate,
+            self.token,
+            &attempt.request_id,
+            target.clone(),
+            until,
+        ) {
+            Ok((e, _)) => e,
+            Err(e)
+                if focus::failure_evidence(self.state, &attempt.request_id, &target, &e)
+                    != crate::focus_stage::FailureEvidence::Unknown
+                    && !unresolved(self.state) =>
+            {
+                return Ok(core::Outcome::NotQueued(e.code.into()))
+            }
+            Err(e) => return Err(e),
+        };
+        // After successful execution, all later failures are possible-input errors.
+        let (_, after, after_binding) =
+            focus::observed_bound(self.process, &mut self.state.guard, &target)?;
+        let fresh = self.producer.observe(self.process, until)?;
+        self.state
+            .guard
+            .accept_context(self.process, &fresh.context.campaign)?;
+        join_focus_canonical(&after, &fresh)?;
+        if after.campaign.date_raw > fresh.context.campaign.date_raw {
+            return Err(Error::new(
+                "torn_read",
+                "Canonical Focus Start chronology regressed",
+            ));
+        }
+        let receipt = core::VerifiedReceipt::from_focus(
+            attempt.clone(),
+            &execution,
+            &before,
+            &after,
+            fresh.observation.clone(),
+        )?;
+        if Instant::now() >= until {
+            return Err(Error::new(
+                "action_uncertain",
+                "Focus final canonical observation exceeded original deadline",
+            ));
+        }
+        let focus = self.focus.as_mut().expect("checked Focus permission");
+        focus.navigation.record_start(
+            attempt,
+            focus.revision,
+            before_binding,
+            after_binding,
+            execution.receipt,
+            fresh.observation,
+        )?;
+        Ok(core::Outcome::Verified(Box::new(receipt)))
+    }
+}
+
 fn compact(p: Produced, report: &Value, blocked: bool, revision: u64) -> Result<Value> {
     compact_observation(p.observation, report, blocked, revision)
 }
@@ -780,6 +1293,9 @@ fn compact_observation(
     digest["last_error"] = report["last_error"].clone();
     digest["last_preparation_refusal"] = report["last_preparation_refusal"].clone();
     digest["last_stage_failure"] = report["last_stage_failure"].clone();
+    digest["focus"] = report["focus"].clone();
+    digest["focus_permission"] = report["focus_permission"].clone();
+    digest["latest_focus_wait_historical"] = report["focus_wait"].clone();
     digest["quarantined"] = json!(blocked);
     digest["input_authorized"] = json!(false);
     while serde_json::to_vec(&digest)
@@ -970,5 +1486,37 @@ mod tests {
         );
         assert_eq!(out["input_authorized"], false);
         assert!(serde_json::to_vec(&out).unwrap().len() <= 2048);
+    }
+    #[test]
+    fn focus_plan_permission_is_default_off_omitted_and_plan_order_is_explicit() {
+        let value = json!({"version":1,"revision":1,"entries":[{"id":"focus-a","intent":{"kind":"Focus","focus_id":"GER_rhineland"}}],"max_actions_per_day":1,"max_observation_age_ms":5000,"review_day":null});
+        let spec: Spec = serde_json::from_value(value.clone()).unwrap();
+        assert!(!spec.focus_permission);
+        assert!(serde_json::to_value(&spec)
+            .unwrap()
+            .get("focus_permission")
+            .is_none());
+        let mut enabled = value;
+        enabled["focus_permission"] = json!(true);
+        let spec: Spec = serde_json::from_value(enabled).unwrap();
+        assert!(spec.focus_permission);
+        assert!(
+            crate::daily_focus_navigation::capability(false, spec.focus_permission, true).is_err()
+        );
+        let f = spec.entries[0].clone();
+        let r = core::Entry {
+            id: "research-a".into(),
+            intent: core::Intent::Research {
+                technology_id: "support_weapons".into(),
+                slot: 0,
+            },
+            navigation: None,
+        };
+        assert!(focus_precedes(&[f.clone(), r.clone()], Some(&f), Some(&r)));
+        assert!(!focus_precedes(&[r.clone(), f.clone()], Some(&f), Some(&r)));
+        let controller = Controller::new(false, true, Weak::new(), Path::new("/generated"));
+        assert!(controller.enabled());
+        assert!(!controller.research_enabled);
+        assert!(controller.focus_enabled());
     }
 }

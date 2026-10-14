@@ -1530,3 +1530,66 @@ fn focus_converter_requires_current_start_exact_active_and_full_domain_scope() {
     stale.sequence = 5;
     assert!(VerifiedReceipt::from_focus(attempt, &execution, &before, &after, stale).is_err());
 }
+
+#[test]
+#[cfg(unix)]
+fn focus_wait_never_consumes_budget_or_day_and_update_restart_keeps_original_limit() {
+    let t = Temp::new();
+    let mut p = plan();
+    p.entries
+        .retain(|e| matches!(e.intent, Intent::Focus { .. }));
+    p.max_actions_per_day = 1;
+    let mut g = Governor::open(&t.path(), p.clone()).unwrap();
+    let mut b = Fake::new(&p);
+    b.ready = Readiness::WaitingForFocus;
+    run(&mut g, &mut b).unwrap();
+    assert_eq!(b.sends, 0);
+    assert_eq!(g.used_actions(1936 * 365), 0);
+    assert!(g.pending_focus(1936 * 365).is_some());
+    g.continue_entry(
+        &mut b,
+        "focus-1",
+        10000,
+        Instant::now() + Duration::from_secs(1),
+    )
+    .unwrap();
+    assert_eq!(b.sends, 0);
+    b.ready = Readiness::Ready;
+    g.continue_entry(
+        &mut b,
+        "focus-1",
+        10000,
+        Instant::now() + Duration::from_secs(1),
+    )
+    .unwrap();
+    assert_eq!(b.sends, 1);
+    let complete = serde_json::to_value(g.entry_state("focus-1")).unwrap();
+    p.revision = 2;
+    p.entries.push(Entry {
+        id: "focus-next".into(),
+        intent: Intent::Focus {
+            focus_id: "GER_autarky".into(),
+        },
+        navigation: None,
+    });
+    assert!(g.update_plan(p.clone()).unwrap());
+    assert!(!g.update_plan(p.clone()).unwrap());
+    drop(g);
+    let mut g = Governor::open(&t.path(), p).unwrap();
+    assert_eq!(g.used_actions(1936 * 365), 1);
+    assert!(!g.budget_available(1936 * 365));
+    assert_eq!(g.pending_focus(1936 * 365).unwrap().id, "focus-next");
+    b.ready = Readiness::WaitingForFocus;
+    g.continue_entry(
+        &mut b,
+        "focus-next",
+        10000,
+        Instant::now() + Duration::from_secs(1),
+    )
+    .unwrap();
+    assert_eq!(b.sends, 1);
+    assert_eq!(
+        serde_json::to_value(g.entry_state("focus-1")).unwrap(),
+        complete
+    );
+}

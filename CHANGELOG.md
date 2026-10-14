@@ -2,6 +2,10 @@
 
 ## Unreleased native preview
 
+- Wire a default-off daily Focus preview with separate owner/request permission,
+  ordered heads, active-focus waiting and unchanged shared assignment budgets.
+  Retain actual verified evidence when late returns require durable quarantine.
+  Worker live validation and cross-domain UI handoff remain pending.
 - Add bounded connected components and multi-source breadth-first search over
   supplied public/generated topology, with explicit truncation and deterministic
   source ties. The helper has no game-state producer or campaign action adapter.

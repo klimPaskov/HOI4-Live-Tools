@@ -10,6 +10,7 @@ use crate::{
 };
 use fs2::FileExt;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::{
     collections::BTreeMap,
     fs::{File, OpenOptions},
@@ -259,9 +260,47 @@ pub(crate) enum FailureEvidence {
     ConfirmedNotQueued,
     Unknown,
 }
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+struct TerminalQuarantine {
+    version: u8,
+    kind: String,
+    request_id: String,
+    target: Target,
+    code: String,
+    reason: String,
+    receipt_hash: String,
+    checksum: String,
+}
+impl TerminalQuarantine {
+    fn checksum(&self) -> Result<String> {
+        let bytes = serde_json::to_vec(&(
+            "focus-terminal-quarantine-v1",
+            self.version,
+            &self.kind,
+            &self.request_id,
+            &self.target,
+            &self.code,
+            &self.reason,
+            &self.receipt_hash,
+        ))
+        .map_err(|_| error("invalid_journal", "Cannot encode quarantine checksum"))?;
+        Ok(format!("{:x}", Sha256::digest(bytes)))
+    }
+}
+fn receipt_hash(receipt: &Receipt) -> Result<String> {
+    Ok(format!(
+        "{:x}",
+        Sha256::digest(
+            serde_json::to_vec(receipt)
+                .map_err(|_| error("invalid_journal", "Cannot encode focus witness"))?
+        )
+    ))
+}
 pub struct Journal {
     file: File,
     receipts: BTreeMap<String, Receipt>,
+    quarantines: BTreeMap<String, TerminalQuarantine>,
     poisoned: bool,
 }
 const LIMIT: u64 = 64 << 20;
@@ -350,6 +389,7 @@ impl Journal {
         .sync_all()?;
         let mut reader = BufReader::new(file.try_clone()?);
         let mut receipts: BTreeMap<String, Receipt> = BTreeMap::new();
+        let mut quarantines: BTreeMap<String, TerminalQuarantine> = BTreeMap::new();
         loop {
             let mut line = Vec::new();
             loop {
@@ -380,8 +420,44 @@ impl Journal {
                     "Incomplete journal tail; preserve for recovery",
                 ));
             }
+            if let Ok(marker) = serde_json::from_slice::<TerminalQuarantine>(&line) {
+                let previous = receipts.get(&marker.request_id).ok_or_else(|| {
+                    error(
+                        "invalid_journal",
+                        "Quarantine requires original verified receipt",
+                    )
+                })?;
+                if marker.version != 1
+                    || marker.kind != "FocusTerminalQuarantine"
+                    || marker.code != "action_uncertain"
+                    || marker.reason.is_empty()
+                    || marker.reason.len() > 256
+                    || marker.reason.chars().any(char::is_control)
+                    || previous.status != Status::Verified
+                    || previous.target != marker.target
+                    || receipt_hash(previous)? != marker.receipt_hash
+                    || marker.checksum()? != marker.checksum
+                    || quarantines.contains_key(&marker.request_id)
+                {
+                    return Err(error(
+                        "invalid_journal",
+                        "Invalid terminal focus quarantine",
+                    ));
+                }
+                quarantines.insert(marker.request_id.clone(), marker);
+                continue;
+            }
             let receipt: Receipt = serde_json::from_slice(&line)
                 .map_err(|_| error("invalid_journal", "Malformed focus receipt"))?;
+            if quarantines
+                .values()
+                .any(|q| q.target.epoch.game == receipt.target.epoch.game)
+            {
+                return Err(error(
+                    "invalid_journal",
+                    "Receipt follows terminal focus quarantine",
+                ));
+            }
             request_id(&receipt.request_id)?;
             receipt.target.validate_key()?;
             receipt.observed.validate(&receipt.target)?;
@@ -424,6 +500,7 @@ impl Journal {
         Ok(Self {
             file,
             receipts,
+            quarantines,
             poisoned: false,
         })
     }
@@ -455,6 +532,81 @@ impl Journal {
         self.poisoned = false;
         Ok(receipt)
     }
+    /// Preserve actual terminal evidence while prohibiting every subsequent input.
+    /// A failed append poisons this owner; it cannot promise an uncommitted marker
+    /// will survive a crash or independently reopening an unchanged old file.
+    #[cfg(any(target_os = "linux", test))]
+    pub(crate) fn finish_before_deadline(
+        &mut self,
+        execution: &Execution,
+        until: Instant,
+    ) -> Result<()> {
+        if Instant::now() < until {
+            return Ok(());
+        }
+        let reason = "Focus result arrived after original absolute deadline";
+        if let Err(e) = self.quarantine_verified(&execution.receipt, reason) {
+            return Err(error(
+                "action_uncertain",
+                &format!("{reason}; quarantine persistence failed: {e}"),
+            ));
+        }
+        Err(error("action_uncertain", reason))
+    }
+    #[cfg(any(target_os = "linux", test))]
+    fn quarantine_verified(&mut self, receipt: &Receipt, reason: &str) -> Result<()> {
+        if self.poisoned {
+            return Err(error("journal_failed", "Focus journal requires recovery"));
+        }
+        self.poisoned = true;
+        if receipt.status != Status::Verified
+            || self.receipts.get(&receipt.request_id) != Some(receipt)
+            || reason.is_empty()
+            || reason.len() > 256
+            || reason.chars().any(char::is_control)
+        {
+            return Err(error(
+                "invalid_journal",
+                "Actual verified focus evidence required",
+            ));
+        }
+        let mut marker = TerminalQuarantine {
+            version: 1,
+            kind: "FocusTerminalQuarantine".into(),
+            request_id: receipt.request_id.clone(),
+            target: receipt.target.clone(),
+            code: "action_uncertain".into(),
+            reason: reason.into(),
+            receipt_hash: receipt_hash(receipt)?,
+            checksum: String::new(),
+        };
+        marker.checksum = marker.checksum()?;
+        if self.quarantines.get(&marker.request_id) == Some(&marker) {
+            return Ok(());
+        }
+        self.quarantines
+            .insert(marker.request_id.clone(), marker.clone());
+        let mut line = serde_json::to_vec(&marker)
+            .map_err(|_| error("invalid_journal", "Cannot encode quarantine"))?;
+        line.push(b'\n');
+        if line.len() > LINE
+            || self
+                .file
+                .metadata()?
+                .len()
+                .saturating_add(line.len() as u64)
+                > LIMIT
+        {
+            return Err(error(
+                "journal_full",
+                "No durable focus quarantine capacity",
+            ));
+        }
+        self.file.write_all(&line)?;
+        self.file.sync_all()?;
+        self.poisoned = false;
+        Ok(())
+    }
     /// Classify only immediately after execute returns an error, never from
     /// absence in a historic file alone. Poison/possible input always dominates.
     #[allow(dead_code)] // Future daily caller must classify immediately, not historical absence.
@@ -483,6 +635,10 @@ impl Journal {
     pub fn blocks_game(&self, game: &Identity) -> bool {
         self.poisoned
             || self
+                .quarantines
+                .values()
+                .any(|q| &q.target.epoch.game == game)
+            || self
                 .receipts
                 .values()
                 .any(|r| r.status == Status::Intent && &r.target.epoch.game == game)
@@ -505,6 +661,12 @@ impl Journal {
         }
         let deadline = (Instant::now() + timeout).min(authority.authorize(token, &target.epoch)?);
         live(authority, token, &target, deadline, gate)?;
+        if self.blocks_game(&target.epoch.game) {
+            return Err(error(
+                "action_uncertain",
+                "Focus journal quarantines this game; never replay",
+            ));
+        }
         if let Some(r) = self.receipts.get(id) {
             if r.target != target {
                 return Err(error(

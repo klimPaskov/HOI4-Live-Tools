@@ -2558,3 +2558,34 @@ ran after the previous owned game exited normally, under unchanged Yama1. Five
 X11 tests used their isolated fixture display. No game was launched or controlled
 for this gate. There is no map producer, military access/supply inference, army
 action integration, tactical live evidence or campaign acceptance from these tests.
+
+
+## Daily Focus worker preview and late-return quarantine — 14 October 2026
+
+The composed worker requires independent default-off owner `daily_focus`, an
+existing Focus profile and explicit request `focus_permission`. Request permission
+is immutable while running; stop/restart loads both ledgers and retains core-plan
+serialization, completion and shared budget. Positive other-active Focus heads
+wait without navigation, assignment reservation or day refusal, even at exhausted
+budget. Preparations and actual Start audits stay separate; only a fresh strict
+canonical Start receipt can complete an assignment. Cross-domain panel switching
+is still unavailable. Matching-active goals use the actual fresh no-input stage
+path rather than manufactured receipts; this boundary has no live proof yet.
+
+Focus and research use separate absolute ceilings from one batch origin:10 and5
+seconds respectively, both clamped to the lease. Late preparation and manual
+returns retain actual Verified evidence and separately append checksum-bound
+quarantine. A committed marker blocks reopening and all same-game inputs, including
+old request IDs. A failed marker commit poisons the current owner; an unchanged
+Verified-only file cannot prove an uncommitted marker after a crash. Replacing the
+owner does not authorize adopting the orphaned game or clearing uncertainty.
+
+The final source passed624 Rust1.86 host tests,723 reported actual Linux checks
+(721 substantive),953 Python tests (37 skips), compiler/format/Clippy/MSRV gates
+and release linking. The initial host Clippy failure identified Linux-only unused
+helpers on macOS; narrow platform/test gates fixed it and original logs remain.
+All11 bundle payloads were hash-verified before actual Linux execution; five X11
+cases used the isolated fixture display under unchanged Yama1. No game was running
+for these checks. Recorded run037 must reverify the borrowed path, worker-only
+Focus Start, positive-active waiting, idempotent update and budget-preserving
+restart before any live worker acceptance claim.

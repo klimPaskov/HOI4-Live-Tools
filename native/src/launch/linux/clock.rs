@@ -37,6 +37,19 @@ pub(super) struct Binding {
     focus_profile: Option<focus::Profile>,
     #[serde(default)]
     daily_prepared_research: bool,
+    #[serde(default)]
+    daily_focus: bool,
+}
+impl Binding {
+    fn validate_daily_focus(&self) -> Result<()> {
+        if self.daily_focus && self.focus_profile.is_none() {
+            return Err(Error::new(
+                "invalid_input_binding",
+                "daily_focus requires the existing owned Focus profile",
+            ));
+        }
+        Ok(())
+    }
 }
 struct Guard {
     epoch: Epoch,
@@ -162,6 +175,7 @@ impl ClockService {
                 "Owned game and recorded ordinary singleplayer setup evidence required",
             ));
         }
+        binding.validate_daily_focus()?;
         let observed: ClockContext = game::clock_context(process)?;
         if observed.player != binding.player
             || observed.difficulty != 2
@@ -197,10 +211,15 @@ impl ClockService {
             .transpose()?;
         json_new(
             &directory.join("input-binding.json"),
-            json!({"version":1,"game":binding.game,"controller":binding.controller,"player":binding.player,"window":binding.window,"menu_evidence_ids":binding.menu_evidence_ids,"epoch":epoch,"scope":"ordinary clock keys; optional ID research/focus previews","research_profile":binding.research_profile,"focus_profile":binding.focus_profile,"daily_prepared_research":binding.daily_prepared_research,"load_generation":"unverified: persisted identity, anchor and timeline checks only"}),
+            json!({"version":1,"game":binding.game,"controller":binding.controller,"player":binding.player,"window":binding.window,"menu_evidence_ids":binding.menu_evidence_ids,"epoch":epoch,"scope":"ordinary clock keys; optional ID research/focus previews","research_profile":binding.research_profile,"focus_profile":binding.focus_profile,"daily_prepared_research":binding.daily_prepared_research,"daily_focus":binding.daily_focus,"load_generation":"unverified: persisted identity, anchor and timeline checks only"}),
         )?;
         Ok(Self {
-            daily: daily::Controller::new(binding.daily_prepared_research, owner, directory),
+            daily: daily::Controller::new(
+                binding.daily_prepared_research,
+                binding.daily_focus,
+                owner,
+                directory,
+            ),
             input_gate,
             research_enabled: research.is_some(),
             focus_enabled: focus.is_some(),
@@ -300,7 +319,7 @@ impl Commands for ClockService {
             || (name == "hoi4_daily_governor" && self.daily.enabled())
     }
     fn capabilities(&self) -> Value {
-        json!({"transport":"ordinary authenticated X11 input","actions":["set_paused","set_speed"],"research_preview":{"enabled":self.research_enabled,"scope":"one OpenPanel, SelectSlot, SelectCategory, View or Research stage for own empty slot","installed_game_validation":"Clock cycles, four assignments and advancement to 5 January passed bounded run025; run024 uncertainty unexplained; full campaign acceptance pending"},"focus_preview":{"enabled":self.focus_enabled,"scope":"one own OpenPolitics/OpenFocus/View/Start ordinary stage; exact Sprite/zero-angle Text/unmasked Frame branches","installed_game_validation":"unavailable: new focus integration awaiting installed-game validation"},"daily_prepared_research":{"enabled":self.daily.enabled(),"navigation_implemented":true,"scope":"fresh digest, durable research navigation and refills within persisted daily assignment budget; live acceptance pending"},"lease":"exclusive configured controller","native_posting":false,"cursor_movement":self.research_enabled||self.focus_enabled,"load_generation":"unverified; campaign identity, anchors and observed timeline checked","full_campaign_acceptance":false})
+        json!({"transport":"ordinary authenticated X11 input","actions":["set_paused","set_speed"],"research_preview":{"enabled":self.research_enabled,"scope":"one OpenPanel, SelectSlot, SelectCategory, View or Research stage for own empty slot","installed_game_validation":"Clock cycles, four assignments and advancement to 5 January passed bounded run025; run024 uncertainty unexplained; full campaign acceptance pending"},"focus_preview":{"enabled":self.focus_enabled,"scope":"one own OpenPolitics/OpenFocus/View/Start ordinary stage; exact Sprite/zero-angle Text/unmasked Frame branches","installed_game_validation":"Run036 verified one ordinary Start on prior source; borrowed executor and daily worker require fresh live validation"},"daily_focus":{"owner_enabled":self.daily.focus_enabled(),"plan_opt_in_required":true,"full_campaign_acceptance":false},"daily_prepared_research":{"enabled":self.daily.research_enabled(),"navigation_implemented":true,"scope":"fresh digest, durable research navigation and refills within persisted daily assignment budget; live acceptance pending"},"lease":"exclusive configured controller","native_posting":false,"cursor_movement":self.research_enabled||self.focus_enabled,"load_generation":"unverified; campaign identity, anchors and observed timeline checked","full_campaign_acceptance":false})
     }
     fn call(&self, process: &dyn Process, name: &str, arguments: &Value) -> Result<Value> {
         let call_started = Instant::now();
@@ -866,5 +885,26 @@ mod tests {
         assert_eq!(error.code, "clock_changed_before_delivery");
         assert!(states.is_empty());
         assert_eq!(sends, 0);
+    }
+    #[test]
+    fn daily_focus_binding_is_default_off_and_profile_is_required() {
+        let value = json!({"game":{"pid":123,"start_ticks":"456","exe":"/generated/game","uid":1000},"controller":"generated","player":"GER","window":1,"window_class":[],"menu_evidence_ids":["setup"]});
+        let b: Binding = serde_json::from_value(value.clone()).unwrap();
+        assert!(!b.daily_focus);
+        assert!(b.validate_daily_focus().is_ok());
+        let mut enabled = value.clone();
+        enabled["daily_focus"] = json!(true);
+        let b: Binding = serde_json::from_value(enabled.clone()).unwrap();
+        assert_eq!(
+            b.validate_daily_focus().unwrap_err().code,
+            "invalid_input_binding"
+        );
+        enabled["focus_profile"] = json!("linux_builtin_absolute_512x288_v1");
+        let b: Binding = serde_json::from_value(enabled).unwrap();
+        assert!(b.daily_focus);
+        assert!(b.validate_daily_focus().is_ok());
+        let mut invalid = value;
+        invalid["daily_focus"] = json!(1);
+        assert!(serde_json::from_value::<Binding>(invalid).is_err());
     }
 }

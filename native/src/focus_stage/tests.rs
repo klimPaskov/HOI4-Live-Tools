@@ -532,3 +532,127 @@ fn missing_wrong_and_late_canonical_join_never_dispatch() {
         assert!(!j.blocks_game(&epoch().game));
     }
 }
+
+#[test]
+fn late_verified_terminal_quarantine_retains_receipt_and_survives_reopen() {
+    let sc = Scratch::new();
+    let mut j = Journal::open(&sc.path()).unwrap();
+    let a = authority();
+    let gate = RwLock::new(true);
+    let mut f = Fake::sequence(Stage::OpenPolitics, state(23), state(12));
+    let execution = run(
+        &mut j,
+        "late",
+        target(Stage::OpenPolitics),
+        &a,
+        &gate,
+        &mut f,
+        Duration::from_secs(2),
+    )
+    .unwrap();
+    assert_eq!(f.dispatches, 1);
+    j.finish_before_deadline(&execution, Instant::now() + Duration::from_secs(1))
+        .unwrap();
+    assert!(!j.blocks_game(&epoch().game));
+    assert_eq!(
+        j.finish_before_deadline(&execution, Instant::now())
+            .unwrap_err()
+            .code,
+        "action_uncertain"
+    );
+    assert_eq!(j.receipts.get("late"), Some(&execution.receipt));
+    assert!(j.blocks_game(&epoch().game));
+    drop(j);
+    let mut j = Journal::open(&sc.path()).unwrap();
+    assert!(j.blocks_game(&epoch().game));
+    for id in ["late", "new-id"] {
+        assert_eq!(
+            run(
+                &mut j,
+                id,
+                target(Stage::OpenPolitics),
+                &a,
+                &gate,
+                &mut f,
+                Duration::from_secs(2)
+            )
+            .unwrap_err()
+            .code,
+            "action_uncertain"
+        );
+    }
+    assert_eq!(f.dispatches, 1);
+    assert_eq!(
+        j.failure_evidence(
+            "new-id",
+            &target(Stage::OpenPolitics),
+            &error("input_busy", "busy")
+        ),
+        FailureEvidence::Unknown
+    );
+    drop(j);
+    let text = std::fs::read_to_string(sc.path())
+        .unwrap()
+        .replace("original absolute", "forged absolute");
+    // Both bounded reason and original receipt are checksum-bound.
+    let mut records: Vec<serde_json::Value> = text
+        .lines()
+        .map(|v| serde_json::from_str(v).unwrap())
+        .collect();
+    records.last_mut().unwrap()["receipt_hash"] = serde_json::json!("0".repeat(64));
+    std::fs::write(
+        sc.path(),
+        records
+            .iter()
+            .map(|v| format!("{}\n", v))
+            .collect::<String>(),
+    )
+    .unwrap();
+    assert_eq!(
+        Journal::open(&sc.path()).err().unwrap().code,
+        "invalid_journal"
+    );
+}
+
+#[test]
+fn late_verified_marker_write_failure_poison_retains_actual_evidence() {
+    let sc = Scratch::new();
+    let mut j = Journal::open(&sc.path()).unwrap();
+    let a = authority();
+    let gate = RwLock::new(true);
+    let mut f = Fake::sequence(Stage::OpenPolitics, state(23), state(12));
+    let execution = run(
+        &mut j,
+        "write-failure",
+        target(Stage::OpenPolitics),
+        &a,
+        &gate,
+        &mut f,
+        Duration::from_secs(2),
+    )
+    .unwrap();
+    j.file = File::open(sc.path()).unwrap();
+    let e = j
+        .finish_before_deadline(&execution, Instant::now())
+        .unwrap_err();
+    assert_eq!(e.code, "action_uncertain");
+    assert!(e.to_string().contains("persistence failed"));
+    assert!(j.poisoned && j.blocks_game(&epoch().game));
+    assert_eq!(j.receipts.get("write-failure"), Some(&execution.receipt));
+    assert_eq!(
+        run(
+            &mut j,
+            "new",
+            target(Stage::OpenPolitics),
+            &a,
+            &gate,
+            &mut f,
+            Duration::from_secs(2)
+        )
+        .unwrap_err()
+        .code,
+        "action_uncertain"
+    );
+    assert_eq!(f.dispatches, 1);
+    // No committed marker: do not claim independent reopen knows the failure.
+}

@@ -24,6 +24,10 @@ Earlier callback/topology failures and a player parsing failure remain preserved
 a compact selected-detail tool now makes the Start binding explicit. Broader
 strategic automation and campaign acceptance remain unfinished.
 
+The new daily Focus preview is default-off and requires independent owner and
+plan permissions. It preserves shared budgets and separate uncertainty histories;
+its worker execution and combined focus/research UI handoff still need live tests.
+
 | Runtime | Verified | Remaining |
 | --- | --- | --- |
 | Python / Windows | Baseline tools and recorded play attempts | Clean campaign acceptance; current development changes are unfinished |

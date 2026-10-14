@@ -461,6 +461,7 @@ pub enum Readiness {
     Ready,
     /// Fresh own slot is occupied: retain head without a day-long refusal.
     WaitingForResearchSlot,
+    WaitingForFocus,
     Deferred(String),
     Unavailable(String),
     BlockingDecision(String),

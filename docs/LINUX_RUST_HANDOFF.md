@@ -12,12 +12,22 @@ Canonical lease transfer/readback, 247-second recording integrity, normal owned
 exit and exact process absence passed. This is bounded Start evidence, not a
 clean two-year run or full campaign.
 
-The next source adds the reviewed daily Focus foundations: borrowed manual
-executor, strict fresh Start receipt conversion, ordered pending head and a
-separate durable preparation ledger. Daily Focus is still hard-unavailable;
-worker wiring/default-off permissions/cross-domain handoff require separate
-review, combined tests and live validation. The borrowed manual path also needs
-revalidation after extraction. Research histories and consumed budgets stay intact.
+The new source wires a default-off daily Focus preview using the borrowed manual
+executor, strict fresh Start receipt conversion, ordered pending head and separate
+durable preparation/Start histories. It requires owner `daily_focus`, an existing
+Focus profile and explicit request `focus_permission`; permission changes require
+stop/restart. Research permission, core-plan serialization, completion and consumed
+budgets stay independent. Positive other-active Focus heads wait without input,
+including when the shared daily budget is exhausted. Late returns retain actual
+verified evidence and separately record quarantine; failed persistence poisons
+the live owner but an unchanged old file cannot prove an uncommitted marker.
+The borrowed path and worker need recorded run037 validation. Cross-domain UI
+handoff remains unavailable; the next test is Focus-only.
+The composed worker passed624 Rust1.86 host tests,723 reported actual Linux
+checks (721 substantive),953 Python tests (37 skips), format, host/Linux Clippy,
+MSRV Linux compilation and release linking. The initial Mac Clippy dead-code
+failure is retained; narrow Linux/test gates fixed it. These are offline gates,
+not live worker or campaign acceptance.
 The next independent foundation adds bounded graph components and multi-source
 BFS over supplied public/generated node IDs. It has no game-state producer or
 army integration. Combined checks passed614 Rust1.86 host tests,711 reported

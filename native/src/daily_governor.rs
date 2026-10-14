@@ -731,6 +731,24 @@ impl Governor {
                         self.persist()?;
                         continue;
                     }
+                    Readiness::WaitingForFocus => {
+                        if !matches!(entry.intent, Intent::Focus { .. }) {
+                            return Err(types::invalid("Focus wait belongs only to Focus"));
+                        }
+                        self.state.entries.insert(
+                            entry.id.clone(),
+                            EntryState::Pending {
+                                attempts: count,
+                                reason: Some(
+                                    "Own different active focus; awaiting fresh idle state".into(),
+                                ),
+                                reason_day: None,
+                            },
+                        );
+                        retained.push(entry.id);
+                        self.persist()?;
+                        continue;
+                    }
                     Readiness::Deferred(s) | Readiness::Unavailable(s) => {
                         self.state.entries.insert(
                             entry.id.clone(),
