@@ -20,12 +20,15 @@ assignment, with canonical slot readback and counter advancement through
 assignments and advancement to 5 January. An earlier speed-change request lacked
 a readback witness and remains quarantined without retry. Full campaign
 acceptance remains unfinished; there is no Rust release yet.
+Recorded run030 verified worker-only four-slot research refill, idempotent updates
+and restart without resetting the daily budget, followed by counter advancement
+through 3 January. This is bounded automation evidence, not campaign acceptance.
 
 | Runtime | Verified | Remaining |
 | --- | --- | --- |
 | Python / Windows | Baseline tools and recorded play attempts | Clean campaign acceptance; current development changes are unfinished |
 | Python / macOS | Platform work and limited diagnostic play | Reliable live acceptance; screenshot-driven testing is stopped |
-| Native / Linux | Own-country reads, focus/research catalogs, owned launch/reconnects, bounded Luna clock tests, category navigation and four-slot research assignment | Reliable clock and focus actions, governor, economics/army/naval control and campaign acceptance |
+| Native / Linux | Own reads/catalogs, owned launch, bounded Luna clock/research tests, four-slot worker refill and restart persistence | Focus, broader daily plans, economics/army/naval control and campaign acceptance |
 | Native / Windows and macOS | Portable protocol and fixture tests in CI | Independently verified process/build adapters and live tests |
 
 Read [the acceptance gates](docs/LINUX_RUST_HANDOFF.md),
@@ -93,12 +96,12 @@ run 024 clock uncertainty remains unexplained. Opt-in focus stages and a daily
 worker now pass fixtures. Recorded run026 verified focus opening, then refused
 selection because owned root closure was missing; that cause remains unresolved.
 The current worker adds durable panel/slot/category navigation, plan updates and
-several research assignments within a persisted daily budget. Recorded run028
-verified public folder discovery, idempotent updates and two automatic assignments;
-two other slots remained empty after navigation failures. Full refill remains
-unaccepted. Run029 retained a pre-input torn-read reason and exposed a missing
-return-to-panel transition, but assigned no research. Broader strategic adapters
-and Windows/macOS live adapters remain
+several research assignments within a persisted daily budget. Recorded run030
+passed worker-only refill of all four slots on one paused day, idempotent plan
+updates and restart without replay or budget reset. Bounded pre-input retries
+preserved the original torn-read history. Earlier failed runs remain documented;
+returning from a failed open tree to another slot is still unavailable. Broader
+strategic adapters and Windows/macOS live adapters remain
 unfinished. Three-OS CI tests
 shared code and fixtures; compilation is not live compatibility or campaign acceptance.
 

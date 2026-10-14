@@ -30,13 +30,16 @@ return a capability error. Logs and setup errors go to stderr.
 Three-OS CI validates shared code. It does not establish Windows/macOS live
 compatibility. Layouts must be recovered and verified separately for each build.
 
-Focus stages and a daily prepared-research worker now have optional owned MCP
-services. Their installed-game validation is pending. They share the clock and
+Focus stages and a daily prepared-research worker have optional owned MCP
+services. Recorded run030 passed worker-only four-slot refill, restart persistence
+and counter advancement through3January; focus selection/start remain unaccepted.
+They share the clock and
 research controller, lease, shutdown gate and uncertainty journals. The worker
 retains unfinished entries and requires fresh assignment receipts; navigation
 receipts cannot complete research work. It prepares each research stage separately
-and supports idempotent plan updates. It completes at most one research entry per
-advancing day. Daily focus, economy, army and naval adapters remain unfinished. Private daily storage
+and supports idempotent plan updates. Several research entries may complete on
+one day within the durable assignment limit. Research completion queues, daily
+focus, economy, army and naval adapters remain unfinished. Private daily storage
 supports Unix only; other platforms return an explicit capability error.
 
 ## Connect an owned Linux game

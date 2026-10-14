@@ -2128,3 +2128,47 @@ including five isolated X11 cases. Nested helper output is not counted twice;
 display identity/Yama1 stayed unchanged and run029's exact processes remained
 gone. These are fixture results, not evidence that live torn reads or refill
 have been resolved. Record a fresh exclusive Luna medium trial next.
+
+## Recorded run030: worker refill, persistence and counter advancement passed
+
+Immutable source `6060216`, CLI SHA-256
+`31da4e7f40cf6ffd399b6a50b08061e9bda0a1f151fc3f944c351401b6691dcc`
+ran Normal historical vanilla Germany, no mods or DLC. First video packet was
+verified before one Start; own memory confirmed paused noon on1January1936,
+speed0, four empty slots and no focus. Focus stayed disabled. One exclusive
+Luna medium player owned gameplay; the parent made no game reads/input during
+that ownership.
+
+The worker alone navigated and assigned support_weapons to slot0,
+basic_machine_tools to slot1, electronic_mechanical_engineering to slot2 and
+construction1 to slot3 on the same paused day. Fresh canonical reads matched
+all four durable goal completions; idle0, budget used4/4, remaining0. Navigation
+retains14 steps:12 verified and two pre-intent View torn_read failures for support,
+with counts1 and2. The third fresh attempt passed without weakened witnesses;
+both original reasons remain historical. No pre-navigation refusal or quarantine
+was present. This proves bounded recovery, not identification of the changed
+byte or a new return-to-panel route.
+
+Catalog RPC was65ms and initial start362ms. Revision2 update passed in214ms;
+the immediate identical retry returned known nonqueued input_busy in19ms.
+After a server wait, the identical retry returned updated:false in235ms without
+resetting consumption. Stop/restart retained revision2 and budget4/4 with no
+replay. Digests took92–115ms. Worker stop took9–13ms and changed no game time.
+
+After stopping the worker, ordinary unpause and a bounded server wait reached
+3January at01:00 in32.87 seconds; normal pause verified the final04:00 state.
+All four raw counters advanced **101000 to303000**; their units remain unverified.
+Lease release/status proved remaining0 with the canonical identity/reply shape.
+
+Two H.264 segments finalized and passed ffprobe: **884.333 seconds**,
+**11,780,918 bytes**,512×288 at3fps. One owned WM close returned actual normal
+exit **0**, no signal/core dump, in **3.156 seconds**. Both exact process paths
+were absent afterward, Yama1 was unchanged and both clients closed. Private
+calls, journals, proof and recordings are preserved. All nine CI jobs passed
+for the exact source commit; offline gates remain separate from this live proof.
+
+Same-day four-slot worker refill, idempotence, restart persistence and subsequent
+counter advancement passed this bounded run. Research completion queues, focus,
+economy, army/naval automation, independent Windows/macOS live adapters, clean
+two-year acceptance and full campaigns remain unfinished. Next take a fresh
+exclusive Luna focus Open/read-only geometry gate before any View/Start attempt.

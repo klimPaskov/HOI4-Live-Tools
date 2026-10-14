@@ -4,39 +4,28 @@ User direction, 12 October 2026: stop the Mac screenshot-driven live tests and
 replace the primary runtime with a fast Rust MCP based on Clausewitz-MCP.
 Linux is the first live target; Windows and macOS remain required platforms.
 
-**Current continuation:** run025 verified Luna medium clock controls, four
-research assignments and advancement to5January1936. Run026 verified focus
-opening, then refused View on missing root closure. Run027 verified worker-only
-OpenPanel/SelectSlot, then failed to refill: the builder supplied display labels
-instead of canonical folder IDs. Three busy digests obscured the refusal;
-a post-release diagnostic reported research_precondition and zero goal attempts.
-All three owned runs exited normally and recordings passed ffprobe. No clean
-two-year or full campaign has passed; native posting stays quarantined.
+**Current continuation:** recorded run030 passed exclusive Luna medium
+worker-only four-slot research refill on one paused day, idempotent revision
+updates, restart with budget4/4/no replay, and raw counter advancement through
+3January1936. Two proved pre-intent View torn reads recovered within the bounded
+retry allowance; their original history remains preserved. Lease release,
+ffprobe and normal owned exit passed. No clean two-year or full campaign has
+passed; native posting stays quarantined.
 
-Recorded run028 then verified GUI-independent discovery of16 exact public
-folder IDs in49ms RPC, idempotent revision updates and two worker-only research
-assignments on the same paused day. Four-slot refill failed: two navigation
-stages ended terminalfalse without retaining their original errors, and later busy
-probes obscured the cause. Pending entries and unused budget were preserved;
-the worker stopped, the lease released and the owned game exited normally.
+Exact source `6060216` passed545 Rust1.86 host tests,640 reported actual Linux
+checks (638 substantive), five isolated X11 cases,953 Python tests (37 skipped)
+and all nine three-OS CI jobs. Offline results and bounded live success remain
+separate evidence. Research completion queues and a return-to-panel route after
+permanent tree failure are still unfinished; no new input transition is enabled.
 
-Run029 then retained the original pre-intent View torn_read and three subsequent
-navigation refusals, but assigned no research. Source review and a post-release
-read-only snapshot confirm that the selector cannot return from the open own
-tree to another slot. The changed View witness remains unidentified. Lease
-release, recording validation and normal owned exit passed.
-
-Its immutable preview passed541 Rust1.86 host tests,636 reported actual Linux
-checks (634 substantive), five isolated X11 cases and953 Python tests (37
-skipped), plus all nine three-OS CI jobs. The follow-up now bounds proved
-pre-intent torn-read retries without weakening witnesses and explicitly reports
-the missing return-to-panel route. It passed545 Rust1.86 host tests,640 reported
-actual Linux checks (638 substantive), five X11 cases and953 Python tests (37
-skipped). Fresh exclusive recorded Luna medium refill validation is next; no new
-return-panel input transition is enabled.
-Focus, economic, army/naval actions and independent
-Windows/macOS live adapters remain unfinished.
-[Live evidence](CLAUSEWITZ_VALIDATION.md) preserves failures and boundaries.
+Next run a fresh exclusive Luna focus gate: verified Open, then one exact-key
+`hoi4_focus_node_detail` with include_geometry:true. Only a closed1f0 hierarchy,
+consistent unit cache and supported renderer permit View/Start; otherwise retain
+the diagnostic and stop before input. Run026's generic closure failure remains
+unexplained. Node hierarchy policies have not changed since that run; current
+diagnostics must not be presented as its fix. Finish focus, economic, army/naval
+actions and independent Windows/macOS live adapters afterward.
+[Live evidence](CLAUSEWITZ_VALIDATION.md) preserves earlier failures and boundaries.
 
 ## Ordered acceptance gates
 
