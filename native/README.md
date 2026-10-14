@@ -93,6 +93,7 @@ anchors do not establish a load-generation token.
 | `hoi4_research` | Own completed technologies and active signed counters; normalized progress remains unavailable |
 | `hoi4_army` | Own divisions with full snapshot-scoped handles, selected province joins and lossless raw status; recorded structural reads, units unverified |
 | `hoi4_economy` | Own named factory trigger counts, civilian project capacity and exact signed political-power units; live comparison pending |
+| `hoi4_production_lines` | Paged own equipment-line handles and separate signed factory counters; fixture validation only, equipment IDs and allocation unavailable |
 | `hoi4_technology_list` | Canonical loaded technology IDs with filtering/pagination; no eligibility inference |
 | `hoi4_input_geometry` | GUI dimensions, scale, pointer and conditional source-window diagnostics; no click authority |
 | `hoi4_research_folders` | Exact loaded public folder IDs, independent of open GUI; no technology mapping or eligibility authority |
@@ -109,6 +110,15 @@ Catalog queries accept `filter`, `offset` and `limit` (1–100). Research comple
 membership is paged separately. Full models are validated before output paging;
 request-local shared proofs are rechecked before return and never survive a call.
 `freshness.read_calls` counts logical requests, not kernel syscalls.
+
+`hoi4_production_lines` accepts `offset` (0–2,048) and `limit` (1–128; default 32).
+It validates the entire own equipment-line collection before paging. Known
+military/naval members require a reciprocal owner; other subtypes return bounded
+metadata with ownership unproved. Handles are lossless hexadecimal strings scoped
+to the current snapshot, not persistent IDs. Active, damaged and requested signed
+counters remain separate; anomalous values are preserved and marked unavailable.
+General production, equipment joins and allocation controls remain unavailable.
+No production action is authorized by this read-only tool.
 
 The current game uses a 365-day calendar, including February 28 in 1936. Its raw
 clock includes a 5000-year epoch and displays hours as 1–24. Raw research counters

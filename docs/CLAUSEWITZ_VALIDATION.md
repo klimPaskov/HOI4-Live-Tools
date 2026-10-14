@@ -2348,3 +2348,47 @@ compilation and release linking passed. The immutable actual Linux bundle passed
 including five isolated X11 cases. Display identity/Yama1 were unchanged and
 run032's exact processes remained gone. These stricter-guard fixtures do not
 establish the runtime callback association or successful Start.
+
+
+## Recorded run033: selected Start association unavailable before input
+
+The stricter source `f469990` ran with one exclusive Luna medium player in vanilla
+Normal/historical Germany. OpenPolitics verified in 1.346 seconds, OpenFocus in
+4.824 seconds and View in 6.594 seconds. Both pre-View Sprite paths closed at the
+own graphics root with consistent conditional caches and unmasked resources.
+The selected detail matched the exact Rhineland key, but Start association
+reported `event_binding_unavailable`, false callback/renderer association flags,
+null renderer type and nested `focus_geometry_binding_unavailable`. Start was
+not attempted. No further game observation or clock change followed this gate.
+This identifies the unavailable association category, not its underlying cause
+or the specific combined-guard failure in run032.
+
+Canonical lease release and zero remaining lease time passed. The H.264 recording
+was 478 seconds, 5,387,633 bytes, 512×288 at 3 fps and passed ffprobe. Requested
+recording stop returned255 and remains preserved. One ordinary owned window close
+produced actual game exit0 without signal or core dump in 2.621 seconds; both exact
+owned processes disappeared, Yama remained1 and both protocol brokers closed.
+No campaign-success claim follows this bounded gate.
+
+## Own equipment-line observer: generated fixtures before live comparison
+
+The new read-only producer uses independently recovered Linux constructors,
+serialization and handle witnesses for the exact installed ELF. It validates
+own production status, the whole scoped equipment-line array and reciprocal
+ownership for known military/naval layouts before reading full eight-byte handles
+and separate signed active/damaged/requested counters. Unknown layouts return
+bounded static metadata without assuming ownership or reading their payload.
+Every observed field is rechecked before paging; indices and handles are scoped
+to the fresh snapshot and do not establish cross-load identity.
+
+The default page is32 and maximum128. Generated tests check unsupported metadata,
+full-width string handles, anomalies, changed roots/owners/arrays/counters,
+malformed pages before process access, and complete validation outside the returned
+page. Known/unknown/mixed maximum pages fit the entire escaped MCP response bound.
+Equipment/public ID joins, general production and allocation remain unavailable.
+Combined host Rust1.86 tests passed582; Python passed953 with37 skips; Linux
+compiler, both Clippy targets and formatting passed. Actual Linux execution
+passed678 reported checks (676 substantive), including five isolated X11 cases.
+The original library worker-limit fixture stderr remains preserved. Live own-line
+comparison remains pending; generated tests add no input authority and are not
+installed-game evidence.

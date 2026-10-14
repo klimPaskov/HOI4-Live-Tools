@@ -54,8 +54,21 @@ An independently audited alternate EVENT manager+1d8 now also requires zero;
 active variants refuse before their captured payload/renderer is read. This
 stricter source passed567 host checks,663 reported parallel Linux checks
 (661 substantive),953 Python tests (37 skipped) and the compiler/format/Clippy
-gates. Run032's specific failed binding field remains unknown. The fresh run033
-brief includes the selected own-detail observation before any Start attempt.
+gates. Run032's specific failed binding field remains unknown. Run033 then repeated verified OpenPolitics/OpenFocus/View and saved the selected
+own-detail observation before Start. The exact selected key matched, but its
+callback association reported `event_binding_unavailable`; renderer/control
+association and geometry were unavailable. Luna stopped before Start and made no
+further game reads. Canonical lease release, 478-second recording integrity,
+normal owned exit0 and exact process absence passed. The earlier run032 combined
+guard failure is not retrospectively attributed to a specific field.
+
+A new read-only own equipment-line observer validates the complete scoped
+collection before bounded paging, preserves full snapshot-scoped handles and
+separate signed active/damaged/requested counts, and returns unknown subtype
+metadata without dereferencing its unproved payload. Equipment IDs, general
+production and allocation remain unavailable. Combined Rust1.86 host tests582,
+Python953 (37 skipped), Linux compiler/Clippy/format gates and678 reported actual
+Linux checks (676 substantive) passed. Live own-line comparison remains pending.
 Finish economic, army/naval actions
 and independent Windows/macOS live adapters afterward.
 [Live evidence](CLAUSEWITZ_VALIDATION.md) preserves earlier failures and boundaries.

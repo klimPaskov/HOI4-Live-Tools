@@ -31,6 +31,7 @@ mod node_unit_cache;
 mod info_research_button;
 
 pub mod economy;
+pub mod production_lines;
 
 // Ordinary research candidate building block; no protocol input registration.
 pub mod research_attempt;
