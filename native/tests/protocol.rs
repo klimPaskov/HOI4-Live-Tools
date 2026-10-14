@@ -61,6 +61,7 @@ fn stdio_is_json_and_notifications_have_no_reply() {
             "hoi4_research_nodes",
             "hoi4_focus_list",
             "hoi4_focus_node_detail",
+            "hoi4_focus_selected_detail",
             "hoi4_technology_list",
             "hoi4_wait_for"
         ]
@@ -359,4 +360,65 @@ fn research_folders_tool_is_read_only_empty_arguments_and_capability_is_listed()
         .unwrap()
         .contains(&json!("public_research_folder_catalog")));
     assert_eq!(value["owned_session_bound"], false);
+}
+
+#[test]
+fn selected_focus_detail_query_is_strict_read_only_before_process_access() {
+    use hoi4_live_native::protocol::Server;
+    let server = Server {
+        process: None,
+        unavailable: None,
+    };
+    for arguments in [
+        json!({}),
+        json!([]),
+        json!({"focus_id":null}),
+        json!({"focus_id":1}),
+        json!({"focus_id":""}),
+        json!({"focus_id":"x".repeat(129)}),
+        json!({"focus_id":"GER other"}),
+        json!({"focus_id":"GER_rhineland","include_geometry":1}),
+        json!({"focus_id":"GER_rhineland","include_geometry":null}),
+        json!({"focus_id":"GER_rhineland","include_geometry":"true"}),
+        json!({"focus_id":"GER_rhineland","country":"OTHER"}),
+        json!({"focus_id":"GER_rhineland","force":true}),
+        json!({"focus_id":"GER_rhineland","x":1,"y":1}),
+    ] {
+        let reply=server.handle(json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"hoi4_focus_selected_detail","arguments":arguments}})).unwrap();
+        assert_eq!(reply["result"]["isError"], true);
+        let value: Value =
+            serde_json::from_str(reply["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+        let code = value["error"]["code"].as_str().unwrap();
+        assert!(
+            ["invalid_arguments", "invalid_argument"].contains(&code),
+            "{value}"
+        );
+    }
+    let list = server
+        .handle(json!({"jsonrpc":"2.0","id":2,"method":"tools/list"}))
+        .unwrap();
+    let tool = list["result"]["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|t| t["name"] == "hoi4_focus_selected_detail")
+        .unwrap();
+    assert_eq!(tool["annotations"]["readOnlyHint"], true);
+    assert_eq!(tool["inputSchema"]["required"], json!(["focus_id"]));
+    assert_eq!(tool["inputSchema"]["additionalProperties"], false);
+    assert_eq!(
+        tool["inputSchema"]["properties"]["include_geometry"]["type"],
+        "boolean"
+    );
+    assert_eq!(
+        tool["inputSchema"]["properties"]["include_geometry"]["default"],
+        false
+    );
+    let caps=server.handle(json!({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"hoi4_capabilities","arguments":{}}})).unwrap();
+    let value: Value =
+        serde_json::from_str(caps["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+    assert!(value["observations"]
+        .as_array()
+        .unwrap()
+        .contains(&json!("own_focus_selected_detail")));
 }

@@ -2455,3 +2455,46 @@ and final changed witnesses. A live focus Start has not passed yet.
 The composed source passed 590 Rust 1.86 host tests, 686 reported actual Linux
 checks (684 substantive), 953 Python tests (37 skips), both Clippy targets,
 format, MSRV Linux checks and release linking. Live Start remains unverified.
+
+
+## Recorded run035: fields-present player parsing failure
+
+The selector-checked source `b35f7e7` ran with exclusive Luna medium input in
+vanilla Normal/historical Germany. Focus opens and exact Rhineland View verified.
+Pre-View and selected-detail observations took 99.7/95.0 ms. The saved selected
+response contains positive available/callback/renderer associations at
+`details[0].window.start.ordinary_binding`, with the admitted selected-only
+listener, zero-selector prerequisite, TextSprite, closed own root1f0 and
+consistent conditional cache.
+
+Luna instead inspected the separate node symbol and reported the required Start
+fields missing. That report is incorrect; this is a player parsing failure, not a
+producer refusal. The original report/metrics and full response are preserved,
+with a separate parent correction. Start was not attempted, and no later game
+read or input occurred. Positive read-only metadata does not prove a live Start.
+
+Canonical lease proof was transferred and read back correctly. Recording passed
+ffprobe at 322.333 seconds, 3,903,554 bytes; requested recorder stop255 is retained.
+One ordinary owned close gave actual exit0/no signal/no core in 2.761 seconds;
+exact owner/game processes disappeared, Yama remained1, and brokers closed.
+
+## Compact selected-focus window
+
+`hoi4_focus_selected_detail` reuses exactly one original fresh node/detail read
+and complete witness sequence, then projects the matched selected window. Start
+is directly at `window.start.ordinary_binding`; the unrelated node symbol and
+catalog are omitted. Missing, different or multiple selected details refuse
+explicitly; missing/unavailable Start fields keep their actual reasons and flags.
+No cache, new offsets, coordinate or input authority is introduced. Optional raw
+geometry retains the original diagnostics. The singleton success label now
+reflects the selected handler alone; the existing pair keeps its prior label.
+Seven producer fixtures and one protocol fixture cover path separation, strict
+arguments, unchanged reads/brackets, unavailable/ambiguous selection and final
+changed witnesses. Daily Focus foundation work remains private and disabled.
+
+The composed source passed 598 host Rust tests, 694 reported actual Linux checks
+(692 substantive), 953 Python tests (37 skips), both Clippy targets, format,
+MSRV Linux checks and release linking. The first fixture launch raced installation
+and found no library binary before any native case ran. That orchestration failure
+is preserved; after all ten payload hashes were verified, the same immutable
+binaries passed. No live Start is inferred from these tests.

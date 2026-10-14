@@ -110,6 +110,7 @@ anchors do not establish a load-generation token.
 | `hoi4_research_nodes` | Paged current own-tree keys and conditional control associations |
 | `hoi4_focus_list` | Own canonical focus keys and selected detail diagnostics; no start authority |
 | `hoi4_focus_node_detail` | One own focus key's current-item/control associations; opt-in raw Sprite/Text/Frame diagnostics, awaiting live validation |
+| `hoi4_focus_selected_detail` | Compact exact selected window; Start is `window.start.ordinary_binding`, distinct from the node symbol; read-only with optional geometry |
 | `hoi4_wait_for` | Server wait, 1–50 seconds, for a date, focus/research changes or research UI predicates |
 
 Catalog queries accept `filter`, `offset` and `limit` (1–100). Research completed

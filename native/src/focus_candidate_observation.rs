@@ -33,6 +33,7 @@ fn start_binding_diagnostic(binding: &Value, key: &str) -> String {
                     | "renderer_unavailable"
                     | "renderer_layout_unavailable"
                     | "own_selected_event_start_and_noop_listener_verified"
+                    | "own_selected_event_start_listener_verified"
                     | "detail_not_locally_visible"
             )
         })

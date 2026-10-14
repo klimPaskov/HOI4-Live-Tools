@@ -1760,6 +1760,7 @@ fn focus_start_selected_singleton_proves_route_without_absent_noop_payload() {
     assert_eq!(v["available"], true);
     assert_eq!(v["callback_route_verified"], true);
     assert_eq!(v["listener_topology"]["selected_event_only"], true);
+    assert_eq!(v["reason"], "own_selected_event_start_listener_verified");
     assert_eq!(v["input_authorized"], false);
     assert_eq!(v["effective_routing_verified"], false);
     assert!(f.untouched(PANEL + 0x530, 0x270));
@@ -1829,4 +1830,208 @@ fn focus_start_selected_singleton_all_route_reads_remain_final_witnesses() {
         f.torn = Some(at);
         assert_eq!(f.result().unwrap_err().code, "torn_read");
     }
+}
+
+#[test]
+fn selected_detail_exposes_start_window_even_when_node_symbol_route_is_unavailable() {
+    let mut f = Fake::new();
+    f.start_binding();
+    f.start_listener_targets(&[PANEL + 0x2a8]);
+    f.focus_nodes();
+    f.word(0x234000, 0x4346b10); // Node symbol is not the detail Start button.
+    let original = f.node_result().unwrap();
+    assert_eq!(
+        original["node_association"]["controls"][0]["binding_verified"],
+        false
+    );
+    let value = own_focus::selected_detail(&f, "GER_rhineland", false).unwrap();
+    assert_eq!(value["selected_key"], "GER_rhineland");
+    assert_eq!(value["selected_detail_count"], 1);
+    assert_eq!(value["scope"], "own_selected_focus_detail_only");
+    assert_eq!(value["window"], original["details"][0]["window"]);
+    let binding = &value["window"]["start"]["ordinary_binding"];
+    assert_eq!(binding["available"], true);
+    assert_eq!(binding["callback_route_verified"], true);
+    assert_eq!(binding["renderer_control_join_verified"], true);
+    assert_eq!(binding["renderer_type_encoding"], "11CTextSprite");
+    assert_eq!(
+        binding["reason"],
+        "own_selected_event_start_listener_verified"
+    );
+    assert_eq!(binding["listener_topology"]["noop_target_present"], false);
+    assert_eq!(value["input_authorized"], false);
+    assert_eq!(binding["input_authorized"], false);
+    assert!(value.get("node_association").is_none());
+    assert!(value.get("focuses").is_none());
+    assert!(f.untouched(PANEL + 0x530, 0x270));
+    assert!(f.untouched(0x221020, 24));
+}
+
+#[test]
+fn selected_detail_keeps_exact_original_reader_bracket_and_witnesses() {
+    let mut original = Fake::new();
+    original.start_binding();
+    original.focus_nodes();
+    let full = original.node_result().unwrap();
+    let mut compact = Fake::new();
+    compact.start_binding();
+    compact.focus_nodes();
+    let value = own_focus::selected_detail(&compact, "GER_rhineland", false).unwrap();
+    assert_eq!(value["window"], full["details"][0]["window"]);
+    assert_eq!(compact.checks.get(), 2);
+    assert_eq!(*compact.reads.borrow(), *original.reads.borrow());
+    assert_eq!(
+        value["freshness"]["read_calls"],
+        full["freshness"]["read_calls"]
+    );
+    assert_eq!(
+        value["freshness"]["read_bytes"],
+        full["freshness"]["read_bytes"]
+    );
+}
+
+#[test]
+fn selected_detail_refuses_missing_selection_and_missing_window_explicitly() {
+    for case in 0..3 {
+        let mut f = Fake::new();
+        match case {
+            0 => f.array(VIEW + 0x1180, 0, &[]),
+            1 => f.word(PANEL + 0x7d0, 0),
+            _ => f.word(PANEL + 0x7c8, 0),
+        }
+        assert_eq!(
+            own_focus::selected_detail(&f, "GER_rhineland", false)
+                .unwrap_err()
+                .code,
+            "focus_detail_unavailable"
+        );
+        assert!(f.untouched(WIN, 0x1800));
+        assert_eq!(f.checks.get(), 2);
+    }
+}
+
+#[test]
+fn selected_detail_refuses_wrong_key_or_multiple_selected_details_without_guessing() {
+    let mut f = Fake::new();
+    f.region(0x238000, 0x1800);
+    f.word(0x238000, 0x42024d0);
+    f.word(0x238160, TREE);
+    f.string(0x238018, "GER_other");
+    f.array(TREE + 0x30, 0x212000, &[F, 0x238000]);
+    f.array(DB + 0x58, 0x213000, &[F, 0x238000]);
+    f.word(PANEL + 0x7d0, 0x238000);
+    assert_eq!(
+        own_focus::selected_detail(&f, "GER_rhineland", false)
+            .unwrap_err()
+            .code,
+        "focus_detail_not_selected"
+    );
+    assert!(f.untouched(WIN, 0x1800));
+    let mut f = Fake::new();
+    let second = 0x270000;
+    f.region(second, 0x800);
+    f.word(second, 0x43023f8);
+    f.word(second + 0x7b8, ID);
+    f.word(second + 0x7c0, VIEW);
+    f.word(second + 0x7d0, F);
+    f.word(second + 0x7c8, 0);
+    f.array(VIEW + 0x1180, 0x214000, &[PANEL, second]);
+    assert_eq!(
+        own_focus::selected_detail(&f, "GER_rhineland", false)
+            .unwrap_err()
+            .code,
+        "ambiguous_focus_detail"
+    );
+    assert_eq!(f.checks.get(), 2);
+}
+
+#[test]
+fn selected_detail_preserves_actual_unavailable_and_absent_start_fields() {
+    let mut f = Fake::new();
+    f.start_binding();
+    f.start_listener_targets(&[PANEL + 0x530]);
+    let value = own_focus::selected_detail(&f, "GER_rhineland", false).unwrap();
+    let binding = &value["window"]["start"]["ordinary_binding"];
+    assert_eq!(binding["available"], false);
+    assert_eq!(binding["reason"], "event_binding_unavailable");
+    assert_eq!(
+        binding["listener_topology"]["selected_event_target_present"],
+        false
+    );
+    assert!(f.untouched(BUTTON + 0xe8, 8));
+    let mut f = Fake::new();
+    f.string(0x216000, "other");
+    let value = own_focus::selected_detail(&f, "GER_rhineland", false).unwrap();
+    assert_eq!(value["window"]["start"]["materialized"], false);
+    assert!(value["window"]["start"]["ordinary_binding"].is_null());
+    assert!(value["window"]["start"].get("ordinary_binding").is_none());
+    assert!(f.untouched(BUTTON, 0x1800));
+}
+
+#[test]
+fn selected_detail_geometry_is_optional_and_preserves_only_existing_diagnostics() {
+    let mut f = Fake::new();
+    f.start_binding();
+    f.focus_geometry_fixture(WIN, BUTTON, true);
+    let value = own_focus::selected_detail(&f, "GER_rhineland", false).unwrap();
+    assert!(value["window"]["start"]["ordinary_binding"]
+        .get("render_diagnostic")
+        .is_none());
+    assert!(f.untouched(0x244168, 8));
+    let value = own_focus::selected_detail(&f, "GER_rhineland", true).unwrap();
+    let binding = &value["window"]["start"]["ordinary_binding"];
+    assert_eq!(binding["available"], true);
+    assert_eq!(binding["render_diagnostic"]["raw_fields_available"], true);
+    assert_eq!(
+        binding["render_diagnostic"]["hit_projection_available"],
+        false
+    );
+    assert_eq!(binding["render_diagnostic"]["input_authorized"], false);
+    assert!(value.get("client_point").is_none());
+    assert!(value.get("coordinates").is_none());
+    assert!(f.untouched(0x2441b0, 8));
+}
+
+#[test]
+fn selected_detail_keeps_original_torn_and_process_refusals() {
+    for at in [
+        GS + 0x518,
+        CO + 0x1338,
+        F + 0x18,
+        VIEW + 0x1180,
+        PANEL + 0x7d0,
+        WIN + 0x98,
+        BUTTON + 0x80,
+        0x220000,
+        PANEL + 0x2a8 + 0x1d8,
+        BUTTON + 0xe8,
+        0x222138,
+    ] {
+        let mut f = Fake::new();
+        f.start_binding();
+        f.focus_nodes();
+        f.torn = Some(at);
+        assert_eq!(
+            own_focus::selected_detail(&f, "GER_rhineland", false)
+                .unwrap_err()
+                .code,
+            "torn_read",
+            "{at:x}"
+        );
+    }
+    let mut f = Fake::new();
+    f.fail_final = true;
+    assert_eq!(
+        own_focus::selected_detail(&f, "GER_rhineland", false)
+            .unwrap_err()
+            .code,
+        "ownership_changed"
+    );
+    let f = Fake::new();
+    assert_eq!(
+        own_focus::selected_detail(&f, "", false).unwrap_err().code,
+        "invalid_argument"
+    );
+    assert_eq!(f.checks.get(), 0);
+    assert!(f.reads.borrow().is_empty());
 }

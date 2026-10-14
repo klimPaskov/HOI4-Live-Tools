@@ -25,7 +25,9 @@ that association remained unavailable before any Start input. The failures are
 preserved without retry. Run034 identified a selected-event-only Start listener
 and read 21 supported own production lines. The new binding checks that local
 event route and selector zero; a live focus Start still needs verification.
-Broader strategic automation remains unfinished.
+Run035 returned positive Start bindings, but Luna misread the nested response
+and stopped before input. A compact selected-detail tool now makes the Start
+path explicit. Broader strategic automation remains unfinished.
 
 | Runtime | Verified | Remaining |
 | --- | --- | --- |

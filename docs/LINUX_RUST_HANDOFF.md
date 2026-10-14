@@ -4,13 +4,22 @@ User direction, 12 October 2026: stop the Mac screenshot-driven live tests and
 replace the primary runtime with a fast Rust MCP based on Clausewitz-MCP.
 Linux is the first live target; Windows and macOS remain required platforms.
 
-**Latest tested candidate:** run034 verified 21 supported own production lines
-and exact focus selection, then identified a selected-event-only Start listener.
-Start was not attempted. The next source adds that narrowly proved binding and a
-fresh selector-zero prerequisite for both supported listener shapes. It passed
-590 Rust 1.86 host tests, 686 reported Linux checks (684 substantive), 953 Python
-tests (37 skips), compiler/Clippy/format gates and release linking. Fresh run035
-is next; a live focus Start and campaign acceptance remain unverified.
+**Latest continuation:** run035 returned positive selected Start callback and
+renderer associations with TextSprite/own root1f0/cache checks. Luna inspected the
+separate node-symbol object and incorrectly reported those fields missing; Start
+was not attempted. Its original calls/results and the correction remain preserved.
+Release proof/readback, recording integrity and normal owned exit passed.
+
+The next source adds a compact exact selected-window observation with Start at
+`window.start.ordinary_binding`, retaining the original reader and witnesses.
+Missing/different/multiple selection refuses; action guards remain unchanged.
+The composed source passed 598 host Rust tests, 694 reported Linux checks
+(692 substantive), 953 Python tests (37 skips), compiler/Clippy/format and release
+linking. A premature fixture launch preceded full archive installation and
+stopped before native tests; the same binaries passed after verified installation.
+Fresh036 will use this tool before Start. Daily Focus foundations stay private
+and hard-unavailable pending live Start acceptance.
+
 
 **Current continuation:** recorded run030 passed exclusive Luna medium
 worker-only four-slot research refill on one paused day, idempotent revision

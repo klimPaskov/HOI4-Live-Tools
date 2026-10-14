@@ -496,6 +496,78 @@ pub fn node_detail_with_geometry(
     Ok(snapshot_model(process, 0, 1, Some(key), Some(key), include_geometry, false)?.0)
 }
 
+/// Compact selected-window observation. The node symbol is a separate control,
+/// never the selected detail's Start binding. Reuses exactly one fresh reader
+/// bracket with the complete original node/detail ownership and field witnesses.
+pub fn selected_detail(process: &dyn Process, key: &str, include_geometry: bool) -> Result<Value> {
+    let body = node_detail_with_geometry(process, key, include_geometry)?;
+    let details = body["details"].as_array().ok_or_else(|| {
+        Error::new(
+            "invalid_focus_detail",
+            "Own selected-detail model unavailable",
+        )
+    })?;
+    let mut selected = Vec::new();
+    for row in details {
+        match row.get("selected_key") {
+            Some(Value::String(selected_key)) => selected.push((selected_key, row)),
+            Some(Value::Null) => (),
+            _ => {
+                return Err(Error::new(
+                    "invalid_focus_detail",
+                    "Explicit selected-detail key required",
+                ))
+            }
+        }
+    }
+    if selected.len() > 1 {
+        return Err(Error::new(
+            "ambiguous_focus_detail",
+            "Multiple own selected focus details",
+        ));
+    }
+    let (selected_key, row) = selected.first().ok_or_else(|| {
+        Error::new(
+            "focus_detail_unavailable",
+            "No own focus detail is selected",
+        )
+    })?;
+    if selected_key.as_str() != key {
+        return Err(Error::new(
+            "focus_detail_not_selected",
+            "Requested own focus detail is not selected",
+        ));
+    }
+    let window = &row["window"];
+    match window["materialized"].as_bool() {
+        Some(true) => (),
+        Some(false) => {
+            return Err(Error::new(
+                "focus_detail_unavailable",
+                "Own selected detail window is not materialized",
+            ))
+        }
+        None => {
+            return Err(Error::new(
+                "invalid_focus_detail",
+                "Explicit own selected-detail window required",
+            ))
+        }
+    }
+    // Preserve existing observed booleans/reasons and unknowns verbatim. A
+    // missing Start/binding is never synthesized into a false route witness.
+    Ok(
+        json!({"source":"native own selected focus detail","build_id":body["build_id"],
+        "scope":"own_selected_focus_detail_only","owned":body["owned"],
+        "selected_key":selected_key,"selected_detail_count":selected.len(),"window":window,
+        "include_geometry":include_geometry,"freshness":body["freshness"],
+        "numeric_ids_available":body["numeric_ids_available"],
+        "eligibility_available":body["eligibility_available"],
+        "branch_visibility_available":body["branch_visibility_available"],
+        "input_authorized":body["input_authorized"],"observation_paused_game":body["observation_paused_game"]}),
+    )
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[doc(hidden)]
 pub struct FocusContext {

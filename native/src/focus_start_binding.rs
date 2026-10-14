@@ -187,6 +187,10 @@ pub(crate) fn observe(
         )?;
     }
     out["available"] = json!(true);
-    out["reason"] = json!("own_selected_event_start_and_noop_listener_verified");
+    out["reason"] = json!(if selected_only {
+        "own_selected_event_start_listener_verified"
+    } else {
+        "own_selected_event_start_and_noop_listener_verified"
+    });
     Ok(out)
 }

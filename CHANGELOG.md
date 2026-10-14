@@ -2,6 +2,9 @@
 
 ## Unreleased native preview
 
+- Add a compact exact selected-focus window observation after a fields-present
+  parsing failure in run035. Keep all original witnesses and action guards;
+  label selected-only listener provenance without claiming an absent NOOP.
 - Add read-only own equipment-line pages with complete collection validation,
   lossless snapshot-scoped handles and separate signed factory counters. Unknown
   layouts expose bounded metadata; equipment joins and allocation remain unavailable.
