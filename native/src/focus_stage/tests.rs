@@ -112,7 +112,9 @@ impl Fake {
         Self {
             queue: VecDeque::new(),
             last: state(23),
-            candidate: if stage == Stage::OpenPolitics {
+            candidate: if stage == Stage::ClosePolitics {
+                Candidate::ClosePolitics
+            } else if stage == Stage::OpenPolitics {
                 Candidate::OpenPolitics
             } else {
                 Candidate::Point(point())
@@ -655,4 +657,311 @@ fn late_verified_marker_write_failure_poison_retains_actual_evidence() {
     );
     assert_eq!(f.dispatches, 1);
     // No committed marker: do not claim independent reopen knows the failure.
+}
+
+fn close_state(mode: i32) -> OwnState {
+    let mut s = state(mode);
+    s.active_focus = ActiveFocus::Active("GER_rhineland".into());
+    s
+}
+#[test]
+fn close_politics_one_typed_q_preserves_exact_active_and_reopens_without_replay() {
+    {
+        let active = ActiveFocus::Active("GER_rhineland".into());
+        let sc = Scratch::new();
+        let mut j = Journal::open(&sc.path()).unwrap();
+        let mut before = close_state(12);
+        before.active_focus = active.clone();
+        let mut after = close_state(23);
+        after.active_focus = active.clone();
+        let mut f = Fake::sequence(Stage::ClosePolitics, before, after);
+        let e = run(
+            &mut j,
+            "close",
+            target(Stage::ClosePolitics),
+            &authority(),
+            &RwLock::new(true),
+            &mut f,
+            Duration::from_secs(2),
+        )
+        .unwrap();
+        assert_eq!(f.dispatches, 1);
+        assert_eq!(e.receipt.observed.active_focus, active);
+        assert_eq!(e.receipt.observed.managed_mode, Some(23));
+        assert!(!e.event_causality_verified);
+        drop(j);
+        let mut j = Journal::open(&sc.path()).unwrap();
+        let e = run(
+            &mut j,
+            "close",
+            target(Stage::ClosePolitics),
+            &authority(),
+            &RwLock::new(true),
+            &mut f,
+            Duration::from_secs(2),
+        )
+        .unwrap();
+        assert!(e.historical && !e.current_state_verified);
+        assert_eq!(f.dispatches, 1);
+        // Already hidden mode23 cannot supply a new close attempt/no-op receipt.
+        assert!(run(
+            &mut j,
+            "new",
+            target(Stage::ClosePolitics),
+            &authority(),
+            &RwLock::new(true),
+            &mut f,
+            Duration::from_secs(2)
+        )
+        .is_err());
+        assert_eq!(f.dispatches, 1);
+    }
+}
+#[test]
+fn close_politics_unknown_wrong_mode_roots_and_complete_blockers_never_dispatch() {
+    let mut bad = Vec::new();
+    for mode in [6, 13, 23] {
+        bad.push(close_state(mode));
+    }
+    let mut s = close_state(12);
+    s.active_focus = ActiveFocus::Unknown;
+    bad.push(s);
+    for root in [LocalRoot::Unknown, LocalRoot::Animating, LocalRoot::Hidden] {
+        let mut s = close_state(12);
+        s.politics_root = root;
+        bad.push(s);
+    }
+    for root in [LocalRoot::Unknown, LocalRoot::Animating, LocalRoot::Ready] {
+        let mut s = close_state(12);
+        s.focus_root = root;
+        bad.push(s);
+    }
+    for counts in [None, Some([1, 0]), Some([0, 1])] {
+        let mut s = close_state(12);
+        s.own_detail_counts = counts;
+        bad.push(s);
+        let mut s = close_state(12);
+        s.own_research_info_counts = counts;
+        bad.push(s);
+    }
+    let mut s = close_state(12);
+    s.canonical_focus_id = None;
+    bad.push(s);
+    let mut s = close_state(12);
+    s.epoch.game.start_ticks = "foreign".into();
+    bad.push(s);
+    for (index, s) in bad.into_iter().enumerate() {
+        let sc = Scratch::new();
+        let mut j = Journal::open(&sc.path()).unwrap();
+        let mut f = Fake::sequence(Stage::ClosePolitics, s, close_state(23));
+        assert!(run(
+            &mut j,
+            &format!("bad{index}"),
+            target(Stage::ClosePolitics),
+            &authority(),
+            &RwLock::new(true),
+            &mut f,
+            Duration::from_secs(2)
+        )
+        .is_err());
+        assert_eq!(f.dispatches, 0);
+        assert!(!j.blocks_game(&epoch().game));
+    }
+}
+#[test]
+fn close_politics_wrong_candidate_late_pre_change_and_post_change_are_distinct() {
+    for candidate in [Candidate::OpenPolitics, Candidate::Point(point())] {
+        let sc = Scratch::new();
+        let mut j = Journal::open(&sc.path()).unwrap();
+        let mut f = Fake::sequence(Stage::ClosePolitics, close_state(12), close_state(23));
+        f.candidate = candidate;
+        assert!(run(
+            &mut j,
+            "wrong",
+            target(Stage::ClosePolitics),
+            &authority(),
+            &RwLock::new(true),
+            &mut f,
+            Duration::from_secs(2)
+        )
+        .is_err());
+        assert_eq!(f.dispatches, 0);
+    }
+    for after_input in [false, true] {
+        let sc = Scratch::new();
+        let mut j = Journal::open(&sc.path()).unwrap();
+        let mut changed = close_state(if after_input { 23 } else { 12 });
+        changed.active_focus = ActiveFocus::Active("GER_other".into());
+        let mut f = Fake::new(Stage::ClosePolitics);
+        f.queue = if after_input {
+            VecDeque::from([Ok(close_state(12)), Ok(close_state(12)), Ok(changed)])
+        } else {
+            VecDeque::from([Ok(close_state(12)), Ok(changed)])
+        };
+        let e = run(
+            &mut j,
+            "changed",
+            target(Stage::ClosePolitics),
+            &authority(),
+            &RwLock::new(true),
+            &mut f,
+            Duration::from_secs(2),
+        )
+        .unwrap_err();
+        assert_eq!(
+            e.code,
+            if after_input {
+                "action_uncertain"
+            } else {
+                "focus_precondition"
+            }
+        );
+        assert_eq!(f.dispatches, usize::from(after_input));
+        drop(j);
+        let j = Journal::open(&sc.path()).unwrap();
+        assert_eq!(j.blocks_game(&epoch().game), after_input);
+    }
+}
+#[test]
+fn close_politics_unknown_delivery_missing_idle_and_late_read_quarantine_no_replay() {
+    for failure in 0..3 {
+        let sc = Scratch::new();
+        let mut j = Journal::open(&sc.path()).unwrap();
+        let mut f = Fake::sequence(Stage::ClosePolitics, close_state(12), close_state(23));
+        match failure {
+            0 => {
+                f.delivery = Delivery::Unknown;
+                f.queue.pop_back();
+            }
+            1 => f.idle = false,
+            _ => f.expire_readback = true,
+        };
+        // Unknown delivery with unchanged mode12 has no successful postcondition.
+        let e = run(
+            &mut j,
+            "uncertain",
+            target(Stage::ClosePolitics),
+            &authority(),
+            &RwLock::new(true),
+            &mut f,
+            Duration::from_millis(300),
+        )
+        .unwrap_err();
+        assert_eq!(e.code, "action_uncertain");
+        assert_eq!(f.dispatches, 1);
+        drop(j);
+        let mut j = Journal::open(&sc.path()).unwrap();
+        assert!(j.blocks_game(&epoch().game));
+        assert!(run(
+            &mut j,
+            "other",
+            target(Stage::OpenPolitics),
+            &authority(),
+            &RwLock::new(true),
+            &mut f,
+            Duration::from_secs(1)
+        )
+        .is_err());
+        assert_eq!(f.dispatches, 1);
+    }
+}
+#[test]
+fn close_politics_forged_terminal_active_focus_cannot_reopen() {
+    let sc = Scratch::new();
+    let mut j = Journal::open(&sc.path()).unwrap();
+    let mut f = Fake::sequence(Stage::ClosePolitics, close_state(12), close_state(23));
+    run(
+        &mut j,
+        "close",
+        target(Stage::ClosePolitics),
+        &authority(),
+        &RwLock::new(true),
+        &mut f,
+        Duration::from_secs(2),
+    )
+    .unwrap();
+    drop(j);
+    let mut lines: Vec<Receipt> = std::fs::read_to_string(sc.path())
+        .unwrap()
+        .lines()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .collect();
+    lines.last_mut().unwrap().observed.active_focus = ActiveFocus::Active("GER_other".into());
+    std::fs::write(
+        sc.path(),
+        lines
+            .into_iter()
+            .map(|r| format!("{}\n", serde_json::to_string(&r).unwrap()))
+            .collect::<String>(),
+    )
+    .unwrap();
+    assert_eq!(
+        Journal::open(&sc.path()).err().unwrap().code,
+        "invalid_journal"
+    );
+}
+
+#[test]
+fn close_politics_idle_or_other_canonical_active_refuses_before_candidate_transport_and_intent() {
+    for active in [
+        ActiveFocus::Idle,
+        ActiveFocus::Unknown,
+        ActiveFocus::Active("GER_other".into()),
+    ] {
+        let sc = Scratch::new();
+        let mut j = Journal::open(&sc.path()).unwrap();
+        let mut before = close_state(12);
+        before.active_focus = active;
+        assert!(!before.reached(&target(Stage::ClosePolitics)));
+        let mut f = Fake::sequence(Stage::ClosePolitics, before, close_state(23));
+        assert!(run(
+            &mut j,
+            "active-required",
+            target(Stage::ClosePolitics),
+            &authority(),
+            &RwLock::new(true),
+            &mut f,
+            Duration::from_secs(2)
+        )
+        .is_err());
+        assert_eq!(f.dispatches, 0);
+        assert!(j.receipts.is_empty());
+        assert!(!j.blocks_game(&epoch().game));
+        assert_eq!(std::fs::metadata(sc.path()).unwrap().len(), 0);
+    }
+}
+#[test]
+fn close_politics_forged_idle_intent_cannot_reopen_as_positive_active() {
+    let sc = Scratch::new();
+    let mut j = Journal::open(&sc.path()).unwrap();
+    let mut f = Fake::sequence(Stage::ClosePolitics, close_state(12), close_state(23));
+    run(
+        &mut j,
+        "close",
+        target(Stage::ClosePolitics),
+        &authority(),
+        &RwLock::new(true),
+        &mut f,
+        Duration::from_secs(2),
+    )
+    .unwrap();
+    drop(j);
+    let mut lines: Vec<Receipt> = std::fs::read_to_string(sc.path())
+        .unwrap()
+        .lines()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .collect();
+    lines[0].observed.active_focus = ActiveFocus::Idle;
+    std::fs::write(
+        sc.path(),
+        lines
+            .into_iter()
+            .map(|r| format!("{}\n", serde_json::to_string(&r).unwrap()))
+            .collect::<String>(),
+    )
+    .unwrap();
+    assert_eq!(
+        Journal::open(&sc.path()).err().unwrap().code,
+        "invalid_journal"
+    );
 }

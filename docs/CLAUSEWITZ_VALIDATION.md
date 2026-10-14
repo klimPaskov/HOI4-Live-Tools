@@ -2648,3 +2648,92 @@ and release linking. All11 optimized bundle payloads were hash-verified before
 Linux execution; five X11 cases used an isolated display under unchanged Yama1.
 These synthetic checks establish no corrected live worker acceptance. Fresh038
 must verify actual Start, active-focus waiting and budget-preserving update/restart.
+
+
+## Recorded daily Focus run038 — 14 October 2026
+
+Exact source `0b221d68179ff747b86e80dccd1038b131434f49` passed all nine
+Linux/Windows/macOS CI jobs after full reachable-history audit. One exclusive Luna
+medium player started the Focus-only worker in vanilla Normal, historical FAIR
+Germany at1January1936 noon, paused with four empty research slots. Recording
+began before the single campaign Start; frontend startup took395.085seconds
+under CPU emulation. Worker start RPC took328.5ms. The first45-second bounded
+wait returned `focus_changed` after8.443seconds, with fresh canonical Rhineland
+and zero rejected torn reads.
+
+Independent saved-journal review confirms one Start Intent followed by
+Verified/ServerConfirmed, canonical active `GER_remilitarize_the_rhineland`, a
+matching separate Focus goal audit, and core entry Complete with terminaltrue,
+after_sequence6 and exactly one consumed reservation. All three preparations
+were separately verified. No Start failure/retry, refusal or quarantine occurred.
+The transient-retry branch therefore has no live-trigger evidence from this run.
+
+Luna's subsequent fresh digests returned `verified:[]` and only
+`latest_verified_ids_historical:[focus-rhineland]`; their preparation summary
+correctly said goal_completedfalse, while the Start summary omitted completion.
+The player interpreted that presentation as incomplete and stopped without the
+revision2 update, positive-active waiting or restart. Preserve the original player
+result and the separate offline correction; the worker did complete the
+assignment, but the reporting and intended acceptance sequence failed. The second
+15-second wait returned normal wall_timeout with state_historicaltrue,
+current_state_verifiedfalse, age110ms and deadline_refusalnull. It validates the
+normal historical timeout response, not the late-read deadline-refusal branch.
+
+STOP retained used1/remaining0 and no pending core entries. Actual release=true
+and remaining0 were transferred to the canonical guest proof and independently
+read back against saved RPC receipts. The233-second H264512x288 recording passed
+ffprobe; requested recorder shutdown returned255. One ordinary owned window close
+produced exit0 in2.349seconds, signalnull/core_dumpedfalse, without fallback or
+replay. Exact owner/game identities were absent afterward under unchanged Yama1;
+both brokers exited130. No postfailure game observation or rescue occurred.
+Durable completion must be explicit beside separately fresh current-state evidence
+before the next Focus update/restart gate. No two-year or full campaign acceptance
+is established.
+
+
+## Durable completion reporting and disabled panel foundation — offline gates
+
+Digest and STOP now project checked durable assignment state directly from the
+locked governor, independent of the latest batch. Counts and latest completion
+(entry, original request, sequence and date) survive updates and restart; optional
+completed IDs truncate explicitly. All completion evidence remains historical,
+current_state_verifiedfalse/input_authorizedfalse. A fresh overview separately
+proves current active Focus. Unknown persistence refuses digest and blocks input;
+STOP preserves unavailable-summary and uncertainty information. Core Plan/state
+serialization, request identities, permissions and consumed budgets are unchanged.
+
+Meaningful generated checks cover actual completion, an empty later batch, plan
+update/restart without replay, known nonqueued and unresolved entries, externally
+replaced storage and retained poison, and256 completed assignments with bounded
+IDs/latest evidence. An initial large-batch test exposed the old formatter adding
+retained_count after optional IDs filled the2KB bound; essential counts now reserve
+space first. The original failure is preserved. Fixture-only timing and method-name
+failures, then a Linux immutable-lock compile failure and Clippy inspect_err issue,
+were corrected without relaxing production deadlines, persistence or input guards.
+Duplicate Focus waits and optional empty history are compacted; essential completion,
+budget and uncertainty remain. Generated active-wait and restarted-report shapes
+fit2KB, but the next recorded run must establish their live behavior.
+
+A separate ClosePolitics foundation remains hard-disabled in public parsing and
+the borrowed service. It admits only the exact canonical active requested Focus,
+settled own mode12 PoliticsReady/FocusHidden/full-zero detail/info blockers, and
+preserves that key through settled mode23 hidden readback. Generated tests verify
+pre-input refusal, post-input uncertainty, journal reopening and nonreplay. The
+installed-build static Q route is shortcut provenance, not live callback binding;
+OS preflight likewise is not callback proof. No cross-domain action is enabled.
+
+The final composed source passed646 Rust1.86 host checks,748 reported actual Linux
+checks (746 substantive, excluding two fixture helpers),953 Python tests (37
+skips), format, host/Linux Clippy, Linux MSRV compilation and optimized release
+linking. All11 bundle payloads were hash-verified before Linux execution. Five X11
+cases used their isolated display; the owned game had exited normally and exact
+processes were absent. Ownership and Yama1 were unchanged before/after. Initial
+failed logs remain separate from final passing logs. No live Focus update/restart,
+panel handoff, two-year run or full campaign is established by these fixtures.
+
+Historical count correction: summing every saved `test result` line, including
+the nested exec helper and generated WM helper, gives724 reported/722 substantive
+checks for worker-v21 and734/732 for retry-v22. Earlier723/721 and733/731 totals
+were arithmetic/helper-count errors. The original logs, cases and pass/fail
+outcomes are unchanged; the new748/746 total uses the same explicit two-helper
+exclusion consistently.

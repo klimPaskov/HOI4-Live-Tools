@@ -2,6 +2,15 @@
 
 ## Unreleased native preview
 
+- Report durable assignment completion separately from fresh observations and
+  batch receipts in digest/STOP. Preserve latest completion and counts when
+  optional IDs truncate; reserve essential counts before filling the 2KB bound.
+- Add a runtime-disabled typed ClosePolitics foundation with exact active-focus,
+  settled mode/root and blocker guards. Live shortcut and panel handoff acceptance
+  remain pending.
+- Record run038 worker-driven Rhineland Start and durable assignment completion
+  with one consumed attempt. Preserve the player reporting failure: digest
+  historical IDs obscured completion, so update/restart were not attempted.
 - Bound proven pre-input Focus Start torn-read retries inside the same in-flight
   reservation/request, preserving the original cause, history and daily budget.
   Surface core refusals beside preparation in digest/stop output.

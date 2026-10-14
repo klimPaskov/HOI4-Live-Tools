@@ -313,8 +313,22 @@ impl Controller {
                     })
                     .transpose()?
                     .unwrap_or(Value::Null);
+                let assignments = active
+                    .as_ref()
+                    .map(|a| -> Result<Value> {
+                        let mut governor = try_state(&a.governor)?;
+                        // STOP must still return its uncertainty evidence if a
+                        // durable file can no longer be verified.
+                        let summary = assignment_summary_or_unavailable(&mut governor);
+                        if summary["available"] == false {
+                            self.blocked.store(true, Ordering::Release);
+                        }
+                        Ok(summary)
+                    })
+                    .transpose()?
+                    .unwrap_or(Value::Null);
                 Ok(
-                    json!({"daily_budget":active.as_ref().and_then(|a|a.report.try_lock().ok().map(|r|r["daily_budget"].clone())).unwrap_or(Value::Null),"core_pending_historical":core_state,"focus":focus,"latest_focus_wait_historical":focus_wait,"worker_stopped":true,"game_time_changed":false,"uncertainty_retained":self.blocked.load(Ordering::Acquire),"last_error":last_error,"last_preparation_refusal":last_preparation_refusal,"last_stage_failure":last_stage_failure}),
+                    json!({"assignments":assignments,"daily_budget":active.as_ref().and_then(|a|a.report.try_lock().ok().map(|r|r["daily_budget"].clone())).unwrap_or(Value::Null),"core_pending_historical":core_state,"focus":focus,"latest_focus_wait_historical":focus_wait,"worker_stopped":true,"game_time_changed":false,"uncertainty_retained":self.blocked.load(Ordering::Acquire),"last_error":last_error,"last_preparation_refusal":last_preparation_refusal,"last_stage_failure":last_stage_failure}),
                 )
             }
             "digest" => {
@@ -337,6 +351,9 @@ impl Controller {
                         .map_err(|_| Error::new("input_busy", "Daily digest update in progress"))?
                         .clone();
                     report["daily_budget"] = json!({"day":day,"used_assignment_attempts":used,"limit":plan.max_actions_per_day,"remaining":if available {usize::from(plan.max_actions_per_day).saturating_sub(used)} else {0},"navigation_spends_assignment_budget":false});
+                    report["assignments"] = governor.assignment_summary().inspect_err(|_| {
+                        self.blocked.store(true, Ordering::Release);
+                    })?;
                     compact(
                         fresh,
                         &report,
@@ -1363,6 +1380,12 @@ impl DailyBackend<'_> {
     }
 }
 
+fn assignment_summary_or_unavailable(governor: &mut core::Governor) -> Value {
+    governor.assignment_summary().unwrap_or_else(|e| {
+        json!({"available":false,"source":"durable_plan",
+        "reason":e.code,"current_state_verified":false,"input_authorized":false})
+    })
+}
 fn compact(p: Produced, report: &Value, blocked: bool, revision: u64) -> Result<Value> {
     compact_observation(p.observation, report, blocked, revision)
 }
@@ -1398,6 +1421,7 @@ fn compact_observation(
         json!(crate::daily_observation::unix_ms()?.saturating_sub(observation.observed_unix_ms));
     digest["counts"] = json!(observation.counts);
     digest["daily_budget"] = report["daily_budget"].clone();
+    digest["assignments"] = report["assignments"].clone();
     digest["core_pending_historical"] = report["core_pending_historical"].clone();
     digest["running"] = report["running"].clone();
     digest["running_is_input_authority"] = json!(false);
@@ -1410,6 +1434,21 @@ fn compact_observation(
     digest["latest_focus_wait_historical"] = report["focus_wait"].clone();
     digest["quarantined"] = json!(blocked);
     digest["input_authorized"] = json!(false);
+    // Publish a duplicated wait only once. Absent optional history records do
+    // not establish current game state; their freshness remains historical.
+    let wait_duplicated = digest["focus"]["wait"].is_object()
+        && digest["focus"]["wait"] == digest["latest_focus_wait_historical"];
+    if let Some(focus) = digest.get_mut("focus").and_then(Value::as_object_mut) {
+        if wait_duplicated {
+            focus.remove("wait");
+        }
+        focus.retain(|_, value| !value.is_null());
+    }
+    for key in ["latest_preparation_historical", "core_pending_historical"] {
+        if digest[key].is_null() {
+            digest.as_object_mut().unwrap().remove(key);
+        }
+    }
     while serde_json::to_vec(&digest)
         .map_err(|e| Error::new("digest_error", e.to_string()))?
         .len()
@@ -1424,6 +1463,14 @@ fn compact_observation(
                 .filter(|v| !v.is_empty());
             if let Some(rows) = rows {
                 rows.pop();
+            } else if let Some(ids) = digest
+                .get_mut("assignments")
+                .and_then(|assignments| assignments.get_mut("completed_ids"))
+                .and_then(Value::as_array_mut)
+                .filter(|v| !v.is_empty())
+            {
+                ids.pop();
+                digest["assignments"]["completed_ids_truncated"] = json!(true);
             } else {
                 return Err(Error::new("digest_error", "Essential digest exceeds bound"));
             }
@@ -1534,6 +1581,70 @@ mod tests {
         assert_eq!(out["latest_preparation_historical"]["entry_id"], "pending");
         assert_eq!(out["verified"], json!([]));
         assert_eq!(out["input_authorized"], false);
+    }
+    #[test]
+    fn digest_keeps_durable_completion_when_batch_is_empty_and_rows_are_trimmed() {
+        let id = format!("focus-{}", "x".repeat(110));
+        let latest = json!({"entry_id":id,"state":"Complete","request_id":"a".repeat(64),"observed_sequence":6,"date_raw":60759371});
+        let assignments = json!({"available":true,"source":"durable_plan","plan_revision":2,
+            "historical":true,"current_state_verified":false,"input_authorized":false,
+            "total":256,"completed":255,"pending":1,"in_flight":0,
+            "completed_ids":[id,"b".repeat(128),"c".repeat(128),"d".repeat(128)],
+            "completed_ids_truncated":true,"latest_completion":latest});
+        let report = json!({"running":true,"last_error":null,"assignments":assignments,
+            "daily_budget":{"day":706640,"used_assignment_attempts":1,"limit":1,"remaining":0},
+            "last_batch":{"digest":{"date_raw":60759371,"plan_revision":2,"verified":[],"retained":[],"retained_count":0}},
+            "focus":{"preparation":{"entry_id":id,"stage":"View","request_id":"b".repeat(64),"verified":true,"goal_completed":false,"historical":true},
+                "start":{"entry_id":id,"stage":"Start","request_id":"a".repeat(64),"historical":true}}});
+        let out = compact_observation(digest_sample(), &report, false, 2).unwrap();
+        assert!(serde_json::to_vec(&out).unwrap().len() <= 2048);
+        assert!(
+            out["assignments"]["completed_ids"]
+                .as_array()
+                .unwrap()
+                .len()
+                < 4
+        );
+        assert_eq!(out["assignments"]["latest_completion"], latest);
+        assert_eq!(out["assignments"]["completed"], 255);
+        assert_eq!(out["assignments"]["completed_ids_truncated"], true);
+        assert_eq!(out["assignments"]["current_state_verified"], false);
+        assert_eq!(out["focus"]["preparation"]["goal_completed"], false);
+        assert_eq!(out["verified"], json!([]));
+        assert_eq!(out["daily_budget"]["used_assignment_attempts"], 1);
+        assert_eq!(out["input_authorized"], false);
+    }
+    #[test]
+    fn completed_focus_plus_positive_active_wait_fits_digest_without_replay_authority() {
+        let wait = json!({"entry_id":"focus-next","active_focus_id":"GER_remilitarize_the_rhineland",
+            "date_raw":60759371,"observed_unix_ms":12345,"source":"native witnessed own focus",
+            "historical":true,"navigation_attempted":false,"assignment_budget_consumed":false});
+        let latest = json!({"entry_id":"focus-rhineland","state":"Complete","request_id":"a".repeat(64),"observed_sequence":6,"date_raw":60759371});
+        let report = json!({"running":true,"last_error":null,"focus_permission":true,
+            "assignments":{"available":true,"source":"durable_plan","plan_revision":2,"historical":true,
+                "current_state_verified":false,"input_authorized":false,"total":2,"completed":1,"pending":1,"in_flight":0,
+                "completed_ids":["focus-rhineland"],"completed_ids_truncated":false,"latest_completion":latest},
+            "daily_budget":{"day":706640,"used_assignment_attempts":1,"limit":1,"remaining":0,"navigation_spends_assignment_budget":false},
+            "last_batch":{"digest":{"date_raw":60759371,"plan_revision":1,"country":"GER","counts_scope":"observed own categories; null is unknown","review_due":false,"blocking_decision":null,"verified":["focus-rhineland"],"retained":[],"retained_count":0}},
+            "focus":{"preparation":{"entry_id":"focus-rhineland","stage":"View","request_id":"b".repeat(64),"verified":true,"goal_completed":false,"historical":true},
+                "start":{"entry_id":"focus-rhineland","stage":"Start","request_id":"a".repeat(64),"historical":true},
+                "wait":wait,"refusal":null,"failure":null,"uncertainty":null,"start_failure":null},"focus_wait":wait});
+        for restarted in [false, true] {
+            let mut report = report.clone();
+            if restarted {
+                report["last_batch"] = Value::Null;
+            }
+            let out = compact_observation(digest_sample(), &report, false, 2).unwrap();
+            assert!(serde_json::to_vec(&out).unwrap().len() <= 2048);
+            assert_eq!(out["assignments"]["latest_completion"], latest);
+            assert_eq!(out["assignments"]["completed"], 1);
+            assert_eq!(out["assignments"]["pending"], 1);
+            assert_eq!(out["latest_focus_wait_historical"], wait);
+            assert!(out["focus"].get("wait").is_none());
+            assert_eq!(out["daily_budget"]["used_assignment_attempts"], 1);
+            assert_eq!(out["input_authorized"], false);
+            assert_eq!(out["verified"], json!([]));
+        }
     }
     #[test]
     fn player_json_cannot_supply_trusted_scope_or_process_pointers() {

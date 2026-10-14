@@ -24,6 +24,8 @@ use std::{
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub enum Stage {
     OpenPolitics,
+    /// Prospective mode12-to23 Q; production service hard-disabled.
+    ClosePolitics,
     OpenFocus,
     View,
     Start,
@@ -142,6 +144,13 @@ impl OwnState {
             return false;
         }
         match t.stage {
+            Stage::ClosePolitics => {
+                matches!(&self.active_focus, ActiveFocus::Active(id) if id == &t.focus_id)
+                    && self.managed_mode == Some(23)
+                    && self.politics_root == LocalRoot::Hidden
+                    && self.focus_root == LocalRoot::Hidden
+                    && self.blockers_clear()
+            }
             Stage::OpenPolitics => {
                 self.managed_mode == Some(12)
                     && self.politics_root == LocalRoot::Ready
@@ -174,6 +183,13 @@ impl OwnState {
             ));
         }
         let ok = match t.stage {
+            Stage::ClosePolitics => {
+                matches!(&self.active_focus, ActiveFocus::Active(id) if id == &t.focus_id)
+                    && self.managed_mode == Some(12)
+                    && self.politics_root == LocalRoot::Ready
+                    && self.focus_root == LocalRoot::Hidden
+                    && self.blockers_clear()
+            }
             Stage::OpenPolitics => {
                 self.managed_mode == Some(23)
                     && self.politics_root == LocalRoot::Hidden
@@ -214,6 +230,8 @@ impl OwnState {
 }
 #[derive(Clone, Debug)]
 pub enum Candidate {
+    /// Distinct fixed Q candidate, never a generic panel escape.
+    ClosePolitics,
     /// Fixed ordinary shortcut; no coordinates or arbitrary key arguments.
     OpenPolitics,
     Point(PointCandidate),
@@ -461,7 +479,10 @@ impl Journal {
             request_id(&receipt.request_id)?;
             receipt.target.validate_key()?;
             receipt.observed.validate(&receipt.target)?;
-            if receipt.version != 1
+            if (receipt.target.stage == Stage::ClosePolitics
+                && receipt.status == Status::Intent
+                && receipt.observed.preflight(&receipt.target).is_err())
+                || receipt.version != 1
                 || (receipt.status == Status::Verified
                     && !receipt.observed.reached(&receipt.target))
                 || (receipt.status == Status::Intent && receipt.delivery.is_some())
@@ -478,10 +499,13 @@ impl Journal {
                     return Err(error("invalid_journal", "Invalid focus receipt transition"));
                 }
                 if (receipt.status == Status::Verified
-                    && !matches!(
-                        receipt.delivery,
-                        Some(Delivery::Unknown | Delivery::ServerConfirmed)
-                    ))
+                    && receipt.target.stage == Stage::ClosePolitics
+                    && receipt.observed.active_focus != previous.observed.active_focus)
+                    || (receipt.status == Status::Verified
+                        && !matches!(
+                            receipt.delivery,
+                            Some(Delivery::Unknown | Delivery::ServerConfirmed)
+                        ))
                     || (receipt.status == Status::NotQueued
                         && receipt.observed != previous.observed)
                 {
@@ -490,7 +514,9 @@ impl Journal {
                         "Focus terminal record contradicts durable intent",
                     ));
                 }
-            } else if receipt.status == Status::NotQueued
+            } else if (receipt.target.stage == Stage::ClosePolitics
+                && receipt.status == Status::Verified)
+                || receipt.status == Status::NotQueued
                 || (receipt.status == Status::Verified && receipt.delivery.is_some())
             {
                 return Err(error("invalid_journal", "Missing durable focus intent"));
@@ -701,7 +727,7 @@ impl Journal {
         let before = backend.observe()?;
         live(authority, token, &target, deadline, gate)?;
         before.validate(&target)?;
-        if before.reached(&target) {
+        if before.reached(&target) && target.stage != Stage::ClosePolitics {
             let receipt = self.append(Receipt {
                 version: 1,
                 request_id: id.into(),
@@ -722,7 +748,10 @@ impl Journal {
         let candidate = backend.candidate(&target)?;
         match &candidate {
             Candidate::OpenPolitics if target.stage == Stage::OpenPolitics => {}
-            Candidate::Point(point) if target.stage != Stage::OpenPolitics => {
+            Candidate::ClosePolitics if target.stage == Stage::ClosePolitics => {}
+            Candidate::Point(point)
+                if !matches!(target.stage, Stage::OpenPolitics | Stage::ClosePolitics) =>
+            {
                 if point.input_authorized
                     || point.current_frame_verified
                     || point.effective_routing_verified
@@ -753,6 +782,12 @@ impl Journal {
         let fresh = backend.observe()?;
         fresh.validate(&target)?;
         fresh.preflight(&target)?;
+        if target.stage == Stage::ClosePolitics && fresh.active_focus != before.active_focus {
+            return Err(error(
+                "torn_read",
+                "Canonical active focus changed before ClosePolitics input",
+            ));
+        }
         live(authority, token, &target, deadline, gate)?;
         if self
             .file
@@ -829,6 +864,11 @@ impl Journal {
                             "action_uncertain",
                             "Readback completed after bounded deadline",
                         ));
+                    }
+                    if target.stage == Stage::ClosePolitics
+                        && state.active_focus != intent.observed.active_focus
+                    {
+                        return Err(error("action_uncertain", "Canonical active focus changed after ClosePolitics input; never replay"));
                     }
                     if state.reached(&target) {
                         backend.confirm_input_idle(&candidate,deadline).map_err(|_|error(

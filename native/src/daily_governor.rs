@@ -514,6 +514,54 @@ impl Governor {
     pub fn entry_state(&self, id: &str) -> Option<&EntryState> {
         self.state.entries.get(id)
     }
+    /// Durable assignment history, independent of the latest batch and current
+    /// game state. Caller holds the governor lock; this never authorizes input.
+    #[cfg(any(target_os = "linux", all(test, unix)))]
+    pub(crate) fn assignment_summary(&mut self) -> Result<Value> {
+        if self.poisoned {
+            return Err(Error::new(
+                "governor_quarantined",
+                "Assignment persistence is unverified",
+            ));
+        }
+        if let Err(error) = self.store.check() {
+            self.poisoned = true;
+            return Err(error);
+        }
+        let mut complete = Vec::new();
+        let mut pending = 0;
+        let mut in_flight = 0;
+        for entry in &self.state.plan.entries {
+            match self.state.entries.get(&entry.id) {
+                Some(EntryState::Complete { attempt, observed }) => {
+                    complete.push((entry, attempt, observed));
+                }
+                Some(EntryState::Pending { .. }) => pending += 1,
+                Some(EntryState::Intent { .. }) => in_flight += 1,
+                None => return Err(Error::new("invalid_plan_state", "Assignment state missing")),
+            }
+        }
+        complete.sort_by(|a, b| {
+            b.2.sequence
+                .cmp(&a.2.sequence)
+                .then_with(|| a.0.id.cmp(&b.0.id))
+        });
+        let latest = complete.first().map(|(entry, attempt, observed)| {
+            json!({"entry_id":entry.id,"state":"Complete","request_id":attempt.request_id,
+                "observed_sequence":observed.sequence,"date_raw":observed.date_raw})
+        });
+        let ids: Vec<_> = complete
+            .iter()
+            .take(4)
+            .map(|(entry, _, _)| entry.id.as_str())
+            .collect();
+        Ok(
+            json!({"available":true,"source":"durable_plan","plan_revision":self.state.plan.revision,
+            "historical":true,"current_state_verified":false,"input_authorized":false,
+            "total":self.state.plan.entries.len(),"completed":complete.len(),"pending":pending,"in_flight":in_flight,
+            "completed_ids":ids,"completed_ids_truncated":complete.len()>ids.len(),"latest_completion":latest}),
+        )
+    }
     /// Trusted owner-only plan update. The caller checks the shared controller,
     /// lease, fresh scope and ALL input journals before exposing this through MCP.
     /// Existing work/specifications and evidence cannot be removed or replaced;
@@ -953,7 +1001,16 @@ impl Governor {
         verified: &[String],
         blocking: Option<&str>,
     ) -> Result<Value> {
+        let total = self
+            .state
+            .entries
+            .values()
+            .filter(|s| !matches!(s, EntryState::Complete { .. }))
+            .count();
         let mut out = json!({"date_raw":o.date_raw,"observed_unix_ms":o.observed_unix_ms,"age_ms":now.saturating_sub(o.observed_unix_ms),"source":o.source,"country":o.scope.epoch.player,"plan_revision":self.state.plan.revision,"counts":o.counts,"counts_scope":"observed own categories; null is unknown","review_due":self.state.plan.review_day.is_some_and(|d|self.state.last_day.is_some_and(|day|day>=d)),"verified":[],"retained":[],"blocking_decision":blocking,"input_authorized":false});
+        // Reserve essential counts before admitting optional IDs; otherwise a
+        // full verified-ID list can leave no room for the count added later.
+        out["retained_count"] = json!(total);
         for id in verified {
             let mut candidate = out.clone();
             candidate["verified"]
@@ -968,13 +1025,6 @@ impl Governor {
                 out = candidate;
             }
         }
-        let total = self
-            .state
-            .entries
-            .values()
-            .filter(|s| !matches!(s, EntryState::Complete { .. }))
-            .count();
-        out["retained_count"] = json!(total);
         for entry in &self.state.plan.entries {
             if let Some(EntryState::Pending {
                 reason, reason_day, ..

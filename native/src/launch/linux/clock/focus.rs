@@ -131,6 +131,13 @@ pub(super) fn execute_internal(
     target: stage::Target,
     until: Instant,
 ) -> Result<(stage::Execution, Option<Value>)> {
+    // Prospective only: public parser and governor do not route this stage.
+    if target.stage == stage::Stage::ClosePolitics {
+        return Err(Error::new(
+            "capability_unavailable",
+            "ClosePolitics requires recorded mode12-to23 validation; prospective only",
+        ));
+    }
     drop(input_permit(gate)?);
     state.authority.authorize(token, &state.guard.epoch)?;
     if target.epoch != state.guard.epoch {
@@ -177,6 +184,7 @@ pub(super) fn execute_internal(
         target: target.clone(),
         scope: None,
         candidate_selection: None,
+        close_active: None,
         last_transport: None,
         until,
     };
@@ -203,6 +211,7 @@ struct FocusBackend<'a> {
     authority: &'a Path,
     target: stage::Target,
     scope: Option<state::Scope>,
+    close_active: Option<stage::ActiveFocus>,
     candidate_selection: Option<Selection>,
     last_transport: Option<Value>,
     until: Instant,
@@ -348,10 +357,18 @@ impl stage::Backend for FocusBackend<'_> {
         let o = observed(self.process, self.guard, target, &mut self.scope, false)?;
         o.state.validate(target)?;
         o.state.preflight(target)?;
-        if target.stage == stage::Stage::OpenPolitics {
+        if matches!(
+            target.stage,
+            stage::Stage::OpenPolitics | stage::Stage::ClosePolitics
+        ) {
             self.controls
                 .preflight(self.process, &ControlKey::PoliticsPanel)?;
-            return Ok(stage::Candidate::OpenPolitics);
+            return Ok(if target.stage == stage::Stage::ClosePolitics {
+                self.close_active = Some(o.state.active_focus);
+                stage::Candidate::ClosePolitics
+            } else {
+                stage::Candidate::OpenPolitics
+            });
         }
         let (point, context) = point(
             self.process,
@@ -380,10 +397,20 @@ impl stage::Backend for FocusBackend<'_> {
         let mut pin = self.scope.clone();
         let profile = self.profile;
         let selected = self.candidate_selection.clone();
+        let close_active = self.close_active.clone();
         let fresh_check = |guard: &mut Guard, pin: &mut Option<state::Scope>| -> Result<()> {
             let o = observed(process, guard, &target, pin, false)?;
             o.state.validate(&target)?;
             o.state.preflight(&target)?;
+            if close_active
+                .as_ref()
+                .is_some_and(|expected| expected != &o.state.active_focus)
+            {
+                return Err(Error::new(
+                    "torn_read",
+                    "Pinned canonical active focus changed before ClosePolitics Q",
+                ));
+            }
             if let Some(expected) = &selected {
                 if expected != &(o.context.selected, o.context.matching_details) {
                     return Err(Error::new(
@@ -395,7 +422,13 @@ impl stage::Backend for FocusBackend<'_> {
             Ok(())
         };
         match candidate {
-            stage::Candidate::OpenPolitics if target.stage == stage::Stage::OpenPolitics => {
+            candidate @ (stage::Candidate::OpenPolitics | stage::Candidate::ClosePolitics)
+                if matches!(
+                    (candidate, target.stage),
+                    (stage::Candidate::OpenPolitics, stage::Stage::OpenPolitics)
+                        | (stage::Candidate::ClosePolitics, stage::Stage::ClosePolitics)
+                ) =>
+            {
                 let mut may_queue = false;
                 let result = self.controls.send_until_checked(
                     process,
@@ -425,7 +458,12 @@ impl stage::Backend for FocusBackend<'_> {
                 self.last_transport = Some(diagnostic);
                 delivery
             }
-            stage::Candidate::Point(original) if target.stage != stage::Stage::OpenPolitics => {
+            stage::Candidate::Point(original)
+                if !matches!(
+                    target.stage,
+                    stage::Stage::OpenPolitics | stage::Stage::ClosePolitics
+                ) =>
+            {
                 match self.controls.prepare_left_click_until(
                     process,
                     PointerDisplay {
@@ -480,7 +518,7 @@ impl stage::Backend for FocusBackend<'_> {
             return Err(Error::new("focus_deadline", "Input-idle deadline ended"));
         }
         match candidate {
-            stage::Candidate::OpenPolitics => self
+            stage::Candidate::OpenPolitics | stage::Candidate::ClosePolitics => self
                 .controls
                 .preflight(self.process, &ControlKey::PoliticsPanel),
             stage::Candidate::Point(point) => {
@@ -508,6 +546,7 @@ mod tests {
         for value in [
             json!({"stage":"start","focus_id":"GER_rhineland","request_id":"x","lease_token":"t","x":1}),
             json!({"stage":"callback","focus_id":"GER_rhineland","request_id":"x","lease_token":"t"}),
+            json!({"stage":"close_politics","focus_id":"GER_rhineland","request_id":"x","lease_token":"t"}),
             json!({"stage":"start","focus_id":"../foreign","request_id":"x","lease_token":"t"}),
             json!({"stage":"start","focus_id":"GER_rhineland","request_id":"bad token","lease_token":"t"}),
         ] {

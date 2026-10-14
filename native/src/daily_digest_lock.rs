@@ -6,14 +6,17 @@ use std::{
 };
 /// The same gate used by the worker must be obtained before touching producer.
 #[cfg(any(target_os = "linux", test))]
-pub(crate) fn governed<T, R>(governor: &Mutex<T>, body: impl FnOnce(&T) -> Result<R>) -> Result<R> {
-    let guard = governor.try_lock().map_err(|e| match e {
+pub(crate) fn governed<T, R>(
+    governor: &Mutex<T>,
+    body: impl FnOnce(&mut T) -> Result<R>,
+) -> Result<R> {
+    let mut guard = governor.try_lock().map_err(|e| match e {
         TryLockError::WouldBlock => Error::new("input_busy", "Daily worker owns governor"),
         TryLockError::Poisoned(_) => {
             Error::new("action_uncertain", "Daily governor mutex poisoned")
         }
     })?;
-    body(&guard)
+    body(&mut guard)
 }
 pub(crate) fn acquire<T>(mutex: &Mutex<T>, until: Option<Instant>) -> Result<MutexGuard<'_, T>> {
     acquire_with(mutex, until, Instant::now, std::thread::park_timeout)

@@ -67,7 +67,25 @@ input gates, and time remaining under the original deadline. It preserves the
 first detailed cause beside later errors. Intent, delivery, uncertainty, poison
 or a finished nonqueued reservation never supplies retry authority. Digest and
 stop summaries include core pending reasons and reserved budget. Recorded
-run037 remains an immutable failed gate; corrected worker live validation is pending.
+run037 remains an immutable failed gate. Run038 verified worker Start and durable
+completion with one consumed attempt; no retry was triggered. Its digest obscured
+completion from Luna, so active-focus waiting and update/restart remain untested.
+
+Digest and STOP now include `assignments`: a checked durable-plan summary with
+completed/pending/in-flight counts and the latest completion's entry, request,
+sequence and date. This survives empty batches and restart. It is explicitly
+historical and never proves the focus currently active; use a fresh overview for
+that. Optional completed IDs may truncate within the 2KB digest, while counts and
+latest completion remain. Optional empty history fields are omitted and duplicate
+wait records appear once. A View preparation still does not complete an assignment.
+Unverified durable storage refuses a digest and blocks input; STOP retains an
+unavailable summary and the uncertainty information.
+
+A prospective typed ClosePolitics stage is runtime-disabled. It requires the
+exact canonical active focus, settled own Politics mode12, hidden Focus and zero
+detail/info blockers, then preserves that focus through settled mode23 readback.
+Static shortcut evidence and fixtures do not establish live callback binding or
+cross-domain acceptance. Public parsing and the borrowed executor still refuse it.
 
 Wait timeouts return only the last earlier accepted sample, explicitly marked
 `state_historical: true`, `current_state_verified: false` and

@@ -26,10 +26,13 @@ strategic automation and campaign acceptance remain unfinished.
 
 The new daily Focus preview is default-off and requires independent owner and
 plan permissions. It preserves shared budgets and separate uncertainty histories;
-its worker execution and combined focus/research UI handoff still need live tests.
+its combined focus/research UI handoff still needs live tests.
 Run037 verified worker preparation through View, then recorded a known nonqueued
 Start-read failure that exhausted its single reservation. No Start was delivered;
-bounded retry handling and timeout reporting are the next corrections.
+bounded retry handling and timeout reporting were subsequently corrected.
+Recorded run038 then passed worker-driven Rhineland Start and durable assignment
+completion with one consumed attempt. Luna stopped because the digest obscured
+that completion; active-focus waiting, plan updates and restart remain untested.
 
 | Runtime | Verified | Remaining |
 | --- | --- | --- |
@@ -96,21 +99,13 @@ exact-key diagnostics measured 116/120 ms. Scope, hardware and validation limits
 are documented in [the comparison](docs/CLAUSEWITZ_COMPARISON.md) and
 [live evidence](docs/CLAUSEWITZ_VALIDATION.md), including failures and clean exits.
 
-The research preview opens the own panel, selects empty slots and navigates
-folders with verified state readback. Recorded run 025 passed ordinary clock
-control, four research assignments and advancement to 5 January 1936. The earlier
-run 024 clock uncertainty remains unexplained. Opt-in focus stages and a daily
-worker now pass fixtures. Recorded run026 verified focus opening, then refused
-selection because owned root closure was missing; that cause remains unresolved.
-The current worker adds durable panel/slot/category navigation, plan updates and
-several research assignments within a persisted daily budget. Recorded run030
-passed worker-only refill of all four slots on one paused day, idempotent plan
-updates and restart without replay or budget reset. Bounded pre-input retries
-preserved the original torn-read history. Earlier failed runs remain documented;
-returning from a failed open tree to another slot is still unavailable. Broader
-strategic adapters and Windows/macOS live adapters remain
-unfinished. Three-OS CI tests
-shared code and fixtures; compilation is not live compatibility or campaign acceptance.
+Research uses exact technology IDs, verified panel/slot/category navigation and
+a persisted shared daily budget. Focus has separate owner and plan permissions;
+its worker now has recorded Start and completion evidence. Completed-technology
+refill, Focus update/restart, combined panel switching and broader strategic
+adapters remain acceptance gates. Earlier failures, including unresolved clock
+uncertainty, are preserved in the validation report. Three-OS CI checks shared
+code and fixtures; Windows/macOS live adapters still need independent validation.
 
 ## Development
 

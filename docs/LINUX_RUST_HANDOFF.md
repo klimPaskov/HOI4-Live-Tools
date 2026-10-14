@@ -4,7 +4,29 @@ User direction, 12 October 2026: stop the Mac screenshot-driven live tests and
 replace the primary runtime with a fast Rust MCP based on Clausewitz-MCP.
 Linux is the first live target; Windows and macOS remain required platforms.
 
-**Latest live result:** run036 passed one exact Rhineland Start with fresh
+**Latest live result:** run038 passed worker-driven Rhineland Start and durable
+assignment completion. Its saved action receipt is Verified/ServerConfirmed with
+canonical active Rhineland; the core entry is Complete, terminaltrue, sequence6,
+with one consumed attempt and no quarantine. Luna's fresh digests cleared the
+batch `verified` list and exposed completion only as historical IDs, so the player
+stopped before revision2 or restart. Preserve that original player report alongside
+the independent saved-journal correction. Clarify durable completion versus fresh
+current-state evidence before the next gate. Active-focus waiting, idempotent update,
+budget-preserving restart and cross-domain handoff remain unverified for Focus.
+The next source reports durable assignment counts/latest completion explicitly
+on digest and STOP, separately from fresh current state. Luna must check that
+summary plus a fresh overview before continuing; an empty batch `verified` list
+does not negate durable Complete. Optional history truncation preserves counts,
+latest completion, uncertainty and budget. The prospective typed ClosePolitics
+stage remains hard-disabled pending its own recorded ordinary shortcut gate.
+The composed source passed646 Rust1.86 host checks,748 reported actual Linux
+checks (746 substantive),953 Python tests (37 skips), format/Clippy/MSRV and
+release linking. Raw historical recounts correct the earlier worker/retry totals
+to724/722 and734/732 respectively; the original saved logs remain unchanged.
+The233-second recording passed ffprobe; canonical lease proof/readback, normal
+owned exit0 and exact process absence passed. No full campaign has passed.
+
+**Earlier manual result:** run036 passed one exact Rhineland Start with fresh
 canonical active-focus readback, after verified opens/View and the compact
 selected-detail gate. It used exclusive Luna medium control in vanilla
 Normal/historical Germany; no post-Start game observation or clock change.
@@ -30,7 +52,8 @@ Later wait deadline refusals return only explicitly historical earlier evidence;
 late payloads remain discarded and real scope/ownership errors propagate. The
 composed source passed634 Rust1.86 host tests,733 reported actual Linux checks
 (731 substantive),953 Python tests (37 skips), compiler/format/Clippy/MSRV and
-release-link gates. Recorded run038 must verify the corrected worker.
+release-link gates. Run038 verified Start/completion and normal historical timeout;
+no pre-input retry or late-read timeout branch occurred in that run.
 
 The new source wires a default-off daily Focus preview using the borrowed manual
 executor, strict fresh Start receipt conversion, ordered pending head and separate
@@ -41,7 +64,7 @@ budgets stay independent. Positive other-active Focus heads wait without input,
 including when the shared daily budget is exhausted. Late returns retain actual
 verified evidence and separately record quarantine; failed persistence poisons
 the live owner but an unchanged old file cannot prove an uncommitted marker.
-The borrowed path and worker need recorded run037 validation. Cross-domain UI
+The borrowed worker path passed Start in run038. Cross-domain UI
 handoff remains unavailable; the next test is Focus-only.
 The composed worker passed624 Rust1.86 host tests,723 reported actual Linux
 checks (721 substantive),953 Python tests (37 skips), format, host/Linux Clippy,

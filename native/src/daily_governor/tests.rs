@@ -1593,3 +1593,142 @@ fn focus_wait_never_consumes_budget_or_day_and_update_restart_keeps_original_lim
         complete
     );
 }
+
+#[test]
+#[cfg(unix)]
+fn assignment_summary_survives_empty_batch_update_restart_without_fresh_authority() {
+    let t = Temp::new();
+    let p = plan();
+    let mut b = Fake::new(&p);
+    let mut g = Governor::open(&t.path(), p.clone()).unwrap();
+    assert_eq!(g.assignment_summary().unwrap()["completed"], 0);
+    assert_eq!(run(&mut g, &mut b).unwrap().verified.len(), 2);
+    let summary = g.assignment_summary().unwrap();
+    assert_eq!(summary["completed"], 2);
+    assert_eq!(summary["pending"], 0);
+    assert_eq!(summary["latest_completion"]["entry_id"], "focus-1");
+    assert_eq!(summary["latest_completion"]["state"], "Complete");
+    assert_eq!(summary["current_state_verified"], false);
+    assert_eq!(summary["input_authorized"], false);
+    let latest = summary["latest_completion"].clone();
+    assert!(run(&mut g, &mut b).unwrap().verified.is_empty());
+    assert_eq!(g.assignment_summary().unwrap()["latest_completion"], latest);
+    let next = extended(p);
+    assert!(g.update_plan(next.clone()).unwrap());
+    let updated = g.assignment_summary().unwrap();
+    assert_eq!(updated["plan_revision"], 2);
+    assert_eq!(updated["completed"], 2);
+    assert_eq!(updated["pending"], 1);
+    assert_eq!(updated["latest_completion"], latest);
+    drop(g);
+    let mut g = Governor::open(&t.path(), next).unwrap();
+    assert_eq!(g.assignment_summary().unwrap(), updated);
+    assert_eq!(
+        g.used_actions((i64::from(b.obs.date_raw) - 43_800_000).div_euclid(24)),
+        2
+    );
+    assert_eq!(b.sends, 2);
+}
+
+#[test]
+#[cfg(unix)]
+fn assignment_summary_never_promotes_nonqueued_or_unresolved_intent() {
+    for mode in [Mode::NotQueued, Mode::Uncertain] {
+        let t = Temp::new();
+        let p = plan();
+        let mut b = Fake::new(&p);
+        b.mode = mode;
+        let mut g = Governor::open(&t.path(), p).unwrap();
+        let _ = run(&mut g, &mut b);
+        let summary = g.assignment_summary().unwrap();
+        assert_eq!(summary["completed"], 0);
+        assert!(summary["latest_completion"].is_null());
+        assert_eq!(summary["input_authorized"], false);
+        assert_eq!(summary["current_state_verified"], false);
+        match mode {
+            Mode::NotQueued => assert_eq!(summary["pending"], 2),
+            Mode::Uncertain => assert_eq!(summary["in_flight"], 1),
+            _ => unreachable!(),
+        }
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn assignment_summary_refuses_replaced_store_and_stays_poisoned() {
+    let t = Temp::new();
+    let p = plan();
+    let mut b = Fake::new(&p);
+    let mut g = Governor::open(&t.path(), p).unwrap();
+    run(&mut g, &mut b).unwrap();
+    let old = t.root.join("old.json");
+    fs::rename(t.path(), &old).unwrap();
+    fs::write(t.path(), "{}").unwrap();
+    fs::set_permissions(t.path(), fs::Permissions::from_mode(0o600)).unwrap();
+    assert!(g.assignment_summary().is_err());
+    fs::remove_file(t.path()).unwrap();
+    fs::rename(old, t.path()).unwrap();
+    assert_eq!(
+        g.assignment_summary().unwrap_err().code,
+        "governor_quarantined"
+    );
+}
+
+#[test]
+#[cfg(unix)]
+fn assignment_summary_bounds_ids_but_keeps_latest_of_256_actual_completions() {
+    let t = Temp::new();
+    let mut p = plan();
+    p.review_day = None;
+    p.max_actions_per_day = 16;
+    p.max_observation_age_ms = 5000;
+    p.entries = (0..256)
+        .map(|i| Entry {
+            id: format!("focus-{i}-{}", "x".repeat(90)),
+            intent: Intent::Focus {
+                focus_id: format!("GER_generated_{i}"),
+            },
+            navigation: None,
+        })
+        .collect();
+    let mut b = Fake::new(&p);
+    let mut g = Governor::open(&t.path(), p.clone()).unwrap();
+    for (i, entry) in p.entries.iter().enumerate() {
+        b.day((i / 16 + 1) as i64);
+        g.continue_entry(
+            &mut b,
+            &entry.id,
+            10000,
+            Instant::now() + Duration::from_secs(10),
+        )
+        .unwrap();
+    }
+    let summary = g.assignment_summary().unwrap();
+    assert_eq!(b.sends, 256);
+    assert_eq!(summary["total"], 256);
+    assert_eq!(summary["completed"], 256);
+    assert_eq!(summary["completed_ids"].as_array().unwrap().len(), 4);
+    assert_eq!(summary["completed_ids_truncated"], true);
+    assert_eq!(summary["latest_completion"]["entry_id"], p.entries[255].id);
+    assert!(serde_json::to_vec(&summary).unwrap().len() < 1400);
+    assert!(!serde_json::to_string(&summary)
+        .unwrap()
+        .contains("/owned/hoi4"));
+}
+
+#[test]
+#[cfg(unix)]
+fn digest_reserves_unfinished_count_before_long_verified_ids() {
+    let t = Temp::new();
+    let p = plan();
+    let b = Fake::new(&p);
+    let g = Governor::open(&t.path(), p).unwrap();
+    let ids = (0..16)
+        .map(|i| format!("generated-{i}-{}", "x".repeat(110)))
+        .collect::<Vec<_>>();
+    let digest = g.digest(&b.obs, 10000, &ids, None).unwrap();
+    assert!(serde_json::to_vec(&digest).unwrap().len() <= 2048);
+    assert_eq!(digest["retained_count"], 2);
+    assert!(digest["verified"].as_array().unwrap().len() < ids.len());
+    assert_eq!(digest["input_authorized"], false);
+}
