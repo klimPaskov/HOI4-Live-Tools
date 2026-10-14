@@ -2,6 +2,18 @@
 
 ## Unreleased native preview
 
+- Add read-only own equipment-line pages with complete collection validation,
+  lossless snapshot-scoped handles and separate signed factory counters. Unknown
+  layouts expose bounded metadata; equipment joins and allocation remain unavailable.
+- Record worker-only four-slot research assignment, idempotent plan updates and
+  restart without resetting the consumed daily budget. Ordered queues now retain
+  pending slot heads; refill after a technology finishes still needs live validation.
+- Record exact focus selection with witnessed hierarchy/cache closure. The selected
+  Start callback association remains unavailable, and the latest run stopped before
+  Start input. Add bounded listener diagnostics without changing the action guard.
+- Prefilter occupied research slots using a complete witnessed canonical probe.
+  Fixture reads fall while occupied and increase while idle; live latency is unverified.
+
 - Add witnessed own-focus command context, local UI facts and private Sprite
   point preparation. Keep public defaults unchanged; focus dispatch remains
   unavailable. Record one successful industry-category switch/no-op and a later

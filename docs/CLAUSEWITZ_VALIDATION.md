@@ -2392,3 +2392,22 @@ passed678 reported checks (676 substantive), including five isolated X11 cases.
 The original library worker-limit fixture stderr remains preserved. Live own-line
 comparison remains pending; generated tests add no input authority and are not
 installed-game evidence.
+
+
+## Focus Start topology diagnostics
+
+Run033 did not record its bounded listener count or target membership. Static
+ELF evidence shows that named Start lookup and a separate generic listener
+registration traverse different collections; it does not establish the actual
+run033 topology or authorize an alternative route. A diagnostic now reports
+count and expected-target match booleans after complete bounded-list integrity
+checks. It exposes no pointers, reads no unknown target payload, and preserves
+the existing exact-two listener action guard. Four new Reader fixtures cover
+unavailable singleton/other-target branches, unchanged admitted topology,
+malformed structures and final changed witnesses. Capabilities also explicitly
+mark own equipment-line observations as awaiting installed-game validation.
+
+The composed source passed586 Rust1.86 host tests,682 reported actual Linux
+checks (680 substantive),953 Python tests (37 skips), both Clippy targets, format,
+MSRV Linux checks and release linking. These checks do not identify live listener
+topology or prove focus Start.

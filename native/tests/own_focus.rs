@@ -1648,3 +1648,106 @@ fn focus_start_alternate_manager_is_final_witness_on_valid_and_refused_paths() {
         }
     }
 }
+
+impl Fake {
+    fn start_listener_targets(&mut self, targets: &[u64]) {
+        self.word(BUTTON + 0x88, if targets.is_empty() { 0 } else { 0x220000 });
+        self.word(
+            BUTTON + 0x90,
+            if targets.is_empty() {
+                0
+            } else {
+                0x220000 + (targets.len() as u64 - 1) * 32
+            },
+        );
+        self.int(BUTTON + 0x98, targets.len() as i32);
+        self.region(0x220000, targets.len() * 32);
+        for (i, target) in targets.iter().enumerate() {
+            let node = 0x220000 + i as u64 * 32;
+            self.word(node, *target);
+            self.word(node + 8, if i == 0 { 0 } else { node - 32 });
+            self.word(
+                node + 0x10,
+                if i + 1 == targets.len() { 0 } else { node + 32 },
+            );
+        }
+    }
+}
+#[test]
+fn focus_start_topology_zero_singletons_and_unknown_remain_unavailable_without_target_reads() {
+    for (targets, event, noop, other) in [
+        (vec![], false, false, false),
+        (vec![PANEL + 0x2a8], true, false, false),
+        (vec![PANEL + 0x530], false, true, false),
+        (vec![PANEL + 0x2a8, 0xdead0000], true, false, true),
+        (
+            vec![PANEL + 0x2a8, PANEL + 0x530, 0xdead0000],
+            true,
+            true,
+            true,
+        ),
+    ] {
+        let mut f = Fake::new();
+        f.start_binding();
+        f.start_listener_targets(&targets);
+        let v = f.binding();
+        let t = &v["listener_topology"];
+        assert_eq!(v["available"], false);
+        assert_eq!(v["reason"], "event_binding_unavailable");
+        assert_eq!(v["callback_route_verified"], false);
+        assert_eq!(v["input_authorized"], false);
+        assert_eq!(t["complete_bounded_list"], true);
+        assert_eq!(t["listener_count"], targets.len());
+        assert_eq!(t["selected_event_target_present"], event);
+        assert_eq!(t["noop_target_present"], noop);
+        assert_eq!(t["other_target_present"], other);
+        assert_eq!(t["matches_admitted_topology"], false);
+        assert!(f.untouched(PANEL + 0x2a8, 8));
+        assert!(f.untouched(PANEL + 0x530, 8));
+        assert!(f.untouched(0xdead0000, 24));
+        assert!(f.untouched(BUTTON + 0xe8, 8));
+    }
+}
+#[test]
+fn focus_start_topology_existing_two_target_acceptance_and_early_unknown_are_preserved() {
+    let mut f = Fake::new();
+    f.start_binding();
+    let v = f.binding();
+    assert_eq!(v["available"], true);
+    assert_eq!(v["callback_route_verified"], true);
+    assert_eq!(v["listener_topology"]["matches_admitted_topology"], true);
+    assert_eq!(v["listener_topology"]["count_matches_two"], true);
+    assert_eq!(v["listener_topology"]["other_target_present"], false);
+    let mut f = Fake::new();
+    f.start_binding();
+    f.word(BUTTON + 0xa0, 0xdead0000);
+    let v = f.binding();
+    assert!(v.get("listener_topology").is_none());
+    assert!(f.untouched(BUTTON + 0x98, 4));
+}
+#[test]
+fn focus_start_topology_malformed_links_duplicates_and_bounds_still_refuse() {
+    for kind in 0..4 {
+        let mut f = Fake::new();
+        f.start_binding();
+        match kind {
+            0 => f.start_listener_targets(&[PANEL + 0x2a8, PANEL + 0x2a8]),
+            1 => f.word(0x220010, 0x220000),
+            2 => f.put(0x220018, &[1]),
+            _ => f.int(BUTTON + 0x98, 17),
+        }
+        assert_eq!(f.result().unwrap_err().code, "invalid_focus_binding");
+        assert!(f.untouched(0x221000, 24));
+        assert!(f.untouched(BUTTON + 0xe8, 8));
+    }
+}
+#[test]
+fn focus_start_topology_count_and_target_mutations_are_final_witnesses_on_unavailable_path() {
+    for at in [BUTTON + 0x98, 0x220000, 0x220010, BUTTON + 0x90] {
+        let mut f = Fake::new();
+        f.start_binding();
+        f.start_listener_targets(&[PANEL + 0x2a8]);
+        f.torn = Some(at);
+        assert_eq!(f.result().unwrap_err().code, "torn_read");
+    }
+}

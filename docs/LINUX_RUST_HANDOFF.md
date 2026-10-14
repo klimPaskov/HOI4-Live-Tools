@@ -69,6 +69,14 @@ metadata without dereferencing its unproved payload. Equipment IDs, general
 production and allocation remain unavailable. Combined Rust1.86 host tests582,
 Python953 (37 skipped), Linux compiler/Clippy/format gates and678 reported actual
 Linux checks (676 substantive) passed. Live own-line comparison remains pending.
+The next source adds pointer-free Start listener count/membership diagnostics
+after complete bounded-list validation; exact-two callback acceptance and all
+owner/capture/renderer guards remain unchanged. Combined host586, actual
+Linux682 reported (680 substantive), Python953 (37 skipped) and all compiler,
+format and Clippy gates passed. Fresh run034 will first obtain
+one own production page, then use exclusive Luna Open/pre-View/View/selected-detail
+gates. Preserve actual topology and stop before Start if unavailable; do not
+infer run033 topology from the separate static registration collections.
 Finish economic, army/naval actions
 and independent Windows/macOS live adapters afterward.
 [Live evidence](CLAUSEWITZ_VALIDATION.md) preserves earlier failures and boundaries.

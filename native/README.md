@@ -33,7 +33,10 @@ compatibility. Layouts must be recovered and verified separately for each build.
 Focus stages and a daily prepared-research worker have optional owned MCP
 services. Recorded run030 passed worker-only four-slot refill, restart persistence
 and counter advancement through3January. Run032 verified exact focus selection;
-focus start remains blocked at the callback guard.
+focus start remains blocked at the callback guard. Run033 stopped before Start
+after its selected-detail association was unavailable. Pointer-free listener
+count/membership diagnostics now distinguish the bounded topology; matching it
+alone never authorizes input.
 They share the clock and
 research controller, lease, shutdown gate and uncertainty journals. The worker
 retains unfinished entries and requires fresh assignment receipts; navigation

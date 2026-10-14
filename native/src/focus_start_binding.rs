@@ -87,7 +87,20 @@ pub(crate) fn observe(
             "Focus listener terminal mismatch",
         ));
     }
-    if count != 2 || targets != BTreeSet::from([panel + 0x2a8, panel + 0x530]) {
+    let expected_targets = BTreeSet::from([panel + 0x2a8, panel + 0x530]);
+    // Pointer-free metadata from this already validated complete bounded list.
+    // No unknown listener target/capture is dereferenced, and matching this
+    // topology does not assert callback readiness, frame currency or authority.
+    out["listener_topology"] = json!({
+        "complete_bounded_list":true,
+        "listener_count":count,
+        "count_matches_two":count==2,
+        "selected_event_target_present":targets.contains(&(panel+0x2a8)),
+        "noop_target_present":targets.contains(&(panel+0x530)),
+        "other_target_present":targets.iter().any(|target|!expected_targets.contains(target)),
+        "matches_admitted_topology":count==2&&targets==expected_targets,
+    });
+    if count != 2 || targets != expected_targets {
         return Ok(out);
     }
     for (glue, offset, manager, invoker, member) in [
