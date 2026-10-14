@@ -90,9 +90,12 @@ The research preview opens the own panel, selects empty slots and navigates
 folders with verified state readback. Recorded run 025 passed ordinary clock
 control, four research assignments and advancement to 5 January 1936. The earlier
 run 024 clock uncertainty remains unexplained. Opt-in focus stages and a daily
-worker for already-prepared research now pass fixtures; their installed-game
-validation is pending. Automatic navigation, broader strategic adapters and
-Windows/macOS live adapters remain unfinished. Three-OS CI tests
+worker now pass fixtures. Recorded run026 verified focus opening, then refused
+selection because owned root closure was missing; that cause remains unresolved.
+The current worker adds durable panel/slot/category navigation, plan updates and
+several research assignments within a persisted daily budget. Its installed-game
+validation is pending. Broader strategic adapters and Windows/macOS live adapters
+remain unfinished. Three-OS CI tests
 shared code and fixtures; compilation is not live compatibility or campaign acceptance.
 
 ## Development
