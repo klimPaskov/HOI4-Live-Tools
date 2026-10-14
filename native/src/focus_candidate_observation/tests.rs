@@ -417,3 +417,91 @@ fn unknown_nonmatching_producer_window_still_refuses() {
         assert!(surface(&d, "army_effort", stage, Some(&u)).is_err());
     }
 }
+
+fn start_refusal(binding: Value) -> Error {
+    let mut d = detail(true);
+    d["details"][0]["window"]["start"]["ordinary_binding"] = binding;
+    surface(&d, "army_effort", Stage::Start, Some(&facts(true))).unwrap_err()
+}
+#[test]
+fn start_refusal_reports_known_observed_reason_flags_and_type_without_relaxing_guard() {
+    let error = start_refusal(json!({"selected_own_key":"army_effort","available":false,
+        "reason":"event_variant_unavailable","callback_route_verified":false,
+        "renderer_control_join_verified":false,"renderer_type_encoding":"11CTextSprite"}));
+    assert_eq!(error.code, "focus_geometry_unavailable");
+    for field in [
+        "Exact own selected start callback required",
+        "reason=event_variant_unavailable",
+        "available=false",
+        "callback_route_verified=false",
+        "renderer_control_join_verified=false",
+        "renderer_type_encoding=11CTextSprite",
+        "selected_key_matches=true",
+    ] {
+        assert!(error.message.contains(field), "{field}");
+    }
+    // A positively observed success reason cannot override any existing guard.
+    let error = start_refusal(json!({"selected_own_key":"army_effort","available":true,
+        "reason":"own_selected_event_start_and_noop_listener_verified",
+        "callback_route_verified":false,"renderer_control_join_verified":true,
+        "renderer_type_encoding":"7CSprite"}));
+    assert!(error.message.contains("callback_route_verified=false"));
+    assert_eq!(error.code, "focus_geometry_unavailable");
+}
+#[test]
+fn start_refusal_missing_fields_and_non_boolean_values_are_unknown() {
+    for binding in [
+        json!({}),
+        Value::Null,
+        json!({"reason":null,"available":"true",
+        "callback_route_verified":1,"renderer_control_join_verified":[],
+        "renderer_type_encoding":false,"selected_own_key":123}),
+    ] {
+        let error = start_refusal(binding);
+        assert_eq!(error.code, "focus_geometry_unavailable");
+        for field in [
+            "reason=unknown",
+            "available=unknown",
+            "callback_route_verified=unknown",
+            "renderer_control_join_verified=unknown",
+            "renderer_type_encoding=unknown",
+            "selected_key_matches=unknown",
+        ] {
+            assert!(error.message.contains(field), "{field}");
+        }
+    }
+}
+#[test]
+fn start_refusal_does_not_echo_unknown_private_long_or_control_character_strings() {
+    for secret in [
+        "opaque_unrecognized_value",
+        "renderer_0x12345678",
+        "event_variant_unavailable\nprivate-data",
+        &"x".repeat(4096),
+    ] {
+        let error = start_refusal(json!({"reason":secret,"renderer_type_encoding":secret,
+            "selected_own_key":secret,"available":false,"callback_route_verified":false,
+            "renderer_control_join_verified":false,"address":"0x12345678"}));
+        assert_eq!(error.code, "focus_geometry_unavailable");
+        assert!(error.message.contains("reason=unknown"));
+        assert!(error.message.contains("renderer_type_encoding=unknown"));
+        assert!(error.message.contains("selected_key_matches=false"));
+        assert!(!error.message.contains(secret));
+        assert!(!error.message.contains("0x12345678"));
+        assert!(error.message.len() < 400);
+    }
+}
+#[test]
+fn start_refusal_default_public_reason_is_retained_and_success_path_is_unchanged() {
+    let error = start_refusal(json!({"selected_own_key":"army_effort","available":false,
+        "reason":"event_binding_unavailable","callback_route_verified":false,
+        "renderer_control_join_verified":false,"renderer_type_encoding":null}));
+    assert!(error.message.contains("reason=event_binding_unavailable"));
+    assert!(surface(
+        &detail(true),
+        "army_effort",
+        Stage::Start,
+        Some(&facts(true))
+    )
+    .is_ok());
+}

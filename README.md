@@ -18,16 +18,16 @@ and memory readback. Recorded run030 passed worker-only four-slot research refil
 idempotent plan updates, restart without resetting its daily budget, and counter
 advancement through 3 January 1936.
 
-Recorded run031 verified opening Politics and the focus tree. Focus selection
-stopped before input because the geometry reader reached a traversal limit before
-proving the graphics root. The failure and full diagnostics are preserved;
-focus selection and broader strategic automation remain unfinished.
+Recorded run032 verified opening Politics and the focus tree, then selecting the
+exact Rhineland focus after hierarchy and cache checks passed. Starting it refused
+at an unverified callback association; the failure is preserved without retry.
+Focus start and broader strategic automation remain unfinished.
 
 | Runtime | Verified | Remaining |
 | --- | --- | --- |
 | Python / Windows | Baseline tools and recorded play attempts | Clean campaign acceptance; current development changes are unfinished |
 | Python / macOS | Platform work and limited diagnostic play | Reliable live acceptance; screenshot-driven testing is stopped |
-| Native / Linux | Own reads/catalogs, owned launch, bounded Luna clock/research tests, four-slot worker refill and restart persistence | Focus, broader daily plans, economics/army/naval control and campaign acceptance |
+| Native / Linux | Own reads/catalogs, owned launch, bounded Luna clock/research tests, four-slot worker refill, restart persistence and exact focus selection | Focus start, broader daily plans, economics/army/naval control and campaign acceptance |
 | Native / Windows and macOS | Portable protocol and fixture tests in CI | Independently verified process/build adapters and live tests |
 
 Read [the acceptance gates](docs/LINUX_RUST_HANDOFF.md),

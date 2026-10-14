@@ -2259,3 +2259,92 @@ including five isolated X11 cases. Display identity and Yama1 were unchanged.
 No nested helper result is counted twice. No new live focus selection, closure,
 technology-completion refill or campaign acceptance is established by these tests.
 Record a fresh exclusive Luna medium focus gate next.
+
+## Recorded run032: focus selection passed; Start callback guard refused
+
+Immutable source `b3abe90`, CLI SHA-256
+`b95db519a4869d4fa0acfb192c74b9d421b6ee7520b9ee1ac137dff6340a452a`
+launched Normal historical vanilla Germany, no mods or DLC. Recording's first
+packet was verified before one Start; own memory confirmed paused noon on
+1 January 1936, speed0, four empty research slots and no focus. The daily worker
+was disabled. Luna medium held exclusive input; the parent made no game reads
+or input during that ownership.
+
+OpenPolitics verified in2.180 seconds and OpenFocus in8.432 seconds. The exact
+Rhineland node diagnostic took168ms: both Sprite chains contained ten ancestors,
+closed at owned graphics root1f0, and had consistent conditional unit caches,
+cache-equivalent textures and no mask. View verified in3.843 seconds and selected
+`GER_remilitarize_the_rhineland` in the own detail. This is live evidence that the
+scoped policy handled this recorded hierarchy and supported exact-node selection.
+It does not establish run026's cause or other unobserved render branches.
+
+The single Start request refused in397ms with `focus_geometry_unavailable`,
+"Exact own selected start callback required." No retry or further game read
+followed; no active focus change is claimed. That combined guard did not identify
+which binding field was unavailable. Preserve the uncertainty: the next fresh
+run needs one selected own-detail geometry observation before Start, and the
+guard's diagnostic should expose bounded producer reasons without granting input.
+
+Actual lease release/status proved zero remaining authority. The H.264 recording
+passed ffprobe:298.333 seconds,3,536,110 bytes,512×288 at3fps. Requested recorder
+stop returned255, retained separately from actual normal game exit0. One owned
+window close took3.449 seconds, without signal/core dump; both exact process paths
+were absent, Yama1 unchanged and both clients closed. Private calls, geometry,
+receipts and footage are preserved. Focus start, clean two-year acceptance and
+full campaigns remain unpassed.
+
+## Canonical occupancy filter and bounded Start diagnostics: fixture validation
+
+The next source skips full research UI reads only when a fully validated canonical
+probe proves every eligible queue head is occupied by a different technology.
+It reuses the complete own canonical reader, scope/build/identity/chronology and
+final witness checks. It publishes no sequence, digest, completion or input
+authority. Empty or same-target slots still get an independent full UI read;
+probe errors refuse and a changed day defers without altering consumed budgets.
+
+Generated fixtures measured367 logical read requests for the occupied probe
+against593 for the old canonical/public-UI lower bound, saving226. The idle
+probe plus independent canonical/UI reads used864 against the old lower bound545,
+adding319. The reference omits additional private context/selection reads. These
+are fixture request counts, not syscalls or live timings; the complete catalog
+still costs work. Occupied-slot savings and idle overhead must both remain clear.
+
+The unchanged Start callback guard now reports only allowlisted producer reasons,
+renderer types, tri-state binding flags and selected-key equality. Missing values
+remain unknown; arbitrary strings, keys and pointer values are not echoed.
+Four new fixtures verify useful known reasons, absent/wrong-typed fields,
+sanitization, and unchanged refusal/success. These diagnostics cannot establish
+which field failed in the earlier run032 or grant an input retry.
+
+Combined Rust1.86 host tests passed **564 checks**; Python passed **953 tests**,
+**37 skipped**, in24.482 seconds. Formatting, host/Linux Clippy, MSRV Linux
+compilation and release linking passed. The immutable actual Linux bundle passed
+**660 reported checks** (**658 substantive and two inert helpers**) in parallel,
+including five isolated X11 cases; display identity/Yama1 stayed unchanged and
+run032's exact processes remained gone. Nested helper output is not counted twice.
+Runtime filter latency, completed-technology refill and Start remain unverified.
+Next take the recorded fresh selected-detail diagnostic before any Start input.
+
+## Additional Start callback path: stricter refusal
+
+The subsequent static audit found that the exact event-glue consumer also checks
+an alternate manager at+1d8, invoking its+1e0 function on the+1c8 capture before
+the expected event callback. The existing member-constructor slot list omitted
+that path. Both own Start glues now require this manager to be zero and refuse
+`additional_event_variant_unavailable` before reading the alternate capture,
+invoker or renderer. This tightens the callback whitelist; it does not add a
+callback variant or establish what failed during run032.
+
+Three actual-reader fixtures cover both glues with and without geometry, skipped
+payload reads, the unchanged known branch, and final-witness mutation on valid
+and refused paths. The audit also corrects terminology: the no-op invoker reads
+an integer argument, and the Start member receives the event's control pointer.
+No direct call or native posting was executed or enabled by this static evidence.
+
+Combined Rust1.86 host tests passed **567 checks**; Python passed **953 tests**,
+**37 skipped**, in24.274 seconds. Formatting, host/Linux Clippy, MSRV Linux
+compilation and release linking passed. The immutable actual Linux bundle passed
+**663 reported checks** (**661 substantive and two inert helpers**) in parallel,
+including five isolated X11 cases. Display identity/Yama1 were unchanged and
+run032's exact processes remained gone. These stricter-guard fixtures do not
+establish the runtime callback association or successful Start.

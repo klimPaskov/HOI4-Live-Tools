@@ -32,7 +32,8 @@ compatibility. Layouts must be recovered and verified separately for each build.
 
 Focus stages and a daily prepared-research worker have optional owned MCP
 services. Recorded run030 passed worker-only four-slot refill, restart persistence
-and counter advancement through3January; focus selection/start remain unaccepted.
+and counter advancement through3January. Run032 verified exact focus selection;
+focus start remains blocked at the callback guard.
 They share the clock and
 research controller, lease, shutdown gate and uncertainty journals. The worker
 retains unfinished entries and requires fresh assignment receipts; navigation
@@ -222,15 +223,17 @@ The optional `hoi4_focus_attempt` service provides `open_politics`, `open_focus`
 canonical own-focus, active-progress, campaign and local UI witnesses. It requires
 settled own roots and complete local blocker facts, then uses exact Sprite,
 zero-angle Text or unmasked Frame geometry. Unknown facts and unsupported renderers refuse. These facts do not
-prove global modal clearance or routing. Installed-game focus dispatch is pending.
+prove global modal clearance or routing. Run032 verified open/select stages;
+installed-game focus start remains unaccepted.
 
 Only the verified own-focus node/start producers opt into a fixed traversal
 policy for the larger focus-tree container: exact generic Position ancestors
 allow capacity 8192, with 16384 pointer comparisons across the whole path.
 Ordinary callers retain their existing limits. Depth, reciprocal membership,
 final witnesses, conditional cache checks and root1f0 conversion remain required;
-root350 is diagnostic only. This policy passed fixtures, but the installed-game
-continuation beyond run031's boundary remains unproved.
+root350 is diagnostic only. Run032 verified the actual ten-ancestor hierarchy,
+root1f0 closure, conditional cache and exact-node selection. Other unobserved
+branches remain unproved; the Start callback association still refuses.
 
 The optional `hoi4_daily_governor` service starts a durable explicit plan, returns
 a fresh compact digest, updates its plan, or stops without changing game time.
@@ -258,6 +261,21 @@ Digest reads cannot acquire the producer during the worker’s post-action witne
 producer contention may wait within the existing two-second read deadline.
 Other domains remain retained with an unavailable reason. See the
 [focus and daily setup](../docs/OWNED_LINUX_LAUNCHER.md#focus-and-daily-previews).
+
+While all eligible queue heads are occupied by different technologies, the
+worker can use a fully validated canonical probe and skip the full UI read.
+The probe publishes no sequence, digest, receipt or input authority. Empty or
+same-target slots still require an independent full UI observation; unavailable
+or torn data refuses. This saves reads in occupied-slot fixtures and adds work
+when slots are idle. Live performance and completion-refill acceptance remain
+unverified.
+
+Start callback refusals include only allowlisted producer reasons, renderer types
+and tri-state binding flags. Missing fields remain unknown. Diagnostics never
+override the existing callback/ownership checks or authorize retries.
+Both Start event glues additionally require their alternate manager+1d8 to be
+zero. A nonzero value refuses before its captured payload or renderer is read;
+the existing supported callback route is the only accepted branch.
 
 The separate Linux pointer library permits one bounded motion/left-button pair
 for a future verified adapter. It pins client/root geometry and ownership,

@@ -96,6 +96,42 @@ pub struct Produced {
     pub canonical: Value,
     pub context: ResearchContext,
 }
+/// Unpublished scheduling evidence only. No input or completion authority.
+#[doc(hidden)]
+pub struct ResearchProbe {
+    context: ResearchContext,
+    slots: Vec<Option<String>>,
+}
+impl ResearchProbe {
+    pub fn context(&self) -> &ResearchContext {
+        &self.context
+    }
+    pub fn all_heads_occupied(&self, entries: &[crate::daily_governor::Entry]) -> Result<bool> {
+        if entries.is_empty() {
+            return Ok(false);
+        }
+        for entry in entries {
+            let crate::daily_governor::Intent::Research {
+                technology_id,
+                slot,
+            } = &entry.intent
+            else {
+                return Err(Error::new("invalid_plan", "Research queue heads required"));
+            };
+            match self.slots.get(*slot as usize) {
+                Some(Some(current)) if current != technology_id => {}
+                Some(_) => return Ok(false),
+                None => {
+                    return Err(Error::new(
+                        "research_unavailable",
+                        "Unknown own slot is not occupied/empty evidence",
+                    ))
+                }
+            }
+        }
+        Ok(true)
+    }
+}
 fn same(a: &ClockContext, b: &ClockContext) -> bool {
     a.player == b.player
         && a.playthrough_id == b.playthrough_id
@@ -298,6 +334,70 @@ impl Producer {
         deadline(until)?;
         counter.probe_latest_date = context.date_raw;
         Ok(context.date_raw)
+    }
+    /// Complete canonical reader, no UI, sequence allocation or fsync.
+    /// Used only to avoid full UI when every queue head is already occupied.
+    pub fn probe_research(&self, process: &dyn Process, until: Instant) -> Result<ResearchProbe> {
+        deadline(until)?;
+        let mut counter = crate::daily_digest_lock::acquire(&self.counter, None)?;
+        if counter.poisoned {
+            return Err(Error::new(
+                "daily_quarantined",
+                "Daily sequence uncertainty",
+            ));
+        }
+        let (canonical, context) = read(
+            process,
+            &counter.record.scope.epoch,
+            &self.expected,
+            Some(&counter.record.scope),
+            until,
+        )?;
+        if context.own
+            != [
+                counter.record.scope.own_country,
+                counter.record.scope.own_status,
+            ]
+            || context.campaign.date_raw < counter.record.last_date.max(counter.probe_latest_date)
+        {
+            return Err(Error::new(
+                "ownership_changed",
+                "Daily probe own status or chronology changed",
+            ));
+        }
+        let array = canonical["slots"]
+            .as_array()
+            .filter(|a| !a.is_empty() && a.len() <= 32)
+            .ok_or_else(|| {
+                Error::new(
+                    "research_unavailable",
+                    "Complete nonempty own slots required",
+                )
+            })?;
+        let mut slots = Vec::with_capacity(array.len());
+        for (index, slot) in array.iter().enumerate() {
+            if slot["slot"].as_u64() != Some(index as u64) {
+                return Err(Error::new(
+                    "research_unavailable",
+                    "Complete own slot order required",
+                ));
+            }
+            slots.push(match slot.get("researching") {
+                Some(Value::Null) => None,
+                Some(Value::String(key)) if !key.is_empty() && key.len() <= 256 => {
+                    Some(key.clone())
+                }
+                _ => {
+                    return Err(Error::new(
+                        "research_unavailable",
+                        "Unknown own occupancy is not empty",
+                    ))
+                }
+            });
+        }
+        deadline(until)?;
+        counter.probe_latest_date = context.campaign.date_raw;
+        Ok(ResearchProbe { context, slots })
     }
     pub fn observe(&self, process: &dyn Process, until: Instant) -> Result<Produced> {
         deadline(until)?;

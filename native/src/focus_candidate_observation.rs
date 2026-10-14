@@ -16,6 +16,49 @@ pub(crate) enum Stage {
 fn unavailable(s: &str) -> Error {
     Error::new("focus_geometry_unavailable", s)
 }
+// Diagnostics consume only already observed own binding fields. Missing or
+// unsupported values never echo arbitrary strings, pointers, keys or paths.
+fn start_binding_diagnostic(binding: &Value, key: &str) -> String {
+    let reason = binding["reason"]
+        .as_str()
+        .filter(|reason| {
+            matches!(
+                *reason,
+                "event_binding_unavailable"
+                    | "observer_layout_unavailable"
+                    | "observer_override_unavailable"
+                    | "event_variant_unavailable"
+                    | "additional_event_variant_unavailable"
+                    | "event_member_unavailable"
+                    | "renderer_unavailable"
+                    | "renderer_layout_unavailable"
+                    | "own_selected_event_start_and_noop_listener_verified"
+                    | "detail_not_locally_visible"
+            )
+        })
+        .unwrap_or("unknown");
+    let flag = |field: &str| match binding[field].as_bool() {
+        Some(true) => "true",
+        Some(false) => "false",
+        None => "unknown",
+    };
+    let renderer = binding["renderer_type_encoding"]
+        .as_str()
+        .filter(|name| {
+            matches!(
+                *name,
+                "7CSprite" | "11CTextSprite" | "20CFrameAnimatedSprite" | "14CInstantSprite"
+            )
+        })
+        .unwrap_or("unknown");
+    let selected_matches = match binding["selected_own_key"].as_str() {
+        Some(observed) if observed == key => "true",
+        Some(_) => "false",
+        None => "unknown",
+    };
+    format!("reason={reason}, available={}, callback_route_verified={}, renderer_control_join_verified={}, renderer_type_encoding={renderer}, selected_key_matches={selected_matches}",
+        flag("available"), flag("callback_route_verified"), flag("renderer_control_join_verified"))
+}
 fn ui(facts: Option<&crate::focus_ui_facts::FocusUiFacts>, stage: Stage) -> Result<()> {
     let facts = facts.ok_or_else(|| unavailable("Witnessed own UI facts unavailable"))?;
     if facts.focus_mode_selected() != Some(true)
@@ -155,7 +198,10 @@ fn surface(
                 || b["callback_route_verified"] != true
                 || b["renderer_control_join_verified"] != true
             {
-                return Err(unavailable("Exact own selected start callback required"));
+                return Err(unavailable(&format!(
+                    "Exact own selected start callback required ({})",
+                    start_binding_diagnostic(b, key)
+                )));
             }
             control_surface(&b["render_diagnostic"])
         }

@@ -426,6 +426,17 @@ fn worker(
             // Re-read complete own canonical/UI state under the common lock.
             // Occupied queue heads defer without a permanent day refusal. Later
             // entries for that slot remain blocked; other slots can progress.
+            let probe = producer.probe_research(process, until)?;
+            state
+                .guard
+                .accept_context(process, &probe.context().campaign)?;
+            // A day change defers this batch; original budget/day anchors remain.
+            if (i64::from(probe.context().campaign.date_raw) - 43_800_000).div_euclid(24) != day
+                || probe.all_heads_occupied(&heads)?
+            {
+                return Ok(None);
+            }
+            // Probe is never reused as UI/action/completion authority.
             let (queue_ui, _) = research::observed_state(process, &mut state.guard)?;
             let entry =
                 crate::daily_navigation::available_research_head(&heads, &queue_ui)?.cloned();

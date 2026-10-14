@@ -37,9 +37,26 @@ traversal policy and test-only exec-stress expectation now pass combined
 953 Python tests (37 skipped), compiler/Clippy/format gates and release linking.
 Only verified focus node/start producers opt in to capacity8192 for exact generic
 Position ancestors and aggregate16384; ordinary limits and production ownership
-guards stay unchanged. Next run a fresh exclusive Luna
-focus Open/read-only geometry gate. Only a closed1f0 hierarchy, consistent cache
-and supported renderer permit View/Start. Finish economic, army/naval actions
+guards stay unchanged. Run032 then verified the actual ten-ancestor/root1f0
+hierarchy and exact Rhineland View. Start refused its combined callback guard;
+the specific unavailable binding field remains unknown. The lease was released,
+recording passed, normal game exit0 and exact-process absence were verified.
+Next run a fresh exclusive Luna Open/pre-View geometry gate, verified View, then
+one selected own-detail geometry observation BEFORE Start. Save its full callback
+reason and supported hierarchy/cache; refuse before input if unavailable.
+The next source adds a fully validated unpublished occupied-slot filter and
+bounded Start refusal diagnostics, preserving all input/callback guards. It
+passed564 host Rust checks,660 reported actual Linux checks (658 substantive),
+953 Python tests (37 skipped), compiler/Clippy/format gates and release linking.
+The filter saves generated-fixture reads while occupied and adds work while idle;
+live latency and completed-technology refill remain unverified.
+An independently audited alternate EVENT manager+1d8 now also requires zero;
+active variants refuse before their captured payload/renderer is read. This
+stricter source passed567 host checks,663 reported parallel Linux checks
+(661 substantive),953 Python tests (37 skipped) and the compiler/format/Clippy
+gates. Run032's specific failed binding field remains unknown. The fresh run033
+brief includes the selected own-detail observation before any Start attempt.
+Finish economic, army/naval actions
 and independent Windows/macOS live adapters afterward.
 [Live evidence](CLAUSEWITZ_VALIDATION.md) preserves earlier failures and boundaries.
 

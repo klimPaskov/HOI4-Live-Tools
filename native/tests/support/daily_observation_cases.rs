@@ -256,4 +256,182 @@ mod daily_producer_cases {
         let mut b=Bound::new();let s=Scratch::new();let producer=Producer::open(&b,b.epoch(),game::clock_context(&b).unwrap(),&s.path(),until()).unwrap();b.f.word(0x3a010,0xdead0000);b.f.tracked_reads.borrow_mut().clear();
         assert_eq!(producer.probe_clock(&b,until()).err().unwrap().code,"ownership_changed");assert!(!b.f.tracked_reads.borrow().keys().any(|a|*a>=0xdead0000&&*a<0xdead1000));
     }
+    fn head(key: &str, slot: u32) -> hoi4_live_native::daily_governor::Entry {
+        hoi4_live_native::daily_governor::Entry {
+            id: "next-head".into(),
+            intent: hoi4_live_native::daily_governor::Intent::Research {
+                technology_id: key.into(),
+                slot,
+            },
+            navigation: None,
+        }
+    }
+    #[test]
+    fn canonical_prefilter_is_unpublished_occupied_only_and_unknown_not_empty() {
+        let mut b = Bound::new();
+        let s = Scratch::new();
+        let producer = Producer::open(
+            &b,
+            b.epoch(),
+            game::clock_context(&b).unwrap(),
+            &s.path(),
+            until(),
+        )
+        .unwrap();
+        let old = fs::read(s.path()).unwrap();
+        let p = producer.probe_research(&b, until()).unwrap();
+        assert!(p.all_heads_occupied(&[head("construction1", 0)]).unwrap());
+        assert!(!p.all_heads_occupied(&[head("tools1", 0)]).unwrap());
+        assert!(!p.all_heads_occupied(&[head("construction1", 1)]).unwrap());
+        assert_eq!(
+            p.all_heads_occupied(&[head("construction1", 31)])
+                .unwrap_err()
+                .code,
+            "research_unavailable"
+        );
+        b.f.word(0x2c018, 0);
+        assert!(!producer
+            .probe_research(&b, until())
+            .unwrap()
+            .all_heads_occupied(&[head("construction1", 0)])
+            .unwrap());
+        assert_eq!(fs::read(s.path()).unwrap(), old);
+        assert_eq!(
+            producer.observe(&b, until()).unwrap().observation.sequence,
+            1
+        );
+    }
+    #[test]
+    fn canonical_prefilter_scope_campaign_torn_and_late_changes_refuse_without_publication() {
+        for (address, bytes) in [
+            (0x28130, 0x40008u64.to_le_bytes().to_vec()),
+            (0x2c018, 0x81000u64.to_le_bytes().to_vec()),
+            (0x30460, 60759370i32.to_le_bytes().to_vec()),
+        ] {
+            let mut b = Bound::new();
+            let s = Scratch::new();
+            let producer = Producer::open(
+                &b,
+                b.epoch(),
+                game::clock_context(&b).unwrap(),
+                &s.path(),
+                until(),
+            )
+            .unwrap();
+            let old = fs::read(s.path()).unwrap();
+            b.f.fault = Some((address, 1, bytes));
+            b.f.fault_reads.set(0);
+            assert!(producer.probe_research(&b, until()).is_err());
+            assert_eq!(fs::read(s.path()).unwrap(), old);
+        }
+        let mut b = Bound::new();
+        let s = Scratch::new();
+        let producer = Producer::open(
+            &b,
+            b.epoch(),
+            game::clock_context(&b).unwrap(),
+            &s.path(),
+            until(),
+        )
+        .unwrap();
+        let old = fs::read(s.path()).unwrap();
+        b.id.start_ticks = "replacement".into();
+        let before = b.reads.get();
+        assert_eq!(
+            producer.probe_research(&b, until()).err().unwrap().code,
+            "ownership_changed"
+        );
+        assert_eq!(b.reads.get(), before);
+        b.id.start_ticks = "456".into();
+        b.delay.set(true);
+        assert_eq!(
+            producer
+                .probe_research(&b, Instant::now() + Duration::from_millis(5))
+                .err()
+                .unwrap()
+                .code,
+            "daily_deadline"
+        );
+        assert_eq!(fs::read(s.path()).unwrap(), old);
+    }
+    #[test]
+    fn canonical_prefilter_reads_all_occupied_vs_idle_branch_measurement() {
+        let mut b = Bound::new();
+        b.f = owned_category_fixture();
+        let s = Scratch::new();
+        let producer = Producer::open(
+            &b,
+            b.epoch(),
+            game::clock_context(&b).unwrap(),
+            &s.path(),
+            until(),
+        )
+        .unwrap();
+        b.reads.set(0);
+        let p = producer.probe_research(&b, until()).unwrap();
+        assert!(p.all_heads_occupied(&[head("construction1", 0)]).unwrap());
+        let occupied = b.reads.get();
+        let reference = owned_category_fixture();
+        research::owned_snapshot(&reference).unwrap();
+        research_ui::snapshot(&reference).unwrap();
+        let old_lower_bound: usize = reference.tracked_reads.borrow().values().sum();
+        assert!(occupied < old_lower_bound);
+        b.f.word(0x2c018, 0);
+        b.reads.set(0);
+        let p = producer.probe_research(&b, until()).unwrap();
+        assert!(!p.all_heads_occupied(&[head("construction1", 0)]).unwrap());
+        research::owned_snapshot(&b).unwrap();
+        research_ui::snapshot(&b).unwrap();
+        let idle = b.reads.get();
+        assert!(idle > occupied);
+        let mut idle_reference = owned_category_fixture();
+        idle_reference.word(0x2c018, 0);
+        research::owned_snapshot(&idle_reference).unwrap();
+        research_ui::snapshot(&idle_reference).unwrap();
+        let old_idle_lower_bound: usize = idle_reference.tracked_reads.borrow().values().sum();
+        assert!(idle > old_idle_lower_bound);
+        println!("PREFILTER_ALL_HEADS_OCCUPIED_LOGICAL_READS={occupied}; OLD_FULL_UI_LOWER_BOUND={old_lower_bound}; OLD_IDLE_FULL_UI_LOWER_BOUND={old_idle_lower_bound}; IDLE_PREFILTER_PLUS_FULL_UI_LOWER_BOUND={idle}");
+    }
+
+    #[test]
+    fn canonical_prefilter_date_advance_and_foreign_root_never_publish_authority() {
+        let mut b = Bound::new();
+        let s = Scratch::new();
+        let producer = Producer::open(
+            &b,
+            b.epoch(),
+            game::clock_context(&b).unwrap(),
+            &s.path(),
+            until(),
+        )
+        .unwrap();
+        let old = fs::read(s.path()).unwrap();
+        b.f.number(0x30460, 60759395);
+        let p = producer.probe_research(&b, until()).unwrap();
+        assert_ne!(
+            (i64::from(p.context().campaign.date_raw) - 43800000).div_euclid(24),
+            (60759371i64 - 43800000).div_euclid(24)
+        );
+        assert_eq!(fs::read(s.path()).unwrap(), old);
+        b.check_fail.set(true);
+        assert_eq!(
+            producer.probe_research(&b, until()).err().unwrap().code,
+            "ownership_changed"
+        );
+        b.check_fail.set(false);
+        b.f.word(0x3a010, 0xdead0000);
+        b.f.tracked_reads.borrow_mut().clear();
+        assert_eq!(
+            producer.probe_research(&b, until()).err().unwrap().code,
+            "ownership_changed"
+        );
+        assert!(!b
+            .f
+            .tracked_reads
+            .borrow()
+            .keys()
+            .any(|a| *a >= 0xdead0000 && *a < 0xdead1000));
+        assert_eq!(fs::read(s.path()).unwrap(), old);
+    }
+
 }

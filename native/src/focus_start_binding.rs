@@ -103,8 +103,10 @@ pub(crate) fn observe(
         }
         // Generic2838460 constructs these independent manager slots. Refuse
         // additional callback variants instead of interpreting their captures.
+        // Exact glue event consumer92ae60 also tests alternate manager1d8
+        // and invokes1e0 from1c8 before the expected event callback38/40.
         for slot in [
-            0x18, 0xd8, 0x118, 0x218, 0x158, 0x98, 0x38, 0x78, 0xb8, 0x1b8, 0x238, 0x258,
+            0x18, 0xd8, 0x118, 0x218, 0x158, 0x98, 0x38, 0x78, 0xb8, 0x1b8, 0x1d8, 0x238, 0x258,
         ] {
             if slot != offset + 0x10 && r.u64(glue + slot)? != 0 {
                 out["reason"] = json!("additional_event_variant_unavailable");

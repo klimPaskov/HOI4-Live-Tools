@@ -1592,3 +1592,59 @@ use hoi4_live_native::{actions, error, focus_stage, game, platform, politics_foc
 #[path = "../src/launch/linux/clock/focus/state.rs"]
 mod state;
 include!("support/focus_service_cases.rs");
+
+#[test]
+fn focus_start_alternate_event_manager_refuses_before_capture_and_geometry() {
+    for (glue, known_capture) in [(PANEL + 0x2a8, 0x221000), (PANEL + 0x530, 0x221020)] {
+        for geometry in [false, true] {
+            let mut f = Fake::new();
+            f.start_binding();
+            f.word(glue + 0x1d8, 0xdead0000);
+            f.word(glue + 0x1c8, 0xdead1000);
+            f.word(glue + 0x1e0, 0xdead2000);
+            let v = if geometry {
+                f.geometry_result().unwrap()["details"][0]["window"]["start"]["ordinary_binding"]
+                    .clone()
+            } else {
+                f.binding()
+            };
+            assert_eq!(v["available"], false);
+            assert_eq!(v["reason"], "additional_event_variant_unavailable");
+            assert_eq!(v["callback_route_verified"], false);
+            assert!(f.untouched(glue + 0x1c8, 8));
+            assert!(f.untouched(glue + 0x1e0, 8));
+            assert!(f.untouched(0xdead0000, 8));
+            assert!(f.untouched(0xdead1000, 24));
+            assert!(f.untouched(known_capture, 24));
+            assert!(f.untouched(BUTTON + 0xe8, 8));
+            assert!(f.untouched(0x222000, 0x140));
+        }
+    }
+}
+#[test]
+fn focus_start_zero_alternate_manager_preserves_known_event_branch() {
+    let mut f = Fake::new();
+    f.start_binding();
+    let v = f.binding();
+    assert_eq!(v["available"], true);
+    assert_eq!(v["callback_route_verified"], true);
+    assert_eq!(
+        v["reason"],
+        "own_selected_event_start_and_noop_listener_verified"
+    );
+    assert!(f.reads.borrow().contains(&(PANEL + 0x2a8 + 0x1d8, 8)));
+    assert!(f.reads.borrow().contains(&(PANEL + 0x530 + 0x1d8, 8)));
+    assert_eq!(v["input_authorized"], false);
+}
+#[test]
+fn focus_start_alternate_manager_is_final_witness_on_valid_and_refused_paths() {
+    for glue in [PANEL + 0x2a8, PANEL + 0x530] {
+        for initial in [0, 1] {
+            let mut f = Fake::new();
+            f.start_binding();
+            f.word(glue + 0x1d8, initial);
+            f.torn = Some(glue + 0x1d8);
+            assert_eq!(f.result().unwrap_err().code, "torn_read");
+        }
+    }
+}
