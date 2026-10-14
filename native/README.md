@@ -38,8 +38,10 @@ research controller, lease, shutdown gate and uncertainty journals. The worker
 retains unfinished entries and requires fresh assignment receipts; navigation
 receipts cannot complete research work. It prepares each research stage separately
 and supports idempotent plan updates. Several research entries may complete on
-one day within the durable assignment limit. Research completion queues, daily
-focus, economy, army and naval adapters remain unfinished. Private daily storage
+one day within the durable assignment limit. Ordered research queues now retain
+one pending head per slot and wait for fresh empty-slot evidence; refill after
+an actual technology finishes still awaits live validation. Daily focus, economy,
+army and naval adapters remain unfinished. Private daily storage
 supports Unix only; other platforms return an explicit capability error.
 
 ## Connect an owned Linux game
@@ -230,7 +232,12 @@ folder hint must be an exact ID returned by `hoi4_research_folders`. Start and
 update validate explicit hints before storing a plan; display labels are rejected. It probes exhausted days without rewriting
 the plan and completes prepared research entries within its persisted daily
 assignment budget. Navigation stages are recorded separately and do not spend
-that assignment budget. Updates preserve used reservations and exact entry
+that assignment budget. Plans may queue distinct technologies for the same slot
+using distinct entry IDs. Updates must retain that slot's existing order as a
+prefix; repeated technology IDs are rejected. Occupied heads wait without a
+day-long refusal, and another slot may progress. Complete means verified
+assignment, not finished technology; completed entries never reopen. Updates
+preserve used reservations and exact entry
 specifications; stored preparation evidence remains historical. Known read-only
 preparation refusals are retained per entry/day with their actual bounded reason.
 Stage errors remain visible in `last_stage_failure` after later probe errors.

@@ -247,8 +247,14 @@ impl Plan {
         }
         let mut names = std::collections::BTreeSet::new();
         let mut intents = std::collections::BTreeSet::new();
+        let mut research_keys = std::collections::BTreeSet::new();
         for e in &self.entries {
             e.validate()?;
+            if let Intent::Research { technology_id, .. } = &e.intent {
+                if !research_keys.insert(technology_id) {
+                    return Err(invalid("Duplicate research technology in refill queue"));
+                }
+            }
             if !names.insert(&e.id)
                 || !intents.insert(
                     serde_json::to_vec(&e.intent).map_err(|_| invalid("Intent encoding failed"))?,
@@ -384,6 +390,8 @@ pub enum Outcome {
 #[derive(Clone, Debug)]
 pub enum Readiness {
     Ready,
+    /// Fresh own slot is occupied: retain head without a day-long refusal.
+    WaitingForResearchSlot,
     Deferred(String),
     Unavailable(String),
     BlockingDecision(String),

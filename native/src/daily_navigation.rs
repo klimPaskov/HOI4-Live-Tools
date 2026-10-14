@@ -581,6 +581,34 @@ fn validate_history(data: &Data, epoch: &Epoch) -> Result<()> {
     }
     Ok(())
 }
+/// Select only queue heads whose fresh canonical slot is empty or already
+/// researching their exact target. This is scheduling, never input authority.
+pub(crate) fn available_research_head<'a>(
+    entries: &'a [Entry],
+    state: &OwnState,
+) -> Result<Option<&'a Entry>> {
+    for entry in entries {
+        let crate::daily_governor::Intent::Research {
+            technology_id,
+            slot,
+        } = &entry.intent
+        else {
+            continue;
+        };
+        match state.researching.get(*slot as usize) {
+            Some(None) => return Ok(Some(entry)),
+            Some(Some(current)) if current == technology_id => return Ok(Some(entry)),
+            Some(Some(_)) => {}
+            None => {
+                return Err(Error::new(
+                    "research_unavailable",
+                    "Requested own slot is unavailable; no refill authority",
+                ))
+            }
+        }
+    }
+    Ok(None)
+}
 /// Choose from current canonical/UI state, never from stored receipt freshness.
 pub(crate) fn next(entry: &Entry, state: &OwnState) -> Result<Option<Target>> {
     let crate::daily_governor::Intent::Research {
@@ -598,10 +626,16 @@ pub(crate) fn next(entry: &Entry, state: &OwnState) -> Result<Option<Target>> {
     {
         return Ok(None);
     }
+    if state.researching.get(*slot as usize).is_none() {
+        return Err(Error::new(
+            "research_unavailable",
+            "Own target slot unavailable",
+        ));
+    }
     if state.researching.get(*slot as usize) != Some(&None) {
         return Err(Error::new(
-            "research_precondition",
-            "Own target slot occupied or unavailable",
+            "research_slot_occupied",
+            "Own target slot occupied; awaiting fresh empty-slot evidence",
         ));
     }
     let which = if state.active_mode == Some(23)
@@ -1394,5 +1428,42 @@ mod tests {
         fs::write(t.path(), serde_json::to_vec(&n.data).unwrap()).unwrap();
         drop(n);
         assert!(Navigator::open(&t.path(), epoch(), &[e]).is_err());
+    }
+    #[test]
+    fn fresh_slot_selector_defers_occupied_and_unknown_never_grants_authority() {
+        let first = entry();
+        let mut other = first.clone();
+        other.id = "other-slot".into();
+        if let crate::daily_governor::Intent::Research {
+            slot,
+            technology_id,
+        } = &mut other.intent
+        {
+            *slot = 1;
+            *technology_id = "construction1".into();
+        }
+        let entries = [first.clone(), other];
+        let mut own = state();
+        own.researching[0] = Some("old-tech".into());
+        assert_eq!(
+            available_research_head(&entries, &own).unwrap().unwrap().id,
+            "other-slot"
+        );
+        assert_eq!(
+            next(&first, &own).unwrap_err().code,
+            "research_slot_occupied"
+        );
+        assert!(!known_preparation_refusal("research_slot_occupied"));
+        own.researching[0] = None;
+        assert_eq!(
+            available_research_head(&entries, &own).unwrap().unwrap().id,
+            first.id
+        );
+        own.researching.clear();
+        assert_eq!(
+            available_research_head(&entries, &own).unwrap_err().code,
+            "research_unavailable"
+        );
+        assert_eq!(next(&first, &own).unwrap_err().code, "research_unavailable");
     }
 }

@@ -6,23 +6,22 @@ with Windows and macOS as required targets.
 
 ## Current status
 
-The existing **1.1.0 Python release** has been exercised on Windows. The native
-runtime is in development. A Luna player at medium reasoning verified upstream
-focus and research, then encountered a native posting timeout. That adapter stays
-quarantined. A subsequent Rust test passed ordinary speed, unpause, time advancement
-and pause through 5 January 1936, using memory readback and stationary keys.
-Recorded builder checks also validated 438 own focus keys and 411 current
-technology keys, with 423 structural control associations. Those associations
-do not authorize strategic input.
-A fresh Rust run also passed Luna medium ID-based research selection and
-assignment, with canonical slot readback and counter advancement through
-3 January. Recorded run025 then verified clock controls, all four research
-assignments and advancement to 5 January. An earlier speed-change request lacked
-a readback witness and remains quarantined without retry. Full campaign
-acceptance remains unfinished; there is no Rust release yet.
-Recorded run030 verified worker-only four-slot research refill, idempotent updates
-and restart without resetting the daily budget, followed by counter advancement
-through 3 January. This is bounded automation evidence, not campaign acceptance.
+The existing **1.1.0 Python release** has been exercised on Windows. The Rust
+runtime is a development preview with live evidence on Linux; there is no Rust
+release and no accepted full campaign yet. Windows and macOS native live adapters
+still need independent validation.
+
+One Luna player at medium reasoning verified upstream focus and research. Its
+final native posting request timed out, so that adapter remains quarantined.
+Subsequent Rust runs verified ordinary clock controls, exact-ID research actions
+and memory readback. Recorded run030 passed worker-only four-slot research refill,
+idempotent plan updates, restart without resetting its daily budget, and counter
+advancement through 3 January 1936.
+
+Recorded run031 verified opening Politics and the focus tree. Focus selection
+stopped before input because the geometry reader reached a traversal limit before
+proving the graphics root. The failure and full diagnostics are preserved;
+focus selection and broader strategic automation remain unfinished.
 
 | Runtime | Verified | Remaining |
 | --- | --- | --- |

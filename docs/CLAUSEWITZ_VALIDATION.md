@@ -2172,3 +2172,61 @@ counter advancement passed this bounded run. Research completion queues, focus,
 economy, army/naval automation, independent Windows/macOS live adapters, clean
 two-year acceptance and full campaigns remain unfinished. Next take a fresh
 exclusive Luna focus Open/read-only geometry gate before any View/Start attempt.
+
+## Recorded run031: focus opening passed; geometry limit blocked selection
+
+The same immutable `6060216` native source and CLI used in run030 launched
+Normal historical vanilla Germany, without mods or DLC. Recording began before
+Start; memory confirmed paused 1 January 1936 at noon, four empty research slots
+and no active focus. Focus was enabled and the daily worker disabled. Luna medium
+held exclusive gameplay input; the parent made no game reads or input during it.
+
+The own catalog confirmed `GER_remilitarize_the_rhineland`. OpenPolitics verified
+in 2.558 seconds and OpenFocus in 7.091 seconds. Before View, one exact-node
+geometry observation found both Sprite controls stopped at the same traversal
+policy boundary: two ancestors observed, then a typed reciprocal ancestor with
+4,687 children and capacity 5,395 exceeded the ordinary limit of 2,048. Its child
+payload was not read. The graphics root remained unproved and the conditional
+unit-cache diagnostic unavailable. Luna stopped before View or Start; no rescue,
+clock advancement, research or further game observation followed the refusal.
+
+This identifies run031's concrete boundary. Run026 had no corresponding geometry
+observation, so its earlier generic failure still cannot be assigned this cause.
+Traversal policy was byte-identical in both sources; diagnostics were not a fix.
+
+Lease release and canonical status confirmed zero remaining authority. The H.264
+recording passed ffprobe: 201.333 seconds, 2,508,836 bytes, 512×288 at 3fps. The
+recorder's requested stop returned code 255; this is retained separately from the
+game exit. One owned window close returned actual normal game exit 0, without
+signal or core dump, in 2.803 seconds. Both exact process paths were absent,
+Yama remained 1 and both protocol clients closed. Private geometry, calls,
+receipts and footage are preserved. Focus selection and campaign acceptance
+remain unpassed.
+
+## Ordered research queues: fixture validation
+
+The next candidate keeps one pending head per own slot. Plans can append distinct
+technologies while preserving the existing per-slot order, completed assignment
+receipts and consumed daily budget. Occupied slots wait for fresh empty-slot
+evidence without a day-long refusal; other slots may progress. Missing slots
+refuse explicitly, and repeated technology keys are rejected. No completion ETA,
+dependency eligibility or new input route is inferred.
+
+Rust 1.86 host tests passed **550 checks**; Python passed **953 tests**, with
+**37 skipped**, in 20.656 seconds. Formatting, host/Linux Clippy, MSRV Linux
+compilation and release linking passed. The actual Linux bundle reported
+**645 passing checks** (**643 substantive and two inert helpers**), including
+five isolated X11 cases; display identity and Yama1 remained unchanged.
+
+The first parallel Linux library run failed the existing generated threaded-exec
+stress fixture: 302 passed, one failed, 23 ignored. The rejected anchor retained
+PID, UID and start time but reported parent0, so the production ownership guard
+refused; the fixture had unconditionally required success. The same immutable
+binary passed the full serial rerun. Both outputs are retained. The separate
+endpoint worker resource-error message was emitted by an intentional worker-limit
+test and must not be attributed to this anchor failure. No production ownership
+guard was weakened. Fixture refinement remains separate work.
+
+These tests establish queue mechanics, not installed-game refill after a
+technology finishes. Focus policy changes are not included in this candidate;
+run031's limits remain unchanged until separately reviewed and tested.

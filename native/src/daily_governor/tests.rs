@@ -1087,3 +1087,270 @@ fn legacy_unbound_day_is_conservatively_exhausted_until_fresh_advance() {
     continue_goal(&mut g, &mut b, "refill_1").unwrap();
     assert_eq!(b.sends, 2);
 }
+
+#[cfg(unix)]
+fn ordered_refill_plan() -> Plan {
+    let mut p = plan();
+    p.entries
+        .retain(|e| matches!(e.intent, Intent::Research { .. }));
+    p.entries.push(Entry {
+        id: "slot0-next".into(),
+        intent: Intent::Research {
+            technology_id: "construction1".into(),
+            slot: 0,
+        },
+        navigation: None,
+    });
+    p.entries.push(Entry {
+        id: "slot1-head".into(),
+        intent: Intent::Research {
+            technology_id: "basic_machine_tools".into(),
+            slot: 1,
+        },
+        navigation: None,
+    });
+    p
+}
+#[cfg(unix)]
+struct QueueFake {
+    inner: Fake,
+    occupied: std::collections::BTreeSet<u32>,
+    order: Vec<String>,
+}
+#[cfg(unix)]
+impl Backend for QueueFake {
+    fn unresolved_input(&mut self) -> Result<bool> {
+        self.inner.unresolved_input()
+    }
+    fn observe(&mut self) -> Result<Observation> {
+        self.inner.observe()
+    }
+    fn readiness(&mut self, entry: &Entry, _: &Observation) -> Result<Readiness> {
+        let Intent::Research { slot, .. } = entry.intent else {
+            panic!("research fixture only")
+        };
+        Ok(if self.occupied.contains(&slot) {
+            Readiness::WaitingForResearchSlot
+        } else {
+            Readiness::Ready
+        })
+    }
+    fn attempt(
+        &mut self,
+        a: &Attempt,
+        observed: &Observation,
+        deadline: Instant,
+    ) -> Result<Outcome> {
+        let Intent::Research { slot, .. } = a.entry.intent else {
+            panic!("research fixture only")
+        };
+        self.occupied.insert(slot);
+        self.order.push(a.entry.id.clone());
+        self.inner.attempt(a, observed, deadline)
+    }
+}
+#[test]
+#[cfg(unix)]
+fn refill_waiting_head_blocks_later_but_other_slot_progresses_then_empty_same_day() {
+    let t = Temp::new();
+    let p = ordered_refill_plan();
+    let mut b = QueueFake {
+        inner: Fake::new(&p),
+        occupied: [0].into_iter().collect(),
+        order: vec![],
+    };
+    let mut g = Governor::open(&t.path(), p.clone()).unwrap();
+    let out = g
+        .run_day(&mut b, 10000, Instant::now() + Duration::from_secs(1))
+        .unwrap();
+    assert_eq!(out.verified, vec!["slot1-head"]);
+    assert_eq!(b.order, vec!["slot1-head"]);
+    assert_eq!(
+        g.pending_research(1936 * 365)
+            .iter()
+            .map(|e| e.id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["research-1"]
+    );
+    assert!(g
+        .continue_entry(
+            &mut b,
+            "slot0-next",
+            10000,
+            Instant::now() + Duration::from_secs(1)
+        )
+        .unwrap()
+        .verified
+        .is_empty());
+    assert_eq!(b.inner.sends, 1);
+    b.occupied.remove(&0);
+    assert_eq!(
+        g.continue_entry(
+            &mut b,
+            "research-1",
+            10000,
+            Instant::now() + Duration::from_secs(1)
+        )
+        .unwrap()
+        .verified,
+        vec!["research-1"]
+    );
+    assert_eq!(g.used_actions(1936 * 365), 2);
+    let completed = serde_json::to_value(g.entry_state("research-1")).unwrap();
+    assert!(g
+        .continue_entry(
+            &mut b,
+            "slot0-next",
+            10000,
+            Instant::now() + Duration::from_secs(1)
+        )
+        .unwrap()
+        .verified
+        .is_empty());
+    b.occupied.remove(&0);
+    assert_eq!(
+        g.continue_entry(
+            &mut b,
+            "slot0-next",
+            10000,
+            Instant::now() + Duration::from_secs(1)
+        )
+        .unwrap()
+        .verified,
+        vec!["slot0-next"]
+    );
+    assert_eq!(b.order, vec!["slot1-head", "research-1", "slot0-next"]);
+    assert_eq!(
+        serde_json::to_value(g.entry_state("research-1")).unwrap(),
+        completed
+    );
+    assert_eq!(g.used_actions(1936 * 365), 3);
+    drop(g);
+    let mut g = Governor::open(&t.path(), p).unwrap();
+    b.inner.day(2);
+    assert!(g
+        .run_day(&mut b, 10000, Instant::now() + Duration::from_secs(1))
+        .unwrap()
+        .verified
+        .is_empty());
+    assert_eq!(b.inner.sends, 3);
+}
+#[test]
+#[cfg(unix)]
+fn refill_update_restart_preserves_budget_and_future_day_activation() {
+    let t = Temp::new();
+    let mut p = ordered_refill_plan();
+    p.max_actions_per_day = 1;
+    let mut b = QueueFake {
+        inner: Fake::new(&p),
+        occupied: std::collections::BTreeSet::new(),
+        order: vec![],
+    };
+    let mut g = Governor::open(&t.path(), p.clone()).unwrap();
+    g.run_day(&mut b, 10000, Instant::now() + Duration::from_secs(1))
+        .unwrap();
+    let completed = serde_json::to_value(g.entry_state("research-1")).unwrap();
+    p.revision += 1;
+    p.entries.push(Entry {
+        id: "slot0-third".into(),
+        intent: Intent::Research {
+            technology_id: "electronic_mechanical_engineering".into(),
+            slot: 0,
+        },
+        navigation: None,
+    });
+    assert!(g.update_plan(p.clone()).unwrap());
+    assert!(!g.update_plan(p.clone()).unwrap());
+    drop(g);
+    let mut g = Governor::open(&t.path(), p).unwrap();
+    b.occupied.clear();
+    assert!(!g.budget_available(1936 * 365));
+    assert!(g
+        .continue_entry(
+            &mut b,
+            "slot0-next",
+            10000,
+            Instant::now() + Duration::from_secs(1)
+        )
+        .unwrap()
+        .verified
+        .is_empty());
+    b.inner.day(2);
+    assert_eq!(
+        g.run_day(&mut b, 10000, Instant::now() + Duration::from_secs(1))
+            .unwrap()
+            .verified,
+        vec!["slot0-next"]
+    );
+    assert_eq!(g.used_actions(1936 * 365), 1);
+    assert_eq!(g.used_actions(1936 * 365 + 1), 1);
+    assert_eq!(
+        serde_json::to_value(g.entry_state("research-1")).unwrap(),
+        completed
+    );
+    assert_eq!(b.order, vec!["research-1", "slot0-next"]);
+}
+#[test]
+#[cfg(unix)]
+fn refill_duplicate_technology_and_slot_reordering_or_prepend_refuse() {
+    let t = Temp::new();
+    let p = ordered_refill_plan();
+    let mut g = Governor::open(&t.path(), p.clone()).unwrap();
+    let mut duplicate = p.clone();
+    duplicate.revision += 1;
+    duplicate.entries.push(Entry {
+        id: "conflicting-other-slot".into(),
+        intent: Intent::Research {
+            technology_id: "support_weapons".into(),
+            slot: 3,
+        },
+        navigation: None,
+    });
+    assert_eq!(g.update_plan(duplicate).unwrap_err().code, "invalid_plan");
+    let mut reorder = p.clone();
+    reorder.revision += 1;
+    reorder.entries.swap(0, 1);
+    assert_eq!(g.update_plan(reorder).unwrap_err().code, "plan_conflict");
+    let mut prepend = p.clone();
+    prepend.revision += 1;
+    prepend.entries.insert(
+        0,
+        Entry {
+            id: "new-before-head".into(),
+            intent: Intent::Research {
+                technology_id: "electronic_mechanical_engineering".into(),
+                slot: 0,
+            },
+            navigation: None,
+        },
+    );
+    assert_eq!(g.update_plan(prepend).unwrap_err().code, "plan_conflict");
+    let mut cross_slot_order = p;
+    cross_slot_order.revision += 1;
+    cross_slot_order.entries.swap(1, 2);
+    assert!(g.update_plan(cross_slot_order).unwrap());
+}
+#[test]
+#[cfg(unix)]
+fn refused_head_does_not_expose_later_same_slot_on_same_or_next_day() {
+    let t = Temp::new();
+    let p = ordered_refill_plan();
+    let mut g = Governor::open(&t.path(), p.clone()).unwrap();
+    if let Some(EntryState::Pending { reason_day, .. }) = g.state.entries.get_mut("research-1") {
+        *reason_day = Some(1936 * 365);
+    }
+    assert_eq!(
+        g.pending_research(1936 * 365)
+            .iter()
+            .map(|e| e.id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["slot1-head"]
+    );
+    assert_eq!(
+        g.pending_research(1936 * 365 + 1)
+            .iter()
+            .map(|e| e.id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["research-1", "slot1-head"]
+    );
+}

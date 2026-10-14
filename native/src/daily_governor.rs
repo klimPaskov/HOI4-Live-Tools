@@ -431,21 +431,36 @@ impl Governor {
     pub(crate) fn preparation_check(&mut self) -> Result<()> {
         self.check()
     }
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", all(test, unix)))]
     pub(crate) fn pending_research(&self, day: i64) -> Vec<Entry> {
+        let mut slots = std::collections::BTreeSet::new();
         self.state
             .plan
             .entries
             .iter()
-            .filter(|e| {
-                matches!(e.intent, Intent::Research { .. })
-                    && matches!(
-                        self.state.entries.get(&e.id),
-                        Some(EntryState::Pending { reason_day, .. }) if *reason_day != Some(day)
-                    )
+            .filter(|entry| {
+                let Intent::Research { slot, .. } = &entry.intent else {
+                    return false;
+                };
+                let Some(EntryState::Pending { reason_day, .. }) =
+                    self.state.entries.get(&entry.id)
+                else {
+                    return false;
+                };
+                // A refused/deferred head still blocks later entries for this slot.
+                slots.insert(*slot) && *reason_day != Some(day)
             })
             .cloned()
             .collect()
+    }
+    fn research_queue_head(&self, entry: &Entry) -> bool {
+        let Intent::Research { slot, .. } = &entry.intent else {
+            return true;
+        };
+        self.state.plan.entries.iter().find(|candidate| {
+            matches!(&candidate.intent, Intent::Research { slot: candidate_slot, .. } if candidate_slot == slot)
+                && !matches!(self.state.entries.get(&candidate.id), Some(EntryState::Complete { .. }))
+        }).is_some_and(|head| head.id == entry.id)
     }
     /// Count persisted unique intent reservations, including NotQueued and unresolved.
     pub(crate) fn used_actions(&self, day: i64) -> usize {
@@ -490,6 +505,34 @@ impl Governor {
                 return Err(Error::new(
                     "plan_conflict",
                     "Plan update must retain every existing entry and its specification",
+                ));
+            }
+        }
+        // Existing per-slot order is immutable; additions append to that slot.
+        // Other domains and relative ordering across different slots may move.
+        let mut slots = std::collections::BTreeSet::new();
+        for old in &self.state.plan.entries {
+            if let Intent::Research { slot, .. } = old.intent {
+                slots.insert(slot);
+            }
+        }
+        for slot in slots {
+            let old: Vec<_> = self
+                .state
+                .plan
+                .entries
+                .iter()
+                .filter(|e| matches!(e.intent, Intent::Research { slot: s, .. } if s == slot))
+                .collect();
+            let updated: Vec<_> = next
+                .entries
+                .iter()
+                .filter(|e| matches!(e.intent, Intent::Research { slot: s, .. } if s == slot))
+                .collect();
+            if !updated.starts_with(&old) {
+                return Err(Error::new(
+                    "plan_conflict",
+                    "Existing research slot queue order must remain an unchanged prefix",
                 ));
             }
         }
@@ -583,6 +626,10 @@ impl Governor {
                 self.used_actions(day)
             };
             for entry in entries {
+                if !self.research_queue_head(&entry) {
+                    retained.push(entry.id.clone());
+                    continue;
+                }
                 if only_entry.is_some_and(|id| id != entry.id) {
                     continue;
                 }
@@ -619,6 +666,21 @@ impl Governor {
                 self.state.last_sequence = Some(observed.sequence);
                 let ready = backend.readiness(&entry, &observed)?;
                 match ready {
+                    Readiness::WaitingForResearchSlot => {
+                        if !matches!(entry.intent, Intent::Research { .. }) {
+                            return Err(types::invalid(
+                                "Research slot wait belongs only to Research",
+                            ));
+                        }
+                        self.state.entries.insert(entry.id.clone(), EntryState::Pending {
+                            attempts: count,
+                            reason: Some("Own research slot occupied; awaiting fresh empty-slot evidence".into()),
+                            reason_day: None,
+                        });
+                        retained.push(entry.id);
+                        self.persist()?;
+                        continue;
+                    }
                     Readiness::Deferred(s) | Readiness::Unavailable(s) => {
                         self.state.entries.insert(
                             entry.id.clone(),

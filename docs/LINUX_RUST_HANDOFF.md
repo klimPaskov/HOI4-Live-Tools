@@ -18,13 +18,24 @@ and all nine three-OS CI jobs. Offline results and bounded live success remain
 separate evidence. Research completion queues and a return-to-panel route after
 permanent tree failure are still unfinished; no new input transition is enabled.
 
-Next run a fresh exclusive Luna focus gate: verified Open, then one exact-key
-`hoi4_focus_node_detail` with include_geometry:true. Only a closed1f0 hierarchy,
-consistent unit cache and supported renderer permit View/Start; otherwise retain
-the diagnostic and stop before input. Run026's generic closure failure remains
-unexplained. Node hierarchy policies have not changed since that run; current
-diagnostics must not be presented as its fix. Finish focus, economic, army/naval
-actions and independent Windows/macOS live adapters afterward.
+Run031 subsequently verified Luna OpenPolitics and OpenFocus. The required
+pre-View geometry observation refused a 4,687-child ancestor with capacity5,395
+at the unchanged ordinary traversal limit2,048. The root and unit cache remained
+unproved, so View/Start were not attempted. Release, recording checks and normal
+owned exit0 passed; exact processes are gone. Run026 lacks this diagnostic and
+its earlier generic failure remains unexplained.
+
+The next source adds ordered research queues; occupied heads wait for fresh
+empty-slot evidence without resetting receipts or consumed budgets. It passed
+550 host Rust checks, 645 reported actual Linux checks (643 substantive) and
+953 Python tests (37 skipped). An existing threaded-exec fixture's parent0
+refusal failed the first parallel run; the same binary passed serially. Both
+outputs are retained and production ownership guards are unchanged. Technology
+completion and refill still need live validation. Prepare a narrowly scoped focus
+traversal policy, run its combined offline/Linux gates, then a fresh exclusive Luna
+focus Open/read-only geometry gate. Only a closed1f0 hierarchy, consistent cache
+and supported renderer permit View/Start. Finish economic, army/naval actions
+and independent Windows/macOS live adapters afterward.
 [Live evidence](CLAUSEWITZ_VALIDATION.md) preserves earlier failures and boundaries.
 
 ## Ordered acceptance gates

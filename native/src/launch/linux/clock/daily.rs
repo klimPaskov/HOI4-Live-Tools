@@ -398,11 +398,12 @@ fn worker(
             let raw = producer.probe_clock(process, Instant::now() + Duration::from_secs(1))?;
             let mut governor = try_state(governor)?;
             let day = (i64::from(raw) - 43_800_000).div_euclid(24);
-            let entry = governor
+            let heads: Vec<_> = governor
                 .pending_research(day)
                 .into_iter()
-                .find(|e| !navigation.refused_today(&e.id, day));
-            if !governor.budget_available(day) || entry.is_none() {
+                .filter(|e| !navigation.refused_today(&e.id, day))
+                .collect();
+            if !governor.budget_available(day) || heads.is_empty() {
                 return Ok(None);
             }
             let mut state = try_state(state)?;
@@ -422,11 +423,20 @@ fn worker(
                 }
                 return Err(e);
             }
+            // Re-read complete own canonical/UI state under the common lock.
+            // Occupied queue heads defer without a permanent day refusal. Later
+            // entries for that slot remain blocked; other slots can progress.
+            let (queue_ui, _) = research::observed_state(process, &mut state.guard)?;
+            let entry =
+                crate::daily_navigation::available_research_head(&heads, &queue_ui)?.cloned();
+            if entry.is_none() {
+                return Ok(None);
+            }
             if let Some(entry) = &entry {
                 let retry_target =
                     navigation.retry_target(entry, day, crate::daily_observation::unix_ms()?)?;
                 let prepared = (|| -> Result<Option<crate::research_stage::Target>> {
-                    let (mut ui, _) = research::observed_state(process, &mut state.guard)?;
+                    let mut ui = queue_ui;
                     if let Some(hint) = &entry.navigation {
                         if ui.tree_visible
                             && ui.visible_info.is_empty()
@@ -656,10 +666,13 @@ impl core::Backend for DailyBackend<'_> {
         {
             return Ok(core::Readiness::Ready);
         }
-        if state.researching.get(*slot as usize) != Some(&None) {
-            return Ok(core::Readiness::Deferred(
-                "Requested own slot is occupied or unavailable".into(),
+        if state.researching.get(*slot as usize).is_none() {
+            return Ok(core::Readiness::Unavailable(
+                "Requested own slot is unavailable".into(),
             ));
+        }
+        if state.researching.get(*slot as usize) != Some(&None) {
+            return Ok(core::Readiness::WaitingForResearchSlot);
         }
         if state.selected_slot != Some(*slot)
             || !state.tree_visible
