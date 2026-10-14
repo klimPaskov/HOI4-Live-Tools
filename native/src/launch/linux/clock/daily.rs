@@ -115,6 +115,7 @@ impl Controller {
                 }
                 let expected = game::clock_context(process)?;
                 state.guard.accept_context(process, &expected)?;
+                prevalidate_navigation(process, &mut state.guard, &spec.entries, until)?;
                 let producer = Arc::new(Producer::open(
                     process,
                     epoch,
@@ -157,7 +158,7 @@ impl Controller {
                 let stop = Arc::new(AtomicBool::new(false));
                 let wake = Arc::new(core::Wakeup::default());
                 let report = Arc::new(Mutex::new(
-                    json!({"running":true,"last_batch":null,"last_error":null}),
+                    json!({"running":true,"last_batch":null,"last_error":navigation.latest_refusal(),"last_preparation_refusal":navigation.latest_refusal()}),
                 ));
                 let control = owner.state.clone();
                 let gate = owner.input_gate.clone();
@@ -204,6 +205,7 @@ impl Controller {
                 }
                 let mut governor = try_state(&active.governor)?;
                 let until = Instant::now() + Duration::from_secs(2);
+                prevalidate_navigation(process, &mut state.guard, &spec.entries, until)?;
                 let fresh = active.producer.observe(process, until)?;
                 state
                     .guard
@@ -225,8 +227,19 @@ impl Controller {
                 if let Some(a) = active.as_mut() {
                     a.life.stop()?;
                 }
+                let (last_error, last_preparation_refusal) = active
+                    .as_ref()
+                    .and_then(|a| {
+                        a.report.try_lock().ok().map(|r| {
+                            (
+                                r["last_error"].clone(),
+                                r["last_preparation_refusal"].clone(),
+                            )
+                        })
+                    })
+                    .unwrap_or((Value::Null, Value::Null));
                 Ok(
-                    json!({"worker_stopped":true,"game_time_changed":false,"uncertainty_retained":self.blocked.load(Ordering::Acquire)}),
+                    json!({"worker_stopped":true,"game_time_changed":false,"uncertainty_retained":self.blocked.load(Ordering::Acquire),"last_error":last_error,"last_preparation_refusal":last_preparation_refusal}),
                 )
             }
             "digest" => {
@@ -235,32 +248,89 @@ impl Controller {
                 let a = active
                     .as_ref()
                     .ok_or_else(|| Error::new("capability_unavailable", "No daily plan started"))?;
-                let fresh = a
-                    .producer
-                    .observe(process, Instant::now() + Duration::from_secs(2))?;
-                let governor = try_state(&a.governor)?;
-                let plan = governor.plan();
-                let revision = plan.revision;
-                let day = (i64::from(fresh.observation.date_raw) - 43_800_000).div_euclid(24);
-                let used = governor.used_actions(day);
-                let available = governor.budget_available(day);
-                drop(governor);
-                let mut report = a
-                    .report
-                    .try_lock()
-                    .map_err(|_| Error::new("input_busy", "Daily digest update in progress"))?
-                    .clone();
-                report["daily_budget"] = json!({"day":day,"used_assignment_attempts":used,"limit":plan.max_actions_per_day,"remaining":if available {usize::from(plan.max_actions_per_day).saturating_sub(used)} else {0},"navigation_spends_assignment_budget":false});
-                compact(
-                    fresh,
-                    &report,
-                    self.blocked.load(Ordering::Acquire),
-                    revision,
-                )
+                let until = Instant::now() + Duration::from_secs(2);
+                crate::daily_digest_lock::governed(&a.governor, |governor| {
+                    let fresh = a.producer.observe_digest(process, until)?;
+                    let plan = governor.plan();
+                    let revision = plan.revision;
+                    let day = (i64::from(fresh.observation.date_raw) - 43_800_000).div_euclid(24);
+                    let used = governor.used_actions(day);
+                    let available = governor.budget_available(day);
+                    let mut report = a
+                        .report
+                        .try_lock()
+                        .map_err(|_| Error::new("input_busy", "Daily digest update in progress"))?
+                        .clone();
+                    report["daily_budget"] = json!({"day":day,"used_assignment_attempts":used,"limit":plan.max_actions_per_day,"remaining":if available {usize::from(plan.max_actions_per_day).saturating_sub(used)} else {0},"navigation_spends_assignment_budget":false});
+                    compact(
+                        fresh,
+                        &report,
+                        self.blocked.load(Ordering::Acquire),
+                        revision,
+                    )
+                })
             }
             _ => Err(Error::new("invalid_arguments", "Unknown daily operation")),
         }
     }
+}
+fn prevalidate_navigation(
+    process: &dyn Process,
+    guard: &mut Guard,
+    entries: &[core::Entry],
+    until: Instant,
+) -> Result<()> {
+    if entries.len() > 256 {
+        return Err(Error::new("invalid_plan", "Bounded plan entries required"));
+    }
+    if entries.iter().all(|e| e.navigation.is_none()) {
+        return Ok(());
+    }
+    let (catalog, context) = crate::research_folders::owned_snapshot(process)?;
+    if Instant::now() >= until {
+        return Err(Error::new(
+            "daily_deadline",
+            "Folder validation exceeded original deadline; no plan change",
+        ));
+    }
+    guard.accept_context(process, &context)?;
+    if Instant::now() >= until {
+        return Err(Error::new(
+            "daily_deadline",
+            "Folder context exceeded original deadline; no plan change",
+        ));
+    }
+    validate_navigation_keys(entries, &catalog)
+}
+fn validate_navigation_keys(
+    entries: &[core::Entry],
+    catalog: &crate::research_folders::FolderCatalog,
+) -> Result<()> {
+    if entries.len() > 256 {
+        return Err(Error::new("invalid_plan", "Bounded plan entries required"));
+    }
+    for entry in entries {
+        let Some(hint) = &entry.navigation else {
+            continue;
+        };
+        let bounded = |key: &str| {
+            !key.is_empty()
+                && key.len() <= 128
+                && key
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+        };
+        if !bounded(&entry.id) || !bounded(&hint.folder_id) {
+            return Err(Error::new(
+                "invalid_plan",
+                "Bounded entry and folder IDs required",
+            ));
+        }
+        if !catalog.contains(&hint.folder_id) {
+            return Err(Error::new("invalid_plan", format!("Unknown public research folder '{}' for entry '{}'; inspect hoi4_research_folders", hint.folder_id, entry.id)));
+        }
+    }
+    Ok(())
 }
 fn unresolved(state: &ControlState) -> bool {
     state.journal.blocks_game(&state.guard.epoch.game)
@@ -296,6 +366,7 @@ fn worker(
         {
             break;
         }
+        let mut refusal_entry = None;
         let run = (|| -> Result<Option<core::DailyResult>> {
             let _read = shared
                 .reads
@@ -310,6 +381,19 @@ fn worker(
                 .as_ref()
                 .ok_or_else(|| Error::new("session_closed", "Owned reader unavailable"))?
                 .as_ref();
+            // Check even idle/exhausted workers before any clock probe. This is
+            // released promptly; the existing pre-action check remains below.
+            {
+                let state = try_state(state)?;
+                if blocked.load(Ordering::Acquire) || unresolved(&state) || navigation.blocked() {
+                    blocked.store(true, Ordering::Release);
+                    return Err(Error::new(
+                        "action_uncertain",
+                        "Shared input unresolved before idle probe",
+                    ));
+                }
+                state.authority.authorize(token, &state.guard.epoch)?;
+            }
             let raw = producer.probe_clock(process, Instant::now() + Duration::from_secs(1))?;
             let mut governor = try_state(governor)?;
             let day = (i64::from(raw) - 43_800_000).div_euclid(24);
@@ -338,35 +422,56 @@ fn worker(
                 return Err(e);
             }
             if let Some(entry) = &entry {
-                let (mut ui, _) = research::observed_state(process, &mut state.guard)?;
-                if let Some(hint) = &entry.navigation {
-                    if ui.tree_visible
-                        && ui.visible_info.is_empty()
-                        && ui.selected_slot
-                            == match entry.intent {
-                                core::Intent::Research { slot, .. } => Some(slot),
-                                _ => None,
-                            }
-                    {
-                        let core::Intent::Research { slot, .. } = &entry.intent else {
-                            unreachable!()
-                        };
-                        let target = crate::research_stage::Target {
-                            epoch: state.guard.epoch.clone(),
-                            stage: crate::research_stage::Stage::SelectCategory,
-                            technology: String::new(),
-                            folder_id: Some(hint.folder_id.clone()),
-                            slot: *slot,
-                        };
-                        ui = research::observed_target_state(
-                            process,
-                            &mut state.guard,
-                            Some(&target),
-                        )?
-                        .0;
+                let prepared = (|| -> Result<Option<crate::research_stage::Target>> {
+                    let (mut ui, _) = research::observed_state(process, &mut state.guard)?;
+                    if let Some(hint) = &entry.navigation {
+                        if ui.tree_visible
+                            && ui.visible_info.is_empty()
+                            && ui.selected_slot
+                                == match entry.intent {
+                                    core::Intent::Research { slot, .. } => Some(slot),
+                                    _ => None,
+                                }
+                        {
+                            let core::Intent::Research { slot, .. } = &entry.intent else {
+                                unreachable!()
+                            };
+                            let target = crate::research_stage::Target {
+                                epoch: state.guard.epoch.clone(),
+                                stage: crate::research_stage::Stage::SelectCategory,
+                                technology: String::new(),
+                                folder_id: Some(hint.folder_id.clone()),
+                                slot: *slot,
+                            };
+                            ui = research::observed_target_state(
+                                process,
+                                &mut state.guard,
+                                Some(&target),
+                            )?
+                            .0;
+                        }
                     }
-                }
-                if let Some(target) = crate::daily_navigation::next(entry, &ui)? {
+                    crate::daily_navigation::next(entry, &ui)
+                })();
+                let target = match prepared {
+                    Ok(target) => target,
+                    Err(e) => {
+                        if crate::daily_navigation::known_preparation_refusal(e.code) {
+                            refusal_entry = Some(entry.id.clone());
+                            let saved = navigation.refuse_preparation(entry, day, &e);
+                            if navigation.blocked() {
+                                blocked.store(true, Ordering::Release);
+                            }
+                            saved?;
+                            if let Ok(mut report) = report.lock() {
+                                report["last_preparation_refusal"] =
+                                    json!(navigation.latest_refusal());
+                            }
+                        }
+                        return Err(e);
+                    }
+                };
+                if let Some(target) = target {
                     let id = match navigation.begin(entry, target.clone(), day) {
                         Ok(id) => id,
                         Err(e) => {
@@ -428,7 +533,19 @@ fn worker(
             }
             result.map(Some)
         })();
+        let possible_input = blocked.load(Ordering::Acquire)
+            || navigation.blocked()
+            || crate::daily_worker::retained_quarantine(governor, |g| g.blocks_work());
+        let disposition = crate::daily_worker::disposition(run.as_ref().err(), possible_input);
         if let Ok(mut report) = report.lock() {
+            if disposition != crate::daily_worker::Disposition::Continue {
+                report["stop_reason"] = json!(run
+                    .as_ref()
+                    .err()
+                    .map(|e| e.code)
+                    .unwrap_or("action_uncertain"));
+                report["running"] = json!(false);
+            }
             match run {
                 Ok(Some(result)) => {
                     report["last_batch"] = json!(result);
@@ -436,15 +553,17 @@ fn worker(
                 }
                 Ok(None) => {}
                 Err(e) => {
-                    report["last_error"] = json!({"code":e.code,"reason":"Daily work retained or quarantined; no automatic replay"});
+                    report["last_error"] = json!({"code":e.code,"entry_id":refusal_entry,"reason":crate::daily_navigation::bounded_reason(&e.message),"historical":true});
                 }
             }
         }
-        if navigation.blocked()
-            || crate::daily_worker::retained_quarantine(governor, |g| g.blocks_work())
-        {
-            blocked.store(true, Ordering::Release);
-            break;
+        match disposition {
+            crate::daily_worker::Disposition::Quarantine => {
+                blocked.store(true, Ordering::Release);
+                break;
+            }
+            crate::daily_worker::Disposition::Stop => break,
+            crate::daily_worker::Disposition::Continue => {}
         }
         drop(shared);
         match wake.wait_after(generation, Duration::from_millis(250)) {
@@ -598,7 +717,10 @@ fn compact_observation(
     digest["counts"] = json!(observation.counts);
     digest["daily_budget"] = report["daily_budget"].clone();
     digest["running"] = report["running"].clone();
+    digest["running_is_input_authority"] = json!(false);
+    digest["stop_reason"] = report["stop_reason"].clone();
     digest["last_error"] = report["last_error"].clone();
+    digest["last_preparation_refusal"] = report["last_preparation_refusal"].clone();
     digest["quarantined"] = json!(blocked);
     digest["input_authorized"] = json!(false);
     while serde_json::to_vec(&digest)
@@ -626,6 +748,38 @@ fn compact_observation(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn plan_hints_require_exact_catalog_keys_and_preserve_specs() {
+        let catalog = crate::research_folders::FolderCatalog {
+            ids: vec!["infantry_folder".into(), "industry_folder".into()],
+        };
+        let entry: core::Entry = serde_json::from_value(json!({
+            "id":"research-support", "intent":{"kind":"Research","technology_id":"support_weapons","slot":0},
+            "navigation":{"folder_id":"infantry_folder"}
+        })).unwrap();
+        let bytes = serde_json::to_vec(&entry).unwrap();
+        validate_navigation_keys(std::slice::from_ref(&entry), &catalog).unwrap();
+        assert_eq!(serde_json::to_vec(&entry).unwrap(), bytes);
+        for key in [
+            "infantry",
+            "INFANTRY_FOLDER",
+            "infantry_folder ",
+            "not_a_folder",
+        ] {
+            let mut wrong = entry.clone();
+            wrong.navigation.as_mut().unwrap().folder_id = key.into();
+            assert_eq!(
+                validate_navigation_keys(&[wrong], &catalog)
+                    .unwrap_err()
+                    .code,
+                "invalid_plan"
+            );
+        }
+        let mut legacy = entry.clone();
+        legacy.navigation = None;
+        validate_navigation_keys(&[legacy], &catalog).unwrap();
+        assert!(validate_navigation_keys(&vec![entry; 257], &catalog).is_err());
+    }
     fn digest_sample() -> core::Observation {
         core::Observation {
             scope: core::Scope {
@@ -711,5 +865,38 @@ mod tests {
             tool["inputSchema"]["oneOf"][1]["properties"]["op"]["enum"],
             json!(["digest", "stop"])
         );
+    }
+    #[test]
+    fn terminal_stop_digest_labels_lifecycle_without_input_authority() {
+        let report = json!({"running":false,"stop_reason":"input_lease_required","last_error":{"code":"input_lease_required"},"last_batch":null});
+        let out = compact_observation(digest_sample(), &report, false, 1).unwrap();
+        assert_eq!(out["running"], false);
+        assert_eq!(out["running_is_input_authority"], false);
+        assert_eq!(out["input_authorized"], false);
+        assert_eq!(out["stop_reason"], "input_lease_required");
+        assert_eq!(out["quarantined"], false);
+    }
+    #[test]
+    fn concrete_refusal_reason_is_exposed_without_promoting_historical_authority() {
+        let report = json!({"running":true,"last_error":{"code":"research_precondition","entry_id":"research-support","reason":"actual recorded bounded reason","historical":true}});
+        let out = compact_observation(digest_sample(), &report, false, 1).unwrap();
+        assert_eq!(
+            out["last_error"]["reason"],
+            "actual recorded bounded reason"
+        );
+        assert_eq!(out["input_authorized"], false);
+        assert_eq!(out["running_is_input_authority"], false);
+    }
+    #[test]
+    fn historical_refusal_survives_success_error_clear_within_digest_budget() {
+        let historical = json!({"code":"research_precondition","entry_id":"a".repeat(128),"reason":crate::daily_navigation::bounded_reason(&"é".repeat(1000)),"historical":true});
+        let report = json!({"running":true,"last_error":null,"last_preparation_refusal":historical,"last_batch":{"digest":{"verified":["successful-other-goal"],"retained":[]}}});
+        let out = compact_observation(digest_sample(), &report, false, 2).unwrap();
+        assert!(out["last_error"].is_null());
+        assert_eq!(
+            out["last_preparation_refusal"]["code"],
+            "research_precondition"
+        );
+        assert!(serde_json::to_vec(&out).unwrap().len() <= 2048);
     }
 }

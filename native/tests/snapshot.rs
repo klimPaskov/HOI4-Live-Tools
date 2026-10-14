@@ -3,7 +3,7 @@ use hoi4_live_native::{
     game, gui,
     memory::ReadMemory,
     platform::Process,
-    research, research_ui, technology,
+    research, research_folders, research_ui, technology,
 };
 use std::{cell::Cell, collections::BTreeMap};
 
@@ -5875,3 +5875,281 @@ fn unified_category_read_count_measurement_per_verification_phase() {
 }
 
 include!("support/daily_observation_cases.rs");
+
+// A public folder catalog fixture with no GUI manager, registry, windows,
+// buttons or callbacks mapped. Campaign/own-country fields use the independent
+// overview fixture; reserved and folder primaries are constructed separately.
+fn folder_catalog_key(f: &mut Fixture, pointer: u64, key: &str, heap: u64) {
+    f.region(pointer, 40);
+    f.word(pointer, 0x10000 + 0x42112c0);
+    if key.len() <= 15 {
+        f.string(pointer + 8, key);
+    } else {
+        f.word(pointer + 8, heap);
+        f.word(pointer + 16, key.len() as u64);
+        f.word(pointer + 24, key.len() as u64);
+        f.put(heap, key.as_bytes());
+    }
+}
+fn folder_catalog_fixture() -> Fixture {
+    let mut f = Fixture::new();
+    f.catalog();
+    f.word(0x10000 + 0x43a40e0, 0x210000);
+    f.word(0x210000, 0x10000 + 0x42113f0); // No readable sentinel payload.
+    for (pointer, key, heap) in [
+        (0x211000, "industry_folder", 0),
+        (0x211100, "infantry_folder", 0),
+        (0x211200, "electronics_folder", 0x216000),
+    ] {
+        folder_catalog_key(&mut f, pointer, key, heap);
+    }
+    f.array(0x360a8, 0x215000, 4);
+    for (index, pointer) in [0x210000, 0x211000, 0x211100, 0x211200]
+        .into_iter()
+        .enumerate()
+    {
+        f.word(0x215000 + index as u64 * 8, pointer);
+    }
+    f
+}
+
+#[test]
+fn research_folders_are_exact_sorted_and_independent_of_closed_or_unmapped_gui() {
+    let f = folder_catalog_fixture();
+    let (catalog, context) = research_folders::owned_snapshot(&f).unwrap();
+    assert_eq!(
+        catalog.ids,
+        ["electronics_folder", "industry_folder", "infantry_folder"]
+    );
+    assert!(catalog.contains("industry_folder"));
+    for alias in ["industry", "Industry_folder", "industry_folder "] {
+        assert!(!catalog.contains(alias), "No invented alias: {alias}");
+    }
+    assert_eq!(context.player, "GER");
+    assert_eq!(context.anchors, [0x30000, 0x32000, 0x36000]);
+    assert_eq!(f.checks.get(), 2); // One begin/end bracket, no nested snapshot.
+    f.assert_not_read(&[
+        0x326b8, 0x324f8, 0x90000, 0x903d8, 0x91000, 0x92000, 0x70000, 0x210008, 0xdead0000,
+        0xbeef0000,
+    ]);
+    let value = research_folders::snapshot(&f).unwrap();
+    assert_eq!(value["ids"], serde_json::json!(catalog.ids));
+    assert_eq!(value["count"], 3);
+    assert_eq!(value["own_player"], "GER");
+    assert_eq!(value["requires_open_research_view"], false);
+    for field in [
+        "technology_folder_mapping_available",
+        "eligibility_available",
+        "geometry_available",
+        "input_authorized",
+        "observation_paused_game",
+    ] {
+        assert_eq!(value[field], false, "{field}");
+    }
+    assert!(value["freshness"]["read_calls"].as_u64().unwrap() > 0);
+    for address in [0x30000u64, 0x36000, 0x210000, 0x211000, 0x216000] {
+        assert!(!value.to_string().contains(&address.to_string()));
+    }
+}
+
+#[test]
+fn research_folders_positive_own_country_and_status_precede_catalog_payload() {
+    for (address, value, code) in [
+        (0x30518, 0, "player_unavailable"),
+        (0x28138, 2, "invalid_research_owner"),
+    ] {
+        let mut f = folder_catalog_fixture();
+        f.number(address, value);
+        assert_eq!(research_folders::owned_snapshot(&f).unwrap_err().code, code);
+        f.assert_not_read(&[0x360a8, 0x215000, 0x211008, 0x216000]);
+    }
+    let mut f = folder_catalog_fixture();
+    f.word(0x28130, 0xdead0000);
+    assert_eq!(
+        research_folders::owned_snapshot(&f).unwrap_err().code,
+        "invalid_research_owner"
+    );
+    f.assert_not_read(&[0x360a8, 0xdead0000]);
+}
+
+#[test]
+fn research_folders_capacity_bound_rejects_before_unreadable_array_payload() {
+    for (capacity, count, data) in [
+        (129, 4, 0xdead0000),
+        (128, 129, 0xdead0000),
+        (-1, 0, 0),
+        (4, -1, 0x215000),
+        (4, 4, 0x215001),
+        (4, 4, 0),
+    ] {
+        let mut f = folder_catalog_fixture();
+        f.word(0x360a8, data);
+        f.number(0x360b0, capacity);
+        f.number(0x360b4, count);
+        assert_eq!(
+            research_folders::owned_snapshot(&f).unwrap_err().code,
+            "invalid_array",
+            "capacity={capacity}, count={count}, data={data:x}"
+        );
+        f.assert_not_read(&[0x215000, 0x215001, 0xdead0000]);
+    }
+}
+
+#[test]
+fn research_folders_accept_complete_policy_boundary_and_known_empty_catalog() {
+    let mut f = folder_catalog_fixture();
+    f.array(0x360a8, 0x220000, 128);
+    f.word(0x220000, 0x210000);
+    for index in 0..127u64 {
+        let pointer = 0x300000 + index * 0x100;
+        folder_catalog_key(&mut f, pointer, &format!("folder_{index:03}"), 0);
+        f.word(0x220008 + index * 8, pointer);
+    }
+    let (catalog, _) = research_folders::owned_snapshot(&f).unwrap();
+    assert_eq!(catalog.ids.len(), 127); // 128 includes the reserved singleton.
+    assert_eq!(catalog.ids.first().unwrap(), "folder_000");
+    assert_eq!(catalog.ids.last().unwrap(), "folder_126");
+    let mut f = folder_catalog_fixture();
+    f.array(0x360a8, 0x215000, 1);
+    f.number(0x360b0, 128);
+    let value = research_folders::snapshot(&f).unwrap();
+    assert_eq!(value["ids"], serde_json::json!([]));
+    assert_eq!(value["count"], 0);
+    assert_eq!(value["input_authorized"], false);
+    f.assert_not_read(&[0x211000, 0x211008, 0x210008]);
+}
+
+#[test]
+fn research_folders_require_exact_database_folder_and_first_reserved_singleton() {
+    for (address, value, code, forbidden) in [
+        (0x36000, 0x10000 + 0x42112c0, "invalid_gui_type", 0x215000),
+        (0x210000, 0x10000 + 0x42112c0, "invalid_gui_type", 0x211008),
+        (0x215000, 0x211000, "invalid_category_ui", 0x211008),
+        (0x215008, 0x210000, "invalid_gui_type", 0x210008),
+        (0x211000, 0x10000 + 0x42113f0, "invalid_gui_type", 0x211008),
+        (0x215008, 0x211001, "invalid_gui_type", 0x211001),
+        (0x215008, 0, "read_bound", 0),
+    ] {
+        let mut f = folder_catalog_fixture();
+        f.word(address, value);
+        assert_eq!(research_folders::owned_snapshot(&f).unwrap_err().code, code);
+        f.assert_not_read(&[forbidden]);
+    }
+    let mut f = folder_catalog_fixture();
+    f.array(0x360a8, 0, 0);
+    assert_eq!(
+        research_folders::owned_snapshot(&f).unwrap_err().code,
+        "invalid_category_ui"
+    );
+    f.assert_not_read(&[0x211008, 0x210008]);
+}
+
+#[test]
+fn research_folders_reject_duplicate_keys_and_pointers_empty_control_and_invalid_utf8() {
+    for key in ["industry_folder", "", "bad\nfolder"] {
+        let mut f = folder_catalog_fixture();
+        f.string(0x211108, key);
+        assert_eq!(
+            research_folders::owned_snapshot(&f).unwrap_err().code,
+            "invalid_category_ui",
+            "{key:?}"
+        );
+    }
+    let mut f = folder_catalog_fixture();
+    f.word(0x215010, 0x211000);
+    assert_eq!(
+        research_folders::owned_snapshot(&f).unwrap_err().code,
+        "invalid_category_ui"
+    );
+    let mut f = folder_catalog_fixture();
+    f.put(0x211018, &[0xff]);
+    assert_eq!(
+        research_folders::owned_snapshot(&f).unwrap_err().code,
+        "invalid_string"
+    );
+}
+
+#[test]
+fn research_folders_key_limit_is_checked_before_heap_payload() {
+    let mut f = folder_catalog_fixture();
+    folder_catalog_key(&mut f, 0x211000, &"x".repeat(256), 0x217000);
+    assert!(research_folders::owned_snapshot(&f)
+        .unwrap()
+        .0
+        .contains(&"x".repeat(256)));
+    let mut f = folder_catalog_fixture();
+    f.word(0x211008, 0xdead0000);
+    f.word(0x211010, 257);
+    assert_eq!(
+        research_folders::owned_snapshot(&f).unwrap_err().code,
+        "invalid_string"
+    );
+    f.assert_not_read(&[0xdead0000]);
+}
+
+#[test]
+fn research_folders_final_witnesses_cover_catalog_and_bound_own_campaign() {
+    for (address, width) in [
+        (0x10000 + 0x439f450, 8),
+        (0x36000, 8),
+        (0x360a8, 16),
+        (0x215000, 32),
+        (0x10000 + 0x43a40e0, 8),
+        (0x210000, 8),
+        (0x211000, 8),
+        (0x211008, 32),
+        (0x216000, 18),
+        (0x10000 + 0x44086a8, 8),
+        (0x39004, 4),
+        (0x28130, 8),
+        (0x28138, 4),
+        (0x3b000, 32),
+        (0x60000, 36),
+        (0x30518, 4),
+        (0x30620, 4),
+        (0x30628, 4),
+        (0x326c1, 1),
+    ] {
+        let mut f = OwnedContextFixture::new();
+        f.fixture = folder_catalog_fixture();
+        let mut bytes: Vec<_> = (0..width)
+            .map(|index| f.fixture.data[&(address + index as u64)])
+            .collect();
+        bytes[0] ^= 1;
+        f.final_mutation = Some((address, bytes));
+        assert_eq!(
+            research_folders::owned_snapshot(&f).unwrap_err().code,
+            "torn_read",
+            "field {address:x}"
+        );
+    }
+}
+
+#[test]
+fn research_folders_identical_list_relocation_is_not_a_stable_observation() {
+    let mut f = OwnedContextFixture::new();
+    f.fixture = folder_catalog_fixture();
+    let identical: Vec<_> = (0..32)
+        .map(|index| f.fixture.data[&(0x215000 + index)])
+        .collect();
+    f.fixture.put(0x218000, &identical);
+    let mut header = 0x218000u64.to_le_bytes().to_vec();
+    header.extend(4i32.to_le_bytes());
+    header.extend(4i32.to_le_bytes());
+    f.final_mutation = Some((0x360a8, header));
+    assert_eq!(
+        research_folders::owned_snapshot(&f).unwrap_err().code,
+        "torn_read"
+    );
+}
+
+#[test]
+fn research_folders_identity_failure_does_not_publish_a_completed_catalog() {
+    let mut f = folder_catalog_fixture();
+    f.replaced = true;
+    assert_eq!(
+        research_folders::owned_snapshot(&f).unwrap_err().code,
+        "ownership_changed"
+    );
+    assert_eq!(f.checks.get(), 2);
+}

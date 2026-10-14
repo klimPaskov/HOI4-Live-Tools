@@ -258,7 +258,7 @@ Start the daily preview with an existing exclusive lease and an explicit plan:
     "entries": [{
       "id": "research-slot-0",
       "intent": {"kind": "Research", "technology_id": "support_weapons", "slot": 0},
-      "navigation": {"folder_id": "infantry"}
+      "navigation": {"folder_id": "infantry_folder"}
     }],
     "max_actions_per_day": 1,
     "max_observation_age_ms": 2000,
@@ -271,7 +271,11 @@ The player cannot supply trusted process/campaign scope. Entry IDs and technolog
 IDs are explicit and bounded; requested slots must belong to the own current
 array. Navigation prepares one ordinary panel/slot/category/view stage per
 worker cycle, persisting intent and requiring fresh stage verification before
-continuing. An optional explicit folder hint selects the category; omitted hints
+continuing. Discover keys with the read-only `hoi4_research_folders` tool, which does not
+require an open research view. Start/update validate explicit hints before plan
+persistence. Use canonical public folder IDs, such as `infantry_folder`, `industry_folder`
+and `electronics_folder` on the verified build, rather than display labels.
+An optional explicit folder hint selects the category; omitted hints
 preserve legacy entry serialization. Unknown or unrelated UI refuses; the worker
 does not blindly close panels or Info. Only fresh Research completion can finish
 an entry within the persisted daily assignment budget. Several slots may refill
@@ -282,6 +286,13 @@ lease automatically. Daily focus, economy, army and naval domains remain unfinis
 Use `{"op":"digest"}` for fresh own counts and the last batch, or
 `{"op":"stop"}` to join the worker. Digests stay within 2 KB and label prior
 verification as historical. Stop does not pause the game or clear uncertainty.
+Known read-only preparation refusals retain an entry/day backoff and the actual
+bounded reason in digest/stop. This does not silently correct an existing hint.
+An idle worker checks lease authority and stops on explicit ownership/session
+loss or expiry; `running` alone never grants input authority. Digest reads take
+the governor gate before producer, avoiding interference with post-action
+verification. Counter contention alone may wait inside the existing two-second
+deadline; poison is reported separately.
 Private sequence and plan files preserve chronology across restarts. Use
 `{"op":"update","lease_token":"<existing private lease>","plan":{...}}`
 to add entries or change bounded policy with an increased revision. Exact retries

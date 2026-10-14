@@ -1,5 +1,5 @@
-//! Offline category association candidate. Caller must verify full own mode6
-//! context and use this Reader with the production final Witnesses.
+//! Canonical public folders and own category associations for the verified
+//! Linux build. The caller owns the Reader's final production witnesses.
 use crate::{
     error::{Error, Result},
     memory::Reader,
@@ -8,6 +8,33 @@ use crate::{
 use serde_json::{json, Value};
 fn refuse(message: &str) -> Error {
     Error::new("invalid_category_ui", message)
+}
+
+pub(crate) struct CanonicalFolders {
+    pub(crate) database: u64,
+    pub(crate) ids: std::collections::BTreeSet<String>,
+}
+
+/// Existing independently recovered category database traversal, without a
+/// dependency on materialized GUI roots. The reserved singleton has no payload.
+pub(crate) fn canonical_folders(r: &Reader<'_>, base: u64) -> Result<CanonicalFolders> {
+    let database = r.u64(base + 0x439f450)?;
+    exact(r, database, base + 0x42110c8)?;
+    let folders = array(r, database + 0xa8, 128)?;
+    let sentinel = r.u64(base + 0x43a40e0)?;
+    exact(r, sentinel, base + 0x42113f0)?;
+    if folders.first().copied() != Some(sentinel) {
+        return Err(refuse("Reserved category singleton join"));
+    }
+    let mut ids = std::collections::BTreeSet::new();
+    for pointer in folders.into_iter().skip(1) {
+        exact(r, pointer, base + 0x42112c0)?;
+        let key = r.string_bounded(pointer + 8, 256)?;
+        if key.is_empty() || key.chars().any(char::is_control) || !ids.insert(key) {
+            return Err(refuse("Malformed canonical category key"));
+        }
+    }
+    Ok(CanonicalFolders { database, ids })
 }
 fn container(r: &Reader<'_>, base: u64, p: u64, registry: u64) -> Result<()> {
     exact(r, p, base + 0x4347d58)?;
@@ -100,30 +127,8 @@ fn observe_inner(
         out["selected_slot_empty"] = json!(r.u64(slot + 0x18)? == 0);
     }
     container(r, base, root, registry)?;
-    let db = r.u64(base + 0x439f450)?;
-    exact(r, db, base + 0x42110c8)?;
-    let folders = array(r, db + 0xa8, 128)?;
-    let sentinel = r.u64(base + 0x43a40e0)?;
-    exact(r, sentinel, base + 0x42113f0)?;
-    if folders.first().copied() != Some(sentinel) {
-        return Err(refuse("Reserved category singleton join"));
-    }
-    let mut canonical = std::collections::BTreeSet::new();
-    let mut found = false;
-    for (index, p) in folders.into_iter().enumerate() {
-        if index == 0 {
-            continue;
-        } // Exact singleton identity and primary checked above; no payload.
-        exact(r, p, base + 0x42112c0)?;
-        let k = r.string_bounded(p + 8, 256)?;
-        if k.is_empty() || k.chars().any(char::is_control) || !canonical.insert(k.clone()) {
-            return Err(refuse("Malformed canonical category key"));
-        }
-        if k == key {
-            found = true;
-        }
-    }
-    if !found {
+    let canonical = canonical_folders(r, base)?.ids;
+    if !canonical.contains(key) {
         out["reason"] = json!("unknown_canonical_folder_key");
         return Ok(out);
     }

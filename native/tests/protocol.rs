@@ -52,6 +52,7 @@ fn stdio_is_json_and_notifications_have_no_reply() {
             "hoi4_input_geometry",
             "hoi4_research_slot_control",
             "hoi4_research_category",
+            "hoi4_research_folders",
             "hoi4_research_ui",
             "hoi4_army",
             "hoi4_economy",
@@ -300,4 +301,61 @@ fn focus_geometry_flag_is_optional_strict_boolean_before_process_access() {
         let reply=server.handle(json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"hoi4_focus_node_detail","arguments":args}})).unwrap();
         assert!(!reply.to_string().contains("invalid_arguments"));
     }
+}
+
+#[test]
+fn research_folders_arguments_refuse_before_any_process_access() {
+    let server = hoi4_live_native::protocol::Server {
+        process: None,
+        unavailable: None,
+    };
+    for arguments in [
+        json!({"folder_id":"industry_folder"}),
+        json!({"country":"GER"}),
+        json!({"filter":"industry"}),
+        json!({"offset":0}),
+        json!({"include_geometry":true}),
+        json!({"lease_token":"x"}),
+        json!({"click":true}),
+        json!([]),
+        json!(null),
+    ] {
+        let reply = server.handle(json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"hoi4_research_folders","arguments":arguments}})).unwrap();
+        let value: Value =
+            serde_json::from_str(reply["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+        assert_eq!(reply["result"]["isError"], true);
+        assert_eq!(value["error"]["code"], "invalid_arguments");
+    }
+    let reply = server.handle(json!({"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"hoi4_research_folders","arguments":{}}})).unwrap();
+    let value: Value =
+        serde_json::from_str(reply["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+    assert_eq!(value["error"]["code"], "capability_unavailable");
+}
+
+#[test]
+fn research_folders_tool_is_read_only_empty_arguments_and_capability_is_listed() {
+    let server = hoi4_live_native::protocol::Server {
+        process: None,
+        unavailable: None,
+    };
+    let reply = server
+        .handle(json!({"jsonrpc":"2.0","id":1,"method":"tools/list"}))
+        .unwrap();
+    let tool = reply["result"]["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|value| value["name"] == "hoi4_research_folders")
+        .unwrap();
+    assert_eq!(tool["inputSchema"]["properties"], json!({}));
+    assert_eq!(tool["inputSchema"]["additionalProperties"], false);
+    assert_eq!(tool["annotations"]["readOnlyHint"], true);
+    let reply = server.handle(json!({"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"hoi4_capabilities","arguments":{}}})).unwrap();
+    let value: Value =
+        serde_json::from_str(reply["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+    assert!(value["observations"]
+        .as_array()
+        .unwrap()
+        .contains(&json!("public_research_folder_catalog")));
+    assert_eq!(value["owned_session_bound"], false);
 }

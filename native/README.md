@@ -89,6 +89,7 @@ anchors do not establish a load-generation token.
 | `hoi4_economy` | Own named factory trigger counts, civilian project capacity and exact signed political-power units; live comparison pending |
 | `hoi4_technology_list` | Canonical loaded technology IDs with filtering/pagination; no eligibility inference |
 | `hoi4_input_geometry` | GUI dimensions, scale, pointer and conditional source-window diagnostics; no click authority |
+| `hoi4_research_folders` | Exact loaded public folder IDs, independent of open GUI; no technology mapping or eligibility authority |
 | `hoi4_research_ui` | Own slot/widget joins, selected slot, retained Info windows and typed controls |
 | `hoi4_research_slot_control` | One own slot's independently verified callback and control metadata; no input authority |
 | `hoi4_research_category` | One public folder ID, named own tab and dense selection/callback association; optional Sprite diagnostics, read-only |
@@ -222,11 +223,15 @@ The optional `hoi4_daily_governor` service starts a durable explicit plan, retur
 a fresh compact digest, updates its plan, or stops without changing game time.
 It prepares OpenPanel/SelectSlot/optional SelectCategory/View as separately
 persisted and freshly verified stages, then executes Research. An explicit
-folder hint can identify the category. It probes exhausted days without rewriting
+folder hint must be an exact ID returned by `hoi4_research_folders`. Start and
+update validate explicit hints before storing a plan; display labels are rejected. It probes exhausted days without rewriting
 the plan and completes prepared research entries within its persisted daily
 assignment budget. Navigation stages are recorded separately and do not spend
 that assignment budget. Updates preserve used reservations and exact entry
-specifications; stored preparation evidence remains historical.
+specifications; stored preparation evidence remains historical. Known read-only
+preparation refusals are retained per entry/day with their actual bounded reason.
+Digest reads cannot acquire the producer during the worker’s post-action witness;
+producer contention may wait within the existing two-second read deadline.
 Other domains remain retained with an unavailable reason. See the
 [focus and daily setup](../docs/OWNED_LINUX_LAUNCHER.md#focus-and-daily-previews).
 

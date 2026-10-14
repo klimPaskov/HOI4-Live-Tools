@@ -194,3 +194,140 @@ mod contention_tests {
         assert!(super::retained_quarantine(&state, |blocked| *blocked));
     }
 }
+
+/// Lifecycle-only classification; never authorize input or renew a lease here.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Disposition {
+    Continue,
+    Stop,
+    Quarantine,
+}
+pub(crate) fn disposition(error: Option<&Error>, possible_input: bool) -> Disposition {
+    if possible_input
+        || error.is_some_and(|e| {
+            matches!(
+                e.code,
+                "action_uncertain" | "governor_quarantined" | "daily_quarantined"
+            )
+        })
+    {
+        Disposition::Quarantine
+    } else if error.is_some_and(|e| {
+        matches!(
+            e.code,
+            "ownership_changed" | "session_closed" | "input_lease_required"
+        )
+    }) {
+        Disposition::Stop
+    } else {
+        Disposition::Continue
+    }
+}
+#[cfg(test)]
+mod terminal_tests {
+    use super::*;
+    #[test]
+    fn terminal_preinput_loss_stops_without_false_quarantine() {
+        for code in [
+            "ownership_changed",
+            "session_closed",
+            "input_lease_required",
+        ] {
+            assert_eq!(
+                disposition(Some(&Error::new(code, "injected before input")), false),
+                Disposition::Stop
+            );
+        }
+        for code in ["input_busy", "capability_unavailable", "torn_read"] {
+            assert_eq!(
+                disposition(Some(&Error::new(code, "known local refusal")), false),
+                Disposition::Continue
+            );
+        }
+    }
+    #[test]
+    fn possible_input_always_dominates_expiration_and_terminal_loss() {
+        for code in [
+            "ownership_changed",
+            "session_closed",
+            "input_lease_required",
+            "input_busy",
+        ] {
+            assert_eq!(
+                disposition(
+                    Some(&Error::new(code, "injected after possible input")),
+                    true
+                ),
+                Disposition::Quarantine
+            );
+        }
+        assert_eq!(disposition(None, true), Disposition::Quarantine);
+        assert_eq!(
+            disposition(
+                Some(&Error::new("action_uncertain", "unknown delivery")),
+                false
+            ),
+            Disposition::Quarantine
+        );
+    }
+    #[test]
+    fn idle_expiration_join_has_no_probe_dispatch_or_automatic_restart() {
+        use std::sync::atomic::AtomicUsize;
+        let stop = Arc::new(AtomicBool::new(false));
+        let wake = Arc::new(Wakeup::default());
+        let cycles = Arc::new(AtomicUsize::new(0));
+        let probes = Arc::new(AtomicUsize::new(0));
+        let dispatches = Arc::new(AtomicUsize::new(0));
+        let (s, w, c, p, d) = (
+            stop.clone(),
+            wake.clone(),
+            cycles.clone(),
+            probes.clone(),
+            dispatches.clone(),
+        );
+        let h = thread::spawn(move || {
+            c.fetch_add(1, Ordering::SeqCst);
+            let error = Error::new("input_lease_required", "injected idle expiry");
+            if disposition(Some(&error), false) == Disposition::Stop {
+                s.store(true, Ordering::Release);
+                return;
+            }
+            p.fetch_add(1, Ordering::SeqCst);
+            d.fetch_add(1, Ordering::SeqCst);
+            let _ = w.wait_after(0, std::time::Duration::from_millis(1));
+        });
+        let mut life = Lifecycle::new(stop, wake, h);
+        life.stop().unwrap();
+        assert!(!life.running());
+        assert_eq!(cycles.load(Ordering::SeqCst), 1);
+        assert_eq!(probes.load(Ordering::SeqCst), 0);
+        assert_eq!(dispatches.load(Ordering::SeqCst), 0);
+        life.stop().unwrap();
+        assert_eq!(cycles.load(Ordering::SeqCst), 1);
+    }
+    #[test]
+    fn real_released_authority_cannot_be_renewed_or_mistaken_for_busy() {
+        let epoch = crate::actions::Epoch {
+            game: crate::platform::Identity {
+                pid: 123,
+                start_ticks: "5".into(),
+                exe: "/fixture".into(),
+                uid: 1000,
+            },
+            campaign: "fixture".into(),
+            player: "GER".into(),
+        };
+        let token = "a".repeat(32);
+        let mut authority =
+            crate::input_lease::InputAuthority::new("holder".into(), epoch.clone()).unwrap();
+        authority
+            .acquire("holder", token.clone(), 30, &epoch)
+            .unwrap();
+        authority.release(&token, &epoch).unwrap();
+        let error = authority.authorize(&token, &epoch).unwrap_err();
+        assert_eq!(disposition(Some(&error), false), Disposition::Stop);
+        assert!(authority.renew(&token, 30, &epoch).is_err());
+        assert!(authority.status().1.is_zero());
+        assert_eq!(disposition(Some(&error), true), Disposition::Quarantine);
+    }
+}

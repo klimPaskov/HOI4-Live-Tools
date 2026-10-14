@@ -1915,3 +1915,76 @@ Yama1 and display ownership remained unchanged and run026 stayed exited. Earlier
 exec ownership failure remains unexplained; this run did not reproduce it. No
 production guard was relaxed. A fresh recorded worker trial is next; these
 fixture results do not establish installed-game or campaign acceptance.
+
+
+## Recorded run027: worker preparation passed; bad hint refused
+
+Immutable source `371e677` / CLI SHA-256
+`2e6d3ded36baedebda84459e2089c8f21bf237af61e7bdc3b31323fd25d06645`
+started Normal historical vanilla Germany, no mods or DLC. Recording's first
+packet was verified before one Start. Fresh own state confirmed1January1936
+at12:00, paused speed0, four empty slots and no active focus.
+
+One exclusive Luna medium player verified speed4 while paused (**1,851 ms RPC**)
+and started research plan revision1 (**223 ms**). The parent supplied incorrect
+folder hints: `infantry` and `industry`, rather than the canonical
+`infantry_folder` and `industry_folder` already verified in run025. This is a
+builder test-setup error. Stored navigation receipts verify worker-only
+**OpenPanel** and **SelectSlot**; they are preparation, not goal completion.
+
+Three in-run digests refused `input_busy`; two intervening50-second server waits
+still observed all four slots empty on the initial paused date. Luna stopped the
+worker (**12 ms**, uncertainty retained false), released the lease and confirmed
+remaining0. No update, restart, assignment or time advancement was attempted.
+The parent made no game reads/input during Luna's ownership. After release, one
+read-only diagnostic digest succeeded in74ms: last_error `research_precondition`,
+current revision1, idle4, assignment attempts0/remaining4 and no quarantine.
+The exact deeper association error was not retained; wrong hints are concrete
+setup evidence, not proof that every runtime failure has been explained.
+
+The H.264 recording finalized and passed ffprobe: **591.666 seconds**,
+**6,960,787 bytes**,512×288 at3fps. One owned WM close returned actual normal
+exit **0**, no signal/core dump, in **3.382 seconds**. Both exact game and owner
+were absent afterward; Yama1 remained unchanged. Private receipts, journals,
+release proof, calls and footage are preserved; both clients closed.
+
+Worker preparation passed two stages. Same-day refill and campaign acceptance
+remain unpassed. Correct the public setup example and next brief; add bounded
+preparation-refusal reporting/backoff and read-only digest contention handling.
+Do not replace the persisted bad specification or count a fresh trial as success
+of this run. Future worker terminal-stop code remains a separate tested candidate.
+
+
+## Public folder validation and worker refusal/scheduling correction
+
+The read-only `hoi4_research_folders` tool now returns exact sorted loaded public
+keys with fresh own context, without any open GUI dependency. It reuses the
+existing canonical database/sentinel/type/key traversal and final witnesses;
+no new offsets, technology mapping, eligibility or input authority are claimed.
+Start/update compare explicit hints against this owned catalog before plan
+persistence, rejecting labels/aliases. The setup example uses `infantry_folder`.
+
+Known logical read-only preparation refusals are persisted by full entry/day
+without a new navigation intent or goal-budget reservation. Their actual
+control-free160-byte reason remains historical through success/restart and is
+reported by digest/stop. Unknown delivery, I/O, ownership and torn reads retain
+distinct handling; no hint is silently changed. Other entries can be considered,
+but unsupported transitions may still refuse.
+
+Digest now acquires the governor gate before producer, preventing observation
+from making a required post-dispatch witness busy. Only counter acquisition may
+wait within the original absolute two-second deadline; no body/input retry,
+pause, stale cache or renewal occurs. Mutex poison reports quarantine. An idle
+worker checks authority and stops on explicit ownership/session loss or expiry;
+possible input takes precedence and quarantines. `running` is lifecycle only.
+Generic I/O is not guessed into ownership loss. Stop drains in-flight work.
+
+The composed Rust1.86 host suite passed **536 tests**. Host/Linux Clippy with
+warnings denied, Rust1.86 Linux compilation, formatting and optimized linking
+passed. Local Python passed **953 tests,37 skipped**, in21.090 seconds, including
+preserved WIP. The immutable Linux bundle passed **630 reported checks**
+(**628 substantive plus two inert helpers**), including five isolated X11 cases.
+Nested helper output is not counted again. All88 source files are privately
+hashed; prior owned processes remained gone and display identity/Yama1 were
+unchanged. These are fixture/kernel results; fresh installed-game catalog and
+worker refill acceptance are pending. Earlier failures remain preserved.

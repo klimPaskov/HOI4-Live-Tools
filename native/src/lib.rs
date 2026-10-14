@@ -11,6 +11,7 @@ pub mod own_focus;
 pub mod platform;
 pub mod protocol;
 pub mod research;
+pub mod research_folders;
 pub mod research_ui;
 mod target_node;
 pub mod technology;
@@ -69,3 +70,5 @@ mod daily_worker;
 
 #[cfg(any(target_os = "linux", all(test, unix)))]
 mod daily_navigation;
+
+mod daily_digest_lock;

@@ -22,10 +22,43 @@ struct Step {
 }
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+struct Refusal {
+    entry: Entry,
+    day: i64,
+    code: String,
+    reason: String,
+    checksum: String,
+}
+pub(crate) fn known_preparation_refusal(code: &str) -> bool {
+    matches!(
+        code,
+        "research_precondition"
+            | "research_unavailable"
+            | "capability_unavailable"
+            | "input_not_queued"
+    )
+}
+pub(crate) fn bounded_reason(message: &str) -> String {
+    let mut out = String::new();
+    for c in message.chars().filter(|c| !c.is_control()) {
+        if out.len() + c.len_utf8() > 160 {
+            break;
+        }
+        out.push(c);
+    }
+    out
+}
+fn refusal_checksum(r: &Refusal) -> Result<String> {
+    digest(&(&r.entry, r.day, &r.code, &r.reason))
+}
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct Data {
     version: u8,
     epoch: Epoch,
     steps: Vec<Step>,
+    #[serde(default)]
+    refusals: Vec<Refusal>,
 }
 pub(crate) struct Navigator {
     store: crate::daily_governor::store::Store,
@@ -43,6 +76,7 @@ impl Navigator {
                 version: 2,
                 epoch: epoch.clone(),
                 steps: vec![],
+                refusals: vec![],
             }
         };
         validate_history(&data, &epoch)?;
@@ -50,6 +84,13 @@ impl Navigator {
             .steps
             .iter()
             .any(|s| !entries.iter().any(|e| e == &s.entry))
+        {
+            return Err(invalid());
+        }
+        if data
+            .refusals
+            .iter()
+            .any(|r| !entries.iter().any(|e| e == &r.entry))
         {
             return Err(invalid());
         }
@@ -78,11 +119,68 @@ impl Navigator {
     }
     pub(crate) fn refused_today(&self, entry_id: &str, day: i64) -> bool {
         self.data
-            .steps
+            .refusals
             .iter()
-            .rev()
-            .find(|s| s.entry.id == entry_id)
-            .is_some_and(|s| s.terminal == Some(false) && s.day == day)
+            .any(|r| r.entry.id == entry_id && r.day == day)
+            || self
+                .data
+                .steps
+                .iter()
+                .rev()
+                .find(|s| s.entry.id == entry_id)
+                .is_some_and(|s| s.terminal == Some(false) && s.day == day)
+    }
+    pub(crate) fn latest_refusal(&self) -> Option<serde_json::Value> {
+        self.data.refusals.last().map(|r|serde_json::json!({"code":r.code,"entry_id":r.entry.id,"reason":r.reason,"observed_on_day":r.day,"historical":true}))
+    }
+    pub(crate) fn refuse_preparation(
+        &mut self,
+        entry: &Entry,
+        day: i64,
+        error: &Error,
+    ) -> Result<()> {
+        if let Err(e) = self.store.check() {
+            self.poisoned = true;
+            return Err(e);
+        }
+        if self.blocked() || !known_preparation_refusal(error.code) {
+            return Err(invalid());
+        }
+        entry.validate()?;
+        if !matches!(entry.intent, crate::daily_governor::Intent::Research { .. }) {
+            return Err(invalid());
+        }
+        if !(1936 * 365..2001 * 365).contains(&day) {
+            return Err(invalid());
+        }
+        if let Some(old) = self
+            .data
+            .refusals
+            .iter()
+            .find(|r| r.entry.id == entry.id && r.day == day)
+        {
+            return if old.entry == *entry {
+                Ok(())
+            } else {
+                Err(invalid())
+            };
+        }
+        if self.data.steps.len() + self.data.refusals.len() >= 4096 {
+            return Err(Error::new(
+                "journal_full",
+                "Bounded preparation history full; no input",
+            ));
+        }
+        let mut r = Refusal {
+            entry: entry.clone(),
+            day,
+            code: error.code.into(),
+            reason: bounded_reason(&error.message),
+            checksum: String::new(),
+        };
+        r.checksum = refusal_checksum(&r)?;
+        self.data.refusals.push(r);
+        self.save()
     }
     pub(crate) fn begin(&mut self, entry: &Entry, target: Target, day: i64) -> Result<String> {
         self.store.check()?;
@@ -92,7 +190,7 @@ impl Navigator {
                 "Unresolved navigation cannot replay",
             ));
         }
-        if self.data.steps.len() >= 4096
+        if self.data.steps.len() + self.data.refusals.len() >= 4096
             || target.epoch != self.data.epoch
             || target.stage == Stage::Research
         {
@@ -221,6 +319,28 @@ fn validate_binding(entry: &Entry, target: &Target, day: i64) -> Result<()> {
 fn validate_history(data: &Data, epoch: &Epoch) -> Result<()> {
     if data.version != 2 || data.epoch != *epoch || data.steps.len() > 4096 {
         return Err(invalid());
+    }
+    if data.steps.len() + data.refusals.len() > 4096 {
+        return Err(invalid());
+    }
+    let mut refusals = std::collections::BTreeSet::new();
+    for r in &data.refusals {
+        r.entry.validate()?;
+        if !matches!(
+            r.entry.intent,
+            crate::daily_governor::Intent::Research { .. }
+        ) {
+            return Err(invalid());
+        }
+        if !(1936 * 365..2001 * 365).contains(&r.day)
+            || !known_preparation_refusal(&r.code)
+            || r.reason.len() > 160
+            || r.reason.chars().any(char::is_control)
+            || r.checksum != refusal_checksum(r)?
+            || !refusals.insert((&r.entry.id, r.day))
+        {
+            return Err(invalid());
+        }
     }
     let mut ids = std::collections::BTreeSet::new();
     let mut entries = std::collections::BTreeMap::new();
@@ -661,5 +781,92 @@ mod tests {
         n.begin(&b, next(&b, &state()).unwrap().unwrap(), day)
             .unwrap();
         assert!(n.blocked());
+    }
+    #[test]
+    fn pre_navigation_refusal_is_durable_per_entry_day_and_never_goal_input() {
+        let t = Temp::new();
+        let a = entry();
+        let mut b = a.clone();
+        b.id = "research_2".into();
+        b.intent = crate::daily_governor::Intent::Research {
+            technology_id: "other_tech".into(),
+            slot: 1,
+        };
+        let entries = [a.clone(), b.clone()];
+        let day = 1936 * 365;
+        let mut n = Navigator::open(&t.path(), epoch(), &entries).unwrap();
+        let error = Error::new(
+            "research_precondition",
+            "Actual bounded refusal\nno invented diagnosis",
+        );
+        n.refuse_preparation(&a, day, &error).unwrap();
+        let saved = fs::read(t.path()).unwrap();
+        n.refuse_preparation(
+            &a,
+            day,
+            &Error::new("research_unavailable", "replacement reason"),
+        )
+        .unwrap();
+        assert_eq!(fs::read(t.path()).unwrap(), saved);
+        assert!(n.data.steps.is_empty());
+        assert!(!n.blocked());
+        drop(n);
+        let n = Navigator::open(&t.path(), epoch(), &entries).unwrap();
+        assert!(n.refused_today(&a.id, day));
+        assert!(!n.refused_today(&b.id, day));
+        assert!(!n.refused_today(&a.id, day + 1));
+        assert_eq!(
+            n.latest_refusal().unwrap()["reason"],
+            "Actual bounded refusalno invented diagnosis"
+        );
+        let selected = entries
+            .iter()
+            .find(|e| !n.refused_today(&e.id, day))
+            .unwrap();
+        assert_eq!(selected.id, b.id);
+    }
+    #[test]
+    fn unknown_error_and_forged_refusal_cannot_supply_backoff_history() {
+        let t = Temp::new();
+        let a = entry();
+        let mut n = Navigator::open(&t.path(), epoch(), std::slice::from_ref(&a)).unwrap();
+        assert!(n
+            .refuse_preparation(
+                &a,
+                1936 * 365,
+                &Error::new("action_uncertain", "possible input")
+            )
+            .is_err());
+        assert!(n.data.refusals.is_empty());
+        n.refuse_preparation(
+            &a,
+            1936 * 365,
+            &Error::new("research_precondition", "known no-input refusal"),
+        )
+        .unwrap();
+        drop(n);
+        let mut value: serde_json::Value =
+            serde_json::from_slice(&fs::read(t.path()).unwrap()).unwrap();
+        value["refusals"][0]["day"] = serde_json::json!(1936 * 365 + 1);
+        fs::write(t.path(), serde_json::to_vec(&value).unwrap()).unwrap();
+        assert!(Navigator::open(&t.path(), epoch(), &[a]).is_err());
+    }
+    #[test]
+    fn reason_is_bounded_and_existing_proven_step_history_is_compatible() {
+        assert!(bounded_reason(&"é".repeat(1000)).len() <= 160);
+        let t = Temp::new();
+        let a = entry();
+        let mut n = Navigator::open(&t.path(), epoch(), std::slice::from_ref(&a)).unwrap();
+        n.begin(&a, next(&a, &state()).unwrap().unwrap(), 1936 * 365)
+            .unwrap();
+        n.not_queued().unwrap();
+        drop(n);
+        let mut value: serde_json::Value =
+            serde_json::from_slice(&fs::read(t.path()).unwrap()).unwrap();
+        value.as_object_mut().unwrap().remove("refusals");
+        fs::write(t.path(), serde_json::to_vec(&value).unwrap()).unwrap();
+        let n = Navigator::open(&t.path(), epoch(), &[a]).unwrap();
+        assert_eq!(n.data.steps.len(), 1);
+        assert!(n.data.refusals.is_empty());
     }
 }

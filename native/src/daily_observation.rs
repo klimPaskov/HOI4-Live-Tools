@@ -263,10 +263,7 @@ impl Producer {
     /// Prove stored own scope before the broader clock reader can follow it.
     pub fn probe_clock(&self, process: &dyn Process, until: Instant) -> Result<i32> {
         deadline(until)?;
-        let mut counter = self
-            .counter
-            .try_lock()
-            .map_err(|_| Error::new("input_busy", "Daily producer currently reading"))?;
+        let mut counter = crate::daily_digest_lock::acquire(&self.counter, None)?;
         if counter.poisoned {
             return Err(Error::new(
                 "daily_quarantined",
@@ -304,9 +301,20 @@ impl Producer {
     }
     pub fn observe(&self, process: &dyn Process, until: Instant) -> Result<Produced> {
         deadline(until)?;
-        let mut counter = self.counter.try_lock().map_err(|_| {
-            Error::new("input_busy", "Daily producer currently reading or poisoned")
-        })?;
+        self.observe_locked(process, until, false)
+    }
+    /// Only digest may wait for the producer, within its original read deadline.
+    pub fn observe_digest(&self, process: &dyn Process, until: Instant) -> Result<Produced> {
+        self.observe_locked(process, until, true)
+    }
+    fn observe_locked(
+        &self,
+        process: &dyn Process,
+        until: Instant,
+        wait: bool,
+    ) -> Result<Produced> {
+        deadline(until)?;
+        let mut counter = crate::daily_digest_lock::acquire(&self.counter, wait.then_some(until))?;
         if counter.poisoned {
             return Err(Error::new(
                 "daily_quarantined",
