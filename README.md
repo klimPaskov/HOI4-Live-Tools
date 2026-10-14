@@ -96,7 +96,9 @@ The current worker adds durable panel/slot/category navigation, plan updates and
 several research assignments within a persisted daily budget. Recorded run028
 verified public folder discovery, idempotent updates and two automatic assignments;
 two other slots remained empty after navigation failures. Full refill remains
-unaccepted. Broader strategic adapters and Windows/macOS live adapters remain
+unaccepted. Run029 retained a pre-input torn-read reason and exposed a missing
+return-to-panel transition, but assigned no research. Broader strategic adapters
+and Windows/macOS live adapters remain
 unfinished. Three-OS CI tests
 shared code and fixtures; compilation is not live compatibility or campaign acceptance.
 

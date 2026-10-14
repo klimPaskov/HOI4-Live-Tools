@@ -20,11 +20,21 @@ stages ended terminalfalse without retaining their original errors, and later bu
 probes obscured the cause. Pending entries and unused budget were preserved;
 the worker stopped, the lease released and the owned game exited normally.
 
-That immutable preview passed536 Rust1.86 host tests,630 reported actual Linux
-checks (628 substantive), five isolated X11 cases and953 Python tests (37
-skipped). Next retain original nonqueued-stage reasons and allow only bounded
-proven-no-input transient retries, then repeat exclusive recorded Luna medium
-refill validation. Focus, economic, army/naval actions and independent
+Run029 then retained the original pre-intent View torn_read and three subsequent
+navigation refusals, but assigned no research. Source review and a post-release
+read-only snapshot confirm that the selector cannot return from the open own
+tree to another slot. The changed View witness remains unidentified. Lease
+release, recording validation and normal owned exit passed.
+
+Its immutable preview passed541 Rust1.86 host tests,636 reported actual Linux
+checks (634 substantive), five isolated X11 cases and953 Python tests (37
+skipped), plus all nine three-OS CI jobs. The follow-up now bounds proved
+pre-intent torn-read retries without weakening witnesses and explicitly reports
+the missing return-to-panel route. It passed545 Rust1.86 host tests,640 reported
+actual Linux checks (638 substantive), five X11 cases and953 Python tests (37
+skipped). Fresh exclusive recorded Luna medium refill validation is next; no new
+return-panel input transition is enabled.
+Focus, economic, army/naval actions and independent
 Windows/macOS live adapters remain unfinished.
 [Live evidence](CLAUSEWITZ_VALIDATION.md) preserves failures and boundaries.
 

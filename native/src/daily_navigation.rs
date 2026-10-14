@@ -41,6 +41,16 @@ struct Refusal {
     reason: String,
     checksum: String,
 }
+fn transient_before_intent(code: &str, evidence: crate::research_stage::FailureEvidence) -> bool {
+    matches!(code, "input_busy" | "torn_read")
+        && evidence == crate::research_stage::FailureEvidence::BeforeIntent
+}
+fn retry_failure(f: &StageFailure) -> bool {
+    transient_before_intent(&f.code, f.evidence)
+        // Earlier journals retained torn_read with zero retry allowance. Preserve
+        // those terminal refusals; do not manufacture a retry on migration.
+        && (f.code != "torn_read" || f.retry_count > 0)
+}
 pub(crate) fn known_preparation_refusal(code: &str) -> bool {
     matches!(
         code,
@@ -143,12 +153,10 @@ impl Navigator {
                 .is_some_and(|s| {
                     s.terminal == Some(false)
                         && s.day == day
-                        && !s.failure.as_ref().is_some_and(|f| {
-                            f.code == "input_busy"
-                                && f.evidence
-                                    == crate::research_stage::FailureEvidence::BeforeIntent
-                                && f.retry_count < 3
-                        })
+                        && !s
+                            .failure
+                            .as_ref()
+                            .is_some_and(|f| retry_failure(f) && f.retry_count < 3)
                 })
     }
     pub(crate) fn latest_refusal(&self) -> Option<serde_json::Value> {
@@ -221,11 +229,7 @@ impl Navigator {
         let Some(f) = &step.failure else {
             return Ok(None);
         };
-        if step.terminal == Some(false)
-            && f.code == "input_busy"
-            && f.evidence == crate::research_stage::FailureEvidence::BeforeIntent
-            && f.retry_count < 3
-        {
+        if step.terminal == Some(false) && retry_failure(f) && f.retry_count < 3 {
             if now_ms < f.retry_not_before_unix_ms {
                 return Err(Error::new(
                     "input_busy",
@@ -253,8 +257,7 @@ impl Navigator {
         if last.terminal.is_some() {
             return Err(invalid());
         }
-        let retryable = error.code == "input_busy"
-            && evidence == crate::research_stage::FailureEvidence::BeforeIntent;
+        let retryable = transient_before_intent(error.code, evidence);
         let count = if retryable {
             self.data
                 .steps
@@ -262,11 +265,7 @@ impl Navigator {
                 .filter(|s| {
                     s.entry == last.entry
                         && s.day == last.day
-                        && s.failure.as_ref().is_some_and(|f| {
-                            f.code == "input_busy"
-                                && f.evidence
-                                    == crate::research_stage::FailureEvidence::BeforeIntent
-                        })
+                        && s.failure.as_ref().is_some_and(retry_failure)
                 })
                 .count()
                 + 1
@@ -497,7 +496,8 @@ fn validate_history(data: &Data, epoch: &Epoch) -> Result<()> {
     let mut ids = std::collections::BTreeSet::new();
     let mut entries = std::collections::BTreeMap::new();
     let mut last_day = None;
-    let mut busy_counts: std::collections::BTreeMap<String, u8> = std::collections::BTreeMap::new();
+    let mut transient_counts: std::collections::BTreeMap<String, u8> =
+        std::collections::BTreeMap::new();
     for (i, s) in data.steps.iter().enumerate() {
         validate_binding(&s.entry, &s.target, s.day)?;
         if let Some(f) = &s.failure {
@@ -513,11 +513,10 @@ fn validate_history(data: &Data, epoch: &Epoch) -> Result<()> {
             {
                 return Err(invalid());
             }
-            let retryable = f.code == "input_busy"
-                && f.evidence == crate::research_stage::FailureEvidence::BeforeIntent;
+            let retryable = retry_failure(f);
             if retryable {
                 let k = digest(&(&s.entry, s.day))?;
-                let n = busy_counts.entry(k).or_default();
+                let n = transient_counts.entry(k).or_default();
                 *n += 1;
                 if *n > 3
                     || f.retry_count != *n
@@ -635,6 +634,18 @@ pub(crate) fn next(entry: &Entry, state: &OwnState) -> Result<Option<Target>> {
         && state.visible_info.as_slice() == [Some(technology_id.clone())]
     {
         return Ok(None);
+    } else if state.active_mode == Some(6)
+        && state.tree_visible
+        && state.panel_visible == Some(false)
+        && state.selected_slot.is_some_and(|selected| {
+            selected != *slot && state.researching.get(selected as usize) == Some(&None)
+        })
+        && state.visible_info.is_empty()
+    {
+        return Err(Error::new(
+            "capability_unavailable",
+            "Own tree selects another empty slot; ordinary return-to-panel transition is not implemented",
+        ));
     } else {
         return Err(Error::new(
             "research_precondition",
@@ -1122,6 +1133,11 @@ mod tests {
     fn permanent_confirmed_notqueued_and_unknown_never_automatically_retry() {
         for (code, evidence) in [
             (
+                "torn_read",
+                crate::research_stage::FailureEvidence::ConfirmedNotQueued,
+            ),
+            ("torn_read", crate::research_stage::FailureEvidence::Unknown),
+            (
                 "research_precondition",
                 crate::research_stage::FailureEvidence::BeforeIntent,
             ),
@@ -1253,5 +1269,130 @@ mod tests {
         let n = Navigator::open(&t.path(), epoch(), &[other, e.clone()]).unwrap();
         assert_eq!(n.latest_stage_failure().unwrap()["retry_count"], 2);
         assert!(n.retry_target(&e, day, 103_000).is_err());
+    }
+    #[test]
+    fn alternating_transient_codes_share_entry_day_allowance_and_preserve_reasons() {
+        let t = Temp::new();
+        let e = entry();
+        let target = next(&e, &state()).unwrap().unwrap();
+        let day = 1936 * 365;
+        let mut n = Navigator::open(&t.path(), epoch(), std::slice::from_ref(&e)).unwrap();
+        for (index, code) in ["torn_read", "input_busy", "torn_read"]
+            .into_iter()
+            .enumerate()
+        {
+            let count = index as u64 + 1;
+            let now = 100_000 + count * 10_000;
+            n.begin(&e, target.clone(), day, now).unwrap();
+            n.stage_failed(
+                &Error::new(code, "Exact original witness/contention reason"),
+                crate::research_stage::FailureEvidence::BeforeIntent,
+                now,
+            )
+            .unwrap();
+            assert_eq!(n.latest_stage_failure().unwrap()["code"], code);
+            assert_eq!(
+                n.latest_stage_failure().unwrap()["reason"],
+                "Exact original witness/contention reason"
+            );
+            assert_eq!(n.latest_stage_failure().unwrap()["retry_count"], count);
+            drop(n);
+            n = Navigator::open(&t.path(), epoch(), std::slice::from_ref(&e)).unwrap();
+            if count < 3 {
+                assert!(n.retry_target(&e, day, now).is_err());
+                assert_eq!(
+                    n.retry_target(&e, day, now + count * 1000).unwrap(),
+                    Some(target.clone())
+                );
+            }
+        }
+        assert!(n.refused_today(&e.id, day));
+        assert!(n.retry_target(&e, day, 200_000).unwrap().is_none());
+        assert!(n.begin(&e, target, day, 200_000).is_err());
+    }
+    #[test]
+    fn old_zero_allowance_torn_history_remains_nonretryable() {
+        let t = Temp::new();
+        let e = entry();
+        let day = 1936 * 365;
+        let mut n = Navigator::open(&t.path(), epoch(), std::slice::from_ref(&e)).unwrap();
+        n.begin(&e, next(&e, &state()).unwrap().unwrap(), day, 100_000)
+            .unwrap();
+        n.stage_failed(
+            &Error::new("torn_read", "Original retained witness reason"),
+            crate::research_stage::FailureEvidence::BeforeIntent,
+            100_000,
+        )
+        .unwrap();
+        let step = n.data.steps.last_mut().unwrap();
+        step.failure.as_mut().unwrap().retry_count = 0;
+        step.failure.as_mut().unwrap().retry_not_before_unix_ms = 0;
+        step.checksum = checksum(step).unwrap();
+        fs::write(t.path(), serde_json::to_vec(&n.data).unwrap()).unwrap();
+        drop(n);
+        let n = Navigator::open(&t.path(), epoch(), std::slice::from_ref(&e)).unwrap();
+        assert!(n.refused_today(&e.id, day));
+        assert!(n.retry_target(&e, day, 200_000).unwrap().is_none());
+        assert_eq!(
+            n.latest_stage_failure().unwrap()["reason"],
+            "Original retained witness reason"
+        );
+    }
+    #[test]
+    fn known_other_empty_slot_is_explicit_missing_transition_and_durable_refusal() {
+        let t = Temp::new();
+        let mut e = entry();
+        if let crate::daily_governor::Intent::Research { slot, .. } = &mut e.intent {
+            *slot = 1;
+        }
+        let mut own = state();
+        own.active_mode = Some(6);
+        own.tree_visible = true;
+        own.selected_slot = Some(0);
+        let error = next(&e, &own).unwrap_err();
+        assert_eq!(error.code, "capability_unavailable");
+        assert!(error
+            .message
+            .contains("return-to-panel transition is not implemented"));
+        let mut n = Navigator::open(&t.path(), epoch(), std::slice::from_ref(&e)).unwrap();
+        n.refuse_preparation(&e, 1936 * 365, &error).unwrap();
+        drop(n);
+        let n = Navigator::open(&t.path(), epoch(), std::slice::from_ref(&e)).unwrap();
+        assert!(n.refused_today(&e.id, 1936 * 365));
+        assert_eq!(
+            n.latest_refusal().unwrap()["code"],
+            "capability_unavailable"
+        );
+        own.visible_info = vec![None];
+        assert_eq!(next(&e, &own).unwrap_err().code, "research_precondition");
+        own.visible_info.clear();
+        own.researching[0] = Some("other_tech".into());
+        assert_eq!(next(&e, &own).unwrap_err().code, "research_precondition");
+    }
+    #[test]
+    fn alternating_code_cannot_forge_a_reset_count_on_reopen() {
+        let t = Temp::new();
+        let e = entry();
+        let target = next(&e, &state()).unwrap().unwrap();
+        let day = 1936 * 365;
+        let mut n = Navigator::open(&t.path(), epoch(), std::slice::from_ref(&e)).unwrap();
+        for (index, code) in ["input_busy", "torn_read"].into_iter().enumerate() {
+            let now = 100_000 + index as u64 * 10_000;
+            n.begin(&e, target.clone(), day, now).unwrap();
+            n.stage_failed(
+                &Error::new(code, "Original reason"),
+                crate::research_stage::FailureEvidence::BeforeIntent,
+                now,
+            )
+            .unwrap();
+        }
+        let step = n.data.steps.last_mut().unwrap();
+        let f = step.failure.as_mut().unwrap();
+        f.retry_count = 1;
+        f.retry_not_before_unix_ms = f.recorded_unix_ms + 1000;
+        step.checksum = checksum(step).unwrap();
+        fs::write(t.path(), serde_json::to_vec(&n.data).unwrap()).unwrap();
+        drop(n);
+        assert!(Navigator::open(&t.path(), epoch(), &[e]).is_err());
     }
 }

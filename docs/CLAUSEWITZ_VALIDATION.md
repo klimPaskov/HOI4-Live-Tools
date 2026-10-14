@@ -2062,3 +2062,69 @@ checks** (**634 substantive plus two inert helpers**), including five isolated
 X11 cases. Nested helper results are not counted twice. Display ownership and
 Yama1 were unchanged, and run028's exact processes remained gone. These fixture
 results do not establish live refill or campaign acceptance.
+
+## Recorded run029: failure evidence passed; refill failed
+
+Immutable source `e4a9a8d`, CLI SHA-256
+`124e7e33d68c51901a25523d39796d1e472e18c2172ded0ef779ab1e19d31cd3`
+ran Normal historical vanilla Germany with no mods or DLC. The first video
+packet was verified before one Start; own memory confirmed paused noon on
+1January1936, speed0, four empty slots and no focus. One exclusive Luna medium
+player owned all gameplay input. Focus was disabled.
+
+Catalog discovery passed in53ms RPC. Worker start took259ms; it verified
+OpenPanel and SelectSlot0, then refused support's View before any research
+Intent: `torn_read`, "Research UI witness changed", known_no_input:true,
+retry_count0. The specific changed witness remains unidentified. The policy
+retries only pre-intent input_busy, so this failure did not retry. The original
+code/reason survived both later probes and plan revision2 in last_stage_failure.
+
+Tools, electronics and construction were durably refused before navigation with
+research_precondition, "Unknown/other own UI must be resolved; no blind navigation".
+Update passed in131ms; identical retry returned updated:false in112ms without
+resetting consumption. Both50-second waits independently confirmed all four
+slots empty, same paused day at speed4; assignment budget remained0/4. Neither
+restart nor clock advancement was attempted. Stop passed in12ms, with no time
+change or retained uncertainty; canonical lease release/status proved remaining0.
+
+After the completed handoff, one parent read-only UI query passed in60ms: mode6,
+own tree visible, panel hidden, selected slot0, no Info. Source review confirms
+the selector lacks a return-to-panel transition for another pending slot and
+SelectSlot requires the panel. This explains that transition gap; it does not
+identify the earlier changing witness. No parent gameplay rescue occurred.
+
+Both H.264 segments finalized and passed ffprobe: **664.333 seconds**,
+**7,714,883 bytes**,512×288 at3fps. One owned WM close returned actual normal
+exit **0**, no signal/core dump, in **2.912 seconds**. Both exact process paths
+were absent afterward, Yama1 was unchanged and both clients closed. Calls,
+journals, proof and recordings remain private.
+
+Durable error reporting and idempotent updates passed; four-slot refill and
+campaign acceptance remain unpassed. Next bound retries of proved pre-intent
+transient torn reads without weakening witnesses, and explicitly report the
+missing return-to-panel route. New input transitions need separate live proof.
+
+## Bounded pre-intent transient follow-up
+
+New BeforeIntent input_busy and torn_read failures now share the same full
+entry/day allowance: three failures total, at most two automatic retries, with
+the existing persisted one/two-second backoff, exact target and fresh scope,
+lease/UI checks. Alternating error codes cannot reset consumption. Final
+witnesses are unchanged; unknown/post-dispatch or confirmed NotQueued delivery,
+ownership errors and permanent geometry failures never authorize this retry.
+
+Run029's previously stored torn_read with zero allowance stays nonretryable;
+neither migration nor restart manufactures permission. Legacy missing causes
+remain unknown. The known own open-tree/different-empty-slot case now reports
+capability_unavailable with the concrete return-to-panel-not-implemented reason.
+Contradictory or other UI states retain their original refusal. No new keyboard
+or pointer transition is enabled. Fresh installed-game validation is required.
+
+The combined Rust1.86 host suite passed **545 tests**; host/Linux Clippy,
+Rust1.86 Linux compilation, formatting and optimized linking passed. Python
+passed **953 tests,37 skipped**, in22.125 seconds. The immutable actual-Linux
+bundle passed **640 reported checks** (**638 substantive plus two inert helpers**),
+including five isolated X11 cases. Nested helper output is not counted twice;
+display identity/Yama1 stayed unchanged and run029's exact processes remained
+gone. These are fixture results, not evidence that live torn reads or refill
+have been resolved. Record a fresh exclusive Luna medium trial next.
