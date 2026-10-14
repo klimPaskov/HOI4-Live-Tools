@@ -158,7 +158,7 @@ impl Controller {
                 let stop = Arc::new(AtomicBool::new(false));
                 let wake = Arc::new(core::Wakeup::default());
                 let report = Arc::new(Mutex::new(
-                    json!({"running":true,"last_batch":null,"last_error":navigation.latest_refusal(),"last_preparation_refusal":navigation.latest_refusal()}),
+                    json!({"running":true,"last_batch":null,"last_error":navigation.latest_refusal(),"last_preparation_refusal":navigation.latest_refusal(),"last_stage_failure":navigation.latest_stage_failure()}),
                 ));
                 let control = owner.state.clone();
                 let gate = owner.input_gate.clone();
@@ -227,19 +227,20 @@ impl Controller {
                 if let Some(a) = active.as_mut() {
                     a.life.stop()?;
                 }
-                let (last_error, last_preparation_refusal) = active
+                let (last_error, last_preparation_refusal, last_stage_failure) = active
                     .as_ref()
                     .and_then(|a| {
                         a.report.try_lock().ok().map(|r| {
                             (
                                 r["last_error"].clone(),
                                 r["last_preparation_refusal"].clone(),
+                                r["last_stage_failure"].clone(),
                             )
                         })
                     })
-                    .unwrap_or((Value::Null, Value::Null));
+                    .unwrap_or((Value::Null, Value::Null, Value::Null));
                 Ok(
-                    json!({"worker_stopped":true,"game_time_changed":false,"uncertainty_retained":self.blocked.load(Ordering::Acquire),"last_error":last_error,"last_preparation_refusal":last_preparation_refusal}),
+                    json!({"worker_stopped":true,"game_time_changed":false,"uncertainty_retained":self.blocked.load(Ordering::Acquire),"last_error":last_error,"last_preparation_refusal":last_preparation_refusal,"last_stage_failure":last_stage_failure}),
                 )
             }
             "digest" => {
@@ -422,6 +423,8 @@ fn worker(
                 return Err(e);
             }
             if let Some(entry) = &entry {
+                let retry_target =
+                    navigation.retry_target(entry, day, crate::daily_observation::unix_ms()?)?;
                 let prepared = (|| -> Result<Option<crate::research_stage::Target>> {
                     let (mut ui, _) = research::observed_state(process, &mut state.guard)?;
                     if let Some(hint) = &entry.navigation {
@@ -451,7 +454,17 @@ fn worker(
                             .0;
                         }
                     }
-                    crate::daily_navigation::next(entry, &ui)
+                    let target = crate::daily_navigation::next(entry, &ui)?;
+                    if retry_target
+                        .as_ref()
+                        .is_some_and(|expected| target.as_ref() != Some(expected))
+                    {
+                        return Err(Error::new(
+                            "research_precondition",
+                            "Fresh own UI changed the pending retry target; no input",
+                        ));
+                    }
+                    Ok(target)
                 })();
                 let target = match prepared {
                     Ok(target) => target,
@@ -472,7 +485,12 @@ fn worker(
                     }
                 };
                 if let Some(target) = target {
-                    let id = match navigation.begin(entry, target.clone(), day) {
+                    let id = match navigation.begin(
+                        entry,
+                        target.clone(),
+                        day,
+                        crate::daily_observation::unix_ms()?,
+                    ) {
                         Ok(id) => id,
                         Err(e) => {
                             if navigation.blocked() {
@@ -483,20 +501,36 @@ fn worker(
                     };
                     let preparation_stage = target.stage;
                     let result = research::execute_internal(
-                        &mut state, process, gate, token, &id, target, until,
+                        &mut state,
+                        process,
+                        gate,
+                        token,
+                        &id,
+                        target.clone(),
+                        until,
                     );
                     let saved = match result {
                         Ok((receipt, _)) => navigation.verified(&receipt),
-                        Err(e) if e.code != "action_uncertain" && !unresolved(&state) => {
-                            let saved = navigation.not_queued();
+                        Err(e) => {
+                            refusal_entry = Some(entry.id.clone());
+                            let evidence = if unresolved(&state) {
+                                crate::research_stage::FailureEvidence::Unknown
+                            } else {
+                                research::failure_evidence(&state, &id, &target, &e)
+                            };
+                            let saved = navigation.stage_failed(
+                                &e,
+                                evidence,
+                                crate::daily_observation::unix_ms()?,
+                            );
                             if navigation.blocked() {
                                 blocked.store(true, Ordering::Release);
                             }
+                            if let Ok(mut report) = report.lock() {
+                                report["last_stage_failure"] =
+                                    json!(navigation.latest_stage_failure());
+                            }
                             saved?;
-                            return Err(e);
-                        }
-                        Err(e) => {
-                            blocked.store(true, Ordering::Release);
                             return Err(e);
                         }
                     };
@@ -721,6 +755,7 @@ fn compact_observation(
     digest["stop_reason"] = report["stop_reason"].clone();
     digest["last_error"] = report["last_error"].clone();
     digest["last_preparation_refusal"] = report["last_preparation_refusal"].clone();
+    digest["last_stage_failure"] = report["last_stage_failure"].clone();
     digest["quarantined"] = json!(blocked);
     digest["input_authorized"] = json!(false);
     while serde_json::to_vec(&digest)
@@ -897,6 +932,19 @@ mod tests {
             out["last_preparation_refusal"]["code"],
             "research_precondition"
         );
+        assert!(serde_json::to_vec(&out).unwrap().len() <= 2048);
+    }
+    #[test]
+    fn stage_original_failure_is_not_masked_by_later_probe_contention() {
+        let original = json!({"entry_id":"research-support","stage":"SelectSlot","code":"research_precondition","reason":"actual original reason","known_no_input":true,"retry_count":0,"historical":true});
+        let report = json!({"running":true,"last_error":{"code":"input_busy","reason":"later producer probe busy"},"last_stage_failure":original});
+        let out = compact_observation(digest_sample(), &report, false, 2).unwrap();
+        assert_eq!(out["last_error"]["code"], "input_busy");
+        assert_eq!(
+            out["last_stage_failure"]["reason"],
+            "actual original reason"
+        );
+        assert_eq!(out["input_authorized"], false);
         assert!(serde_json::to_vec(&out).unwrap().len() <= 2048);
     }
 }

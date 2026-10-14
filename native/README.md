@@ -230,6 +230,10 @@ assignment budget. Navigation stages are recorded separately and do not spend
 that assignment budget. Updates preserve used reservations and exact entry
 specifications; stored preparation evidence remains historical. Known read-only
 preparation refusals are retained per entry/day with their actual bounded reason.
+Stage errors remain visible in `last_stage_failure` after later probe errors.
+Only proven pre-intent busy failures permit up to two automatic retries, with
+persisted backoff and an entry/day limit. Unknown delivery stays quarantined;
+legacy records without a cause never authorize retries.
 Digest reads cannot acquire the producer during the worker’s post-action witness;
 producer contention may wait within the existing two-second read deadline.
 Other domains remain retained with an unavailable reason. See the

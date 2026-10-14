@@ -304,6 +304,13 @@ pub struct Execution {
     pub current_state_verified: bool,
     pub event_causality_verified: bool,
 }
+#[cfg(any(target_os = "linux", test))]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub(crate) enum FailureEvidence {
+    BeforeIntent,
+    ConfirmedNotQueued,
+    Unknown,
+}
 pub struct Journal {
     file: File,
     receipts: BTreeMap<String, Receipt>,
@@ -518,6 +525,32 @@ impl Journal {
                 .receipts
                 .values()
                 .any(|r| r.status == Status::Intent && &r.target.epoch.game == game)
+    }
+    /// Only an immediate error from execute may use this classification.
+    /// execute calls dispatch_once only after a durable Intent. Post-dispatch
+    /// observation errors become action_uncertain and keep that Intent.
+    #[cfg(any(target_os = "linux", test))]
+    pub(crate) fn failure_evidence(
+        &self,
+        id: &str,
+        target: &Target,
+        error: &Error,
+    ) -> FailureEvidence {
+        if self.poisoned || self.blocks_game(&target.epoch.game) || error.code == "action_uncertain"
+        {
+            return FailureEvidence::Unknown;
+        }
+        match self.receipts.get(id) {
+            None => FailureEvidence::BeforeIntent,
+            Some(r)
+                if r.target == *target
+                    && r.status == Status::NotQueued
+                    && r.delivery == Some(Delivery::NotQueued) =>
+            {
+                FailureEvidence::ConfirmedNotQueued
+            }
+            _ => FailureEvidence::Unknown,
+        }
     }
     #[allow(clippy::too_many_arguments)]
     pub fn execute(

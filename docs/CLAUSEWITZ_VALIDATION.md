@@ -1988,3 +1988,77 @@ Nested helper output is not counted again. All88 source files are privately
 hashed; prior owned processes remained gone and display identity/Yama1 were
 unchanged. These are fixture/kernel results; fresh installed-game catalog and
 worker refill acceptance are pending. Earlier failures remain preserved.
+
+
+## Recorded run028: catalog, update and two automatic assignments passed
+
+Immutable source `3297ce3` / CLI SHA-256
+`f57cb93275499c288d6c1c8e71e2f9950693f36ffb70acb56a45a3912647711e`
+ran Normal historical vanilla Germany, no mods or DLC. Recording's first packet
+was verified before one Start; own state confirmed1January1936 at12:00,
+paused speed0, four empty slots and no focus.
+
+One exclusive Luna medium player queried the new catalog while the research
+views were closed. It returned **16 exact public folder IDs in49ms RPC**.
+Worker start revision1 passed in267ms. Worker-only navigation and Research
+assigned **basic_machine_tools to slot1**, then after revision2 added entries,
+**electronic_mechanical_engineering to slot2**, on the same paused day. Fresh
+canonical reads and durable goal receipts matched; budget used2 of4.
+Update passed in131ms; identical retry returned updated:false in115ms without
+resetting consumption. Digest revision2 remained current.
+
+Full refill did not pass. Slot0 SelectSlot and slot3 SelectCategory navigation
+records ended terminalfalse, with no matching NotQueued Research-journal receipt.
+Their original returned errors were not persisted. Later probes recorded
+`input_busy: Daily producer currently reading`, masking the earlier stage reason.
+No pre-navigation refusal records or quarantine were present. These facts do
+not establish the exact failed-stage cause. Pending entries and unused budget
+were preserved. No restart or clock-advance test followed.
+
+Luna stopped the worker in34ms (no time change, uncertainty retained false),
+released the lease and confirmed remaining0. The parent made no game reads or
+inputs during player ownership. The original release proof used a nested release
+reply and extra player metadata; a private cleanup-validator shape mismatch was
+corrected by checking exact game identity plus actual returned release/status.
+The original proof remained unchanged; no gameplay action was repeated.
+
+Both H.264 segments finalized and passed ffprobe: **848.333 seconds total**,
+**10,599,232 bytes**,512×288 at3fps. One owned WM close returned actual normal
+exit **0**, no signal/core dump, in **3.247 seconds**. Both exact game and owner
+were absent afterward; Yama1 stayed unchanged and both clients closed. Private
+journals, calls, proof, recordings and the initial validator error are preserved.
+
+Catalog discovery, idempotent plan update and two worker-only assignments passed
+this bounded trial. Four-slot refill, clean two-year play and full campaigns
+remain unpassed. Next retain known nonqueued stage code/reason durably and permit
+only bounded proven-no-input transient retries; never retry uncertain delivery.
+
+## Navigation failure evidence and bounded retry correction
+
+The worker now stores the actual immediate stage error, bounded reason and
+delivery evidence in the durable navigation record. Digest and stop expose
+`last_stage_failure` independently of later probe errors. Legacy terminalfalse
+records retain null cause and cannot authorize a retry.
+
+Only an immediate `input_busy` error proved to precede the research journal's
+Intent can retry automatically. The journal dispatches only after durable Intent;
+post-dispatch read errors retain that Intent and become action_uncertain. A
+matching NotQueued receipt also proves no input, but does not authorize this
+transient retry policy. Unknown evidence stays unresolved and quarantines.
+
+Retry requires the same full entry/day and exact target, fresh unchanged UI,
+valid ownership/lease and shared input checks. Persisted one/two-second backoff
+permits at most three proven-busy failures total, or two automatic retries;
+changing targets, updating the plan or restarting cannot reset that allowance.
+Permanent failures back off for the day. Assignment budget and unfinished goals
+remain unchanged. These changes require a fresh immutable live trial; run028's
+missing original errors remain unexplained.
+
+The combined Rust1.86 host suite passed **541 tests**; host/Linux Clippy with
+warnings denied, final Rust1.86 Linux compilation, formatting and optimized
+linking passed. Python passed **953 tests,37 skipped**, in22.460 seconds, with
+unrelated WIP preserved. The immutable actual-Linux bundle passed **636 reported
+checks** (**634 substantive plus two inert helpers**), including five isolated
+X11 cases. Nested helper results are not counted twice. Display ownership and
+Yama1 were unchanged, and run028's exact processes remained gone. These fixture
+results do not establish live refill or campaign acceptance.

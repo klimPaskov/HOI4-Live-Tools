@@ -1066,3 +1066,93 @@ fn newer_category_info_or_occupancy_evidence_blocks_before_dispatch() {
         assert_eq!(f.dispatches, 0);
     }
 }
+
+#[test]
+fn real_candidate_mutex_contention_is_proven_before_intent_and_postdispatch_busy_is_unknown() {
+    struct LockedCandidate {
+        inner: Fake,
+        lock: std::sync::Arc<std::sync::Mutex<()>>,
+    }
+    impl Backend for LockedCandidate {
+        fn observe(&mut self) -> Result<OwnState> {
+            self.inner.observe()
+        }
+        fn candidate(&mut self, t: &Target) -> Result<Candidate> {
+            let _g = self
+                .lock
+                .try_lock()
+                .map_err(|_| error("input_busy", "Actual candidate mutex is held"))?;
+            self.inner.candidate(t)
+        }
+        fn confirm_input_idle(&mut self, c: &Candidate, d: Instant) -> Result<()> {
+            self.inner.confirm_input_idle(c, d)
+        }
+        fn dispatch_once(&mut self, c: &Candidate, d: Instant) -> Delivery {
+            self.inner.dispatch_once(c, d)
+        }
+    }
+    let scratch = Scratch::new();
+    let mut j = Journal::open(&scratch.journal()).unwrap();
+    let a = authority();
+    let gate = RwLock::new(true);
+    let lock = std::sync::Arc::new(std::sync::Mutex::new(()));
+    let (held_tx, held_rx) = std::sync::mpsc::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let l = lock.clone();
+    let holder = std::thread::spawn(move || {
+        let _g = l.lock().unwrap();
+        held_tx.send(()).unwrap();
+        release_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+    });
+    held_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+    let t = target(Stage::Research);
+    let mut f = LockedCandidate {
+        inner: Fake::new(),
+        lock,
+    };
+    let e = j
+        .execute(
+            "busy-before-intent",
+            t.clone(),
+            &"a".repeat(32),
+            &a,
+            &gate,
+            &mut f,
+            Duration::from_secs(5),
+        )
+        .unwrap_err();
+    assert_eq!(e.code, "input_busy");
+    assert_eq!(f.inner.dispatches, 0);
+    assert_eq!(j.file.metadata().unwrap().len(), 0);
+    assert_eq!(
+        j.failure_evidence("busy-before-intent", &t, &e),
+        FailureEvidence::BeforeIntent
+    );
+    release_tx.send(()).unwrap();
+    holder.join().unwrap();
+    let mut f = Fake::new();
+    f.delivery = Delivery::ServerConfirmed;
+    f.observations = VecDeque::from([
+        Ok(state()),
+        Ok(state()),
+        Err(error("input_busy", "Injected postdispatch read busy")),
+    ]);
+    let e = j
+        .execute(
+            "busy-after-dispatch",
+            t.clone(),
+            &"a".repeat(32),
+            &a,
+            &gate,
+            &mut f,
+            Duration::from_secs(5),
+        )
+        .unwrap_err();
+    assert_eq!(e.code, "action_uncertain");
+    assert_eq!(f.dispatches, 1);
+    assert_eq!(
+        j.failure_evidence("busy-after-dispatch", &t, &e),
+        FailureEvidence::Unknown
+    );
+    assert!(j.blocks_game(&t.epoch.game));
+}

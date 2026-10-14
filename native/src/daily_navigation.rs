@@ -10,6 +10,16 @@ use sha2::{Digest, Sha256};
 use std::path::Path;
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+struct StageFailure {
+    code: String,
+    reason: String,
+    evidence: crate::research_stage::FailureEvidence,
+    recorded_unix_ms: u64,
+    retry_count: u8,
+    retry_not_before_unix_ms: u64,
+}
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct Step {
     entry: Entry,
     index: u64,
@@ -19,6 +29,8 @@ struct Step {
     day: i64,
     receipt: Option<crate::research_stage::Receipt>,
     checksum: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    failure: Option<StageFailure>,
 }
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -128,7 +140,16 @@ impl Navigator {
                 .iter()
                 .rev()
                 .find(|s| s.entry.id == entry_id)
-                .is_some_and(|s| s.terminal == Some(false) && s.day == day)
+                .is_some_and(|s| {
+                    s.terminal == Some(false)
+                        && s.day == day
+                        && !s.failure.as_ref().is_some_and(|f| {
+                            f.code == "input_busy"
+                                && f.evidence
+                                    == crate::research_stage::FailureEvidence::BeforeIntent
+                                && f.retry_count < 3
+                        })
+                })
     }
     pub(crate) fn latest_refusal(&self) -> Option<serde_json::Value> {
         self.data.refusals.last().map(|r|serde_json::json!({"code":r.code,"entry_id":r.entry.id,"reason":r.reason,"observed_on_day":r.day,"historical":true}))
@@ -182,7 +203,107 @@ impl Navigator {
         self.data.refusals.push(r);
         self.save()
     }
-    pub(crate) fn begin(&mut self, entry: &Entry, target: Target, day: i64) -> Result<String> {
+    pub(crate) fn retry_target(
+        &self,
+        entry: &Entry,
+        day: i64,
+        now_ms: u64,
+    ) -> Result<Option<Target>> {
+        let Some(step) = self
+            .data
+            .steps
+            .iter()
+            .rev()
+            .find(|s| s.entry == *entry && s.day == day)
+        else {
+            return Ok(None);
+        };
+        let Some(f) = &step.failure else {
+            return Ok(None);
+        };
+        if step.terminal == Some(false)
+            && f.code == "input_busy"
+            && f.evidence == crate::research_stage::FailureEvidence::BeforeIntent
+            && f.retry_count < 3
+        {
+            if now_ms < f.retry_not_before_unix_ms {
+                return Err(Error::new(
+                    "input_busy",
+                    "Persisted stage retry backoff; no input",
+                ));
+            }
+            return Ok(Some(step.target.clone()));
+        }
+        Ok(None)
+    }
+    pub(crate) fn latest_stage_failure(&self) -> Option<serde_json::Value> {
+        self.data.steps.iter().rev().find(|s|s.terminal==Some(false) || s.failure.is_some()).map(|s| match &s.failure {
+            Some(f)=>serde_json::json!({"entry_id":s.entry.id,"stage":s.target.stage,"observed_on_day":s.day,"code":f.code,"reason":f.reason,"known_no_input":f.evidence!=crate::research_stage::FailureEvidence::Unknown,"retry_count":f.retry_count,"retry_not_before_unix_ms":f.retry_not_before_unix_ms,"historical":true}),
+            None=>serde_json::json!({"entry_id":s.entry.id,"stage":s.target.stage,"observed_on_day":s.day,"code":null,"reason":null,"detail_available":false,"historical":true}),
+        })
+    }
+    pub(crate) fn stage_failed(
+        &mut self,
+        error: &Error,
+        evidence: crate::research_stage::FailureEvidence,
+        now_ms: u64,
+    ) -> Result<()> {
+        self.store.check().inspect_err(|_| self.poisoned = true)?;
+        let last = self.data.steps.last().ok_or_else(invalid)?;
+        if last.terminal.is_some() {
+            return Err(invalid());
+        }
+        let retryable = error.code == "input_busy"
+            && evidence == crate::research_stage::FailureEvidence::BeforeIntent;
+        let count = if retryable {
+            self.data
+                .steps
+                .iter()
+                .filter(|s| {
+                    s.entry == last.entry
+                        && s.day == last.day
+                        && s.failure.as_ref().is_some_and(|f| {
+                            f.code == "input_busy"
+                                && f.evidence
+                                    == crate::research_stage::FailureEvidence::BeforeIntent
+                        })
+                })
+                .count()
+                + 1
+        } else {
+            0
+        };
+        if count > 3 {
+            return Err(invalid());
+        }
+        let f = StageFailure {
+            code: error.code.into(),
+            reason: bounded_reason(&error.message),
+            evidence,
+            recorded_unix_ms: now_ms,
+            retry_count: count as u8,
+            retry_not_before_unix_ms: if retryable && count < 3 {
+                now_ms
+                    .checked_add((count as u64) * 1000)
+                    .ok_or_else(invalid)?
+            } else {
+                0
+            },
+        };
+        let last = self.data.steps.last_mut().unwrap();
+        last.failure = Some(f);
+        if evidence != crate::research_stage::FailureEvidence::Unknown {
+            last.terminal = Some(false);
+        }
+        self.save()
+    }
+    pub(crate) fn begin(
+        &mut self,
+        entry: &Entry,
+        target: Target,
+        day: i64,
+        now_ms: u64,
+    ) -> Result<String> {
         self.store.check()?;
         if self.blocked() {
             return Err(Error::new(
@@ -199,6 +320,22 @@ impl Navigator {
                 "Bounded preparation stage required",
             ));
         }
+        if self.refused_today(&entry.id, day) {
+            return Err(Error::new(
+                "research_precondition",
+                "Permanent/exhausted refusal remains unfinished for this day",
+            ));
+        }
+        if self
+            .retry_target(entry, day, now_ms)?
+            .as_ref()
+            .is_some_and(|expected| expected != &target)
+        {
+            return Err(Error::new(
+                "research_precondition",
+                "Retry must preserve exact entry and target",
+            ));
+        }
         let index = self.data.steps.len() as u64 + 1;
         validate_binding(entry, &target, day)?;
         let id = request_id(entry, &target, index, day)?;
@@ -211,6 +348,7 @@ impl Navigator {
             day,
             receipt: None,
             checksum: String::new(),
+            failure: None,
         });
         self.save()?;
         Ok(id)
@@ -250,6 +388,7 @@ impl Navigator {
         last.terminal = Some(true);
         self.save()
     }
+    #[cfg(test)]
     pub(crate) fn not_queued(&mut self) -> Result<()> {
         let last = self
             .data
@@ -282,6 +421,19 @@ fn request_id(entry: &Entry, target: &Target, index: u64, day: i64) -> Result<St
     digest(&(entry, target, index, day))
 }
 fn checksum(s: &Step) -> Result<String> {
+    if let Some(f) = &s.failure {
+        return digest(&(
+            "stage-failure-v1",
+            &s.entry,
+            s.index,
+            &s.target,
+            &s.id,
+            s.terminal,
+            s.day,
+            &s.receipt,
+            f,
+        ));
+    }
     digest(&(
         &s.entry, s.index, &s.target, &s.id, s.terminal, s.day, &s.receipt,
     ))
@@ -345,8 +497,53 @@ fn validate_history(data: &Data, epoch: &Epoch) -> Result<()> {
     let mut ids = std::collections::BTreeSet::new();
     let mut entries = std::collections::BTreeMap::new();
     let mut last_day = None;
+    let mut busy_counts: std::collections::BTreeMap<String, u8> = std::collections::BTreeMap::new();
     for (i, s) in data.steps.iter().enumerate() {
         validate_binding(&s.entry, &s.target, s.day)?;
+        if let Some(f) = &s.failure {
+            if f.code.is_empty()
+                || f.code.len() > 64
+                || !f
+                    .code
+                    .bytes()
+                    .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
+                || f.reason.len() > 160
+                || f.reason.chars().any(char::is_control)
+                || f.recorded_unix_ms == 0
+            {
+                return Err(invalid());
+            }
+            let retryable = f.code == "input_busy"
+                && f.evidence == crate::research_stage::FailureEvidence::BeforeIntent;
+            if retryable {
+                let k = digest(&(&s.entry, s.day))?;
+                let n = busy_counts.entry(k).or_default();
+                *n += 1;
+                if *n > 3
+                    || f.retry_count != *n
+                    || f.retry_not_before_unix_ms
+                        != if *n < 3 {
+                            f.recorded_unix_ms
+                                .checked_add(u64::from(*n) * 1000)
+                                .ok_or_else(invalid)?
+                        } else {
+                            0
+                        }
+                {
+                    return Err(invalid());
+                }
+            } else if f.retry_count != 0 || f.retry_not_before_unix_ms != 0 {
+                return Err(invalid());
+            }
+            if (f.evidence == crate::research_stage::FailureEvidence::Unknown
+                && s.terminal.is_some())
+                || (f.evidence != crate::research_stage::FailureEvidence::Unknown
+                    && s.terminal != Some(false))
+            {
+                return Err(invalid());
+            }
+        }
+
         if s.index != i as u64 + 1
             || s.target.epoch != *epoch
             || s.id.len() != 64
@@ -576,11 +773,15 @@ mod tests {
         let s = state();
         let target = next(&e, &s).unwrap().unwrap();
         let mut n = Navigator::open(&t.path(), epoch(), &[entry()]).unwrap();
-        let id = n.begin(&e, target.clone(), 1936 * 365 + 12).unwrap();
+        let id = n
+            .begin(&e, target.clone(), 1936 * 365 + 12, 100_000)
+            .unwrap();
         drop(n);
         let mut n = Navigator::open(&t.path(), epoch(), &[entry()]).unwrap();
         assert!(n.blocked());
-        assert!(n.begin(&e, target.clone(), 1936 * 365 + 13).is_err());
+        assert!(n
+            .begin(&e, target.clone(), 1936 * 365 + 13, 100_000)
+            .is_err());
         let mut post = s.clone();
         post.active_mode = Some(5);
         post.panel_visible = Some(true);
@@ -598,7 +799,9 @@ mod tests {
         let s = state();
         let target = next(&e, &s).unwrap().unwrap();
         let mut n = Navigator::open(&t.path(), epoch(), &[entry()]).unwrap();
-        let id = n.begin(&e, target.clone(), 1936 * 365 + 1).unwrap();
+        let id = n
+            .begin(&e, target.clone(), 1936 * 365 + 1, 100_000)
+            .unwrap();
         let mut x = receipt(id, target, s);
         assert!(n.verified(&x).is_err());
         assert!(n.blocked());
@@ -617,11 +820,13 @@ mod tests {
         let e = entry();
         let target = next(&e, &state()).unwrap().unwrap();
         let mut n = Navigator::open(&t.path(), epoch(), &[entry()]).unwrap();
-        let first = n.begin(&e, target.clone(), 1936 * 365 + 7).unwrap();
+        let first = n
+            .begin(&e, target.clone(), 1936 * 365 + 7, 100_000)
+            .unwrap();
         n.not_queued().unwrap();
         assert!(n.refused_today("research_1", 1936 * 365 + 7));
         assert!(!n.refused_today("research_1", 1936 * 365 + 8));
-        let second = n.begin(&e, target, 1936 * 365 + 8).unwrap();
+        let second = n.begin(&e, target, 1936 * 365 + 8, 100_000).unwrap();
         assert_ne!(first, second);
         assert_eq!(n.data.steps.len(), 2);
     }
@@ -641,10 +846,11 @@ mod tests {
         assert!(Navigator::open(&t.path(), epoch(), &[entry()]).is_err());
         let e = entry();
         let target = next(&e, &state()).unwrap().unwrap();
-        n.begin(&e, target.clone(), 1936 * 365 + 1).unwrap();
+        n.begin(&e, target.clone(), 1936 * 365 + 1, 100_000)
+            .unwrap();
         n.not_queued().unwrap();
         fs::write(t.path(), b"changed").unwrap();
-        assert!(n.begin(&e, target, 1936 * 365 + 2).is_err());
+        assert!(n.begin(&e, target, 1936 * 365 + 2, 100_000).is_err());
     }
     fn altered_reopen(mut alter: impl FnMut(&mut Data)) {
         let t = Temp::new();
@@ -653,6 +859,7 @@ mod tests {
             &entry(),
             next(&entry(), &state()).unwrap().unwrap(),
             1936 * 365 + 7,
+            100_000,
         )
         .unwrap();
         n.not_queued().unwrap();
@@ -738,6 +945,7 @@ mod tests {
             &entry(),
             next(&entry(), &state()).unwrap().unwrap(),
             1936 * 365,
+            100_000,
         )
         .unwrap();
         n.not_queued().unwrap();
@@ -751,6 +959,7 @@ mod tests {
             &entry(),
             next(&entry(), &state()).unwrap().unwrap(),
             1936 * 365,
+            100_000,
         )
         .unwrap();
         n.data.steps[0].day = 1;
@@ -773,12 +982,12 @@ mod tests {
         };
         let mut n = Navigator::open(&t.path(), epoch(), &[a.clone(), b.clone()]).unwrap();
         let day = 1936 * 365;
-        n.begin(&a, next(&a, &state()).unwrap().unwrap(), day)
+        n.begin(&a, next(&a, &state()).unwrap().unwrap(), day, 100_000)
             .unwrap();
         n.not_queued().unwrap();
         assert!(n.refused_today(&a.id, day));
         assert!(!n.refused_today(&b.id, day));
-        n.begin(&b, next(&b, &state()).unwrap().unwrap(), day)
+        n.begin(&b, next(&b, &state()).unwrap().unwrap(), day, 100_000)
             .unwrap();
         assert!(n.blocked());
     }
@@ -857,8 +1066,13 @@ mod tests {
         let t = Temp::new();
         let a = entry();
         let mut n = Navigator::open(&t.path(), epoch(), std::slice::from_ref(&a)).unwrap();
-        n.begin(&a, next(&a, &state()).unwrap().unwrap(), 1936 * 365)
-            .unwrap();
+        n.begin(
+            &a,
+            next(&a, &state()).unwrap().unwrap(),
+            1936 * 365,
+            100_000,
+        )
+        .unwrap();
         n.not_queued().unwrap();
         drop(n);
         let mut value: serde_json::Value =
@@ -868,5 +1082,176 @@ mod tests {
         let n = Navigator::open(&t.path(), epoch(), &[a]).unwrap();
         assert_eq!(n.data.steps.len(), 1);
         assert!(n.data.refusals.is_empty());
+    }
+    #[test]
+    fn proven_busy_retry_is_durable_bounded_and_exact_target_only() {
+        let t = Temp::new();
+        let e = entry();
+        let target = next(&e, &state()).unwrap().unwrap();
+        let day = 1936 * 365;
+        let mut n = Navigator::open(&t.path(), epoch(), std::slice::from_ref(&e)).unwrap();
+        for attempt in 1..=3 {
+            let now = 100_000 + attempt * 10_000;
+            n.begin(&e, target.clone(), day, now).unwrap();
+            n.stage_failed(
+                &Error::new("input_busy", "Actual pre-intent contention"),
+                crate::research_stage::FailureEvidence::BeforeIntent,
+                now,
+            )
+            .unwrap();
+            assert!(!n.blocked());
+            assert_eq!(n.latest_stage_failure().unwrap()["retry_count"], attempt);
+            drop(n);
+            n = Navigator::open(&t.path(), epoch(), std::slice::from_ref(&e)).unwrap();
+            if attempt < 3 {
+                assert!(n.retry_target(&e, day, now).is_err());
+                assert_eq!(
+                    n.retry_target(&e, day, now + attempt * 1000).unwrap(),
+                    Some(target.clone())
+                );
+                let mut wrong = target.clone();
+                wrong.stage = Stage::SelectSlot;
+                assert!(n.begin(&e, wrong, day, now + attempt * 1000).is_err());
+            }
+        }
+        assert!(n.refused_today(&e.id, day));
+        assert!(n.begin(&e, target, day, 200_000).is_err());
+        assert_eq!(n.data.steps.len(), 3);
+    }
+    #[test]
+    fn permanent_confirmed_notqueued_and_unknown_never_automatically_retry() {
+        for (code, evidence) in [
+            (
+                "research_precondition",
+                crate::research_stage::FailureEvidence::BeforeIntent,
+            ),
+            (
+                "input_busy",
+                crate::research_stage::FailureEvidence::ConfirmedNotQueued,
+            ),
+            (
+                "action_uncertain",
+                crate::research_stage::FailureEvidence::Unknown,
+            ),
+            (
+                "input_lease_required",
+                crate::research_stage::FailureEvidence::BeforeIntent,
+            ),
+        ] {
+            let t = Temp::new();
+            let e = entry();
+            let day = 1936 * 365;
+            let mut n = Navigator::open(&t.path(), epoch(), std::slice::from_ref(&e)).unwrap();
+            n.begin(&e, next(&e, &state()).unwrap().unwrap(), day, 100_000)
+                .unwrap();
+            n.stage_failed(
+                &Error::new(code, "Retained exact actual reason"),
+                evidence,
+                100_000,
+            )
+            .unwrap();
+            assert!(n.retry_target(&e, day, 200_000).unwrap().is_none());
+            if evidence == crate::research_stage::FailureEvidence::Unknown {
+                assert!(n.blocked());
+            } else {
+                assert!(n.refused_today(&e.id, day));
+            }
+            assert_eq!(
+                n.latest_stage_failure().unwrap()["reason"],
+                "Retained exact actual reason"
+            );
+        }
+    }
+    #[test]
+    fn forged_retry_count_or_backoff_and_legacy_missing_detail_refuse_or_remain_nonretryable() {
+        for field in ["retry_count", "retry_not_before_unix_ms"] {
+            let t = Temp::new();
+            let e = entry();
+            let mut n = Navigator::open(&t.path(), epoch(), std::slice::from_ref(&e)).unwrap();
+            n.begin(
+                &e,
+                next(&e, &state()).unwrap().unwrap(),
+                1936 * 365,
+                100_000,
+            )
+            .unwrap();
+            n.stage_failed(
+                &Error::new("input_busy", "busy"),
+                crate::research_stage::FailureEvidence::BeforeIntent,
+                100_000,
+            )
+            .unwrap();
+            drop(n);
+            let mut d: Data = serde_json::from_slice(&fs::read(t.path()).unwrap()).unwrap();
+            if field == "retry_count" {
+                d.steps[0].failure.as_mut().unwrap().retry_count = 0;
+            } else {
+                d.steps[0]
+                    .failure
+                    .as_mut()
+                    .unwrap()
+                    .retry_not_before_unix_ms = 0;
+            }
+            d.steps[0].checksum = checksum(&d.steps[0]).unwrap();
+            fs::write(t.path(), serde_json::to_vec(&d).unwrap()).unwrap();
+            assert!(Navigator::open(&t.path(), epoch(), std::slice::from_ref(&e)).is_err());
+        }
+        let t = Temp::new();
+        let e = entry();
+        let mut n = Navigator::open(&t.path(), epoch(), std::slice::from_ref(&e)).unwrap();
+        n.begin(
+            &e,
+            next(&e, &state()).unwrap().unwrap(),
+            1936 * 365,
+            100_000,
+        )
+        .unwrap();
+        n.not_queued().unwrap();
+        drop(n);
+        let n = Navigator::open(&t.path(), epoch(), std::slice::from_ref(&e)).unwrap();
+        assert!(n.refused_today(&e.id, 1936 * 365));
+        assert!(n.latest_stage_failure().unwrap()["code"].is_null());
+        assert!(n.retry_target(&e, 1936 * 365, 200_000).unwrap().is_none());
+    }
+    #[test]
+    fn busy_limit_is_not_reset_by_success_other_target_or_plan_revision_order() {
+        let t = Temp::new();
+        let e = entry();
+        let day = 1936 * 365;
+        let mut n = Navigator::open(&t.path(), epoch(), std::slice::from_ref(&e)).unwrap();
+        let first = next(&e, &state()).unwrap().unwrap();
+        let id = n.begin(&e, first.clone(), day, 100_000).unwrap();
+        n.stage_failed(
+            &Error::new("input_busy", "first stage original"),
+            crate::research_stage::FailureEvidence::BeforeIntent,
+            100_000,
+        )
+        .unwrap();
+        let second_id = n.begin(&e, first.clone(), day, 101_000).unwrap();
+        assert_ne!(id, second_id);
+        let mut post = state();
+        post.active_mode = Some(5);
+        post.panel_visible = Some(true);
+        n.verified(&receipt(second_id, first, post.clone()))
+            .unwrap();
+        let next_target = next(&e, &post).unwrap().unwrap();
+        n.begin(&e, next_target, day, 102_000).unwrap();
+        n.stage_failed(
+            &Error::new("input_busy", "different stage original"),
+            crate::research_stage::FailureEvidence::BeforeIntent,
+            102_000,
+        )
+        .unwrap();
+        assert_eq!(n.latest_stage_failure().unwrap()["retry_count"], 2);
+        drop(n);
+        let mut other = e.clone();
+        other.id = "added_other".into();
+        other.intent = crate::daily_governor::Intent::Research {
+            technology_id: "another_tech".into(),
+            slot: 1,
+        };
+        let n = Navigator::open(&t.path(), epoch(), &[other, e.clone()]).unwrap();
+        assert_eq!(n.latest_stage_failure().unwrap()["retry_count"], 2);
+        assert!(n.retry_target(&e, day, 103_000).is_err());
     }
 }

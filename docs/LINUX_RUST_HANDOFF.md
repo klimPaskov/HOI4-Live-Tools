@@ -13,16 +13,20 @@ a post-release diagnostic reported research_precondition and zero goal attempts.
 All three owned runs exited normally and recordings passed ffprobe. No clean
 two-year or full campaign has passed; native posting stays quarantined.
 
-The next composed preview adds GUI-independent public folder discovery and
-pre-persistence hint validation, durable per-entry/day preparation refusal,
-concrete reasons, digest scheduling that excludes post-action witnesses and
-explicit terminal worker stops. It passes536 Rust1.86 host tests,630 reported
-actual Linux checks (628 substantive), five isolated X11 cases and953 Python
-tests (37 skipped). These are fixture results: record a fresh exclusive Luna
-medium run with exact catalog IDs before claiming worker refill acceptance.
-Then finish focus, economic, army/naval actions and independent Windows/macOS
-live adapters. [Live evidence](CLAUSEWITZ_VALIDATION.md) preserves failures and
-validation boundaries.
+Recorded run028 then verified GUI-independent discovery of16 exact public
+folder IDs in49ms RPC, idempotent revision updates and two worker-only research
+assignments on the same paused day. Four-slot refill failed: two navigation
+stages ended terminalfalse without retaining their original errors, and later busy
+probes obscured the cause. Pending entries and unused budget were preserved;
+the worker stopped, the lease released and the owned game exited normally.
+
+That immutable preview passed536 Rust1.86 host tests,630 reported actual Linux
+checks (628 substantive), five isolated X11 cases and953 Python tests (37
+skipped). Next retain original nonqueued-stage reasons and allow only bounded
+proven-no-input transient retries, then repeat exclusive recorded Luna medium
+refill validation. Focus, economic, army/naval actions and independent
+Windows/macOS live adapters remain unfinished.
+[Live evidence](CLAUSEWITZ_VALIDATION.md) preserves failures and boundaries.
 
 ## Ordered acceptance gates
 

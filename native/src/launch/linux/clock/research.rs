@@ -186,6 +186,28 @@ pub(super) fn execute_internal(
     Ok((execution, backend.last_transport))
 }
 
+/// Called only immediately after execute_internal returned its actual error.
+pub(super) fn failure_evidence(
+    state: &ControlState,
+    id: &str,
+    target: &stage::Target,
+    error: &Error,
+) -> stage::FailureEvidence {
+    if error.code == "action_uncertain"
+        || state.journal.blocks_game(&target.epoch.game)
+        || state
+            .focus
+            .as_ref()
+            .is_some_and(|f| f.journal.blocks_game(&target.epoch.game))
+    {
+        return stage::FailureEvidence::Unknown;
+    }
+    match &state.research {
+        Some(service) => service.journal.failure_evidence(id, target, error),
+        None if error.code == "capability_unavailable" => stage::FailureEvidence::BeforeIntent,
+        None => stage::FailureEvidence::Unknown,
+    }
+}
 struct ResearchBackend<'a> {
     process: &'a dyn Process,
     controls: &'a mut X11Controls,
