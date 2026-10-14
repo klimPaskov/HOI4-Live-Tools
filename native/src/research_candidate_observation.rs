@@ -126,7 +126,14 @@ fn closure_diagnostic(h: &Value) -> String {
             .unwrap_or("unknown");
         let scope = policy["policy_scope"]
             .as_str()
-            .filter(|s| matches!(*s, "exact_owned_graphics_root" | "ordinary_ancestor"))
+            .filter(|s| {
+                matches!(
+                    *s,
+                    "exact_owned_graphics_root"
+                        | "ordinary_ancestor"
+                        | "own_focus_position_ancestor"
+                )
+            })
             .unwrap_or("unknown");
         detail.push_str(&format!(
             ", boundary={stage}, scope={scope}, count={}, capacity={}",

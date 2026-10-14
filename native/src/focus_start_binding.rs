@@ -126,7 +126,7 @@ pub(crate) fn observe(
     }
     out["callback_route_verified"] = json!(true);
     let renderer = r.u64(button + 0xe8)?;
-    let mut reuse = Reuse::new(base, 0);
+    let mut reuse = Reuse::for_owned_focus(base);
     out["renderer_type_encoding"] = match reuse.nullable_type(r, renderer) {
         Ok(v) => v,
         Err(e) if e.code == "invalid_gui_type" => Value::Null,

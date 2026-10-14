@@ -1488,12 +1488,84 @@ fn readiness_late_image_cannot_publish_success() {
     assert_eq!(c.identity, before);
     private_finish(c);
 }
+// This accepts an observed conservative refusal, never a ready identity. It
+// cannot classify other ownership changes as expected or retry the input/exec.
+fn parent_zero_exec_refusal(
+    error: &Error,
+    expected: &Option<ReadinessAnchor>,
+    observed: &ReadinessAnchor,
+    before: &Identity,
+) -> bool {
+    let Some(expected) = expected else {
+        return false;
+    };
+    error.code == "ownership_changed"
+        && expected.parent == std::process::id() as i32
+        && expected.pid == before.pid
+        && observed.pid == before.pid
+        && expected.uid == before.uid
+        && observed.uid == before.uid
+        && before.uid == uid()
+        && expected.start_ticks == before.start_ticks
+        && observed.start_ticks == before.start_ticks
+        && observed.parent == 0
+}
+#[test]
+fn exec_stress_refusal_policy_is_exact_not_blanket_ownership_ignore() {
+    let before = Identity {
+        pid: 7,
+        uid: uid(),
+        start_ticks: "123".into(),
+        exe: "prior_image".into(),
+    };
+    let expected = ReadinessAnchor {
+        pid: before.pid,
+        uid: before.uid,
+        parent: std::process::id() as i32,
+        start_ticks: before.start_ticks.clone(),
+    };
+    let mut observed = expected.clone();
+    observed.parent = 0;
+    let error = Error::new("ownership_changed", "Generated typed guard refusal");
+    assert!(parent_zero_exec_refusal(
+        &error,
+        &Some(expected.clone()),
+        &observed,
+        &before
+    ));
+    for field in 0..4 {
+        let mut wrong = observed.clone();
+        match field {
+            0 => wrong.pid += 1,
+            1 => wrong.uid += 1,
+            2 => wrong.start_ticks.push('0'),
+            _ => wrong.parent = 1,
+        };
+        assert!(!parent_zero_exec_refusal(
+            &error,
+            &Some(expected.clone()),
+            &wrong,
+            &before
+        ));
+    }
+    for code in ["io_error", "launch_not_ready", "launch_exited"] {
+        assert!(!parent_zero_exec_refusal(
+            &Error::new(code, "Other refusal"),
+            &Some(expected.clone()),
+            &observed,
+            &before
+        ));
+    }
+    assert!(!parent_zero_exec_refusal(&error, &None, &observed, &before));
+}
 #[test]
 fn readiness_threaded_exec_collects_actual_image_operation_failures() {
     if !ordinary() {
         return;
     }
     let mut genuine = 0;
+    let mut ready = 0;
+    let mut parent_zero_refusals = 0;
     for iteration in 0..12 {
         let mut cmd = Command::new(std::env::current_exe().unwrap());
         cmd.args([
@@ -1513,6 +1585,9 @@ fn readiness_threaded_exec_collects_actual_image_operation_failures() {
             input.write_all(b"x").unwrap();
         });
         let exe = fs::canonicalize("/bin/sleep").unwrap();
+        LAST_READINESS_ANCHOR_REFUSAL.with(|last| {
+            last.borrow_mut().take();
+        });
         let result=child.await_executable_observed(&exe,&fs::metadata(&exe).unwrap(),&mut |pid| {
             // Diagnostic-only tighter read-only sampling of generated exec.
             // Production observer retains 5ms polling; its exact timing is not reproduced.
@@ -1528,12 +1603,54 @@ fn readiness_threaded_exec_collects_actual_image_operation_failures() {
             result
         });
         release.join().unwrap();
-        result.unwrap();
-        let after = child.identity.clone().unwrap();
-        assert_eq!(before.pid, after.pid);
-        assert_eq!(before.start_ticks, after.start_ticks);
-        assert_eq!(after.exe, exe.to_string_lossy());
-        private_finish(child);
+        match result {
+            Ok(()) => {
+                ready += 1;
+                let after = child.identity.clone().unwrap();
+                assert_eq!(before.pid, after.pid);
+                assert_eq!(before.uid, after.uid);
+                assert_eq!(before.start_ticks, after.start_ticks);
+                assert_eq!(after.exe, exe.to_string_lossy());
+                let image = readiness_image(after.pid).unwrap();
+                let expected = fs::metadata(&exe).unwrap();
+                assert_eq!(
+                    (image.device, image.inode),
+                    (expected.dev(), expected.ino())
+                );
+                private_finish(child);
+            }
+            Err(error) => {
+                let refusal = LAST_READINESS_ANCHOR_REFUSAL.with(|last| last.borrow_mut().take());
+                let (expected, observed) = refusal
+                    .as_ref()
+                    .expect("Unclassified stress refusal must fail");
+                assert!(
+                    parent_zero_exec_refusal(&error, expected, observed, &before),
+                    "Unexpected readiness failure: {error}; typed={refusal:?}"
+                );
+                assert_eq!(
+                    child.identity,
+                    Some(before.clone()),
+                    "Refusal must not publish a new executable identity"
+                );
+                eprintln!("ACTUAL_EXEC_GUARD_REFUSAL iteration={iteration} code={} expected={expected:?} observed={observed:?}; readiness_not_verified=true; no_retry_or_signal",error.code);
+                parent_zero_refusals += 1;
+                // Only the pinned generated child; preserve until its ordinary
+                // sleep2 exit. Never retry readiness or signal an unverified image.
+                let until = Instant::now() + Duration::from_secs(5);
+                while !child.exited_without_reaping().unwrap() {
+                    assert!(
+                        Instant::now() < until,
+                        "Generated refusal child exceeded bounded natural-exit fixture"
+                    );
+                    thread::sleep(Duration::from_millis(5));
+                }
+                let status = child.child.wait().unwrap();
+                child.exited = true;
+                assert!(status.success(), "Generated exec child failed: {status}");
+            }
+        }
     }
-    eprintln!("ACTUAL_EXEC_OBSERVATION summary generated_execs=12 real_image_errors={genuine}; zero_errors_does_not_disprove_race");
+    assert_eq!(ready + parent_zero_refusals, 12);
+    eprintln!("ACTUAL_EXEC_OBSERVATION summary generated_execs=12 ready={ready} conservative_parent0_refusals={parent_zero_refusals} real_image_errors={genuine}; refusal_is_not_readiness_success");
 }

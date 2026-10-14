@@ -31,8 +31,13 @@ empty-slot evidence without resetting receipts or consumed budgets. It passed
 953 Python tests (37 skipped). An existing threaded-exec fixture's parent0
 refusal failed the first parallel run; the same binary passed serially. Both
 outputs are retained and production ownership guards are unchanged. Technology
-completion and refill still need live validation. Prepare a narrowly scoped focus
-traversal policy, run its combined offline/Linux gates, then a fresh exclusive Luna
+completion and refill still need live validation. A narrowly scoped focus
+traversal policy and test-only exec-stress expectation now pass combined
+556 host Rust checks, 652 reported parallel Linux checks (650 substantive),
+953 Python tests (37 skipped), compiler/Clippy/format gates and release linking.
+Only verified focus node/start producers opt in to capacity8192 for exact generic
+Position ancestors and aggregate16384; ordinary limits and production ownership
+guards stay unchanged. Next run a fresh exclusive Luna
 focus Open/read-only geometry gate. Only a closed1f0 hierarchy, consistent cache
 and supported renderer permit View/Start. Finish economic, army/naval actions
 and independent Windows/macOS live adapters afterward.

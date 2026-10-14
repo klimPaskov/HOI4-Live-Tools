@@ -224,6 +224,14 @@ settled own roots and complete local blocker facts, then uses exact Sprite,
 zero-angle Text or unmasked Frame geometry. Unknown facts and unsupported renderers refuse. These facts do not
 prove global modal clearance or routing. Installed-game focus dispatch is pending.
 
+Only the verified own-focus node/start producers opt into a fixed traversal
+policy for the larger focus-tree container: exact generic Position ancestors
+allow capacity 8192, with 16384 pointer comparisons across the whole path.
+Ordinary callers retain their existing limits. Depth, reciprocal membership,
+final witnesses, conditional cache checks and root1f0 conversion remain required;
+root350 is diagnostic only. This policy passed fixtures, but the installed-game
+continuation beyond run031's boundary remains unproved.
+
 The optional `hoi4_daily_governor` service starts a durable explicit plan, returns
 a fresh compact digest, updates its plan, or stops without changing game time.
 It prepares OpenPanel/SelectSlot/optional SelectCategory/View as separately

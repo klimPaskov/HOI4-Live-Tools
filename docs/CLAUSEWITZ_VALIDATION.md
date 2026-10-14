@@ -2230,3 +2230,32 @@ guard was weakened. Fixture refinement remains separate work.
 These tests establish queue mechanics, not installed-game refill after a
 technology finishes. Focus policy changes are not included in this candidate;
 run031's limits remain unchanged until separately reviewed and tested.
+
+## Scoped focus traversal and exec-stress expectation: fixture validation
+
+The next source opts in only from verified own-focus node/start producers. Its
+fixed request-local policy allows capacity8,192 only for exact generic Position
+ancestors outside the owned container positions; the whole path is bounded to
+16,384 pointer comparisons. Ordinary callers keep their original limits. Sibling
+pointers are compared, never dereferenced. Depth16, structural validation, unique
+reciprocity, final witnesses and cache checks remain unchanged. A closed root350
+still cannot supply input coordinates. Six new fixtures cover the recorded-sized
+vector, default refusal, aggregate/capacity bounds, malformed/duplicate links,
+wrong root, unknown/cyclic/detached ancestry and torn fields. Generated ancestry
+beyond the observed boundary is a fixture, not installed-game proof.
+
+The threaded-exec stress fixture now recognizes only a structured same-anchor
+parent0 refusal captured at the exact guard. It verifies the prior executable
+identity remains unpublished, performs no readiness retry or signal, and waits
+for the generated child's natural exit. Success still requires the configured
+image and device/inode. Other errors or identity changes fail the test. This
+capture and expectation code is test-only; production guards are unchanged.
+
+Combined Rust1.86 host tests passed **556 checks**. Python passed **953 tests**,
+**37 skipped**, in22.400 seconds; formatting, host/Linux Clippy, MSRV Linux
+compilation and release linking passed. The immutable Linux bundle passed its
+parallel run: **652 reported checks**, **650 substantive plus two inert helpers**,
+including five isolated X11 cases. Display identity and Yama1 were unchanged.
+No nested helper result is counted twice. No new live focus selection, closure,
+technology-completion refill or campaign acceptance is established by these tests.
+Record a fresh exclusive Luna medium focus gate next.

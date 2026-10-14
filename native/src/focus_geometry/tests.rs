@@ -132,9 +132,16 @@ impl Fixture {
         f
     }
     fn observe(&self) -> Result<Value> {
+        self.observe_policy(false)
+    }
+    fn observe_policy(&self, focus: bool) -> Result<Value> {
         let witnesses = Witnesses::new(self);
         let reader = Reader::new(&witnesses);
-        let mut reuse = Reuse::new(BASE, 0);
+        let mut reuse = if focus {
+            Reuse::for_owned_focus(BASE)
+        } else {
+            Reuse::new(BASE, 0)
+        };
         let result = super::observe(
             &reader,
             &mut reuse,
@@ -266,11 +273,13 @@ fn depth_boundary_still_refuses_without_inspecting_a_seventeenth_parent() {
             if i == 0 { RENDER } else { p - 0x2000 },
         );
     }
-    let g = f.observe().unwrap();
-    let e = crate::research_candidate_observation::control_surface(&g).unwrap_err();
-    assert!(e.message.contains("status=depth_limit"));
-    assert!(e.message.contains("ancestors=16"));
-    assert!(f.untouched(root + 0xc0, 16));
+    for focus in [false, true] {
+        let g = f.observe_policy(focus).unwrap();
+        let e = crate::research_candidate_observation::control_surface(&g).unwrap_err();
+        assert!(e.message.contains("status=depth_limit"));
+        assert!(e.message.contains("ancestors=16"));
+        assert!(f.untouched(root + 0xc0, 16));
+    }
 }
 #[test]
 fn rooted_graph_parent_and_membership_mutations_still_discard_the_whole_observation() {
@@ -284,5 +293,177 @@ fn rooted_graph_parent_and_membership_mutations_still_discard_the_whole_observat
         let mut f = Fixture::new(GRAPH + 0x1f0);
         f.torn = Some(a);
         assert_eq!(f.observe().unwrap_err().code, "torn_read", "{a:x}");
+    }
+}
+
+// Reproduce run031's observed header sizes; the remainder beyond this boundary
+// is generated deliberately and is not evidence of the actual game ancestry.
+fn large_focus_position(root: u64) -> Fixture {
+    let mut f = Fixture::new(root);
+    let ancestor = 0x90000;
+    f.metadata(0x43484f0, 2, "17C2dPositionObject");
+    // Recorded container counts: initial1, E78 nine, E70 one => total11.
+    f.zero(0xa0100, 9 * 8);
+    f.word(0xa0100 + 4 * 8, RENDER);
+    f.word(P1 + 0xc0, 0xa0100);
+    f.number(P1 + 0xc8, 9);
+    f.number(P1 + 0xcc, 9);
+    f.position(ancestor);
+    f.word(P0 + 0x108, ancestor);
+    f.word(ancestor + 0x108, root);
+    f.zero(0xb0000, 4687 * 8);
+    // Thousands of arbitrary sibling pointers are compared, never dereferenced.
+    for i in 0..4687u64 {
+        f.word(0xb0000 + i * 8, 0xdead0000);
+    }
+    f.word(0xb0000 + 2343 * 8, P0);
+    f.word(ancestor + 0xc0, 0xb0000);
+    f.number(ancestor + 0xc8, 5395);
+    f.number(ancestor + 0xcc, 4687);
+    f.word(0xa0020, ancestor);
+    f
+}
+#[test]
+fn focus_position_policy_reads_bounded_actual_sized_vector_without_sibling_dereference() {
+    let root = GRAPH + 0x1f0;
+    let f = large_focus_position(root);
+    let ordinary = f.observe().unwrap();
+    assert_eq!(
+        ordinary["parent_chain"]["status"],
+        "unavailable_policy_bound"
+    );
+    assert_eq!(
+        ordinary["parent_chain"]["policy_boundary"]["capacity_limit"],
+        2048
+    );
+    assert!(f.untouched(0xb0000, 4687 * 8));
+    let focus = f.observe_policy(true).unwrap();
+    let h = &focus["parent_chain"];
+    assert_eq!(h["graphics_root_closed"], true);
+    assert_eq!(
+        h["chain"][2]["membership_policy_scope"],
+        "own_focus_position_ancestor"
+    );
+    assert_eq!(h["chain"][2]["child_count_raw"], 4687);
+    assert_eq!(h["chain"][2]["capacity_limit"], 8192);
+    assert_eq!(h["chain"][2]["aggregate_entry_limit"], 16384);
+    assert!(crate::research_candidate_observation::control_surface(&focus).is_ok());
+    assert!(f.untouched(0xdead0000, 8));
+    for field in [
+        "input_authorized",
+        "effective_routing_verified",
+        "client_rectangle_available",
+    ] {
+        assert_eq!(focus[field], false);
+    }
+}
+#[test]
+fn focus_position_policy_still_refuses_root350_coordinate_conversion() {
+    let f = large_focus_position(GRAPH + 0x350);
+    let g = f.observe_policy(true).unwrap();
+    assert_eq!(g["parent_chain"]["graphics_root_closed"], true);
+    let error = crate::research_candidate_observation::control_surface(&g).unwrap_err();
+    assert!(error.message.contains("root_scope=owned_graphics_root_350"));
+    assert!(f.untouched(0xdead0000, 8));
+}
+#[test]
+fn focus_position_capacity_and_aggregate_limits_refuse_before_payload() {
+    let mut f = large_focus_position(GRAPH + 0x1f0);
+    f.number(0x900c8, 8193);
+    f.word(0x900c0, 0xbeef0000);
+    let g = f.observe_policy(true).unwrap();
+    assert_eq!(g["parent_chain"]["policy_boundary"]["capacity"], 8193);
+    assert_eq!(
+        g["parent_chain"]["policy_boundary"]["aggregate_entry_limit"],
+        16384
+    );
+    assert!(f.untouched(0xbeef0000, 8));
+    let mut f = large_focus_position(GRAPH + 0x1f0);
+    let second = 0x95000;
+    f.position(second);
+    f.word(0x90108, second);
+    f.zero(0xc0000, 8192 * 8);
+    f.word(0xc0000, 0x90000);
+    f.word(second + 0xc0, 0xc0000);
+    f.number(second + 0xc8, 8192);
+    f.number(second + 0xcc, 8192);
+    f.word(second + 0x108, GRAPH + 0x1f0);
+    // Header valid individually, but total4687+8192+prior11+3503 >16384.
+    let root = GRAPH + 0x1f0;
+    f.word(root + 0xc0, 0xbeef0000);
+    f.number(root + 0xc8, 3503);
+    f.number(root + 0xcc, 3503);
+    let g = f.observe_policy(true).unwrap();
+    assert_eq!(g["parent_chain"]["status"], "unavailable_policy_bound");
+    assert_eq!(
+        g["parent_chain"]["policy_boundary"]["role"],
+        "owned_graphics_root_1f0"
+    );
+    assert_eq!(g["parent_chain"]["policy_boundary"]["count"], 3503);
+    assert!(f.untouched(0xbeef0000, 3503 * 8));
+}
+#[test]
+fn focus_position_policy_requires_structure_and_unique_reciprocity() {
+    for case in 0..4 {
+        let mut f = large_focus_position(GRAPH + 0x1f0);
+        match case {
+            0 => f.word(0x900c0, 0xb0001),
+            1 => f.number(0x900cc, 5396),
+            2 => f.word(0xb0000 + 2343 * 8, 0xdead0000),
+            _ => f.word(0xb0000, P0),
+        }
+        let e = f.observe_policy(true).unwrap_err();
+        assert_eq!(
+            e.code,
+            if case == 1 {
+                "invalid_array"
+            } else {
+                "invalid_gui_hierarchy"
+            }
+        );
+        assert!(f.untouched(0xdead0000, 8));
+    }
+}
+#[test]
+fn focus_position_policy_does_not_expand_other_classes_or_owned_container_positions() {
+    for container in [false, true] {
+        let mut f = large_focus_position(GRAPH + 0x1f0);
+        if container {
+            f.number(P0 + 0xc8, 5395);
+            f.number(P0 + 0xcc, 4687);
+            f.word(P0 + 0xc0, 0xbeef0000);
+        } else {
+            f.word(0x90000, BASE + 0x4356e08); // known common ancestor, not position
+        }
+        let g = f.observe_policy(true).unwrap();
+        assert_eq!(g["parent_chain"]["status"], "unavailable_policy_bound");
+        assert_eq!(g["parent_chain"]["policy_boundary"]["capacity_limit"], 2048);
+        assert!(f.untouched(0xbeef0000, 8));
+    }
+}
+#[test]
+fn focus_position_policy_unknown_cycle_detached_and_torn_fields_still_refuse() {
+    for case in 0..3 {
+        let mut f = large_focus_position(GRAPH + 0x1f0);
+        match case {
+            0 => f.word(0x90000, BASE + 0x43593d8),
+            1 => f.word(0x90108, P1),
+            _ => f.word(0x90108, 0),
+        }
+        if case == 1 {
+            assert_eq!(
+                f.observe_policy(true).unwrap_err().code,
+                "invalid_gui_hierarchy"
+            );
+        } else {
+            let g = f.observe_policy(true).unwrap();
+            assert_eq!(g["parent_chain"]["graphics_root_closed"], false);
+            assert!(crate::research_candidate_observation::control_surface(&g).is_err());
+        }
+    }
+    for field in [0x90108, 0x900c0, 0xb0000, 0xa0020] {
+        let mut f = large_focus_position(GRAPH + 0x1f0);
+        f.torn = Some(field);
+        assert_eq!(f.observe_policy(true).unwrap_err().code, "torn_read");
     }
 }

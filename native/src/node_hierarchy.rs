@@ -2,7 +2,7 @@
 use crate::{
     error::{Error, Result},
     memory::Reader,
-    node_reuse::Reuse,
+    node_reuse::{HierarchyPolicy, Reuse},
     research_ui::exact,
 };
 use serde_json::{json, Value};
@@ -19,6 +19,8 @@ fn membership(
     child: u64,
     total: &mut usize,
     owned_root: bool,
+    policy: HierarchyPolicy,
+    focus_position: bool,
 ) -> Result<Membership> {
     let (header, data, count) = r.array_header(parent + 0xc0)?;
     let capacity = i32::from_le_bytes(header[8..12].try_into().unwrap()) as usize;
@@ -30,10 +32,20 @@ fn membership(
             "Aligned nonempty hierarchy child array required",
         ));
     }
+    // Recorded run 031 had own-focus position count 4687/capacity 5395. The opt-in
+    // permits only existing typed positions beyond the owned container. All
+    // sibling entries remain pointer comparisons, bounded to 128 KiB per path.
+    let focus = policy == HierarchyPolicy::OwnFocus;
     let (capacity_limit, aggregate_limit, scope) = if owned_root {
-        (8192, 8192, "exact_owned_graphics_root")
+        (
+            8192,
+            if focus { 16384 } else { 8192 },
+            "exact_owned_graphics_root",
+        )
+    } else if focus && focus_position {
+        (8192, 16384, "own_focus_position_ancestor")
     } else {
-        (2048, 4096, "ordinary_ancestor")
+        (2048, if focus { 16384 } else { 4096 }, "ordinary_ancestor")
     };
     if capacity > capacity_limit || *total > aggregate_limit || count > aggregate_limit - *total {
         return Ok(Membership::PolicyUnavailable(json!({
@@ -83,6 +95,7 @@ pub(crate) fn observe(
     registry: u64,
 ) -> Result<Value> {
     let base = reuse.base();
+    let policy = reuse.hierarchy_policy();
     // Text is supported ONLY as the constructor-proved leaf, not as an ancestor.
     let leaf = r.u64(render)?;
     if !TYPES.iter().any(|table| leaf == base + table) && leaf != base + 0x43593d8 {
@@ -128,9 +141,15 @@ pub(crate) fn observe(
             "Container E78 parent must match E70",
         ));
     }
-    if let Membership::PolicyUnavailable(mut policy) =
-        membership(r, positions[0], positions[1], &mut total, false)?
-    {
+    if let Membership::PolicyUnavailable(mut policy) = membership(
+        r,
+        positions[0],
+        positions[1],
+        &mut total,
+        false,
+        policy,
+        false,
+    )? {
         policy["stage"] = json!("container_position_membership");
         return Ok(summary(
             Vec::new(),
@@ -185,7 +204,15 @@ pub(crate) fn observe(
         } else {
             "exact_reciprocal_gui_ancestor"
         };
-        let count = match membership(r, parent, child, &mut total, roots.contains(&parent))? {
+        let count = match membership(
+            r,
+            parent,
+            child,
+            &mut total,
+            roots.contains(&parent),
+            policy,
+            role == "exact_reciprocal_gui_ancestor" && table == base + POSITION,
+        )? {
             Membership::Verified(count) => count,
             Membership::PolicyUnavailable(mut policy) => {
                 policy["stage"] = json!("ancestor_membership");
@@ -199,7 +226,11 @@ pub(crate) fn observe(
                 ));
             }
         };
-        chain.push(json!({"type_encoding":encoding,"role":role,"payload_read":true,"reciprocal_child_membership":true,"child_count_raw":count,"membership_policy_scope":if roots.contains(&parent){"exact_owned_graphics_root"}else{"ordinary_ancestor"},"capacity_limit":if roots.contains(&parent){8192}else{2048},"aggregate_entry_limit":if roots.contains(&parent){8192}else{4096},"inspected_entries_after":total}));
+        let root = roots.contains(&parent);
+        let focus_position = policy == HierarchyPolicy::OwnFocus
+            && role == "exact_reciprocal_gui_ancestor"
+            && table == base + POSITION;
+        chain.push(json!({"type_encoding":encoding,"role":role,"payload_read":true,"reciprocal_child_membership":true,"child_count_raw":count,"membership_policy_scope":if root{"exact_owned_graphics_root"}else if focus_position{"own_focus_position_ancestor"}else{"ordinary_ancestor"},"capacity_limit":if root || focus_position{8192}else{2048},"aggregate_entry_limit":if policy==HierarchyPolicy::OwnFocus{16384}else if root{8192}else{4096},"inspected_entries_after":total}));
         typed_path.push(parent);
         if roots.contains(&parent) {
             status = "closed_to_owned_graphics_root";

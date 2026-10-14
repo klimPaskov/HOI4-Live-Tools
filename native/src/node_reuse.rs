@@ -8,7 +8,15 @@ use crate::{
 };
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
+/// Fixed request-local traversal policy, never a tool argument or proof of
+/// foreign GUI ownership/input authority. Only own focus producers opt in.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum HierarchyPolicy {
+    Ordinary,
+    OwnFocus,
+}
 pub(crate) struct Reuse {
+    hierarchy_policy: HierarchyPolicy,
     base: u64,
     tree: u64,
     types: BTreeMap<u64, Value>,
@@ -17,11 +25,21 @@ pub(crate) struct Reuse {
 impl Reuse {
     pub(crate) fn new(base: u64, tree: u64) -> Self {
         Self {
+            hierarchy_policy: HierarchyPolicy::Ordinary,
             base,
             tree,
             types: BTreeMap::new(),
             callbacks: [None, None],
         }
+    }
+    pub(crate) fn for_owned_focus(base: u64) -> Self {
+        Self {
+            hierarchy_policy: HierarchyPolicy::OwnFocus,
+            ..Self::new(base, 0)
+        }
+    }
+    pub(crate) fn hierarchy_policy(&self) -> HierarchyPolicy {
+        self.hierarchy_policy
     }
     pub(crate) fn base(&self) -> u64 {
         self.base

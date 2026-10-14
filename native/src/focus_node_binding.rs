@@ -107,7 +107,7 @@ pub(crate) fn observe(
     }
     let mut seen_names = BTreeSet::new();
     let mut controls = vec![];
-    let mut reuse = Reuse::new(base, 0);
+    let mut reuse = Reuse::for_owned_focus(base);
     for (i, child) in children.iter().enumerate() {
         let name = r.string_bounded(names + i as u64 * 32, 256)?;
         if !seen_names.insert(name.clone()) {

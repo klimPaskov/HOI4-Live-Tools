@@ -352,6 +352,11 @@ struct ReadinessImage {
     inode: u64,
 }
 type ImageResult = std::result::Result<ReadinessImage, (&'static str, std::io::Error)>;
+// Test-only structured refusal diagnostics; never changes guard or retry policy.
+#[cfg(test)]
+std::thread_local! {
+    static LAST_READINESS_ANCHOR_REFUSAL: std::cell::RefCell<Option<(Option<ReadinessAnchor>, ReadinessAnchor)>> = const { std::cell::RefCell::new(None) };
+}
 fn readiness_io_error(stage: &'static str, io: std::io::Error) -> Error {
     let mut error: Error = io.into();
     error.message = format!("Executable readiness {stage}: {}", error.message);
@@ -477,6 +482,10 @@ impl OwnedChild {
             || current.parent != std::process::id() as i32
             || first.as_ref().is_some_and(|old| old != &current)
         {
+            #[cfg(test)]
+            LAST_READINESS_ANCHOR_REFUSAL.with(|last| {
+                *last.borrow_mut() = Some((first.clone(), current.clone()));
+            });
             #[cfg(test)]
             eprintln!(
                 "ACTUAL_READINESS_ANCHOR_REFUSAL expected={first:?} observed={current:?} owner_pid={} owner_uid={}",
