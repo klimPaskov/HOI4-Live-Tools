@@ -38,7 +38,7 @@ fn tools(commands: Option<&dyn Commands>) -> Value {
         {"name":"hoi4_focus_node_detail","description":"Exact own focus key joined to complete current-item ownership and only the requested control/callback metadata. Optional raw Sprite/Text/Frame diagnostics; no input or eligibility authority.","inputSchema":{"type":"object","properties":{"focus_id":{"type":"string","minLength":1,"maxLength":128},"include_geometry":{"type":"boolean","default":false}},"required":["focus_id"],"additionalProperties":false}},
         {"name":"hoi4_focus_selected_detail","description":"Compact fresh exact own selected focus detail window. Start binding is window.start.ordinary_binding; the node symbol is a separate control. Refuses missing, different or multiple selected details. Optional existing raw renderer diagnostics; no client point, input or eligibility authority.","inputSchema":{"type":"object","properties":{"focus_id":{"type":"string","minLength":1,"maxLength":128},"include_geometry":{"type":"boolean","default":false}},"required":["focus_id"],"additionalProperties":false},"annotations":{"readOnlyHint":true}},
         {"name":"hoi4_technology_list","description":"Canonical loaded public technology IDs with bounded filtering/pagination. Catalog membership does not imply player research eligibility. Pure reads; never pauses.","inputSchema":{"type":"object","properties":{"filter":{"type":"string","maxLength":128},"offset":{"type":"integer","minimum":0,"maximum":8192},"limit":{"type":"integer","minimum":1,"maximum":100}},"additionalProperties":false}},
-        {"name":"hoi4_wait_for","description":"Bounded server wait for own focus/research change, game date, or research UI view predicates and optional selected own slot. UI matches do not authorize input. Never pauses.","inputSchema":{"type":"object","properties":{"timeout_seconds":{"type":"integer","minimum":1,"maximum":50},"until_date":{"type":"array","items":{"type":"integer"},"minItems":3,"maxItems":3},"until_research_ui":{"type":"object","properties":{"view":{"type":"string","enum":["panel","tree"]},"selected_slot":{"type":"integer","minimum":0,"maximum":31}},"required":["view"],"additionalProperties":false}},"additionalProperties":false}}
+        {"name":"hoi4_wait_for","description":"Bounded server wait for own focus/research change, game date, or research UI view predicates and optional selected own slot. UI matches do not authorize input. Wall timeout returns only an explicitly historical earlier accepted sample; no late target is accepted. Never pauses.","inputSchema":{"type":"object","properties":{"timeout_seconds":{"type":"integer","minimum":1,"maximum":50},"until_date":{"type":"array","items":{"type":"integer"},"minItems":3,"maxItems":3},"until_research_ui":{"type":"object","properties":{"view":{"type":"string","enum":["panel","tree"]},"selected_slot":{"type":"integer","minimum":0,"maximum":31}},"required":["view"],"additionalProperties":false}},"additionalProperties":false}}
     ]});
     if let Some(commands) = commands {
         value["tools"]
@@ -93,38 +93,111 @@ fn fresh_wait_read_with<T>(
     start: Instant,
     timeout: Duration,
     rejected: &mut u64,
+    read: impl FnMut() -> Result<T>,
+    now: impl FnMut() -> Instant,
+    sleep: impl FnMut(Duration),
+) -> Result<T> {
+    match bounded_wait_read_with(start, timeout, rejected, read, now, sleep)? {
+        WaitRead::Fresh(value) => Ok(value),
+        WaitRead::Deadline(refusal) => Err(refusal.error()),
+    }
+}
+#[derive(Debug)]
+enum WaitRead<T> {
+    Fresh(T),
+    // No late payload or context survives this outcome.
+    Deadline(WaitDeadline),
+}
+#[derive(Clone, Copy, Debug)]
+enum WaitDeadline {
+    BeforeRead,
+    TornExhausted,
+    LateCompletion,
+}
+impl WaitDeadline {
+    fn reason(self) -> &'static str {
+        match self {
+            Self::BeforeRead => "deadline_before_read",
+            Self::TornExhausted => "no_stable_snapshot_before_deadline",
+            Self::LateCompletion => "snapshot_completed_after_deadline",
+        }
+    }
+    fn error(self) -> Error {
+        Error::new(
+            "unstable_observation",
+            match self {
+                Self::BeforeRead => {
+                    "Fresh observation deadline reached; no further read or cached result"
+                }
+                Self::TornExhausted => {
+                    "No stable snapshot within wait deadline; no stale result returned"
+                }
+                Self::LateCompletion => {
+                    "Snapshot completed after wait deadline; no late target accepted"
+                }
+            },
+        )
+    }
+}
+fn bounded_wait_read<T>(
+    start: Instant,
+    timeout: Duration,
+    rejected: &mut u64,
+    read: impl FnMut() -> Result<T>,
+) -> Result<WaitRead<T>> {
+    bounded_wait_read_with(
+        start,
+        timeout,
+        rejected,
+        read,
+        Instant::now,
+        std::thread::sleep,
+    )
+}
+fn bounded_wait_read_with<T>(
+    start: Instant,
+    timeout: Duration,
+    rejected: &mut u64,
     mut read: impl FnMut() -> Result<T>,
     mut now: impl FnMut() -> Instant,
     mut sleep: impl FnMut(Duration),
-) -> Result<T> {
+) -> Result<WaitRead<T>> {
     loop {
         if now().saturating_duration_since(start) >= timeout {
-            return Err(Error::new(
-                "unstable_observation",
-                "Fresh observation deadline reached; no further read or cached result",
-            ));
+            return Ok(WaitRead::Deadline(WaitDeadline::BeforeRead));
         }
         match read() {
             Err(e) if e.code == "torn_read" => {
                 *rejected += 1;
                 let remaining = timeout.saturating_sub(now().saturating_duration_since(start));
                 if remaining.is_zero() {
-                    return Err(Error::new(
-                        "unstable_observation",
-                        "No stable snapshot within wait deadline; no stale result returned",
-                    ));
+                    return Ok(WaitRead::Deadline(WaitDeadline::TornExhausted));
                 }
                 sleep(remaining.min(Duration::from_millis(250)));
             }
             Ok(_) if now().saturating_duration_since(start) >= timeout => {
-                return Err(Error::new(
-                    "unstable_observation",
-                    "Snapshot completed after wait deadline; no late target accepted",
-                ));
+                return Ok(WaitRead::Deadline(WaitDeadline::LateCompletion));
             }
-            result => return result,
+            result => return result.map(WaitRead::Fresh),
         }
     }
+}
+/// Only callers with an earlier timely, context-accepted snapshot may call this.
+/// It reports historical timeout evidence, never a fresh or reached state.
+fn historical_wait_timeout(
+    state: Value,
+    start: Instant,
+    received: Instant,
+    rejected: u64,
+    refusal: Option<WaitDeadline>,
+) -> Value {
+    json!({"reasons":["wall_timeout"],"state":state,
+        "state_historical":true,"current_state_verified":false,"input_authorized":false,
+        "state_role":"last_snapshot_accepted_before_wait_deadline",
+        "state_age_ms":received.elapsed().as_millis(),"state_age_basis":"time_since_accepted_snapshot",
+        "elapsed_seconds":start.elapsed().as_secs_f64(),"rejected_torn_reads":rejected,
+        "deadline_refusal":refusal.map(|d|json!({"reason":d.reason(),"fresh_read_error":d.error(),
+            "late_snapshot_accepted":false,"late_target_accepted":false,"late_scope_accepted":false}))})
 }
 fn same_wait_context(
     before: &game::ClockContext,
@@ -258,10 +331,16 @@ impl Server {
         let mut last_date = baseline.campaign.date_raw;
         let mut current_received = Instant::now();
         loop {
+            if start.elapsed() >= timeout {
+                let mut value =
+                    historical_wait_timeout(current, start, current_received, rejected, None);
+                value["condition_meaning"] = json!("active view and local visibility predicates; no hit routing or input authorization");
+                return Ok(value);
+            }
             let reached = target.reached(&current);
-            if reached || start.elapsed() >= timeout {
+            if reached && start.elapsed() < timeout {
                 return Ok(
-                    json!({"reasons":[if reached {"research_ui_reached"} else {"wall_timeout"}],"state":current,"condition_meaning":"active view and local visibility predicates; no hit routing or input authorization","elapsed_seconds":start.elapsed().as_secs_f64(),"rejected_torn_reads":rejected,"state_age_ms":current_received.elapsed().as_millis()}),
+                    json!({"reasons":["research_ui_reached"],"state":current,"condition_meaning":"active view and local visibility predicates; no hit routing or input authorization","elapsed_seconds":start.elapsed().as_secs_f64(),"rejected_torn_reads":rejected,"state_age_ms":current_received.elapsed().as_millis()}),
                 );
             }
             std::thread::sleep(
@@ -270,10 +349,26 @@ impl Server {
             if start.elapsed() >= timeout {
                 continue;
             }
-            let (value, context) = fresh_wait_read(start, timeout, &mut rejected, || {
-                research_ui::wait_snapshot(self.process()?)
+            let outcome = bounded_wait_read(start, timeout, &mut rejected, || {
+                let sample = research_ui::wait_snapshot(self.process()?)?;
+                // Refuse a real changed scope even if the read completed late.
+                same_ui_context(&baseline, &sample.1, last_date)?;
+                Ok(sample)
             })?;
-            same_ui_context(&baseline, &context, last_date)?;
+            let (value, context) = match outcome {
+                WaitRead::Fresh(sample) => sample,
+                WaitRead::Deadline(refusal) => {
+                    let mut value = historical_wait_timeout(
+                        current,
+                        start,
+                        current_received,
+                        rejected,
+                        Some(refusal),
+                    );
+                    value["condition_meaning"] = json!("active view and local visibility predicates; no hit routing or input authorization");
+                    return Ok(value);
+                }
+            };
             last_date = context.campaign.date_raw;
             current = value;
             current_received = Instant::now();
@@ -611,6 +706,15 @@ impl Server {
                 let mut last_date = baseline.date_raw;
                 let mut current_received = Instant::now();
                 loop {
+                    if start.elapsed() >= timeout {
+                        return Ok(historical_wait_timeout(
+                            current,
+                            start,
+                            current_received,
+                            rejected,
+                            None,
+                        ));
+                    }
                     let mut reasons = Vec::new();
                     for field in ["focus", "research"] {
                         if current[field] != before[field] {
@@ -624,10 +728,7 @@ impl Server {
                     }) {
                         reasons.push("date_reached".into());
                     }
-                    if !reasons.is_empty() || start.elapsed() >= timeout {
-                        if reasons.is_empty() {
-                            reasons.push("wall_timeout".into());
-                        }
+                    if !reasons.is_empty() && start.elapsed() < timeout {
                         return Ok(
                             json!({"reasons":reasons,"state":current,"elapsed_seconds":start.elapsed().as_secs_f64(),"rejected_torn_reads":rejected,"state_age_ms":current_received.elapsed().as_millis()}),
                         );
@@ -638,11 +739,23 @@ impl Server {
                     if start.elapsed() >= timeout {
                         continue;
                     }
-                    let (observed, context) =
-                        fresh_wait_read(start, timeout, &mut rejected, || {
-                            game::wait_snapshot(self.process()?)
-                        })?;
-                    same_wait_context(&baseline, &context, last_date)?;
+                    let outcome = bounded_wait_read(start, timeout, &mut rejected, || {
+                        let sample = game::wait_snapshot(self.process()?)?;
+                        same_wait_context(&baseline, &sample.1, last_date)?;
+                        Ok(sample)
+                    })?;
+                    let (observed, context) = match outcome {
+                        WaitRead::Fresh(sample) => sample,
+                        WaitRead::Deadline(refusal) => {
+                            return Ok(historical_wait_timeout(
+                                current,
+                                start,
+                                current_received,
+                                rejected,
+                                Some(refusal),
+                            ))
+                        }
+                    };
                     last_date = context.date_raw;
                     current = observed;
                     current_received = Instant::now();
@@ -714,6 +827,263 @@ impl Server {
 mod tests {
     use super::*;
     use std::cell::Cell;
+
+    #[test]
+    fn late_followup_discards_target_and_reports_only_earlier_historical_state() {
+        for completed in [Duration::from_secs(1), Duration::from_secs(2)] {
+            let start = Instant::now();
+            let now = Cell::new(start);
+            let mut rejected = 0;
+            let prior = fresh_wait_read_with(
+                start,
+                Duration::from_secs(1),
+                &mut rejected,
+                || Ok(json!({"date":"earlier_accepted","focus":"unchanged"})),
+                || now.get(),
+                |_| panic!("Timely initial sample must not sleep"),
+            )
+            .unwrap();
+            let outcome = bounded_wait_read_with(
+                start,
+                Duration::from_secs(1),
+                &mut rejected,
+                || {
+                    now.set(start + completed);
+                    Ok(json!({"date":"late_target","focus":"late_change"}))
+                },
+                || now.get(),
+                |_| panic!("Late success must not sleep or retry"),
+            )
+            .unwrap();
+            let WaitRead::Deadline(refusal) = outcome else {
+                panic!("Late value must be discarded");
+            };
+            let value = historical_wait_timeout(
+                prior,
+                start,
+                start.checked_sub(Duration::from_millis(250)).unwrap(),
+                rejected,
+                Some(refusal),
+            );
+            assert_eq!(value["reasons"], json!(["wall_timeout"]));
+            assert_eq!(value["state"]["date"], "earlier_accepted");
+            assert_eq!(value["state"]["focus"], "unchanged");
+            assert_eq!(value["state_historical"], true);
+            assert_eq!(value["current_state_verified"], false);
+            assert_eq!(value["input_authorized"], false);
+            assert!(value["state_age_ms"].as_u64().unwrap() >= 250);
+            assert_eq!(
+                value["deadline_refusal"]["reason"],
+                "snapshot_completed_after_deadline"
+            );
+            assert_eq!(value["deadline_refusal"]["late_target_accepted"], false);
+            assert_eq!(value["deadline_refusal"]["late_scope_accepted"], false);
+            assert!(!value.to_string().contains("late_target\""));
+        }
+    }
+
+    #[test]
+    fn late_followup_real_errors_are_never_normalized_into_historical_timeout() {
+        for code in [
+            "ownership_changed",
+            "permission_denied",
+            "wait_context_changed",
+            "unstable_observation",
+        ] {
+            let start = Instant::now();
+            let now = Cell::new(start);
+            let mut rejected = 0;
+            let error = bounded_wait_read_with::<Value>(
+                start,
+                Duration::from_secs(1),
+                &mut rejected,
+                || {
+                    now.set(start + Duration::from_secs(2));
+                    Err(Error::new(code, "Real backend refusal"))
+                },
+                || now.get(),
+                |_| panic!("Real error must not sleep or retry"),
+            )
+            .unwrap_err();
+            assert_eq!(error.code, code);
+            assert!(error.to_string().contains("Real backend refusal"));
+            assert_eq!(rejected, 0);
+        }
+    }
+
+    #[test]
+    fn followup_cross_baseline_scope_is_checked_even_when_payload_completes_late() {
+        let before = game::ClockContext {
+            playthrough_id: "campaign".into(),
+            player: "GER".into(),
+            anchors: [1, 2, 3],
+            date_raw: 100,
+            difficulty: 2,
+            historical_raw: 1,
+            paused: true,
+            speed: 0,
+        };
+        for field in 0..7 {
+            let mut current = before.clone();
+            match field {
+                0 => current.player = "FRA".into(),
+                1 => current.playthrough_id = "different".into(),
+                2 => current.anchors[1] = 9,
+                3 => current.difficulty = 3,
+                4 => current.historical_raw = 0,
+                5 => current.date_raw = 99,
+                _ => current.date_raw = 101,
+            }
+            let start = Instant::now();
+            let now = Cell::new(start);
+            let mut rejected = 0;
+            let error = bounded_wait_read_with(
+                start,
+                Duration::from_secs(1),
+                &mut rejected,
+                || {
+                    now.set(start + Duration::from_secs(2));
+                    same_wait_context(&before, &current, if field == 6 { 102 } else { 100 })?;
+                    Ok(json!({"target":"not_accepted"}))
+                },
+                || now.get(),
+                |_| panic!("Changed scope must not retry"),
+            )
+            .unwrap_err();
+            assert_eq!(error.code, "wait_context_changed");
+        }
+    }
+
+    #[test]
+    fn late_ui_followup_preserves_changed_anchor_or_slot_error() {
+        let before = research_ui::UiContext {
+            campaign: game::ClockContext {
+                playthrough_id: "campaign".into(),
+                player: "GER".into(),
+                anchors: [1, 2, 3],
+                date_raw: 100,
+                difficulty: 2,
+                historical_raw: 1,
+                paused: true,
+                speed: 0,
+            },
+            anchors: [4, 5, 6, 7, 8, 9],
+            slots: vec![10, 11],
+        };
+        for slot_changed in [false, true] {
+            let mut current = before.clone();
+            if slot_changed {
+                current.slots.swap(0, 1);
+            } else {
+                current.anchors[5] = 99;
+            }
+            let start = Instant::now();
+            let now = Cell::new(start);
+            let mut rejected = 0;
+            let error = bounded_wait_read_with(
+                start,
+                Duration::from_secs(1),
+                &mut rejected,
+                || {
+                    now.set(start + Duration::from_secs(2));
+                    same_ui_context(&before, &current, 100)?;
+                    Ok(json!({"view":"late_target"}))
+                },
+                || now.get(),
+                |_| panic!("Changed UI scope must not retry"),
+            )
+            .unwrap_err();
+            assert_eq!(error.code, "wait_context_changed");
+            assert_eq!(rejected, 0);
+        }
+    }
+
+    #[test]
+    fn followup_torn_deadline_with_prior_state_is_historical_but_initial_remains_strict() {
+        let start = Instant::now();
+        let now = Cell::new(start);
+        let mut rejected = 0;
+        let outcome = bounded_wait_read_with::<Value>(
+            start,
+            Duration::from_secs(1),
+            &mut rejected,
+            || {
+                now.set(start + Duration::from_secs(1));
+                Err(Error::new("torn_read", "Changed fields"))
+            },
+            || now.get(),
+            |_| panic!("Expired torn read must not sleep"),
+        )
+        .unwrap();
+        let WaitRead::Deadline(refusal) = outcome else {
+            panic!("No timely sample exists");
+        };
+        let value = historical_wait_timeout(
+            json!({"accepted":"prior"}),
+            start,
+            start,
+            rejected,
+            Some(refusal),
+        );
+        assert_eq!(value["reasons"], json!(["wall_timeout"]));
+        assert_eq!(value["state_historical"], true);
+        assert_eq!(value["rejected_torn_reads"], 1);
+        assert_eq!(
+            value["deadline_refusal"]["reason"],
+            "no_stable_snapshot_before_deadline"
+        );
+        now.set(start);
+        let error = fresh_wait_read_with::<Value>(
+            start,
+            Duration::from_secs(1),
+            &mut rejected,
+            || {
+                now.set(start + Duration::from_secs(1));
+                Err(Error::new("torn_read", "No initial sample"))
+            },
+            || now.get(),
+            |_| panic!("No initial stable sample must not retry late"),
+        )
+        .unwrap_err();
+        assert_eq!(error.code, "unstable_observation");
+    }
+
+    #[test]
+    fn followup_timely_sample_and_already_expired_boundary_stay_distinct() {
+        let start = Instant::now();
+        let now = Cell::new(start);
+        let mut rejected = 0;
+        let outcome = bounded_wait_read_with(
+            start,
+            Duration::from_secs(1),
+            &mut rejected,
+            || {
+                now.set(start + Duration::from_millis(999));
+                Ok(json!({"sample":"timely"}))
+            },
+            || now.get(),
+            |_| panic!("Timely read must not sleep"),
+        )
+        .unwrap();
+        let WaitRead::Fresh(value) = outcome else {
+            panic!("Timely sample must remain fresh");
+        };
+        assert_eq!(value["sample"], "timely");
+        now.set(start + Duration::from_secs(1));
+        let outcome = bounded_wait_read_with::<Value>(
+            start,
+            Duration::from_secs(1),
+            &mut rejected,
+            || panic!("Already expired followup must not start any read"),
+            || now.get(),
+            |_| panic!("Already expired followup must not sleep"),
+        )
+        .unwrap();
+        let WaitRead::Deadline(refusal) = outcome else {
+            panic!("Expired followup has no payload");
+        };
+        assert_eq!(refusal.reason(), "deadline_before_read");
+    }
 
     #[test]
     fn wait_refuses_a_successful_read_completed_at_or_after_its_deadline() {

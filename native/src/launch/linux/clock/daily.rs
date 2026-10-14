@@ -293,8 +293,28 @@ impl Controller {
                     .as_ref()
                     .and_then(|a| a.report.try_lock().ok().map(|r| r["focus"].clone()))
                     .unwrap_or(Value::Null);
+                let core_state = active
+                    .as_ref()
+                    .map(|a| -> Result<Value> {
+                        let governor = try_state(&a.governor)?;
+                        let plan = governor.plan();
+                        let pending = plan
+                            .entries
+                            .iter()
+                            .filter_map(|e| match governor.entry_state(&e.id) {
+                                Some(core::EntryState::Pending { .. }) => Some(
+                                    json!({"entry_id":e.id,"state":governor.entry_state(&e.id)}),
+                                ),
+                                _ => None,
+                            })
+                            .collect::<Vec<_>>();
+                        // Saved chronology is reported through core digest without a game read.
+                        Ok(json!({"pending":pending,"historical":true}))
+                    })
+                    .transpose()?
+                    .unwrap_or(Value::Null);
                 Ok(
-                    json!({"focus":focus,"latest_focus_wait_historical":focus_wait,"worker_stopped":true,"game_time_changed":false,"uncertainty_retained":self.blocked.load(Ordering::Acquire),"last_error":last_error,"last_preparation_refusal":last_preparation_refusal,"last_stage_failure":last_stage_failure}),
+                    json!({"daily_budget":active.as_ref().and_then(|a|a.report.try_lock().ok().map(|r|r["daily_budget"].clone())).unwrap_or(Value::Null),"core_pending_historical":core_state,"focus":focus,"latest_focus_wait_historical":focus_wait,"worker_stopped":true,"game_time_changed":false,"uncertainty_retained":self.blocked.load(Ordering::Acquire),"last_error":last_error,"last_preparation_refusal":last_preparation_refusal,"last_stage_failure":last_stage_failure}),
                 )
             }
             "digest" => {
@@ -1134,7 +1154,17 @@ fn run_focus(
                     crate::daily_observation::unix_ms()?,
                     until,
                 )
-                .map(|value| FocusRun::Done(Some(value)))
+                .map(|value| {
+                    if let Ok(mut r) = report.lock() {
+                        r["focus"] = backend.focus.as_ref().expect("checked").navigation.latest();
+                        r["core_pending_historical"] = match governor.entry_state(&entry.id) {
+                            Some(core::EntryState::Pending { attempts, reason, reason_day }) => json!({"entry_id":entry.id,"attempts":attempts,"reason":reason,"reason_day":reason_day,"historical":true}),
+                            _ => Value::Null,
+                        };
+                        r["daily_budget"] = json!({"day":day,"used_assignment_attempts":governor.used_actions(day),"limit":governor.plan().max_actions_per_day,"remaining":usize::from(governor.plan().max_actions_per_day).saturating_sub(governor.used_actions(day)),"navigation_spends_assignment_budget":false});
+                    }
+                    FocusRun::Done(Some(value))
+                })
         }
     }
 }
@@ -1157,6 +1187,40 @@ fn join_focus_canonical(context: &crate::own_focus::FocusContext, p: &Produced) 
     Ok(())
 }
 impl DailyBackend<'_> {
+    fn focus_start_failure(
+        &mut self,
+        attempt: &core::Attempt,
+        target: &crate::focus_stage::Target,
+        error: &Error,
+        failures: &mut u8,
+        until: Instant,
+    ) -> Result<bool> {
+        let evidence = focus::failure_evidence(self.state, &attempt.request_id, target, error);
+        *failures += 1;
+        let backoff = Duration::from_millis(100 * u64::from(*failures));
+        let retry = !unresolved(self.state)
+            && crate::daily_focus_navigation::retry_before_intent(error, evidence, *failures)
+            && until.saturating_duration_since(Instant::now()) > backoff;
+        let f = self.focus.as_mut().expect("checked Focus permission");
+        f.navigation
+            .record_start_failure(attempt, f.revision, error, evidence, *failures, retry)
+            .map_err(|storage| {
+                Error::new(
+                    "action_uncertain",
+                    format!(
+                        "{}: {}; Focus failure persistence failed: {}",
+                        error.code, error.message, storage
+                    ),
+                )
+            })?;
+        if evidence == crate::focus_stage::FailureEvidence::Unknown || unresolved(self.state) {
+            return Err(Error::new(error.code, error.message.clone()));
+        }
+        if retry {
+            std::thread::sleep(backoff);
+        }
+        Ok(retry)
+    }
     fn attempt_focus(&mut self, attempt: &core::Attempt, until: Instant) -> Result<core::Outcome> {
         let core::Intent::Focus { focus_id } = &attempt.entry.intent else {
             return Err(Error::new("invalid_plan", "Focus attempt required"));
@@ -1171,46 +1235,93 @@ impl DailyBackend<'_> {
             stage: crate::focus_stage::Stage::Start,
             focus_id: focus_id.clone(),
         };
-        let (own, before, before_binding) =
-            match focus::observed_bound(self.process, &mut self.state.guard, &target) {
-                Ok(value) => value,
-                Err(e) if !unresolved(self.state) => {
-                    return Ok(core::Outcome::NotQueued(e.code.into()))
-                }
-                Err(e) => return Err(e),
-            };
-        if let Some(p) = &self.last {
-            join_focus_canonical(&before, p)?;
-            if before.campaign.date_raw < p.context.campaign.date_raw {
-                return Err(Error::new("torn_read", "Focus Start chronology regressed"));
-            }
-        }
-        if !matches!(
-            crate::daily_focus_navigation::next(&own, &target)?,
-            crate::daily_focus_navigation::Next::Start
-        ) {
-            return Ok(core::Outcome::NotQueued(
-                "Fresh own Focus Start precondition changed".into(),
-            ));
-        }
-        let execution = match focus::execute_internal(
-            self.state,
-            self.process,
-            self.gate,
-            self.token,
-            &attempt.request_id,
-            target.clone(),
-            until,
-        ) {
-            Ok((e, _)) => e,
-            Err(e)
-                if focus::failure_evidence(self.state, &attempt.request_id, &target, &e)
-                    != crate::focus_stage::FailureEvidence::Unknown
-                    && !unresolved(self.state) =>
+        let mut failures = 0u8;
+        let (before, before_binding, execution) = loop {
+            if unresolved(self.state) || self.focus.as_ref().expect("checked").navigation.blocked()
             {
-                return Ok(core::Outcome::NotQueued(e.code.into()))
+                return Err(Error::new(
+                    "action_uncertain",
+                    "Shared Focus retry input unresolved",
+                ));
             }
-            Err(e) => return Err(e),
+            let prepared = (|| -> Result<_> {
+                self.state
+                    .authority
+                    .authorize(self.token, &attempt.scope.epoch)?;
+                drop(super::input_permit(self.gate)?);
+                if Instant::now() >= until {
+                    return Err(Error::new(
+                        "focus_deadline",
+                        "Original Focus deadline expired before input",
+                    ));
+                }
+                let fresh = self.producer.observe(self.process, until)?;
+                if fresh.observation.scope != attempt.scope
+                    || fresh.observation.sequence <= attempt.before_sequence
+                    || (i64::from(fresh.observation.date_raw) - 43_800_000).div_euclid(24)
+                        != attempt.day
+                {
+                    return Err(Error::new(
+                        "ownership_changed",
+                        "Focus retry scope/day changed",
+                    ));
+                }
+                self.state
+                    .guard
+                    .accept_context(self.process, &fresh.context.campaign)?;
+                let (own, before, binding) =
+                    focus::observed_bound(self.process, &mut self.state.guard, &target)?;
+                focus_scope(&before, &attempt.scope)?;
+                join_focus_canonical(&before, &fresh)?;
+                if before.campaign.date_raw < fresh.context.campaign.date_raw
+                    || (i64::from(before.campaign.date_raw) - 43_800_000).div_euclid(24)
+                        != attempt.day
+                {
+                    return Err(Error::new("ownership_changed", "Focus retry date changed"));
+                }
+                if Instant::now() >= until {
+                    return Err(Error::new(
+                        "focus_deadline",
+                        "Focus readiness exceeded original deadline",
+                    ));
+                }
+                if !matches!(
+                    crate::daily_focus_navigation::next(&own, &target)?,
+                    crate::daily_focus_navigation::Next::Start
+                ) {
+                    return Err(Error::new(
+                        "focus_precondition",
+                        "Fresh own Focus Start precondition changed",
+                    ));
+                }
+                Ok((before, binding))
+            })();
+            let (before, binding) = match prepared {
+                Ok(v) => v,
+                Err(e) => {
+                    if self.focus_start_failure(attempt, &target, &e, &mut failures, until)? {
+                        continue;
+                    }
+                    return Ok(core::Outcome::NotQueued(e.code.into()));
+                }
+            };
+            match focus::execute_internal(
+                self.state,
+                self.process,
+                self.gate,
+                self.token,
+                &attempt.request_id,
+                target.clone(),
+                until,
+            ) {
+                Ok((execution, _)) => break (before, binding, execution),
+                Err(e) => {
+                    if self.focus_start_failure(attempt, &target, &e, &mut failures, until)? {
+                        continue;
+                    }
+                    return Ok(core::Outcome::NotQueued(e.code.into()));
+                }
+            }
         };
         // After successful execution, all later failures are possible-input errors.
         let (_, after, after_binding) =
@@ -1287,6 +1398,7 @@ fn compact_observation(
         json!(crate::daily_observation::unix_ms()?.saturating_sub(observation.observed_unix_ms));
     digest["counts"] = json!(observation.counts);
     digest["daily_budget"] = report["daily_budget"].clone();
+    digest["core_pending_historical"] = report["core_pending_historical"].clone();
     digest["running"] = report["running"].clone();
     digest["running_is_input_authority"] = json!(false);
     digest["stop_reason"] = report["stop_reason"].clone();

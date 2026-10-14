@@ -2932,6 +2932,13 @@ fn ui_wait_distinguishes_reached_predicates_unavailable_slots_and_wall_timeout()
     assert_eq!(v["reasons"][0], "wall_timeout");
     assert_eq!(v["state"]["panel"]["visible_predicate"], true);
     assert!(v["state_age_ms"].as_u64().is_some());
+    assert_eq!(v["state_historical"], true);
+    assert_eq!(v["current_state_verified"], false);
+    assert_eq!(v["input_authorized"], false);
+    assert_eq!(
+        v["state_role"],
+        "last_snapshot_accepted_before_wait_deadline"
+    );
 }
 
 #[test]
@@ -2945,6 +2952,33 @@ fn ui_wait_requires_positive_own_tag_before_any_country_payload_read() {
     let v = ui_wait_reply(f, Vec::new(), serde_json::json!({"view":"tree"}), 10);
     assert_eq!(v["error"]["code"], "player_unavailable");
     assert!(v.get("state").is_none());
+}
+
+#[test]
+fn game_wait_normal_timeout_labels_earlier_accepted_state_historical() {
+    let server = hoi4_live_native::protocol::Server {
+        process: Some(Box::new(UiWaitFixture {
+            fixture: std::sync::Mutex::new(Fixture::new()),
+            snapshots: std::sync::atomic::AtomicUsize::new(0),
+            second_snapshot_changes: Vec::new(),
+        })),
+        unavailable: None,
+    };
+    let reply = server.handle(serde_json::json!({"jsonrpc":"2.0","id":1,"method":"tools/call",
+        "params":{"name":"hoi4_wait_for","arguments":{"timeout_seconds":1,"until_date":[1940,1,1]}}})).unwrap();
+    let value: serde_json::Value =
+        serde_json::from_str(reply["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+    assert_eq!(value["reasons"], serde_json::json!(["wall_timeout"]));
+    assert_eq!(value["state_historical"], true);
+    assert_eq!(value["current_state_verified"], false);
+    assert_eq!(value["input_authorized"], false);
+    assert_eq!(value["state"]["owned"], true);
+    assert!(value["state_age_ms"].as_u64().is_some());
+    assert_eq!(value["state_age_basis"], "time_since_accepted_snapshot");
+    assert_eq!(
+        value["state_role"],
+        "last_snapshot_accepted_before_wait_deadline"
+    );
 }
 
 #[test]

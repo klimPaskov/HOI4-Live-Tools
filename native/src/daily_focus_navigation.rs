@@ -192,6 +192,39 @@ fn uncertainty_hash(epoch: &Epoch, u: &TerminalUncertainty) -> Result<String> {
 }
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+struct StartFailure {
+    attempt: crate::daily_governor::Attempt,
+    revision: u64,
+    index: u8,
+    code: String,
+    reason: String,
+    evidence: crate::focus_stage::FailureEvidence,
+    retry_planned: bool,
+    checksum: String,
+}
+fn start_failure_hash(f: &StartFailure) -> Result<String> {
+    hash(&(
+        "focus-start-failure-v1",
+        &f.attempt,
+        f.revision,
+        f.index,
+        &f.code,
+        &f.reason,
+        f.evidence,
+        f.retry_planned,
+    ))
+}
+pub(crate) fn retry_before_intent(
+    error: &Error,
+    evidence: crate::focus_stage::FailureEvidence,
+    failures: u8,
+) -> bool {
+    error.code == "torn_read"
+        && evidence == crate::focus_stage::FailureEvidence::BeforeIntent
+        && failures < 3
+}
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct Data {
     version: u8,
     epoch: Epoch,
@@ -200,6 +233,8 @@ struct Data {
     refusals: Vec<Refusal>,
     #[serde(default)]
     goals: Vec<Goal>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    start_failures: Vec<StartFailure>,
     #[serde(default)]
     wait: Option<WaitFact>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -271,6 +306,10 @@ fn validate_step(s: &Step, epoch: &Epoch, entries: &[Entry], index: usize) -> Re
     if let Some(f) = &s.failure {
         if f.code.is_empty()
             || f.code.len() > 64
+            || !f
+                .code
+                .bytes()
+                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
             || !f.code.bytes().all(|b| b.is_ascii_lowercase() || b == b'_')
             || f.reason.len() > 160
             || f.reason.chars().any(char::is_control)
@@ -325,6 +364,7 @@ impl Navigator {
                 steps: vec![],
                 refusals: vec![],
                 goals: vec![],
+                start_failures: vec![],
                 wait: None,
                 uncertainty: None,
             },
@@ -368,6 +408,55 @@ impl Navigator {
             {
                 return Err(invalid());
             }
+        }
+        let mut failures: std::collections::BTreeMap<&str, &StartFailure> =
+            std::collections::BTreeMap::new();
+        if data.start_failures.len() > 4096 {
+            return Err(invalid());
+        }
+        for f in &data.start_failures {
+            f.attempt.entry.validate()?;
+            if !entries.contains(&f.attempt.entry)
+                || f.attempt.scope.epoch != epoch
+                || !matches!(f.attempt.entry.intent, Intent::Focus { .. })
+                || f.attempt.request_id.len() != 64
+                || !f.attempt.request_id.bytes().all(|b| b.is_ascii_hexdigit())
+                || f.attempt.before_sequence == 0
+                || f.attempt
+                    .scope
+                    .anchors
+                    .iter()
+                    .chain([&f.attempt.scope.own_country, &f.attempt.scope.own_status])
+                    .any(|p| !(0x10000..=0x7fff_ffff_0000).contains(p))
+                || f.revision == 0
+                || !(1936 * 365..2001 * 365).contains(&f.attempt.day)
+                || !(1..=3).contains(&f.index)
+                || f.code.is_empty()
+                || f.code.len() > 64
+                || !f
+                    .code
+                    .bytes()
+                    .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
+                || f.reason.len() > 160
+                || f.reason.chars().any(char::is_control)
+                || f.checksum != start_failure_hash(f)?
+                || (f.retry_planned
+                    && !(f.code == "torn_read"
+                        && f.evidence == crate::focus_stage::FailureEvidence::BeforeIntent
+                        && f.index < 3))
+            {
+                return Err(invalid());
+            }
+            match failures.get(f.attempt.request_id.as_str()) {
+                Some(previous)
+                    if previous.retry_planned
+                        && previous.attempt == f.attempt
+                        && previous.revision == f.revision
+                        && f.index == previous.index + 1 => {}
+                None if f.index == 1 => {}
+                _ => return Err(invalid()),
+            }
+            failures.insert(&f.attempt.request_id, f);
         }
         let mut ids = std::collections::BTreeSet::new();
         let mut goals_entries = std::collections::BTreeSet::new();
@@ -431,6 +520,11 @@ impl Navigator {
     pub(crate) fn blocked(&self) -> bool {
         self.poisoned
             || self.data.uncertainty.is_some()
+            || self
+                .data
+                .start_failures
+                .iter()
+                .any(|f| f.evidence == crate::focus_stage::FailureEvidence::Unknown)
             || self.data.steps.iter().any(|s| {
                 s.receipt.is_none()
                     && !s
@@ -450,13 +544,66 @@ impl Navigator {
                 .iter()
                 .any(|s| s.entry == *entry && s.day == day && s.failure.is_some())
     }
+    pub(crate) fn record_start_failure(
+        &mut self,
+        attempt: &crate::daily_governor::Attempt,
+        revision: u64,
+        error: &Error,
+        evidence: crate::focus_stage::FailureEvidence,
+        index: u8,
+        retry_planned: bool,
+    ) -> Result<()> {
+        self.store.check().inspect_err(|_| self.poisoned = true)?;
+        if self.blocked()
+            || self.data.start_failures.len() >= 4096
+            || attempt.scope.epoch != self.data.epoch
+            || !(1..=3).contains(&index)
+            || (retry_planned && !retry_before_intent(error, evidence, index))
+        {
+            return Err(invalid());
+        }
+        let previous = self
+            .data
+            .start_failures
+            .iter()
+            .rev()
+            .find(|f| f.attempt.request_id == attempt.request_id);
+        if !match previous {
+            None => index == 1,
+            Some(p) => {
+                p.retry_planned
+                    && p.attempt == *attempt
+                    && p.revision == revision
+                    && p.index + 1 == index
+            }
+        } {
+            return Err(invalid());
+        }
+        let mut f = StartFailure {
+            attempt: attempt.clone(),
+            revision,
+            index,
+            code: error.code.into(),
+            reason: crate::daily_navigation::bounded_reason(&error.message),
+            evidence,
+            retry_planned,
+            checksum: String::new(),
+        };
+        f.checksum = start_failure_hash(&f)?;
+        self.data.start_failures.push(f);
+        self.save()
+    }
     pub(crate) fn latest(&self) -> serde_json::Value {
+        let start_failure = self.data.start_failures.last().map(|last| {
+            let first = self.data.start_failures.iter().find(|f| f.attempt.request_id == last.attempt.request_id).expect("validated failure");
+            serde_json::json!({"entry_id":last.attempt.entry.id,"request_id":last.attempt.request_id,"day":last.attempt.day,"original_code":first.code,"original_reason":first.reason,"code":last.code,"reason":last.reason,"evidence":last.evidence,"failures":last.index,"retry_planned_historical":last.retry_planned,"historical":true,"retry_authority":false})
+        });
         let preparation=self.data.steps.last().map(|s|serde_json::json!({"entry_id":s.entry.id,"stage":s.target.stage,"request_id":s.id,"verified":s.receipt.is_some(),"goal_completed":false,"historical":true}));
         let failure=self.data.steps.iter().rev().find_map(|s|s.failure.as_ref().map(|f|serde_json::json!({"entry_id":s.entry.id,"stage":s.target.stage,"code":f.code,"reason":f.reason,"day":s.day,"historical":true})));
         let refusal=self.data.refusals.last().map(|r|serde_json::json!({"entry_id":r.entry.id,"code":r.code,"reason":r.reason,"day":r.day,"historical":true}));
         let start=self.data.goals.last().map(|g|serde_json::json!({"entry_id":g.attempt.entry.id,"request_id":g.attempt.request_id,"stage":"Start","historical":true}));
         let wait=self.data.wait.as_ref().map(|w|serde_json::json!({"entry_id":w.entry.id,"active_focus_id":w.active,"date_raw":w.date_raw,"observed_unix_ms":w.observed_unix_ms,"source":"native witnessed own focus","historical":true,"navigation_attempted":false,"assignment_budget_consumed":false}));
-        serde_json::json!({"preparation":preparation,"failure":failure,"refusal":refusal,"start":start,"wait":wait,"uncertainty":self.data.uncertainty.as_ref().map(|u|serde_json::json!({"code":u.code,"reason":u.reason,"request_id":u.step_id,"historical":true,"blocks_all_input":true}))})
+        serde_json::json!({"start_failure":start_failure,"preparation":preparation,"failure":failure,"refusal":refusal,"start":start,"wait":wait,"uncertainty":self.data.uncertainty.as_ref().map(|u|serde_json::json!({"code":u.code,"reason":u.reason,"request_id":u.step_id,"historical":true,"blocks_all_input":true}))})
     }
     /// A verified packet never proves that no input occurred. Retain its exact
     /// receipt and persist a separate terminal marker for subsequent uncertainty.
@@ -1248,5 +1395,235 @@ mod tests {
         data.uncertainty.as_mut().unwrap().reason = "Forged".into();
         std::fs::write(t.path(), serde_json::to_vec(&data).unwrap()).unwrap();
         assert!(Navigator::open(&t.path(), epoch(), std::slice::from_ref(&e)).is_err());
+    }
+    fn retry_attempt() -> crate::daily_governor::Attempt {
+        crate::daily_governor::Attempt {
+            request_id: "a".repeat(64),
+            entry: entry(),
+            scope: crate::daily_governor::Scope {
+                epoch: epoch(),
+                anchors: [0x10000; 3],
+                own_country: 0x20000,
+                own_status: 0x30000,
+            },
+            day: 1936 * 365,
+            before_sequence: 5,
+        }
+    }
+    #[test]
+    fn start_failure_history_retains_original_cause_and_never_authorizes_reopen_retry() {
+        let t = Scratch::new();
+        let e = entry();
+        let a = retry_attempt();
+        let mut n = Navigator::open(&t.path(), epoch(), std::slice::from_ref(&e)).unwrap();
+        for index in 1..=3 {
+            let err = Error::new("torn_read", format!("original own witness {index}"));
+            let retry = retry_before_intent(&err, FailureEvidence::BeforeIntent, index);
+            assert_eq!(retry, index < 3);
+            n.record_start_failure(&a, 1, &err, FailureEvidence::BeforeIntent, index, retry)
+                .unwrap();
+        }
+        assert_eq!(
+            n.latest()["start_failure"]["original_reason"],
+            "original own witness 1"
+        );
+        assert_eq!(n.latest()["start_failure"]["failures"], 3);
+        assert_eq!(n.latest()["start_failure"]["retry_authority"], false);
+        assert!(n
+            .record_start_failure(
+                &a,
+                1,
+                &Error::new("torn_read", "fourth"),
+                FailureEvidence::BeforeIntent,
+                3,
+                true
+            )
+            .is_err());
+        drop(n);
+        let n = Navigator::open(&t.path(), epoch(), std::slice::from_ref(&e)).unwrap();
+        assert_eq!(
+            n.latest()["start_failure"]["original_reason"],
+            "original own witness 1"
+        );
+        drop(n);
+        let mut d: Data = serde_json::from_slice(&std::fs::read(t.path()).unwrap()).unwrap();
+        d.start_failures[1].attempt.day += 1;
+        std::fs::write(t.path(), serde_json::to_vec(&d).unwrap()).unwrap();
+        assert!(Navigator::open(&t.path(), epoch(), std::slice::from_ref(&e)).is_err());
+    }
+    #[test]
+    fn only_beforeintent_torn_retries_unknown_is_durable_block_and_savefailure_poison() {
+        for code in [
+            "input_busy",
+            "ownership_changed",
+            "focus_deadline",
+            "focus_precondition",
+            "action_uncertain",
+        ] {
+            assert!(!retry_before_intent(
+                &Error::new(code, "refuse"),
+                FailureEvidence::BeforeIntent,
+                1
+            ));
+        }
+        for proof in [
+            FailureEvidence::ConfirmedNotQueued,
+            FailureEvidence::Unknown,
+        ] {
+            assert!(!retry_before_intent(
+                &Error::new("torn_read", "refuse"),
+                proof,
+                1
+            ));
+        }
+        let t = Scratch::new();
+        let e = entry();
+        let a = retry_attempt();
+        let mut n = Navigator::open(&t.path(), epoch(), std::slice::from_ref(&e)).unwrap();
+        n.record_start_failure(
+            &a,
+            1,
+            &Error::new("torn_read", "possible input"),
+            FailureEvidence::Unknown,
+            1,
+            false,
+        )
+        .unwrap();
+        assert!(n.blocked());
+        drop(n);
+        assert!(
+            Navigator::open(&t.path(), epoch(), std::slice::from_ref(&e))
+                .unwrap()
+                .blocked()
+        );
+        let t = Scratch::new();
+        let mut n = Navigator::open(&t.path(), epoch(), std::slice::from_ref(&e)).unwrap();
+        std::fs::write(t.path(), b"external mutation").unwrap();
+        assert!(n
+            .record_start_failure(
+                &a,
+                1,
+                &Error::new("torn_read", "original"),
+                FailureEvidence::BeforeIntent,
+                1,
+                true
+            )
+            .is_err());
+        assert!(n.blocked());
+    }
+    #[test]
+    fn two_inflight_preintent_failures_complete_one_original_core_budget_reservation() {
+        use crate::daily_governor as c;
+        struct B {
+            obs: c::Observation,
+            n: Navigator,
+            sends: usize,
+            failures: u8,
+            exhaust: bool,
+        }
+        impl c::Backend for B {
+            fn unresolved_input(&mut self) -> Result<bool> {
+                Ok(self.n.blocked())
+            }
+            fn observe(&mut self) -> Result<c::Observation> {
+                self.obs.sequence += 1;
+                Ok(self.obs.clone())
+            }
+            fn readiness(&mut self, _: &Entry, _: &c::Observation) -> Result<c::Readiness> {
+                Ok(c::Readiness::Ready)
+            }
+            fn attempt(
+                &mut self,
+                a: &c::Attempt,
+                _: &c::Observation,
+                _: std::time::Instant,
+            ) -> Result<c::Outcome> {
+                for index in 1..=if self.exhaust { 3 } else { 2 } {
+                    self.obs.sequence += 1;
+                    let e = Error::new("torn_read", format!("own witness {index}"));
+                    let retry = retry_before_intent(&e, FailureEvidence::BeforeIntent, index);
+                    self.n.record_start_failure(
+                        a,
+                        1,
+                        &e,
+                        FailureEvidence::BeforeIntent,
+                        index,
+                        retry,
+                    )?;
+                    self.failures += 1;
+                    if !retry {
+                        return Ok(c::Outcome::NotQueued(e.code.into()));
+                    }
+                }
+                self.sends += 1;
+                self.obs.sequence += 1;
+                Ok(c::Outcome::Verified(Box::new(c::VerifiedReceipt {
+                    attempt: a.clone(),
+                    current: true,
+                    canonical_intent: a.entry.intent.clone(),
+                    observed: self.obs.clone(),
+                })))
+            }
+        }
+        for exhaust in [false, true] {
+            let t = Scratch::new();
+            let a = retry_attempt();
+            let e = a.entry.clone();
+            let p = c::Plan {
+                version: 1,
+                revision: 1,
+                scope: a.scope.clone(),
+                entries: vec![e.clone()],
+                max_actions_per_day: 1,
+                max_observation_age_ms: 5000,
+                review_day: None,
+            };
+            let mut g = c::Governor::open(&t.0.join("plan"), p.clone()).unwrap();
+            let n = Navigator::open(&t.path(), epoch(), std::slice::from_ref(&e)).unwrap();
+            let mut b = B {
+                obs: c::Observation {
+                    scope: a.scope,
+                    date_raw: crate::calendar::encode(1936, 1, 1).unwrap(),
+                    sequence: 1,
+                    observed_unix_ms: 9999,
+                    source: "generated fresh owned state".into(),
+                    counts: Default::default(),
+                },
+                n,
+                sends: 0,
+                failures: 0,
+                exhaust,
+            };
+            let result = g
+                .run_day(
+                    &mut b,
+                    10000,
+                    std::time::Instant::now() + std::time::Duration::from_secs(2),
+                )
+                .unwrap();
+            assert_eq!(g.used_actions(1936 * 365), 1);
+            assert_eq!(b.sends, usize::from(!exhaust));
+            assert_eq!(result.verified.len(), usize::from(!exhaust));
+            let original = std::fs::read(t.0.join("plan")).unwrap();
+            drop(g);
+            let mut g = c::Governor::open(&t.0.join("plan"), p).unwrap();
+            assert_eq!(g.used_actions(1936 * 365), 1);
+            if exhaust {
+                assert!(g.pending_focus(1936 * 365).is_none());
+            }
+            b.obs.sequence += 10;
+            g.continue_entry(
+                &mut b,
+                &e.id,
+                10000,
+                std::time::Instant::now() + std::time::Duration::from_secs(1),
+            )
+            .unwrap();
+            assert_eq!(b.sends, usize::from(!exhaust));
+            let before: serde_json::Value = serde_json::from_slice(&original).unwrap();
+            let after: serde_json::Value =
+                serde_json::from_slice(&std::fs::read(t.0.join("plan")).unwrap()).unwrap();
+            assert_eq!(before["journal"], after["journal"]);
+        }
     }
 }

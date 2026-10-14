@@ -12,6 +12,26 @@ Canonical lease transfer/readback, 247-second recording integrity, normal owned
 exit and exact process absence passed. This is bounded Start evidence, not a
 clean two-year run or full campaign.
 
+Run037 subsequently verified worker preparations through View. Its core Start
+goal recorded a known nonqueued `torn_read`, consuming the limit1 reservation
+and blocking that head for the day; no actual Start journal entry or completion
+exists. A15-second server wait then refused a snapshot completing after its
+deadline. STOP's preparation-only summary omitted the core refusal. Exact torn
+witness and timing remain unknown. Lease proof/readback,442.333-second recording,
+normal owned exit0 and process absence passed. Correct the wait boundary and
+known pre-input goal handling before another worker gate; do not reset budgets
+or infer success from verified preparation.
+
+The correction bounds only immediately proven BeforeIntent Start torn reads
+inside one still-inflight core reservation/request, with fresh contexts, lease,
+scope/day and producer sequence on each iteration. It never reopens run037 or
+resets budgets. Original cause/core pending reason now appear in digest/stop.
+Later wait deadline refusals return only explicitly historical earlier evidence;
+late payloads remain discarded and real scope/ownership errors propagate. The
+composed source passed634 Rust1.86 host tests,733 reported actual Linux checks
+(731 substantive),953 Python tests (37 skips), compiler/format/Clippy/MSRV and
+release-link gates. Recorded run038 must verify the corrected worker.
+
 The new source wires a default-off daily Focus preview using the borrowed manual
 executor, strict fresh Start receipt conversion, ordered pending head and separate
 durable preparation/Start histories. It requires owner `daily_focus`, an existing

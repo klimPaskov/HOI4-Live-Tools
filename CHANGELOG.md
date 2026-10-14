@@ -2,6 +2,15 @@
 
 ## Unreleased native preview
 
+- Bound proven pre-input Focus Start torn-read retries inside the same in-flight
+  reservation/request, preserving the original cause, history and daily budget.
+  Surface core refusals beside preparation in digest/stop output.
+- Return explicitly historical timeout evidence when a later wait sample misses
+  its deadline. Discard late payloads; initial and real scope/ownership errors
+  retain strict refusal behavior.
+- Record run037 verified worker preparation through View, followed by a known
+  nonqueued Start `torn_read` that exhausted its single reservation. Preserve the
+  wait-deadline refusal and missing core-cause summary; worker acceptance is open.
 - Wire a default-off daily Focus preview with separate owner/request permission,
   ordered heads, active-focus waiting and unchanged shared assignment budgets.
   Retain actual verified evidence when late returns require durable quarantine.

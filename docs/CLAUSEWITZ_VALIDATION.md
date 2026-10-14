@@ -2589,3 +2589,62 @@ cases used the isolated fixture display under unchanged Yama1. No game was runni
 for these checks. Recorded run037 must reverify the borrowed path, worker-only
 Focus Start, positive-active waiting, idempotent update and budget-preserving
 restart before any live worker acceptance claim.
+
+
+## Recorded daily Focus run037 — 14 October 2026
+
+Exclusive Luna medium started the Rhineland-only worker in vanilla Normal,
+historical FAIR Germany at1January1936 noon, paused with four empty research
+slots. OpenPolitics, OpenFocus and View each have an actual Intent followed by
+Verified/ServerConfirmed preparation. The core Start goal then recorded one
+reservation and terminalfalse with known nonqueued `torn_read`: entry Pending,
+attempts1, reason_day706640, used1/remaining0. There is no Start Intent/receipt
+in the Focus action journal, no Start audit or completion, and no revision2 test.
+The exact changed witness and error message were not retained; concurrency is
+not an established cause. The old terminalfalse history must remain intact.
+
+The single15-second wait refused a snapshot completing after its deadline at
+15.014seconds. Luna stopped without requesting a digest or further observations.
+STOP showed only the latest historical View preparation and omitted the core
+refusal. The durable reservation and same-day exclusion prevented progression;
+this was more than simply stopping before the worker reached its goal branch.
+Future handling must preserve original cause and bound only trusted pre-input
+retries within the same still-inflight attempt, without refunds, new IDs or
+reopening an already terminalfalse reservation. Late wait payloads remain rejected.
+
+Actual release=true/statusremaining0 were transferred to the canonical guest
+file and independently read back against saved RPC receipts. The442.333-second
+H264512x288 recording passed ffprobe; intentional recorder shutdown returned255.
+One ordinary owned window close produced exit0 in2.317seconds, signalnull and
+core_dumpedfalse, with no signal fallback or replay. Exact owner/game process
+paths were absent afterward under unchanged Yama1; both brokers closed130.
+No postfailure game observation or rescue occurred. Worker Start, positive-active
+waiting, update/restart acceptance and full campaigns remain unpassed.
+
+
+## Run037 retry and wait corrections — offline gates
+
+The new Focus adapter permits at most two immediately proven BeforeIntent
+`torn_read` retries inside one still-inflight core attempt, using its original
+request and reservation. Every iteration requires fresh complete own contexts,
+producer sequence, unchanged scope/day and lease/gate checks under the original
+absolute deadline.100/200ms backoff never resets that deadline. Intent, receipt,
+confirmed nonqueued delivery, unknown or poison cannot qualify. Original and
+latest errors remain in separate checksummed Focus history, while digest/stop
+expose core pending reasons and reserved budget. Run037's finished terminalfalse
+remains immutable; no budget refund, new request or restart rescue is introduced.
+
+A later wait read exceeding its deadline now yields historical timeout evidence
+only when an earlier timely sample exists. Late payload/context are discarded;
+state_historical=true/current_state_verified=false/input_authorized=false and
+sample age distinguish the old sample. Any deadline-refusal diagnostic retains
+the original error. Strict initial/no-stable refusals remain; real ownership,
+scope and backend errors propagate even when late. This does not cancel a
+synchronous read or promise exact RPC return latency.
+
+The composed source passed634 Rust1.86 host tests,733 reported actual Linux
+checks (731 substantive),953 Python tests (37 skips), compiler/format/Clippy/MSRV
+and release linking. All11 optimized bundle payloads were hash-verified before
+Linux execution; five X11 cases used an isolated display under unchanged Yama1.
+These synthetic checks establish no corrected live worker acceptance. Fresh038
+must verify actual Start, active-focus waiting and budget-preserving update/restart.

@@ -60,6 +60,22 @@ the live controller; an unchanged old file cannot prove an uncommitted marker.
 Replacing the owner does not authorize adopting an orphaned game or clearing
 uncertainty.
 
+The worker now bounds immediately proven pre-input Start torn reads to two
+retries within the same in-flight reservation and request. Each retry needs
+new complete own contexts and producer sequence, the same scope/day, lease and
+input gates, and time remaining under the original deadline. It preserves the
+first detailed cause beside later errors. Intent, delivery, uncertainty, poison
+or a finished nonqueued reservation never supplies retry authority. Digest and
+stop summaries include core pending reasons and reserved budget. Recorded
+run037 remains an immutable failed gate; corrected worker live validation is pending.
+
+Wait timeouts return only the last earlier accepted sample, explicitly marked
+`state_historical: true`, `current_state_verified: false` and
+`input_authorized: false`, with sample age and any deadline refusal. Late payloads
+and targets are discarded. An initial wait without a timely stable sample still
+refuses, and real ownership/scope/backend errors propagate. Read a fresh digest
+after a normal timeout; historical wait output cannot authorize input.
+
 The independent `graph_kernel` library provides bounded connected components
 and multi-source breadth-first search over supplied public/generated topology.
 It rejects unknown nodes and malformed adjacency, resolves source ties

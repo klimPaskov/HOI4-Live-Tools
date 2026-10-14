@@ -27,6 +27,9 @@ strategic automation and campaign acceptance remain unfinished.
 The new daily Focus preview is default-off and requires independent owner and
 plan permissions. It preserves shared budgets and separate uncertainty histories;
 its worker execution and combined focus/research UI handoff still need live tests.
+Run037 verified worker preparation through View, then recorded a known nonqueued
+Start-read failure that exhausted its single reservation. No Start was delivered;
+bounded retry handling and timeout reporting are the next corrections.
 
 | Runtime | Verified | Remaining |
 | --- | --- | --- |
