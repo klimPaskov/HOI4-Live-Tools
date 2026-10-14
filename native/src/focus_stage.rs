@@ -136,7 +136,7 @@ impl OwnState {
     fn blockers_clear(&self) -> bool {
         self.own_detail_counts == Some([0, 0]) && self.own_research_info_counts == Some([0, 0])
     }
-    fn reached(&self, t: &Target) -> bool {
+    pub(crate) fn reached(&self, t: &Target) -> bool {
         if !self.base_known() {
             return false;
         }
@@ -252,6 +252,12 @@ pub struct Execution {
     pub historical: bool,
     pub current_state_verified: bool,
     pub event_causality_verified: bool,
+}
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub(crate) enum FailureEvidence {
+    BeforeIntent,
+    ConfirmedNotQueued,
+    Unknown,
 }
 pub struct Journal {
     file: File,
@@ -448,6 +454,31 @@ impl Journal {
             .insert(receipt.request_id.clone(), receipt.clone());
         self.poisoned = false;
         Ok(receipt)
+    }
+    /// Classify only immediately after execute returns an error, never from
+    /// absence in a historic file alone. Poison/possible input always dominates.
+    #[allow(dead_code)] // Future daily caller must classify immediately, not historical absence.
+    pub(crate) fn failure_evidence(
+        &self,
+        id: &str,
+        target: &Target,
+        error: &Error,
+    ) -> FailureEvidence {
+        if self.poisoned || self.blocks_game(&target.epoch.game) || error.code == "action_uncertain"
+        {
+            return FailureEvidence::Unknown;
+        }
+        match self.receipts.get(id) {
+            None => FailureEvidence::BeforeIntent,
+            Some(r)
+                if r.target == *target
+                    && r.status == Status::NotQueued
+                    && r.delivery == Some(Delivery::NotQueued) =>
+            {
+                FailureEvidence::ConfirmedNotQueued
+            }
+            _ => FailureEvidence::Unknown,
+        }
     }
     pub fn blocks_game(&self, game: &Identity) -> bool {
         self.poisoned
@@ -666,3 +697,83 @@ impl Journal {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(all(test, unix))]
+mod daily_failure_classifier_tests {
+    use super::*;
+    use std::os::unix::fs::PermissionsExt;
+    use std::sync::atomic::{AtomicU64, Ordering};
+    #[test]
+    fn immediate_classifier_never_converts_possible_input_to_preintent() {
+        static N: AtomicU64 = AtomicU64::new(0);
+        let root = std::env::temp_dir().join(format!(
+            "private-focus-classifier-{}-{}",
+            std::process::id(),
+            N.fetch_add(1, Ordering::Relaxed)
+        ));
+        std::fs::create_dir(&root).unwrap();
+        std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let mut j = Journal::open(&root.join("focus.jsonl")).unwrap();
+        let epoch = Epoch {
+            game: Identity {
+                pid: 123,
+                start_ticks: "456".into(),
+                exe: "/generated/game".into(),
+                uid: 1000,
+            },
+            campaign: "generated".into(),
+            player: "GER".into(),
+        };
+        let target = Target {
+            epoch: epoch.clone(),
+            stage: Stage::View,
+            focus_id: "GER_rhineland".into(),
+        };
+        assert_eq!(
+            j.failure_evidence("id", &target, &error("input_busy", "before")),
+            FailureEvidence::BeforeIntent
+        );
+        assert_eq!(
+            j.failure_evidence("id", &target, &error("action_uncertain", "unknown")),
+            FailureEvidence::Unknown
+        );
+        let mut receipt = Receipt {
+            version: 1,
+            request_id: "id".into(),
+            target: target.clone(),
+            status: Status::Intent,
+            delivery: None,
+            observed: OwnState {
+                epoch,
+                active_focus: ActiveFocus::Idle,
+                canonical_focus_id: Some(target.focus_id.clone()),
+                managed_mode: Some(13),
+                politics_root: LocalRoot::Hidden,
+                focus_root: LocalRoot::Ready,
+                own_detail_counts: Some([0, 0]),
+                own_research_info_counts: Some([0, 0]),
+                selected_focus: None,
+                requested_detail_ready: Some(false),
+            },
+        };
+        j.receipts.insert("id".into(), receipt.clone());
+        assert_eq!(
+            j.failure_evidence("id", &target, &error("input_busy", "after intent")),
+            FailureEvidence::Unknown
+        );
+        receipt.status = Status::NotQueued;
+        receipt.delivery = Some(Delivery::NotQueued);
+        j.receipts.insert("id".into(), receipt);
+        assert_eq!(
+            j.failure_evidence("id", &target, &error("input_not_queued", "confirmed")),
+            FailureEvidence::ConfirmedNotQueued
+        );
+        j.poisoned = true;
+        assert_eq!(
+            j.failure_evidence("id", &target, &error("input_busy", "poison")),
+            FailureEvidence::Unknown
+        );
+        drop(j);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+}

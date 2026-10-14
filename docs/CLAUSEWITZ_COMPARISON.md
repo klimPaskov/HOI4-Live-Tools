@@ -1,5 +1,13 @@
 # Clausewitz-MCP comparison checkpoint
 
+Latest bounded Linux result: recorded run036 with exclusive Luna medium control
+passed exact Rhineland selection and one ordinary Start. The compact selected
+detail read took 98.3 ms, View took 2.483 s and Start took 1.651 s with fresh
+canonical active-focus readback, under x86 CPU emulation. These are individual
+operation timings, not a latency distribution or a like-for-like upstream
+command benchmark. The original upstream posting timeout stays quarantined;
+no clean two-year run or full campaign has passed.
+
 11 October 2026. This is a development comparison, not proof of campaign success
 or a claim that HOI4 Live Tools is faster overall. Required targets are Windows,
 macOS and Linux. Linux game control remains unfinished.

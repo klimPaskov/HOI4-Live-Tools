@@ -1354,3 +1354,179 @@ fn refused_head_does_not_expose_later_same_slot_on_same_or_next_day() {
         vec!["research-1", "slot1-head"]
     );
 }
+
+#[test]
+#[cfg(unix)]
+fn focus_ordered_head_update_and_completed_assignment_preserved() {
+    let t = Temp::new();
+    let mut p = plan();
+    p.entries
+        .retain(|e| matches!(e.intent, Intent::Focus { .. }));
+    p.entries.push(Entry {
+        id: "focus-next".into(),
+        intent: Intent::Focus {
+            focus_id: "GER_autarky".into(),
+        },
+        navigation: None,
+    });
+    let mut b = Fake::new(&p);
+    let mut g = Governor::open(&t.path(), p.clone()).unwrap();
+    assert_eq!(g.pending_focus(1936 * 365).unwrap().id, "focus-1");
+    b.ready = Readiness::Deferred("Unknown active state".into());
+    run(&mut g, &mut b).unwrap();
+    assert_eq!(b.sends, 0);
+    assert!(g.pending_focus(1936 * 365).is_none());
+    assert_eq!(g.pending_focus(1936 * 365 + 1).unwrap().id, "focus-1");
+    let mut reordered = p.clone();
+    reordered.revision += 1;
+    reordered.entries.swap(0, 1);
+    assert_eq!(g.update_plan(reordered).unwrap_err().code, "plan_conflict");
+    b.day(2);
+    b.ready = Readiness::Ready;
+    run(&mut g, &mut b).unwrap();
+    let complete = serde_json::to_value(g.entry_state("focus-1")).unwrap();
+    assert_eq!(b.sends, 2);
+    p.revision += 1;
+    p.entries.push(Entry {
+        id: "focus-third".into(),
+        intent: Intent::Focus {
+            focus_id: "GER_four_year_plan".into(),
+        },
+        navigation: None,
+    });
+    assert!(g.update_plan(p.clone()).unwrap());
+    drop(g);
+    let g = Governor::open(&t.path(), p).unwrap();
+    assert_eq!(
+        serde_json::to_value(g.entry_state("focus-1")).unwrap(),
+        complete
+    );
+    assert_eq!(g.used_actions(1936 * 365 + 1), 2);
+    assert_eq!(g.pending_focus(1936 * 365 + 1).unwrap().id, "focus-third");
+}
+
+#[test]
+fn focus_converter_requires_current_start_exact_active_and_full_domain_scope() {
+    use crate::focus_stage::{self as f, ActiveFocus, LocalRoot};
+    let p = plan();
+    let entry = p.entries[1].clone();
+    let attempt = Attempt {
+        request_id: "focus-start-current".into(),
+        entry,
+        scope: p.scope.clone(),
+        day: 1936 * 365,
+        before_sequence: 5,
+    };
+    let date = crate::calendar::encode(1936, 1, 1).unwrap();
+    let before = crate::own_focus::FocusContext {
+        campaign: crate::game::ClockContext {
+            playthrough_id: "game-campaign".into(),
+            player: "GER".into(),
+            anchors: p.scope.anchors,
+            date_raw: date,
+            difficulty: 2,
+            historical_raw: 1,
+            paused: true,
+            speed: 1,
+        },
+        anchors: [
+            p.scope.own_country,
+            0x60000,
+            0x70000,
+            0x80000,
+            0x90000,
+            0xa0000,
+            p.scope.own_status,
+        ],
+        slots: vec![0xb0000],
+        active_focus: 0,
+        active_key: None,
+        selected: vec![],
+        matching_details: vec![],
+        ui_facts: None,
+    };
+    let mut after = before.clone();
+    after.active_focus = 0xc0000;
+    after.active_key = Some("GER_rhineland".into());
+    let obs = Observation {
+        scope: p.scope.clone(),
+        date_raw: date,
+        sequence: 6,
+        observed_unix_ms: 9999,
+        source: "generated fresh owned".into(),
+        counts: OwnCounts::default(),
+    };
+    let mut execution = f::Execution {
+        receipt: f::Receipt {
+            version: 1,
+            request_id: attempt.request_id.clone(),
+            target: f::Target {
+                epoch: p.scope.epoch.clone(),
+                stage: f::Stage::Start,
+                focus_id: "GER_rhineland".into(),
+            },
+            status: f::Status::Verified,
+            delivery: Some(f::Delivery::ServerConfirmed),
+            observed: f::OwnState {
+                epoch: p.scope.epoch,
+                active_focus: ActiveFocus::Active("GER_rhineland".into()),
+                canonical_focus_id: Some("GER_rhineland".into()),
+                managed_mode: Some(13),
+                politics_root: LocalRoot::Hidden,
+                focus_root: LocalRoot::Ready,
+                own_detail_counts: Some([0, 0]),
+                own_research_info_counts: Some([0, 0]),
+                selected_focus: None,
+                requested_detail_ready: Some(false),
+            },
+        },
+        historical: false,
+        current_state_verified: true,
+        event_causality_verified: false,
+    };
+    VerifiedReceipt::from_focus(attempt.clone(), &execution, &before, &after, obs.clone()).unwrap();
+    execution.historical = true;
+    assert!(
+        VerifiedReceipt::from_focus(attempt.clone(), &execution, &before, &after, obs.clone())
+            .is_err()
+    );
+    execution.historical = false;
+    for stage in [f::Stage::OpenPolitics, f::Stage::OpenFocus, f::Stage::View] {
+        execution.receipt.target.stage = stage;
+        assert!(VerifiedReceipt::from_focus(
+            attempt.clone(),
+            &execution,
+            &before,
+            &after,
+            obs.clone()
+        )
+        .is_err());
+    }
+    execution.receipt.target.stage = f::Stage::Start;
+    execution.receipt.observed.active_focus = ActiveFocus::Unknown;
+    assert!(
+        VerifiedReceipt::from_focus(attempt.clone(), &execution, &before, &after, obs.clone())
+            .is_err()
+    );
+    execution.receipt.observed.active_focus = ActiveFocus::Active("GER_other".into());
+    assert!(
+        VerifiedReceipt::from_focus(attempt.clone(), &execution, &before, &after, obs.clone())
+            .is_err()
+    );
+    execution.receipt.observed.active_focus = ActiveFocus::Active("GER_rhineland".into());
+    for i in 0..7 {
+        let mut changed = after.clone();
+        changed.anchors[i] += 8;
+        assert!(VerifiedReceipt::from_focus(
+            attempt.clone(),
+            &execution,
+            &before,
+            &changed,
+            obs.clone()
+        )
+        .is_err());
+    }
+    let mut stale = obs;
+    stale.sequence = 5;
+    assert!(VerifiedReceipt::from_focus(attempt, &execution, &before, &after, stale).is_err());
+}

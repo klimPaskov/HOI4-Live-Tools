@@ -380,6 +380,75 @@ impl VerifiedReceipt {
             observed,
         })
     }
+    /// Only a fresh exact Start receipt can complete a Focus assignment.
+    /// Preparation stages and historical replay never complete an entry.
+    pub fn from_focus(
+        attempt: Attempt,
+        execution: &crate::focus_stage::Execution,
+        before: &crate::own_focus::FocusContext,
+        context: &crate::own_focus::FocusContext,
+        observed: Observation,
+    ) -> Result<Self> {
+        use crate::focus_stage::{ActiveFocus, Stage, Status};
+        let Intent::Focus { focus_id } = &attempt.entry.intent else {
+            return Err(Error::new(
+                "receipt_mismatch",
+                "Focus receipt cannot complete another domain",
+            ));
+        };
+        let r = &execution.receipt;
+        r.observed.validate(&r.target)?;
+        if r.version != 1
+            || r.status != Status::Verified
+            || execution.historical
+            || !execution.current_state_verified
+            || r.request_id != attempt.request_id
+            || r.target.epoch != attempt.scope.epoch
+            || r.target.stage != Stage::Start
+            || r.delivery == Some(crate::focus_stage::Delivery::NotQueued)
+            || r.target.focus_id != *focus_id
+            || !matches!(&r.observed.active_focus,ActiveFocus::Active(id) if id==focus_id)
+            || observed.scope != attempt.scope
+            || observed.sequence <= attempt.before_sequence
+            || context.campaign.player != attempt.scope.epoch.player
+            || context.campaign.anchors != attempt.scope.anchors
+            || context.campaign.date_raw > observed.date_raw
+            || context.anchors != before.anchors
+            || context.slots != before.slots
+            || context.slots.is_empty()
+            || context.slots.len() > 32
+            || context
+                .slots
+                .iter()
+                .collect::<std::collections::BTreeSet<_>>()
+                .len()
+                != context.slots.len()
+            || context.campaign.player != before.campaign.player
+            || context.campaign.playthrough_id != before.campaign.playthrough_id
+            || context.campaign.anchors != before.campaign.anchors
+            || context.campaign.difficulty != before.campaign.difficulty
+            || context.campaign.historical_raw != before.campaign.historical_raw
+            || context.campaign.difficulty != 2
+            || context.campaign.historical_raw != 1
+            || context.campaign.date_raw < before.campaign.date_raw
+            || context.anchors[0] != attempt.scope.own_country
+            || context.anchors[6] != attempt.scope.own_status
+            || context.anchors.contains(&0)
+            || context.active_focus == 0
+            || context.active_key.as_deref() != Some(focus_id.as_str())
+        {
+            return Err(Error::new(
+                "receipt_mismatch",
+                "Current exact Focus Start assignment receipt required",
+            ));
+        }
+        Ok(Self {
+            canonical_intent: attempt.entry.intent.clone(),
+            attempt,
+            current: true,
+            observed,
+        })
+    }
 }
 #[derive(Clone, Debug)]
 pub enum Outcome {

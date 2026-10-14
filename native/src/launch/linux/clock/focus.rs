@@ -90,17 +90,68 @@ pub(super) fn call(
     owner.daily.input_check()?;
     drop(input_permit(&owner.input_gate)?);
     let mut state = owner.input_state()?;
-    let epoch = state.guard.epoch.clone();
-    state.authority.authorize(args.token, &epoch)?;
-    if state.journal.blocks_game(&epoch.game)
+    let target = stage::Target {
+        epoch: state.guard.epoch.clone(),
+        stage: args.stage,
+        focus_id: args.key.into(),
+    };
+    let (execution, transport) = execute_internal(
+        &mut state,
+        process,
+        &owner.input_gate,
+        args.token,
+        args.id,
+        target,
+        Instant::now() + Duration::from_secs(10),
+    )?;
+    Ok(
+        json!({"execution":execution,"transport":transport,"global_modal_clear_available":false,"effective_routing_verified":false,"full_campaign_acceptance":false}),
+    )
+}
+fn remaining(until: Instant) -> Result<Duration> {
+    let timeout = until
+        .saturating_duration_since(Instant::now())
+        .min(Duration::from_secs(10));
+    if timeout.is_zero() {
+        return Err(Error::new(
+            "focus_deadline",
+            "Focus deadline expired before dispatch",
+        ));
+    }
+    Ok(timeout)
+}
+/// Borrow the common controller exactly once; never re-enter ClockService.call.
+/// Manual preview only. Daily Focus remains capability-unavailable.
+pub(super) fn execute_internal(
+    state: &mut ControlState,
+    process: &dyn Process,
+    gate: &RwLock<bool>,
+    token: &str,
+    id: &str,
+    target: stage::Target,
+    until: Instant,
+) -> Result<(stage::Execution, Option<Value>)> {
+    drop(input_permit(gate)?);
+    state.authority.authorize(token, &state.guard.epoch)?;
+    if target.epoch != state.guard.epoch {
+        return Err(Error::new(
+            "ownership_changed",
+            "Focus target epoch differs from controller",
+        ));
+    }
+    if state.journal.blocks_game(&target.epoch.game)
         || state
             .research
             .as_ref()
-            .is_some_and(|r| r.journal.blocks_game(&epoch.game))
+            .is_some_and(|r| r.journal.blocks_game(&target.epoch.game))
+        || state
+            .focus
+            .as_ref()
+            .is_some_and(|f| f.journal.blocks_game(&target.epoch.game))
     {
         return Err(Error::new(
             "action_uncertain",
-            "Unresolved clock/research input blocks focus",
+            "Unresolved clock/research/focus input blocks focus",
         ));
     }
     let ControlState {
@@ -109,18 +160,13 @@ pub(super) fn call(
         authority,
         focus,
         ..
-    } = &mut *state;
+    } = state;
     let service = focus.as_mut().ok_or_else(|| {
         Error::new(
             "capability_unavailable",
             "Owner did not opt in to focus preview",
         )
     })?;
-    let target = stage::Target {
-        epoch,
-        stage: args.stage,
-        focus_id: args.key.into(),
-    };
     let mut backend = FocusBackend {
         process,
         controls,
@@ -132,20 +178,26 @@ pub(super) fn call(
         scope: None,
         candidate_selection: None,
         last_transport: None,
+        until,
     };
     let execution = service.journal.execute(
-        args.id,
+        id,
         target,
-        args.token,
+        token,
         authority,
-        &owner.input_gate,
+        gate,
         &mut backend,
-        Duration::from_secs(10),
+        remaining(until)?,
     )?;
-    Ok(
-        json!({"execution":execution,"transport":backend.last_transport,"global_modal_clear_available":false,"effective_routing_verified":false,"full_campaign_acceptance":false}),
-    )
+    if Instant::now() >= until {
+        return Err(Error::new(
+            "action_uncertain",
+            "Focus result arrived after original absolute deadline",
+        ));
+    }
+    Ok((execution, backend.last_transport))
 }
+
 type Selection = (Vec<[u64; 2]>, Vec<[u64; 3]>);
 struct FocusBackend<'a> {
     process: &'a dyn Process,
@@ -158,6 +210,7 @@ struct FocusBackend<'a> {
     scope: Option<state::Scope>,
     candidate_selection: Option<Selection>,
     last_transport: Option<Value>,
+    until: Instant,
 }
 fn accept(guard: &mut Guard, process: &dyn Process, o: &state::Observation) -> Result<()> {
     guard.accept_context(process, &o.context.campaign)?;
@@ -176,6 +229,16 @@ fn observed(
     state::pin(pin, observation.scope.clone())?;
     Ok(observation)
 }
+#[allow(dead_code)] // Prospective daily observer; worker input is unavailable.
+pub(super) fn observed_state(
+    process: &dyn Process,
+    guard: &mut Guard,
+    target: &stage::Target,
+) -> Result<(stage::OwnState, crate::own_focus::FocusContext)> {
+    let o = observed(process, guard, target, &mut None, false)?;
+    Ok((o.state, o.context))
+}
+
 fn politics_point(
     o: &state::Observation,
     process: &dyn Process,
@@ -275,6 +338,10 @@ impl stage::Backend for FocusBackend<'_> {
         candidate: &stage::Candidate,
         deadline: Instant,
     ) -> stage::Delivery {
+        let deadline = deadline.min(self.until);
+        if Instant::now() >= deadline {
+            return stage::Delivery::NotQueued;
+        }
         let process = self.process;
         let target = self.target.clone();
         let guard = &mut *self.guard;
@@ -376,6 +443,7 @@ impl stage::Backend for FocusBackend<'_> {
         candidate: &stage::Candidate,
         deadline: Instant,
     ) -> Result<()> {
+        let deadline = deadline.min(self.until);
         if Instant::now() >= deadline {
             return Err(Error::new("focus_deadline", "Input-idle deadline ended"));
         }
@@ -417,6 +485,20 @@ mod tests {
         assert_eq!(
             parse(value.as_object().unwrap()).unwrap().stage,
             stage::Stage::OpenPolitics
+        );
+    }
+    #[test]
+    fn internal_deadline_is_absolute_expired_refuses_and_never_widens() {
+        assert_eq!(
+            remaining(Instant::now() - Duration::from_millis(1))
+                .unwrap_err()
+                .code,
+            "focus_deadline"
+        );
+        let until = Instant::now() + Duration::from_millis(100);
+        assert!(remaining(until).unwrap() <= Duration::from_millis(100));
+        assert!(
+            remaining(Instant::now() + Duration::from_secs(30)).unwrap() <= Duration::from_secs(10)
         );
     }
 }

@@ -2,6 +2,11 @@
 
 ## Unreleased native preview
 
+- Pass recorded run036 exact Rhineland selection and one ordinary Start with
+  canonical active-focus readback. Keep full campaign acceptance open.
+- Add disabled daily Focus foundations: borrowed executor, strict Start receipt
+  conversion, ordered head and separate durable preparation ledger. Worker
+  enablement and cross-domain UI handoff remain separate gates.
 - Add a compact exact selected-focus window observation after a fields-present
   parsing failure in run035. Keep all original witnesses and action guards;
   label selected-only listener provenance without claiming an absent NOOP.

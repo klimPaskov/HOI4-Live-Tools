@@ -18,22 +18,17 @@ and memory readback. Recorded run030 passed worker-only four-slot research refil
 idempotent plan updates, restart without resetting its daily budget, and counter
 advancement through 3 January 1936.
 
-Recorded run032 verified opening Politics and the focus tree, then selecting the
-exact Rhineland focus after hierarchy and cache checks passed. Starting it refused
-at an unverified callback association. Run033 repeated selection and confirmed
-that association remained unavailable before any Start input. The failures are
-preserved without retry. Run034 identified a selected-event-only Start listener
-and read 21 supported own production lines. The new binding checks that local
-event route and selector zero; a live focus Start still needs verification.
-Run035 returned positive Start bindings, but Luna misread the nested response
-and stopped before input. A compact selected-detail tool now makes the Start
-path explicit. Broader strategic automation remains unfinished.
+Recorded run036 passed opening Politics and the focus tree, selecting the exact
+Rhineland focus, and one ordinary Start with canonical active-focus readback.
+Earlier callback/topology failures and a player parsing failure remain preserved;
+a compact selected-detail tool now makes the Start binding explicit. Broader
+strategic automation and campaign acceptance remain unfinished.
 
 | Runtime | Verified | Remaining |
 | --- | --- | --- |
 | Python / Windows | Baseline tools and recorded play attempts | Clean campaign acceptance; current development changes are unfinished |
 | Python / macOS | Platform work and limited diagnostic play | Reliable live acceptance; screenshot-driven testing is stopped |
-| Native / Linux | Own reads/catalogs, owned launch, bounded Luna clock/research tests, four-slot worker refill, restart persistence and exact focus selection | Focus start, broader daily plans, economics/army/naval control and campaign acceptance |
+| Native / Linux | Own reads/catalogs, owned launch, bounded Luna clock/research tests, four-slot worker refill, restart persistence and exact focus selection/Start | Broader daily plans, economics/army/naval control and campaign acceptance |
 | Native / Windows and macOS | Portable protocol and fixture tests in CI | Independently verified process/build adapters and live tests |
 
 Read [the acceptance gates](docs/LINUX_RUST_HANDOFF.md),

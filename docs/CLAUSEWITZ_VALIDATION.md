@@ -2498,3 +2498,44 @@ MSRV Linux checks and release linking. The first fixture launch raced installati
 and found no library binary before any native case ran. That orchestration failure
 is preserved; after all ten payload hashes were verified, the same immutable
 binaries passed. No live Start is inferred from these tests.
+
+
+## Recorded run036: exact focus Start passed
+
+Source `c1aa7ff` ran with exclusive Luna medium control in vanilla Normal/historical
+Germany. OpenPolitics verified in 1.489 seconds, OpenFocus in 4.756 seconds and
+exact Rhineland View in 2.483 seconds. Pre-View geometry took 108.4 ms; the new
+compact selected-detail read took 98.3 ms and was parsed at the correct path.
+The selected-only listener, fresh selector-zero requirement, callback and renderer
+associations, zero-angle TextSprite, closed own root1f0 and consistent conditional
+cache passed. One ordinary Start returned Verified/current-state readback in
+1.651 seconds, with exact own active focus `GER_remilitarize_the_rhineland`.
+No post-Start game observation or clock change occurred.
+
+The lease released and canonical proof was transferred/read back against actual
+RPC responses. H.264 recording passed ffprobe at 247 seconds/3,414,190 bytes;
+requested recording stop255 remains preserved. One ordinary owned close gave
+actual exit0/no signal/no core in 2.319 seconds; exact game/owner processes
+disappeared, Yama remained1 and both brokers closed. Earlier failures and the
+separate run035 parsing correction remain retained. This proves a bounded
+ordinary Start, not focus completion, eligibility modeling or campaign acceptance.
+
+## Disabled daily Focus foundation
+
+The next source extracts a borrowed Focus executor under the existing common
+controller and original absolute deadline, without mutex/RPC re-entry or a new
+input route. A strict converter accepts only a fresh exact Verified Start,
+canonical Active key and unchanged full own domain context before completing an
+assignment. Open/View/preparation/history cannot complete it. Ordered pending
+heads and append-prefix updates preserve completed entries and consumed budgets.
+A separate durable preparation ledger retains full entry/target/day/revision/
+binding/receipt or actual failure; unknown/lost outcomes remain blocked across
+restart. Research storage/navigation schemas are untouched. Daily Focus remains
+hard-unavailable; worker wiring, explicit default-off enablement, trusted final
+producer plumbing and cross-domain UI handoff are separate future gates.
+
+The composed disabled foundation passed 606 Rust 1.86 host tests, 703 reported
+actual Linux checks (701 substantive), 953 Python tests (37 skips), both Clippy
+targets, formatting, MSRV Linux checks and release linking. Fixture archives
+were completely installed and hash-verified before execution. The manual Focus
+extraction remains a new live-regression boundary; daily Focus stays disabled.

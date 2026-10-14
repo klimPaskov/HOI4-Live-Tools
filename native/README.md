@@ -32,14 +32,11 @@ compatibility. Layouts must be recovered and verified separately for each build.
 
 Focus stages and a daily prepared-research worker have optional owned MCP
 services. Recorded run030 passed worker-only four-slot refill, restart persistence
-and counter advancement through3January. Run032 verified exact focus selection;
-focus start has not passed live verification. Run033 stopped before Start
-after its selected-detail association was unavailable. Pointer-free listener
-count/membership diagnostics identified the actual selected-only topology in
-run034. The binding admits that exact selected-event route or the prior two-target
-list, and now requires the fresh control selector to equal zero in both cases.
-Other event equivalence, eligibility and effective routing remain unproved.
-A fresh live Start still needs verification.
+and counter advancement through3January. Run036 verified exact focus selection
+and one ordinary Start with canonical active-focus readback. The compact selected
+detail reports the correct Start object, avoiding the fields-present player parsing
+failure in run035. A borrowed Focus executor and separate durable preparation
+ledger are now offline foundations; the daily Focus capability remains disabled.
 They share the clock and
 research controller, lease, shutdown gate and uncertainty journals. The worker
 retains unfinished entries and requires fresh assignment receipts; navigation
@@ -240,8 +237,9 @@ The optional `hoi4_focus_attempt` service provides `open_politics`, `open_focus`
 canonical own-focus, active-progress, campaign and local UI witnesses. It requires
 settled own roots and complete local blocker facts, then uses exact Sprite,
 zero-angle Text or unmasked Frame geometry. Unknown facts and unsupported renderers refuse. These facts do not
-prove global modal clearance or routing. Run032 verified open/select stages;
-installed-game focus start remains unaccepted.
+prove global modal clearance or routing. Run036 passed open/select and one
+ordinary Start with canonical active-focus readback. Focus completion, durable
+daily Focus execution and campaign acceptance still need live validation.
 
 Only the verified own-focus node/start producers opt into a fixed traversal
 policy for the larger focus-tree container: exact generic Position ancestors

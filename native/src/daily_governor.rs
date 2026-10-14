@@ -453,8 +453,40 @@ impl Governor {
             .cloned()
             .collect()
     }
+    #[cfg(any(target_os = "linux", all(test, unix)))]
+    #[allow(dead_code)] // Prospective daily Focus remains unavailable.
+    pub(crate) fn pending_focus(&self, day: i64) -> Option<Entry> {
+        let head = self.state.plan.entries.iter().find(|e| {
+            matches!(e.intent, Intent::Focus { .. })
+                && !matches!(
+                    self.state.entries.get(&e.id),
+                    Some(EntryState::Complete { .. })
+                )
+        })?;
+        match self.state.entries.get(&head.id) {
+            Some(EntryState::Pending { reason_day, .. }) if *reason_day != Some(day) => {
+                Some(head.clone())
+            }
+            _ => None,
+        }
+    }
     fn research_queue_head(&self, entry: &Entry) -> bool {
         let Intent::Research { slot, .. } = &entry.intent else {
+            if matches!(entry.intent, Intent::Focus { .. }) {
+                return self
+                    .state
+                    .plan
+                    .entries
+                    .iter()
+                    .find(|e| {
+                        matches!(e.intent, Intent::Focus { .. })
+                            && !matches!(
+                                self.state.entries.get(&e.id),
+                                Some(EntryState::Complete { .. })
+                            )
+                    })
+                    .is_some_and(|head| head.id == entry.id);
+            }
             return true;
         };
         self.state.plan.entries.iter().find(|candidate| {
@@ -535,6 +567,24 @@ impl Governor {
                     "Existing research slot queue order must remain an unchanged prefix",
                 ));
             }
+        }
+        let old_focus: Vec<_> = self
+            .state
+            .plan
+            .entries
+            .iter()
+            .filter(|e| matches!(e.intent, Intent::Focus { .. }))
+            .collect();
+        let next_focus: Vec<_> = next
+            .entries
+            .iter()
+            .filter(|e| matches!(e.intent, Intent::Focus { .. }))
+            .collect();
+        if !next_focus.starts_with(&old_focus) {
+            return Err(Error::new(
+                "plan_conflict",
+                "Existing focus queue order must remain an unchanged prefix",
+            ));
         }
         let previous_revision = self.state.plan.revision;
         for record in &mut self.state.journal {
