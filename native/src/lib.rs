@@ -76,3 +76,6 @@ mod daily_digest_lock;
 
 #[cfg(any(target_os = "linux", all(test, unix)))]
 mod daily_focus_navigation;
+
+// Pure generated/public topology only; no campaign integration.
+pub mod graph_kernel;

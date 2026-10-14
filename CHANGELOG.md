@@ -2,6 +2,9 @@
 
 ## Unreleased native preview
 
+- Add bounded connected components and multi-source breadth-first search over
+  supplied public/generated topology, with explicit truncation and deterministic
+  source ties. The helper has no game-state producer or campaign action adapter.
 - Pass recorded run036 exact Rhineland selection and one ordinary Start with
   canonical active-focus readback. Keep full campaign acceptance open.
 - Add disabled daily Focus foundations: borrowed executor, strict Start receipt
@@ -16,11 +19,11 @@
 - Record worker-only four-slot research assignment, idempotent plan updates and
   restart without resetting the consumed daily budget. Ordered queues now retain
   pending slot heads; refill after a technology finishes still needs live validation.
-- Record exact focus selection with witnessed hierarchy/cache closure. The selected
-  Start callback association remains unavailable, and the latest run stopped before
-  Start input. Bounded diagnostics identify a selected-only listener; its narrow
+- Record exact focus selection with witnessed hierarchy/cache closure. Earlier
+  runs stopped before Start on unavailable bindings. Bounded diagnostics identified
+  a selected-only listener; its narrow
   event binding and the prior two-listener binding now require selector zero.
-  Live focus Start remains unverified.
+  Run036 subsequently verified one ordinary focus Start, as recorded above.
 - Prefilter occupied research slots using a complete witnessed canonical probe.
   Fixture reads fall while occupied and increase while idle; live latency is unverified.
 

@@ -48,6 +48,12 @@ an actual technology finishes still awaits live validation. Daily focus, economy
 army and naval adapters remain unfinished. Private daily storage
 supports Unix only; other platforms return an explicit capability error.
 
+The independent `graph_kernel` library provides bounded connected components
+and multi-source breadth-first search over supplied public/generated topology.
+It rejects unknown nodes and malformed adjacency, resolves source ties
+deterministically and reports depth truncation. It has no game-state producer
+or army integration; graph reachability establishes no movement or supply authority.
+
 ## Connect an owned Linux game
 
 Follow [owned Linux launch setup](../docs/OWNED_LINUX_LAUNCHER.md). The supervisor

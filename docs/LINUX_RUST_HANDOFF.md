@@ -18,6 +18,11 @@ separate durable preparation ledger. Daily Focus is still hard-unavailable;
 worker wiring/default-off permissions/cross-domain handoff require separate
 review, combined tests and live validation. The borrowed manual path also needs
 revalidation after extraction. Research histories and consumed budgets stay intact.
+The next independent foundation adds bounded graph components and multi-source
+BFS over supplied public/generated node IDs. It has no game-state producer or
+army integration. Combined checks passed614 Rust1.86 host tests,711 reported
+actual Linux checks (709 substantive),953 Python tests (37 skips), compiler,
+Clippy, format and release-link gates. Graph fixtures are not tactical acceptance.
 The composed foundation passed 606 Rust 1.86 host tests, 703 reported actual Linux
 checks (701 substantive), 953 Python tests (37 skips), compiler/Clippy/format
 gates and release linking. These checks do not enable the Focus worker.

@@ -2539,3 +2539,22 @@ actual Linux checks (701 substantive), 953 Python tests (37 skips), both Clippy
 targets, formatting, MSRV Linux checks and release linking. Fixture archives
 were completely installed and hash-verified before execution. The manual Focus
 extraction remains a new live-regression boundary; daily Focus stays disabled.
+
+
+## Bounded public-topology foundation — 14 October 2026
+
+The independent Rust graph kernel validates complete symmetric adjacency over
+explicit supplied node IDs, computes ordered connected components and performs
+multi-source breadth-first search with deterministic smallest-source ties.
+Unknown nodes, malformed edges and work/count bounds refuse; depth truncation is
+explicit. It consults Clausewitz-MCP's graph ideas with retained attribution,
+without importing its hidden-enemy payload producers or executor.
+
+Combined checks passed614 Rust1.86 host tests,711 reported actual Linux checks
+(709 substantive; nested/inert fixture helpers counted separately),953 Python
+tests (37 skips), format, host/Linux Clippy, MSRV Linux compilation and optimized
+Linux linking. The Linux archive had11 hash-verified payloads; all generated tests
+ran after the previous owned game exited normally, under unchanged Yama1. Five
+X11 tests used their isolated fixture display. No game was launched or controlled
+for this gate. There is no map producer, military access/supply inference, army
+action integration, tactical live evidence or campaign acceptance from these tests.

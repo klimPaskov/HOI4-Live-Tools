@@ -40,6 +40,10 @@ Upstream foundation and attribution:
   semantics. Their current-build trigger, handle and location layouts and all
   renderer/input guards are independently recovered project work; observations
   do not authorize engine calls or reveal foreign-unit payload.
+  native/src/graph_kernel.rs independently implements bounded components and
+  multi-source breadth-first search, consulting calling/doctrine.py and
+  calling/ragemicro.py. It operates on caller-supplied public/generated topology;
+  graph reachability establishes no military access, supply or action authority.
   The node_binding module independently observes ordinary control/callback data
   associations; it grants no input authority and executes no engine callback.
 

@@ -277,3 +277,13 @@ validation core with its full UI body under one final witness set. This is
 independent project integration of the attributed own-research semantics above;
 it changes no public default, engine call, deadline or replay policy. Generated
 read-count reductions are separate from live timing evidence.
+
+
+`graph_kernel.rs` independently implements bounded connected components and
+multi-source breadth-first search, consulting `calling/doctrine.py` and
+`calling/ragemicro.py` at the pinned Clausewitz-MCP commit above. No upstream
+code is copied. Its integer node IDs and proven domain are explicit algorithm
+inputs, not a game-state producer. Symmetric adjacency, deterministic source
+ties and bounded traversal do not establish military access, supply, visible
+opposition or command legality. Generated fixtures are its only current evidence;
+there is no campaign integration.
