@@ -80,6 +80,12 @@ latest completion remain. Optional empty history fields are omitted and duplicat
 wait records appear once. A View preparation still does not complete an assignment.
 Unverified durable storage refuses a digest and blocks input; STOP retains an
 unavailable summary and the uncertainty information.
+For an exactly matching completed Start, the compact Focus summary references
+`assignments.latest_completion` and omits its successful preparation. STOP and
+durable journals retain the full records. Failure, refusal and uncertainty history
+remain present; a mismatched request cannot qualify for this compaction.
+The matching failure can share that identity reference too; original/latest
+codes, reasons, evidence and retry-authority labels remain unchanged.
 
 A prospective typed ClosePolitics stage is runtime-disabled. It requires the
 exact canonical active focus, settled own Politics mode12, hidden Focus and zero

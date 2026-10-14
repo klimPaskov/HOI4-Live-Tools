@@ -1449,6 +1449,43 @@ fn compact_observation(
             digest.as_object_mut().unwrap().remove(key);
         }
     }
+    // A matching durable Complete already carries the original Start identity.
+    // Keep a reference rather than duplicating it, and omit only the successful
+    // preparation; failure/refusal/uncertainty history is never removed here.
+    let latest = &digest["assignments"]["latest_completion"];
+    let start = &digest["focus"]["start"];
+    let completed_start = digest["assignments"]["available"] == true
+        && latest["state"] == "Complete"
+        && latest["entry_id"].is_string()
+        && latest["request_id"].is_string()
+        && start["entry_id"] == latest["entry_id"]
+        && start["request_id"] == latest["request_id"];
+    if completed_start {
+        let completed_id = latest["entry_id"].clone();
+        let completed_request = latest["request_id"].clone();
+        digest["focus"]["start"] = json!({"stage":"Start","historical":true,
+            "completion_ref":"assignments.latest_completion"});
+        let preparation = &digest["focus"]["preparation"];
+        if preparation["entry_id"] == completed_id && preparation["verified"] == true {
+            digest["focus"]
+                .as_object_mut()
+                .unwrap()
+                .remove("preparation");
+            digest["focus"]["preparation_omitted_after_completion"] = json!(true);
+        }
+        let failure = &digest["focus"]["start_failure"];
+        if failure["entry_id"] == completed_id && failure["request_id"] == completed_request {
+            // The failure belongs to this very same completed reservation.
+            // Preserve every cause/evidence field, sharing only its identity.
+            let failure = digest["focus"]["start_failure"].as_object_mut().unwrap();
+            failure.remove("entry_id");
+            failure.remove("request_id");
+            failure.insert(
+                "completion_ref".into(),
+                json!("assignments.latest_completion"),
+            );
+        }
+    }
     while serde_json::to_vec(&digest)
         .map_err(|e| Error::new("digest_error", e.to_string()))?
         .len()
@@ -1595,7 +1632,8 @@ mod tests {
             "daily_budget":{"day":706640,"used_assignment_attempts":1,"limit":1,"remaining":0},
             "last_batch":{"digest":{"date_raw":60759371,"plan_revision":2,"verified":[],"retained":[],"retained_count":0}},
             "focus":{"preparation":{"entry_id":id,"stage":"View","request_id":"b".repeat(64),"verified":true,"goal_completed":false,"historical":true},
-                "start":{"entry_id":id,"stage":"Start","request_id":"a".repeat(64),"historical":true}}});
+                "start":{"entry_id":id,"stage":"Start","request_id":"a".repeat(64),"historical":true},
+                "start_failure":{"entry_id":id,"request_id":"a".repeat(64),"original_code":"torn_read","original_reason":"x".repeat(160),"code":"torn_read","reason":"y".repeat(160),"evidence":"BeforeIntent","failures":2,"historical":true,"retry_authority":false}}});
         let out = compact_observation(digest_sample(), &report, false, 2).unwrap();
         assert!(serde_json::to_vec(&out).unwrap().len() <= 2048);
         assert!(
@@ -1609,7 +1647,11 @@ mod tests {
         assert_eq!(out["assignments"]["completed"], 255);
         assert_eq!(out["assignments"]["completed_ids_truncated"], true);
         assert_eq!(out["assignments"]["current_state_verified"], false);
-        assert_eq!(out["focus"]["preparation"]["goal_completed"], false);
+        assert_eq!(out["focus"]["preparation_omitted_after_completion"], true);
+        assert_eq!(
+            out["focus"]["start"]["completion_ref"],
+            "assignments.latest_completion"
+        );
         assert_eq!(out["verified"], json!([]));
         assert_eq!(out["daily_budget"]["used_assignment_attempts"], 1);
         assert_eq!(out["input_authorized"], false);
@@ -1644,6 +1686,52 @@ mod tests {
             assert_eq!(out["daily_budget"]["used_assignment_attempts"], 1);
             assert_eq!(out["input_authorized"], false);
             assert_eq!(out["verified"], json!([]));
+        }
+    }
+    #[test]
+    fn recovered_start_failure_digest_preserves_cause_completion_budget_under_bound() {
+        let request = "a".repeat(64);
+        let latest = json!({"entry_id":"focus-rhineland","state":"Complete","request_id":request,"observed_sequence":7,"date_raw":60759371});
+        let failure = json!({"entry_id":"focus-rhineland","request_id":request,"day":706640,
+            "original_code":"torn_read","original_reason":"Focus witness changed","code":"torn_read","reason":"Focus witness changed",
+            "evidence":"BeforeIntent","failures":1,"retry_planned_historical":true,"historical":true,"retry_authority":false});
+        let report = json!({"running":true,"last_error":null,"focus_permission":true,
+            "assignments":{"available":true,"source":"durable_plan","plan_revision":1,"historical":true,
+                "current_state_verified":false,"input_authorized":false,"total":1,"completed":1,"pending":0,"in_flight":0,
+                "completed_ids":["focus-rhineland"],"completed_ids_truncated":false,"latest_completion":latest},
+            "daily_budget":{"day":706640,"used_assignment_attempts":1,"limit":1,"remaining":0,"navigation_spends_assignment_budget":false},
+            "last_batch":{"digest":{"date_raw":60759371,"plan_revision":1,"country":"GER","counts_scope":"observed own categories; null is unknown","review_due":false,"blocking_decision":null,"verified":["focus-rhineland"],"retained":[],"retained_count":0}},
+            "focus":{"preparation":{"entry_id":"focus-rhineland","stage":"View","request_id":"b".repeat(64),"verified":true,"goal_completed":false,"historical":true},
+                "start":{"entry_id":"focus-rhineland","stage":"Start","request_id":request,"historical":true},
+                "start_failure":failure,"failure":null,"refusal":null,"uncertainty":null,"wait":null}});
+        let out = compact_observation(digest_sample(), &report, false, 1).unwrap();
+        assert!(serde_json::to_vec(&out).unwrap().len() <= 2048);
+        assert_eq!(out["assignments"]["latest_completion"], latest);
+        let mut compact_failure = failure.clone();
+        compact_failure.as_object_mut().unwrap().remove("entry_id");
+        compact_failure
+            .as_object_mut()
+            .unwrap()
+            .remove("request_id");
+        compact_failure["completion_ref"] = json!("assignments.latest_completion");
+        assert_eq!(out["focus"]["start_failure"], compact_failure);
+        assert_eq!(
+            out["focus"]["start"]["completion_ref"],
+            "assignments.latest_completion"
+        );
+        assert_eq!(out["focus"]["preparation_omitted_after_completion"], true);
+        assert_eq!(out["daily_budget"]["used_assignment_attempts"], 1);
+        assert_eq!(out["input_authorized"], false);
+        let mut mismatch = report;
+        mismatch["assignments"]["latest_completion"]["request_id"] = json!("c".repeat(64));
+        // A mismatched completion must not hide the Start or its preparation.
+        let result = compact_observation(digest_sample(), &mismatch, false, 1);
+        if let Ok(out) = result {
+            assert_eq!(out["focus"]["start"]["request_id"], request);
+            assert_eq!(out["focus"]["preparation"]["stage"], "View");
+            assert_eq!(out["focus"]["start_failure"], failure);
+        } else {
+            assert_eq!(result.unwrap_err().code, "digest_error");
         }
     }
     #[test]

@@ -2,6 +2,9 @@
 
 ## Unreleased native preview
 
+- Compact matching completed Focus Start by reference and omit only its successful
+  preparation, retaining error history. Run039 verified one original-reservation
+  pre-input retry and completion, then stopped on digest overflow before update/restart.
 - Report durable assignment completion separately from fresh observations and
   batch receipts in digest/STOP. Preserve latest completion and counts when
   optional IDs truncate; reserve essential counts before filling the 2KB bound.

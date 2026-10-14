@@ -2737,3 +2737,56 @@ checks for worker-v21 and734/732 for retry-v22. Earlier723/721 and733/731 totals
 were arithmetic/helper-count errors. The original logs, cases and pass/fail
 outcomes are unchanged; the new748/746 total uses the same explicit two-helper
 exclusion consistently.
+
+
+## Recorded daily Focus run039 — 14 October 2026
+
+Exact source4cf3bb1 passed all nine cross-platform CI jobs and full reachable-history
+audit before exclusive Luna medium play. Vanilla Normal/historical FAIR Germany
+started at1January1936noon, paused with four empty research slots. Recording's first
+packet preceded the single campaign Start; frontend startup took394.152seconds.
+The first bounded45-second wait returned focus_changed after10.300seconds with
+fresh canonical Rhineland and zero rejected wait torn reads.
+
+Saved journals independently verify one immediately trusted BeforeIntent Start
+torn_read, reason `Focus witness changed`, index1/retry_plannedtrue, linked to the
+original core Attempt/request. It then produced one actual Start Intent followed
+by Verified/ServerConfirmed and canonical active Rhineland, a matching separate
+Focus goal audit, core Complete with terminaltrue/after_sequence7 and exactly one
+consumed reservation. There is no terminalfalse, new request or budget refund.
+This is live evidence for the same-in-flight pre-input retry; precise changed
+witness remains unidentified beyond the retained reason. Historical retry-planned
+metadata never grants later retry authority.
+
+The required fresh digest failed with digest_error, Essential digest exceeds bound.
+It combined durable completion with retained pre-input failure history, a shape
+missing from the previous compact fixtures. STOP preserved assignments completed1,
+latest Complete/original request/sequence7, used1/remaining0, original/latest torn
+cause, historicaltrue/current_state_verifiedfalse and retry_authorityfalse. Luna
+stopped without further game observations, revision2 update or restart.
+
+Actual release=true/statusremaining0 were transferred and independently read back
+against saved RPC responses. The310.333-second H264512x288 recording passed ffprobe;
+requested recorder shutdown returned255. One ordinary owned window close produced
+exit0 in2.448seconds, signalnull/core_dumpedfalse, with no fallback or replay. Exact
+owner/game processes were absent afterward under Yama1; both brokers exited130.
+No postfailure observation or UI rescue occurred.
+
+The correction references an exactly matching completed Start through the essential
+latest-completion record and omits only successful preparation. Full STOP and
+durable journals remain; failure, refusal, uncertainty and budget stay visible.
+A generated recovered-Start failure shape and mismatched-request negative gate
+exercise this boundary. Combined gates and fresh live update/restart validation
+are still required. No two-year/full campaign or cross-domain acceptance is claimed.
+
+The final overflow correction also shares a failure identity only when it exactly
+matches the completed Start, retaining all original/latest causes, evidence and
+retry-authority labels. Initial Linux fixtures exposed a stale required-truncation
+expectation, then a genuine maximum-length-ID/two-reason overflow. Both failed
+bundles/logs remain separate; the latter prompted identity sharing rather than
+cause deletion. Three direct Linux digest checks passed before the full suite.
+Final gates passed646 Rust1.86 host checks,749 reported actual Linux checks
+(747 substantive excluding two helpers),953 Python tests (37 skips), compiler,
+format, host/Linux Clippy, MSRV and release linking. All11 payload hashes and
+unchanged display ownership/Yama1 passed; no game was active. These fixture gates
+do not establish the pending live Focus update/restart or panel handoff.

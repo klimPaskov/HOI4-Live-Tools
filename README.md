@@ -33,6 +33,9 @@ bounded retry handling and timeout reporting were subsequently corrected.
 Recorded run038 then passed worker-driven Rhineland Start and durable assignment
 completion with one consumed attempt. Luna stopped because the digest obscured
 that completion; active-focus waiting, plan updates and restart remain untested.
+Run039 then verified recovery from one pre-input torn read within the original
+reservation and completed Rhineland. Its digest exceeded the 2KB limit, so Luna
+stopped before update/restart; the compact reporting path is being corrected.
 
 | Runtime | Verified | Remaining |
 | --- | --- | --- |

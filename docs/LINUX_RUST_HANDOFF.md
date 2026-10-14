@@ -4,7 +4,19 @@ User direction, 12 October 2026: stop the Mac screenshot-driven live tests and
 replace the primary runtime with a fast Rust MCP based on Clausewitz-MCP.
 Linux is the first live target; Windows and macOS remain required platforms.
 
-**Latest live result:** run038 passed worker-driven Rhineland Start and durable
+**Latest live result:** run039 recovered from one immediately proven BeforeIntent
+Start `torn_read` within the original in-flight request/reservation. Saved journals
+show one Start Intent/Verified pair, core Complete/terminaltrue after_sequence7,
+used1 and no terminalfalse or quarantine. The first wait observed active Rhineland;
+the fresh digest then refused because completion plus retained failure history
+exceeded2KB. STOP preserved actual durable completion and the original cause.
+Luna stopped before revision2/restart and made no further game observations.
+Canonical lease proof/readback,310.333-second recording, normal owned exit0 and
+exact process absence passed. Next correct the compact representation while
+retaining all failure/uncertainty/budget information, then repeat update/restart.
+The prospective ClosePolitics stage remains disabled; no full campaign has passed.
+
+**Earlier worker result:** run038 passed worker-driven Rhineland Start and durable
 assignment completion. Its saved action receipt is Verified/ServerConfirmed with
 canonical active Rhineland; the core entry is Complete, terminaltrue, sequence6,
 with one consumed attempt and no quarantine. Luna's fresh digests cleared the
