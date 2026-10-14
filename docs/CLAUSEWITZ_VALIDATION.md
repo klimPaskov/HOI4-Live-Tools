@@ -2411,3 +2411,47 @@ The composed source passed586 Rust1.86 host tests,682 reported actual Linux
 checks (680 substantive),953 Python tests (37 skips), both Clippy targets, format,
 MSRV Linux checks and release linking. These checks do not identify live listener
 topology or prove focus Start.
+
+
+## Recorded run034: own production lines and the actual singleton listener
+
+With one Luna medium player in vanilla Normal/historical Germany, one own
+production page returned21 supported lines, no unsupported layouts, and complete
+coverage of that scoped collection. Full string handles and separate signed
+active/damaged/requested counters are preserved privately. Equipment IDs, UI
+comparison, allocation, idle capacity and cross-load identity remain unavailable.
+OpenPolitics verified in2.017seconds, OpenFocus in5.108seconds and exact Rhineland
+View in2.881seconds. Pre-View paths closed at the own graphics root with consistent
+conditional caches. The selected-detail diagnostic then showed exactly one
+selected-event target, no NOOP target and no unknown target, failing the current
+exact-two topology guard. Start was forbidden and not attempted; no further game
+read or clock change occurred. This cause belongs to run034 only.
+
+Canonical release/status receipts confirmed zero remaining authority. Luna first
+wrote their proof payload only on the host while reporting the canonical guest
+path. The cleanup guard caught the absent guest file before any close input. The
+actual persisted RPC payload was transferred and read back, with the mistake and
+failed precondition retained. No game calls or repeated lease release were used
+to repair it. The H.264 recording passed ffprobe at345.333seconds/4,198,103bytes;
+requested stop255 is preserved. One ordinary owned close then gave actualexit0,
+no signal/core, in2.422seconds; both exact processes disappeared and Yama remained1.
+
+## Selected-event singleton binding and selector prerequisite
+
+Independent saved ELF witnesses prove the ordinary selected-event branch reaches
+the selected member without a contribution from the second known listener.
+Other event kinds can differ, so this is a local callback proof, not global
+observer equivalence. The producer now admits exactly the selected target alone
+or the prior exact pair after complete list validation. It never reads an absent
+NOOP capture, and unknown/extra/NOOP-only targets still refuse.
+
+The callback consumes the named control's signed selector; both routes now require
+a fresh witnessed zero before capture or renderer traversal. This tightens the
+prior two-target route as well. Existing owner/member/alternate-manager guards
+and typed hierarchy/cache/input checks remain. Four new Reader fixtures cover
+the singleton route, absent-payload avoidance, guarded refusals, both selectors
+and final changed witnesses. A live focus Start has not passed yet.
+
+The composed source passed 590 Rust 1.86 host tests, 686 reported actual Linux
+checks (684 substantive), 953 Python tests (37 skips), both Clippy targets,
+format, MSRV Linux checks and release linking. Live Start remains unverified.

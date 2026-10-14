@@ -4,6 +4,14 @@ User direction, 12 October 2026: stop the Mac screenshot-driven live tests and
 replace the primary runtime with a fast Rust MCP based on Clausewitz-MCP.
 Linux is the first live target; Windows and macOS remain required platforms.
 
+**Latest tested candidate:** run034 verified 21 supported own production lines
+and exact focus selection, then identified a selected-event-only Start listener.
+Start was not attempted. The next source adds that narrowly proved binding and a
+fresh selector-zero prerequisite for both supported listener shapes. It passed
+590 Rust 1.86 host tests, 686 reported Linux checks (684 substantive), 953 Python
+tests (37 skips), compiler/Clippy/format gates and release linking. Fresh run035
+is next; a live focus Start and campaign acceptance remain unverified.
+
 **Current continuation:** recorded run030 passed exclusive Luna medium
 worker-only four-slot research refill on one paused day, idempotent revision
 updates, restart with budget4/4/no replay, and raw counter advancement through
@@ -77,6 +85,23 @@ format and Clippy gates passed. Fresh run034 will first obtain
 one own production page, then use exclusive Luna Open/pre-View/View/selected-detail
 gates. Preserve actual topology and stop before Start if unavailable; do not
 infer run033 topology from the separate static registration collections.
+Run034 read21 supported own production lines in one fresh page (no equipment/UI
+allocation comparison), then verified the focus opens and exact View. Its selected
+Start detail showed a complete one-listener list: the selected target only, with
+no other target. This identifies run034's topology refusal; it does not identify
+run033 topology or run032's failed combined term. Start was forbidden and not
+attempted. The lease released, recording integrity passed at345.333seconds, and
+one ordinary close gave exit0 with exact processes absent. Cleanup first refused
+because Luna's proof payload was host-only despite reporting a guest path; actual
+persisted RPC receipts were transferred and read back before the first close input.
+No game read or repeated lease action was used for that repair.
+
+The next source admits the independently witnessed selected-only event route or
+the existing two-target list, with no unknown listeners and a new selector-zero
+prerequisite for BOTH routes. All owner/capture/alternate-manager/renderer/geometry
+guards remain. General event equivalence is not claimed; live focus Start remains
+unverified. Fresh035 may attempt Start only after supported selected-detail
+callback/geometry proof, then requires exact own canonical active-focus readback.
 Finish economic, army/naval actions
 and independent Windows/macOS live adapters afterward.
 [Live evidence](CLAUSEWITZ_VALIDATION.md) preserves earlier failures and boundaries.

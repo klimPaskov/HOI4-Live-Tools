@@ -88,6 +88,8 @@ pub(crate) fn observe(
         ));
     }
     let expected_targets = BTreeSet::from([panel + 0x2a8, panel + 0x530]);
+    let selected_only = count == 1 && targets == BTreeSet::from([panel + 0x2a8]);
+    let selected_and_noop = count == 2 && targets == expected_targets;
     // Pointer-free metadata from this already validated complete bounded list.
     // No unknown listener target/capture is dereferenced, and matching this
     // topology does not assert callback readiness, frame currency or authority.
@@ -98,15 +100,26 @@ pub(crate) fn observe(
         "selected_event_target_present":targets.contains(&(panel+0x2a8)),
         "noop_target_present":targets.contains(&(panel+0x530)),
         "other_target_present":targets.iter().any(|target|!expected_targets.contains(target)),
-        "matches_admitted_topology":count==2&&targets==expected_targets,
+        "matches_admitted_topology":selected_only || selected_and_noop,
+        "selected_event_only":selected_only,
     });
-    if count != 2 || targets != expected_targets {
+    if !selected_only && !selected_and_noop {
         return Ok(out);
     }
+    //282ffe0 reads this CONTROL selector; only zero selects28332c0.
+    if r.i32(button + 8)? != 0 {
+        out["reason"] = json!("selected_event_selector_unavailable");
+        return Ok(out);
+    }
+    // Only the witnessed selected-event branch is locally equivalent. Other
+    // event kinds may differ; this is not global routing or input authority.
     for (glue, offset, manager, invoker, member) in [
         (panel + 0x2a8, 0x28, 0x283a060, 0x283a030, 0x282ffe0),
         (panel + 0x530, 0x228, 0x283a100, 0x283a0d0, 0x2839080),
     ] {
+        if selected_only && glue == panel + 0x530 {
+            continue;
+        }
         if r.u64(glue)? != base + 0x4302598
             || r.u64(glue + offset + 0x10)? != base + manager
             || r.u64(glue + offset + 0x18)? != base + invoker

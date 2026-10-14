@@ -1674,10 +1674,9 @@ impl Fake {
     }
 }
 #[test]
-fn focus_start_topology_zero_singletons_and_unknown_remain_unavailable_without_target_reads() {
+fn focus_start_topology_zero_noop_only_and_unknown_remain_unavailable_without_target_reads() {
     for (targets, event, noop, other) in [
         (vec![], false, false, false),
-        (vec![PANEL + 0x2a8], true, false, false),
         (vec![PANEL + 0x530], false, true, false),
         (vec![PANEL + 0x2a8, 0xdead0000], true, false, true),
         (
@@ -1744,6 +1743,86 @@ fn focus_start_topology_malformed_links_duplicates_and_bounds_still_refuse() {
 #[test]
 fn focus_start_topology_count_and_target_mutations_are_final_witnesses_on_unavailable_path() {
     for at in [BUTTON + 0x98, 0x220000, 0x220010, BUTTON + 0x90] {
+        let mut f = Fake::new();
+        f.start_binding();
+        f.start_listener_targets(&[PANEL + 0x530]);
+        f.torn = Some(at);
+        assert_eq!(f.result().unwrap_err().code, "torn_read");
+    }
+}
+
+#[test]
+fn focus_start_selected_singleton_proves_route_without_absent_noop_payload() {
+    let mut f = Fake::new();
+    f.start_binding();
+    f.start_listener_targets(&[PANEL + 0x2a8]);
+    let v = f.binding();
+    assert_eq!(v["available"], true);
+    assert_eq!(v["callback_route_verified"], true);
+    assert_eq!(v["listener_topology"]["selected_event_only"], true);
+    assert_eq!(v["input_authorized"], false);
+    assert_eq!(v["effective_routing_verified"], false);
+    assert!(f.untouched(PANEL + 0x530, 0x270));
+    assert!(f.untouched(0x221020, 24));
+}
+#[test]
+fn focus_start_selected_singleton_keeps_capture_alternate_and_renderer_guards() {
+    for kind in 0..4 {
+        let mut f = Fake::new();
+        f.start_binding();
+        f.start_listener_targets(&[PANEL + 0x2a8]);
+        match kind {
+            0 => f.word(PANEL + 0x2a8 + 0x1d8, 0xdead0000),
+            1 => f.word(0x221000 + 0x10, PANEL + 8),
+            2 => f.word(0x221000, 0x2833390),
+            _ => f.word(0x222138, BUTTON + 8),
+        }
+        let result = f.result();
+        match kind {
+            0 | 2 => assert_eq!(
+                result.unwrap()["details"][0]["window"]["start"]["ordinary_binding"]["available"],
+                false
+            ),
+            _ => assert_eq!(result.unwrap_err().code, "invalid_focus_owner"),
+        }
+        assert!(f.untouched(PANEL + 0x530, 0x270));
+        if kind == 0 {
+            assert!(f.untouched(0x221000, 24));
+            assert!(f.untouched(BUTTON + 0xe8, 8));
+        }
+    }
+}
+#[test]
+fn focus_start_selected_route_selector_zero_required_for_both_topologies() {
+    for singleton in [false, true] {
+        for selector in [-1, 1, 2] {
+            let mut f = Fake::new();
+            f.start_binding();
+            if singleton {
+                f.start_listener_targets(&[PANEL + 0x2a8]);
+            }
+            f.int(BUTTON + 8, selector);
+            let v = f.binding();
+            assert_eq!(v["reason"], "selected_event_selector_unavailable");
+            assert_eq!(v["available"], false);
+            assert!(f.untouched(0x221000, 24));
+            assert!(f.untouched(BUTTON + 0xe8, 8));
+        }
+    }
+}
+#[test]
+fn focus_start_selected_singleton_all_route_reads_remain_final_witnesses() {
+    for at in [
+        BUTTON + 8,
+        BUTTON + 0x98,
+        0x220000,
+        0x220010,
+        BUTTON + 0x90,
+        PANEL + 0x2a8 + 0x1d8,
+        0x221000,
+        0x221010,
+        0x222138,
+    ] {
         let mut f = Fake::new();
         f.start_binding();
         f.start_listener_targets(&[PANEL + 0x2a8]);

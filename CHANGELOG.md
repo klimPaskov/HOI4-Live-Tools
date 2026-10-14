@@ -10,7 +10,9 @@
   pending slot heads; refill after a technology finishes still needs live validation.
 - Record exact focus selection with witnessed hierarchy/cache closure. The selected
   Start callback association remains unavailable, and the latest run stopped before
-  Start input. Add bounded listener diagnostics without changing the action guard.
+  Start input. Bounded diagnostics identify a selected-only listener; its narrow
+  event binding and the prior two-listener binding now require selector zero.
+  Live focus Start remains unverified.
 - Prefilter occupied research slots using a complete witnessed canonical probe.
   Fixture reads fall while occupied and increase while idle; live latency is unverified.
 

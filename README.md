@@ -22,7 +22,10 @@ Recorded run032 verified opening Politics and the focus tree, then selecting the
 exact Rhineland focus after hierarchy and cache checks passed. Starting it refused
 at an unverified callback association. Run033 repeated selection and confirmed
 that association remained unavailable before any Start input. The failures are
-preserved without retry. Focus start and broader strategic automation remain unfinished.
+preserved without retry. Run034 identified a selected-event-only Start listener
+and read 21 supported own production lines. The new binding checks that local
+event route and selector zero; a live focus Start still needs verification.
+Broader strategic automation remains unfinished.
 
 | Runtime | Verified | Remaining |
 | --- | --- | --- |

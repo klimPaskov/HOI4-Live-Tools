@@ -33,10 +33,13 @@ compatibility. Layouts must be recovered and verified separately for each build.
 Focus stages and a daily prepared-research worker have optional owned MCP
 services. Recorded run030 passed worker-only four-slot refill, restart persistence
 and counter advancement through3January. Run032 verified exact focus selection;
-focus start remains blocked at the callback guard. Run033 stopped before Start
+focus start has not passed live verification. Run033 stopped before Start
 after its selected-detail association was unavailable. Pointer-free listener
-count/membership diagnostics now distinguish the bounded topology; matching it
-alone never authorizes input.
+count/membership diagnostics identified the actual selected-only topology in
+run034. The binding admits that exact selected-event route or the prior two-target
+list, and now requires the fresh control selector to equal zero in both cases.
+Other event equivalence, eligibility and effective routing remain unproved.
+A fresh live Start still needs verification.
 They share the clock and
 research controller, lease, shutdown gate and uncertainty journals. The worker
 retains unfinished entries and requires fresh assignment receipts; navigation
@@ -96,7 +99,7 @@ anchors do not establish a load-generation token.
 | `hoi4_research` | Own completed technologies and active signed counters; normalized progress remains unavailable |
 | `hoi4_army` | Own divisions with full snapshot-scoped handles, selected province joins and lossless raw status; recorded structural reads, units unverified |
 | `hoi4_economy` | Own named factory trigger counts, civilian project capacity and exact signed political-power units; live comparison pending |
-| `hoi4_production_lines` | Paged own equipment-line handles and separate signed factory counters; fixture validation only, equipment IDs and allocation unavailable |
+| `hoi4_production_lines` | Paged own equipment-line handles and separate signed factory counters; 21 own lines read in run034; equipment IDs, UI comparison and allocation unavailable |
 | `hoi4_technology_list` | Canonical loaded technology IDs with filtering/pagination; no eligibility inference |
 | `hoi4_input_geometry` | GUI dimensions, scale, pointer and conditional source-window diagnostics; no click authority |
 | `hoi4_research_folders` | Exact loaded public folder IDs, independent of open GUI; no technology mapping or eligibility authority |
