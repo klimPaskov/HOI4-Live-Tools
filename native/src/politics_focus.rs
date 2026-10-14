@@ -231,9 +231,30 @@ fn diagnostics(
         r.read(at(button, 0x74)?, 4)?.try_into().unwrap()
     ));
     if geometry {
-        out["render_diagnostic"] = crate::node_detail::standard_sprite_diagnostic(
-            r, &mut reuse, container, button, registry,
-        )?;
+        // The named own callback is already proved. Payload remains conditional
+        // on an exact supported renderer and reciprocal Standard owner.
+        let render = r.u64(at(button, 0xe8)?)?;
+        out["renderer_type_encoding"] = reuse.nullable_type(r, render)?;
+        let primary = if render == 0 { 0 } else { r.u64(render)? };
+        if [0x4356e08, 0x43593d8, 0x434b370]
+            .iter()
+            .any(|p| primary == base + p)
+        {
+            pointer(render)?;
+            if r.u64(at(render, 0x138)?)? != button {
+                return Err(fail(
+                    "invalid_gui_owner",
+                    "Politics renderer must belong to exact named Standard",
+                ));
+            }
+            out["renderer_control_join_verified"] = json!(true);
+            out["render_diagnostic"] = crate::focus_geometry::observe(
+                r, &mut reuse, container, button, registry, primary, render,
+            )?;
+        } else {
+            out["renderer_control_join_verified"] = json!(false);
+            out["render_diagnostic"] = json!({"field_layout_verified":false,"reason":"renderer_layout_unavailable","input_authorized":false,"client_rectangle_available":false});
+        }
     }
     Ok(out)
 }

@@ -4,7 +4,7 @@ use crate::{
     focus_candidate_observation as candidate, focus_stage as stage,
     platform::x11::{PointerDelivery, PointerDisplay},
     research_attempt::{self, PointCandidate},
-    research_candidate_observation::{codec, sprite_surface, OwnedClientProfile},
+    research_candidate_observation::{codec, control_surface, OwnedClientProfile},
 };
 mod state;
 
@@ -42,7 +42,7 @@ impl Service {
     }
 }
 pub(super) fn tool() -> Value {
-    json!({"name":"hoi4_focus_attempt","description":"Preview: one ordinary OpenPolitics Q, OpenFocus named-button, View or Start stage for an exact own canonical focus ID. Requires explicit owned profile, exclusive lease, settled own roots and complete own scoped blockers. Supported exact Sprite geometry only; unknown branches refuse. Canonical readback verifies current state, not event causality or eligibility. Uncertain input is quarantined; no replay, coordinates, activation or engine calls.",
+    json!({"name":"hoi4_focus_attempt","description":"Preview: one ordinary OpenPolitics Q, OpenFocus named-button, View or Start stage for an exact own canonical focus ID. Requires explicit owned profile, exclusive lease, settled own roots and complete own scoped blockers. Supported exact Sprite, zero-angle Text or unmasked Frame geometry; unknown branches refuse. Canonical readback verifies current state, not event causality or eligibility. Uncertain input is quarantined; no replay, coordinates, activation or engine calls.",
         "inputSchema":{"type":"object","properties":{"stage":{"enum":["open_politics","open_focus","view","start"]},"focus_id":{"type":"string","minLength":1,"maxLength":128},"request_id":{"type":"string","minLength":1,"maxLength":128},"lease_token":{"type":"string"}},"required":["stage","focus_id","request_id","lease_token"],"additionalProperties":false}})
 }
 struct Arguments<'a> {
@@ -186,6 +186,7 @@ fn politics_point(
     let ac = p["disabled_raw"].as_i64();
     if p["available"] != true
         || p["callback_route_verified"] != true
+        || p["renderer_control_join_verified"] != true
         || p["control_type_encoding"] != "15CButtonStandard"
         || p["target_managed_mode"] != 13
         || !matches!(ac, Some(0..=2))
@@ -197,7 +198,7 @@ fn politics_point(
             "Exact settled own named politics control required",
         ));
     }
-    let surface = sprite_surface(&p["render_diagnostic"])?;
+    let surface = control_surface(&p["render_diagnostic"])?;
     let geometry = crate::gui::input_geometry(process)?;
     let client = codec(&geometry, profile)?;
     process.check()?;

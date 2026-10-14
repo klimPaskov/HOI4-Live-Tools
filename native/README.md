@@ -34,9 +34,9 @@ Focus stages and a daily prepared-research worker now have optional owned MCP
 services. Their installed-game validation is pending. They share the clock and
 research controller, lease, shutdown gate and uncertainty journals. The worker
 retains unfinished entries and requires fresh assignment receipts; navigation
-receipts cannot complete research work. Safe plan updates exist in the library
-but are not yet exposed by the service. Automatic research navigation and daily
-focus, economy, army and naval adapters remain unfinished. Private daily storage
+receipts cannot complete research work. It prepares each research stage separately
+and supports idempotent plan updates. It completes at most one research entry per
+advancing day. Daily focus, economy, army and naval adapters remain unfinished. Private daily storage
 supports Unix only; other platforms return an explicit capability error.
 
 ## Connect an owned Linux game
@@ -95,7 +95,7 @@ anchors do not establish a load-generation token.
 | `hoi4_research_node_detail` | One exact own key's binding, raw renderer/cache and typed hierarchy diagnostics |
 | `hoi4_research_nodes` | Paged current own-tree keys and conditional control associations |
 | `hoi4_focus_list` | Own canonical focus keys and selected detail diagnostics; no start authority |
-| `hoi4_focus_node_detail` | One own focus key's current-item/control associations; opt-in raw Sprite/Text diagnostics, awaiting live validation |
+| `hoi4_focus_node_detail` | One own focus key's current-item/control associations; opt-in raw Sprite/Text/Frame diagnostics, awaiting live validation |
 | `hoi4_wait_for` | Server wait, 1–50 seconds, for a date, focus/research changes or research UI predicates |
 
 Catalog queries accept `filter`, `offset` and `limit` (1–100). Research completed
@@ -214,15 +214,19 @@ lease, journal and verified ordinary dispatch boundary.
 The optional `hoi4_focus_attempt` service provides `open_politics`, `open_focus`,
 `view` and `start` stages for an exact own focus ID. Its point preparer shares
 canonical own-focus, active-progress, campaign and local UI witnesses. It requires
-settled own roots and complete local blocker facts, then uses supported Sprite
-geometry. Unknown facts and unsupported renderers refuse. These facts do not
+settled own roots and complete local blocker facts, then uses exact Sprite,
+zero-angle Text or unmasked Frame geometry. Unknown facts and unsupported renderers refuse. These facts do not
 prove global modal clearance or routing. Installed-game focus dispatch is pending.
 
 The optional `hoi4_daily_governor` service starts a durable explicit plan, returns
-a fresh compact digest, or stops its worker without changing game time. It can
-execute Research only when the requested own slot and matching Info are already
-prepared, or verify an existing matching assignment. It probes unchanged days
-without rewriting the plan and executes a batch only on an advancing day.
+a fresh compact digest, updates its plan, or stops without changing game time.
+It prepares OpenPanel/SelectSlot/optional SelectCategory/View as separately
+persisted and freshly verified stages, then executes Research. An explicit
+folder hint can identify the category. It probes exhausted days without rewriting
+the plan and completes prepared research entries within its persisted daily
+assignment budget. Navigation stages are recorded separately and do not spend
+that assignment budget. Updates preserve used reservations and exact entry
+specifications; stored preparation evidence remains historical.
 Other domains remain retained with an unavailable reason. See the
 [focus and daily setup](../docs/OWNED_LINUX_LAUNCHER.md#focus-and-daily-previews).
 

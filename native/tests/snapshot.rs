@@ -88,6 +88,109 @@ fn politics_forbid(f: &mut Fixture, start: u64, size: usize) {
     }
 }
 
+fn politics_typed_geometry_fixture(text: bool) -> Fixture {
+    let mut f = politics_focus_fixture();
+    let b = 0x10000;
+    // Retain the independently constructed owner/hierarchy fields, only expand
+    // the exact renderer's observed object storage for Text-specific fields.
+    f.region(0xf0180, 0x180);
+    for (object, table, info, name, string) in [
+        (
+            0xf0000,
+            if text { 0x43593d8 } else { 0x434b370 },
+            0x435a800,
+            if text {
+                "11CTextSprite"
+            } else {
+                "20CFrameAnimatedSprite"
+            },
+            0x3516000,
+        ),
+        (
+            0xf1000,
+            if text { 0x4359740 } else { 0x434b668 },
+            0x435a900,
+            if text {
+                "15CTextSpriteType"
+            } else {
+                "24CFrameAnimatedSpriteType"
+            },
+            0x3516100,
+        ),
+    ] {
+        f.word(object, b + table);
+        f.word(b + table - 16, 0);
+        f.word(b + table - 8, b + info);
+        f.region(b + info, 16);
+        f.word(b + info + 8, b + string);
+        f.region(b + string, 128);
+        f.put(b + string, name.as_bytes());
+    }
+    if text {
+        f.number(0xf108c, 1);
+        f.number(0xf0228, 300);
+        f.number(0xf022c, 60);
+        f.number(0xf0238, 1);
+        f.put(0xf0110, &0.0f32.to_le_bytes());
+    } else {
+        f.word(0xf01b0, 0xf1000); // separate hit pointer must equal dimension168
+    }
+    f.unit_chain();
+    f
+}
+#[test]
+fn politics_focus_exact_text_frame_renderer_inheritance_follows_named_own_callback() {
+    for text in [false, true] {
+        let f = politics_typed_geometry_fixture(text);
+        let (value, _) = hoi4_live_native::politics_focus::owned_snapshot(&f, true).unwrap();
+        assert_eq!(value["renderer_control_join_verified"], true);
+        assert_eq!(value["callback_route_verified"], true);
+        let g = &value["render_diagnostic"];
+        if text {
+            assert_eq!(g["raw_fields_available"], true);
+            assert_eq!(g["renderer_width_raw"], 300);
+            assert_eq!(g["hit_width_divisor_raw"], 1);
+            assert_eq!(
+                g["parent_chain"]["unit_cache_diagnostic"]
+                    ["cache_consistent_under_observed_unit_branch"],
+                true
+            );
+            f.assert_not_read(&[0xf01b0, 0xf1090, 0xf1094, 0xf10a4]);
+        } else {
+            assert_eq!(g["field_layout_verified"], true);
+            assert_eq!(g["resource_alias_matches"], true);
+            assert_eq!(
+                g["frame_raw_geometry"]["parent_chain"]["unit_cache_diagnostic"]
+                    ["cache_consistent_under_observed_unit_branch"],
+                true
+            );
+            f.assert_not_read(&[0xf0228, 0xf0238]);
+        }
+        assert_eq!(g["current_frame_verified"], false);
+        assert_eq!(g["input_authorized"], false);
+        f.assert_not_read(&[0xdead0000, 0xd5110, 0xd5008]);
+    }
+}
+#[test]
+fn politics_focus_text_frame_foreign_owner_and_callback_refuse_before_renderer_resource() {
+    for text in [false, true] {
+        let mut f = politics_typed_geometry_fixture(text);
+        f.word(0xf0138, 0xdead0000);
+        assert_eq!(
+            hoi4_live_native::politics_focus::owned_snapshot(&f, true)
+                .unwrap_err()
+                .code,
+            "invalid_gui_owner"
+        );
+        f.assert_not_read(&[0xf0168, 0xf01b0, 0xf0228, 0xf1090, 0xdead0000]);
+        let mut f = politics_typed_geometry_fixture(text);
+        f.word(POLITICS + 0x320, 0x10000 + 0x1693138);
+        let (value, _) = hoi4_live_native::politics_focus::owned_snapshot(&f, true).unwrap();
+        assert_eq!(value["callback_route_verified"], false);
+        f.assert_not_read(&[0xd50e8, 0xf0168, 0xf01b0, 0xf0228]);
+    }
+}
+
 #[test]
 fn politics_focus_positive_owned_route_is_metadata_not_input_authority() {
     let f = politics_focus_fixture();

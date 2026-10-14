@@ -477,6 +477,11 @@ impl OwnedChild {
             || current.parent != std::process::id() as i32
             || first.as_ref().is_some_and(|old| old != &current)
         {
+            #[cfg(test)]
+            eprintln!(
+                "ACTUAL_READINESS_ANCHOR_REFUSAL expected={first:?} observed={current:?} owner_pid={} owner_uid={}",
+                std::process::id(), uid()
+            );
             return Err(Error::new(
                 "ownership_changed",
                 "Launched child ownership changed",

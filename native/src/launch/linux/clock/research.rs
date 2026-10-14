@@ -501,7 +501,7 @@ pub(super) fn observed_state(
     Ok((state, ui_context))
 }
 
-fn observed_target_state(
+pub(super) fn observed_target_state(
     process: &dyn Process,
     guard: &mut Guard,
     target: Option<&stage::Target>,

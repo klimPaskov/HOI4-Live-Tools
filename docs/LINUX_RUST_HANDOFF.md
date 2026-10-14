@@ -5,16 +5,21 @@ replace the primary runtime with a fast Rust MCP based on Clausewitz-MCP.
 Linux is the first live target; Windows and macOS remain required platforms.
 
 **Current continuation:** recorded run025 passed exclusive Luna medium clock
-controls, all four research assignments and advancement through 5 January 1936.
-Recording passed ffprobe; one owned window close returned normal exit0, and both
-game and owner are absent. Run024's clock uncertainty remains unexplained.
-The failed upstream native-posting adapter stays quarantined. Opt-in focus
-stages and a shared-controller daily prepared-research worker now pass fixtures;
-verify them in a fresh immutable recorded Luna run, then finish automatic
-navigation and plan-update service wiring, followed by economic,
-army and naval adapters and independent Windows/macOS live support. All nine
-cross-platform CI jobs passed at `9697051`; this does not prove native gameplay
-on every platform. No clean two-year or full campaign has passed. Detailed
+controls, all four research assignments and advancement through 5 January1936.
+Run026 verified OpenPolitics/OpenFocus, then refused exact-ID View because owned
+root closure was missing; its specific cause remains unknown. Both owned games
+exited normally and their recordings passed ffprobe. No clean two-year or full
+campaign has passed. The failed upstream native-post adapter stays quarantined.
+
+The latest composed Rust preview adds independent research navigation receipts,
+idempotent plan updates, same-day refill within persisted assignment budgets,
+current compact digests and stricter point root-scope validation. It passes512
+Rust1.86 host tests,602 reported actual Linux checks (600 substantive), five
+isolated X11 cases and953 Python tests (37 skipped). These are fixture results;
+verify the worker in a fresh immutable recorded Luna medium run before claiming
+live automation. Root350 coordinate conversion remains unsupported. Then finish
+focus, economic, army/naval actions and independent Windows/macOS live adapters.
+Cross-platform CI remains separate from native gameplay acceptance. Detailed
 failures and evidence remain in [live validation](CLAUSEWITZ_VALIDATION.md).
 
 ## Ordered acceptance gates

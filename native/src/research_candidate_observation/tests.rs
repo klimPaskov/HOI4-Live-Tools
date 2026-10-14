@@ -1,4 +1,21 @@
 use super::*;
+#[test]
+fn incomplete_closure_diagnostic_does_not_echo_unbounded_or_untrusted_values() {
+    let h = serde_json::json!({"status":"injected arbitrary status /private/path","graphics_root_closed":false,
+        "observed_ancestors":99999,"payload_hops":18446744073709551615u64,
+        "chain":[{"type_encoding":"/Users/private/unknown"}],
+        "policy_boundary":{"stage":"arbitrary /private/path","policy_scope":"unknown","count":99999999,"capacity":99999999}});
+    let e = common(&serde_json::Value::Null, "w", "a", "s", &h).unwrap_err();
+    assert_eq!(e.code, "research_geometry_unavailable");
+    assert!(e.message.contains("status=missing_or_invalid"));
+    assert!(e.message.contains("ancestors=unknown"));
+    assert!(
+        !e.message.contains("/Users/")
+            && !e.message.contains("/private/")
+            && !e.message.contains("99999")
+    );
+    assert!(e.message.len() < 600);
+}
 use serde_json::json;
 fn profile() -> OwnedClientProfile {
     OwnedClientProfile {
@@ -17,8 +34,21 @@ fn geometry() -> Value {
           "native_window_id":42,"window_dimensions":[512,288],"relative_mode_raw":[0,0],"owned_os_window_verified":false,"client_origin_verified":false}}}})
 }
 fn hierarchy() -> Value {
-    json!({"graphics_root_closed":true,"status":"closed_to_owned_graphics_root",
+    json!({"graphics_root_closed":true,"status":"closed_to_owned_graphics_root","chain":[{"role":"owned_graphics_root_1f0"}],
       "unit_cache_diagnostic":{"cache_consistent_under_observed_unit_branch":true}})
+}
+#[test]
+fn a_closed_unknown_or_350_scope_cannot_fabricate_root1f0_coordinate_authority() {
+    for role in [
+        serde_json::Value::Null,
+        json!("owned_graphics_root_350"),
+        json!("arbitrary_root"),
+    ] {
+        let mut h = hierarchy();
+        h["chain"][0]["role"] = role;
+        let e = common(&serde_json::Value::Null, "w", "a", "s", &h).unwrap_err();
+        assert!(e.message.contains("root1f0 coordinate scope required"));
+    }
 }
 fn detail(research: bool) -> Value {
     json!({"owned":true,"build_id":game::BUILD_ID,"id":"support_weapons","selected_slot":0,

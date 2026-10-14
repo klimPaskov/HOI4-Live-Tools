@@ -58,7 +58,7 @@ pub mod focus_stage;
 #[doc(hidden)]
 pub mod politics_focus;
 
-// Durable daily-plan prerequisite; owner worker/adapters are not registered.
+// Durable plan core; the optional Linux owner wires supported ordinary adapters.
 pub mod daily_governor;
 
 #[doc(hidden)]
@@ -66,3 +66,6 @@ pub mod daily_observation;
 
 #[cfg(any(target_os = "linux", test))]
 mod daily_worker;
+
+#[cfg(any(target_os = "linux", all(test, unix)))]
+mod daily_navigation;

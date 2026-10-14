@@ -81,7 +81,7 @@ fn key(value: &str) -> Result<()> {
     Ok(())
 }
 impl Target {
-    fn validate_key(&self) -> Result<()> {
+    pub(crate) fn validate_key(&self) -> Result<()> {
         if self.stage == Stage::SelectCategory {
             if !self.technology.is_empty() {
                 return Err(error(
@@ -135,7 +135,7 @@ impl OwnState {
         }
         Ok(())
     }
-    fn reached(&self, target: &Target) -> bool {
+    pub(crate) fn reached(&self, target: &Target) -> bool {
         match target.stage {
             Stage::OpenPanel => {
                 self.active_mode == Some(5)

@@ -69,6 +69,73 @@ fn size(value: &Value) -> Result<[u16; 2]> {
         u16::try_from(uint(v)?).map_err(|_| unavailable("Bounded client size required"))
     })
 }
+// Report only already observed, bounded structural facts. No extra process
+// reads, addresses, unverified ancestor payload or claimed closure follow.
+fn closed_root_scope(h: &Value) -> &str {
+    h["chain"]
+        .as_array()
+        .filter(|c| (1..=16).contains(&c.len()))
+        .and_then(|c| c.last())
+        .and_then(|c| c["role"].as_str())
+        .filter(|s| matches!(*s, "owned_graphics_root_1f0" | "owned_graphics_root_350"))
+        .unwrap_or("unknown")
+}
+fn closure_diagnostic(h: &Value) -> String {
+    let status = h["status"]
+        .as_str()
+        .filter(|s| {
+            matches!(
+                *s,
+                "closed_to_owned_graphics_root"
+                    | "detached_ancestor"
+                    | "depth_limit"
+                    | "unknown_ancestor"
+                    | "unknown_primary_metadata"
+                    | "unavailable_policy_bound"
+            )
+        })
+        .unwrap_or("missing_or_invalid");
+    let number = |v: &Value, max| {
+        v.as_u64()
+            .filter(|n| *n <= max)
+            .map(|n| n.to_string())
+            .unwrap_or_else(|| "unknown".into())
+    };
+    let last_type = h["chain"]
+        .as_array()
+        .filter(|c| c.len() <= 16)
+        .and_then(|c| c.last())
+        .and_then(|c| c["type_encoding"].as_str())
+        .filter(|s| {
+            s.len() <= 128
+                && s.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
+                && s.bytes().any(|b| b.is_ascii_alphabetic())
+        })
+        .unwrap_or("unknown");
+    let mut detail = format!(
+        "status={status}, root_scope={}, ancestors={}, payload_hops={}, last_type={last_type}",
+        closed_root_scope(h),
+        number(&h["observed_ancestors"], 16),
+        number(&h["payload_hops"], 16)
+    );
+    let policy = &h["policy_boundary"];
+    if !policy.is_null() {
+        let stage = policy["stage"]
+            .as_str()
+            .filter(|s| matches!(*s, "container_position_membership" | "ancestor_membership"))
+            .unwrap_or("unknown");
+        let scope = policy["policy_scope"]
+            .as_str()
+            .filter(|s| matches!(*s, "exact_owned_graphics_root" | "ordinary_ancestor"))
+            .unwrap_or("unknown");
+        detail.push_str(&format!(
+            ", boundary={stage}, scope={scope}, count={}, capacity={}",
+            number(&policy["count"], 20000),
+            number(&policy["capacity"], 20000)
+        ));
+    }
+    detail
+}
 fn common(
     raw: &Value,
     world: &str,
@@ -76,13 +143,25 @@ fn common(
     scalar: &str,
     hierarchy: &Value,
 ) -> Result<Common> {
-    required(
-        &hierarchy["graphics_root_closed"],
-        true,
-        "Owned graphics root closure required",
-    )?;
+    if hierarchy["graphics_root_closed"].as_bool() != Some(true) {
+        return Err(unavailable(&format!(
+            "Owned graphics root closure required ({})",
+            closure_diagnostic(hierarchy)
+        )));
+    }
     if hierarchy["status"] != "closed_to_owned_graphics_root" {
-        return Err(unavailable("Typed owned root hierarchy required"));
+        return Err(unavailable(&format!(
+            "Typed owned root hierarchy required ({})",
+            closure_diagnostic(hierarchy)
+        )));
+    }
+    // The producer recognizes two owned roots. The independently corroborated
+    // coordinate profile proves 1F0 only; closure at350 is not equivalence.
+    if closed_root_scope(hierarchy) != "owned_graphics_root_1f0" {
+        return Err(unavailable(&format!(
+            "Owned graphics root1f0 coordinate scope required ({})",
+            closure_diagnostic(hierarchy)
+        )));
     }
     required(
         &hierarchy["unit_cache_diagnostic"]["cache_consistent_under_observed_unit_branch"],
@@ -199,6 +278,96 @@ pub(crate) fn sprite_surface(render: &Value) -> Result<Surface> {
         ]),
     }))
 }
+/// Each caller proves its own exact Text callback/control before sharing the
+/// raw parser. This never unwraps Text as Frame or invokes a getter.
+pub(crate) fn text_surface(raw: &Value) -> Result<Surface> {
+    required(
+        &raw["resource_layout_verified"],
+        true,
+        "Exact Text resource required",
+    )?;
+    required(
+        &raw["raw_fields_available"],
+        true,
+        "Bounded Text fields required",
+    )?;
+    Ok(Surface::ExactZeroAngleTextResearch(TextResearch {
+        common: common(
+            raw,
+            "cache_translation_raw",
+            "anchor_raw",
+            "scalar_raw",
+            &raw["parent_chain"],
+        )?,
+        width: int(&raw["renderer_width_raw"])?,
+        height: int(&raw["renderer_height_raw"])?,
+        resource_count: uint(&raw["resource_count_raw"])?,
+        hit_divisor: int(&raw["hit_width_divisor_raw"])?,
+        angle: float(&raw["transform_110_raw"])?,
+    }))
+}
+/// Trusted exact-primary diagnostics only; no caller-supplied renderer names.
+pub(crate) fn control_surface(render: &Value) -> Result<Surface> {
+    match render["render_type_encoding"].as_str() {
+        Some("7CSprite") => sprite_surface(render),
+        Some("11CTextSprite") => text_surface(render),
+        Some("20CFrameAnimatedSprite") => {
+            required(
+                &render["field_layout_verified"],
+                true,
+                "Exact Frame fields required",
+            )?;
+            required(
+                &render["resource_layout_verified"],
+                true,
+                "Exact Frame resource required",
+            )?;
+            required(
+                &render["resource_alias_matches"],
+                true,
+                "Frame dimension/hit resource equality required",
+            )?;
+            if render["resource_type_encoding"] != "24CFrameAnimatedSpriteType" {
+                return Err(unavailable("Exact Frame resource metadata required"));
+            }
+            let raw = &render["frame_raw_geometry"];
+            let cache = &render["resource_cache"];
+            required(
+                &raw["no_mask_rejection_branch"],
+                true,
+                "Unmasked Frame branch required",
+            )?;
+            required(
+                &cache["getter_cache_equivalent"],
+                true,
+                "Frame resource cache required",
+            )?;
+            Ok(Surface::ExactFrameSprite(SpriteNode {
+                common: common(
+                    raw,
+                    "cache_translation_raw",
+                    "anchor_raw",
+                    "scalar_raw",
+                    &raw["parent_chain"],
+                )?,
+                texture: [
+                    int(&cache["texture_width_raw"])?,
+                    int(&cache["texture_height_raw"])?,
+                ],
+                grid: [
+                    int(&cache["frame_count_raw"])?,
+                    int(&cache["grid_other_raw"])?,
+                ],
+                orientation: uint(&cache["orientation_raw"])?,
+                orientation_full_width: true,
+                cache_equivalent: true,
+                no_mask_rejection_branch: true,
+                physical_clip: None,
+            }))
+        }
+        _ => Err(unavailable("Supported exact renderer diagnostic required")),
+    }
+}
 fn slot_surface(detail: &Value, slot: u32) -> Result<Surface> {
     if detail["owned"] != true
         || detail["build_id"] != game::BUILD_ID
@@ -276,31 +445,7 @@ fn surface(detail: &Value, key: &str, slot: u32, stage: Stage) -> Result<Surface
                     "Supported enabled Text Research branch required",
                 ));
             }
-            let raw = &button["text_raw_diagnostic"];
-            required(
-                &raw["resource_layout_verified"],
-                true,
-                "Exact Text resource required",
-            )?;
-            required(
-                &raw["raw_fields_available"],
-                true,
-                "Bounded Text fields required",
-            )?;
-            Ok(Surface::ExactZeroAngleTextResearch(TextResearch {
-                common: common(
-                    raw,
-                    "cache_translation_raw",
-                    "anchor_raw",
-                    "scalar_raw",
-                    &raw["parent_chain"],
-                )?,
-                width: int(&raw["renderer_width_raw"])?,
-                height: int(&raw["renderer_height_raw"])?,
-                resource_count: uint(&raw["resource_count_raw"])?,
-                hit_divisor: int(&raw["hit_width_divisor_raw"])?,
-                angle: float(&raw["transform_110_raw"])?,
-            }))
+            text_surface(&button["text_raw_diagnostic"])
         }
     }
 }

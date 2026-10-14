@@ -907,17 +907,17 @@ fn focus_geometry_callback_gate_before_all_renderer_payload_and_final_mutations(
 }
 
 #[test]
-fn focus_geometry_frame_metadata_does_not_borrow_sprite_or_text_payload() {
+fn focus_geometry_instant_metadata_does_not_borrow_sprite_or_text_payload() {
     let mut f = Fake::new();
     f.focus_nodes();
     f.focus_geometry_fixture(0x232000, 0x234000, false);
-    f.word(0x244000, 0x434b370);
-    f.word(0x434b360, 0);
-    f.word(0x434b368, 0x4358300);
+    f.word(0x244000, 0x434c5b0);
+    f.word(0x434c5a0, 0);
+    f.word(0x434c5a8, 0x4358300);
     f.region(0x4358300, 16);
     f.word(0x4358308, 0x350f600);
     f.region(0x350f600, 128);
-    f.put(0x350f600, b"20CFrameAnimatedSprite");
+    f.put(0x350f600, b"14CInstantSprite");
     let v = f.geometry_result().unwrap();
     assert_eq!(
         v["node_association"]["controls"][0]["render_diagnostic"]["reason"],
@@ -926,6 +926,127 @@ fn focus_geometry_frame_metadata_does_not_borrow_sprite_or_text_payload() {
     assert!(f.untouched(0x244168, 8));
     assert!(f.untouched(0x2441b0, 8));
     assert!(f.untouched(0x244228, 4));
+}
+
+impl Fake {
+    fn focus_frame_fixture(&mut self, window: u64, button: u64) {
+        self.focus_geometry_fixture(window, button, false);
+        self.word(0x244000, 0x434b370);
+        self.word(0x2441b0, 0x245000);
+        self.word(0x245000, 0x434b668);
+        for (table, ti, name, strp) in [
+            (0x434b370, 0x4358300, "20CFrameAnimatedSprite", 0x350f500),
+            (
+                0x434b668,
+                0x4358400,
+                "24CFrameAnimatedSpriteType",
+                0x350f600,
+            ),
+        ] {
+            self.word(table - 16, 0);
+            self.word(table - 8, ti);
+            self.region(ti, 16);
+            self.word(ti + 8, strp);
+            self.region(strp, 128);
+            self.put(strp, name.as_bytes());
+        }
+    }
+}
+#[test]
+fn focus_geometry_frame_node_and_start_require_exact_resource_alias_and_no_texture_payload() {
+    for start in [false, true] {
+        let mut f = Fake::new();
+        if start {
+            f.start_binding();
+            f.focus_frame_fixture(WIN, BUTTON);
+        } else {
+            f.focus_nodes();
+            f.focus_frame_fixture(0x232000, 0x234000);
+        }
+        let v = f.geometry_result().unwrap();
+        let g = if start {
+            &v["details"][0]["window"]["start"]["ordinary_binding"]["render_diagnostic"]
+        } else {
+            &v["node_association"]["controls"][0]["render_diagnostic"]
+        };
+        assert_eq!(g["field_layout_verified"], true);
+        assert_eq!(g["resource_alias_matches"], true);
+        assert_eq!(g["resource_cache"]["frame_count_raw"], 3);
+        assert_eq!(g["resource_cache"]["texture_width_raw"], 369);
+        assert_eq!(g["frame_raw_geometry"]["no_mask_rejection_branch"], true);
+        assert_eq!(g["client_rectangle_available"], false);
+        assert_eq!(g["input_authorized"], false);
+        assert!(f.untouched(0xdead0000, 8));
+        assert!(f.untouched(0x244228, 4));
+        assert!(f.untouched(if start { BUTTON + 0x110 } else { 0x234110 }, 8));
+    }
+    let mut f = Fake::new();
+    f.focus_nodes();
+    f.focus_frame_fixture(0x232000, 0x234000);
+    f.word(0x244168, 0xdead0000);
+    let v = f.geometry_result().unwrap();
+    assert_eq!(
+        v["node_association"]["controls"][0]["render_diagnostic"]["reason"],
+        "frame_resource_alias_unavailable"
+    );
+    assert!(f.untouched(0x245090, 4));
+    assert!(f.untouched(0xdead0000, 8));
+}
+#[test]
+fn focus_geometry_frame_full_orientation_and_cold_cache_refuse_before_dimension_payload() {
+    for (a, b, reason) in [
+        (
+            0x24510c,
+            0x100u32.to_le_bytes().to_vec(),
+            "frame_resource_grid_orientation_unavailable",
+        ),
+        (0x2451d3, vec![1], "frame_resource_cache_unavailable"),
+    ] {
+        let mut f = Fake::new();
+        f.focus_nodes();
+        f.focus_frame_fixture(0x232000, 0x234000);
+        f.put(a, &b);
+        let v = f.geometry_result().unwrap();
+        let g = &v["node_association"]["controls"][0]["render_diagnostic"];
+        assert_eq!(g["reason"], reason);
+        assert_eq!(g["field_layout_verified"], false);
+        assert!(f.untouched(0x2450a4, 4));
+        assert!(f.untouched(0x244114, 4));
+    }
+}
+#[test]
+fn focus_geometry_frame_and_text_new_fields_are_final_snapshot_witnesses() {
+    for (text, a) in [
+        (false, 0x2441b0),
+        (false, 0x24510f),
+        (false, 0x2451a7),
+        (false, 0x2451d3),
+        (false, 0x2450a4),
+        (false, 0x245111),
+        (false, 0x245170),
+        (false, 0x2451d0),
+        (false, 0x2440b0),
+        (false, 0x244124),
+        (false, 0x232e70),
+        (true, 0x24508c),
+        (true, 0x244228),
+        (true, 0x24422c),
+        (true, 0x244238),
+        (true, 0x244110),
+        (true, 0x244114),
+        (true, 0x244120),
+        (true, 0x242108),
+    ] {
+        let mut f = Fake::new();
+        f.focus_nodes();
+        if text {
+            f.focus_geometry_fixture(0x232000, 0x234000, true);
+        } else {
+            f.focus_frame_fixture(0x232000, 0x234000);
+        }
+        f.torn = Some(a);
+        assert_eq!(f.geometry_result().unwrap_err().code, "torn_read", "{a:x}");
+    }
 }
 #[test]
 fn focus_geometry_inherits_exact_sprite_and_text_numeric_refusals() {

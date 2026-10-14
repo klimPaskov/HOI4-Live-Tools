@@ -39,6 +39,9 @@ pub struct TextResearch {
 #[derive(Clone, Debug)]
 pub enum Surface {
     ExactSpriteNode(SpriteNode),
+    /// Exact Frame renderer/resource uses independently proved grid bounds and
+    /// the bounded common-origin projection. This is not a Sprite cast.
+    ExactFrameSprite(SpriteNode),
     ExactZeroAngleTextResearch(TextResearch),
     Unsupported,
 }
@@ -176,7 +179,7 @@ pub fn point_candidate(surface: &Surface, codec: &ClientCodec) -> Result<PointCa
     validate_codec(codec)?;
     let (predicate, clip) = match surface {
         Surface::Unsupported => return Err(unavailable("unsupported renderer/resource branch")),
-        Surface::ExactSpriteNode(s) => {
+        Surface::ExactSpriteNode(s) | Surface::ExactFrameSprite(s) => {
             if !s.orientation_full_width
                 || !matches!(s.orientation, 0 | 1)
                 || !s.cache_equivalent

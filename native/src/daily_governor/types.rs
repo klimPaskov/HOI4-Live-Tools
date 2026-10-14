@@ -195,9 +195,29 @@ impl Intent {
 }
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
+pub struct ResearchNavigation {
+    pub folder_id: String,
+}
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub struct Entry {
     pub id: String,
     pub intent: Intent,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub navigation: Option<ResearchNavigation>,
+}
+impl Entry {
+    pub(crate) fn validate(&self) -> Result<()> {
+        key(&self.id)?;
+        self.intent.validate()?;
+        if let Some(nav) = &self.navigation {
+            key(&nav.folder_id)?;
+            if !matches!(self.intent, Intent::Research { .. }) {
+                return Err(invalid("Navigation hints belong only to Research"));
+            }
+        }
+        Ok(())
+    }
 }
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -228,8 +248,7 @@ impl Plan {
         let mut names = std::collections::BTreeSet::new();
         let mut intents = std::collections::BTreeSet::new();
         for e in &self.entries {
-            key(&e.id)?;
-            e.intent.validate()?;
+            e.validate()?;
             if !names.insert(&e.id)
                 || !intents.insert(
                     serde_json::to_vec(&e.intent).map_err(|_| invalid("Intent encoding failed"))?,

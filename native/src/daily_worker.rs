@@ -169,3 +169,28 @@ mod tests {
         assert!(!life.running());
     }
 }
+
+/// Contention is a local busy state, not unresolved input. Poison is uncertain.
+pub(crate) fn retained_quarantine<T>(
+    state: &std::sync::Mutex<T>,
+    check: impl FnOnce(&T) -> bool,
+) -> bool {
+    match state.try_lock() {
+        Ok(value) => check(&value),
+        Err(std::sync::TryLockError::WouldBlock) => false,
+        Err(std::sync::TryLockError::Poisoned(_)) => true,
+    }
+}
+#[cfg(test)]
+mod contention_tests {
+    #[test]
+    fn update_contention_does_not_quarantine_or_mutate_worker() {
+        let state = std::sync::Mutex::new(false);
+        let guard = state.lock().unwrap();
+        assert!(!super::retained_quarantine(&state, |blocked| *blocked));
+        drop(guard);
+        assert!(!super::retained_quarantine(&state, |blocked| *blocked));
+        *state.lock().unwrap() = true;
+        assert!(super::retained_quarantine(&state, |blocked| *blocked));
+    }
+}

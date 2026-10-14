@@ -73,7 +73,7 @@ fn facts(start: bool) -> crate::focus_ui_facts::FocusUiFacts {
     UiMemory::new(start).facts()
 }
 fn render() -> Value {
-    json!({"field_layout_verified":true,"render_type_encoding":"7CSprite","resource_type_encoding":"11CSpriteType","raw":{"visibility_flag":1,"cached_world_translation":[-106,-241],"pivot_dimensions":[512,288],"local_scalar":1,"physical_scaled_clip":[0,0,512,288]},"resource_cache":{"cache_equivalent":true,"no_mask_rejection_branch":true,"texture_dimensions":[72,72],"grid":[1,1],"orientation_raw":0},"parent_chain":{"graphics_root_closed":true,"status":"closed_to_owned_graphics_root","unit_cache_diagnostic":{"cache_consistent_under_observed_unit_branch":true}}})
+    json!({"field_layout_verified":true,"render_type_encoding":"7CSprite","resource_type_encoding":"11CSpriteType","raw":{"visibility_flag":1,"cached_world_translation":[-106,-241],"pivot_dimensions":[512,288],"local_scalar":1,"physical_scaled_clip":[0,0,512,288]},"resource_cache":{"cache_equivalent":true,"no_mask_rejection_branch":true,"texture_dimensions":[72,72],"grid":[1,1],"orientation_raw":0},"parent_chain":{"graphics_root_closed":true,"status":"closed_to_owned_graphics_root","chain":[{"role":"owned_graphics_root_1f0"}],"unit_cache_diagnostic":{"cache_consistent_under_observed_unit_branch":true}}})
 }
 fn detail(start: bool) -> Value {
     let binding = json!({"selected_own_key":"army_effort","available":true,"callback_route_verified":true,"renderer_control_join_verified":true,"render_diagnostic":render()});
@@ -95,6 +95,90 @@ fn profile() -> OwnedClientProfile {
 }
 fn geometry() -> Value {
     json!({"build_id":game::BUILD_ID,"physical_dimensions":[512,288],"logical_dimensions":[2560,1440],"logical_per_physical":[5.,5.],"physical_per_logical":[0.2,0.2],"input_source":{"point_diagnostic":{"getter_source_layout_verified":true,"window_association":{"association_available":true,"normal_absolute_mode":true,"graphics_dimensions_match":true,"native_window_id":42,"window_dimensions":[512,288],"relative_mode_raw":[0,0]}}}})
+}
+fn text_render() -> Value {
+    json!({"render_type_encoding":"11CTextSprite","resource_layout_verified":true,"raw_fields_available":true,
+        "cache_translation_raw":[634,-47],"anchor_raw":[512,288],"scalar_raw":1,
+        "renderer_width_raw":123,"renderer_height_raw":36,"resource_count_raw":1,"hit_width_divisor_raw":1,"transform_110_raw":0,
+        "parent_chain":render()["parent_chain"],"hit_projection_available":false,"input_authorized":false})
+}
+fn frame_render() -> Value {
+    json!({"render_type_encoding":"20CFrameAnimatedSprite","field_layout_verified":true,"resource_layout_verified":true,
+        "resource_alias_matches":true,"resource_type_encoding":"24CFrameAnimatedSpriteType",
+        "resource_cache":{"getter_cache_equivalent":true,"frame_count_raw":3,"grid_other_raw":1,"orientation_raw":0,"texture_width_raw":217,"texture_height_raw":72},
+        "frame_raw_geometry":{"cache_translation_raw":[-106,-241],"anchor_raw":[512,288],"scalar_raw":1,"no_mask_rejection_branch":true,"parent_chain":render()["parent_chain"]},
+        "current_frame_verified":false,"effective_routing_verified":false,"input_authorized":false})
+}
+fn with_render(r: Value, start: bool) -> Result<PointCandidate> {
+    let mut d = detail(start);
+    if start {
+        d["details"][0]["window"]["start"]["ordinary_binding"]["render_diagnostic"] = r;
+    } else {
+        d["node_association"]["controls"][0]["render_diagnostic"] = r;
+    }
+    let s = surface(
+        &d,
+        "army_effort",
+        if start { Stage::Start } else { Stage::Node },
+        Some(&facts(start)),
+    )?;
+    research_attempt::point_candidate(&s, &codec(&geometry(), &profile())?)
+}
+#[test]
+fn exact_zero_angle_text_and_frame_bindings_prepare_conditional_points_for_both_stages() {
+    for start in [false, true] {
+        let p = with_render(text_render(), start).unwrap();
+        assert_eq!(p.ideal_logical, [951, 173]);
+        assert_eq!(p.client_pixel, [190, 35]);
+        assert_eq!(p.quantized_logical, [950, 175]);
+        assert!(!p.current_frame_verified && !p.effective_routing_verified && !p.input_authorized);
+        let p = with_render(frame_render(), start).unwrap();
+        assert_eq!(p.client_pixel, [37, 70]);
+        assert_eq!(p.ideal_logical, [186, 349]); // fractional grid bounds, integer dimension origin
+        assert!(!p.current_frame_verified && !p.effective_routing_verified && !p.input_authorized);
+    }
+}
+#[test]
+fn text_rotation_divisor_unsettled_cache_hierarchy_and_quantization_never_fall_back_to_sprite() {
+    for (path, value) in [
+        ("/transform_110_raw", json!(0.01)),
+        ("/hit_width_divisor_raw", json!(2)),
+        ("/raw_fields_available", json!(false)),
+        ("/resource_layout_verified", json!(false)),
+        ("/scalar_raw", json!(2)),
+        ("/cache_translation_raw/0", json!(1000000)),
+        (
+            "/parent_chain/unit_cache_diagnostic/cache_consistent_under_observed_unit_branch",
+            json!(false),
+        ),
+        ("/renderer_width_raw", json!(2)),
+    ] {
+        let mut r = text_render();
+        *r.pointer_mut(path).unwrap() = value;
+        assert!(with_render(r, true).is_err(), "{path}");
+    }
+}
+#[test]
+fn frame_alias_resource_mask_orientation_and_cache_refuse_without_text_unwrapping() {
+    for (path, value) in [
+        ("/resource_alias_matches", json!(false)),
+        ("/resource_type_encoding", json!("15CTextSpriteType")),
+        ("/resource_cache/orientation_raw", json!(0x100)),
+        ("/resource_cache/getter_cache_equivalent", json!(false)),
+        ("/frame_raw_geometry/no_mask_rejection_branch", json!(false)),
+        ("/resource_cache/frame_count_raw", json!(0)),
+        (
+            "/frame_raw_geometry/parent_chain/graphics_root_closed",
+            json!(false),
+        ),
+    ] {
+        let mut r = frame_render();
+        *r.pointer_mut(path).unwrap() = value;
+        assert!(with_render(r, true).is_err(), "{path}");
+    }
+    let mut r = frame_render();
+    r["render_type_encoding"] = json!("14CInstantSprite");
+    assert!(with_render(r, true).is_err());
 }
 #[test]
 fn exact_bound_sprite_node_and_start_reuse_independent_point() {

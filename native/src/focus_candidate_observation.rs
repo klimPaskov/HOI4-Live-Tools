@@ -4,7 +4,7 @@ use crate::{
     game, gui, own_focus,
     platform::Process,
     research_attempt::{self, PointCandidate, Surface},
-    research_candidate_observation::{codec, sprite_surface, OwnedClientProfile},
+    research_candidate_observation::{codec, control_surface, OwnedClientProfile},
 };
 use serde_json::Value;
 #[derive(Clone, Copy)]
@@ -136,7 +136,7 @@ fn surface(
                 ));
             }
             controls_state(c)?;
-            sprite_surface(&c["render_diagnostic"])
+            control_surface(&c["render_diagnostic"])
         }
         Stage::Start => {
             if visible.len() != 1 || visible[0]["selected_key"] != key {
@@ -157,7 +157,7 @@ fn surface(
             {
                 return Err(unavailable("Exact own selected start callback required"));
             }
-            sprite_surface(&b["render_diagnostic"])
+            control_surface(&b["render_diagnostic"])
         }
     }
 }

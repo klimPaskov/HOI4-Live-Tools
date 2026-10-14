@@ -249,7 +249,7 @@ pub(crate) fn observe(
 }
 
 // Raw exact-build hit inputs only. No world/client projection or getter invocation.
-fn frame_raw_geometry(
+pub(crate) fn frame_raw_geometry(
     r: &Reader<'_>,
     reuse: &mut Reuse,
     render: u64,

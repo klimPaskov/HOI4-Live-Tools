@@ -1,6 +1,6 @@
 # Clausewitz-MCP Linux validation
 
-Updated 13 October 2026. This records preflight and partial licensed-game evidence for
+Updated 14 October 2026. This records preflight and partial licensed-game evidence for
 the [Linux-first migration](LINUX_RUST_HANDOFF.md). One **gpt-6-luna player at
 medium reasoning** used the guarded upstream MCP in an actual Linux Germany
 campaign. Focus, four research assignments, unpause and one day of advancement
@@ -1802,3 +1802,116 @@ launched run026 keeps its original immutable `5aaceba` binary and has the daily
 worker disabled before input binding. It will test focus/clock only; worker
 validation requires a separate fresh binary and game. No hot-swap or campaign
 acceptance is claimed.
+
+## Recorded run026: focus opening passed; selection refused
+
+Immutable source `5aaceba` / CLI SHA-256
+`d188f8a4fa6b7dc3751cbc8d53583d3db788b2ef08ac9e81371e36b6275ee17d`
+started Normal historical vanilla Germany, no mods or DLC. Recording's first
+packet was verified before one campaign Start. Fresh own reads confirmed
+1 January1936 at12:00, paused speed0, four empty research slots and no active
+focus. The daily worker was disabled before input binding because the subsequent
+quarantine correction was not this running binary.
+
+One exclusive Luna medium player verified ordinary **OpenPolitics** in
+**1,482 ms RPC** and named-button **OpenFocus** in **5,139 ms**. Readback confirmed
+the corresponding managed mode and settled own politics/focus roots. The exact
+own key was `GER_remilitarize_the_rhineland`; `rhineland` returned zero because
+catalog filtering is by prefix.
+
+**View** then refused in **257 ms** with `research_geometry_unavailable`:
+`Owned graphics root closure required`. No focus-node click, Start, clock action,
+worker start or further game observation followed. Final game state after the
+error remains unknown. Saved calls contain no deep hierarchy result, so the
+specific missing closure reason is not established. Bounds and unknown-state
+guards were not relaxed. Lease release/status confirmed zero remaining time.
+
+The H.264 recording finalized and passed ffprobe: **250.333 seconds**,
+**3,033,764 bytes**,512×288 at3fps. One owned WM close returned actual normal
+exit **0**, no signal/core dump, in **3.200 seconds**. Both exact game and owner
+were absent afterward; Yama1 stayed unchanged. Journals, release proof,
+sanitized calls and terminal evidence remain private; both clients closed.
+
+Opening focus passed in this bounded trial. Focus selection/start, worker live
+acceptance, the clean two-year run and full campaigns remain unfinished.
+
+## Navigation and renderer expansion: kernel gate pending
+
+The next composed source adds separate durable research preparation stages,
+explicit optional folder hints and idempotent plan updates. Navigation history
+stores and validates full entry/target/index/day bindings, chronology and matching
+terminal receipts. Stored receipts remain historical and cannot complete a goal
+or replace current UI observations. Persistence failures quarantine the navigator.
+Research completion remains at most once per advancing day. Other daily domains
+and arbitrary panel/Info closing remain unavailable.
+
+Focus point preparation adds distinct guarded zero-angle Text and unmasked Frame
+branches; unknown renderers, incomplete hierarchy and unproved routing still
+refuse. These renderer fixtures do not explain run026's missing root closure.
+
+The composed Rust1.86 host suite passed **497 tests**; host/Linux Clippy,
+Rust1.86 Linux compilation, formatting and optimized cross-linking passed. Local
+Python passed **953 tests,37 skipped**, in22.311 seconds, with preserved Python
+WIP. The first immutable actual Linux bundle failed the existing threaded-exec
+readiness fixture on `ownership_changed` after genuine executable-link NotFound
+observations. The suite stopped after its library gate; remaining executables
+were not run. The original bundle and failure logs are preserved privately.
+
+Test-only ownership-sample logging is under investigation. The isolated diagnostic
+passed12 generated execs and observed12 genuine NotFound errors, without an
+ownership refusal. This does not explain the earlier failure. No production
+ownership guard has been relaxed; the expanded runtime is not yet cleared for
+a fresh worker trial.
+
+The instrumented full-library diagnostic initially omitted the required fixture
+CLI environment and failed only reconnect setup. That runner error is preserved;
+it is not a production reconnect regression. A new complete immutable bundle
+with its verified CLI environment then passed **585 reported checks** on the
+actual Linux kernel (**583 substantive plus two inert helpers**), including five
+isolated X11 cases. Display identity/Yama1 stayed unchanged and run026 remained
+exited. Test-only logging did not reproduce the original ownership refusal;
+that first failure remains unexplained. No production guard was relaxed.
+
+Review independently found that point conversion labeled either closed graphics
+root as root1f0, although equivalence of root350 coordinates has not been proved.
+An explicit root-scope witness and refusal of root350 point conversion are being
+prepared. This is not established as run026's cause: its closure flag was false.
+Do not begin the next worker/focus trial until this correction is composed and
+verified in a fresh immutable binary.
+
+
+## Durable same-day research continuation and root scope
+
+The next composed source can prepare and assign several own research slots on
+one observed day, within the explicit assignment budget. Each unique persisted
+goal intent counts once, including known NotQueued and unresolved reservations;
+terminal records do not double count. Navigation uses separate verified intents
+and does not consume assignment reservations. The worker does not pause, renew
+its lease, bundle a UI chain or replace unfinished entry specifications. A local
+refusal backs off that entry/day; uncertainty still quarantines shared input.
+
+New goal request identities bind their reservation day. Reopening validates
+chronology, unique identities and matching terminal transitions. Legacy unbound
+history conservatively exhausts its recorded day until a fresh advancing day.
+Updates and restarts preserve usage; raising the limit exposes only the remaining
+difference. Digests label prior batches/preparation as historical, return the
+current revision and fresh counts, and include the remaining assignment budget.
+Only Research has an automatic completion adapter; other domains remain pending.
+
+Point conversion now consumes the actual terminal hierarchy root role. A closed
+root350 remains diagnostic and cannot be mislabeled root1f0 or authorize its
+coordinate conversion. Existing type, traversal, depth and capacity bounds are
+unchanged. Producer/consumer fixtures cover both roots and torn or unsupported
+hierarchies. Bounded closure diagnostics retain the reason without raw pointers.
+This independently found correction does not explain run026's closure refusal.
+
+The composed Rust1.86 host suite passed **512 tests**. Host/Linux Clippy with
+warnings denied, Rust1.86 Linux compilation, formatting and optimized cross-link
+passed. Local Python passed **953 tests,37 skipped**, in24.306 seconds, including
+preserved Python WIP. The fresh immutable full Linux-kernel bundle passed **602 reported checks**
+(**600 substantive plus two inert helpers**), including five isolated X11 cases.
+Nested helper output is not counted again. All86 source files are hashed privately;
+Yama1 and display ownership remained unchanged and run026 stayed exited. Earlier
+exec ownership failure remains unexplained; this run did not reproduce it. No
+production guard was relaxed. A fresh recorded worker trial is next; these
+fixture results do not establish installed-game or campaign acceptance.

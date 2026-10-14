@@ -61,12 +61,14 @@ fn plan() -> Plan {
                     technology_id: "support_weapons".into(),
                     slot: 0,
                 },
+                navigation: None,
             },
             Entry {
                 id: "focus-1".into(),
                 intent: Intent::Focus {
                     focus_id: "GER_rhineland".into(),
                 },
+                navigation: None,
             },
         ],
         max_actions_per_day: 4,
@@ -201,6 +203,7 @@ fn extended(mut p: Plan) -> Plan {
             technology_id: "construction1".into(),
             slot: 1,
         },
+        navigation: None,
     });
     p
 }
@@ -652,6 +655,7 @@ fn explicit_future_domain_ids_validate_without_creating_capabilities() {
                     total_levels: 4,
                 },
             },
+            navigation: None,
         },
         Entry {
             id: "army".into(),
@@ -660,6 +664,7 @@ fn explicit_future_domain_ids_validate_without_creating_capabilities() {
                 army_id: 3,
                 order_id: "defend_home".into(),
             },
+            navigation: None,
         },
         Entry {
             id: "invasion".into(),
@@ -670,6 +675,7 @@ fn explicit_future_domain_ids_validate_without_creating_capabilities() {
                 destination_province: 8,
                 sea_region_ids: vec![9, 10],
             },
+            navigation: None,
         },
     ]);
     p.validate().unwrap();
@@ -855,4 +861,229 @@ fn existing_research_receipt_converter_never_consumes_view_or_historical_receipt
     execution.receipt.target.stage = Stage::Research;
     execution.receipt.observed.researching[0] = Some("construction1".into());
     assert!(VerifiedReceipt::from_research(attempt, &execution, obs).is_err());
+}
+
+#[test]
+#[cfg(unix)]
+fn navigation_preparation_refuses_external_plan_mutation_before_any_stage() {
+    let t = Temp::new();
+    let p = plan();
+    let mut g = Governor::open(&t.path(), p).unwrap();
+    assert!(g.preparation_check().is_ok());
+    fs::write(t.path(), b"changed externally").unwrap();
+    assert!(g.preparation_check().is_err());
+    assert!(g.preparation_check().is_err());
+}
+
+#[cfg(unix)]
+fn refill_plan() -> Plan {
+    let mut p = plan();
+    p.entries = (0..4)
+        .map(|slot| Entry {
+            id: format!("refill_{slot}"),
+            intent: Intent::Research {
+                technology_id: format!("tech_{slot}"),
+                slot,
+            },
+            navigation: None,
+        })
+        .collect();
+    p.max_actions_per_day = 2;
+    p
+}
+#[cfg(unix)]
+fn continue_goal(g: &mut Governor, b: &mut Fake, id: &str) -> Result<DailyResult> {
+    g.continue_entry(b, id, 10000, Instant::now() + Duration::from_secs(1))
+}
+#[test]
+#[cfg(unix)]
+fn same_day_multiple_slots_restart_repeat_and_exhaustion_preserve_budget() {
+    let t = Temp::new();
+    let p = refill_plan();
+    let mut g = Governor::open(&t.path(), p.clone()).unwrap();
+    let mut b = Fake::new(&p);
+    let day = 1936 * 365;
+    assert_eq!(
+        continue_goal(&mut g, &mut b, "refill_0").unwrap().verified,
+        vec!["refill_0"]
+    );
+    assert_eq!(g.used_actions(day), 1);
+    assert!(continue_goal(&mut g, &mut b, "refill_0")
+        .unwrap()
+        .verified
+        .is_empty());
+    assert_eq!(b.sends, 1);
+    drop(g);
+    let mut g = Governor::open(&t.path(), p).unwrap();
+    assert_eq!(
+        continue_goal(&mut g, &mut b, "refill_1").unwrap().verified,
+        vec!["refill_1"]
+    );
+    assert_eq!(g.used_actions(day), 2);
+    assert!(continue_goal(&mut g, &mut b, "refill_2")
+        .unwrap()
+        .verified
+        .is_empty());
+    assert_eq!(b.sends, 2);
+    assert!(!g.budget_available(day));
+    assert_eq!(g.state.last_day, Some(day));
+    assert!(g
+        .entry_state("refill_2")
+        .is_some_and(|s| matches!(s, EntryState::Pending { .. })));
+    b.day(2);
+    assert_eq!(
+        continue_goal(&mut g, &mut b, "refill_2").unwrap().verified,
+        vec!["refill_2"]
+    );
+    assert_eq!(g.used_actions(day), 2);
+    assert_eq!(g.used_actions(day + 1), 1);
+}
+#[test]
+#[cfg(unix)]
+fn continuation_updates_limits_without_resetting_used_or_revision_evidence() {
+    let t = Temp::new();
+    let mut p = refill_plan();
+    let mut g = Governor::open(&t.path(), p.clone()).unwrap();
+    let mut b = Fake::new(&p);
+    continue_goal(&mut g, &mut b, "refill_0").unwrap();
+    p.revision = 2;
+    p.max_actions_per_day = 1;
+    g.update_plan(p.clone()).unwrap();
+    assert!(continue_goal(&mut g, &mut b, "refill_1")
+        .unwrap()
+        .verified
+        .is_empty());
+    assert_eq!(b.sends, 1);
+    p.revision = 3;
+    p.max_actions_per_day = 3;
+    g.update_plan(p.clone()).unwrap();
+    assert!(!g.update_plan(p.clone()).unwrap());
+    continue_goal(&mut g, &mut b, "refill_1").unwrap();
+    assert_eq!(g.used_actions(1936 * 365), 2);
+    assert_eq!(g.state.journal[0].plan_revision, Some(1));
+    assert_eq!(g.state.journal[2].plan_revision, Some(3));
+    drop(g);
+    let mut g = Governor::open(&t.path(), p).unwrap();
+    continue_goal(&mut g, &mut b, "refill_2").unwrap();
+    assert_eq!(g.used_actions(1936 * 365), 3);
+}
+#[test]
+#[cfg(unix)]
+fn notqueued_goal_consumes_budget_but_does_not_idle_other_same_day_slots() {
+    let t = Temp::new();
+    let p = refill_plan();
+    let mut g = Governor::open(&t.path(), p.clone()).unwrap();
+    let mut b = Fake::new(&p);
+    b.mode = Mode::NotQueued;
+    continue_goal(&mut g, &mut b, "refill_0").unwrap();
+    assert_eq!(g.used_actions(1936 * 365), 1);
+    continue_goal(&mut g, &mut b, "refill_0").unwrap();
+    assert_eq!(b.sends, 1);
+    b.mode = Mode::Verified;
+    continue_goal(&mut g, &mut b, "refill_1").unwrap();
+    assert_eq!(b.sends, 2);
+    assert!(g
+        .entry_state("refill_0")
+        .is_some_and(|s| matches!(s, EntryState::Pending { .. })));
+}
+#[test]
+#[cfg(unix)]
+fn stale_date_sequence_and_late_receipts_cannot_replenish_or_continue() {
+    for mode in [Mode::StaleReceipt, Mode::Late] {
+        let t = Temp::new();
+        let p = refill_plan();
+        let mut g = Governor::open(&t.path(), p.clone()).unwrap();
+        let mut b = Fake::new(&p);
+        continue_goal(&mut g, &mut b, "refill_0").unwrap();
+        b.mode = mode;
+        assert!(continue_goal(&mut g, &mut b, "refill_1").is_err());
+        assert_eq!(g.used_actions(1936 * 365), 2);
+        assert!(continue_goal(&mut g, &mut b, "refill_2").is_err());
+        assert_eq!(b.sends, 2);
+    }
+    let t = Temp::new();
+    let p = refill_plan();
+    let mut g = Governor::open(&t.path(), p.clone()).unwrap();
+    let mut b = Fake::new(&p);
+    continue_goal(&mut g, &mut b, "refill_0").unwrap();
+    b.obs.sequence = 0;
+    assert!(continue_goal(&mut g, &mut b, "refill_1").is_err());
+    assert_eq!(b.sends, 1);
+    b.obs.sequence = 100;
+    b.obs.date_raw -= 24;
+    assert!(continue_goal(&mut g, &mut b, "refill_1").is_err());
+    assert_eq!(b.sends, 1);
+}
+#[test]
+#[cfg(unix)]
+fn forged_duplicate_or_regressing_budget_history_refuses_reopen() {
+    for duplicate in [true, false] {
+        let t = Temp::new();
+        let p = refill_plan();
+        let mut g = Governor::open(&t.path(), p.clone()).unwrap();
+        let mut b = Fake::new(&p);
+        continue_goal(&mut g, &mut b, "refill_0").unwrap();
+        continue_goal(&mut g, &mut b, "refill_1").unwrap();
+        drop(g);
+        let mut value: serde_json::Value =
+            serde_json::from_slice(&fs::read(t.path()).unwrap()).unwrap();
+        if duplicate {
+            let pair = value["journal"].as_array().unwrap()[0..2].to_vec();
+            value["journal"].as_array_mut().unwrap().extend(pair);
+        } else {
+            value["journal"][2]["before_sequence"] = value["journal"][0]["before_sequence"].clone();
+            value["journal"][3]["before_sequence"] = value["journal"][0]["before_sequence"].clone();
+        }
+        fs::write(t.path(), serde_json::to_vec(&value).unwrap()).unwrap();
+        assert!(Governor::open(&t.path(), p).is_err());
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn same_valid_range_forged_goal_day_cannot_release_budget() {
+    let t = Temp::new();
+    let p = refill_plan();
+    let mut g = Governor::open(&t.path(), p.clone()).unwrap();
+    let mut b = Fake::new(&p);
+    b.day(2);
+    continue_goal(&mut g, &mut b, "refill_0").unwrap();
+    drop(g);
+    let mut value: serde_json::Value =
+        serde_json::from_slice(&fs::read(t.path()).unwrap()).unwrap();
+    for record in value["journal"].as_array_mut().unwrap() {
+        record["day"] = serde_json::json!(1936 * 365);
+    }
+    value["entries"]["refill_0"]["attempt"]["day"] = serde_json::json!(1936 * 365);
+    fs::write(t.path(), serde_json::to_vec(&value).unwrap()).unwrap();
+    assert!(Governor::open(&t.path(), p).is_err());
+}
+#[test]
+#[cfg(unix)]
+fn legacy_unbound_day_is_conservatively_exhausted_until_fresh_advance() {
+    let t = Temp::new();
+    let p = refill_plan();
+    let mut g = Governor::open(&t.path(), p.clone()).unwrap();
+    let mut b = Fake::new(&p);
+    continue_goal(&mut g, &mut b, "refill_0").unwrap();
+    let old = request_id_revision(&p, &p.entries[0], 1, p.revision).unwrap();
+    for r in &mut g.state.journal {
+        r.day_bound = false;
+        r.request_id = old.clone();
+    }
+    if let EntryState::Complete { attempt, .. } = g.state.entries.get_mut("refill_0").unwrap() {
+        attempt.request_id = old;
+    }
+    g.persist().unwrap();
+    drop(g);
+    let mut g = Governor::open(&t.path(), p).unwrap();
+    assert!(!g.budget_available(1936 * 365));
+    assert!(continue_goal(&mut g, &mut b, "refill_1")
+        .unwrap()
+        .verified
+        .is_empty());
+    assert_eq!(b.sends, 1);
+    b.day(2);
+    continue_goal(&mut g, &mut b, "refill_1").unwrap();
+    assert_eq!(b.sends, 2);
 }

@@ -68,6 +68,8 @@ struct JournalRecord {
     // before changing the plan so historical request identities stay valid.
     #[serde(default)]
     plan_revision: Option<u64>,
+    #[serde(default)]
+    day_bound: bool,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -97,8 +99,23 @@ pub struct DailyResult {
 fn reason(s: &str) -> String {
     s.chars().filter(|c| !c.is_control()).take(160).collect()
 }
-fn request_id(plan: &Plan, entry: &Entry, number: u64) -> Result<String> {
-    request_id_revision(plan, entry, number, plan.revision)
+fn request_id_day(
+    plan: &Plan,
+    entry: &Entry,
+    number: u64,
+    revision: u64,
+    day: i64,
+) -> Result<String> {
+    let encoded = serde_json::to_vec(&(
+        "daily-day-bound-v1",
+        &plan.scope,
+        revision,
+        entry,
+        number,
+        day,
+    ))
+    .map_err(|_| types::invalid("Request encoding failed"))?;
+    Ok(format!("{:x}", Sha256::digest(encoded)))
 }
 fn request_id_revision(plan: &Plan, entry: &Entry, number: u64, revision: u64) -> Result<String> {
     let encoded = serde_json::to_vec(&(&plan.scope, revision, entry, number))
@@ -129,6 +146,8 @@ impl Governor {
             let mut latest = BTreeMap::new();
             let mut counts: BTreeMap<&String, u64> = BTreeMap::new();
             let mut seen = std::collections::BTreeSet::new();
+            let mut previous_day = None;
+            let mut previous_sequence = 0;
             for record in &state.journal {
                 let revision = record.plan_revision.unwrap_or(plan.revision);
                 if record.request_id.len() != 64
@@ -142,6 +161,13 @@ impl Governor {
                     return Err(types::invalid("Invalid journal record binding"));
                 }
                 if record.terminal.is_none() {
+                    if previous_day.is_some_and(|d| record.day < d)
+                        || record.before_sequence <= previous_sequence
+                    {
+                        return Err(types::invalid("Journal chronology regressed"));
+                    }
+                    previous_day = Some(record.day);
+                    previous_sequence = record.before_sequence;
                     if !intents.is_empty()
                         || latest
                             .get(&record.entry_id)
@@ -160,7 +186,11 @@ impl Governor {
                         .unwrap();
                     if !seen.insert(&record.request_id)
                         || record.request_id
-                            != request_id_revision(&plan, entry, *number, revision)?
+                            != if record.day_bound {
+                                request_id_day(&plan, entry, *number, revision, record.day)?
+                            } else {
+                                request_id_revision(&plan, entry, *number, revision)?
+                            }
                     {
                         return Err(types::invalid("Reused or nonmatching request identity"));
                     }
@@ -170,12 +200,16 @@ impl Governor {
                         return Err(types::invalid("Duplicate or malformed intent journal"));
                     }
                 } else {
+                    if let Some(after) = record.after_sequence {
+                        previous_sequence = after;
+                    }
                     let previous = intents
                         .remove(&record.request_id)
                         .ok_or_else(|| types::invalid("Terminal journal lacks unique intent"))?;
                     if previous.entry_id != record.entry_id
                         || previous.day != record.day
                         || previous.before_sequence != record.before_sequence
+                        || previous.day_bound != record.day_bound
                         || previous.plan_revision.unwrap_or(plan.revision) != revision
                         || (record.terminal == Some(true)
                             && !record
@@ -386,12 +420,49 @@ impl Governor {
                 .any(|e| matches!(e, EntryState::Intent { .. }))
     }
     #[cfg(target_os = "linux")]
-    pub(crate) fn last_day(&self) -> Option<i64> {
-        self.state.last_day
-    }
-    #[cfg(target_os = "linux")]
     pub(crate) fn last_sequence(&self) -> u64 {
         self.state.last_sequence.unwrap_or(0)
+    }
+    #[cfg(target_os = "linux")]
+    pub(crate) fn plan(&self) -> Plan {
+        self.state.plan.clone()
+    }
+    #[cfg(any(target_os = "linux", all(test, unix)))]
+    pub(crate) fn preparation_check(&mut self) -> Result<()> {
+        self.check()
+    }
+    #[cfg(target_os = "linux")]
+    pub(crate) fn pending_research(&self, day: i64) -> Vec<Entry> {
+        self.state
+            .plan
+            .entries
+            .iter()
+            .filter(|e| {
+                matches!(e.intent, Intent::Research { .. })
+                    && matches!(
+                        self.state.entries.get(&e.id),
+                        Some(EntryState::Pending { reason_day, .. }) if *reason_day != Some(day)
+                    )
+            })
+            .cloned()
+            .collect()
+    }
+    /// Count persisted unique intent reservations, including NotQueued and unresolved.
+    pub(crate) fn used_actions(&self, day: i64) -> usize {
+        self.state
+            .journal
+            .iter()
+            .filter(|r| r.terminal.is_none() && r.day == day)
+            .count()
+    }
+    #[cfg(any(target_os = "linux", all(test, unix)))]
+    pub(crate) fn budget_available(&self, day: i64) -> bool {
+        !self
+            .state
+            .journal
+            .iter()
+            .any(|r| r.day == day && !r.day_bound)
+            && self.used_actions(day) < usize::from(self.state.plan.max_actions_per_day)
     }
     pub fn entry_state(&self, id: &str) -> Option<&EntryState> {
         self.state.entries.get(id)
@@ -449,6 +520,29 @@ impl Governor {
         now_unix_ms: u64,
         deadline: Instant,
     ) -> Result<DailyResult> {
+        self.run_batch(backend, now_unix_ms, deadline, false, None)
+    }
+    #[cfg(any(target_os = "linux", all(test, unix)))]
+    pub(crate) fn continue_entry(
+        &mut self,
+        backend: &mut dyn Backend,
+        entry_id: &str,
+        now_unix_ms: u64,
+        deadline: Instant,
+    ) -> Result<DailyResult> {
+        if !self.state.plan.entries.iter().any(|e| e.id == entry_id) {
+            return Err(types::invalid("Unknown continuation entry"));
+        }
+        self.run_batch(backend, now_unix_ms, deadline, true, Some(entry_id))
+    }
+    fn run_batch(
+        &mut self,
+        backend: &mut dyn Backend,
+        now_unix_ms: u64,
+        deadline: Instant,
+        continuation: bool,
+        only_entry: Option<&str>,
+    ) -> Result<DailyResult> {
         let started = Instant::now();
         let now = || {
             now_unix_ms
@@ -476,15 +570,34 @@ impl Governor {
         let mut verified = Vec::new();
         let mut retained = Vec::new();
         let mut blocking = None;
-        if advanced {
+        if advanced || continuation {
             let entries = self.state.plan.entries.clone();
-            let mut attempts = 0;
+            let mut attempts = if self
+                .state
+                .journal
+                .iter()
+                .any(|r| r.day == day && !r.day_bound)
+            {
+                usize::from(self.state.plan.max_actions_per_day)
+            } else {
+                self.used_actions(day)
+            };
             for entry in entries {
+                if only_entry.is_some_and(|id| id != entry.id) {
+                    continue;
+                }
+                if continuation
+                    && matches!(self.state.entries.get(&entry.id),Some(EntryState::Pending {reason_day,..}) if *reason_day==Some(day))
+                {
+                    continue;
+                }
                 let count = match self.state.entries.get(&entry.id) {
                     Some(EntryState::Pending { attempts, .. }) => *attempts,
                     _ => continue,
                 };
-                if attempts >= self.state.plan.max_actions_per_day || Instant::now() >= deadline {
+                if attempts >= usize::from(self.state.plan.max_actions_per_day)
+                    || Instant::now() >= deadline
+                {
                     retained.push(entry.id.clone());
                     continue;
                 }
@@ -563,7 +676,13 @@ impl Governor {
                     .checked_add(1)
                     .ok_or_else(|| types::invalid("Attempt count exhausted"))?;
                 let attempt = Attempt {
-                    request_id: request_id(&self.state.plan, &entry, number)?,
+                    request_id: request_id_day(
+                        &self.state.plan,
+                        &entry,
+                        number,
+                        self.state.plan.revision,
+                        day,
+                    )?,
                     entry: entry.clone(),
                     scope: self.state.plan.scope.clone(),
                     day,
@@ -577,6 +696,7 @@ impl Governor {
                     terminal: None,
                     after_sequence: None,
                     plan_revision: Some(self.state.plan.revision),
+                    day_bound: true,
                 });
                 self.state.entries.insert(
                     entry.id.clone(),
@@ -622,6 +742,7 @@ impl Governor {
                             terminal: Some(false),
                             after_sequence: None,
                             plan_revision: Some(self.state.plan.revision),
+                            day_bound: true,
                         });
                         self.state.entries.insert(
                             entry.id.clone(),
@@ -667,6 +788,7 @@ impl Governor {
                             terminal: Some(true),
                             after_sequence: Some(observed.sequence),
                             plan_revision: Some(self.state.plan.revision),
+                            day_bound: true,
                         });
                         self.state.last_date = Some(observed.date_raw);
                         self.state.last_sequence = Some(observed.sequence);

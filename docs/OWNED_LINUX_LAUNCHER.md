@@ -240,7 +240,8 @@ profile used by research. Their installed-game acceptance is pending.
 
 `hoi4_focus_attempt` accepts `stage`, `focus_id`, `request_id` and `lease_token`.
 Stages are `open_politics`, `open_focus`, `view` and `start`. Each attempts at
-most one ordinary event and verifies canonical own state. Unsupported renderers,
+most one ordinary event and verifies canonical own state. Exact Sprite,
+zero-angle Text and unmasked Frame branches are supported. Unsupported renderers,
 unsettled roots and incomplete local blocker observations refuse. Intent is
 persisted first; uncertain input blocks clock, research, focus and daily work.
 No new token can bypass that quarantine.
@@ -256,7 +257,8 @@ Start the daily preview with an existing exclusive lease and an explicit plan:
     "revision": 1,
     "entries": [{
       "id": "research-slot-0",
-      "intent": {"kind": "Research", "technology_id": "support_weapons", "slot": 0}
+      "intent": {"kind": "Research", "technology_id": "support_weapons", "slot": 0},
+      "navigation": {"folder_id": "infantry"}
     }],
     "max_actions_per_day": 1,
     "max_observation_age_ms": 2000,
@@ -267,19 +269,26 @@ Start the daily preview with an existing exclusive lease and an explicit plan:
 
 The player cannot supply trusted process/campaign scope. Entry IDs and technology
 IDs are explicit and bounded; requested slots must belong to the own current
-array. The worker does not navigate panels or select targets yet: prepare the
-exact own slot and matching Info using research stages before starting it.
-Only fresh Research completion can finish that entry. Unavailable domains remain
-unfinished. The worker neither acquires nor renews its lease automatically.
+array. Navigation prepares one ordinary panel/slot/category/view stage per
+worker cycle, persisting intent and requiring fresh stage verification before
+continuing. An optional explicit folder hint selects the category; omitted hints
+preserve legacy entry serialization. Unknown or unrelated UI refuses; the worker
+does not blindly close panels or Info. Only fresh Research completion can finish
+an entry within the persisted daily assignment budget. Several slots may refill
+on the same day; navigation stages do not spend assignment reservations. It
+neither acquires nor renews its
+lease automatically. Daily focus, economy, army and naval domains remain unfinished.
 
 Use `{"op":"digest"}` for fresh own counts and the last batch, or
 `{"op":"stop"}` to join the worker. Digests stay within 2 KB and label prior
 verification as historical. Stop does not pause the game or clear uncertainty.
-Private sequence and plan files preserve chronology across restarts. Library
-plan updates preserve existing entries and completion evidence, require an
-increased revision and reject unresolved input; service update wiring remains
-unfinished. This prepared-research preview is not full daily automation or
-campaign acceptance.
+Private sequence and plan files preserve chronology across restarts. Use
+`{"op":"update","lease_token":"<existing private lease>","plan":{...}}`
+to add entries or change bounded policy with an increased revision. Exact retries
+are idempotent. Updates preserve existing specifications, navigation hints,
+attempts, consumed days and completion evidence; unresolved input refuses.
+This preview requires installed-game verification and is not full daily
+automation or campaign acceptance.
 
 ## Ownership and recovery checks
 
