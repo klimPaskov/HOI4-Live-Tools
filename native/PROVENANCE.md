@@ -422,5 +422,11 @@ text-event thunk `0x2eaacb0` adjusts by `-0x1a0` into `0x2eaab60`.
 then compares each receiver without dereferencing foreign controls. Keyboard
 handler `0x2ea9960` additionally requires byte `+0x75` bit 3, edit flag bit 0
 and no edit flag bit 1. Identity/flag diagnostics remain distinct from effective
-event delivery and input authority. These new branches have static/generated
-evidence only until a new immutable live probe; Run060 did not observe them.
+event delivery and input authority. Run061 observed the exact InstantText layout and owned GUI receiver joins,
+with both receivers unfocused. It did not deliver search input. The optional
+SearchField stage reuses the ordinary authenticated X11 click dispatcher,
+persisted Focus intent and exact own postconditions. Settled `find_view` uses
+the established CContainerWindow visibility and both transition channels.
+Root/edit/renderer identities, active Focus and empty query are retained through
+rechecks; positive readback requires both independent receivers. Live activation
+remains pending; no typing, Enter or engine invocation is introduced.

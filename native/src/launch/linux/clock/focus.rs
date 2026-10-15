@@ -42,8 +42,8 @@ impl Service {
     }
 }
 pub(super) fn tool() -> Value {
-    json!({"name":"hoi4_focus_attempt","description":"Preview: one ordinary OpenPolitics/ClosePolitics/OpenPoliticsFromResearch Q, OpenFocus named-button, View or Start stage for an exact own canonical focus ID. ClosePolitics requires that exact focus active and preserves it through settled closed-root readback. OpenPoliticsFromResearch requires both profiles, an own settled research panel and hidden tree; its live gate is pending. Requires explicit owned profile, exclusive lease, settled own roots and complete own scoped blockers. Supported exact Sprite, zero-angle Text or unmasked Frame geometry; unknown branches refuse. Canonical readback verifies current state, not event causality or eligibility. Uncertain input is quarantined; no replay, coordinates, activation or engine calls.",
-        "inputSchema":{"type":"object","properties":{"stage":{"enum":["open_politics","open_politics_from_research","close_politics","open_focus","view","start"]},"focus_id":{"type":"string","minLength":1,"maxLength":128},"request_id":{"type":"string","minLength":1,"maxLength":128},"lease_token":{"type":"string"}},"required":["stage","focus_id","request_id","lease_token"],"additionalProperties":false}})
+    json!({"name":"hoi4_focus_attempt","description":"Preview: one ordinary OpenPolitics/ClosePolitics/OpenPoliticsFromResearch Q, OpenFocus named-button, SearchField empty-field click, View or Start stage for an exact own canonical focus ID. ClosePolitics requires that exact focus active and preserves it through settled closed-root readback. OpenPoliticsFromResearch requires both profiles, an own settled research panel and hidden tree; its live gate is pending. Requires explicit owned profile, exclusive lease, settled own roots and complete own scoped blockers. SearchField preserves the active Focus and requires both keyboard/text receiver readback; it does not type or press Enter. Supported exact Sprite, zero-angle Text, InstantText or unmasked Frame geometry; unknown branches refuse. Canonical readback verifies current state, not event causality or eligibility. Uncertain input is quarantined; no replay, coordinates, activation or engine calls.",
+        "inputSchema":{"type":"object","properties":{"stage":{"enum":["open_politics","open_politics_from_research","close_politics","open_focus","search_field","view","start"]},"focus_id":{"type":"string","minLength":1,"maxLength":128},"request_id":{"type":"string","minLength":1,"maxLength":128},"lease_token":{"type":"string"}},"required":["stage","focus_id","request_id","lease_token"],"additionalProperties":false}})
 }
 pub(super) fn observe_ui(
     owner: &ClockService,
@@ -91,6 +91,7 @@ fn parse(args: &serde_json::Map<String, Value>) -> Result<Arguments<'_>> {
         "open_politics_from_research" => stage::Stage::OpenPoliticsFromResearch,
         "close_politics" => stage::Stage::ClosePolitics,
         "open_focus" => stage::Stage::OpenFocus,
+        "search_field" => stage::Stage::SearchField,
         "view" => stage::Stage::View,
         "start" => stage::Stage::Start,
         _ => return Err(Error::new("invalid_arguments", "Unknown focus stage")),
@@ -268,7 +269,13 @@ fn observed(
     pin: &mut Option<state::Scope>,
     geometry: bool,
 ) -> Result<state::Observation> {
-    let observation = state::observe(process, &target.focus_id, &target.epoch, geometry)?;
+    let observation = state::observe_with_search(
+        process,
+        &target.focus_id,
+        &target.epoch,
+        geometry,
+        target.stage == stage::Stage::SearchField,
+    )?;
     accept(guard, process, &observation)?;
     state::pin(pin, observation.scope.clone())?;
     Ok(observation)
@@ -364,6 +371,7 @@ fn point(
     let which = match target.stage {
         stage::Stage::View => candidate::Stage::Node,
         stage::Stage::Start => candidate::Stage::Start,
+        stage::Stage::SearchField => candidate::Stage::SearchField,
         _ => return Err(Error::new("focus_precondition", "Point stage required")),
     };
     // Existing adapter proves exact own callback/renderer joins, conditional
@@ -371,7 +379,10 @@ fn point(
     let (point, context) = candidate::observe(process, &target.focus_id, which, profile)?;
     guard.accept_context(process, &context.campaign)?;
     let o = observed(process, guard, target, pin, false)?;
-    if context.anchors != o.context.anchors || context.slots != o.context.slots {
+    if context.anchors != o.context.anchors
+        || context.slots != o.context.slots
+        || context.search_anchors != o.context.search_anchors
+    {
         return Err(Error::new(
             "torn_read",
             "Point and own focus scopes disagree",
@@ -397,12 +408,12 @@ impl stage::Backend for FocusBackend<'_> {
         let o = observed(self.process, self.guard, target, &mut self.scope, false)?;
         o.state.validate(target)?;
         o.state.preflight(target)?;
+        if target.stage.preserves_focus() {
+            self.preserved_focus = Some(o.state.active_focus.clone());
+        }
         if target.stage.is_shortcut() {
             self.controls
                 .preflight(self.process, &ControlKey::PoliticsPanel)?;
-            if target.stage.preserves_focus() {
-                self.preserved_focus = Some(o.state.active_focus);
-            }
             return Ok(match target.stage {
                 stage::Stage::ClosePolitics => stage::Candidate::ClosePolitics,
                 stage::Stage::OpenPoliticsFromResearch => {
@@ -449,7 +460,7 @@ impl stage::Backend for FocusBackend<'_> {
             {
                 return Err(Error::new(
                     "torn_read",
-                    "Pinned canonical active focus changed before navigation Q",
+                    "Pinned canonical active focus changed before navigation input",
                 ));
             }
             if let Some(expected) = &selected {

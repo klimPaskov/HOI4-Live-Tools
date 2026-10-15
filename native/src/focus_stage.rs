@@ -29,12 +29,17 @@ pub enum Stage {
     /// Guarded mode12-to23 Q; recorded service validation in run045.
     ClosePolitics,
     OpenFocus,
+    /// One ordinary click in the exact empty own search field; no text input.
+    SearchField,
     View,
     Start,
 }
 impl Stage {
     pub(crate) fn preserves_focus(self) -> bool {
-        matches!(self, Self::ClosePolitics | Self::OpenPoliticsFromResearch)
+        matches!(
+            self,
+            Self::ClosePolitics | Self::OpenPoliticsFromResearch | Self::SearchField
+        )
     }
     pub(crate) fn is_shortcut(self) -> bool {
         matches!(
@@ -87,6 +92,81 @@ pub enum LocalRoot {
     Ready,
     Animating,
 }
+/// Producer-derived identities, not caller-supplied input permission.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct SearchControl {
+    pub locally_ready: bool,
+    pub empty_query: bool,
+    pub enabled: bool,
+    pub keyboard_focus_verified: bool,
+    pub text_receiver_verified: bool,
+}
+impl SearchControl {
+    /// Projection of a witnessed producer response; not a command or public MCP input.
+    #[doc(hidden)]
+    pub fn from_owned_observation(d: &serde_json::Value, key: &str) -> Result<Self> {
+        if d["owned"] != true
+            || d["build_id"] != crate::game::BUILD_ID
+            || d["command_observation"]["requested_key"] != key
+            || d["command_observation"]["same_reader_clock_context"] != true
+            || !d["focuses"]
+                .as_array()
+                .is_some_and(|a| a.len() == 1 && a[0]["key"] == key)
+            || d["search"]["available"] != true
+            || d["search"]["requested_key"] != key
+        {
+            return Err(search_error(
+                "Same-reader exact own search command required",
+            ));
+        }
+        let c = &d["search"]["query_control"];
+        if [
+            "available",
+            "named_container_binding_verified",
+            "ordinary_listener_binding_verified",
+            "renderer_control_join_verified",
+        ]
+        .iter()
+        .any(|k| c[k] != true)
+            || c["query_encoding"] != "bounded_utf32le"
+        {
+            return Err(search_error(
+                "Exact named own search control/listener/renderer required",
+            ));
+        }
+        let r = &c["routing_diagnostic"];
+        if [
+            "available",
+            "gui_global_binding_verified",
+            "receiver_layout_verified",
+        ]
+        .iter()
+        .any(|k| r[k] != true)
+        {
+            return Err(search_error(
+                "Exact own GUI and separate search receivers required",
+            ));
+        }
+        let flag = |v: &serde_json::Value| {
+            v.as_bool()
+                .ok_or_else(|| search_error("Known search control state required"))
+        };
+        Ok(Self {
+            locally_ready: flag(&c["container_locally_ready"])?,
+            empty_query: c["query_text"]
+                .as_str()
+                .ok_or_else(|| search_error("Exact search query required"))?
+                .is_empty(),
+            enabled: flag(&r["control_enabled_flag"])?,
+            keyboard_focus_verified: flag(&r["keyboard_focus_verified"])?,
+            text_receiver_verified: flag(&r["text_receiver_verified"])?,
+        })
+    }
+}
+fn search_error(message: &str) -> Error {
+    Error::new("focus_precondition", message)
+}
 impl LocalRoot {
     fn is_unknown(&self) -> bool {
         *self == Self::Unknown
@@ -115,6 +195,9 @@ pub struct OwnState {
     pub research_tree_root: LocalRoot,
     pub selected_focus: Option<String>,
     pub requested_detail_ready: Option<bool>,
+    /// Absent on older stages/receipts; retain their serialized hashes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub search_control: Option<SearchControl>,
 }
 fn error(code: &'static str, message: &str) -> Error {
     Error::new(code, message)
@@ -209,6 +292,13 @@ impl OwnState {
                     && self.politics_root == LocalRoot::Hidden
                     && self.blockers_clear()
             }
+            Stage::SearchField => {
+                self.search_base_ready()
+                    && self
+                        .search_control
+                        .as_ref()
+                        .is_some_and(|s| s.keyboard_focus_verified && s.text_receiver_verified)
+            }
             Stage::View => {
                 self.managed_mode == Some(13)
                     && self.focus_root == LocalRoot::Ready
@@ -256,6 +346,13 @@ impl OwnState {
                     && self.focus_root == LocalRoot::Hidden
                     && self.blockers_clear()
             }
+            Stage::SearchField => {
+                self.search_base_ready()
+                    && self
+                        .search_control
+                        .as_ref()
+                        .is_some_and(|s| !s.keyboard_focus_verified && !s.text_receiver_verified)
+            }
             Stage::View => {
                 self.managed_mode == Some(13)
                     && self.focus_root == LocalRoot::Ready
@@ -280,6 +377,18 @@ impl OwnState {
             ));
         }
         Ok(())
+    }
+    fn search_base_ready(&self) -> bool {
+        self.managed_mode == Some(13)
+            && self.focus_root == LocalRoot::Ready
+            && self.politics_root == LocalRoot::Hidden
+            && self.research_panel_root == LocalRoot::Hidden
+            && self.research_tree_root == LocalRoot::Hidden
+            && self.blockers_clear()
+            && self
+                .search_control
+                .as_ref()
+                .is_some_and(|s| s.locally_ready && s.empty_query && s.enabled)
     }
 }
 #[derive(Clone, Debug)]
@@ -1012,6 +1121,7 @@ mod daily_failure_classifier_tests {
                 research_tree_root: LocalRoot::Unknown,
                 selected_focus: None,
                 requested_detail_ready: Some(false),
+                search_control: None,
             },
         };
         j.receipts.insert("id".into(), receipt.clone());

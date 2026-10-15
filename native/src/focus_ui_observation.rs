@@ -97,6 +97,7 @@ mod tests {
             research_tree_root: LocalRoot::Unknown,
             selected_focus: None,
             requested_detail_ready: None,
+            search_control: None,
         };
         let out = report(&state, 60759371, 60759372, 1000, 4.5);
         assert!(out["own_detail_counts"].is_null());

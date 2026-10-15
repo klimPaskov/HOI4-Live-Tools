@@ -343,29 +343,37 @@ fn snapshot_model(
             output.push(json!({"key":key}));
         }
     }
+    let mut command_search = None;
+    let mut search_anchors = None;
     if let Some(FocusQuery::Search(key, include_control)) = query {
         w.section.set("search_selection");
         w.region(view, 0x1380, "focus_view");
         let mut search = search::observe(&r, base, view, country, &keys, key)?;
         if include_control && search["available"] == true {
             w.section.set("search_control");
-            search["query_control"] = search::control(&r, base, view, registry)?;
+            let (control, binding) = search::control(&r, base, view, registry)?;
+            search["query_control"] = control;
+            search_anchors = binding;
             search["query_text_available"] = search["query_control"]["available"].clone();
             search["query_control_binding_available"] =
                 search["query_control"]["available"].clone();
         }
-        let (end_calls, end_bytes) = w.finish()?;
-        process.check()?;
-        return Ok((
-            json!({
-                "source":"native own Focus search selection","build_id":game::BUILD_ID,
-                "owned":true,"search":search,"input_authorized":false,
-                "observation_paused_game":false,
-                "freshness":{"observed_unix_ms":SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),
-                    "elapsed_ms":start.elapsed().as_secs_f64()*1000.0,"read_calls":r.calls.get()+end_calls as u64,"read_bytes":r.bytes.get()+end_bytes}
-            }),
-            None,
-        ));
+        if command_context {
+            command_search = Some(search);
+        } else {
+            let (end_calls, end_bytes) = w.finish()?;
+            process.check()?;
+            return Ok((
+                json!({
+                    "source":"native own Focus search selection","build_id":game::BUILD_ID,
+                    "owned":true,"search":search,"input_authorized":false,
+                    "observation_paused_game":false,
+                    "freshness":{"observed_unix_ms":SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),
+                        "elapsed_ms":start.elapsed().as_secs_f64()*1000.0,"read_calls":r.calls.get()+end_calls as u64,"read_bytes":r.bytes.get()+end_bytes}
+                }),
+                None,
+            ));
+        }
     }
     if command_context && requested.is_some_and(|key| !keys.values().any(|value| value == key)) {
         return Err(Error::new(
@@ -435,6 +443,7 @@ fn snapshot_model(
             selected: vec![],
             matching_details: vec![],
             ui_facts: None,
+            search_anchors,
         })
     } else {
         None
@@ -558,6 +567,9 @@ fn snapshot_model(
     let mut body = json!({"source":"native own focus catalog and UI diagnostics","build_id":game::BUILD_ID,"owned":true,"catalog_count":own.len(),"filtered_count":total,"offset":offset,"limit":limit,"next_offset":if offset.saturating_add(page.len())<total {Some(offset+page.len())}else{None},"focuses":page,"details":details,"node_association":node_association,"numeric_ids_available":false,"eligibility_available":false,"input_authorized":false,"branch_visibility_available":false,"observation_paused_game":false,"freshness":{"observed_unix_ms":SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),"elapsed_ms":start.elapsed().as_secs_f64()*1000.0,"read_calls":r.calls.get()+end_calls as u64,"read_bytes":r.bytes.get()+end_bytes}});
     if let Some(c) = context.as_ref() {
         body["command_observation"] = json!({"active_key":c.active_key,"requested_key":requested,"same_reader_clock_context":true,"eligibility_available":false,"input_authorized":false});
+    }
+    if let Some(search) = command_search {
+        body["search"] = search;
     }
     Ok((body, context))
 }
@@ -736,6 +748,23 @@ pub struct FocusContext {
     pub selected: Vec<[u64; 2]>,
     pub matching_details: Vec<[u64; 3]>,
     pub ui_facts: Option<crate::focus_ui_facts::FocusUiFacts>,
+    /// Root/edit/renderer identities for the same-reader search command only.
+    pub search_anchors: Option<[u64; 3]>,
+}
+/// Same witnessed own command/UI context plus exact search control. No input.
+#[doc(hidden)]
+pub fn command_search(process: &dyn Process, key: &str) -> Result<(Value, FocusContext)> {
+    validate_key(key)?;
+    let (body, context) = snapshot_model(
+        process,
+        0,
+        1,
+        Some(key),
+        Some(FocusQuery::Search(key, true)),
+        false,
+        true,
+    )?;
+    Ok((body, context.expect("Search command context requested")))
 }
 /// Same witnessed reader for a future ordinary focus stage, never an action.
 #[doc(hidden)]

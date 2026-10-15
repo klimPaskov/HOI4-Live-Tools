@@ -71,6 +71,7 @@ fn state(mode: i32) -> OwnState {
         research_tree_root: LocalRoot::Unknown,
         selected_focus: None,
         requested_detail_ready: Some(false),
+        search_control: None,
     }
 }
 fn view() -> OwnState {
@@ -84,6 +85,189 @@ fn started() -> OwnState {
     let mut s = state(23);
     s.active_focus = ActiveFocus::Active("GER_rhineland".into());
     s
+}
+fn search_state(focused: bool) -> OwnState {
+    let mut s = state(13);
+    s.research_panel_root = LocalRoot::Hidden;
+    s.research_tree_root = LocalRoot::Hidden;
+    s.search_control = Some(SearchControl {
+        locally_ready: true,
+        empty_query: true,
+        enabled: true,
+        keyboard_focus_verified: focused,
+        text_receiver_verified: focused,
+    });
+    s
+}
+
+#[test]
+fn search_field_preserves_active_focus_and_replays_only_historical_receipt() {
+    for active in [ActiveFocus::Idle, ActiveFocus::Active("GER_other".into())] {
+        let sc = Scratch::new();
+        let mut j = Journal::open(&sc.path()).unwrap();
+        let a = authority();
+        let g = RwLock::new(true);
+        let t = target(Stage::SearchField);
+        let mut before = search_state(false);
+        before.active_focus = active.clone();
+        let mut after = search_state(true);
+        after.active_focus = active;
+        let mut f = Fake::sequence(t.stage, before, after);
+        let r = run(
+            &mut j,
+            "field",
+            t.clone(),
+            &a,
+            &g,
+            &mut f,
+            Duration::from_secs(1),
+        )
+        .unwrap();
+        assert!(r.current_state_verified && !r.historical);
+        assert_eq!(f.dispatches, 1);
+        drop(j);
+        let mut j = Journal::open(&sc.path()).unwrap();
+        let r = run(
+            &mut j,
+            "field",
+            t.clone(),
+            &a,
+            &g,
+            &mut f,
+            Duration::from_secs(1),
+        )
+        .unwrap();
+        assert!(r.historical && !r.current_state_verified);
+        assert_eq!(f.dispatches, 1);
+        // Already focused is not permission for another click under a new ID.
+        assert_eq!(
+            run(
+                &mut j,
+                "new-field",
+                t,
+                &a,
+                &g,
+                &mut f,
+                Duration::from_secs(1)
+            )
+            .unwrap_err()
+            .code,
+            "focus_precondition"
+        );
+        assert_eq!(f.dispatches, 1);
+    }
+}
+
+#[test]
+fn search_field_requires_empty_enabled_settled_control_and_both_receivers() {
+    for field in 0..10 {
+        let mut before = search_state(false);
+        match field {
+            0 => before.search_control = None,
+            1 => before.search_control.as_mut().unwrap().empty_query = false,
+            2 => before.search_control.as_mut().unwrap().enabled = false,
+            3 => before.search_control.as_mut().unwrap().locally_ready = false,
+            4 => {
+                before
+                    .search_control
+                    .as_mut()
+                    .unwrap()
+                    .keyboard_focus_verified = true
+            }
+            5 => {
+                before
+                    .search_control
+                    .as_mut()
+                    .unwrap()
+                    .text_receiver_verified = true
+            }
+            6 => before.research_panel_root = LocalRoot::Ready,
+            7 => before.own_detail_counts = Some([1, 0]),
+            8 => before.focus_root = LocalRoot::Animating,
+            _ => before.research_tree_root = LocalRoot::Unknown,
+        }
+        let sc = Scratch::new();
+        let mut j = Journal::open(&sc.path()).unwrap();
+        let mut f = Fake::sequence(Stage::SearchField, before, search_state(true));
+        assert_eq!(
+            run(
+                &mut j,
+                "bad",
+                target(Stage::SearchField),
+                &authority(),
+                &RwLock::new(true),
+                &mut f,
+                Duration::from_secs(1)
+            )
+            .unwrap_err()
+            .code,
+            "focus_precondition"
+        );
+        assert_eq!(f.dispatches, 0);
+        assert_eq!(fs::metadata(sc.path()).unwrap().len(), 0);
+    }
+    for field in 0..4 {
+        let mut after = search_state(true);
+        match field {
+            0 => {
+                after
+                    .search_control
+                    .as_mut()
+                    .unwrap()
+                    .keyboard_focus_verified = false
+            }
+            1 => {
+                after
+                    .search_control
+                    .as_mut()
+                    .unwrap()
+                    .text_receiver_verified = false
+            }
+            2 => after.search_control.as_mut().unwrap().empty_query = false,
+            _ => after.active_focus = ActiveFocus::Active("GER_other".into()),
+        }
+        let sc = Scratch::new();
+        let mut j = Journal::open(&sc.path()).unwrap();
+        let a = authority();
+        let g = RwLock::new(true);
+        let t = target(Stage::SearchField);
+        let mut f = Fake::sequence(t.stage, search_state(false), after);
+        assert_eq!(
+            run(
+                &mut j,
+                "uncertain",
+                t.clone(),
+                &a,
+                &g,
+                &mut f,
+                Duration::from_millis(50)
+            )
+            .unwrap_err()
+            .code,
+            "action_uncertain"
+        );
+        assert_eq!(f.dispatches, 1);
+        drop(j);
+        let mut j = Journal::open(&sc.path()).unwrap();
+        assert!(j.blocks_game(&t.epoch.game));
+        assert_eq!(
+            run(&mut j, "new", t, &a, &g, &mut f, Duration::from_secs(1))
+                .unwrap_err()
+                .code,
+            "action_uncertain"
+        );
+        assert_eq!(f.dispatches, 1);
+    }
+}
+
+#[test]
+fn older_focus_receipts_keep_their_serialized_shape() {
+    let s = state(13);
+    let mut v = serde_json::to_value(&s).unwrap();
+    assert!(v.get("search_control").is_none());
+    assert_eq!(serde_json::from_value::<OwnState>(v.clone()).unwrap(), s);
+    v["search_control"] = serde_json::json!({"empty_query":true});
+    assert!(serde_json::from_value::<OwnState>(v).is_err());
 }
 fn point() -> PointCandidate {
     PointCandidate {

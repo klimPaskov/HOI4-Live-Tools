@@ -1098,6 +1098,7 @@ mod tests {
             research_tree_root: LocalRoot::Unknown,
             selected_focus: None,
             requested_detail_ready: Some(false),
+            search_control: None,
         }
     }
     fn receipt(id: String) -> Execution {

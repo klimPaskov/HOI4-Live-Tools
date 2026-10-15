@@ -183,12 +183,23 @@ overview stayed at the paused baseline. Canonical release, the 356.666-second
 recording, normal exit 0, exact-process absence and unchanged 106 native inputs/
 24 helpers passed audit; both brokers are closed.
 
-The next observer supports the independently recovered CInstantTextObject leaf
-and separate GUI keyboard/text receiver joins. Conditional coordinate math uses
-that renderer's own alignment and hit predicate, not TextSprite fields or font
-getters. Generated tests do not prove its live type, geometry or input routing.
-Search typing, Enter and successive Focus choices remain unverified; no clean
-two-year run or full campaign has passed.
+Run061 on immutable `e35fefe` passed the paused renderer/receiver observation:
+15 player RPCs, zero errors/retries, both opening receipts and unchanged final
+baseline. The exact InstantText renderer closed through five owned ancestors
+with consistent conditional unit caches. The named control was enabled but
+neither keyboard nor text receiver was focused. Search cache remained empty.
+The detailed read took 75.460 ms RPC / 63.990 ms producer. Independent audit
+verified canonical release, the 293.333-second recording, normal exit 0,
+exact-process absence and unchanged 107 native inputs/24 helpers. Both brokers
+are closed; no game or player owns input.
+
+The new `search_field` preview performs one ordinary click in the exact empty
+search control, preserving the active Focus and requiring both independent
+receiver identities afterward. It uses the existing durable intent, lease,
+geometry recheck and unknown-delivery quarantine. Search binding identities and
+settled container flags are witnessed with the own command context. This action
+has generated evidence only until its next immutable live gate. Typing, Enter,
+successive Focus choices and campaign acceptance remain unverified.
 
 ## Immediate acceptance work
 

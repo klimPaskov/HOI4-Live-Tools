@@ -4058,3 +4058,39 @@ checks (871 substantive), five included X11 cases and 953 Python tests (37 skips
 Formatting, host/Linux Clippy, MSRV and Linux release linking passed with all
 107 native inputs unchanged. The existing Python shutdown-deferred diagnostic
 remains recorded. No new input stage is enabled by this observer/math change.
+
+
+## Run061: exact search renderer and receiver observation — 15 October 2026
+
+One Luna medium player used immutable `e35fefe` in fresh vanilla Germany at
+Normal/historical/FAIR, paused on 1 January noon. Both ordinary opening stages
+passed. The detailed search read took 75.460 ms RPC / 63.990 ms producer, with
+5,911 logical reads and 348,378 bytes. It identified CInstantTextObject, a
+reciprocal control join, five ancestors to the owned graphics root and consistent
+conditional unit caches. The enabled edit box had neither keyboard nor text
+receiver focus. Query and search cache remained empty.
+
+The default Rhineland comparison took 64.206 ms RPC; the separately granted
+input-geometry read took 28.230 ms. Offline conditional projection places the
+field candidate at client pixel (466, 22), with quantized logical (2330, 110)
+strictly inside its recovered bounds. This is not an observed hit or permission
+to click. No typing, Enter, assignment, clock or worker action occurred.
+
+All 15 RPCs succeeded without retries. Independent audit verified both input
+pairs, unchanged paused final overview, canonical release against guest proof,
+unchanged 107 native inputs/24 helpers, and the 293.333-second recording.
+Ordinary owned close took 2.328 seconds and exited normally with code 0. All
+four guest processes and four host broker/launcher instances were absent.
+
+The next `search_field` preview uses one journaled ordinary click and requires
+both receiver identities, enabled/focused flags, an empty query, settled own
+roots and clear scoped blockers in its readback. It preserves the active Focus
+and pins root/edit/renderer identities through rechecks. Existing uncertain-input
+quarantine and historical-only receipt replay remain mandatory. Generated tests
+do not establish successful live activation, typing, Enter or campaign progress.
+
+Composed checks passed 772 Rust 1.86 host tests, 880 reported actual Linux
+checks (878 substantive), five included X11 cases and 953 Python tests (37 skips).
+Formatting, host/Linux Clippy, MSRV and release linking passed with 107 native
+inputs unchanged. The existing Python shutdown-deferred diagnostic remains
+recorded. Live SearchField activation is the next gate.

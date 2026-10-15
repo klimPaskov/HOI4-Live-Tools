@@ -12,6 +12,7 @@ use serde_json::Value;
 pub(crate) enum Stage {
     Node,
     Start,
+    SearchField,
 }
 fn unavailable(s: &str) -> Error {
     Error::new("focus_geometry_unavailable", s)
@@ -98,6 +99,7 @@ fn controls_state(c: &Value) -> Result<()> {
     }
     Ok(())
 }
+
 fn surface(
     d: &Value,
     key: &str,
@@ -148,6 +150,15 @@ fn surface(
         }
     }
     match stage {
+        Stage::SearchField => {
+            let state = crate::focus_stage::SearchControl::from_owned_observation(d, key)?;
+            if !state.locally_ready || !state.empty_query || !state.enabled {
+                return Err(unavailable(
+                    "Settled enabled empty own search field required",
+                ));
+            }
+            control_surface(&d["search"]["query_control"]["render_diagnostic"])
+        }
         Stage::Node => {
             if !visible.is_empty() {
                 return Err(unavailable(
@@ -220,6 +231,7 @@ pub(crate) fn observe(
     let (detail, context) = match stage {
         Stage::Node => own_focus::command_owned(process, key, true)?,
         Stage::Start => own_focus::command_selected_detail(process, key, true)?,
+        Stage::SearchField => own_focus::command_search(process, key)?,
     };
     let s = surface(&detail, key, stage, context.ui_facts.as_ref())?;
     let geometry = gui::input_geometry(process)?;

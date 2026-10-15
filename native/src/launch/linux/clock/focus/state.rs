@@ -14,6 +14,7 @@ pub(super) struct Scope {
     focus: [u64; 7],
     politics: [u64; 6],
     slots: Vec<u64>,
+    search_anchors: Option<[u64; 3]>,
 }
 fn bad(message: &'static str) -> Error {
     Error::new("focus_precondition", message)
@@ -81,6 +82,7 @@ pub(super) fn join(c: &FocusContext, p: &PoliticsContext) -> Result<Scope> {
         focus: c.anchors,
         politics: q,
         slots: c.slots.clone(),
+        search_anchors: c.search_anchors,
     })
 }
 pub(super) fn model(
@@ -164,6 +166,13 @@ pub(super) fn model(
             None
         },
         requested_detail_ready: ready,
+        search_control: if d.get("search").is_some() {
+            Some(crate::focus_stage::SearchControl::from_owned_observation(
+                d, key,
+            )?)
+        } else {
+            None
+        },
     })
 }
 fn settled_root(visible: Option<bool>) -> LocalRoot {
@@ -186,7 +195,20 @@ pub(super) fn observe(
     epoch: &Epoch,
     geometry: bool,
 ) -> Result<Observation> {
-    let (body, context) = own_focus::command_selected_detail(process, key, false)?;
+    observe_with_search(process, key, epoch, geometry, false)
+}
+pub(super) fn observe_with_search(
+    process: &dyn Process,
+    key: &str,
+    epoch: &Epoch,
+    geometry: bool,
+    search: bool,
+) -> Result<Observation> {
+    let (body, context) = if search {
+        own_focus::command_search(process, key)?
+    } else {
+        own_focus::command_selected_detail(process, key, false)?
+    };
     let (politics, politics_context) = politics_focus::owned_snapshot(process, geometry)?;
     let scope = join(&context, &politics_context)?;
     let state = model(&body, &context, &politics, &politics_context, key, epoch)?;
@@ -235,6 +257,7 @@ mod tests {
             focus: [1; 7],
             politics: [2; 6],
             slots: vec![3, 4],
+            search_anchors: Some([7, 8, 9]),
         };
         let mut p = None;
         pin(&mut p, s.clone()).unwrap();
@@ -244,6 +267,11 @@ mod tests {
         let mut changed = s.clone();
         changed.politics[5] = 6;
         assert_eq!(pin(&mut p, changed).unwrap_err().code, "ownership_changed");
+        for index in 0..3 {
+            let mut changed = s.clone();
+            changed.search_anchors.as_mut().unwrap()[index] += 10;
+            assert_eq!(pin(&mut p, changed).unwrap_err().code, "ownership_changed");
+        }
         assert_eq!(p, Some(s));
     }
 }

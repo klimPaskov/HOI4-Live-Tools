@@ -665,3 +665,73 @@ fn query_binding_text_and_flags_are_witnessed_through_final_identity_check() {
     f.fail_final = true;
     assert_eq!(query_result(&f).unwrap_err().code, "ownership_changed");
 }
+
+#[test]
+fn search_container_local_visibility_requires_both_settled_channels() {
+    for (flags, states, ready) in [
+        (8, [0, 0], true),
+        (0, [0, 0], false),
+        (8, [1, 0], false),
+        (8, [0, 2], false),
+        (8, [99, 0], false),
+    ] {
+        let mut f = query_fixture("");
+        f.put(CONTAINER + 0xa5, &[flags]);
+        f.int(CONTAINER + 0xeb0, states[0]);
+        f.int(CONTAINER + 0xef8, states[1]);
+        assert_eq!(
+            query_result(&f).unwrap()["search"]["query_control"]["container_locally_ready"],
+            ready
+        );
+    }
+    for address in [CONTAINER + 0xa5, CONTAINER + 0xeb0, CONTAINER + 0xef8] {
+        let mut f = query_fixture("");
+        f.torn = Some(address);
+        assert_eq!(query_result(&f).unwrap_err().code, "torn_read");
+    }
+}
+fn command_search_fixture() -> Fake {
+    let mut f = instant_fixture();
+    f.own_focus_ui_fixture();
+    // Compose disjoint synthetic collections: command context uses 250000/251000.
+    f.array(VIEW + 0x1138, CURRENT, &[ITEM]);
+    f.array(0x2420c0, 0x342000, &[0x244000]);
+    f.array(0x2402b0, 0x343000, &[0x241000]);
+    f.word(VIEW + 0x2f8, ROOT);
+    f.put(ROOT + 0xa5, &[8]);
+    f.array(VIEW + 0x1180, 0x214000, &[]);
+    f.put(CONTAINER + 0xa5, &[8]);
+    f.int(EDIT + 0x74, 0x800);
+    f
+}
+#[test]
+fn search_command_includes_same_reader_context_and_private_binding_anchors() {
+    let f = command_search_fixture();
+    let (v, c) = own_focus::command_search(&f, "GER_rhineland").unwrap();
+    assert_eq!(v["command_observation"]["same_reader_clock_context"], true);
+    assert_eq!(v["command_observation"]["requested_key"], "GER_rhineland");
+    assert_eq!(c.search_anchors, Some([ROOT, EDIT, 0x244000]));
+    assert!(c.ui_facts.unwrap().focus_view_local_ready().unwrap());
+    assert_eq!(
+        v["search"]["query_control"]["container_locally_ready"],
+        true
+    );
+    assert!(v.get("search_anchors").is_none());
+    for address in [
+        VIEW + 0x2f8,
+        EDIT + 0x1b0,
+        CO + 0x1348,
+        GUI + 0x158,
+        GUI + 0x230,
+    ] {
+        let mut f = command_search_fixture();
+        f.torn = Some(address);
+        assert_eq!(
+            own_focus::command_search(&f, "GER_rhineland")
+                .unwrap_err()
+                .code,
+            "torn_read",
+            "{address:x}"
+        );
+    }
+}

@@ -529,3 +529,78 @@ fn start_surface_needs_own_start_guards_but_no_tree_node_association() {
         );
     }
 }
+
+fn search_detail() -> Value {
+    let mut d = detail(false);
+    let r = json!({"render_type_encoding":"18CInstantTextObject","field_layout_verified":true,
+        "renderer_control_join_verified":true,"cache_translation_raw":[2216,-86],
+        "scalar_raw":1,"position_raw":[41,14],"alignment_offset_raw":[385,300],
+        "dimensions_raw":[150,25],"alignment_raw":0,"flags228_raw":74,
+        "parent_chain":render()["parent_chain"]});
+    d["search"] = json!({"available":true,"requested_key":"army_effort","query_control":{
+        "available":true,"named_container_binding_verified":true,"ordinary_listener_binding_verified":true,
+        "renderer_control_join_verified":true,"container_locally_ready":true,"query_encoding":"bounded_utf32le",
+        "query_text":"","render_diagnostic":r,"routing_diagnostic":{"available":true,
+        "gui_global_binding_verified":true,"receiver_layout_verified":true,"control_enabled_flag":true,
+        "keyboard_focus_verified":false,"text_receiver_verified":false}}});
+    d
+}
+#[test]
+fn search_field_projects_exact_instant_text_through_owned_client_without_clamping() {
+    let d = search_detail();
+    let s = surface(&d, "army_effort", Stage::SearchField, Some(&facts(false))).unwrap();
+    let p =
+        research_attempt::point_candidate(&s, &codec(&geometry(), &profile()).unwrap()).unwrap();
+    assert_eq!(p.ideal_logical, [2332, 112]);
+    assert_eq!(p.client_pixel, [466, 22]);
+    assert_eq!(p.quantized_logical, [2330, 110]);
+    assert!(!p.input_authorized && !p.effective_routing_verified && !p.current_frame_verified);
+    let mut d = d;
+    d["search"]["query_control"]["render_diagnostic"]["cache_translation_raw"] =
+        json!([-5000, -86]);
+    let s = surface(&d, "army_effort", Stage::SearchField, Some(&facts(false))).unwrap();
+    assert!(
+        research_attempt::point_candidate(&s, &codec(&geometry(), &profile()).unwrap()).is_err()
+    );
+}
+#[test]
+fn search_candidate_refuses_missing_scope_bindings_receivers_or_nonempty_query() {
+    for path in [
+        "/owned",
+        "/command_observation/same_reader_clock_context",
+        "/search/available",
+        "/search/query_control/available",
+        "/search/query_control/named_container_binding_verified",
+        "/search/query_control/ordinary_listener_binding_verified",
+        "/search/query_control/renderer_control_join_verified",
+        "/search/query_control/container_locally_ready",
+        "/search/query_control/routing_diagnostic/available",
+        "/search/query_control/routing_diagnostic/gui_global_binding_verified",
+        "/search/query_control/routing_diagnostic/receiver_layout_verified",
+        "/search/query_control/routing_diagnostic/control_enabled_flag",
+    ] {
+        let mut d = search_detail();
+        *d.pointer_mut(path).unwrap() = json!(false);
+        assert!(
+            surface(&d, "army_effort", Stage::SearchField, Some(&facts(false))).is_err(),
+            "{path}"
+        );
+    }
+    let mut d = search_detail();
+    d["search"]["query_control"]["query_text"] = json!("existing");
+    assert!(surface(&d, "army_effort", Stage::SearchField, Some(&facts(false))).is_err());
+    assert!(surface(
+        &search_detail(),
+        "army_effort",
+        Stage::SearchField,
+        Some(&facts(true))
+    )
+    .is_err());
+    assert!(surface(
+        &search_detail(),
+        "other",
+        Stage::SearchField,
+        Some(&facts(false))
+    )
+    .is_err());
+}

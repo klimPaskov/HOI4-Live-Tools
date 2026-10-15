@@ -141,13 +141,19 @@ fn named_child(
     found.ok_or_else(|| invalid("Named search container entry missing"))
 }
 
-pub(crate) fn observe(r: &Reader<'_>, base: u64, view: u64, registry: u64) -> Result<Value> {
+pub(crate) fn observe(
+    r: &Reader<'_>,
+    base: u64,
+    view: u64,
+    registry: u64,
+) -> Result<(Value, Option<[u64; 3]>)> {
     let edit = r.u64(view + 0x1200)?;
     if edit == 0 {
-        return Ok(
+        return Ok((
             json!({"available":false,"reason":"query_control_unmaterialized",
             "input_authorized":false}),
-        );
+            None,
+        ));
     }
     exact_search_type(r, base, edit, 0x43498b8, "query_control")?;
     if r.u64(edit + 0x68)? != registry {
@@ -187,14 +193,22 @@ pub(crate) fn observe(r: &Reader<'_>, base: u64, view: u64, registry: u64) -> Re
     let flags = u32::from_le_bytes(r.read(edit + 0x74, 4)?.try_into().unwrap());
     let edit_flags = r.byte(edit + 0x271)?;
     let routing = routing(r, base, edit, registry, flags, edit_flags)?;
-    Ok(
+    let container_flags = r.byte(container + 0xa5)?;
+    let transitions = [r.i32(container + 0xeb0)?, r.i32(container + 0xef8)?];
+    // Use the already typed local edit identity; never re-follow a view pointer
+    // after its type check. The renderer pointer itself remains a witness.
+    let anchors = [root, edit, r.u64(edit + 0x1b0)?];
+    Ok((
         json!({"available":true,"name":"to_find_text","query_text":query,
         "query_encoding":"bounded_utf32le","named_container_binding_verified":true,
+        "container_flags_a5_raw":container_flags,"container_states_raw":transitions,
+        "container_locally_ready":container_flags&8!=0 && transitions==[0,0],
         "ordinary_listener_binding_verified":true,
         "flags74_raw":flags,"edit_flags271_raw":edit_flags,
         "renderer_control_join_verified":geometry["renderer_control_join_verified"]==true,
         "render_diagnostic":geometry,"keyboard_focus_verified":routing["keyboard_focus_verified"],
         "routing_diagnostic":routing,"effective_routing_verified":false,
         "input_authorized":false}),
-    )
+        Some(anchors),
+    ))
 }

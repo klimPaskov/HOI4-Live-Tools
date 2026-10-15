@@ -1501,6 +1501,7 @@ fn focus_converter_requires_current_start_exact_active_and_full_domain_scope() {
         selected: vec![],
         matching_details: vec![],
         ui_facts: None,
+        search_anchors: None,
     };
     let mut after = before.clone();
     after.active_focus = 0xc0000;
@@ -1537,6 +1538,7 @@ fn focus_converter_requires_current_start_exact_active_and_full_domain_scope() {
                 research_tree_root: LocalRoot::Unknown,
                 selected_focus: None,
                 requested_detail_ready: Some(false),
+                search_control: None,
             },
         },
         historical: false,

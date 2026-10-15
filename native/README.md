@@ -289,6 +289,12 @@ are not forcibly interrupted. Uncertain input remains quarantined without replay
 It never activates a window or moves the cursor. Bounded X11 delivery is separate
 from authoritative game-state readback.
 
+The `hoi4_focus_attempt` preview also accepts `search_field`: one ordinary click
+in an empty, enabled own Focus search field. It preserves the current Focus and
+verifies both keyboard and text receiver identities. This stage has generated
+tests; live activation is pending. It does not type, press Enter or choose a
+Focus. `hoi4_focus_search_state` remains a read-only diagnostic.
+
 The optional `hoi4_research_attempt` preview derives exact technology/slot/category
 controls from fresh own state. Its OpenPanel, SelectSlot, SelectCategory, View and
 Research stages have bounded Luna live evidence, including four-slot assignment
