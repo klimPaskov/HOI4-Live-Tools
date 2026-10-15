@@ -1,6 +1,9 @@
 # Clausewitz-MCP comparison checkpoint
 
-Latest checkpoint, 15 October 2026: run050 passed actual research completion and
+Latest checkpoint, 15 October 2026: run053 failed the successive-Focus gate on
+read-only consistency checks, with no second-entry input. The three specifically
+identified changes were clock ticks; two generic witness causes remain unknown.
+Bounded read-only recovery awaits live validation. Earlier, run050 passed actual research completion and
 same-slot refill in 27m 37s under x86 CPU emulation. Run051 verified an empty
 completed-Focus baseline in 29.433 ms RPC, but refused Start before possible input
 when a tree-node witness changed. Run052 then verified actual Rhineland completion

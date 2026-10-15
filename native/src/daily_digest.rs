@@ -10,6 +10,7 @@ pub(crate) const SECTIONS: &[&str] = &[
     "core_pending_historical",
     "latest_preparation_historical",
     "latest_focus_wait_historical",
+    "focus_readiness_historical",
     "last_error",
     "last_preparation_refusal",
     "last_stage_failure",
@@ -175,6 +176,9 @@ mod tests {
                 "preparation":{"verified":true,"goal_completed":false,"request_id":"c".repeat(64)}},
             "latest_preparation_historical":{"request_id":"d".repeat(64)},
             "latest_focus_wait_historical":{"active_focus_id":"GER_other"},
+            "focus_readiness_historical":{"entry_id":"x".repeat(128),"day":706640,
+                "rejected_reads":(0..4).map(|i|json!({"code":"torn_read","message":format!("{i} {}","x".repeat(160))})).collect::<Vec<_>>(),
+                "outcome":"ready","historical":true,"worker_lifetime_only":true,"input_authorized":false},
             "core_pending_historical":{"entry_id":"x".repeat(128),"attempts":1,"reason":"input_not_queued"},
             "retained":(0..256).map(|i|json!({"id":format!("{i}-{}", "x".repeat(120)),"reason":"é".repeat(80)})).collect::<Vec<_>>(),
             "latest_verified_ids_historical":["old-success"]})

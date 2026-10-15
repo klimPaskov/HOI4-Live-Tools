@@ -2,6 +2,14 @@
 
 ## Unreleased native preview
 
+- Discard and retry torn Focus readiness snapshots before navigation or assignment,
+  sharing the existing four-read/one-second bound. Recheck authority and day for
+  each read; preserve rejected-read diagnostics in the worker's historical report.
+  Invalid state, ownership loss and possible input never gain retry authority.
+- Preserve run053's failed successive-Focus gate: five read-only refusals across
+  game days, one Rhineland assignment, no Four Year Plan attempt, canonical release,
+  622-second recording and normal exit. Recovery still needs live validation.
+
 - Verify actual Rhineland Focus completion in run052, followed by same-plan
   restart/STOP without duplicate input. Preserve historical background read
   diagnostics and distinguish STOP's last-attempt-day budget from current-day

@@ -53,10 +53,14 @@ not a finished technology or Focus. Completed entries never reopen.
 Fresh own state governs every action. Focus batches have a ten-second ceiling,
 research five seconds, both capped by the current lease. Unknown roots/blockers
 refuse. Before any Focus navigation intent or assignment reservation, a refused
-well-formed UI state may receive at most three additional fresh observations,
-100 ms apart, within one second and the original deadline. Reader/context errors
-propagate and late positives are discarded. Run049 exercised this build but did
-not establish whether that readiness retry branch fired.
+well-formed UI state or a torn read may receive at most three additional fresh
+observations, 100 ms apart, within one second after the first refusal and the
+original deadline. Torn snapshots are discarded in full; every new read rechecks
+lease, ownership, scope and day. Other reader/context errors propagate and late
+positives are discarded. `focus_readiness_historical` retains the latest batch
+of rejected reads in digest/details and STOP for the current worker lifetime;
+it is not durable action history or retry authority. Run053 exposed clock-tick
+refusals before this recovery change; its live validation remains pending.
 
 Only proven BeforeIntent busy/torn reads qualify for bounded automatic retries;
 a possible delivered input never does. Focus Start retries retain the same

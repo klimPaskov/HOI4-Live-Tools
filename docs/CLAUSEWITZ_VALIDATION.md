@@ -3656,3 +3656,57 @@ The subsequent evidence/wording publication passed 713 Rust 1.86 host tests,
 953 Python tests (37 skips), format, host/Linux Clippy, Linux MSRV all-target
 compilation and release linking. Actual Linux fixtures were not repeated for
 these wording-only changes; run052 remains pinned to its original source/binary.
+
+
+## Run053: successive Focus gate stopped on read-only refusals — 15 October 2026
+
+One existing gpt-6-luna medium player used immutable source `3ade3b0`, Linux CLI
+SHA-256 `f0c64b2f20002e2b271404a8785c4d8349eca16decb4602d4eb90b4a37deadf6`,
+and all nine passing exact-source CI jobs. Normal/historical vanilla Germany
+had no enabled mods or DLC. Recording began before the explicit campaign-Start
+operation; seven menu clicks preceded exclusive player ownership.
+
+The worker assigned Rhineland with four verified ordinary stages and one core
+reservation. Four Year Plan remained pending under the shared one-assignment/day
+budget. After STOP, ordinary unpause at speed4 and identical-plan restart, one
+45-second wait returned a historical timeout at 6 January 01:00 with Rhineland
+still active. The player then saw a durable read-only refusal and stopped. No
+actual Focus completion, second assignment, final restart check or campaign
+acceptance was reached.
+
+Independent stopped journals show five read-only refusals across 2–6 January.
+Three identify `Focus witness changed: own_context; game_state+0x460 size=4`:
+the witnessed game-clock field changed. Two retain `Snapshot witness changed`;
+their exact changing field remains unknown. The latest digest showed only the
+last refusal. Four Year Plan had zero attempts, no navigation and no consumed
+assignment budget. The one Rhineland receipt remained unchanged. The worker
+could observe again on later days; the player never issued an action retry.
+
+Among 32 player protocol rows, one actual read-only digest RPC returned
+`input_busy: Daily worker owns governor`; the identical read succeeded after a
+delay. A separate historical busy diagnostic and STOP's generic torn-read cause
+remain distinct. STOP retained one Complete assignment, one Pending entry and
+no uncertainty; Complete here means assignment, not finished Focus. Only speed4
+and unpause clock pairs occurred. No research actions or second-entry inputs
+appear in the final journals.
+
+Canonical release/status matched independent readback. The 622-second recording
+passed ffprobe; one ordinary owned close returned exit0 without signal or core
+dump in 2.297 seconds. Exact owned processes were absent and both brokers closed.
+The failed run remains preserved; later changes do not retroactively pass it.
+
+The following change adds whole-snapshot retries only to read-only Focus readiness,
+before navigation intent or assignment reservation. Torn reads and unsettled UI
+share at most four observations, 100 ms intervals, a one-second window after the
+first refusal and the original absolute deadline. Every call repeats authority,
+context and day checks. Late results and partial snapshots never supply action
+state. Other errors and possible-input states are not retryable. Exhaustion
+retains the actual failure. Latest rejected-read diagnostics are exposed as
+worker-lifetime history through digest/details and STOP; action histories remain
+durable. Live verification of this recovery is still pending.
+
+Composed validation passed 717 Rust 1.86 host tests, 825 reported actual Linux
+checks (823 substantive, including five X11 cases), 953 Python tests with 37
+skips, format, host/Linux Clippy, Linux MSRV all-target compilation and release
+linking. All 101 native source-input hashes stayed unchanged. These checks do
+not establish successful successive-Focus live play.

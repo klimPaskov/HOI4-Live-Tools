@@ -18,8 +18,16 @@ pub(crate) fn observed_ready<T>(
     target: &Target,
     until: Instant,
     observe: impl FnMut() -> Result<Option<(OwnState, T)>>,
+    rejected: &mut Vec<Error>,
 ) -> Result<Option<Ready<T>>> {
-    observed_ready_with(target, until, observe, Instant::now, std::thread::sleep)
+    observed_ready_with(
+        target,
+        until,
+        observe,
+        Instant::now,
+        std::thread::sleep,
+        rejected,
+    )
 }
 
 fn deadline() -> Error {
@@ -35,6 +43,7 @@ fn observed_ready_with<T>(
     mut observe: impl FnMut() -> Result<Option<(OwnState, T)>>,
     mut now: impl FnMut() -> Instant,
     mut sleep: impl FnMut(Duration),
+    rejected: &mut Vec<Error>,
 ) -> Result<Option<Ready<T>>> {
     let mut end = until;
     for index in 0..MAX_READS {
@@ -43,38 +52,52 @@ fn observed_ready_with<T>(
         }
         // The caller rechecks lease/gate/scope/day on every invocation. None
         // means cancellation or day change; neither is a navigation refusal.
-        let sample = observe()?;
+        // This callback observes only: no navigation intent, reservation or
+        // input has started. Discard a torn snapshot in full, then recheck all
+        // authority/context on the next call. Never reuse its partial payload.
+        let sample = observe();
+        if let Err(error) = &sample {
+            if error.code == "torn_read" {
+                rejected.push(Error::new(
+                    error.code,
+                    crate::daily_navigation::bounded_reason(&error.message),
+                ));
+            }
+        }
         if now() >= end {
             return Err(deadline());
         }
-        let Some((own, observed)) = sample else {
-            return Ok(None);
-        };
-        // Never turn invalid canonical producer data into UI readiness retries.
-        own.validate(target)?;
-        match next(&own, target) {
-            Ok(next) => {
-                return Ok(Some(Ready {
-                    next,
-                    own,
-                    observed,
-                }))
-            }
-            Err(error) if error.code == "focus_precondition" => {
-                if index + 1 == MAX_READS {
-                    return Err(error);
-                }
-                if index == 0 {
-                    end = end.min(now() + RETRY_WINDOW);
-                }
-                let at = now();
-                if at >= end {
-                    return Err(deadline());
-                }
-                sleep(INTERVAL.min(end - at));
-            }
+        let error = match sample {
+            Err(error) if error.code == "torn_read" => error,
             Err(error) => return Err(error),
+            Ok(None) => return Ok(None),
+            Ok(Some((own, observed))) => {
+                // Invalid producer data is never a readiness retry.
+                own.validate(target)?;
+                match next(&own, target) {
+                    Ok(next) => {
+                        return Ok(Some(Ready {
+                            next,
+                            own,
+                            observed,
+                        }))
+                    }
+                    Err(error) if error.code == "focus_precondition" => error,
+                    Err(error) => return Err(error),
+                }
+            }
+        };
+        if index + 1 == MAX_READS {
+            return Err(error);
         }
+        if index == 0 {
+            end = end.min(now() + RETRY_WINDOW);
+        }
+        let at = now();
+        if at >= end {
+            return Err(deadline());
+        }
+        sleep(INTERVAL.min(end - at));
     }
     unreachable!("Last rejected read returns its actual precondition")
 }
@@ -112,6 +135,7 @@ mod tests {
             },
             || time.get(),
             |delay| time.set(time.get() + delay),
+            &mut Vec::new(),
         )
         .unwrap()
         .unwrap();
@@ -145,6 +169,7 @@ mod tests {
                 },
                 || start,
                 |_| panic!("Ready/active state never delays"),
+                &mut Vec::new(),
             )
             .unwrap()
             .unwrap();
@@ -175,6 +200,7 @@ mod tests {
             },
             || time.get(),
             |_| panic!("Positive initial read never receives a retry limit"),
+            &mut Vec::new(),
         )
         .unwrap();
         assert!(result.is_some());
@@ -203,6 +229,7 @@ mod tests {
             },
             || time.get(),
             |delay| time.set(time.get() + delay),
+            &mut Vec::new(),
         )
         .err()
         .unwrap();
@@ -227,6 +254,7 @@ mod tests {
             },
             || time.get(),
             |delay| time.set(time.get() + delay),
+            &mut Vec::new(),
         )
         .err()
         .unwrap();
@@ -252,6 +280,7 @@ mod tests {
                 },
                 || time.get(),
                 |_| panic!("No delay after deadline"),
+                &mut Vec::new(),
             )
             .err()
             .unwrap();
@@ -280,6 +309,7 @@ mod tests {
             },
             || time.get(),
             |delay| time.set(time.get() + delay),
+            &mut Vec::new(),
         )
         .err()
         .unwrap();
@@ -303,6 +333,7 @@ mod tests {
                 assert_eq!(delay, Duration::from_millis(30));
                 time.set(time.get() + delay)
             },
+            &mut Vec::new(),
         )
         .err()
         .unwrap();
@@ -313,10 +344,14 @@ mod tests {
     #[test]
     fn reader_scope_validation_and_unknown_focus_errors_never_retry() {
         for code in [
-            "torn_read",
             "ownership_changed",
             "action_uncertain",
             "lease_expired",
+            "input_lease_required",
+            "permission_denied",
+            "invalid_focus_owner",
+            "input_not_queued",
+            "focus_stage_uncertain",
         ] {
             let reads = Cell::new(0);
             let start = Instant::now();
@@ -329,6 +364,7 @@ mod tests {
                 },
                 || start,
                 |_| panic!("Observer errors never retry"),
+                &mut Vec::new(),
             )
             .err()
             .unwrap();
@@ -352,7 +388,8 @@ mod tests {
                     Ok(Some((own.clone(), ())))
                 },
                 || start,
-                |_| panic!("Invalid producer is not UI readiness")
+                |_| panic!("Invalid producer is not UI readiness"),
+                &mut Vec::new(),
             )
             .is_err());
             assert_eq!(reads.get(), 1);
@@ -379,9 +416,152 @@ mod tests {
             },
             || time.get(),
             |delay| time.set(time.get() + delay),
+            &mut Vec::new(),
         )
         .unwrap();
         assert!(result.is_none());
         assert_eq!(reads.get(), 2);
+    }
+
+    #[test]
+    fn torn_read_is_discarded_before_fresh_active_wait_or_navigation() {
+        for active in [ActiveFocus::Idle, ActiveFocus::Active("GER_other".into())] {
+            let start = Instant::now();
+            let time = Cell::new(start);
+            let reads = Cell::new(0);
+            let mut rejected = Vec::new();
+            let result = observed_ready_with(
+                &target(Stage::Start),
+                start + Duration::from_secs(10),
+                || {
+                    reads.set(reads.get() + 1);
+                    if reads.get() == 1 {
+                        Err(Error::new(
+                            "torn_read",
+                            "Focus witness changed: own_context; game_state+0x460 size=4",
+                        ))
+                    } else {
+                        let mut own = ready();
+                        own.active_focus = active.clone();
+                        Ok(Some((own, reads.get())))
+                    }
+                },
+                || time.get(),
+                |delay| time.set(time.get() + delay),
+                &mut rejected,
+            )
+            .unwrap()
+            .unwrap();
+            assert_eq!(reads.get(), 2);
+            assert_eq!(result.observed, 2);
+            assert_eq!(rejected.len(), 1);
+            assert!(rejected[0].message.contains("game_state+0x460"));
+            assert_eq!(time.get() - start, INTERVAL);
+            assert_eq!(
+                matches!(result.next, Next::Wait),
+                matches!(active, ActiveFocus::Active(_))
+            );
+        }
+    }
+
+    #[test]
+    fn persistent_torn_reads_share_four_read_limit_and_preserve_actual_last_error() {
+        let start = Instant::now();
+        let time = Cell::new(start);
+        let reads = Cell::new(0);
+        let mut rejected = Vec::new();
+        let error = observed_ready_with::<()>(
+            &target(Stage::Start),
+            start + Duration::from_secs(10),
+            || {
+                reads.set(reads.get() + 1);
+                Err(Error::new("torn_read", format!("witness {}", reads.get())))
+            },
+            || time.get(),
+            |delay| time.set(time.get() + delay),
+            &mut rejected,
+        )
+        .err()
+        .unwrap();
+        assert_eq!(reads.get(), MAX_READS);
+        assert_eq!(rejected.len(), MAX_READS);
+        assert_eq!(error.message, "witness 4");
+        assert_eq!(rejected[0].message, "witness 1");
+        assert_eq!(time.get() - start, INTERVAL * 3);
+    }
+
+    #[test]
+    fn torn_read_followup_can_cancel_or_refuse_authority_without_returning_old_state() {
+        for code in [
+            None,
+            Some("ownership_changed"),
+            Some("input_lease_required"),
+            Some("action_uncertain"),
+            Some("invalid_focus_owner"),
+        ] {
+            let start = Instant::now();
+            let time = Cell::new(start);
+            let reads = Cell::new(0);
+            let mut rejected = Vec::new();
+            let result = observed_ready_with::<()>(
+                &target(Stage::Start),
+                start + RETRY_WINDOW,
+                || {
+                    reads.set(reads.get() + 1);
+                    if reads.get() == 1 {
+                        Err(Error::new("torn_read", "date changed"))
+                    } else {
+                        match code {
+                            Some(code) => Err(Error::new(code, "fresh refusal")),
+                            None => Ok(None),
+                        }
+                    }
+                },
+                || time.get(),
+                |delay| time.set(time.get() + delay),
+                &mut rejected,
+            );
+            match code {
+                Some(code) => assert_eq!(result.err().unwrap().code, code),
+                None => assert!(result.unwrap().is_none()),
+            }
+            assert_eq!(reads.get(), 2);
+            assert_eq!(rejected.len(), 1);
+        }
+    }
+
+    #[test]
+    fn torn_and_unsettled_reads_share_one_window_and_late_state_never_authorizes_input() {
+        let start = Instant::now();
+        let time = Cell::new(start);
+        let reads = Cell::new(0);
+        let mut rejected = Vec::new();
+        let error = observed_ready_with(
+            &target(Stage::Start),
+            start + Duration::from_secs(10),
+            || {
+                reads.set(reads.get() + 1);
+                match reads.get() {
+                    1 => Err(Error::new("torn_read", "date changed")),
+                    2 => {
+                        let mut own = ready();
+                        own.research_tree_root = LocalRoot::Unknown;
+                        Ok(Some((own, ())))
+                    }
+                    _ => {
+                        time.set(start + RETRY_WINDOW);
+                        Ok(Some((ready(), ())))
+                    }
+                }
+            },
+            || time.get(),
+            |delay| time.set(time.get() + delay),
+            &mut rejected,
+        )
+        .err()
+        .unwrap();
+        assert_eq!(error.code, "focus_deadline");
+        assert_eq!(reads.get(), 3);
+        assert_eq!(rejected.len(), 1);
     }
 }

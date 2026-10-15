@@ -80,9 +80,20 @@ remain preserved; no player RPC returned an error. The 702.666-second recording,
 dedicated campaign-Start artifact, canonical release, normal exit 0 and exact
 process absence passed. Both brokers are closed; no player owns input.
 
+Run053 on immutable `3ade3b0` failed the successive-Focus gate while Rhineland
+was still active. The independent journals retain five read-only refusals on
+2–6 January: three name the game-clock witness and two have a generic snapshot
+witness message. Four Year Plan stayed Pending with zero attempts and no input.
+The player saw the latest refusal after one advancing wait and stopped; it did
+not retry an action. Canonical release, the 622-second recording, normal exit0
+and exact-process absence passed. Both brokers are closed. The next change
+retries wholly discarded torn snapshots only during read-only Focus readiness,
+within the existing four-read/one-second bound; live validation remains pending.
+
 ## Immediate acceptance work
 
-1. Validate successive Focus choices over advancing time, using the now-verified
+1. Validate the bounded read-only recovery exposed by run053, then successive
+   Focus choices over advancing time, using the now-verified
    completed-membership reader to distinguish assignment from finished Focus.
    Run052 passed actual Rhineland completion and restart on immutable `64f3634`:
    the selected-detail/Start scope change retained all relevant checks. Completed

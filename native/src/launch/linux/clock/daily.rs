@@ -295,6 +295,15 @@ impl Controller {
                     .as_ref()
                     .and_then(|a| a.report.try_lock().ok().map(|r| r["focus"].clone()))
                     .unwrap_or(Value::Null);
+                let focus_readiness = active
+                    .as_ref()
+                    .and_then(|a| {
+                        a.report
+                            .try_lock()
+                            .ok()
+                            .map(|r| r["focus_readiness_historical"].clone())
+                    })
+                    .unwrap_or(Value::Null);
                 let core_state = active
                     .as_ref()
                     .map(|a| -> Result<Value> {
@@ -330,7 +339,7 @@ impl Controller {
                     .transpose()?
                     .unwrap_or((Value::Null, Value::Null));
                 Ok(
-                    json!({"assignments":assignments,"daily_budget":budget,"core_pending_historical":core_state,"focus":focus,"latest_focus_wait_historical":focus_wait,"worker_stopped":true,"game_time_changed":false,"uncertainty_retained":self.blocked.load(Ordering::Acquire),"last_error":last_error,"last_preparation_refusal":last_preparation_refusal,"last_stage_failure":last_stage_failure}),
+                    json!({"assignments":assignments,"daily_budget":budget,"core_pending_historical":core_state,"focus":focus,"latest_focus_wait_historical":focus_wait,"focus_readiness_historical":focus_readiness,"worker_stopped":true,"game_time_changed":false,"uncertainty_retained":self.blocked.load(Ordering::Acquire),"last_error":last_error,"last_preparation_refusal":last_preparation_refusal,"last_stage_failure":last_stage_failure}),
                 )
             }
             "details" => {
@@ -1257,29 +1266,35 @@ fn run_focus(
         stage: crate::focus_stage::Stage::Start,
         focus_id: focus_id.clone(),
     };
+    let mut rejected = Vec::new();
     let result = (|| -> Result<_> {
-        let ready = crate::daily_focus_navigation::observed_ready(&target, until, || {
-            if stop.load(Ordering::Acquire) {
-                return Ok(None);
-            }
-            drop(input_permit(gate)?);
-            state.authority.authorize(token, &state.guard.epoch)?;
-            if unresolved(state) || navigation.blocked() {
-                return Err(Error::new(
-                    "action_uncertain",
-                    "Input unresolved during Focus readiness",
-                ));
-            }
-            let (own, context, binding) =
-                focus::observed_bound(process, &mut state.guard, &target)?;
-            focus_scope(&context, &governor.plan().scope)?;
-            if stop.load(Ordering::Acquire)
-                || (i64::from(context.campaign.date_raw) - 43_800_000).div_euclid(24) != day
-            {
-                return Ok(None);
-            }
-            Ok(Some((own, (context, binding))))
-        })?;
+        let ready = crate::daily_focus_navigation::observed_ready(
+            &target,
+            until,
+            || {
+                if stop.load(Ordering::Acquire) {
+                    return Ok(None);
+                }
+                drop(input_permit(gate)?);
+                state.authority.authorize(token, &state.guard.epoch)?;
+                if unresolved(state) || navigation.blocked() {
+                    return Err(Error::new(
+                        "action_uncertain",
+                        "Input unresolved during Focus readiness",
+                    ));
+                }
+                let (own, context, binding) =
+                    focus::observed_bound(process, &mut state.guard, &target)?;
+                focus_scope(&context, &governor.plan().scope)?;
+                if stop.load(Ordering::Acquire)
+                    || (i64::from(context.campaign.date_raw) - 43_800_000).div_euclid(24) != day
+                {
+                    return Ok(None);
+                }
+                Ok(Some((own, (context, binding))))
+            },
+            &mut rejected,
+        )?;
         let Some(ready) = ready else { return Ok(None) };
         let (context, binding) = ready.observed;
         if matches!(ready.next, crate::daily_focus_navigation::Next::Wait) {
@@ -1294,6 +1309,18 @@ fn run_focus(
         }
         Ok(Some((ready.next, binding)))
     })();
+    if !rejected.is_empty() {
+        // Latest diagnostic for this worker lifetime. This is neither durable
+        // action history nor permission to retry a navigation/input operation.
+        if let Ok(mut r) = report.lock() {
+            r["focus_readiness_historical"] = json!({
+                "entry_id":entry.id,"day":day,"rejected_reads":rejected,
+                "outcome":match &result { Ok(Some(_)) => "ready", Ok(None) => "deferred", Err(_) => "failed" },
+                "historical":true,"worker_lifetime_only":true,"input_authorized":false,
+                "navigation_attempted_during_reads":false,"assignment_budget_consumed_during_reads":false
+            });
+        }
+    }
     let (next, binding) = match result {
         Ok(Some(value)) => value,
         Ok(None) => return Ok(FocusRun::Wait),
@@ -1637,6 +1664,7 @@ fn compact_observation_with_details(
     digest["focus"] = report["focus"].clone();
     digest["focus_permission"] = report["focus_permission"].clone();
     digest["latest_focus_wait_historical"] = report["focus_wait"].clone();
+    digest["focus_readiness_historical"] = report["focus_readiness_historical"].clone();
     digest["quarantined"] = json!(blocked);
     digest["input_authorized"] = json!(false);
     // Retain the complete sanitized report before any optional-history pruning.
@@ -1817,6 +1845,31 @@ mod tests {
         assert!(out["latest_preparation_historical"]["private_scope"].is_null());
         assert_eq!(out["input_authorized"], false);
         assert!(!serde_json::to_string(&out).unwrap().contains("/owned/game"));
+    }
+    #[test]
+    fn recovered_readiness_diagnostics_survive_digest_compaction_as_history_only() {
+        let history = json!({"entry_id":"queued-focus","day":706640,"rejected_reads":[{"code":"torn_read","message":"game clock changed"}],"outcome":"ready","historical":true,"worker_lifetime_only":true,"input_authorized":false});
+        let report = json!({"running":true,"focus_readiness_historical":history,"last_error":null,
+            "last_batch":{"digest":{"verified":[],"retained":(0..256).map(|i|json!({"id":i,"reason":"x".repeat(160)})).collect::<Vec<_>>()}}});
+        let mut details = crate::daily_digest::Details::default();
+        let out =
+            compact_observation_with_details(&mut details, digest_sample(), &report, false, 1)
+                .unwrap();
+        assert!(serde_json::to_vec(&out).unwrap().len() <= 2048);
+        let saved = if out["history"]["compacted"] == true {
+            details
+                .get(
+                    out["history"]["snapshot_id"].as_str().unwrap(),
+                    "focus_readiness_historical",
+                )
+                .unwrap()["value"]
+                .clone()
+        } else {
+            out["focus_readiness_historical"].clone()
+        };
+        assert_eq!(saved, history);
+        assert_eq!(out["quarantined"], false);
+        assert_eq!(out["input_authorized"], false);
     }
     #[test]
     fn digest_size_trimming_preserves_fresh_counts_revision_and_history_labels() {
