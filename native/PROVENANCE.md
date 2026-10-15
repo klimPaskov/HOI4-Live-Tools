@@ -15,8 +15,8 @@ upstream 1.19.2 offsets were not copied as current-build evidence.
 accessor, paired child/button registries and the ordinary politics-to-focus
 callback. It observes these associations without executing them. The fixed `Q`
 transport names the politics shortcut; it is not a direct focus shortcut.
-`focus_stage.rs` adapts this project's durable research-stage policy. It remains
-a library without a live backend or MCP registration. Local focus readiness
+`focus_stage.rs` adapts this project's durable research-stage policy. The optional
+owned Linux adapter exposes its verified ordinary stages through MCP. Local focus readiness
 requires the literal shown flag and both transition channels settled at zero;
 unknown or moving windows cannot clear local blockers. No game assets are
 redistributed and local flags never supply routing or input authority.
@@ -25,10 +25,12 @@ redistributed and local flags never supply routing or input authority.
 existing Python governor and standing-plan concepts. Typed future plan fields
 do not implement economy, army or naval actions. The current research receipt
 converter accepts only fresh verified assignment results. The worker, shared
-controller integration and safe plan-update API remain unfinished; non-Unix
-private storage returns an explicit capability error.
+controller and guarded plan updates have bounded Linux assignment/restart
+evidence. Economy, army and naval plans remain unfinished; non-Unix private
+storage returns an explicit capability error.
 
-The owned Linux preview exposes observations and optionally ordinary clock keys.
+The owned Linux preview exposes observations and optionally ordinary clock,
+research and Focus controls behind exclusive leases and durable journals.
 The failed engine posting path remains permanently quarantined in
 the disclosed private upstream validation adapter. No raw process-write, injection,
 console or foreign-country interface is exposed by this Rust MCP.
@@ -270,7 +272,9 @@ own focus containers and own research Info blockers without reading selected
 foreign technology payloads. Local mode/visibility/animation facts never mean
 global modal clearance or effective routing. The private Sprite point preparer
 shares the existing maths and consumes producer-only facts; it has no caller UI
-booleans, dispatcher or MCP registration. Focus actions remain unverified.
+booleans or independent input authority. The optional owned Focus adapter adds
+leases, persisted intent, ordinary input and canonical readback; bounded live
+assignment and completion evidence is recorded separately.
 
 The category command reader now shares the unchanged canonical research
 validation core with its full UI body under one final witness set. This is
@@ -304,3 +308,26 @@ the observer returns distinct sorted keys without inferring repeat counts or
 completion causes. Every active/completed pointer must first belong to the
 current own canonical tree. Changed/shared trees remain unsupported, and all
 observed fields must survive the final read and process-ownership checks.
+
+
+`production_lines/equipment.rs` consults `calling/game.py`'s `_load_equipment`
+and `production_lines` at the pinned Clausewitz-MCP commit. The implementation is
+new project code. It uses only the independently recovered current Linux base
+catalog: global `0x439f440`, exact database primary `0x41f72d8`, vector data `+0x60`,
+capacity `+0x68`, count `+0x6c`, stride eight. Constructor `0xc54510`, growth at
+`0xc547b2`–`0xc5484c` and iterator `0xc59cf0` provide structural witnesses.
+
+An authenticated own line's `+0x88` variant must have primary `0x41fa1a0`.
+Constructors `0xce0f80`/`0xce1670` store its type pointer at `+0x3f0` and copy the
+type's intern key `+8` to variant `+0x14`. Selected type primary `0x41f8810`, name
+`+0x10` and intern storage are supported by constructor `0xca5a50`. Resolver
+`0xc54e20`/`0xc61c10` proves intern keys are not vector indices. These are static
+witnesses from the exact supported ELF, not live production validation.
+
+The port checks fresh pointer membership before selected type payloads, preserves
+explicit unsupported coverage, and witnesses all reads before paging. It never
+traverses unselected type payloads or the upstream's other unreviewed collections.
+A visible owned licensed line may reference a foreign-designed variant; exposing
+its base key does not claim variant-country ownership or authorize reading its
+hidden design. No game data or decompiled artifacts are redistributed. Allocation,
+custom variant identity, eligibility and native posting remain unavailable.

@@ -348,7 +348,7 @@ fn focus_position_policy_reads_bounded_actual_sized_vector_without_sibling_deref
         "own_focus_position_ancestor"
     );
     assert_eq!(h["chain"][2]["child_count_raw"], 4687);
-    assert_eq!(h["chain"][2]["capacity_limit"], 8192);
+    assert_eq!(h["chain"][2]["capacity_limit"], 16384);
     assert_eq!(h["chain"][2]["aggregate_entry_limit"], 16384);
     assert!(crate::research_candidate_observation::control_surface(&focus).is_ok());
     assert!(f.untouched(0xdead0000, 8));
@@ -372,10 +372,10 @@ fn focus_position_policy_still_refuses_root350_coordinate_conversion() {
 #[test]
 fn focus_position_capacity_and_aggregate_limits_refuse_before_payload() {
     let mut f = large_focus_position(GRAPH + 0x1f0);
-    f.number(0x900c8, 8193);
+    f.number(0x900c8, 16385);
     f.word(0x900c0, 0xbeef0000);
     let g = f.observe_policy(true).unwrap();
-    assert_eq!(g["parent_chain"]["policy_boundary"]["capacity"], 8193);
+    assert_eq!(g["parent_chain"]["policy_boundary"]["capacity"], 16385);
     assert_eq!(
         g["parent_chain"]["policy_boundary"]["aggregate_entry_limit"],
         16384
@@ -468,5 +468,87 @@ fn focus_position_policy_unknown_cycle_detached_and_torn_fields_still_refuse() {
         let mut f = large_focus_position(GRAPH + 0x1f0);
         f.torn = Some(field);
         assert_eq!(f.observe_policy(true).unwrap_err().code, "torn_read");
+    }
+}
+
+#[test]
+fn reopened_focus_allocation_reads_only_live_children_and_keeps_other_bounds() {
+    // Run056's exact boundary sizes; the remainder of this graph is generated.
+    for capacity in [12138, 16384] {
+        let mut f = large_focus_position(GRAPH + 0x1f0);
+        f.number(0x900c8, capacity);
+        f.number(0x900cc, 3806);
+        let ordinary = f.observe().unwrap();
+        assert_eq!(
+            ordinary["parent_chain"]["policy_boundary"]["capacity_limit"],
+            2048
+        );
+        assert!(f.untouched(0xb0000, 3806 * 8));
+        let g = f.observe_policy(true).unwrap();
+        let h = &g["parent_chain"];
+        assert_eq!(h["status"], "closed_to_owned_graphics_root");
+        assert_eq!(h["chain"][2]["capacity_limit"], 16384);
+        assert_eq!(h["chain"][2]["child_count_raw"], 3806);
+        assert_eq!(h["chain"][2]["inspected_entries_after"], 3817);
+        assert_eq!(h["chain"][2]["aggregate_entry_limit"], 16384);
+        assert_eq!(h["chain"][0]["capacity_limit"], 2048);
+        assert_eq!(h["chain"][3]["capacity_limit"], 8192);
+        assert!(crate::research_candidate_observation::control_surface(&g).is_ok());
+        assert!(f.untouched(0xb0000 + 3806 * 8, (4687 - 3806) * 8));
+        assert!(f.untouched(0xdead0000, 8));
+    }
+}
+
+#[test]
+fn expanded_focus_capacity_cannot_expand_aggregate_pointer_payload() {
+    for count in [16372, 16373] {
+        let mut f = large_focus_position(GRAPH + 0x1f0);
+        f.zero(0xb0000, count * 8);
+        f.word(0xb0000, P0);
+        f.number(0x900c8, 16384);
+        f.number(0x900cc, count as i32);
+        let g = f.observe_policy(true).unwrap();
+        let h = &g["parent_chain"];
+        if count == 16372 {
+            assert_eq!(h["graphics_root_closed"], true);
+            assert_eq!(h["chain"][3]["inspected_entries_after"], 16384);
+        } else {
+            assert_eq!(h["status"], "unavailable_policy_bound");
+            assert_eq!(
+                h["policy_boundary"]["policy_scope"],
+                "exact_owned_graphics_root"
+            );
+            assert_eq!(
+                h["policy_boundary"]["inspected_entries_before_attempt"],
+                16384
+            );
+            assert_eq!(h["policy_boundary"]["child_payload_read"], false);
+            assert!(f.untouched(0xa0020, 8));
+            assert!(crate::research_candidate_observation::control_surface(&g).is_err());
+        }
+    }
+}
+
+#[test]
+fn reopened_focus_capacity_still_requires_unique_membership_and_final_witnesses() {
+    for case in 0..4 {
+        let mut f = large_focus_position(GRAPH + 0x1f0);
+        f.number(0x900c8, 12138);
+        f.number(0x900cc, 3806);
+        match case {
+            0 => f.word(0xb0000 + 2343 * 8, 0xdead0000),
+            1 => f.word(0xb0000, P0),
+            2 => f.torn = Some(0x900c0),
+            _ => f.torn = Some(0xb0000),
+        }
+        assert_eq!(
+            f.observe_policy(true).unwrap_err().code,
+            if case < 2 {
+                "invalid_gui_hierarchy"
+            } else {
+                "torn_read"
+            }
+        );
+        assert!(f.untouched(0xdead0000, 8));
     }
 }

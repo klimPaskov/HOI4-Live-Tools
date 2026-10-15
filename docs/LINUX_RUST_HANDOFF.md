@@ -102,20 +102,37 @@ exit0 and exact-process absence passed; both brokers are closed. The original
 160-byte reason lost the hierarchy boundary numbers. New compact diagnostics
 retain every policy quantity within that bound without changing traversal limits.
 
+
+Run055 on `6d4daa4` passed paused geometry for both Focus nodes, closing through
+10 ancestors to the owned graphics root. It did not reproduce the later failure.
+Run056 on the same immutable runtime then retained the actual advancing failure:
+Four Year Plan View refused before intent with count 3,806, allocated capacity
+12,138, capacity limit 8,192, prior aggregate 11 and aggregate limit 16,384. A prior
+View refusal retained a clock-witness torn read. STOP had no uncertainty and the
+second entry had zero assignment attempts. Under its pre-granted diagnostic
+extension, one ordinary pause preceded separately timestamped membership and
+geometry reads: Rhineland was completed on 6 February 22:00, no Focus was active,
+and the same geometry boundary was present. Canonical release, 652.666-second
+recording, normal exit 0 and exact-process absence passed. Both brokers are closed.
+
+The next source permits capacity 16,384 only for the existing opt-in exact Focus
+position ancestor class. Aggregate sibling-pointer reads remain capped at 16,384;
+owned-root and ordinary/container capacity bounds stay 8,192 and 2,048. Types,
+reciprocal membership, final witnesses and input guards remain mandatory. The
+read-only production port adds optional base equipment keys; generated tests
+cover it, but live production comparison and allocation remain pending.
+
 ## Immediate acceptance work
 
-1. Diagnose run054's Four Year Plan hierarchy limit with one fresh owned,
-   paused read-only geometry observation after verified Focus opening. Retain
-   full structured boundary fields; never guess the lost numbers or loosen
-   guards without that evidence. Then verify successive
-   Focus choices over advancing time, using the now-verified
-   completed-membership reader to distinguish assignment from finished Focus.
-   Run052 passed actual Rhineland completion and restart on immutable `64f3634`:
-   the selected-detail/Start scope change retained all relevant checks. Completed
-   membership grew from zero to one on 4 February; no duplicate input followed.
-   Use one existing Luna medium player, worker/ordinary-clock separation,
-   explicit fixed bounds and the recording-checked campaign-Start operation.
-   Do not infer run051's exact changing field from the later success.
+1. Verify successive Focus choices on the tested capacity correction, using
+   completed membership to distinguish assignment from finished Focus. Run056
+   supplies the original boundary evidence; run054's lost quantities remain
+   unknown. Keep one existing Luna medium player, worker/ordinary-clock separation,
+   fixed bounds, recorded campaign Start and independent stopped-journal audit.
+   Require Rhineland membership, active Four Year Plan and identical-plan restart
+   without duplicate input. No clean two-year or campaign acceptance is implied.
+   The run056 post-failure reads were explicitly granted before its launch;
+   any future diagnostic exception must also be fixed before the input grant.
 2. Preserve durable assignment receipts and budgets through advancing days and
    queued heads. Prove finished technology membership/empty slot before refill;
    an active Focus or assigned slot alone does not prove completion. Use fresh

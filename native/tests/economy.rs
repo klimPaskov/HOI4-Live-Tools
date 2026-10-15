@@ -401,9 +401,7 @@ fn production_fixture() -> Fixture {
         f.number(p + 0x14, 12);
         f.number(p + 0x18, 2);
         f.number(p + 0xe8, 15);
-        for a in p + 0x88..p + 0x90 {
-            f.data.remove(&a);
-        }
+        f.word(p + 0x88, 0);
     }
     f
 }
@@ -462,7 +460,7 @@ fn production_lines_preserve_full_string_handles_distinct_counters_and_own_conte
     ] {
         assert_eq!(v[flag], false);
     }
-    production_not_read(&f, &[0x80088, 0x81088, 0x82088, 0xdead0000, 0xbeef0000]);
+    production_not_read(&f, &[0x10000 + 0x439f440, 0xdead0000, 0xbeef0000]);
 }
 #[test]
 fn production_lines_foreign_owner_refuses_before_handle_counter_and_equipment() {
@@ -814,7 +812,7 @@ fn production_lines_pages_preserve_collection_indices_global_coverage_and_scope(
     assert_eq!(empty["total_count"], 4);
     assert_eq!(empty["page_count"], 0);
     assert!(empty["next_offset"].is_null());
-    production_not_read(&f, &[0x40070, 0x80088, 0x90008, 0x90020]);
+    production_not_read(&f, &[0x40070, 0x90008, 0x90020]);
 }
 
 #[test]
@@ -900,3 +898,6 @@ fn production_lines_default_page_is_compact_with_fresh_nonpersistent_collection_
     assert!(last["next_offset"].is_null());
     assert_eq!(last["page_index_scope"], "fresh_snapshot_collection_only");
 }
+
+#[path = "economy/equipment.rs"]
+mod equipment;

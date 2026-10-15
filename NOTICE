@@ -40,6 +40,10 @@ Upstream foundation and attribution:
   semantics. Their current-build trigger, handle and location layouts and all
   renderer/input guards are independently recovered project work; observations
   do not authorize engine calls or reveal foreign-unit payload.
+  native/src/production_lines/equipment.rs consults calling/game.py's
+  _load_equipment and production_lines for base-equipment naming semantics.
+  Fresh catalog membership, current-build layouts and own-line guards are
+  independent project code; no custom design or allocation authority is implied.
   native/src/graph_kernel.rs independently implements bounded components and
   multi-source breadth-first search, consulting calling/doctrine.py and
   calling/ragemicro.py. It operates on caller-supplied public/generated topology;

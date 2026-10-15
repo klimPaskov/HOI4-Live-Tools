@@ -3345,7 +3345,7 @@ successes. The next diagnostic records bounded mode/root/blocker and selection
 facts from the actual refused observation, without extra reads or changed action,
 retry or journal authority. Full campaigns remain unaccepted.
 
-The diagnostic's composed source passed 686 Rust1.86 host tests, 793 reported
+The diagnostic's composed source passed 686 Rust 1.86 host tests, 793 reported
 actual Linux checks (791 substantive), all five X11 cases, 953 Python tests
 (37 skips), format, host/Linux Clippy, Linux MSRV all-target compilation and
 release linking. Its two new fixtures verify exact refusal facts, no selected-key
@@ -3372,7 +3372,7 @@ dispatch/readback, journal transitions and shared assignment budgets are unchang
 Nine deterministic fixtures cover fresh state/binding replacement, ready/active
 immediate returns, read-count and time bounds, retained final refusal, late result
 rejection, original first-read deadline, cancellation/day deferral, and original
-observer/validation failures without retry. Composed validation passed695 Rust1.86
+observer/validation failures without retry. Composed validation passed695 Rust 1.86
 host tests,802 reported actual Linux checks (800 substantive), all five X11 cases,
 953 Python tests (37 skips), format, host/Linux Clippy, Linux MSRV all-target
 compilation and release linking. All99 code/build/test input hashes remained
@@ -3779,3 +3779,92 @@ still verifies durable persistence through restart. No runtime change was made,
 and the rebuilt Linux CLI is byte-identical. The Linux reopen failure's cause
 remains unestablished; later passing runs do not erase it. No Luna input grant
 was issued while this CI gate was failing.
+
+
+## Run055: paused Focus geometry diagnostic — 15 October 2026
+
+One existing Luna player at medium reasoning used immutable `6d4daa4`, with
+Linux CLI SHA256 `f64012cd722b6a69f78a84d887416cf3368749b83776fc1a6e9198667bb55f7c`.
+This was a paused Normal/historical/FAIR Germany diagnostic, with workers disabled.
+The owner initially launched the preceding source's runtime; its test-only
+portability fix rebuilt to the identical CLI bytes. All nine CI jobs for the
+final source passed before the recording and exclusive player grant.
+
+Ordinary OpenPolitics and OpenFocus each produced a verified receipt. Full
+read-only geometry for Four Year Plan and Rhineland each closed through ten
+ancestors/payload hops to `owned_graphics_root_1f0`, within the sixteen-hop limit.
+Both nodes had binding-verified `bg` and `symbol` controls. The largest intermediate
+position contained 4,687 children with capacity limit 8,192; the final aggregate
+was 8,870 under 16,384. Neither observation reported a policy boundary. The calls
+returned in 85.839/87.857 ms RPC; their producer timings were 69.984/71.525 ms.
+These paused observations do not reproduce or explain run054's later failed state.
+
+Independent audit found 16 player RPC rows and no RPC errors, two verified Focus
+input pairs, and no View, Start, worker, research or clock action. The final state
+remained paused at 1 January 1936 noon, no active Focus and four empty research slots.
+Canonical lease release matched independent guest readback. The 714.333-second
+recording passed ffprobe, and one ordinary owned close returned exit 0 without
+signal/core dump in 2.502 seconds. All four exact owned processes were absent and
+both brokers closed. Successive-Focus and full campaign acceptance remained open.
+
+## Run056: successive Focus capacity boundary retained — 15 October 2026
+
+The same immutable `6d4daa4` runtime and one Luna medium player repeated the
+Normal/historical/FAIR Germany plan. Rhineland assignment matched in 12.155
+seconds while paused. STOP, ordinary unpause and identical-plan restart retained
+its receipt and one-assignment-per-day budget. Six 45-second advancing waits
+returned historical timeouts; the last accepted snapshot was 4 February 07:00
+with no active Focus, 357.077 seconds after the unpause reply. The player's metrics
+prose incorrectly described Rhineland as still active in that final wait; raw
+protocol evidence is authoritative.
+
+Four Year Plan OpenFocus passed on day 706674. View first refused BeforeIntent
+with a clock witness change on that day. A second BeforeIntent refusal on day 706675
+retained the complete original message:
+
+```text
+Root closure policy bound: stage=ancestor scope=focus_position count=3806 cap=12138 cap_max=8192 prior=11 sum_max=16384 hops=2
+```
+
+No second View click or assignment reservation occurred. STOP retained one Complete
+assignment, Four Year Plan Pending with zero attempts, zero in-flight work and no
+uncertainty. Its historical last-attempt-day budget remained 1/1/0. Independent
+journals contain five verified Focus input pairs, two BeforeIntent View refusals,
+one core reservation/completion and no research actions. The 85 player RPC rows
+include two actual read-only digest busy errors. Recovered read-only snapshots
+and historical worker errors remain separate from those RPC errors.
+
+This run's pre-granted failure extension allowed a verified ordinary pause after
+STOP, followed by separately timestamped own overview, completion membership and
+exactly one full Four Year Plan geometry read. On 6 February 22:00 the paused
+membership contained only Rhineland, active Focus was null and all four research
+slots were empty. Both requested node controls independently reported the same
+count/capacity boundary; their rejected child payload was unread. These later
+observations are not substituted for the original failure state.
+
+Canonical release/status matched independent guest readback. The 652.666-second
+recording passed ffprobe, with its first packet before the dedicated campaign
+Start. One ordinary owned close returned exit 0 without signal/core dump in 2.588
+seconds. All four exact owned processes were absent, both brokers closed, and
+all 101 native source inputs and 24 private helpers remained unchanged. The final
+successive-assignment restart gate was not reached; this remains a failed run.
+
+The correction raises only the existing opt-in exact Focus position ancestor's
+allocated-capacity policy from 8,192 to 16,384. The total pointer payload per path
+remains 16,384 entries/128 KiB; owned-root and ordinary/container capacities remain
+8,192 and 2,048. No sibling is dereferenced. Exact types, unique reciprocal child
+membership, cycles/depth, owned root closure, final witnesses and all input gates
+remain required. Shared policy construction keeps accepted-chain metadata aligned
+with refusal diagnostics. Generated regression cases cover the recorded boundary,
+exact capacity/aggregate limits, unread rejected payloads and final mutations;
+the remaining generated hierarchy is not live evidence. A new live gate is required.
+
+
+The combined Focus-capacity correction and production base-equipment reader
+passed 733 Rust 1.86 host tests, 841 reported actual Linux checks (839 substantive,
+including five X11 cases), 953 Python tests with 37 skips, format, host/Linux Clippy,
+Linux MSRV all-target compilation and release linking. All 103 native source
+inputs remained fixed. Ten new production cases cover owner/catalog/type joins,
+unsupported coverage, fresh request-local reuse, malformed identities and final
+witness changes before paging. These are generated checks; live production-key
+comparison and successful successive-Focus verification remain pending.

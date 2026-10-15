@@ -1,7 +1,8 @@
 //! Own equipment-line observations for the verified Linux build only.
 //! Independently recovered constructors/save/handle/keyword witnesses:
 //! production-lines-v1, ELF a4971c9e8ac9a6f2487dea109e01f9839ee59db7.
-//! No equipment traversal, UI/callback/command, allocation or input authority.
+//! Base equipment type joins only; no design payload, allocation or input authority.
+mod equipment;
 use crate::{
     economy,
     error::{Error, Result},
@@ -86,6 +87,8 @@ fn observe(
     let mut unsupported = Vec::new();
     let mut handles = BTreeSet::new();
     let mut anomalous = 0;
+    let mut equipment_catalog = None;
+    let mut equipment_unavailable = 0;
     for (index, &line) in entries.iter().enumerate() {
         let primary = reader.u64(line)?;
         let (kind, expected_word) = if primary == base + 0x42ede08 {
@@ -126,10 +129,12 @@ fn observe(
         if !within_policy {
             anomalous += 1;
         }
+        let equipment = equipment::observe(&reader, base, line, &mut equipment_catalog)?;
+        equipment_unavailable += usize::from(equipment.key.is_none());
         lines.push(json!({"entry_index":index,"line_kind":kind,
             "line_handle":format!("0x{handle:016x}"),
             "handle_scope":"own_current_snapshot_collection",
-            "equipment_id":null,
+            "equipment_id":equipment.key,"equipment_unavailable_reason":equipment.unavailable,
             "factory_counters":{"active_factories_raw_signed":active,"damaged_factories_raw_signed":damaged,
                 "requested_factories_raw_signed":requested,"available_under_reviewed_policy":within_policy,
                 "unavailable_reason":if within_policy {Value::Null} else {json!("anomalous_counter_policy")}},
@@ -154,7 +159,7 @@ fn observe(
         own: [country, production],
         entries,
     };
-    let value = json!({"source":"native own equipment production lines","build_id":game::BUILD_ID,
+    let mut value = json!({"source":"native own equipment production lines","build_id":game::BUILD_ID,
         "scope":"own_equipment_line_collection_only","owned":true,"player":context.campaign.player,
         "handle_scope":{"kind":"own_current_snapshot_collection","player":context.campaign.player,
             "playthrough_id":context.campaign.playthrough_id,"date_raw":context.campaign.date_raw,
@@ -171,10 +176,15 @@ fn observe(
         "lines":lines,"unsupported_type_metadata":unsupported,
         "collection_policy":{"maximum_capacity":LINE_LIMIT,"engine_invariant_claimed":false},
         "general_production_collection_available":false,
-        "equipment_ids_available":false,"ui_allocation_available":false,"idle_capacity_available":false,"eligibility_available":false,
+        "equipment_ids_available":unsupported_count==0 && equipment_unavailable==0,
+        "ui_allocation_available":false,"idle_capacity_available":false,"eligibility_available":false,
         "cross_load_identity_available":false,"input_authorized":false,"observation_paused_game":false,
         "freshness":{"observed_unix_ms":SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),
             "elapsed_ms":start.elapsed().as_secs_f64()*1000.0,"read_calls_kind":"logical_read_requests",
             "read_calls":reader.calls.get()+end_calls as u64,"read_bytes":reader.bytes.get()+end_bytes}});
+    value["equipment_id_kind"] = json!("base_equipment_type_key");
+    value["equipment_id_unavailable_count"] = json!(unsupported_count + equipment_unavailable);
+    value["equipment_catalog_scope"] = json!("reviewed_base_equipment_types_only");
+    value["custom_variant_identity_available"] = json!(false);
     Ok((value, context))
 }

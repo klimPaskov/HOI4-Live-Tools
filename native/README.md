@@ -63,7 +63,11 @@ it is not durable action history or retry authority. Run053 exposed clock-tick
 refusals before this recovery change. Run054 observed successful recovery across
 advancing days, then failed Four Year Plan View geometry before input. Geometry
 policy refusals now preserve stage, scope, count, capacity and aggregate limits
-within the existing durable reason bound; no traversal limit was relaxed.
+within the existing durable reason bound. Run056 then identified retained Focus
+position capacity 12,138 for 3,806 children. That exact ancestor class now permits
+capacity 16,384 while retaining the 16,384 aggregate pointer-read limit; ordinary
+containers and owned-root bounds remain unchanged. Successive-Focus validation
+of this correction is pending.
 
 Only proven BeforeIntent busy/torn reads qualify for bounded automatic retries;
 a possible delivered input never does. Focus Start retries retain the same
@@ -166,7 +170,7 @@ anchors do not establish a load-generation token.
 | `hoi4_research` | Own completed technologies and active signed counters; normalized progress remains unavailable |
 | `hoi4_army` | Own divisions with full snapshot-scoped handles, selected province joins and lossless raw status; recorded structural reads, units unverified |
 | `hoi4_economy` | Own named factory trigger counts, civilian project capacity and exact signed political-power units; live comparison pending |
-| `hoi4_production_lines` | Paged own equipment-line handles and separate signed factory counters; 21 own lines read in run034; equipment IDs, UI comparison and allocation unavailable |
+| `hoi4_production_lines` | Paged own line handles, separate signed factory counters and optional base equipment keys; key joins have fixture evidence, live comparison and allocation remain pending |
 | `hoi4_technology_list` | Canonical loaded technology IDs with filtering/pagination; no eligibility inference |
 | `hoi4_input_geometry` | GUI dimensions, scale, pointer and conditional source-window diagnostics; no click authority |
 | `hoi4_research_folders` | Exact loaded public folder IDs, independent of open GUI; no technology mapping or eligibility authority |
@@ -177,7 +181,7 @@ anchors do not establish a load-generation token.
 | `hoi4_research_nodes` | Paged current own-tree keys and conditional control associations |
 | `hoi4_focus_list` | Own canonical focus keys and selected detail diagnostics; no start authority |
 | `hoi4_focus_completed` | Preview: own engine completion-membership IDs and active key without opening GUI; bounded sorted pages; actual Rhineland membership verified in run052 |
-| `hoi4_focus_node_detail` | One own focus key's current-item/control associations; opt-in raw Sprite/Text/Frame diagnostics, awaiting live validation |
+| `hoi4_focus_node_detail` | One own focus key's current-item/control associations; opt-in raw Sprite/Text/Frame diagnostics; paused Sprite closure and the later capacity refusal recorded |
 | `hoi4_focus_selected_detail` | Compact exact selected window; Start is `window.start.ordinary_binding`, distinct from the node symbol; read-only with optional geometry |
 | `hoi4_focus_ui` | Optional owned Focus binding: compact canonical active focus, managed mode, local roots and complete own blocker counts; no lease or input |
 | `hoi4_wait_for` | Server wait, 1–50 seconds, for a date, focus/research changes, explicit assignment targets or research UI predicates |
@@ -193,8 +197,20 @@ military/naval members require a reciprocal owner; other subtypes return bounded
 metadata with ownership unproved. Handles are lossless hexadecimal strings scoped
 to the current snapshot, not persistent IDs. Active, damaged and requested signed
 counters remain separate; anomalous values are preserved and marked unavailable.
-General production, equipment joins and allocation controls remain unavailable.
-No production action is authorized by this read-only tool.
+Known own lines may expose `equipment_id` as a **base equipment type key**.
+It is not a custom variant or designer identity. The reader joins the line's
+variant to fresh reviewed base-catalog membership, checks exact types and matching
+intern keys, and reads only selected names. Unrelated definitions and variant
+owner/design payloads are not traversed. Catalog state is never cached across
+requests, and all join bytes participate in the final snapshot witness.
+
+An unresolved supported line has a null key and `equipment_unavailable_reason`;
+unknown line subtypes stay metadata-only. `equipment_ids_available` describes
+all scoped lines, not just the returned page; `equipment_id_unavailable_count`
+includes unsupported lines. Other equipment databases remain unreviewed. These
+joins have generated host/Linux fixture evidence only; a live UI comparison is
+pending. Custom variant identity, general production and allocation controls
+remain unavailable. No production action is authorized by this read-only tool.
 
 The current game uses a 365-day calendar, including February 28 in 1936. Its raw
 clock includes a 5000-year epoch and displays hours as 1–24. Raw research counters

@@ -13,6 +13,27 @@ enum Membership {
     Verified(usize),
     PolicyUnavailable(Value),
 }
+fn bounds(
+    owned_root: bool,
+    policy: HierarchyPolicy,
+    focus_position: bool,
+) -> (usize, usize, &'static str) {
+    let focus = policy == HierarchyPolicy::OwnFocus;
+    if owned_root {
+        (
+            8192,
+            if focus { 16384 } else { 8192 },
+            "exact_owned_graphics_root",
+        )
+    } else if focus && focus_position {
+        // Run056 retained capacity 12138 for only 3806 children after reopening
+        // Focus. Permit that allocation without increasing the per-path payload
+        // limit: at most 16384 sibling pointers (128 KiB), never dereferenced.
+        (16384, 16384, "own_focus_position_ancestor")
+    } else {
+        (2048, if focus { 16384 } else { 4096 }, "ordinary_ancestor")
+    }
+}
 fn membership(
     r: &Reader<'_>,
     parent: u64,
@@ -32,21 +53,7 @@ fn membership(
             "Aligned nonempty hierarchy child array required",
         ));
     }
-    // Recorded run 031 had own-focus position count 4687/capacity 5395. The opt-in
-    // permits only existing typed positions beyond the owned container. All
-    // sibling entries remain pointer comparisons, bounded to 128 KiB per path.
-    let focus = policy == HierarchyPolicy::OwnFocus;
-    let (capacity_limit, aggregate_limit, scope) = if owned_root {
-        (
-            8192,
-            if focus { 16384 } else { 8192 },
-            "exact_owned_graphics_root",
-        )
-    } else if focus && focus_position {
-        (8192, 16384, "own_focus_position_ancestor")
-    } else {
-        (2048, if focus { 16384 } else { 4096 }, "ordinary_ancestor")
-    };
+    let (capacity_limit, aggregate_limit, scope) = bounds(owned_root, policy, focus_position);
     if capacity > capacity_limit || *total > aggregate_limit || count > aggregate_limit - *total {
         return Ok(Membership::PolicyUnavailable(json!({
             "capacity":capacity,"count":count,
@@ -230,7 +237,8 @@ pub(crate) fn observe(
         let focus_position = policy == HierarchyPolicy::OwnFocus
             && role == "exact_reciprocal_gui_ancestor"
             && table == base + POSITION;
-        chain.push(json!({"type_encoding":encoding,"role":role,"payload_read":true,"reciprocal_child_membership":true,"child_count_raw":count,"membership_policy_scope":if root{"exact_owned_graphics_root"}else if focus_position{"own_focus_position_ancestor"}else{"ordinary_ancestor"},"capacity_limit":if root || focus_position{8192}else{2048},"aggregate_entry_limit":if policy==HierarchyPolicy::OwnFocus{16384}else if root{8192}else{4096},"inspected_entries_after":total}));
+        let (capacity_limit, aggregate_limit, scope) = bounds(root, policy, focus_position);
+        chain.push(json!({"type_encoding":encoding,"role":role,"payload_read":true,"reciprocal_child_membership":true,"child_count_raw":count,"membership_policy_scope":scope,"capacity_limit":capacity_limit,"aggregate_entry_limit":aggregate_limit,"inspected_entries_after":total}));
         typed_path.push(parent);
         if roots.contains(&parent) {
             status = "closed_to_owned_graphics_root";

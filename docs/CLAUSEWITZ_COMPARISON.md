@@ -1,16 +1,15 @@
 # Clausewitz-MCP comparison checkpoint
 
-Latest checkpoint, 15 October 2026: run054 verified bounded read-only recovery,
-but failed Four Year Plan View geometry before input after advancing to February.
-Three durable policy refusals lost their boundary numbers to message truncation;
-the reporting fix adds no geometry or input authority. Run053 remains failed on
-five read-only consistency checks. Earlier, run050 passed actual research completion and
-same-slot refill in 27m 37s under x86 CPU emulation. Run051 verified an empty
-completed-Focus baseline in 29.433 ms RPC, but refused Start before possible input
-when a tree-node witness changed. Run052 then verified actual Rhineland completion
-on 4 February, 5m 36s after the unpause reply, and restart without duplicate input.
-Its initial/final completed-Focus reads took 25.889/26.666 ms RPC. These remain
-bounded tests, with no matched upstream completion benchmark or accepted campaign.
+Latest checkpoint, 15 October 2026: run055 passed paused Focus geometry, and
+run056 reproduced the advancing second-Focus failure with its full original
+capacity diagnostic. Rhineland completed; Four Year Plan View refused before
+input because an allocated capacity of 12,138 exceeded the 8,192 policy despite
+only 3,806 children. A narrowly scoped correction keeps the same total-read bound;
+its live successive-Focus verification remains pending. Run054's truncated
+quantities remain unknown. Earlier run050 verified research completion/refill in
+27m 37s under x86 CPU emulation, and run052 verified actual Rhineland membership
+and restart without duplicate input. These are bounded tests, with no matched
+upstream completion benchmark or accepted campaign.
 
 Run049 completed three worker assignments
 across research→Focus→research in 23.668 seconds after the start reply. One explicit
@@ -271,6 +270,18 @@ restart/STOP replies were 35.070 ms apart and preserved the original assignment
 receipt and historical budget, with no duplicate action in the saved journals.
 The 702.666-second recording and normal exit passed. This does not establish
 successive Focus automation, matched upstream performance or campaign competence.
+
+## Successive-Focus capacity diagnosis
+
+Run055's paused full-geometry RPCs returned in 85.839/87.857 ms. Run056 then
+reproduced the advancing gate failure with a complete original BeforeIntent
+reason: count 3,806, allocated capacity 12,138 versus cap 8,192. The first assignment
+wait took 12.155 seconds; unpause reply to final historical wait took 357.077
+seconds, reaching 4 February 07:00 with no active Focus. A separate paused read
+on 6 February 22:00 verified Rhineland in completed membership. The second Focus
+was never selected or assigned. Both runs retained recordings and normal exits.
+These are diagnostics of the Rust implementation, not a matched upstream
+benchmark or evidence of successful successive Focus automation.
 
 ## Live comparison still required
 

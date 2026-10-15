@@ -2,6 +2,18 @@
 
 ## Unreleased native preview
 
+- Preserve run055's passing paused geometry and run056's failed advancing
+  second-Focus View, including its exact capacity boundary and actual Rhineland
+  membership. Increase only the opt-in Focus position allocation cap to 16,384;
+  keep total pointer reads, ordinary/root bounds, ownership and input checks.
+  Live successive-Focus verification of the correction remains pending.
+
+- Add optional base equipment keys to authenticated own production lines, with
+  fresh reviewed catalog membership, exact type/intern joins and full snapshot
+  witnesses before paging. Explicit unavailability covers unsupported variants
+  and types. Custom variant identity, allocation and live UI validation remain
+  pending; generated Linux fixtures do not establish live behavior.
+
 - Keep portable geometry tests independent of Unix-only journal helpers. The
   persistence check stays in the Unix journal suite; the runtime is unchanged.
 
