@@ -3868,3 +3868,71 @@ inputs remained fixed. Ten new production cases cover owner/catalog/type joins,
 unsupported coverage, fresh request-local reuse, malformed identities and final
 witness changes before paging. These are generated checks; live production-key
 comparison and successful successive-Focus verification remain pending.
+
+## Run057: capacity correction and offscreen Focus — 15 October 2026
+
+One Luna medium player used immutable `c67aa668644b461771d24147ccd1d10665d2bb67`,
+Linux CLI SHA256 `3705a19926c77ca48ad1112918fdd43dafc17ac836f3a179581593c39661de3a`,
+after all nine platform CI jobs passed. Germany remained vanilla, Normal,
+historical and FAIR. An early input-binding attempt refused `campaign_unavailable`
+while loading; a later read-only retry bound after fresh own-country verification.
+No campaign Start or other menu input was replayed.
+
+The initial segment assigned Rhineland in 13.399 seconds while paused, then
+stopped, unpaused and restarted the same two-Focus plan. Two 45-second waits
+accepted 4 January 02:00 and 9 January 01:00, with Rhineland still active. Two
+subsequent digest calls returned `input_busy`. The player stopped early at
+18:29:49.673879 UTC, although bounded busy-read recovery was permitted. Preserve
+that incomplete segment. Its original report incorrectly used the earlier
+pre-unpause STOP timestamp and described the assignment as Focus completion;
+raw protocol evidence and the independent correction remain authoritative.
+
+After independent clean STOP/lease/journal verification, a separate continuation
+was granted for the same game and exact plan, within the original wall bound.
+Its preflight was 27 January 11:00 with Rhineland active. The supplement retained
+one recovered completion-witness torn read, one expired detail-snapshot error and
+three bounded digest busy responses. Two more advancing waits reached 31 January
+20:00 and 4 February 01:00. Four Year Plan OpenFocus passed, but View refused
+BeforeIntent with `research_geometry_unavailable`, reason
+`quantized candidate outside owned client`. STOP at 18:37:14.447653 UTC retained
+one Complete assignment, the original request ID, Four Year Plan Pending with
+zero attempts, no in-flight work and no uncertainty. The last-attempt-day budget
+remained 1/1/0. No final success-path restart or action repair occurred.
+
+The pre-granted failure diagnostic allowed one verified pause after STOP, then
+separate overview, completion membership and one exact node geometry observation.
+At 4 February 24:00 Rhineland was in completed membership, no Focus was active and
+all four research slots were empty. Both Four Year Plan controls closed through
+ten ancestors to the owned graphics root with no policy boundary, including the
+3,806-child ancestor under the corrected 16,384 capacity policy. Their unit caches
+were consistent. The later geometry places the node offscreen to the left; it is
+not a substitute for the original failed snapshot or permission to clamp a click.
+Ordinary navigation to an offscreen target remains required.
+
+Before any assignment, one production read returned base equipment keys for all
+21 own lines, with complete scoped coverage and zero unavailable IDs. RPC time was
+67.818 ms, reported producer time 53.575 ms, 731 logical reads and 14,550 bytes.
+This single read has not been compared against the production UI and establishes
+neither custom variant identity nor allocation authority.
+
+Independent audit of 66 player RPC rows retained seven actual errors, five verified
+Focus input pairs, one core reservation/completion and no research input. The
+initial and supplemental reports and lease proofs remain distinct. Final release
+matched independent guest readback; the 884.333-second recording passed ffprobe.
+One ordinary owned close returned exit 0 without signal/core dump in 3.178 seconds.
+All four exact owned processes were absent, both brokers closed, and all 103 native
+source inputs and 24 private helpers remained unchanged. Neither successive-Focus
+nor clean two-year/full campaign acceptance passed.
+
+The next preview adds a read-only Focus search-state tool. Static joins from the
+exact Linux build connect selected cache indices to current own items and
+canonical Focus keys; all rows, types, reciprocal ownership and final witnesses
+validate before a result is reported. It reads no cached text, types no query and
+grants no input authority. Live search validation and offscreen navigation remain
+pending. Offscreen refusal diagnostics now preserve the signed projected point
+and client size without clamping or changing the geometry guards.
+
+Composed validation passed 744 Rust 1.86 host tests, 852 reported actual Linux
+checks (850 substantive), five included X11 cases and 953 Python tests (37 skips).
+Format, host/Linux Clippy, MSRV checks and Linux release linking passed on 105
+unchanged native inputs. These generated checks do not establish live navigation.

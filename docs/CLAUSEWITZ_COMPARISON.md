@@ -1,12 +1,14 @@
 # Clausewitz-MCP comparison checkpoint
 
-Latest checkpoint, 15 October 2026: run055 passed paused Focus geometry, and
-run056 reproduced the advancing second-Focus failure with its full original
-capacity diagnostic. Rhineland completed; Four Year Plan View refused before
-input because an allocated capacity of 12,138 exceeded the 8,192 policy despite
-only 3,806 children. A narrowly scoped correction keeps the same total-read bound;
-its live successive-Focus verification remains pending. Run054's truncated
-quantities remain unknown. Earlier run050 verified research completion/refill in
+Latest checkpoint, 15 October 2026: run057's initial segment stopped early after
+two busy reads. Its separately granted continuation confirmed actual Rhineland
+completion, but Four Year Plan View refused before input because its candidate
+was outside the owned client. Post-stop geometry closed through ten ancestors,
+confirming the capacity correction in that observation; ordinary navigation to
+offscreen Focus nodes remains missing. A production sample returned base equipment
+keys for all 21 own lines in 67.818 ms RPC / 53.575 ms producer time. UI comparison
+and allocation are unverified. Run054's truncated quantities remain unknown.
+Earlier run050 verified research completion/refill in
 27m 37s under x86 CPU emulation, and run052 verified actual Rhineland membership
 and restart without duplicate input. These are bounded tests, with no matched
 upstream completion benchmark or accepted campaign.

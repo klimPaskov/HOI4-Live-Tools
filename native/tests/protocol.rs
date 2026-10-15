@@ -106,6 +106,7 @@ fn stdio_is_json_and_notifications_have_no_reply() {
             "hoi4_research_nodes",
             "hoi4_focus_list",
             "hoi4_focus_completed",
+            "hoi4_focus_search_state",
             "hoi4_focus_node_detail",
             "hoi4_focus_selected_detail",
             "hoi4_technology_list",
@@ -114,6 +115,49 @@ fn stdio_is_json_and_notifications_have_no_reply() {
     );
     assert_eq!(replies[3]["result"]["isError"], true);
     assert_eq!(replies[4]["result"]["isError"], true);
+}
+
+#[test]
+fn focus_search_query_is_strict_read_only_and_marked_unverified() {
+    use hoi4_live_native::protocol::Server;
+    let server = Server {
+        process: None,
+        unavailable: None,
+    };
+    for arguments in [
+        json!({}),
+        json!([]),
+        json!({"focus_id":null}),
+        json!({"focus_id":""}),
+        json!({"focus_id":"bad/key"}),
+        json!({"focus_id":"a".repeat(129)}),
+        json!({"focus_id":"GER_rhineland","country":"OTHER"}),
+        json!({"focus_id":"GER_rhineland","include_geometry":true}),
+        json!({"focus_id":"GER_rhineland","select":true}),
+    ] {
+        let reply = server.handle(json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"hoi4_focus_search_state","arguments":arguments}})).unwrap();
+        let body: Value =
+            serde_json::from_str(reply["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+        assert_eq!(body["error"]["code"], "invalid_arguments", "{body}");
+    }
+    let list = server
+        .handle(json!({"jsonrpc":"2.0","id":2,"method":"tools/list"}))
+        .unwrap();
+    let tool = list["result"]["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|tool| tool["name"] == "hoi4_focus_search_state")
+        .unwrap();
+    assert_eq!(tool["annotations"]["readOnlyHint"], true);
+    assert_eq!(tool["inputSchema"]["additionalProperties"], false);
+    let reply = server.handle(json!({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"hoi4_capabilities","arguments":{}}})).unwrap();
+    let body: Value =
+        serde_json::from_str(reply["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+    assert!(body["unverified_observations"]
+        .as_array()
+        .unwrap()
+        .contains(&json!("own_focus_search_selection")));
 }
 
 #[test]

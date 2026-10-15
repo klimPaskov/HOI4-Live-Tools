@@ -22,6 +22,8 @@ const WIN: u64 = 0x1a0000;
 const BUTTON: u64 = 0x1b0000;
 #[path = "support/focus_completion_cases.rs"]
 mod completion_cases;
+#[path = "support/focus_search_cases.rs"]
+mod search_cases;
 struct Fake {
     data: BTreeMap<u64, u8>,
     reads: RefCell<Vec<(u64, usize)>>,

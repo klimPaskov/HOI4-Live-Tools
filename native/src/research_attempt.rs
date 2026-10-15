@@ -246,7 +246,13 @@ pub fn point_candidate(surface: &Surface, codec: &ClientCodec) -> Result<PointCa
     for axis in 0..2 {
         pixel[axis] = integer((ideal[axis] as f32 * codec.forward[axis]).round())?;
         if pixel[axis] < 0 || pixel[axis] >= i32::from(codec.client[axis]) {
-            return Err(unavailable("quantized candidate outside owned client"));
+            // Preserve the original refused projection in durable stage reports.
+            // These bounded numeric facts are diagnostics, never a clamped click
+            // or authority to move the viewport.
+            return Err(unavailable(&format!(
+                "Point outside client: axis={} ideal={} pixel={} client={}x{}",
+                axis, ideal[axis], pixel[axis], codec.client[0], codec.client[1]
+            )));
         }
         logical[axis] = integer(pixel[axis] as f32 * codec.inverse[axis])?;
     }

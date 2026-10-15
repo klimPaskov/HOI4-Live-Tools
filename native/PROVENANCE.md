@@ -331,3 +331,29 @@ A visible owned licensed line may reference a foreign-designed variant; exposing
 its base key does not claim variant-country ownership or authorize reading its
 hidden design. No game data or decompiled artifacts are redistributed. Allocation,
 custom variant identity, eligibility and native posting remain unavailable.
+
+`own_focus/search.rs` is independent project code for a missing ordinary-UI
+navigation prerequisite. It reuses the attributed canonical own Focus model;
+the search layout was recovered from the exact Linux ELF identified above,
+without copying offsets from another platform. RTTI/constructor `0x150f870`
+identifies the Focus view primary `0x4249c70`. Its search-cache initializer
+`0x15124a0` iterates current items at view `+0x1138`, then appends cache records
+through `0x15210a0`. The cache is data `+0x12f8`, capacity `+0x1300`, count
+`+0x1304`, stride `0x50`; each record starts with a current-item pointer.
+
+Search-change routine `0x1510480` and result iteration in `0x1513fa0` identify
+matches at data `+0x1310`, capacity `+0x1318`, count `+0x131c`, stride eight.
+The first signed DWORD of each match indexes the cache. Selection `+0x1358` uses
+`-1` for no highlight. Ordinary open-result callbacks `0x1510830`/`0x15109d0`
+bound that index against the cache count, load its item pointer, then obtain the
+canonical Focus at item `+0x20`. They do not establish that a highlighted Focus
+has been assigned or finished. The reader requires every cache item to belong
+to the complete current own-item set, with exact primary `0x4249b90`, reciprocal
+view `+0x2b0` and canonical own key before reporting any selection.
+
+Static ELF unwind-table ranges and decoded instructions support these joins;
+nearest exported symbol labels are not treated as function names. The optional
+observer witnesses its fields and refuses malformed or stale joins. Cached
+names/descriptions, rank values and edit-box text remain unread. Search input,
+control geometry and callback authority remain unavailable, and live validation
+is pending. No game assets, assembly or decompiled code are redistributed.

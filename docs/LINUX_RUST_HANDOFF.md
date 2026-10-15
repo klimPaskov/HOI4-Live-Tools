@@ -115,16 +115,43 @@ geometry reads: Rhineland was completed on 6 February 22:00, no Focus was active
 and the same geometry boundary was present. Canonical release, 652.666-second
 recording, normal exit 0 and exact-process absence passed. Both brokers are closed.
 
-The next source permits capacity 16,384 only for the existing opt-in exact Focus
+Source `c67aa66` permits capacity 16,384 only for the existing opt-in exact Focus
 position ancestor class. Aggregate sibling-pointer reads remain capped at 16,384;
 owned-root and ordinary/container capacity bounds stay 8,192 and 2,048. Types,
 reciprocal membership, final witnesses and input guards remain mandatory. The
 read-only production port adds optional base equipment keys; generated tests
 cover it, but live production comparison and allocation remain pending.
 
+Run057 on that immutable source had two distinct segments. The initial player
+stopped early after two read-only digest busy responses, while Rhineland was
+still active. An independently audited clean STOP allowed a separately granted
+same-game continuation; preserve the original incomplete report. The supplement
+confirmed Rhineland completed on 4 February 24:00, but Four Year Plan View refused
+BeforeIntent with `quantized candidate outside owned client`. No second assignment
+attempt or uncertain input occurred. Its permitted post-stop geometry observation
+closed through ten ancestors with no policy boundary; the node was offscreen to
+the left. The capacity correction therefore passed that later observation, but
+successive-Focus assignment still failed. Add ordinary verified navigation for
+offscreen nodes; do not clamp coordinates or treat this as a completed gate.
+
+All 21 production lines returned base equipment keys in 67.818 ms RPC / 53.575 ms
+producer time, with no unavailable IDs. This is one read sample, not UI comparison
+or allocation evidence. Independent audit preserved seven actual RPC errors
+across both segments, one original assignment receipt, five verified Focus input
+pairs and no research actions. Canonical release, the 884.333-second recording,
+normal exit 0, exact-process absence and unchanged 103 native inputs/24 helpers
+passed. Both brokers are closed; no game or player owns input.
+
+The read-only `hoi4_focus_search_state` preview joins search matches/highlights to
+the complete current own-item set and canonical keys. It has static and generated
+evidence, with 744 host and 852 reported actual Linux checks passing; live search
+validation remains pending. It does not type queries or authorize input. Signed
+offscreen diagnostics now retain projected coordinates without clamping them.
+
 ## Immediate acceptance work
 
-1. Verify successive Focus choices on the tested capacity correction, using
+1. Implement and verify ordinary navigation to an offscreen Focus, then verify
+   successive Focus choices on the tested capacity correction, using
    completed membership to distinguish assignment from finished Focus. Run056
    supplies the original boundary evidence; run054's lost quantities remain
    unknown. Keep one existing Luna medium player, worker/ordinary-clock separation,

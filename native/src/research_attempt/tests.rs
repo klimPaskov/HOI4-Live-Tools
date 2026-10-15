@@ -185,3 +185,54 @@ fn recorded_text_control_maps_to_independently_verified_interior() {
     assert_eq!(p.quantized_logical, [950, 175]);
     assert!(!p.current_frame_verified && !p.input_authorized && !p.effective_routing_verified);
 }
+
+#[test]
+fn offscreen_focus_projection_retains_original_signed_facts_without_clamping() {
+    // Run057's separately timestamped post-STOP symbol geometry, combined with
+    // the existing generated client codec. This is not its original refusal
+    // snapshot or live input validation.
+    let s = SpriteNode {
+        common: Common {
+            world: [-1427.0, -108.0],
+            ..common()
+        },
+        texture: [100, 88],
+        ..sprite()
+    };
+    let error = point_candidate(&Surface::ExactSpriteNode(s), &codec()).unwrap_err();
+    assert_eq!(error.code, "research_geometry_unavailable");
+    assert_eq!(
+        error.message,
+        "Point outside client: axis=0 ideal=-1121 pixel=-224 client=512x288"
+    );
+}
+
+#[test]
+fn each_client_edge_remains_exclusive_and_refusal_fits_durable_reason() {
+    let c = ClientCodec {
+        graphics_logical: [512, 288],
+        inverse: [1.0, 1.0],
+        forward: [1.0, 1.0],
+        ..codec()
+    };
+    // Independent center arithmetic for 72x72: x=world_x+292,
+    // y=108-world_y. Include far-off finite values on both axes.
+    for (world, axis, ideal, pixel) in [
+        ([-293.0, 0.0], 0, -1, -1),
+        ([220.0, 0.0], 0, 512, 512),
+        ([0.0, 109.0], 1, -1, -1),
+        ([0.0, -180.0], 1, 288, 288),
+        ([-999_000.0, 0.0], 0, -998_708, -998_708),
+        ([0.0, -999_000.0], 1, 999_108, 999_108),
+    ] {
+        let mut s = sprite();
+        s.common.world = world;
+        let error = point_candidate(&Surface::ExactSpriteNode(s), &c).unwrap_err();
+        assert_eq!(error.code, "research_geometry_unavailable");
+        assert_eq!(
+            error.message,
+            format!("Point outside client: axis={axis} ideal={ideal} pixel={pixel} client=512x288")
+        );
+        assert!(error.message.is_ascii() && error.message.len() <= 160);
+    }
+}

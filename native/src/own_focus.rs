@@ -15,6 +15,7 @@ use std::{
     time::{Instant, SystemTime, UNIX_EPOCH},
 };
 mod completion;
+mod search;
 pub use completion::snapshot as completion_snapshot;
 
 struct Witnesses<'a> {
@@ -198,11 +199,12 @@ fn named_start(
 enum FocusQuery<'a> {
     Node(&'a str),
     SelectedDetail(&'a str),
+    Search(&'a str),
 }
 impl<'a> FocusQuery<'a> {
     fn key(self) -> &'a str {
         match self {
-            Self::Node(key) | Self::SelectedDetail(key) => key,
+            Self::Node(key) | Self::SelectedDetail(key) | Self::Search(key) => key,
         }
     }
 }
@@ -340,6 +342,23 @@ fn snapshot_model(
         if prefix.is_none_or(|filter| key.starts_with(filter)) {
             output.push(json!({"key":key}));
         }
+    }
+    if let Some(FocusQuery::Search(key)) = query {
+        w.section.set("search_selection");
+        w.region(view, 0x1380, "focus_view");
+        let search = search::observe(&r, base, view, country, &keys, key)?;
+        let (end_calls, end_bytes) = w.finish()?;
+        process.check()?;
+        return Ok((
+            json!({
+                "source":"native own Focus search selection","build_id":game::BUILD_ID,
+                "owned":true,"search":search,"input_authorized":false,
+                "observation_paused_game":false,
+                "freshness":{"observed_unix_ms":SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),
+                    "elapsed_ms":start.elapsed().as_secs_f64()*1000.0,"read_calls":r.calls.get()+end_calls as u64,"read_bytes":r.bytes.get()+end_bytes}
+            }),
+            None,
+        ));
     }
     if command_context && requested.is_some_and(|key| !keys.values().any(|value| value == key)) {
         return Err(Error::new(
@@ -569,6 +588,22 @@ pub(crate) fn validate_key(key: &str) -> Result<()> {
         ));
     }
     Ok(())
+}
+
+/// Current search highlight joined through the complete bounded cache to own
+/// current items and canonical keys. Does not read text, click or start a Focus.
+pub fn search_state(process: &dyn Process, key: &str) -> Result<Value> {
+    validate_key(key)?;
+    Ok(snapshot_model(
+        process,
+        0,
+        1,
+        Some(key),
+        Some(FocusQuery::Search(key)),
+        false,
+        false,
+    )?
+    .0)
 }
 
 /// Opt-in deep renderer diagnostics; default node/list readers remain metadata-only.
