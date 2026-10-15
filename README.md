@@ -13,40 +13,26 @@ still need independent validation.
 
 One Luna player at medium reasoning verified upstream focus and research. Its
 final native posting request timed out, so that adapter remains quarantined.
-Subsequent Rust runs verified ordinary clock controls, exact-ID research actions
-and memory readback. Recorded run030 passed worker-only four-slot research refill,
-idempotent plan updates, restart without resetting its daily budget, and counter
-advancement through 3 January 1936.
+The Rust preview uses verified ordinary input with fresh process readback.
+Recorded Linux tests have passed:
 
-Recorded run036 passed opening Politics and the focus tree, selecting the exact
-Rhineland focus, and one ordinary Start with canonical active-focus readback.
-Earlier callback/topology failures and a player parsing failure remain preserved;
-a compact selected-detail tool now makes the Start binding explicit. Broader
-strategic automation and campaign acceptance remain unfinished.
+- Clock controls, exact-ID research navigation and four-slot worker assignment.
+- Exact focus selection and Start, followed by a pending next-focus plan.
+- Idempotent plan updates and worker restarts without replay or budget resets.
+- Digests below 2 KB with exact historical detail lookup; five recent samples
+  returned in 50–62 ms under x86 CPU emulation.
 
-The new daily Focus preview is default-off and requires independent owner and
-plan permissions. It preserves shared budgets and separate uncertainty histories;
-its combined focus/research UI handoff still needs live tests.
-Run037 verified worker preparation through View, then recorded a known nonqueued
-Start-read failure that exhausted its single reservation. No Start was delivered;
-bounded retry handling and timeout reporting were subsequently corrected.
-Recorded run038 then passed worker-driven Rhineland Start and durable assignment
-completion with one consumed attempt. Luna stopped because the digest obscured
-that completion; active-focus waiting, plan updates and restart remain untested.
-Run039 then verified recovery from one pre-input torn read within the original
-reservation and completed Rhineland. Its digest exceeded the 2KB limit, so Luna
-stopped before update/restart. Run040 recorded a nonqueued Start and another
-history-overflow case. Its player stopped and released the lease; a later host
-restart interrupted recording/normal-close cleanup. No completion is claimed.
-Compact digests now retain large histories through exact, read-only detail lookups;
-nonqueued Focus errors preserve the underlying transport cause. Fresh live
-validation of these corrections remains pending.
+These are bounded tests in vanilla Normal/historical Germany. The latest Focus
+test, run041, finalized its recording and exited normally. Combined research/focus
+panel switching, completed-technology refill, economic/army/naval commands and
+full campaigns remain open. The Focus worker requires explicit opt-in. Earlier
+failures and reporting limitations remain in the validation report.
 
 | Runtime | Verified | Remaining |
 | --- | --- | --- |
 | Python / Windows | Baseline tools and recorded play attempts | Clean campaign acceptance; current development changes are unfinished |
 | Python / macOS | Platform work and limited diagnostic play | Reliable live acceptance; screenshot-driven testing is stopped |
-| Native / Linux | Own reads/catalogs, owned launch, bounded Luna clock/research tests, four-slot worker refill, restart persistence and exact focus selection/Start | Broader daily plans, economics/army/naval control and campaign acceptance |
+| Native / Linux | Own reads/catalogs, owned launch, bounded Luna clock/research/focus tests, daily assignment and restart persistence | Combined domain plans, economics/army/naval control and campaign acceptance |
 | Native / Windows and macOS | Portable protocol and fixture tests in CI | Independently verified process/build adapters and live tests |
 
 Read [the acceptance gates](docs/LINUX_RUST_HANDOFF.md),
@@ -109,8 +95,8 @@ are documented in [the comparison](docs/CLAUSEWITZ_COMPARISON.md) and
 
 Research uses exact technology IDs, verified panel/slot/category navigation and
 a persisted shared daily budget. Focus has separate owner and plan permissions;
-its worker now has recorded Start and completion evidence. Completed-technology
-refill, Focus update/restart, combined panel switching and broader strategic
+its worker has recorded Start, plan-update and restart evidence. Completed-technology
+refill, combined panel switching and broader strategic
 adapters remain acceptance gates. Earlier failures, including unresolved clock
 uncertainty, are preserved in the validation report. Three-OS CI checks shared
 code and fixtures; Windows/macOS live adapters still need independent validation.

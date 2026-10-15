@@ -8,6 +8,9 @@ were verified. The final pause command timed out during posting; the adapter
 is quarantined. A subsequent fresh Rust run passed Luna's ordinary clock test
 through 3 January 1936, including verified pause. These are **bounded live tests,
 not campaign acceptance or a successful campaign**. The Rust port is underway.
+The latest Rust Focus worker gate, run041, passed Start, active-focus waiting,
+idempotent updates, budget-preserving restarts and bounded digest/detail output.
+Its recording finalized and the owned game exited normally; see the final section.
 
 ## Reference and test environment
 
@@ -2829,3 +2832,58 @@ absence and Yama1 matched before/after. The first Linux suite exposed a fixture
 that assumed a short history necessarily overflowed; its log remains preserved.
 The strengthened maximum-ID case passed directly, followed by the full suite.
 These are offline gates and do not establish fresh live behavior.
+
+
+## Recorded daily Focus run041 — 15 October 2026
+
+Exact source `2a36278` passed all nine three-OS CI jobs before this recorded
+vanilla Normal/historical Germany test with one exclusive Luna medium player.
+The recording had a verified packet before the single campaign Start. The game
+remained paused at 1 January 1936; no clock, console, effect, native-post or
+manual focus command was used by the player.
+
+The private single-accept broker initially refused two concurrent connections
+before either request was sent. The original failure, lease release and saved
+report remain preserved. A local socket fixture reproduced the queue saturation;
+serializing complete calls removed it without retrying a sent request. After
+independent verification that the worker had never started, Luna continued in
+the same game with the unchanged native binary. This was a harness correction,
+not a gameplay retry or reload.
+
+The daily worker verified OpenPolitics, OpenFocus, View and one Start. The saved
+Focus journal contains exactly one Intent/Verified pair per stage. The core
+assignment recorded one reservation followed by terminal Complete at sequence 6;
+fresh overview confirmed canonical `GER_remilitarize_the_rhineland`. No pre-input
+retry, Start refusal or quarantine occurred.
+
+Revision2 retained that completion and added `GER_the_four_year_plan`. With
+Rhineland active, the next entry waited with zero attempts, no navigation and no
+additional budget use. An identical update returned `updated:false`; both update
+responses retained the consumed budget. Two worker restarts preserved the same
+revision, completion and used 1/limit 1 budget. Offline journal inspection found
+no extra Focus action rows or replay. A historical transient `input_busy` from
+producer contention remained visible; no failure or refusal was erased.
+
+Five fresh digest payloads measured **1,556, 1,241, 1,241, 1,913 and 2,008 bytes**;
+RPC times ranged **49.7–62.4 ms** through the persistent local SSH/broker path.
+Two used the compacted-history fallback. Eight exact section lookups returned
+historical data with current-state/input authority false. These five samples
+establish the bounded gate, not broad throughput or campaign performance.
+One server wait observed `focus_changed` after 10.22 seconds; two later 45-second
+waits returned normal historical timeouts, followed by fresh digests. The first
+offline report mistakenly filtered the name `hoi4_wait` instead of actual
+`hoi4_wait_for`; its empty wait list was corrected against original RPC records,
+with both reports preserved.
+
+Final STOP changed no game time. The latest actual release/status receipts were
+persisted to the guest and independently read back before close. Both H264
+512×288 recording segments finalized and passed ffprobe, totaling 834 seconds.
+One ordinary window-close request returned normal exit 0 after 2.19 seconds, without
+signal fallback or replay; exact owner/game absence and unchanged Yama 1 passed.
+
+**Remaining limits:** a rapid restart followed by STOP can expose a null cached
+budget, although fresh digests and durable journals prove the consumed attempt.
+No new transport refusal occurred, so the cause-preservation correction remains
+offline-tested only. ClosePolitics is still disabled. Cross-domain panel handoff,
+focus completion over game time, completed-technology refill, strategic warfare,
+Windows/macOS native live support and full campaign acceptance remain open.

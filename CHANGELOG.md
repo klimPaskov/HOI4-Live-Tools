@@ -2,6 +2,10 @@
 
 ## Unreleased native preview
 
+- Record run041: worker-driven Focus Start, active-focus waiting, idempotent plan
+  update and two restarts without replay or budget reset. Five digests stayed
+  below 2 KB, with eight exact historical detail lookups. Recording and normal
+  owned exit passed; full campaign acceptance remains open.
 - Keep overflowing daily histories in an exact read-only detail snapshot while
   returning a bounded summary with fresh counts, budget, completion counts,
   quarantine and historical failure codes. Stale detail IDs fail explicitly.

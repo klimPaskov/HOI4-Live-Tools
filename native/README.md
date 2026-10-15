@@ -39,8 +39,9 @@ failure in run035. A borrowed Focus executor and separate durable preparation
 ledger now support a default-off daily Focus preview. It requires owner
 `daily_focus: true`, the existing Focus profile and `focus_permission: true`
 in every start/update request. A running worker rejects permission changes;
-stop/restart retains its histories and consumed shared budget. Worker live
-validation remains pending. Different active focus IDs retain a pending head
+stop/restart retains its histories and consumed shared budget. Recorded run041
+verified worker Start, active-focus waiting, idempotent update and two restarts
+without replay or budget reset. Different active focus IDs retain a pending head
 without navigation or budget use. Focus stages have a fixed ten-second batch
 ceiling, research five seconds, both clamped to the lease.
 They share the clock and
@@ -69,7 +70,8 @@ or a finished nonqueued reservation never supplies retry authority. Digest and
 stop summaries include core pending reasons and reserved budget. Recorded
 run037 remains an immutable failed gate. Run038 verified worker Start and durable
 completion with one consumed attempt; no retry was triggered. Its digest obscured
-completion from Luna, so active-focus waiting and update/restart remain untested.
+completion from Luna. Run039 verified one permitted pre-input retry; run041 later
+passed active-focus waiting, updates and restart with bounded digest/detail output.
 
 Digest and STOP now include `assignments`: a checked durable-plan summary with
 completed/pending/in-flight counts and the latest completion's entry, request,
@@ -108,6 +110,9 @@ A nonqueued Focus attempt now reports its underlying transport cause while
 retaining `input_not_queued` and its terminal receipt. A transport torn read
 inside a finalized NotQueued attempt does not authorize replay. Run040's older
 adapter discarded that specific cause, so it cannot be recovered retroactively.
+Run041 triggered no new transport refusal, so live verification of cause retention
+remains open. An immediate STOP after restart can still report a null cached
+budget; the fresh digest and durable plan retain the consumed reservation.
 
 A prospective typed ClosePolitics stage is runtime-disabled. It requires the
 exact canonical active focus, settled own Politics mode12, hidden Focus and zero

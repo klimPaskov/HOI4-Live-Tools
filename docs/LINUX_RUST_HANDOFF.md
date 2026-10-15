@@ -4,22 +4,39 @@ User direction, 12 October 2026: stop the Mac screenshot-driven live tests and
 replace the primary runtime with a fast Rust MCP based on Clausewitz-MCP.
 Linux is the first live target; Windows and macOS remain required platforms.
 
-**Latest live result:** run040 verified worker preparation through View, then one
-Start Intent/NotQueued terminal receipt. The core assignment remains Pending,
-completed0/used1/remaining0. Its 45-second wait timed out with historical evidence;
-the required digest overflowed with pending-failure history. Luna stopped and
-released the lease; independent guest-file readback matched actual RPC evidence.
-The adapter discarded the specific transport refusal, so its exact cause is
-unknown. A later host restart interrupted recorder/normal-close cleanup. On
-recovery, all54 recording segments were readable, but no recorder finalization
-or normal game exit is proven; exact old processes are gone. Preserve this as an
-interrupted failed gate, without replaying or reopening its terminal attempt.
+**Latest live result:** recorded run041 passed exclusive Luna medium worker
+Focus Start, active-focus waiting, revision 2 update, an identical no-op update
+and two worker restarts. The first entry is durably Complete; the second remains
+Pending with zero attempts. The shared daily budget stays used 1/limit 1, with no
+replay. Fresh overview confirmed canonical active Rhineland. Five fresh digests
+fit below 2 KB, including two compacted histories; eight exact historical detail
+lookups passed. The 834-second recording finalized and passed ffprobe; canonical
+lease proof/readback, one normal owned exit 0 and exact process absence passed.
+No game or player input remains active. This is a bounded gate, not full campaign
+acceptance. See the [recorded evidence](CLAUSEWITZ_VALIDATION.md#recorded-daily-focus-run041--15-october-2026).
 
-The current correction provides a bounded summary plus exact read-only historical
-detail lookup and preserves future transport refusal causes. Verify the composed
-source, then repeat the Focus update/restart gate with Luna medium. Run039's
-same-in-flight pre-input retry and completion remain valid earlier evidence.
-ClosePolitics remains disabled and full campaign acceptance remains open.
+The tested source is `2a36278`. It passed 650 Rust 1.86 host tests, 754 reported
+actual Linux checks (752 substantive), 953 Python tests (37 skips), compiler,
+format, Clippy, release linking and all nine three-OS CI jobs. A private local
+broker initially refused two concurrent connections before request bytes were
+sent. Its serialized continuation used the same game and runtime; original
+failure evidence remains preserved. No gameplay retry or reload occurred.
+
+**Next work:** fix STOP's null cached budget after a rapid restart by reporting
+checked historical durable state, then complete read-only own Focus UI evidence
+and the separately recorded ordinary ClosePolitics transition. ClosePolitics
+remains disabled. Combined research/focus switching, technology completion/refill,
+focus completion over game time, economy/army/naval adapters, Windows/macOS native
+live support and the clean two-year/full campaigns remain open. Run041 triggered
+no transport refusal, so new cause retention still has only offline evidence.
+
+The run040 failure remains unchanged: one terminal NotQueued Start, pending
+assignment and digest overflow. Its specific transport cause was discarded by
+the old adapter. A later host restart interrupted recorder/close cleanup; all 54
+recovered recording segments were readable, but no finalization or normal exit
+is proven. Exact old processes are gone. Never reopen or replay that attempt.
+
+## Earlier checkpoints (historical)
 
 **Earlier worker result:** run038 passed worker-driven Rhineland Start and durable
 assignment completion. Its saved action receipt is Verified/ServerConfirmed with
