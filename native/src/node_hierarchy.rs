@@ -104,8 +104,12 @@ pub(crate) fn observe(
     let base = reuse.base();
     let policy = reuse.hierarchy_policy();
     // Text is supported ONLY as the constructor-proved leaf, not as an ancestor.
+    // InstantText is restricted to the owned Focus search renderer path.
     let leaf = r.u64(render)?;
-    if !TYPES.iter().any(|table| leaf == base + table) && leaf != base + 0x43593d8 {
+    if !TYPES.iter().any(|table| leaf == base + table)
+        && leaf != base + 0x43593d8
+        && !(policy == HierarchyPolicy::OwnFocus && leaf == base + 0x434cc68)
+    {
         return Err(Error::new(
             "invalid_gui_hierarchy",
             "Exact supported hierarchy leaf required",

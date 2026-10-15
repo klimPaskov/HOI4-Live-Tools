@@ -37,12 +37,23 @@ pub struct TextResearch {
     pub angle: f32,
 }
 #[derive(Clone, Debug)]
+pub struct InstantText {
+    /// Common anchor is unused: this renderer has its own alignment operands.
+    pub common: Common,
+    pub position: [i32; 2],
+    pub alignment_offset: [i32; 2],
+    pub dimensions: [i32; 2],
+    pub alignment: u32,
+    pub hit_rejected: bool,
+}
+#[derive(Clone, Debug)]
 pub enum Surface {
     ExactSpriteNode(SpriteNode),
     /// Exact Frame renderer/resource uses independently proved grid bounds and
     /// the bounded common-origin projection. This is not a Sprite cast.
     ExactFrameSprite(SpriteNode),
     ExactZeroAngleTextResearch(TextResearch),
+    ExactInstantText(InstantText),
     Unsupported,
 }
 #[derive(Clone, Debug)]
@@ -82,6 +93,15 @@ fn integer(value: f32) -> Result<i32> {
     Ok(value.trunc() as i32)
 }
 fn origin(common: &Common, height: i32) -> Result<[i32; 2]> {
+    validate_common(common)?;
+    // Keep the recovered f32 addition/subtraction order, including the sign
+    // flip and dimension height. Cache b0/b4 is NOT the upper-left corner.
+    Ok([
+        integer(common.world[0] + common.anchor[0] as f32 * 0.5)?,
+        integer(-((common.world[1] - common.anchor[1] as f32 * 0.5) + height as f32))?,
+    ])
+}
+fn validate_common(common: &Common) -> Result<()> {
     if common.scalar.to_bits() != 1.0f32.to_bits()
         || !common.hierarchy.closed_to_owned_root_1f0
         || !common.hierarchy.conditional_unit_cache_consistent
@@ -93,22 +113,20 @@ fn origin(common: &Common, height: i32) -> Result<[i32; 2]> {
     {
         return Err(unavailable("typed owned unit hierarchy/cache unavailable"));
     }
-    // Keep the recovered f32 addition/subtraction order, including the sign
-    // flip and dimension height. Cache b0/b4 is NOT the upper-left corner.
-    Ok([
-        integer(common.world[0] + common.anchor[0] as f32 * 0.5)?,
-        integer(-((common.world[1] - common.anchor[1] as f32 * 0.5) + height as f32))?,
-    ])
+    Ok(())
 }
 enum Predicate {
     Sprite { origin: [i32; 2], extent: [f32; 2] },
     Text { origin: [i32; 2], size: [i32; 2] },
+    InstantText { origin: [i32; 2], size: [i32; 2] },
 }
 impl Predicate {
     fn center(&self) -> Result<[i32; 2]> {
         let (origin, extent) = match self {
             Self::Sprite { origin, extent } => (*origin, *extent),
-            Self::Text { origin, size } => (*origin, size.map(|n| n as f32)),
+            Self::Text { origin, size } | Self::InstantText { origin, size } => {
+                (*origin, size.map(|n| n as f32))
+            }
         };
         Ok([
             origin[0]
@@ -137,6 +155,8 @@ impl Predicate {
                     && origin[1] < baseline + dy.trunc() as i32
                     && point[1] < baseline
             }
+            Self::InstantText { origin, size } => (0..2)
+                .all(|axis| point[axis] > origin[axis] && point[axis] < origin[axis] + size[axis]),
         }
     }
 }
@@ -235,6 +255,44 @@ pub fn point_candidate(surface: &Surface, codec: &ClientCodec) -> Result<PointCa
                 Predicate::Text {
                     origin: origin(&t.common, t.height)?,
                     size: [width, t.height],
+                },
+                None,
+            )
+        }
+        Surface::ExactInstantText(t) => {
+            validate_common(&t.common)?;
+            if t.hit_rejected
+                || t.alignment > 6
+                || t.position
+                    .iter()
+                    .chain(t.alignment_offset.iter())
+                    .any(|v| !(-65536..=65536).contains(v))
+                || t.dimensions.iter().any(|v| !(2..=65536).contains(v))
+            {
+                return Err(unavailable("Bounded enabled InstantText fields required"));
+            }
+            // Exact2ee8d10: integer alignment before float32 cache addition;
+            // truncate each origin before strict integer hit comparisons.
+            // This differs from both CTextSprite and its font measurement.
+            let [dx, dy] = t.alignment_offset;
+            let offset = match t.alignment {
+                0 => [0, 0],
+                1 => [dx, 0],
+                2 => [0, dy],
+                3 => [dx, dy],
+                4 => [dx / 2, dy / 2],
+                5 => [dx / 2, 0],
+                6 => [dx / 2, dy],
+                _ => unreachable!(),
+            };
+            let origin = [
+                integer((t.position[0] + offset[0]) as f32 + t.common.world[0])?,
+                integer((t.position[1] + offset[1]) as f32 - t.common.world[1])?,
+            ];
+            (
+                Predicate::InstantText {
+                    origin,
+                    size: t.dimensions,
                 },
                 None,
             )

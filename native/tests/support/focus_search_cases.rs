@@ -181,6 +181,8 @@ fn query_fixture(text: &str) -> Fake {
     f.word(VIEW + 0x1200, EDIT);
     f.word(EDIT, 0x43498b8);
     f.word(EDIT + 0x68, GUI);
+    f.word(0x45778e0, GUI);
+    f.word(EDIT + 0x1a0, 0x4349be8);
     // This definition is intentionally unmapped: never interpret it as a window.
     f.word(EDIT + 0x60, DEFINITION);
     f.word(VIEW + 0x2f8, ROOT);
@@ -227,6 +229,194 @@ fn query_fixture(text: &str) -> Fake {
 }
 fn query_result(f: &Fake) -> Result<serde_json::Value> {
     own_focus::search_state_with_control(f, "GER_rhineland")
+}
+
+fn instant_fixture() -> Fake {
+    let mut f = query_fixture("");
+    f.focus_geometry_fixture(CONTAINER, EDIT, true);
+    f.word(EDIT + 0x1b0, 0x244000);
+    f.word(0x244000, 0x434cc68);
+    f.int(0x2441f0, 5);
+    f.int(0x2441f4, 9);
+    f.int(0x244208, -101);
+    f.int(0x24420c, 31);
+    f.int(0x244210, 160);
+    f.int(0x244214, 30);
+    f.int(0x244218, 4);
+    f.put(0x244228, &[0]);
+    f.word(0x244108, 0x242000);
+    f.array(0x2420c0, 0x250000, &[0x244000]);
+    f.word(0x241108, 0x2401f0);
+    f.array(0x2402b0, 0x251000, &[0x241000]);
+    f.word(0x43484e0, 0);
+    f.word(0x43484e8, 0x4358200);
+    f.region(0x4358200, 16);
+    f.word(0x4358208, 0x350f700);
+    f.region(0x350f700, 128);
+    f.put(0x350f700, b"15CGuiPositionist");
+    for node in [0x2401f0, 0x241000, 0x242000, 0x244000] {
+        f.put(node + 0x114, &1.0f32.to_le_bytes());
+        f.put(node + 0x80, &1.0f32.to_le_bytes());
+        f.put(node + 0x94, &1.0f32.to_le_bytes());
+        f.put(node + 0x144, &[1]);
+        f.put(node + 0x128, &[1]);
+    }
+    f.put(0x244070, &10.0f32.to_le_bytes());
+    f.put(0x244074, &(-20.0f32).to_le_bytes());
+    f
+}
+
+#[test]
+fn search_instant_text_closes_owned_hierarchy_without_text_sprite_or_font_payload() {
+    let f = instant_fixture();
+    let v = query_result(&f).unwrap();
+    let g = &v["search"]["query_control"]["render_diagnostic"];
+    assert_eq!(g["available"], true);
+    assert_eq!(g["render_type_encoding"], "18CInstantTextObject");
+    assert_eq!(g["renderer_control_join_verified"], true);
+    assert_eq!(g["dimensions_raw"], serde_json::json!([160, 30]));
+    assert_eq!(g["alignment_offset_raw"], serde_json::json!([-101, 31]));
+    assert_eq!(g["parent_chain"]["graphics_root_closed"], true);
+    assert_eq!(
+        g["parent_chain"]["unit_cache_diagnostic"]["cache_consistent_under_observed_unit_branch"],
+        true
+    );
+    assert_eq!(g["current_frame_verified"], false);
+    assert_eq!(g["input_authorized"], false);
+    assert!(f.untouched(0x244160, 0x88));
+    assert!(f.untouched(0x244229, 0x10));
+    assert!(f.untouched(0x245000, 0x200));
+}
+
+#[test]
+fn search_unknown_renderers_return_bounded_table_diagnostic_without_payload_reads() {
+    for table in [0, 0x434c5b0, 0x41adddf, 0x436d9f8, u64::MAX] {
+        let mut f = query_fixture("");
+        f.word(EDIT + 0x1b0, 0x244000);
+        f.word(0x244000, table); // only vptr mapped
+        let v = query_result(&f).unwrap();
+        let g = &v["search"]["query_control"]["render_diagnostic"];
+        assert_eq!(g["available"], false);
+        if table == 0x434c5b0 {
+            assert_eq!(g["observed_table_rva"], "0x434c5b0");
+        } else {
+            assert!(g["observed_table_rva"].is_null());
+        }
+        assert!(f.untouched(0x244008, 0x300));
+    }
+    let mut f = query_fixture("");
+    f.word(EDIT + 0x1b0, 0x244001);
+    assert_eq!(query_result(&f).unwrap_err().code, "invalid_focus_search");
+    assert!(f.untouched(0x244001, 0x300));
+}
+
+#[test]
+fn search_renderer_control_equality_precedes_all_renderer_payload() {
+    for table in [0x434cc68, 0x43593d8] {
+        let mut f = query_fixture("");
+        f.word(EDIT + 0x1b0, 0x244000);
+        f.word(0x244000, table);
+        f.word(0x244138, EDIT + 8);
+        assert_eq!(query_result(&f).unwrap_err().code, "invalid_focus_search");
+        assert!(f.untouched(0x244008, 0x130) && f.untouched(0x244140, 0x200));
+    }
+}
+
+#[test]
+fn search_instant_invalid_numbers_refuse_before_hierarchy() {
+    for (address, value) in [
+        (0x2441f0, 65537),
+        (0x24420c, -65537),
+        (0x244210, -1),
+        (0x244214, 65537),
+        (0x244218, 7),
+        (0x244218, -1),
+        (0x2440b0, f32::NAN.to_bits() as i32),
+        (0x244114, f32::INFINITY.to_bits() as i32),
+    ] {
+        let mut f = instant_fixture();
+        f.int(address, value);
+        assert_eq!(query_result(&f).unwrap_err().code, "invalid_focus_search");
+        assert!(f.untouched(CONTAINER + 0xe70, 16));
+    }
+}
+
+#[test]
+fn search_keyboard_and_text_receiver_require_independent_identities_and_flags() {
+    for bits in 0u8..32 {
+        let mut f = query_fixture("");
+        f.word(GUI + 0x158, if bits & 1 != 0 { EDIT } else { UNSELECTED });
+        f.word(
+            GUI + 0x230,
+            if bits & 2 != 0 {
+                EDIT + 0x1a0
+            } else {
+                UNSELECTED
+            },
+        );
+        f.int(EDIT + 0x74, if bits & 4 != 0 { 0x800 } else { 0 });
+        f.put(
+            EDIT + 0x271,
+            &[u8::from(bits & 8 != 0) | (u8::from(bits & 16 != 0) << 1)],
+        );
+        let v = query_result(&f).unwrap();
+        let c = &v["search"]["query_control"];
+        let valid_flags = bits & 28 == 12;
+        assert_eq!(c["keyboard_focus_verified"], bits & 1 != 0 && valid_flags);
+        assert_eq!(
+            c["routing_diagnostic"]["text_receiver_verified"],
+            bits & 2 != 0 && valid_flags
+        );
+        assert_eq!(c["effective_routing_verified"], false);
+        assert_eq!(c["input_authorized"], false);
+        assert!(f.untouched(UNSELECTED, 0x1000));
+    }
+}
+
+#[test]
+fn search_foreign_global_and_receiver_type_cannot_borrow_owned_routing() {
+    let mut f = query_fixture("");
+    f.word(0x45778e0, UNSELECTED);
+    let v = query_result(&f).unwrap();
+    assert_eq!(
+        v["search"]["query_control"]["routing_diagnostic"]["available"],
+        false
+    );
+    assert!(f.untouched(UNSELECTED, 0x1000));
+    assert!(f.untouched(GUI + 0x158, 8) && f.untouched(GUI + 0x230, 8));
+    let mut f = query_fixture("");
+    f.word(EDIT + 0x1a0, 0x4349b78);
+    assert_eq!(
+        query_result(&f).unwrap_err().message,
+        "Search text_receiver: expected_rva=0x4349be8 observed_rva=0x4349b78"
+    );
+    assert!(f.untouched(GUI + 0x158, 8) && f.untouched(GUI + 0x230, 8));
+}
+
+#[test]
+fn search_new_render_and_receiver_fields_are_final_snapshot_witnesses() {
+    for address in [
+        0x244000,
+        0x244138,
+        0x2441f0,
+        0x24420c,
+        0x244210,
+        0x244218,
+        0x244228,
+        0x244108,
+        0x45778e0,
+        EDIT + 0x1a0,
+        GUI + 0x158,
+        GUI + 0x230,
+    ] {
+        let mut f = instant_fixture();
+        f.torn = Some(address);
+        assert_eq!(
+            query_result(&f).unwrap_err().code,
+            "torn_read",
+            "{address:x}"
+        );
+    }
 }
 
 #[test]

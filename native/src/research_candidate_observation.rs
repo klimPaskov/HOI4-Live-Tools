@@ -6,7 +6,8 @@ use crate::{
     game, gui,
     platform::Process,
     research_attempt::{
-        self, ClientCodec, Common, Hierarchy, PointCandidate, SpriteNode, Surface, TextResearch,
+        self, ClientCodec, Common, Hierarchy, InstantText, PointCandidate, SpriteNode, Surface,
+        TextResearch,
     },
     research_ui,
 };
@@ -185,6 +186,15 @@ fn common(
     scalar: &str,
     hierarchy: &Value,
 ) -> Result<Common> {
+    let hierarchy = owned_hierarchy(hierarchy)?;
+    Ok(Common {
+        world: pair(&raw[world], float)?,
+        anchor: pair(&raw[anchor], uint)?,
+        scalar: float(&raw[scalar])?,
+        hierarchy,
+    })
+}
+fn owned_hierarchy(hierarchy: &Value) -> Result<Hierarchy> {
     if hierarchy["graphics_root_closed"].as_bool() != Some(true) {
         return Err(closure_refusal(
             "Owned graphics root closure required",
@@ -210,14 +220,9 @@ fn common(
         true,
         "Conditional unit cache required",
     )?;
-    Ok(Common {
-        world: pair(&raw[world], float)?,
-        anchor: pair(&raw[anchor], uint)?,
-        scalar: float(&raw[scalar])?,
-        hierarchy: Hierarchy {
-            closed_to_owned_root_1f0: true,
-            conditional_unit_cache_consistent: true,
-        },
+    Ok(Hierarchy {
+        closed_to_owned_root_1f0: true,
+        conditional_unit_cache_consistent: true,
     })
 }
 pub(crate) fn codec(geometry: &Value, profile: &OwnedClientProfile) -> Result<ClientCodec> {
@@ -353,6 +358,35 @@ pub(crate) fn control_surface(render: &Value) -> Result<Surface> {
     match render["render_type_encoding"].as_str() {
         Some("7CSprite") => sprite_surface(render),
         Some("11CTextSprite") => text_surface(render),
+        Some("18CInstantTextObject") => {
+            required(
+                &render["field_layout_verified"],
+                true,
+                "Exact InstantText fields required",
+            )?;
+            required(
+                &render["renderer_control_join_verified"],
+                true,
+                "Exact InstantText control required",
+            )?;
+            let flags = uint(&render["flags228_raw"])?;
+            if flags > 255 {
+                return Err(unavailable("InstantText byte flags required"));
+            }
+            Ok(Surface::ExactInstantText(InstantText {
+                common: Common {
+                    world: pair(&render["cache_translation_raw"], float)?,
+                    anchor: [0, 0], // unused by the exact InstantText predicate
+                    scalar: float(&render["scalar_raw"])?,
+                    hierarchy: owned_hierarchy(&render["parent_chain"])?,
+                },
+                position: pair(&render["position_raw"], int)?,
+                alignment_offset: pair(&render["alignment_offset_raw"], int)?,
+                dimensions: pair(&render["dimensions_raw"], int)?,
+                alignment: uint(&render["alignment_raw"])?,
+                hit_rejected: flags & 1 != 0,
+            }))
+        }
         Some("20CFrameAnimatedSprite") => {
             required(
                 &render["field_layout_verified"],

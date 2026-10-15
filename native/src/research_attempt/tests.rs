@@ -38,6 +38,113 @@ fn sprite() -> SpriteNode {
         physical_clip: Some([2, 27, 507, 283]),
     }
 }
+
+fn instant() -> InstantText {
+    InstantText {
+        common: Common {
+            world: [100.75, -200.25],
+            anchor: [0, 0],
+            ..common()
+        },
+        position: [11, 13],
+        alignment_offset: [-21, 31],
+        dimensions: [80, 40],
+        alignment: 0,
+        hit_rejected: false,
+    }
+}
+#[test]
+fn instant_text_all_seven_alignments_preserve_signed_integer_halves_and_float_order() {
+    // Independently worked origins: base111,213, then x offsets -21/-10,
+    // y offsets31/15; half of negative21 truncates toward zero.
+    for (alignment, expected) in [
+        [151, 233],
+        [130, 233],
+        [151, 264],
+        [130, 264],
+        [141, 248],
+        [141, 233],
+        [141, 264],
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let p = point_candidate(
+            &Surface::ExactInstantText(InstantText {
+                alignment: alignment as u32,
+                ..instant()
+            }),
+            &codec(),
+        )
+        .unwrap();
+        assert_eq!(p.ideal_logical, expected);
+        assert!(!p.current_frame_verified && !p.effective_routing_verified && !p.input_authorized);
+    }
+}
+#[test]
+fn instant_text_bad_branch_hierarchy_numbers_and_quantized_boundary_refuse() {
+    for t in [
+        InstantText {
+            hit_rejected: true,
+            ..instant()
+        },
+        InstantText {
+            alignment: 7,
+            ..instant()
+        },
+        InstantText {
+            alignment: u32::MAX,
+            ..instant()
+        },
+        InstantText {
+            position: [65537, 0],
+            ..instant()
+        },
+        InstantText {
+            alignment_offset: [0, -65537],
+            ..instant()
+        },
+        InstantText {
+            dimensions: [65537, 40],
+            ..instant()
+        },
+        InstantText {
+            dimensions: [80, -1],
+            ..instant()
+        },
+        InstantText {
+            common: Common {
+                scalar: 2.0,
+                ..instant().common
+            },
+            ..instant()
+        },
+        InstantText {
+            common: Common {
+                world: [f32::NAN, 0.0],
+                ..instant().common
+            },
+            ..instant()
+        },
+        InstantText {
+            common: Common {
+                hierarchy: Hierarchy {
+                    closed_to_owned_root_1f0: true,
+                    conditional_unit_cache_consistent: false,
+                },
+                ..instant().common
+            },
+            ..instant()
+        },
+        // Center112 snaps to110 at 5x scaling, outside the strict left edge111.
+        InstantText {
+            dimensions: [2, 40],
+            ..instant()
+        },
+    ] {
+        assert!(point_candidate(&Surface::ExactInstantText(t), &codec()).is_err());
+    }
+}
 #[test]
 fn sprite_origin_sign_height_and_physical_roundtrip_match_independent_example() {
     let p = point_candidate(&Surface::ExactSpriteNode(sprite()), &codec()).unwrap();

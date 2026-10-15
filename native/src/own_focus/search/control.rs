@@ -2,6 +2,42 @@
 //! still requires its own stage, persisted intent and independently checked UI.
 use super::*;
 use crate::node_reuse::Reuse;
+mod render;
+
+fn routing(
+    r: &Reader<'_>,
+    base: u64,
+    edit: u64,
+    registry: u64,
+    flags: u32,
+    edit_flags: u8,
+) -> Result<Value> {
+    // GUI+158 is keyboard focus, GUI+230 is the separate text receiver.
+    // Never dereference another control or infer either identity from flags.
+    let gui = r.u64(base + 0x45778e0)?;
+    if gui != registry {
+        return Ok(
+            json!({"available":false,"reason":"owned_gui_global_join_unavailable",
+            "keyboard_focus_verified":false,"text_receiver_verified":false,
+            "input_authorized":false}),
+        );
+    }
+    exact_search_type(r, base, gui, 0x42736f8, "input_gui")?;
+    exact_search_type(r, base, edit + 0x1a0, 0x4349be8, "text_receiver")?;
+    let keyboard = r.u64(gui + 0x158)? == edit;
+    let text = r.u64(gui + 0x230)? == edit + 0x1a0;
+    let enabled = flags & 0x800 != 0 && edit_flags & 2 == 0;
+    let focused = edit_flags & 1 != 0;
+    Ok(
+        json!({"available":true,"reason":"exact_owned_gui_and_edit_receiver",
+        "gui_global_binding_verified":true,"receiver_layout_verified":true,
+        "keyboard_target_matches":keyboard,"text_receiver_matches":text,
+        "control_enabled_flag":enabled,"edit_focused_flag":focused,
+        "keyboard_focus_verified":keyboard&&enabled&&focused,
+        "text_receiver_verified":text&&enabled&&focused,
+        "effective_routing_verified":false,"input_authorized":false}),
+    )
+}
 
 fn wide_query(r: &Reader<'_>, edit: u64) -> Result<String> {
     // CEditBox embeds the text editor at +80. Its getter reads the std::wstring
@@ -147,27 +183,18 @@ pub(crate) fn observe(r: &Reader<'_>, base: u64, view: u64, registry: u64) -> Re
     }
     listener(r, base, edit, view)?;
     let query = wide_query(r, edit)?;
-    let render = r.u64(edit + 0x1b0)?;
-    let mut geometry = json!({"available":false,"reason":"search_renderer_layout_unavailable",
-        "input_authorized":false});
-    let renderer_join = render != 0 && r.u64(render)? == base + 0x43593d8;
-    if renderer_join {
-        if r.u64(render + 0x138)? != edit {
-            return Err(invalid("Search text renderer and control differ"));
-        }
-        let mut reuse = Reuse::for_owned_focus(base);
-        geometry =
-            crate::info_research_button::text_raw(r, &mut reuse, render, container, registry)?;
-        geometry["render_type_encoding"] = json!("11CTextSprite");
-    }
+    let geometry = render::observe(r, base, edit, container, registry)?;
+    let flags = u32::from_le_bytes(r.read(edit + 0x74, 4)?.try_into().unwrap());
+    let edit_flags = r.byte(edit + 0x271)?;
+    let routing = routing(r, base, edit, registry, flags, edit_flags)?;
     Ok(
         json!({"available":true,"name":"to_find_text","query_text":query,
         "query_encoding":"bounded_utf32le","named_container_binding_verified":true,
         "ordinary_listener_binding_verified":true,
-        "flags74_raw":u32::from_le_bytes(r.read(edit+0x74,4)?.try_into().unwrap()),
-        "edit_flags271_raw":r.byte(edit+0x271)?,
-        "renderer_control_join_verified":renderer_join,"render_diagnostic":geometry,
-        "keyboard_focus_verified":false,"effective_routing_verified":false,
+        "flags74_raw":flags,"edit_flags271_raw":edit_flags,
+        "renderer_control_join_verified":geometry["renderer_control_join_verified"]==true,
+        "render_diagnostic":geometry,"keyboard_focus_verified":routing["keyboard_focus_verified"],
+        "routing_diagnostic":routing,"effective_routing_verified":false,
         "input_authorized":false}),
     )
 }

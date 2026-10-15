@@ -173,8 +173,22 @@ The corrected observer follows the owned Focus root's named `find_view` window,
 then its typed edit-box collection for `to_find_text`. The prior `edit+0x60`
 pointer is a definition, never a parent window, and is no longer read. Complete
 paired names, exact types/registries, alias/listener joins and final witnesses
-remain mandatory. The corrected path still requires a paused live probe before
-search input is implemented. No successful search or campaign gate is claimed.
+remain mandatory. Run060 on immutable `c1e0d9c` passed that paused live probe:
+both opening stages and both search reads succeeded, with 14 player RPCs and
+zero errors. The optional query read took 75.559 ms RPC / 64.288 ms producer and
+verified the named field/listener with an empty query. The alternate renderer
+was unavailable, and the search cache remained unmaterialized (zero rows for
+262 current items). No typing, selection or assignment was attempted. Final
+overview stayed at the paused baseline. Canonical release, the 356.666-second
+recording, normal exit 0, exact-process absence and unchanged 106 native inputs/
+24 helpers passed audit; both brokers are closed.
+
+The next observer supports the independently recovered CInstantTextObject leaf
+and separate GUI keyboard/text receiver joins. Conditional coordinate math uses
+that renderer's own alignment and hit predicate, not TextSprite fields or font
+getters. Generated tests do not prove its live type, geometry or input routing.
+Search typing, Enter and successive Focus choices remain unverified; no clean
+two-year run or full campaign has passed.
 
 ## Immediate acceptance work
 

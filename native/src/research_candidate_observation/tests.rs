@@ -82,6 +82,45 @@ fn hierarchy() -> Value {
       "unit_cache_diagnostic":{"cache_consistent_under_observed_unit_branch":true}})
 }
 #[test]
+fn instant_text_parser_requires_exact_join_and_uses_its_own_hit_operands() {
+    let raw = json!({"render_type_encoding":"18CInstantTextObject",
+        "field_layout_verified":true,"renderer_control_join_verified":true,
+        "flags228_raw":128,"cache_translation_raw":[100.75,-200.25],
+        "scalar_raw":1,"position_raw":[11,13],"alignment_offset_raw":[-21,31],
+        "dimensions_raw":[80,40],"alignment_raw":4,"parent_chain":hierarchy()});
+    let c = codec(&geometry(), &profile()).unwrap();
+    let p = research_attempt::point_candidate(&control_surface(&raw).unwrap(), &c).unwrap();
+    assert_eq!(p.ideal_logical, [141, 248]);
+    assert_eq!(p.client_pixel, [28, 50]);
+    assert!(!p.input_authorized && !p.effective_routing_verified);
+    for (path, value) in [
+        ("/field_layout_verified", json!(false)),
+        ("/renderer_control_join_verified", json!(false)),
+        ("/flags228_raw", json!(256)),
+        ("/flags228_raw", json!(-1)),
+        ("/flags228_raw", json!(129)),
+        ("/alignment_raw", json!(7)),
+        (
+            "/parent_chain/unit_cache_diagnostic/cache_consistent_under_observed_unit_branch",
+            json!(false),
+        ),
+        (
+            "/parent_chain/chain/0/role",
+            json!("owned_graphics_root_350"),
+        ),
+        ("/render_type_encoding", json!("14CInstantSprite")),
+    ] {
+        let mut bad = raw.clone();
+        *bad.pointer_mut(path).unwrap() = value;
+        assert!(
+            control_surface(&bad)
+                .and_then(|s| research_attempt::point_candidate(&s, &c))
+                .is_err(),
+            "{path}"
+        );
+    }
+}
+#[test]
 fn a_closed_unknown_or_350_scope_cannot_fabricate_root1f0_coordinate_authority() {
     for role in [
         serde_json::Value::Null,

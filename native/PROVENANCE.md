@@ -385,11 +385,42 @@ values. The reader bounds that Linux wide string to 128 code points, checks
 capacity/termination and rejects invalid values. This is not a portable wchar
 assumption. Exact CTextSprite diagnostics reuse the existing witnessed hierarchy
 only after the reciprocal control join. Raw edit flags do not prove keyboard
-focus, effective routing or permission to type. The corrected optional path is
-unverified in the live game. Run058 refused an exact type check before returning
+focus, effective routing or permission to type. Run060 verified the corrected
+named path, listener and empty query; its renderer remained unavailable.
+Run058 refused an exact type check before returning
 the optional payload; its original response did not identify the failing object. Search type
 diagnostics now retain static object labels and expected table offsets. An
 unexpected value is reported only as a relative offset within this exact ELF's
 `.data.rel.ro` range `[0x41adde0, 0x436d9f8)`; values outside it remain undisclosed.
 That range limits diagnostic disclosure only. It never makes another type valid
 or permits reading its payload. No additional process read is introduced.
+
+The same exact ELF's edit-box constructor has a second branch through
+`0x2ee8270`, storing primary `0x434cc68` (RTTI `18CInstantTextObject`) in
+`edit+0x1b0`. It shares the `0x2ec4c30` graphics base and reciprocal control
+`+0x138`, but not CTextSprite's payload. Its exact hit method `0x2ee8d10`
+(virtual `+0x80`) uses signed position `+0x1f0/+0x1f4`, signed alignment offsets
+`+0x208/+0x20c`, dimensions `+0x210/+0x214`, alignment `+0x218`, and rejection
+bit 0 at `+0x228`. Jump table `0x38b6128` establishes six non-default alignment
+branches; signed halves truncate toward zero. Integer alignment precedes
+float32 world-cache addition/subtraction; origins truncate before strict
+integer interior comparisons. Its virtual `+0x150` (`0x2ee8a40`) uses the same
+origin operands, while virtual `+0xb8` (`0x2ec5a60`) returns zero. The hit
+predicate does not need the font-measurement getter at virtual `+0x160`.
+The new observer witnesses bounded fields and permits InstantText only as an
+owned-Focus hierarchy leaf, never an ancestor. Conditional pure projection
+requires the existing owned root1f0, unit-cache and SDL/X11 coordinate profile.
+It does not establish current-frame/topmost routing or deliver input.
+
+GUI setter `0x2edd750` stores keyboard control `+0x158` and invokes gain/loss
+members. Edit gain/loss `0x2eaa9f0`/`0x2eaaad0` changes bit 0 at `+0x271` and
+registers/unregisters `edit+0x1a0`. That secondary primary is `0x4349be8`; its
+text-event thunk `0x2eaacb0` adjusts by `-0x1a0` into `0x2eaab60`.
+`0x2f75650`/`0x2f75670` use GUI global `0x45778e0`; registration
+`0x2edde40` stores text receiver `+0x230`, separately read by input router
+`0x2edb850`. The observer first requires global equality with the owned registry,
+then compares each receiver without dereferencing foreign controls. Keyboard
+handler `0x2ea9960` additionally requires byte `+0x75` bit 3, edit flag bit 0
+and no edit flag bit 1. Identity/flag diagnostics remain distinct from effective
+event delivery and input authority. These new branches have static/generated
+evidence only until a new immutable live probe; Run060 did not observe them.

@@ -4019,3 +4019,42 @@ Composed checks passed 755 Rust 1.86 host tests, 863 reported actual Linux check
 (861 substantive), five included X11 cases and 953 Python tests (37 skips).
 Format, host/Linux Clippy, MSRV and Linux release linking passed with all 106
 native inputs unchanged. These generated checks do not replace the live probe.
+
+## Run060: paused search-field observation passed — 15 October 2026
+
+One Luna medium player used immutable `c1e0d9c` in fresh vanilla Germany,
+Normal/historical/FAIR, paused at 1 January 1936 noon. OpenPolitics and OpenFocus
+returned verified receipts. Four Year Plan with `include_control:true` succeeded
+in 75.559 ms RPC / 64.288 ms producer, using 5,674 logical reads and 280,328 bytes.
+The corrected named-container and listener joins passed; the bounded query was
+empty. Renderer/control binding remained unavailable. This run did not retain
+the renderer table and therefore does not establish its actual type.
+
+The comparison Rhineland read succeeded in 72.634 ms RPC / 62.912 ms producer.
+Both returned 262 current items and zero cached search rows, matches or selected
+key. The cache was unmaterialized, so cached name tokens cannot bootstrap the
+initial query. Final overview matched the paused baseline. There was no worker,
+assignment, research, clock action, typing, Enter, raw-coordinate input or map
+movement by Luna.
+
+Independent audit verified all 14 player RPC rows with zero errors, the two
+ordinary input pairs, canonical release against the latest actual release/status
+and guest proof, and unchanged 106 native inputs/24 helpers. The 356.666-second
+recording passed integrity checks. Ordinary owned close took 2.165 seconds and
+exited normally with code 0; all four owned guest processes and both brokers
+were absent. Search input and campaign acceptance remain unverified.
+
+The next preview adds exact CInstantTextObject raw geometry and bounded
+conditional hit math, derived from this Linux binary's constructor, alignment
+switch and strict integer hit test. It reads no font payload and invokes no
+getter. The hierarchy accepts that type only as an owned-Focus leaf. A separate
+diagnostic checks the global GUI against the owned registry and independently
+compares its keyboard control and text receiver with the named edit box. Flags
+alone cannot prove either identity. All authority flags remain false; live
+renderer, focused receiver and ordinary search behavior still require testing.
+
+Composed validation passed 765 Rust 1.86 host tests, 873 reported actual Linux
+checks (871 substantive), five included X11 cases and 953 Python tests (37 skips).
+Formatting, host/Linux Clippy, MSRV and Linux release linking passed with all
+107 native inputs unchanged. The existing Python shutdown-deferred diagnostic
+remains recorded. No new input stage is enabled by this observer/math change.
