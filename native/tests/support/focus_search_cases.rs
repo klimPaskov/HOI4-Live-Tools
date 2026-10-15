@@ -217,6 +217,55 @@ fn query_result(f: &Fake) -> Result<serde_json::Value> {
 }
 
 #[test]
+fn search_type_refusal_identifies_object_without_reading_its_payload() {
+    for (object, label, expected, payload, size) in [
+        (ITEM, "current_item", 0x4249b90, ITEM + 0x20, 8),
+        (EDIT, "query_control", 0x43498b8, EDIT + 0x60, 16),
+        (CONTAINER, "query_container", 0x4347d58, CONTAINER + 0x98, 8),
+        (EDIT + 0x80, "embedded_editor", 0x4349b78, EDIT + 0x88, 32),
+        (
+            VIEW + 0x678,
+            "own_view_listener",
+            0x424aa30,
+            VIEW + 0x680,
+            8,
+        ),
+    ] {
+        let mut f = query_fixture("");
+        f.word(object, 0x43470c8);
+        let error = query_result(&f).unwrap_err();
+        assert_eq!(error.code, "invalid_focus_type");
+        assert_eq!(
+            error.message,
+            format!("Search {label}: expected_rva=0x{expected:x} observed_rva=0x43470c8")
+        );
+        assert!(f.untouched(payload, size));
+        assert!(f.untouched(0x43470c8, 8));
+    }
+}
+
+#[test]
+fn search_type_diagnostics_hide_outside_section_values_and_never_follow_them() {
+    for table in [0, 0x41adddf, 0x436d9f8, u64::MAX] {
+        let mut f = query_fixture("");
+        f.word(EDIT, table);
+        let error = query_result(&f).unwrap_err();
+        assert_eq!(error.code, "invalid_focus_type");
+        assert_eq!(error.message, "Search query_control: expected_rva=0x43498b8 observed_rva=outside_verified_table_section");
+        assert!(f.untouched(EDIT + 0x60, 16));
+    }
+    let mut f = query_fixture("");
+    f.word(EDIT + 0x60, CONTAINER + 1);
+    let error = query_result(&f).unwrap_err();
+    assert_eq!(error.code, "invalid_focus_type");
+    assert_eq!(
+        error.message,
+        "Search query_container: non-null aligned object required"
+    );
+    assert!(f.untouched(CONTAINER, 0x1000));
+}
+
+#[test]
 fn exact_search_query_reads_utf32_only_after_own_name_and_listener_join() {
     for text in ["", "abc", "Å世🦀", "four year plan", "Rhineland"] {
         let f = query_fixture(text);

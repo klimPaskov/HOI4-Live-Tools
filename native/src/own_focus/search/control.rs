@@ -38,7 +38,7 @@ fn wide_query(r: &Reader<'_>, edit: u64) -> Result<String> {
 }
 
 fn listener(r: &Reader<'_>, base: u64, edit: u64, view: u64) -> Result<()> {
-    exact(r, edit + 0x80, base + 0x4349b78)?;
+    exact_search_type(r, base, edit + 0x80, 0x4349b78, "embedded_editor")?;
     // This edit-box observer is a list rooted in the embedded editor. Require
     // the one constructor-bound Focus listener; never chase an unknown target.
     if r.i32(edit + 0x98)? != 1 || r.u64(edit + 0xa0)? != 0 {
@@ -56,7 +56,7 @@ fn listener(r: &Reader<'_>, base: u64, edit: u64, view: u64) -> Result<()> {
     {
         return Err(invalid("Search listener must capture exact own Focus view"));
     }
-    exact(r, target, base + 0x424aa30)?;
+    exact_search_type(r, base, target, 0x424aa30, "own_view_listener")?;
     if r.u64(target + 8)? != view {
         return Err(invalid("Search listener own-view receiver differs"));
     }
@@ -81,7 +81,7 @@ pub(crate) fn observe(r: &Reader<'_>, base: u64, view: u64, registry: u64) -> Re
             "input_authorized":false}),
         );
     }
-    exact(r, edit, base + 0x43498b8)?;
+    exact_search_type(r, base, edit, 0x43498b8, "query_control")?;
     if r.u64(edit + 0x68)? != registry {
         return Err(Error::new(
             "foreign_focus_scope",
@@ -89,7 +89,7 @@ pub(crate) fn observe(r: &Reader<'_>, base: u64, view: u64, registry: u64) -> Re
         ));
     }
     let container = r.u64(edit + 0x60)?;
-    exact(r, container, base + 0x4347d58)?;
+    exact_search_type(r, base, container, 0x4347d58, "query_container")?;
     if r.u64(container + 0x98)? != registry {
         return Err(Error::new(
             "foreign_focus_scope",

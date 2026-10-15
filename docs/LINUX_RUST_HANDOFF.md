@@ -151,8 +151,20 @@ offscreen diagnostics now retain projected coordinates without clamping them.
 The next optional `include_control` observation adds bounded query text, exact
 named search-field/listener joins and reciprocal renderer diagnostics. Default
 search reads omit that payload. Keyboard focus, typing and Enter routing remain
-unverified. Run058 is planned as a paused observation probe after two existing
-ordinary Focus-opening actions, with no worker, assignment or time advancement.
+unverified. Run058 on immutable `1531b4b` verified OpenPolitics and OpenFocus,
+then its first search-state read refused with `invalid_focus_type`. The original
+generic error does not identify the failing object; no query text or geometry
+was returned. Luna stopped without a retry, comparison or final overview, as
+required by its pre-granted terminal contract. The two input pairs, one RPC
+error, canonical release, 418.666-second recording, normal exit 0 and exact
+process absence passed independent audit. All 106 native inputs and 24 helpers
+remained unchanged. Both brokers are closed; no game or player owns input.
+
+The next diagnostic preserves the search object label and expected/observed
+table offsets when the latter is inside this exact ELF's read-only table section.
+Unknown table values remain undisclosed and are never followed. This changes no
+accepted type, ownership check, read budget or input authority. Repeat the paused
+probe before implementing search input; the original mismatch remains unresolved.
 
 ## Immediate acceptance work
 

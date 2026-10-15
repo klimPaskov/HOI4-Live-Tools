@@ -3947,4 +3947,43 @@ Live field geometry and ordinary query/Enter behavior remain unverified.
 Composed checks passed 750 Rust 1.86 host tests, 858 reported actual Linux checks
 (856 substantive), five included X11 cases and 953 Python tests (37 skips). All
 106 native source inputs stayed fixed through formatting, host/Linux Clippy,
-MSRV and Linux release checks. Run058 will verify the paused live observation.
+MSRV and Linux release checks. Run058 subsequently exercised the paused observer.
+
+## Run058: paused Focus search-field refusal — 15 October 2026
+
+One Luna medium player used immutable source `1531b4b` and its tested Linux
+binary in fresh vanilla Germany, Normal/historical/FAIR, paused at 1 January
+1936 noon. Exactly two authorized ordinary stages, OpenPolitics and OpenFocus,
+returned Verified/ServerConfirmed receipts. The first search-state read, for
+Four Year Plan with `include_control:true`, returned actual MCP `isError:true`,
+`invalid_focus_type: Exact primary focus/UI type required`, in 66.519 ms RPC.
+The original error lacks the failing object's identity. No search payload,
+query text or geometry was obtained, and the type mismatch remains unresolved.
+
+Under the terminal contract Luna made no retry, comparison read or final
+overview. No worker, assignment, research or clock action occurred. Independent
+audit found 12 player RPC rows, one error and exactly two Focus input pairs.
+The latest actual release/status rows matched the canonical guest proof. The
+418.666-second recording passed integrity checks; ordinary owned close took
+2.131 seconds, exited normally with code 0, and all four owned game/recording
+processes were absent. Both brokers closed. All 106 native inputs and 24 helpers
+remained unchanged through the run.
+
+The menu harness recorded 11 inputs, including opening and closing Load Game
+and Settings without loading a save or changing settings. Its preflight was
+corrected before grant to count the Escape operation's absent campaign-start
+flag as false. A capture-copy basename refusal and an early read-only journal
+fetch before normal close are retained separately from player RPC errors.
+No campaign acceptance or successful search observation is claimed.
+
+The next diagnostic identifies each search type-check object and reports an
+unexpected table offset only within the exact ELF's read-only table section.
+Generated cases verify refusal before payload reads, no unexpected-table
+dereference and suppression of values outside that section. Accepted layouts,
+ownership checks and input authority are unchanged.
+
+This diagnostic build passed 752 Rust 1.86 host tests, 860 reported actual Linux
+checks (858 substantive), five included X11 cases and 953 Python tests (37 skips).
+Format, host/Linux Clippy, MSRV checks and Linux release linking passed with all
+106 native inputs unchanged. These checks do not identify the original live
+mismatch; the next paused probe is still required.

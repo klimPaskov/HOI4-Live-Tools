@@ -376,4 +376,10 @@ capacity/termination and rejects invalid values. This is not a portable wchar
 assumption. Exact CTextSprite diagnostics reuse the existing witnessed hierarchy
 only after the reciprocal control join. Raw edit flags do not prove keyboard
 focus, effective routing or permission to type. This optional path is unverified
-in the live game.
+in the live game. Run058 refused an exact type check before returning the optional
+payload; its original response did not identify the failing object. Search type
+diagnostics now retain static object labels and expected table offsets. An
+unexpected value is reported only as a relative offset within this exact ELF's
+`.data.rel.ro` range `[0x41adde0, 0x436d9f8)`; values outside it remain undisclosed.
+That range limits diagnostic disclosure only. It never makes another type valid
+or permits reading its payload. No additional process read is introduced.

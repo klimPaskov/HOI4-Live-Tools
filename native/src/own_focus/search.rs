@@ -11,6 +11,38 @@ fn invalid(message: &str) -> Error {
     Error::new("invalid_focus_search", message)
 }
 
+// Preserve the object that refused before its payload is read. Run058's
+// generic type error could not distinguish the item, edit box or listener.
+// A relative table value is diagnostic only, and is reported only within the
+// verified ELF's .data.rel.ro section. Never follow an unexpected type.
+fn exact_search_type(
+    r: &Reader<'_>,
+    base: u64,
+    object: u64,
+    table_rva: u64,
+    label: &'static str,
+) -> Result<()> {
+    if object == 0 || object % 8 != 0 {
+        return Err(Error::new(
+            "invalid_focus_type",
+            format!("Search {label}: non-null aligned object required"),
+        ));
+    }
+    let observed = r.u64(object)?;
+    if observed != base + table_rva {
+        let observed = observed
+            .checked_sub(base)
+            .filter(|rva| (0x41adde0..0x436d9f8).contains(rva))
+            .map(|rva| format!("0x{rva:x}"))
+            .unwrap_or_else(|| "outside_verified_table_section".into());
+        return Err(Error::new(
+            "invalid_focus_type",
+            format!("Search {label}: expected_rva=0x{table_rva:x} observed_rva={observed}"),
+        ));
+    }
+    Ok(())
+}
+
 pub(super) fn observe(
     r: &Reader<'_>,
     base: u64,
@@ -36,7 +68,7 @@ pub(super) fn observe(
     unique(&current)?;
     let mut own_items = BTreeMap::new();
     for item in current {
-        exact(r, item, base + 0x4249b90)?;
+        exact_search_type(r, base, item, 0x4249b90, "current_item")?;
         if r.u64(item + 0x2b0)? != view {
             return Err(Error::new(
                 "foreign_focus_scope",
