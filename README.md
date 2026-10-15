@@ -23,25 +23,24 @@ Recorded Linux tests have passed:
   observations requiring no input lease.
 - Rust Politics-close and research assignment, preserving the active focus; an
   identical close request returned its saved receipt without another dispatch.
+- Worker-only Focus-to-research navigation and assignment, followed by immediate
+  restart/STOP with both completions and the shared 2/2 budget intact.
 - Digests below 2 KB with exact historical detail lookup; five recent samples
   returned in 50–62 ms under x86 CPU emulation.
 
-These are bounded tests in vanilla Normal/historical Germany. Run045 passed
-worker Focus Start, Rust Politics-close, saved-receipt nonreplay and research
-assignment. The game stayed paused; the active focus has not finished over game
-time. Recording and normal exit passed. The automatic Focus-to-research handoff
-is implemented with explicit opt-in. Run046 stopped earlier, at an unresolved
-OpenFocus readback; the worker quarantined the attempt and its handoff gate was
-not reached. The original cause was lost by that adapter; future errors now
-retain it without permitting replay. Reverse panel switching, completed-technology
-refill, economic/army/naval commands and full campaigns remain open. Original
-failures remain in the validation report.
+These are bounded tests in vanilla Normal/historical Germany. Run047 completed
+the automatic Focus-to-research plan in about 20 seconds under x86 CPU emulation;
+its recording and normal exit passed. The game stayed paused, so Focus and
+technology completion over game time remain unverified. Reverse panel switching,
+completed-technology refill, economic/army/naval commands and full campaigns
+remain open. Original failures, including run046's unresolved OpenFocus attempt,
+remain in the validation report; a later success does not explain them.
 
 | Runtime | Verified | Remaining |
 | --- | --- | --- |
 | Python / Windows | Baseline tools and recorded play attempts | Clean campaign acceptance; current development changes are unfinished |
 | Python / macOS | Platform work and limited diagnostic play | Reliable live acceptance; screenshot-driven testing is stopped |
-| Native / Linux | Own reads/catalogs, owned launch, bounded Luna clock/research/focus tests, daily assignment and restart persistence | Combined domain plans, economics/army/naval control and campaign acceptance |
+| Native / Linux | Own reads/catalogs, owned launch, bounded Luna clock/research/focus tests, Focus-to-research plans and restart persistence | Reverse panel navigation, completion/refill, economics/army/naval control and campaign acceptance |
 | Native / Windows and macOS | Portable protocol and fixture tests in CI | Independently verified process/build adapters and live tests |
 
 Read [the acceptance gates](docs/LINUX_RUST_HANDOFF.md),
@@ -105,8 +104,9 @@ are documented in [the comparison](docs/CLAUSEWITZ_COMPARISON.md) and
 Research uses exact technology IDs, verified panel/slot/category navigation and
 a persisted shared daily budget. Focus has separate owner and plan permissions;
 its worker has recorded Start, plan-update and restart evidence. The new one-way
-Focus-to-research worker handoff awaits live validation. Completed-technology
-refill, reverse panel switching and broader strategic adapters remain acceptance gates. Earlier failures, including unresolved clock
+Focus-to-research worker handoff passed run047 with one recorded pre-input research
+retry and no replay on restart. Completed-technology refill, reverse panel
+switching and broader strategic adapters remain acceptance gates. Earlier failures, including unresolved clock
 uncertainty, are preserved in the validation report. Three-OS CI checks shared
 code and fixtures; Windows/macOS live adapters still need independent validation.
 

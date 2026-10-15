@@ -52,7 +52,8 @@ and supports idempotent plan updates. Several research entries may complete on
 one day within the durable assignment limit. Ordered research queues now retain
 one pending head per slot and wait for fresh empty-slot evidence; refill after
 an actual technology finishes still awaits live validation. A one-way automatic
-Focus-to-research handoff is implemented and awaits live validation. Reverse
+Focus-to-research handoff passed recorded run047, including same-plan restart
+without input replay or a budget reset. Reverse
 research-to-Focus navigation, economy, army and naval adapters remain unfinished. Private daily storage
 supports Unix only; other platforms return an explicit capability error.
 
@@ -171,8 +172,25 @@ input. One preparation is recorded per batch, without spending an assignment
 reservation. Research receives its own fresh five-second ceiling next batch.
 The close history survives restart and prevents a second automatic attempt,
 including after a known nonqueued refusal. Occupied slots and pending research
-retries bypass this handoff. This worker path is fixture-tested only; its recorded
-combined-plan test remains pending. Research-to-Focus navigation is unavailable.
+retries bypass this handoff. Run047 verified the complete worker path and adjacent
+restart/STOP, retaining both completion IDs and budget2/2. Its SelectSlot step had
+one preserved BeforeIntent torn-read, then succeeded under the existing bounded
+retry policy. Research-to-Focus navigation is unavailable.
+
+To wait for a known assignment state, use `hoi4_wait_for` with, for example:
+
+```json
+{"timeout_seconds":45,"until_assignments":{"focus_id":"GER_remilitarize_the_rhineland","research":[{"slot":0,"technology_id":"support_weapons"}]}}
+```
+
+All supplied targets must match a single accepted own-country snapshot. The
+first snapshot counts, so work completed before the call returns immediately.
+Either domain can be omitted; at least one target is required. Slots must be
+unique and between 0 and 31. This option cannot be combined with a date or UI wait.
+It means an active Focus and current slot assignments, not completed technologies,
+a finished Focus or durable governor receipts. It uses the existing bounded
+reader and never pauses or supplies input authority. Unrelated changes do not
+finish this targeted wait. Fixture checks pass; installed-game validation is pending.
 
 Wait timeouts return only the last earlier accepted sample, explicitly marked
 `state_historical: true`, `current_state_verified: false` and
@@ -379,8 +397,8 @@ settled own roots and complete local blocker facts, then uses exact Sprite,
 zero-angle Text or unmasked Frame geometry. Unknown facts and unsupported renderers refuse. These facts do not
 prove global modal clearance or routing. Run036 passed open/select and one
 ordinary Start with canonical active-focus readback. Run041/042 passed bounded
-daily Focus execution and restart persistence. Focus completion over game time,
-automatic cross-domain handoff and campaign acceptance still need live validation.
+daily Focus execution and restart persistence. Run047 passed the one-way automatic
+handoff. Focus completion over game time and campaign acceptance remain open.
 
 Only the verified own-focus node/start producers opt into a fixed traversal
 policy for the larger focus-tree container: exact generic Position ancestors

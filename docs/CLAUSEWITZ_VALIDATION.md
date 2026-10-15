@@ -16,8 +16,10 @@ exit passed. Its Focus Start assignment is Complete; the focus itself has not
 finished over game time. Run044's terminal nonqueued Start and consumed budget
 remain preserved. The subsequent combined-plan run046 stopped at an unresolved
 OpenFocus readback before Start or handoff. Its original observation cause was
-not retained; recording and normal exit passed. The automatic handoff remains
-unaccepted. See the recorded run045 and run046 sections below.
+not retained; recording and normal exit passed. Run047 then passed the complete
+worker-only Focus-to-research plan and immediate restart/STOP, retaining both
+completion identities and budget 2/2. Its recording and normal exit passed;
+the game stayed paused. See the recorded run045–047 sections below.
 
 ## Reference and test environment
 
@@ -3204,5 +3206,62 @@ but Windows rejected two new test-only file reads while the journal held its
 exclusive byte-range lock (OS error33). The tests now release that journal before
 inspecting persisted bytes, both before reopening and after checking that all
 request IDs remain blocked. The same assertions and production locking remain
-unchanged. Both targeted tests pass locally; Windows confirmation is pending.
+unchanged. Both targeted tests pass locally, and all nine exact-head Windows,
+Linux and macOS CI jobs passed for the test repair at `e3f3dd8`.
 Run047 retains the immutable `8664dd1` Linux binary during this test-only repair.
+
+## Recorded worker handoff run047 — 15 October 2026
+
+One exclusive Luna player at medium reasoning used immutable source `8664dd1`
+and CLI SHA256
+`4e541a19cdfd91d76ba4fae22d6bb3f61282fc2665fe0f6de7cad1fa81b8af06`.
+Vanilla Germany, Normal difficulty, historical AI and FAIR were verified, with
+no mods. Recording preceded campaign Start; only the worker supplied gameplay
+input. The plan ordered Rhineland and slot 0 `support_weapons`, with budget 2.
+
+- OpenPolitics, OpenFocus, View, Start and ClosePolitics each recorded exactly
+  one Intent/Verified pair with ServerConfirmed delivery. ClosePolitics retained
+  active Rhineland and verified mode23, both roots hidden and zero own blockers.
+- Research recorded four input pairs: OpenPanel, SelectSlot, View and Research.
+  Category input was unnecessary. The first SelectSlot preparation had a
+  BeforeIntent `torn_read: Research UI witness changed`, persisted retry_count 1
+  and a one-second backoff. It had no action-journal Intent; the later verified
+  attempt used the existing bounded pre-input retry policy.
+- Both core assignments became Complete, at producer sequences 6 and 11. There
+  were exactly four core journal rows and no quarantine. Research completion
+  was recorded 19.650 seconds after the start reply. This is assignment timing;
+  the Focus and technology themselves did not finish over game time.
+- A fresh overview confirmed active Rhineland, `support_weapons` in slot 0,
+  paused 1 January 1936 noon and speed 0. Two overview RPCs took 15.29–15.52 ms.
+  Two successful digests took 62.89/52.91 ms and 1295/1257 bytes. One earlier
+  read-only digest returned `input_busy`; an identical retry followed after 5 s.
+  All listed compacted historical detail sections were retrieved.
+- STOP, an identical plan/revision restart, then immediate STOP retained both
+  completion identities, latest request, budget used 2 / limit 2 / remaining 0 and no
+  uncertainty or game-time change. No RPC intervened between restart and STOP;
+  the independent final-journal audit found no additional input or reservations.
+
+Canonical release at 11:49:37.495544UTC and status 0 at 11:49:39.237675UTC matched the
+persisted guest proof and independent readback. The350.333-second512×288 H264
+recording finalized at 11:51:27.893428UTC and passed ffprobe. One ordinary owned
+window close returned at 11:51:49.507127UTC after 2.153 seconds with exit 0, no signal
+or core dump. Exact process absence and Yama 1 passed; brokers closed afterward.
+
+This accepts the bounded automatic Focus-to-research handoff and adjacent
+restart. Reverse navigation, actual completion/refill and full campaigns remain
+unaccepted. Run046's original unresolved OpenFocus attempt remains unexplained.
+
+The worker had already finished before Luna's second change-only wait began;
+that call timed out after 45 seconds. The next `until_assignments` option checks
+the first accepted own snapshot for an explicit conjunction of active Focus and
+research-slot IDs. It preserves bounded reads, deadline rejection and campaign
+identity checks, and neither authorizes input nor proves durable plan completion.
+Seven targeted tests pass, including immediate match, delayed assignment,
+unrelated-change timeout and changed-campaign rejection. Composed validation
+passed 673 Rust 1.86 host tests, 779 reported actual Linux checks (777 substantive;
+two helper cases excluded), all five X11 cases and 953 Python tests (37 skips),
+plus formatting, host/Linux Clippy, Linux MSRV compilation and release linking.
+Review moved three invalid-wait cases from an unrelated catalog test into the
+wait test; the protocol suite was rerun and the Linux bundle rebuilt before its
+full checks. Production code was unchanged by that test correction. Installed-game
+validation of the new wait option remains pending.

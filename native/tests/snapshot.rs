@@ -6187,3 +6187,6 @@ fn research_folders_identity_failure_does_not_publish_a_completed_catalog() {
     );
     assert_eq!(f.checks.get(), 2);
 }
+
+#[path = "support/assignment_wait_cases.rs"]
+mod assignment_wait_cases;

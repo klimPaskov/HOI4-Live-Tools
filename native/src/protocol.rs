@@ -7,6 +7,7 @@ use crate::{
 };
 use serde_json::{json, Value};
 use std::time::{Duration, Instant};
+mod assignment_wait;
 pub struct Server {
     pub process: Option<Box<dyn Process + Send + Sync>>,
     pub unavailable: Option<Error>,
@@ -38,7 +39,7 @@ fn tools(commands: Option<&dyn Commands>) -> Value {
         {"name":"hoi4_focus_node_detail","description":"Exact own focus key joined to complete current-item ownership and only the requested control/callback metadata. Optional raw Sprite/Text/Frame diagnostics; no input or eligibility authority.","inputSchema":{"type":"object","properties":{"focus_id":{"type":"string","minLength":1,"maxLength":128},"include_geometry":{"type":"boolean","default":false}},"required":["focus_id"],"additionalProperties":false}},
         {"name":"hoi4_focus_selected_detail","description":"Compact fresh exact own selected focus detail window. Start binding is window.start.ordinary_binding; the node symbol is a separate control. Refuses missing, different or multiple selected details. Optional existing raw renderer diagnostics; no client point, input or eligibility authority.","inputSchema":{"type":"object","properties":{"focus_id":{"type":"string","minLength":1,"maxLength":128},"include_geometry":{"type":"boolean","default":false}},"required":["focus_id"],"additionalProperties":false},"annotations":{"readOnlyHint":true}},
         {"name":"hoi4_technology_list","description":"Canonical loaded public technology IDs with bounded filtering/pagination. Catalog membership does not imply player research eligibility. Pure reads; never pauses.","inputSchema":{"type":"object","properties":{"filter":{"type":"string","maxLength":128},"offset":{"type":"integer","minimum":0,"maximum":8192},"limit":{"type":"integer","minimum":1,"maximum":100}},"additionalProperties":false}},
-        {"name":"hoi4_wait_for","description":"Bounded server wait for own focus/research change, game date, or research UI view predicates and optional selected own slot. UI matches do not authorize input. Wall timeout returns only an explicitly historical earlier accepted sample; no late target is accepted. Never pauses.","inputSchema":{"type":"object","properties":{"timeout_seconds":{"type":"integer","minimum":1,"maximum":50},"until_date":{"type":"array","items":{"type":"integer"},"minItems":3,"maxItems":3},"until_research_ui":{"type":"object","properties":{"view":{"type":"string","enum":["panel","tree"]},"selected_slot":{"type":"integer","minimum":0,"maximum":31}},"required":["view"],"additionalProperties":false}},"additionalProperties":false}}
+        {"name":"hoi4_wait_for","description":"Bounded server wait for own focus/research change, game date, research UI, or all explicit until_assignments targets. Assignment targets check the first sample too and mean active focus/current slot assignment, not completion over game time or a durable plan receipt. Choose one target family. UI/assignment matches do not authorize input. Wall timeout returns only an explicitly historical earlier accepted sample; no late target is accepted. Never pauses.","inputSchema":{"type":"object","properties":{"timeout_seconds":{"type":"integer","minimum":1,"maximum":50},"until_date":{"type":"array","items":{"type":"integer"},"minItems":3,"maxItems":3},"until_assignments":{"type":"object","properties":{"focus_id":{"type":"string","minLength":1,"maxLength":128,"pattern":"^[A-Za-z0-9_]+$"},"research":{"type":"array","maxItems":32,"items":{"type":"object","properties":{"slot":{"type":"integer","minimum":0,"maximum":31},"technology_id":{"type":"string","minLength":1,"maxLength":256,"pattern":"^[A-Za-z0-9_]+$"}},"required":["slot","technology_id"],"additionalProperties":false}}},"anyOf":[{"required":["focus_id"]},{"required":["research"],"properties":{"research":{"minItems":1}}}],"additionalProperties":false},"until_research_ui":{"type":"object","properties":{"view":{"type":"string","enum":["panel","tree"]},"selected_slot":{"type":"integer","minimum":0,"maximum":31}},"required":["view"],"additionalProperties":false}},"additionalProperties":false}}
     ]});
     if let Some(commands) = commands {
         value["tools"]
@@ -643,7 +644,13 @@ impl Server {
             }
             "hoi4_wait_for" => {
                 if object.keys().any(|k| {
-                    !["timeout_seconds", "until_date", "until_research_ui"].contains(&k.as_str())
+                    ![
+                        "timeout_seconds",
+                        "until_date",
+                        "until_research_ui",
+                        "until_assignments",
+                    ]
+                    .contains(&k.as_str())
                 }) {
                     return Err(Error::new("invalid_arguments", "Unknown wait argument"));
                 }
@@ -659,16 +666,25 @@ impl Server {
                         "Timeout must be 1..50 seconds",
                     ));
                 }
+                if ["until_date", "until_research_ui", "until_assignments"]
+                    .iter()
+                    .filter(|key| object.contains_key(**key))
+                    .count()
+                    > 1
+                {
+                    return Err(Error::new(
+                        "invalid_arguments",
+                        "Choose one date, research UI or assignment wait target",
+                    ));
+                }
+                let assignments = object
+                    .get("until_assignments")
+                    .map(assignment_wait::Target::parse)
+                    .transpose()?;
                 let ui_target = object
                     .get("until_research_ui")
                     .map(UiTarget::parse)
                     .transpose()?;
-                if ui_target.is_some() && object.contains_key("until_date") {
-                    return Err(Error::new(
-                        "invalid_arguments",
-                        "Choose one date or research UI wait target",
-                    ));
-                }
                 if let Some(target) = ui_target {
                     return self.wait_ui(target, Duration::from_secs(timeout));
                 }
@@ -716,9 +732,17 @@ impl Server {
                         ));
                     }
                     let mut reasons = Vec::new();
-                    for field in ["focus", "research"] {
-                        if current[field] != before[field] {
-                            reasons.push(format!("{field}_changed"));
+                    if let Some(assignments) = &assignments {
+                        // Includes the first accepted sample: completion before
+                        // this RPC is not a missed edge requiring another event.
+                        if assignments.reached(&current) {
+                            reasons.push("assignments_reached".into());
+                        }
+                    } else {
+                        for field in ["focus", "research"] {
+                            if current[field] != before[field] {
+                                reasons.push(format!("{field}_changed"));
+                            }
                         }
                     }
                     if target.is_some_and(|v| {

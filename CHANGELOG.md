@@ -2,6 +2,17 @@
 
 ## Unreleased native preview
 
+- Verify run047 worker-only Focus-to-research assignment and adjacent same-plan
+  restart/STOP, retaining both completion IDs and budget2/2. Preserve its one
+  known pre-input SelectSlot retry; recording and normal exit passed.
+- Add an explicit `until_assignments` target to the read-only server wait. It
+  matches the first accepted snapshot and requires all requested active Focus
+  and research-slot IDs, avoiding a missed-change timeout after work finishes.
+  Live validation of this new wait option remains pending.
+- Correct two uncertainty tests to inspect persisted bytes after releasing the
+  journal lock. All nine Windows/Linux/macOS CI jobs passed the test-only repair;
+  production locks and no-replay assertions are unchanged.
+
 - Preserve run046's unresolved OpenFocus intent and worker quarantine. No Start,
   handoff, research or restart was reached; recording and normal exit passed.
 - Retain bounded original causes for Focus/research readback, context, idle,
@@ -14,7 +25,7 @@
 - Add an opt-in automatic Focus-to-research worker handoff using fresh own-state
   checks and the shared guarded close executor. Retain its durable preparation
   history across restart without spending or resetting assignment reservations.
-  Live combined-plan validation and the reverse direction remain pending.
+  Run047 passed combined-plan validation; the reverse direction remains pending.
 
 - Preserve run044's terminal nonqueued Focus Start and consumed budget. No retry,
   close stage or research input occurred; recording and normal owned exit passed.

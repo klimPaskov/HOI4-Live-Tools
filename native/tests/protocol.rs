@@ -226,6 +226,9 @@ fn invalid_wait_is_refused_before_process_access() {
         json!({"until_date":[1936,-1,1]}),
         json!({"until_date":[1936,1.1,1]}),
         json!({"unknown":1}),
+        json!({"until_assignments":{}}),
+        json!({"until_assignments":{"focus_id":"GER_rhineland"},"until_date":[1936,1,2]}),
+        json!({"until_assignments":{"focus_id":"GER_rhineland"},"until_research_ui":{"view":"panel"}}),
     ] {
         let result=server.handle(json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"hoi4_wait_for","arguments":arguments}})).unwrap();
         assert_eq!(result["result"]["isError"], true);
