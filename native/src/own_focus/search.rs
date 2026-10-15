@@ -107,6 +107,7 @@ pub(super) fn observe(
         return Err(invalid("Search matches exceed bounded aligned catalog"));
     }
     let mut matched = BTreeSet::new();
+    let mut ordered = Vec::new();
     let mut requested_matches = 0usize;
     for index in 0..count {
         // Each 8-byte result is a cache index followed by a ranking value. The
@@ -120,6 +121,9 @@ pub(super) fn observe(
             return Err(invalid("Duplicate search result index"));
         }
         requested_matches += usize::from(key.as_str() == requested);
+        if count <= crate::focus_stage::search_matches::MAX_MATCHES {
+            ordered.push(*key);
+        }
     }
     let raw = r.i32(view + 0x1358)?;
     let selected_index = if raw == -1 {
@@ -138,6 +142,8 @@ pub(super) fn observe(
         "current_item_count":own_items.len(),"search_cache_count":records.len(),
         "complete_current_item_coverage":seen.len()==own_items.len(),
         "match_count":count,"requested_match_count":requested_matches,
+        "ordered_matches_available":count<=crate::focus_stage::search_matches::MAX_MATCHES,
+        "ordered_match_keys":if count<=crate::focus_stage::search_matches::MAX_MATCHES {Some(ordered)} else {None},
         "selected_key":selected_key,
         "selected_matches_requested":selected_key.is_some_and(|key| key==requested),
         "selected_in_matches":selected_index.is_some_and(|index| matched.contains(&index)),

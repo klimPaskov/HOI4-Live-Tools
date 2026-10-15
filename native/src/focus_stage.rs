@@ -25,6 +25,8 @@ use std::{
 pub(crate) mod query_readback;
 #[cfg(any(target_os = "linux", test))]
 pub(crate) mod read_recovery;
+pub mod search_matches;
+pub use search_matches::SearchMatches;
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub enum Stage {
@@ -38,6 +40,10 @@ pub enum Stage {
     SearchField,
     /// Bounded ordinary text into the already focused empty own search field.
     SearchQuery,
+    /// Text and complete matches only; deliberately distinct from SearchQuery.
+    SearchText,
+    /// One Tab to the requested immediate next canonical match, with wraparound.
+    SearchNext,
     View,
     Start,
 }
@@ -49,6 +55,8 @@ impl Stage {
                 | Self::OpenPoliticsFromResearch
                 | Self::SearchField
                 | Self::SearchQuery
+                | Self::SearchText
+                | Self::SearchNext
         )
     }
     pub(crate) fn is_shortcut(self) -> bool {
@@ -56,6 +64,12 @@ impl Stage {
             self,
             Self::OpenPolitics | Self::ClosePolitics | Self::OpenPoliticsFromResearch
         )
+    }
+    pub(crate) fn types_query(self) -> bool {
+        matches!(self, Self::SearchQuery | Self::SearchText)
+    }
+    pub(crate) fn uses_query(self) -> bool {
+        self.types_query() || self == Self::SearchNext
     }
 }
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -77,10 +91,11 @@ pub(crate) fn with_transport_cause(
             error.message = format!("{code}: {message}; {}", error.message);
         }
     }
-    if let Some(t) = transport.filter(|t| t["ordinary_text"] == true) {
+    if let Some(t) = transport.filter(|t| t["ordinary_text"] == true || t["ordinary_key"] == "Tab")
+    {
         error.message.push_str(&format!(
             "; query_transport={}",
-            serde_json::json!({"delivery":t["delivery"],"characters":t["characters"],
+            serde_json::json!({"delivery":t["delivery"],"characters":t["characters"],"ordinary_key":t["ordinary_key"],
                 "game_action_verified":false})
         ));
         if let Some(readback) = t.get("postinput_readback") {
@@ -143,6 +158,8 @@ pub struct SearchControl {
     pub query_text: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub requested_selection_verified: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub matches: Option<SearchMatches>,
 }
 impl SearchControl {
     /// Projection of a witnessed producer response; not a command or public MCP input.
@@ -216,6 +233,7 @@ impl SearchControl {
                     && d["search"]["selected_matches_requested"] == true
                     && d["search"]["selected_in_matches"] == true,
             ),
+            matches: SearchMatches::from_observation(&d["search"])?,
         })
     }
 }
@@ -275,10 +293,14 @@ impl Target {
     fn validate_key(&self) -> Result<()> {
         key(&self.focus_id)?;
         match (self.stage, self.query.as_deref()) {
-            (Stage::SearchQuery, Some(query)) => validate_query(query),
-            (Stage::SearchQuery, None) | (_, Some(_)) => Err(error(
+            (stage, Some(query)) if stage.uses_query() => validate_query(query),
+            (stage, None) if stage.uses_query() => Err(error(
                 "invalid_arguments",
-                "SearchQuery alone requires explicit bounded query text",
+                "Search text and next-result stages require explicit bounded query text",
+            )),
+            (_, Some(_)) => Err(error(
+                "invalid_arguments",
+                "Query is invalid for this stage",
             )),
             _ => Ok(()),
         }
@@ -330,6 +352,9 @@ impl OwnState {
         if let Some(id) = &self.selected_focus {
             key(id)?;
         }
+        if let Some(matches) = self.search_matches() {
+            matches.validate()?;
+        }
         Ok(())
     }
     fn base_known(&self) -> bool {
@@ -378,7 +403,7 @@ impl OwnState {
                         .as_ref()
                         .is_some_and(|s| s.keyboard_focus_verified && s.text_receiver_verified)
             }
-            Stage::SearchQuery => {
+            Stage::SearchQuery | Stage::SearchNext => {
                 self.search_base_ready()
                     && self.search_control.as_ref().is_some_and(|s| {
                         s.keyboard_focus_verified
@@ -386,7 +411,15 @@ impl OwnState {
                             && !s.empty_query
                             && s.query_text == t.query
                             && s.requested_selection_verified == Some(true)
+                            && (t.stage != Stage::SearchNext
+                                || s.matches.as_ref().is_some_and(|m| m.selected == t.focus_id))
                     })
+            }
+            Stage::SearchText => {
+                self.query_ready(t)
+                    && self
+                        .search_matches()
+                        .is_some_and(|m| m.ordered.contains(&t.focus_id))
             }
             Stage::View => {
                 self.managed_mode == Some(13)
@@ -443,13 +476,19 @@ impl OwnState {
                         .as_ref()
                         .is_some_and(|s| !s.keyboard_focus_verified && !s.text_receiver_verified)
             }
-            Stage::SearchQuery => {
+            Stage::SearchQuery | Stage::SearchText => {
                 self.search_base_ready()
                     && self.search_control.as_ref().is_some_and(|s| {
                         s.empty_query
                             && s.query_text.as_deref() == Some("")
                             && s.keyboard_focus_verified
                             && s.text_receiver_verified
+                    })
+            }
+            Stage::SearchNext => {
+                self.query_ready(t)
+                    && self.search_matches().is_some_and(|m| {
+                        m.selected != t.focus_id && m.next_key() == Some(&t.focus_id)
                     })
             }
             Stage::View => {
@@ -477,6 +516,18 @@ impl OwnState {
         }
         Ok(())
     }
+    pub(crate) fn search_matches(&self) -> Option<&SearchMatches> {
+        self.search_control.as_ref()?.matches.as_ref()
+    }
+    fn query_ready(&self, t: &Target) -> bool {
+        self.search_base_ready()
+            && self.search_control.as_ref().is_some_and(|s| {
+                s.keyboard_focus_verified
+                    && s.text_receiver_verified
+                    && !s.empty_query
+                    && s.query_text == t.query
+            })
+    }
     fn search_base_ready(&self) -> bool {
         self.managed_mode == Some(13)
             && self.focus_root == LocalRoot::Ready
@@ -499,6 +550,7 @@ pub enum Candidate {
     OpenPoliticsFromResearch,
     /// Target-bound query, no caller-supplied arbitrary key sequence.
     SearchQuery(String),
+    SearchNext(SearchMatches),
     Point(PointCandidate),
 }
 /// Trusted internal adapter contract, not a caller-supplied state/input surface.
@@ -767,6 +819,9 @@ impl Journal {
                     && receipt.target.stage.preserves_focus()
                     && receipt.observed.active_focus != previous.observed.active_focus)
                     || (receipt.status == Status::Verified
+                        && receipt.target.stage == Stage::SearchNext
+                        && !same_search_order(&previous.observed, &receipt.observed))
+                    || (receipt.status == Status::Verified
                         && !matches!(
                             receipt.delivery,
                             Some(Delivery::Unknown | Delivery::ServerConfirmed)
@@ -1016,9 +1071,12 @@ impl Journal {
                 if target.stage == Stage::OpenPoliticsFromResearch => {}
             Candidate::ClosePolitics if target.stage == Stage::ClosePolitics => {}
             Candidate::SearchQuery(query)
-                if target.stage == Stage::SearchQuery && target.query.as_ref() == Some(query) => {}
+                if target.stage.types_query() && target.query.as_ref() == Some(query) => {}
+            Candidate::SearchNext(matches)
+                if target.stage == Stage::SearchNext
+                    && before.search_matches() == Some(matches) => {}
             Candidate::Point(point)
-                if !target.stage.is_shortcut() && target.stage != Stage::SearchQuery =>
+                if !target.stage.is_shortcut() && !target.stage.uses_query() =>
             {
                 if point.input_authorized
                     || point.current_frame_verified
@@ -1054,6 +1112,12 @@ impl Journal {
             return Err(error(
                 "torn_read",
                 "Canonical active focus changed before focus navigation input",
+            ));
+        }
+        if target.stage == Stage::SearchNext && fresh.search_matches() != before.search_matches() {
+            return Err(error(
+                "torn_read",
+                "Search order or selection changed before next-result input",
             ));
         }
         live(authority, token, &target, deadline, gate)?;
@@ -1138,6 +1202,14 @@ impl Journal {
                     {
                         return Err(error("action_uncertain", "Canonical active focus changed after focus navigation input; never replay"));
                     }
+                    if target.stage == Stage::SearchNext
+                        && !same_search_order(&intent.observed, &state)
+                    {
+                        return Err(error(
+                            "action_uncertain",
+                            "Search order changed after next-result input; never replay",
+                        ));
+                    }
                     if state.reached(&target) {
                         backend.confirm_input_idle(&candidate,deadline).map_err(|cause|Error::after_possible_input(
                             "Canonical result observed but input idle remains unverified; never replay",cause))?;
@@ -1163,6 +1235,10 @@ impl Journal {
             );
         }
     }
+}
+
+fn same_search_order(before: &OwnState, after: &OwnState) -> bool {
+    matches!((before.search_matches(), after.search_matches()), (Some(a), Some(b)) if a.ordered == b.ordered)
 }
 
 #[cfg(test)]

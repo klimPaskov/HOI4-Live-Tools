@@ -308,6 +308,15 @@ Every accepted snapshot must still satisfy all identity and input preconditions;
 no input or terminal attempt is retried. Neither stage presses Enter or assigns a Focus.
 `hoi4_focus_search_state` remains a read-only diagnostic.
 
+Run066 observed the exact query but selected a different one of six matching
+Focuses. The new `search_text` stage verifies text plus a complete canonical
+match list (up to 64); it does not claim the requested Focus is selected.
+`search_next` sends one ordinary Tab when `focus_id` is the immediate next match,
+including wraparound. It requires the same query, unchanged match order, exact
+selected ID and unchanged active Focus. Each step has its own durable receipt;
+there is no automatic input retry. These new stages await live validation.
+The original `search_query` predicate and failed historical receipts are unchanged.
+
 The optional `hoi4_research_attempt` preview derives exact technology/slot/category
 controls from fresh own state. Its OpenPanel, SelectSlot, SelectCategory, View and
 Research stages have bounded Luna live evidence, including four-slot assignment

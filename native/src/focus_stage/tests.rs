@@ -1,4 +1,5 @@
 use super::*;
+mod search_navigation;
 mod search_query;
 use std::{
     collections::VecDeque,
@@ -100,6 +101,7 @@ fn search_state(focused: bool) -> OwnState {
         text_receiver_verified: focused,
         query_text: Some(String::new()),
         requested_selection_verified: Some(false),
+        matches: None,
     });
     s
 }

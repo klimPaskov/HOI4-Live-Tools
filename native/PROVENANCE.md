@@ -463,3 +463,27 @@ which invokes the already pinned member `0x1510830`. That member joins the
 selected cache row to a canonical Focus and calls detail creator `0x150efd0`.
 This supports the inference that Enter opens a detail; it does not prove live
 delivery or assignment. The preview does not expose Enter.
+
+
+Run066 observed exact query text and six canonical matches but highlighted
+`GER_prioritize_the_four_year_plan`. The requested `GER_the_four_year_plan`
+was present once; the strict SearchQuery attempt remained unresolved.
+
+Exact Linux ELF FDE-bounded disassembly traces the ordinary next-result route.
+Event handler `0x2088360` checks the unconsumed symbol from `0x38aa6a8` (9, Tab),
+then managed mode 13 and the current managed view before calling `0x151b6f0`.
+That routine finds selected cache index `+0x1358` in ordered eight-byte matches
+`+0x1310`, advances once with wraparound, and calls `0x1513fa0` to select and
+scroll the next item. The previously pinned member `0x1510870` controls the
+empty-query placeholder; it is not the next-result handler. These are local
+shell/static observations of the exact licensed ELF, not REA provider output
+or live input evidence. No engine function is invoked by the adapter.
+
+SearchText and SearchNext have distinct durable semantics. The first verifies
+text and complete canonical matches. The second permits one ordinary Tab only
+for the immediate next requested key, pinning query/order/selection before input
+and requiring unchanged order plus exact selected key afterward. Canonical keys
+are limited to 128 bytes and navigation to 64 matches, within existing journal
+bounds. Existing strict SearchQuery receipts keep their meaning. X11 requires
+unique unshifted Tab, clear XKB state and owned process/window/display identities.
+Live Tab navigation and subsequent View remain pending.

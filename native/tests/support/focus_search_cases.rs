@@ -33,6 +33,11 @@ fn search_highlight_joins_own_current_item_cache_and_match_index() {
     assert_eq!(s["selected_in_matches"], true);
     assert_eq!(s["requested_match_count"], 1);
     assert_eq!(s["complete_current_item_coverage"], true);
+    assert_eq!(s["ordered_matches_available"], true);
+    assert_eq!(
+        s["ordered_match_keys"],
+        serde_json::json!(["GER_rhineland"])
+    );
     assert_eq!(s["query_text_available"], false);
     assert_eq!(s["query_control_binding_available"], false);
     assert_eq!(v["input_authorized"], false);

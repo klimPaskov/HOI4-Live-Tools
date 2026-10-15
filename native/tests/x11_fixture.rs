@@ -931,6 +931,54 @@ fn owned_xvfb_keyboard_controls() {
             .unwrap();
         assert_eq!(mapping.keysyms[0], u32::from(expected));
     }
+    // Search navigation sends exactly one Tab pair and never moves the pointer.
+    controls.preflight_search_next(&process).unwrap();
+    assert!(controls
+        .send_search_next_until_checked(&process, Instant::now(), || Ok(()))
+        .is_err());
+    assert_eq!(
+        controls
+            .send_search_next_until_checked(
+                &process,
+                Instant::now() + Duration::from_secs(5),
+                || Err(Error::new("state_changed", "Next canonical match changed"))
+            )
+            .unwrap_err()
+            .code,
+        "state_changed"
+    );
+    connection.get_input_focus().unwrap().reply().unwrap();
+    while let Some(event) = connection.poll_for_event().unwrap() {
+        assert!(!matches!(event, Event::KeyPress(_) | Event::KeyRelease(_)));
+    }
+    controls
+        .send_search_next_until_checked(
+            &process,
+            Instant::now() + Duration::from_secs(5),
+            || Ok(()),
+        )
+        .unwrap();
+    connection.get_input_focus().unwrap().reply().unwrap();
+    let mut tab_events = Vec::new();
+    while let Some(event) = connection.poll_for_event().unwrap() {
+        match event {
+            Event::KeyPress(e) => tab_events.push((true, e.detail)),
+            Event::KeyRelease(e) => tab_events.push((false, e.detail)),
+            _ => {}
+        }
+    }
+    assert_eq!(tab_events.len(), 2);
+    assert!(tab_events[0].0 && !tab_events[1].0);
+    assert_eq!(tab_events[0].1, tab_events[1].1);
+    assert_eq!(
+        connection
+            .get_keyboard_mapping(tab_events[0].1, 1)
+            .unwrap()
+            .reply()
+            .unwrap()
+            .keysyms[0],
+        0xff09
+    );
     // Locked modifiers must refuse without resetting the user's state.
     {
         use x11rb::protocol::{
@@ -953,6 +1001,7 @@ fn owned_xvfb_keyboard_controls() {
             .check()
             .unwrap();
         assert!(controls.preflight_query(&process, query).is_err());
+        assert!(controls.preflight_search_next(&process).is_err());
         let s = connection
             .xkb_get_state(ID::USE_CORE_KBD.into())
             .unwrap()

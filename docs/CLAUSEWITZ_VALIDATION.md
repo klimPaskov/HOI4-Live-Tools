@@ -4217,3 +4217,37 @@ The diagnostic source passed 786 Rust 1.86 host tests, 896 reported actual Linux
 checks (894 substantive), five included X11 cases and 953 Python tests (37 skips).
 Formatting, host/Linux/Windows Clippy, Linux MSRV and release linking passed;
 all 111 native inputs remained unchanged through those checks.
+
+## Run066: text observed, different match selected — 15 October 2026 UTC
+
+Run066 on immutable `cbd60c5` passed the three opening/field stages, then the
+sole SearchQuery reached `action_uncertain` after 10,007.615 ms. New diagnostics
+retained server-confirmed text transport and 87 readback reads (75 accepted,
+12 rejected). The last accepted snapshot contained exact `four year plan` text,
+both focused receivers and six matches, including the requested Focus exactly
+once. The selected key was `GER_prioritize_the_four_year_plan`, not
+`GER_the_four_year_plan`. The strict selection predicate correctly withheld
+success. No pre-input read was discarded. The original Run065 post-state remains
+unknown; these observations belong only to Run066.
+
+Luna stopped without replay, a later search read, View or final overview.
+Independent audit verified 14 RPCs, one error, three verified input pairs and
+one unresolved query Intent; no worker, clock or research actions occurred.
+Canonical release, the 316.666-second recording, normal exit 0 in 2.360 seconds,
+exact-process absence and unchanged 111 inputs/24 helpers passed. All nine CI
+jobs passed. Both brokers are closed.
+
+The next source adds separate `search_text` and `search_next` stages. Text entry
+verifies the exact query and complete bounded canonical matches without claiming
+the requested selection. One ordinary Tab is permitted only for the immediate
+next requested match; unchanged order, exact selection, receivers and active
+Focus must verify afterward. The original `search_query` semantics and Run066
+uncertainty remain unchanged. Static analysis and generated checks are not live
+Tab or successive-Focus evidence.
+
+The search-navigation source passed 793 Rust 1.86 host tests, 905 reported
+actual Linux checks (903 substantive), five included isolated X11 cases
+and 953 Python tests (37 skips). The X11 fixture verified one Tab press/release,
+zero input on preflight refusal, modifier rejection and unchanged pointer position.
+Host/Linux/Windows Clippy, formatting, Linux MSRV and release linking passed;
+all 113 native inputs stayed unchanged. These are not live HOI4 Tab evidence.

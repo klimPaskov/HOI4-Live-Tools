@@ -25,9 +25,40 @@ fn keycodes(min: u8, count: u8, stride: usize, symbols: &[u32], text: &str) -> R
         .collect()
 }
 
+// None is the single internally chosen Tab operation, never arbitrary keys.
+fn search_codes(
+    min: u8,
+    count: u8,
+    stride: usize,
+    symbols: &[u32],
+    text: Option<&str>,
+) -> Result<Vec<u8>> {
+    if let Some(text) = text {
+        return keycodes(min, count, stride, symbols, text);
+    }
+    if stride == 0 || symbols.len() != usize::from(count) * stride {
+        return Err(xerror("Malformed search keyboard mapping"));
+    }
+    let mut found = symbols
+        .chunks_exact(stride)
+        .enumerate()
+        .filter(|(_, row)| row[0] == 0xff09);
+    let (index, _) = found
+        .next()
+        .ok_or_else(|| xerror("Unshifted Tab unavailable"))?;
+    if found.next().is_some() {
+        return Err(xerror("Ambiguous unshifted Tab"));
+    }
+    Ok(vec![min
+        .checked_add(index as u8)
+        .ok_or_else(|| xerror("Search keycode outside map"))?])
+}
+
 impl X11Controls {
-    fn query_codes(&self, process: &dyn Process, text: &str) -> Result<Vec<u8>> {
-        crate::focus_stage::validate_query(text)?;
+    fn search_codes(&self, process: &dyn Process, text: Option<&str>) -> Result<Vec<u8>> {
+        if let Some(text) = text {
+            crate::focus_stage::validate_query(text)?;
+        }
         // Reuse exact process/window/foreground ownership and idle-input checks.
         self.check(process, &ControlKey::Pause)?;
         let version = self
@@ -80,7 +111,7 @@ impl X11Controls {
             .map_err(xerror)?
             .reply()
             .map_err(xerror)?;
-        keycodes(
+        search_codes(
             setup.min_keycode,
             count,
             usize::from(mapping.keysyms_per_keycode),
@@ -89,7 +120,7 @@ impl X11Controls {
         )
     }
     pub fn preflight_query(&self, process: &dyn Process, text: &str) -> Result<()> {
-        self.query_codes(process, text).map(|_| ())
+        self.search_codes(process, Some(text)).map(|_| ())
     }
     /// Caller persists intent, owns the input lease, and pins an empty focused
     /// own search field. Any error after `before_queue` succeeds is uncertain.
@@ -100,10 +131,31 @@ impl X11Controls {
         deadline: Instant,
         before_queue: impl FnOnce() -> Result<()>,
     ) -> Result<()> {
-        let codes = self.query_codes(process, text)?;
+        self.send_search_until_checked(process, Some(text), deadline, before_queue)
+    }
+    pub fn preflight_search_next(&self, process: &dyn Process) -> Result<()> {
+        self.search_codes(process, None).map(|_| ())
+    }
+    /// One fixed unshifted Tab; the caller pins the next canonical search match.
+    pub fn send_search_next_until_checked(
+        &self,
+        process: &dyn Process,
+        deadline: Instant,
+        before_queue: impl FnOnce() -> Result<()>,
+    ) -> Result<()> {
+        self.send_search_until_checked(process, None, deadline, before_queue)
+    }
+    fn send_search_until_checked(
+        &self,
+        process: &dyn Process,
+        text: Option<&str>,
+        deadline: Instant,
+        before_queue: impl FnOnce() -> Result<()>,
+    ) -> Result<()> {
+        let codes = self.search_codes(process, text)?;
         before_queue()?;
         // The typed reader may block. Revalidate transport and mapping afterward.
-        if self.query_codes(process, text)? != codes {
+        if self.search_codes(process, text)? != codes {
             return Err(xerror("Query keyboard mapping changed"));
         }
         process.check()?;
@@ -144,6 +196,18 @@ impl X11Controls {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn next_search_match_uses_only_one_unique_unshifted_tab() {
+        assert_eq!(
+            search_codes(8, 2, 2, &[97, 65, 0xff09, 0xfe20], None).unwrap(),
+            vec![9]
+        );
+        for map in [[97, 0xff09, 98, 66], [0xff09, 0xfe20, 0xff09, 0xfe20]] {
+            assert!(search_codes(8, 2, 2, &map, None).is_err());
+        }
+        assert!(search_codes(8, 2, 0, &[], None).is_err());
+        assert!(search_codes(8, 1, 2, &[0xff09, 0xfe20], Some("\t")).is_err());
+    }
     #[test]
     fn query_requires_exact_unique_unshifted_character_and_no_control_keys() {
         let map = [

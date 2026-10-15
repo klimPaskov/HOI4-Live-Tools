@@ -42,8 +42,8 @@ impl Service {
     }
 }
 pub(super) fn tool() -> Value {
-    json!({"name":"hoi4_focus_attempt","description":"Preview: one ordinary OpenPolitics/ClosePolitics/OpenPoliticsFromResearch Q, OpenFocus named-button, SearchField empty-field click, SearchQuery bounded text, View or Start stage for an exact own canonical focus ID. ClosePolitics requires that exact focus active and preserves it through settled closed-root readback. OpenPoliticsFromResearch requires both profiles, an own settled research panel and hidden tree; its live gate is pending. Requires explicit owned profile, exclusive lease, settled own roots and complete own scoped blockers. SearchField preserves the active Focus and requires both keyboard/text receiver readback; SearchQuery requires an already focused empty field and explicit lowercase ASCII query; it verifies the exact text and selected canonical key. Neither stage presses Enter. Supported exact Sprite, zero-angle Text, InstantText or unmasked Frame geometry; unknown branches refuse. Canonical readback verifies current state, not event causality or eligibility. Uncertain input is quarantined; no replay, coordinates, activation or engine calls.",
-        "inputSchema":{"type":"object","properties":{"stage":{"enum":["open_politics","open_politics_from_research","close_politics","open_focus","search_field","search_query","view","start"]},"focus_id":{"type":"string","minLength":1,"maxLength":128},"query":{"type":"string","minLength":1,"maxLength":48,"description":"Required only for search_query: lowercase ASCII letters and spaces, no surrounding spaces"},"request_id":{"type":"string","minLength":1,"maxLength":128},"lease_token":{"type":"string"}},"required":["stage","focus_id","request_id","lease_token"],"additionalProperties":false}})
+    json!({"name":"hoi4_focus_attempt","description":"Preview: one ordinary OpenPolitics/ClosePolitics/OpenPoliticsFromResearch Q, OpenFocus named-button, SearchField empty-field click, SearchQuery bounded text, View or Start stage for an exact own canonical focus ID. ClosePolitics requires that exact focus active and preserves it through settled closed-root readback. OpenPoliticsFromResearch requires both profiles, an own settled research panel and hidden tree; its live gate is pending. Requires explicit owned profile, exclusive lease, settled own roots and complete own scoped blockers. SearchField preserves the active Focus and requires both keyboard/text receiver readback; SearchQuery requires an already focused empty field and explicit lowercase ASCII query; it verifies the exact text and selected canonical key. SearchText verifies exact text and complete bounded canonical matches without claiming the requested selection; SearchNext sends one Tab only when focus_id is the immediate next match, and verifies unchanged order and the expected selected key. All search stages preserve the active Focus and never press Enter. Supported exact Sprite, zero-angle Text, InstantText or unmasked Frame geometry; unknown branches refuse. Canonical readback verifies current state, not event causality or eligibility. Uncertain input is quarantined; no replay, coordinates, activation or engine calls.",
+        "inputSchema":{"type":"object","properties":{"stage":{"enum":["open_politics","open_politics_from_research","close_politics","open_focus","search_field","search_query","search_text","search_next","view","start"]},"focus_id":{"type":"string","minLength":1,"maxLength":128},"query":{"type":"string","minLength":1,"maxLength":48,"description":"Required for search_query, search_text and search_next: lowercase ASCII letters and spaces, no surrounding spaces"},"request_id":{"type":"string","minLength":1,"maxLength":128},"lease_token":{"type":"string"}},"required":["stage","focus_id","request_id","lease_token"],"additionalProperties":false}})
 }
 pub(super) fn observe_ui(
     owner: &ClockService,
@@ -97,18 +97,20 @@ fn parse(args: &serde_json::Map<String, Value>) -> Result<Arguments<'_>> {
         "open_focus" => stage::Stage::OpenFocus,
         "search_field" => stage::Stage::SearchField,
         "search_query" => stage::Stage::SearchQuery,
+        "search_text" => stage::Stage::SearchText,
+        "search_next" => stage::Stage::SearchNext,
         "view" => stage::Stage::View,
         "start" => stage::Stage::Start,
         _ => return Err(Error::new("invalid_arguments", "Unknown focus stage")),
     };
-    let query = if selected == stage::Stage::SearchQuery {
+    let query = if selected.uses_query() {
         let query = string(args, "query")?;
         stage::validate_query(query)?;
         Some(query)
     } else if args.contains_key("query") {
         return Err(Error::new(
             "invalid_arguments",
-            "Query is only valid for search_query",
+            "Query is only valid for search_query, search_text or search_next",
         ));
     } else {
         None
@@ -241,6 +243,7 @@ pub(super) fn execute_internal(
         target: target.clone(),
         scope: None,
         candidate_selection: None,
+        search_selection: None,
         preserved_focus: None,
         last_transport: None,
         until,
@@ -273,6 +276,7 @@ struct FocusBackend<'a> {
     scope: Option<state::Scope>,
     preserved_focus: Option<stage::ActiveFocus>,
     candidate_selection: Option<Selection>,
+    search_selection: Option<stage::SearchMatches>,
     last_transport: Option<Value>,
     until: Instant,
 }
@@ -293,10 +297,7 @@ fn observed(
         &target.focus_id,
         &target.epoch,
         geometry,
-        matches!(
-            target.stage,
-            stage::Stage::SearchField | stage::Stage::SearchQuery
-        ),
+        target.stage == stage::Stage::SearchField || target.stage.uses_query(),
     )?;
     accept(guard, process, &observation)?;
     state::pin(pin, observation.scope.clone())?;
@@ -421,7 +422,7 @@ impl stage::Backend for FocusBackend<'_> {
             &mut self.scope,
             false,
         );
-        if self.target.stage == stage::Stage::SearchQuery {
+        if self.target.stage.uses_query() {
             if let Some(transport) = &mut self.last_transport {
                 stage::query_readback::record(
                     transport,
@@ -443,13 +444,21 @@ impl stage::Backend for FocusBackend<'_> {
         if target.stage.preserves_focus() {
             self.preserved_focus = Some(o.state.active_focus.clone());
         }
-        if target.stage == stage::Stage::SearchQuery {
+        if target.stage.types_query() {
             let query = target
                 .query
                 .as_deref()
                 .ok_or_else(|| Error::new("invalid_arguments", "Search query required"))?;
             self.controls.preflight_query(self.process, query)?;
             return Ok(stage::Candidate::SearchQuery(query.into()));
+        }
+        if target.stage == stage::Stage::SearchNext {
+            let matches = o.state.search_matches().cloned().ok_or_else(|| {
+                Error::new("focus_precondition", "Complete search order required")
+            })?;
+            self.controls.preflight_search_next(self.process)?;
+            self.search_selection = Some(matches.clone());
+            return Ok(stage::Candidate::SearchNext(matches));
         }
         if target.stage.is_shortcut() {
             self.controls
@@ -490,9 +499,10 @@ impl stage::Backend for FocusBackend<'_> {
         let profile = self.profile;
         let selected = self.candidate_selection.clone();
         let preserved_focus = self.preserved_focus.clone();
+        let search_selection = self.search_selection.clone();
         let mut rejected_reads = Vec::new();
         let mut fresh_check = |guard: &mut Guard, pin: &mut Option<state::Scope>| -> Result<()> {
-            let o = if target.stage == stage::Stage::SearchQuery {
+            let o = if target.stage.uses_query() {
                 // Only complete native reads may retry, before possible input.
                 // No guard/pin acceptance, journal operation or X11 dispatch is
                 // inside the recovery loop. Preserve the original lease ceiling.
@@ -526,6 +536,14 @@ impl stage::Backend for FocusBackend<'_> {
                     "Pinned canonical active focus changed before navigation input",
                 ));
             }
+            if let Some(expected) = &search_selection {
+                if o.state.search_matches() != Some(expected) {
+                    return Err(Error::new(
+                        "torn_read",
+                        "Pinned search order or selection changed before Tab",
+                    ));
+                }
+            }
             if let Some(expected) = &selected {
                 if expected != &(o.context.selected, o.context.matching_details) {
                     return Err(Error::new(
@@ -538,8 +556,7 @@ impl stage::Backend for FocusBackend<'_> {
         };
         match candidate {
             stage::Candidate::SearchQuery(query)
-                if target.stage == stage::Stage::SearchQuery
-                    && target.query.as_ref() == Some(query) =>
+                if target.stage.types_query() && target.query.as_ref() == Some(query) =>
             {
                 let mut may_queue = false;
                 let result =
@@ -557,6 +574,27 @@ impl stage::Backend for FocusBackend<'_> {
                 self.last_transport = Some(
                     json!({"delivery":delivery,"ordinary_text":true,"characters":query.len(),"error":result.err(),"preinput_rejected_reads":rejected_reads,"game_action_verified":false}),
                 );
+                delivery
+            }
+            stage::Candidate::SearchNext(matches)
+                if target.stage == stage::Stage::SearchNext
+                    && self.search_selection.as_ref() == Some(matches) =>
+            {
+                let mut may_queue = false;
+                let result =
+                    self.controls
+                        .send_search_next_until_checked(process, deadline, || {
+                            fresh_check(guard, &mut pin)?;
+                            may_queue = true;
+                            Ok(())
+                        });
+                let delivery = match &result {
+                    Ok(()) => stage::Delivery::ServerConfirmed,
+                    Err(_) if !may_queue => stage::Delivery::NotQueued,
+                    Err(_) => stage::Delivery::Unknown,
+                };
+                self.last_transport = Some(json!({"delivery":delivery,"ordinary_key":"Tab",
+                    "error":result.err(),"preinput_rejected_reads":rejected_reads,"game_action_verified":false}));
                 delivery
             }
             candidate @ (stage::Candidate::OpenPolitics
@@ -602,7 +640,7 @@ impl stage::Backend for FocusBackend<'_> {
                 delivery
             }
             stage::Candidate::Point(original)
-                if !target.stage.is_shortcut() && target.stage != stage::Stage::SearchQuery =>
+                if !target.stage.is_shortcut() && !target.stage.uses_query() =>
             {
                 match self.controls.prepare_left_click_until(
                     process,
@@ -661,6 +699,7 @@ impl stage::Backend for FocusBackend<'_> {
             stage::Candidate::SearchQuery(query) => {
                 self.controls.preflight_query(self.process, query)
             }
+            stage::Candidate::SearchNext(_) => self.controls.preflight_search_next(self.process),
             stage::Candidate::OpenPolitics
             | stage::Candidate::ClosePolitics
             | stage::Candidate::OpenPoliticsFromResearch => self
@@ -686,6 +725,24 @@ impl stage::Backend for FocusBackend<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn search_text_and_next_require_query_but_accept_no_caller_match_order() {
+        for (name, expected) in [
+            ("search_text", stage::Stage::SearchText),
+            ("search_next", stage::Stage::SearchNext),
+        ] {
+            let value = json!({"stage":name,"focus_id":"GER_the_four_year_plan","request_id":"once","lease_token":"t","query":"four year plan"});
+            assert_eq!(parse(value.as_object().unwrap()).unwrap().stage, expected);
+            for extra in ["matches", "selected", "key", "repeat", "x", "y"] {
+                let mut forged = value.clone();
+                forged[extra] = json!(true);
+                assert!(parse(forged.as_object().unwrap()).is_err());
+            }
+            let mut missing = value;
+            missing.as_object_mut().unwrap().remove("query");
+            assert!(parse(missing.as_object().unwrap()).is_err());
+        }
+    }
     #[test]
     fn search_query_is_explicit_bounded_and_rejected_on_other_stages() {
         let value = json!({"stage":"search_query","focus_id":"GER_the_four_year_plan","request_id":"query-once","lease_token":"t","query":"four year plan"});

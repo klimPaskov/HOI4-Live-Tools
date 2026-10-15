@@ -244,6 +244,31 @@ All nine CI jobs passed. Both brokers are closed. The next source preserves
 bounded already-read post-input facts and transport classification on failure;
 it changes neither input, deadlines nor acceptance predicates.
 
+Run066 on immutable `cbd60c5` passed the three opening/field stages, then the
+sole SearchQuery reached `action_uncertain` after 10,007.615 ms. New diagnostics
+retained server-confirmed text transport and 87 readback reads (75 accepted,
+12 rejected). The last accepted snapshot contained exact `four year plan` text,
+both focused receivers and six matches, including the requested Focus exactly
+once. The selected key was `GER_prioritize_the_four_year_plan`, not
+`GER_the_four_year_plan`. The strict selection predicate correctly withheld
+success. No pre-input read was discarded. The original Run065 post-state remains
+unknown; these observations belong only to Run066.
+
+Luna stopped without replay, a later search read, View or final overview.
+Independent audit verified 14 RPCs, one error, three verified input pairs and
+one unresolved query Intent; no worker, clock or research actions occurred.
+Canonical release, the 316.666-second recording, normal exit 0 in 2.360 seconds,
+exact-process absence and unchanged 111 inputs/24 helpers passed. All nine CI
+jobs passed. Both brokers are closed.
+
+The next source adds separate `search_text` and `search_next` stages. Text entry
+verifies the exact query and complete bounded canonical matches without claiming
+the requested selection. One ordinary Tab is permitted only for the immediate
+next requested match; unchanged order, exact selection, receivers and active
+Focus must verify afterward. The original `search_query` semantics and Run066
+uncertainty remain unchanged. Static analysis and generated checks are not live
+Tab or successive-Focus evidence.
+
 ## Immediate acceptance work
 
 1. Implement and verify ordinary navigation to an offscreen Focus, then verify
