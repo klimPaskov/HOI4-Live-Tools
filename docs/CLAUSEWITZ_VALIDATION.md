@@ -3987,3 +3987,35 @@ checks (858 substantive), five included X11 cases and 953 Python tests (37 skips
 Format, host/Linux Clippy, MSRV checks and Linux release linking passed with all
 106 native inputs unchanged. These checks do not identify the original live
 mismatch; the next paused probe is still required.
+
+## Run059: exact search definition mismatch — 15 October 2026
+
+The same bounded paused Germany diagnostic ran on immutable `5ef90cb` with one
+Luna medium player. OpenPolitics and OpenFocus returned verified receipts. The
+first Four Year Plan search read returned actual MCP `isError:true` in 54.044 ms:
+`Search query_container: expected_rva=0x4347d58 observed_rva=0x4349f00`.
+Static constructor/factory evidence identifies the observed table as CEditBoxType,
+confirming that `edit+0x60` is a definition, not the parent window. Run058's
+unlabeled original refusal remains independently unknown.
+
+The terminal contract prevented a retry, comparison read and final overview.
+Independent audit retained 12 player RPC rows, one error and two verified input
+pairs, with no assignment, worker, research or clock action. Canonical release
+matched the latest actual release/status rows and guest readback. The 422-second
+recording passed integrity checks; ordinary close took 2.234 seconds and exited
+normally with code 0. All four owned processes and both brokers were absent.
+Seven menu inputs and unchanged 106 native inputs/24 helpers were verified.
+
+The next correction derives `find_view` from the owned root's typed window
+collection, then `to_find_text` from its edit-box collection. Static finders
+establish both paired layouts. It never follows the definition or substitutes
+the standard-button collection. Generated cases reject incomplete, duplicate,
+misaligned, foreign or changed joins before query text, and retain the original
+type refusal if a definition is substituted into the named window collection.
+Corrected live query observation, search input and campaign acceptance remain
+pending.
+
+Composed checks passed 755 Rust 1.86 host tests, 863 reported actual Linux checks
+(861 substantive), five included X11 cases and 953 Python tests (37 skips).
+Format, host/Linux Clippy, MSRV and Linux release linking passed with all 106
+native inputs unchanged. These generated checks do not replace the live probe.

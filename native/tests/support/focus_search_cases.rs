@@ -166,20 +166,33 @@ const CHILDREN: u64 = 0x370000;
 const NAMES: u64 = 0x380000;
 const LISTENER: u64 = 0x390000;
 const QUERY: u64 = 0x3a0000;
+const ROOT: u64 = 0x3b0000;
+const WINDOWS: u64 = 0x3c0000;
+const WINDOW_NAMES: u64 = 0x3d0000;
+const UNSELECTED: u64 = 0x3e0000;
+const DEFINITION: u64 = 0x3f0000;
 
 fn query_fixture(text: &str) -> Fake {
     let mut f = fixture();
     f.region(EDIT, 0x280);
     f.region(CONTAINER, 0x1000);
+    f.region(ROOT, 0x1000);
     f.region(LISTENER, 0x20);
     f.word(VIEW + 0x1200, EDIT);
     f.word(EDIT, 0x43498b8);
     f.word(EDIT + 0x68, GUI);
-    f.word(EDIT + 0x60, CONTAINER);
+    // This definition is intentionally unmapped: never interpret it as a window.
+    f.word(EDIT + 0x60, DEFINITION);
+    f.word(VIEW + 0x2f8, ROOT);
+    f.word(ROOT, 0x4347d58);
+    f.word(ROOT + 0x98, GUI);
+    f.array(ROOT + 0xbb0, WINDOWS, &[CONTAINER]);
+    f.array(ROOT + 0xbc8, WINDOW_NAMES, &[0]);
+    f.string(WINDOW_NAMES, "find_view");
     f.word(CONTAINER, 0x4347d58);
     f.word(CONTAINER + 0x98, GUI);
-    f.array(CONTAINER + 0x9a0, CHILDREN, &[EDIT]);
-    f.array(CONTAINER + 0x9b8, NAMES, &[0]);
+    f.array(CONTAINER + 0xac0, CHILDREN, &[EDIT]);
+    f.array(CONTAINER + 0xad8, NAMES, &[0]);
     f.string(NAMES, "to_find_text");
     f.word(EDIT + 0x80, 0x4349b78);
     f.word(EDIT + 0x88, LISTENER);
@@ -221,6 +234,7 @@ fn search_type_refusal_identifies_object_without_reading_its_payload() {
     for (object, label, expected, payload, size) in [
         (ITEM, "current_item", 0x4249b90, ITEM + 0x20, 8),
         (EDIT, "query_control", 0x43498b8, EDIT + 0x60, 16),
+        (ROOT, "query_root", 0x4347d58, ROOT + 0x98, 8),
         (CONTAINER, "query_container", 0x4347d58, CONTAINER + 0x98, 8),
         (EDIT + 0x80, "embedded_editor", 0x4349b78, EDIT + 0x88, 32),
         (
@@ -255,12 +269,12 @@ fn search_type_diagnostics_hide_outside_section_values_and_never_follow_them() {
         assert!(f.untouched(EDIT + 0x60, 16));
     }
     let mut f = query_fixture("");
-    f.word(EDIT + 0x60, CONTAINER + 1);
+    f.word(VIEW + 0x2f8, ROOT + 1);
     let error = query_result(&f).unwrap_err();
     assert_eq!(error.code, "invalid_focus_type");
     assert_eq!(
         error.message,
-        "Search query_container: non-null aligned object required"
+        "Search query_root: non-null aligned object required"
     );
     assert!(f.untouched(CONTAINER, 0x1000));
 }
@@ -273,11 +287,14 @@ fn exact_search_query_reads_utf32_only_after_own_name_and_listener_join() {
         let c = &v["search"]["query_control"];
         assert_eq!(c["query_text"], text);
         assert_eq!(c["ordinary_listener_binding_verified"], true);
+        assert_eq!(c["named_container_binding_verified"], true);
         assert_eq!(v["search"]["query_text_available"], true);
         assert_eq!(c["keyboard_focus_verified"], false);
         assert_eq!(c["input_authorized"], false);
         assert_eq!(c["render_diagnostic"]["available"], false);
         assert!(f.untouched(CACHE + 8, 0x48));
+        assert!(f.untouched(EDIT + 0x60, 8) && f.untouched(DEFINITION, 0x1000));
+        assert!(f.untouched(CONTAINER + 0x9a0, 0x28));
     }
 }
 
@@ -296,6 +313,8 @@ fn query_is_opt_in_and_unmaterialized_control_is_explicit() {
 fn query_foreign_or_substituted_binding_refuses_before_text_payload() {
     for (address, value) in [
         (EDIT + 0x68, GUI + 8),
+        (ROOT + 0x98, GUI + 8),
+        (WINDOWS, ROOT),
         (CONTAINER + 0x98, GUI + 8),
         (CHILDREN, EDIT + 8),
         (LISTENER, VIEW + 0x680),
@@ -338,19 +357,108 @@ fn query_malformed_wide_strings_refuse_without_unbounded_payload() {
 
 #[test]
 fn query_all_paired_names_validate_before_text_and_later_duplicates_refuse() {
+    for (container, pointer_offset, name_offset, children, names, child, name) in [
+        (
+            ROOT,
+            0xbb0,
+            0xbc8,
+            WINDOWS,
+            WINDOW_NAMES,
+            CONTAINER,
+            "find_view",
+        ),
+        (
+            CONTAINER,
+            0xac0,
+            0xad8,
+            CHILDREN,
+            NAMES,
+            EDIT,
+            "to_find_text",
+        ),
+    ] {
+        let mut f = query_fixture("four year plan");
+        f.array(container + pointer_offset, children, &[child, UNSELECTED]);
+        f.int(container + name_offset + 8, 2);
+        f.int(container + name_offset + 12, 2);
+        f.string(names + 32, name);
+        assert_eq!(query_result(&f).unwrap_err().code, "invalid_focus_search");
+        assert!(f.untouched(EDIT + 0xb0, 16) && f.untouched(UNSELECTED, 0x1000));
+    }
+}
+
+#[test]
+fn query_missing_or_malformed_typed_collections_never_read_query_payload() {
+    for (container, pointer_offset, name_offset, children, names, child) in [
+        (ROOT, 0xbb0, 0xbc8, WINDOWS, WINDOW_NAMES, CONTAINER),
+        (CONTAINER, 0xac0, 0xad8, CHILDREN, NAMES, EDIT),
+    ] {
+        for case in 0..8 {
+            let mut f = query_fixture("four year plan");
+            match case {
+                0 => f.string(names, "wrong_name"),
+                1 => f.int(container + name_offset + 12, 0),
+                2 => f.int(container + name_offset + 8, 257),
+                3 => f.int(container + pointer_offset + 8, 257),
+                4 => f.word(container + name_offset, names + 1),
+                5 => f.word(children, child + 1),
+                6 => f.word(children, 0),
+                7 => f.array(container + pointer_offset, children, &[child, child]),
+                _ => unreachable!(),
+            }
+            assert!(query_result(&f).is_err());
+            assert!(f.untouched(EDIT + 0xb0, 16) && f.untouched(QUERY, 64));
+        }
+    }
+}
+
+#[test]
+fn query_typed_joins_ignore_unselected_payloads_and_button_registry() {
     let mut f = query_fixture("four year plan");
-    f.array(CONTAINER + 0x9a0, CHILDREN, &[EDIT, 0x3b0000]);
-    f.int(CONTAINER + 0x9c0, 2);
-    f.int(CONTAINER + 0x9c4, 2);
-    f.string(NAMES + 32, "to_find_text");
-    assert_eq!(query_result(&f).unwrap_err().code, "invalid_focus_search");
-    assert!(f.untouched(EDIT + 0xb0, 16) && f.untouched(0x3b0000, 0x1000));
+    f.array(ROOT + 0xbb0, WINDOWS, &[CONTAINER, UNSELECTED]);
+    f.int(ROOT + 0xbd0, 2);
+    f.int(ROOT + 0xbd4, 2);
+    f.string(WINDOW_NAMES + 32, "other_window");
+    // A decoy standard-button entry must never supply the edit-box alias.
+    f.array(CONTAINER + 0x9a0, 0x400000, &[UNSELECTED]);
+    f.array(CONTAINER + 0x9b8, 0x410000, &[0]);
+    f.string(0x410000, "to_find_text");
+    assert_eq!(
+        query_result(&f).unwrap()["search"]["query_control"]["query_text"],
+        "four year plan"
+    );
+    assert!(f.untouched(UNSELECTED, 0x1000));
+    assert!(f.untouched(CONTAINER + 0x9a0, 0x28));
+}
+
+#[test]
+fn query_definition_type_is_still_rejected_if_substituted_into_named_windows() {
+    let mut f = query_fixture("");
+    f.word(WINDOWS, DEFINITION);
+    f.word(DEFINITION, 0x4349f00);
+    let error = query_result(&f).unwrap_err();
+    assert_eq!(error.code, "invalid_focus_type");
+    assert_eq!(
+        error.message,
+        "Search query_container: expected_rva=0x4347d58 observed_rva=0x4349f00"
+    );
+    assert!(f.untouched(DEFINITION + 8, 0xff8));
+    assert!(f.untouched(EDIT + 0xb0, 16));
 }
 
 #[test]
 fn query_binding_text_and_flags_are_witnessed_through_final_identity_check() {
     for address in [
         VIEW + 0x1200,
+        VIEW + 0x2f8,
+        ROOT + 0x98,
+        ROOT + 0xbb0,
+        WINDOWS,
+        WINDOW_NAMES,
+        CONTAINER + 0x98,
+        CONTAINER + 0xac0,
+        CHILDREN,
+        NAMES,
         EDIT + 0x68,
         EDIT + 0xb0,
         EDIT + 0xb8,

@@ -73,6 +73,38 @@ fn listener(r: &Reader<'_>, base: u64, edit: u64, view: u64) -> Result<()> {
     Ok(())
 }
 
+fn named_child(
+    r: &Reader<'_>,
+    container: u64,
+    pointer_offset: u64,
+    name_offset: u64,
+    requested: &str,
+) -> Result<u64> {
+    let children = pointers(r, container + pointer_offset, 256)?;
+    unique(&children)?;
+    if children.iter().any(|child| child % 8 != 0) {
+        return Err(invalid("Aligned search collection entries required"));
+    }
+    let (header, names, count) = r.array_header(container + name_offset)?;
+    let capacity = i32::from_le_bytes(header[8..12].try_into().unwrap()) as usize;
+    if capacity > 256 || count != children.len() || (count > 0 && names % 8 != 0) {
+        return Err(invalid("Bounded paired search container names required"));
+    }
+    let mut seen = BTreeSet::new();
+    let mut found = None;
+    for (index, child) in children.iter().enumerate() {
+        let name = r.string_bounded(names + index as u64 * 32, 256)?;
+        if !seen.insert(name.clone()) {
+            return Err(invalid("Duplicate search container control name"));
+        }
+        if name == requested {
+            found = Some(*child);
+        }
+    }
+    // Validate the complete paired collection before reading selected payload.
+    found.ok_or_else(|| invalid("Named search container entry missing"))
+}
+
 pub(crate) fn observe(r: &Reader<'_>, base: u64, view: u64, registry: u64) -> Result<Value> {
     let edit = r.u64(view + 0x1200)?;
     if edit == 0 {
@@ -88,7 +120,20 @@ pub(crate) fn observe(r: &Reader<'_>, base: u64, view: u64, registry: u64) -> Re
             "Search control registry differs",
         ));
     }
-    let container = r.u64(edit + 0x60)?;
+    // edit+60 is CEditBoxType, not the parent window (live Run059 confirmed
+    // primary 4349f00). Follow the owned view root and its named window list.
+    let root = r.u64(view + 0x2f8)?;
+    exact_search_type(r, base, root, 0x4347d58, "query_root")?;
+    if r.u64(root + 0x98)? != registry {
+        return Err(Error::new(
+            "foreign_focus_scope",
+            "Search root registry differs",
+        ));
+    }
+    let container = named_child(r, root, 0xbb0, 0xbc8, "find_view")?;
+    if container == root {
+        return Err(invalid("Search container cannot alias its root"));
+    }
     exact_search_type(r, base, container, 0x4347d58, "query_container")?;
     if r.u64(container + 0x98)? != registry {
         return Err(Error::new(
@@ -96,25 +141,8 @@ pub(crate) fn observe(r: &Reader<'_>, base: u64, view: u64, registry: u64) -> Re
             "Search container registry differs",
         ));
     }
-    let children = pointers(r, container + 0x9a0, 256)?;
-    unique(&children)?;
-    let (header, names, count) = r.array_header(container + 0x9b8)?;
-    let capacity = i32::from_le_bytes(header[8..12].try_into().unwrap()) as usize;
-    if capacity > 256 || count != children.len() || (count > 0 && names % 8 != 0) {
-        return Err(invalid("Bounded paired search container names required"));
-    }
-    let mut seen = BTreeSet::new();
-    let mut found = None;
-    for (index, child) in children.iter().enumerate() {
-        let name = r.string_bounded(names + index as u64 * 32, 256)?;
-        if !seen.insert(name.clone()) {
-            return Err(invalid("Duplicate search container control name"));
-        }
-        if name == "to_find_text" {
-            found = Some(*child);
-        }
-    }
-    if found != Some(edit) {
+    // Exact edit-box lookup 2e88080 uses ac0/ad8; 9a0/9b8 is buttons.
+    if named_child(r, container, 0xac0, 0xad8, "to_find_text")? != edit {
         return Err(invalid("Named search control and Focus view alias differ"));
     }
     listener(r, base, edit, view)?;
@@ -134,7 +162,8 @@ pub(crate) fn observe(r: &Reader<'_>, base: u64, view: u64, registry: u64) -> Re
     }
     Ok(
         json!({"available":true,"name":"to_find_text","query_text":query,
-        "query_encoding":"bounded_utf32le","ordinary_listener_binding_verified":true,
+        "query_encoding":"bounded_utf32le","named_container_binding_verified":true,
+        "ordinary_listener_binding_verified":true,
         "flags74_raw":u32::from_le_bytes(r.read(edit+0x74,4)?.try_into().unwrap()),
         "edit_flags271_raw":r.byte(edit+0x271)?,
         "renderer_control_join_verified":renderer_join,"render_diagnostic":geometry,

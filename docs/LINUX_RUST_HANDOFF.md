@@ -160,11 +160,21 @@ error, canonical release, 418.666-second recording, normal exit 0 and exact
 process absence passed independent audit. All 106 native inputs and 24 helpers
 remained unchanged. Both brokers are closed; no game or player owns input.
 
-The next diagnostic preserves the search object label and expected/observed
-table offsets when the latter is inside this exact ELF's read-only table section.
-Unknown table values remain undisclosed and are never followed. This changes no
-accepted type, ownership check, read budget or input authority. Repeat the paused
-probe before implementing search input; the original mismatch remains unresolved.
+Run059 on immutable `5ef90cb` confirmed the failing object: `query_container`,
+expected table `0x4347d58`, observed `0x4349f00` (CEditBoxType). Both opening
+stages passed; the first search read refused in 54.044 ms. No retry, comparison,
+final overview or assignment followed. Independent audit verified the two input
+pairs, one RPC error, canonical release, 422-second recording, normal exit 0,
+exact-process absence and unchanged 106 native inputs/24 helpers. Both brokers
+are closed. This pinpoints the same class of mismatch but does not retroactively
+identify Run058's original unlabeled refusal.
+
+The corrected observer follows the owned Focus root's named `find_view` window,
+then its typed edit-box collection for `to_find_text`. The prior `edit+0x60`
+pointer is a definition, never a parent window, and is no longer read. Complete
+paired names, exact types/registries, alias/listener joins and final witnesses
+remain mandatory. The corrected path still requires a paused live probe before
+search input is implemented. No successful search or campaign gate is claimed.
 
 ## Immediate acceptance work
 

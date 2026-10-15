@@ -362,9 +362,19 @@ The optional `own_focus/search/control.rs` observer follows the exact view's
 `+0x1200` alias, initialized by named lookup for `to_find_text` at `0x15165b6`.
 Constructor `0x2ea8a60` establishes CEditBox primary `0x43498b8`, its embedded
 editor at `+0x80` with secondary `0x4349b78`, and renderer at `+0x1b0`.
-Shared base construction `0x2edf7e0` stores container/registry at `+0x60/+0x68`;
-`0x2ecc9e0` stores the renderer's reciprocal control at `+0x138`. The observer
-requires complete paired names and unique children in that owned container.
+Shared base construction `0x2edf7e0` stores definition/registry at `+0x60/+0x68`.
+The original observer incorrectly treated the definition as a parent window;
+Run059 identified its exact CEditBoxType primary `0x4349f00`. Factory `0x2eab9b0`
+and constructor `0x2ea8a60` independently establish that definition argument.
+The corrected observer never reads the definition. Getter `0x1693ad0` identifies
+the owned view's root window at `+0x2f8`; window finder `0x2e87ac0` uses paired
+child-window pointers/names at `+0xbb0/+0xbc8`. The installed GUI places named
+`find_view` directly under that root. Edit-box finder `0x2e88080`, called by the
+Focus setup, uses `+0xac0/+0xad8` for `to_find_text`; `+0x9a0/+0x9b8` is the
+separate standard-button collection. Both complete named joins are bounded to
+256 entries, with unique aligned pointers/names, exact window types, registry
+ownership and final edit alias equality. Unselected payloads remain unread.
+`0x2ecc9e0` stores the renderer's reciprocal control at `+0x138`.
 
 UI setup binds the edit-box observer to view `+0x678`; `0x2eab020` appends its
 typed doubly linked listener record. The Focus constructor supplies exact own
@@ -375,9 +385,9 @@ values. The reader bounds that Linux wide string to 128 code points, checks
 capacity/termination and rejects invalid values. This is not a portable wchar
 assumption. Exact CTextSprite diagnostics reuse the existing witnessed hierarchy
 only after the reciprocal control join. Raw edit flags do not prove keyboard
-focus, effective routing or permission to type. This optional path is unverified
-in the live game. Run058 refused an exact type check before returning the optional
-payload; its original response did not identify the failing object. Search type
+focus, effective routing or permission to type. The corrected optional path is
+unverified in the live game. Run058 refused an exact type check before returning
+the optional payload; its original response did not identify the failing object. Search type
 diagnostics now retain static object labels and expected table offsets. An
 unexpected value is reported only as a relative offset within this exact ELF's
 `.data.rel.ro` range `[0x41adde0, 0x436d9f8)`; values outside it remain undisclosed.
