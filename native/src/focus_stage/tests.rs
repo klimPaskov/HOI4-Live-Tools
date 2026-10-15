@@ -1,4 +1,5 @@
 use super::*;
+mod search_query;
 use std::{
     collections::VecDeque,
     fs,
@@ -39,6 +40,7 @@ fn epoch() -> Epoch {
 }
 fn target(stage: Stage) -> Target {
     Target {
+        query: None,
         epoch: epoch(),
         stage,
         focus_id: "GER_rhineland".into(),
@@ -96,6 +98,8 @@ fn search_state(focused: bool) -> OwnState {
         enabled: true,
         keyboard_focus_verified: focused,
         text_receiver_verified: focused,
+        query_text: Some(String::new()),
+        requested_selection_verified: Some(false),
     });
     s
 }
@@ -232,6 +236,10 @@ fn search_field_requires_empty_enabled_settled_control_and_both_receivers() {
         let g = RwLock::new(true);
         let t = target(Stage::SearchField);
         let mut f = Fake::sequence(t.stage, search_state(false), after);
+        // End after one rejected post-state, independently of journal fsync or
+        // scheduler latency. A 50 ms wall deadline can expire before dispatch.
+        f.queue
+            .push_back(Err(error("fixture_end", "End unchanged post-state")));
         assert_eq!(
             run(
                 &mut j,
@@ -240,7 +248,7 @@ fn search_field_requires_empty_enabled_settled_control_and_both_receivers() {
                 &a,
                 &g,
                 &mut f,
-                Duration::from_millis(50)
+                Duration::from_secs(5)
             )
             .unwrap_err()
             .code,

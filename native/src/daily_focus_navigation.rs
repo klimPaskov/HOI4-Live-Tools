@@ -73,6 +73,7 @@ pub(crate) fn research_handoff_target(
         ));
     }
     let target = Target {
+        query: None,
         epoch: focus.epoch.clone(),
         stage: Stage::ClosePolitics,
         focus_id: focus_id.clone(),
@@ -1072,6 +1073,7 @@ mod tests {
     }
     pub(super) fn target(stage: Stage) -> Target {
         Target {
+            query: None,
             epoch: epoch(),
             stage,
             focus_id: "GER_rhineland".into(),

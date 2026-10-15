@@ -880,6 +880,101 @@ fn owned_xvfb_keyboard_controls() {
             .unwrap();
         assert!(mapping.keysyms.contains(&symbol));
     }
+    // Query transport must deliver exactly the literal unshifted characters,
+    // including repeated keys, without Enter or pointer motion.
+    let query = "four year plan";
+    controls.preflight_query(&process, query).unwrap();
+    assert!(controls
+        .send_query_until_checked(&process, query, Instant::now(), || Ok(()))
+        .is_err());
+    assert_eq!(
+        controls
+            .send_query_until_checked(
+                &process,
+                query,
+                Instant::now() + Duration::from_secs(5),
+                || Err(Error::new("state_changed", "Own search receiver changed"))
+            )
+            .unwrap_err()
+            .code,
+        "state_changed"
+    );
+    connection.get_input_focus().unwrap().reply().unwrap();
+    while let Some(event) = connection.poll_for_event().unwrap() {
+        assert!(!matches!(event, Event::KeyPress(_) | Event::KeyRelease(_)));
+    }
+    controls
+        .send_query_until_checked(
+            &process,
+            query,
+            Instant::now() + Duration::from_secs(5),
+            || Ok(()),
+        )
+        .unwrap();
+    connection.get_input_focus().unwrap().reply().unwrap();
+    let mut text_events = Vec::new();
+    while let Some(event) = connection.poll_for_event().unwrap() {
+        match event {
+            Event::KeyPress(e) => text_events.push((true, e.detail)),
+            Event::KeyRelease(e) => text_events.push((false, e.detail)),
+            _ => {}
+        }
+    }
+    assert_eq!(text_events.len(), query.len() * 2);
+    for (pair, expected) in text_events.chunks_exact(2).zip(query.bytes()) {
+        assert!(pair[0].0 && !pair[1].0);
+        assert_eq!(pair[0].1, pair[1].1);
+        let mapping = connection
+            .get_keyboard_mapping(pair[0].1, 1)
+            .unwrap()
+            .reply()
+            .unwrap();
+        assert_eq!(mapping.keysyms[0], u32::from(expected));
+    }
+    // Locked modifiers must refuse without resetting the user's state.
+    {
+        use x11rb::protocol::{
+            xkb::{ConnectionExt as _, ID},
+            xproto::ModMask,
+        };
+        connection.xkb_use_extension(1, 0).unwrap().reply().unwrap();
+        connection
+            .xkb_latch_lock_state(
+                ID::USE_CORE_KBD.into(),
+                ModMask::LOCK,
+                ModMask::LOCK,
+                false,
+                0u8.into(),
+                ModMask::default(),
+                false,
+                0,
+            )
+            .unwrap()
+            .check()
+            .unwrap();
+        assert!(controls.preflight_query(&process, query).is_err());
+        let s = connection
+            .xkb_get_state(ID::USE_CORE_KBD.into())
+            .unwrap()
+            .reply()
+            .unwrap();
+        assert_ne!(u16::from(s.locked_mods) & u16::from(ModMask::LOCK), 0);
+        connection
+            .xkb_latch_lock_state(
+                ID::USE_CORE_KBD.into(),
+                ModMask::LOCK,
+                ModMask::default(),
+                false,
+                0u8.into(),
+                ModMask::default(),
+                false,
+                0,
+            )
+            .unwrap()
+            .check()
+            .unwrap();
+        controls.preflight_query(&process, query).unwrap();
+    }
     let after = connection.query_pointer(root).unwrap().reply().unwrap();
     assert_eq!(
         (pointer.root_x, pointer.root_y),

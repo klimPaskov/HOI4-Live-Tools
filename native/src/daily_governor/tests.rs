@@ -1519,6 +1519,7 @@ fn focus_converter_requires_current_start_exact_active_and_full_domain_scope() {
             version: 1,
             request_id: attempt.request_id.clone(),
             target: f::Target {
+                query: None,
                 epoch: p.scope.epoch.clone(),
                 stage: f::Stage::Start,
                 focus_id: "GER_rhineland".into(),

@@ -428,5 +428,21 @@ SearchField stage reuses the ordinary authenticated X11 click dispatcher,
 persisted Focus intent and exact own postconditions. Settled `find_view` uses
 the established CContainerWindow visibility and both transition channels.
 Root/edit/renderer identities, active Focus and empty query are retained through
-rechecks; positive readback requires both independent receivers. Live activation
-remains pending; no typing, Enter or engine invocation is introduced.
+rechecks; positive readback requires both independent receivers. Run062 verified
+ordinary activation and historical replay, with no typing or Enter.
+
+The next bounded SearchQuery adapter uses ordinary X11 key pairs and exact XKB
+group/modifier checks, with literal query and canonical selected-key readback.
+Static ELF evidence traces text receiver `0x2eaab60` through `0x2f71630` and
+`0x2f70130`; the existing own listener invokes query handler `0x1510480`.
+That handler lazily builds the cache and calls `0x1513fa0` for selected matches.
+The latter stores index `+0x1358`, calls `0x1514e80` to adjust the viewport when
+needed, and updates highlights. This is static evidence; query delivery and
+offscreen navigation still require live validation. No engine function is called.
+
+For future Enter support, exact editor table `0x4349b78` method `+0x38` points
+to `0x2f707f0`. Its symbol-13 branch calls listener method `+0x20` (`0x1527aa0`),
+which invokes the already pinned member `0x1510830`. That member joins the
+selected cache row to a canonical Focus and calls detail creator `0x150efd0`.
+This supports the inference that Enter opens a detail; it does not prove live
+delivery or assignment. The preview does not expose Enter.

@@ -565,6 +565,7 @@ fn worker(
                             unreachable!()
                         };
                         let target = crate::focus_stage::Target {
+                            query: None,
                             epoch: state.guard.epoch.clone(),
                             stage: crate::focus_stage::Stage::Start,
                             focus_id: focus_id.clone(),
@@ -948,6 +949,7 @@ impl core::Backend for DailyBackend<'_> {
                 ));
             }
             let target = crate::focus_stage::Target {
+                query: None,
                 epoch: self.state.guard.epoch.clone(),
                 stage: crate::focus_stage::Stage::Start,
                 focus_id: focus_id.clone(),
@@ -1187,6 +1189,7 @@ fn run_research_handoff(
         unreachable!()
     };
     let target = crate::focus_stage::Target {
+        query: None,
         epoch: state.guard.epoch.clone(),
         stage: crate::focus_stage::Stage::ClosePolitics,
         focus_id: focus_id.clone(),
@@ -1262,6 +1265,7 @@ fn run_focus(
         ));
     }
     let target = crate::focus_stage::Target {
+        query: None,
         epoch: state.guard.epoch.clone(),
         stage: crate::focus_stage::Stage::Start,
         focus_id: focus_id.clone(),
@@ -1457,6 +1461,7 @@ impl DailyBackend<'_> {
             ));
         }
         let target = crate::focus_stage::Target {
+            query: None,
             epoch: attempt.scope.epoch.clone(),
             stage: crate::focus_stage::Stage::Start,
             focus_id: focus_id.clone(),

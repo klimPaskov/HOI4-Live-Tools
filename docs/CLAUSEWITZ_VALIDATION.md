@@ -4094,3 +4094,41 @@ checks (878 substantive), five included X11 cases and 953 Python tests (37 skips
 Formatting, host/Linux Clippy, MSRV and release linking passed with 107 native
 inputs unchanged. The existing Python shutdown-deferred diagnostic remains
 recorded. Live SearchField activation is the next gate.
+
+## Run062: ordinary search activation and replay — 15 October 2026 UTC
+
+Immutable `0419644` passed the paused vanilla Normal/historical Germany gate
+with one Luna medium player. OpenPolitics, OpenFocus and SearchField each
+produced one verified ordinary-input receipt. The exact same SearchField request
+then returned an identical historical receipt and no transport action. Both
+independent receivers changed from unfocused to focused; the query stayed empty.
+The final overview remained 1 January 1936 noon, speed 0, idle Focus and four
+empty research slots. No text, Enter, assignment or time action occurred.
+
+Independent stopped-journal audit found 18 RPCs, zero errors/retries and exactly
+six Focus journal rows (three intent/verified pairs). Search activation took
+1,763.559 ms RPC; historical replay 5.702 ms. Detailed search reads took 93.138
+and 71.444 ms; the default comparison took 63.211 ms. These are individual
+samples, not a throughput benchmark or campaign acceptance.
+
+Canonical release/status proof matched the actual last RPCs. The 307.333-second
+recording started before campaign Start and passed integrity checks. Ordinary
+owned close took 2.437 seconds and exited with code 0. All four guest instances
+and four host broker/launcher instances were absent. The 107 native inputs and
+24 helpers remained unchanged. The first native macOS CI attempt failed because
+a 50 ms test deadline expired before simulated input; one unchanged-source rerun
+passed all jobs. Preserve that failure alongside the successful live evidence.
+
+The next source removes the fixture's deadline race using an explicit failed
+read after one rejected post-state. Its new SearchQuery preview persists an
+explicit query, verifies unshifted ordinary key bindings and clear XKB state,
+then requires exact text and canonical selection. Live typing remains pending;
+Enter and complete campaigns are not accepted.
+
+The composed SearchQuery source passed 777 Rust 1.86 host tests, 887 reported
+actual Linux checks (885 substantive), five included isolated X11 cases and
+953 Python tests (37 skips). X11 checks verified the literal character-event
+sequence, no pointer movement, no input on a refused decision/deadline, and
+locked-modifier refusal without clearing that state. Formatting, host/Linux
+Clippy, MSRV and release linking passed with 109 native inputs unchanged.
+These fixtures do not establish live game typing or search selection.

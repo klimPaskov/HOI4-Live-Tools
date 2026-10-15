@@ -31,6 +31,8 @@ pub enum Stage {
     OpenFocus,
     /// One ordinary click in the exact empty own search field; no text input.
     SearchField,
+    /// Bounded ordinary text into the already focused empty own search field.
+    SearchQuery,
     View,
     Start,
 }
@@ -38,7 +40,10 @@ impl Stage {
     pub(crate) fn preserves_focus(self) -> bool {
         matches!(
             self,
-            Self::ClosePolitics | Self::OpenPoliticsFromResearch | Self::SearchField
+            Self::ClosePolitics
+                | Self::OpenPoliticsFromResearch
+                | Self::SearchField
+                | Self::SearchQuery
         )
     }
     pub(crate) fn is_shortcut(self) -> bool {
@@ -75,6 +80,9 @@ pub struct Target {
     pub epoch: Epoch,
     pub stage: Stage,
     pub focus_id: String,
+    /// Explicit localized search text, never inferred from the canonical ID.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub query: Option<String>,
 }
 #[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(tag = "state", content = "focus_id")]
@@ -101,6 +109,10 @@ pub struct SearchControl {
     pub enabled: bool,
     pub keyboard_focus_verified: bool,
     pub text_receiver_verified: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub query_text: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub requested_selection_verified: Option<bool>,
 }
 impl SearchControl {
     /// Projection of a witnessed producer response; not a command or public MCP input.
@@ -161,6 +173,19 @@ impl SearchControl {
             enabled: flag(&r["control_enabled_flag"])?,
             keyboard_focus_verified: flag(&r["keyboard_focus_verified"])?,
             text_receiver_verified: flag(&r["text_receiver_verified"])?,
+            query_text: Some(
+                c["query_text"]
+                    .as_str()
+                    .ok_or_else(|| search_error("Exact search query required"))?
+                    .into(),
+            ),
+            requested_selection_verified: Some(
+                d["search"]["complete_current_item_coverage"] == true
+                    && d["search"]["requested_match_count"] == 1
+                    && d["search"]["selected_key"] == key
+                    && d["search"]["selected_matches_requested"] == true
+                    && d["search"]["selected_in_matches"] == true,
+            ),
         })
     }
 }
@@ -218,8 +243,31 @@ fn key(value: &str) -> Result<()> {
 }
 impl Target {
     fn validate_key(&self) -> Result<()> {
-        key(&self.focus_id)
+        key(&self.focus_id)?;
+        match (self.stage, self.query.as_deref()) {
+            (Stage::SearchQuery, Some(query)) => validate_query(query),
+            (Stage::SearchQuery, None) | (_, Some(_)) => Err(error(
+                "invalid_arguments",
+                "SearchQuery alone requires explicit bounded query text",
+            )),
+            _ => Ok(()),
+        }
     }
+}
+/// Initial ordinary-key adapter supports unshifted lowercase ASCII words only.
+/// No control characters, key names, shortcuts, or implicit localization.
+pub fn validate_query(query: &str) -> Result<()> {
+    if query.is_empty()
+        || query.len() > 48
+        || query.trim() != query
+        || !query.bytes().all(|b| b.is_ascii_lowercase() || b == b' ')
+    {
+        return Err(error(
+            "invalid_arguments",
+            "Search text must be 1–48 lowercase ASCII letters/spaces without surrounding spaces",
+        ));
+    }
+    Ok(())
 }
 impl OwnState {
     pub(crate) fn validate(&self, target: &Target) -> Result<()> {
@@ -294,10 +342,21 @@ impl OwnState {
             }
             Stage::SearchField => {
                 self.search_base_ready()
+                    && self.search_control.as_ref().is_some_and(|s| s.empty_query)
                     && self
                         .search_control
                         .as_ref()
                         .is_some_and(|s| s.keyboard_focus_verified && s.text_receiver_verified)
+            }
+            Stage::SearchQuery => {
+                self.search_base_ready()
+                    && self.search_control.as_ref().is_some_and(|s| {
+                        s.keyboard_focus_verified
+                            && s.text_receiver_verified
+                            && !s.empty_query
+                            && s.query_text == t.query
+                            && s.requested_selection_verified == Some(true)
+                    })
             }
             Stage::View => {
                 self.managed_mode == Some(13)
@@ -348,10 +407,20 @@ impl OwnState {
             }
             Stage::SearchField => {
                 self.search_base_ready()
+                    && self.search_control.as_ref().is_some_and(|s| s.empty_query)
                     && self
                         .search_control
                         .as_ref()
                         .is_some_and(|s| !s.keyboard_focus_verified && !s.text_receiver_verified)
+            }
+            Stage::SearchQuery => {
+                self.search_base_ready()
+                    && self.search_control.as_ref().is_some_and(|s| {
+                        s.empty_query
+                            && s.query_text.as_deref() == Some("")
+                            && s.keyboard_focus_verified
+                            && s.text_receiver_verified
+                    })
             }
             Stage::View => {
                 self.managed_mode == Some(13)
@@ -388,7 +457,7 @@ impl OwnState {
             && self
                 .search_control
                 .as_ref()
-                .is_some_and(|s| s.locally_ready && s.empty_query && s.enabled)
+                .is_some_and(|s| s.locally_ready && s.enabled)
     }
 }
 #[derive(Clone, Debug)]
@@ -398,6 +467,8 @@ pub enum Candidate {
     /// Fixed ordinary shortcut; no coordinates or arbitrary key arguments.
     OpenPolitics,
     OpenPoliticsFromResearch,
+    /// Target-bound query, no caller-supplied arbitrary key sequence.
+    SearchQuery(String),
     Point(PointCandidate),
 }
 /// Trusted internal adapter contract, not a caller-supplied state/input surface.
@@ -914,7 +985,11 @@ impl Journal {
             Candidate::OpenPoliticsFromResearch
                 if target.stage == Stage::OpenPoliticsFromResearch => {}
             Candidate::ClosePolitics if target.stage == Stage::ClosePolitics => {}
-            Candidate::Point(point) if !target.stage.is_shortcut() => {
+            Candidate::SearchQuery(query)
+                if target.stage == Stage::SearchQuery && target.query.as_ref() == Some(query) => {}
+            Candidate::Point(point)
+                if !target.stage.is_shortcut() && target.stage != Stage::SearchQuery =>
+            {
                 if point.input_authorized
                     || point.current_frame_verified
                     || point.effective_routing_verified
@@ -1090,6 +1165,7 @@ mod daily_failure_classifier_tests {
             player: "GER".into(),
         };
         let target = Target {
+            query: None,
             epoch: epoch.clone(),
             stage: Stage::View,
             focus_id: "GER_rhineland".into(),

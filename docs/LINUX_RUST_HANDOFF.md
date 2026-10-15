@@ -193,13 +193,22 @@ verified canonical release, the 293.333-second recording, normal exit 0,
 exact-process absence and unchanged 107 native inputs/24 helpers. Both brokers
 are closed; no game or player owns input.
 
-The new `search_field` preview performs one ordinary click in the exact empty
-search control, preserving the active Focus and requiring both independent
-receiver identities afterward. It uses the existing durable intent, lease,
-geometry recheck and unknown-delivery quarantine. Search binding identities and
-settled container flags are witnessed with the own command context. This action
-has generated evidence only until its next immutable live gate. Typing, Enter,
-successive Focus choices and campaign acceptance remain unverified.
+Run062 on immutable `0419644` passed the empty `search_field` activation and exact
+same-ID historical replay: 18 RPCs, zero errors/retries, three verified input
+pairs, both receiver identities true and unchanged paused baseline. Activation
+took 1.764 seconds; replay took 5.702 ms without input. Canonical release,
+307.333-second recording, normal exit 0, exact-process absence and unchanged
+107 inputs/24 helpers passed audit. Both brokers are closed. Native macOS CI
+first hit a 50 ms fixture deadline before dispatch; one unchanged-source rerun
+passed. The original failure is retained, and the next source replaces that
+timing race with an explicit failing read after the rejected post-state.
+
+The next `search_query` preview types explicit bounded lowercase ASCII words
+into the focused empty own control. It pins the same bindings, checks XKB state,
+persists the exact query in the target and requires exact query text plus the
+requested canonical selection afterward. Unknown delivery remains quarantined;
+only identical successful requests replay historically. Typing, Enter, successive
+Focus choices and campaign acceptance remain unverified.
 
 ## Immediate acceptance work
 

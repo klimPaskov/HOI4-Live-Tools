@@ -291,9 +291,14 @@ from authoritative game-state readback.
 
 The `hoi4_focus_attempt` preview also accepts `search_field`: one ordinary click
 in an empty, enabled own Focus search field. It preserves the current Focus and
-verifies both keyboard and text receiver identities. This stage has generated
-tests; live activation is pending. It does not type, press Enter or choose a
-Focus. `hoi4_focus_search_state` remains a read-only diagnostic.
+verifies both keyboard and text receiver identities. Run062 verified activation
+and identical-request historical replay without duplicate input. The separate
+`search_query` preview types an explicit query into the already focused empty
+field and requires exact text plus the selected canonical Focus ID in readback.
+It currently supports 1–48 lowercase ASCII letters/spaces, with no surrounding
+spaces, and requires an unmodified first keyboard group. Text delivery is not
+live-verified yet. Neither stage presses Enter or assigns a Focus.
+`hoi4_focus_search_state` remains a read-only diagnostic.
 
 The optional `hoi4_research_attempt` preview derives exact technology/slot/category
 controls from fresh own state. Its OpenPanel, SelectSlot, SelectCategory, View and

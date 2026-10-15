@@ -21,6 +21,7 @@ use x11rb::{
 };
 
 mod pointer;
+mod text;
 pub use pointer::{LeftClick, PointerDelivery, PointerDispatch, PointerDisplay};
 
 pub enum ControlKey {
