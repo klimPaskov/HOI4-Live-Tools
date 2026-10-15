@@ -2,6 +2,11 @@
 
 ## Unreleased native preview
 
+- Preserve run048's pre-input Focus navigation refusal, two completed research
+  assignments and budget2/3/1. Recording and normal exit passed; reverse navigation
+  and successful assignment-target waits remain unaccepted.
+- Retain bounded observed mode, roots, blocker counts and selection-state facts
+  in future Focus navigation refusals. No new reads or input/retry changes.
 - Add a separately typed research-to-Politics preview with positive own panel/tree
   facts, both domain permissions, preserved active Focus and durable nonreplay.
   Existing open-Politics semantics and old receipt serialization remain unchanged.

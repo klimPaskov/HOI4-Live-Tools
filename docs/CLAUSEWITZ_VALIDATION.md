@@ -3290,3 +3290,62 @@ three-assignment research → Focus → research plan, both new target-wait case
 fresh own state, and same-plan immediate restart/STOP without extra input or
 budget reset. Reverse live navigation, actual completion/refill and full campaigns
 remain unaccepted.
+
+
+## Recorded reverse worker run048 — 15 October 2026
+
+Immutable source `ce419e8` ran with exclusive Luna medium control in vanilla
+Normal/historical FAIR Germany. All nine exact-source CI jobs passed before
+control was granted. The first canonical catalog preflight found zero matches
+for the plan's `tools1` key; a broader query returned `basic_machine_tools`.
+No lease or action preceded that finding. The original plan/finding were retained,
+and the corrected first plan used `basic_machine_tools` slot0/industry_folder,
+Rhineland, then `support_weapons` slot1/infantry_folder, with shared budget3.
+
+The independent saved-journal audit found:
+
+- Both research assignments Complete, with sequences5 and9 and exactly nine
+  Intent/Verified input pairs, all ServerConfirmed. No research failure/retry
+  was recorded.
+- Focus remained Pending with attempts0. Its action journal, navigation steps
+  and Start goals were empty. One durable `focus_precondition` refusal stated
+  that own roots/blockers could not be navigated. The exact failed predicate
+  was not recorded and remains unknown.
+- The all-target wait returned historical wall_timeout after45.002seconds
+  (45,008.804ms RPC), with both technologies assigned but Focus idle. It accepted
+  no late target and reported no rejected torn reads. Successful-match and
+  already-matching cases were not tested.
+- The1969-byte digest took56.386ms and exposed the refusal. Luna then made only
+  STOP, release and status calls. No manual action, second wait, overview or
+  restart followed. STOP retained two completions, one pending Focus, budget2/3/1,
+  no uncertainty and no time change. Clock and Focus action journals were empty.
+
+After explicit handback and canonical lease proof, one separately labeled
+root read-only `hoi4_focus_ui` call at12:49:03.804483UTC took94.066ms. It showed
+idle Focus, mode5, ready research panel, hidden research tree/Politics/Focus and
+zero detail/info blockers. This later settled state does not establish which
+predicate failed earlier. No diagnostic input or lease acquisition occurred.
+
+Canonical release12:46:13.235797UTC and status0 at12:46:14.731845UTC matched the
+persisted proof and independent readback. The477-second512×288 H264 recording
+finalized at12:49:44.916347UTC and passed ffprobe. One ordinary owned window-close
+request returned at12:49:56.170123UTC after2.361seconds with exit0, no signal or
+core dump. Exact process absence and Yama1 passed; both brokers closed afterward.
+The offline verifier initially used the wrong historical-response field name;
+it was corrected to the actual `state_historical` field without changing evidence.
+
+This run does not accept reverse navigation, restart with three assignments or
+successful target waits. It preserves a pre-input refusal with two research
+successes. The next diagnostic records bounded mode/root/blocker and selection
+facts from the actual refused observation, without extra reads or changed action,
+retry or journal authority. Full campaigns remain unaccepted.
+
+The diagnostic's composed source passed 686 Rust1.86 host tests, 793 reported
+actual Linux checks (791 substantive), all five X11 cases, 953 Python tests
+(37 skips), format, host/Linux Clippy, Linux MSRV all-target compilation and
+release linking. Its two new fixtures verify exact refusal facts, no selected-key
+payload, worst-case fit within the existing160-byte bound and unchanged durable
+read-only refusal across restart. The initial test compilation used an error
+extraction requiring an unavailable Debug implementation; the test-only extraction
+was corrected before these composed checks. Readiness retry is not implemented
+and the diagnostic itself has no installed-game validation yet.

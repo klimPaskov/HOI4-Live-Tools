@@ -54,8 +54,9 @@ one pending head per slot and wait for fresh empty-slot evidence; refill after
 an actual technology finishes still awaits live validation. A one-way automatic
 Focus-to-research handoff passed recorded run047, including same-plan restart
 without input replay or a budget reset. The separate research-to-Focus preview
-requires both domain permissions and positive own panel/tree facts; its live gate
-is pending. Economy, army and naval adapters remain unfinished. Private daily storage
+requires both domain permissions and positive own panel/tree facts. Run048 refused
+Focus navigation before input; its live gate remains unaccepted.
+Economy, army and naval adapters remain unfinished. Private daily storage
 supports Unix only; other platforms return an explicit capability error.
 
 Late Focus results retain verified evidence and separately record quarantine.
@@ -186,8 +187,13 @@ active-focus state unchanged. Both profiles are required; automatic use also
 requires both worker domain permissions. It has its own stage and receipts: the
 original `open_politics` remains mode23-only. Missing roots remain Unknown and
 cannot authorize the new route. Optional root fields preserve old receipt bytes
-and checksums when absent. Offline validation is separate from the pending
-recorded research → Focus → research worker test.
+and checksums when absent. Run048 completed two research assignments but refused
+Focus navigation before any Focus intent; the exact failed predicate was not
+retained. A separate later read-only observation showed settled expected roots,
+which cannot establish the earlier refusal's cause. The next diagnostic retains
+the observed mode, roots and blocker counts in the existing bounded durable
+refusal reason, without new reads or changed input/retry authority. Reverse live
+acceptance remains open.
 
 To wait for a known assignment state, use `hoi4_wait_for` with, for example:
 
@@ -202,7 +208,9 @@ unique and between 0 and 31. This option cannot be combined with a date or UI wa
 It means an active Focus and current slot assignments, not completed technologies,
 a finished Focus or durable governor receipts. It uses the existing bounded
 reader and never pauses or supplies input authority. Unrelated changes do not
-finish this targeted wait. Fixture checks pass; installed-game validation is pending.
+finish this targeted wait. Run048 returned a historical timeout when Focus stayed
+idle despite both research targets being assigned. Live successful-match and
+already-matching behavior remain unverified.
 
 Wait timeouts return only the last earlier accepted sample, explicitly marked
 `state_historical: true`, `current_state_verified: false` and

@@ -988,10 +988,30 @@ pub(crate) fn next(state: &OwnState, target: &Target) -> Result<Next> {
             });
         }
     }
-    Err(Error::new(
-        "focus_precondition",
-        "Current own roots/blockers cannot be navigated; no blind transitions",
-    ))
+    // Keep the actual accepted observation's failing facts, not a later read.
+    // Static enums/counts fit the durable 160-byte reason limit. No keys,
+    // addresses, geometry or new reads enter this diagnostic.
+    fn counts(value: Option<[usize; 2]>) -> String {
+        value.map_or_else(|| "unknown".into(), |v| format!("{}/{}", v[0], v[1]))
+    }
+    let mode = state
+        .managed_mode
+        .map_or_else(|| "unknown".into(), |v| v.to_string());
+    let selected = match state.selected_focus.as_deref() {
+        None => "none",
+        Some(id) if id == target.focus_id => "target",
+        Some(_) => "other",
+    };
+    let ready = match state.requested_detail_ready {
+        Some(true) => "true",
+        Some(false) => "false",
+        None => "unknown",
+    };
+    Err(Error::new("focus_precondition", format!(
+        "UI precondition: mode={mode} politics={:?} focus={:?} panel={:?} tree={:?} details={} info={} selected={selected} ready={ready}",
+        state.politics_root, state.focus_root, state.research_panel_root, state.research_tree_root,
+        counts(state.own_detail_counts), counts(state.own_research_info_counts)
+    )))
 }
 
 #[cfg(test)]
@@ -1574,6 +1594,52 @@ mod tests {
         assert_eq!(
             n.latest()["refusal"]["reason"],
             "Unsupported cross-domain root; no UI escape"
+        );
+    }
+    #[test]
+    fn navigation_refusal_preserves_exact_facts_without_keys_across_restart() {
+        let mut own = state();
+        own.managed_mode = Some(5);
+        own.research_panel_root = LocalRoot::Unknown;
+        own.research_tree_root = LocalRoot::Hidden;
+        own.selected_focus = Some("PRIVATE_SELECTED_KEY".into());
+        let error = next(&own, &target(Stage::Start)).err().unwrap();
+        assert_eq!(error.code, "focus_precondition");
+        assert_eq!(error.message, "UI precondition: mode=5 politics=Hidden focus=Hidden panel=Unknown tree=Hidden details=0/0 info=0/0 selected=other ready=false");
+        assert!(!error.message.contains("PRIVATE_SELECTED_KEY"));
+        assert_eq!(
+            crate::daily_navigation::bounded_reason(&error.message),
+            error.message
+        );
+        let t = Scratch::new();
+        let e = entry();
+        let day = 1936 * 365;
+        let mut n = Navigator::open(&t.path(), epoch(), std::slice::from_ref(&e)).unwrap();
+        n.refuse_read_only(&e, day, &error).unwrap();
+        assert!(n.data.steps.is_empty() && n.data.goals.is_empty());
+        drop(n);
+        let n = Navigator::open(&t.path(), epoch(), std::slice::from_ref(&e)).unwrap();
+        assert_eq!(n.latest()["refusal"]["reason"], error.message);
+        assert!(n.refused_today(&e, day) && !n.blocked());
+    }
+    #[test]
+    fn navigation_refusal_worst_case_facts_fit_the_existing_durable_bound() {
+        let mut own = state();
+        own.managed_mode = None;
+        own.politics_root = LocalRoot::Animating;
+        own.focus_root = LocalRoot::Animating;
+        own.research_panel_root = LocalRoot::Animating;
+        own.research_tree_root = LocalRoot::Animating;
+        own.own_detail_counts = None;
+        own.own_research_info_counts = None;
+        own.selected_focus = Some(target(Stage::Start).focus_id);
+        own.requested_detail_ready = None;
+        let error = next(&own, &target(Stage::Start)).err().unwrap();
+        assert_eq!(error.message, "UI precondition: mode=unknown politics=Animating focus=Animating panel=Animating tree=Animating details=unknown info=unknown selected=target ready=unknown");
+        assert!(error.message.len() <= 160 && error.message.is_ascii());
+        assert_eq!(
+            crate::daily_navigation::bounded_reason(&error.message),
+            error.message
         );
     }
     #[test]
