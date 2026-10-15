@@ -25,13 +25,19 @@ calendar, with independently recovered current Linux build layouts. A real
 upstream Luna smoke passed selected ordinary actions and one day of advancement,
 but its final pause timed out; that native-posting adapter remains quarantined.
 A subsequent Rust Luna medium test passed ordinary X11 clock controls, advancement
-to 3 January 1936 and verified pause. Recorded run 019 then passed two Rust
-ID-based research stages with exclusive Luna medium input, independent canonical
-slot readback and research-counter advancement. This narrow preview requires the
-empty own slot tree to be selected first. Automatic navigation, broader strategic
-controls and the daily governor remain unfinished. Catalogs and targeted typed
-renderer diagnostics have recorded installed-game evidence; they alone grant no
-input authority. See [actual live evidence](CLAUSEWITZ_VALIDATION.md).
+to 3 January 1936 and verified pause. Later runs verified exact-ID research
+panel/slot/category navigation and canonical assignment. Run030 passed four-slot
+daily worker assignment, idempotent updates, budget-preserving restart and
+research-counter advancement. Run041 passed worker-driven Focus Start, waiting
+on another active focus, idempotent updates and two restarts without replay.
+Its fresh digests stayed below 2 KB and retained complete historical details
+through exact snapshot lookups.
+
+This remains a development preview. Combined research/focus panel handoff,
+technology/focus completion queues, economic recovery, warfare and native
+Windows/macOS live support remain unfinished. Catalogs and targeted renderer
+diagnostics alone grant no input authority. See [actual live evidence and
+failures](CLAUSEWITZ_VALIDATION.md); no full campaign has passed.
 
 ## Expansion contract
 
@@ -49,8 +55,9 @@ input authority. See [actual live evidence](CLAUSEWITZ_VALIDATION.md).
 
 ## Integration gates
 
-1. Port pure engine components into package-relative modules with Python 3.9+
-   compatibility and lazy native dependencies. Preserve provenance for each port.
+1. Port engine components into the Rust runtime, preserving provenance and
+   explicit platform boundaries. Retain the legacy Python 3.9+ package during
+   migration; importing shared code must not attach to a game or load foreign APIs.
 2. Replace upstream implicit PID discovery and unbounded reads with existing
    owned adapters. Bind layouts to independently verified executable build/ABI.
 3. Adapt structured own-country observations and the event loop. Missing data

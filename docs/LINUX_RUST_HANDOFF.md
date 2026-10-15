@@ -4,31 +4,33 @@ User direction, 12 October 2026: stop the Mac screenshot-driven live tests and
 replace the primary runtime with a fast Rust MCP based on Clausewitz-MCP.
 Linux is the first live target; Windows and macOS remain required platforms.
 
-**Latest live result:** recorded run041 passed exclusive Luna medium worker
-Focus Start, active-focus waiting, revision 2 update, an identical no-op update
-and two worker restarts. The first entry is durably Complete; the second remains
-Pending with zero attempts. The shared daily budget stays used 1/limit 1, with no
-replay. Fresh overview confirmed canonical active Rhineland. Five fresh digests
-fit below 2 KB, including two compacted histories; eight exact historical detail
-lookups passed. The 834-second recording finalized and passed ffprobe; canonical
-lease proof/readback, one normal owned exit 0 and exact process absence passed.
+**Latest live result:** recorded run042 passed the new read-only Focus UI gate
+before lease acquisition and after worker Start. Adjacent restart/STOP calls
+retained the exact durable completion and historical budget used 1/limit 1. The
+next focus remained Pending with zero attempts. An identical revision 2 update
+returned nonqueued `input_busy`; it was preserved and not retried. The subsequent
+restart used the already committed revision after a clean STOP and new lease.
+The 739.333-second recording finalized and passed ffprobe; canonical lease proof,
+independent readback, one normal owned exit 0 and exact process absence passed.
 No game or player input remains active. This is a bounded gate, not full campaign
-acceptance. See the [recorded evidence](CLAUSEWITZ_VALIDATION.md#recorded-daily-focus-run041--15-october-2026).
+acceptance. See the [recorded evidence](CLAUSEWITZ_VALIDATION.md#recorded-focus-ui-and-immediate-stop-run042--15-october-2026).
 
-The tested source is `2a36278`. It passed 650 Rust 1.86 host tests, 754 reported
-actual Linux checks (752 substantive), 953 Python tests (37 skips), compiler,
-format, Clippy, release linking and all nine three-OS CI jobs. A private local
-broker initially refused two concurrent connections before request bytes were
-sent. Its serialized continuation used the same game and runtime; original
-failure evidence remains preserved. No gameplay retry or reload occurred.
+The tested source is `7f71e92`. It passed 656 Rust 1.86 host tests, 760 reported
+actual Linux checks (758 substantive), 953 Python tests (37 skips), compiler,
+format, Clippy, release linking and all nine three-OS CI jobs. The two compact UI
+responses were 770/807 bytes and took 99.85/104.88 ms RPC time. These observations
+prove only complete own local GUI flags, not global modal clearance or routing.
+Earlier run041 passed idempotent update, two worker restarts, five digests below
+2 KB and eight exact historical detail lookups; that evidence remains preserved.
 
-**Next work:** freshly verify STOP's corrected durable historical budget after
-restart and the new read-only `hoi4_focus_ui` output. Then complete the separately
-recorded ordinary ClosePolitics transition. ClosePolitics
-remains disabled. Combined research/focus switching, technology completion/refill,
-focus completion over game time, economy/army/naval adapters, Windows/macOS native
-live support and the clean two-year/full campaigns remain open. Run041 triggered
-no transport refusal, so new cause retention still has only offline evidence.
+**Next work:** complete the separately recorded ordinary ClosePolitics transition.
+Run042 proved its prospective before-state after Start: exact active Rhineland,
+settled mode12/Politics Ready/Focus Hidden and zero own detail/Info blockers.
+ClosePolitics remains disabled; no closing shortcut was attempted. Combined
+research/focus switching, technology completion/refill, focus completion over
+game time, economy/army/naval adapters, Windows/macOS native live support and the
+clean two-year/full campaigns remain open. Run041/042 triggered no Focus transport
+refusal, so new cause retention still has only offline evidence.
 
 The run040 failure remains unchanged: one terminal NotQueued Start, pending
 assignment and digest overflow. Its specific transport cause was discarded by

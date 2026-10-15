@@ -19,11 +19,13 @@ Recorded Linux tests have passed:
 - Clock controls, exact-ID research navigation and four-slot worker assignment.
 - Exact focus selection and Start, followed by a pending next-focus plan.
 - Idempotent plan updates and worker restarts without replay or budget resets.
+- Immediate restart/STOP with the durable budget intact, plus read-only Focus UI
+  observations requiring no input lease.
 - Digests below 2 KB with exact historical detail lookup; five recent samples
   returned in 50–62 ms under x86 CPU emulation.
 
 These are bounded tests in vanilla Normal/historical Germany. The latest Focus
-test, run041, finalized its recording and exited normally. Combined research/focus
+test, run042, finalized its recording and exited normally. Combined research/focus
 panel switching, completed-technology refill, economic/army/naval commands and
 full campaigns remain open. The Focus worker requires explicit opt-in. Earlier
 failures and reporting limitations remain in the validation report.

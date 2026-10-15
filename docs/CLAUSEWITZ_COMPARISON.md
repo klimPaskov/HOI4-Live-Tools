@@ -1,12 +1,12 @@
 # Clausewitz-MCP comparison checkpoint
 
-Latest bounded Linux result: recorded run036 with exclusive Luna medium control
-passed exact Rhineland selection and one ordinary Start. The compact selected
-detail read took 98.3 ms, View took 2.483 s and Start took 1.651 s with fresh
-canonical active-focus readback, under x86 CPU emulation. These are individual
-operation timings, not a latency distribution or a like-for-like upstream
-command benchmark. The original upstream posting timeout stays quarantined;
-no clean two-year run or full campaign has passed.
+Latest bounded Linux result (15 October): recorded run041 passed worker-driven
+Focus Start, active-focus waiting, idempotent plan update and two restarts without
+replay or budget resets, with exclusive Luna medium control. Five fresh digests
+returned in 49.7–62.4 ms and stayed below 2 KB; two used exact historical detail
+lookup. This is a small sample under x86 CPU emulation, not a matched upstream
+benchmark or campaign throughput result. The original upstream posting timeout
+stays quarantined; no clean two-year run or full campaign has passed.
 
 11 October 2026. This is a development comparison, not proof of campaign success
 or a claim that HOI4 Live Tools is faster overall. Required targets are Windows,
@@ -19,7 +19,7 @@ without game offsets, memory writes or injected game commands. Subsequent user
 steering selected it as the engine foundation; the pinned source and first active
 ported component are described in [the migration status](CLAUSEWITZ_FOUNDATION.md).
 
-## Current licensed-game comparison — 12 October 2026
+## Licensed-game comparison — 12 October 2026
 
 The earlier sections below preserve the 11 October synthetic checkpoint. A
 licensed Linux game has since launched. One Luna medium player verified focus,
@@ -38,11 +38,12 @@ over pinned localhost SSH. Each runtime returned 20 fresh own-country overviews.
 Rust was about 40× faster for these snapshots, with no screenshot or suspension.
 The Python adapter includes per-read validation overhead; this does not benchmark
 unmodified upstream, prove faster commands, or establish completeness. Rust
-currently exposes observations and bounded waits only. Windows/macOS native
-adapters, commands and the governor remain unfinished. See [live evidence and
+at that checkpoint exposed observations and bounded waits only. Later Rust runs
+added ordinary clock/research/focus controls and bounded daily workers;
+Windows/macOS native live adapters remain unfinished. See [live evidence and
 limitations](CLAUSEWITZ_VALIDATION.md) and [the Rust preview](../native/README.md).
 
-## Current owned Rust clock checkpoint — 13 October 2026
+## Owned Rust clock checkpoint — 13 October 2026
 
 A subsequent Luna medium test passed ordinary clock controls and advancement to
 3 January 1936, including pause. Pause took 1.27 seconds; single-step speed changes
@@ -57,7 +58,7 @@ have different ownership and load conditions from the 7.5 ms comparison above;
 they are not a matched regression or a new upstream speedup claim. See
 [the recorded evidence](CLAUSEWITZ_VALIDATION.md#passed-luna-rust-clock-test--13-october-2026).
 
-## Current node-query comparison — 13 October 2026
+## Node-query comparison — 13 October 2026
 
 Two fresh owned Normal historical vanilla Germany runs validated the same
 411 own current technology keys and 423 structural control associations.
@@ -133,6 +134,28 @@ and pause 1,013 ms. These samples validate the exact owned emulated Linux run;
 they do not establish a general latency distribution or an upstream command
 advantage. Run024's earlier clock uncertainty remains unexplained. See
 [the full result and recording checks](CLAUSEWITZ_VALIDATION.md#recorded-run-025-clock-and-four-slot-research-passed).
+
+## Daily worker and Focus checkpoints — 14–15 October 2026
+
+Run030 verified four-slot worker assignment, idempotent updates and restart with
+the same consumed daily budget. Run036 subsequently verified exact focus View
+and Start. Run041 extended the Focus worker evidence through active-focus waiting,
+plan updates and two restarts, with no replay. Both the latest research and Focus
+gates finalized their recordings and exited normally.
+
+| Operation | Observed RPC time | Sample and scope |
+| --- | ---: | --- |
+| Selected Focus detail, run036 | 98.3 ms | One compact exact selected-window read |
+| Focus View / Start, run036 | 2,483 / 1,651 ms | One verified ordinary action each |
+| Daily digest, run041 | 49.7–62.4 ms | Five fresh payloads, 1,241–2,008 bytes |
+| Focus-change server wait, run041 | 10.23 s | Includes worker navigation, Start and wait detection |
+| Compact Focus UI, run042 | 99.85/104.88 ms | Two read-only samples, 770/807 bytes; 93.55/99.30 ms server-side |
+
+Run041 also passed eight exact historical section lookups. Two later 45-second
+waits expired normally because the game stayed paused with an active focus; their
+elapsed time is waiting time, not snapshot latency. Research/focus panel switching,
+actual technology/focus completion over game time and broad strategic throughput
+remain unverified. These results do not support an overall superiority claim.
 
 ## Measured process reads
 

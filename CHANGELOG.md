@@ -2,12 +2,16 @@
 
 ## Unreleased native preview
 
+- Record run042: read-only Focus UI before lease acquisition and after worker
+  Start; immediate restart/STOP retained completion and durable budget 1/1.
+  A duplicate update returned nonqueued `input_busy` and was not retried.
+  Recording integrity, independent lease proof and normal owned exit passed.
 - Derive STOP's historical budget from checked durable state, including after an
   immediate worker restart. Preserve unknown days and all consumed reservations;
   return explicit unavailability if storage cannot be verified.
 - Add compact read-only `hoi4_focus_ui` for the owned canonical focus, managed
   mode, local roots and complete own blocker counts. It needs no input lease and
-  exposes no command authority; installed-game validation remains pending.
+  exposes no command authority; the bounded run042 observation gate passed.
 - Record run041: worker-driven Focus Start, active-focus waiting, idempotent plan
   update and two restarts without replay or budget reset. Five digests stayed
   below 2 KB, with eight exact historical detail lookups. Recording and normal

@@ -117,7 +117,8 @@ It reports the last accepted day, date and sequence without a game read. Before
 the first accepted daily observation, day/usage/remaining stay explicitly unknown.
 Changed or unverified storage makes both summaries unavailable and blocks input;
 NotQueued, unresolved and legacy reservations are never refunded. This correction
-still needs a fresh live restart/STOP check.
+passed run042's adjacent restart/STOP calls: both STOP reports retained the same
+completion and historical budget used 1/limit 1/remaining 0.
 
 `hoi4_focus_ui` is a read-only owned Focus observation. Supply one `focus_id` to
 receive canonical active focus, managed mode, settled Politics/Focus roots and
@@ -125,7 +126,8 @@ complete own detail/research-Info counts. Unknown counts remain null; counts use
 named `visible` and `animating` fields. It shares the existing witnessed producers
 and campaign guard, requires the owned Focus binding, and needs no input lease.
 It exposes no private process identities, geometry or input authority. Its compact
-output awaits fresh live validation before the separate ClosePolitics gate.
+output passed run042 before lease acquisition and after worker Start: 770/807
+bytes, 100/105 ms RPC time in two samples. ClosePolitics remains a separate gate.
 
 A prospective typed ClosePolitics stage is runtime-disabled. It requires the
 exact canonical active focus, settled own Politics mode12, hidden Focus and zero

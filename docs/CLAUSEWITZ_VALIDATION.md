@@ -2912,3 +2912,50 @@ tests** (37 skips), format, host/Linux Clippy, Linux MSRV compilation and optimi
 release linking. All 11 Linux payload hashes passed before execution. Guest boot
 identity, prior exact-process absence, prior normal exit and unchanged Yama 1
 matched before/after. These additions still require a fresh recorded live gate.
+
+
+## Recorded Focus UI and immediate STOP run042 — 15 October 2026
+
+Exact source `7f71e92` passed all nine three-OS CI jobs before this recorded vanilla
+Normal/historical Germany gate with one exclusive Luna medium player. There were
+no mods. The recording had a verified packet before the single campaign Start;
+the game remained paused on 1 January 1936, with no clock or manual Focus input.
+
+Before acquiring a lease, Luna queried `hoi4_focus_ui`: canonical Idle, managed
+mode23, hidden Politics/Focus roots and zero visible/animating own detail and
+research-Info objects. After the worker completed Rhineland, the same observation
+reported the canonical active focus, mode12, settled Politics Ready, Focus Hidden
+and both blocker counts zero. Payloads were **770/807 bytes**, RPC times
+**99.85/104.88 ms**, and server times **93.55/99.30 ms**. These are two bounded
+samples. Global modal clearance, effective routing, eligibility and input
+authority remained explicitly unavailable or false.
+
+The saved Focus journal contains exactly one Intent/Verified pair for each of
+OpenPolitics, OpenFocus, View and Start. The core journal has one reservation and
+one terminal Complete at sequence6. Fresh overview confirmed canonical active
+Rhineland. Revision2 retained it and appended Four Year Plan, still Pending with
+zero attempts. The first update committed; the exact duplicate returned
+`input_busy` with an explicit not-queued message. Luna preserved the refusal,
+stopped and released its lease without retrying that update.
+
+After independent checks of the committed plan and clean STOP, Luna continued in
+the same game with the same binary and a new lease. It started the exact committed
+revision2 and made STOP the immediately following RPC, with no intervening game
+read. Both STOP responses retained the same completion identity and historical
+budget **used1/limit1/remaining0**. Neither changed game time or reported
+uncertainty. The final journal has no replay or additional Focus actions. Run041's
+successful duplicate no-op update remains separate evidence; run042 does not
+claim that its refused duplicate succeeded.
+
+The latest actual release/status receipts were persisted and independently read
+back from the guest before close. Two H264 recording segments finalized and
+passed ffprobe, totaling **739.333 seconds**. One ordinary window-close request
+returned actual normal exit0 after **2.23 seconds**, with no signal fallback or
+replay. Exact owner/game absence and unchanged Yama1 passed; local brokers closed.
+An initial offline collector used the wrong STOP budget field and failed before
+producing a report; the corrected verifier used original `daily_budget` responses.
+
+This passes the compact observation and immediate STOP budget gates. No Q shortcut
+or ClosePolitics action was attempted. Cross-domain panel switching, focus and
+technology completion over game time, strategic warfare, Windows/macOS native
+live support and full campaign acceptance remain open.
