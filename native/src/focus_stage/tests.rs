@@ -407,12 +407,14 @@ fn nonqueued_transport_cause_survives_without_reopening_terminal_attempt() {
         Duration::from_secs(1),
     )
     .unwrap_err();
-    let transport = serde_json::json!({"delivery":"not_queued","error":{"code":"torn_read","message":"Focus witness changed at final queue check"}});
+    let transport = serde_json::json!({"delivery":"not_queued","error":{"code":"torn_read","message":"Focus witness changed at final queue check"},"preinput_rejected_reads":[{"code":"torn_read","message":"original discarded search field"},{"code":"torn_read","message":"final discarded search field"}]});
     let detailed = with_transport_cause(original, Some(&transport));
     assert_eq!(detailed.code, "input_not_queued");
     assert!(detailed
         .message
         .starts_with("torn_read: Focus witness changed at final queue check;"));
+    assert!(detailed.message.contains("original discarded search field"));
+    assert!(detailed.message.contains("final discarded search field"));
     assert_eq!(
         j.failure_evidence("refused", &t, &detailed),
         FailureEvidence::ConfirmedNotQueued

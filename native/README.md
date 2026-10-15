@@ -296,8 +296,12 @@ and identical-request historical replay without duplicate input. The separate
 `search_query` preview types an explicit query into the already focused empty
 field and requires exact text plus the selected canonical Focus ID in readback.
 It currently supports 1–48 lowercase ASCII letters/spaces, with no surrounding
-spaces, and requires an unmodified first keyboard group. Text delivery is not
-live-verified yet. Neither stage presses Enter or assigns a Focus.
+spaces, and requires an unmodified first keyboard group. Run063 refused before
+typing because a final search-control snapshot changed. Text delivery is not
+live-verified yet. Before its one text dispatch, the adapter can discard up to
+four torn read-only snapshots within one second and the original deadline.
+Every accepted snapshot must still satisfy all identity and input preconditions;
+no input or terminal attempt is retried. Neither stage presses Enter or assigns a Focus.
 `hoi4_focus_search_state` remains a read-only diagnostic.
 
 The optional `hoi4_research_attempt` preview derives exact technology/slot/category

@@ -210,6 +210,19 @@ requested canonical selection afterward. Unknown delivery remains quarantined;
 only identical successful requests replay historically. Typing, Enter, successive
 Focus choices and campaign acceptance remain unverified.
 
+Run063 on immutable `23117fd` passed OpenPolitics, OpenFocus and SearchField,
+then SearchQuery refused before possible input: a four-byte `search_control`
+witness changed. The exact field remains unknown. Its persisted intent ended
+NotQueued; no mutation retry, replay, post-query read, View or final overview
+followed. Independent audit retained 14 RPCs and one error, canonical release,
+274.666-second recording, normal exit 0, exact-process absence and unchanged
+109 inputs/24 helpers. The recorder helper retained an outdated purpose string
+and expected content hash; both defects are recorded separately, with installed
+script bytes independently matched to its frozen literal before campaign Start.
+Both brokers are closed. The next source adds field labels and bounded recovery
+of wholly discarded read-only snapshots before the single SearchQuery dispatch.
+It does not retry input or reopen a terminal request. Live query validation is pending.
+
 ## Immediate acceptance work
 
 1. Implement and verify ordinary navigation to an offscreen Focus, then verify

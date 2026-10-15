@@ -59,14 +59,11 @@ impl Witnesses<'_> {
     }
     fn changed(&self, phase: &str, address: u64, size: usize, section: &str) -> Error {
         let regions = self.regions.borrow();
-        let object = regions
-            .range(..=address)
-            .next_back()
-            .filter(|(_, (end, _))| {
-                address
-                    .checked_add(size as u64)
-                    .is_some_and(|last| last <= *end)
-            });
+        let object = regions.range(..=address).rev().find(|(_, (end, _))| {
+            address
+                .checked_add(size as u64)
+                .is_some_and(|last| last <= *end)
+        });
         let field = match object {
             Some((start, (_, label))) => format!("{label}+0x{:x} size={size}", address - start),
             None => format!("unclassified size={size}"),
@@ -351,7 +348,7 @@ fn snapshot_model(
         let mut search = search::observe(&r, base, view, country, &keys, key)?;
         if include_control && search["available"] == true {
             w.section.set("search_control");
-            let (control, binding) = search::control(&r, base, view, registry)?;
+            let (control, binding) = search::control(&r, base, view, registry, &w)?;
             search["query_control"] = control;
             search_anchors = binding;
             search["query_text_available"] = search["query_control"]["available"].clone();

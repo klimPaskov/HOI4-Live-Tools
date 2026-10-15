@@ -667,6 +667,26 @@ fn query_binding_text_and_flags_are_witnessed_through_final_identity_check() {
 }
 
 #[test]
+fn query_witness_diagnostics_label_fields_without_exposing_addresses_or_values() {
+    for (address, label) in [
+        (EDIT + 0x74, "search_edit+0x74 size=4"),
+        // An inline text subregion must not hide later fields in its edit box.
+        (EDIT + 0x271, "search_edit+0x271 size=1"),
+        (EDIT + 0xc0, "search_query_text+0x0 size=4"),
+        (CONTAINER + 0xeb0, "search_container+0xeb0 size=4"),
+        (0x2440b0, "search_renderer+0xb0 size=4"),
+        (0x244210, "search_renderer+0x210 size=4"),
+    ] {
+        let mut f = instant_fixture();
+        f.torn = Some(address);
+        let error = query_result(&f).unwrap_err();
+        assert_eq!(error.code, "torn_read");
+        assert!(error.message.contains(label), "{}", error.message);
+        assert!(!error.message.contains(&format!("{address:x}")));
+    }
+}
+
+#[test]
 fn search_container_local_visibility_requires_both_settled_channels() {
     for (flags, states, ready) in [
         (8, [0, 0], true),

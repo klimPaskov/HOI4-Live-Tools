@@ -480,8 +480,31 @@ impl stage::Backend for FocusBackend<'_> {
         let profile = self.profile;
         let selected = self.candidate_selection.clone();
         let preserved_focus = self.preserved_focus.clone();
-        let fresh_check = |guard: &mut Guard, pin: &mut Option<state::Scope>| -> Result<()> {
-            let o = observed(process, guard, &target, pin, false)?;
+        let mut rejected_reads = Vec::new();
+        let mut fresh_check = |guard: &mut Guard, pin: &mut Option<state::Scope>| -> Result<()> {
+            let o = if target.stage == stage::Stage::SearchQuery {
+                // Only complete native reads may retry, before possible input.
+                // No guard/pin acceptance, journal operation or X11 dispatch is
+                // inside the recovery loop. Preserve the original lease ceiling.
+                let o = stage::read_recovery::before_query(
+                    deadline,
+                    || {
+                        state::observe_with_search(
+                            process,
+                            &target.focus_id,
+                            &target.epoch,
+                            false,
+                            true,
+                        )
+                    },
+                    &mut rejected_reads,
+                )?;
+                accept(guard, process, &o)?;
+                state::pin(pin, o.scope.clone())?;
+                o
+            } else {
+                observed(process, guard, &target, pin, false)?
+            };
             o.state.validate(&target)?;
             o.state.preflight(&target)?;
             if preserved_focus
@@ -522,7 +545,7 @@ impl stage::Backend for FocusBackend<'_> {
                     Err(_) => stage::Delivery::Unknown,
                 };
                 self.last_transport = Some(
-                    json!({"delivery":delivery,"ordinary_text":true,"characters":query.len(),"error":result.err(),"game_action_verified":false}),
+                    json!({"delivery":delivery,"ordinary_text":true,"characters":query.len(),"error":result.err(),"preinput_rejected_reads":rejected_reads,"game_action_verified":false}),
                 );
                 delivery
             }

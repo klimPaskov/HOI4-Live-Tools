@@ -21,6 +21,9 @@ use std::{
     time::{Duration, Instant},
 };
 
+#[cfg(any(target_os = "linux", test))]
+pub(crate) mod read_recovery;
+
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub enum Stage {
     OpenPolitics,
@@ -71,6 +74,19 @@ pub(crate) fn with_transport_cause(
         if let (Some(code), Some(message)) = (cause["code"].as_str(), cause["message"].as_str()) {
             error.message = format!("{code}: {message}; {}", error.message);
         }
+    }
+    if let Some(reads) = transport
+        .and_then(|v| v.get("preinput_rejected_reads"))
+        .and_then(serde_json::Value::as_array)
+        .filter(|v| !v.is_empty())
+    {
+        // At most four bounded reader errors; preserve their order even when
+        // the final transport refusal has a different cause. No retry authority.
+        let bounded: Vec<_> = reads.iter().take(4).collect();
+        error.message.push_str(&format!(
+            "; discarded_preinput_reads={}",
+            serde_json::json!(bounded)
+        ));
     }
     error
 }

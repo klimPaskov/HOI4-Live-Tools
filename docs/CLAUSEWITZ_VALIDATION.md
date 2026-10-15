@@ -4132,3 +4132,38 @@ sequence, no pointer movement, no input on a refused decision/deadline, and
 locked-modifier refusal without clearing that state. Formatting, host/Linux
 Clippy, MSRV and release linking passed with 109 native inputs unchanged.
 These fixtures do not establish live game typing or search selection.
+
+## Run063: search text refused before input — 15 October 2026 UTC
+
+Immutable `23117fd` passed OpenPolitics, OpenFocus and SearchField in paused
+vanilla Normal/historical Germany. The sole SearchQuery request persisted its
+intent, then returned `input_not_queued` with a `torn_read` on a four-byte
+`search_control` witness. The field was unclassified and remains unknown. The
+journal ended NotQueued with no text delivery. Luna made no mutation retry,
+historical replay, post-query observation, View or final overview.
+
+Independent audit found 14 RPCs, one error and eight Focus journal rows: three
+intent/verified pairs and one intent/NotQueued pair. SearchField took 1,582.203 ms;
+the refused query took 373.748 ms. No research, clock or worker actions occurred.
+Canonical release/status proof matched the last RPCs. The 274.666-second
+recording predates campaign Start and passed integrity checks; ordinary close
+took 2.578 seconds with exit 0. All owned game/recorder and host broker instances
+were absent, and 109 native inputs/24 helpers remained unchanged.
+
+The recorder helper retained an old purpose string and expected content hash.
+The failed upload assertion is preserved. Before campaign Start, an independent
+comparison confirmed that the installed recorder exactly matched the literal
+script in the frozen helper. These harness limitations remain distinct from the
+MCP refusal. All nine cross-platform CI jobs passed on the exact source.
+
+The next correction adds relative field labels without changing witness checks,
+and retries only wholly discarded native reads at the final pre-input SearchQuery
+check: at most four reads, a one-second retry window and the original deadline.
+Positive state, scope and input checks remain mandatory. Rejected read diagnostics
+are retained. No transport or terminal request is retried; live typing and
+successive-Focus acceptance remain pending.
+
+The correction passed 783 Rust 1.86 host tests, 893 reported actual Linux checks
+(891 substantive), five included isolated X11 cases and 953 Python tests
+(37 skips). Formatting, host/Linux Clippy, MSRV and release linking passed with
+110 native inputs unchanged. These checks do not establish successful live typing.

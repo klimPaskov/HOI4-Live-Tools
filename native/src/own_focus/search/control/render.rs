@@ -8,6 +8,7 @@ pub(super) fn observe(
     edit: u64,
     container: u64,
     registry: u64,
+    witnesses: &Witnesses<'_>,
 ) -> Result<Value> {
     let render = r.u64(edit + 0x1b0)?;
     let mut out = json!({"available":false,"reason":"search_renderer_layout_unavailable",
@@ -32,6 +33,7 @@ pub(super) fn observe(
     if r.u64(render + 0x138)? != edit {
         return Err(invalid("Search text renderer and control differ"));
     }
+    witnesses.region(render, 0x240, "search_renderer");
     let mut reuse = Reuse::for_owned_focus(base);
     if primary == base + 0x43593d8 {
         out = crate::info_research_button::text_raw(r, &mut reuse, render, container, registry)?;

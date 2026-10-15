@@ -39,7 +39,7 @@ fn routing(
     )
 }
 
-fn wide_query(r: &Reader<'_>, edit: u64) -> Result<String> {
+fn wide_query(r: &Reader<'_>, edit: u64, witnesses: &Witnesses<'_>) -> Result<String> {
     // CEditBox embeds the text editor at +80. Its getter reads the std::wstring
     // at editor+30; this exact Linux conversion consumes four-byte code points.
     let address = edit + 0xb0;
@@ -58,6 +58,7 @@ fn wide_query(r: &Reader<'_>, edit: u64) -> Result<String> {
             return Err(invalid("Search query capacity outside policy"));
         }
     }
+    witnesses.region(pointer, (length + 1) * 4, "search_query_text");
     let bytes = r.read(pointer, (length as usize + 1) * 4)?;
     if bytes[bytes.len() - 4..] != [0; 4] {
         return Err(invalid("Search query terminator changed"));
@@ -141,11 +142,12 @@ fn named_child(
     found.ok_or_else(|| invalid("Named search container entry missing"))
 }
 
-pub(crate) fn observe(
+pub(in crate::own_focus) fn observe(
     r: &Reader<'_>,
     base: u64,
     view: u64,
     registry: u64,
+    witnesses: &Witnesses<'_>,
 ) -> Result<(Value, Option<[u64; 3]>)> {
     let edit = r.u64(view + 0x1200)?;
     if edit == 0 {
@@ -156,6 +158,7 @@ pub(crate) fn observe(
         ));
     }
     exact_search_type(r, base, edit, 0x43498b8, "query_control")?;
+    witnesses.region(edit, 0x272, "search_edit");
     if r.u64(edit + 0x68)? != registry {
         return Err(Error::new(
             "foreign_focus_scope",
@@ -166,6 +169,7 @@ pub(crate) fn observe(
     // primary 4349f00). Follow the owned view root and its named window list.
     let root = r.u64(view + 0x2f8)?;
     exact_search_type(r, base, root, 0x4347d58, "query_root")?;
+    witnesses.region(root, 0xefc, "search_root");
     if r.u64(root + 0x98)? != registry {
         return Err(Error::new(
             "foreign_focus_scope",
@@ -177,6 +181,7 @@ pub(crate) fn observe(
         return Err(invalid("Search container cannot alias its root"));
     }
     exact_search_type(r, base, container, 0x4347d58, "query_container")?;
+    witnesses.region(container, 0xefc, "search_container");
     if r.u64(container + 0x98)? != registry {
         return Err(Error::new(
             "foreign_focus_scope",
@@ -188,8 +193,8 @@ pub(crate) fn observe(
         return Err(invalid("Named search control and Focus view alias differ"));
     }
     listener(r, base, edit, view)?;
-    let query = wide_query(r, edit)?;
-    let geometry = render::observe(r, base, edit, container, registry)?;
+    let query = wide_query(r, edit, witnesses)?;
+    let geometry = render::observe(r, base, edit, container, registry, witnesses)?;
     let flags = u32::from_le_bytes(r.read(edit + 0x74, 4)?.try_into().unwrap());
     let edit_flags = r.byte(edit + 0x271)?;
     let routing = routing(r, base, edit, registry, flags, edit_flags)?;

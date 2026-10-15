@@ -440,6 +440,16 @@ The latter stores index `+0x1358`, calls `0x1514e80` to adjust the viewport when
 needed, and updates highlights. This is static evidence; query delivery and
 offscreen navigation still require live validation. No engine function is called.
 
+Run063 persisted SearchQuery intent, then refused before possible input on a
+four-byte `search_control` witness change. Its journal ended NotQueued; no query
+replay or View followed. The original field was unclassified and remains unknown.
+The next observer labels known edit, text, container and renderer regions without
+adding reads or relaxing witnesses. Only the final pre-input SearchQuery reader
+can discard up to four torn snapshots, with a one-second retry window, 25 ms
+intervals and the unchanged absolute deadline. Guard/pin acceptance, state
+preconditions and the one ordinary dispatcher remain outside that retry loop.
+Rejected reads remain in transport diagnostics, including terminal error text.
+
 For future Enter support, exact editor table `0x4349b78` method `+0x38` points
 to `0x2f707f0`. Its symbol-13 branch calls listener method `+0x20` (`0x1527aa0`),
 which invokes the already pinned member `0x1510830`. That member joins the
