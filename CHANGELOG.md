@@ -2,6 +2,9 @@
 
 ## Unreleased native preview
 
+- Keep portable geometry tests independent of Unix-only journal helpers. The
+  persistence check stays in the Unix journal suite; the runtime is unchanged.
+
 - Preserve run054's successful read-only recovery and failed successive-Focus
   gate. Three Four Year Plan View refusals occurred before input; their exact
   hierarchy limits were truncated and remain unknown. Canonical release,

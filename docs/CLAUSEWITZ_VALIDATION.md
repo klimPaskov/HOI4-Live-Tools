@@ -3770,3 +3770,12 @@ format, host/Linux Clippy, Linux MSRV all-target compilation and release linking
 All 101 native input hashes remained fixed. An initial host run caught an assertion
 for the old diagnostic wording; it was corrected before the complete successful
 run. These checks verify reporting and refusal behavior, not the live geometry fix.
+
+The first CI run for `307bd45` failed: new portable assertions referenced the
+Unix-only daily journal module on Windows, and an existing Linux research-return
+test received `journal_busy` while reopening its just-closed fixture journal.
+Portable tests now check the message's ASCII/byte bound directly; the Unix test
+still verifies durable persistence through restart. No runtime change was made,
+and the rebuilt Linux CLI is byte-identical. The Linux reopen failure's cause
+remains unestablished; later passing runs do not erase it. No Luna input grant
+was issued while this CI gate was failing.

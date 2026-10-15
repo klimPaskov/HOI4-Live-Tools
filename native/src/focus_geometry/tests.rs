@@ -258,10 +258,7 @@ fn owned_root_capacity_policy_remains_unread_and_diagnostic_instead_of_expanded(
     ] {
         assert!(e.message.contains(s), "{s}");
     }
-    assert_eq!(
-        crate::daily_navigation::bounded_reason(&e.message),
-        e.message
-    );
+    assert!(e.message.is_ascii() && e.message.len() <= 160);
     assert!(f.untouched(0xbeef0000, 8));
 }
 #[test]

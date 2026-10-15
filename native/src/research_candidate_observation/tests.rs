@@ -39,10 +39,6 @@ fn policy_closure_refusal_retains_each_boundary_quantity_within_durable_limit() 
                 let n = if count == 20000 { "20000" } else { "unknown" };
                 assert_eq!(e.code, "research_geometry_unavailable");
                 assert_eq!(e.message, format!("Root closure policy bound: stage={expected_stage} scope={expected_scope} count={n} cap={n} cap_max={n} prior={n} sum_max={n} hops=16"));
-                assert_eq!(
-                    crate::daily_navigation::bounded_reason(&e.message),
-                    e.message
-                );
                 assert!(e.message.is_ascii() && e.message.len() <= 160);
                 assert!(!e.message.contains("arbitrary") && !e.message.contains(&"A".repeat(128)));
             }
@@ -61,10 +57,7 @@ fn malformed_or_contradictory_policy_closure_never_produces_a_candidate() {
                 "policy_boundary":boundary,"payload_hops":u64::MAX});
             let e = common(&Value::Null, "w", "a", "s", &h).unwrap_err();
             assert_eq!(e.message,"Root closure policy bound: stage=unknown scope=unknown count=unknown cap=unknown cap_max=unknown prior=unknown sum_max=unknown hops=unknown");
-            assert_eq!(
-                crate::daily_navigation::bounded_reason(&e.message),
-                e.message
-            );
+            assert!(e.message.is_ascii() && e.message.len() <= 160);
         }
     }
 }
