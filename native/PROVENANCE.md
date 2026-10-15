@@ -486,4 +486,9 @@ and requiring unchanged order plus exact selected key afterward. Canonical keys
 are limited to 128 bytes and navigation to 64 matches, within existing journal
 bounds. Existing strict SearchQuery receipts keep their meaning. X11 requires
 unique unshifted Tab, clear XKB state and owned process/window/display identities.
-Live Tab navigation and subsequent View remain pending.
+Run067 verified two ordinary Tab steps against the canonical ordered list. The
+third refused before intent on a torn edit-box witness; subsequent View remains
+pending. New initial/candidate/final pre-intent read recovery uses separate
+four-read/one-second phase bounds under the original absolute deadline. Only
+wholly discarded producer reads retry; phase-labeled diagnostics preserve their
+causes, and ownership acceptance, predicates, journaling and input stay outside.

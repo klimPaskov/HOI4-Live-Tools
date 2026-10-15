@@ -314,7 +314,11 @@ match list (up to 64); it does not claim the requested Focus is selected.
 `search_next` sends one ordinary Tab when `focus_id` is the immediate next match,
 including wraparound. It requires the same query, unchanged match order, exact
 selected ID and unchanged active Focus. Each step has its own durable receipt;
-there is no automatic input retry. These new stages await live validation.
+there is no automatic input retry. Run067 verified text entry and two Tab steps;
+the third refused on a torn snapshot before intent. The complete search-to-View
+sequence remains pending. Each initial/candidate/final pre-intent search read can
+discard torn snapshots within its own four-read/one-second bound and the original
+absolute deadline; input, state predicates and ownership checks are never retried.
 The original `search_query` predicate and failed historical receipts are unchanged.
 
 The optional `hoi4_research_attempt` preview derives exact technology/slot/category

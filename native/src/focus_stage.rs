@@ -105,6 +105,17 @@ pub(crate) fn with_transport_cause(
         }
     }
     if let Some(reads) = transport
+        .and_then(|v| v.get("preintent_rejected_reads"))
+        .and_then(serde_json::Value::as_array)
+        .filter(|v| !v.is_empty())
+    {
+        let bounded: Vec<_> = reads.iter().take(3).collect();
+        error.message.push_str(&format!(
+            "; discarded_preintent_reads={}",
+            serde_json::json!(bounded)
+        ));
+    }
+    if let Some(reads) = transport
         .and_then(|v| v.get("preinput_rejected_reads"))
         .and_then(serde_json::Value::as_array)
         .filter(|v| !v.is_empty())

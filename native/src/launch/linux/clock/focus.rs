@@ -244,21 +244,28 @@ pub(super) fn execute_internal(
         scope: None,
         candidate_selection: None,
         search_selection: None,
+        preintent_observations: 0,
+        preintent_rejected_reads: Vec::new(),
         preserved_focus: None,
         last_transport: None,
         until,
     };
-    let execution = service
-        .journal
-        .execute(
-            id,
-            target,
-            token,
-            authority,
-            gate,
-            &mut backend,
-            remaining(until)?,
-        )
+    let result = service.journal.execute(
+        id,
+        target,
+        token,
+        authority,
+        gate,
+        &mut backend,
+        remaining(until)?,
+    );
+    if !backend.preintent_rejected_reads.is_empty() {
+        let transport = backend
+            .last_transport
+            .get_or_insert_with(|| json!({"delivery":"NotAttempted","game_action_verified":false}));
+        transport["preintent_rejected_reads"] = json!(backend.preintent_rejected_reads);
+    }
+    let execution = result
         .map_err(|error| stage::with_transport_cause(error, backend.last_transport.as_ref()))?;
     service.journal.finish_before_deadline(&execution, until)?;
     Ok((execution, backend.last_transport))
@@ -277,8 +284,46 @@ struct FocusBackend<'a> {
     preserved_focus: Option<stage::ActiveFocus>,
     candidate_selection: Option<Selection>,
     search_selection: Option<stage::SearchMatches>,
+    preintent_observations: usize,
+    preintent_rejected_reads: Vec<Value>,
     last_transport: Option<Value>,
     until: Instant,
+}
+impl FocusBackend<'_> {
+    fn preintent_observation(
+        &mut self,
+        phase: stage::read_recovery::PreintentPhase,
+    ) -> Result<state::Observation> {
+        if !self.target.stage.uses_query() {
+            return observed(
+                self.process,
+                self.guard,
+                &self.target,
+                &mut self.scope,
+                false,
+            );
+        }
+        // Run067 refused before Intent, outside the old final queue check.
+        // Retry only the wholly discarded producer call, never accept_context,
+        // scope pinning, state predicates, journal execution or input dispatch.
+        let o = stage::read_recovery::before_intent(
+            phase,
+            self.until,
+            || {
+                state::observe_with_search(
+                    self.process,
+                    &self.target.focus_id,
+                    &self.target.epoch,
+                    false,
+                    true,
+                )
+            },
+            &mut self.preintent_rejected_reads,
+        )?;
+        accept(self.guard, self.process, &o)?;
+        state::pin(&mut self.scope, o.scope.clone())?;
+        Ok(o)
+    }
 }
 fn accept(guard: &mut Guard, process: &dyn Process, o: &state::Observation) -> Result<()> {
     guard.accept_context(process, &o.context.campaign)?;
@@ -415,13 +460,28 @@ fn point(
 }
 impl stage::Backend for FocusBackend<'_> {
     fn observe(&mut self) -> Result<stage::OwnState> {
-        let result = observed(
-            self.process,
-            self.guard,
-            &self.target,
-            &mut self.scope,
-            false,
-        );
+        let result = if self.last_transport.is_none() {
+            let phase = match self.preintent_observations {
+                0 => stage::read_recovery::PreintentPhase::Initial,
+                1 => stage::read_recovery::PreintentPhase::Final,
+                _ => {
+                    return Err(Error::new(
+                        "focus_precondition",
+                        "Unexpected pre-intent observation phase",
+                    ))
+                }
+            };
+            self.preintent_observations += 1;
+            self.preintent_observation(phase)
+        } else {
+            observed(
+                self.process,
+                self.guard,
+                &self.target,
+                &mut self.scope,
+                false,
+            )
+        };
         if self.target.stage.uses_query() {
             if let Some(transport) = &mut self.last_transport {
                 stage::query_readback::record(
@@ -438,7 +498,7 @@ impl stage::Backend for FocusBackend<'_> {
         if target != &self.target {
             return Err(Error::new("ownership_changed", "Focus target changed"));
         }
-        let o = observed(self.process, self.guard, target, &mut self.scope, false)?;
+        let o = self.preintent_observation(stage::read_recovery::PreintentPhase::Candidate)?;
         o.state.validate(target)?;
         o.state.preflight(target)?;
         if target.stage.preserves_focus() {

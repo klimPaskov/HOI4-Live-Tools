@@ -1,4 +1,4 @@
-//! Discard wholly torn read-only snapshots before the one SearchQuery dispatch.
+//! Discard wholly torn read-only snapshots before ordinary search input.
 //! This helper never wraps transport, lease checks, input or journal execution.
 use crate::error::{Error, Result};
 use std::time::{Duration, Instant};
@@ -6,6 +6,37 @@ use std::time::{Duration, Instant};
 const MAX_READS: usize = 4;
 const WINDOW: Duration = Duration::from_secs(1);
 const INTERVAL: Duration = Duration::from_millis(25);
+
+#[derive(Clone, Copy, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum PreintentPhase {
+    Initial,
+    Candidate,
+    Final,
+}
+
+/// A separate bounded read phase. Scope acceptance and all input decisions stay
+/// outside this function. Journal execution itself must never be retried.
+pub(crate) fn before_intent<T>(
+    phase: PreintentPhase,
+    until: Instant,
+    observe: impl FnMut() -> Result<T>,
+    diagnostics: &mut Vec<serde_json::Value>,
+) -> Result<T> {
+    let mut rejected = Vec::new();
+    let result = recover(
+        until,
+        observe,
+        Instant::now,
+        std::thread::sleep,
+        &mut rejected,
+    );
+    if !rejected.is_empty() {
+        diagnostics.push(serde_json::json!({"phase":phase,"rejected_reads":rejected,
+            "historical":true,"input_authorized":false}));
+    }
+    result
+}
 
 #[cfg(target_os = "linux")]
 pub(crate) fn before_query<T>(
@@ -81,6 +112,84 @@ fn recover<T>(
 mod tests {
     use super::*;
     use std::cell::Cell;
+
+    #[test]
+    fn preintent_phases_discard_original_torn_snapshot_and_keep_distinct_evidence() {
+        let mut diagnostics = Vec::new();
+        for phase in [
+            PreintentPhase::Initial,
+            PreintentPhase::Candidate,
+            PreintentPhase::Final,
+        ] {
+            let calls = Cell::new(0);
+            let snapshot = before_intent(
+                phase,
+                Instant::now() + WINDOW,
+                || {
+                    calls.set(calls.get() + 1);
+                    if calls.get() == 1 {
+                        Err(Error::new(
+                            "torn_read",
+                            "Focus witness changed: search_control; search_edit+0x74 size=4",
+                        ))
+                    } else {
+                        Ok(("whole fresh snapshot", calls.get()))
+                    }
+                },
+                &mut diagnostics,
+            )
+            .unwrap();
+            assert_eq!(snapshot, ("whole fresh snapshot", 2));
+        }
+        assert_eq!(diagnostics.len(), 3);
+        for (row, phase) in diagnostics.iter().zip(["initial", "candidate", "final"]) {
+            assert_eq!(row["phase"], phase);
+            assert_eq!(row["rejected_reads"].as_array().unwrap().len(), 1);
+            assert_eq!(row["rejected_reads"][0]["code"], "torn_read");
+            assert_eq!(row["input_authorized"], false);
+        }
+        let transport =
+            serde_json::json!({"delivery":"NotAttempted","preintent_rejected_reads":diagnostics});
+        let error = super::super::with_transport_cause(
+            Error::new("focus_precondition", "Complete fresh state refused"),
+            Some(&transport),
+        );
+        assert_eq!(error.code, "focus_precondition");
+        assert!(error.message.starts_with("Complete fresh state refused"));
+        assert!(error.message.contains("discarded_preintent_reads="));
+        assert!(!error.message.contains("query_transport="));
+    }
+
+    #[test]
+    fn preintent_permanent_or_late_observation_never_becomes_action_evidence() {
+        let mut diagnostics = Vec::new();
+        let calls = Cell::new(0);
+        let error = before_intent::<()>(
+            PreintentPhase::Initial,
+            Instant::now() + WINDOW,
+            || {
+                calls.set(calls.get() + 1);
+                Err(Error::new(
+                    "ownership_changed",
+                    "Exact producer identity changed",
+                ))
+            },
+            &mut diagnostics,
+        )
+        .unwrap_err();
+        assert_eq!(error.code, "ownership_changed");
+        assert_eq!(calls.get(), 1);
+        assert!(diagnostics.is_empty());
+        let error = before_intent::<()>(
+            PreintentPhase::Final,
+            Instant::now(),
+            || panic!("Expired original deadline must not read"),
+            &mut diagnostics,
+        )
+        .unwrap_err();
+        assert_eq!(error.code, "focus_deadline");
+        assert!(diagnostics.is_empty());
+    }
 
     #[test]
     fn portable_diagnostic_bound_preserves_utf8_and_removes_control_characters() {

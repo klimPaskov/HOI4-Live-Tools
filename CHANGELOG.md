@@ -2,6 +2,12 @@
 
 ## Unreleased native preview
 
+- Verify Focus search text and two ordinary Tab selection steps in Linux run067.
+  Preserve the third step's torn-read refusal before intent, with no pending
+  action. Extend bounded snapshot recovery to the three pre-intent search read
+  phases, preserving their diagnostic causes and the original action deadline.
+  Ownership, state predicates, journaling and input are never retried.
+
 - Preserve run055's passing paused geometry and run056's failed advancing
   second-Focus View, including its exact capacity boundary and actual Rhineland
   membership. Increase only the opt-in Focus position allocation cap to 16,384;

@@ -4251,3 +4251,34 @@ and 953 Python tests (37 skips). The X11 fixture verified one Tab press/release,
 zero input on preflight refusal, modifier rejection and unchanged pointer position.
 Host/Linux/Windows Clippy, formatting, Linux MSRV and release linking passed;
 all 113 native inputs stayed unchanged. These are not live HOI4 Tab evidence.
+
+## Run067: two Tab steps verified, third refused before intent — 15 October 2026 UTC
+
+Run067 on immutable `1fa1268` verified SearchText, its identical historical replay,
+and two ordinary Tab steps through the six canonical matches. Text entry took
+1,417.285 ms; the two steps took 875.374 and 1,161.722 ms. The third step refused
+BeforeIntent in 178.671 ms with `torn_read` at `search_edit+0x74` (four bytes).
+The original initial/candidate/final phase was not retained. Its request has no
+journal row and no input was sent; all six earlier input pairs were verified,
+with no pending Intent. The last verified selection was Ascension of Göring.
+No retry, final Tab replay, later search read, View or final overview followed.
+
+Independent audit retained 18 RPCs and one error, canonical release/status,
+327.666-second recording beginning before campaign Start, normal exit 0 in
+2.406 seconds, and absence of all four guest and four host processes. All 113
+native inputs and 24 helpers stayed unchanged; all nine CI jobs passed. Both
+brokers are closed. This verifies two Tab steps, not the complete search-to-View
+sequence, successive Focus assignment or campaign acceptance.
+
+The next source extends recovery to each initial, candidate and final pre-Intent
+search observation. Each phase permits at most four whole reads, a one-second
+window after its first torn read and 25 ms intervals, all under the original
+absolute deadline. The final pre-queue check keeps its separate existing bound.
+Only producer `torn_read` snapshots are discarded; ownership acceptance, scope
+pinning, predicates, journal execution and input are never retried. Rejected
+reads retain their phase and grant no input authority. Live validation is pending.
+
+The recovery source passed 795 Rust 1.86 host tests, 907 reported actual Linux
+checks (905 substantive), five included X11 cases and 953 Python tests (37 skips).
+Formatting, host/Linux/Windows Clippy, Linux MSRV and release linking passed;
+all 113 native inputs remained unchanged. Full live search-to-View is still pending.
