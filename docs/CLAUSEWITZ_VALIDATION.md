@@ -2887,3 +2887,28 @@ No new transport refusal occurred, so the cause-preservation correction remains
 offline-tested only. ClosePolitics is still disabled. Cross-domain panel handoff,
 focus completion over game time, completed-technology refill, strategic warfare,
 Windows/macOS native live support and full campaign acceptance remain open.
+
+## STOP history and compact Focus UI foundation — 15 October 2026
+
+STOP now reads budget and assignment summaries from one checked durable state,
+independent of the latest worker report. It reports the historical accepted day,
+date and sequence without reading the game. Before the first accepted daily
+observation, day/usage/remaining stay null. Store replacement or corruption makes
+both summaries unavailable and blocks input. Generated tests cover immediate
+restart, identical updates, unchanged journal bytes, no game reads, nonqueued and
+uncertain reservations, conservative legacy budgets and persistent refusal after
+an invalid store is restored.
+
+The new optional `hoi4_focus_ui` projects the existing witnessed own Focus/Politics
+model into a compact read-only response: active canonical focus, managed mode,
+settled local roots and complete own detail/research-Info counts. It needs an
+owned Focus binding but no input lease. Unknown blockers stay null; private
+process/campaign identities, raw addresses, geometry and command authority are
+not exposed. The ClosePolitics parser and runtime still refuse that stage.
+
+The composed source passed **656 Rust 1.86 host tests**, **760 reported actual
+Linux checks** (758 substantive, excluding two fixture helpers), **953 Python
+tests** (37 skips), format, host/Linux Clippy, Linux MSRV compilation and optimized
+release linking. All 11 Linux payload hashes passed before execution. Guest boot
+identity, prior exact-process absence, prior normal exit and unchanged Yama 1
+matched before/after. These additions still require a fresh recorded live gate.

@@ -306,6 +306,7 @@ impl Commands for ClockService {
         }
         if self.focus_enabled {
             tools.push(focus::tool());
+            tools.push(crate::focus_ui_observation::tool());
         }
         if self.daily.enabled() {
             tools.push(daily::Controller::tool());
@@ -315,11 +316,11 @@ impl Commands for ClockService {
     fn supports(&self, name: &str) -> bool {
         matches!(name, "hoi4_input_lease" | "hoi4_time")
             || (name == "hoi4_research_attempt" && self.research_enabled)
-            || (name == "hoi4_focus_attempt" && self.focus_enabled)
+            || (matches!(name, "hoi4_focus_attempt" | "hoi4_focus_ui") && self.focus_enabled)
             || (name == "hoi4_daily_governor" && self.daily.enabled())
     }
     fn capabilities(&self) -> Value {
-        json!({"transport":"ordinary authenticated X11 input","actions":["set_paused","set_speed"],"research_preview":{"enabled":self.research_enabled,"scope":"one OpenPanel, SelectSlot, SelectCategory, View or Research stage for own empty slot","installed_game_validation":"Clock cycles, four assignments and advancement to 5 January passed bounded run025; run024 uncertainty unexplained; full campaign acceptance pending"},"focus_preview":{"enabled":self.focus_enabled,"scope":"one own OpenPolitics/OpenFocus/View/Start ordinary stage; exact Sprite/zero-angle Text/unmasked Frame branches","installed_game_validation":"Run036 verified one ordinary Start on prior source; borrowed executor and daily worker require fresh live validation"},"daily_focus":{"owner_enabled":self.daily.focus_enabled(),"plan_opt_in_required":true,"full_campaign_acceptance":false},"daily_prepared_research":{"enabled":self.daily.research_enabled(),"navigation_implemented":true,"scope":"fresh digest, durable research navigation and refills within persisted daily assignment budget; live acceptance pending"},"lease":"exclusive configured controller","native_posting":false,"cursor_movement":self.research_enabled||self.focus_enabled,"load_generation":"unverified; campaign identity, anchors and observed timeline checked","full_campaign_acceptance":false})
+        json!({"transport":"ordinary authenticated X11 input","actions":["set_paused","set_speed"],"research_preview":{"enabled":self.research_enabled,"scope":"one OpenPanel, SelectSlot, SelectCategory, View or Research stage for own empty slot","installed_game_validation":"Clock cycles, four assignments and advancement to 5 January passed bounded run025; run024 uncertainty unexplained; full campaign acceptance pending"},"focus_preview":{"enabled":self.focus_enabled,"scope":"one own OpenPolitics/OpenFocus/View/Start ordinary stage; exact Sprite/zero-angle Text/unmasked Frame branches","installed_game_validation":"Run041 verified worker Start, active-focus waiting, idempotent update and restart without replay; combined panel handoff pending"},"focus_ui":{"enabled":self.focus_enabled,"read_only":true,"lease_required":false,"installed_game_validation":"pending"},"daily_focus":{"owner_enabled":self.daily.focus_enabled(),"plan_opt_in_required":true,"full_campaign_acceptance":false},"daily_prepared_research":{"enabled":self.daily.research_enabled(),"navigation_implemented":true,"scope":"Run030 verified four-slot assignment, update/restart and counter advancement; completed-technology refill pending"},"lease":"exclusive configured controller","native_posting":false,"cursor_movement":self.research_enabled||self.focus_enabled,"load_generation":"unverified; campaign identity, anchors and observed timeline checked","full_campaign_acceptance":false})
     }
     fn call(&self, process: &dyn Process, name: &str, arguments: &Value) -> Result<Value> {
         let call_started = Instant::now();
@@ -334,6 +335,9 @@ impl Commands for ClockService {
         }
         if name == "hoi4_focus_attempt" {
             return focus::call(self, process, args);
+        }
+        if name == "hoi4_focus_ui" {
+            return focus::observe_ui(self, process, args);
         }
         // Validate all shapes before process access or lease mutation.
         if name == "hoi4_input_lease" {

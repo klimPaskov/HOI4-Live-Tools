@@ -518,16 +518,48 @@ impl Governor {
     /// game state. Caller holds the governor lock; this never authorizes input.
     #[cfg(any(target_os = "linux", all(test, unix)))]
     pub(crate) fn assignment_summary(&mut self) -> Result<Value> {
+        self.check_history()?;
+        self.assignment_history()
+    }
+    /// STOP has no fresh game observation. Derive its budget from the same
+    /// checked durable state as assignments, never from a worker report cache.
+    #[cfg(any(target_os = "linux", all(test, unix)))]
+    pub(crate) fn stopped_history(&mut self) -> Result<(Value, Value)> {
+        self.check_history()?;
+        let day = self.state.last_day;
+        let used = day.map(|day| self.used_actions(day));
+        let remaining = day.map(|day| {
+            if self.budget_available(day) {
+                usize::from(self.state.plan.max_actions_per_day)
+                    .saturating_sub(self.used_actions(day))
+            } else {
+                0
+            }
+        });
+        let budget = json!({"available":true,"source":"durable_plan",
+            "historical":true,"current_state_verified":false,"input_authorized":false,
+            "plan_revision":self.state.plan.revision,"date_raw":self.state.last_date,
+            "observed_sequence":self.state.last_sequence,"day":day,
+            "used_assignment_attempts":used,"limit":self.state.plan.max_actions_per_day,
+            "remaining":remaining,"navigation_spends_assignment_budget":false});
+        Ok((self.assignment_history()?, budget))
+    }
+    #[cfg(any(target_os = "linux", all(test, unix)))]
+    fn check_history(&mut self) -> Result<()> {
         if self.poisoned {
             return Err(Error::new(
                 "governor_quarantined",
-                "Assignment persistence is unverified",
+                "Daily persistence is unverified",
             ));
         }
         if let Err(error) = self.store.check() {
             self.poisoned = true;
             return Err(error);
         }
+        Ok(())
+    }
+    #[cfg(any(target_os = "linux", all(test, unix)))]
+    fn assignment_history(&self) -> Result<Value> {
         let mut complete = Vec::new();
         let mut pending = 0;
         let mut in_flight = 0;

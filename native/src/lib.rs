@@ -1,6 +1,8 @@
 pub mod actions;
 pub mod calendar;
 pub mod error;
+#[cfg(any(target_os = "linux", test))]
+mod focus_ui_observation;
 pub mod framing;
 pub mod game;
 pub mod gui;

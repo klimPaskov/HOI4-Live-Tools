@@ -315,22 +315,22 @@ impl Controller {
                     })
                     .transpose()?
                     .unwrap_or(Value::Null);
-                let assignments = active
+                let (assignments, budget) = active
                     .as_ref()
-                    .map(|a| -> Result<Value> {
+                    .map(|a| -> Result<(Value, Value)> {
                         let mut governor = try_state(&a.governor)?;
                         // STOP must still return its uncertainty evidence if a
                         // durable file can no longer be verified.
-                        let summary = assignment_summary_or_unavailable(&mut governor);
-                        if summary["available"] == false {
+                        let (assignments, budget) = stopped_history_or_unavailable(&mut governor);
+                        if assignments["available"] == false {
                             self.blocked.store(true, Ordering::Release);
                         }
-                        Ok(summary)
+                        Ok((assignments, budget))
                     })
                     .transpose()?
-                    .unwrap_or(Value::Null);
+                    .unwrap_or((Value::Null, Value::Null));
                 Ok(
-                    json!({"assignments":assignments,"daily_budget":active.as_ref().and_then(|a|a.report.try_lock().ok().map(|r|r["daily_budget"].clone())).unwrap_or(Value::Null),"core_pending_historical":core_state,"focus":focus,"latest_focus_wait_historical":focus_wait,"worker_stopped":true,"game_time_changed":false,"uncertainty_retained":self.blocked.load(Ordering::Acquire),"last_error":last_error,"last_preparation_refusal":last_preparation_refusal,"last_stage_failure":last_stage_failure}),
+                    json!({"assignments":assignments,"daily_budget":budget,"core_pending_historical":core_state,"focus":focus,"latest_focus_wait_historical":focus_wait,"worker_stopped":true,"game_time_changed":false,"uncertainty_retained":self.blocked.load(Ordering::Acquire),"last_error":last_error,"last_preparation_refusal":last_preparation_refusal,"last_stage_failure":last_stage_failure}),
                 )
             }
             "details" => {
@@ -1393,10 +1393,11 @@ impl DailyBackend<'_> {
     }
 }
 
-fn assignment_summary_or_unavailable(governor: &mut core::Governor) -> Value {
-    governor.assignment_summary().unwrap_or_else(|e| {
-        json!({"available":false,"source":"durable_plan",
-        "reason":e.code,"current_state_verified":false,"input_authorized":false})
+fn stopped_history_or_unavailable(governor: &mut core::Governor) -> (Value, Value) {
+    governor.stopped_history().unwrap_or_else(|e| {
+        let unavailable = json!({"available":false,"source":"durable_plan",
+            "historical":true,"reason":e.code,"current_state_verified":false,"input_authorized":false});
+        (unavailable.clone(), unavailable)
     })
 }
 fn compact(

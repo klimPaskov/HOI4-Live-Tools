@@ -45,6 +45,39 @@ pub(super) fn tool() -> Value {
     json!({"name":"hoi4_focus_attempt","description":"Preview: one ordinary OpenPolitics Q, OpenFocus named-button, View or Start stage for an exact own canonical focus ID. Requires explicit owned profile, exclusive lease, settled own roots and complete own scoped blockers. Supported exact Sprite, zero-angle Text or unmasked Frame geometry; unknown branches refuse. Canonical readback verifies current state, not event causality or eligibility. Uncertain input is quarantined; no replay, coordinates, activation or engine calls.",
         "inputSchema":{"type":"object","properties":{"stage":{"enum":["open_politics","open_focus","view","start"]},"focus_id":{"type":"string","minLength":1,"maxLength":128},"request_id":{"type":"string","minLength":1,"maxLength":128},"lease_token":{"type":"string"}},"required":["stage","focus_id","request_id","lease_token"],"additionalProperties":false}})
 }
+pub(super) fn observe_ui(
+    owner: &ClockService,
+    process: &dyn Process,
+    args: &serde_json::Map<String, Value>,
+) -> Result<Value> {
+    let key = crate::focus_ui_observation::key(args)?;
+    if !owner.focus_enabled {
+        return Err(Error::new(
+            "capability_unavailable",
+            "Owned Focus binding required",
+        ));
+    }
+    let start = Instant::now();
+    // Serialize with ordinary input but do not require or mutate a lease, pause
+    // the game, clear quarantine, touch journals, or enter an input dispatcher.
+    let mut control = try_state(&owner.state)?;
+    let observation = state::observe(process, key, &control.guard.epoch, false)?;
+    accept(&mut control.guard, process, &observation)?;
+    process.check()?;
+    if start.elapsed() >= Duration::from_secs(2) {
+        return Err(Error::new(
+            "focus_observation_deadline",
+            "Own Focus UI observation exceeded two seconds",
+        ));
+    }
+    Ok(crate::focus_ui_observation::report(
+        &observation.state,
+        observation.context.campaign.date_raw,
+        observation.politics_context.campaign().date_raw,
+        crate::daily_observation::unix_ms()?,
+        start.elapsed().as_secs_f64() * 1000.0,
+    ))
+}
 struct Arguments<'a> {
     stage: stage::Stage,
     key: &'a str,

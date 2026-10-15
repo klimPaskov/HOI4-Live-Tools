@@ -22,9 +22,9 @@ broker initially refused two concurrent connections before request bytes were
 sent. Its serialized continuation used the same game and runtime; original
 failure evidence remains preserved. No gameplay retry or reload occurred.
 
-**Next work:** fix STOP's null cached budget after a rapid restart by reporting
-checked historical durable state, then complete read-only own Focus UI evidence
-and the separately recorded ordinary ClosePolitics transition. ClosePolitics
+**Next work:** freshly verify STOP's corrected durable historical budget after
+restart and the new read-only `hoi4_focus_ui` output. Then complete the separately
+recorded ordinary ClosePolitics transition. ClosePolitics
 remains disabled. Combined research/focus switching, technology completion/refill,
 focus completion over game time, economy/army/naval adapters, Windows/macOS native
 live support and the clean two-year/full campaigns remain open. Run041 triggered

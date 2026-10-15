@@ -1078,6 +1078,9 @@ fn legacy_unbound_day_is_conservatively_exhausted_until_fresh_advance() {
     drop(g);
     let mut g = Governor::open(&t.path(), p).unwrap();
     assert!(!g.budget_available(1936 * 365));
+    let (_, budget) = g.stopped_history().unwrap();
+    assert_eq!(budget["used_assignment_attempts"], 1);
+    assert_eq!(budget["remaining"], 0); // Legacy day is blocked, not limit - used.
     assert!(continue_goal(&mut g, &mut b, "refill_1")
         .unwrap()
         .verified
@@ -1632,6 +1635,83 @@ fn assignment_summary_survives_empty_batch_update_restart_without_fresh_authorit
 
 #[test]
 #[cfg(unix)]
+fn stopped_history_survives_immediate_restart_without_worker_report_or_game_read() {
+    let t = Temp::new();
+    let mut p = plan();
+    p.max_actions_per_day = 1;
+    let mut b = Fake::new(&p);
+    let mut g = Governor::open(&t.path(), p.clone()).unwrap();
+    run(&mut g, &mut b).unwrap();
+    let next = extended(p);
+    g.update_plan(next.clone()).unwrap();
+    assert!(!g.update_plan(next.clone()).unwrap());
+    let expected = g.stopped_history().unwrap();
+    let (assignments, budget) = &expected;
+    assert_eq!(assignments["completed"], 1);
+    assert_eq!(assignments["pending"], 2);
+    assert_eq!(budget["plan_revision"], 2);
+    assert_eq!(budget["day"], 1936 * 365);
+    assert_eq!(budget["used_assignment_attempts"], 1);
+    assert_eq!(budget["remaining"], 0);
+    assert_eq!(budget["historical"], true);
+    assert_eq!(budget["current_state_verified"], false);
+    assert_eq!(budget["input_authorized"], false);
+    let reads = b.observes;
+    let bytes = fs::read(t.path()).unwrap();
+    for _ in 0..2 {
+        drop(g);
+        g = Governor::open(&t.path(), next.clone()).unwrap();
+        assert_eq!(g.stopped_history().unwrap(), expected);
+    }
+    assert_eq!(fs::read(t.path()).unwrap(), bytes);
+    assert_eq!(b.observes, reads);
+    assert_eq!(b.sends, 1);
+}
+
+#[test]
+#[cfg(unix)]
+fn stopped_history_before_first_daily_observation_does_not_invent_a_day_or_budget() {
+    let t = Temp::new();
+    let mut g = Governor::open(&t.path(), plan()).unwrap();
+    let (assignments, budget) = g.stopped_history().unwrap();
+    assert_eq!(assignments["pending"], 2);
+    assert_eq!(budget["available"], true);
+    assert_eq!(budget["limit"], 4);
+    for key in [
+        "day",
+        "date_raw",
+        "observed_sequence",
+        "used_assignment_attempts",
+        "remaining",
+    ] {
+        assert!(budget[key].is_null(), "{key} must remain unknown");
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn stopped_history_counts_nonqueued_and_unresolved_reservations_without_refund() {
+    for mode in [Mode::NotQueued, Mode::Uncertain] {
+        let t = Temp::new();
+        let mut p = plan();
+        p.max_actions_per_day = 1;
+        let mut b = Fake::new(&p);
+        b.mode = mode;
+        let mut g = Governor::open(&t.path(), p.clone()).unwrap();
+        let _ = run(&mut g, &mut b);
+        drop(g);
+        let mut g = Governor::open(&t.path(), p).unwrap();
+        let (assignments, budget) = g.stopped_history().unwrap();
+        assert_eq!(assignments["completed"], 0);
+        assert_eq!(budget["used_assignment_attempts"], 1);
+        assert_eq!(budget["remaining"], 0);
+        assert_eq!(budget["input_authorized"], false);
+        assert_eq!(b.sends, 1);
+    }
+}
+
+#[test]
+#[cfg(unix)]
 fn assignment_summary_never_promotes_nonqueued_or_unresolved_intent() {
     for mode in [Mode::NotQueued, Mode::Uncertain] {
         let t = Temp::new();
@@ -1666,12 +1746,35 @@ fn assignment_summary_refuses_replaced_store_and_stays_poisoned() {
     fs::write(t.path(), "{}").unwrap();
     fs::set_permissions(t.path(), fs::Permissions::from_mode(0o600)).unwrap();
     assert!(g.assignment_summary().is_err());
+    assert_eq!(
+        g.stopped_history().unwrap_err().code,
+        "governor_quarantined"
+    );
     fs::remove_file(t.path()).unwrap();
     fs::rename(old, t.path()).unwrap();
     assert_eq!(
         g.assignment_summary().unwrap_err().code,
         "governor_quarantined"
     );
+}
+
+#[test]
+#[cfg(unix)]
+fn stopped_history_refuses_changed_store_before_returning_budget_and_stays_poisoned() {
+    let t = Temp::new();
+    let p = plan();
+    let mut b = Fake::new(&p);
+    let mut g = Governor::open(&t.path(), p).unwrap();
+    run(&mut g, &mut b).unwrap();
+    let original = fs::read(t.path()).unwrap();
+    fs::write(t.path(), "{}").unwrap();
+    assert_eq!(g.stopped_history().unwrap_err().code, "plan_changed");
+    fs::write(t.path(), original).unwrap();
+    assert_eq!(
+        g.stopped_history().unwrap_err().code,
+        "governor_quarantined"
+    );
+    assert!(g.assignment_summary().is_err());
 }
 
 #[test]

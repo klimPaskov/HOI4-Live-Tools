@@ -111,8 +111,21 @@ retaining `input_not_queued` and its terminal receipt. A transport torn read
 inside a finalized NotQueued attempt does not authorize replay. Run040's older
 adapter discarded that specific cause, so it cannot be recovered retroactively.
 Run041 triggered no new transport refusal, so live verification of cause retention
-remains open. An immediate STOP after restart can still report a null cached
-budget; the fresh digest and durable plan retain the consumed reservation.
+remains open. STOP now derives its historical budget from the same checked durable
+state as its assignment summary, fixing run041's null cached budget after restart.
+It reports the last accepted day, date and sequence without a game read. Before
+the first accepted daily observation, day/usage/remaining stay explicitly unknown.
+Changed or unverified storage makes both summaries unavailable and blocks input;
+NotQueued, unresolved and legacy reservations are never refunded. This correction
+still needs a fresh live restart/STOP check.
+
+`hoi4_focus_ui` is a read-only owned Focus observation. Supply one `focus_id` to
+receive canonical active focus, managed mode, settled Politics/Focus roots and
+complete own detail/research-Info counts. Unknown counts remain null; counts use
+named `visible` and `animating` fields. It shares the existing witnessed producers
+and campaign guard, requires the owned Focus binding, and needs no input lease.
+It exposes no private process identities, geometry or input authority. Its compact
+output awaits fresh live validation before the separate ClosePolitics gate.
 
 A prospective typed ClosePolitics stage is runtime-disabled. It requires the
 exact canonical active focus, settled own Politics mode12, hidden Focus and zero
@@ -193,6 +206,7 @@ anchors do not establish a load-generation token.
 | `hoi4_focus_list` | Own canonical focus keys and selected detail diagnostics; no start authority |
 | `hoi4_focus_node_detail` | One own focus key's current-item/control associations; opt-in raw Sprite/Text/Frame diagnostics, awaiting live validation |
 | `hoi4_focus_selected_detail` | Compact exact selected window; Start is `window.start.ordinary_binding`, distinct from the node symbol; read-only with optional geometry |
+| `hoi4_focus_ui` | Optional owned Focus binding: compact canonical active focus, managed mode, local roots and complete own blocker counts; no lease or input |
 | `hoi4_wait_for` | Server wait, 1–50 seconds, for a date, focus/research changes or research UI predicates |
 
 Catalog queries accept `filter`, `offset` and `limit` (1–100). Research completed
