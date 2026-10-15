@@ -263,6 +263,7 @@ mod daily_producer_cases {
                 technology_id: key.into(),
                 slot,
             },
+            focus_search: None,
             navigation: None,
         }
     }

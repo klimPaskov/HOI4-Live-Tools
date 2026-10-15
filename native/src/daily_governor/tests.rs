@@ -61,6 +61,7 @@ fn plan() -> Plan {
                     technology_id: "support_weapons".into(),
                     slot: 0,
                 },
+                focus_search: None,
                 navigation: None,
             },
             Entry {
@@ -68,6 +69,7 @@ fn plan() -> Plan {
                 intent: Intent::Focus {
                     focus_id: "GER_rhineland".into(),
                 },
+                focus_search: None,
                 navigation: None,
             },
         ],
@@ -203,6 +205,7 @@ fn extended(mut p: Plan) -> Plan {
             technology_id: "construction1".into(),
             slot: 1,
         },
+        focus_search: None,
         navigation: None,
     });
     p
@@ -655,6 +658,7 @@ fn explicit_future_domain_ids_validate_without_creating_capabilities() {
                     total_levels: 4,
                 },
             },
+            focus_search: None,
             navigation: None,
         },
         Entry {
@@ -664,6 +668,7 @@ fn explicit_future_domain_ids_validate_without_creating_capabilities() {
                 army_id: 3,
                 order_id: "defend_home".into(),
             },
+            focus_search: None,
             navigation: None,
         },
         Entry {
@@ -675,6 +680,7 @@ fn explicit_future_domain_ids_validate_without_creating_capabilities() {
                 destination_province: 8,
                 sea_region_ids: vec![9, 10],
             },
+            focus_search: None,
             navigation: None,
         },
     ]);
@@ -939,6 +945,7 @@ fn refill_plan() -> Plan {
                 technology_id: format!("tech_{slot}"),
                 slot,
             },
+            focus_search: None,
             navigation: None,
         })
         .collect();
@@ -1156,6 +1163,7 @@ fn ordered_refill_plan() -> Plan {
             technology_id: "construction1".into(),
             slot: 0,
         },
+        focus_search: None,
         navigation: None,
     });
     p.entries.push(Entry {
@@ -1164,6 +1172,7 @@ fn ordered_refill_plan() -> Plan {
             technology_id: "basic_machine_tools".into(),
             slot: 1,
         },
+        focus_search: None,
         navigation: None,
     });
     p
@@ -1314,6 +1323,7 @@ fn refill_update_restart_preserves_budget_and_future_day_activation() {
             technology_id: "electronic_mechanical_engineering".into(),
             slot: 0,
         },
+        focus_search: None,
         navigation: None,
     });
     assert!(g.update_plan(p.clone()).unwrap());
@@ -1361,6 +1371,7 @@ fn refill_duplicate_technology_and_slot_reordering_or_prepend_refuse() {
             technology_id: "support_weapons".into(),
             slot: 3,
         },
+        focus_search: None,
         navigation: None,
     });
     assert_eq!(g.update_plan(duplicate).unwrap_err().code, "invalid_plan");
@@ -1378,6 +1389,7 @@ fn refill_duplicate_technology_and_slot_reordering_or_prepend_refuse() {
                 technology_id: "electronic_mechanical_engineering".into(),
                 slot: 0,
             },
+            focus_search: None,
             navigation: None,
         },
     );
@@ -1424,6 +1436,7 @@ fn focus_ordered_head_update_and_completed_assignment_preserved() {
         intent: Intent::Focus {
             focus_id: "GER_autarky".into(),
         },
+        focus_search: None,
         navigation: None,
     });
     let mut b = Fake::new(&p);
@@ -1449,6 +1462,7 @@ fn focus_ordered_head_update_and_completed_assignment_preserved() {
         intent: Intent::Focus {
             focus_id: "GER_four_year_plan".into(),
         },
+        focus_search: None,
         navigation: None,
     });
     assert!(g.update_plan(p.clone()).unwrap());
@@ -1632,6 +1646,7 @@ fn focus_wait_never_consumes_budget_or_day_and_update_restart_keeps_original_lim
         intent: Intent::Focus {
             focus_id: "GER_autarky".into(),
         },
+        focus_search: None,
         navigation: None,
     });
     assert!(g.update_plan(p.clone()).unwrap());
@@ -1850,6 +1865,7 @@ fn assignment_summary_bounds_ids_but_keeps_latest_of_256_actual_completions() {
             intent: Intent::Focus {
                 focus_id: format!("GER_generated_{i}"),
             },
+            focus_search: None,
             navigation: None,
         })
         .collect();
@@ -1998,4 +2014,33 @@ fn refuse_malformed_or_wrong_outcome_historical_reasons() {
         fs::write(t.path(), serde_json::to_vec(&saved).unwrap()).unwrap();
         assert!(Governor::open(&t.path(), p).is_err());
     }
+}
+
+#[test]
+fn explicit_focus_search_hint_preserves_legacy_serialization_and_rejects_other_domains() {
+    let legacy =
+        serde_json::json!({"id":"focus","intent":{"kind":"Focus","focus_id":"GER_rhineland"}});
+    let mut entry: Entry = serde_json::from_value(legacy.clone()).unwrap();
+    assert!(entry.focus_search.is_none());
+    assert_eq!(serde_json::to_value(&entry).unwrap(), legacy);
+    entry.focus_search = Some("rhineland".into());
+    entry.validate().unwrap();
+    for query in [
+        "",
+        "Rhineland",
+        "rhineland\n",
+        "enter",
+        " leading",
+        "rhineland\t",
+    ] {
+        entry.focus_search = Some(query.into());
+        // A literal ordinary lowercase word is text, never a special key.
+        assert_eq!(entry.validate().is_ok(), query == "enter");
+    }
+    entry.focus_search = Some("rhineland".into());
+    entry.intent = Intent::Research {
+        technology_id: "generated".into(),
+        slot: 0,
+    };
+    assert_eq!(entry.validate().unwrap_err().code, "invalid_plan");
 }

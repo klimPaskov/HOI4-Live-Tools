@@ -31,8 +31,8 @@ vanilla Normal/historical Germany tests have verified:
 - Durable receipts, daily budgets, plan updates and restart/STOP without duplicate
   input.
 - Compact digests below 2 KB, exact historical details and bounded server waits.
-- Focus text search and two ordinary Tab selection steps. A later step refused
-  before input; complete search-to-View navigation remains under validation.
+- Focus text search, three ordinary Tab selection steps, historical replays and
+  opening the requested detail. Automatic plan integration is under validation.
 
 Fresh overviews measured 15.7 ms median RPC under x86 CPU emulation; five recent
 compact digests returned in 50–62 ms. These are scoped measurements, not a promise

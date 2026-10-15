@@ -152,7 +152,7 @@ pub(super) fn call(
         focus_id: args.key.into(),
         query: args.query.map(str::to_owned),
     };
-    let (execution, transport) = execute_internal(
+    let result = execute_internal(
         &mut state,
         process,
         &owner.input_gate,
@@ -162,7 +162,7 @@ pub(super) fn call(
         Instant::now() + Duration::from_secs(10),
     )?;
     Ok(
-        json!({"execution":execution,"transport":transport,"global_modal_clear_available":false,"effective_routing_verified":false,"full_campaign_acceptance":false}),
+        json!({"execution":result.execution,"transport":result.transport,"global_modal_clear_available":false,"effective_routing_verified":false,"full_campaign_acceptance":false}),
     )
 }
 fn remaining(until: Instant) -> Result<Duration> {
@@ -179,6 +179,11 @@ fn remaining(until: Instant) -> Result<Duration> {
 }
 /// Borrow the common controller exactly once; never re-enter ClockService.call.
 /// Used by manual previews and the separately opted-in daily Focus worker.
+pub(super) struct Executed {
+    pub(super) execution: stage::Execution,
+    pub(super) transport: Option<Value>,
+    pub(super) binding: Option<crate::daily_focus_navigation::OwnBinding>,
+}
 pub(super) fn execute_internal(
     state: &mut ControlState,
     process: &dyn Process,
@@ -187,7 +192,7 @@ pub(super) fn execute_internal(
     id: &str,
     target: stage::Target,
     until: Instant,
-) -> Result<(stage::Execution, Option<Value>)> {
+) -> Result<Executed> {
     // Each fixed Q route has its own typed preconditions and receipt.
     // Closing Politics and returning from research also preserve active Focus.
     // The opted-in daily worker shares this executor; no raw key API exists.
@@ -246,6 +251,7 @@ pub(super) fn execute_internal(
         search_selection: None,
         preintent_observations: 0,
         preintent_rejected_reads: Vec::new(),
+        last_observed_binding: None,
         preserved_focus: None,
         last_transport: None,
         until,
@@ -268,7 +274,15 @@ pub(super) fn execute_internal(
     let execution = result
         .map_err(|error| stage::with_transport_cause(error, backend.last_transport.as_ref()))?;
     service.journal.finish_before_deadline(&execution, until)?;
-    Ok((execution, backend.last_transport))
+    let binding = crate::daily_focus_navigation::receipt_binding(
+        &execution,
+        backend.last_observed_binding.as_ref(),
+    )?;
+    Ok(Executed {
+        execution,
+        transport: backend.last_transport,
+        binding,
+    })
 }
 
 type Selection = (Vec<[u64; 2]>, Vec<[u64; 3]>);
@@ -286,6 +300,7 @@ struct FocusBackend<'a> {
     search_selection: Option<stage::SearchMatches>,
     preintent_observations: usize,
     preintent_rejected_reads: Vec<Value>,
+    last_observed_binding: Option<(stage::OwnState, crate::daily_focus_navigation::OwnBinding)>,
     last_transport: Option<Value>,
     until: Instant,
 }
@@ -482,6 +497,14 @@ impl stage::Backend for FocusBackend<'_> {
                 false,
             )
         };
+        let result = result.and_then(|o| {
+            let binding = crate::daily_focus_navigation::OwnBinding::from_context(
+                &o.context,
+                &o.politics_context,
+            )?;
+            self.last_observed_binding = Some((o.state.clone(), binding));
+            Ok(o)
+        });
         if self.target.stage.uses_query() {
             if let Some(transport) = &mut self.last_transport {
                 stage::query_readback::record(

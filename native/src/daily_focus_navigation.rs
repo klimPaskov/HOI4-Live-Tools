@@ -11,6 +11,7 @@ use sha2::{Digest, Sha256};
 use std::path::Path;
 
 mod readiness;
+mod search;
 #[cfg(target_os = "linux")]
 pub(crate) use readiness::observed_ready;
 
@@ -88,6 +89,8 @@ pub(crate) struct OwnBinding {
     focus: [u64; 7],
     politics: [u64; 6],
     slots: Vec<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    search: Option<[u64; 3]>,
 }
 impl OwnBinding {
     #[cfg(target_os = "linux")]
@@ -120,11 +123,18 @@ impl OwnBinding {
             focus: focus.anchors,
             politics: q,
             slots: focus.slots.clone(),
+            search: focus.search_anchors,
         };
         value.validate()?;
         Ok(value)
     }
     fn validate(&self) -> Result<()> {
+        if self
+            .search
+            .is_some_and(|a| a.iter().any(|p| *p == 0 || *p % 8 != 0))
+        {
+            return Err(invalid());
+        }
         if [self.focus[0], self.focus[5], self.focus[4], self.focus[3]]
             != [
                 self.politics[0],
@@ -154,6 +164,28 @@ impl OwnBinding {
         }
         Ok(())
     }
+}
+/// The binding must come from the exact accepted observation in this receipt.
+/// Historical replies never carry current producer evidence.
+pub(crate) fn receipt_binding(
+    execution: &Execution,
+    observed: Option<&(OwnState, OwnBinding)>,
+) -> Result<Option<OwnBinding>> {
+    if execution.historical && !execution.current_state_verified {
+        return Ok(None);
+    }
+    if !execution.historical && execution.current_state_verified {
+        if let Some((own, binding)) = observed {
+            if own == &execution.receipt.observed {
+                binding.validate()?;
+                return Ok(Some(binding.clone()));
+            }
+        }
+    }
+    Err(Error::new(
+        "action_uncertain",
+        "Current receipt lacks its exact witnessed own binding",
+    ))
 }
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -338,7 +370,7 @@ fn validate_step(s: &Step, epoch: &Epoch, entries: &[Entry], index: usize) -> Re
     };
     if !entries.contains(&s.entry)
         || s.target.epoch != *epoch
-        || s.target.focus_id != *focus_id
+        || (s.target.focus_id != *focus_id && s.target.stage != Stage::SearchNext)
         || s.target.stage == Stage::Start
         || !(1936 * 365..2001 * 365).contains(&s.day)
         || s.revision == 0
@@ -348,6 +380,7 @@ fn validate_step(s: &Step, epoch: &Epoch, entries: &[Entry], index: usize) -> Re
     {
         return Err(invalid());
     }
+    search::validate_target(&s.entry, &s.target, &s.binding)?;
     if let Some(r) = &s.receipt {
         r.observed.validate(&r.target)?;
         if s.failure.is_some()
@@ -432,6 +465,7 @@ impl Navigator {
         let mut previous = None;
         for (i, s) in data.steps.iter().enumerate() {
             validate_step(s, &epoch, entries, i)?;
+            search::validate_extension(&data.steps[..i], s)?;
             if previous.is_some_and(|day| s.day < day)
                 || (i + 1 < data.steps.len()
                     && s.receipt.is_none()
@@ -894,6 +928,7 @@ impl Navigator {
             std::slice::from_ref(&step.entry),
             self.data.steps.len(),
         )?;
+        search::validate_extension(&self.data.steps, &step)?;
         let id = step.id.clone();
         self.data.steps.push(step);
         self.save()?;
@@ -920,6 +955,9 @@ impl Navigator {
         }
         e.receipt.observed.validate(&last.target)?;
         last.receipt = Some(e.receipt.clone());
+        let index = self.data.steps.len() - 1;
+        search::validate_extension(&self.data.steps[..index], &self.data.steps[index])
+            .inspect_err(|_| self.poisoned = true)?;
         self.save()
     }
     /// Only a trusted immediate adapter classification can mark known pre-input.
@@ -1068,6 +1106,7 @@ mod tests {
             intent: Intent::Focus {
                 focus_id: "GER_rhineland".into(),
             },
+            focus_search: None,
             navigation: None,
         }
     }
@@ -1084,6 +1123,7 @@ mod tests {
             focus: [0x1000, 0x2000, 0x3000, 0x4000, 0x5000, 0x6000, 0x7000],
             politics: [0x1000, 0x6000, 0x5000, 0x8000, 0x4000, 0x9000],
             slots: vec![0xa000],
+            search: None,
         }
     }
     pub(super) fn state() -> OwnState {
@@ -1129,6 +1169,7 @@ mod tests {
                     technology_id: "support_weapons".into(),
                     slot: 0,
                 },
+                focus_search: None,
                 navigation: None,
             },
             crate::research_stage::OwnState {

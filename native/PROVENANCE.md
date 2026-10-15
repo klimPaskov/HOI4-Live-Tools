@@ -492,3 +492,17 @@ pending. New initial/candidate/final pre-intent read recovery uses separate
 four-read/one-second phase bounds under the original absolute deadline. Only
 wholly discarded producer reads retry; phase-labeled diagnostics preserve their
 causes, and ownership acceptance, predicates, journaling and input stay outside.
+
+Run068 verified SearchText, three canonical one-step Tab selections and ordinary
+View, with exact historical replays and unchanged paused own state. No initial,
+candidate or final pre-intent read needed recovery in that run; the final
+pre-queue reader did discard one torn snapshot. The next daily planner uses only
+these verified ordinary stage adapters and an explicit entry query. It persists
+and validates the ordered chain, retains the original assignment target and
+never replaces an existing query. Worker live validation remains pending.
+
+Search preparation retains the exact identity binding alongside the accepted
+receipt observation. The worker uses that binding after a current verified
+search stage, avoiding a redundant caret-sensitive read. Historical replays
+return no current binding; different or missing observations refuse. Other
+preparation/assignment readback checks remain unchanged.

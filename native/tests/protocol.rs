@@ -9,7 +9,7 @@ fn server_binary() -> std::path::PathBuf {
         .unwrap_or_else(|| env!("CARGO_BIN_EXE_hoi4-live-native").into())
 }
 #[test]
-fn completed_focus_query_is_strict_read_only_and_live_unverified() {
+fn completed_focus_query_is_read_only_and_reports_bounded_linux_evidence() {
     use hoi4_live_native::protocol::Server;
     let server = Server {
         process: None,
@@ -48,10 +48,18 @@ fn completed_focus_query_is_strict_read_only_and_live_unverified() {
     let reply=server.handle(json!({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"hoi4_capabilities","arguments":{}}})).unwrap();
     let body: Value =
         serde_json::from_str(reply["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
-    assert!(body["unverified_observations"]
+    assert!(!body["unverified_observations"]
         .as_array()
         .unwrap()
         .contains(&json!("own_focus_completion_membership")));
+    assert!(
+        body["bounded_observation_validation"]["own_focus_completion_membership"]
+            .as_str()
+            .unwrap()
+            .starts_with("run052:")
+    );
+    assert_eq!(body["owned_session_bound"], false);
+    assert_eq!(body["windows_macos"], "unverified native adapters");
 }
 #[test]
 fn stdio_is_json_and_notifications_have_no_reply() {
@@ -118,7 +126,7 @@ fn stdio_is_json_and_notifications_have_no_reply() {
 }
 
 #[test]
-fn focus_search_query_is_strict_read_only_and_marked_unverified() {
+fn focus_search_query_is_read_only_and_reports_bounded_manual_evidence() {
     use hoi4_live_native::protocol::Server;
     let server = Server {
         process: None,
@@ -161,10 +169,18 @@ fn focus_search_query_is_strict_read_only_and_marked_unverified() {
     let reply = server.handle(json!({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"hoi4_capabilities","arguments":{}}})).unwrap();
     let body: Value =
         serde_json::from_str(reply["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
-    assert!(body["unverified_observations"]
+    assert!(!body["unverified_observations"]
         .as_array()
         .unwrap()
         .contains(&json!("own_focus_search_selection")));
+    assert!(
+        body["bounded_observation_validation"]["own_focus_search_selection"]
+            .as_str()
+            .unwrap()
+            .starts_with("run068:")
+    );
+    assert_eq!(body["owned_session_bound"], false);
+    assert_eq!(body["windows_macos"], "unverified native adapters");
 }
 
 #[test]

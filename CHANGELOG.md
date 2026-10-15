@@ -2,6 +2,12 @@
 
 ## Unreleased native preview
 
+- Verify full manual Focus search-to-View in Linux run068, including three Tab
+  steps and exact historical replays. Add optional explicit `focus_search` hints
+  to daily Focus plans with durable ordered-chain validation and unchanged
+  serialization for existing entries. Worker live validation remains pending;
+  failed/uncertain chains and existing query text are never replayed or replaced.
+
 - Verify Focus search text and two ordinary Tab selection steps in Linux run067.
   Preserve the third step's torn-read refusal before intent, with no pending
   action. Extend bounded snapshot recovery to the three pre-intent search read

@@ -92,7 +92,7 @@ impl Controller {
         self.research_enabled
     }
     pub(super) fn tool() -> Value {
-        json!({"name":"hoi4_daily_governor","description":"Optional owned daily automatic research refill worker and fresh compact digest. Start requires the existing exclusive lease and explicit typed plan. Navigation uses separately journaled verified stages; only fresh Research or separately opted-in Focus Start completes an assignment. Focus requires default-off owner daily_focus plus plan.focus_permission and existing profile. With both domain permissions, one journaled ClosePolitics stage can bridge a completed Focus to an empty research slot; a separately typed research-to-Politics shortcut requires both permissions and positive own panel/tree facts. Both routes passed bounded run049; later runs verified research completion/refill and actual Rhineland completion. Successive Focus automation and full campaigns remain unverified. Economy, army and naval domains remain unavailable. Unknown/uncertain input is never replayed. Stop does not pause the game. Compacted history includes a snapshot_id; details retrieves an exact historical section without game reads or input. The Focus section reports latest-per-kind history, not the full navigation ledger.","inputSchema":{"type":"object","oneOf":[{"properties":{"op":{"enum":["start","update"]},"lease_token":{"type":"string"},"plan":{"type":"object"}},"required":["op","lease_token","plan"],"additionalProperties":false},{"properties":{"op":{"enum":["digest","stop"]}},"required":["op"],"additionalProperties":false},{"properties":{"op":{"enum":["details"]},"snapshot_id":{"type":"string","minLength":64,"maxLength":64},"section":{"enum":crate::daily_digest::SECTIONS}},"required":["op","snapshot_id","section"],"additionalProperties":false}]}})
+        json!({"name":"hoi4_daily_governor","description":"Optional owned daily automatic research refill worker and fresh compact digest. Start requires the existing exclusive lease and explicit typed plan. Navigation uses separately journaled verified stages; only fresh Research or separately opted-in Focus Start completes an assignment. Focus requires default-off owner daily_focus plus plan.focus_permission and existing profile. With both domain permissions, one journaled ClosePolitics stage can bridge a completed Focus to an empty research slot; a separately typed research-to-Politics shortcut requires both permissions and positive own panel/tree facts. Both routes passed bounded run049; later runs verified research completion/refill and actual Rhineland completion. An optional Focus entry focus_search string uses the verified manual search stages with one durable bounded match chain; existing entries retain direct node navigation. Query replacement and worker search live validation are pending. Successive Focus automation and full campaigns remain unverified. Economy, army and naval domains remain unavailable. Unknown/uncertain input is never replayed. Stop does not pause the game. Compacted history includes a snapshot_id; details retrieves an exact historical section without game reads or input. The Focus section reports latest-per-kind history, not the full navigation ledger.","inputSchema":{"type":"object","oneOf":[{"properties":{"op":{"enum":["start","update"]},"lease_token":{"type":"string"},"plan":{"type":"object"}},"required":["op","lease_token","plan"],"additionalProperties":false},{"properties":{"op":{"enum":["digest","stop"]}},"required":["op"],"additionalProperties":false},{"properties":{"op":{"enum":["details"]},"snapshot_id":{"type":"string","minLength":64,"maxLength":64},"section":{"enum":crate::daily_digest::SECTIONS}},"required":["op","snapshot_id","section"],"additionalProperties":false}]}})
     }
     pub(super) fn call(
         &self,
@@ -1131,8 +1131,20 @@ fn run_focus_preparation(
     let id = navigation.begin(entry.clone(), target.clone(), day, revision, binding)?;
     let result = focus::execute_internal(state, process, gate, token, &id, target.clone(), until);
     match result {
-        Ok((execution, _)) => {
-            let (_, _, after) = focus::observed_bound(process, &mut state.guard, &target)?;
+        Ok(result) => {
+            let execution = result.execution;
+            let after = if target.stage == crate::focus_stage::Stage::SearchField
+                || target.stage.uses_query()
+            {
+                result.binding.ok_or_else(|| {
+                    Error::new(
+                        "action_uncertain",
+                        "Current search receipt binding is absent",
+                    )
+                })?
+            } else {
+                focus::observed_bound(process, &mut state.guard, &target)?.2
+            };
             navigation.verified(&execution, &after)?;
             if Instant::now() >= until {
                 let error = Error::new(
@@ -1287,9 +1299,25 @@ fn run_focus(
                         "Input unresolved during Focus readiness",
                     ));
                 }
-                let (own, context, binding) =
+                let (mut own, mut context, mut binding) =
                     focus::observed_bound(process, &mut state.guard, &target)?;
                 focus_scope(&context, &governor.plan().scope)?;
+                if entry.focus_search.is_some()
+                    && matches!(
+                        crate::daily_focus_navigation::next(&own, &target),
+                        Ok(crate::daily_focus_navigation::Next::Stage(
+                            crate::focus_stage::Stage::View
+                        ))
+                    )
+                {
+                    let search = crate::focus_stage::Target {
+                        stage: crate::focus_stage::Stage::SearchField,
+                        ..target.clone()
+                    };
+                    (own, context, binding) =
+                        focus::observed_bound(process, &mut state.guard, &search)?;
+                    focus_scope(&context, &governor.plan().scope)?;
+                }
                 if stop.load(Ordering::Acquire)
                     || (i64::from(context.campaign.date_raw) - 43_800_000).div_euclid(24) != day
                 {
@@ -1311,7 +1339,7 @@ fn run_focus(
                 binding.clone(),
             )?;
         }
-        Ok(Some((ready.next, binding)))
+        Ok(Some((ready.next, binding, ready.own)))
     })();
     if !rejected.is_empty() {
         // Latest diagnostic for this worker lifetime. This is neither durable
@@ -1325,7 +1353,7 @@ fn run_focus(
             });
         }
     }
-    let (next, binding) = match result {
+    let (next, mut binding, own) = match result {
         Ok(Some(value)) => value,
         Ok(None) => return Ok(FocusRun::Wait),
         Err(e) => {
@@ -1345,7 +1373,23 @@ fn run_focus(
                 navigation.refuse_read_only(entry, day, &error)?;
                 return Err(error);
             }
-            let target = crate::focus_stage::Target { stage, ..target };
+            let target = if stage == crate::focus_stage::Stage::View && entry.focus_search.is_some()
+            {
+                match navigation.search_target(entry, &own, &binding) {
+                    Ok(target) => {
+                        if target.stage == crate::focus_stage::Stage::View {
+                            binding = binding.without_search();
+                        }
+                        target
+                    }
+                    Err(error) => {
+                        navigation.refuse_read_only(entry, day, &error)?;
+                        return Err(error);
+                    }
+                }
+            } else {
+                crate::focus_stage::Target { stage, ..target }
+            };
             run_focus_preparation(
                 navigation,
                 state,
@@ -1545,7 +1589,7 @@ impl DailyBackend<'_> {
                 target.clone(),
                 until,
             ) {
-                Ok((execution, _)) => break (before, binding, execution),
+                Ok(result) => break (before, binding, result.execution),
                 Err(e) => {
                     if self.focus_start_failure(attempt, &target, &e, &mut failures, until)? {
                         continue;
@@ -2154,6 +2198,7 @@ mod tests {
                 technology_id: "support_weapons".into(),
                 slot: 0,
             },
+            focus_search: None,
             navigation: None,
         };
         assert!(focus_precedes(&[f.clone(), r.clone()], Some(&f), Some(&r)));

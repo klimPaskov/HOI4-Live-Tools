@@ -293,9 +293,36 @@ Only producer `torn_read` snapshots are discarded; ownership acceptance, scope
 pinning, predicates, journal execution and input are never retried. Rejected
 reads retain their phase and grant no input authority. Live validation is pending.
 
+Run068 on immutable `67bd4c4` passed the complete paused search-to-View gate:
+24 player RPCs, zero errors/retries, eight verified input pairs and no pending
+Intent. SearchText took 1,419.205 ms; three ordinary Tab steps took 1,012.609,
+1,090.946 and 1,015.285 ms, selecting Four Year Plan in the unchanged six-key
+list. Exact SearchText and final Tab replays returned identical historical
+receipts in 5.558 and 6.490 ms without input. Fresh full-coverage selection,
+Rhineland comparison, node detail and ordinary View passed; View took 2,373.680 ms.
+The final overview retained the paused January 1936 baseline and idle Focus.
+
+One torn final pre-input snapshot recovered before SearchText; its post-input
+reads retained six rejections among ten reads. Tab readbacks retained one, zero
+and one rejected snapshots respectively. No pre-intent snapshot was rejected,
+so the newly added pre-intent recovery phases were not exercised in this run.
+Independent audit verified canonical release, the 283.666-second recording,
+normal exit 0 in 2.259 seconds, absence of all guest/host instances and unchanged
+113 native inputs/24 helpers. All nine CI jobs passed; both brokers are closed.
+This completes manual search navigation, not successive worker assignment or
+campaign acceptance.
+
+The next worker preview accepts an explicit optional `focus_search` entry hint.
+It retains the assignment key while selecting each immediate canonical search
+match; every stage and binding is durable, and reopening validates the complete
+ordered chain. Empty-field entry occurs once. A changed query/order/selection,
+failed or unresolved search stage cannot start another chain. The query is never
+inferred from the Focus ID. Existing omitted hints and stored hashes retain their
+meaning. Worker live validation and replacing an existing query remain pending.
+
 ## Immediate acceptance work
 
-1. Implement and verify ordinary navigation to an offscreen Focus, then verify
+1. Manual search-to-View passed Run068. Verify its new worker integration, then
    successive Focus choices on the tested capacity correction, using
    completed membership to distinguish assignment from finished Focus. Run056
    supplies the original boundary evidence; run054's lost quantities remain

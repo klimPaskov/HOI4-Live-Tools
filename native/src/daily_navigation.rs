@@ -736,6 +736,7 @@ mod tests {
                 technology_id: "support_weapons".into(),
                 slot: 0,
             },
+            focus_search: None,
             navigation: Some(ResearchNavigation {
                 folder_id: "infantry".into(),
             }),

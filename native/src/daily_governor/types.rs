@@ -205,6 +205,10 @@ pub struct Entry {
     pub intent: Intent,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub navigation: Option<ResearchNavigation>,
+    /// Explicit localized text for the verified ordinary Focus search adapter.
+    /// Omission preserves existing plan hashes and direct node navigation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub focus_search: Option<String>,
 }
 impl Entry {
     pub(crate) fn validate(&self) -> Result<()> {
@@ -215,6 +219,13 @@ impl Entry {
             if !matches!(self.intent, Intent::Research { .. }) {
                 return Err(invalid("Navigation hints belong only to Research"));
             }
+        }
+        if let Some(query) = &self.focus_search {
+            if !matches!(self.intent, Intent::Focus { .. }) {
+                return Err(invalid("Focus search hints belong only to Focus"));
+            }
+            crate::focus_stage::validate_query(query)
+                .map_err(|_| invalid("Focus search requires explicit bounded lowercase words"))?;
         }
         Ok(())
     }

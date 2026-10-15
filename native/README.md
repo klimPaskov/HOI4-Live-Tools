@@ -314,12 +314,21 @@ match list (up to 64); it does not claim the requested Focus is selected.
 `search_next` sends one ordinary Tab when `focus_id` is the immediate next match,
 including wraparound. It requires the same query, unchanged match order, exact
 selected ID and unchanged active Focus. Each step has its own durable receipt;
-there is no automatic input retry. Run067 verified text entry and two Tab steps;
-the third refused on a torn snapshot before intent. The complete search-to-View
-sequence remains pending. Each initial/candidate/final pre-intent search read can
+there is no automatic input retry. Run067 stopped before its third Tab; Run068
+verified all three steps, historical replays and ordinary View of Four Year Plan.
+Each initial/candidate/final pre-intent search read can
 discard torn snapshots within its own four-read/one-second bound and the original
 absolute deadline; input, state predicates and ownership checks are never retried.
 The original `search_query` predicate and failed historical receipts are unchanged.
+
+A daily Focus entry can opt into this route with `"focus_search": "four year plan"`.
+The query must match the installed localization and the current lowercase ASCII
+adapter. Omit it for existing direct node navigation. The worker retains the
+assignment ID while traversing the observed order, and validates each recorded
+stage on restart. It types only into the verified empty field once; query
+replacement is unavailable. A changed query, match order, selected key or control
+binding refuses. Worker integration still needs live validation; the manual gate
+is not successive-Focus assignment evidence.
 
 The optional `hoi4_research_attempt` preview derives exact technology/slot/category
 controls from fresh own state. Its OpenPanel, SelectSlot, SelectCategory, View and
