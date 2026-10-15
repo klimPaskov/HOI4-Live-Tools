@@ -31,7 +31,11 @@ daily worker assignment, idempotent updates, budget-preserving restart and
 research-counter advancement. Run041 passed worker-driven Focus Start, waiting
 on another active focus, idempotent updates and two restarts without replay.
 Its fresh digests stayed below 2 KB and retained complete historical details
-through exact snapshot lookups.
+through exact snapshot lookups. Run042 verified compact own UI observations and
+immediate restart/STOP budgets. Run043 verified ordinary Politics closing followed
+by existing Rust research stages with the active focus preserved. The typed Rust
+close stage is exposed next; production invocation and automatic worker handoff
+remain separate acceptance gates.
 
 This remains a development preview. Combined research/focus panel handoff,
 technology/focus completion queues, economic recovery, warfare and native

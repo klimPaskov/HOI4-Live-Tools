@@ -42,8 +42,8 @@ impl Service {
     }
 }
 pub(super) fn tool() -> Value {
-    json!({"name":"hoi4_focus_attempt","description":"Preview: one ordinary OpenPolitics Q, OpenFocus named-button, View or Start stage for an exact own canonical focus ID. Requires explicit owned profile, exclusive lease, settled own roots and complete own scoped blockers. Supported exact Sprite, zero-angle Text or unmasked Frame geometry; unknown branches refuse. Canonical readback verifies current state, not event causality or eligibility. Uncertain input is quarantined; no replay, coordinates, activation or engine calls.",
-        "inputSchema":{"type":"object","properties":{"stage":{"enum":["open_politics","open_focus","view","start"]},"focus_id":{"type":"string","minLength":1,"maxLength":128},"request_id":{"type":"string","minLength":1,"maxLength":128},"lease_token":{"type":"string"}},"required":["stage","focus_id","request_id","lease_token"],"additionalProperties":false}})
+    json!({"name":"hoi4_focus_attempt","description":"Preview: one ordinary OpenPolitics/ClosePolitics Q, OpenFocus named-button, View or Start stage for an exact own canonical focus ID. ClosePolitics requires that exact focus active and preserves it through settled closed-root readback. Requires explicit owned profile, exclusive lease, settled own roots and complete own scoped blockers. Supported exact Sprite, zero-angle Text or unmasked Frame geometry; unknown branches refuse. Canonical readback verifies current state, not event causality or eligibility. Uncertain input is quarantined; no replay, coordinates, activation or engine calls.",
+        "inputSchema":{"type":"object","properties":{"stage":{"enum":["open_politics","close_politics","open_focus","view","start"]},"focus_id":{"type":"string","minLength":1,"maxLength":128},"request_id":{"type":"string","minLength":1,"maxLength":128},"lease_token":{"type":"string"}},"required":["stage","focus_id","request_id","lease_token"],"additionalProperties":false}})
 }
 pub(super) fn observe_ui(
     owner: &ClockService,
@@ -88,6 +88,7 @@ fn parse(args: &serde_json::Map<String, Value>) -> Result<Arguments<'_>> {
     allowed(args, &["stage", "focus_id", "request_id", "lease_token"])?;
     let selected = match string(args, "stage")? {
         "open_politics" => stage::Stage::OpenPolitics,
+        "close_politics" => stage::Stage::ClosePolitics,
         "open_focus" => stage::Stage::OpenFocus,
         "view" => stage::Stage::View,
         "start" => stage::Stage::Start,
@@ -154,7 +155,7 @@ fn remaining(until: Instant) -> Result<Duration> {
     Ok(timeout)
 }
 /// Borrow the common controller exactly once; never re-enter ClockService.call.
-/// Manual preview only. Daily Focus remains capability-unavailable.
+/// Used by manual previews and the separately opted-in daily Focus worker.
 pub(super) fn execute_internal(
     state: &mut ControlState,
     process: &dyn Process,
@@ -164,13 +165,9 @@ pub(super) fn execute_internal(
     target: stage::Target,
     until: Instant,
 ) -> Result<(stage::Execution, Option<Value>)> {
-    // Prospective only: public parser and governor do not route this stage.
-    if target.stage == stage::Stage::ClosePolitics {
-        return Err(Error::new(
-            "capability_unavailable",
-            "ClosePolitics requires recorded mode12-to23 validation; prospective only",
-        ));
-    }
+    // Run043 verified ordinary Q from exact active Focus/mode12 to mode23.
+    // The typed stage retains fresh preflight, pinned focus, lease, journal and
+    // readback guards. The daily worker does not yet select ClosePolitics.
     drop(input_permit(gate)?);
     state.authority.authorize(token, &state.guard.epoch)?;
     if target.epoch != state.guard.epoch {
@@ -582,7 +579,6 @@ mod tests {
         for value in [
             json!({"stage":"start","focus_id":"GER_rhineland","request_id":"x","lease_token":"t","x":1}),
             json!({"stage":"callback","focus_id":"GER_rhineland","request_id":"x","lease_token":"t"}),
-            json!({"stage":"close_politics","focus_id":"GER_rhineland","request_id":"x","lease_token":"t"}),
             json!({"stage":"start","focus_id":"../foreign","request_id":"x","lease_token":"t"}),
             json!({"stage":"start","focus_id":"GER_rhineland","request_id":"bad token","lease_token":"t"}),
         ] {
@@ -593,6 +589,32 @@ mod tests {
             parse(value.as_object().unwrap()).unwrap().stage,
             stage::Stage::OpenPolitics
         );
+    }
+    #[test]
+    fn close_politics_is_typed_and_rejects_caller_supplied_input_or_state() {
+        let value = json!({"stage":"close_politics","focus_id":"GER_rhineland","request_id":"close-once","lease_token":"t"});
+        let parsed = parse(value.as_object().unwrap()).unwrap();
+        assert_eq!(parsed.stage, stage::Stage::ClosePolitics);
+        assert_eq!(parsed.key, "GER_rhineland");
+        for extra in [
+            "key",
+            "x",
+            "y",
+            "managed_mode",
+            "active_focus",
+            "input_authorized",
+        ] {
+            let mut forged = value.clone();
+            forged[extra] = json!(true);
+            assert_eq!(
+                parse(forged.as_object().unwrap()).err().unwrap().code,
+                "invalid_arguments"
+            );
+        }
+        assert!(tool()["inputSchema"]["properties"]["stage"]["enum"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("close_politics")));
     }
     #[test]
     fn internal_deadline_is_absolute_expired_refuses_and_never_widens() {

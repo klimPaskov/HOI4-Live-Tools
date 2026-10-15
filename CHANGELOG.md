@@ -2,6 +2,14 @@
 
 ## Unreleased native preview
 
+- Expose the guarded ordinary `close_politics` Focus stage after run043 verified
+  the Q transition and subsequent Rust research assignment. Retain active-focus,
+  local-blocker, lease, deadline and durable uncertainty checks; automatic worker
+  handoff and the new Rust close-stage live gate remain pending.
+- Preserve run043's initial stale pre-input refusal. A distinct guest-local
+  diagnostic passed with the unchanged freshness limit, followed by five verified
+  research stages (four input stages and one no-input category result). Recording,
+  independent lease readback and normal owned exit passed.
 - Record run042: read-only Focus UI before lease acquisition and after worker
   Start; immediate restart/STOP retained completion and durable budget 1/1.
   A duplicate update returned nonqueued `input_busy` and was not retried.

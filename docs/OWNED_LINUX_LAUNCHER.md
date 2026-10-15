@@ -239,12 +239,18 @@ geometry; they require the same reviewed 512×288 client and 2560×1440 logical
 profile used by research. Their installed-game acceptance is pending.
 
 `hoi4_focus_attempt` accepts `stage`, `focus_id`, `request_id` and `lease_token`.
-Stages are `open_politics`, `open_focus`, `view` and `start`. Each attempts at
+Stages are `open_politics`, `close_politics`, `open_focus`, `view` and `start`. Each attempts at
 most one ordinary event and verifies canonical own state. Exact Sprite,
 zero-angle Text and unmasked Frame branches are supported. Unsupported renderers,
 unsettled roots and incomplete local blocker observations refuse. Intent is
 persisted first; uncertain input blocks clock, research, focus and daily work.
 No new token can bypass that quarantine.
+
+`close_politics` requires the requested focus to be active, settled Politics
+mode12, a hidden Focus root and zero complete own detail/Info blockers. It sends
+one ordinary Q and requires settled mode23 with both roots hidden and the same
+active focus. Run043 verified the ordinary route with a private diagnostic;
+the new Rust service and automatic worker handoff still need recorded acceptance.
 
 Start the daily preview with an existing exclusive lease and an explicit plan:
 

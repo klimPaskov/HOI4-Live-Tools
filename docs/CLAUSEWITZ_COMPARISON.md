@@ -1,12 +1,19 @@
 # Clausewitz-MCP comparison checkpoint
 
-Latest bounded Linux result (15 October): recorded run041 passed worker-driven
+Bounded Linux worker result (15 October): recorded run041 passed worker-driven
 Focus Start, active-focus waiting, idempotent plan update and two restarts without
 replay or budget resets, with exclusive Luna medium control. Five fresh digests
 returned in 49.7–62.4 ms and stayed below 2 KB; two used exact historical detail
 lookup. This is a small sample under x86 CPU emulation, not a matched upstream
 benchmark or campaign throughput result. The original upstream posting timeout
 stays quarantined; no clean two-year run or full campaign has passed.
+
+Run043 then verified an ordinary Q Politics-close diagnostic followed by existing
+Rust research stages, retaining active Rhineland. Four input stages took390–764ms;
+a same-category no-input result took55.6ms. The original helper's stale-state
+refusal remains preserved. Fresh guest-local reads solved that harness issue
+without relaxing the two-second limit. This is manual route evidence; the new
+Rust close-stage service and automatic worker handoff still need live checks.
 
 11 October 2026. This is a development comparison, not proof of campaign success
 or a claim that HOI4 Live Tools is faster overall. Required targets are Windows,
@@ -149,6 +156,7 @@ gates finalized their recordings and exited normally.
 | Focus View / Start, run036 | 2,483 / 1,651 ms | One verified ordinary action each |
 | Daily digest, run041 | 49.7–62.4 ms | Five fresh payloads, 1,241–2,008 bytes |
 | Focus-change server wait, run041 | 10.23 s | Includes worker navigation, Start and wait detection |
+| Research input stages, run043 | 389.91–763.62 ms | Four individual samples after the ordinary Q diagnostic; category no-input 55.61 ms |
 | Compact Focus UI, run042 | 99.85/104.88 ms | Two read-only samples, 770/807 bytes; 93.55/99.30 ms server-side |
 
 Run041 also passed eight exact historical section lookups. Two later 45-second

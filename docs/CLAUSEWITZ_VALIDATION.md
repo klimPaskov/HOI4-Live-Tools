@@ -2959,3 +2959,62 @@ This passes the compact observation and immediate STOP budget gates. No Q shortc
 or ClosePolitics action was attempted. Cross-domain panel switching, focus and
 technology completion over game time, strategic warfare, Windows/macOS native
 live support and full campaign acceptance remain open.
+
+
+## Recorded Politics close and research run043 — 15 October 2026
+
+This recorded vanilla Normal/historical Germany test used unchanged source
+`7f71e92` and one exclusive Luna medium player. Recording had a verified packet
+before the single campaign Start. The worker again completed Rhineland with one
+reservation and terminal Complete at sequence6. No game-time input occurred.
+
+The first private ordinary-Q helper stopped the worker and read the expected
+active-focus/panel state, but its guest freshness check refused before input.
+No guest Q intent or delivery file existed. The original refusal and lease
+release were preserved and independently checked against the actual broker
+records. The exact elapsed age and contribution of each setup step were not
+recorded, so the cause is not narrowed beyond the failed freshness bound.
+
+A distinct helper moved the last status and Focus UI reads into a guest-local
+native MCP connection after SSH/client/X11 setup. The unchanged two-second limit
+still applied. With a new lease in the same game, it recorded one ordinary Q
+press/release; before-state age was16.0ms and dispatch age24.5ms. Four subsequent
+read-only observations reached settled mode23 with both roots hidden, zero own
+detail/Info blockers and the same active Rhineland/date. Input was idle afterward.
+No cursor movement, reload, worker restart, Focus replay or native posting occurred
+in this diagnostic. The original helper was not rerun.
+
+Luna then used existing Rust `hoi4_research_attempt` stages. OpenPanel, SelectSlot,
+View and Research each have exactly one Intent/Verified pair with server-confirmed
+delivery; their RPC times were **389.91,498.51,641.83 and763.62ms**. SelectCategory
+returned one verified no-input receipt for the already selected infantry folder
+in **55.61ms**. Fresh overview confirmed `support_weapons` in slot0, Rhineland
+active and the game paused at 1January1936 noon. These are five individual samples,
+not a broad throughput benchmark. The manual research action is separate from
+the stopped daily plan, whose historical Focus budget remains1/1/0.
+
+The latest actual lease release/status were persisted to the guest and
+independently read back before cleanup. Both H264 segments finalized and passed
+ffprobe, totaling **657.333 seconds**. One ordinary window close returned actual
+normal exit0 after **2.17 seconds**, without signal fallback or replay. Exact
+owner/game absence, Yama1 and broker shutdown passed.
+
+### Rust close-stage exposure after run043
+
+The next source exposes `close_politics` in the existing optional Focus service.
+It requires the exact requested focus active, settled Politics mode12/Focus Hidden
+and zero complete own detail/Info blockers. The existing typed adapter pins that
+focus across fresh preflight and readback, uses the common lease and ordinary Q
+transport, persists intent before dispatch, and retains uncertainty across restart.
+A new request from already closed mode23 refuses; replay of a verified request
+returns only its historical receipt. Caller-supplied keys, geometry or state are
+rejected. The worker does not yet select this stage.
+
+The composed source passed **656 Rust1.86 host tests**, **761 reported actual
+Linux checks** (759 substantive, excluding two fixture helpers), **953 Python
+tests** (37 skips), format, host/Linux Clippy, Linux MSRV compilation and release
+linking. All11 Linux payload hashes matched before execution; boot identity,
+prior normal exit, old-process absence and Yama1 matched before/after. These
+fixtures and the private Q diagnostic do not establish a live invocation of the
+new Rust close-stage service. That gate, automatic worker handoff and full
+campaign acceptance remain open.

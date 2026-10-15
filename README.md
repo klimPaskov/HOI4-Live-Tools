@@ -21,12 +21,15 @@ Recorded Linux tests have passed:
 - Idempotent plan updates and worker restarts without replay or budget resets.
 - Immediate restart/STOP with the durable budget intact, plus read-only Focus UI
   observations requiring no input lease.
+- An ordinary Politics-close diagnostic followed by Rust research navigation and
+  assignment, preserving the active focus.
 - Digests below 2 KB with exact historical detail lookup; five recent samples
   returned in 50–62 ms under x86 CPU emulation.
 
 These are bounded tests in vanilla Normal/historical Germany. The latest Focus
-test, run042, finalized its recording and exited normally. Combined research/focus
-panel switching, completed-technology refill, economic/army/naval commands and
+test, run043, finalized its recording and exited normally. The newly exposed Rust
+close stage, automatic research/focus panel switching, completed-technology refill,
+economic/army/naval commands and
 full campaigns remain open. The Focus worker requires explicit opt-in. Earlier
 failures and reporting limitations remain in the validation report.
 

@@ -4,33 +4,39 @@ User direction, 12 October 2026: stop the Mac screenshot-driven live tests and
 replace the primary runtime with a fast Rust MCP based on Clausewitz-MCP.
 Linux is the first live target; Windows and macOS remain required platforms.
 
-**Latest live result:** recorded run042 passed the new read-only Focus UI gate
-before lease acquisition and after worker Start. Adjacent restart/STOP calls
-retained the exact durable completion and historical budget used 1/limit 1. The
-next focus remained Pending with zero attempts. An identical revision 2 update
-returned nonqueued `input_busy`; it was preserved and not retried. The subsequent
-restart used the already committed revision after a clean STOP and new lease.
-The 739.333-second recording finalized and passed ffprobe; canonical lease proof,
-independent readback, one normal owned exit 0 and exact process absence passed.
-No game or player input remains active. This is a bounded gate, not full campaign
-acceptance. See the [recorded evidence](CLAUSEWITZ_VALIDATION.md#recorded-focus-ui-and-immediate-stop-run042--15-october-2026).
+**Latest live result:** recorded run043 passed one ordinary Q Politics-close
+diagnostic followed by five Rust research stages. Fresh overview confirmed
+Rhineland still active and `support_weapons` in slot0, paused at 1 January 1936.
+The initial helper refused an expired before-state before writing an input
+intent. Its failure is preserved. A distinct helper in the same game read state
+locally inside the guest, kept the same two-second freshness limit, and dispatched
+one Q with state age24.5ms. No reload or Focus replay occurred. The 657.333-second
+recording finalized and passed ffprobe; independent canonical lease proof, one
+normal owned exit0 and exact process absence passed. No game or player input
+remains active. This is bounded route evidence, not full campaign acceptance.
+See the [recorded evidence](CLAUSEWITZ_VALIDATION.md#recorded-politics-close-and-research-run043--15-october-2026).
 
-The tested source is `7f71e92`. It passed 656 Rust 1.86 host tests, 760 reported
-actual Linux checks (758 substantive), 953 Python tests (37 skips), compiler,
-format, Clippy, release linking and all nine three-OS CI jobs. The two compact UI
-responses were 770/807 bytes and took 99.85/104.88 ms RPC time. These observations
-prove only complete own local GUI flags, not global modal clearance or routing.
-Earlier run041 passed idempotent update, two worker restarts, five digests below
-2 KB and eight exact historical detail lookups; that evidence remains preserved.
+Run043 used unchanged source `7f71e92`. The next source exposes the existing
+strict typed `close_politics` service, retaining active-focus, settled-root,
+complete-blocker, shared lease, deadline and durable uncertainty guards. It passes
+656 Rust1.86 host tests,761 reported actual Linux checks (759 substantive),953
+Python tests (37 skips), format, host/Linux Clippy, MSRV Linux compilation and
+release linking. The new service itself still needs a recorded Rust invocation;
+the worker does not yet select it. Ordinary diagnostic input is distinct from
+production-adapter acceptance.
 
-**Next work:** complete the separately recorded ordinary ClosePolitics transition.
-Run042 proved its prospective before-state after Start: exact active Rhineland,
-settled mode12/Politics Ready/Focus Hidden and zero own detail/Info blockers.
-ClosePolitics remains disabled; no closing shortcut was attempted. Combined
-research/focus switching, technology completion/refill, focus completion over
-game time, economy/army/naval adapters, Windows/macOS native live support and the
-clean two-year/full campaigns remain open. Run041/042 triggered no Focus transport
-refusal, so new cause retention still has only offline evidence.
+**Next work:** verify the Rust ClosePolitics stage, then integrate and validate
+worker Focus-to-research handoff using separate navigation receipts without
+consuming assignment budget. Preserve unfinished plans, receipts and refusal
+history across restart. Focus completion over game time, technology completion/
+refill, economy/army/naval adapters, Windows/macOS native live support and the
+clean two-year/full campaigns remain open. Recent runs triggered no Focus
+transport refusal, so new cause retention still has only offline evidence.
+
+Earlier run042 passed read-only Focus UI before lease acquisition and after Start,
+and adjacent restart/STOP with durable budget1/1/0. Run041 passed idempotent update,
+two restarts, five digests below2KB and eight exact historical detail lookups.
+Those results and their original failures remain preserved.
 
 The run040 failure remains unchanged: one terminal NotQueued Start, pending
 assignment and digest overflow. Its specific transport cause was discarded by

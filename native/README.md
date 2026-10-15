@@ -127,13 +127,19 @@ named `visible` and `animating` fields. It shares the existing witnessed produce
 and campaign guard, requires the owned Focus binding, and needs no input lease.
 It exposes no private process identities, geometry or input authority. Its compact
 output passed run042 before lease acquisition and after worker Start: 770/807
-bytes, 100/105 ms RPC time in two samples. ClosePolitics remains a separate gate.
+bytes, 100/105 ms RPC time in two samples.
 
-A prospective typed ClosePolitics stage is runtime-disabled. It requires the
+The typed `close_politics` stage is now available in the manual Focus preview.
+It requires the
 exact canonical active focus, settled own Politics mode12, hidden Focus and zero
 detail/info blockers, then preserves that focus through settled mode23 readback.
-Static shortcut evidence and fixtures do not establish live callback binding or
-cross-domain acceptance. Public parsing and the borrowed executor still refuse it.
+Run043 verified this ordinary Q transition through a private diagnostic, followed
+by five existing Rust research stages and canonical slot assignment. Its initial
+helper refused stale before-state before input; the corrected helper took fresh
+reads inside the guest with the same two-second limit. This establishes the
+ordinary route; the newly exposed Rust close-stage service still needs its own
+recorded check. The daily worker does not yet select it. A verified retry returns
+its historical receipt; a new close request from an already hidden panel refuses.
 
 Wait timeouts return only the last earlier accepted sample, explicitly marked
 `state_historical: true`, `current_state_verified: false` and
@@ -333,14 +339,15 @@ distinguishes the event start callback from the separate no-op listener. This
 metadata grants no action authority; the separate opt-in service supplies the
 lease, journal and verified ordinary dispatch boundary.
 
-The optional `hoi4_focus_attempt` service provides `open_politics`, `open_focus`,
+The optional `hoi4_focus_attempt` service provides `open_politics`, `close_politics`, `open_focus`,
 `view` and `start` stages for an exact own focus ID. Its point preparer shares
 canonical own-focus, active-progress, campaign and local UI witnesses. It requires
 settled own roots and complete local blocker facts, then uses exact Sprite,
 zero-angle Text or unmasked Frame geometry. Unknown facts and unsupported renderers refuse. These facts do not
 prove global modal clearance or routing. Run036 passed open/select and one
-ordinary Start with canonical active-focus readback. Focus completion, durable
-daily Focus execution and campaign acceptance still need live validation.
+ordinary Start with canonical active-focus readback. Run041/042 passed bounded
+daily Focus execution and restart persistence. Focus completion over game time,
+automatic cross-domain handoff and campaign acceptance still need live validation.
 
 Only the verified own-focus node/start producers opt into a fixed traversal
 policy for the larger focus-tree container: exact generic Position ancestors
