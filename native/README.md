@@ -419,8 +419,10 @@ The preview `hoi4_focus_search_state` reader accepts an exact own `focus_id` and
 reports the current search highlight, match counts and whether that highlight
 matches the request. It validates cache indices through current own items and
 canonical keys. It does not type, navigate, open a detail or start a Focus;
-query text/control binding and live validation remain unavailable. Run057's
-offscreen-node failure motivates this prerequisite for ordinary navigation.
+live validation remains pending. Optional `include_control: true` adds bounded
+query text and exact own search-field listener/renderer diagnostics. Keyboard
+focus, typing and Enter input remain unavailable. Run057's offscreen-node failure
+motivates this prerequisite for ordinary navigation.
 No clean two-year Luna run or full campaign has passed. Follow the
 [acceptance gates](../docs/LINUX_RUST_HANDOFF.md),
 [complete live evidence](../docs/CLAUSEWITZ_VALIDATION.md) and

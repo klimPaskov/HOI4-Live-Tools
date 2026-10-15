@@ -354,6 +354,26 @@ view `+0x2b0` and canonical own key before reporting any selection.
 Static ELF unwind-table ranges and decoded instructions support these joins;
 nearest exported symbol labels are not treated as function names. The optional
 observer witnesses its fields and refuses malformed or stale joins. Cached
-names/descriptions, rank values and edit-box text remain unread. Search input,
-control geometry and callback authority remain unavailable, and live validation
-is pending. No game assets, assembly or decompiled code are redistributed.
+names/descriptions and rank values remain unread. Default observations also omit
+edit-box text. Search input remains unavailable and live validation is pending.
+No game assets, assembly or decompiled code are redistributed.
+
+The optional `own_focus/search/control.rs` observer follows the exact view's
+`+0x1200` alias, initialized by named lookup for `to_find_text` at `0x15165b6`.
+Constructor `0x2ea8a60` establishes CEditBox primary `0x43498b8`, its embedded
+editor at `+0x80` with secondary `0x4349b78`, and renderer at `+0x1b0`.
+Shared base construction `0x2edf7e0` stores container/registry at `+0x60/+0x68`;
+`0x2ecc9e0` stores the renderer's reciprocal control at `+0x138`. The observer
+requires complete paired names and unique children in that owned container.
+
+UI setup binds the edit-box observer to view `+0x678`; `0x2eab020` appends its
+typed doubly linked listener record. The Focus constructor supplies exact own
+receiver and members `0x1510480`, `0x1510830`, `0x1510870`. Unknown listeners or
+member adjustments refuse before text reads. Getter `0x2f70580` consumes editor
+`+0x30`; `0x34d9d90` counts four-byte units and `0x349a2e0` converts their Unicode
+values. The reader bounds that Linux wide string to 128 code points, checks
+capacity/termination and rejects invalid values. This is not a portable wchar
+assumption. Exact CTextSprite diagnostics reuse the existing witnessed hierarchy
+only after the reciprocal control join. Raw edit flags do not prove keyboard
+focus, effective routing or permission to type. This optional path is unverified
+in the live game.

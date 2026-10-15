@@ -134,6 +134,9 @@ fn focus_search_query_is_strict_read_only_and_marked_unverified() {
         json!({"focus_id":"GER_rhineland","country":"OTHER"}),
         json!({"focus_id":"GER_rhineland","include_geometry":true}),
         json!({"focus_id":"GER_rhineland","select":true}),
+        json!({"focus_id":"GER_rhineland","include_control":1}),
+        json!({"focus_id":"GER_rhineland","include_control":null}),
+        json!({"focus_id":"GER_rhineland","include_control":"true"}),
     ] {
         let reply = server.handle(json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"hoi4_focus_search_state","arguments":arguments}})).unwrap();
         let body: Value =
@@ -151,6 +154,10 @@ fn focus_search_query_is_strict_read_only_and_marked_unverified() {
         .unwrap();
     assert_eq!(tool["annotations"]["readOnlyHint"], true);
     assert_eq!(tool["inputSchema"]["additionalProperties"], false);
+    assert_eq!(
+        tool["inputSchema"]["properties"]["include_control"]["default"],
+        false
+    );
     let reply = server.handle(json!({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"hoi4_capabilities","arguments":{}}})).unwrap();
     let body: Value =
         serde_json::from_str(reply["result"]["content"][0]["text"].as_str().unwrap()).unwrap();

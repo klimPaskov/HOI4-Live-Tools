@@ -199,12 +199,12 @@ fn named_start(
 enum FocusQuery<'a> {
     Node(&'a str),
     SelectedDetail(&'a str),
-    Search(&'a str),
+    Search(&'a str, bool),
 }
 impl<'a> FocusQuery<'a> {
     fn key(self) -> &'a str {
         match self {
-            Self::Node(key) | Self::SelectedDetail(key) | Self::Search(key) => key,
+            Self::Node(key) | Self::SelectedDetail(key) | Self::Search(key, _) => key,
         }
     }
 }
@@ -343,10 +343,17 @@ fn snapshot_model(
             output.push(json!({"key":key}));
         }
     }
-    if let Some(FocusQuery::Search(key)) = query {
+    if let Some(FocusQuery::Search(key, include_control)) = query {
         w.section.set("search_selection");
         w.region(view, 0x1380, "focus_view");
-        let search = search::observe(&r, base, view, country, &keys, key)?;
+        let mut search = search::observe(&r, base, view, country, &keys, key)?;
+        if include_control && search["available"] == true {
+            w.section.set("search_control");
+            search["query_control"] = search::control(&r, base, view, registry)?;
+            search["query_text_available"] = search["query_control"]["available"].clone();
+            search["query_control_binding_available"] =
+                search["query_control"]["available"].clone();
+        }
         let (end_calls, end_bytes) = w.finish()?;
         process.check()?;
         return Ok((
@@ -593,13 +600,22 @@ pub(crate) fn validate_key(key: &str) -> Result<()> {
 /// Current search highlight joined through the complete bounded cache to own
 /// current items and canonical keys. Does not read text, click or start a Focus.
 pub fn search_state(process: &dyn Process, key: &str) -> Result<Value> {
+    search_observation(process, key, false)
+}
+
+/// Opt-in query text and exact ordinary-control diagnostics. No input authority.
+pub fn search_state_with_control(process: &dyn Process, key: &str) -> Result<Value> {
+    search_observation(process, key, true)
+}
+
+fn search_observation(process: &dyn Process, key: &str, include_control: bool) -> Result<Value> {
     validate_key(key)?;
     Ok(snapshot_model(
         process,
         0,
         1,
         Some(key),
-        Some(FocusQuery::Search(key)),
+        Some(FocusQuery::Search(key, include_control)),
         false,
         false,
     )?

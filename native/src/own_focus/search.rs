@@ -2,6 +2,8 @@
 //! contains current-item pointers, not canonical Focus pointers. Validate that
 //! join before reporting keys; never expose its cached text or foreign payload.
 use super::*;
+mod control;
+pub(super) use control::observe as control;
 
 const MAX_ITEMS: usize = 4096;
 

@@ -159,3 +159,162 @@ fn search_bad_or_absent_key_cannot_read_search_payload() {
     );
     assert!(f.untouched(VIEW + 0x12f8, 0x64));
 }
+
+const EDIT: u64 = 0x350000;
+const CONTAINER: u64 = 0x360000;
+const CHILDREN: u64 = 0x370000;
+const NAMES: u64 = 0x380000;
+const LISTENER: u64 = 0x390000;
+const QUERY: u64 = 0x3a0000;
+
+fn query_fixture(text: &str) -> Fake {
+    let mut f = fixture();
+    f.region(EDIT, 0x280);
+    f.region(CONTAINER, 0x1000);
+    f.region(LISTENER, 0x20);
+    f.word(VIEW + 0x1200, EDIT);
+    f.word(EDIT, 0x43498b8);
+    f.word(EDIT + 0x68, GUI);
+    f.word(EDIT + 0x60, CONTAINER);
+    f.word(CONTAINER, 0x4347d58);
+    f.word(CONTAINER + 0x98, GUI);
+    f.array(CONTAINER + 0x9a0, CHILDREN, &[EDIT]);
+    f.array(CONTAINER + 0x9b8, NAMES, &[0]);
+    f.string(NAMES, "to_find_text");
+    f.word(EDIT + 0x80, 0x4349b78);
+    f.word(EDIT + 0x88, LISTENER);
+    f.word(EDIT + 0x90, LISTENER);
+    f.int(EDIT + 0x98, 1);
+    f.word(LISTENER, VIEW + 0x678);
+    f.word(VIEW + 0x678, 0x424aa30);
+    f.word(VIEW + 0x680, VIEW);
+    for (offset, member) in [
+        (0x688, 0x1510480),
+        (0x698, 0x1510480),
+        (0x6a8, 0x1510830),
+        (0x6b8, 0x1510870),
+    ] {
+        f.word(VIEW + offset, member);
+    }
+    let values: Vec<_> = text.chars().map(u32::from).collect();
+    let data = if values.len() <= 3 {
+        EDIT + 0xc0
+    } else {
+        QUERY
+    };
+    f.word(EDIT + 0xb0, data);
+    f.word(EDIT + 0xb8, values.len() as u64);
+    if data == QUERY {
+        f.word(EDIT + 0xc0, values.len() as u64);
+    }
+    for (index, value) in values.into_iter().chain([0]).enumerate() {
+        f.put(data + index as u64 * 4, &value.to_le_bytes());
+    }
+    f
+}
+fn query_result(f: &Fake) -> Result<serde_json::Value> {
+    own_focus::search_state_with_control(f, "GER_rhineland")
+}
+
+#[test]
+fn exact_search_query_reads_utf32_only_after_own_name_and_listener_join() {
+    for text in ["", "abc", "Å世🦀", "four year plan", "Rhineland"] {
+        let f = query_fixture(text);
+        let v = query_result(&f).unwrap();
+        let c = &v["search"]["query_control"];
+        assert_eq!(c["query_text"], text);
+        assert_eq!(c["ordinary_listener_binding_verified"], true);
+        assert_eq!(v["search"]["query_text_available"], true);
+        assert_eq!(c["keyboard_focus_verified"], false);
+        assert_eq!(c["input_authorized"], false);
+        assert_eq!(c["render_diagnostic"]["available"], false);
+        assert!(f.untouched(CACHE + 8, 0x48));
+    }
+}
+
+#[test]
+fn query_is_opt_in_and_unmaterialized_control_is_explicit() {
+    let mut f = query_fixture("four year plan");
+    result(&f).unwrap();
+    assert!(f.untouched(EDIT, 0x280) && f.untouched(QUERY, 64));
+    f.word(VIEW + 0x1200, 0);
+    let v = query_result(&f).unwrap();
+    assert_eq!(v["search"]["query_control"]["available"], false);
+    assert_eq!(v["search"]["query_text_available"], false);
+}
+
+#[test]
+fn query_foreign_or_substituted_binding_refuses_before_text_payload() {
+    for (address, value) in [
+        (EDIT + 0x68, GUI + 8),
+        (CONTAINER + 0x98, GUI + 8),
+        (CHILDREN, EDIT + 8),
+        (LISTENER, VIEW + 0x680),
+        (VIEW + 0x680, VIEW + 8),
+        (VIEW + 0x6a8, 0x1510838),
+        (VIEW + 0x6b0, 8),
+        (EDIT + 0xa0, LISTENER),
+    ] {
+        let mut f = query_fixture("four year plan");
+        f.word(address, value);
+        assert!(query_result(&f).is_err());
+        assert!(f.untouched(EDIT + 0xb0, 16) && f.untouched(QUERY, 64));
+    }
+    let mut f = query_fixture("four year plan");
+    f.string(NAMES, "wrong_name");
+    assert!(query_result(&f).is_err());
+    assert!(f.untouched(EDIT + 0xb0, 16));
+}
+
+#[test]
+fn query_malformed_wide_strings_refuse_without_unbounded_payload() {
+    for (address, value) in [
+        (EDIT + 0xb8, 129),
+        (EDIT + 0xc0, 4097),
+        (EDIT + 0xc0, 1),
+        (EDIT + 0xb0, QUERY + 1),
+        (QUERY, 0xd800),
+        (QUERY, 0x110000),
+        (QUERY, 0),
+        (QUERY + 14 * 4, 1),
+    ] {
+        let mut f = query_fixture("four year plan");
+        f.word(address, value);
+        assert_eq!(query_result(&f).unwrap_err().code, "invalid_focus_search");
+    }
+    let mut f = query_fixture("abc");
+    f.word(EDIT + 0xb8, 4);
+    assert_eq!(query_result(&f).unwrap_err().code, "invalid_focus_search");
+}
+
+#[test]
+fn query_all_paired_names_validate_before_text_and_later_duplicates_refuse() {
+    let mut f = query_fixture("four year plan");
+    f.array(CONTAINER + 0x9a0, CHILDREN, &[EDIT, 0x3b0000]);
+    f.int(CONTAINER + 0x9c0, 2);
+    f.int(CONTAINER + 0x9c4, 2);
+    f.string(NAMES + 32, "to_find_text");
+    assert_eq!(query_result(&f).unwrap_err().code, "invalid_focus_search");
+    assert!(f.untouched(EDIT + 0xb0, 16) && f.untouched(0x3b0000, 0x1000));
+}
+
+#[test]
+fn query_binding_text_and_flags_are_witnessed_through_final_identity_check() {
+    for address in [
+        VIEW + 0x1200,
+        EDIT + 0x68,
+        EDIT + 0xb0,
+        EDIT + 0xb8,
+        QUERY,
+        LISTENER,
+        VIEW + 0x6a8,
+        EDIT + 0x271,
+    ] {
+        let mut f = query_fixture("four year plan");
+        f.torn = Some(address);
+        assert_eq!(query_result(&f).unwrap_err().code, "torn_read");
+    }
+    let mut f = query_fixture("four year plan");
+    f.fail_final = true;
+    assert_eq!(query_result(&f).unwrap_err().code, "ownership_changed");
+}

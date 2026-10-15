@@ -148,6 +148,12 @@ evidence, with 744 host and 852 reported actual Linux checks passing; live searc
 validation remains pending. It does not type queries or authorize input. Signed
 offscreen diagnostics now retain projected coordinates without clamping them.
 
+The next optional `include_control` observation adds bounded query text, exact
+named search-field/listener joins and reciprocal renderer diagnostics. Default
+search reads omit that payload. Keyboard focus, typing and Enter routing remain
+unverified. Run058 is planned as a paused observation probe after two existing
+ordinary Focus-opening actions, with no worker, assignment or time advancement.
+
 ## Immediate acceptance work
 
 1. Implement and verify ordinary navigation to an offscreen Focus, then verify

@@ -3936,3 +3936,15 @@ Composed validation passed 744 Rust 1.86 host tests, 852 reported actual Linux
 checks (850 substantive), five included X11 cases and 953 Python tests (37 skips).
 Format, host/Linux Clippy, MSRV checks and Linux release linking passed on 105
 unchanged native inputs. These generated checks do not establish live navigation.
+
+The subsequent optional `include_control` observation reads only the exact own
+named search field after container, registry and listener validation. Its Linux
+query decoder bounds UTF-32 text and validates allocation/termination; default
+search reads still omit it. Exact text-renderer diagnostics require the reciprocal
+control join. Raw edit flags do not establish keyboard focus or authorize input.
+Live field geometry and ordinary query/Enter behavior remain unverified.
+
+Composed checks passed 750 Rust 1.86 host tests, 858 reported actual Linux checks
+(856 substantive), five included X11 cases and 953 Python tests (37 skips). All
+106 native source inputs stayed fixed through formatting, host/Linux Clippy,
+MSRV and Linux release checks. Run058 will verify the paused live observation.
