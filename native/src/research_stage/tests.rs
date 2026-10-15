@@ -1204,9 +1204,11 @@ fn detailed_postinput_refusal_retains_intent_and_blocks_all_ids_after_restart() 
             FailureEvidence::Unknown
         );
         assert_eq!(f.dispatches, 1);
+        // Windows enforces the journal's byte-range lock on a second reader.
+        // Inspect persisted bytes only after releasing the owning journal.
+        drop(j);
         let bytes = fs::read(sc.journal()).unwrap();
         assert_eq!(bytes.iter().filter(|b| **b == b'\n').count(), 1);
-        drop(j);
         let mut j = Journal::open(&sc.journal()).unwrap();
         assert!(j.blocks_game(&epoch().game));
         for id in ["uncertain", "different-id"] {
@@ -1226,6 +1228,7 @@ fn detailed_postinput_refusal_retains_intent_and_blocks_all_ids_after_restart() 
             );
         }
         assert_eq!(f.dispatches, 1);
+        drop(j);
         assert_eq!(fs::read(sc.journal()).unwrap(), bytes);
     }
 }

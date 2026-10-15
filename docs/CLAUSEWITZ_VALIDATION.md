@@ -3198,3 +3198,11 @@ tests with 37 platform skips, formatting, host/Linux Clippy, MSRV Linux compilat
 and optimized release linking. All five isolated X11 cases passed; prior normal
 exit, exact-process absence and Yama1 matched before/after. These checks cover
 cause retention and unchanged quarantine behavior, not live recovery of run046.
+
+Exact-head CI for `8664dd1` passed Linux/macOS Rust and all six Python jobs,
+but Windows rejected two new test-only file reads while the journal held its
+exclusive byte-range lock (OS error33). The tests now release that journal before
+inspecting persisted bytes, both before reopening and after checking that all
+request IDs remain blocked. The same assertions and production locking remain
+unchanged. Both targeted tests pass locally; Windows confirmation is pending.
+Run047 retains the immutable `8664dd1` Linux binary during this test-only repair.
