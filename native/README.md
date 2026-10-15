@@ -37,8 +37,9 @@ Recorded run030 verified four-slot worker assignment, idempotent updates,
 restart persistence and research-counter advancement. Run047 passed automatic
 Focus-to-research navigation. Run049 passed research-to-Focus-to-research with
 three assignments, both explicit target-wait cases and a separate restart/STOP
-supplement preserving budget 3/3. Actual technology/Focus completion and queued
-refill over game time remain unverified.
+supplement preserving budget 3/3. Run050 verified actual support-weapons completion,
+automatic same-slot refill with basic machine tools, advancing-day budgets and
+restart persistence. Actual Focus completion remains unverified.
 
 Focus requires owner `daily_focus: true`, a verified Focus profile and
 `focus_permission: true` in every start/update request. A running worker rejects
@@ -167,6 +168,7 @@ anchors do not establish a load-generation token.
 | `hoi4_research_node_detail` | One exact own key's binding, raw renderer/cache and typed hierarchy diagnostics |
 | `hoi4_research_nodes` | Paged current own-tree keys and conditional control associations |
 | `hoi4_focus_list` | Own canonical focus keys and selected detail diagnostics; no start authority |
+| `hoi4_focus_completed` | Preview: own engine completion-membership IDs and active key without opening GUI; bounded sorted pages, static/fixture validation only |
 | `hoi4_focus_node_detail` | One own focus key's current-item/control associations; opt-in raw Sprite/Text/Frame diagnostics, awaiting live validation |
 | `hoi4_focus_selected_detail` | Compact exact selected window; Start is `window.start.ordinary_binding`, distinct from the node symbol; read-only with optional geometry |
 | `hoi4_focus_ui` | Optional owned Focus binding: compact canonical active focus, managed mode, local roots and complete own blocker counts; no lease or input |
@@ -371,7 +373,14 @@ x86 CPU emulation; its matching-first-sample wait returned in 15.670 ms RPC.
 Recording and normal exit passed. These are bounded samples, not a general
 latency distribution or campaign-throughput benchmark.
 
-Actual technology/Focus completion and queued refill, economic recovery,
+Run050 reached the queued research target after 27m 37s of unpaused game time
+under emulation. Completed membership grew from 47 to 48, adding support weapons;
+basic machine tools occupied the same slot. There were three core reservations
+on three days: two succeeded, and one was refused with known zero input. Its
+original reason was replaced by later completion and is unavailable. The daily
+limit held, and all historical navigation/read refusals remain recorded.
+
+Actual Focus completion, economic recovery,
 army/air/naval-invasion control, and independent Windows/macOS live adapters
 remain open. FAIR is the default; META and mod QA retain separate boundaries.
 No clean two-year Luna run or full campaign has passed. Follow the

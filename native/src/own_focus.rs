@@ -14,6 +14,8 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     time::{Instant, SystemTime, UNIX_EPOCH},
 };
+mod completion;
+pub use completion::snapshot as completion_snapshot;
 
 struct Witnesses<'a> {
     process: &'a dyn Process,

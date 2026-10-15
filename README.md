@@ -27,23 +27,25 @@ Recorded Linux tests have passed:
   restart/STOP with both completions and the shared 2/2 budget intact.
 - Worker-only research-to-Focus-to-research assignment, explicit target waits,
   and a separately verified restart/STOP with all three completions and budget 3/3.
+- Research completion over advancing game time, automatic same-slot refill and
+  restart persistence under a one-assignment-per-day budget.
 - Digests below 2 KB with exact historical detail lookup; five recent samples
   returned in 50–62 ms under x86 CPU emulation.
 
-These are bounded tests in vanilla Normal/historical Germany. Run049 completed
-three worker assignments in 23.7 seconds under x86 CPU emulation. Its target wait
-matched, then an already-matching request returned in 15.7 ms RPC. The player first
-stopped because its summary omitted an earlier navigation receipt; independent
-journals proved that receipt, and a separate restart check passed. Recording and
-normal exit passed. The game stayed paused, so actual Focus/technology completion,
-queued refill, economic/army/naval commands and full campaigns remain open.
+These are bounded tests in vanilla Normal/historical Germany. Run050 advanced
+from January into June 1936: support weapons entered completed membership and
+the worker filled its slot with basic machine tools. The target was observed
+after 27m 37s under x86 CPU emulation. Restart preserved receipts and budget;
+recording and normal exit passed. Known zero-input refusals and one additional
+budget-consuming refused attempt remain recorded. Actual Focus completion,
+economic/army/naval commands and full campaigns remain open.
 Original failures remain in the validation report; later success does not explain them.
 
 | Runtime | Verified | Remaining |
 | --- | --- | --- |
 | Python / Windows | Baseline tools and recorded play attempts | Clean campaign acceptance; current development changes are unfinished |
 | Python / macOS | Platform work and limited diagnostic play | Reliable live acceptance; screenshot-driven testing is stopped |
-| Native / Linux | Own reads/catalogs, owned launch, bounded Luna clock/research/focus tests, both panel transitions, target waits and restart persistence | Completion/refill, economics/army/naval control and campaign acceptance |
+| Native / Linux | Own reads/catalogs, owned launch, bounded Luna clock/research/focus tests, research completion/refill, both panel transitions and restart persistence | Focus completion, economics/army/naval control and campaign acceptance |
 | Native / Windows and macOS | Portable protocol and fixture tests in CI | Independently verified process/build adapters and live tests |
 
 Read [the acceptance gates](docs/LINUX_RUST_HANDOFF.md),

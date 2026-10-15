@@ -3475,3 +3475,56 @@ Linux MSRV all-target compilation and release linking. All 99 source-input
 hashes stayed unchanged through these checks. A stale tool-discovery sentence
 was found after an initial metadata-only build; that build was retained and
 superseded by the final checked bundle. No game used the intermediate bundle.
+
+
+## Run050: research completion and same-slot refill — 15 October 2026
+
+One Luna medium player used immutable source `230709689a5f46cfa1a6a5aee2037a4df326fd45`
+and CLI SHA-256 `3f26be33b5b159d845e71f040b9237d8826810ebc67889a24e75cb17707187c4`.
+Normal/historical/FAIR Germany had no enabled mods. The ordered standing plan was
+support weapons, then basic machine tools, both in slot0, with one assignment
+reservation per day and Focus permission disabled. Ordinary clock control set
+speed4 while paused, then unpaused only after the initial worker STOP.
+
+Initial completed-technology membership contained 47 entries and neither target.
+After advancing game time, fresh membership contained 48 entries, adding only
+support weapons; basic machine tools occupied slot0. The worker's assignment
+receipt is dated 15 June; the explicit target wait observed it at 1936.06.16.17.
+The post-STOP ordinary pause and fresh overview were at 1936.06.17.09, with Focus
+idle and speed4 retained. The 31 refill waits used 1,656.691 seconds from verified
+unpause to target, within 30 minutes and before July 1. One initial assignment wait
+also matched. Historical timeouts remain historical; one late snapshot was
+explicitly rejected, and nine torn reads were rejected by waits.
+
+Independent durable-journal verification found eight delivered research-stage
+Intent/Verified pairs, one SelectSlot Intent/NotQueued pair and no Focus inputs.
+The support SelectSlot first failed BeforeIntent with `torn_read`; the tools
+SelectSlot had a ConfirmedNotQueued refusal on 13 June, then succeeded on a later
+day. Both remain recorded. The core journal contains **three** budget reservations:
+support succeeded on 1 January, tools was terminal NotQueued on 14 June, and tools
+succeeded on 15 June. Each consumed at most one reservation that day. The failed
+core request has no research-action intent. Its original Pending reason was
+replaced by the later Complete entry, so the exact cause is unavailable; do not
+conflate it with the separately retained SelectSlot refusal or describe this run
+as having only two total reservations.
+
+All three plan starts used the same ordered plan. The last start was immediately
+followed by STOP, 37.460 ms between RPC replies, with identical STOP summaries,
+completion IDs, request receipts and budget 1/1/0. Final journals contain no extra
+reservation or input from that restart. There was no quarantine or uncertain
+input. Nine digest RPCs returned explicit read-only `input_busy` refusals;
+identical read retries succeeded. Successful digests took 53.834–161.549 ms RPC
+(median 64.811); the two overviews took 15.254/13.660 ms and completed-membership
+reads 83.377/22.987 ms. These are bounded samples under x86 CPU emulation, not a
+matched upstream benchmark or a general latency distribution.
+
+Three lease renewals succeeded. Root independently compared the canonical guest
+release/status proof to the actual latest responses, finalized four valid H.264
+segments totaling 1,982 seconds, then issued one ordinary owned-window close.
+The game exited normally with code 0, no signal/core dump, in 2.184 seconds; exact
+owned game/supervisor absence was checked before offline fixtures. No save reload,
+manual repair, hidden enemy data or console action was used. The original player
+report is preserved alongside the independent audit, including the extra core
+reservation the player summary omitted. This passes the bounded research-completion
+and refill gate. Focus completion, a clean two-year run and full campaigns remain
+unaccepted.

@@ -287,3 +287,20 @@ inputs, not a game-state producer. Symmetric adjacency, deterministic source
 ties and bounded traversal do not establish military access, supply, visible
 opposition or command legality. Generated fixtures are its only current evidence;
 there is no campaign integration.
+
+The read-only completed-focus observer in `own_focus/completion.rs` is new project
+code using the existing own-country, canonical-tree and witness helpers. On the
+pinned Linux ELF, RTTI identifies `CHasCompletedNationalFocusTrigger`; its
+predicate at `0x12c4ca0` obtains country progress through `0xd1f220` (country
+`+0x1348`) and delegates to `0xeecb30`. That routine tests key membership in the
+pointer array at progress `+0x40`, capacity `+0x48`, count `+0x4c`, stride eight.
+The normal daily completion path `0xeec090` passes the active focus to `0xeea830`,
+which appends to that array. Constructor, destructor and serialization provide
+independent structural witnesses. These are static observations of the exact ELF,
+not a live completion claim. Upstream `calling/game.py` labels progress `+0x20`
+as `FP_COMPLETED`; that offset is deliberately not copied into this observer.
+The engine predicate's membership semantics permit repeated identical pointers;
+the observer returns distinct sorted keys without inferring repeat counts or
+completion causes. Every active/completed pointer must first belong to the
+current own canonical tree. Changed/shared trees remain unsupported, and all
+observed fields must survive the final read and process-ownership checks.

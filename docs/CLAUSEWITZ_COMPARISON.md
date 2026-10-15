@@ -233,6 +233,18 @@ for upstream and 2.85 s for ours; this is diagnostic timing, not a distribution
 or a steady-state latency comparison. Tool availability does not establish that
 its actions work on the installed game.
 
+## Advancing-time Rust research gate
+
+Run050 independently verified actual support-weapons completion, automatic
+same-slot basic-machine-tools refill, one-reservation-per-day limits and restart
+persistence. Target match took 27m 37s under x86 CPU emulation. Successful digest
+RPC median was 64.811 ms (range 53.834–161.549 ms); nine read-only busy responses,
+known zero-input navigation failures and one extra refused core reservation
+remain in the evidence. Its exact original core refusal reason was not retained.
+Recording and normal exit passed. This extends the Rust evidence beyond paused
+assignments; no matched upstream completion/refill benchmark was run, and it
+does not establish overall superiority or campaign competence.
+
 ## Live comparison still required
 
 Use the same installed Linux build, starting state, difficulty and ordinary

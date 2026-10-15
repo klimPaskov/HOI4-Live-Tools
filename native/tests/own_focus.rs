@@ -20,6 +20,8 @@ const F: u64 = 0x180000;
 const PANEL: u64 = 0x190000;
 const WIN: u64 = 0x1a0000;
 const BUTTON: u64 = 0x1b0000;
+#[path = "support/focus_completion_cases.rs"]
+mod completion_cases;
 struct Fake {
     data: BTreeMap<u64, u8>,
     reads: RefCell<Vec<(u64, usize)>>,

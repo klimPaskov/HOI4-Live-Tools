@@ -2,6 +2,15 @@
 
 ## Unreleased native preview
 
+- Verify run050 actual research completion and same-slot queued refill over
+  advancing game time, with one assignment reservation per day and unchanged
+  restart receipts. Preserve both known-no-input navigation failures, an extra
+  refused core reservation whose exact reason was not retained, and read-only
+  busy/torn/deadline refusals. The 1,982-second recording and normal exit passed.
+- Add the read-only `hoi4_focus_completed` preview. Its bounded own canonical
+  membership reader follows the current engine predicate independently of GUI
+  state; static and fixture validation do not establish live Focus completion.
+
 - Verify run049 worker research-to-Focus-to-research assignment and both explicit
   target-wait cases. Preserve Luna's initial stop over an omitted summary receipt;
   independent saved journals proved the earlier transition, and a separate

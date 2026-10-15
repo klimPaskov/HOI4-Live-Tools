@@ -47,14 +47,27 @@ navigation files. The 561-second recording, canonical release, normal exit 0 and
 process absence passed. No game or player currently owns input. The original
 player stop and the separate supplement remain distinct evidence.
 
+Run050 on immutable source `2307096` passed actual research completion and queued
+same-slot refill. Support weapons entered completed membership; basic machine
+tools was assigned on 15 June and the target observed on 16 June 1936. The
+27m 37s unpaused-to-target interval stayed within its fixed bound. Restart/STOP
+preserved both completion receipts and final budget 1/1/0. Independent journals
+show three core reservations on distinct days, including a terminal NotQueued
+reservation on 14 June with no research-action intent. Its original refusal
+reason was overwritten by later completion and remains unknown. Preserve this
+limitation alongside the known zero-input navigation refusals, nine read-only
+busy responses and one rejected late wait snapshot. The 1,982-second recording,
+canonical release, normal exit 0 and exact-process absence passed. No game or
+player owns input now.
+
 ## Immediate acceptance work
 
-1. Run a new immutable recorded research-completion gate: `support_weapons`,
-   then queued `basic_machine_tools` in the same slot0, with one assignment per
-   day. Verify completed technology membership, automatic refill and durable
-   budgets across advancing days. Use one existing Luna medium player; keep
-   worker input separate from ordinary clock control and avoid routine screenshots
-   or manual repair. Actual Focus completion follows as a separate gate.
+1. Validate the new read-only `hoi4_focus_completed` preview against actual Focus
+   completion in a new immutable recorded gate. The pinned engine predicate reads
+   progress `+0x40`, unlike upstream's `FP_COMPLETED` label at `+0x20`; do not copy
+   that label into this build. Use one existing Luna medium player, preserve
+   worker/ordinary-clock separation and avoid routine screenshots or manual repair.
+   Passing fixtures alone does not establish live completion.
 2. Preserve durable assignment receipts and budgets through advancing days and
    queued heads. Prove finished technology membership/empty slot before refill;
    an active Focus or assigned slot alone does not prove completion. Use fresh
@@ -67,6 +80,8 @@ player stop and the separate supplement remain distinct evidence.
    and canonical proof transfer follow; no blind repairs or new action IDs.
    After explicit player handback, independently verify release, finalize the
    recording and perform one ordinary owned close. Preserve actual failures.
+   Improve core NotQueued history so its original reason remains reviewable after
+   a later successful attempt; run050 exposed that evidence gap.
 5. Finish economy, army, air and naval-invasion adapters, recovery and long-running
    standing plans. Then pass the clean two-year and full recorded campaign gates.
    Paused assignment completion is not completed research or a finished Focus.

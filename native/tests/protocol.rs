@@ -9,6 +9,51 @@ fn server_binary() -> std::path::PathBuf {
         .unwrap_or_else(|| env!("CARGO_BIN_EXE_hoi4-live-native").into())
 }
 #[test]
+fn completed_focus_query_is_strict_read_only_and_live_unverified() {
+    use hoi4_live_native::protocol::Server;
+    let server = Server {
+        process: None,
+        unavailable: None,
+    };
+    for arguments in [
+        json!([]),
+        json!({"offset":-1}),
+        json!({"offset":4097}),
+        json!({"offset":1.5}),
+        json!({"offset":null}),
+        json!({"limit":0}),
+        json!({"limit":101}),
+        json!({"limit":null}),
+        json!({"country":"OTHER"}),
+        json!({"force":true}),
+        json!({"filter":"GER"}),
+    ] {
+        let reply=server.handle(json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"hoi4_focus_completed","arguments":arguments}})).unwrap();
+        let body: Value =
+            serde_json::from_str(reply["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+        assert_eq!(body["error"]["code"], "invalid_arguments", "{body}");
+    }
+    let list = server
+        .handle(json!({"jsonrpc":"2.0","id":2,"method":"tools/list"}))
+        .unwrap();
+    let tool = list["result"]["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|t| t["name"] == "hoi4_focus_completed")
+        .unwrap();
+    assert_eq!(tool["annotations"]["readOnlyHint"], true);
+    assert_eq!(tool["inputSchema"]["additionalProperties"], false);
+    assert_eq!(tool["inputSchema"]["properties"]["offset"]["maximum"], 4096);
+    let reply=server.handle(json!({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"hoi4_capabilities","arguments":{}}})).unwrap();
+    let body: Value =
+        serde_json::from_str(reply["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+    assert!(body["unverified_observations"]
+        .as_array()
+        .unwrap()
+        .contains(&json!("own_focus_completion_membership")));
+}
+#[test]
 fn stdio_is_json_and_notifications_have_no_reply() {
     let mut child = Command::new(server_binary())
         .stdin(Stdio::piped())
@@ -60,6 +105,7 @@ fn stdio_is_json_and_notifications_have_no_reply() {
             "hoi4_research_node_detail",
             "hoi4_research_nodes",
             "hoi4_focus_list",
+            "hoi4_focus_completed",
             "hoi4_focus_node_detail",
             "hoi4_focus_selected_detail",
             "hoi4_technology_list",

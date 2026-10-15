@@ -37,9 +37,14 @@ passed the reverse route as part of a three-assignment plan, both explicit
 target-wait cases and a separately recorded restart/STOP with budget 3/3. Its
 original player stop over a missing summary receipt remains preserved; independent
 stopped journals proved the actual earlier transition.
+Run050 then passed actual support-weapons completion and automatic same-slot
+machine-tools refill over advancing time. Restart/STOP preserved the receipts
+and daily budget. Its three core reservations include one terminal NotQueued
+attempt whose original reason was overwritten by later success; that evidence
+gap remains explicit.
 
-This remains a development preview. Actual technology/Focus completion and queued
-refill, economic recovery, warfare and native Windows/macOS live support remain
+This remains a development preview. Actual Focus completion, economic recovery,
+warfare and native Windows/macOS live support remain
 unfinished. Catalogs and targeted renderer diagnostics alone grant no input
 authority. See [actual live evidence and failures](CLAUSEWITZ_VALIDATION.md);
 no clean two-year run or full campaign has passed.
