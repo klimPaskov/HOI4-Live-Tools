@@ -30,19 +30,19 @@ panel/slot/category navigation and canonical assignment. Run030 passed four-slot
 daily worker assignment, idempotent updates, budget-preserving restart and
 research-counter advancement. Run041 passed worker-driven Focus Start, waiting
 on another active focus, idempotent updates and two restarts without replay.
-Its fresh digests stayed below 2 KB and retained complete historical details
-through exact snapshot lookups. Run042 verified compact own UI observations and
-immediate restart/STOP budgets. Run043 verified ordinary Politics closing followed
-by existing Rust research stages with the active focus preserved. The typed Rust
-close stage is exposed; run044 stopped at a confirmed-nonqueued Focus Start
-before reaching it. Production invocation and automatic worker handoff remain
-separate acceptance gates. The failed reservation and recording are preserved.
+Its fresh digests stayed below 2 KB and retained exact historical detail
+lookups. Run042 verified compact own UI observations and restart budgets.
+Run047 passed worker-only Focus-to-research navigation and assignment. Run049
+passed the reverse route as part of a three-assignment plan, both explicit
+target-wait cases and a separately recorded restart/STOP with budget 3/3. Its
+original player stop over a missing summary receipt remains preserved; independent
+stopped journals proved the actual earlier transition.
 
-This remains a development preview. Combined research/focus panel handoff,
-technology/focus completion queues, economic recovery, warfare and native
-Windows/macOS live support remain unfinished. Catalogs and targeted renderer
-diagnostics alone grant no input authority. See [actual live evidence and
-failures](CLAUSEWITZ_VALIDATION.md); no full campaign has passed.
+This remains a development preview. Actual technology/Focus completion and queued
+refill, economic recovery, warfare and native Windows/macOS live support remain
+unfinished. Catalogs and targeted renderer diagnostics alone grant no input
+authority. See [actual live evidence and failures](CLAUSEWITZ_VALIDATION.md);
+no clean two-year run or full campaign has passed.
 
 ## Expansion contract
 

@@ -30,212 +30,84 @@ return a capability error. Logs and setup errors go to stderr.
 Three-OS CI validates shared code. It does not establish Windows/macOS live
 compatibility. Layouts must be recovered and verified separately for each build.
 
-Focus stages and a daily prepared-research worker have optional owned MCP
-services. Recorded run030 passed worker-only four-slot refill, restart persistence
-and counter advancement through3January. Run036 verified exact focus selection
-and one ordinary Start with canonical active-focus readback. The compact selected
-detail reports the correct Start object, avoiding the fields-present player parsing
-failure in run035. A borrowed Focus executor and separate durable preparation
-ledger now support a default-off daily Focus preview. It requires owner
-`daily_focus: true`, the existing Focus profile and `focus_permission: true`
-in every start/update request. A running worker rejects permission changes;
-stop/restart retains its histories and consumed shared budget. Recorded run041
-verified worker Start, active-focus waiting, idempotent update and two restarts
-without replay or budget reset. Different active focus IDs retain a pending head
-without navigation or budget use. Focus stages have a fixed ten-second batch
-ceiling, research five seconds, both clamped to the lease.
-They share the clock and
-research controller, lease, shutdown gate and uncertainty journals. The worker
-retains unfinished entries and requires fresh assignment receipts; navigation
-receipts cannot complete research work. It prepares each research stage separately
-and supports idempotent plan updates. Several research entries may complete on
-one day within the durable assignment limit. Ordered research queues now retain
-one pending head per slot and wait for fresh empty-slot evidence; refill after
-an actual technology finishes still awaits live validation. A one-way automatic
-Focus-to-research handoff passed recorded run047, including same-plan restart
-without input replay or a budget reset. The separate research-to-Focus preview
-requires both domain permissions and positive own panel/tree facts. Run048 refused
-Focus navigation before input; its live gate remains unaccepted.
-Economy, army and naval adapters remain unfinished. Private daily storage
-supports Unix only; other platforms return an explicit capability error.
+## Standing plans and observations
 
-Late Focus results retain verified evidence and separately record quarantine.
-A committed marker blocks reopening and new input. Failed persistence poisons
-the live controller; an unchanged old file cannot prove an uncommitted marker.
-Replacing the owner does not authorize adopting an orphaned game or clearing
-uncertainty.
+An owned session can enable prepared research, Focus and durable daily plans.
+Recorded run030 verified four-slot worker assignment, idempotent updates,
+restart persistence and research-counter advancement. Run047 passed automatic
+Focus-to-research navigation. Run049 passed research-to-Focus-to-research with
+three assignments, both explicit target-wait cases and a separate restart/STOP
+supplement preserving budget 3/3. Actual technology/Focus completion and queued
+refill over game time remain unverified.
 
-The worker now bounds immediately proven pre-input Start torn reads to two
-retries within the same in-flight reservation and request. Each retry needs
-new complete own contexts and producer sequence, the same scope/day, lease and
-input gates, and time remaining under the original deadline. It preserves the
-first detailed cause beside later errors. Intent, delivery, uncertainty, poison
-or a finished nonqueued reservation never supplies retry authority. Digest and
-stop summaries include core pending reasons and reserved budget. Recorded
-run037 remains an immutable failed gate. Run038 verified worker Start and durable
-completion with one consumed attempt; no retry was triggered. Its digest obscured
-completion from Luna. Run039 verified one permitted pre-input retry; run041 later
-passed active-focus waiting, updates and restart with bounded digest/detail output.
+Focus requires owner `daily_focus: true`, a verified Focus profile and
+`focus_permission: true` in every start/update request. A running worker rejects
+permission changes; stop/restart preserves histories and consumed shared budget.
+Research has independent permission. Cross-domain navigation requires both owner
+permissions and profiles. Each preparation has its own durable receipt and does
+not spend the assignment budget. A Complete entry means verified assignment,
+not a finished technology or Focus. Completed entries never reopen.
 
-Digest and STOP now include `assignments`: a checked durable-plan summary with
-completed/pending/in-flight counts and the latest completion's entry, request,
-sequence and date. This survives empty batches and restart. It is explicitly
-historical and never proves the focus currently active; use a fresh overview for
-that. Optional completed IDs may truncate within the 2KB digest, while counts and
-latest completion remain inline when space permits. Optional empty history fields are omitted and duplicate
-wait records appear once. A View preparation still does not complete an assignment.
-Unverified durable storage refuses a digest and blocks input; STOP retains an
-unavailable summary and the uncertainty information.
-For an exactly matching completed Start, the compact Focus summary references
-`assignments.latest_completion` and omits only its successful OpenPolitics,
-OpenFocus or View preparation. A later ClosePolitics receipt remains visible. STOP and
-durable journals retain the full records. Failure, refusal and uncertainty history
-remain present; a mismatched request cannot qualify for this compaction.
-The matching failure can share that identity reference too; original/latest
-codes, reasons, evidence and retry-authority labels remain unchanged.
+Fresh own state governs every action. Focus batches have a ten-second ceiling,
+research five seconds, both capped by the current lease. Unknown roots/blockers
+refuse. Before any Focus navigation intent or assignment reservation, a refused
+well-formed UI state may receive at most three additional fresh observations,
+100 ms apart, within one second and the original deadline. Reader/context errors
+propagate and late positives are discarded. Run049 exercised this build but did
+not establish whether that readiness retry branch fired.
 
-If accumulated history cannot fit, the digest returns an explicitly compacted
-summary with the same fresh counts, budget, completion counts, quarantine and
-historical failure codes. `history.snapshot_id` identifies an exact in-memory
-copy of the unabridged sanitized report. Retrieve a listed section without game
-reads or input:
+Only proven BeforeIntent busy/torn reads qualify for bounded automatic retries;
+a possible delivered input never does. Focus Start retries retain the same
+in-flight reservation/request and original deadline. Durable causes, pending
+reasons and consumed budgets survive restart. Uncertain input quarantines the
+owner; changing request IDs or replacing the owner cannot clear it. Failed
+persistence poisons the live controller. Private daily storage currently supports
+Unix only; unsupported platforms return explicit capability errors.
+
+Digest and STOP include a historical `assignments` summary: completed/pending/
+in-flight counts, completion IDs and the latest request/sequence/date. This
+survives empty worker batches and does not prove current state; use a fresh
+overview for that. STOP reports the last accepted durable day and budget without
+a game read. Before any accepted observation, those values remain unknown.
+
+If accumulated history cannot fit the 2 KB digest, `history.snapshot_id` points
+to the exact unabridged sanitized report. Retrieve each listed section before
+another digest replaces the cache:
 
 ```json
 {"op":"details","snapshot_id":"<hash from digest>","section":"focus"}
 ```
 
-Use `assignments` for full completion identities or `core_pending_historical`
-for pending reasons. Details are historical, with no current-state or retry
-authority. The next digest replaces this cache; stale IDs explicitly return
-`digest_snapshot_expired`, and stop does not discard it. Worker restart clears
-the cache but preserves durable journals. This avoids treating large histories
-as a failed observation. Full STOP output remains available.
+Details are historical, with no input/retry authority. Stale IDs return
+`digest_snapshot_expired`; stop preserves the cache, restart clears it. The
+`focus` section is a **latest-per-kind summary**: `preparation` contains only the
+latest navigation step, alongside the latest Start, failures and wait. It is not
+the complete navigation ledger. Full stage-order audits use stopped durable
+journals. This distinction caused Luna's original run049 stop; independent
+journals proved the earlier receipt before a separate restart supplement.
 
-Recorded run044 retained a terminal nonqueued Focus Start caused by
-`Focus witness changed`. It preserved the one consumed reservation and unfinished
-entry; no close or research stage was attempted. Recording and normal exit passed.
-The diagnostic change labels existing torn reads with static sections and,
-where known, object-relative fields. It exposes no addresses or memory payloads
-and leaves all consistency checks and terminal nonreplay behavior unchanged.
-
-Run046's combined plan stopped earlier, at OpenFocus after possible input. Its
-unresolved Intent and Unknown failure remain quarantined, and neither assignment
-was attempted. The old adapter replaced the underlying observation error with
-`Own readback unavailable; never replay`, so that particular cause is unknown.
-The next source retains bounded original causes for post-input readback, context,
-input-idle, authority and terminal-commit failures in both Focus and research.
-The outer classification stays `action_uncertain`; no dispatch, deadline,
-witness, retry or journal-transition rule changes. Generated refusal/restart
-checks pass, but this diagnostic change does not repair or explain run046's
-original underlying failure. Worker handoff live acceptance remains open.
-
-A nonqueued Focus attempt now reports its underlying transport cause while
-retaining `input_not_queued` and its terminal receipt. A transport torn read
-inside a finalized NotQueued attempt does not authorize replay. Run040's older
-adapter discarded that specific cause, so it cannot be recovered retroactively.
-Run044 verified cause retention, although its earlier binary did not identify the
-changing field. STOP now derives its historical budget from the same checked durable
-state as its assignment summary, fixing run041's null cached budget after restart.
-It reports the last accepted day, date and sequence without a game read. Before
-the first accepted daily observation, day/usage/remaining stay explicitly unknown.
-Changed or unverified storage makes both summaries unavailable and blocks input;
-NotQueued, unresolved and legacy reservations are never refunded. This correction
-passed run042's adjacent restart/STOP calls: both STOP reports retained the same
-completion and historical budget used 1/limit 1/remaining 0.
-
-`hoi4_focus_ui` is a read-only owned Focus observation. Supply one `focus_id` to
-receive canonical active focus, managed mode, settled Politics/Focus roots and
-complete own detail/research-Info counts. Unknown counts remain null; counts use
-named `visible` and `animating` fields. It shares the existing witnessed producers
-and campaign guard, requires the owned Focus binding, and needs no input lease.
-It exposes no private process identities, geometry or input authority. Its compact
-output passed run042 before lease acquisition and after worker Start: 770/807
-bytes, 100/105 ms RPC time in two samples.
-
-The typed `close_politics` stage is now available in the manual Focus preview.
-It requires the
-exact canonical active focus, settled own Politics mode12, hidden Focus and zero
-detail/info blockers, then preserves that focus through settled mode23 readback.
-Run043 verified this ordinary Q transition through a private diagnostic, followed
-by five existing Rust research stages and canonical slot assignment. Its initial
-helper refused stale before-state before input; the corrected helper took fresh
-reads inside the guest with the same two-second limit. Run045 then verified the
-public Rust close stage and an identical saved-receipt lookup without new input,
-followed by research assignment. A new close request from an already hidden panel
-refuses. Rhineland remained active; assignment completion does not mean the
-focus finished over game time.
-
-The daily worker can now select ClosePolitics between a completed Focus
-assignment and an eligible empty-slot research head. It requires both owner
-permissions, plan Focus opt-in, remaining shared assignment budget and fresh
-same-epoch own Focus/research observations. The completed entry supplies only
-the focus ID; current active-focus, root, blocker and scope checks still govern
-input. One preparation is recorded per batch, without spending an assignment
-reservation. Research receives its own fresh five-second ceiling next batch.
-The close history survives restart and prevents a second automatic attempt,
-including after a known nonqueued refusal. Occupied slots and pending research
-retries bypass this handoff. Run047 verified the complete worker path and adjacent
-restart/STOP, retaining both completion IDs and budget2/2. Its SelectSlot step had
-one preserved BeforeIntent torn-read, then succeeded under the existing bounded
-retry policy.
-
-The separate `open_politics_from_research` preview uses ordinary Q only from
-settled mode5 with an own visible research panel, hidden research tree, hidden
-Politics/Focus roots and complete zero detail/info blockers. Readback must show
-settled mode12 Politics with both research roots hidden and the original canonical
-active-focus state unchanged. Both profiles are required; automatic use also
-requires both worker domain permissions. It has its own stage and receipts: the
-original `open_politics` remains mode23-only. Missing roots remain Unknown and
-cannot authorize the new route. Optional root fields preserve old receipt bytes
-and checksums when absent. Run048 completed two research assignments but refused
-Focus navigation before any Focus intent; the exact failed predicate was not
-retained. A separate later read-only observation showed settled expected roots,
-which cannot establish the earlier refusal's cause. The next diagnostic retains
-the observed mode, roots and blocker counts in the existing bounded durable
-refusal reason, without new reads or changed input/retry authority. Reverse live
-acceptance remains open.
-
-The worker now rechecks a well-formed but unnavigable Focus UI state with at most
-four fresh observations before creating any navigation intent or assignment
-reservation. After the first refused state, retries have a one-second window,
-100ms intervals and the original absolute Focus deadline. A ready first sample
-returns immediately. Every read rechecks lease, gate, scope and day; reader,
-ownership and invalid-producer errors propagate. Unknown facts still cannot
-authorize input, and late positive samples are discarded. This readiness path
-does not replay action attempts or change durable budgets/receipts. Composed
-validation passed 695 Rust1.86 host tests, 802 reported Linux checks (800
-substantive), five X11 cases, 953 Python tests (37 skips) and compiler gates.
-Installed-game validation of readiness remains pending.
-
-To wait for a known assignment state, use `hoi4_wait_for` with, for example:
+Wait for a known active Focus/current research assignment state with:
 
 ```json
 {"timeout_seconds":45,"until_assignments":{"focus_id":"GER_remilitarize_the_rhineland","research":[{"slot":0,"technology_id":"support_weapons"}]}}
 ```
 
-All supplied targets must match a single accepted own-country snapshot. The
-first snapshot counts, so work completed before the call returns immediately.
-Either domain can be omitted; at least one target is required. Slots must be
-unique and between 0 and 31. This option cannot be combined with a date or UI wait.
-It means an active Focus and current slot assignments, not completed technologies,
-a finished Focus or durable governor receipts. It uses the existing bounded
-reader and never pauses or supplies input authority. Unrelated changes do not
-finish this targeted wait. Run048 returned a historical timeout when Focus stayed
-idle despite both research targets being assigned. Live successful-match and
-already-matching behavior remain unverified.
+All targets must match one accepted own snapshot. The first sample counts;
+already-matching work returns immediately. Either domain can be omitted, but at
+least one target is required. Slot IDs must be unique and in 0–31. This option
+cannot be combined with date or UI predicates. It proves current assignment,
+not finished technologies/Focus or durable governor completion. Both successful
+cases passed run049; run048 preserves historical-timeout evidence.
 
-Wait timeouts return only the last earlier accepted sample, explicitly marked
+Timeouts return only the last timely accepted sample, marked
 `state_historical: true`, `current_state_verified: false` and
-`input_authorized: false`, with sample age and any deadline refusal. Late payloads
-and targets are discarded. An initial wait without a timely stable sample still
-refuses, and real ownership/scope/backend errors propagate. Read a fresh digest
-after a normal timeout; historical wait output cannot authorize input.
+`input_authorized: false`, with age and any deadline refusal. Late payloads are
+discarded; ownership/scope errors propagate. A wait with no timely stable sample
+refuses. Reads and waits never pause or confer input authority.
 
-The independent `graph_kernel` library provides bounded connected components
-and multi-source breadth-first search over supplied public/generated topology.
-It rejects unknown nodes and malformed adjacency, resolves source ties
-deterministically and reports depth truncation. It has no game-state producer
-or army integration; graph reachability establishes no movement or supply authority.
+The independent `graph_kernel` library provides bounded components and
+multi-source breadth-first search over public/generated topology. It has no
+live army integration and supplies no movement or supply authority.
 
 ## Connect an owned Linux game
 
@@ -298,7 +170,7 @@ anchors do not establish a load-generation token.
 | `hoi4_focus_node_detail` | One own focus key's current-item/control associations; opt-in raw Sprite/Text/Frame diagnostics, awaiting live validation |
 | `hoi4_focus_selected_detail` | Compact exact selected window; Start is `window.start.ordinary_binding`, distinct from the node symbol; read-only with optional geometry |
 | `hoi4_focus_ui` | Optional owned Focus binding: compact canonical active focus, managed mode, local roots and complete own blocker counts; no lease or input |
-| `hoi4_wait_for` | Server wait, 1–50 seconds, for a date, focus/research changes or research UI predicates |
+| `hoi4_wait_for` | Server wait, 1–50 seconds, for a date, focus/research changes, explicit assignment targets or research UI predicates |
 
 Catalog queries accept `filter`, `offset` and `limit` (1–100). Research completed
 membership is paged separately. Full models are validated before output paging;
@@ -391,31 +263,18 @@ are not forcibly interrupted. Uncertain input remains quarantined without replay
 It never activates a window or moves the cursor. Bounded X11 delivery is separate
 from authoritative game-state readback.
 
-The portable research-point library computes conditional Sprite/Text interior
-candidates with explicit scale/profile guards. It does not register input
-commands or grant frame/routing authority. A recorded builder diagnostic verified
-ID-derived selection and assignment. An explicit owner profile can now enable
-the bounded `hoi4_research_attempt` preview. In recorded run 019, an exclusive
-Luna medium player opened and assigned `support_weapons` by ID. Separate reads
-confirmed slot 0 and its advancing counter through 3 January 1936. View and
-Research RPCs took 774 and 851 ms. The recorded source required the
-own empty slot tree to be selected first. A new `select_slot` stage can derive
-the ordinary slot control from an open own panel. Recorded run 020 verified
-Luna selecting slots 0 and 1, assigning research, and advancing its counter
-through 3 January; all four strategic RPC samples were under one second.
-Recorded run 022 verified ordinary `W` panel opening from known closed own views
-with no managed view selected, followed by slot selection and research. A distinct
-repeat request verified without another key. Recorded run024 verified a complete
-industry/electronics/infantry cycle, a same-folder no-input request, and all four
-research assignments. Its later speed-change request became uncertain, so
-reliable combined clock/research play remains unfinished.
-Its internal observation adapter checks the requested own key/slot and fresh
-renderer, callback, hierarchy and SDL/X11 associations before candidate maths.
-The owner supplies the reviewed origin profile; player arguments cannot supply
-coordinates. Clock and pointer operations share one controller lock, lease and
-shutdown gate. Intent persists before input; unresolved delivery blocks new IDs
-and stages. Canonical readback plus clear input is required for success; replayed
-receipts are labeled historical. See [preview setup](../docs/OWNED_LINUX_LAUNCHER.md#ordinary-research-preview).
+The optional `hoi4_research_attempt` preview derives exact technology/slot/category
+controls from fresh own state. Its OpenPanel, SelectSlot, SelectCategory, View and
+Research stages have bounded Luna live evidence, including four-slot assignment
+and counter advancement. The preparer verifies renderer, callback, hierarchy and
+SDL/X11 associations before deriving an ordinary point. The owner supplies the
+reviewed origin profile; player arguments cannot supply coordinates.
+
+Clock and pointer operations share one controller lock, lease and shutdown gate.
+Intent persists before input. Canonical readback and clear input are required for
+success; replayed receipts are explicitly historical. Unknown delivery blocks
+new IDs and stages. See [research setup](../docs/OWNED_LINUX_LAUNCHER.md#ordinary-research-preview)
+and [recorded results and original failures](../docs/CLAUSEWITZ_VALIDATION.md).
 
 Selected own focus details also expose a bounded start-binding diagnostic. It
 distinguishes the event start callback from the separate no-op listener. This
@@ -430,8 +289,7 @@ settled own roots and complete local blocker facts, then uses exact Sprite,
 zero-angle Text or unmasked Frame geometry. Unknown facts and unsupported renderers refuse. These facts do not
 prove global modal clearance or routing. Run036 passed open/select and one
 ordinary Start with canonical active-focus readback. Run041/042 passed bounded
-daily Focus execution and restart persistence. Run047 passed the one-way automatic
-handoff. Focus completion over game time and campaign acceptance remain open.
+daily Focus execution and restart persistence. Run047 passed Focus-to-research and run049 passed research-to-Focus-to-research. Focus completion over game time and campaign acceptance remain open.
 
 Only the verified own-focus node/start producers opt into a fixed traversal
 policy for the larger focus-tree container: exact generic Position ancestors
@@ -440,7 +298,7 @@ Ordinary callers retain their existing limits. Depth, reciprocal membership,
 final witnesses, conditional cache checks and root1f0 conversion remain required;
 root350 is diagnostic only. Run032 verified the actual ten-ancestor hierarchy,
 root1f0 closure, conditional cache and exact-node selection. Other unobserved
-branches remain unproved; the Start callback association still refuses.
+branches remain unproved; unsupported callback associations refuse.
 
 The optional `hoi4_daily_governor` service starts a durable explicit plan, returns
 a fresh compact digest, updates its plan, or stops without changing game time.
@@ -504,37 +362,22 @@ python3 native/tests/run_x11_fixture.py
 
 ## Live evidence and remaining work
 
-One Luna medium player verified upstream focus, four research assignments and
-unpause. The final native pause timed out; **that posting adapter is quarantined**.
-It must not be blindly retried or ported as safe.
+Upstream Luna play verified Focus, four research assignments and unpause. Its
+final native posting request timed out; that adapter remains quarantined.
+Later Rust Luna runs verified ordinary clock controls, canonical research and
+Focus assignments, both panel transitions, explicit target waits and durable
+restart behavior. Run049 completed three assignments in 23.668 seconds under
+x86 CPU emulation; its matching-first-sample wait returned in 15.670 ms RPC.
+Recording and normal exit passed. These are bounded samples, not a general
+latency distribution or campaign-throughput benchmark.
 
-Later Rust Luna tests verified ordinary clock changes through 5 January 1936,
-including research-counter advancement. Recorded builder diagnostics validated
-438 own focus keys, 411 technology keys and 423 structural associations. Exact-key
-RPC medians were 116/120 ms for a narrower model, versus 313 ms for full nodes;
-those scopes are not an equivalent-model speed comparison.
-
-Recorded run 025 passed clock-first control, all four research assignments, then
-unpause/advancement/pause with the research panel open. All 17 research stages
-verified fresh canonical state. The recording passed ffprobe and the owned game
-exited normally with code 0. Earlier run024 uncertainty remains unexplained;
-this bounded run does not establish campaign or governor acceptance.
-
-New owned-root/cache diagnostics have passed portable/MSRV and actual Linux
-fixtures. A fresh recorded game verified owned-root closure and conditional cache
-checks, and observed own economy counts. Precise economy UI comparison remains
-pending. Its Research button used a separate text renderer. A subsequent recorded run
-verified the Text and own-division structural diagnostics and an ID-derived
-point sequence; Frame diagnostics still await a matching installed-game branch. Detailed test counts,
-failures, recordings and measurement limits are in [live validation](../docs/CLAUSEWITZ_VALIDATION.md)
-and [the comparison](../docs/CLAUSEWITZ_COMPARISON.md).
-
-Research ID stages have bounded live evidence. Focus actions, durable daily
-execution, economic/army/naval-invasion control, recovery and independent
-Windows/macOS adapters remain unfinished.
-FAIR is the campaign default; META strategy and mod QA retain separate boundaries.
-No clean two-year Luna run or full campaign has passed acceptance. Follow the
-[Linux acceptance gates](../docs/LINUX_RUST_HANDOFF.md).
+Actual technology/Focus completion and queued refill, economic recovery,
+army/air/naval-invasion control, and independent Windows/macOS live adapters
+remain open. FAIR is the default; META and mod QA retain separate boundaries.
+No clean two-year Luna run or full campaign has passed. Follow the
+[acceptance gates](../docs/LINUX_RUST_HANDOFF.md),
+[complete live evidence](../docs/CLAUSEWITZ_VALIDATION.md) and
+[measured comparison](../docs/CLAUSEWITZ_COMPARISON.md).
 
 ## Provenance and acknowledgements
 

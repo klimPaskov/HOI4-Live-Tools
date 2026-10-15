@@ -2,10 +2,22 @@
 
 ## Unreleased native preview
 
+- Verify run049 worker research-to-Focus-to-research assignment and both explicit
+  target-wait cases. Preserve Luna's initial stop over an omitted summary receipt;
+  independent saved journals proved the earlier transition, and a separate
+  restart/STOP supplement preserved all completions and budget 3/3/0 without replay.
+  The 561-second recording and normal owned exit passed. Completion over game time
+  and full campaigns remain unaccepted.
+- Mark the bounded reverse route as live-validated and clarify that Focus details
+  contain the latest preparation summary, not the full navigation ledger.
+- Separate current continuation instructions from preserved historical checkpoints
+  and refresh preview/setup documentation around the current verified behavior.
+
 - Add bounded fresh read-only Focus navigation readiness before any intent or
   reservation: at most four reads, a one-second retry window and the unchanged
   absolute deadline. Positive preflight remains mandatory; reader/context errors
-  propagate and uncertain actions are never retried. Live validation is pending.
+  propagate and uncertain actions are never retried. Run049 passed the combined
+  route; no evidence establishes whether the readiness retry branch fired.
 - Preserve run048's pre-input Focus navigation refusal, two completed research
   assignments and budget2/3/1. Recording and normal exit passed; reverse navigation
   and successful assignment-target waits remain unaccepted.
@@ -14,14 +26,15 @@
 - Add a separately typed research-to-Politics preview with positive own panel/tree
   facts, both domain permissions, preserved active Focus and durable nonreplay.
   Existing open-Politics semantics and old receipt serialization remain unchanged.
-  Recorded reverse-transition validation is pending.
+  Recorded reverse-transition validation passed run049.
 - Verify run047 worker-only Focus-to-research assignment and adjacent same-plan
   restart/STOP, retaining both completion IDs and budget2/2. Preserve its one
   known pre-input SelectSlot retry; recording and normal exit passed.
 - Add an explicit `until_assignments` target to the read-only server wait. It
   matches the first accepted snapshot and requires all requested active Focus
   and research-slot IDs, avoiding a missed-change timeout after work finishes.
-  Live validation of this new wait option remains pending.
+  Successful and already-matching cases passed run049; run048 preserves
+  historical-timeout evidence.
 - Correct two uncertainty tests to inspect persisted bytes after releasing the
   journal lock. All nine Windows/Linux/macOS CI jobs passed the test-only repair;
   production locks and no-replay assertions are unchanged.

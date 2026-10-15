@@ -1,29 +1,23 @@
 # Clausewitz-MCP comparison checkpoint
 
-Bounded Linux worker result (15 October): recorded run041 passed worker-driven
-Focus Start, active-focus waiting, idempotent plan update and two restarts without
-replay or budget resets, with exclusive Luna medium control. Five fresh digests
-returned in 49.7–62.4 ms and stayed below 2 KB; two used exact historical detail
-lookup. This is a small sample under x86 CPU emulation, not a matched upstream
-benchmark or campaign throughput result. The original upstream posting timeout
-stays quarantined; no clean two-year run or full campaign has passed.
+Latest bounded result, 15 October 2026: run049 completed three worker assignments
+across research→Focus→research in 23.668 seconds after the start reply. One explicit
+target wait took 21.777 seconds including worker execution; the identical already-
+matching request took 15.670 ms RPC (10.232 ms server). A 1243-byte fresh digest took
+73.126 ms; two overviews took 15.649/14.818 ms. This is a small sample under x86 CPU
+emulation, not a matched upstream benchmark or campaign throughput result.
 
-Run043 then verified an ordinary Q Politics-close diagnostic followed by existing
-Rust research stages, retaining active Rhineland. Four input stages took390–764ms;
-a same-category no-input result took55.6ms. The original helper's stale-state
-refusal remains preserved. Fresh guest-local reads solved that harness issue
-without relaxing the two-second limit. This is manual route evidence; the new
-Rust close-stage service and automatic worker handoff still need live checks.
+The player initially stopped because the Focus summary showed only the latest
+preparation. Independent saved journals proved the earlier reverse transition;
+a separate restart/STOP supplement retained all completions and budget 3/3 without
+replay. Recording and normal exit passed. The original upstream posting timeout
+stays quarantined, and actual completion/refill and full campaigns remain open.
+See [the complete run049 evidence](CLAUSEWITZ_VALIDATION.md#recorded-reverse-worker-run049--15-october-2026).
 
-Run044 did not reach the new Rust close command: worker Start ended in a confirmed
-nonqueued torn read after three verified preparations. The unfinished plan and
-consumed reservation were preserved without replay. Recording and normal exit
-passed. Its specific changing field remains unknown; this failure prevents a
-close-stage acceptance claim.
-
-11 October 2026. This is a development comparison, not proof of campaign success
-or a claim that HOI4 Live Tools is faster overall. Required targets are Windows,
-macOS and Linux. Linux game control remains unfinished.
+This is a development comparison, not proof of overall superiority. Required
+targets are Linux, Windows and macOS; native Windows/macOS live adapters remain
+unavailable. The dated sections below preserve earlier measurement conditions
+and limitations rather than current setup instructions.
 
 Reference: [smerss/Clausewitz-MCP](https://github.com/smerss/Clausewitz-MCP), commit
 `97c85437081904d5ad07bae1623ec58d1c0a5b9e`. See [NOTICE](../NOTICE) for attribution.
@@ -169,9 +163,10 @@ Run041 also passed eight exact historical section lookups. Two later 45-second
 waits expired normally because the game stayed paused with an active focus; their
 elapsed time is waiting time, not snapshot latency. Research/focus panel switching,
 actual technology/focus completion over game time and broad strategic throughput
-remain unverified. These results do not support an overall superiority claim.
+remained unverified at this checkpoint. Run047/run049 later verified bounded
+panel switching; completion over game time remains open. These results do not support an overall superiority claim.
 
-## Measured process reads
+## Generated-process read benchmark — 11 October 2026
 
 Both readers ran against the same generated child process and checked every
 returned byte. The environment was a native ARM64 Linux Docker VM on Apple
@@ -209,7 +204,7 @@ process-reader microbenchmark, not a live-game speed claim. The separate runs
 have different warm-cache and host-load conditions; compare methods within each
 table, not individual reads across tables.
 
-## Linux runtime checks
+## Historical Linux runtime checks — 11 October 2026
 
 An isolated Ubuntu 24.04 amd64 container ran x86-64 programs through Rosetta.
 Non-root Xvfb with Mesa llvmpipe supplied OpenGL 4.5 software rendering. A generated
@@ -228,7 +223,7 @@ The installed game is the Mac build. A separate licensed Linux depot and a
 verified supported execution environment are still needed for live comparison.
 There is no successful Linux HOI4 run in this checkpoint.
 
-## Protocol smoke
+## Historical protocol smoke — 11 October 2026
 
 Both actual stdio servers initialized and listed tools in the isolated amd64
 Linux container with no game running. Upstream advertised 107 tools, including

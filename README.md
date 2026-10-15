@@ -25,22 +25,25 @@ Recorded Linux tests have passed:
   identical close request returned its saved receipt without another dispatch.
 - Worker-only Focus-to-research navigation and assignment, followed by immediate
   restart/STOP with both completions and the shared 2/2 budget intact.
+- Worker-only research-to-Focus-to-research assignment, explicit target waits,
+  and a separately verified restart/STOP with all three completions and budget 3/3.
 - Digests below 2 KB with exact historical detail lookup; five recent samples
   returned in 50–62 ms under x86 CPU emulation.
 
-These are bounded tests in vanilla Normal/historical Germany. Run047 completed
-the automatic Focus-to-research plan in about 20 seconds under x86 CPU emulation;
-its recording and normal exit passed. The game stayed paused, so Focus and
-technology completion over game time remain unverified. Reverse panel switching,
-completed-technology refill, economic/army/naval commands and full campaigns
-remain open. Original failures, including run046's unresolved OpenFocus attempt,
-remain in the validation report; a later success does not explain them.
+These are bounded tests in vanilla Normal/historical Germany. Run049 completed
+three worker assignments in 23.7 seconds under x86 CPU emulation. Its target wait
+matched, then an already-matching request returned in 15.7 ms RPC. The player first
+stopped because its summary omitted an earlier navigation receipt; independent
+journals proved that receipt, and a separate restart check passed. Recording and
+normal exit passed. The game stayed paused, so actual Focus/technology completion,
+queued refill, economic/army/naval commands and full campaigns remain open.
+Original failures remain in the validation report; later success does not explain them.
 
 | Runtime | Verified | Remaining |
 | --- | --- | --- |
 | Python / Windows | Baseline tools and recorded play attempts | Clean campaign acceptance; current development changes are unfinished |
 | Python / macOS | Platform work and limited diagnostic play | Reliable live acceptance; screenshot-driven testing is stopped |
-| Native / Linux | Own reads/catalogs, owned launch, bounded Luna clock/research/focus tests, Focus-to-research plans and restart persistence | Reverse panel navigation, completion/refill, economics/army/naval control and campaign acceptance |
+| Native / Linux | Own reads/catalogs, owned launch, bounded Luna clock/research/focus tests, both panel transitions, target waits and restart persistence | Completion/refill, economics/army/naval control and campaign acceptance |
 | Native / Windows and macOS | Portable protocol and fixture tests in CI | Independently verified process/build adapters and live tests |
 
 Read [the acceptance gates](docs/LINUX_RUST_HANDOFF.md),
@@ -103,15 +106,14 @@ are documented in [the comparison](docs/CLAUSEWITZ_COMPARISON.md) and
 
 Research uses exact technology IDs, verified panel/slot/category navigation and
 a persisted shared daily budget. Focus has separate owner and plan permissions;
-its worker has recorded Start, plan-update and restart evidence. The new one-way
-Focus-to-research worker handoff passed run047 with one recorded pre-input research
-retry and no replay on restart. A separate research-to-Focus shortcut now has
-offline validation and requires settled own panel/tree state. Run048 refused its
-Focus navigation before input; reverse live acceptance remains open.
-Completed-technology refill and broader strategic adapters remain
-acceptance gates. Earlier failures, including unresolved clock
-uncertainty, are preserved in the validation report. Three-OS CI checks shared
-code and fixtures; Windows/macOS live adapters still need independent validation.
+its worker has recorded Start, plan-update and restart evidence. The two worker
+panel transitions now have bounded live evidence: run047 passed Focus-to-research,
+and run049 passed research-to-Focus-to-research with three assignments. Explicit
+assignment waits accept a matching first sample. Durable completion means the
+assignment was verified; actual technology/Focus completion and queued refill
+remain acceptance gates. Earlier failures, including unresolved clock uncertainty,
+are preserved in the validation report. Three-OS CI checks shared code and fixtures;
+Windows/macOS live adapters still need independent validation.
 
 ## Development
 

@@ -3377,3 +3377,101 @@ This is offline evidence. It neither identifies run048's original failed predica
 nor accepts the reverse route live. A new immutable recorded Luna medium run must
 verify the three assignments, successful/all-already-matching target waits and
 adjacent same-plan restart/STOP. Do not reopen or retry run048.
+
+
+## Recorded reverse worker run049 — 15 October 2026
+
+One exclusive Luna medium player used immutable source
+`a9f708c118d4d09a1f7d874872c0277c496c1df7` and CLI SHA256
+`b411ce78fe9987bb3fb957d88dba364cf925b412993bef31e28fed2e9777365a`.
+All nine exact-source CI jobs passed. The fresh vanilla Normal/historical FAIR
+Germany campaign remained paused at 1 January 1936 noon, speed 0. Recording's
+first packet preceded the single campaign Start. The worker alone supplied
+all gameplay input; Luna issued no manual navigation, research, Focus or clock
+commands. Its ordered plan requested `basic_machine_tools` in slot 0 with
+`industry_folder`, Rhineland, then `support_weapons` in slot 1 with
+`infantry_folder`, sharing assignment budget 3.
+
+The recorded assignment gate passed:
+
+- Focus recorded exactly five Intent/Verified ServerConfirmed pairs:
+  OpenPoliticsFromResearch, OpenFocus, View, Start and ClosePolitics. The reverse
+  route preserved idle Focus from mode 5/ready research panel/hidden tree to
+  mode 12/ready Politics/hidden research roots. Closing Politics retained active
+  Rhineland and verified mode 23, both Focus/Politics roots hidden and zero own
+  blockers. Four preparation receipts and one Start goal were retained.
+- Research recorded exactly ten input pairs, five for each assignment:
+  OpenPanel, SelectSlot, SelectCategory, View and Research. No research or Focus
+  preparation refusal, pre-input retry or unresolved action was recorded.
+- All three core entries became Complete at sequences 5, 10 and 14, with exactly six
+  core journal rows and no quarantine. The third assignment completed 23.668 seconds
+  after the start reply. This is assignment timing, not technology/Focus completion.
+- The explicit all-target wait matched in 21.777 seconds server time
+  (21,783.975 ms RPC). The identical subsequent wait accepted its first matching
+  sample in 10.232 ms server time (15.670 ms RPC), without waiting for a new change.
+- A fresh digest took 73.126 ms and 1243 bytes. All six listed compacted sections
+  were retrieved using the exact snapshot ID. A subsequent fresh overview showed
+  the three requested assignments and unchanged paused date/speed. The two
+  overview RPC samples took 15.649/14.818 ms.
+
+The digest preserved one historical `input_busy`, entry_id null, stating that
+another ordinary input operation was in progress and the request was not queued.
+It did not quarantine the worker or create another action pair. Preserve this
+transient; the run is not described as error-free.
+
+### Original player stop and independent journal correction
+
+Luna stopped before restart because the retrieved Focus detail showed Start and
+ClosePolitics but no earlier OpenPoliticsFromResearch receipt. The original
+partial-gate report remains unchanged. The API's `focus` detail is the full
+**latest-per-kind summary**, not the complete navigation ledger: `Navigator.latest`
+selects `steps.last()` for `preparation`. After STOP, canonical lease release and
+explicit handback, root read the stopped durable files, with no game observation
+or input. Both the navigation ledger and action journal independently contained
+the earlier verified reverse receipt. Their complete stage order, request IDs,
+pre/post roots and core assignment links passed an independent verifier.
+
+### Separately recorded restart supplement
+
+After preserving the original report, proof and stopped journals, the same Luna
+player reacquired a fresh lease for a separate restart-only phase. It started the
+identical plan/revision/permissions and immediately stopped, with no intervening
+RPC. Replies were 32.863 ms apart. The second STOP exactly matched the original
+assignment and Focus summaries, including all three completion IDs and budget
+used 3 / limit 3 / remaining 0, no uncertainty and no game-time change.
+
+The six action/plan/navigation files remained byte-identical across the restart.
+Only the observation sequence advanced 15→16, with unchanged scope; no input or
+reservation was added. The first independent comparison incorrectly required
+that observation counter to remain identical too; the corrected comparison
+retains that initial harness failure and checks the actual action/persistence
+invariant. The earlier stopped-file fetch also incorrectly required an unused
+`research-stages.json`; it was corrected to the seven files actually present.
+Neither harness correction changed raw evidence or game state.
+
+Canonical final release at 13:36:31.508800 UTC and status 0 at 13:36:33.374815 UTC
+matched the guest proof and independent readback. The 561-second 512×288 H264
+recording finalized at 13:38:14.584253 UTC and passed ffprobe. One ordinary owned
+window close returned at 13:38:28.290238 UTC after 2.339 seconds with exit 0, no signal
+or core dump. Exact process absence and unchanged Yama 1 passed; brokers closed.
+The combined offline verifier matched original calls, both stopped snapshots,
+final journals, immutable source/binary, recording and terminal evidence.
+
+This accepts bounded reverse navigation, three worker assignments and both
+successful target-wait cases, plus restart persistence in a separate supplement.
+It does not retroactively make the original player phase uninterrupted. The
+readiness code ran in this build, but temporary readiness refusals are not logged;
+this run does not prove that its retry branch fired or explain run048's failure.
+Actual technology/Focus completion, queued refill, economics/warfare and clean
+two-year/full campaigns remain open. Native Windows/macOS play is unverified.
+
+
+The following publication change updates only capability metadata and tool
+wording to reflect this bounded result and the Focus-summary scope; action and
+observation behavior is unchanged. Its final composed source passed 695 Rust 1.86
+host tests, 802 reported actual Linux checks (800 substantive, including all
+five X11 cases), 953 Python tests with 37 skips, format, host/Linux Clippy,
+Linux MSRV all-target compilation and release linking. All 99 source-input
+hashes stayed unchanged through these checks. A stale tool-discovery sentence
+was found after an initial metadata-only build; that build was retained and
+superseded by the final checked bundle. No game used the intermediate bundle.
