@@ -70,20 +70,26 @@ absence passed. The private menu harness omitted its dedicated Start artifact
 because its coordinate guard did not match the actual successful menu click;
 original recording/menu timestamps remain available. Preserve this limitation.
 
+Run052 on immutable source `64f3634` passed actual Rhineland completion. The
+worker assigned it once; a Focus-change wait woke on 4 February 01:00, and a
+fresh stopped/paused membership read at 19:00 contained only Rhineland, with no
+active Focus. Final adjacent same-plan restart/STOP preserved the original
+receipt and historical last-attempt-day budget 1/1/0 without duplicate input.
+Fresh advancing-day digests reported 0/1/1. Background busy/torn diagnostics
+remain preserved; no player RPC returned an error. The 702.666-second recording,
+dedicated campaign-Start artifact, canonical release, normal exit 0 and exact
+process absence passed. Both brokers are closed; no player owns input.
+
 ## Immediate acceptance work
 
-1. Validate the narrowed selected-detail/Start observations in a fresh gate.
-   Tree-node controls remain witnessed for View; selected-detail ownership,
-   canonical identity, Start callback, visibility and geometry remain checked.
-   The change reduces unnecessary reads; it does not identify run051's changed
-   field. The private menu harness now requires an explicit campaign-Start
-   operation and recording check before its click.
-   Validate the new read-only `hoi4_focus_completed` preview against actual Focus
-   completion in a new immutable recorded gate. The pinned engine predicate reads
-   progress `+0x40`, unlike upstream's `FP_COMPLETED` label at `+0x20`; do not copy
-   that label into this build. Use one existing Luna medium player, preserve
-   worker/ordinary-clock separation and avoid routine screenshots or manual repair.
-   Passing fixtures alone does not establish live completion.
+1. Validate successive Focus choices over advancing time, using the now-verified
+   completed-membership reader to distinguish assignment from finished Focus.
+   Run052 passed actual Rhineland completion and restart on immutable `64f3634`:
+   the selected-detail/Start scope change retained all relevant checks. Completed
+   membership grew from zero to one on 4 February; no duplicate input followed.
+   Use one existing Luna medium player, worker/ordinary-clock separation,
+   explicit fixed bounds and the recording-checked campaign-Start operation.
+   Do not infer run051's exact changing field from the later success.
 2. Preserve durable assignment receipts and budgets through advancing days and
    queued heads. Prove finished technology membership/empty slot before refill;
    an active Focus or assigned slot alone does not prove completion. Use fresh

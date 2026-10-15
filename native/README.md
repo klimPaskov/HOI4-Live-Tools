@@ -39,7 +39,8 @@ Focus-to-research navigation. Run049 passed research-to-Focus-to-research with
 three assignments, both explicit target-wait cases and a separate restart/STOP
 supplement preserving budget 3/3. Run050 verified actual support-weapons completion,
 automatic same-slot refill with basic machine tools, advancing-day budgets and
-restart persistence. Actual Focus completion remains unverified.
+restart persistence. Run052 verified actual Rhineland completion on 4 February
+1936 and a same-plan restart/STOP without duplicate input.
 
 Focus requires owner `daily_focus: true`, a verified Focus profile and
 `focus_permission: true` in every start/update request. A running worker rejects
@@ -168,7 +169,7 @@ anchors do not establish a load-generation token.
 | `hoi4_research_node_detail` | One exact own key's binding, raw renderer/cache and typed hierarchy diagnostics |
 | `hoi4_research_nodes` | Paged current own-tree keys and conditional control associations |
 | `hoi4_focus_list` | Own canonical focus keys and selected detail diagnostics; no start authority |
-| `hoi4_focus_completed` | Preview: own engine completion-membership IDs and active key without opening GUI; bounded sorted pages, static/fixture validation only |
+| `hoi4_focus_completed` | Preview: own engine completion-membership IDs and active key without opening GUI; bounded sorted pages; actual Rhineland membership verified in run052 |
 | `hoi4_focus_node_detail` | One own focus key's current-item/control associations; opt-in raw Sprite/Text/Frame diagnostics, awaiting live validation |
 | `hoi4_focus_selected_detail` | Compact exact selected window; Start is `window.start.ordinary_binding`, distinct from the node symbol; read-only with optional geometry |
 | `hoi4_focus_ui` | Optional owned Focus binding: compact canonical active focus, managed mode, local roots and complete own blocker counts; no lease or input |
@@ -291,7 +292,7 @@ settled own roots and complete local blocker facts, then uses exact Sprite,
 zero-angle Text or unmasked Frame geometry. Unknown facts and unsupported renderers refuse. These facts do not
 prove global modal clearance or routing. Run036 passed open/select and one
 ordinary Start with canonical active-focus readback. Run041/042 passed bounded
-daily Focus execution and restart persistence. Run047 passed Focus-to-research and run049 passed research-to-Focus-to-research. Focus completion over game time and campaign acceptance remain open.
+daily Focus execution and restart persistence. Run047 passed Focus-to-research and run049 passed research-to-Focus-to-research. Run052 verified actual Rhineland completion over game time. Successive Focus automation and campaign acceptance remain open.
 
 Only the verified own-focus node/start producers opt into a fixed traversal
 policy for the larger focus-tree container: exact generic Position ancestors
@@ -334,8 +335,8 @@ worker can use a fully validated canonical probe and skip the full UI read.
 The probe publishes no sequence, digest, receipt or input authority. Empty or
 same-target slots still require an independent full UI observation; unavailable
 or torn data refuses. This saves reads in occupied-slot fixtures and adds work
-when slots are idle. Live performance and completion-refill acceptance remain
-unverified.
+when slots are idle. Run050 verified completion and same-slot refill; a matched
+benchmark of this probe optimization remains unavailable.
 
 Start callback refusals include only allowlisted producer reasons, renderer types
 and tri-state binding flags. Missing fields remain unknown. Diagnostics never
@@ -380,7 +381,14 @@ on three days: two succeeded, and one was refused with known zero input. Its
 original reason was replaced by later completion and is unavailable. The daily
 limit held, and all historical navigation/read refusals remain recorded.
 
-Actual Focus completion, economic recovery,
+Run052 independently verified Rhineland in completed membership after five
+historical timeout waits and a Focus-change wake on 4 February. Its final
+membership read took 26.666 ms RPC; adjacent restart/STOP preserved the original
+assignment receipt. STOP reported the historical last-attempt-day budget 1/1/0;
+fresh advancing-day digests reported 0/1/1. Background busy/torn diagnostics
+remain recorded, with no player RPC errors. Recording and normal exit passed.
+
+Successive Focus automation, economic recovery,
 army/air/naval-invasion control, and independent Windows/macOS live adapters
 remain open. FAIR is the default; META and mod QA retain separate boundaries.
 No clean two-year Luna run or full campaign has passed. Follow the

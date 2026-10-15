@@ -22,7 +22,8 @@ completion identities and budget 2/2. Its recording and normal exit passed;
 the game stayed paused. See the recorded run045–047 sections below.
 Run050 subsequently verified actual research completion and same-slot refill.
 Run051 read an empty completed-Focus baseline but failed Start before input;
-actual Focus completion and campaign acceptance remain open. See the latest
+run052 subsequently verified actual Rhineland completion and restart without
+duplicate input. Campaign acceptance remains open. See the latest
 run sections for failures, timings and evidence limits.
 
 ## Reference and test environment
@@ -3595,3 +3596,63 @@ checks (818 substantive, including five X11 cases), 953 Python tests with 37 ski
 format, host/Linux Clippy, Linux MSRV compilation and release linking. All 101
 source-input hashes stayed unchanged. Live validation uses a fresh run and an
 explicit menu-Start operation that checks recording evidence before the click.
+
+
+## Run052: actual Focus completion and restart — 15 October 2026
+
+One existing gpt-6-luna medium player used immutable source `64f3634` and Linux
+CLI SHA-256 `a2195d29b1d02d277a3127d6dae45bf85ba9146e7cd4fe120887068c0a6105c8`.
+All nine exact-source CI jobs passed. Normal, historical, vanilla Germany began
+paused on 1 January 1936; no mods or DLC were enabled. The 512×288 recording's
+first packet preceded the explicit campaign-Start artifact and click. Seven
+menu clicks were recorded, followed by exclusive player ownership. Private
+harness setup corrections preceded the grant; none replayed a game action.
+
+The first `hoi4_focus_completed` read returned empty membership in 25.889 ms RPC
+(18.123 ms reader). Ordinary clock input set speed4 while paused. A one-entry,
+one-assignment-per-day plan performed OpenPolitics, OpenFocus, View and Start,
+with four Intent/Verified pairs and one core reservation. The assignment wait
+returned in 11.106 seconds with active Rhineland. This was assignment evidence;
+actual completion was observed separately after unpause.
+
+The player stopped the worker, unpaused through verified ordinary clock input,
+and restarted the identical plan. Five 45-second waits returned explicitly
+historical timeout snapshots. The sixth advancing wait woke on `focus_changed`
+at 4 February 01:00, with no active Focus. Unpause reply to this reply took
+336.284 seconds under x86 CPU emulation. The player stopped the worker and
+paused normally. Fresh overview and completed-membership reads at 4 February
+19:00 agreed: exactly `GER_remilitarize_the_rhineland` was completed and the
+active key was null. The final membership read took 26.666 ms RPC (19.466 ms
+reader). Cause, repeat counts, eligibility and other Focus trees remain outside
+this observer's claims.
+
+A final identical-plan start was immediately followed by STOP, with no intervening
+RPC; their replies were 35.070 ms apart. All three STOPs retained the original
+assignment request, one completed entry, no pending/in-flight entry and no
+uncertainty. Independent final journals contain exactly one core Intent/success
+pair, four Focus stage pairs, no research actions and three clock pairs (speed,
+unpause, pause). Navigation history contains three preparations and one Start
+goal, with no refusal or quarantine. There was no duplicate input after restart.
+STOP's budget 1/1/0 belongs to the durable last-attempt day, 1 January; it does not
+claim an attempt on 4 February. Fresh advancing-day digests reported 0/1/1.
+
+All 32 player RPCs succeeded. Successful digests retained historical `input_busy`
+and `torn_read: Research UI witness changed` diagnostics; waits rejected no torn
+snapshots. That message came from the shared `Witnesses` helper and does not
+identify a research GUI field. The exact changing field remains unknown. The
+following wording-only correction calls this a snapshot witness; it does not
+change stability checks, reads or retry policy.
+
+Canonical release/status matched independent guest readback. The 702.666-second
+recording finalized as two H.264 segments and passed ffprobe. One ordinary owned
+close returned exit0, with no signal or core dump, in 2.179 seconds. Exact game,
+owner and recorder absence was checked, and both brokers closed. Root's offline
+verification cross-checked raw RPCs, durable journals, menu/recording chronology,
+build identity and close evidence. This passes the bounded actual-Focus-completion
+gate. Successive Focus automation, a clean two-year run, full campaigns and native
+Windows/macOS adapters remain unaccepted. Run051's failure remains unchanged.
+
+The subsequent evidence/wording publication passed 713 Rust 1.86 host tests,
+953 Python tests (37 skips), format, host/Linux Clippy, Linux MSRV all-target
+compilation and release linking. Actual Linux fixtures were not repeated for
+these wording-only changes; run052 remains pinned to its original source/binary.

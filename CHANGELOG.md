@@ -2,6 +2,13 @@
 
 ## Unreleased native preview
 
+- Verify actual Rhineland Focus completion in run052, followed by same-plan
+  restart/STOP without duplicate input. Preserve historical background read
+  diagnostics and distinguish STOP's last-attempt-day budget from current-day
+  digests. Recording and normal exit passed; full campaigns remain unaccepted.
+- Describe shared stability errors as snapshot changes instead of research UI
+  changes. Error codes, reads and retry policy remain unchanged.
+
 - Scope Focus Start and selected-detail reads to the selected window and its
   Start button. View retains tree-node checks; ownership, canonical identity,
   Start callback/geometry and final torn-read checks remain required.
@@ -17,7 +24,7 @@
   busy/torn/deadline refusals. The 1,982-second recording and normal exit passed.
 - Add the read-only `hoi4_focus_completed` preview. Its bounded own canonical
   membership reader follows the current engine predicate independently of GUI
-  state; static and fixture validation do not establish live Focus completion.
+  state; run052 later verified actual Rhineland completion.
 
 - Verify run049 worker research-to-Focus-to-research assignment and both explicit
   target-wait cases. Preserve Luna's initial stop over an omitted summary receipt;

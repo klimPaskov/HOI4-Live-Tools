@@ -28,7 +28,7 @@ impl ReadMemory for Witnesses<'_> {
         let mut reads = self.reads.borrow_mut();
         if let Some(prior) = reads.get(&(address, size)) {
             if *prior != bytes {
-                return Err(Error::new("torn_read", "Research UI field changed"));
+                return Err(Error::new("torn_read", "Snapshot field changed"));
             }
         } else {
             reads.insert((address, size), bytes.clone());
@@ -62,7 +62,7 @@ impl Witnesses<'_> {
                 ));
             }
             if current != prior {
-                return Err(Error::new("torn_read", "Research UI witness changed"));
+                return Err(Error::new("torn_read", "Snapshot witness changed"));
             }
             bytes += size;
         }

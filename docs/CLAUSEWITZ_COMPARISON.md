@@ -3,7 +3,9 @@
 Latest checkpoint, 15 October 2026: run050 passed actual research completion and
 same-slot refill in 27m 37s under x86 CPU emulation. Run051 verified an empty
 completed-Focus baseline in 29.433 ms RPC, but refused Start before possible input
-when a tree-node witness changed. No Focus completion was observed. These remain
+when a tree-node witness changed. Run052 then verified actual Rhineland completion
+on 4 February, 5m 36s after the unpause reply, and restart without duplicate input.
+Its initial/final completed-Focus reads took 25.889/26.666 ms RPC. These remain
 bounded tests, with no matched upstream completion benchmark or accepted campaign.
 
 Run049 completed three worker assignments
@@ -17,8 +19,8 @@ The player initially stopped because the Focus summary showed only the latest
 preparation. Independent saved journals proved the earlier reverse transition;
 a separate restart/STOP supplement retained all completions and budget 3/3 without
 replay. Recording and normal exit passed. The original upstream posting timeout
-stays quarantined. Focus completion and full campaigns remain open; run050's
-research completion/refill evidence is recorded below.
+stays quarantined. Full campaigns remain open; run050's research completion/refill
+and run052's Focus completion evidence are recorded below.
 See [the complete run049 evidence](CLAUSEWITZ_VALIDATION.md#recorded-reverse-worker-run049--15-october-2026).
 
 This is a development comparison, not proof of overall superiority. Required
@@ -251,6 +253,20 @@ remain in the evidence. Its exact original core refusal reason was not retained.
 Recording and normal exit passed. This extends the Rust evidence beyond paused
 assignments; no matched upstream completion/refill benchmark was run, and it
 does not establish overall superiority or campaign competence.
+
+## Advancing-time Rust Focus gate
+
+Run052 on source `64f3634` completed Rhineland and independently verified its
+engine membership on 4 February 1936. The assignment wait took 11.106 seconds;
+unpause reply to Focus-change reply took 336.284 seconds under x86 CPU emulation.
+The completed-membership reader itself took 18.123/19.466 ms, versus
+25.889/26.666 ms including MCP transport. These are two samples, not percentiles.
+Five intermediate timeout responses were explicitly historical. Background
+busy/torn diagnostics persisted, but all 32 player RPCs succeeded. The adjacent
+restart/STOP replies were 35.070 ms apart and preserved the original assignment
+receipt and historical budget, with no duplicate action in the saved journals.
+The 702.666-second recording and normal exit passed. This does not establish
+successive Focus automation, matched upstream performance or campaign competence.
 
 ## Live comparison still required
 
