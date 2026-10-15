@@ -216,3 +216,56 @@ fn query_shape_and_legacy_receipts_are_unambiguous() {
     let c: SearchControl = serde_json::from_value(old.clone()).unwrap();
     assert_eq!(serde_json::to_value(c).unwrap(), old);
 }
+
+#[test]
+fn query_readback_evidence_keeps_last_snapshot_and_actual_failure_without_authority() {
+    let mut transport = serde_json::json!({"ordinary_text":true,"characters":14,
+        "delivery":"ServerConfirmed","error":null,"game_action_verified":false,
+        "preinput_rejected_reads":[{"code":"torn_read","message":"original before input"}]});
+    let mut state = queried();
+    let selection = serde_json::json!({"match_count":2,"requested_match_count":1,
+        "selected_key":"GER_other","selected_matches_requested":false});
+    state
+        .search_control
+        .as_mut()
+        .unwrap()
+        .requested_selection_verified = Some(false);
+    query_readback::record(&mut transport, Ok((&state, Some(&selection))));
+    query_readback::record(&mut transport, Err(&error("torn_read", "after input")));
+    state
+        .search_control
+        .as_mut()
+        .unwrap()
+        .text_receiver_verified = false;
+    query_readback::record(&mut transport, Ok((&state, Some(&selection))));
+    let evidence = &transport["postinput_readback"];
+    assert_eq!(evidence["reads"], 3);
+    assert_eq!(evidence["accepted_reads"], 2);
+    assert_eq!(evidence["rejected_reads"], 1);
+    assert_eq!(
+        evidence["last_observed"]["search_control"]["query_text"],
+        "four year plan"
+    );
+    assert_eq!(
+        evidence["last_observed"]["search_control"]["text_receiver_verified"],
+        false
+    );
+    assert_eq!(evidence["last_observed"]["selection"], selection);
+    assert!(evidence["last_observed"].get("epoch").is_none());
+    assert_eq!(evidence["input_authorized"], false);
+    assert!(!state.reached(&query_target()));
+    let terminal = with_transport_cause(
+        error(
+            "action_uncertain",
+            "Original readback deadline; never replay",
+        ),
+        Some(&transport),
+    );
+    assert_eq!(terminal.code, "action_uncertain");
+    assert!(terminal
+        .message
+        .starts_with("Original readback deadline; never replay"));
+    assert!(terminal.message.contains("postinput_readback="));
+    assert!(terminal.message.contains("after input"));
+    assert!(terminal.message.contains("original before input"));
+}

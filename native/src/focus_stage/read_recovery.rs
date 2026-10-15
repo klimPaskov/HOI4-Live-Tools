@@ -25,7 +25,7 @@ fn deadline() -> Error {
 
 // This observer is tested on every platform. Keep its diagnostic formatting
 // independent of the Unix-only durable navigation implementation.
-fn bounded_reason(message: &str) -> String {
+pub(super) fn bounded_reason(message: &str) -> String {
     let mut out = String::new();
     for c in message.chars().filter(|c| !c.is_control()) {
         if out.len() + c.len_utf8() > 160 {

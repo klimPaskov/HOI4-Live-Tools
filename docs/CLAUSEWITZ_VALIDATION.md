@@ -4185,3 +4185,35 @@ The corrected source passed 784 Rust 1.86 host tests, 894 reported actual Linux
 checks (892 substantive), five included X11 cases and 953 Python tests (37 skips).
 Host/Linux/Windows Clippy, formatting, Linux MSRV and release linking passed.
 All 110 native inputs remained unchanged through those checks.
+
+## Run065: query readback uncertainty — 15 October 2026 UTC
+
+Immutable `430bb05` passed OpenPolitics, OpenFocus and SearchField in paused
+vanilla Normal/historical Germany. The sole SearchQuery returned
+`action_uncertain` after 10,007.045 ms, with a readback deadline cause. Its
+diagnostic retained one discarded pre-input `torn_read` at `search_edit+0x74`,
+four bytes. Recovery proceeded to possible input, but the failure response did
+not retain transport acknowledgement or the post-input snapshots. Exact query
+text and canonical selection therefore remain unverified. Do not attribute the
+post-input failure to the earlier changed field or retroactively identify
+Run063's unclassified witness.
+
+The durable journal contains three intent/verified pairs and one unresolved
+SearchQuery Intent. Luna made no mutation retry, historical replay, post-query
+read, View or final overview. Independent audit found 14 RPCs and one error,
+with no research, clock or worker actions. Canonical release/status proof matched
+the final RPCs. The 280-second recording began before campaign Start and passed
+integrity checks. Ordinary close took 2.545 seconds with exit 0; all four guest
+and four host instances were absent. The 110 native inputs and 24 helpers stayed
+unchanged, and all nine cross-platform CI jobs passed on the exact source.
+
+The next diagnostic retains counts, first/last bounded rejected-read causes and
+the last witnessed query/routing/selection facts from existing post-input reads.
+Failure responses retain the actual transport classification. This adds no reads,
+input retries, deadline extension or weaker success predicate. The original
+Run065 post-input state remains unknown; no full campaign has passed.
+
+The diagnostic source passed 786 Rust 1.86 host tests, 896 reported actual Linux
+checks (894 substantive), five included X11 cases and 953 Python tests (37 skips).
+Formatting, host/Linux/Windows Clippy, Linux MSRV and release linking passed;
+all 111 native inputs remained unchanged through those checks.

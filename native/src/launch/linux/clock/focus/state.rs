@@ -188,6 +188,7 @@ pub(super) struct Observation {
     pub(super) politics_context: PoliticsContext,
     pub(super) politics: Value,
     pub(super) scope: Scope,
+    pub(super) search_selection: Option<Value>,
 }
 pub(super) fn observe(
     process: &dyn Process,
@@ -212,12 +213,22 @@ pub(super) fn observe_with_search(
     let (politics, politics_context) = politics_focus::owned_snapshot(process, geometry)?;
     let scope = join(&context, &politics_context)?;
     let state = model(&body, &context, &politics, &politics_context, key, epoch)?;
+    // Already-read own search facts only. No diagnostic can grant input or
+    // substitute for SearchControl's complete selection predicate.
+    let search_selection = body.get("search").map(|s| serde_json::json!({
+        "available":s["available"],"current_item_count":s["current_item_count"],
+        "search_cache_count":s["search_cache_count"],
+        "complete_current_item_coverage":s["complete_current_item_coverage"],
+        "match_count":s["match_count"],"requested_match_count":s["requested_match_count"],
+        "selected_key":s["selected_key"],"selected_matches_requested":s["selected_matches_requested"],
+        "selected_in_matches":s["selected_in_matches"]}));
     Ok(Observation {
         state,
         context,
         politics_context,
         politics,
         scope,
+        search_selection,
     })
 }
 

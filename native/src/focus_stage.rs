@@ -22,6 +22,8 @@ use std::{
 };
 
 #[cfg(any(target_os = "linux", test))]
+pub(crate) mod query_readback;
+#[cfg(any(target_os = "linux", test))]
 pub(crate) mod read_recovery;
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -73,6 +75,18 @@ pub(crate) fn with_transport_cause(
     if let Some(cause) = transport.and_then(|v| v.get("error")) {
         if let (Some(code), Some(message)) = (cause["code"].as_str(), cause["message"].as_str()) {
             error.message = format!("{code}: {message}; {}", error.message);
+        }
+    }
+    if let Some(t) = transport.filter(|t| t["ordinary_text"] == true) {
+        error.message.push_str(&format!(
+            "; query_transport={}",
+            serde_json::json!({"delivery":t["delivery"],"characters":t["characters"],
+                "game_action_verified":false})
+        ));
+        if let Some(readback) = t.get("postinput_readback") {
+            error
+                .message
+                .push_str(&format!("; postinput_readback={readback}"));
         }
     }
     if let Some(reads) = transport

@@ -450,6 +450,13 @@ intervals and the unchanged absolute deadline. Guard/pin acceptance, state
 preconditions and the one ordinary dispatcher remain outside that retry loop.
 Rejected reads remain in transport diagnostics, including terminal error text.
 
+Run065 recovered one pre-input witness change at `search_edit+0x74`, then reached
+the post-input deadline with unresolved Intent. The original post-input state
+was not retained and remains unknown. The next diagnostic records bounded
+historical facts from reads already made after dispatch, plus the actual
+transport classification on failure. It adds no memory reads, engine calls,
+input retries or changed acceptance predicates.
+
 For future Enter support, exact editor table `0x4349b78` method `+0x38` points
 to `0x2f707f0`. Its symbol-13 branch calls listener method `+0x20` (`0x1527aa0`),
 which invokes the already pinned member `0x1510830`. That member joins the

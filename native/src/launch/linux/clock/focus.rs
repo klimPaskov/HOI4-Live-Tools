@@ -414,14 +414,24 @@ fn point(
 }
 impl stage::Backend for FocusBackend<'_> {
     fn observe(&mut self) -> Result<stage::OwnState> {
-        Ok(observed(
+        let result = observed(
             self.process,
             self.guard,
             &self.target,
             &mut self.scope,
             false,
-        )?
-        .state)
+        );
+        if self.target.stage == stage::Stage::SearchQuery {
+            if let Some(transport) = &mut self.last_transport {
+                stage::query_readback::record(
+                    transport,
+                    result
+                        .as_ref()
+                        .map(|o| (&o.state, o.search_selection.as_ref())),
+                );
+            }
+        }
+        result.map(|o| o.state)
     }
     fn candidate(&mut self, target: &stage::Target) -> Result<stage::Candidate> {
         if target != &self.target {

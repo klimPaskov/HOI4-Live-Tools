@@ -231,6 +231,19 @@ exact-process absence were audited. The correction keeps bounded diagnostic
 formatting inside the portable observer and adds Windows cross-compilation to
 the local checks. Run064 is an aborted setup, not a live query result.
 
+Run065 on immutable `430bb05` passed the three opening/field stages, then its
+only SearchQuery returned `action_uncertain` after the ten-second readback
+deadline. One wholly discarded pre-input read identified `search_edit+0x74`
+(four bytes); the retry recovered before possible input. The post-input states
+and transport acknowledgement were not retained in the failure response, so
+the actual query/selection remain unverified. Its durable Intent remains
+unresolved. No action retry, historical replay, later observation or View followed.
+Independent audit verified 14 RPCs, one error, canonical release, a 280-second
+recording, normal exit 0, exact-process absence and unchanged 110 inputs/24 helpers.
+All nine CI jobs passed. Both brokers are closed. The next source preserves
+bounded already-read post-input facts and transport classification on failure;
+it changes neither input, deadlines nor acceptance predicates.
+
 ## Immediate acceptance work
 
 1. Implement and verify ordinary navigation to an offscreen Focus, then verify
