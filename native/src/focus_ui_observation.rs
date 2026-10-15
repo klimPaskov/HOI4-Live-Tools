@@ -37,6 +37,7 @@ pub(crate) fn report(
         "managed_mode":state.managed_mode,"politics_root":state.politics_root,
         "focus_root":state.focus_root,"own_detail_counts":counts(state.own_detail_counts),
         "own_research_info_counts":counts(state.own_research_info_counts),
+        "research_panel_root":state.research_panel_root,"research_tree_root":state.research_tree_root,
         "selected_focus_id":state.selected_focus,"requested_detail_ready":state.requested_detail_ready,
         "date_raw":focus_date_raw,"politics_date_raw":politics_date_raw,
         "freshness":{"observed_unix_ms":observed_unix_ms,"elapsed_ms":elapsed_ms},
@@ -92,6 +93,8 @@ mod tests {
             focus_root: LocalRoot::Hidden,
             own_detail_counts: None,
             own_research_info_counts: Some([1, 2]),
+            research_panel_root: LocalRoot::Unknown,
+            research_tree_root: LocalRoot::Unknown,
             selected_focus: None,
             requested_detail_ready: None,
         };

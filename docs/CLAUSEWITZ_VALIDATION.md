@@ -3265,3 +3265,28 @@ Review moved three invalid-wait cases from an unrelated catalog test into the
 wait test; the protocol suite was rerun and the Linux bundle rebuilt before its
 full checks. Production code was unchanged by that test correction. Installed-game
 validation of the new wait option remains pending.
+
+## Reverse worker transition: offline gates — 15 October 2026
+
+A separately typed `OpenPoliticsFromResearch` stage now connects a settled own
+research panel to Politics using the ordinary Q transport. It requires mode5,
+positive own visible panel/hidden tree, hidden Politics/Focus roots and complete
+zero detail/info blockers. Readback requires mode12, settled Politics and both
+research roots hidden, with the original canonical active-focus state unchanged.
+Both owned profiles are required; automatic use also requires both worker domain
+permissions. The original mode23 OpenPolitics stage is unchanged. Unknown roots
+cannot authorize the new route, and absent optional facts preserve old receipt
+serialization/checksums. Any uncertain input remains quarantined across restart.
+
+Composed validation passed 684 Rust 1.86 host tests, 791 reported actual Linux
+checks (789 substantive; two helper cases excluded), all five X11 cases and
+953 Python tests (37 skips), plus format, host/Linux Clippy, Linux MSRV all-target
+compilation and release linking. New fixtures cover all root/permission gates,
+foreign objects before payload access, final witness changes, exact stage/candidate
+pairing, preserved Focus, receipt compatibility and durable quarantine.
+
+This is offline evidence. The next fresh immutable recorded run must verify a
+three-assignment research → Focus → research plan, both new target-wait cases,
+fresh own state, and same-plan immediate restart/STOP without extra input or
+budget reset. Reverse live navigation, actual completion/refill and full campaigns
+remain unaccepted.

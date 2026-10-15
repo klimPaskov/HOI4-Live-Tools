@@ -946,6 +946,16 @@ pub(crate) enum Next {
     Stage(Stage),
     Start,
 }
+pub(crate) fn preparation_permission(stage: Stage, research_permission: bool) -> Result<()> {
+    if stage == Stage::OpenPoliticsFromResearch && !research_permission {
+        Err(Error::new(
+            "capability_unavailable",
+            "Research-to-Politics requires both worker domain permissions",
+        ))
+    } else {
+        Ok(())
+    }
+}
 pub(crate) fn next(state: &OwnState, target: &Target) -> Result<Next> {
     state.validate(target)?;
     match &state.active_focus {
@@ -960,6 +970,7 @@ pub(crate) fn next(state: &OwnState, target: &Target) -> Result<Next> {
         ActiveFocus::Idle => {}
     }
     for stage in [
+        Stage::OpenPoliticsFromResearch,
         Stage::OpenPolitics,
         Stage::OpenFocus,
         Stage::View,
@@ -1059,6 +1070,8 @@ mod tests {
             focus_root: LocalRoot::Hidden,
             own_detail_counts: Some([0, 0]),
             own_research_info_counts: Some([0, 0]),
+            research_panel_root: LocalRoot::Unknown,
+            research_tree_root: LocalRoot::Unknown,
             selected_focus: None,
             requested_detail_ready: Some(false),
         }
@@ -1240,6 +1253,53 @@ mod tests {
         std::fs::write(t.path(), "external change").unwrap();
         assert!(n.check_handoff(&e, day).is_err());
         assert!(n.blocked());
+    }
+    #[test]
+    fn research_return_selection_permissions_and_durable_preparation() {
+        let mut own = state();
+        own.managed_mode = Some(5);
+        assert!(next(&own, &target(Stage::Start)).is_err());
+        own.research_panel_root = LocalRoot::Ready;
+        own.research_tree_root = LocalRoot::Hidden;
+        assert!(matches!(
+            next(&own, &target(Stage::Start)).unwrap(),
+            Next::Stage(Stage::OpenPoliticsFromResearch)
+        ));
+        assert_eq!(
+            preparation_permission(Stage::OpenPoliticsFromResearch, false)
+                .unwrap_err()
+                .code,
+            "capability_unavailable"
+        );
+        preparation_permission(Stage::OpenPoliticsFromResearch, true).unwrap();
+        preparation_permission(Stage::OpenPolitics, false).unwrap();
+        let t = Scratch::new();
+        let e = entry();
+        let day = 1936 * 365;
+        let mut n = Navigator::open(&t.path(), epoch(), std::slice::from_ref(&e)).unwrap();
+        let id = n
+            .begin(
+                e.clone(),
+                target(Stage::OpenPoliticsFromResearch),
+                day,
+                1,
+                binding(),
+            )
+            .unwrap();
+        let mut execution = receipt(id);
+        execution.receipt.target = target(Stage::OpenPoliticsFromResearch);
+        execution.receipt.observed.research_panel_root = LocalRoot::Hidden;
+        execution.receipt.observed.research_tree_root = LocalRoot::Hidden;
+        n.verified(&execution, &binding()).unwrap();
+        assert!(n.data.goals.is_empty());
+        drop(n);
+        let n = Navigator::open(&t.path(), epoch(), std::slice::from_ref(&e)).unwrap();
+        assert!(!n.blocked());
+        assert_eq!(
+            n.latest()["preparation"]["stage"],
+            "OpenPoliticsFromResearch"
+        );
+        assert_eq!(n.latest()["preparation"]["goal_completed"], false);
     }
     #[test]
     fn idle_navigation_active_wait_unknown_refusal_and_hard_gate() {

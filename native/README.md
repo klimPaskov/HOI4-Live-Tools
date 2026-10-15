@@ -53,8 +53,9 @@ one day within the durable assignment limit. Ordered research queues now retain
 one pending head per slot and wait for fresh empty-slot evidence; refill after
 an actual technology finishes still awaits live validation. A one-way automatic
 Focus-to-research handoff passed recorded run047, including same-plan restart
-without input replay or a budget reset. Reverse
-research-to-Focus navigation, economy, army and naval adapters remain unfinished. Private daily storage
+without input replay or a budget reset. The separate research-to-Focus preview
+requires both domain permissions and positive own panel/tree facts; its live gate
+is pending. Economy, army and naval adapters remain unfinished. Private daily storage
 supports Unix only; other platforms return an explicit capability error.
 
 Late Focus results retain verified evidence and separately record quarantine.
@@ -175,7 +176,18 @@ including after a known nonqueued refusal. Occupied slots and pending research
 retries bypass this handoff. Run047 verified the complete worker path and adjacent
 restart/STOP, retaining both completion IDs and budget2/2. Its SelectSlot step had
 one preserved BeforeIntent torn-read, then succeeded under the existing bounded
-retry policy. Research-to-Focus navigation is unavailable.
+retry policy.
+
+The separate `open_politics_from_research` preview uses ordinary Q only from
+settled mode5 with an own visible research panel, hidden research tree, hidden
+Politics/Focus roots and complete zero detail/info blockers. Readback must show
+settled mode12 Politics with both research roots hidden and the original canonical
+active-focus state unchanged. Both profiles are required; automatic use also
+requires both worker domain permissions. It has its own stage and receipts: the
+original `open_politics` remains mode23-only. Missing roots remain Unknown and
+cannot authorize the new route. Optional root fields preserve old receipt bytes
+and checksums when absent. Offline validation is separate from the pending
+recorded research → Focus → research worker test.
 
 To wait for a known assignment state, use `hoi4_wait_for` with, for example:
 
@@ -390,7 +402,8 @@ distinguishes the event start callback from the separate no-op listener. This
 metadata grants no action authority; the separate opt-in service supplies the
 lease, journal and verified ordinary dispatch boundary.
 
-The optional `hoi4_focus_attempt` service provides `open_politics`, `close_politics`, `open_focus`,
+The optional `hoi4_focus_attempt` service provides `open_politics`,
+`open_politics_from_research`, `close_politics`, `open_focus`,
 `view` and `start` stages for an exact own focus ID. Its point preparer shares
 canonical own-focus, active-progress, campaign and local UI witnesses. It requires
 settled own roots and complete local blocker facts, then uses exact Sprite,

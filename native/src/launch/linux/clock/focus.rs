@@ -42,8 +42,8 @@ impl Service {
     }
 }
 pub(super) fn tool() -> Value {
-    json!({"name":"hoi4_focus_attempt","description":"Preview: one ordinary OpenPolitics/ClosePolitics Q, OpenFocus named-button, View or Start stage for an exact own canonical focus ID. ClosePolitics requires that exact focus active and preserves it through settled closed-root readback. Requires explicit owned profile, exclusive lease, settled own roots and complete own scoped blockers. Supported exact Sprite, zero-angle Text or unmasked Frame geometry; unknown branches refuse. Canonical readback verifies current state, not event causality or eligibility. Uncertain input is quarantined; no replay, coordinates, activation or engine calls.",
-        "inputSchema":{"type":"object","properties":{"stage":{"enum":["open_politics","close_politics","open_focus","view","start"]},"focus_id":{"type":"string","minLength":1,"maxLength":128},"request_id":{"type":"string","minLength":1,"maxLength":128},"lease_token":{"type":"string"}},"required":["stage","focus_id","request_id","lease_token"],"additionalProperties":false}})
+    json!({"name":"hoi4_focus_attempt","description":"Preview: one ordinary OpenPolitics/ClosePolitics/OpenPoliticsFromResearch Q, OpenFocus named-button, View or Start stage for an exact own canonical focus ID. ClosePolitics requires that exact focus active and preserves it through settled closed-root readback. OpenPoliticsFromResearch requires both profiles, an own settled research panel and hidden tree; its live gate is pending. Requires explicit owned profile, exclusive lease, settled own roots and complete own scoped blockers. Supported exact Sprite, zero-angle Text or unmasked Frame geometry; unknown branches refuse. Canonical readback verifies current state, not event causality or eligibility. Uncertain input is quarantined; no replay, coordinates, activation or engine calls.",
+        "inputSchema":{"type":"object","properties":{"stage":{"enum":["open_politics","open_politics_from_research","close_politics","open_focus","view","start"]},"focus_id":{"type":"string","minLength":1,"maxLength":128},"request_id":{"type":"string","minLength":1,"maxLength":128},"lease_token":{"type":"string"}},"required":["stage","focus_id","request_id","lease_token"],"additionalProperties":false}})
 }
 pub(super) fn observe_ui(
     owner: &ClockService,
@@ -88,6 +88,7 @@ fn parse(args: &serde_json::Map<String, Value>) -> Result<Arguments<'_>> {
     allowed(args, &["stage", "focus_id", "request_id", "lease_token"])?;
     let selected = match string(args, "stage")? {
         "open_politics" => stage::Stage::OpenPolitics,
+        "open_politics_from_research" => stage::Stage::OpenPoliticsFromResearch,
         "close_politics" => stage::Stage::ClosePolitics,
         "open_focus" => stage::Stage::OpenFocus,
         "view" => stage::Stage::View,
@@ -165,9 +166,9 @@ pub(super) fn execute_internal(
     target: stage::Target,
     until: Instant,
 ) -> Result<(stage::Execution, Option<Value>)> {
-    // Run043 verified ordinary Q from exact active Focus/mode12 to mode23.
-    // The typed stage retains fresh preflight, pinned focus, lease, journal and
-    // readback guards. The opted-in daily worker shares this same executor.
+    // Each fixed Q route has its own typed preconditions and receipt.
+    // Closing Politics and returning from research also preserve active Focus.
+    // The opted-in daily worker shares this executor; no raw key API exists.
     drop(input_permit(gate)?);
     state.authority.authorize(token, &state.guard.epoch)?;
     if target.epoch != state.guard.epoch {
@@ -189,6 +190,12 @@ pub(super) fn execute_internal(
         return Err(Error::new(
             "action_uncertain",
             "Unresolved clock/research/focus input blocks focus",
+        ));
+    }
+    if target.stage == stage::Stage::OpenPoliticsFromResearch && state.research.is_none() {
+        return Err(Error::new(
+            "capability_unavailable",
+            "Research-to-Politics requires both owned profiles",
         ));
     }
     let ControlState {
@@ -214,7 +221,7 @@ pub(super) fn execute_internal(
         target: target.clone(),
         scope: None,
         candidate_selection: None,
-        close_active: None,
+        preserved_focus: None,
         last_transport: None,
         until,
     };
@@ -244,7 +251,7 @@ struct FocusBackend<'a> {
     authority: &'a Path,
     target: stage::Target,
     scope: Option<state::Scope>,
-    close_active: Option<stage::ActiveFocus>,
+    preserved_focus: Option<stage::ActiveFocus>,
     candidate_selection: Option<Selection>,
     last_transport: Option<Value>,
     until: Instant,
@@ -390,17 +397,18 @@ impl stage::Backend for FocusBackend<'_> {
         let o = observed(self.process, self.guard, target, &mut self.scope, false)?;
         o.state.validate(target)?;
         o.state.preflight(target)?;
-        if matches!(
-            target.stage,
-            stage::Stage::OpenPolitics | stage::Stage::ClosePolitics
-        ) {
+        if target.stage.is_shortcut() {
             self.controls
                 .preflight(self.process, &ControlKey::PoliticsPanel)?;
-            return Ok(if target.stage == stage::Stage::ClosePolitics {
-                self.close_active = Some(o.state.active_focus);
-                stage::Candidate::ClosePolitics
-            } else {
-                stage::Candidate::OpenPolitics
+            if target.stage.preserves_focus() {
+                self.preserved_focus = Some(o.state.active_focus);
+            }
+            return Ok(match target.stage {
+                stage::Stage::ClosePolitics => stage::Candidate::ClosePolitics,
+                stage::Stage::OpenPoliticsFromResearch => {
+                    stage::Candidate::OpenPoliticsFromResearch
+                }
+                _ => stage::Candidate::OpenPolitics,
             });
         }
         let (point, context) = point(
@@ -430,18 +438,18 @@ impl stage::Backend for FocusBackend<'_> {
         let mut pin = self.scope.clone();
         let profile = self.profile;
         let selected = self.candidate_selection.clone();
-        let close_active = self.close_active.clone();
+        let preserved_focus = self.preserved_focus.clone();
         let fresh_check = |guard: &mut Guard, pin: &mut Option<state::Scope>| -> Result<()> {
             let o = observed(process, guard, &target, pin, false)?;
             o.state.validate(&target)?;
             o.state.preflight(&target)?;
-            if close_active
+            if preserved_focus
                 .as_ref()
                 .is_some_and(|expected| expected != &o.state.active_focus)
             {
                 return Err(Error::new(
                     "torn_read",
-                    "Pinned canonical active focus changed before ClosePolitics Q",
+                    "Pinned canonical active focus changed before navigation Q",
                 ));
             }
             if let Some(expected) = &selected {
@@ -455,11 +463,17 @@ impl stage::Backend for FocusBackend<'_> {
             Ok(())
         };
         match candidate {
-            candidate @ (stage::Candidate::OpenPolitics | stage::Candidate::ClosePolitics)
+            candidate @ (stage::Candidate::OpenPolitics
+            | stage::Candidate::ClosePolitics
+            | stage::Candidate::OpenPoliticsFromResearch)
                 if matches!(
                     (candidate, target.stage),
                     (stage::Candidate::OpenPolitics, stage::Stage::OpenPolitics)
                         | (stage::Candidate::ClosePolitics, stage::Stage::ClosePolitics)
+                        | (
+                            stage::Candidate::OpenPoliticsFromResearch,
+                            stage::Stage::OpenPoliticsFromResearch
+                        )
                 ) =>
             {
                 let mut may_queue = false;
@@ -491,12 +505,7 @@ impl stage::Backend for FocusBackend<'_> {
                 self.last_transport = Some(diagnostic);
                 delivery
             }
-            stage::Candidate::Point(original)
-                if !matches!(
-                    target.stage,
-                    stage::Stage::OpenPolitics | stage::Stage::ClosePolitics
-                ) =>
-            {
+            stage::Candidate::Point(original) if !target.stage.is_shortcut() => {
                 match self.controls.prepare_left_click_until(
                     process,
                     PointerDisplay {
@@ -551,7 +560,9 @@ impl stage::Backend for FocusBackend<'_> {
             return Err(Error::new("focus_deadline", "Input-idle deadline ended"));
         }
         match candidate {
-            stage::Candidate::OpenPolitics | stage::Candidate::ClosePolitics => self
+            stage::Candidate::OpenPolitics
+            | stage::Candidate::ClosePolitics
+            | stage::Candidate::OpenPoliticsFromResearch => self
                 .controls
                 .preflight(self.process, &ControlKey::PoliticsPanel),
             stage::Candidate::Point(point) => {
@@ -615,6 +626,33 @@ mod tests {
             .as_array()
             .unwrap()
             .contains(&json!("close_politics")));
+    }
+    #[test]
+    fn research_return_parser_has_no_caller_supplied_panel_authority() {
+        let value = json!({"stage":"open_politics_from_research","focus_id":"GER_rhineland","request_id":"return-once","lease_token":"t"});
+        assert_eq!(
+            parse(value.as_object().unwrap()).unwrap().stage,
+            stage::Stage::OpenPoliticsFromResearch
+        );
+        for extra in [
+            "research_panel_root",
+            "research_tree_root",
+            "managed_mode",
+            "key",
+            "x",
+            "input_authorized",
+        ] {
+            let mut forged = value.clone();
+            forged[extra] = json!(true);
+            assert_eq!(
+                parse(forged.as_object().unwrap()).err().unwrap().code,
+                "invalid_arguments"
+            );
+        }
+        assert!(tool()["inputSchema"]["properties"]["stage"]["enum"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("open_politics_from_research")));
     }
     #[test]
     fn internal_deadline_is_absolute_expired_refuses_and_never_widens() {

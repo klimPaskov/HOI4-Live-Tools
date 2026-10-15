@@ -92,7 +92,7 @@ impl Controller {
         self.research_enabled
     }
     pub(super) fn tool() -> Value {
-        json!({"name":"hoi4_daily_governor","description":"Optional owned daily automatic research refill worker and fresh compact digest. Start requires the existing exclusive lease and explicit typed plan. Navigation uses separately journaled verified stages; only fresh Research or separately opted-in Focus Start completes an assignment. Focus requires default-off owner daily_focus plus plan.focus_permission and existing profile. With both domain permissions, one journaled ClosePolitics stage can bridge a completed Focus to an empty research slot; the reverse transition is unavailable. Economy, army and naval domains remain unavailable. Unknown/uncertain input is never replayed. Stop does not pause the game. Compacted history includes a snapshot_id; details retrieves an exact historical section without game reads or input.","inputSchema":{"type":"object","oneOf":[{"properties":{"op":{"enum":["start","update"]},"lease_token":{"type":"string"},"plan":{"type":"object"}},"required":["op","lease_token","plan"],"additionalProperties":false},{"properties":{"op":{"enum":["digest","stop"]}},"required":["op"],"additionalProperties":false},{"properties":{"op":{"enum":["details"]},"snapshot_id":{"type":"string","minLength":64,"maxLength":64},"section":{"enum":crate::daily_digest::SECTIONS}},"required":["op","snapshot_id","section"],"additionalProperties":false}]}})
+        json!({"name":"hoi4_daily_governor","description":"Optional owned daily automatic research refill worker and fresh compact digest. Start requires the existing exclusive lease and explicit typed plan. Navigation uses separately journaled verified stages; only fresh Research or separately opted-in Focus Start completes an assignment. Focus requires default-off owner daily_focus plus plan.focus_permission and existing profile. With both domain permissions, one journaled ClosePolitics stage can bridge a completed Focus to an empty research slot; a separately typed research-to-Politics shortcut requires both permissions and positive own panel/tree facts; its live gate is pending. Economy, army and naval domains remain unavailable. Unknown/uncertain input is never replayed. Stop does not pause the game. Compacted history includes a snapshot_id; details retrieves an exact historical section without game reads or input.","inputSchema":{"type":"object","oneOf":[{"properties":{"op":{"enum":["start","update"]},"lease_token":{"type":"string"},"plan":{"type":"object"}},"required":["op","lease_token","plan"],"additionalProperties":false},{"properties":{"op":{"enum":["digest","stop"]}},"required":["op"],"additionalProperties":false},{"properties":{"op":{"enum":["details"]},"snapshot_id":{"type":"string","minLength":64,"maxLength":64},"section":{"enum":crate::daily_digest::SECTIONS}},"required":["op","snapshot_id","section"],"additionalProperties":false}]}})
     }
     pub(super) fn call(
         &self,
@@ -606,6 +606,7 @@ fn worker(
                     gate,
                     token,
                     focus_until,
+                    research_permission,
                     day,
                     focus_entry.as_ref().expect("focus head"),
                     report,
@@ -646,6 +647,7 @@ fn worker(
                         gate,
                         token,
                         focus_until,
+                        research_permission,
                         day,
                         entry,
                         report,
@@ -1232,6 +1234,7 @@ fn run_focus(
     gate: &RwLock<bool>,
     token: &str,
     until: Instant,
+    research_permission: bool,
     day: i64,
     entry: &core::Entry,
     report: &Mutex<Value>,
@@ -1285,6 +1288,12 @@ fn run_focus(
     match next {
         crate::daily_focus_navigation::Next::Wait => Ok(FocusRun::Wait),
         crate::daily_focus_navigation::Next::Stage(stage) => {
+            if let Err(error) =
+                crate::daily_focus_navigation::preparation_permission(stage, research_permission)
+            {
+                navigation.refuse_read_only(entry, day, &error)?;
+                return Err(error);
+            }
             let target = crate::focus_stage::Target { stage, ..target };
             run_focus_preparation(
                 navigation,

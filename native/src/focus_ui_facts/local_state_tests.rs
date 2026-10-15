@@ -32,7 +32,9 @@ impl Fixture {
             mode: 13,
             focus: fact.clone(),
             details: vec![fact.clone()],
-            research: Some(vec![fact]),
+            research: Some(vec![fact.clone()]),
+            research_panel: fact.clone(),
+            research_tree: fact,
         }
     }
 }
@@ -133,6 +135,8 @@ fn null_or_unmaterialized_is_unknown_not_hidden() {
         focus: None,
         details: vec![None],
         research: None,
+        research_panel: None,
+        research_tree: None,
     };
     assert_eq!(facts.focus_view_local_hidden(), None);
     assert_eq!(facts.focus_view_local_ready(), None);

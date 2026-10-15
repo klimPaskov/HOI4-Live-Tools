@@ -32,6 +32,8 @@ pub struct FocusUiFacts {
     focus: Option<LocalWindow>,
     details: Vec<Option<LocalWindow>>,
     research: Option<Vec<Option<LocalWindow>>>,
+    research_panel: Option<LocalWindow>,
+    research_tree: Option<LocalWindow>,
 }
 impl FocusUiFacts {
     pub fn focus_mode_selected(&self) -> Option<bool> {
@@ -56,6 +58,16 @@ impl FocusUiFacts {
     }
     pub fn own_research_info_local_counts(&self) -> Option<[usize; 2]> {
         self.research.as_ref().and_then(|v| counts(v))
+    }
+    pub fn research_panel_local_ready(&self) -> Option<bool> {
+        self.research_panel
+            .as_ref()
+            .and_then(LocalWindow::settled_visibility)
+    }
+    pub fn research_tree_local_ready(&self) -> Option<bool> {
+        self.research_tree
+            .as_ref()
+            .and_then(LocalWindow::settled_visibility)
     }
     pub fn local_summary(&self) -> Value {
         json!({"scope":"complete_own_local_gui_flags_only","managed_mode_raw":self.mode,"focus_mode_selected":self.focus_mode_selected(),"focus_view_local_ready":self.focus_view_local_ready(),"focus_detail_visible_animating_counts":self.focus_detail_local_counts(),"own_research_info_visible_animating_counts":self.own_research_info_local_counts(),"global_modal_clear_available":false,"effective_routing_verified":false,"input_authorized":false})
@@ -148,7 +160,23 @@ pub(crate) fn observe(
         }
         details.push(window(r, base, r.u64(panel + 0x7c8)?, registry)?);
     }
+    // Same exact-build own research view/tree association as research_ui.
+    // Null or an unproved country binding remains Unknown, never Hidden.
+    let panel = r.u64(manager + 0xf0)?;
+    let research_panel = if panel == 0 {
+        None
+    } else {
+        exact(r, panel, base + 0x424dc38)?;
+        if r.u64(panel + 0x2f0)? != idler {
+            return Err(Error::new(
+                "invalid_focus_owner",
+                "Own research panel required",
+            ));
+        }
+        window(r, base, r.u64(panel + 0x2f8)?, registry)?
+    };
     let tree = r.u64(manager + 0xf8)?;
+    let mut research_tree = None;
     let research = if tree == 0 {
         None
     } else {
@@ -163,6 +191,7 @@ pub(crate) fn observe(
         if r.i32(tree + 0xe24)? != 6 || (displayed != 0 && displayed != tag) {
             None
         } else {
+            research_tree = window(r, base, r.u64(tree + 0x2f8)?, registry)?;
             let infos = array(r, tree + 0xdc0, 64)?;
             let mut windows = vec![];
             for info in infos {
@@ -183,6 +212,8 @@ pub(crate) fn observe(
         focus,
         details,
         research,
+        research_panel,
+        research_tree,
     })
 }
 

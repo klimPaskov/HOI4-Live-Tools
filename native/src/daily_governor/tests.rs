@@ -1533,6 +1533,8 @@ fn focus_converter_requires_current_start_exact_active_and_full_domain_scope() {
                 focus_root: LocalRoot::Ready,
                 own_detail_counts: Some([0, 0]),
                 own_research_info_counts: Some([0, 0]),
+                research_panel_root: LocalRoot::Unknown,
+                research_tree_root: LocalRoot::Unknown,
                 selected_focus: None,
                 requested_detail_ready: Some(false),
             },

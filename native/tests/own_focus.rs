@@ -2068,3 +2068,6 @@ fn selected_detail_keeps_original_torn_and_process_refusals() {
     assert_eq!(f.checks.get(), 0);
     assert!(f.reads.borrow().is_empty());
 }
+
+#[path = "support/focus_research_root_cases.rs"]
+mod focus_research_root_cases;

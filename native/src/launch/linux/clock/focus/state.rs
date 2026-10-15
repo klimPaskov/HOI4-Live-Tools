@@ -156,6 +156,8 @@ pub(super) fn model(
         focus_root,
         own_detail_counts: counts,
         own_research_info_counts: facts.own_research_info_local_counts(),
+        research_panel_root: settled_root(facts.research_panel_local_ready()),
+        research_tree_root: settled_root(facts.research_tree_local_ready()),
         selected_focus: if ready == Some(true) {
             Some(key.into())
         } else {
@@ -163,6 +165,13 @@ pub(super) fn model(
         },
         requested_detail_ready: ready,
     })
+}
+fn settled_root(visible: Option<bool>) -> LocalRoot {
+    match visible {
+        Some(true) => LocalRoot::Ready,
+        Some(false) => LocalRoot::Hidden,
+        None => LocalRoot::Unknown,
+    }
 }
 pub(super) struct Observation {
     pub(super) state: OwnState,

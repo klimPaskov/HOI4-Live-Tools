@@ -45,6 +45,7 @@ impl UiMemory {
             m.put(0x810a5, &[8]);
         }
         m.word(0x300f8, 0x70000);
+        m.word(0x300f0, 0);
         m.zero(0x70000, 0xe30);
         m.word(0x70000, 0x10000 + 0x424de40);
         m.word(0x702f0, 0x20000);

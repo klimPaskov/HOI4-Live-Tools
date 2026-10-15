@@ -105,8 +105,10 @@ Research uses exact technology IDs, verified panel/slot/category navigation and
 a persisted shared daily budget. Focus has separate owner and plan permissions;
 its worker has recorded Start, plan-update and restart evidence. The new one-way
 Focus-to-research worker handoff passed run047 with one recorded pre-input research
-retry and no replay on restart. Completed-technology refill, reverse panel
-switching and broader strategic adapters remain acceptance gates. Earlier failures, including unresolved clock
+retry and no replay on restart. A separate research-to-Focus shortcut now has
+offline validation and requires settled own panel/tree state; its recorded live
+gate is pending. Completed-technology refill and broader strategic adapters remain
+acceptance gates. Earlier failures, including unresolved clock
 uncertainty, are preserved in the validation report. Three-OS CI checks shared
 code and fixtures; Windows/macOS live adapters still need independent validation.
 

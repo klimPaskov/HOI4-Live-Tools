@@ -24,11 +24,24 @@ use std::{
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub enum Stage {
     OpenPolitics,
+    /// Distinct research-panel-to-Politics Q; never reinterprets old receipts.
+    OpenPoliticsFromResearch,
     /// Guarded mode12-to23 Q; recorded service validation in run045.
     ClosePolitics,
     OpenFocus,
     View,
     Start,
+}
+impl Stage {
+    pub(crate) fn preserves_focus(self) -> bool {
+        matches!(self, Self::ClosePolitics | Self::OpenPoliticsFromResearch)
+    }
+    pub(crate) fn is_shortcut(self) -> bool {
+        matches!(
+            self,
+            Self::OpenPolitics | Self::ClosePolitics | Self::OpenPoliticsFromResearch
+        )
+    }
 }
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub enum Delivery {
@@ -74,6 +87,11 @@ pub enum LocalRoot {
     Ready,
     Animating,
 }
+impl LocalRoot {
+    fn is_unknown(&self) -> bool {
+        *self == Self::Unknown
+    }
+}
 /// Future Backend must derive every field from positively typed own producer
 /// contexts. This library exposes no MCP Boolean/coordinate argument surface.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -90,6 +108,11 @@ pub struct OwnState {
     pub focus_root: LocalRoot,
     pub own_detail_counts: Option<[usize; 2]>,
     pub own_research_info_counts: Option<[usize; 2]>,
+    // Omit unknown defaults to preserve serialized old receipts/checksums.
+    #[serde(default, skip_serializing_if = "LocalRoot::is_unknown")]
+    pub research_panel_root: LocalRoot,
+    #[serde(default, skip_serializing_if = "LocalRoot::is_unknown")]
+    pub research_tree_root: LocalRoot,
     pub selected_focus: Option<String>,
     pub requested_detail_ready: Option<bool>,
 }
@@ -159,6 +182,14 @@ impl OwnState {
             return false;
         }
         match t.stage {
+            Stage::OpenPoliticsFromResearch => {
+                self.managed_mode == Some(12)
+                    && self.politics_root == LocalRoot::Ready
+                    && self.focus_root == LocalRoot::Hidden
+                    && self.research_panel_root == LocalRoot::Hidden
+                    && self.research_tree_root == LocalRoot::Hidden
+                    && self.blockers_clear()
+            }
             Stage::ClosePolitics => {
                 matches!(&self.active_focus, ActiveFocus::Active(id) if id == &t.focus_id)
                     && self.managed_mode == Some(23)
@@ -198,6 +229,14 @@ impl OwnState {
             ));
         }
         let ok = match t.stage {
+            Stage::OpenPoliticsFromResearch => {
+                self.managed_mode == Some(5)
+                    && self.politics_root == LocalRoot::Hidden
+                    && self.focus_root == LocalRoot::Hidden
+                    && self.research_panel_root == LocalRoot::Ready
+                    && self.research_tree_root == LocalRoot::Hidden
+                    && self.blockers_clear()
+            }
             Stage::ClosePolitics => {
                 matches!(&self.active_focus, ActiveFocus::Active(id) if id == &t.focus_id)
                     && self.managed_mode == Some(12)
@@ -249,6 +288,7 @@ pub enum Candidate {
     ClosePolitics,
     /// Fixed ordinary shortcut; no coordinates or arbitrary key arguments.
     OpenPolitics,
+    OpenPoliticsFromResearch,
     Point(PointCandidate),
 }
 /// Trusted internal adapter contract, not a caller-supplied state/input surface.
@@ -494,7 +534,7 @@ impl Journal {
             request_id(&receipt.request_id)?;
             receipt.target.validate_key()?;
             receipt.observed.validate(&receipt.target)?;
-            if (receipt.target.stage == Stage::ClosePolitics
+            if (receipt.target.stage.preserves_focus()
                 && receipt.status == Status::Intent
                 && receipt.observed.preflight(&receipt.target).is_err())
                 || receipt.version != 1
@@ -514,7 +554,7 @@ impl Journal {
                     return Err(error("invalid_journal", "Invalid focus receipt transition"));
                 }
                 if (receipt.status == Status::Verified
-                    && receipt.target.stage == Stage::ClosePolitics
+                    && receipt.target.stage.preserves_focus()
                     && receipt.observed.active_focus != previous.observed.active_focus)
                     || (receipt.status == Status::Verified
                         && !matches!(
@@ -529,8 +569,7 @@ impl Journal {
                         "Focus terminal record contradicts durable intent",
                     ));
                 }
-            } else if (receipt.target.stage == Stage::ClosePolitics
-                && receipt.status == Status::Verified)
+            } else if (receipt.target.stage.preserves_focus() && receipt.status == Status::Verified)
                 || receipt.status == Status::NotQueued
                 || (receipt.status == Status::Verified && receipt.delivery.is_some())
             {
@@ -742,7 +781,7 @@ impl Journal {
         let before = backend.observe()?;
         live(authority, token, &target, deadline, gate)?;
         before.validate(&target)?;
-        if before.reached(&target) && target.stage != Stage::ClosePolitics {
+        if before.reached(&target) && !target.stage.preserves_focus() {
             let receipt = self.append(Receipt {
                 version: 1,
                 request_id: id.into(),
@@ -763,10 +802,10 @@ impl Journal {
         let candidate = backend.candidate(&target)?;
         match &candidate {
             Candidate::OpenPolitics if target.stage == Stage::OpenPolitics => {}
+            Candidate::OpenPoliticsFromResearch
+                if target.stage == Stage::OpenPoliticsFromResearch => {}
             Candidate::ClosePolitics if target.stage == Stage::ClosePolitics => {}
-            Candidate::Point(point)
-                if !matches!(target.stage, Stage::OpenPolitics | Stage::ClosePolitics) =>
-            {
+            Candidate::Point(point) if !target.stage.is_shortcut() => {
                 if point.input_authorized
                     || point.current_frame_verified
                     || point.effective_routing_verified
@@ -797,10 +836,10 @@ impl Journal {
         let fresh = backend.observe()?;
         fresh.validate(&target)?;
         fresh.preflight(&target)?;
-        if target.stage == Stage::ClosePolitics && fresh.active_focus != before.active_focus {
+        if target.stage.preserves_focus() && fresh.active_focus != before.active_focus {
             return Err(error(
                 "torn_read",
-                "Canonical active focus changed before ClosePolitics input",
+                "Canonical active focus changed before focus navigation input",
             ));
         }
         live(authority, token, &target, deadline, gate)?;
@@ -880,10 +919,10 @@ impl Journal {
                             "Readback completed after bounded deadline",
                         ));
                     }
-                    if target.stage == Stage::ClosePolitics
+                    if target.stage.preserves_focus()
                         && state.active_focus != intent.observed.active_focus
                     {
-                        return Err(error("action_uncertain", "Canonical active focus changed after ClosePolitics input; never replay"));
+                        return Err(error("action_uncertain", "Canonical active focus changed after focus navigation input; never replay"));
                     }
                     if state.reached(&target) {
                         backend.confirm_input_idle(&candidate,deadline).map_err(|cause|Error::after_possible_input(
@@ -969,6 +1008,8 @@ mod daily_failure_classifier_tests {
                 focus_root: LocalRoot::Ready,
                 own_detail_counts: Some([0, 0]),
                 own_research_info_counts: Some([0, 0]),
+                research_panel_root: LocalRoot::Unknown,
+                research_tree_root: LocalRoot::Unknown,
                 selected_focus: None,
                 requested_detail_ready: Some(false),
             },

@@ -27,16 +27,22 @@ attempt. Run047 validates this path in a bounded paused campaign, not Focus or
 technology completion over game time. All nine exact-head CI jobs passed the
 Windows test-lock repair at `e3f3dd8`; production locking was unchanged.
 
-**Next work:** finish and test the explicit `until_assignments` read-only wait.
+**Next work:** validate the explicit `until_assignments` read-only wait live.
 Run047 completed before a later change-only wait began, causing an avoidable
 45-second timeout. The new option checks all requested active Focus/research-slot
 IDs in the first accepted sample too, retains existing deadline/scope guards,
 and ignores unrelated changes. Seven targeted fixtures, 673 Rust 1.86 host tests,
 779 reported Linux checks (777 substantive), all five X11 cases, 953 Python tests
 (37 skips), format/Clippy/MSRV and release-link gates pass. Installed-game
-validation of the new option remains pending. Then implement the reviewed reverse
-research-to-Focus route with fresh own panel/tree facts and guarded ordinary
-input, and run longer completion/refill checks with exclusive Luna medium.
+validation of the new option remains pending. The separately typed reverse
+research-to-Politics route is now implemented with fresh own panel/tree facts,
+both domain permissions, unchanged active-focus state and guarded ordinary Q.
+Its offline tests cover old receipt compatibility, exact stage/candidate pairing,
+foreign/changing UI refusal and quarantine across restart; its live gate is pending.
+After composed checks, run a fresh immutable research → Focus → research plan
+with three assignment reservations, target-state wait, immediate already-matched
+wait and adjacent same-plan restart/STOP under exclusive Luna medium. Then run
+longer completion/refill checks.
 Do not manually repair or replay refused earlier runs. Economy/army/naval
 adapters, Windows/macOS native live support, and clean two-year/full campaigns
 remain open. Keep the full goal active.

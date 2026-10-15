@@ -2,6 +2,10 @@
 
 ## Unreleased native preview
 
+- Add a separately typed research-to-Politics preview with positive own panel/tree
+  facts, both domain permissions, preserved active Focus and durable nonreplay.
+  Existing open-Politics semantics and old receipt serialization remain unchanged.
+  Recorded reverse-transition validation is pending.
 - Verify run047 worker-only Focus-to-research assignment and adjacent same-plan
   restart/STOP, retaining both completion IDs and budget2/2. Preserve its one
   known pre-input SelectSlot retry; recording and normal exit passed.

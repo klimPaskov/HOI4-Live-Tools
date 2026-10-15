@@ -67,6 +67,8 @@ fn state(mode: i32) -> OwnState {
         },
         own_detail_counts: Some([0, 0]),
         own_research_info_counts: Some([0, 0]),
+        research_panel_root: LocalRoot::Unknown,
+        research_tree_root: LocalRoot::Unknown,
         selected_focus: None,
         requested_detail_ready: Some(false),
     }
@@ -114,6 +116,8 @@ impl Fake {
             last: state(23),
             candidate: if stage == Stage::ClosePolitics {
                 Candidate::ClosePolitics
+            } else if stage == Stage::OpenPoliticsFromResearch {
+                Candidate::OpenPoliticsFromResearch
             } else if stage == Stage::OpenPolitics {
                 Candidate::OpenPolitics
             } else {
@@ -1087,3 +1091,5 @@ fn detailed_postinput_refusal_retains_intent_and_blocks_all_ids_after_restart() 
         assert_eq!(fs::read(sc.path()).unwrap(), bytes);
     }
 }
+
+mod research_return;
