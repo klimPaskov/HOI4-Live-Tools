@@ -1016,3 +1016,71 @@ fn close_politics_forged_idle_intent_cannot_reopen_as_positive_active() {
         "invalid_journal"
     );
 }
+
+#[test]
+fn detailed_postinput_refusal_retains_intent_and_blocks_all_ids_after_restart() {
+    for case in 0..3 {
+        let sc = Scratch::new();
+        let mut j = Journal::open(&sc.path()).unwrap();
+        let a = authority();
+        let g = RwLock::new(true);
+        let t = target(Stage::OpenFocus);
+        let mut f = Fake::sequence(Stage::OpenFocus, state(12), state(13));
+        let cause = match case {
+            0 => {
+                f.queue[2] = Err(error("invalid_focus_owner", "Generated own root mismatch"));
+                "invalid_focus_owner: Generated own root mismatch"
+            }
+            1 => {
+                let mut wrong = state(13);
+                wrong.canonical_focus_id = Some("other_focus".into());
+                f.queue[2] = Ok(wrong);
+                "focus_precondition: Fresh canonical own focus join required"
+            }
+            _ => {
+                f.idle = false;
+                "input_unavailable: Generated uncertain idle"
+            }
+        };
+        let e = run(
+            &mut j,
+            "uncertain",
+            t.clone(),
+            &a,
+            &g,
+            &mut f,
+            Duration::from_secs(2),
+        )
+        .unwrap_err();
+        assert_eq!(e.code, "action_uncertain");
+        assert!(e.message.contains(cause), "{}", e.message);
+        assert_eq!(
+            j.failure_evidence("uncertain", &t, &e),
+            FailureEvidence::Unknown
+        );
+        assert_eq!(f.dispatches, 1);
+        let bytes = fs::read(sc.path()).unwrap();
+        assert_eq!(bytes.iter().filter(|b| **b == b'\n').count(), 1);
+        drop(j);
+        let mut j = Journal::open(&sc.path()).unwrap();
+        assert!(j.blocks_game(&epoch().game));
+        for id in ["uncertain", "different-id"] {
+            assert_eq!(
+                run(
+                    &mut j,
+                    id,
+                    t.clone(),
+                    &a,
+                    &g,
+                    &mut f,
+                    Duration::from_secs(2)
+                )
+                .unwrap_err()
+                .code,
+                "action_uncertain"
+            );
+        }
+        assert_eq!(f.dispatches, 1);
+        assert_eq!(fs::read(sc.path()).unwrap(), bytes);
+    }
+}

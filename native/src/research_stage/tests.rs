@@ -1156,3 +1156,76 @@ fn real_candidate_mutex_contention_is_proven_before_intent_and_postdispatch_busy
     );
     assert!(j.blocks_game(&t.epoch.game));
 }
+
+#[test]
+fn detailed_postinput_refusal_retains_intent_and_blocks_all_ids_after_restart() {
+    for case in 0..3 {
+        let sc = Scratch::new();
+        let mut j = Journal::open(&sc.journal()).unwrap();
+        let a = authority();
+        let g = RwLock::new(true);
+        let t = target(Stage::Research);
+        let mut f = Fake::new();
+        f.delivery = Delivery::ServerConfirmed;
+        f.observations = VecDeque::from([Ok(state()), Ok(state()), Ok(reached())]);
+        let cause = match case {
+            0 => {
+                f.observations[2] = Err(error(
+                    "invalid_research_owner",
+                    "Generated own slot mismatch",
+                ));
+                "invalid_research_owner: Generated own slot mismatch"
+            }
+            1 => {
+                let mut wrong = reached();
+                wrong.epoch.player = "CHI".into();
+                f.observations[2] = Ok(wrong);
+                "ownership_changed: Research own context or slot changed"
+            }
+            _ => {
+                f.input_idle = false;
+                "input_unavailable: Generated held input"
+            }
+        };
+        let e = execute(
+            &mut j,
+            "uncertain",
+            t.clone(),
+            &a,
+            &g,
+            &mut f,
+            Duration::from_secs(2),
+        )
+        .unwrap_err();
+        assert_eq!(e.code, "action_uncertain");
+        assert!(e.message.contains(cause), "{}", e.message);
+        assert_eq!(
+            j.failure_evidence("uncertain", &t, &e),
+            FailureEvidence::Unknown
+        );
+        assert_eq!(f.dispatches, 1);
+        let bytes = fs::read(sc.journal()).unwrap();
+        assert_eq!(bytes.iter().filter(|b| **b == b'\n').count(), 1);
+        drop(j);
+        let mut j = Journal::open(&sc.journal()).unwrap();
+        assert!(j.blocks_game(&epoch().game));
+        for id in ["uncertain", "different-id"] {
+            assert_eq!(
+                execute(
+                    &mut j,
+                    id,
+                    t.clone(),
+                    &a,
+                    &g,
+                    &mut f,
+                    Duration::from_secs(2)
+                )
+                .unwrap_err()
+                .code,
+                "action_uncertain"
+            );
+        }
+        assert_eq!(f.dispatches, 1);
+        assert_eq!(fs::read(sc.journal()).unwrap(), bytes);
+    }
+}

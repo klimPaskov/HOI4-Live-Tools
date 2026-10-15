@@ -14,8 +14,10 @@ Rust Politics-close, identical saved-receipt nonreplay and subsequent research
 assignment, preserving active Rhineland and the paused date. Recording and normal
 exit passed. Its Focus Start assignment is Complete; the focus itself has not
 finished over game time. Run044's terminal nonqueued Start and consumed budget
-remain preserved. Automatic worker handoff awaits a separate live gate; see the
-recorded run045 section below.
+remain preserved. The subsequent combined-plan run046 stopped at an unresolved
+OpenFocus readback before Start or handoff. Its original observation cause was
+not retained; recording and normal exit passed. The automatic handoff remains
+unaccepted. See the recorded run045 and run046 sections below.
 
 ## Reference and test environment
 
@@ -3143,3 +3145,56 @@ five isolated X11 cases passed, with matching before/after prior-process absence
 normal-exit and Yama1 witnesses. These are offline fixture results. One fresh
 recorded worker-only combined-plan run remains required; reverse research-to-Focus
 handoff and all full campaigns remain open.
+
+
+## Recorded combined-plan refusal run046 — 15 October 2026
+
+One exclusive Luna medium player used immutable source
+`68d3dac8782ba8373b10edef93eb70e9c311dbd3` and CLI SHA-256
+`094b1e9103f81348b5c6147d8446647d7eb97056640045507943ec928ee13403`.
+The fresh campaign was vanilla Germany, Normal2, historical AI and FAIR, paused
+at 1 January 1936 noon with idle Focus and four empty slots. The first recording
+packet preceded the single campaign Start. The worker's ordered two-entry plan
+requested Rhineland then slot0 `support_weapons`, with both permissions and a
+shared assignment limit2. Luna issued no manual Focus/research/clock commands.
+
+OpenPolitics recorded one Intent/Verified pair with ServerConfirmed delivery.
+OpenFocus persisted one Intent, then returned `action_uncertain` with
+`Own readback unavailable; never replay`. Its navigation failure evidence is
+Unknown; there is no terminal action receipt. The worker stopped and quarantined
+input. The old action wrapper discarded the underlying observation error code
+and message, so the precise failure cannot be reconstructed from this history.
+No Start, ClosePolitics or research stage was reached, and no action was retried.
+Both core entries remain Pending with attempts0 and an empty core journal.
+
+One 45.002-second server wait returned normal historical timeout evidence.
+The following fresh digest reported quarantine and the saved OpenFocus failure
+in 1,571 compact JSON bytes, taking 59.0 ms RPC. It reported the observed day's
+budget used0/limit2/remaining2. STOP retained uncertainty and changed no game
+time. Its durable budget day, usage and remaining are correctly unknown because
+no core observation had yet been committed; the limit remains2. No extra gameplay
+observation, manual rescue, plan update or worker restart followed the failure.
+
+Canonical guest proof matched actual lease release at 11:23:04.307483UTC and
+status at 11:23:06.391660UTC. The 255.333-second 512×288 H264 segment finalized
+at 11:24:36.577870UTC and passed ffprobe. One ordinary owned window close returned
+at 11:24:58.763963UTC after 2.263 s with exit0, no signal or core dump. Exact owner
+and game absence and Yama1 passed; brokers closed afterward. Independent offline
+verification matched the three action journal rows, unresolved navigation,
+untouched assignments, empty clock/research journals and canonical proof.
+
+The next source retains bounded original causes when possible-input failures are
+wrapped as `action_uncertain`: observation, context validation, input-idle,
+authority/deadline and terminal persistence. Both Focus and research use this
+reporting rule. Generated tests verify original cause retention and exactly one
+unresolved Intent that continues blocking both the same and new IDs after
+restart. No witness, dispatch, retry, deadline or journal transition is relaxed.
+This fixes lost diagnostics, not the unknown underlying run046 failure. The
+combined worker handoff and all full campaigns remain unaccepted.
+
+The composed diagnostic source passed 666 Rust 1.86 host tests, 772 reported
+actual Linux checks (770 substantive; two helper cases excluded), 953 Python
+tests with 37 platform skips, formatting, host/Linux Clippy, MSRV Linux compilation
+and optimized release linking. All five isolated X11 cases passed; prior normal
+exit, exact-process absence and Yama1 matched before/after. These checks cover
+cause retention and unchanged quarantine behavior, not live recovery of run046.

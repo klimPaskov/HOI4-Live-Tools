@@ -167,7 +167,7 @@ pub(super) fn execute_internal(
 ) -> Result<(stage::Execution, Option<Value>)> {
     // Run043 verified ordinary Q from exact active Focus/mode12 to mode23.
     // The typed stage retains fresh preflight, pinned focus, lease, journal and
-    // readback guards. The daily worker does not yet select ClosePolitics.
+    // readback guards. The opted-in daily worker shares this same executor.
     drop(input_permit(gate)?);
     state.authority.authorize(token, &state.guard.epoch)?;
     if target.epoch != state.guard.epoch {

@@ -709,25 +709,25 @@ impl Journal {
             ));
         }
         loop {
-            live(authority, token, &target, deadline, gate).map_err(|_| {
-                error(
-                    "action_uncertain",
+            live(authority, token, &target, deadline, gate).map_err(|cause| {
+                Error::after_possible_input(
                     "Readback deadline/authority ended; never replay",
+                    cause,
                 )
             })?;
             match backend.observe() {
                 Err(e) if e.code == "torn_read" => {}
-                Err(_) => {
-                    return Err(error(
-                        "action_uncertain",
+                Err(cause) => {
+                    return Err(Error::after_possible_input(
                         "Own readback unavailable; never replay",
+                        cause,
                     ))
                 }
                 Ok(state) => {
-                    state.validate(&target).map_err(|_| {
-                        error(
-                            "action_uncertain",
+                    state.validate(&target).map_err(|cause| {
+                        Error::after_possible_input(
                             "Own context changed after possible input",
+                            cause,
                         )
                     })?;
                     if Instant::now() >= deadline {
@@ -737,16 +737,16 @@ impl Journal {
                         ));
                     }
                     if state.reached(&target) {
-                        backend.confirm_input_idle(&candidate,deadline).map_err(|_|error(
-                            "action_uncertain","Canonical result observed but input idle remains unverified; never replay"))?;
-                        live(authority, token, &target, deadline, gate).map_err(|_| {
-                            error(
-                                "action_uncertain",
+                        backend.confirm_input_idle(&candidate,deadline).map_err(|cause|Error::after_possible_input(
+                            "Canonical result observed but input idle remains unverified; never replay",cause))?;
+                        live(authority, token, &target, deadline, gate).map_err(|cause| {
+                            Error::after_possible_input(
                                 "Input-idle check exceeded attempt authority/deadline",
+                                cause,
                             )
                         })?;
                         let receipt=self.append(Receipt{status:Status::Verified,delivery:Some(delivery),observed:state,..intent})
-                            .map_err(|_|error("action_uncertain","Canonical result observed but terminal receipt could not be committed"))?;
+                            .map_err(|cause|Error::after_possible_input("Canonical result observed but terminal receipt could not be committed",cause))?;
                         return Ok(Execution {
                             receipt,
                             historical: false,

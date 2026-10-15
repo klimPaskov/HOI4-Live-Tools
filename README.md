@@ -30,10 +30,12 @@ These are bounded tests in vanilla Normal/historical Germany. Run045 passed
 worker Focus Start, Rust Politics-close, saved-receipt nonreplay and research
 assignment. The game stayed paused; the active focus has not finished over game
 time. Recording and normal exit passed. The automatic Focus-to-research handoff
-is implemented with explicit opt-in and awaits its own recorded test. Reverse
-panel switching, completed-technology refill, economic/army/naval commands and
-full campaigns remain open. Earlier failures, including run044's terminal
-nonqueued Start and consumed budget, remain in the validation report.
+is implemented with explicit opt-in. Run046 stopped earlier, at an unresolved
+OpenFocus readback; the worker quarantined the attempt and its handoff gate was
+not reached. The original cause was lost by that adapter; future errors now
+retain it without permitting replay. Reverse panel switching, completed-technology
+refill, economic/army/naval commands and full campaigns remain open. Original
+failures remain in the validation report.
 
 | Runtime | Verified | Remaining |
 | --- | --- | --- |

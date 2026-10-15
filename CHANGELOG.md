@@ -2,6 +2,12 @@
 
 ## Unreleased native preview
 
+- Preserve run046's unresolved OpenFocus intent and worker quarantine. No Start,
+  handoff, research or restart was reached; recording and normal exit passed.
+- Retain bounded original causes for Focus/research readback, context, idle,
+  authority and commit failures after possible input. They remain
+  `action_uncertain`; journals, guards, deadlines and nonreplay are unchanged.
+
 - Verify run045 public Rust ClosePolitics, identical historical-receipt lookup
   without new input, and research assignment while retaining active Rhineland.
   Recording and normal exit passed; no focus completion over game time is claimed.

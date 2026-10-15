@@ -115,6 +115,17 @@ The diagnostic change labels existing torn reads with static sections and,
 where known, object-relative fields. It exposes no addresses or memory payloads
 and leaves all consistency checks and terminal nonreplay behavior unchanged.
 
+Run046's combined plan stopped earlier, at OpenFocus after possible input. Its
+unresolved Intent and Unknown failure remain quarantined, and neither assignment
+was attempted. The old adapter replaced the underlying observation error with
+`Own readback unavailable; never replay`, so that particular cause is unknown.
+The next source retains bounded original causes for post-input readback, context,
+input-idle, authority and terminal-commit failures in both Focus and research.
+The outer classification stays `action_uncertain`; no dispatch, deadline,
+witness, retry or journal-transition rule changes. Generated refusal/restart
+checks pass, but this diagnostic change does not repair or explain run046's
+original underlying failure. Worker handoff live acceptance remains open.
+
 A nonqueued Focus attempt now reports its underlying transport cause while
 retaining `input_not_queued` and its terminal receipt. A transport torn read
 inside a finalized NotQueued attempt does not authorize replay. Run040's older

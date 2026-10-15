@@ -4,42 +4,47 @@ User direction, 12 October 2026: stop the Mac screenshot-driven live tests and
 replace the primary runtime with a fast Rust MCP based on Clausewitz-MCP.
 Linux is the first live target; Windows and macOS remain required platforms.
 
-**Latest live result:** recorded run045 passed worker Rhineland Start, the public
-Rust ClosePolitics stage, an identical saved-receipt lookup without new input,
-and five research stages assigning `support_weapons` to slot0. Fresh final state
-retained active Rhineland and paused 1 January 1936 noon. The durable Start
-assignment is Complete; the focus has not finished over game time. Independent
-journals, canonical lease proof, the 248.666-second recording, normal owned exit0
-and exact process absence passed. No game or player input remains active. This
-is bounded service acceptance, not a successful campaign. See the
-[recorded evidence](CLAUSEWITZ_VALIDATION.md#recorded-rust-close-and-research-run045--15-october-2026).
+**Latest live result:** recorded run046's combined Focus/research plan verified
+OpenPolitics, then quarantined an unresolved OpenFocus intent after readback
+failed. The old wrapper discarded the underlying cause; the preserved error is
+`Own readback unavailable; never replay`. Both core assignments remain Pending
+with zero attempts. No Start, handoff, research, retry or restart was reached.
+Canonical lease proof, the 255.333-second recording, normal owned exit0 and exact
+process absence passed. No game or player input remains active. See the
+[recorded failure](CLAUSEWITZ_VALIDATION.md#recorded-combined-plan-refusal-run046--15-october-2026).
 
-Run044's terminal nonqueued Start and consumed reservation remain permanently
-preserved. Its changing field is unknown. The following diagnostic source adds
-static section/object-relative-field labels without new reads, memory payloads,
-weaker witnesses or any terminal replay. Run045 triggered no refusal that could
-establish live acceptance of those diagnostic labels.
+Run045 previously passed worker Start, public Rust ClosePolitics, an identical
+historical receipt without new input, and research assignment. Rhineland remained
+active and the game paused; the Start assignment being Complete does not mean
+Focus finished over game time. Run044's terminal nonqueued Start and consumed
+reservation also remain preserved. Never replay those earlier failed attempts.
 
-**Current implementation:** the daily worker now supports a one-way
-Focus-to-research handoff, requiring both owner permissions, plan Focus opt-in,
-remaining shared budget and fresh consistent own-state evidence. A checked
-completed Focus entry provides only the key hint. The guarded ClosePolitics
-executor persists one preparation without a new assignment reservation; the
-next batch uses research's own five-second ceiling. Close history survives
-restart and cannot be replayed. Occupied slots and pending retries bypass it.
-The composed source passed 663 Rust 1.86 host tests, 769 reported actual Linux
-checks (767 substantive), 953 Python tests (37 skips), format, host/Linux Clippy,
-MSRV Linux compilation and optimized release linking. All five isolated X11
-cases passed. These fixtures do not establish live worker handoff acceptance.
+**Current implementation:** the one-way Focus-to-research worker handoff requires
+both owner permissions, plan Focus opt-in, remaining shared budget and fresh
+consistent own state. A checked completed Focus entry supplies only a key hint.
+The guarded close executor records one preparation without a new assignment
+reservation, and research uses its own fresh five-second ceiling. Close history
+survives restart and prevents another automatic attempt. The source passed all
+nine exact-head CI jobs before run046, but that run never reached the handoff.
 
-**Next work:** run one fresh recorded combined plan with exclusive Luna medium:
-Rhineland followed by slot0 `support_weapons`, budget2, all navigation and
-assignments through the worker. Verify both canonical assignments, STOP and an
-adjacent restart/STOP with the same completion/budget and no replay. Do not
-manually close Politics or repair a refused run. Preserve run044 and all earlier
-failures. Reverse panel handoff, Focus completion over game time, technology
-completion/refill, economy/army/naval adapters, Windows/macOS native live support
-and the clean two-year/full campaigns remain open.
+The diagnostic change retains bounded original causes while preserving
+`action_uncertain` for post-input observation, context, input-idle, authority and
+terminal-commit failures in both Focus and research. It changes neither input
+nor retry authority. It does not retrospectively explain run046's lost cause.
+The composed source passed 666 Rust 1.86 host tests, 772 reported actual Linux
+checks (770 substantive), all five X11 cases, 953 Python tests (37 skips),
+formatting, host/Linux Clippy, MSRV Linux compilation and release linking.
+
+**Next work:** use a fresh immutable recorded
+combined-plan run with exclusive Luna medium: Rhineland followed by slot0
+`support_weapons`, budget2, all input through the worker. Preserve the actual
+cause if a refusal recurs. If both assignments pass, verify fresh canonical state,
+STOP and an adjacent restart/STOP with unchanged completion/budget and no replay.
+Do not manually repair or replay a refused run. Reverse research-to-Focus
+navigation was reviewed but no implementation was made before the run046 failure.
+That return path, focus/technology completion over game time, economy/army/naval
+adapters, Windows/macOS native live support and clean two-year/full campaigns
+remain open.
 
 Earlier run042 passed read-only Focus UI before lease acquisition and after Start,
 and adjacent restart/STOP with durable budget1/1/0. Run041 passed idempotent update,
