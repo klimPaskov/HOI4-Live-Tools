@@ -10,6 +10,10 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::path::Path;
 
+mod readiness;
+#[cfg(target_os = "linux")]
+pub(crate) use readiness::observed_ready;
+
 /// Explicit owner flag AND plan opt-in AND existing verified profile. These
 /// permissions never stand in for fresh game state, lease or journal checks.
 pub(crate) fn capability(owner: bool, plan: bool, profile: bool) -> Result<()> {
@@ -1066,7 +1070,7 @@ mod tests {
             navigation: None,
         }
     }
-    fn target(stage: Stage) -> Target {
+    pub(super) fn target(stage: Stage) -> Target {
         Target {
             epoch: epoch(),
             stage,
@@ -1080,7 +1084,7 @@ mod tests {
             slots: vec![0xa000],
         }
     }
-    fn state() -> OwnState {
+    pub(super) fn state() -> OwnState {
         OwnState {
             epoch: epoch(),
             active_focus: ActiveFocus::Idle,

@@ -2,6 +2,10 @@
 
 ## Unreleased native preview
 
+- Add bounded fresh read-only Focus navigation readiness before any intent or
+  reservation: at most four reads, a one-second retry window and the unchanged
+  absolute deadline. Positive preflight remains mandatory; reader/context errors
+  propagate and uncertain actions are never retried. Live validation is pending.
 - Preserve run048's pre-input Focus navigation refusal, two completed research
   assignments and budget2/3/1. Recording and normal exit passed; reverse navigation
   and successful assignment-target waits remain unaccepted.

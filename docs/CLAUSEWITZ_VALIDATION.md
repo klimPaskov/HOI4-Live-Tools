@@ -3349,3 +3349,31 @@ read-only refusal across restart. The initial test compilation used an error
 extraction requiring an unavailable Debug implementation; the test-only extraction
 was corrected before these composed checks. Readiness retry is not implemented
 and the diagnostic itself has no installed-game validation yet.
+
+## Bounded pre-intent readiness: offline gates — 15 October 2026
+
+The worker now rechecks well-formed but unnavigable own Focus UI state before any
+navigation intent or assignment reservation. A ready first sample returns
+immediately under the original batch deadline. After the first precondition
+refusal, at most three further fresh reads use100ms intervals and a one-second
+window capped by that original deadline. Every production invocation rechecks
+lease, gate, unresolved input, own scope and day. Stop/day changes defer without
+a stage. Reader/context errors and invalid canonical producer data propagate;
+Unknown facts never become positive authority and late successful reads are
+discarded. The final accepted refusal retains its actual bounded UI facts.
+
+No action attempt is replayed by this path. Existing stage preflight, fresh
+dispatch/readback, journal transitions and shared assignment budgets are unchanged.
+Nine deterministic fixtures cover fresh state/binding replacement, ready/active
+immediate returns, read-count and time bounds, retained final refusal, late result
+rejection, original first-read deadline, cancellation/day deferral, and original
+observer/validation failures without retry. Composed validation passed695 Rust1.86
+host tests,802 reported actual Linux checks (800 substantive), all five X11 cases,
+953 Python tests (37 skips), format, host/Linux Clippy, Linux MSRV all-target
+compilation and release linking. All99 code/build/test input hashes remained
+unchanged through the composed checks.
+
+This is offline evidence. It neither identifies run048's original failed predicate
+nor accepts the reverse route live. A new immutable recorded Luna medium run must
+verify the three assignments, successful/all-already-matching target waits and
+adjacent same-plan restart/STOP. Do not reopen or retry run048.

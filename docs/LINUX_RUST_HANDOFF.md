@@ -33,9 +33,14 @@ it adds no reads and changes no input, retry or journal authority. Its composed
 checks passed 686 Rust1.86 host tests, 793 reported actual Linux checks (791
 substantive), five X11 cases, 953 Python tests (37 skips) and compiler gates.
 
-**Next work:** implement and review bounded fresh read-only readiness handling
-before a new immutable recorded
-reverse-worker gate. Every action must still satisfy the existing positive
+**Next work:** run a new immutable recorded reverse-worker gate for the bounded
+read-only readiness path. Composed checks passed 695 Rust1.86 host tests, 802
+reported actual Linux checks (800 substantive), five X11 cases, 953 Python tests
+(37 skips) and compiler/format/Clippy/MSRV/release gates. The worker permits
+at most four fresh observations and a one-second retry window after the initial
+precondition refusal, capped by its original deadline. Reader/context errors
+propagate; no navigation intent or assignment reservation exists during these
+checks. Every action must still satisfy the existing positive
 preflight, scope, deadline, lease and fresh readback guards. Never reuse run048
 or erase its refusal. Use canonical `basic_machine_tools`/industry_folder slot0,
 Rhineland, then `support_weapons`/infantry_folder slot1 with budget3. Validate

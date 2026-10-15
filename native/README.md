@@ -195,6 +195,18 @@ the observed mode, roots and blocker counts in the existing bounded durable
 refusal reason, without new reads or changed input/retry authority. Reverse live
 acceptance remains open.
 
+The worker now rechecks a well-formed but unnavigable Focus UI state with at most
+four fresh observations before creating any navigation intent or assignment
+reservation. After the first refused state, retries have a one-second window,
+100ms intervals and the original absolute Focus deadline. A ready first sample
+returns immediately. Every read rechecks lease, gate, scope and day; reader,
+ownership and invalid-producer errors propagate. Unknown facts still cannot
+authorize input, and late positive samples are discarded. This readiness path
+does not replay action attempts or change durable budgets/receipts. Composed
+validation passed 695 Rust1.86 host tests, 802 reported Linux checks (800
+substantive), five X11 cases, 953 Python tests (37 skips) and compiler gates.
+Installed-game validation of readiness remains pending.
+
 To wait for a known assignment state, use `hoi4_wait_for` with, for example:
 
 ```json

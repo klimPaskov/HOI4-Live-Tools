@@ -607,6 +607,7 @@ fn worker(
                     token,
                     focus_until,
                     research_permission,
+                    stop,
                     day,
                     focus_entry.as_ref().expect("focus head"),
                     report,
@@ -648,6 +649,7 @@ fn worker(
                         token,
                         focus_until,
                         research_permission,
+                        stop,
                         day,
                         entry,
                         report,
@@ -1235,6 +1237,7 @@ fn run_focus(
     token: &str,
     until: Instant,
     research_permission: bool,
+    stop: &AtomicBool,
     day: i64,
     entry: &core::Entry,
     report: &Mutex<Value>,
@@ -1255,27 +1258,41 @@ fn run_focus(
         focus_id: focus_id.clone(),
     };
     let result = (|| -> Result<_> {
-        let (own, context, binding) = focus::observed_bound(process, &mut state.guard, &target)?;
-        focus_scope(&context, &governor.plan().scope)?;
-        if matches!(
-            crate::daily_focus_navigation::next(&own, &target)?,
-            crate::daily_focus_navigation::Next::Wait
-        ) {
-            report_focus_wait(report, navigation, entry, &own, &context, binding.clone())?;
+        let ready = crate::daily_focus_navigation::observed_ready(&target, until, || {
+            if stop.load(Ordering::Acquire) {
+                return Ok(None);
+            }
+            drop(input_permit(gate)?);
+            state.authority.authorize(token, &state.guard.epoch)?;
+            if unresolved(state) || navigation.blocked() {
+                return Err(Error::new(
+                    "action_uncertain",
+                    "Input unresolved during Focus readiness",
+                ));
+            }
+            let (own, context, binding) =
+                focus::observed_bound(process, &mut state.guard, &target)?;
+            focus_scope(&context, &governor.plan().scope)?;
+            if stop.load(Ordering::Acquire)
+                || (i64::from(context.campaign.date_raw) - 43_800_000).div_euclid(24) != day
+            {
+                return Ok(None);
+            }
+            Ok(Some((own, (context, binding))))
+        })?;
+        let Some(ready) = ready else { return Ok(None) };
+        let (context, binding) = ready.observed;
+        if matches!(ready.next, crate::daily_focus_navigation::Next::Wait) {
+            report_focus_wait(
+                report,
+                navigation,
+                entry,
+                &ready.own,
+                &context,
+                binding.clone(),
+            )?;
         }
-        if Instant::now() >= until {
-            return Err(Error::new(
-                "focus_deadline",
-                "Focus observation exceeded original deadline",
-            ));
-        }
-        if (i64::from(context.campaign.date_raw) - 43_800_000).div_euclid(24) != day {
-            return Ok(None);
-        }
-        Ok(Some((
-            crate::daily_focus_navigation::next(&own, &target)?,
-            binding,
-        )))
+        Ok(Some((ready.next, binding)))
     })();
     let (next, binding) = match result {
         Ok(Some(value)) => value,
@@ -1285,6 +1302,9 @@ fn run_focus(
             return Err(e);
         }
     };
+    if stop.load(Ordering::Acquire) {
+        return Ok(FocusRun::Wait);
+    }
     match next {
         crate::daily_focus_navigation::Next::Wait => Ok(FocusRun::Wait),
         crate::daily_focus_navigation::Next::Stage(stage) => {
