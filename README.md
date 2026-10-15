@@ -47,8 +47,10 @@ because a tree-node witness changed. Run052 then verified actual Rhineland
 completion on 4 February 1936 using narrower Start observations. Its completed-
 Focus reads took 25.889/26.666 ms RPC; restart, recording and normal exit passed.
 Run053 stopped the successive-Focus gate on read-only snapshot changes; the
-second entry never attempted input. Bounded fresh-read recovery is implemented
-and awaits a new live test.
+second entry never attempted input. Run054 verified bounded fresh-read recovery,
+then stopped at Four Year Plan's View geometry before any selection click. Its
+exact hierarchy size limit was lost to diagnostic truncation; that reporting
+bug is fixed, while the geometry failure and successive-Focus gate remain open.
 
 | Runtime | Verified | Remaining |
 | --- | --- | --- |

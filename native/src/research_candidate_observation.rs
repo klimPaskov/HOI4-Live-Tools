@@ -143,6 +143,41 @@ fn closure_diagnostic(h: &Value) -> String {
     }
     detail
 }
+fn closure_refusal(message: &str, h: &Value) -> Error {
+    if h["status"] == "unavailable_policy_bound" {
+        let policy = &h["policy_boundary"];
+        let stage = match policy["stage"].as_str() {
+            Some("container_position_membership") => "container",
+            Some("ancestor_membership") => "ancestor",
+            _ => "unknown",
+        };
+        let scope = match policy["policy_scope"].as_str() {
+            Some("exact_owned_graphics_root") => "owned_root",
+            Some("ordinary_ancestor") => "ordinary",
+            Some("own_focus_position_ancestor") => "focus_position",
+            _ => "unknown",
+        };
+        let number = |v: &Value, max| {
+            v.as_u64()
+                .filter(|n| *n <= max)
+                .map(|n| n.to_string())
+                .unwrap_or_else(|| "unknown".into())
+        };
+        // The durable navigation reason has a 160-byte bound. Run054 lost the
+        // actual boundary after a long prose/type prefix. Keep all decision
+        // quantities inside that existing bound, without changing traversal.
+        return unavailable(&format!(
+            "Root closure policy bound: stage={stage} scope={scope} count={} cap={} cap_max={} prior={} sum_max={} hops={}",
+            number(&policy["count"], 20000),
+            number(&policy["capacity"], 20000),
+            number(&policy["capacity_limit"], 20000),
+            number(&policy["inspected_entries_before_attempt"], 20000),
+            number(&policy["aggregate_entry_limit"], 20000),
+            number(&h["payload_hops"], 16),
+        ));
+    }
+    unavailable(&format!("{message} ({})", closure_diagnostic(h)))
+}
 fn common(
     raw: &Value,
     world: &str,
@@ -151,16 +186,16 @@ fn common(
     hierarchy: &Value,
 ) -> Result<Common> {
     if hierarchy["graphics_root_closed"].as_bool() != Some(true) {
-        return Err(unavailable(&format!(
-            "Owned graphics root closure required ({})",
-            closure_diagnostic(hierarchy)
-        )));
+        return Err(closure_refusal(
+            "Owned graphics root closure required",
+            hierarchy,
+        ));
     }
     if hierarchy["status"] != "closed_to_owned_graphics_root" {
-        return Err(unavailable(&format!(
-            "Typed owned root hierarchy required ({})",
-            closure_diagnostic(hierarchy)
-        )));
+        return Err(closure_refusal(
+            "Typed owned root hierarchy required",
+            hierarchy,
+        ));
     }
     // The producer recognizes two owned roots. The independently corroborated
     // coordinate profile proves 1F0 only; closure at350 is not equivalence.

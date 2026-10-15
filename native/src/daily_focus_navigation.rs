@@ -1647,6 +1647,38 @@ mod tests {
         );
     }
     #[test]
+    fn geometry_boundary_survives_durable_before_intent_failure_and_restart() {
+        // Generated boundary, not a reconstruction of run054's lost numbers.
+        let render = serde_json::json!({"render_type_encoding":"20CFrameAnimatedSprite",
+            "field_layout_verified":true,"resource_layout_verified":true,"resource_alias_matches":true,
+            "resource_type_encoding":"24CFrameAnimatedSpriteType",
+            "resource_cache":{"getter_cache_equivalent":true},
+            "frame_raw_geometry":{"no_mask_rejection_branch":true,"parent_chain":{
+                "graphics_root_closed":false,"status":"unavailable_policy_bound","payload_hops":2,
+                "policy_boundary":{"stage":"ancestor_membership","policy_scope":"own_focus_position_ancestor",
+                    "count":9001,"capacity":10000,"capacity_limit":8192,"inspected_entries_before_attempt":8,"aggregate_entry_limit":16384}}}});
+        let error = crate::research_candidate_observation::control_surface(&render).unwrap_err();
+        assert_eq!(error.message,"Root closure policy bound: stage=ancestor scope=focus_position count=9001 cap=10000 cap_max=8192 prior=8 sum_max=16384 hops=2");
+        let t = Scratch::new();
+        let e = entry();
+        let day = 1936 * 365;
+        let mut n = Navigator::open(&t.path(), epoch(), std::slice::from_ref(&e)).unwrap();
+        n.begin(e.clone(), target(Stage::View), day, 1, binding())
+            .unwrap();
+        n.failed(&error, FailureEvidence::BeforeIntent).unwrap();
+        assert!(n.data.goals.is_empty() && !n.blocked());
+        drop(n);
+        let n = Navigator::open(&t.path(), epoch(), std::slice::from_ref(&e)).unwrap();
+        assert_eq!(n.latest()["failure"]["reason"], error.message);
+        assert_eq!(
+            n.latest()["failure"]["code"],
+            "research_geometry_unavailable"
+        );
+        assert_eq!(n.latest()["failure"]["historical"], true);
+        assert!(n.data.steps[0].receipt.is_none() && n.data.goals.is_empty());
+        assert!(!n.blocked());
+    }
+    #[test]
     fn late_verified_preparation_retains_receipt_and_blocks_reopen_all_work() {
         let t = Scratch::new();
         let e = entry();

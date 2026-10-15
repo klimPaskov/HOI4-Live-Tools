@@ -17,6 +17,57 @@ fn incomplete_closure_diagnostic_does_not_echo_unbounded_or_untrusted_values() {
     assert!(e.message.len() < 600);
 }
 use serde_json::json;
+#[test]
+fn policy_closure_refusal_retains_each_boundary_quantity_within_durable_limit() {
+    for (stage, expected_stage) in [
+        ("container_position_membership", "container"),
+        ("ancestor_membership", "ancestor"),
+        ("arbitrary/path", "unknown"),
+    ] {
+        for (scope, expected_scope) in [
+            ("exact_owned_graphics_root", "owned_root"),
+            ("ordinary_ancestor", "ordinary"),
+            ("own_focus_position_ancestor", "focus_position"),
+            ("arbitrary/path", "unknown"),
+        ] {
+            for count in [json!(20000), Value::Null, json!(20001), json!(-1)] {
+                let h = json!({"status":"unavailable_policy_bound","graphics_root_closed":false,
+                    "payload_hops":16,"chain":[{"type_encoding":"A".repeat(128)}],
+                    "policy_boundary":{"stage":stage,"policy_scope":scope,"count":count,"capacity":count,
+                        "capacity_limit":count,"inspected_entries_before_attempt":count,"aggregate_entry_limit":count}});
+                let e = common(&Value::Null, "w", "a", "s", &h).unwrap_err();
+                let n = if count == 20000 { "20000" } else { "unknown" };
+                assert_eq!(e.code, "research_geometry_unavailable");
+                assert_eq!(e.message, format!("Root closure policy bound: stage={expected_stage} scope={expected_scope} count={n} cap={n} cap_max={n} prior={n} sum_max={n} hops=16"));
+                assert_eq!(
+                    crate::daily_navigation::bounded_reason(&e.message),
+                    e.message
+                );
+                assert!(e.message.is_ascii() && e.message.len() <= 160);
+                assert!(!e.message.contains("arbitrary") && !e.message.contains(&"A".repeat(128)));
+            }
+        }
+    }
+}
+#[test]
+fn malformed_or_contradictory_policy_closure_never_produces_a_candidate() {
+    for boundary in [
+        Value::Null,
+        json!("untrusted/path"),
+        json!({"count":u64::MAX,"stage":[],"policy_scope":{},"capacity":-1}),
+    ] {
+        for closed in [true, false] {
+            let h = json!({"status":"unavailable_policy_bound","graphics_root_closed":closed,
+                "policy_boundary":boundary,"payload_hops":u64::MAX});
+            let e = common(&Value::Null, "w", "a", "s", &h).unwrap_err();
+            assert_eq!(e.message,"Root closure policy bound: stage=unknown scope=unknown count=unknown cap=unknown cap_max=unknown prior=unknown sum_max=unknown hops=unknown");
+            assert_eq!(
+                crate::daily_navigation::bounded_reason(&e.message),
+                e.message
+            );
+        }
+    }
+}
 fn profile() -> OwnedClientProfile {
     OwnedClientProfile {
         window: 42,

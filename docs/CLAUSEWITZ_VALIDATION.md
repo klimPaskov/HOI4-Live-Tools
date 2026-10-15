@@ -3710,3 +3710,63 @@ checks (823 substantive, including five X11 cases), 953 Python tests with 37
 skips, format, host/Linux Clippy, Linux MSRV all-target compilation and release
 linking. All 101 native source-input hashes stayed unchanged. These checks do
 not establish successful successive-Focus live play.
+
+## Run054: read-only recovery passed; second Focus View refused — 15 October 2026
+
+One existing Luna player at medium reasoning exercised immutable source
+`87f761cb04a6e4e728181166b90ac3d4226c117e`, CLI SHA256
+`4f13fdf4f43b6fd4e0e501a55da0b976ea494c1e58682f165c9fdb8fd701a8f0`.
+The Normal/historical/FAIR Germany plan queued Rhineland then Four Year Plan,
+with one assignment per day. This run's contract explicitly permitted exhausted
+read-only torn readiness samples to defer across days before any navigation
+intent; run053's stricter failed gate remains unchanged.
+
+Rhineland assignment passed in 11.006 seconds while paused. After STOP, ordinary
+unpause and identical-plan restart, six 45-second waits timed out historically
+while game dates progressed. Five exact historical-detail reads and STOP retained
+recovered readiness diagnostics: each discarded one clock-tick sample and then
+returned `ready`, with no input, navigation or assignment-budget consumption
+during those reads. The durable navigator contains no read-only refusals.
+These latest-per-batch samples are not a count of every background observation.
+
+Four Year Plan OpenFocus passed on day706674. View then failed before intent on
+days706674,706675 and706676 with `research_geometry_unavailable`. All three reasons
+reported `unavailable_policy_bound`, two observed ancestors/two payload hops, and
+last inspected type `C2dPositionObject`. The durable 160-byte message ended at
+`boundary=`: exact failed stage/scope/count/capacity/aggregate values are unknown.
+No View click or second assignment reservation followed. The final accepted wait
+was 5 February 20:00, 374.671 seconds after the unpause reply, with no active Focus.
+The terminal stop contract allowed no further membership read or final restart
+check. An idle Focus alone does not prove completed membership.
+
+Independent audit found 74 player protocol rows, four actual read-only digest
+`input_busy` errors, five verified Focus input pairs (the original four Rhineland
+stages and Four Year Plan OpenFocus), two ordinary clock pairs, one core
+reservation/completion, and three BeforeIntent View refusals. There were no
+research actions. STOP retained Rhineland's assignment receipt, Four Year Plan
+Pending with zero attempts, no uncertainty, and historical last-attempt-day budget
+1/1/0. Recovered samples, historical producer errors and actual RPC errors remain
+distinct evidence. The player result's separate actual-error list is correct;
+its per-digest `is_rpc_error` flags remained false and are not the audit source.
+
+Canonical release/status matched independent guest readback. The 718.333-second
+recording passed ffprobe, with its first packet before the dedicated campaign-
+Start artifact. One ordinary owned close returned exit0 without signal/core dump
+in 3.495 seconds. All exact owned processes were absent and both brokers closed.
+This is a failed successive-Focus gate, not an accepted campaign.
+
+The following diagnostic fix emits compact policy stage/scope, count, capacity,
+capacity limit, prior inspected entries, aggregate limit and payload hops within
+the existing 160-byte durable bound. It consumes only already-observed fields,
+sanitizes malformed values, and changes no read, traversal limit, candidate
+acceptance, input or retry policy. Generated tests cover boundary extremes and
+malformed producers plus persistence through BeforeIntent failure/restart. Their
+numbers do not reconstruct the missing live evidence. A fresh paused geometry
+observation is required before changing the traversal policy.
+
+Composed checks passed 720 Rust 1.86 host tests, 828 reported actual Linux checks
+(826 substantive, including five X11 cases), 953 Python tests with 37 skips,
+format, host/Linux Clippy, Linux MSRV all-target compilation and release linking.
+All 101 native input hashes remained fixed. An initial host run caught an assertion
+for the old diagnostic wording; it was corrected before the complete successful
+run. These checks verify reporting and refusal behavior, not the live geometry fix.

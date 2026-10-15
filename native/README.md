@@ -60,7 +60,10 @@ lease, ownership, scope and day. Other reader/context errors propagate and late
 positives are discarded. `focus_readiness_historical` retains the latest batch
 of rejected reads in digest/details and STOP for the current worker lifetime;
 it is not durable action history or retry authority. Run053 exposed clock-tick
-refusals before this recovery change; its live validation remains pending.
+refusals before this recovery change. Run054 observed successful recovery across
+advancing days, then failed Four Year Plan View geometry before input. Geometry
+policy refusals now preserve stage, scope, count, capacity and aggregate limits
+within the existing durable reason bound; no traversal limit was relaxed.
 
 Only proven BeforeIntent busy/torn reads qualify for bounded automatic retries;
 a possible delivered input never does. Focus Start retries retain the same

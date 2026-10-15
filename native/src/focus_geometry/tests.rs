@@ -248,14 +248,20 @@ fn owned_root_capacity_policy_remains_unread_and_diagnostic_instead_of_expanded(
     f.word(root + 0xc0, 0xbeef0000);
     let g = f.observe().unwrap();
     let e = crate::research_candidate_observation::control_surface(&g).unwrap_err();
+    assert_eq!(g["parent_chain"]["status"], "unavailable_policy_bound");
     for s in [
-        "unavailable_policy_bound",
-        "scope=exact_owned_graphics_root",
-        "capacity=8193",
+        "Root closure policy bound",
+        "scope=owned_root",
+        "cap=8193",
+        "cap_max=8192",
         "count=1",
     ] {
         assert!(e.message.contains(s), "{s}");
     }
+    assert_eq!(
+        crate::daily_navigation::bounded_reason(&e.message),
+        e.message
+    );
     assert!(f.untouched(0xbeef0000, 8));
 }
 #[test]

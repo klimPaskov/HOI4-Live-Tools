@@ -88,11 +88,26 @@ The player saw the latest refusal after one advancing wait and stopped; it did
 not retry an action. Canonical release, the 622-second recording, normal exit0
 and exact-process absence passed. Both brokers are closed. The next change
 retries wholly discarded torn snapshots only during read-only Focus readiness,
-within the existing four-read/one-second bound; live validation remains pending.
+within the existing four-read/one-second bound; run054 exercised this recovery.
+
+Run054 on immutable `87f761c` verified recovered torn readiness reads across
+advancing days, but failed the successive-Focus gate. Four Year Plan OpenFocus
+passed; View refused before input on three days with `research_geometry_unavailable`.
+The last accepted wait was 5 February 20:00, with no active Focus. Final completed
+membership was not read under the terminal stop contract, so this run alone does
+not prove actual Rhineland completion. The core retains one assignment receipt,
+Four Year Plan Pending with zero attempts, and no uncertainty. Four read-only
+digest RPCs returned busy. Canonical release, the 718.333-second recording, normal
+exit0 and exact-process absence passed; both brokers are closed. The original
+160-byte reason lost the hierarchy boundary numbers. New compact diagnostics
+retain every policy quantity within that bound without changing traversal limits.
 
 ## Immediate acceptance work
 
-1. Validate the bounded read-only recovery exposed by run053, then successive
+1. Diagnose run054's Four Year Plan hierarchy limit with one fresh owned,
+   paused read-only geometry observation after verified Focus opening. Retain
+   full structured boundary fields; never guess the lost numbers or loosen
+   guards without that evidence. Then verify successive
    Focus choices over advancing time, using the now-verified
    completed-membership reader to distinguish assignment from finished Focus.
    Run052 passed actual Rhineland completion and restart on immutable `64f3634`:
