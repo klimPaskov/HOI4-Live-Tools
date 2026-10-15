@@ -431,6 +431,28 @@ impl Governor {
     pub(crate) fn preparation_check(&mut self) -> Result<()> {
         self.check()
     }
+    /// Historical key hint only. A completed assignment proves a past Start,
+    /// not the current active focus or panel state; the owner must join both
+    /// from fresh scoped observations before any navigation.
+    #[cfg(any(target_os = "linux", all(test, unix)))]
+    pub(crate) fn completed_focus_hint(&mut self) -> Result<Option<Entry>> {
+        self.check()?;
+        Ok(self
+            .state
+            .plan
+            .entries
+            .iter()
+            .filter_map(|entry| match self.state.entries.get(&entry.id) {
+                Some(EntryState::Complete { observed, .. })
+                    if matches!(entry.intent, Intent::Focus { .. }) =>
+                {
+                    Some((observed.sequence, entry))
+                }
+                _ => None,
+            })
+            .max_by_key(|(sequence, _)| *sequence)
+            .map(|(_, entry)| entry.clone()))
+    }
     #[cfg(any(target_os = "linux", all(test, unix)))]
     pub(crate) fn pending_research(&self, day: i64) -> Vec<Entry> {
         let mut slots = std::collections::BTreeSet::new();

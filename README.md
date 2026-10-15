@@ -21,18 +21,19 @@ Recorded Linux tests have passed:
 - Idempotent plan updates and worker restarts without replay or budget resets.
 - Immediate restart/STOP with the durable budget intact, plus read-only Focus UI
   observations requiring no input lease.
-- An ordinary Politics-close diagnostic followed by Rust research navigation and
-  assignment, preserving the active focus.
+- Rust Politics-close and research assignment, preserving the active focus; an
+  identical close request returned its saved receipt without another dispatch.
 - Digests below 2 KB with exact historical detail lookup; five recent samples
   returned in 50–62 ms under x86 CPU emulation.
 
-These are bounded tests in vanilla Normal/historical Germany. The latest run044
-stopped on a confirmed nonqueued Focus Start after a changing-state read. It
-preserved the unfinished plan and consumed budget, finalized its recording and
-exited normally. The new Rust close stage was not reached. Automatic panel
-switching, completed-technology refill, economic/army/naval commands and full
-campaigns remain open. The Focus worker requires explicit opt-in. Original
-failures and reporting limitations remain in the validation report.
+These are bounded tests in vanilla Normal/historical Germany. Run045 passed
+worker Focus Start, Rust Politics-close, saved-receipt nonreplay and research
+assignment. The game stayed paused; the active focus has not finished over game
+time. Recording and normal exit passed. The automatic Focus-to-research handoff
+is implemented with explicit opt-in and awaits its own recorded test. Reverse
+panel switching, completed-technology refill, economic/army/naval commands and
+full campaigns remain open. Earlier failures, including run044's terminal
+nonqueued Start and consumed budget, remain in the validation report.
 
 | Runtime | Verified | Remaining |
 | --- | --- | --- |
@@ -101,9 +102,9 @@ are documented in [the comparison](docs/CLAUSEWITZ_COMPARISON.md) and
 
 Research uses exact technology IDs, verified panel/slot/category navigation and
 a persisted shared daily budget. Focus has separate owner and plan permissions;
-its worker has recorded Start, plan-update and restart evidence. Completed-technology
-refill, combined panel switching and broader strategic
-adapters remain acceptance gates. Earlier failures, including unresolved clock
+its worker has recorded Start, plan-update and restart evidence. The new one-way
+Focus-to-research worker handoff awaits live validation. Completed-technology
+refill, reverse panel switching and broader strategic adapters remain acceptance gates. Earlier failures, including unresolved clock
 uncertainty, are preserved in the validation report. Three-OS CI checks shared
 code and fixtures; Windows/macOS live adapters still need independent validation.
 

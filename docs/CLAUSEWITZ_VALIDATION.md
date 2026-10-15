@@ -9,11 +9,13 @@ is quarantined. A subsequent fresh Rust run passed Luna's ordinary clock test
 through 3 January 1936, including verified pause. These are **bounded live tests,
 not campaign acceptance or a successful campaign**. The Rust port is underway.
 Later worker runs passed Start, active-focus waiting, idempotent updates,
-budget-preserving restarts and bounded digest/detail output. The latest run044
-stopped at a confirmed-nonqueued Focus Start caused by a changing read; its new
-Rust close-stage gate was not reached. The original refusal and consumed budget
-are preserved. Recording finalized and the owned game exited normally; see the
-run044 section below.
+budget-preserving restarts and bounded digest/detail output. Run045 passed public
+Rust Politics-close, identical saved-receipt nonreplay and subsequent research
+assignment, preserving active Rhineland and the paused date. Recording and normal
+exit passed. Its Focus Start assignment is Complete; the focus itself has not
+finished over game time. Run044's terminal nonqueued Start and consumed budget
+remain preserved. Automatic worker handoff awaits a separate live gate; see the
+recorded run045 section below.
 
 ## Reference and test environment
 
@@ -3065,3 +3067,79 @@ platform skips, format, host/Linux Clippy, MSRV Linux compilation and optimized
 release linking. The actual Linux runner retained matching before/after boot,
 process-absence and Yama1 witnesses; all five isolated X11 cases passed.
 Automatic worker panel handoff and all full campaigns remain unaccepted.
+
+
+## Recorded Rust close and research run045 — 15 October 2026
+
+One exclusive Luna medium player used immutable source
+`f8dbf346ca21551df3bdf6c2a839eeec3a00a893` and CLI SHA-256
+`a2ee31bca1cb3ad24c06618b99bea170bfe7afa791d979103d24bbc6bafdb770`.
+Initial own state confirmed vanilla Germany, Normal2, historical AI, FAIR,
+paused 1 January 1936 noon, idle Focus and four empty research slots. Recording
+had its first packet before the single campaign Start. Menu setup used one
+window activation and no cursor parking. No screenshot targeting, diagnostic Q
+helper, console, native posting, reload or clock input was used during gameplay.
+
+The worker verified OpenPolitics, OpenFocus, View and Start once each.
+`focus-rhineland` became durably Complete at sequence6, revision1, with budget
+used1/limit1/remaining0 and no quarantine. This means the Start assignment
+completed; **Rhineland remained active and did not finish over game time**.
+STOP retained the budget and reported no game-time change or uncertainty.
+
+Luna then called public `hoi4_focus_attempt` with `stage: close_politics`.
+The 1,174.7 ms RPC returned Verified/ServerConfirmed with current readback:
+mode23, both local roots Hidden, complete own detail/Info counts zero and the
+same active Rhineland. The exact same request and arguments returned the
+identical saved receipt in 5.5 ms, explicitly historical with no new transport.
+Independent inspection found exactly ten Focus journal rows: one Intent/Verified
+pair for each of five stages, with no second close pair. Fresh Focus UI reads
+confirmed mode12 before and mode23 after, preserving the active focus and zero
+local blockers. This does not prove clearance of arbitrary global modals.
+
+Five public research stages then passed: OpenPanel 355.4 ms, SelectSlot 570.0 ms,
+SelectCategory 49.4 ms, View 552.3 ms and Research 790.8 ms. The category stage
+was a verified no-input completion; the other four had ServerConfirmed input.
+The nine research journal rows matched those results. Final fresh overview
+confirmed `support_weapons` in slot0, active Rhineland and the unchanged paused
+date. These manual research actions occurred after the worker stopped and are
+not counted within its earlier one-assignment budget. Three overview RPCs took
+14.5–15.0 ms; this small sample does not establish campaign throughput.
+
+Canonical guest proof matched the actual release at 10:59:35.519632UTC and
+status at 10:59:37.253527UTC. The single 512×288 H264 segment finalized at
+11:00:51.189140UTC, lasted 248.666 seconds and passed ffprobe. One ordinary owned
+window-close request returned at 11:01:28.329158UTC after 2.327 s with exit0,
+no signal or core dump. Exact owner/game absence and Yama1 were checked; both
+brokers then closed. The independent verifier initially expected an empty
+optional `start_failures` array that serialization omits. Correcting that verifier
+assumption passed all checks without changing saved journals; the original
+verifier error and the player's wording about completion remain preserved.
+
+This gate accepts the public Rust close service and historical nonreplay, followed
+by existing research input. It does not accept automatic worker handoff, actual
+focus/technology completion or a full campaign. No torn-read refusal occurred,
+so new diagnostic labels have no live failure example from this run.
+
+## Automatic Focus-to-research worker preview
+
+The next source joins the verified close service to an eligible research head
+after a completed Focus assignment. It requires explicit permissions, a checked
+historical key hint, available shared budget, matching fresh epochs/scope/day,
+empty target slot, settled Politics and complete zero local blockers. It retains
+the same controller, lease, shutdown gate, executor and fixed deadlines. One
+close preparation consumes no assignment reservation; research resumes in a
+separate batch with its own five-second ceiling. Its preparation history survives
+restart and prevents another automatic close attempt, including after failure.
+Already assigned/occupied slots and pending research retries bypass the handoff.
+The compact digest retains a later ClosePolitics receipt after Focus completion.
+
+Generated tests cover positive and negative fresh-state joins, occupied-slot and
+retry bypass, checked historical selection, unresolved storage, terminal history,
+restart nonreplay and compact receipt retention. The composed source passed
+663 Rust 1.86 host tests, 769 reported actual Linux checks (767 substantive;
+two helper cases excluded), 953 Python tests with 37 platform skips, formatting,
+host/Linux Clippy, MSRV Linux compilation and optimized release linking. All
+five isolated X11 cases passed, with matching before/after prior-process absence,
+normal-exit and Yama1 witnesses. These are offline fixture results. One fresh
+recorded worker-only combined-plan run remains required; reverse research-to-Focus
+handoff and all full campaigns remain open.

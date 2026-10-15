@@ -25,6 +25,58 @@ pub(crate) fn capability(owner: bool, plan: bool, profile: bool) -> Result<()> {
         ))
     }
 }
+/// Scheduling hint only; already-assigned research and pending retries bypass handoff.
+pub(crate) fn needs_research_handoff(
+    permission: bool,
+    pending_retry: bool,
+    entry: &Entry,
+    research: &crate::research_stage::OwnState,
+) -> bool {
+    permission
+        && !pending_retry
+        && research.active_mode == Some(12)
+        && matches!(&entry.intent, Intent::Research { slot, .. }
+            if research.researching.get(*slot as usize) == Some(&None))
+}
+/// The durable Focus entry is only a key hint. Both independent own-state
+/// producers must agree on the epoch and a closed research UI, and the fresh
+/// Focus state must satisfy the same strict ClosePolitics preflight as manual
+/// input. This function supplies no permission, lease or transport authority.
+pub(crate) fn research_handoff_target(
+    focus_entry: &Entry,
+    research_entry: &Entry,
+    focus: &OwnState,
+    research: &crate::research_stage::OwnState,
+) -> Result<Target> {
+    focus_entry.validate()?;
+    research_entry.validate()?;
+    let Intent::Focus { focus_id } = &focus_entry.intent else {
+        return Err(invalid());
+    };
+    let Intent::Research { slot, .. } = &research_entry.intent else {
+        return Err(invalid());
+    };
+    if research.epoch != focus.epoch
+        || research.active_mode != Some(12)
+        || research.panel_visible != Some(false)
+        || research.tree_visible
+        || !research.visible_info.is_empty()
+        || research.researching.get(*slot as usize) != Some(&None)
+    {
+        return Err(Error::new(
+            "focus_precondition",
+            "Fresh same-epoch empty research slot and closed research UI required for handoff",
+        ));
+    }
+    let target = Target {
+        epoch: focus.epoch.clone(),
+        stage: Stage::ClosePolitics,
+        focus_id: focus_id.clone(),
+    };
+    focus.validate(&target)?;
+    focus.preflight(&target)?;
+    Ok(target)
+}
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct OwnBinding {
@@ -769,6 +821,28 @@ impl Navigator {
         self.data.goals.push(g);
         self.save()
     }
+    pub(crate) fn check_handoff(&mut self, entry: &Entry, day: i64) -> Result<()> {
+        self.store.check().inspect_err(|_| self.poisoned = true)?;
+        if self.blocked() {
+            return Err(Error::new(
+                "action_uncertain",
+                "Unresolved Focus navigation blocks handoff",
+            ));
+        }
+        if self.refused_today(entry, day)
+            || self
+                .data
+                .steps
+                .iter()
+                .any(|s| s.entry == *entry && s.target.stage == Stage::ClosePolitics)
+        {
+            return Err(Error::new(
+                "research_precondition",
+                "Prior Focus handoff/refusal is retained; no replay",
+            ));
+        }
+        Ok(())
+    }
     pub(crate) fn begin(
         &mut self,
         entry: Entry,
@@ -786,6 +860,12 @@ impl Navigator {
                 .steps
                 .iter()
                 .any(|s| s.entry == entry && s.day == day && s.failure.is_some())
+            // A completed Focus has one automatic handoff. Even a later fresh
+            // Politics panel must not reopen a prior ClosePolitics attempt.
+            || (target.stage == Stage::ClosePolitics
+                && self.data.steps.iter().any(|s| {
+                    s.entry == entry && s.target.stage == Stage::ClosePolitics
+                }))
         {
             return Err(invalid());
         }
@@ -1000,6 +1080,166 @@ mod tests {
             current_state_verified: true,
             event_causality_verified: false,
         }
+    }
+    fn handoff_research() -> (Entry, crate::research_stage::OwnState) {
+        (
+            Entry {
+                id: "research-head".into(),
+                intent: Intent::Research {
+                    technology_id: "support_weapons".into(),
+                    slot: 0,
+                },
+                navigation: None,
+            },
+            crate::research_stage::OwnState {
+                epoch: epoch(),
+                selected_slot: None,
+                selected_folder: None,
+                tree_visible: false,
+                panel_visible: Some(false),
+                active_mode: Some(12),
+                researching: vec![None; 4],
+                visible_info: vec![],
+            },
+        )
+    }
+    fn active_politics() -> OwnState {
+        let mut s = state();
+        s.active_focus = ActiveFocus::Active("GER_rhineland".into());
+        s.managed_mode = Some(12);
+        s.politics_root = LocalRoot::Ready;
+        s
+    }
+    #[test]
+    fn handoff_scheduling_skips_occupied_slots_missing_permission_and_pending_retries() {
+        let (e, r) = handoff_research();
+        assert!(needs_research_handoff(true, false, &e, &r));
+        assert!(!needs_research_handoff(false, false, &e, &r));
+        assert!(!needs_research_handoff(true, true, &e, &r));
+        assert!(!needs_research_handoff(true, false, &entry(), &r));
+        for current in ["support_weapons", "different_technology"] {
+            let mut own = r.clone();
+            own.researching[0] = Some(current.into());
+            assert!(!needs_research_handoff(true, false, &e, &own));
+        }
+        for mode in [None, Some(5), Some(6), Some(13), Some(23)] {
+            let mut own = r.clone();
+            own.active_mode = mode;
+            assert!(!needs_research_handoff(true, false, &e, &own));
+        }
+        let mut own = r;
+        own.researching.clear();
+        assert!(!needs_research_handoff(true, false, &e, &own));
+    }
+    #[test]
+    fn handoff_hint_needs_exact_current_focus_and_two_consistent_own_ui_states() {
+        let (entry_r, research) = handoff_research();
+        let own = active_politics();
+        assert_eq!(
+            research_handoff_target(&entry(), &entry_r, &own, &research).unwrap(),
+            target(Stage::ClosePolitics)
+        );
+        for index in 0..10 {
+            let mut s = own.clone();
+            match index {
+                0 => s.active_focus = ActiveFocus::Idle,
+                1 => s.active_focus = ActiveFocus::Unknown,
+                2 => s.active_focus = ActiveFocus::Active("GER_other".into()),
+                3 => s.canonical_focus_id = Some("GER_other".into()),
+                4 => s.managed_mode = Some(23),
+                5 => s.politics_root = LocalRoot::Hidden,
+                6 => s.focus_root = LocalRoot::Ready,
+                7 => s.own_detail_counts = None,
+                8 => s.own_detail_counts = Some([0, 1]),
+                9 => s.own_research_info_counts = Some([1, 0]),
+                _ => unreachable!(),
+            }
+            assert!(research_handoff_target(&entry(), &entry_r, &s, &research).is_err());
+        }
+        for index in 0..8 {
+            let mut s = research.clone();
+            match index {
+                0 => s.epoch.campaign = "other".into(),
+                1 => s.active_mode = Some(23),
+                2 => s.panel_visible = Some(true),
+                3 => s.panel_visible = None,
+                4 => s.tree_visible = true,
+                5 => s.visible_info.push(None),
+                6 => s.researching[0] = Some("other_technology".into()),
+                7 => s.researching.clear(),
+                _ => unreachable!(),
+            }
+            assert!(research_handoff_target(&entry(), &entry_r, &own, &s).is_err());
+        }
+        assert!(research_handoff_target(&entry_r, &entry_r, &own, &research).is_err());
+        assert!(research_handoff_target(&entry(), &entry(), &own, &research).is_err());
+    }
+    #[test]
+    fn handoff_close_receipt_survives_restart_and_cannot_create_another_attempt() {
+        let t = Scratch::new();
+        let e = entry();
+        let day = 1936 * 365;
+        let mut n = Navigator::open(&t.path(), epoch(), std::slice::from_ref(&e)).unwrap();
+        n.check_handoff(&e, day).unwrap();
+        let id = n
+            .begin(e.clone(), target(Stage::ClosePolitics), day, 1, binding())
+            .unwrap();
+        let mut execution = receipt(id);
+        execution.receipt.target = target(Stage::ClosePolitics);
+        execution.receipt.observed = state();
+        execution.receipt.observed.active_focus = ActiveFocus::Active("GER_rhineland".into());
+        n.verified(&execution, &binding()).unwrap();
+        assert!(!n.blocked());
+        assert!(n.data.goals.is_empty());
+        let bytes = std::fs::read(t.path()).unwrap();
+        drop(n);
+        let mut n = Navigator::open(&t.path(), epoch(), std::slice::from_ref(&e)).unwrap();
+        assert_eq!(n.latest()["preparation"]["stage"], "ClosePolitics");
+        assert_eq!(n.latest()["preparation"]["goal_completed"], false);
+        for when in [day, day + 1] {
+            assert!(n.check_handoff(&e, when).is_err());
+            assert!(n
+                .begin(e.clone(), target(Stage::ClosePolitics), when, 2, binding())
+                .is_err());
+        }
+        assert_eq!(std::fs::read(t.path()).unwrap(), bytes);
+        assert_eq!(n.data.steps.len(), 1);
+        assert!(n.data.goals.is_empty());
+    }
+    #[test]
+    fn handoff_refusal_unresolved_input_and_changed_storage_never_gain_retry_authority() {
+        for evidence in [
+            None,
+            Some(crate::focus_stage::FailureEvidence::BeforeIntent),
+            Some(crate::focus_stage::FailureEvidence::ConfirmedNotQueued),
+            Some(crate::focus_stage::FailureEvidence::Unknown),
+        ] {
+            let t = Scratch::new();
+            let e = entry();
+            let day = 1936 * 365;
+            let mut n = Navigator::open(&t.path(), epoch(), std::slice::from_ref(&e)).unwrap();
+            n.begin(e.clone(), target(Stage::ClosePolitics), day, 1, binding())
+                .unwrap();
+            if let Some(evidence) = evidence {
+                n.failed(
+                    &Error::new("input_not_queued", "generated refusal"),
+                    evidence,
+                )
+                .unwrap();
+            }
+            drop(n);
+            let mut n = Navigator::open(&t.path(), epoch(), std::slice::from_ref(&e)).unwrap();
+            assert!(n.check_handoff(&e, day).is_err());
+            assert!(n.check_handoff(&e, day + 1).is_err());
+            assert_eq!(n.data.steps.len(), 1);
+        }
+        let t = Scratch::new();
+        let e = entry();
+        let day = 1936 * 365;
+        let mut n = Navigator::open(&t.path(), epoch(), std::slice::from_ref(&e)).unwrap();
+        std::fs::write(t.path(), "external change").unwrap();
+        assert!(n.check_handoff(&e, day).is_err());
+        assert!(n.blocked());
     }
     #[test]
     fn idle_navigation_active_wait_unknown_refusal_and_hard_gate() {

@@ -875,6 +875,60 @@ fn navigation_preparation_refuses_external_plan_mutation_before_any_stage() {
     assert!(g.preparation_check().is_err());
 }
 
+#[test]
+#[cfg(unix)]
+fn completed_focus_hint_is_checked_history_without_budget_or_assignment_mutation() {
+    let t = Temp::new();
+    let mut p = plan();
+    let mut next_focus = p.entries[1].clone();
+    next_focus.id = "focus-2".into();
+    next_focus.intent = Intent::Focus {
+        focus_id: "GER_four_year_plan".into(),
+    };
+    p.entries.push(next_focus.clone());
+    let mut b = Fake::new(&p);
+    let mut g = Governor::open(&t.path(), p.clone()).unwrap();
+    assert_eq!(g.completed_focus_hint().unwrap(), None);
+    continue_goal(&mut g, &mut b, "research-1").unwrap();
+    assert_eq!(g.completed_focus_hint().unwrap(), None);
+    continue_goal(&mut g, &mut b, "focus-1").unwrap();
+    assert_eq!(
+        g.completed_focus_hint().unwrap(),
+        Some(p.entries[1].clone())
+    );
+    continue_goal(&mut g, &mut b, "focus-2").unwrap();
+    let bytes = fs::read(t.path()).unwrap();
+    let budget = g.used_actions(1936 * 365);
+    for _ in 0..2 {
+        assert_eq!(g.completed_focus_hint().unwrap(), Some(next_focus.clone()));
+        assert_eq!(g.used_actions(1936 * 365), budget);
+        assert_eq!(fs::read(t.path()).unwrap(), bytes);
+    }
+    drop(g);
+    let mut g = Governor::open(&t.path(), p).unwrap();
+    assert_eq!(g.completed_focus_hint().unwrap(), Some(next_focus));
+    assert_eq!(fs::read(t.path()).unwrap(), bytes);
+    fs::write(t.path(), b"external mutation").unwrap();
+    assert!(g.completed_focus_hint().is_err());
+    assert!(g.completed_focus_hint().is_err());
+}
+
+#[test]
+#[cfg(unix)]
+fn completed_focus_hint_refuses_unresolved_intent_even_with_an_older_completion() {
+    let t = Temp::new();
+    let p = plan();
+    let mut b = Fake::new(&p);
+    let mut g = Governor::open(&t.path(), p).unwrap();
+    continue_goal(&mut g, &mut b, "focus-1").unwrap();
+    b.mode = Mode::Uncertain;
+    assert!(continue_goal(&mut g, &mut b, "research-1").is_err());
+    assert_eq!(
+        g.completed_focus_hint().unwrap_err().code,
+        "governor_quarantined"
+    );
+}
+
 #[cfg(unix)]
 fn refill_plan() -> Plan {
     let mut p = plan();

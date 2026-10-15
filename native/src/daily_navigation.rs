@@ -56,6 +56,8 @@ pub(crate) fn known_preparation_refusal(code: &str) -> bool {
         code,
         "research_precondition"
             | "research_unavailable"
+            | "focus_precondition"
+            | "focus_unavailable"
             | "capability_unavailable"
             | "input_not_queued"
     )

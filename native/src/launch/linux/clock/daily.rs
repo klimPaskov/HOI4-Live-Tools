@@ -92,7 +92,7 @@ impl Controller {
         self.research_enabled
     }
     pub(super) fn tool() -> Value {
-        json!({"name":"hoi4_daily_governor","description":"Optional owned daily automatic research refill worker and fresh compact digest. Start requires the existing exclusive lease and explicit typed plan. Navigation uses separately journaled verified stages; only fresh Research or separately opted-in Focus Start completes an assignment. Focus requires default-off owner daily_focus plus plan.focus_permission and existing profile. Economy, army and naval domains remain unavailable. Unknown/uncertain input is never replayed. Stop does not pause the game. Compacted history includes a snapshot_id; details retrieves an exact historical section without game reads or input.","inputSchema":{"type":"object","oneOf":[{"properties":{"op":{"enum":["start","update"]},"lease_token":{"type":"string"},"plan":{"type":"object"}},"required":["op","lease_token","plan"],"additionalProperties":false},{"properties":{"op":{"enum":["digest","stop"]}},"required":["op"],"additionalProperties":false},{"properties":{"op":{"enum":["details"]},"snapshot_id":{"type":"string","minLength":64,"maxLength":64},"section":{"enum":crate::daily_digest::SECTIONS}},"required":["op","snapshot_id","section"],"additionalProperties":false}]}})
+        json!({"name":"hoi4_daily_governor","description":"Optional owned daily automatic research refill worker and fresh compact digest. Start requires the existing exclusive lease and explicit typed plan. Navigation uses separately journaled verified stages; only fresh Research or separately opted-in Focus Start completes an assignment. Focus requires default-off owner daily_focus plus plan.focus_permission and existing profile. With both domain permissions, one journaled ClosePolitics stage can bridge a completed Focus to an empty research slot; the reverse transition is unavailable. Economy, army and naval domains remain unavailable. Unknown/uncertain input is never replayed. Stop does not pause the game. Compacted history includes a snapshot_id; details retrieves an exact historical section without game reads or input.","inputSchema":{"type":"object","oneOf":[{"properties":{"op":{"enum":["start","update"]},"lease_token":{"type":"string"},"plan":{"type":"object"}},"required":["op","lease_token","plan"],"additionalProperties":false},{"properties":{"op":{"enum":["digest","stop"]}},"required":["op"],"additionalProperties":false},{"properties":{"op":{"enum":["details"]},"snapshot_id":{"type":"string","minLength":64,"maxLength":64},"section":{"enum":crate::daily_digest::SECTIONS}},"required":["op","snapshot_id","section"],"additionalProperties":false}]}})
     }
     pub(super) fn call(
         &self,
@@ -670,6 +670,47 @@ fn worker(
             if let Some(entry) = &entry {
                 let retry_target =
                     navigation.retry_target(entry, day, crate::daily_observation::unix_ms()?)?;
+                if crate::daily_focus_navigation::needs_research_handoff(
+                    focus_permission,
+                    retry_target.is_some(),
+                    entry,
+                    &queue_ui,
+                ) {
+                    let result = run_research_handoff(
+                        &mut governor,
+                        &mut focus_navigation,
+                        &mut state,
+                        process,
+                        gate,
+                        token,
+                        focus_until,
+                        day,
+                        entry,
+                        &queue_ui,
+                        report,
+                    );
+                    if focus_navigation.blocked() || governor.blocks_work() {
+                        blocked.store(true, Ordering::Release);
+                    }
+                    if let Err(e) = &result {
+                        if crate::daily_navigation::known_preparation_refusal(e.code) {
+                            refusal_entry = Some(entry.id.clone());
+                            let saved = navigation.refuse_preparation(entry, day, e);
+                            if navigation.blocked() {
+                                blocked.store(true, Ordering::Release);
+                            }
+                            if let Ok(mut report) = report.lock() {
+                                report["last_preparation_refusal"] =
+                                    json!(navigation.latest_refusal());
+                            }
+                            saved?;
+                        }
+                    }
+                    result?;
+                    // One navigation stage per batch. Research gets a new
+                    // five-second ceiling on the next batch, not Focus's ten.
+                    return Ok(None);
+                }
                 let prepared = (|| -> Result<Option<crate::research_stage::Target>> {
                     let mut ui = queue_ui;
                     if let Some(hint) = &entry.navigation {
@@ -1058,6 +1099,130 @@ enum FocusRun {
     Done(Option<core::DailyResult>),
 }
 #[allow(clippy::too_many_arguments)]
+fn run_focus_preparation(
+    navigation: &mut crate::daily_focus_navigation::Navigator,
+    state: &mut ControlState,
+    process: &dyn Process,
+    gate: &RwLock<bool>,
+    token: &str,
+    until: Instant,
+    day: i64,
+    entry: &core::Entry,
+    revision: u64,
+    target: crate::focus_stage::Target,
+    binding: crate::daily_focus_navigation::OwnBinding,
+    report: &Mutex<Value>,
+) -> Result<()> {
+    let id = navigation.begin(entry.clone(), target.clone(), day, revision, binding)?;
+    let result = focus::execute_internal(state, process, gate, token, &id, target.clone(), until);
+    match result {
+        Ok((execution, _)) => {
+            let (_, _, after) = focus::observed_bound(process, &mut state.guard, &target)?;
+            navigation.verified(&execution, &after)?;
+            if Instant::now() >= until {
+                let error = Error::new(
+                    "action_uncertain",
+                    "Focus preparation receipt exceeded original deadline",
+                );
+                if let Err(storage) = navigation.quarantine_after_verified(&error) {
+                    return Err(Error::new(
+                        "action_uncertain",
+                        format!(
+                            "{}; terminal uncertainty persistence failed: {}",
+                            error.message, storage
+                        ),
+                    ));
+                }
+                return Err(error);
+            }
+            if let Ok(mut r) = report.lock() {
+                r["focus"] = navigation.latest();
+            }
+            Ok(())
+        }
+        Err(e) => {
+            let evidence = focus::failure_evidence(state, &id, &target, &e);
+            navigation.failed(&e, evidence)?;
+            Err(e)
+        }
+    }
+}
+#[allow(clippy::too_many_arguments)]
+fn run_research_handoff(
+    governor: &mut core::Governor,
+    navigation: &mut crate::daily_focus_navigation::Navigator,
+    state: &mut ControlState,
+    process: &dyn Process,
+    gate: &RwLock<bool>,
+    token: &str,
+    until: Instant,
+    day: i64,
+    research_entry: &core::Entry,
+    research: &crate::research_stage::OwnState,
+    report: &Mutex<Value>,
+) -> Result<()> {
+    // Called only with explicit Focus permission, an eligible research head
+    // and available shared budget, under the common controller lock.
+    let entry = governor.completed_focus_hint()?.ok_or_else(|| {
+        Error::new(
+            "research_precondition",
+            "A durable completed own Focus is required as handoff key hint",
+        )
+    })?;
+    navigation.check_handoff(&entry, day)?;
+    let core::Intent::Focus { focus_id } = &entry.intent else {
+        unreachable!()
+    };
+    let target = crate::focus_stage::Target {
+        epoch: state.guard.epoch.clone(),
+        stage: crate::focus_stage::Stage::ClosePolitics,
+        focus_id: focus_id.clone(),
+    };
+    let prepared = (|| -> Result<_> {
+        state.authority.authorize(token, &state.guard.epoch)?;
+        let (own, context, binding) = focus::observed_bound(process, &mut state.guard, &target)?;
+        focus_scope(&context, &governor.plan().scope)?;
+        if Instant::now() >= until {
+            return Err(Error::new(
+                "focus_deadline",
+                "Focus handoff observation exceeded original deadline",
+            ));
+        }
+        if (i64::from(context.campaign.date_raw) - 43_800_000).div_euclid(24) != day {
+            return Ok(None);
+        }
+        let target = crate::daily_focus_navigation::research_handoff_target(
+            &entry,
+            research_entry,
+            &own,
+            research,
+        )?;
+        Ok(Some((target, binding)))
+    })();
+    let (target, binding) = match prepared {
+        Ok(Some(v)) => v,
+        Ok(None) => return Ok(()),
+        Err(e) => {
+            navigation.refuse_read_only(&entry, day, &e)?;
+            return Err(e);
+        }
+    };
+    run_focus_preparation(
+        navigation,
+        state,
+        process,
+        gate,
+        token,
+        until,
+        day,
+        &entry,
+        governor.plan().revision,
+        target,
+        binding,
+        report,
+    )
+}
+#[allow(clippy::too_many_arguments)]
 fn run_focus(
     governor: &mut core::Governor,
     navigation: &mut crate::daily_focus_navigation::Navigator,
@@ -1121,46 +1286,21 @@ fn run_focus(
         crate::daily_focus_navigation::Next::Wait => Ok(FocusRun::Wait),
         crate::daily_focus_navigation::Next::Stage(stage) => {
             let target = crate::focus_stage::Target { stage, ..target };
-            let id = navigation.begin(
-                entry.clone(),
-                target.clone(),
+            run_focus_preparation(
+                navigation,
+                state,
+                process,
+                gate,
+                token,
+                until,
                 day,
+                entry,
                 governor.plan().revision,
+                target,
                 binding,
+                report,
             )?;
-            let result =
-                focus::execute_internal(state, process, gate, token, &id, target.clone(), until);
-            match result {
-                Ok((execution, _)) => {
-                    let (_, _, after) = focus::observed_bound(process, &mut state.guard, &target)?;
-                    navigation.verified(&execution, &after)?;
-                    if Instant::now() >= until {
-                        let error = Error::new(
-                            "action_uncertain",
-                            "Focus preparation receipt exceeded original deadline",
-                        );
-                        if let Err(storage) = navigation.quarantine_after_verified(&error) {
-                            return Err(Error::new(
-                                "action_uncertain",
-                                format!(
-                                    "{}; terminal uncertainty persistence failed: {}",
-                                    error.message, storage
-                                ),
-                            ));
-                        }
-                        return Err(error);
-                    }
-                    if let Ok(mut r) = report.lock() {
-                        r["focus"] = navigation.latest();
-                    }
-                    Ok(FocusRun::Done(None))
-                }
-                Err(e) => {
-                    let evidence = focus::failure_evidence(state, &id, &target, &e);
-                    navigation.failed(&e, evidence)?;
-                    Err(e)
-                }
-            }
+            Ok(FocusRun::Done(None))
         }
         crate::daily_focus_navigation::Next::Start => {
             let revision = governor.plan().revision;
@@ -1506,7 +1646,13 @@ fn compact_observation_with_details(
         digest["focus"]["start"] = json!({"stage":"Start","historical":true,
             "completion_ref":"assignments.latest_completion"});
         let preparation = &digest["focus"]["preparation"];
-        if preparation["entry_id"] == completed_id && preparation["verified"] == true {
+        if preparation["entry_id"] == completed_id
+            && preparation["verified"] == true
+            && matches!(
+                preparation["stage"].as_str(),
+                Some("OpenPolitics" | "OpenFocus" | "View")
+            )
+        {
             digest["focus"]
                 .as_object_mut()
                 .unwrap()
@@ -1727,6 +1873,22 @@ mod tests {
             assert_eq!(out["input_authorized"], false);
             assert_eq!(out["verified"], json!([]));
         }
+    }
+    #[test]
+    fn completed_focus_does_not_hide_a_later_close_navigation_receipt() {
+        let latest = json!({"entry_id":"focus-head","state":"Complete","request_id":"a".repeat(64),"observed_sequence":6,"date_raw":60759371});
+        let preparation = json!({"entry_id":"focus-head","stage":"ClosePolitics","request_id":"b".repeat(64),"verified":true,"goal_completed":false,"historical":true});
+        let report = json!({"running":true,
+            "assignments":{"available":true,"completed":1,"latest_completion":latest},
+            "focus":{"preparation":preparation,"start":{"entry_id":"focus-head","stage":"Start","request_id":"a".repeat(64),"historical":true}}});
+        let out = compact_observation(digest_sample(), &report, false, 1).unwrap();
+        assert_eq!(out["focus"]["preparation"], preparation);
+        assert!(out["focus"]["preparation_omitted_after_completion"].is_null());
+        assert_eq!(
+            out["focus"]["start"]["completion_ref"],
+            "assignments.latest_completion"
+        );
+        assert_eq!(out["assignments"]["completed"], 1);
     }
     #[test]
     fn recovered_start_failure_digest_preserves_cause_completion_budget_under_bound() {

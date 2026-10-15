@@ -51,8 +51,9 @@ receipts cannot complete research work. It prepares each research stage separate
 and supports idempotent plan updates. Several research entries may complete on
 one day within the durable assignment limit. Ordered research queues now retain
 one pending head per slot and wait for fresh empty-slot evidence; refill after
-an actual technology finishes still awaits live validation. Combined focus/research
-UI handoff, economy, army and naval adapters remain unfinished. Private daily storage
+an actual technology finishes still awaits live validation. A one-way automatic
+Focus-to-research handoff is implemented and awaits live validation. Reverse
+research-to-Focus navigation, economy, army and naval adapters remain unfinished. Private daily storage
 supports Unix only; other platforms return an explicit capability error.
 
 Late Focus results retain verified evidence and separately record quarantine.
@@ -83,7 +84,8 @@ wait records appear once. A View preparation still does not complete an assignme
 Unverified durable storage refuses a digest and blocks input; STOP retains an
 unavailable summary and the uncertainty information.
 For an exactly matching completed Start, the compact Focus summary references
-`assignments.latest_completion` and omits its successful preparation. STOP and
+`assignments.latest_completion` and omits only its successful OpenPolitics,
+OpenFocus or View preparation. A later ClosePolitics receipt remains visible. STOP and
 durable journals retain the full records. Failure, refusal and uncertainty history
 remain present; a mismatched request cannot qualify for this compaction.
 The matching failure can share that identity reference too; original/latest
@@ -109,7 +111,7 @@ as a failed observation. Full STOP output remains available.
 Recorded run044 retained a terminal nonqueued Focus Start caused by
 `Focus witness changed`. It preserved the one consumed reservation and unfinished
 entry; no close or research stage was attempted. Recording and normal exit passed.
-The next diagnostic change labels existing torn reads with static sections and,
+The diagnostic change labels existing torn reads with static sections and,
 where known, object-relative fields. It exposes no addresses or memory payloads
 and leaves all consistency checks and terminal nonreplay behavior unchanged.
 
@@ -117,8 +119,8 @@ A nonqueued Focus attempt now reports its underlying transport cause while
 retaining `input_not_queued` and its terminal receipt. A transport torn read
 inside a finalized NotQueued attempt does not authorize replay. Run040's older
 adapter discarded that specific cause, so it cannot be recovered retroactively.
-Run041 triggered no new transport refusal, so live verification of cause retention
-remains open. STOP now derives its historical budget from the same checked durable
+Run044 verified cause retention, although its earlier binary did not identify the
+changing field. STOP now derives its historical budget from the same checked durable
 state as its assignment summary, fixing run041's null cached budget after restart.
 It reports the last accepted day, date and sequence without a game read. Before
 the first accepted daily observation, day/usage/remaining stay explicitly unknown.
@@ -143,10 +145,23 @@ detail/info blockers, then preserves that focus through settled mode23 readback.
 Run043 verified this ordinary Q transition through a private diagnostic, followed
 by five existing Rust research stages and canonical slot assignment. Its initial
 helper refused stale before-state before input; the corrected helper took fresh
-reads inside the guest with the same two-second limit. This establishes the
-ordinary route; the newly exposed Rust close-stage service still needs its own
-recorded check. The daily worker does not yet select it. A verified retry returns
-its historical receipt; a new close request from an already hidden panel refuses.
+reads inside the guest with the same two-second limit. Run045 then verified the
+public Rust close stage and an identical saved-receipt lookup without new input,
+followed by research assignment. A new close request from an already hidden panel
+refuses. Rhineland remained active; assignment completion does not mean the
+focus finished over game time.
+
+The daily worker can now select ClosePolitics between a completed Focus
+assignment and an eligible empty-slot research head. It requires both owner
+permissions, plan Focus opt-in, remaining shared assignment budget and fresh
+same-epoch own Focus/research observations. The completed entry supplies only
+the focus ID; current active-focus, root, blocker and scope checks still govern
+input. One preparation is recorded per batch, without spending an assignment
+reservation. Research receives its own fresh five-second ceiling next batch.
+The close history survives restart and prevents a second automatic attempt,
+including after a known nonqueued refusal. Occupied slots and pending research
+retries bypass this handoff. This worker path is fixture-tested only; its recorded
+combined-plan test remains pending. Research-to-Focus navigation is unavailable.
 
 Wait timeouts return only the last earlier accepted sample, explicitly marked
 `state_historical: true`, `current_state_verified: false` and

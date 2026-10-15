@@ -2,6 +2,14 @@
 
 ## Unreleased native preview
 
+- Verify run045 public Rust ClosePolitics, identical historical-receipt lookup
+  without new input, and research assignment while retaining active Rhineland.
+  Recording and normal exit passed; no focus completion over game time is claimed.
+- Add an opt-in automatic Focus-to-research worker handoff using fresh own-state
+  checks and the shared guarded close executor. Retain its durable preparation
+  history across restart without spending or resetting assignment reservations.
+  Live combined-plan validation and the reverse direction remain pending.
+
 - Preserve run044's terminal nonqueued Focus Start and consumed budget. No retry,
   close stage or research input occurred; recording and normal owned exit passed.
 - Label Focus torn-read refusals with bounded static sections and known relative
