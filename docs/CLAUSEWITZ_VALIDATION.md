@@ -8,9 +8,12 @@ were verified. The final pause command timed out during posting; the adapter
 is quarantined. A subsequent fresh Rust run passed Luna's ordinary clock test
 through 3 January 1936, including verified pause. These are **bounded live tests,
 not campaign acceptance or a successful campaign**. The Rust port is underway.
-The latest Rust Focus worker gate, run041, passed Start, active-focus waiting,
-idempotent updates, budget-preserving restarts and bounded digest/detail output.
-Its recording finalized and the owned game exited normally; see the final section.
+Later worker runs passed Start, active-focus waiting, idempotent updates,
+budget-preserving restarts and bounded digest/detail output. The latest run044
+stopped at a confirmed-nonqueued Focus Start caused by a changing read; its new
+Rust close-stage gate was not reached. The original refusal and consumed budget
+are preserved. Recording finalized and the owned game exited normally; see the
+run044 section below.
 
 ## Reference and test environment
 
@@ -1612,7 +1615,7 @@ shared-controller wiring, safe plan updates and focus/economy/army/naval receipt
 adapters remain unfinished. Non-Unix storage explicitly reports unavailable.
 Typed future plan fields are not implemented gameplay commands.
 
-Host stable and Rust1.86 suites passed **444 tests**. Optimized actual Linux
+Host stable and Rust 1.86 suites passed **444 tests**. Optimized actual Linux
 passed **506 reported checks** (505 substantive plus one inert helper), including
 five isolated X11 cases with Q press/release and stationary pointer. The nested
 helper print is not counted twice. Python passed **953 tests, 37 skipped**, in
@@ -1651,8 +1654,8 @@ The corrected optimized bundle passed **527 reported checks** on the actual Linu
 kernel: **525 substantive plus two inert helpers**, including five isolated X11
 cases. Nested helper output is not counted again. The previous exact game and
 owner remained absent; display ownership and Yama1 stayed unchanged. Host stable
-and Rust1.86 suites each passed **444 tests**; Python passed **953 tests, 37
-skipped**, in 19.814 seconds. Host/Linux Clippy, Rust1.86 Linux compilation and
+and Rust 1.86 suites each passed **444 tests**; Python passed **953 tests, 37
+skipped**, in 19.814 seconds. Host/Linux Clippy, Rust 1.86 Linux compilation and
 formatting passed. The research-stage timeout fixture now consumes its finite
 deadline after recording dispatch, avoiding a CI scheduling-dependent pre-input
 refusal; production research deadlines remain unchanged.
@@ -1666,7 +1669,7 @@ Windows passed the corrected timeout test but exposed the same pre-dispatch
 scheduling assumption in the category restart fixture: its 20 ms budget expired
 before the expected input. The follow-up fixture uses the same finite
 post-dispatch expiration mechanism. Its 21 research-stage checks passed on host
-stable and Rust1.86; Python passed 953 tests, 37 skipped. Production code and the
+stable and Rust 1.86; Python passed 953 tests, 37 skipped. Production code and the
 running immutable game binary were unchanged. Windows CI verification remains
 pending for this follow-up.
 
@@ -1726,12 +1729,12 @@ game or introduce any input.
 Four deterministic clock-injection regressions cover late success, capped retry
 sleep, timely recovery and preservation of a late ownership error. The complete
 host Rust suite passed **448 tests**; all seven protocol-unit checks passed on
-Rust1.86. The optimized actual Linux bundle passed **531 reported checks**
+Rust 1.86. The optimized actual Linux bundle passed **531 reported checks**
 (529 substantive plus two inert helpers), including five isolated X11 cases.
 Nested helper output is not counted again. Source hashes matched all76 manifest
 files; the previous game/owner remained exited and display ownership/Yama1 were
-unchanged. Host/Linux Clippy, Rust1.86 Linux compilation and formatting passed.
-The local Python working-tree suite passed953 tests,37 skipped, in19.305 seconds;
+unchanged. Host/Linux Clippy, Rust 1.86 Linux compilation and formatting passed.
+The local Python working-tree suite passed 953 tests,37 skipped, in19.305 seconds;
 that checkout includes preserved Python WIP outside this Rust change.
 
 These are offline/kernel regression checks. The new wait behavior has not yet
@@ -1764,7 +1767,7 @@ identical retries do nothing. Historical requests retain their original revision
 when reopened. Uncertainty, lost storage ownership, replacement/deletion and
 forged revision/hash combinations refuse. Service update wiring is still pending.
 
-Rust1.86 host passed **472 tests**. Host/Linux Clippy, Rust1.86 Linux compilation,
+Rust 1.86 host passed **472 tests**. Host/Linux Clippy, Rust 1.86 Linux compilation,
 optimized cross-linking and formatting passed. The immutable optimized bundle
 passed **560 reported checks** on the actual Linux kernel (**558 substantive plus
 two inert helpers**), including five isolated X11 cases. Nested helper output is
@@ -1798,7 +1801,7 @@ deterministic channel/barrier regression reproduces publication between those
 steps and verifies refusal without manual work. Busy acquisition remains
 nonblocking; a poisoned controller reports uncertainty.
 
-Rust1.86 host passed **474 tests**; host/Linux Clippy, Rust1.86 Linux compilation,
+Rust 1.86 host passed **474 tests**; host/Linux Clippy, Rust 1.86 Linux compilation,
 formatting and the local Python suite (**953 tests, 37 skipped**,22.539 seconds)
 passed. Actual Linux fixtures for this correction are pending. The already
 launched run026 keeps its original immutable `5aaceba` binary and has the daily
@@ -1852,8 +1855,8 @@ Focus point preparation adds distinct guarded zero-angle Text and unmasked Frame
 branches; unknown renderers, incomplete hierarchy and unproved routing still
 refuse. These renderer fixtures do not explain run026's missing root closure.
 
-The composed Rust1.86 host suite passed **497 tests**; host/Linux Clippy,
-Rust1.86 Linux compilation, formatting and optimized cross-linking passed. Local
+The composed Rust 1.86 host suite passed **497 tests**; host/Linux Clippy,
+Rust 1.86 Linux compilation, formatting and optimized cross-linking passed. Local
 Python passed **953 tests,37 skipped**, in22.311 seconds, with preserved Python
 WIP. The first immutable actual Linux bundle failed the existing threaded-exec
 readiness fixture on `ownership_changed` after genuine executable-link NotFound
@@ -1908,8 +1911,8 @@ unchanged. Producer/consumer fixtures cover both roots and torn or unsupported
 hierarchies. Bounded closure diagnostics retain the reason without raw pointers.
 This independently found correction does not explain run026's closure refusal.
 
-The composed Rust1.86 host suite passed **512 tests**. Host/Linux Clippy with
-warnings denied, Rust1.86 Linux compilation, formatting and optimized cross-link
+The composed Rust 1.86 host suite passed **512 tests**. Host/Linux Clippy with
+warnings denied, Rust 1.86 Linux compilation, formatting and optimized cross-link
 passed. Local Python passed **953 tests,37 skipped**, in24.306 seconds, including
 preserved Python WIP. The fresh immutable full Linux-kernel bundle passed **602 reported checks**
 (**600 substantive plus two inert helpers**), including five isolated X11 cases.
@@ -1982,8 +1985,8 @@ worker checks authority and stops on explicit ownership/session loss or expiry;
 possible input takes precedence and quarantines. `running` is lifecycle only.
 Generic I/O is not guessed into ownership loss. Stop drains in-flight work.
 
-The composed Rust1.86 host suite passed **536 tests**. Host/Linux Clippy with
-warnings denied, Rust1.86 Linux compilation, formatting and optimized linking
+The composed Rust 1.86 host suite passed **536 tests**. Host/Linux Clippy with
+warnings denied, Rust 1.86 Linux compilation, formatting and optimized linking
 passed. Local Python passed **953 tests,37 skipped**, in21.090 seconds, including
 preserved WIP. The immutable Linux bundle passed **630 reported checks**
 (**628 substantive plus two inert helpers**), including five isolated X11 cases.
@@ -2057,8 +2060,8 @@ Permanent failures back off for the day. Assignment budget and unfinished goals
 remain unchanged. These changes require a fresh immutable live trial; run028's
 missing original errors remain unexplained.
 
-The combined Rust1.86 host suite passed **541 tests**; host/Linux Clippy with
-warnings denied, final Rust1.86 Linux compilation, formatting and optimized
+The combined Rust 1.86 host suite passed **541 tests**; host/Linux Clippy with
+warnings denied, final Rust 1.86 Linux compilation, formatting and optimized
 linking passed. Python passed **953 tests,37 skipped**, in22.460 seconds, with
 unrelated WIP preserved. The immutable actual-Linux bundle passed **636 reported
 checks** (**634 substantive plus two inert helpers**), including five isolated
@@ -2123,8 +2126,8 @@ capability_unavailable with the concrete return-to-panel-not-implemented reason.
 Contradictory or other UI states retain their original refusal. No new keyboard
 or pointer transition is enabled. Fresh installed-game validation is required.
 
-The combined Rust1.86 host suite passed **545 tests**; host/Linux Clippy,
-Rust1.86 Linux compilation, formatting and optimized linking passed. Python
+The combined Rust 1.86 host suite passed **545 tests**; host/Linux Clippy,
+Rust 1.86 Linux compilation, formatting and optimized linking passed. Python
 passed **953 tests,37 skipped**, in22.125 seconds. The immutable actual-Linux
 bundle passed **640 reported checks** (**638 substantive plus two inert helpers**),
 including five isolated X11 cases. Nested helper output is not counted twice;
@@ -2254,7 +2257,7 @@ for the generated child's natural exit. Success still requires the configured
 image and device/inode. Other errors or identity changes fail the test. This
 capture and expectation code is test-only; production guards are unchanged.
 
-Combined Rust1.86 host tests passed **556 checks**. Python passed **953 tests**,
+Combined Rust 1.86 host tests passed **556 checks**. Python passed **953 tests**,
 **37 skipped**, in22.400 seconds; formatting, host/Linux Clippy, MSRV Linux
 compilation and release linking passed. The immutable Linux bundle passed its
 parallel run: **652 reported checks**, **650 substantive plus two inert helpers**,
@@ -2319,7 +2322,7 @@ Four new fixtures verify useful known reasons, absent/wrong-typed fields,
 sanitization, and unchanged refusal/success. These diagnostics cannot establish
 which field failed in the earlier run032 or grant an input retry.
 
-Combined Rust1.86 host tests passed **564 checks**; Python passed **953 tests**,
+Combined Rust 1.86 host tests passed **564 checks**; Python passed **953 tests**,
 **37 skipped**, in24.482 seconds. Formatting, host/Linux Clippy, MSRV Linux
 compilation and release linking passed. The immutable actual Linux bundle passed
 **660 reported checks** (**658 substantive and two inert helpers**) in parallel,
@@ -2344,7 +2347,7 @@ and refused paths. The audit also corrects terminology: the no-op invoker reads
 an integer argument, and the Start member receives the event's control pointer.
 No direct call or native posting was executed or enabled by this static evidence.
 
-Combined Rust1.86 host tests passed **567 checks**; Python passed **953 tests**,
+Combined Rust 1.86 host tests passed **567 checks**; Python passed **953 tests**,
 **37 skipped**, in24.274 seconds. Formatting, host/Linux Clippy, MSRV Linux
 compilation and release linking passed. The immutable actual Linux bundle passed
 **663 reported checks** (**661 substantive and two inert helpers**) in parallel,
@@ -2389,7 +2392,7 @@ full-width string handles, anomalies, changed roots/owners/arrays/counters,
 malformed pages before process access, and complete validation outside the returned
 page. Known/unknown/mixed maximum pages fit the entire escaped MCP response bound.
 Equipment/public ID joins, general production and allocation remain unavailable.
-Combined host Rust1.86 tests passed582; Python passed953 with37 skips; Linux
+Combined host Rust 1.86 tests passed582; Python passed 953 with 37 skips; Linux
 compiler, both Clippy targets and formatting passed. Actual Linux execution
 passed678 reported checks (676 substantive), including five isolated X11 cases.
 The original library worker-limit fixture stderr remains preserved. Live own-line
@@ -2410,8 +2413,8 @@ unavailable singleton/other-target branches, unchanged admitted topology,
 malformed structures and final changed witnesses. Capabilities also explicitly
 mark own equipment-line observations as awaiting installed-game validation.
 
-The composed source passed586 Rust1.86 host tests,682 reported actual Linux
-checks (680 substantive),953 Python tests (37 skips), both Clippy targets, format,
+The composed source passed586 Rust 1.86 host tests,682 reported actual Linux
+checks (680 substantive), 953 Python tests (37 skips), both Clippy targets, format,
 MSRV Linux checks and release linking. These checks do not identify live listener
 topology or prove focus Start.
 
@@ -2553,8 +2556,8 @@ Unknown nodes, malformed edges and work/count bounds refuse; depth truncation is
 explicit. It consults Clausewitz-MCP's graph ideas with retained attribution,
 without importing its hidden-enemy payload producers or executor.
 
-Combined checks passed614 Rust1.86 host tests,711 reported actual Linux checks
-(709 substantive; nested/inert fixture helpers counted separately),953 Python
+Combined checks passed614 Rust 1.86 host tests,711 reported actual Linux checks
+(709 substantive; nested/inert fixture helpers counted separately), 953 Python
 tests (37 skips), format, host/Linux Clippy, MSRV Linux compilation and optimized
 Linux linking. The Linux archive had11 hash-verified payloads; all generated tests
 ran after the previous owned game exited normally, under unchanged Yama1. Five
@@ -2583,8 +2586,8 @@ old request IDs. A failed marker commit poisons the current owner; an unchanged
 Verified-only file cannot prove an uncommitted marker after a crash. Replacing the
 owner does not authorize adopting the orphaned game or clearing uncertainty.
 
-The final source passed624 Rust1.86 host tests,723 reported actual Linux checks
-(721 substantive),953 Python tests (37 skips), compiler/format/Clippy/MSRV gates
+The final source passed624 Rust 1.86 host tests,723 reported actual Linux checks
+(721 substantive), 953 Python tests (37 skips), compiler/format/Clippy/MSRV gates
 and release linking. The initial host Clippy failure identified Linux-only unused
 helpers on macOS; narrow platform/test gates fixed it and original logs remain.
 All11 bundle payloads were hash-verified before actual Linux execution; five X11
@@ -2645,8 +2648,8 @@ the original error. Strict initial/no-stable refusals remain; real ownership,
 scope and backend errors propagate even when late. This does not cancel a
 synchronous read or promise exact RPC return latency.
 
-The composed source passed634 Rust1.86 host tests,733 reported actual Linux
-checks (731 substantive),953 Python tests (37 skips), compiler/format/Clippy/MSRV
+The composed source passed634 Rust 1.86 host tests,733 reported actual Linux
+checks (731 substantive), 953 Python tests (37 skips), compiler/format/Clippy/MSRV
 and release linking. All11 optimized bundle payloads were hash-verified before
 Linux execution; five X11 cases used an isolated display under unchanged Yama1.
 These synthetic checks establish no corrected live worker acceptance. Fresh038
@@ -2725,8 +2728,8 @@ pre-input refusal, post-input uncertainty, journal reopening and nonreplay. The
 installed-build static Q route is shortcut provenance, not live callback binding;
 OS preflight likewise is not callback proof. No cross-domain action is enabled.
 
-The final composed source passed646 Rust1.86 host checks,748 reported actual Linux
-checks (746 substantive, excluding two fixture helpers),953 Python tests (37
+The final composed source passed646 Rust 1.86 host checks,748 reported actual Linux
+checks (746 substantive, excluding two fixture helpers), 953 Python tests (37
 skips), format, host/Linux Clippy, Linux MSRV compilation and optimized release
 linking. All11 bundle payloads were hash-verified before Linux execution. Five X11
 cases used their isolated display; the owned game had exited normally and exact
@@ -2788,8 +2791,8 @@ retry-authority labels. Initial Linux fixtures exposed a stale required-truncati
 expectation, then a genuine maximum-length-ID/two-reason overflow. Both failed
 bundles/logs remain separate; the latter prompted identity sharing rather than
 cause deletion. Three direct Linux digest checks passed before the full suite.
-Final gates passed646 Rust1.86 host checks,749 reported actual Linux checks
-(747 substantive excluding two helpers),953 Python tests (37 skips), compiler,
+Final gates passed646 Rust 1.86 host checks,749 reported actual Linux checks
+(747 substantive excluding two helpers), 953 Python tests (37 skips), compiler,
 format, host/Linux Clippy, MSRV and release linking. All11 payload hashes and
 unchanged display ownership/Yama1 passed; no game was active. These fixture gates
 do not establish the pending live Focus update/restart or panel handoff.
@@ -2824,8 +2827,8 @@ without changing terminal classification or allowing a finalized attempt to retr
 Generated crowded-history, exact-lookup, stale-ID, pending-Start and terminal
 nonreplay tests cover these changes; fresh installed-game acceptance is pending.
 
-The composed source passed650 Rust1.86 host tests,754 reported actual Linux
-checks (752 substantive, excluding two fixture helpers),953 Python tests
+The composed source passed650 Rust 1.86 host tests,754 reported actual Linux
+checks (752 substantive, excluding two fixture helpers), 953 Python tests
 (37 skips), format, host/Linux Clippy, Linux MSRV compilation and release linking.
 All11 payload hashes passed before execution; guest boot identity, old-process
 absence and Yama1 matched before/after. The first Linux suite exposed a fixture
@@ -3010,7 +3013,7 @@ A new request from already closed mode23 refuses; replay of a verified request
 returns only its historical receipt. Caller-supplied keys, geometry or state are
 rejected. The worker does not yet select this stage.
 
-The composed source passed **656 Rust1.86 host tests**, **761 reported actual
+The composed source passed **656 Rust 1.86 host tests**, **761 reported actual
 Linux checks** (759 substantive, excluding two fixture helpers), **953 Python
 tests** (37 skips), format, host/Linux Clippy, Linux MSRV compilation and release
 linking. All11 Linux payload hashes matched before execution; boot identity,
@@ -3018,3 +3021,47 @@ prior normal exit, old-process absence and Yama1 matched before/after. These
 fixtures and the private Q diagnostic do not establish a live invocation of the
 new Rust close-stage service. That gate, automatic worker handoff and full
 campaign acceptance remain open.
+
+## Recorded Focus refusal run044 — 15 October 2026
+
+One exclusive Luna medium player used immutable source `e65930d9373e54595e6a4a862f59b824d8f4ac58`
+and Rust CLI SHA-256 `f1ced044fc5e7879b220f750d685e215fde873834ff7487b92f4b6ce207d53d6`.
+Fresh initial memory confirmed vanilla Germany, Normal2, historical AI, FAIR,
+paused 1 January 1936 noon, idle Focus and four empty research slots. The first
+recorded packet was verified before the single campaign Start. Menu setup used
+one window activation with no cursor parking; gameplay input belonged solely to
+Luna through the Rust MCP.
+
+Worker OpenPolitics, OpenFocus and View each recorded one Intent/Verified pair
+with ServerConfirmed delivery. Start recorded one Intent/NotQueued pair and
+`ConfirmedNotQueued` failure evidence. The preserved cause is
+`torn_read: Focus witness changed; Ordinary attempt was refused before possible input; plan remains unfinished`.
+The changing field is unknown. This failure occurred after the stage journal's
+intent, so the bounded BeforeIntent retry rule does not apply. No retry or new
+reservation was created; the core assignment remains Pending with attempts1,
+revision1, budget used1/limit1/remaining0, two core journal rows and no quarantine.
+
+Luna stopped the worker and released its lease. Root independently fetched the
+canonical guest proof and matched release 10:35:47.626240UTC and status 10:35:49.429657UTC
+to the latest actual broker RPCs. Public ClosePolitics, its historical lookup,
+research and clock actions were not attempted. No final gameplay observation
+was made after the permanent refusal; historical receipts and absence of clock
+input must not be presented as a new current-state read.
+
+The 271-second H264 recording finalized at 10:36:58.931694UTC and passed ffprobe
+at 512×288. One ordinary owned-window close returned at 10:37:50.380959UTC after
+2.387 s with exit0/no signal/no core dump. Exact owned process absence and Yama1
+passed. Both brokers closed afterward. Independent offline verification matched
+all eight Focus journal rows, the pending core state, preserved original cause,
+STOP budget, empty clock/research journals and canonical lease proof.
+
+The following source adds bounded static section/object-relative-field labels
+to the existing witness errors. No read is removed or added, and no memory value
+or process address enters the error. This improves diagnosis on a future failure;
+it does not retroactively identify run044's changing field or prove a live fix.
+The composed source passed 657 Rust 1.86 host tests, 762 reported actual Linux
+checks (760 substantive; two helper cases excluded), 953 Python tests with 37
+platform skips, format, host/Linux Clippy, MSRV Linux compilation and optimized
+release linking. The actual Linux runner retained matching before/after boot,
+process-absence and Yama1 witnesses; all five isolated X11 cases passed.
+Automatic worker panel handoff and all full campaigns remain unaccepted.

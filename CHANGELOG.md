@@ -2,6 +2,11 @@
 
 ## Unreleased native preview
 
+- Preserve run044's terminal nonqueued Focus Start and consumed budget. No retry,
+  close stage or research input occurred; recording and normal owned exit passed.
+- Label Focus torn-read refusals with bounded static sections and known relative
+  fields, without process addresses, memory payloads, new reads or weaker checks.
+
 - Expose the guarded ordinary `close_politics` Focus stage after run043 verified
   the Q transition and subsequent Rust research assignment. Retain active-focus,
   local-blocker, lease, deadline and durable uncertainty checks; automatic worker

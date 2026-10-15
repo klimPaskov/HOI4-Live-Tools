@@ -26,11 +26,12 @@ Recorded Linux tests have passed:
 - Digests below 2 KB with exact historical detail lookup; five recent samples
   returned in 50–62 ms under x86 CPU emulation.
 
-These are bounded tests in vanilla Normal/historical Germany. The latest Focus
-test, run043, finalized its recording and exited normally. The newly exposed Rust
-close stage, automatic research/focus panel switching, completed-technology refill,
-economic/army/naval commands and
-full campaigns remain open. The Focus worker requires explicit opt-in. Earlier
+These are bounded tests in vanilla Normal/historical Germany. The latest run044
+stopped on a confirmed nonqueued Focus Start after a changing-state read. It
+preserved the unfinished plan and consumed budget, finalized its recording and
+exited normally. The new Rust close stage was not reached. Automatic panel
+switching, completed-technology refill, economic/army/naval commands and full
+campaigns remain open. The Focus worker requires explicit opt-in. Original
 failures and reporting limitations remain in the validation report.
 
 | Runtime | Verified | Remaining |

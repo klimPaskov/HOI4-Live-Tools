@@ -106,6 +106,13 @@ authority. The next digest replaces this cache; stale IDs explicitly return
 the cache but preserves durable journals. This avoids treating large histories
 as a failed observation. Full STOP output remains available.
 
+Recorded run044 retained a terminal nonqueued Focus Start caused by
+`Focus witness changed`. It preserved the one consumed reservation and unfinished
+entry; no close or research stage was attempted. Recording and normal exit passed.
+The next diagnostic change labels existing torn reads with static sections and,
+where known, object-relative fields. It exposes no addresses or memory payloads
+and leaves all consistency checks and terminal nonreplay behavior unchanged.
+
 A nonqueued Focus attempt now reports its underlying transport cause while
 retaining `input_not_queued` and its terminal receipt. A transport torn read
 inside a finalized NotQueued attempt does not authorize replay. Run040's older

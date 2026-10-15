@@ -15,6 +15,12 @@ refusal remains preserved. Fresh guest-local reads solved that harness issue
 without relaxing the two-second limit. This is manual route evidence; the new
 Rust close-stage service and automatic worker handoff still need live checks.
 
+Run044 did not reach the new Rust close command: worker Start ended in a confirmed
+nonqueued torn read after three verified preparations. The unfinished plan and
+consumed reservation were preserved without replay. Recording and normal exit
+passed. Its specific changing field remains unknown; this failure prevents a
+close-stage acceptance claim.
+
 11 October 2026. This is a development comparison, not proof of campaign success
 or a claim that HOI4 Live Tools is faster overall. Required targets are Windows,
 macOS and Linux. Linux game control remains unfinished.

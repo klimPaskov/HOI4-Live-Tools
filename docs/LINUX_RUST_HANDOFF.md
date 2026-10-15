@@ -4,34 +4,36 @@ User direction, 12 October 2026: stop the Mac screenshot-driven live tests and
 replace the primary runtime with a fast Rust MCP based on Clausewitz-MCP.
 Linux is the first live target; Windows and macOS remain required platforms.
 
-**Latest live result:** recorded run043 passed one ordinary Q Politics-close
-diagnostic followed by five Rust research stages. Fresh overview confirmed
-Rhineland still active and `support_weapons` in slot0, paused at 1 January 1936.
-The initial helper refused an expired before-state before writing an input
-intent. Its failure is preserved. A distinct helper in the same game read state
-locally inside the guest, kept the same two-second freshness limit, and dispatched
-one Q with state age24.5ms. No reload or Focus replay occurred. The 657.333-second
-recording finalized and passed ffprobe; independent canonical lease proof, one
-normal owned exit0 and exact process absence passed. No game or player input
-remains active. This is bounded route evidence, not full campaign acceptance.
-See the [recorded evidence](CLAUSEWITZ_VALIDATION.md#recorded-politics-close-and-research-run043--15-october-2026).
+**Latest live result:** recorded run044 verified worker OpenPolitics, OpenFocus
+and View, then stopped on a terminal confirmed-nonqueued Start. The preserved
+transport cause is `torn_read: Focus witness changed`; the particular field was
+not recorded. Its single reservation remains consumed, the assignment Pending,
+and retry authority false. ClosePolitics and research were not attempted. The
+271-second recording passed ffprobe, independent canonical lease proof matched
+actual RPCs, and one ordinary owned close produced exit0 with exact process
+absence. No game or player input remains active. This is a failed bounded gate,
+not campaign acceptance. See the
+[recorded evidence](CLAUSEWITZ_VALIDATION.md#recorded-focus-refusal-run044--15-october-2026).
 
-Run043 used unchanged source `7f71e92`. The next source exposes the existing
-strict typed `close_politics` service, retaining active-focus, settled-root,
-complete-blocker, shared lease, deadline and durable uncertainty guards. It passes
-656 Rust1.86 host tests,761 reported actual Linux checks (759 substantive),953
-Python tests (37 skips), format, host/Linux Clippy, MSRV Linux compilation and
-release linking. The new service itself still needs a recorded Rust invocation;
-the worker does not yet select it. Ordinary diagnostic input is distinct from
-production-adapter acceptance.
+Run043 previously passed an ordinary Q Politics-close diagnostic followed by
+five Rust research stages, retaining active Rhineland. Its stale helper refusal
+and distinct successful guest-local continuation remain preserved. Run044 used
+source `e65930d`, which exposes the guarded typed `close_politics` service; that
+service still needs a recorded successful invocation.
 
-**Next work:** verify the Rust ClosePolitics stage, then integrate and validate
-worker Focus-to-research handoff using separate navigation receipts without
-consuming assignment budget. Preserve unfinished plans, receipts and refusal
-history across restart. Focus completion over game time, technology completion/
-refill, economy/army/naval adapters, Windows/macOS native live support and the
-clean two-year/full campaigns remain open. Recent runs triggered no Focus
-transport refusal, so new cause retention still has only offline evidence.
+The next source adds bounded static section/object/relative-field diagnostics to
+existing Focus consistency refusals. It does not remove witnesses, alter input
+classification, retry a terminal reservation or add game reads. It passed 657
+Rust 1.86 host tests, 762 reported actual Linux checks (760 substantive), 953 Python
+tests (37 skips), formatting, host/Linux Clippy, MSRV Linux compilation and
+release linking. No successful live diagnosis of the changing field is claimed.
+
+**Next work:** use a fresh recorded run to
+verify the Rust ClosePolitics stage and saved-receipt nonreplay. Preserve run044
+permanently. Worker Focus-to-research handoff remains unwired; its partial offline
+work is preserved privately. Focus completion over game time, technology
+completion/refill, economy/army/naval adapters, Windows/macOS native live support
+and the clean two-year/full campaigns remain open.
 
 Earlier run042 passed read-only Focus UI before lease acquisition and after Start,
 and adjacent restart/STOP with durable budget1/1/0. Run041 passed idempotent update,
@@ -61,8 +63,8 @@ summary plus a fresh overview before continuing; an empty batch `verified` list
 does not negate durable Complete. Optional history truncation preserves counts,
 latest completion, uncertainty and budget. The prospective typed ClosePolitics
 stage remains hard-disabled pending its own recorded ordinary shortcut gate.
-The composed source passed646 Rust1.86 host checks,748 reported actual Linux
-checks (746 substantive),953 Python tests (37 skips), format/Clippy/MSRV and
+The composed source passed646 Rust 1.86 host checks,748 reported actual Linux
+checks (746 substantive), 953 Python tests (37 skips), format/Clippy/MSRV and
 release linking. Raw historical recounts correct the earlier worker/retry totals
 to724/722 and734/732 respectively; the original saved logs remain unchanged.
 The233-second recording passed ffprobe; canonical lease proof/readback, normal
@@ -92,8 +94,8 @@ scope/day and producer sequence on each iteration. It never reopens run037 or
 resets budgets. Original cause/core pending reason now appear in digest/stop.
 Later wait deadline refusals return only explicitly historical earlier evidence;
 late payloads remain discarded and real scope/ownership errors propagate. The
-composed source passed634 Rust1.86 host tests,733 reported actual Linux checks
-(731 substantive),953 Python tests (37 skips), compiler/format/Clippy/MSRV and
+composed source passed634 Rust 1.86 host tests,733 reported actual Linux checks
+(731 substantive), 953 Python tests (37 skips), compiler/format/Clippy/MSRV and
 release-link gates. Run038 verified Start/completion and normal historical timeout;
 no pre-input retry or late-read timeout branch occurred in that run.
 
@@ -108,15 +110,15 @@ verified evidence and separately record quarantine; failed persistence poisons
 the live owner but an unchanged old file cannot prove an uncommitted marker.
 The borrowed worker path passed Start in run038. Cross-domain UI
 handoff remains unavailable; the next test is Focus-only.
-The composed worker passed624 Rust1.86 host tests,723 reported actual Linux
-checks (721 substantive),953 Python tests (37 skips), format, host/Linux Clippy,
+The composed worker passed624 Rust 1.86 host tests,723 reported actual Linux
+checks (721 substantive), 953 Python tests (37 skips), format, host/Linux Clippy,
 MSRV Linux compilation and release linking. The initial Mac Clippy dead-code
 failure is retained; narrow Linux/test gates fixed it. These are offline gates,
 not live worker or campaign acceptance.
 The next independent foundation adds bounded graph components and multi-source
 BFS over supplied public/generated node IDs. It has no game-state producer or
-army integration. Combined checks passed614 Rust1.86 host tests,711 reported
-actual Linux checks (709 substantive),953 Python tests (37 skips), compiler,
+army integration. Combined checks passed614 Rust 1.86 host tests,711 reported
+actual Linux checks (709 substantive), 953 Python tests (37 skips), compiler,
 Clippy, format and release-link gates. Graph fixtures are not tactical acceptance.
 The composed foundation passed 606 Rust 1.86 host tests, 703 reported actual Linux
 checks (701 substantive), 953 Python tests (37 skips), compiler/Clippy/format
@@ -131,7 +133,7 @@ retry allowance; their original history remains preserved. Lease release,
 ffprobe and normal owned exit passed. No clean two-year or full campaign has
 passed; native posting stays quarantined.
 
-Exact source `6060216` passed545 Rust1.86 host tests,640 reported actual Linux
+Exact source `6060216` passed545 Rust 1.86 host tests,640 reported actual Linux
 checks (638 substantive), five isolated X11 cases,953 Python tests (37 skipped)
 and all nine three-OS CI jobs. Offline results and bounded live success remain
 separate evidence. Research completion queues and a return-to-panel route after
@@ -172,7 +174,7 @@ live latency and completed-technology refill remain unverified.
 An independently audited alternate EVENT manager+1d8 now also requires zero;
 active variants refuse before their captured payload/renderer is read. This
 stricter source passed567 host checks,663 reported parallel Linux checks
-(661 substantive),953 Python tests (37 skipped) and the compiler/format/Clippy
+(661 substantive), 953 Python tests (37 skipped) and the compiler/format/Clippy
 gates. Run032's specific failed binding field remains unknown. Run033 then repeated verified OpenPolitics/OpenFocus/View and saved the selected
 own-detail observation before Start. The exact selected key matched, but its
 callback association reported `event_binding_unavailable`; renderer/control
@@ -185,7 +187,7 @@ A new read-only own equipment-line observer validates the complete scoped
 collection before bounded paging, preserves full snapshot-scoped handles and
 separate signed active/damaged/requested counts, and returns unknown subtype
 metadata without dereferencing its unproved payload. Equipment IDs, general
-production and allocation remain unavailable. Combined Rust1.86 host tests582,
+production and allocation remain unavailable. Combined Rust 1.86 host tests582,
 Python953 (37 skipped), Linux compiler/Clippy/format gates and678 reported actual
 Linux checks (676 substantive) passed. Live own-line comparison remains pending.
 The next source adds pointer-free Start listener count/membership diagnostics

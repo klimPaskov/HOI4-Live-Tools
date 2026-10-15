@@ -397,6 +397,39 @@ fn changed_selection_and_control_state_on_final_witness_refused() {
     }
 }
 
+#[test]
+fn changed_focus_fields_report_bounded_labels_without_addresses_or_payloads() {
+    for (address, field) in [
+        (PANEL + 0x7d0, "detail_panel+0x7d0 size=8"),
+        (WIN + 0xa5, "detail_window+0xa5 size=1"),
+        (BUTTON + 0xac, "start_control+0xac size=4"),
+    ] {
+        let mut f = Fake::new();
+        f.torn = Some(address);
+        let e = f.result().unwrap_err();
+        assert_eq!(e.code, "torn_read");
+        assert!(e.message.contains("detail;"), "{}", e.message);
+        assert!(e.message.contains(field), "{}", e.message);
+        assert!(e.message.len() < 160);
+        for pointer in [address, PANEL, WIN, BUTTON] {
+            assert!(!e.message.contains(&format!("{pointer:x}")));
+            assert!(!e.message.contains(&pointer.to_string()));
+        }
+    }
+    // An existing out-of-object key payload still refuses. Diagnostics must
+    // not invent an object owner or leak its address to explain the failure.
+    let mut f = Fake::new();
+    f.torn = Some(F + 0x28);
+    let e = f.result().unwrap_err();
+    assert_eq!(e.code, "torn_read");
+    assert!(
+        e.message.contains("catalog; unclassified size="),
+        "{}",
+        e.message
+    );
+    assert!(!e.message.contains(&format!("{:x}", F + 0x28)));
+}
+
 impl Fake {
     fn start_binding(&mut self) {
         self.word(BUTTON + 0x80, 0x4347488);

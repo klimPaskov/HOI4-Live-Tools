@@ -10,36 +10,75 @@ use crate::{
 };
 use serde_json::{json, Value};
 use std::{
-    cell::RefCell,
+    cell::{Cell, RefCell},
     collections::{BTreeMap, BTreeSet},
     time::{Instant, SystemTime, UNIX_EPOCH},
 };
 
 struct Witnesses<'a> {
     process: &'a dyn Process,
-    reads: RefCell<BTreeMap<(u64, usize), Vec<u8>>>,
+    reads: RefCell<BTreeMap<(u64, usize), WitnessRead>>,
+    section: Cell<&'static str>,
+    regions: RefCell<BTreeMap<u64, (u64, &'static str)>>,
+}
+struct WitnessRead {
+    bytes: Vec<u8>,
+    section: &'static str,
 }
 impl ReadMemory for Witnesses<'_> {
     fn read(&self, a: u64, n: usize) -> Result<Vec<u8>> {
         let bytes = self.process.read(a, n)?;
         let mut reads = self.reads.borrow_mut();
         if let Some(old) = reads.get(&(a, n)) {
-            if *old != bytes {
-                return Err(Error::new("torn_read", "Focus observation changed"));
+            if old.bytes != bytes {
+                return Err(self.changed("observation", a, n, old.section));
             }
         } else {
-            reads.insert((a, n), bytes.clone());
+            reads.insert(
+                (a, n),
+                WitnessRead {
+                    bytes: bytes.clone(),
+                    section: self.section.get(),
+                },
+            );
         }
         Ok(bytes)
     }
 }
 impl Witnesses<'_> {
+    // Diagnostics only: bounded known object extents label existing reads.
+    // They never trigger reads, loosen a witness or confer ownership. Messages
+    // contain static labels and relative offsets, never addresses or values.
+    fn region(&self, address: u64, size: u64, label: &'static str) {
+        if let Some(end) = address.checked_add(size) {
+            self.regions.borrow_mut().insert(address, (end, label));
+        }
+    }
+    fn changed(&self, phase: &str, address: u64, size: usize, section: &str) -> Error {
+        let regions = self.regions.borrow();
+        let object = regions
+            .range(..=address)
+            .next_back()
+            .filter(|(_, (end, _))| {
+                address
+                    .checked_add(size as u64)
+                    .is_some_and(|last| last <= *end)
+            });
+        let field = match object {
+            Some((start, (_, label))) => format!("{label}+0x{:x} size={size}", address - start),
+            None => format!("unclassified size={size}"),
+        };
+        Error::new(
+            "torn_read",
+            format!("Focus {phase} changed: {section}; {field}"),
+        )
+    }
     fn finish(&self) -> Result<(usize, usize)> {
         let reads = self.reads.borrow();
         let mut bytes = 0;
         for ((a, n), old) in reads.iter() {
-            if self.process.read(*a, *n)? != *old {
-                return Err(Error::new("torn_read", "Focus witness changed"));
+            if self.process.read(*a, *n)? != old.bytes {
+                return Err(self.changed("witness", *a, *n, old.section));
             }
             bytes += n;
         }
@@ -84,8 +123,10 @@ fn unique(values: &[u64]) -> Result<BTreeSet<u64>> {
     }
     Ok(set)
 }
+#[allow(clippy::too_many_arguments)]
 fn named_start(
     r: &Reader<'_>,
+    witnesses: &Witnesses<'_>,
     base: u64,
     window: u64,
     panel: u64,
@@ -122,6 +163,7 @@ fn named_start(
                 ));
             }
             exact(r, *child, base + 0x43470c8)?;
+            witnesses.region(*child, 0xb0, "start_control");
             if r.u64(child + 0x68)? != registry {
                 return Err(Error::new(
                     "invalid_focus_owner",
@@ -179,6 +221,8 @@ fn snapshot_model(
     let w = Witnesses {
         process,
         reads: RefCell::new(BTreeMap::new()),
+        section: Cell::new("roots"),
+        regions: RefCell::new(BTreeMap::new()),
     };
     let r = Reader::new(&w);
     let base = process.image_base();
@@ -186,6 +230,8 @@ fn snapshot_model(
     let idler = r.u64(base + 0x44085f8)?;
     exact(&r, gs, base + 0x42c7598)?;
     exact(&r, idler, base + 0x42c9a88)?;
+    w.region(gs, 0x520, "game_state");
+    w.region(idler, 0x6c0, "idler");
     let tag = r.i32(gs + 0x518)?;
     if !(1..4096).contains(&tag) {
         return Err(Error::new(
@@ -207,6 +253,7 @@ fn snapshot_model(
             .unwrap(),
     );
     r.object_type(country, "CCountry")?;
+    w.region(country, 0x1350, "own_country");
     if r.i32(country + 8)? != tag {
         return Err(Error::new(
             "invalid_focus_owner",
@@ -217,6 +264,7 @@ fn snapshot_model(
     // Match current native research reader's exact current-game GUI primary.
     exact(&r, registry, base + 0x42736f8)?;
     let manager = r.u64(idler + 0x6b8)?;
+    w.region(manager, 0x188, "manager");
     if r.u64(manager + 0x180)? != idler {
         return Err(Error::new(
             "invalid_focus_owner",
@@ -225,6 +273,7 @@ fn snapshot_model(
     }
     let view = r.u64(manager + 0x130)?;
     exact(&r, view, base + 0x4249c70)?;
+    w.region(view, 0x11e0, "focus_view");
     let displayed = r.u64(view + 0x11d8)?;
     if r.u64(view + 0x2f0)? != idler || (displayed != 0 && displayed != country) {
         return Err(Error::new(
@@ -234,8 +283,11 @@ fn snapshot_model(
     }
     let tree = r.u64(country + 0x1338)?;
     exact(&r, tree, base + 0x4202410)?;
+    w.region(tree, 0x40, "own_tree");
     let db = r.u64(base + 0x439faf0)?;
     exact(&r, db, base + 0x4202590)?;
+    w.region(db, 0x68, "catalog");
+    w.section.set("catalog");
     let db_ptrs = pointers(&r, db + 0x58, 20000)?;
     // This global registry proves membership only. Its append path does not
     // guarantee uniqueness or exclude null entries; neither grants ownership.
@@ -281,8 +333,10 @@ fn snapshot_model(
         ));
     }
     let mut context = if command_context {
+        w.section.set("own_context");
         let progress = r.u64(country + 0x1348)?;
         exact(&r, progress, base + 0x4202638)?;
+        w.region(progress, 0x18, "own_progress");
         if r.u64(progress + 8)? != country {
             return Err(Error::new(
                 "invalid_focus_owner",
@@ -302,6 +356,7 @@ fn snapshot_model(
         };
         let status = r.u64(country + 0xf38)?;
         exact(&r, status, base + 0x42108f8)?;
+        w.region(status, 0x13c, "own_status");
         if r.u64(status + 0x130)? != country || r.i32(status + 0x138)? != tag {
             return Err(Error::new(
                 "invalid_focus_owner",
@@ -343,6 +398,7 @@ fn snapshot_model(
     } else {
         None
     };
+    w.section.set("node_binding");
     let node_association = if let Some(key) = requested {
         Some(crate::focus_node_binding::observe(
             &r,
@@ -356,11 +412,13 @@ fn snapshot_model(
     } else {
         None
     };
+    w.section.set("detail");
     let panels = pointers(&r, view + 0x1180, 32)?;
     unique(&panels)?;
     let mut details = Vec::new();
     for panel in panels {
         exact(&r, panel, base + 0x43023f8)?;
+        w.region(panel, 0x7d8, "detail_panel");
         if r.u64(panel + 0x7b8)? != idler || r.u64(panel + 0x7c0)? != view {
             return Err(Error::new(
                 "invalid_focus_owner",
@@ -394,6 +452,7 @@ fn snapshot_model(
             json!({"materialized":false,"detail_visibility_flag":null,"conservative_container_visibility":null,"start":{"materialized":false}})
         } else {
             exact(&r, window, base + 0x4347d58)?;
+            w.region(window, 0xefc, "detail_window");
             if r.u64(window + 0x98)? != registry {
                 return Err(Error::new(
                     "invalid_focus_owner",
@@ -409,6 +468,7 @@ fn snapshot_model(
             } else {
                 named_start(
                     &r,
+                    &w,
                     base,
                     window,
                     panel,
@@ -422,6 +482,7 @@ fn snapshot_model(
         details.push(json!({"selected_key":key,"window":observed}));
     }
     if let Some(c) = context.as_mut() {
+        w.section.set("ui_facts");
         c.ui_facts = Some(crate::focus_ui_facts::observe(
             &r, base, idler, manager, view, registry, tag,
         )?);

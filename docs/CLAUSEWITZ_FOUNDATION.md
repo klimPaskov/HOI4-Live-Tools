@@ -34,8 +34,9 @@ Its fresh digests stayed below 2 KB and retained complete historical details
 through exact snapshot lookups. Run042 verified compact own UI observations and
 immediate restart/STOP budgets. Run043 verified ordinary Politics closing followed
 by existing Rust research stages with the active focus preserved. The typed Rust
-close stage is exposed next; production invocation and automatic worker handoff
-remain separate acceptance gates.
+close stage is exposed; run044 stopped at a confirmed-nonqueued Focus Start
+before reaching it. Production invocation and automatic worker handoff remain
+separate acceptance gates. The failed reservation and recording are preserved.
 
 This remains a development preview. Combined research/focus panel handoff,
 technology/focus completion queues, economic recovery, warfare and native
