@@ -44,6 +44,7 @@ struct Active {
     report: Arc<Mutex<Value>>,
     governor: Arc<Mutex<core::Governor>>,
     focus_permission: bool,
+    details: Mutex<crate::daily_digest::Details>,
 }
 pub(super) struct Controller {
     enabled: bool,
@@ -91,7 +92,7 @@ impl Controller {
         self.research_enabled
     }
     pub(super) fn tool() -> Value {
-        json!({"name":"hoi4_daily_governor","description":"Optional owned daily automatic research refill worker and fresh compact digest. Start requires the existing exclusive lease and explicit typed plan. Navigation uses separately journaled verified stages; only fresh Research or separately opted-in Focus Start completes an assignment. Focus requires default-off owner daily_focus plus plan.focus_permission and existing profile. Economy, army and naval domains remain unavailable. Unknown/uncertain input is never replayed. Stop does not pause the game.","inputSchema":{"type":"object","oneOf":[{"properties":{"op":{"enum":["start","update"]},"lease_token":{"type":"string"},"plan":{"type":"object"}},"required":["op","lease_token","plan"],"additionalProperties":false},{"properties":{"op":{"enum":["digest","stop"]}},"required":["op"],"additionalProperties":false}]}})
+        json!({"name":"hoi4_daily_governor","description":"Optional owned daily automatic research refill worker and fresh compact digest. Start requires the existing exclusive lease and explicit typed plan. Navigation uses separately journaled verified stages; only fresh Research or separately opted-in Focus Start completes an assignment. Focus requires default-off owner daily_focus plus plan.focus_permission and existing profile. Economy, army and naval domains remain unavailable. Unknown/uncertain input is never replayed. Stop does not pause the game. Compacted history includes a snapshot_id; details retrieves an exact historical section without game reads or input.","inputSchema":{"type":"object","oneOf":[{"properties":{"op":{"enum":["start","update"]},"lease_token":{"type":"string"},"plan":{"type":"object"}},"required":["op","lease_token","plan"],"additionalProperties":false},{"properties":{"op":{"enum":["digest","stop"]}},"required":["op"],"additionalProperties":false},{"properties":{"op":{"enum":["details"]},"snapshot_id":{"type":"string","minLength":64,"maxLength":64},"section":{"enum":crate::daily_digest::SECTIONS}},"required":["op","snapshot_id","section"],"additionalProperties":false}]}})
     }
     pub(super) fn call(
         &self,
@@ -222,6 +223,7 @@ impl Controller {
                     report,
                     governor,
                     focus_permission,
+                    details: Mutex::new(crate::daily_digest::Details::default()),
                 });
                 Ok(
                     json!({"started":true,"scope":"owned assignments within durable shared daily budget","focus_implemented":focus_permission,"navigation_implemented":true,"other_action_domains_implemented":false,"full_campaign_acceptance":false}),
@@ -331,6 +333,16 @@ impl Controller {
                     json!({"assignments":assignments,"daily_budget":active.as_ref().and_then(|a|a.report.try_lock().ok().map(|r|r["daily_budget"].clone())).unwrap_or(Value::Null),"core_pending_historical":core_state,"focus":focus,"latest_focus_wait_historical":focus_wait,"worker_stopped":true,"game_time_changed":false,"uncertainty_retained":self.blocked.load(Ordering::Acquire),"last_error":last_error,"last_preparation_refusal":last_preparation_refusal,"last_stage_failure":last_stage_failure}),
                 )
             }
+            "details" => {
+                allowed(args, &["op", "snapshot_id", "section"])?;
+                let active = try_state(&self.active)?;
+                let a = active
+                    .as_ref()
+                    .ok_or_else(|| Error::new("capability_unavailable", "No daily plan started"))?;
+                let result = try_state(&a.details)?
+                    .get(string(args, "snapshot_id")?, string(args, "section")?);
+                result
+            }
             "digest" => {
                 allowed(args, &["op"])?;
                 let active = try_state(&self.active)?;
@@ -355,6 +367,7 @@ impl Controller {
                         self.blocked.store(true, Ordering::Release);
                     })?;
                     compact(
+                        &mut *try_state(&a.details)?,
                         fresh,
                         &report,
                         self.blocked.load(Ordering::Acquire),
@@ -1386,10 +1399,32 @@ fn assignment_summary_or_unavailable(governor: &mut core::Governor) -> Value {
         "reason":e.code,"current_state_verified":false,"input_authorized":false})
     })
 }
-fn compact(p: Produced, report: &Value, blocked: bool, revision: u64) -> Result<Value> {
-    compact_observation(p.observation, report, blocked, revision)
+fn compact(
+    details: &mut crate::daily_digest::Details,
+    p: Produced,
+    report: &Value,
+    blocked: bool,
+    revision: u64,
+) -> Result<Value> {
+    compact_observation_with_details(details, p.observation, report, blocked, revision)
 }
+#[cfg(test)]
 fn compact_observation(
+    observation: core::Observation,
+    report: &Value,
+    blocked: bool,
+    revision: u64,
+) -> Result<Value> {
+    compact_observation_with_details(
+        &mut crate::daily_digest::Details::default(),
+        observation,
+        report,
+        blocked,
+        revision,
+    )
+}
+fn compact_observation_with_details(
+    details: &mut crate::daily_digest::Details,
     observation: core::Observation,
     report: &Value,
     blocked: bool,
@@ -1434,6 +1469,10 @@ fn compact_observation(
     digest["latest_focus_wait_historical"] = report["focus_wait"].clone();
     digest["quarantined"] = json!(blocked);
     digest["input_authorized"] = json!(false);
+    // Retain the complete sanitized report before any optional-history pruning.
+    // The exact hash prevents a later digest from silently replacing its causes.
+    let full = digest.clone();
+    let snapshot_id = details.retain(&full)?;
     // Publish a duplicated wait only once. Absent optional history records do
     // not establish current game state; their freshness remains historical.
     let wait_duplicated = digest["focus"]["wait"].is_object()
@@ -1509,7 +1548,7 @@ fn compact_observation(
                 ids.pop();
                 digest["assignments"]["completed_ids_truncated"] = json!(true);
             } else {
-                return Err(Error::new("digest_error", "Essential digest exceeds bound"));
+                return crate::daily_digest::overflow(&full, &snapshot_id);
             }
         }
     }
@@ -1724,15 +1763,59 @@ mod tests {
         assert_eq!(out["input_authorized"], false);
         let mut mismatch = report;
         mismatch["assignments"]["latest_completion"]["request_id"] = json!("c".repeat(64));
-        // A mismatched completion must not hide the Start or its preparation.
-        let result = compact_observation(digest_sample(), &mismatch, false, 1);
-        if let Ok(out) = result {
-            assert_eq!(out["focus"]["start"]["request_id"], request);
-            assert_eq!(out["focus"]["preparation"]["stage"], "View");
-            assert_eq!(out["focus"]["start_failure"], failure);
+        // A mismatched completion retains both identities in exact details.
+        let mut details = crate::daily_digest::Details::default();
+        let out =
+            compact_observation_with_details(&mut details, digest_sample(), &mismatch, false, 1)
+                .unwrap();
+        let focus = if let Some(id) = out["history"]["snapshot_id"].as_str() {
+            details.get(id, "focus").unwrap()["value"].clone()
         } else {
-            assert_eq!(result.unwrap_err().code, "digest_error");
-        }
+            out["focus"].clone()
+        };
+        assert_eq!(focus["start"]["request_id"], request);
+        assert_eq!(focus["preparation"]["stage"], "View");
+        assert_eq!(focus["start_failure"], failure);
+    }
+    #[test]
+    fn pending_nonqueued_start_has_bounded_digest_and_exact_historical_details() {
+        let failure = json!({"entry_id":"x".repeat(128),"request_id":"a".repeat(64),"day":706640,
+            "original_code":"input_not_queued","original_reason":"Ordinary attempt was refused before possible input; plan remains unfinished",
+            "code":"input_not_queued","reason":"Ordinary attempt was refused before possible input; plan remains unfinished",
+            "evidence":"ConfirmedNotQueued","failures":1,"retry_planned_historical":false,"historical":true,"retry_authority":false});
+        let report = json!({"running":true,"focus_permission":true,
+            "assignments":{"available":true,"source":"durable_plan","plan_revision":1,"historical":true,
+                "current_state_verified":false,"input_authorized":false,"total":1,"completed":0,"pending":1,"in_flight":0,
+                "completed_ids":[],"completed_ids_truncated":false,"latest_completion":null},
+            "daily_budget":{"day":706640,"used_assignment_attempts":1,"limit":1,"remaining":0,"navigation_spends_assignment_budget":false},
+            "core_pending_historical":{"entry_id":"x".repeat(128),"attempts":1,"reason":"input_not_queued","reason_day":706640,"historical":true},
+            "last_batch":{"digest":{"date_raw":60759371,"plan_revision":1,"country":"GER","counts_scope":"observed own categories; null is unknown","review_due":false,"blocking_decision":null,"verified":[],"retained":[],"retained_count":1}},
+            "focus":{"preparation":{"entry_id":"x".repeat(128),"stage":"View","request_id":"b".repeat(64),"verified":true,"goal_completed":false,"historical":true},
+                "start_failure":failure,"start":null,"failure":null,"refusal":null,"uncertainty":null,"wait":null}});
+        let mut details = crate::daily_digest::Details::default();
+        let out =
+            compact_observation_with_details(&mut details, digest_sample(), &report, false, 1)
+                .unwrap();
+        assert!(serde_json::to_vec(&out).unwrap().len() <= 2048);
+        assert_eq!(out["assignments"]["completed"], 0);
+        assert_eq!(out["assignments"]["pending"], 1);
+        assert_eq!(out["daily_budget"]["remaining"], 0);
+        assert_eq!(out["input_authorized"], false);
+        let id = out["history"]["snapshot_id"]
+            .as_str()
+            .expect("overflow history lookup");
+        assert_eq!(
+            details.get(id, "focus").unwrap()["value"]["start_failure"],
+            failure
+        );
+        assert_eq!(
+            details.get(id, "core_pending_historical").unwrap()["value"],
+            report["core_pending_historical"]
+        );
+        assert_eq!(
+            details.get(id, "assignments").unwrap()["value"]["latest_completion"],
+            Value::Null
+        );
     }
     #[test]
     fn player_json_cannot_supply_trusted_scope_or_process_pointers() {

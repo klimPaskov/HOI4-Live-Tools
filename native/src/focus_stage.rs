@@ -36,6 +36,21 @@ pub enum Delivery {
     Unknown,
     ServerConfirmed,
 }
+
+/// Keep the terminal classification while reporting the actual local cause.
+/// In particular, a post-Intent NotQueued must never become retryable torn_read.
+#[cfg(any(target_os = "linux", test))]
+pub(crate) fn with_transport_cause(
+    mut error: Error,
+    transport: Option<&serde_json::Value>,
+) -> Error {
+    if let Some(cause) = transport.and_then(|v| v.get("error")) {
+        if let (Some(code), Some(message)) = (cause["code"].as_str(), cause["message"].as_str()) {
+            error.message = format!("{code}: {message}; {}", error.message);
+        }
+    }
+    error
+}
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct Target {

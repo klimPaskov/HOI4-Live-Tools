@@ -188,15 +188,18 @@ pub(super) fn execute_internal(
         last_transport: None,
         until,
     };
-    let execution = service.journal.execute(
-        id,
-        target,
-        token,
-        authority,
-        gate,
-        &mut backend,
-        remaining(until)?,
-    )?;
+    let execution = service
+        .journal
+        .execute(
+            id,
+            target,
+            token,
+            authority,
+            gate,
+            &mut backend,
+            remaining(until)?,
+        )
+        .map_err(|error| stage::with_transport_cause(error, backend.last_transport.as_ref()))?;
     service.journal.finish_before_deadline(&execution, until)?;
     Ok((execution, backend.last_transport))
 }

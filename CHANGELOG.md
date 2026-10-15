@@ -2,6 +2,14 @@
 
 ## Unreleased native preview
 
+- Keep overflowing daily histories in an exact read-only detail snapshot while
+  returning a bounded summary with fresh counts, budget, completion counts,
+  quarantine and historical failure codes. Stale detail IDs fail explicitly.
+- Preserve Focus transport refusal causes without changing terminal NotQueued
+  classification, reservation budgets or replay rules.
+- Record run040's nonqueued Start, pending assignment and digest overflow.
+  Lease release was verified; host restart interrupted recorder/close cleanup.
+
 - Compact matching completed Focus Start by reference and omit only its successful
   preparation, retaining error history. Run039 verified one original-reservation
   pre-input retry and completion, then stopped on digest overflow before update/restart.

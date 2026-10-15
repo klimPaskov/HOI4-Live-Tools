@@ -74,6 +74,9 @@ mod daily_navigation;
 
 mod daily_digest_lock;
 
+#[cfg(any(target_os = "linux", test))]
+mod daily_digest;
+
 #[cfg(any(target_os = "linux", all(test, unix)))]
 mod daily_focus_navigation;
 

@@ -4,17 +4,22 @@ User direction, 12 October 2026: stop the Mac screenshot-driven live tests and
 replace the primary runtime with a fast Rust MCP based on Clausewitz-MCP.
 Linux is the first live target; Windows and macOS remain required platforms.
 
-**Latest live result:** run039 recovered from one immediately proven BeforeIntent
-Start `torn_read` within the original in-flight request/reservation. Saved journals
-show one Start Intent/Verified pair, core Complete/terminaltrue after_sequence7,
-used1 and no terminalfalse or quarantine. The first wait observed active Rhineland;
-the fresh digest then refused because completion plus retained failure history
-exceeded2KB. STOP preserved actual durable completion and the original cause.
-Luna stopped before revision2/restart and made no further game observations.
-Canonical lease proof/readback,310.333-second recording, normal owned exit0 and
-exact process absence passed. Next correct the compact representation while
-retaining all failure/uncertainty/budget information, then repeat update/restart.
-The prospective ClosePolitics stage remains disabled; no full campaign has passed.
+**Latest live result:** run040 verified worker preparation through View, then one
+Start Intent/NotQueued terminal receipt. The core assignment remains Pending,
+completed0/used1/remaining0. Its 45-second wait timed out with historical evidence;
+the required digest overflowed with pending-failure history. Luna stopped and
+released the lease; independent guest-file readback matched actual RPC evidence.
+The adapter discarded the specific transport refusal, so its exact cause is
+unknown. A later host restart interrupted recorder/normal-close cleanup. On
+recovery, all54 recording segments were readable, but no recorder finalization
+or normal game exit is proven; exact old processes are gone. Preserve this as an
+interrupted failed gate, without replaying or reopening its terminal attempt.
+
+The current correction provides a bounded summary plus exact read-only historical
+detail lookup and preserves future transport refusal causes. Verify the composed
+source, then repeat the Focus update/restart gate with Luna medium. Run039's
+same-in-flight pre-input retry and completion remain valid earlier evidence.
+ClosePolitics remains disabled and full campaign acceptance remains open.
 
 **Earlier worker result:** run038 passed worker-driven Rhineland Start and durable
 assignment completion. Its saved action receipt is Verified/ServerConfirmed with

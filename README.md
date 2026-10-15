@@ -35,7 +35,12 @@ completion with one consumed attempt. Luna stopped because the digest obscured
 that completion; active-focus waiting, plan updates and restart remain untested.
 Run039 then verified recovery from one pre-input torn read within the original
 reservation and completed Rhineland. Its digest exceeded the 2KB limit, so Luna
-stopped before update/restart; the compact reporting path is being corrected.
+stopped before update/restart. Run040 recorded a nonqueued Start and another
+history-overflow case. Its player stopped and released the lease; a later host
+restart interrupted recording/normal-close cleanup. No completion is claimed.
+Compact digests now retain large histories through exact, read-only detail lookups;
+nonqueued Focus errors preserve the underlying transport cause. Fresh live
+validation of these corrections remains pending.
 
 | Runtime | Verified | Remaining |
 | --- | --- | --- |

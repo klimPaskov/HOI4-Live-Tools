@@ -76,7 +76,7 @@ completed/pending/in-flight counts and the latest completion's entry, request,
 sequence and date. This survives empty batches and restart. It is explicitly
 historical and never proves the focus currently active; use a fresh overview for
 that. Optional completed IDs may truncate within the 2KB digest, while counts and
-latest completion remain. Optional empty history fields are omitted and duplicate
+latest completion remain inline when space permits. Optional empty history fields are omitted and duplicate
 wait records appear once. A View preparation still does not complete an assignment.
 Unverified durable storage refuses a digest and blocks input; STOP retains an
 unavailable summary and the uncertainty information.
@@ -86,6 +86,28 @@ durable journals retain the full records. Failure, refusal and uncertainty histo
 remain present; a mismatched request cannot qualify for this compaction.
 The matching failure can share that identity reference too; original/latest
 codes, reasons, evidence and retry-authority labels remain unchanged.
+
+If accumulated history cannot fit, the digest returns an explicitly compacted
+summary with the same fresh counts, budget, completion counts, quarantine and
+historical failure codes. `history.snapshot_id` identifies an exact in-memory
+copy of the unabridged sanitized report. Retrieve a listed section without game
+reads or input:
+
+```json
+{"op":"details","snapshot_id":"<hash from digest>","section":"focus"}
+```
+
+Use `assignments` for full completion identities or `core_pending_historical`
+for pending reasons. Details are historical, with no current-state or retry
+authority. The next digest replaces this cache; stale IDs explicitly return
+`digest_snapshot_expired`, and stop does not discard it. Worker restart clears
+the cache but preserves durable journals. This avoids treating large histories
+as a failed observation. Full STOP output remains available.
+
+A nonqueued Focus attempt now reports its underlying transport cause while
+retaining `input_not_queued` and its terminal receipt. A transport torn read
+inside a finalized NotQueued attempt does not authorize replay. Run040's older
+adapter discarded that specific cause, so it cannot be recovered retroactively.
 
 A prospective typed ClosePolitics stage is runtime-disabled. It requires the
 exact canonical active focus, settled own Politics mode12, hidden Focus and zero

@@ -193,6 +193,57 @@ fn run(
     j.execute(id, t, &"a".repeat(32), a, g, f, timeout)
 }
 #[test]
+fn nonqueued_transport_cause_survives_without_reopening_terminal_attempt() {
+    let sc = Scratch::new();
+    let mut j = Journal::open(&sc.path()).unwrap();
+    let a = authority();
+    let g = RwLock::new(true);
+    let t = target(Stage::Start);
+    let mut f = Fake::sequence(Stage::Start, view(), view());
+    f.delivery = Delivery::NotQueued;
+    let original = run(
+        &mut j,
+        "refused",
+        t.clone(),
+        &a,
+        &g,
+        &mut f,
+        Duration::from_secs(1),
+    )
+    .unwrap_err();
+    let transport = serde_json::json!({"delivery":"not_queued","error":{"code":"torn_read","message":"Focus witness changed at final queue check"}});
+    let detailed = with_transport_cause(original, Some(&transport));
+    assert_eq!(detailed.code, "input_not_queued");
+    assert!(detailed
+        .message
+        .starts_with("torn_read: Focus witness changed at final queue check;"));
+    assert_eq!(
+        j.failure_evidence("refused", &t, &detailed),
+        FailureEvidence::ConfirmedNotQueued
+    );
+    #[cfg(unix)]
+    assert!(!crate::daily_focus_navigation::retry_before_intent(
+        &detailed,
+        FailureEvidence::ConfirmedNotQueued,
+        1
+    ));
+    assert_eq!(f.dispatches, 1);
+    drop(j);
+    let mut j = Journal::open(&sc.path()).unwrap();
+    assert_eq!(
+        run(&mut j, "refused", t, &a, &g, &mut f, Duration::from_secs(1))
+            .unwrap_err()
+            .code,
+        "input_not_queued"
+    );
+    assert_eq!(f.dispatches, 1);
+    let unchanged = with_transport_cause(error("action_uncertain", "original"), None);
+    assert_eq!(
+        (unchanged.code, unchanged.message.as_str()),
+        ("action_uncertain", "original")
+    );
+}
+#[test]
 fn all_four_stages_use_distinct_canonical_postconditions_once() {
     for (stage, before, after) in [
         (Stage::OpenPolitics, state(23), state(12)),

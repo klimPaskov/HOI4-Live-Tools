@@ -1,6 +1,6 @@
 # Clausewitz-MCP Linux validation
 
-Updated 14 October 2026. This records preflight and partial licensed-game evidence for
+Updated 15 October 2026. This records preflight and partial licensed-game evidence for
 the [Linux-first migration](LINUX_RUST_HANDOFF.md). One **gpt-6-luna player at
 medium reasoning** used the guarded upstream MCP in an actual Linux Germany
 campaign. Focus, four research assignments, unpause and one day of advancement
@@ -2790,3 +2790,42 @@ Final gates passed646 Rust1.86 host checks,749 reported actual Linux checks
 format, host/Linux Clippy, MSRV and release linking. All11 payload hashes and
 unchanged display ownership/Yama1 passed; no game was active. These fixture gates
 do not establish the pending live Focus update/restart or panel handoff.
+
+
+## Recorded daily Focus run040 and recovery — 14–15 October 2026
+
+Exact source8082a18 passed all nine CI jobs before exclusive Luna medium play.
+The worker verified Politics/tree/View, then persisted one Start Intent followed
+by NotQueued. Core state remains Pending with one consumed reservation, no goal
+completion and no retry authority. The45-second wait returned historical timeout
+with zero rejected torn reads; the fresh digest failed on pending-failure history
+exceeding2KB. No update/restart or further game observations followed. STOP
+preserved the pending state and `input_not_queued`/ConfirmedNotQueued evidence.
+The exact underlying transport cause was discarded by the adapter and is unknown.
+
+The lease release and zero remaining duration were independently read back from
+the guest before interruption. The Mac subsequently rebooted; on15October the
+owned VM was absent and its SSH port refused connections. Cold-booting the same
+private guest disk recovered the original journals and54 readable H264512x288
+segments. The recorder had continued after the stopped worker; no finalization
+record or normal game exit was present. Exact old owner/game processes are absent
+and Yama remains1. Do not count this as clean shutdown or campaign acceptance.
+
+The correction retains an exact bounded in-memory copy of the sanitized digest
+before pruning. If essential histories exceed2KB, it returns a compact summary
+with counts/budget/uncertainty and historical failure codes, plus a content-hash
+lookup for complete historical sections. Details perform no game reads/input;
+expired IDs fail rather than substituting newer history. STOP and durable journals
+remain unchanged. Focus now includes the transport refusal cause in its error
+without changing terminal classification or allowing a finalized attempt to retry.
+Generated crowded-history, exact-lookup, stale-ID, pending-Start and terminal
+nonreplay tests cover these changes; fresh installed-game acceptance is pending.
+
+The composed source passed650 Rust1.86 host tests,754 reported actual Linux
+checks (752 substantive, excluding two fixture helpers),953 Python tests
+(37 skips), format, host/Linux Clippy, Linux MSRV compilation and release linking.
+All11 payload hashes passed before execution; guest boot identity, old-process
+absence and Yama1 matched before/after. The first Linux suite exposed a fixture
+that assumed a short history necessarily overflowed; its log remains preserved.
+The strengthened maximum-ID case passed directly, followed by the full suite.
+These are offline gates and do not establish fresh live behavior.
