@@ -1903,7 +1903,7 @@ fn selected_detail_exposes_start_window_even_when_node_symbol_route_is_unavailab
 }
 
 #[test]
-fn selected_detail_keeps_exact_original_reader_bracket_and_witnesses() {
+fn selected_detail_keeps_window_witnesses_without_tree_node_reads() {
     let mut original = Fake::new();
     original.start_binding();
     original.focus_nodes();
@@ -1914,14 +1914,15 @@ fn selected_detail_keeps_exact_original_reader_bracket_and_witnesses() {
     let value = own_focus::selected_detail(&compact, "GER_rhineland", false).unwrap();
     assert_eq!(value["window"], full["details"][0]["window"]);
     assert_eq!(compact.checks.get(), 2);
-    assert_eq!(*compact.reads.borrow(), *original.reads.borrow());
-    assert_eq!(
-        value["freshness"]["read_calls"],
-        full["freshness"]["read_calls"]
+    assert!(compact.untouched(VIEW + 0x1138, 16));
+    assert!(compact.untouched(0x230000, 0x7010));
+    assert!(
+        value["freshness"]["read_calls"].as_u64().unwrap()
+            < full["freshness"]["read_calls"].as_u64().unwrap()
     );
-    assert_eq!(
-        value["freshness"]["read_bytes"],
-        full["freshness"]["read_bytes"]
+    assert!(
+        value["freshness"]["read_bytes"].as_u64().unwrap()
+            < full["freshness"]["read_bytes"].as_u64().unwrap()
     );
 }
 
@@ -2073,3 +2074,108 @@ fn selected_detail_keeps_original_torn_and_process_refusals() {
 
 #[path = "support/focus_research_root_cases.rs"]
 mod focus_research_root_cases;
+
+#[test]
+fn selected_detail_skips_unmapped_or_torn_tree_nodes_but_node_query_refuses() {
+    for unmapped in [false, true] {
+        let mut f = Fake::new();
+        f.start_binding();
+        f.focus_nodes();
+        if unmapped {
+            f.data.remove(&(VIEW + 0x1138));
+        } else {
+            f.torn = Some(0x2340ac); // Unrelated node disabled state.
+        }
+        let v = own_focus::selected_detail(&f, "GER_rhineland", false).unwrap();
+        assert_eq!(v["window"]["start"]["ordinary_binding"]["available"], true);
+        assert!(f.untouched(VIEW + 0x1138, 16));
+        assert!(f.untouched(0x234000, 0x110));
+        f.reads.borrow_mut().clear();
+        assert_eq!(
+            f.node_result().unwrap_err().code,
+            if unmapped {
+                "fixture_unmapped"
+            } else {
+                "torn_read"
+            }
+        );
+    }
+}
+
+#[test]
+fn selected_command_retains_full_context_without_node_payload() {
+    let mut full = Fake::new();
+    full.own_focus_ui_fixture();
+    full.start_binding();
+    let (original, context) = own_focus::command_owned(&full, "GER_rhineland", false).unwrap();
+    let mut narrow = Fake::new();
+    narrow.own_focus_ui_fixture();
+    narrow.start_binding();
+    narrow.data.remove(&(VIEW + 0x1138));
+    let (observed, selected_context) =
+        own_focus::command_selected_detail(&narrow, "GER_rhineland", false).unwrap();
+    assert_eq!(selected_context, context);
+    assert_eq!(observed["details"], original["details"]);
+    assert_eq!(
+        observed["command_observation"],
+        original["command_observation"]
+    );
+    assert!(observed["node_association"].is_null());
+    assert!(narrow.untouched(VIEW + 0x1138, 16));
+    assert!(narrow.untouched(0x230000, 0x7010));
+    assert_eq!(narrow.checks.get(), 2);
+}
+
+#[test]
+fn selected_command_still_refuses_changed_context_start_and_geometry() {
+    for at in [
+        GS + 0x460,
+        GS + 0x718,
+        CO + 0x1348,
+        CO + 0x1338,
+        0x254008,
+        0x254010,
+        PANEL + 0x7b8,
+        PANEL + 0x7d0,
+        WIN + 0x98,
+        BUTTON + 0x68,
+        BUTTON + 0xac,
+        BUTTON + 0x74,
+        BUTTON + 0x80,
+        MAN + 0x3d8,
+        0x2600a5,
+        0x261e20,
+        0x244238,
+    ] {
+        let mut f = Fake::new();
+        f.own_focus_ui_fixture();
+        f.start_binding();
+        f.focus_geometry_fixture(WIN, BUTTON, true);
+        f.torn = Some(at);
+        assert_eq!(
+            own_focus::command_selected_detail(&f, "GER_rhineland", true)
+                .unwrap_err()
+                .code,
+            "torn_read",
+            "{at:x}"
+        );
+        assert!(f.untouched(VIEW + 0x1138, 16));
+    }
+    let mut f = Fake::new();
+    f.own_focus_ui_fixture();
+    f.fail_final = true;
+    assert_eq!(
+        own_focus::command_selected_detail(&f, "GER_rhineland", false)
+            .unwrap_err()
+            .code,
+        "ownership_changed"
+    );
+    let f = Fake::new();
+    assert_eq!(
+        own_focus::command_selected_detail(&f, "", false)
+            .unwrap_err()
+            .code,
+        "invalid_argument"
+    );
+    assert!(f.reads.borrow().is_empty());
+}

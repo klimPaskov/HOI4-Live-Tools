@@ -3577,3 +3577,21 @@ passed 709 Rust 1.86 host tests, 816 reported actual Linux checks (814 substanti
 including five X11 cases), 953 Python tests with 37 skips, format, host/Linux
 Clippy, Linux MSRV compilation and release linking. All 101 frozen source-input
 hashes remained unchanged. These are offline checks; run051 used the prior binary.
+
+
+## Selected-detail observation scope — offline follow-up to run051
+
+Start, selected-detail queries and general Focus command state now skip the
+unrelated tree-node controls. View retains their complete witnesses. Own country,
+canonical tree and selected definition, detail window, named Start button,
+callback route, UI state, geometry and final stability checks remain enforced.
+Generated cases poison or change node-only memory and verify that selected-detail
+reads still succeed while node reads refuse; changes to actual Start/context
+fields still fail. This is a scoped observation change, not proof of the exact
+run051 cause or permission to replay its failed attempt.
+
+The composed build passed 713 Rust 1.86 host tests, 820 reported actual Linux
+checks (818 substantive, including five X11 cases), 953 Python tests with 37 skips,
+format, host/Linux Clippy, Linux MSRV compilation and release linking. All 101
+source-input hashes stayed unchanged. Live validation uses a fresh run and an
+explicit menu-Start operation that checks recording evidence before the click.

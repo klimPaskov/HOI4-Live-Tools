@@ -217,7 +217,10 @@ pub(crate) fn observe(
     p: &OwnedClientProfile,
 ) -> Result<(PointCandidate, own_focus::FocusContext)> {
     own_focus::validate_key(key)?;
-    let (detail, context) = own_focus::command_owned(process, key, true)?;
+    let (detail, context) = match stage {
+        Stage::Node => own_focus::command_owned(process, key, true)?,
+        Stage::Start => own_focus::command_selected_detail(process, key, true)?,
+    };
     let s = surface(&detail, key, stage, context.ui_facts.as_ref())?;
     let geometry = gui::input_geometry(process)?;
     let c = codec(&geometry, p)?;

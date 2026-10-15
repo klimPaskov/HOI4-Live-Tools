@@ -394,6 +394,12 @@ include the refusal count and latest refusal; compact digests keep the count and
 provide the exact assignment detail lookup. Older records without a saved reason
 remain unknown. This changes evidence retention, not retry or budget policy.
 
+Focus selected-detail and Start observations skip unrelated tree-node controls.
+View still validates its exact node and callback. Start keeps the own-country,
+canonical selection, window, named Start button, callback, visibility, geometry
+and final stability checks. A narrower read does not authorize retrying an old
+refused or uncertain action.
+
 ## Provenance and acknowledgements
 
 This foundation builds on [smerss/Clausewitz-MCP](https://github.com/smerss/Clausewitz-MCP),

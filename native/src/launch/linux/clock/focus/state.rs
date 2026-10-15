@@ -186,7 +186,7 @@ pub(super) fn observe(
     epoch: &Epoch,
     geometry: bool,
 ) -> Result<Observation> {
-    let (body, context) = own_focus::command_owned(process, key, false)?;
+    let (body, context) = own_focus::command_selected_detail(process, key, false)?;
     let (politics, politics_context) = politics_focus::owned_snapshot(process, geometry)?;
     let scope = join(&context, &politics_context)?;
     let state = model(&body, &context, &politics, &politics_context, key, epoch)?;

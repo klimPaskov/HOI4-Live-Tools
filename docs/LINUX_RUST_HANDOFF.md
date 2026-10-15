@@ -72,11 +72,12 @@ original recording/menu timestamps remain available. Preserve this limitation.
 
 ## Immediate acceptance work
 
-1. Separate selected-detail/Start observations from unrelated Focus tree-node
-   controls. Keep full node witnesses for View and all selected-detail ownership,
-   canonical identity, Start callback, visibility and geometry checks for Start.
-   This reduces unnecessary reads; it does not identify run051's changed field.
-   Correct the private menu Start-recording guard before the next fresh gate.
+1. Validate the narrowed selected-detail/Start observations in a fresh gate.
+   Tree-node controls remain witnessed for View; selected-detail ownership,
+   canonical identity, Start callback, visibility and geometry remain checked.
+   The change reduces unnecessary reads; it does not identify run051's changed
+   field. The private menu harness now requires an explicit campaign-Start
+   operation and recording check before its click.
    Validate the new read-only `hoi4_focus_completed` preview against actual Focus
    completion in a new immutable recorded gate. The pinned engine predicate reads
    progress `+0x40`, unlike upstream's `FP_COMPLETED` label at `+0x20`; do not copy

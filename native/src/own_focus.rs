@@ -194,6 +194,18 @@ fn named_start(
     }
     Ok(start.unwrap_or_else(|| json!({"materialized":false,"disabled":null})))
 }
+#[derive(Clone, Copy)]
+enum FocusQuery<'a> {
+    Node(&'a str),
+    SelectedDetail(&'a str),
+}
+impl<'a> FocusQuery<'a> {
+    fn key(self) -> &'a str {
+        match self {
+            Self::Node(key) | Self::SelectedDetail(key) => key,
+        }
+    }
+}
 /// Caller must open a Process with the verified build/session contract. This
 /// module has no native call or input capability. Pagination bounds output only;
 /// all keys/memberships are validated before a page can be returned.
@@ -202,10 +214,11 @@ fn snapshot_model(
     offset: usize,
     limit: usize,
     prefix: Option<&str>,
-    requested: Option<&str>,
+    query: Option<FocusQuery<'_>>,
     include_geometry: bool,
     command_context: bool,
 ) -> Result<(Value, Option<FocusContext>)> {
+    let requested = query.map(FocusQuery::key);
     if limit == 0
         || limit > 100
         || offset > 4096
@@ -401,7 +414,7 @@ fn snapshot_model(
         None
     };
     w.section.set("node_binding");
-    let node_association = if let Some(key) = requested {
+    let node_association = if let Some(FocusQuery::Node(key)) = query {
         Some(crate::focus_node_binding::observe(
             &r,
             base,
@@ -534,7 +547,16 @@ pub fn snapshot(
 /// Exact own public focus key, read-only current item/control association.
 pub fn node_detail(process: &dyn Process, key: &str) -> Result<Value> {
     validate_key(key)?;
-    Ok(snapshot_model(process, 0, 1, Some(key), Some(key), false, false)?.0)
+    Ok(snapshot_model(
+        process,
+        0,
+        1,
+        Some(key),
+        Some(FocusQuery::Node(key)),
+        false,
+        false,
+    )?
+    .0)
 }
 pub(crate) fn validate_key(key: &str) -> Result<()> {
     if key.is_empty()
@@ -556,14 +578,34 @@ pub fn node_detail_with_geometry(
     include_geometry: bool,
 ) -> Result<Value> {
     validate_key(key)?;
-    Ok(snapshot_model(process, 0, 1, Some(key), Some(key), include_geometry, false)?.0)
+    Ok(snapshot_model(
+        process,
+        0,
+        1,
+        Some(key),
+        Some(FocusQuery::Node(key)),
+        include_geometry,
+        false,
+    )?
+    .0)
 }
 
 /// Compact selected-window observation. The node symbol is a separate control,
 /// never the selected detail's Start binding. Reuses exactly one fresh reader
-/// bracket with the complete original node/detail ownership and field witnesses.
+/// bracket with complete selected-detail ownership and field witnesses. Tree-node
+/// controls belong to View and are deliberately outside this observation.
 pub fn selected_detail(process: &dyn Process, key: &str, include_geometry: bool) -> Result<Value> {
-    let body = node_detail_with_geometry(process, key, include_geometry)?;
+    validate_key(key)?;
+    let body = snapshot_model(
+        process,
+        0,
+        1,
+        Some(key),
+        Some(FocusQuery::SelectedDetail(key)),
+        include_geometry,
+        false,
+    )?
+    .0;
     let details = body["details"].as_array().ok_or_else(|| {
         Error::new(
             "invalid_focus_detail",
@@ -652,7 +694,35 @@ pub fn command_owned(
     include_geometry: bool,
 ) -> Result<(Value, FocusContext)> {
     validate_key(key)?;
-    let (body, context) =
-        snapshot_model(process, 0, 1, Some(key), Some(key), include_geometry, true)?;
+    let (body, context) = snapshot_model(
+        process,
+        0,
+        1,
+        Some(key),
+        Some(FocusQuery::Node(key)),
+        include_geometry,
+        true,
+    )?;
+    Ok((body, context.expect("Command focus context requested")))
+}
+
+/// Same command context and selected-detail witnesses, without tree-node controls.
+/// Start uses the selected window's named button; View still requires command_owned.
+#[doc(hidden)]
+pub fn command_selected_detail(
+    process: &dyn Process,
+    key: &str,
+    include_geometry: bool,
+) -> Result<(Value, FocusContext)> {
+    validate_key(key)?;
+    let (body, context) = snapshot_model(
+        process,
+        0,
+        1,
+        Some(key),
+        Some(FocusQuery::SelectedDetail(key)),
+        include_geometry,
+        true,
+    )?;
     Ok((body, context.expect("Command focus context requested")))
 }

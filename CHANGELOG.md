@@ -2,6 +2,10 @@
 
 ## Unreleased native preview
 
+- Scope Focus Start and selected-detail reads to the selected window and its
+  Start button. View retains tree-node checks; ownership, canonical identity,
+  Start callback/geometry and final torn-read checks remain required.
+
 - Retain each new core NotQueued reason in its durable journal after later
   completion, and expose the refusal count/latest record in assignment history.
   Older missing reasons remain unknown; updates and restarts preserve budgets.

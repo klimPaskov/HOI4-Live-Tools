@@ -506,3 +506,26 @@ fn start_refusal_default_public_reason_is_retained_and_success_path_is_unchanged
     )
     .is_ok());
 }
+
+#[test]
+fn start_surface_needs_own_start_guards_but_no_tree_node_association() {
+    let mut d = detail(true);
+    d["node_association"] = Value::Null;
+    let s = surface(&d, "army_effort", Stage::Start, Some(&facts(true))).unwrap();
+    assert!(
+        research_attempt::point_candidate(&s, &codec(&geometry(), &profile()).unwrap()).is_ok()
+    );
+    assert!(surface(&d, "army_effort", Stage::Node, Some(&facts(false))).is_err());
+    for field in [
+        "available",
+        "callback_route_verified",
+        "renderer_control_join_verified",
+    ] {
+        let mut bad = d.clone();
+        bad["details"][0]["window"]["start"]["ordinary_binding"][field] = json!(false);
+        assert!(
+            surface(&bad, "army_effort", Stage::Start, Some(&facts(true))).is_err(),
+            "{field}"
+        );
+    }
+}
