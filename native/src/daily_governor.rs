@@ -64,6 +64,10 @@ struct JournalRecord {
     before_sequence: u64,
     terminal: Option<bool>,
     after_sequence: Option<u64>,
+    // Retain the original zero-input refusal after Pending becomes Complete.
+    // Absent on older records: never reconstruct a historical cause.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    not_queued_reason: Option<String>,
     // Legacy records bind to the then-immutable plan revision. Updates pin it
     // before changing the plan so historical request identities stay valid.
     #[serde(default)]
@@ -157,6 +161,12 @@ impl Governor {
                     || !(1936 * 365..2001 * 365).contains(&record.day)
                     || revision == 0
                     || revision > plan.revision
+                    || record.not_queued_reason.as_ref().is_some_and(|s| {
+                        record.terminal != Some(false)
+                            || s.len() > 640
+                            || s.chars().count() > 160
+                            || s.chars().any(char::is_control)
+                    })
                 {
                     return Err(types::invalid("Invalid journal record binding"));
                 }
@@ -609,11 +619,24 @@ impl Governor {
             .take(4)
             .map(|(entry, _, _)| entry.id.as_str())
             .collect();
+        let refusals: Vec<_> = self
+            .state
+            .journal
+            .iter()
+            .filter(|record| record.terminal == Some(false))
+            .collect();
+        let latest_refusal = refusals.last().map(|record| {
+            json!({"entry_id":record.entry_id,"request_id":record.request_id,
+                "day":record.day,"before_sequence":record.before_sequence,
+                "plan_revision":record.plan_revision.unwrap_or(self.state.plan.revision),
+                "reason":record.not_queued_reason})
+        });
         Ok(
             json!({"available":true,"source":"durable_plan","plan_revision":self.state.plan.revision,
             "historical":true,"current_state_verified":false,"input_authorized":false,
             "total":self.state.plan.entries.len(),"completed":complete.len(),"pending":pending,"in_flight":in_flight,
-            "completed_ids":ids,"completed_ids_truncated":complete.len()>ids.len(),"latest_completion":latest}),
+            "completed_ids":ids,"completed_ids_truncated":complete.len()>ids.len(),"latest_completion":latest,
+            "not_queued_attempts":refusals.len(),"latest_not_queued":latest_refusal}),
         )
     }
     /// Trusted owner-only plan update. The caller checks the shared controller,
@@ -927,6 +950,7 @@ impl Governor {
                     before_sequence: attempt.before_sequence,
                     terminal: None,
                     after_sequence: None,
+                    not_queued_reason: None,
                     plan_revision: Some(self.state.plan.revision),
                     day_bound: true,
                 });
@@ -973,6 +997,7 @@ impl Governor {
                             before_sequence: attempt.before_sequence,
                             terminal: Some(false),
                             after_sequence: None,
+                            not_queued_reason: Some(reason(&s)),
                             plan_revision: Some(self.state.plan.revision),
                             day_bound: true,
                         });
@@ -1019,6 +1044,7 @@ impl Governor {
                             before_sequence: attempt.before_sequence,
                             terminal: Some(true),
                             after_sequence: Some(observed.sequence),
+                            not_queued_reason: None,
                             plan_revision: Some(self.state.plan.revision),
                             day_bound: true,
                         });

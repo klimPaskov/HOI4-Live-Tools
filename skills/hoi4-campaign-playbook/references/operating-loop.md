@@ -3,9 +3,10 @@
 ## Capability gate
 
 Discover the live tools, their exact argument schemas, action verification and
-freshness fields. `hoi4_governor`, `hoi4_wait_for`, `hoi4_advance` and the
-country tools are repository interfaces, not a promise that every backend
-implements every plan section. Reject unsupported plan parts explicitly.
+freshness fields. The native preview exposes `hoi4_daily_governor`,
+`hoi4_wait_for` and `hoi4_time`; legacy backends have different interfaces.
+Tool names do not promise that every backend implements every plan section.
+Reject unsupported plan parts explicitly.
 Do not submit made-up JSON for an aspirational adapter.
 
 Session/lease, fresh own-country telemetry, verified IDs, ordinary input,
@@ -23,10 +24,10 @@ interruptions; resume only after session, country, chronology and IDs validate.
 
 Compile strategy into the supported schema, preserving these semantics:
 
-| Section | Durable intent | Completion evidence |
+| Section | Durable intent | Assignment and outcome evidence |
 |---|---|---|
-| Research | Ordered eligible tech IDs with prerequisite/ahead-of-time policy and fallback | Slot contains the selected technology or technology is complete |
-| Focus | Ordered branch IDs plus conditions; never silently choose an exclusive alternative | Selected focus ID, progress or completed focus |
+| Research | Ordered eligible tech IDs with prerequisite/ahead-of-time policy and fallback | Assignment: exact technology in the slot. Finished research: fresh own completed membership |
+| Focus | Ordered branch IDs plus conditions; never silently choose an exclusive alternative | Assignment: exact active focus. Finished Focus: fresh own completed membership; idle alone is insufficient |
 | Construction | Building, state/province ID, quantity, slot/capacity and priority | Queue delta for the same destination; count already queued work |
 | Production | Equipment/variant ID, factory targets, minimum floors, deficit priorities | Correct line and assignment; total allocations remain possible |
 | Shortages | Repair order, buffer targets, permitted factory moves, useful trade limits | Improving net flow or relief action verified; do not equate an order with recovery |
@@ -35,10 +36,11 @@ Compile strategy into the supported schema, preserving these semantics:
 | Review | Material change predicates and latest strategic review date | Fresh digest reaches player; routine actions continue |
 
 Separate `pending`, `eligible`, `attempted`, `verified`, `blocked` and `failed`.
-An accepted click is not completion. An already-satisfied postcondition completes
-an idempotent retry; missing or stale evidence leaves it pending. Before retrying
-a non-idempotent action (build, recruit, purchase, declare), inspect whether it
-already happened. Never duplicate it merely because the response timed out.
+An accepted click is not completion. In the native governor, `Complete` means a
+verified assignment receipt; it does not mean the technology or Focus finished.
+An idempotent duplicate may reuse a matching durable receipt under the adapter's
+replay rules. Missing/stale evidence or uncertain delivery never authorizes a new
+action ID. Inspect actual state without clearing uncertainty or resending input.
 
 ## Daily priority and compact digest
 
@@ -72,8 +74,12 @@ or the review deadline. Research completion already handled by the queue is not
 a strategic decision. War declaration, failed diplomacy, newly blocked focus,
 uncovered event, major supply failure or completed theater objective is.
 
-Use server-side bounded waits (the current `hoi4_wait_for` schema caps an
-individual wait at 60 seconds). An elapsed timeout is not a game decision or
+Use server-side bounded waits within the discovered schema (the native preview
+caps an individual wait at 50 seconds). `until_assignments` proves active/current
+assignment, including its first sample; it does not wait for research or Focus
+completion. Date/change waits and fresh completion membership serve that separate
+purpose. A timeout's last accepted sample is historical, not fresh authority.
+An elapsed timeout is not a game decision or
 reason to pause. Continue waiting under the declared policy while routine runs;
 do not replace this with recurring screenshots and model analysis. Maintain
 human progress updates during long work without disturbing the game.
@@ -90,9 +96,12 @@ preconditions; perform one ordinary player action; read back the matching
 postcondition; commit only that plan entry. Name matching is a UI bridge, not
 entity identity. Refresh stale coordinates/selection instead of clicking harder.
 
-On transient failure, retain the entry and retry a small declared number after
-reacquiring state. On repeated failure, mark that capability blocked, journal
-the failed target and evidence, and continue independent routine. Do not
+Only positively proven zero-input or BeforeIntent failures qualify for retries
+explicitly supported by the adapter and current acceptance contract. Retain the
+original attempt, deadline, refusal evidence and consumed budget. Uncertain
+delivery stops routine input; reconnecting or replacing IDs cannot clear it.
+On repeated safe refusal, retain the failed target and evidence and continue
+independent routine only when the contract permits. Do not
 `on_fail=skip` a necessary focus, research, invasion or production commitment.
 
 Pause is justified only when an unhandled decision prevents safe continuation,

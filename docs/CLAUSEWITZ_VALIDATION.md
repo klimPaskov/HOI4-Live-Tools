@@ -20,6 +20,10 @@ not retained; recording and normal exit passed. Run047 then passed the complete
 worker-only Focus-to-research plan and immediate restart/STOP, retaining both
 completion identities and budget 2/2. Its recording and normal exit passed;
 the game stayed paused. See the recorded run045–047 sections below.
+Run050 subsequently verified actual research completion and same-slot refill.
+Run051 read an empty completed-Focus baseline but failed Start before input;
+actual Focus completion and campaign acceptance remain open. See the latest
+run sections for failures, timings and evidence limits.
 
 ## Reference and test environment
 
@@ -3528,3 +3532,48 @@ report is preserved alongside the independent audit, including the extra core
 reservation the player summary omitted. This passes the bounded research-completion
 and refill gate. Focus completion, a clean two-year run and full campaigns remain
 unaccepted.
+
+
+## Run051: empty Focus membership and refused Start — 15 October 2026
+
+One Luna medium player used immutable source `b72e0bdabfdc73dfc035ec977f346902d158527e`
+and CLI SHA-256 `a5117ad070fb08a4fdfd34a45a3e0fa191bd2f0c407b96c1d77e94205b219c84`.
+The fresh vanilla Normal/historical/FAIR Germany campaign stayed paused on
+1 January 1936. `hoi4_focus_completed` returned empty membership and no active
+Focus in 29.433 ms RPC (22.169 ms reader). This verifies only the empty baseline.
+The completed-membership implementation follows independently inspected exact-build
+assembly; a supplemental deep decompiler analysis timed out without a result.
+No decompiler confirmation or actual completed Focus is claimed.
+
+Ordinary clock input set speed4 while paused. The single worker plan selected
+Rhineland with a one-assignment daily budget. OpenPolitics, OpenFocus and View each
+retained an Intent/Verified pair. Start retained Intent/NotQueued with the reason
+`torn_read: Focus witness changed: node_binding; unclassified size=4` and explicit
+ConfirmedNotQueued evidence. The exact field and cause remain unknown. There
+were no research inputs, Focus assignment receipts, unpause or restart. The core
+journal retained one reservation and a terminal refusal; the entry stayed Pending
+with budget used 1 / limit 1 / remaining 0. A 45-second target wait returned
+historical timeout with no rejected torn snapshots. The digest took 65.502 ms RPC;
+no RPC returned an error. Its retained producer `input_busy` was historical and
+must not be counted as a read-RPC refusal.
+
+STOP preserved that pending entry and budget. Canonical release/status matched
+independent guest readback. The 596.333-second 512×288 H.264 recording finalized
+and passed ffprobe. One ordinary owned close returned exit0, no signal/core dump,
+in 2.635 seconds; exact game, owner and recorder absence was checked. Both brokers
+closed. The original calls and durable journals independently confirm the failure.
+The menu harness recorded eight clicks, including one ineffective country-description
+click. Its dedicated campaign-Start artifact is absent: a coordinate-specific
+recording guard recognized a different vertical pixel from the actual successful
+Start click. Original first-packet time precedes that logged click and the verified
+initial campaign. No replacement historical artifact was fabricated.
+
+The following change preserves new core NotQueued reasons in durable assignment
+history even after a later success. Counts include older refusals, whose absent
+reasons stay unknown. Generated checks cover later completion, plan revision and
+restart, unchanged per-day budgets, legacy records and malformed reasons. Compact
+digests retain the count and an exact detail lookup. Final composed validation
+passed 709 Rust 1.86 host tests, 816 reported actual Linux checks (814 substantive,
+including five X11 cases), 953 Python tests with 37 skips, format, host/Linux
+Clippy, Linux MSRV compilation and release linking. All 101 frozen source-input
+hashes remained unchanged. These are offline checks; run051 used the prior binary.

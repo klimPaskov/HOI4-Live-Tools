@@ -1891,3 +1891,108 @@ fn digest_reserves_unfinished_count_before_long_verified_ids() {
     assert!(digest["verified"].as_array().unwrap().len() < ids.len());
     assert_eq!(digest["input_authorized"], false);
 }
+
+#[test]
+#[cfg(unix)]
+fn refused_reason_survives_later_completion_update_and_restart() {
+    let t = Temp::new();
+    let mut p = plan();
+    p.entries.truncate(1);
+    p.max_actions_per_day = 1;
+    let mut b = Fake::new(&p);
+    b.mode = Mode::NotQueued;
+    let mut g = Governor::open(&t.path(), p.clone()).unwrap();
+    run(&mut g, &mut b).unwrap();
+    let refused_day = g.state.last_day.unwrap();
+    let first = g.assignment_summary().unwrap();
+    assert_eq!(first["not_queued_attempts"], 1);
+    let refusal = first["latest_not_queued"].clone();
+    assert_eq!(refusal["reason"], "local refusal; no input queued");
+    assert_eq!(g.used_actions(refused_day), 1);
+    drop(g);
+    let mut g = Governor::open(&t.path(), p.clone()).unwrap();
+    b.mode = Mode::Verified;
+    b.day(2);
+    run(&mut g, &mut b).unwrap();
+    assert_eq!(b.sends, 2);
+    assert_eq!(g.assignment_summary().unwrap()["completed"], 1);
+    assert_eq!(
+        g.assignment_summary().unwrap()["latest_not_queued"],
+        refusal
+    );
+    assert_eq!(g.used_actions(refused_day), 1);
+    assert_eq!(g.used_actions(refused_day + 1), 1);
+    p.revision += 1;
+    g.update_plan(p.clone()).unwrap();
+    let expected = g.stopped_history().unwrap();
+    drop(g);
+    let mut g = Governor::open(&t.path(), p).unwrap();
+    assert_eq!(g.stopped_history().unwrap(), expected);
+    assert_eq!(expected.0["latest_not_queued"], refusal);
+    run(&mut g, &mut b).unwrap();
+    assert_eq!(b.sends, 2);
+    assert_eq!(g.state.journal.len(), 4);
+}
+
+#[test]
+#[cfg(unix)]
+fn legacy_refusal_reason_remains_unknown_without_reconstruction() {
+    let t = Temp::new();
+    let mut p = plan();
+    p.entries.truncate(1);
+    let mut b = Fake::new(&p);
+    b.mode = Mode::NotQueued;
+    let mut g = Governor::open(&t.path(), p.clone()).unwrap();
+    run(&mut g, &mut b).unwrap();
+    drop(g);
+    let mut saved: Value = serde_json::from_slice(&fs::read(t.path()).unwrap()).unwrap();
+    saved["journal"][1]
+        .as_object_mut()
+        .unwrap()
+        .remove("not_queued_reason");
+    fs::write(t.path(), serde_json::to_vec(&saved).unwrap()).unwrap();
+    let mut g = Governor::open(&t.path(), p.clone()).unwrap();
+    let summary = g.assignment_summary().unwrap();
+    assert_eq!(summary["not_queued_attempts"], 1);
+    assert!(summary["latest_not_queued"]["reason"].is_null());
+    // Even the still-present Pending reason cannot prove the original cause.
+    assert!(matches!(
+        g.entry_state("research-1"),
+        Some(EntryState::Pending {
+            reason: Some(_),
+            ..
+        })
+    ));
+    b.mode = Mode::Verified;
+    b.day(2);
+    run(&mut g, &mut b).unwrap();
+    drop(g);
+    let mut g = Governor::open(&t.path(), p).unwrap();
+    assert_eq!(g.assignment_summary().unwrap()["completed"], 1);
+    assert!(g.assignment_summary().unwrap()["latest_not_queued"]["reason"].is_null());
+}
+
+#[test]
+#[cfg(unix)]
+fn refuse_malformed_or_wrong_outcome_historical_reasons() {
+    for (mode, row, bad) in [
+        (Mode::NotQueued, 0, "wrong intent".to_string()),
+        (Mode::Verified, 1, "wrong success".to_string()),
+        (Mode::NotQueued, 1, "x".repeat(161)),
+        (Mode::NotQueued, 1, "界".repeat(161)),
+        (Mode::NotQueued, 1, "bad\ncontrol".to_string()),
+    ] {
+        let t = Temp::new();
+        let mut p = plan();
+        p.entries.truncate(1);
+        let mut b = Fake::new(&p);
+        b.mode = mode;
+        let mut g = Governor::open(&t.path(), p.clone()).unwrap();
+        run(&mut g, &mut b).unwrap();
+        drop(g);
+        let mut saved: Value = serde_json::from_slice(&fs::read(t.path()).unwrap()).unwrap();
+        saved["journal"][row]["not_queued_reason"] = json!(bad);
+        fs::write(t.path(), serde_json::to_vec(&saved).unwrap()).unwrap();
+        assert!(Governor::open(&t.path(), p).is_err());
+    }
+}

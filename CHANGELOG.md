@@ -2,6 +2,10 @@
 
 ## Unreleased native preview
 
+- Retain each new core NotQueued reason in its durable journal after later
+  completion, and expose the refusal count/latest record in assignment history.
+  Older missing reasons remain unknown; updates and restarts preserve budgets.
+
 - Verify run050 actual research completion and same-slot queued refill over
   advancing game time, with one assignment reservation per day and unchanged
   restart receipts. Preserve both known-no-input navigation failures, an extra

@@ -40,6 +40,8 @@ recording and normal exit passed. Known zero-input refusals and one additional
 budget-consuming refused attempt remain recorded. Actual Focus completion,
 economic/army/naval commands and full campaigns remain open.
 Original failures remain in the validation report; later success does not explain them.
+Run051 read the empty completed-Focus baseline, then refused Start before input
+because a tree-node witness changed. Actual Focus completion remains unverified.
 
 | Runtime | Verified | Remaining |
 | --- | --- | --- |

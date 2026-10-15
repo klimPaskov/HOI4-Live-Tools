@@ -388,6 +388,12 @@ No clean two-year Luna run or full campaign has passed. Follow the
 [complete live evidence](../docs/CLAUSEWITZ_VALIDATION.md) and
 [measured comparison](../docs/CLAUSEWITZ_COMPARISON.md).
 
+Core assignment history retains each new terminal NotQueued reason in the
+durable plan journal even after the entry later completes. Assignment summaries
+include the refusal count and latest refusal; compact digests keep the count and
+provide the exact assignment detail lookup. Older records without a saved reason
+remain unknown. This changes evidence retention, not retry or budget policy.
+
 ## Provenance and acknowledgements
 
 This foundation builds on [smerss/Clausewitz-MCP](https://github.com/smerss/Clausewitz-MCP),

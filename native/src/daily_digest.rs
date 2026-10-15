@@ -102,6 +102,7 @@ pub(crate) fn overflow(full: &Value, snapshot_id: &str) -> Result<Value> {
         "completed",
         "pending",
         "in_flight",
+        "not_queued_attempts",
     ] {
         if let Some(value) = assignments.get(key) {
             summary[key] = value.clone();
@@ -167,6 +168,7 @@ mod tests {
             "daily_budget":{"day":706640,"used_assignment_attempts":1,"limit":1,"remaining":0,"navigation_spends_assignment_budget":false},
             "running":true,"stop_reason":null,"quarantined":true,"focus_permission":true,"review_due":false,"blocking_decision":null,"retained_count":256,
             "assignments":{"available":true,"plan_revision":u64::MAX,"total":256,"completed":255,"pending":1,"in_flight":0,
+                "not_queued_attempts":2048,"latest_not_queued":failure,
                 "latest_completion":{"entry_id":"q".repeat(128),"request_id":"b".repeat(64),"state":"Complete","observed_sequence":5}},
             "last_error":failure,"last_preparation_refusal":failure,"last_stage_failure":failure,
             "focus":{"failure":failure,"refusal":failure,"uncertainty":failure,"start_failure":failure,
@@ -186,6 +188,7 @@ mod tests {
         assert!(serde_json::to_vec(&compact).unwrap().len() <= 2048);
         assert_eq!(compact["assignments"]["completed"], 255);
         assert_eq!(compact["assignments"]["pending"], 1);
+        assert_eq!(compact["assignments"]["not_queued_attempts"], 2048);
         assert_eq!(compact["daily_budget"], full["daily_budget"]);
         assert_eq!(compact["quarantined"], true);
         assert_eq!(compact["start_failure"]["evidence"], "ConfirmedNotQueued");

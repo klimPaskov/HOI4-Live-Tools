@@ -11,7 +11,9 @@ selected by the user or the recorded campaign assignment. It permits powerful
 normal-UI metas and game-mechanic exploits; it never permits privileged access.
 Do not switch a losing FAIR run to META or relabel earlier actions.
 
-For this repository read `docs/HANDOFF_MAC.md` and applicable `AGENTS.md` first.
+For this repository read applicable `AGENTS.md` and the current
+`docs/LINUX_RUST_HANDOFF.md` first. `docs/HANDOFF_MAC.md` preserves the original
+campaign specifications; its old Mac test order is superseded.
 This playbook supplies strategy, not evidence that the MCP implements it or that
 live acceptance passed. Discover tool schemas and capabilities at run time.
 The older `hoi4-live-campaign` skill's test-mode setup, save-per-briefing,
@@ -40,9 +42,10 @@ two-day pause loop and skip-on-failure examples are not showcase procedure.
   are permitted. Read-only observation does not authorize hidden information.
 - Never enter test mode to prepare a campaign. A checkpoint may resume a real
   interruption; never pick an older checkpoint to reverse an outcome.
-- One player owns game input. For Mac acceptance use one `gpt-6-luna` player at
-  medium reasoning. Builder and offline helpers do not control the same game.
-  Do not operate the shared Windows game for this Mac continuation.
+- One `gpt-6-luna` player at medium reasoning owns acceptance-run input.
+  Builder and offline helpers do not control the same game. Verify Linux first;
+  Windows and macOS need independent live acceptance. The shared Windows game
+  remains reserved for separate mod testing.
 - Verify session ownership using PID, creation identity and executable. A
   desktop lease alone is not process ownership. Do not take over unrelated games.
 - Run-time policy can enforce only constraints supported by validated inputs.

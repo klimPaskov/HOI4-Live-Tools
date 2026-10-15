@@ -1,6 +1,12 @@
 # Clausewitz-MCP comparison checkpoint
 
-Latest bounded result, 15 October 2026: run049 completed three worker assignments
+Latest checkpoint, 15 October 2026: run050 passed actual research completion and
+same-slot refill in 27m 37s under x86 CPU emulation. Run051 verified an empty
+completed-Focus baseline in 29.433 ms RPC, but refused Start before possible input
+when a tree-node witness changed. No Focus completion was observed. These remain
+bounded tests, with no matched upstream completion benchmark or accepted campaign.
+
+Run049 completed three worker assignments
 across research→Focus→research in 23.668 seconds after the start reply. One explicit
 target wait took 21.777 seconds including worker execution; the identical already-
 matching request took 15.670 ms RPC (10.232 ms server). A 1243-byte fresh digest took
@@ -11,7 +17,8 @@ The player initially stopped because the Focus summary showed only the latest
 preparation. Independent saved journals proved the earlier reverse transition;
 a separate restart/STOP supplement retained all completions and budget 3/3 without
 replay. Recording and normal exit passed. The original upstream posting timeout
-stays quarantined, and actual completion/refill and full campaigns remain open.
+stays quarantined. Focus completion and full campaigns remain open; run050's
+research completion/refill evidence is recorded below.
 See [the complete run049 evidence](CLAUSEWITZ_VALIDATION.md#recorded-reverse-worker-run049--15-october-2026).
 
 This is a development comparison, not proof of overall superiority. Required

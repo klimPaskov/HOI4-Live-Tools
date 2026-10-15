@@ -60,9 +60,24 @@ busy responses and one rejected late wait snapshot. The 1,982-second recording,
 canonical release, normal exit 0 and exact-process absence passed. No game or
 player owns input now.
 
+Run051 on immutable source `b72e0bd` verified the new completed-Focus reader's
+empty baseline, then failed Start before possible input. OpenPolitics, OpenFocus
+and View were verified; Start retained `torn_read` in the `node_binding` section
+(four-byte witness; exact field unknown). One reservation remained Pending with
+budget 1/1/0. There was no unpause, restart or actual Focus completion. STOP,
+canonical release, the 596-second recording, normal exit 0 and exact-process
+absence passed. The private menu harness omitted its dedicated Start artifact
+because its coordinate guard did not match the actual successful menu click;
+original recording/menu timestamps remain available. Preserve this limitation.
+
 ## Immediate acceptance work
 
-1. Validate the new read-only `hoi4_focus_completed` preview against actual Focus
+1. Separate selected-detail/Start observations from unrelated Focus tree-node
+   controls. Keep full node witnesses for View and all selected-detail ownership,
+   canonical identity, Start callback, visibility and geometry checks for Start.
+   This reduces unnecessary reads; it does not identify run051's changed field.
+   Correct the private menu Start-recording guard before the next fresh gate.
+   Validate the new read-only `hoi4_focus_completed` preview against actual Focus
    completion in a new immutable recorded gate. The pinned engine predicate reads
    progress `+0x40`, unlike upstream's `FP_COMPLETED` label at `+0x20`; do not copy
    that label into this build. Use one existing Luna medium player, preserve
@@ -80,8 +95,8 @@ player owns input now.
    and canonical proof transfer follow; no blind repairs or new action IDs.
    After explicit player handback, independently verify release, finalize the
    recording and perform one ordinary owned close. Preserve actual failures.
-   Improve core NotQueued history so its original reason remains reviewable after
-   a later successful attempt; run050 exposed that evidence gap.
+   Core NotQueued history now retains new original reasons after completion and
+   restart. Older absent causes remain unknown; run050 exposed that evidence gap.
 5. Finish economy, army, air and naval-invasion adapters, recovery and long-running
    standing plans. Then pass the clean two-year and full recorded campaign gates.
    Paused assignment completion is not completed research or a finished Focus.
