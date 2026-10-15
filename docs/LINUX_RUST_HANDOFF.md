@@ -223,6 +223,14 @@ Both brokers are closed. The next source adds field labels and bounded recovery
 of wholly discarded read-only snapshots before the single SearchQuery dispatch.
 It does not retry input or reopen a terminal request. Live query validation is pending.
 
+Run064 startup on `82ec261` was aborted before campaign Start or player grant:
+Windows CI found that the new portable read-recovery tests referenced the
+Unix-only navigation formatter. No gameplay input or player RPC occurred.
+One ordinary window close exited normally with code 0; the source/helpers and
+exact-process absence were audited. The correction keeps bounded diagnostic
+formatting inside the portable observer and adds Windows cross-compilation to
+the local checks. Run064 is an aborted setup, not a live query result.
+
 ## Immediate acceptance work
 
 1. Implement and verify ordinary navigation to an offscreen Focus, then verify

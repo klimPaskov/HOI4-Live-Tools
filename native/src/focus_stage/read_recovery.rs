@@ -23,6 +23,19 @@ fn deadline() -> Error {
     )
 }
 
+// This observer is tested on every platform. Keep its diagnostic formatting
+// independent of the Unix-only durable navigation implementation.
+fn bounded_reason(message: &str) -> String {
+    let mut out = String::new();
+    for c in message.chars().filter(|c| !c.is_control()) {
+        if out.len() + c.len_utf8() > 160 {
+            break;
+        }
+        out.push(c);
+    }
+    out
+}
+
 fn recover<T>(
     until: Instant,
     mut observe: impl FnMut() -> Result<T>,
@@ -38,10 +51,7 @@ fn recover<T>(
         let sample = observe();
         if let Err(error) = &sample {
             if error.code == "torn_read" {
-                rejected.push(Error::new(
-                    error.code,
-                    crate::daily_navigation::bounded_reason(&error.message),
-                ));
+                rejected.push(Error::new(error.code, bounded_reason(&error.message)));
             }
         }
         if now() >= end {
@@ -71,6 +81,13 @@ fn recover<T>(
 mod tests {
     use super::*;
     use std::cell::Cell;
+
+    #[test]
+    fn portable_diagnostic_bound_preserves_utf8_and_removes_control_characters() {
+        assert_eq!(bounded_reason("original\n\t field\0"), "original field");
+        assert_eq!(bounded_reason(&"é".repeat(100)), "é".repeat(80));
+        assert_eq!(bounded_reason(&("a".repeat(159) + "é")), "a".repeat(159));
+    }
 
     #[test]
     fn fresh_success_is_returned_once_and_torn_snapshots_are_wholly_discarded() {

@@ -4167,3 +4167,21 @@ The correction passed 783 Rust 1.86 host tests, 893 reported actual Linux checks
 (891 substantive), five included isolated X11 cases and 953 Python tests
 (37 skips). Formatting, host/Linux Clippy, MSRV and release linking passed with
 110 native inputs unchanged. These checks do not establish successful live typing.
+
+## Run064: startup aborted on Windows CI failure
+
+The Windows Rust Clippy job for `82ec261` failed with E0433: the new read-recovery
+tests referenced `daily_navigation`, which is compiled only on Unix. Local macOS
+and Linux checks had passed; they did not cover this Windows configuration.
+The failure log remains preserved. The pending Linux startup was closed normally
+before campaign Start, input binding, recording or a Luna grant. No player RPC or
+gameplay input occurred. Independent audit verified exit 0, unchanged 110 inputs
+and 24 helpers, exact owned-process absence and closed brokers.
+
+The follow-up keeps bounded formatting in the portable observer and adds a local
+Windows compilation check. It does not turn this aborted setup into live evidence.
+
+The corrected source passed 784 Rust 1.86 host tests, 894 reported actual Linux
+checks (892 substantive), five included X11 cases and 953 Python tests (37 skips).
+Host/Linux/Windows Clippy, formatting, Linux MSRV and release linking passed.
+All 110 native inputs remained unchanged through those checks.
