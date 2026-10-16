@@ -42,9 +42,13 @@ machine-tools refill over advancing time. Restart/STOP preserved the receipts
 and daily budget. Its three core reservations include one terminal NotQueued
 attempt whose original reason was overwritten by later success; that evidence
 gap remains explicit.
+Run052 verified actual Rhineland completion. Run070 then passed the successive
+Focus worker route: completed Rhineland membership, searched Four Year Plan
+assignment and adjacent same-plan restart/STOP with both receipts and budget
+preserved. These bounded gates do not establish campaign-level autonomy.
 
-This remains a development preview. Actual Focus completion, economic recovery,
-warfare and native Windows/macOS live support remain
+This remains a development preview. Economic recovery, warfare and native
+Windows/macOS live support remain
 unfinished. Catalogs and targeted renderer diagnostics alone grant no input
 authority. See [actual live evidence and failures](CLAUSEWITZ_VALIDATION.md);
 no clean two-year run or full campaign has passed.

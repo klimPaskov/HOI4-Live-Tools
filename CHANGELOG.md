@@ -2,11 +2,17 @@
 
 ## Unreleased native preview
 
+- Pass Linux run070 with one Luna medium player: the worker completes Rhineland,
+  searches and starts the Four Year Plan, and preserves receipts/budget through
+  restart without duplicate input. Independently audit 12 verified Focus input
+  pairs and two assignment reservations; retain one read-only busy retry and
+  recovered torn reads. This is bounded automation evidence, not a full campaign.
+
 - Preserve Run069's interrupted initial segment and failed worker continuation.
   Correct the search reader's null country-override handling using the exact
   Linux binary's positive-player fallback, with own-country validation and
-  witnesses retained. Add compact search predicate diagnostics; live validation
-  of this correction remains pending.
+  witnesses retained. Add compact search predicate diagnostics; the corrected
+  worker route passed run070 without identifying run069's missing predicate.
 
 - Verify full manual Focus search-to-View in Linux run068, including three Tab
   steps and exact historical replays. Add optional explicit `focus_search` hints

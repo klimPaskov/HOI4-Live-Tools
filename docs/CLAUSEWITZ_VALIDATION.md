@@ -4367,3 +4367,55 @@ The correction passed 805 Rust 1.86 host tests, 917 reported actual Linux checks
 format, Clippy on all three targets, Linux MSRV and release-build checks. All
 114 native inputs matched the tested source. Live worker acceptance remains
 pending.
+
+## Run070: successive Focus worker and restart passed — 16 October 2026 UTC
+
+One existing Luna player at medium reasoning exercised immutable `eadf3a2`, CLI
+SHA-256 `259a03fca091b1a9dcb71deab25d4e413a71f8ada1d6bb9f36a605ce93974e32`,
+in recorded vanilla Germany on Normal difficulty, historical AI and FAIR rules.
+All nine Windows/Linux/macOS CI jobs and the local/actual-Linux checks above
+passed before input ownership was granted. All 114 native inputs and 24 private
+helpers stayed unchanged through the terminal audit.
+
+The exact two-entry daily plan assigned Rhineland while paused, then advanced
+at speed 4 and waited for its completion. The worker opened the Focus view,
+clicked the verified empty search field, typed `four year plan`, followed three
+ordinary Tab steps through the witnessed canonical match order, opened Four Year
+Plan and started it. No manual Focus input, screenshot-driven play, map movement,
+save parsing, native command posting or builder intervention occurred during
+Luna's exclusive ownership.
+
+Eight target waits completed: the first assignment matched while paused, six
+advancing waits returned normal historical timeouts, and the final wait observed
+Four Year Plan active on 4 February at displayed hour 24. The elapsed interval
+from unpause reply to target-match reply was 382.121 seconds under CPU emulation.
+After worker STOP and one verified ordinary pause, the final observation at
+7 February 10:00 contained newly completed Rhineland membership and active Four
+Year Plan, with all four research slots still idle and settings unchanged.
+
+Adjacent identical-plan restart/STOP preserved both assignment receipts, two
+Complete entries, zero pending/in-flight entries and the historical last-attempt
+day budget 1/1/0. Independent journals verified 12 ordinary Focus input pairs,
+two core reservations on distinct days, three clock actions, no NotQueued action,
+no navigation failure/refusal, no unresolved intent and no duplicate Start.
+The search sequence selected two intermediate keys before Four Year Plan; the
+plan's assignment target remained unchanged throughout.
+
+The 92 actual RPCs included one read-only digest `input_busy`. The identical
+retry followed the permitted five-second wait and returned 8.043 seconds after
+the refused reply. Recovered pre-intent torn snapshots and historical producer
+busy/torn diagnostics remain in the original evidence. No action was retried by
+the player. Long terminal waits retained their process session IDs and consumed
+their original responses without duplicate broker calls.
+
+Canonical lease release was independently verified with remaining time zero.
+The 814.333-second recording passed integrity checks, the owned game exited
+normally with code 0 in 2.165 seconds, and all game/recording/broker instances and
+controller sockets were absent. Both brokers are closed.
+
+This passes bounded successive-Focus worker automation and restart persistence.
+It proves Rhineland completion and Four Year Plan assignment, not completion of
+the latter, a clean two-year run or a full campaign. The successful receipts do
+not identify which country-override branch was used, and do not retroactively
+identify Run069's missing failed predicate. Economy/warfare automation and native
+Windows/macOS live adapters remain required.

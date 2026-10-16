@@ -41,6 +41,12 @@ supplement preserving budget 3/3. Run050 verified actual support-weapons complet
 automatic same-slot refill with basic machine tools, advancing-day budgets and
 restart persistence. Run052 verified actual Rhineland completion on 4 February
 1936 and a same-plan restart/STOP without duplicate input.
+Run070 passed the successive-Focus worker route: Rhineland completed, the worker
+searched for and started the Four Year Plan, and adjacent identical-plan
+restart/STOP preserved both receipts and the daily budget. Independent journals
+verified 12 ordinary Focus input pairs and two assignment reservations, with no
+failed navigation, unresolved input or duplicate Start. One read-only digest busy
+response and recovered pre-intent torn reads remain part of the evidence.
 
 Focus requires owner `daily_focus: true`, a verified Focus profile and
 `focus_permission: true` in every start/update request. A running worker rejects
@@ -66,8 +72,8 @@ policy refusals now preserve stage, scope, count, capacity and aggregate limits
 within the existing durable reason bound. Run056 then identified retained Focus
 position capacity 12,138 for 3,806 children. That exact ancestor class now permits
 capacity 16,384 while retaining the 16,384 aggregate pointer-read limit; ordinary
-containers and owned-root bounds remain unchanged. Successive-Focus validation
-of this correction is pending.
+containers and owned-root bounds remain unchanged. Run070 subsequently passed
+successive-Focus navigation, search and assignment on the corrected reader.
 
 Only proven BeforeIntent busy/torn reads qualify for bounded automatic retries;
 a possible delivered input never does. Focus Start retries retain the same
@@ -327,8 +333,8 @@ adapter. Omit it for existing direct node navigation. The worker retains the
 assignment ID while traversing the observed order, and validates each recorded
 stage on restart. It types only into the verified empty field once; query
 replacement is unavailable. A changed query, match order, selected key or control
-binding refuses. Worker integration still needs live validation; the manual gate
-is not successive-Focus assignment evidence.
+binding refuses. Run070 verified worker integration through actual Rhineland
+completion, searched Four Year Plan assignment and a duplicate-free restart.
 
 The optional `hoi4_research_attempt` preview derives exact technology/slot/category
 controls from fresh own state. Its OpenPanel, SelectSlot, SelectCategory, View and
@@ -452,18 +458,19 @@ assignment receipt. STOP reported the historical last-attempt-day budget 1/1/0;
 fresh advancing-day digests reported 0/1/1. Background busy/torn diagnostics
 remain recorded, with no player RPC errors. Recording and normal exit passed.
 
-Successive Focus automation, economic recovery,
-army/air/naval-invasion control, and independent Windows/macOS live adapters
+Economic recovery, army/air/naval-invasion control and independent Windows/macOS live adapters
 remain open. FAIR is the default; META and mod QA retain separate boundaries.
 
 The preview `hoi4_focus_search_state` reader accepts an exact own `focus_id` and
 reports the current search highlight, match counts and whether that highlight
 matches the request. It validates cache indices through current own items and
-canonical keys. It does not type, navigate, open a detail or start a Focus;
-live validation remains pending. Optional `include_control: true` adds bounded
-query text and exact own search-field listener/renderer diagnostics. Keyboard
-focus, typing and Enter input remain unavailable. Run057's offscreen-node failure
-motivates this prerequisite for ordinary navigation.
+canonical keys. It does not type, navigate, open a detail or start a Focus.
+Run068 verified these observations alongside the separate ordinary search
+actions; Run070 verified the worker route. Optional `include_control: true` adds
+bounded query text and exact own search-field listener/renderer diagnostics.
+Ordinary typing and Tab require the separate action adapter's focus/routing
+checks; Enter remains unavailable. Run057's offscreen-node failure motivated
+this prerequisite for ordinary navigation.
 No clean two-year Luna run or full campaign has passed. Follow the
 [acceptance gates](../docs/LINUX_RUST_HANDOFF.md),
 [complete live evidence](../docs/CLAUSEWITZ_VALIDATION.md) and

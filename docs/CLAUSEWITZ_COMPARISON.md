@@ -1,11 +1,20 @@
 # Clausewitz-MCP comparison checkpoint
 
-Latest checkpoint, 15 October 2026: run057's initial segment stopped early after
+Latest checkpoint, 16 October 2026: Run070 passed automatic Rhineland completion
+followed by searched Four Year Plan assignment and duplicate-free restart/STOP.
+The unpause-to-target interval was 382.121 seconds under CPU emulation. Independent
+journals verified 12 ordinary Focus actions and two assignment reservations;
+92 RPCs included one read-only busy response that succeeded on the permitted
+identical retry. No matched upstream successive-Focus benchmark was run, so this
+establishes a bounded Rust capability, not comparative speed or superiority.
+See [the complete Run070 evidence](CLAUSEWITZ_VALIDATION.md#run070-successive-focus-worker-and-restart-passed--16-october-2026-utc).
+
+Earlier, on 15 October 2026, run057's initial segment stopped early after
 two busy reads. Its separately granted continuation confirmed actual Rhineland
 completion, but Four Year Plan View refused before input because its candidate
 was outside the owned client. Post-stop geometry closed through ten ancestors,
 confirming the capacity correction in that observation; ordinary navigation to
-offscreen Focus nodes remains missing. A production sample returned base equipment
+offscreen Focus nodes was then missing. A production sample returned base equipment
 keys for all 21 own lines in 67.818 ms RPC / 53.575 ms producer time. UI comparison
 and allocation are unverified. Run054's truncated quantities remain unknown.
 Earlier run050 verified research completion/refill in

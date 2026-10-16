@@ -16,7 +16,7 @@ adapters still need independent implementation and validation.
 | --- | --- | --- |
 | Python / Windows | Baseline tools and recorded play attempts | Clean campaign acceptance; development changes remain unfinished |
 | Python / macOS | Platform work and limited diagnostic play | Reliable live acceptance; screenshot-driven testing is stopped |
-| Rust / Linux | Owned launch, own-state reads, ordinary clock/research/Focus controls, daily plans and restart persistence | Successive Focus automation, economy/army/naval controls and campaign acceptance |
+| Rust / Linux | Owned launch, own-state reads, ordinary clock/research/Focus controls, successive Focus plans and restart persistence | Economy/army/naval controls and campaign acceptance |
 | Rust / Windows and macOS | Portable protocol and fixture tests in CI | Build-specific native adapters and live tests |
 
 One Luna player at medium reasoning verified upstream Focus and research on Linux.
@@ -31,8 +31,9 @@ vanilla Normal/historical Germany tests have verified:
 - Durable receipts, daily budgets, plan updates and restart/STOP without duplicate
   input.
 - Compact digests below 2 KB, exact historical details and bounded server waits.
-- Focus text search, three ordinary Tab selection steps, historical replays and
-  opening the requested detail. Automatic plan integration is under validation.
+- Automatic Rhineland completion followed by a searched Four Year Plan assignment,
+  including three ordinary Tab selection steps and restart without duplicate input.
+  Separate manual tests verified exact historical search-action replays.
 
 Fresh overviews measured 15.7 ms median RPC under x86 CPU emulation; five recent
 compact digests returned in 50–62 ms. These are scoped measurements, not a promise

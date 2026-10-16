@@ -14,6 +14,17 @@ one day of advancement passed. The final native posting request timed out;
 observations and verified ordinary input. Neither a clean two-year run nor a
 full campaign has passed.
 
+Latest: Run070 on `eadf3a2` passed the bounded successive-Focus worker gate.
+Rhineland completed, the worker searched for and started the Four Year Plan,
+and identical-plan restart/STOP preserved both receipts and the daily budget.
+Independent audit verified 12 ordinary Focus input pairs, two reservations on
+distinct days, no failed navigation and no duplicate Start. One read-only busy
+retry and recovered pre-intent torn snapshots remain recorded. The game exited
+normally; both brokers and all owned game/recording processes are closed.
+Next: expand economy/construction/production controls and standing plans, then
+warfare and the clean two-year/full-campaign gates. Do not repeat the passed
+two-Focus test without a relevant implementation change or unresolved concern.
+
 Run047 passed worker-only Focus-to-research assignment and adjacent same-plan
 restart/STOP, preserving both completion IDs and budget 2/2/0. Its one BeforeIntent
 research torn-read and read-only digest busy retry remain recorded.
@@ -318,7 +329,8 @@ match; every stage and binding is durable, and reopening validates the complete
 ordered chain. Empty-field entry occurs once. A changed query/order/selection,
 failed or unresolved search stage cannot start another chain. The query is never
 inferred from the Focus ID. Existing omitted hints and stored hashes retain their
-meaning. Worker live validation and replacing an existing query remain pending.
+meaning. Run070 subsequently passed worker live validation; replacing an existing
+query remains unsupported.
 
 ## Immediate acceptance work
 
@@ -334,25 +346,23 @@ one NotQueued pair, zero unresolved intents, the unchanged first assignment,
 canonical release, 696-second recording and normal exit 0. Both brokers and all
 owned processes are closed; 114 inputs/24 helpers stayed unchanged.
 
-The next correction follows the exact Linux getter's null country override:
+The correction in `eadf3a2` follows the exact Linux getter's null country override:
 resolve through the already-witnessed positive own player, never observer or
 foreign state. All original own-country/item/control witnesses and input
 predicates remain required. New compact predicate diagnostics preserve future
 refusals. Static evidence does not identify Run069's original failed predicate;
-the corrected worker route still needs live validation. Future Luna calls must
+Run070 passed the corrected worker route. Its receipts do not identify which
+override branch was exercised. Future Luna calls must
 retain `exec_command.session_id` and poll that same process with `write_stdin`;
 an ordinary yield is neither a missing MCP response nor permission for a new call.
 
-1. Manual search-to-View passed Run068. Verify the corrected worker integration, then
-   successive Focus choices on the tested capacity correction, using
-   completed membership to distinguish assignment from finished Focus. Run056
-   supplies the original boundary evidence; run054's lost quantities remain
-   unknown. Keep one existing Luna medium player, worker/ordinary-clock separation,
-   fixed bounds, recorded campaign Start and independent stopped-journal audit.
-   Require Rhineland membership, active Four Year Plan and identical-plan restart
-   without duplicate input. No clean two-year or campaign acceptance is implied.
-   The run056 post-failure reads were explicitly granted before its launch;
-   any future diagnostic exception must also be fixed before the input grant.
+1. The manual Run068 and worker Run070 search gates passed. Move to ordinary
+   economy/construction/production controls and wider standing plans. Validate
+   exact own target identity, eligibility and state changes against the installed
+   build before admitting actions. Keep one existing Luna medium player, fixed
+   bounds, recorded campaign Start and independent stopped-journal audit.
+   Any post-failure diagnostic exception must be fixed before the input grant.
+   Earlier missing evidence remains unknown; later success does not repair it.
 2. Preserve durable assignment receipts and budgets through advancing days and
    queued heads. Prove finished technology membership/empty slot before refill;
    an active Focus or assigned slot alone does not prove completion. Use fresh

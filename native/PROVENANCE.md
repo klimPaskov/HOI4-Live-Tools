@@ -523,6 +523,8 @@ Search now resolves a null override through its existing same-reader positive
 player/country/catalog validation. Foreign overrides still refuse before payload;
 all item, control and final snapshot witnesses remain mandatory. Generated cases
 cover both own branches, invalid player/owner state, foreign payload exclusion
-and torn witnesses. Live acceptance is pending, and the static correction does
-not retroactively fill Run069's missing predicate. Future aggregate projection
-refusals carry compact results for all seven original predicates.
+and torn witnesses. Run070 passed the corrected successive-Focus worker route;
+its receipts do not identify which override branch was used. Neither this result
+nor the static correction retroactively fills Run069's missing predicate. Future
+aggregate projection refusals carry compact results for all seven original
+predicates.
