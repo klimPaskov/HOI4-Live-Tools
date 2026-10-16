@@ -52,8 +52,8 @@ Optional `include_location: true` adds state/province IDs for a selected buildin
 only after both territory ownership and control match the current player.
 Exact catalog IDs, embedded status identity, the fresh template ordinal and a
 reciprocal building slot must agree. National overrides, unknown status flags,
-foreign/allied territory and railway paths remain unavailable. This option has
-static/generated evidence only. It reads selected slots rather than enumerating
+foreign/allied territory and railway paths remain unavailable. Run072 observed one state-level dockyard; province locations remain
+unverified. It reads selected slots rather than enumerating
 geography; the default remains fast and avoids these additional reads.
 `location_available_count` covers the fully validated collection before paging;
 top-level `location_available` means at least one location was proved. Each row
@@ -67,7 +67,18 @@ province building. Root/row flags are local visibility observations; they do
 not establish freshness, unique state-name agreement, eligibility or input
 routing. Hidden roots and unjoined rows expose no text payload. Full UI counts
 precede pagination; `ui.rows` uses the same construction entry-index page.
-This observer has static/generated evidence only and defaults off.
+It defaults off. Run072 matched one dockyard's state 56 and stored Weser-Ems
+label against installed public definitions in 35–37 ms UI RPCs. The player acquired
+its delimiting lease after the reads; the prescribed gate was not a clean pass.
+No game inputs occurred, and general UI freshness remains unverified.
+
+With `include_ui`, `ui.selection` separately reports the owned manager's
+construction mode and canonical building key, even with an empty queue or closed
+panel. Mode 0 is inactive; modes 1 and 3 identify ordinary and railway choices.
+Other modes are explicitly unsupported and do not read template payload. Active
+choices require a fresh public catalog, matching ordinal and the railway cache
+relationship. This readback has static/generated evidence only; selection proves
+neither placement eligibility nor effective map routing or delivered input.
 
 An owned session can enable prepared research, Focus and durable daily plans.
 Recorded run030 verified four-slot worker assignment, idempotent updates,
@@ -214,7 +225,7 @@ anchors do not establish a load-generation token.
 | `hoi4_army` | Own divisions with full snapshot-scoped handles, selected province joins and lossless raw status; recorded structural reads, units unverified |
 | `hoi4_economy` | Own named factory trigger counts, civilian project capacity and exact signed political-power units; live comparison pending |
 | `hoi4_production_lines` | Paged own line handles, separate signed factory counters and optional base equipment keys; key joins have fixture evidence, live comparison and allocation remain pending |
-| `hoi4_construction_queue` | Own building/railway lines, canonical keys and signed cost/work counters; one dockyard observed in run071. Optional own-territory location IDs have static/generated evidence only |
+| `hoi4_construction_queue` | Own building/railway lines, canonical keys and signed cost/work counters; one dockyard observed in run071. Run072 observed one state/label with a late-lease deviation; selection and province/railway coverage remain unverified |
 | `hoi4_technology_list` | Canonical loaded technology IDs with filtering/pagination; no eligibility inference |
 | `hoi4_input_geometry` | GUI dimensions, scale, pointer and conditional source-window diagnostics; no click authority |
 | `hoi4_research_folders` | Exact loaded public folder IDs, independent of open GUI; no technology mapping or eligibility authority |

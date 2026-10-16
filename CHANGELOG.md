@@ -2,6 +2,16 @@
 
 ## Unreleased native preview
 
+- Add optional canonical construction-selection readback under `include_ui`,
+  with fresh catalog/ordinal checks and explicit unsupported modes. Static and
+  generated evidence only; no construction input is enabled.
+
+- Record Run072's paused dockyard state 56/Weser-Ems label comparison, with
+  35–37 ms UI reads and zero player inputs. Preserve the late lease acquisition
+  as a protocol deviation rather than a clean pass. Retain the setup menu
+  misclick/close and early campaign-unavailable response. Audit canonical release,
+  empty action journals, finalized recording and normal owned process closure.
+
 - Add optional `include_ui` construction observations. Within the same witnessed
   snapshot, join exact own panel rows and both full handle copies to located own
   building lines before reading the named location text. Preserve default-off

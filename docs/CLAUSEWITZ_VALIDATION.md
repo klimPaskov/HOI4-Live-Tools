@@ -4517,3 +4517,78 @@ checks**, including five X11 cases (**940 substantive** after excluding the
 nested helper and generated window-client wrapper). All suites returned zero.
 The prior owned game/server were absent before and after; Yama remained 1.
 No game was launched. Location/UI comparison remains pending.
+
+
+## Run072: paused location/label observations with lease-order deviation — 16 October 2026 UTC
+
+Immutable Rust source `0822dcd5e9990c6bb5d5b0360a6b056167f8ceeb`, CLI SHA-256
+`46677c36f0e19ff014fdb55fc1259ddde3885c6a47b834c43869c2acea368038`, ran in a fresh
+owned Linux vanilla Germany session: Normal difficulty, historical AI, FAIR and
+zero mods. This source passed 839 host Rust tests, 953 Python tests (37 skips),
+951 reported actual Linux checks (949 substantive, including five X11 cases),
+compiler/Clippy/MSRV/format gates and all nine exact-head CI jobs.
+
+Root's manual setup opened Load Game by mistake, then closed it before any
+campaign Start; no save was loaded. The two extra menu inputs remain in the
+recording and log. Before the player grant, the private setup guards were
+updated to require the actual nine-entry menu prefix and retested across 112
+cases; the original helper manifest was preserved. Three further ordinary
+clicks opened construction, selected a dockyard and queued it on the coast.
+One pre-ready `campaign_unavailable` response is retained separately from the
+player's results. Manual setup does not validate a construction input adapter.
+
+Luna made **12 RPCs, zero RPC errors, no retries and no game inputs**. Its four
+construction observations used default options, `include_location`, `include_ui`
+and repeated `include_ui`. Every read retained the same single dockyard handle
+`0x000000010000003b`, amount 1, active factories 15, raw cost `640000000`, produced
+`0` and speed `13800000`. Optional location identified own state **56**, with no
+province ID. Both UI reads joined one row with stored text **Weser-Ems**. The
+installed state definition's ID/name key and English localization independently
+agree with that mapping. UI calls took **36.754/35.449 ms RPC**; the location-only
+call took **30.832 ms** and default queue call **50.397 ms**. These isolated
+measurements are not a comparative performance benchmark.
+
+The prescribed order required acquiring a delimiting lease before these reads.
+Luna acquired its sole lease **after** the observations, then made only release
+and status calls. It did not replay observations or acquire a replacement lease.
+This is a recorded protocol deviation, **not a clean gate pass**. Root made no
+game reads or input during the grant. The actual read-only results remain bounded
+location/label evidence; they do not prove observation under an active lease.
+
+Stopped-log audit confirmed the actual order, empty clock/research/Focus action
+journals, unchanged paused 1 January 1936 12:00 state, canonical release and
+status zero. All 121 native source inputs and the final 25-helper manifest stayed
+unchanged through the grant. The **535.666-second** recording finalized; one
+ordinary close exited normally with code 0 in **2.276 seconds**. All four owned
+guest instances, both host brokers and their transports, and both controller
+sockets were absent afterward.
+
+This covers one state-level dockyard and its stored label. Province locations,
+railway payloads, general UI freshness, unique-name/routing authority, exact
+numeric UI comparison, building selection/placement automation and campaign
+acceptance remain unverified. The runtime's static `live_validation: pending`
+and UI freshness/authority flags remain unchanged. Native posting stays
+quarantined. No repeat of this read-only gate is needed solely to erase the
+ordering deviation; preserve it and enforce input leases in later action gates.
+
+
+## Construction selection preview — 16 October 2026 UTC
+
+The optional `include_ui` observation now reports owned manager selection even
+with no queued line or visible construction panel. Mode 0 returns inactive;
+modes 1/3 require fresh exact public catalog membership, valid template, matching
+ordinal and corroborated railway-cache relationship. Unknown modes avoid the
+selected pointer and catalog. Same-snapshot final witnesses cover all consumed
+fields. No input, placement eligibility or map-routing authority is enabled.
+
+Independent static review found no actionable findings across 15 checks. Five
+new generated tests cover empty queues, inactive/unknown modes, malformed and
+foreign-to-catalog identities, mode/cache inconsistencies and final torn reads.
+Composed validation passed **844 host Rust 1.86 tests**, **953 Python tests**
+(37 skips), host/Linux/Windows all-target Clippy, Linux MSRV, formatting and
+static Linux release compilation. The resulting binaries passed **956 reported
+actual Linux checks**, including five X11 cases (**954 substantive**, excluding
+the nested helper and generated window-client wrapper). All suites returned zero.
+The prior owned game/server were absent before and after; Yama remained 1. The
+library's 97-byte worker-unavailable diagnostic remains in private test evidence.
+No game was launched for these fixtures. Live selection validation is pending.

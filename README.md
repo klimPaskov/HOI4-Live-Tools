@@ -85,8 +85,11 @@ allocation controls remain pending.
 The construction preview separately reports buildings and railways, cost,
 produced work and factory counters. It uses fresh building-template keys and
 explicit unsupported coverage. Luna verified one Linux dockyard line across
-advancing days in 31–39 ms per read. Precise UI comparison, railway coverage and
-construction controls remain pending.
+advancing days in 31–39 ms per read. Optional location/UI reads matched one
+state-level dockyard and its label in 35–37 ms; that run retained a lease-order
+deviation. Optional UI reads also expose the canonical selected building; that
+addition has static/generated evidence only. General UI freshness, railway
+coverage and construction controls remain pending.
 Army, economy and naval automation are still in development. See
 [the expansion plan](docs/CLAUSEWITZ_FOUNDATION.md) and
 [current acceptance work](docs/LINUX_RUST_HANDOFF.md).

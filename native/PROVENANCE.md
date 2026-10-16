@@ -651,3 +651,32 @@ corroboration; generated fixtures cover foreign exclusion, full-width handles,
 malformed joins, UTF-8/heap strings and torn reads. Live acceptance remains
 pending. Building-choice and topbar callback evidence is retained separately;
 this observer exposes neither selection controls nor actions.
+
+
+## Optional construction selection
+
+`construction/selection.rs` independently observes the current owned interface
+manager under the existing exact idler/manager/positive-player guards. On the
+same pinned Linux ELF, setter `0x170f520` writes signed mode at manager `+0x3f0`
+and selected template at `+0x3e8`. Constructor `0x17037b0` initializes mode 0;
+close path `0x297aae0` resets it. Consumers `0x297ac40`, `0x170af10` and
+`0x170b270` corroborate the fields. No engine routine is executed.
+
+Choice callback `0x296f810` passes item `+0x20` through an engine predicate to
+`0x2970e50`, which chooses mode 1 or mode 3 based on equality to building
+DB `+0x3a8`. Parser `0x874460` and canonical keyword initializer evidence
+independently identify that cache as `rail_way`. The observer requires fresh
+exact database/catalog membership before selected-template payload, exact valid
+template primary, ordinal `+0x2b8` equal to its fresh catalog slot and bounded
+canonical key `+0x248`. Mode 3 must agree with both cache and key; mode 1 must
+differ from the cache. Cache payload and unselected definitions are never read.
+
+Mode 0 and unknown modes do not follow `+0x3e8` or initialize the catalog. Active
+selection is independent of queued lines and panel visibility. Every consumed
+root, mode, pointer, catalog, identity and string byte participates in final
+witnesses; the setter's two stores do not constitute an atomic pair. Selection
+is not proof of callback delivery, engine eligibility, map routing or placement.
+The separate capability branch, mode 2, target locations and railway paths are
+unsupported. Private evidence retains 14 targeted FDEs and a bounded keyword
+excerpt; generated tests cover empty queues, unknown modes, catalog exclusion,
+mode/cache disagreements and torn reads. Live selection validation is pending.

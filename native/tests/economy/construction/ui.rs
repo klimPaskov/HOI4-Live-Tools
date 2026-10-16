@@ -1,5 +1,7 @@
 use super::*;
 use hoi4_live_native::construction::page_with_options;
+#[path = "selection.rs"]
+mod selection;
 
 const REGISTRY: u64 = 0x110000;
 const MANAGER: u64 = 0x111000;
@@ -26,6 +28,7 @@ fn fixture_ui() -> Fixture {
     f.word(REGISTRY, BASE + 0x42736f8);
     f.word(0x326b8, MANAGER);
     f.word(MANAGER + 0x180, 0x32000);
+    f.number(MANAGER + 0x3f0, 0);
     f.word(MANAGER + 0x150, PANEL);
     f.word(PANEL, BASE + 0x43101d8);
     f.word(PANEL + 0x2f0, 0x32000);

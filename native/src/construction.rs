@@ -4,6 +4,7 @@
 //! keyword initializers and arithmetic; see PROVENANCE.md. No engine calls.
 mod buildings;
 mod location;
+mod selection;
 mod ui;
 use crate::{
     economy,

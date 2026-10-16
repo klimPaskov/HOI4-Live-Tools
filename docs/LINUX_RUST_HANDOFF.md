@@ -14,7 +14,28 @@ one day of advancement passed. The final native posting request timed out;
 observations and verified ordinary input. Neither a clean two-year run nor a
 full campaign has passed.
 
-Latest: Run071 on `a6a458e` passed a bounded construction-observation/clock gate.
+Latest: Run072 on `0822dcd` matched a paused dockyard's own state 56 and stored
+UI label Weser-Ems against installed public state/localization files. Luna's UI
+reads took 35–37 ms; all 12 RPCs succeeded and no game input occurred. It acquired
+the delimiting lease after the observations, so the prescribed gate did not pass
+cleanly. Preserve that ordering deviation; no observation replay followed. Root
+made no competing game reads/input. Canonical release, a 535.666-second recording,
+normal exit 0 and absence of all owned processes/brokers were audited. The setup
+Load Game misclick/close and one early campaign_unavailable response remain
+recorded. One state-level location/label is evidence; province/railway coverage,
+general freshness and construction actions remain unverified. Do not repeat this
+observer-only gate merely to erase the deviation. Next: canonical building
+selection and verified ordinary controls, then economy plans and warfare.
+
+The next Rust preview adds `ui.selection` under `include_ui`: inactive mode 0,
+ordinary mode 1 and railway mode 3 with fresh public template membership, ordinal
+and cache agreement. It works independently of queued lines or panel visibility.
+Unknown modes remain explicit and avoid template payload. Static/generated
+evidence does not establish live selection, placement eligibility or map routing.
+Next implementation work is the ordinary topbar opener and canonical choice
+controls, reusing existing verified geometry and durable input machinery.
+
+Run071 on `a6a458e` passed a bounded construction-observation/clock gate.
 One manually queued dockyard retained its full handle and produced work rose
 from raw `0` to `27600000` by paused 3 January 1936 07:00. Luna made 14 RPCs with
 no errors; queue reads took 31–39 ms. Independent audit verified three ordinary
@@ -34,8 +55,8 @@ The construction preview adds `hoi4_construction_queue`: bounded own-status
 membership, exact building/railway layouts, full snapshot-scoped handles,
 separately named scalar fields and fresh canonical building-template keys.
 Independent current-ELF inspection corrects upstream's progress alias: `+0x28`
-is cost and `+0x38` is produced work. Locations, railway paths, allocation and
-construction actions are unavailable. Run071 covers one dockyard across advancing
+is cost and `+0x38` is produced work. Default reads omit locations; optional own-territory IDs are described below.
+Railway paths, allocation and construction actions are unavailable. Run071 covers one dockyard across advancing
 days; railway payloads and exact numeric UI comparison remain unverified. The
 immutable build's static `live_validation: pending` flag does not describe a
 later audit result. Keep native command posting quarantined.
@@ -49,7 +70,8 @@ correctness; compare a legible own-location UI before acceptance. Optional
 `include_ui` now implies those location guards and reads the panel's named row
 text after exact own handle joins within the same witnessed snapshot. Stored
 state-name text may be stale and does not prove unique name agreement or input
-readiness. This observer is not yet live-validated.
+readiness. Run072 provides the bounded state-level observation above, with its protocol
+deviation. General freshness and province/railway coverage remain unverified.
 
 Run047 passed worker-only Focus-to-research assignment and adjacent same-plan
 restart/STOP, preserving both completion IDs and budget 2/2/0. Its one BeforeIntent

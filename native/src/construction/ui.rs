@@ -66,9 +66,10 @@ pub(super) fn observe(r: &Reader<'_>, base: u64, lines: &[Value]) -> Result<Valu
             "Construction interface manager must belong to own idler",
         ));
     }
+    let selection = super::selection::observe(r, base, manager)?;
     let panel = r.u64(manager + 0x150)?;
     let mut out = json!({"requested":true,"available":false,"reason":"panel_unmaterialized",
-        "scope":"own_located_building_rows_only","rows":[],
+        "scope":"own_located_building_rows_only","rows":[],"selection":selection,
         "row_coverage":"not_checked",
         "display_text_freshness_verified":false,"canonical_name_agreement_verified":false,
         "global_modal_clear_verified":false,"effective_routing_verified":false,

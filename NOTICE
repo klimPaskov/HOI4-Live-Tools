@@ -50,7 +50,9 @@ Upstream foundation and attribution:
   cost and produced work are distinct. construction/location.rs independently
   derives optional selected own-territory IDs with ownership/control and reciprocal
   catalog/status guards. construction/ui.rs independently recovers current Linux
-  panel ownership, row-handle and named text bindings. No foreign geography
+  panel ownership, row-handle and named text bindings. construction/selection.rs
+  independently derives owned manager selection with fresh public template joins;
+  selection is not placement eligibility or routing authority. No foreign geography
   payload or input is authorized.
   native/src/graph_kernel.rs independently implements bounded components and
   multi-source breadth-first search, consulting calling/doctrine.py and
