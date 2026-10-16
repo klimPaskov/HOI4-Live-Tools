@@ -340,6 +340,10 @@ fn each_stage_dispatches_one_point_only_after_durable_intent_then_confirms_canon
             assert_eq!(out.receipt.status, Status::Verified);
             assert_eq!(out.receipt.delivery, Some(delivery));
             assert!(!out.event_causality_verified);
+            assert!(!j.blocks_game(&epoch().game));
+            // Windows enforces the exclusive writer lock against other handles.
+            // Inspect the durable file only after releasing the journal.
+            drop(j);
             let lines: Vec<Receipt> = fs::read_to_string(s.path())
                 .unwrap()
                 .lines()
@@ -349,7 +353,6 @@ fn each_stage_dispatches_one_point_only_after_durable_intent_then_confirms_canon
                 lines.iter().map(|r| r.status).collect::<Vec<_>>(),
                 [Status::Intent, Status::Verified]
             );
-            assert!(!j.blocks_game(&epoch().game));
         }
     }
 }
@@ -1016,7 +1019,15 @@ fn journal_refuses_symlink_hardlink_and_nonprivate_permissions() {
 fn insufficient_capacity_refuses_before_intent_and_possible_input() {
     let s = Scratch::new();
     let mut j = Journal::open(&s.path()).unwrap();
-    j.file.set_len(LIMIT - (2 * LINE) as u64 + 1).unwrap();
+    // The production file is append-only; Windows correctly rejects set_len.
+    // Grow it through the locked writer to exercise the real metadata boundary.
+    let length = LIMIT - (2 * LINE) as u64 + 1;
+    std::io::copy(
+        &mut std::io::Read::take(std::io::repeat(b' '), length),
+        &mut j.file,
+    )
+    .unwrap();
+    assert_eq!(j.file.metadata().unwrap().len(), length);
     let mut f = Fake::new(Stage::EnsureOpen);
     assert_eq!(
         execute(
@@ -1287,6 +1298,7 @@ fn uncertain_readback_keeps_exact_bounded_sanitized_producer_cause_on_restart() 
     assert_eq!(d.code, "permission_denied");
     assert!(d.message.starts_with("read denied pointer=[redacted]"));
     assert!(d.message.len() <= 512 && !d.message.chars().any(char::is_control));
+    drop(j);
     let data = fs::read_to_string(s.path()).unwrap();
     for prohibited in [
         TOKEN,
@@ -1298,7 +1310,6 @@ fn uncertain_readback_keeps_exact_bounded_sanitized_producer_cause_on_restart() 
         assert!(!err.message.contains(prohibited));
     }
     assert!(err.message.contains("cause=permission_denied:"));
-    drop(j);
     let mut j = Journal::open(&s.path()).unwrap();
     let mut retry = Fake::new(stage);
     let err = execute(

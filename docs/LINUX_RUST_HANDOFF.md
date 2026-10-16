@@ -35,6 +35,13 @@ blocking durable uncertainty with exact bounded causes. Next: wire the witnessed
 observer/candidate and ordinary dispatcher, then a bounded action gate; do not
 repeat the passed named-binding probe alone. Map placement remains separate.
 
+Foundation commit `db7e2a3` passed host and actual Linux fixtures, but Windows CI
+found three test-only file-access assumptions: reads through a second handle
+while the journal held its exclusive lock, and `set_len` on its append-only
+handle. The correction releases the journal before inspection and fills the
+capacity fixture through the locked writer; production locking stays unchanged.
+Preserve the original failed CI run rather than treating it as a transient failure.
+
 Run073's original global-name uniqueness failure remains recorded; the exact
 collection and duplicate name were not retained. Run074 does not recover them.
 
