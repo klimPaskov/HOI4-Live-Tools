@@ -680,3 +680,42 @@ The separate capability branch, mode 2, target locations and railway paths are
 unsupported. Private evidence retains 14 targeted FDEs and a bounded keyword
 excerpt; generated tests cover empty queues, unknown modes, catalog exclusion,
 mode/cache disagreements and torn reads. Live selection validation is pending.
+
+## Combined construction control observations
+
+`construction/controls.rs` and `controls/binding.rs` are independent project
+code for the same pinned Linux ELF. The exact own topbar's nested named path
+(`country_menu_window`, `after_faction_button`, `after_intel_agency_button`)
+ends at `construction_button`; the topbar aliases must agree. Its ordinary
+callback `0x186d470` toggles managed mode 17 through `0x1709c20`. Managed mode
+`+0x3d8` is separate from selection mode `+0x3f0`; a future ensure-open action
+must treat an already-open panel as a no-op rather than repeat this toggle.
+
+Only exact choice primary `0x43100f8` is interpreted. The entire bounded choice
+array is checked before selecting the requested canonical key through fresh
+public template membership and ordinal agreement. Only that requested item's
+named `start_construction_button` is inspected. Unknown items preserve incomplete
+coverage; hidden panels do not enumerate choices or their catalog.
+
+Exact Standard primary `0x43470c8` requires own registry identity. Local state,
+optional/delegate absence and the byte-wide shortcut field at `+0xdc` are read
+without following optional payload. A singleton active observer must bind the
+exact manager/invoker pair and member/receiver capture: opener `0x1886560` /
+`0x1886530` / `0x186d470`, choice `0x297df40` / `0x297df10` / `0x296f810`.
+The complete inactive callback tail is zero-checked, including manager `+0x278`
+used by the release cancellation route. Unknown concrete controls receive no
+inferred layout. These checks observe callback data without executing it.
+
+Optional geometry reuses exact Sprite/Text/Frame renderer and hierarchy readers
+only after a reciprocal renderer/control link. Shared input geometry, scoped own
+politics/Focus/research blockers, GUI receiver-null facts and engine scalar gates
+participate in the same final witnesses and process bracket. No queue, map,
+foreign-country data, engine helper payload or callback execution is added.
+
+Private evidence retains 25 control and 34 routing FDEs plus installed public
+GUI definitions. Review corrected the shortcut field from a four-byte read to
+one byte; a sparse fixture forbids the adjacent bytes. Generated integration
+coverage includes geometry within the shared witness bracket, callback-tail
+changes, malformed joins, foreign blockers and unsupported controls. Static and
+fixture evidence does not establish live readiness, a global modal census,
+current-frame delivery, engine eligibility or construction action acceptance.

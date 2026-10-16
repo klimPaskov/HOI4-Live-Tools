@@ -54,6 +54,10 @@ Upstream foundation and attribution:
   independently derives owned manager selection with fresh public template joins;
   selection is not placement eligibility or routing authority. No foreign geography
   payload or input is authorized.
+  construction/controls.rs and controls/binding.rs independently recover the
+  nested topbar path, canonical choice items, exact ordinary callback captures
+  and scoped local gates. Existing typed geometry is reused within one witnessed
+  read; these associations execute no callback and authorize no construction input.
   native/src/graph_kernel.rs independently implements bounded components and
   multi-source breadth-first search, consulting calling/doctrine.py and
   calling/ragemicro.py. It operates on caller-supplied public/generated topology;

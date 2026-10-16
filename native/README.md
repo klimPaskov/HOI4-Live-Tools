@@ -80,6 +80,16 @@ choices require a fresh public catalog, matching ordinal and the railway cache
 relationship. This readback has static/generated evidence only; selection proves
 neither placement eligibility nor effective map routing or delivered input.
 
+`hoi4_construction_controls({"building_id":"dockyard","include_geometry":true})`
+is a read-only preview for inspecting the topbar opener and one building choice
+together. It checks exact named controls, own registry links, callback captures,
+fresh catalog identity and scoped politics/Focus/research blockers in one witnessed
+snapshot. Geometry is optional and defaults off. Hidden construction panels omit
+choice enumeration; unknown concrete controls or renderers remain unavailable.
+Local gates and coordinates do not prove current-frame routing, global modal
+clearance or engine eligibility. Live validation is pending; this tool cannot
+open the panel, select a building or place construction.
+
 An owned session can enable prepared research, Focus and durable daily plans.
 Recorded run030 verified four-slot worker assignment, idempotent updates,
 restart persistence and research-counter advancement. Run047 passed automatic

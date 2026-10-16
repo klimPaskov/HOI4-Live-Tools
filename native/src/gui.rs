@@ -133,6 +133,20 @@ pub fn input_geometry(process: &dyn Process) -> Result<Value> {
     let observed = crate::research_ui::Witnesses::new(process);
     let r = Reader::new(&observed);
     let base = process.image_base();
+    let mut value = input_geometry_from_reader(&r, base)?;
+    let (end_calls, end_bytes) = observed.finish()?;
+    process.check()?;
+    value["freshness"] = json!({
+        "observed_unix_ms":SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),
+        "elapsed_ms":start.elapsed().as_secs_f64()*1000.0,
+        "read_calls_kind":"logical_read_requests",
+        "read_calls":r.calls.get()+end_calls as u64,"read_bytes":r.bytes.get()+end_bytes
+    });
+    Ok(value)
+}
+/// Caller supplies the encompassing process and final-witness bracket.
+/// Shared with combined own control diagnostics; never an input authorization.
+pub(crate) fn input_geometry_from_reader(r: &Reader<'_>, base: u64) -> Result<Value> {
     let gs = r.u64(base + 0x44086a8)?;
     let idler = r.u64(base + 0x44085f8)?;
     if r.u64(gs)? != base + 0x42c7598 || r.u64(idler)? != base + 0x42c9a88 {
@@ -168,13 +182,13 @@ pub fn input_geometry(process: &dyn Process) -> Result<Value> {
     // layout or client-coordinate origin is inferred from the type name.
     let input_source = r.u64(idler + 0x500)?;
     let (source_type, metadata_available) =
-        match crate::research_ui::nullable_type(&r, base, input_source) {
+        match crate::research_ui::nullable_type(r, base, input_source) {
             Ok(value) => (value, input_source != 0),
             Err(error) if error.code == "invalid_gui_type" => (Value::Null, false),
             Err(error) => return Err(error),
         };
     let mut source_point = if metadata_available {
-        point_source(&r, base, input_source)?
+        point_source(r, base, input_source)?
     } else {
         json!({"getter_source_layout_verified":false,"reason":"receiver_metadata_unavailable"})
     };
@@ -230,7 +244,7 @@ pub fn input_geometry(process: &dyn Process) -> Result<Value> {
         }
         source_point["source_logical_point"] = json!(logical);
         source_point["logical_cache_equivalent"] = json!(logical == point);
-        source_point["window_association"] = source_window(&r, base, &dims)?;
+        source_point["window_association"] = source_window(r, base, &dims)?;
     }
     if r.u64(base + 0x44086a8)? != gs
         || r.u64(base + 0x44085f8)? != idler
@@ -247,8 +261,6 @@ pub fn input_geometry(process: &dyn Process) -> Result<Value> {
     {
         return Err(Error::new("torn_read", "GUI input geometry changed"));
     }
-    let (end_calls, end_bytes) = observed.finish()?;
-    process.check()?;
     Ok(json!({
         "source":"native own GUI diagnostics","build_id":game::BUILD_ID,
         "physical_dimensions":&dims[..2],"logical_dimensions":&dims[2..],
@@ -257,12 +269,6 @@ pub fn input_geometry(process: &dyn Process) -> Result<Value> {
         "input_source":{"materialized":input_source!=0,"type_encoding":source_type,"type_metadata_available":metadata_available,"field_layout_verified":false,"client_origin_verified":false,"point_diagnostic":source_point},
         "input_mapping_verified":false,
         "unverified":["X11 client origin","HiDPI conversion","per-control scalar/pivot","effective hit routing"],
-        "observation_paused_game":false,
-        "freshness":{
-            "observed_unix_ms":SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),
-            "elapsed_ms":start.elapsed().as_secs_f64()*1000.0,
-            "read_calls_kind":"logical_read_requests",
-            "read_calls":r.calls.get()+end_calls as u64,"read_bytes":r.bytes.get()+end_bytes
-        }
+        "observation_paused_game":false
     }))
 }

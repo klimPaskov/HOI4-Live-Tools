@@ -2,6 +2,11 @@
 
 ## Unreleased native preview
 
+- Add read-only `hoi4_construction_controls` for one canonical building ID.
+  One witnessed snapshot joins the nested topbar opener, catalog-backed choice,
+  exact callback bindings, local blockers and optional typed geometry. Unknown
+  controls remain explicit; no construction input or routing authority is enabled.
+
 - Add optional canonical construction-selection readback under `include_ui`,
   with fresh catalog/ordinal checks and explicit unsupported modes. Static and
   generated evidence only; no construction input is enabled.

@@ -32,8 +32,11 @@ ordinary mode 1 and railway mode 3 with fresh public template membership, ordina
 and cache agreement. It works independently of queued lines or panel visibility.
 Unknown modes remain explicit and avoid template payload. Static/generated
 evidence does not establish live selection, placement eligibility or map routing.
-Next implementation work is the ordinary topbar opener and canonical choice
-controls, reusing existing verified geometry and durable input machinery.
+The combined `hoi4_construction_controls` preview now observes the nested topbar
+opener and one canonical choice, exact callback bindings, scoped local blockers
+and optional geometry in one snapshot. It enables no input. Next: one bounded
+combined Linux probe with the lease acquired before game observations, then
+ordinary opener/choice stages using the existing durable input machinery.
 
 Run071 on `a6a458e` passed a bounded construction-observation/clock gate.
 One manually queued dockyard retained its full handle and produced work rose

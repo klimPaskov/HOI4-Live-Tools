@@ -1,6 +1,8 @@
 use super::*;
 use hoi4_live_native::construction::{page, snapshot};
 use serde_json::json;
+#[path = "construction/controls.rs"]
+mod controls;
 #[path = "construction/locations.rs"]
 mod locations;
 #[path = "construction/ui.rs"]
