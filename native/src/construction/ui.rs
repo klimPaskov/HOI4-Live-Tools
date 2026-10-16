@@ -33,12 +33,9 @@ fn location_text(r: &Reader<'_>, base: u64, window: u64, registry: u64) -> Resul
         return Err(invalid("Paired construction text names/pointers required"));
     }
     let mut selected = None;
-    let mut seen_names = BTreeSet::new();
     for (index, value) in values.into_iter().enumerate() {
         let name = r.string_bounded(names + index as u64 * 32, 128)?;
-        if !seen_names.insert(name.clone()) {
-            return Err(invalid("Unique construction text registry names required"));
-        }
+        // Unrelated names may repeat; only this requested key must be unique.
         if name == "location" && selected.replace(value).is_some() {
             return Err(invalid("Unique named construction location required"));
         }

@@ -90,6 +90,9 @@ state-level dockyard and its label in 35–37 ms; that run retained a lease-orde
 deviation. Optional UI reads also expose the canonical selected building; that
 addition has static/generated evidence only. General UI freshness, railway
 coverage and construction controls remain pending.
+The combined controls preview failed its first live read on a registry-name
+check. Its corrected lookup is awaiting live validation; no construction input
+adapter is enabled.
 Army, economy and naval automation are still in development. See
 [the expansion plan](docs/CLAUSEWITZ_FOUNDATION.md) and
 [current acceptance work](docs/LINUX_RUST_HANDOFF.md).

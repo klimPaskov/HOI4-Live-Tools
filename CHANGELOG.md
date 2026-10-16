@@ -2,6 +2,12 @@
 
 ## Unreleased native preview
 
+- Record Run073's failed combined controls read: correct lease ordering, one
+  capture, zero player input and `Unique construction control names required`.
+  Correct the overstrict registry policy to require only the requested name to
+  be unique, including location text. Preserve full bounded validation and final
+  witnesses; the exact failing collection/name and live correction remain unverified.
+
 - Add read-only `hoi4_construction_controls` for one canonical building ID.
   One witnessed snapshot joins the nested topbar opener, catalog-backed choice,
   exact callback bindings, local blockers and optional typed geometry. Unknown

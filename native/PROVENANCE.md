@@ -719,3 +719,26 @@ coverage includes geometry within the shared witness bracket, callback-tail
 changes, malformed joins, foreign blockers and unsupported controls. Static and
 fixture evidence does not establish live readiness, a global modal census,
 current-frame delivery, engine eligibility or construction action acceptance.
+
+### Requested-name uniqueness correction
+
+Run073's single combined request failed with a global duplicate-name error. That
+message did not retain which collection/name failed. Independent review of exact
+button lookup `0x2e95540..0x2e956e1` (FDE `0x3ed9a68`), child lookup
+`0x2e96620..0x2e967c1` (FDE `0x3ed9c70`) and instant-text lookup `0x2e956f0`
+shows each compares the requested string and returns its same-index pointer.
+They impose no uniqueness requirement on unrelated registry names. Installed
+construction GUI definitions also contain sibling names repeated as `background`,
+but this does not establish the runtime collection or explain the exact Run073
+failure. The previous global-name uniqueness assumption is withdrawn.
+
+The reader retains its stronger unique-requested-key rule, scans every bounded
+paired entry, and rejects a second requested match before target payload. Repeated
+unrelated or empty names are allowed; this is lookup semantics, not evidence that
+an empty name occurred live. Pointer uniqueness, count/capacity/alignment checks,
+string bounds, own aliases/types and final witnesses remain unchanged. The same
+correction applies to the requested `location` text name. New fixtures cover all
+five container/button lookup scopes, target positions, ambiguity before payload,
+malformed later unrelated entries, unselected payload exclusion and final-witness
+changes; location-text fixtures cover the equivalent reader. Live correction
+remains unverified and no input authority is added.

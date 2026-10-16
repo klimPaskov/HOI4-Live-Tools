@@ -4592,3 +4592,46 @@ the nested helper and generated window-client wrapper). All suites returned zero
 The prior owned game/server were absent before and after; Yama remained 1. The
 library's 97-byte worker-unavailable diagnostic remains in private test evidence.
 No game was launched for these fixtures. Live selection validation is pending.
+
+## Run073: combined construction read refused — 16 October 2026 UTC
+
+Immutable source `eebe76f7941100ec4a3e5fada72f7e0a2891e932` passed 856 host Rust
+1.86 tests, 953 Python tests (37 skips), all compiler/format/Clippy/MSRV checks,
+968 reported actual Linux checks (966 substantive, including five X11 cases),
+and all nine exact-head CI jobs. Static review corrected one shortcut-field
+width before final validation; an initial stale tool-list test expectation was
+fixed and the full host suite passed again. Neither result is live evidence.
+
+One Luna player at medium reasoning then made six RPCs: two metadata discoveries,
+lease acquisition, one combined `hoi4_construction_controls` request for dockyard
+with geometry, release and status. A single owned-window capture occurred after
+acquisition and before the controls call. This preserves the required player
+lease ordering; root made no competing game reads/input during the grant.
+
+The sole controls RPC failed in **26.716 ms** with `invalid_construction` /
+`Unique construction control names required`. No control details, canonical
+selection or geometry were returned. Luna did not retry, make another game
+observation or issue any game input. The exact failed collection/name is unknown:
+the original message did not retain that context. This is a failed diagnostic
+gate, not construction-control acceptance or a performance success measurement.
+
+Root's separate recorded setup used vanilla Normal/historical FAIR Germany,
+paused at 1 January 1936 12:00. Seven menu inputs reached campaign Start, followed
+by two ordinary setup clicks to open construction and select dockyard. Nothing
+was placed on the map. One early `campaign_unavailable` response during loading
+is retained. The baseline was verified by three successful own overview reads;
+there was no extra overview or queue observation during the player phase.
+
+Independent stopped-log audit verified canonical release/status zero, empty
+clock/research/Focus action journals, unchanged 126 native source inputs and
+26 private helpers. The **436.666-second** recording finalized after an owned
+recorder stop. One ordinary game close exited normally with code 0 in
+**2.068 seconds**. All four guest instances, six recorded host broker/transport
+instances and both controller sockets were absent afterward; Yama stayed 1.
+
+Static follow-up found that game lookup compares only the requested name; the
+reader had incorrectly required every registry name to be unique. The corrected
+preview permits unrelated duplicates while rejecting an ambiguous requested
+control, retaining all bounded paired-array checks and final witnesses. That
+correction does not identify the actual duplicate from Run073 and has not yet
+passed live validation. No construction input or campaign acceptance is claimed.

@@ -87,7 +87,10 @@ fresh catalog identity and scoped politics/Focus/research blockers in one witnes
 snapshot. Geometry is optional and defaults off. Hidden construction panels omit
 choice enumeration; unknown concrete controls or renderers remain unavailable.
 Local gates and coordinates do not prove current-frame routing, global modal
-clearance or engine eligibility. Live validation is pending; this tool cannot
+clearance or engine eligibility. Run073's only request failed before returning
+details because the original reader rejected any repeated registry name. The
+corrected preview requires only the requested key to be unique; full bounded
+validation remains. Its live validation is pending; this tool cannot
 open the panel, select a building or place construction.
 
 An owned session can enable prepared research, Focus and durable daily plans.

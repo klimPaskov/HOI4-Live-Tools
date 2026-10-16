@@ -14,7 +14,18 @@ one day of advancement passed. The final native posting request timed out;
 observations and verified ordinary input. Neither a clean two-year run nor a
 full campaign has passed.
 
-Latest: Run072 on `0822dcd` matched a paused dockyard's own state 56 and stored
+Latest: Run073 on `eebe76f` failed its single combined construction-controls
+request in 26.716 ms with `Unique construction control names required`. Luna
+acquired before its one capture and sole game observation, then released without
+retry or input. Root's two setup clicks opened construction and selected dockyard;
+no map placement occurred. Audit verified canonical release, empty action journals,
+the 436.666-second recording, normal game exit 0 and absence of all owned processes.
+The error did not identify the failed collection or duplicate name. Static lookup
+review showed the reader's global-name uniqueness policy was overstrict; the next
+source requires uniqueness only for the requested key while still validating every
+bounded entry and final witness. Live correction and ordinary actions remain pending.
+
+Run072 on `0822dcd` matched a paused dockyard's own state 56 and stored
 UI label Weser-Ems against installed public state/localization files. Luna's UI
 reads took 35–37 ms; all 12 RPCs succeeded and no game input occurred. It acquired
 the delimiting lease after the observations, so the prescribed gate did not pass

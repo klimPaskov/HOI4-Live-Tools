@@ -34,14 +34,19 @@ pub(super) fn named(r: &Reader<'_>, window: u64, children: bool, key: &str) -> R
             "Paired bounded construction control registries required",
         ));
     }
-    let mut seen = BTreeSet::new();
     let mut selected = None;
     for (index, value) in values.into_iter().enumerate() {
         let name = r.string_bounded(names + index as u64 * 32, 128)?;
-        if !seen.insert(name.clone()) {
-            return Err(invalid("Unique construction control names required"));
-        }
         if name == key {
+            // Engine lookup compares only the requested name. Other controls
+            // may share names, including empty names. Still scan every entry
+            // and refuse an ambiguous requested key before following payload.
+            if selected.is_some() {
+                return Err(invalid(&format!(
+                    "Ambiguous requested construction {} name: {key}",
+                    if children { "container" } else { "button" }
+                )));
+            }
             selected = Some(value);
         }
     }

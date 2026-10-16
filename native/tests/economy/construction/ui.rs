@@ -284,3 +284,53 @@ fn heap_utf8_text_is_bounded_and_payload_is_witnessed() {
     f.put(TEXT + 0x120, &[0xff]);
     assert_eq!(observe(&f).unwrap_err().code, "invalid_string");
 }
+
+fn repeated_unrelated_names(position: usize) -> Fixture {
+    let mut f = fixture_ui();
+    let mut entries = vec![
+        ("shared", 0x140000),
+        ("", 0x140100),
+        ("shared", 0x140200),
+        ("", 0x140300),
+    ];
+    entries.insert(position, ("location", TEXT));
+    f.array(WINDOW + 0xa60, POINTERS, entries.len() as i32);
+    f.array(WINDOW + 0xa78, NAMES, entries.len() as i32);
+    for (i, (name, pointer)) in entries.into_iter().enumerate() {
+        f.word(POINTERS + i as u64 * 8, pointer);
+        f.string(NAMES + i as u64 * 32, name);
+    }
+    f
+}
+#[test]
+fn location_lookup_accepts_repeated_unrelated_names_without_following_their_payload() {
+    for position in [0, 2, 4] {
+        let f = repeated_unrelated_names(position);
+        assert_eq!(
+            observe(&f).unwrap()["ui"]["rows"][0]["displayed_location_text"],
+            "Brandenburg"
+        );
+        production_not_read(&f, &[0x140000, 0x140100, 0x140200, 0x140300]);
+    }
+}
+#[test]
+fn later_unrelated_text_name_still_validates_and_participates_in_final_witnesses() {
+    let mut f = repeated_unrelated_names(0);
+    f.word(NAMES + 128 + 8, 129);
+    assert_eq!(observe(&f).unwrap_err().code, "invalid_string");
+    production_not_read(&f, &[TEXT]);
+    let baseline = repeated_unrelated_names(0);
+    observe(&baseline).unwrap();
+    let address = NAMES + 128;
+    let mut bytes = (0..32)
+        .map(|i| baseline.data[&(address + i)])
+        .collect::<Vec<_>>();
+    bytes[0] ^= 1;
+    let mut f = repeated_unrelated_names(0);
+    f.fault = Some((
+        address,
+        baseline.tracked_reads.borrow()[&address] - 1,
+        bytes,
+    ));
+    assert_eq!(observe(&f).unwrap_err().code, "torn_read");
+}
