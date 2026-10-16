@@ -73,6 +73,8 @@ pub struct OwnState {
     /// Ordinary mode1 only, joined to the fresh public template catalog.
     /// Railway/unsupported modes must not expose template payload here.
     pub selected_building: Option<String>,
+    /// Complete bounded unique catalog pointer membership, with the selected or
+    /// requested template's exact ordinal/key join; not all catalog key strings.
     pub catalog_coverage: Coverage,
     pub choice_coverage: Coverage,
     pub requested_choice_present: bool,
@@ -205,7 +207,7 @@ impl OwnState {
                 )?;
                 require(
                     self.catalog_coverage == Coverage::Complete,
-                    "Complete unique public template catalog coverage required",
+                    "Complete unique catalog membership and canonical target join required",
                 )?;
                 require(
                     self.choice_coverage == Coverage::Complete,

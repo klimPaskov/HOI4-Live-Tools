@@ -95,11 +95,20 @@ preview admits only an exact join to the named own window's typed parent and
 observes its traversal flag; that new branch is not yet live verified.
 This tool cannot open the panel, select a building or place construction.
 
-`construction_stage` supplies the unregistered durable foundation for separate
-EnsureOpen and SelectBuilding actions. Already-matching state produces a no-op;
-uncertain delivery remains blocking across restart, and terminal refusals retain
-their bounded diagnostic cause. A concrete witnessed observer, renderer policy,
-shared-domain integration and ordinary dispatcher are still required before use.
+An owned Linux session can opt into `construction_profile` using
+`linux_builtin_absolute_512x288_v1`. This exposes `hoi4_construction_attempt`
+with `ensure_open` and `select_building` stages; selection requires a canonical
+`building_id`. Both require an exclusive `lease_token` and stable `request_id`.
+The profile supports only the owned 512×288 client and exact Standard/Sprite
+controls. Live construction action acceptance is pending.
+
+Each stage permits at most one ordinary click, with private identities and the
+original point checked again immediately before input. Already-matching state
+produces a durable no-op. Identical successful requests return historical
+receipts without further input. Uncertain delivery blocks construction, clock,
+research, Focus and background plans; terminal refusals retain their bounded
+cause. Selection verifies the requested building type, not placement or a queue
+change. Railway selection and map placement are unavailable.
 
 An owned session can enable prepared research, Focus and durable daily plans.
 Recorded run030 verified four-slot worker assignment, idempotent updates,

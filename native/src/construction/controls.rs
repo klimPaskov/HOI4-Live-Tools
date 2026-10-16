@@ -10,6 +10,22 @@ use std::{
     time::Instant,
 };
 mod binding;
+#[cfg_attr(not(any(target_os = "linux", test)), allow(dead_code))]
+mod scope;
+pub(crate) use scope::Scope;
+
+#[cfg_attr(not(any(target_os = "linux", test)), allow(dead_code))]
+pub(crate) struct Observation {
+    pub(crate) value: Value,
+    pub(crate) campaign: game::ClockContext,
+    scopes: scope::Scopes,
+}
+#[cfg_attr(not(any(target_os = "linux", test)), allow(dead_code))]
+impl Observation {
+    pub(crate) fn scope(&self, stage: crate::construction_stage::Stage) -> Result<Scope> {
+        self.scopes.scope(stage)
+    }
+}
 
 fn exact(r: &Reader<'_>, address: u64, primary: u64) -> Result<()> {
     pointer(address)?;
@@ -35,6 +51,7 @@ pub fn validate_key(key: &str) -> Result<()> {
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn opener(
     r: &Reader<'_>,
     base: u64,
@@ -42,6 +59,8 @@ fn opener(
     manager: u64,
     registry: u64,
     geometry: bool,
+    trace: &scope::Recorder<'_>,
+    identity: &mut Option<scope::Opener>,
 ) -> Result<Value> {
     let topbar = r.u64(manager + 0x188)?;
     if topbar == 0 {
@@ -53,6 +72,7 @@ fn opener(
     }
     let mut window = r.u64(topbar + 0x78)?;
     let mut path = vec![binding::local(r, base, window, registry)?];
+    let mut named_path = vec![window];
     if window == 0 {
         return Ok(unavailable("topbar_root_unmaterialized"));
     }
@@ -74,6 +94,7 @@ fn opener(
         local["name"] = json!(name);
         path.push(local);
         window = child;
+        named_path.push(child);
     }
     let Some(button) = binding::named(r, window, false, "construction_button")? else {
         return Ok(unavailable("construction_button_unavailable"));
@@ -81,6 +102,7 @@ fn opener(
     if r.u64(topbar + 0x4db8)? != button {
         return Err(invalid("Named construction opener must equal topbar alias"));
     }
+    let mut control_identity = None;
     let mut out = binding::control(
         r,
         base,
@@ -90,7 +112,16 @@ fn opener(
         registry,
         binding::Kind::Opener,
         geometry,
+        trace,
+        &mut control_identity,
     )?;
+    if let Some(control) = control_identity {
+        *identity = Some(scope::Opener {
+            topbar,
+            named_path,
+            control,
+        });
+    }
     out["named_path_verified"] = json!(true);
     out["all_named_containers_settled_shown"] =
         json!(path.iter().all(|p| p["settled_visible"] == true));
@@ -109,6 +140,8 @@ fn choice(
     key: &str,
     shown: bool,
     geometry: bool,
+    trace: &scope::Recorder<'_>,
+    identity: &mut Option<scope::Choice>,
 ) -> Result<Value> {
     if panel == 0 || !shown {
         return Ok(unavailable("choice_panel_not_settled_shown"));
@@ -116,8 +149,10 @@ fn choice(
     let items = members(r, panel + 0x320, 256)?;
     let db = r.u64(base + 0x439f400)?;
     exact(r, db, base + 0x41b3ed8)?;
-    let catalog: BTreeMap<_, _> = members(r, db + 0x40, 4096)?
-        .into_iter()
+    let ordered_catalog = members(r, db + 0x40, 4096)?;
+    let catalog: BTreeMap<_, _> = ordered_catalog
+        .iter()
+        .copied()
         .enumerate()
         .map(|(i, p)| (p, i))
         .collect();
@@ -125,6 +160,7 @@ fn choice(
     let mut seen_keys = BTreeSet::new();
     let mut selected = None;
     let mut unknown = 0;
+    let mut joins = Vec::new();
     for item in &items {
         if r.u64(*item)? != base + 0x43100f8 {
             unknown += 1;
@@ -155,14 +191,16 @@ fn choice(
                 "Unique canonical construction choice keys required",
             ));
         }
+        joins.push((*item, template, *ordinal));
         if canonical == key {
-            selected = Some(*item);
+            selected = Some((*item, template));
         }
     }
-    let mut out = if let Some(item) = selected {
+    let mut out = if let Some((item, template)) = selected {
         // Only the requested public item reaches window/control payload.
         let window = r.u64(item + 0x10)?;
         let local = binding::local(r, base, window, registry)?;
+        let mut control_identity = None;
         let mut value = if window == 0 {
             unavailable("choice_window_unmaterialized")
         } else if let Some(button) = binding::named(r, window, false, "start_construction_button")?
@@ -176,10 +214,25 @@ fn choice(
                 registry,
                 binding::Kind::Choice,
                 geometry,
+                trace,
+                &mut control_identity,
             )?
         } else {
             unavailable("choice_button_unavailable")
         };
+        if unknown == 0 {
+            if let Some(control) = control_identity {
+                *identity = Some(scope::Choice {
+                    key: key.to_owned(),
+                    database: db,
+                    ordered_catalog,
+                    joins,
+                    requested_item: item,
+                    requested_template: template,
+                    control,
+                });
+            }
+        }
         value["window"] = local;
         value["canonical_choice_join_verified"] = json!(true);
         value
@@ -247,13 +300,22 @@ fn blockers(
 
 /// Own local UI only. No queue, map, foreign location or input operation occurs.
 pub fn snapshot(process: &dyn Process, key: &str, include_geometry: bool) -> Result<Value> {
+    Ok(observe(process, key, include_geometry)?.value)
+}
+
+pub(crate) fn observe(
+    process: &dyn Process,
+    key: &str,
+    include_geometry: bool,
+) -> Result<Observation> {
     validate_key(key)?;
     let start = Instant::now();
     process.begin_snapshot()?;
     let witnesses = Witnesses::new(process);
-    let r = Reader::new(&witnesses);
+    let trace = scope::Recorder::new(&witnesses);
+    let r = Reader::new(&trace);
     let base = process.image_base();
-    let (country, _) = economy::own_production(&r, base)?;
+    let (country, production) = economy::own_production(&r, base)?;
     let campaign = game::context_from_reader(&r, base)?;
     let [gs, idler, _] = campaign.anchors;
     let registry = r.u64(idler + 0x4f8)?;
@@ -269,6 +331,7 @@ pub fn snapshot(process: &dyn Process, key: &str, include_geometry: bool) -> Res
     let mode = r.i32(manager + 0x3d8)?;
     let selected = selection::observe(&r, base, manager)?;
     let panel = r.u64(manager + 0x150)?;
+    let mut panel_root = None;
     let panel_state = if panel == 0 {
         json!({"materialized":false,"settled_visible":null})
     } else {
@@ -276,7 +339,9 @@ pub fn snapshot(process: &dyn Process, key: &str, include_geometry: bool) -> Res
         if r.u64(panel + 0x2f0)? != idler {
             return Err(invalid("Construction panel must belong to own idler"));
         }
-        binding::local(&r, base, r.u64(panel + 0x2f8)?, registry)?
+        let root = r.u64(panel + 0x2f8)?;
+        panel_root = Some(root);
+        binding::local(&r, base, root, registry)?
     };
     let flags150 = r.byte(registry + 0x150)?;
     let flags12 = r.byte(registry + 0x12)?;
@@ -295,7 +360,18 @@ pub fn snapshot(process: &dyn Process, key: &str, include_geometry: bool) -> Res
         "auxiliary_manager218_present":r.u64(manager+0x218)?!=0,
         "auxiliary_manager248_present":r.u64(manager+0x248)?!=0,
         "complete_engine_eligibility_available":false});
-    let opener = opener(&r, base, idler, manager, registry, include_geometry)?;
+    let mut opener_identity = None;
+    let mut choice_identity = None;
+    let opener = opener(
+        &r,
+        base,
+        idler,
+        manager,
+        registry,
+        include_geometry,
+        &trace,
+        &mut opener_identity,
+    )?;
     let choice = choice(
         &r,
         base,
@@ -304,7 +380,10 @@ pub fn snapshot(process: &dyn Process, key: &str, include_geometry: bool) -> Res
         key,
         panel_state["settled_visible"] == true,
         include_geometry,
+        &trace,
+        &mut choice_identity,
     )?;
+    trace.blockers(manager);
     let blockers = blockers(&r, base, country, idler, manager, registry)?;
     let geometry = if include_geometry {
         crate::gui::input_geometry_from_reader(&r, base)?
@@ -313,8 +392,23 @@ pub fn snapshot(process: &dyn Process, key: &str, include_geometry: bool) -> Res
     };
     let (calls, bytes) = witnesses.finish()?;
     process.check()?;
-    Ok(
-        json!({"source":"native own construction controls","build_id":game::BUILD_ID,
+    let scopes = scope::Scopes {
+        base,
+        anchors: campaign.anchors,
+        playthrough_id: campaign.playthrough_id.clone(),
+        player: campaign.player.clone(),
+        country,
+        production,
+        registry,
+        manager,
+        panel,
+        panel_root,
+        opener: opener_identity,
+        choice: choice_identity,
+        include_geometry,
+        words: trace.finish(),
+    };
+    let value = json!({"source":"native own construction controls","build_id":game::BUILD_ID,
         "scope":"own_named_ui_and_public_requested_building_only","player":campaign.player,
         "building_id":key,"date_raw":campaign.date_raw,"paused":campaign.paused,
         "managed_mode_raw":mode,"selection":selected,"panel":panel_state,
@@ -324,8 +418,12 @@ pub fn snapshot(process: &dyn Process, key: &str, include_geometry: bool) -> Res
         "global_modal_clear_verified":false,"eligibility_available":false,"live_validation":"pending",
         "observation_paused_game":false,
         "freshness":{"observed_unix_ms":crate::daily_observation::unix_ms()?,"elapsed_ms":start.elapsed().as_secs_f64()*1000.0,
-            "read_calls_kind":"logical_read_requests","read_calls":r.calls.get()+calls as u64,"read_bytes":r.bytes.get()+bytes}}),
-    )
+            "read_calls_kind":"logical_read_requests","read_calls":r.calls.get()+calls as u64,"read_bytes":r.bytes.get()+bytes}});
+    Ok(Observation {
+        value,
+        campaign,
+        scopes,
+    })
 }
 
 pub(crate) fn tool() -> Value {

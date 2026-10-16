@@ -60,7 +60,14 @@ pub(super) enum Kind {
     Choice,
 }
 
-fn callback(r: &Reader<'_>, base: u64, owner: u64, button: u64, kind: Kind) -> Result<Value> {
+fn callback(
+    r: &Reader<'_>,
+    base: u64,
+    owner: u64,
+    button: u64,
+    kind: Kind,
+    identity: &mut Option<scope::Callback>,
+) -> Result<Value> {
     let mut out = json!({"verified":false,"reason":"observer_layout_unavailable"});
     if r.u64(button + 0x80)? != base + 0x4347488 {
         return Ok(out);
@@ -126,6 +133,11 @@ fn callback(r: &Reader<'_>, base: u64, owner: u64, button: u64, kind: Kind) -> R
         out["reason"] = json!("callback_member_unavailable");
         return Ok(out);
     }
+    *identity = Some(scope::Callback {
+        glue,
+        capture,
+        listener: previous,
+    });
     out["verified"] = json!(true);
     out["reason"] = json!("exact_first_void_binding");
     Ok(out)
@@ -149,6 +161,8 @@ pub(super) fn control(
     registry: u64,
     kind: Kind,
     geometry: bool,
+    trace: &scope::Recorder<'_>,
+    identity: &mut Option<scope::Control>,
 ) -> Result<Value> {
     let mut out = unavailable("standard_layout_unavailable");
     pointer(button)?;
@@ -167,10 +181,12 @@ pub(super) fn control(
     }
     let flags = u32::from_le_bytes(r.read(button + 0x74, 4)?.try_into().unwrap());
     let state = r.i32(button + 0xac)?;
-    let optional = optional_gate::observe(r, base, window, button)?;
+    let mut optional_identity = None;
+    let optional = optional_gate::observe(r, base, window, button, &mut optional_identity)?;
     let blocked = r.byte(button + 0x201)?;
     let delegate = r.u64(button + 0xd0)? == 0;
-    let callback = callback(r, base, owner, button, kind)?;
+    let mut callback_identity = None;
+    let callback = callback(r, base, owner, button, kind, &mut callback_identity)?;
     out["callback"] = callback;
     out["local"] = json!({"state_ac_raw":state,"flags74_raw":flags,
         "optional_gate_1a8_null":optional["absent"],"optional_gate":optional,"block201_raw":blocked,"delegate_d0_null":delegate,
@@ -180,9 +196,15 @@ pub(super) fn control(
         out["reason"] = json!("callback_binding_unavailable");
         return Ok(out);
     }
+    if let (Some(callback), Some(optional)) = (callback_identity, optional_identity) {
+        *identity = Some(scope::Control::new(
+            owner, window, button, callback, optional,
+        ));
+    }
     out["available"] = json!(true);
     out["reason"] = json!("named_own_standard_and_callback");
     if geometry {
+        trace.control(base, window, button);
         let renderer = r.u64(button + 0xe8)?;
         if renderer == 0 {
             out["render_diagnostic"] = unavailable("renderer_unmaterialized");
@@ -203,6 +225,7 @@ pub(super) fn control(
                 "Construction renderer must belong to exact Standard",
             ));
         }
+        trace.renderer(renderer, primary, base);
         out["renderer_control_join_verified"] = json!(true);
         out["render_diagnostic"] = crate::focus_geometry::observe(
             r, &mut reuse, window, button, registry, primary, renderer,

@@ -768,5 +768,33 @@ lease and once-only intent policy, using construction-specific state and targets
 Its backend must supply a same-witness private identity scope, admitted point,
 shared unresolved-domain guards and an ordinary dispatcher. It preserves actual
 bounded refusal causes and blocking uncertainty across restart. No runtime
-adapter or new MCP action is registered; generated module tests are not live
+adapter or new MCP action was registered in foundation commit `db7e2a3`;
+generated module tests are not live
 construction-action evidence.
+
+### Private construction identities and ordinary stage adapter
+
+The controls observer now also returns a crate-private ClockContext and typed
+identity scope from the same Reader/Witnesses transaction. Public JSON remains
+unchanged. A forwarding recorder retains only declared pointer/type fields that
+the original producer already reads; projecting a scope performs no new process
+reads. It does not retain visibility, selection or numeric geometry as identity.
+Registration uses checked arithmetic and Reader address bounds, so malformed raw
+pointer words cannot overflow while the original producer evaluates them.
+
+Both stages pin campaign, own country/production, registry, manager, construction
+panel/root and owned blocker roots. EnsureOpen additionally pins its named
+topbar path and control, excluding choice materialization. SelectBuilding pins
+the ordered bounded catalog pointer membership, complete validated GUI choice
+joins and requested item/template/control. These are not claims that all catalog
+key strings were inspected. Each target retains its callback/capture/listener,
+optional own parent, renderer/resource and witnessed parent identities.
+
+The Linux adapter reuses the existing Standard/Sprite geometry, owned SDL/X11
+profile and ordinary pointer transport. It checks the same scope and original
+point immediately before one click, within the original call/lease deadline.
+Canonical readback follows durable intent. The shared controller mutex covers
+all journals; unresolved construction blocks clock, research, Focus and workers.
+This introduces no native command posting, map placement or frame/routing proof.
+Generated identity-replacement and protocol-shape checks are not live action
+acceptance; that remains pending.

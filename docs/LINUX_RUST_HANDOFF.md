@@ -29,18 +29,23 @@ Preserve the initial close-guard refusal and corrected socket-path audit.
 Exact static follow-up binds the optional parent to the named own container's
 `e78` position and its traversal byte. The next observer handles only that typed
 identity join; unknown objects remain unread. This new branch is not live verified.
-The unregistered construction-stage foundation now supports separate EnsureOpen
-and SelectBuilding receipts, borrowed authority, pinned private identity and
-blocking durable uncertainty with exact bounded causes. Next: wire the witnessed
-observer/candidate and ordinary dispatcher, then a bounded action gate; do not
-repeat the passed named-binding probe alone. Map placement remains separate.
+The next construction adapter connects separate EnsureOpen and SelectBuilding
+receipts to the existing shared controller. It uses a private typed identity
+scope from the same witnessed observation, an exact Standard/Sprite candidate
+and one ordinary pointer attempt. All input domains block on unresolved
+construction delivery; no-ops and successful historical replays send no input.
+The profile is independently opted in and workers remain off for its first gate.
+Live action acceptance is pending. Next: validate the composition, then a bounded
+action/no-op/replay gate; do not repeat the passed named-binding probe alone.
+Map placement remains separate.
 
 Foundation commit `db7e2a3` passed host and actual Linux fixtures, but Windows CI
 found three test-only file-access assumptions: reads through a second handle
 while the journal held its exclusive lock, and `set_len` on its append-only
 handle. The correction releases the journal before inspection and fills the
 capacity fixture through the locked writer; production locking stays unchanged.
-Preserve the original failed CI run rather than treating it as a transient failure.
+All nine CI jobs passed the correction `6add9f5`. Preserve the original failed
+CI run rather than treating it as a transient failure.
 
 Run073's original global-name uniqueness failure remains recorded; the exact
 collection and duplicate name were not retained. Run074 does not recover them.

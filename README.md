@@ -91,8 +91,9 @@ deviation. A later combined read resolved the construction opener, dockyard
 choice, canonical selection and optional geometry in 81 ms, with correct lease
 ordering and no player input. Both local dispatch gates remained false.
 General UI freshness, railway coverage and construction actions remain pending.
-The next source handles a narrowly verified own-parent gate and adds durable
-construction-stage foundations; no construction input adapter is enabled.
+The preview adds an explicit Linux opt-in for opening the construction panel and
+selecting a building type, with durable receipts and uncertainty blocking all
+shared input. Live action acceptance is pending; map placement is unavailable.
 Army, economy and naval automation are still in development. See
 [the expansion plan](docs/CLAUSEWITZ_FOUNDATION.md) and
 [current acceptance work](docs/LINUX_RUST_HANDOFF.md).

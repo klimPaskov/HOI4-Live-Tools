@@ -2,6 +2,13 @@
 
 ## Unreleased native preview
 
+- Add an explicitly opted-in Linux construction action adapter for ensuring the
+  panel is open and selecting one canonical ordinary building type. Pin private
+  witnessed identities and the original point before one ordinary click; verify
+  canonical readback and persist no-ops, historical receipts and uncertainty.
+  Construction uncertainty blocks all shared input adapters and background plans.
+  Live action acceptance and map placement remain pending.
+
 - Record Run074's single combined construction read: five successful player RPCs,
   correct lease/capture ordering, 81 ms controls response and zero player input.
   Preserve both false local dispatch gates and the recording-manifest cleanup
@@ -10,7 +17,8 @@
   window's typed position object. Unknown pointers/types remain unavailable.
   Add durable EnsureOpen/SelectBuilding stage foundations with pinned identity,
   no-op handling, once-only dispatch and persisted uncertainty/refusal causes.
-  No construction input adapter is registered; live action acceptance is pending.
+  The separately opted-in adapter above uses this foundation; live action
+  acceptance is pending.
 
 - Record Run073's failed combined controls read: correct lease ordering, one
   capture, zero player input and `Unique construction control names required`.

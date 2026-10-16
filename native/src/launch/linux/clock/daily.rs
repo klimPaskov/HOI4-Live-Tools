@@ -449,6 +449,10 @@ fn validate_navigation_keys(
 fn unresolved(state: &ControlState) -> bool {
     state.journal.blocks_game(&state.guard.epoch.game)
         || state
+            .construction
+            .as_ref()
+            .is_some_and(|c| c.journal.blocks_game(&state.guard.epoch.game))
+        || state
             .focus
             .as_ref()
             .is_some_and(|f| f.journal.blocks_game(&state.guard.epoch.game))

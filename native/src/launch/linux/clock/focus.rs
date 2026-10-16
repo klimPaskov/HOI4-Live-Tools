@@ -206,6 +206,10 @@ pub(super) fn execute_internal(
     }
     if state.journal.blocks_game(&target.epoch.game)
         || state
+            .construction
+            .as_ref()
+            .is_some_and(|c| c.journal.blocks_game(&target.epoch.game))
+        || state
             .research
             .as_ref()
             .is_some_and(|r| r.journal.blocks_game(&target.epoch.game))
@@ -395,6 +399,10 @@ pub(super) fn failure_evidence(
     error: &Error,
 ) -> stage::FailureEvidence {
     if state.journal.blocks_game(&target.epoch.game)
+        || state
+            .construction
+            .as_ref()
+            .is_some_and(|c| c.journal.blocks_game(&target.epoch.game))
         || state
             .research
             .as_ref()
