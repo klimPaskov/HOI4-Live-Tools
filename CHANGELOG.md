@@ -2,6 +2,12 @@
 
 ## Unreleased native preview
 
+- Add read-only `hoi4_construction_queue` with full own-queue validation before
+  paging, exact building/railway types, snapshot-scoped handles and canonical
+  building keys. Independently distinguish cost from produced work, retain
+  conversion/repair/allied flags, and reject stale or foreign-owned payloads.
+  Live validation, locations, allocation and construction input remain pending.
+
 - Pass Linux run070 with one Luna medium player: the worker completes Rhineland,
   searches and starts the Four Year Plan, and preserves receipts/budget through
   restart without duplicate input. Independently audit 12 verified Focus input

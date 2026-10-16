@@ -901,3 +901,6 @@ fn production_lines_default_page_is_compact_with_fresh_nonpersistent_collection_
 
 #[path = "economy/equipment.rs"]
 mod equipment;
+
+#[path = "economy/construction.rs"]
+mod construction;

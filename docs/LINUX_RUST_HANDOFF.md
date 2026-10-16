@@ -25,6 +25,14 @@ Next: expand economy/construction/production controls and standing plans, then
 warfare and the clean two-year/full-campaign gates. Do not repeat the passed
 two-Focus test without a relevant implementation change or unresolved concern.
 
+The next construction preview adds `hoi4_construction_queue`: bounded own-status
+membership, exact building/railway layouts, full snapshot-scoped handles,
+separately named scalar fields and fresh canonical building-template keys.
+Independent current-ELF inspection corrects upstream's progress alias: `+0x28`
+is cost and `+0x38` is produced work. Locations, railway paths, allocation and
+construction actions are unavailable. Live validation remains pending; generated
+fixtures do not establish it. Keep native command posting quarantined.
+
 Run047 passed worker-only Focus-to-research assignment and adjacent same-plan
 restart/STOP, preserving both completion IDs and budget 2/2/0. Its one BeforeIntent
 research torn-read and read-only digest busy retry remain recorded.

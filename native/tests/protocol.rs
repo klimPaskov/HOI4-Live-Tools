@@ -110,6 +110,7 @@ fn stdio_is_json_and_notifications_have_no_reply() {
             "hoi4_army",
             "hoi4_economy",
             "hoi4_production_lines",
+            "hoi4_construction_queue",
             "hoi4_research_node_detail",
             "hoi4_research_nodes",
             "hoi4_focus_list",

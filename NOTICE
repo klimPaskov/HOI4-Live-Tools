@@ -44,6 +44,10 @@ Upstream foundation and attribution:
   _load_equipment and production_lines for base-equipment naming semantics.
   Fresh catalog membership, current-build layouts and own-line guards are
   independent project code; no custom design or allocation authority is implied.
+  native/src/construction.rs and native/src/construction/buildings.rs consult
+  calling/game.py's construction_queue and building catalog semantics. Current
+  Linux types, scalar names and template joins were independently recovered;
+  cost and produced work are distinct. No geography or input is authorized.
   native/src/graph_kernel.rs independently implements bounded components and
   multi-source breadth-first search, consulting calling/doctrine.py and
   calling/ragemicro.py. It operates on caller-supplied public/generated topology;

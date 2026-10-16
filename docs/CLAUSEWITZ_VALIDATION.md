@@ -4419,3 +4419,31 @@ the latter, a clean two-year run or a full campaign. The successful receipts do
 not identify which country-override branch was used, and do not retroactively
 identify Run069's missing failed predicate. Economy/warfare automation and native
 Windows/macOS live adapters remain required.
+
+## Construction queue preview: static and generated checks — 16 October 2026 UTC
+
+`hoi4_construction_queue` adds bounded read-only own construction observations.
+The exact Linux ELF's constructors, serializers, keyword initializers and
+arithmetic independently identify building/railway layouts and correct the
+upstream progress alias: `+0x28` is cost, `+0x38` produced work. Full handles,
+reciprocal own status, named counters, conversion/repair/allied flags and fresh
+public building-template keys are validated before paging. Unknown types retain
+explicit coverage. Building locations and railway paths are not read.
+
+Fifteen new generated cases cover owner-before-payload ordering, dynamic railway
+handles, duplicate pointers/handles/keys, catalog/type/boolean bounds, lossless
+signed extremes, zero-cost and unclamped fractions, unsupported metadata,
+out-of-page guards, process/campaign changes and final witnesses. The complete
+host suite passed 820 tests on Rust 1.86. Following a definition-flag wording
+correction, all 64 economy/protocol tests passed again. Python passed 953 tests
+with 37 skips. Host/Linux/Windows Clippy, Linux MSRV, formatting and the static
+Linux release test build passed. Final source has 117 pinned native inputs.
+
+The hash-checked bundle ran in the existing Linux VM with the game closed:
+932 reported successes, including the five X11 fixture cases (930 substantive
+checks after excluding the nested helper and generated window-client wrapper).
+All suites returned zero. The existing Yama setting remained 1; the previous
+owned game/server instances were absent before and after. No game was started,
+no game input was sent, and these checks are not live construction evidence.
+The optional native posting adapter remains quarantined. Live queue comparison,
+ordinary construction controls and campaign acceptance remain pending.

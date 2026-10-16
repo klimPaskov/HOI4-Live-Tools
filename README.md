@@ -82,6 +82,10 @@ Production observations include optional base equipment type keys with explicit
 unsupported coverage. A Linux sample returned keys for all 21 own lines in
 67.8 ms RPC; comparison against the production UI, custom variant identity and
 allocation controls remain pending.
+The construction preview separately reports buildings and railways, cost,
+produced work and factory counters. It uses fresh building-template keys and
+explicit unsupported coverage; live comparison and construction controls are
+still pending.
 Army, economy and naval automation are still in development. See
 [the expansion plan](docs/CLAUSEWITZ_FOUNDATION.md) and
 [current acceptance work](docs/LINUX_RUST_HANDOFF.md).

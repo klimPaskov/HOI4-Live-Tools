@@ -528,3 +528,45 @@ its receipts do not identify which override branch was used. Neither this result
 nor the static correction retroactively fills Run069's missing predicate. Future
 aggregate projection refusals carry compact results for all seven original
 predicates.
+
+The read-only construction port consults pinned Clausewitz-MCP
+`calling/game.py` construction_queue and _load_buildings. Independent static
+inspection of the same licensed Linux ELF establishes status `+0x70` as a
+pointer collection (capacity `+0x78`, count `+0x7c`), exact building/railway
+primaries `0x4205680` / `0x42ee398`, and reciprocal owner `+0x20`.
+The common serializer `0xf75a50`, reciprocal parser and independently decoded
+keyword initializers distinguish cost `+0x28`, speed `+0x30`, produced `+0x38`,
+queued factories `+0x40`, priority `+0x44` and amount `+0x48`. Cost is not progress.
+The shared fixed serializer uses scale 100000; a speed time unit is unproved.
+Building flags/counts are to_repair `+0x78`, conversion `+0x8c` and allied_build
+`+0x99`. Railway payload at those offsets has different meaning and is not read.
+The game formatter at `0xf609e0` computes produced/cost. The reader retains an
+unclamped exact fraction with explicit zero-cost/anomaly unavailability, without
+claiming completion, eligibility or ETA.
+
+Both exact serializers preserve the full eight-byte handle at `+8`. Building
+allocator `0xf5f1c0` installs kind `0x3b`; railway uses generic `0x2d95000` and
+`0x2d945e0`, so its kind is not assumed. Nonzero/uniqueness constraints are
+explicit reader policy; handles do not authorize input or persist across loads.
+
+Building-line `+0x70` points to exact CBuilding (`0x41b3e60`), whose `+0x1c0`
+points to its template. Getter `0x871580` and reference constructors
+`0x884c90`, `0x881e90`, `0x881f60` corroborate that distinction from location
+`+0x1b8`. The caller at `0x1f47151..0x1f47166` allocates the database, invokes
+`0x872b10`, then stores it at global `0x439f400`; its exact primary is
+`0x41b3ed8`. Parser `0x878480` creates templates with `0x8910e0` and appends them
+to the database's `+0x40` pointer collection. Template constructor `0x8910e0`
+installs primary `0x41b49c8` and copies the parsed canonical string to `+0x248`.
+It interns that same string into `+8`; neither that intern nor building `+8` is
+used as an array index. Reference constructors require template flag `+0x18`;
+that flag does not establish player eligibility. Only selected templates from
+the fresh bounded catalog are read. No localized names, building locations,
+foreign states or railway paths are traversed.
+
+Private SHA-pinned FDE/ELF ledgers record these static observations. One caller
+has a separately recorded 39,700-byte FDE, within a deliberate 64 KiB extraction
+bound; other extracted functions stay within 32 KiB. No target function was
+executed, no game binary/disassembly is distributed, and no new REA provider
+result is claimed. Generated fixtures check owner/type/catalog boundaries,
+unsupported coverage, exact signed values, paging and final witnesses. Live
+construction comparison and ordinary controls remain pending.

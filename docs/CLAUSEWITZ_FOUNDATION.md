@@ -47,6 +47,12 @@ Focus worker route: completed Rhineland membership, searched Four Year Plan
 assignment and adjacent same-plan restart/STOP with both receipts and budget
 preserved. These bounded gates do not establish campaign-level autonomy.
 
+The construction observation preview distinguishes building and railway types,
+full current-snapshot handles, cost, produced work and factory counters, with
+fresh canonical building-template joins. It has static and generated test
+evidence; live comparison, locations, allocation and construction input remain
+pending. Own queue membership is not proof that a location belongs to the player.
+
 This remains a development preview. Economic recovery, warfare and native
 Windows/macOS live support remain
 unfinished. Catalogs and targeted renderer diagnostics alone grant no input

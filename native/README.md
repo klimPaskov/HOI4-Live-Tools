@@ -32,6 +32,18 @@ compatibility. Layouts must be recovered and verified separately for each build.
 
 ## Standing plans and observations
 
+`hoi4_construction_queue` is a read-only preview (`offset` 0–2048, `limit` 1–128,
+default 32). It validates the entire own collection before paging, recognizes
+exact building and railway layouts, and retains unsupported-type coverage.
+Full line handles are scoped to the current process/campaign snapshot. Building
+keys join only fresh public template definitions; no location, foreign-state or
+railway-path payload is traversed. Signed 64-bit cost/speed/produced values use
+decimal strings to preserve precision. `produced_over_cost` is an unclamped
+exact fraction when the numeric policy passes and cost is positive; it proves
+neither completion nor ETA. Repairs, conversions and allied builds remain
+distinct. This API has static/generated evidence only; live comparison,
+allocation, eligibility and construction commands remain pending.
+
 An owned session can enable prepared research, Focus and durable daily plans.
 Recorded run030 verified four-slot worker assignment, idempotent updates,
 restart persistence and research-counter advancement. Run047 passed automatic
