@@ -2,6 +2,12 @@
 
 ## Unreleased native preview
 
+- Add optional `include_ui` construction observations. Within the same witnessed
+  snapshot, join exact own panel rows and both full handle copies to located own
+  building lines before reading the named location text. Preserve default-off
+  behavior and queue-index pagination. Stored UI text and local flags do not
+  establish freshness, name agreement, eligibility or input authority.
+
 - Add optional `include_location` to construction observations, default false.
   Selected state/province IDs require own ownership and control, current catalog
   joins, exact embedded status and reciprocal building/template membership.

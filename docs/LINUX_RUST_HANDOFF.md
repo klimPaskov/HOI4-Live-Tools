@@ -45,7 +45,11 @@ through exact current catalogs, own ownership/control and the embedded status's
 reciprocal building/template slot. It defaults off and never enumerates geography.
 National overrides, unknown flags, allied/foreign territory and railway paths
 stay unavailable. Static/generated evidence does not establish live location
-correctness; compare a legible own-location UI before acceptance.
+correctness; compare a legible own-location UI before acceptance. Optional
+`include_ui` now implies those location guards and reads the panel's named row
+text after exact own handle joins within the same witnessed snapshot. Stored
+state-name text may be stale and does not prove unique name agreement or input
+readiness. This observer is not yet live-validated.
 
 Run047 passed worker-only Focus-to-research assignment and adjacent same-plan
 restart/STOP, preserving both completion IDs and budget 2/2/0. Its one BeforeIntent

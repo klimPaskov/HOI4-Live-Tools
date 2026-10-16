@@ -4,6 +4,7 @@
 //! keyword initializers and arithmetic; see PROVENANCE.md. No engine calls.
 mod buildings;
 mod location;
+mod ui;
 use crate::{
     economy,
     error::{Error, Result},
@@ -80,6 +81,17 @@ pub fn page_with_location(
     limit: usize,
     include_location: bool,
 ) -> Result<Value> {
+    page_with_options(process, offset, limit, include_location, false)
+}
+/// Optional UI rows require the same snapshot's own territorial location joins.
+pub fn page_with_options(
+    process: &dyn Process,
+    offset: usize,
+    limit: usize,
+    include_location: bool,
+    include_ui: bool,
+) -> Result<Value> {
+    let include_location = include_location || include_ui;
     if offset > LINE_LIMIT || !(1..=PAGE_LIMIT).contains(&limit) {
         return Err(Error::new(
             "invalid_arguments",
@@ -191,12 +203,24 @@ pub fn page_with_location(
             "building":details,"location_available":location["available"],"location":location,
             "input_authorized":false}));
     }
+    let mut ui = if include_ui {
+        ui::observe(&r, base, &rows)?
+    } else {
+        json!({"requested":false,"input_authorized":false})
+    };
     let (end_calls, end_bytes) = witnesses.finish()?;
     process.check()?;
     let total = entries.len();
     let known = rows.len();
     let unknown = unsupported.len();
     let end = total.min(offset + limit);
+    if let Some(ui_rows) = ui.get_mut("rows").and_then(Value::as_array_mut) {
+        ui_rows.retain(|row| {
+            row["entry_index"]
+                .as_u64()
+                .is_some_and(|i| (offset as u64..end as u64).contains(&i))
+        });
+    }
     // Full collection validation/witnesses precede pagination, even an empty page.
     for list in [&mut rows, &mut unsupported] {
         list.retain(|row| {
@@ -218,7 +242,7 @@ pub fn page_with_location(
         "anomalous_numeric_count":anomalous,"numeric_data_complete":unknown==0&&anomalous==0,
         "offset":offset,"limit":limit,"page_count":rows.len()+unsupported.len(),
         "next_offset":if end<total {Some(end)} else {None},"page_index_scope":"fresh_snapshot_collection_only",
-        "lines":rows,"unsupported_type_metadata":unsupported,
+        "lines":rows,"unsupported_type_metadata":unsupported,"ui":ui,
         "numeric_encoding":{"signed_64_bit_fields":"decimal_strings","cost_units_per_point":100000,
             "speed_time_unit_available":false,"fraction":"produced/cost; unclamped; not ETA or completion proof"},
         "policy":{"maximum_collection_capacity":LINE_LIMIT,"maximum_raw_scalar":RAW_LIMIT,

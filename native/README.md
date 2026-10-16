@@ -59,6 +59,16 @@ geography; the default remains fast and avoids these additional reads.
 top-level `location_available` means at least one location was proved. Each row
 has its own availability and reason. Neither IDs nor availability authorize input.
 
+Optional `include_ui: true` also enables the location checks, then joins the
+construction panel's exact building rows to those same full own-line handles.
+It returns stored `displayed_location_text` from the named text control only
+for own-owned-and-controlled locations. The text names the state even for a
+province building. Root/row flags are local visibility observations; they do
+not establish freshness, unique state-name agreement, eligibility or input
+routing. Hidden roots and unjoined rows expose no text payload. Full UI counts
+precede pagination; `ui.rows` uses the same construction entry-index page.
+This observer has static/generated evidence only and defaults off.
+
 An owned session can enable prepared research, Focus and durable daily plans.
 Recorded run030 verified four-slot worker assignment, idempotent updates,
 restart persistence and research-counter advancement. Run047 passed automatic

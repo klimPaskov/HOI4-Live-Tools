@@ -3,6 +3,8 @@ use hoi4_live_native::construction::{page, snapshot};
 use serde_json::json;
 #[path = "construction/locations.rs"]
 mod locations;
+#[path = "construction/ui.rs"]
+mod ui;
 const BASE: u64 = 0x10000;
 const DB: u64 = 0xc0000;
 const LIST: u64 = 0xc1000;

@@ -6,7 +6,7 @@ const PROVINCE: u64 = 0xe1000;
 const STATE_STATUS: u64 = STATE + 0x120;
 const PROVINCE_STATUS: u64 = PROVINCE + 0x1b0;
 
-fn located() -> Fixture {
+pub(super) fn located() -> Fixture {
     let mut f = fixture();
     f.array(0x302c8, 0xf0000, 3);
     f.word(0xf0008, STATE);

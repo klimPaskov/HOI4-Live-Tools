@@ -49,7 +49,9 @@ Upstream foundation and attribution:
   Linux types, scalar names and template joins were independently recovered;
   cost and produced work are distinct. construction/location.rs independently
   derives optional selected own-territory IDs with ownership/control and reciprocal
-  catalog/status guards. No foreign geography payload or input is authorized.
+  catalog/status guards. construction/ui.rs independently recovers current Linux
+  panel ownership, row-handle and named text bindings. No foreign geography
+  payload or input is authorized.
   native/src/graph_kernel.rs independently implements bounded components and
   multi-source breadth-first search, consulting calling/doctrine.py and
   calling/ragemicro.py. It operates on caller-supplied public/generated topology;

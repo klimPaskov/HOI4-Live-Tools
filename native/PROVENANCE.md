@@ -611,3 +611,43 @@ provider result, runtime location or engine execution is claimed. Generated
 fixtures test foreign exclusion before payload, ordered-template alias rejection,
 unsupported statuses, malformed joins and torn witnesses. Live location/UI
 comparison, construction commands and cross-platform layouts remain unverified.
+
+
+## Optional construction queue labels
+
+`construction/ui.rs` is independently recovered for the same pinned Linux ELF.
+It shares the existing own production/location snapshot and final witnesses.
+The exact own idler's `+0xc0` virtual accessor (`0x20811a0`) returns the positive
+current-player field at GameState `+0x518`; the observer forbids its observer-tag
+fallback. Manager construction `0x17037b0` stores the constructions view at
+`+0x150`. View constructor `0x2970fb0` and base `0x1693450` establish primary
+`0x43101d8`, owner idler `+0x2f0` and container `+0x2f8`. Manager `+0x180`,
+exact own registry and container registry links remain mandatory.
+
+Queue updater `0x2979820` obtains that player's production and consumes its
+construction collection. It maintains the pointer array at view `+0x308` with
+capacity/count `+0x310/+0x314`. Only exact building-row primary `0x4265548` is
+interpreted. Constructors `0x17df520` and `0x17f61a0` copy the line's full
+8-byte handle into row `+0x540` and `+0xce8`; both must match an already proven
+own located building line. Row `+0x538` must equal the current own registry.
+Window/text payload follows only after these guards; unknown row types and
+unjoined handles expose counts, never payload.
+
+The generated row container is at `+0x10` (base `0x2f67ff0`). Its exact instant
+text lookup `0x2e86760` uses paired pointer/name arrays `+0xa60/+0xa78`, unlike
+button or child lookup. Only the unique `location` control is read, requiring
+primary `0x434c8a0` and own registry `+0x68`. Constructor `0x2ee5de0` and setter
+`0x2ee6950` establish the UTF-8 std::string at textbox `+0x110`. Updater
+`0x17fa990` resolves the row handle, obtains the building's state and writes its
+name through that setter. Province rows therefore display state names too.
+
+The implementation reads stored text, never invokes a getter/callback and does
+not establish that a UI update has occurred. Local visibility flags confer no
+freshness, unique canonical-name agreement, modal clearance or input authority.
+All routing, handle, owner, named-control and string bytes are final witnesses.
+Validation covers the full bounded collection before queue-index pagination.
+Private SHA-pinned evidence retains 63 targeted FDEs and installed GUI resource
+corroboration; generated fixtures cover foreign exclusion, full-width handles,
+malformed joins, UTF-8/heap strings and torn reads. Live acceptance remains
+pending. Building-choice and topbar callback evidence is retained separately;
+this observer exposes neither selection controls nor actions.
