@@ -36,8 +36,8 @@ compatibility. Layouts must be recovered and verified separately for each build.
 default 32). It validates the entire own collection before paging, recognizes
 exact building and railway layouts, and retains unsupported-type coverage.
 Full line handles are scoped to the current process/campaign snapshot. Building
-keys join only fresh public template definitions; no location, foreign-state or
-railway-path payload is traversed. Signed 64-bit cost/speed/produced values use
+keys join only fresh public template definitions. The default reads no location
+payload. Signed 64-bit cost/speed/produced values use
 decimal strings to preserve precision. `produced_over_cost` is an unclamped
 exact fraction when the numeric policy passes and cost is positive; it proves
 neither completion nor ETA. Repairs, conversions and allied builds remain
@@ -47,6 +47,17 @@ The immutable tested build still reports `live_validation: pending`; the
 [recorded result](../docs/CLAUSEWITZ_VALIDATION.md#run071-dockyard-observation-and-clock-passed--16-october-2026-utc)
 is scoped to that building observation. Exact numeric UI comparison, railway
 payloads, allocation, eligibility and construction commands remain pending.
+
+Optional `include_location: true` adds state/province IDs for a selected building
+only after both territory ownership and control match the current player.
+Exact catalog IDs, embedded status identity, the fresh template ordinal and a
+reciprocal building slot must agree. National overrides, unknown status flags,
+foreign/allied territory and railway paths remain unavailable. This option has
+static/generated evidence only. It reads selected slots rather than enumerating
+geography; the default remains fast and avoids these additional reads.
+`location_available_count` covers the fully validated collection before paging;
+top-level `location_available` means at least one location was proved. Each row
+has its own availability and reason. Neither IDs nor availability authorize input.
 
 An owned session can enable prepared research, Focus and durable daily plans.
 Recorded run030 verified four-slot worker assignment, idempotent updates,
@@ -193,6 +204,7 @@ anchors do not establish a load-generation token.
 | `hoi4_army` | Own divisions with full snapshot-scoped handles, selected province joins and lossless raw status; recorded structural reads, units unverified |
 | `hoi4_economy` | Own named factory trigger counts, civilian project capacity and exact signed political-power units; live comparison pending |
 | `hoi4_production_lines` | Paged own line handles, separate signed factory counters and optional base equipment keys; key joins have fixture evidence, live comparison and allocation remain pending |
+| `hoi4_construction_queue` | Own building/railway lines, canonical keys and signed cost/work counters; one dockyard observed in run071. Optional own-territory location IDs have static/generated evidence only |
 | `hoi4_technology_list` | Canonical loaded technology IDs with filtering/pagination; no eligibility inference |
 | `hoi4_input_geometry` | GUI dimensions, scale, pointer and conditional source-window diagnostics; no click authority |
 | `hoi4_research_folders` | Exact loaded public folder IDs, independent of open GUI; no technology mapping or eligibility authority |

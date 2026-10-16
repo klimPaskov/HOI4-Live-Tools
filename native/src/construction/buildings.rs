@@ -2,22 +2,24 @@
 //! Never traverses building location/foreign state, localized names or rail paths.
 use super::{boolean, invalid, members, pointer};
 use crate::{error::Result, memory::Reader};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 pub(super) struct Catalog {
-    members: BTreeSet<u64>,
+    members: BTreeMap<u64, usize>,
     selected: BTreeMap<u64, String>,
     keys: BTreeMap<String, u64>,
 }
 pub(super) struct Building {
     pub key: Option<String>,
     pub unavailable: Option<&'static str>,
+    pub identity: Option<(u64, u64, usize)>,
 }
 impl Building {
     fn unavailable(reason: &'static str) -> Self {
         Self {
             key: None,
             unavailable: Some(reason),
+            identity: None,
         }
     }
 }
@@ -47,15 +49,19 @@ pub(super) fn observe(
             return Err(invalid("Exact building database primary required"));
         }
         *catalog = Some(Catalog {
-            members: members(r, db + 0x40, 4096)?.into_iter().collect(),
+            members: members(r, db + 0x40, 4096)?
+                .into_iter()
+                .enumerate()
+                .map(|(index, pointer)| (pointer, index))
+                .collect(),
             selected: BTreeMap::new(),
             keys: BTreeMap::new(),
         });
     }
     let catalog = catalog.as_mut().expect("fresh catalog initialized");
-    if !catalog.members.contains(&template) {
+    let Some(&ordinal) = catalog.members.get(&template) else {
         return Ok(Building::unavailable("template_outside_reviewed_catalog"));
-    }
+    };
     if r.u64(template)? != base + 0x41b49c8 {
         return Ok(Building::unavailable("unsupported_template_type"));
     }
@@ -82,5 +88,6 @@ pub(super) fn observe(
     Ok(Building {
         key: Some(key),
         unavailable: None,
+        identity: Some((building, template, ordinal)),
     })
 }

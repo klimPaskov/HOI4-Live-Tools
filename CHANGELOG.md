@@ -2,6 +2,12 @@
 
 ## Unreleased native preview
 
+- Add optional `include_location` to construction observations, default false.
+  Selected state/province IDs require own ownership and control, current catalog
+  joins, exact embedded status and reciprocal building/template membership.
+  Preserve unsupported-location reasons and validate all witnesses before paging.
+  Static/generated evidence only; live location comparison remains pending.
+
 - Add read-only `hoi4_construction_queue` with full own-queue validation before
   paging, exact building/railway types, snapshot-scoped handles and canonical
   building keys. Independently distinguish cost from produced work, retain

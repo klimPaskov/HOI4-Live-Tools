@@ -4490,3 +4490,30 @@ completed-building proof and campaign acceptance remain unverified. The tested
 binary's static `live_validation: pending` value remains unchanged; this later
 audit supplies the narrower observed result. There was no matched upstream
 benchmark, and native command posting remains quarantined.
+
+## Optional construction location preview — static and generated checks
+
+`include_location` defaults to false. When requested, the reader follows only
+the selected building's exact embedded status and current state/province catalog
+slots. Own ownership and control must both match before IDs or reciprocal
+building payload are read. Province control is checked before its parent state.
+The template's ordinal must match its position in the fresh ordered catalog,
+then its selected status-map slot must lead back to the same building. Unknown
+flags, country overrides and foreign/allied territory remain unavailable;
+railway paths and construction input are still unsupported.
+
+Exact Linux constructors, getters, serializers and setters independently support
+the layout. Review caught an omitted ordered-template check: a different ordinal
+could alias a slot containing the same building. The fix checks the fresh catalog
+ordinal before the map, with an adversarial regression fixture. Ten new location
+cases also cover default-off reads, owner/controller exclusion before payload,
+unknown statuses, malformed IDs/arrays, embedded identity, out-of-page validation
+and final witnesses. This is static/generated evidence, not live location proof.
+
+Final host Rust 1.86 tests passed **830 cases**; the Python suite passed **953**
+with **37 skips**. Host/Linux/Windows Clippy, Linux MSRV, formatting and the static
+Linux release build passed. The hash-checked Linux bundle passed **942 reported
+checks**, including five X11 cases (**940 substantive** after excluding the
+nested helper and generated window-client wrapper). All suites returned zero.
+The prior owned game/server were absent before and after; Yama remained 1.
+No game was launched. Location/UI comparison remains pending.

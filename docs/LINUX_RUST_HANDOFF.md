@@ -40,6 +40,13 @@ days; railway payloads and exact numeric UI comparison remain unverified. The
 immutable build's static `live_validation: pending` flag does not describe a
 later audit result. Keep native command posting quarantined.
 
+The next optional `include_location` preview verifies selected state/province IDs
+through exact current catalogs, own ownership/control and the embedded status's
+reciprocal building/template slot. It defaults off and never enumerates geography.
+National overrides, unknown flags, allied/foreign territory and railway paths
+stay unavailable. Static/generated evidence does not establish live location
+correctness; compare a legible own-location UI before acceptance.
+
 Run047 passed worker-only Focus-to-research assignment and adjacent same-plan
 restart/STOP, preserving both completion IDs and budget 2/2/0. Its one BeforeIntent
 research torn-read and read-only digest busy retry remain recorded.

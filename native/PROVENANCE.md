@@ -560,8 +560,8 @@ installs primary `0x41b49c8` and copies the parsed canonical string to `+0x248`.
 It interns that same string into `+8`; neither that intern nor building `+8` is
 used as an array index. Reference constructors require template flag `+0x18`;
 that flag does not establish player eligibility. Only selected templates from
-the fresh bounded catalog are read. No localized names, building locations,
-foreign states or railway paths are traversed.
+the fresh bounded catalog are read. The default observer traverses no localized
+names, building locations, foreign states or railway paths.
 
 Private SHA-pinned FDE/ELF ledgers record these static observations. One caller
 has a separately recorded 39,700-byte FDE, within a deliberate 64 KiB extraction
@@ -570,3 +570,44 @@ executed, no game binary/disassembly is distributed, and no new REA provider
 result is claimed. Generated fixtures check owner/type/catalog boundaries,
 unsupported coverage, exact signed values, paging and final witnesses. Live
 construction comparison and ordinary controls remain pending.
+
+## Optional construction location identity
+
+`construction/location.rs` independently follows the exact Linux ELF's selected
+building/status/state/province joins. Building constructor `0x86f730` stores
+status at `+0x1b8` and template at `+0x1c0`. Status constructor `0x8841e0`
+installs primary `0x41b4768`, flags at `+0x68`, routing index at `+0x6c` and a
+country override at `+0x70`. State constructor `0xd872e0` installs `0x41fba98`
+and embeds status at `+0x120` with flags 2; province constructor `0xd79240`
+installs `0x41fb728` and embeds status at `+0x1b0` with flags 1.
+
+Resolver `0x884e10` uses the state catalog at GS `+0x2c8` or province getter
+`0x2020f90` over GS `+0x2b0`, followed by province `+0xe0` for its state.
+Reference constructors `0x881e90`/`0x881f60` corroborate IDs at state `+0x48` and
+province `+0xa4`. State serializer `0xd88b80` names owner `+0xc8` and controller
+`+0xcc`; setters `0xd899e0`/`0xd8a450` corroborate them. Province serializer
+`0xd7a2a0` names controller `+0x1a8`, independently of aggregate state control.
+The reader requires equality to the already verified positive own tag before
+publishing IDs or reading reciprocal building data. Province control is checked
+before following its parent pointer. Other territory payload is never traversed.
+
+Getter `0x887850` treats positive status `+0x70` as a country override; it does
+not establish territorial authority. Exact flags 1/2 and override zero are
+conservative supported-path policies, not general engine invariants. The reader
+does not infer inherited controller values, occupation or allied eligibility.
+
+Getter `0x884be0`, writer `0x885400` and map initializer `0x884920` establish the
+status `+0x20` int32 map and `+0x38` building-pointer array, with standard signed
+capacity/count pairs. The selected template ordinal at `+0x2b8` must agree with
+its position in the fresh ordered database catalog. That ordinal selects exactly
+one map slot and then one building slot, which must point back to the original
+building. The separate positive-level list at `+0x50` is deliberately unused;
+new queued buildings can have zero levels. Every routing, ownership, catalog,
+ordinal and reciprocal field participates in final witnesses before pagination.
+
+Private SHA-pinned raw ELF/FDE evidence retains 58 exact function ranges with
+constructor, serializer, keyword and reciprocal lookup corroboration. No new REA
+provider result, runtime location or engine execution is claimed. Generated
+fixtures test foreign exclusion before payload, ordered-template alias rejection,
+unsupported statuses, malformed joins and torn witnesses. Live location/UI
+comparison, construction commands and cross-platform layouts remain unverified.

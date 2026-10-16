@@ -3,6 +3,7 @@
 //! Layout/field names independently recovered from constructors, serializers,
 //! keyword initializers and arithmetic; see PROVENANCE.md. No engine calls.
 mod buildings;
+mod location;
 use crate::{
     economy,
     error::{Error, Result},
@@ -71,6 +72,14 @@ pub fn snapshot(process: &dyn Process) -> Result<Value> {
     page(process, 0, 32)
 }
 pub fn page(process: &dyn Process, offset: usize, limit: usize) -> Result<Value> {
+    page_with_location(process, offset, limit, false)
+}
+pub fn page_with_location(
+    process: &dyn Process,
+    offset: usize,
+    limit: usize,
+    include_location: bool,
+) -> Result<Value> {
     if offset > LINE_LIMIT || !(1..=PAGE_LIMIT).contains(&limit) {
         return Err(Error::new(
             "invalid_arguments",
@@ -82,7 +91,12 @@ pub fn page(process: &dyn Process, offset: usize, limit: usize) -> Result<Value>
     let witnesses = Witnesses::new(process);
     let r = Reader::new(&witnesses);
     let base = process.image_base();
-    let (_, production) = economy::own_production(&r, base)?;
+    let (country, production) = economy::own_production(&r, base)?;
+    let own_tag = if include_location {
+        r.i32(country + 8)?
+    } else {
+        0
+    };
     let context = game::context_from_reader(&r, base)?;
     let entries = members(&r, production + 0x70, LINE_LIMIT)?;
     let mut rows = Vec::new();
@@ -92,6 +106,7 @@ pub fn page(process: &dyn Process, offset: usize, limit: usize) -> Result<Value>
     let mut unavailable_buildings = 0;
     let mut building_count = 0;
     let mut anomalous = 0;
+    let mut locations = 0;
     for (index, &line) in entries.iter().enumerate() {
         let primary = r.u64(line)?;
         let is_building = primary == base + 0x4205680;
@@ -131,6 +146,11 @@ pub fn page(process: &dyn Process, offset: usize, limit: usize) -> Result<Value>
             && [active, damaged, queued, priority, amount]
                 .iter()
                 .all(|v| (0..=COUNTER_LIMIT).contains(v));
+        let mut location = location::unavailable(if include_location {
+            "railway_location_unavailable"
+        } else {
+            "not_requested"
+        });
         let details = if is_building {
             building_count += 1;
             let repairs = r.i32(line + 0x78)?;
@@ -139,6 +159,15 @@ pub fn page(process: &dyn Process, offset: usize, limit: usize) -> Result<Value>
             numeric_policy &= (0..=COUNTER_LIMIT).contains(&repairs);
             let building = buildings::observe(&r, base, line, &mut catalog)?;
             unavailable_buildings += usize::from(building.key.is_none());
+            if include_location {
+                location = match building.identity {
+                    Some((building, template, ordinal)) => {
+                        location::observe(&r, base, own_tag, building, template, ordinal)?
+                    }
+                    None => location::unavailable("building_identity_unavailable"),
+                };
+                locations += usize::from(location["available"] == true);
+            }
             json!({"building_id":building.key,"building_id_unavailable_reason":building.unavailable,
                 "to_repair_raw_signed":repairs,"conversion":conversion,"allied_build":allied})
         } else {
@@ -159,7 +188,8 @@ pub fn page(process: &dyn Process, offset: usize, limit: usize) -> Result<Value>
             "priority_raw_signed":priority,"amount_raw_signed":amount,
             "numeric_policy_satisfied":numeric_policy,"produced_over_cost":fraction,
             "fraction_unavailable_reason":if !numeric_policy {json!("anomalous_numeric_policy")} else if cost==0 {json!("zero_cost")} else {Value::Null},
-            "building":details,"location_available":false,"input_authorized":false}));
+            "building":details,"location_available":location["available"],"location":location,
+            "input_authorized":false}));
     }
     let (end_calls, end_bytes) = witnesses.finish()?;
     process.check()?;
@@ -194,7 +224,9 @@ pub fn page(process: &dyn Process, offset: usize, limit: usize) -> Result<Value>
         "policy":{"maximum_collection_capacity":LINE_LIMIT,"maximum_raw_scalar":RAW_LIMIT,
             "maximum_counter":COUNTER_LIMIT,"nonzero_unique_handles_required":true,
             "building_handle_kind":59,"railway_handle_kind":"dynamic","engine_invariant_claimed":false},
-        "location_available":false,"railway_path_available":false,"idle_builders_available":false,
+        "location_available":locations>0,"location_requested":include_location,
+        "location_available_count":locations,"location_coverage":"full_own_collection; available means at least one proven own territorial location",
+        "railway_path_available":false,"idle_builders_available":false,
         "allocation_available":false,"eligibility_available":false,"input_authorized":false,
         "live_validation":"pending","observation_paused_game":false,
         "freshness":{"observed_unix_ms":SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),

@@ -47,7 +47,9 @@ Upstream foundation and attribution:
   native/src/construction.rs and native/src/construction/buildings.rs consult
   calling/game.py's construction_queue and building catalog semantics. Current
   Linux types, scalar names and template joins were independently recovered;
-  cost and produced work are distinct. No geography or input is authorized.
+  cost and produced work are distinct. construction/location.rs independently
+  derives optional selected own-territory IDs with ownership/control and reciprocal
+  catalog/status guards. No foreign geography payload or input is authorized.
   native/src/graph_kernel.rs independently implements bounded components and
   multi-source breadth-first search, consulting calling/doctrine.py and
   calling/ragemicro.py. It operates on caller-supplied public/generated topology;

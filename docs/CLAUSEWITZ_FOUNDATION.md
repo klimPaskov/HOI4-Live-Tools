@@ -54,6 +54,9 @@ identity and increased produced work across advancing days, with 14 player RPCs
 and no errors. Manual preparation is not construction automation; exact numeric
 UI comparison, railway payloads, locations, allocation and construction input
 remain pending. Own queue membership does not prove player-owned territory.
+An optional location preview now checks exact catalog/status/building identity
+and both own ownership and control. It defaults off; generated tests and static
+layout evidence do not establish live geographic correctness.
 
 This remains a development preview. Economic recovery, warfare and native
 Windows/macOS live support remain
