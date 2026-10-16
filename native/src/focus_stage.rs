@@ -176,19 +176,32 @@ impl SearchControl {
     /// Projection of a witnessed producer response; not a command or public MCP input.
     #[doc(hidden)]
     pub fn from_owned_observation(d: &serde_json::Value, key: &str) -> Result<Self> {
-        if d["owned"] != true
-            || d["build_id"] != crate::game::BUILD_ID
-            || d["command_observation"]["requested_key"] != key
-            || d["command_observation"]["same_reader_clock_context"] != true
-            || !d["focuses"]
-                .as_array()
-                .is_some_and(|a| a.len() == 1 && a[0]["key"] == key)
-            || d["search"]["available"] != true
-            || d["search"]["requested_key"] != key
-        {
-            return Err(search_error(
-                "Same-reader exact own search command required",
-            ));
+        let predicates = [
+            ("owned", d["owned"] == true),
+            ("build", d["build_id"] == crate::game::BUILD_ID),
+            ("command", d["command_observation"]["requested_key"] == key),
+            (
+                "clock",
+                d["command_observation"]["same_reader_clock_context"] == true,
+            ),
+            (
+                "catalog",
+                d["focuses"]
+                    .as_array()
+                    .is_some_and(|a| a.len() == 1 && a[0]["key"] == key),
+            ),
+            ("available", d["search"]["available"] == true),
+            ("search_key", d["search"]["requested_key"] == key),
+        ];
+        if predicates.iter().any(|(_, passed)| !passed) {
+            // Already-read predicate results only: no extra process reads or
+            // raw keys/addresses. All facts fit the durable 160-byte reason.
+            let facts = predicates
+                .iter()
+                .map(|(name, passed)| format!("{name}={}", u8::from(*passed)))
+                .collect::<Vec<_>>()
+                .join(" ");
+            return Err(search_error(&format!("Search command predicates: {facts}")));
         }
         let c = &d["search"]["query_control"];
         if [

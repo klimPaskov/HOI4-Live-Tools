@@ -2,6 +2,12 @@
 
 ## Unreleased native preview
 
+- Preserve Run069's interrupted initial segment and failed worker continuation.
+  Correct the search reader's null country-override handling using the exact
+  Linux binary's positive-player fallback, with own-country validation and
+  witnesses retained. Add compact search predicate diagnostics; live validation
+  of this correction remains pending.
+
 - Verify full manual Focus search-to-View in Linux run068, including three Tab
   steps and exact historical replays. Add optional explicit `focus_search` hints
   to daily Focus plans with durable ordered-chain validation and unchanged

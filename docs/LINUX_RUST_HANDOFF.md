@@ -322,7 +322,28 @@ meaning. Worker live validation and replacing an existing query remain pending.
 
 ## Immediate acceptance work
 
-1. Manual search-to-View passed Run068. Verify its new worker integration, then
+Run069 on `3659c24` remains failed. The initial Luna segment dropped a running
+terminal session ID despite a complete normal broker wait response; preserve its
+early STOP as incomplete. A separately granted continuation retained the original
+wall bound and corrected terminal-session polling. Its Four Year Plan OpenFocus
+was NotQueued on day 706674, succeeded on 706675, then search preparation refused
+with an aggregate command predicate on days 706675 and 706676. The final wait
+showed idle Focus on 5 February 23:00; no later completed-membership read was
+authorized. Audit retained 44 RPCs/zero MCP errors, five verified Focus pairs,
+one NotQueued pair, zero unresolved intents, the unchanged first assignment,
+canonical release, 696-second recording and normal exit 0. Both brokers and all
+owned processes are closed; 114 inputs/24 helpers stayed unchanged.
+
+The next correction follows the exact Linux getter's null country override:
+resolve through the already-witnessed positive own player, never observer or
+foreign state. All original own-country/item/control witnesses and input
+predicates remain required. New compact predicate diagnostics preserve future
+refusals. Static evidence does not identify Run069's original failed predicate;
+the corrected worker route still needs live validation. Future Luna calls must
+retain `exec_command.session_id` and poll that same process with `write_stdin`;
+an ordinary yield is neither a missing MCP response nor permission for a new call.
+
+1. Manual search-to-View passed Run068. Verify the corrected worker integration, then
    successive Focus choices on the tested capacity correction, using
    completed membership to distinguish assignment from finished Focus. Run056
    supplies the original boundary evidence; run054's lost quantities remain

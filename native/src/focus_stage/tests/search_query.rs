@@ -1,6 +1,41 @@
 use super::*;
 
 #[test]
+fn rejected_search_command_retains_each_failed_predicate_without_payload() {
+    let key = "GER_rhineland";
+    let body = serde_json::json!({"owned":true,"build_id":crate::game::BUILD_ID,
+        "command_observation":{"requested_key":key,"same_reader_clock_context":true},
+        "focuses":[{"key":key}],"search":{"available":true,"requested_key":key}});
+    let cases = [
+        ("owned", "/owned"),
+        ("build", "/build_id"),
+        ("command", "/command_observation/requested_key"),
+        ("clock", "/command_observation/same_reader_clock_context"),
+        ("catalog", "/focuses/0/key"),
+        ("available", "/search/available"),
+        ("search_key", "/search/requested_key"),
+    ];
+    for (failed, pointer) in cases {
+        let mut bad = body.clone();
+        *bad.pointer_mut(pointer).unwrap() = serde_json::json!("untrusted-payload");
+        let error = SearchControl::from_owned_observation(&bad, key).unwrap_err();
+        assert_eq!(error.code, "focus_precondition");
+        assert!(error.message.len() <= 160);
+        assert!(!error.message.contains("untrusted-payload"));
+        assert!(!error.message.contains(key));
+        for (name, _) in cases {
+            let token = format!("{name}={}", u8::from(name != failed));
+            assert!(error.message.split_whitespace().any(|word| word == token));
+        }
+    }
+    let mut absent = body;
+    absent.as_object_mut().unwrap().remove("search");
+    let error = SearchControl::from_owned_observation(&absent, key).unwrap_err();
+    assert!(error.message.ends_with("available=0 search_key=0"));
+    assert!(error.message.len() <= 160);
+}
+
+#[test]
 fn typed_search_projection_needs_complete_exact_canonical_selection() {
     let key = "GER_rhineland";
     let body = serde_json::json!({"owned":true,"build_id":crate::game::BUILD_ID,

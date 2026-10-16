@@ -506,3 +506,23 @@ receipt observation. The worker uses that binding after a current verified
 search stage, avoiding a redundant caret-sensitive read. Historical replays
 return no current binding; different or missing observations refuse. Other
 preparation/assignment readback checks remain unchanged.
+
+Run069's worker search preparation refused an aggregate command predicate after
+the second OpenFocus; the exact failed field was not retained. Independent
+static review of the same verified ELF found that `0x15117f0..0x15118fe` returns
+the non-null `view+0x11d8` override, otherwise selects current-game tag `+0x518`
+when positive (observer tag `+0x51c` otherwise) and calls `0xd77320`. That getter
+uses the tag-to-index array at game state `+0x340`, then the country array `+0x310`.
+Only its positive-player path is admitted by this reader. The clear method at
+`0x1515e50` writes null; `0x1515fa0` sets an explicit override; `0x1516130` stores
+the current-country lookup. FDE-bounded instructions and the ELF digest are
+retained privately. No target function was executed, and no new provider result
+is claimed after the earlier REA timeout.
+
+Search now resolves a null override through its existing same-reader positive
+player/country/catalog validation. Foreign overrides still refuse before payload;
+all item, control and final snapshot witnesses remain mandatory. Generated cases
+cover both own branches, invalid player/owner state, foreign payload exclusion
+and torn witnesses. Live acceptance is pending, and the static correction does
+not retroactively fill Run069's missing predicate. Future aggregate projection
+refusals carry compact results for all seven original predicates.

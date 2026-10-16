@@ -57,12 +57,16 @@ pub(super) fn observe(
             "Exact own canonical focus required",
         ));
     }
-    // A null displayed country is allowed by the catalog reader, but it cannot
-    // establish ownership of a retained search result. Do not read its arrays.
-    if r.u64(view + 0x11d8)? != country {
-        return Ok(
-            json!({"available":false,"reason":"own_displayed_focus_view_required","input_authorized":false}),
-        );
+    // This is a country override. The exact ELF getter at 0x15117f0 resolves
+    // null through the positive current-player tag. snapshot_model already
+    // witnessed that lookup, country type/tag, own tree and manager/idler join;
+    // its nonpositive/observer branch is intentionally unsupported here.
+    let country_override = r.u64(view + 0x11d8)?;
+    if country_override != 0 && country_override != country {
+        return Err(Error::new(
+            "foreign_focus_scope",
+            "Search country override must resolve to the witnessed own player",
+        ));
     }
     let current = pointers(r, view + 0x1138, MAX_ITEMS)?;
     unique(&current)?;
@@ -139,6 +143,7 @@ pub(super) fn observe(
     let selected_key = selected_index.map(|index| records[index]);
     Ok(json!({
         "available":true,"requested_key":requested,
+        "country_binding_source":if country_override==0 {"positive_player_fallback"} else {"explicit_own_override"},
         "current_item_count":own_items.len(),"search_cache_count":records.len(),
         "complete_current_item_coverage":seen.len()==own_items.len(),
         "match_count":count,"requested_match_count":requested_matches,

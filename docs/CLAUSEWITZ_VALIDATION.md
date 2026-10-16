@@ -4322,3 +4322,48 @@ Linux checks (912 substantive), five included X11 cases and 953 Python tests
 (37 skips). Formatting, host/Linux/Windows Clippy, Linux MSRV and release linking
 passed; all 114 native source inputs remained unchanged. These checks establish
 offline behavior, not a successful live worker search or campaign.
+
+## Run069: worker search refused; country override corrected — 15 October 2026 UTC
+
+Run069 on immutable `3659c24` had two separately recorded segments. The initial
+player discarded `exec_command`'s running session ID and interpreted empty
+interim output as a missing response. The broker actually retained a normal
+45-second timeout at 6 January 02:00. Luna stopped before the required fresh
+digest. Independent audit found one settled Rhineland assignment, Four Year
+Plan Pending with zero attempts, no uncertainty and a released lease. Preserve
+that incomplete segment and its original artifacts.
+
+A separate grant continued the same game under the original wall deadline.
+The player retained and polled the terminal session correctly. On day 706674,
+Four Year Plan OpenFocus was confirmed NotQueued after a torn read. A new-day
+OpenFocus succeeded on 706675, then search preparation refused on days 706675
+and 706676 with `Same-reader exact own search command required`. Its aggregate
+error did not retain the individual failed predicate. The accepted wait reached
+5 February 23:00 with no active Focus; completed membership was not read after
+that transition under the terminal contract. Do not claim this run proves
+Rhineland completion, second assignment or the final restart gate.
+
+Across both segments, all 44 player RPCs returned without an MCP error. Stopped
+journals contain five verified Focus input pairs, one NotQueued pair, one core
+reservation and no unresolved intent. The first assignment receipt and budget
+1/1/0 stayed unchanged. Canonical release, the 696-second recording, normal exit
+0 in 2.149 seconds, all guest/host process absence, nine passing CI jobs and
+unchanged 114 native inputs/24 helpers passed independent audit.
+
+Focused static review found a separate concrete reader defect: the exact ELF
+getter at `0x15117f0` treats `view+0x11d8` as an override and resolves null through
+the current-player country lookup. The search reader had required a non-null
+override. It now accepts the null case only through the existing witnessed
+positive-player lookup, own country type/tag, manager/idler and own catalog joins.
+Explicit foreign overrides, observer tags, torn reads and invalid own membership
+still refuse. Returned search state identifies which own-country branch applied;
+typed input requirements remain unchanged. Compact predicate results retain the
+specific reason for future projection refusals without raw values or extra reads.
+This static finding does not retroactively identify Run069's missing predicate;
+live validation of the correction remains pending.
+
+The correction passed 805 Rust 1.86 host tests, 917 reported actual Linux checks
+(915 substantive, including all five X11 cases), 953 Python tests with 37 skips,
+format, Clippy on all three targets, Linux MSRV and release-build checks. All
+114 native inputs matched the tested source. Live worker acceptance remains
+pending.

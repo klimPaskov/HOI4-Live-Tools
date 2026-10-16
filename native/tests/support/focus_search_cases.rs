@@ -58,10 +58,48 @@ fn search_empty_unmaterialized_and_unmatched_selection_remain_explicit() {
     let v = result(&f).unwrap();
     assert_eq!(v["search"]["selected_key"], "GER_rhineland");
     assert_eq!(v["search"]["selected_in_matches"], false);
+}
+
+#[test]
+fn search_null_country_override_resolves_only_witnessed_positive_player() {
+    for country_override in [0, CO] {
+        let mut f = fixture();
+        f.word(VIEW + 0x11d8, country_override);
+        let v = result(&f).unwrap();
+        assert_eq!(v["search"]["available"], true);
+        assert_eq!(v["search"]["selected_key"], "GER_rhineland");
+        assert_eq!(
+            v["search"]["country_binding_source"],
+            if country_override == 0 {
+                "positive_player_fallback"
+            } else {
+                "explicit_own_override"
+            }
+        );
+        assert_eq!(v["input_authorized"], false);
+    }
+    for tag in [-1, 0, 4096] {
+        let mut f = fixture();
+        f.word(VIEW + 0x11d8, 0);
+        f.int(GS + 0x518, tag);
+        assert_eq!(result(&f).unwrap_err().code, "player_unavailable");
+        assert!(f.untouched(VIEW, 0x1380) && f.untouched(GS + 0x51c, 4));
+    }
+    let mut f = fixture();
+    f.word(VIEW + 0x11d8, 0x450000);
+    assert_eq!(result(&f).unwrap_err().code, "foreign_focus_scope");
+    assert!(f.untouched(0x450000, 0x1000) && f.untouched(CURRENT, 8));
     let mut f = fixture();
     f.word(VIEW + 0x11d8, 0);
-    assert_eq!(result(&f).unwrap()["search"]["available"], false);
-    assert!(f.untouched(VIEW + 0x12f8, 0x64));
+    f.int(CO + 8, 2);
+    assert_eq!(result(&f).unwrap_err().code, "invalid_focus_owner");
+    assert!(f.untouched(CURRENT, 8));
+    for address in [GS + 0x518, CO + 8, VIEW + 0x11d8, ITEM + 0x2b0] {
+        let mut f = fixture();
+        f.word(VIEW + 0x11d8, 0);
+        f.torn = Some(address);
+        assert_eq!(result(&f).unwrap_err().code, "torn_read");
+    }
 }
 
 #[test]
@@ -759,4 +797,22 @@ fn search_command_includes_same_reader_context_and_private_binding_anchors() {
             "{address:x}"
         );
     }
+}
+
+#[test]
+fn null_override_search_command_keeps_exact_control_and_context_binding() {
+    let mut f = command_search_fixture();
+    f.word(VIEW + 0x11d8, 0);
+    let (body, context) = own_focus::command_search(&f, "GER_rhineland").unwrap();
+    let control = hoi4_live_native::focus_stage::SearchControl::from_owned_observation(
+        &body,
+        "GER_rhineland",
+    )
+    .unwrap();
+    assert_eq!(context.search_anchors, Some([ROOT, EDIT, 0x244000]));
+    assert!(context.ui_facts.unwrap().focus_view_local_ready().unwrap());
+    assert!(control.locally_ready && control.empty_query && control.enabled);
+    assert!(!control.keyboard_focus_verified && !control.text_receiver_verified);
+    assert_eq!(body["input_authorized"], false);
+    assert_eq!(body["observation_paused_game"], false);
 }
