@@ -49,9 +49,11 @@ preserved. These bounded gates do not establish campaign-level autonomy.
 
 The construction observation preview distinguishes building and railway types,
 full current-snapshot handles, cost, produced work and factory counters, with
-fresh canonical building-template joins. It has static and generated test
-evidence; live comparison, locations, allocation and construction input remain
-pending. Own queue membership is not proof that a location belongs to the player.
+fresh canonical building-template joins. Run071 verified one dockyard's stable
+identity and increased produced work across advancing days, with 14 player RPCs
+and no errors. Manual preparation is not construction automation; exact numeric
+UI comparison, railway payloads, locations, allocation and construction input
+remain pending. Own queue membership does not prove player-owned territory.
 
 This remains a development preview. Economic recovery, warfare and native
 Windows/macOS live support remain

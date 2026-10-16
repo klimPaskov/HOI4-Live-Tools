@@ -14,24 +14,31 @@ one day of advancement passed. The final native posting request timed out;
 observations and verified ordinary input. Neither a clean two-year run nor a
 full campaign has passed.
 
-Latest: Run070 on `eadf3a2` passed the bounded successive-Focus worker gate.
-Rhineland completed, the worker searched for and started the Four Year Plan,
-and identical-plan restart/STOP preserved both receipts and the daily budget.
-Independent audit verified 12 ordinary Focus input pairs, two reservations on
-distinct days, no failed navigation and no duplicate Start. One read-only busy
-retry and recovered pre-intent torn snapshots remain recorded. The game exited
-normally; both brokers and all owned game/recording processes are closed.
-Next: expand economy/construction/production controls and standing plans, then
-warfare and the clean two-year/full-campaign gates. Do not repeat the passed
-two-Focus test without a relevant implementation change or unresolved concern.
+Latest: Run071 on `a6a458e` passed a bounded construction-observation/clock gate.
+One manually queued dockyard retained its full handle and produced work rose
+from raw `0` to `27600000` by paused 3 January 1936 07:00. Luna made 14 RPCs with
+no errors; queue reads took 31–39 ms. Independent audit verified three ordinary
+clock actions, canonical release, the 582-second recording and normal exit 0.
+All owned game/recording instances and both brokers are closed. The refused
+inland setup placement, initial icon misidentification and a separate startup
+`campaign_unavailable` response remain recorded. UI evidence proves a queue row,
+not precise numeric agreement; manual setup is not automated construction input.
 
-The next construction preview adds `hoi4_construction_queue`: bounded own-status
+Run070 already passed Rhineland completion, searched Four Year Plan assignment
+and receipt/budget preservation through restart. Next: prove construction
+location identity and ordinary economy controls, expand standing plans, then
+warfare and clean two-year/full campaigns. Do not repeat passed Focus-only or
+single-line observer gates without a relevant change or unresolved concern.
+
+The construction preview adds `hoi4_construction_queue`: bounded own-status
 membership, exact building/railway layouts, full snapshot-scoped handles,
 separately named scalar fields and fresh canonical building-template keys.
 Independent current-ELF inspection corrects upstream's progress alias: `+0x28`
 is cost and `+0x38` is produced work. Locations, railway paths, allocation and
-construction actions are unavailable. Live validation remains pending; generated
-fixtures do not establish it. Keep native command posting quarantined.
+construction actions are unavailable. Run071 covers one dockyard across advancing
+days; railway payloads and exact numeric UI comparison remain unverified. The
+immutable build's static `live_validation: pending` flag does not describe a
+later audit result. Keep native command posting quarantined.
 
 Run047 passed worker-only Focus-to-research assignment and adjacent same-plan
 restart/STOP, preserving both completion IDs and budget 2/2/0. Its one BeforeIntent

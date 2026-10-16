@@ -6,7 +6,11 @@
   paging, exact building/railway types, snapshot-scoped handles and canonical
   building keys. Independently distinguish cost from produced work, retain
   conversion/repair/allied flags, and reject stale or foreign-owned payloads.
-  Live validation, locations, allocation and construction input remain pending.
+  Run071 verifies one dockyard across advancing days with stable identity and
+  increased produced work: 14 Luna RPCs, zero errors and 31–39 ms queue reads.
+  Preserve manual setup's refused inland placement and startup reader error.
+  Precise UI comparison, railway payloads, locations, allocation and construction
+  input remain pending.
 
 - Pass Linux run070 with one Luna medium player: the worker completes Rhineland,
   searches and starts the Four Year Plan, and preserves receipts/budget through

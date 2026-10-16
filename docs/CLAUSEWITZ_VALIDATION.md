@@ -4447,3 +4447,46 @@ owned game/server instances were absent before and after. No game was started,
 no game input was sent, and these checks are not live construction evidence.
 The optional native posting adapter remains quarantined. Live queue comparison,
 ordinary construction controls and campaign acceptance remain pending.
+
+## Run071 dockyard observation and clock passed — 16 October 2026 UTC
+
+One Luna medium player exercised immutable source `a6a458e` on the licensed Linux
+build, with vanilla Germany, Normal difficulty, historical AI and FAIR rules.
+Both daily workers were disabled. Root prepared one construction line through
+four recorded ordinary clicks before granting exclusive input. The selected
+icon was initially mistaken for a civilian factory; it was the dockyard button.
+An inland placement was refused and the queue stayed empty. A subsequent
+eligible coastal placement produced one canonical `dockyard` line. Provisional
+artifact filenames do not establish a location ID. A separate pre-grant overview
+arrived before the campaign was ready and returned `campaign_unavailable`;
+that startup error is retained alongside nine successful builder requests.
+
+Luna's baseline was paused 1 January 1936 12:00. It made **14 RPCs with zero
+errors or retries**, verified speed 4 and unpause, and used one 45-second-bounded
+date wait. The wait reached 3 January 01:00 in **15.504 seconds** (15.551 seconds
+RPC); final verified pause and fresh reads were at 07:00. The full construction
+handle `0x000000010000003b`, canonical dockyard key, amount 1, active factories 15,
+cost raw `640000000` and speed raw `13800000` remained unchanged. Produced work
+rose from raw `0` to `27600000`. Both observations contained one supported line,
+zero unsupported/anomalous entries and lossless decimal-string scalar fields.
+The queue reads took **31.375/39.373 ms RPC**, **25.017/32.912 ms producer**.
+The fraction is produced/cost, not completion or ETA evidence.
+
+Independent stopped-log audits matched the three exact Dispatching/Verified
+clock pairs, all four setup intents, original and final line values, exclusive
+ownership and canonical release/status proof. There were no Focus/research
+actions, workers, unresolved clock intents or builder calls during the grant.
+All 117 native input hashes, 25 helpers and nine source-matched CI jobs remained
+valid. The **582-second** recording finalized with verified media metadata;
+one ordinary window close exited normally with code 0 in **2.151 seconds**.
+All four owned guest instances, both host brokers and their child transports,
+and both controller sockets were absent afterward.
+
+The visible queue row and coastal construction overlay agree with the presence
+of an order, but 512×288 text is too small for precise numeric UI comparison.
+This passes a single dockyard observer/clock gate. Construction input automation,
+canonical location, railway payloads, allocation, eligibility, speed time units,
+completed-building proof and campaign acceptance remain unverified. The tested
+binary's static `live_validation: pending` value remains unchanged; this later
+audit supplies the narrower observed result. There was no matched upstream
+benchmark, and native command posting remains quarantined.

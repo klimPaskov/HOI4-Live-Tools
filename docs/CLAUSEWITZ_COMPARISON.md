@@ -1,6 +1,14 @@
 # Clausewitz-MCP comparison checkpoint
 
-Latest checkpoint, 16 October 2026: Run070 passed automatic Rhineland completion
+Latest checkpoint, 16 October 2026: Run071 verified one manually queued dockyard
+across advancing days. Its two Luna construction reads took 31.375/39.373 ms RPC
+(25.017/32.912 ms producer). The original line identity remained stable and
+produced work increased; 14 player RPCs had no errors. A single target wait
+returned after 15.504 seconds. Precise UI comparison and automated placement
+remain unverified; there was no matched upstream construction benchmark.
+See [the scoped Run071 result](CLAUSEWITZ_VALIDATION.md#run071-dockyard-observation-and-clock-passed--16-october-2026-utc).
+
+Run070 passed automatic Rhineland completion
 followed by searched Four Year Plan assignment and duplicate-free restart/STOP.
 The unpause-to-target interval was 382.121 seconds under CPU emulation. Independent
 journals verified 12 ordinary Focus actions and two assignment reservations;

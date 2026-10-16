@@ -41,8 +41,12 @@ railway-path payload is traversed. Signed 64-bit cost/speed/produced values use
 decimal strings to preserve precision. `produced_over_cost` is an unclamped
 exact fraction when the numeric policy passes and cost is positive; it proves
 neither completion nor ETA. Repairs, conversions and allied builds remain
-distinct. This API has static/generated evidence only; live comparison,
-allocation, eligibility and construction commands remain pending.
+distinct. Run071 verified one dockyard line across advancing days: the full
+handle remained stable and produced work increased, with 31–39 ms RPC reads.
+The immutable tested build still reports `live_validation: pending`; the
+[recorded result](../docs/CLAUSEWITZ_VALIDATION.md#run071-dockyard-observation-and-clock-passed--16-october-2026-utc)
+is scoped to that building observation. Exact numeric UI comparison, railway
+payloads, allocation, eligibility and construction commands remain pending.
 
 An owned session can enable prepared research, Focus and durable daily plans.
 Recorded run030 verified four-slot worker assignment, idempotent updates,
