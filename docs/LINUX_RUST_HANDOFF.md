@@ -14,7 +14,33 @@ one day of advancement passed. The final native posting request timed out;
 observations and verified ordinary input. Neither a clean two-year run nor a
 full campaign has passed.
 
-Latest: Run074 on `7e36594` passed its single combined construction-controls
+Latest: Run075 on `583ca49` failed its first `ensure_open` action with
+`torn_read: Snapshot witness changed` in 38.892 ms. The preceding controls read
+passed in 43.774 ms, including the opener's exact optional-parent join and clear
+local gate. Six player RPCs followed the declared order; Luna stopped on the
+refusal, made no further game observations, and released control. All four
+action journals are empty. The immutable adapter writes intent before dispatch,
+so this refusal occurred before input. The exact changing witness was not saved.
+No opening, selection, replay or no-op acceptance was established.
+
+The recorded Normal/historical vanilla Germany setup remained paused. One
+pregrant controls read also refused a changing snapshot; a single read-only
+preflight retry passed before the grant. Preserve both responses. The recorder
+finalized without the prior manifest race (316.333 seconds, recorder exit 255);
+the game closed normally with exit 0. All owned game/recording processes and
+both brokers are closed. Preserve the initial capture-copy basename refusal
+and host cleanup identity-format refusal; neither caused an extra game input.
+The original 136 source inputs and 26 helpers were verified unchanged after close.
+
+Next: identify the changing witness before admitting construction actions.
+The diagnostic follow-up adds producer section, first-read ordinal, size and
+changed-byte position to construction torn-read errors, without addresses or
+payload. It changes no witness predicate and adds no retry. Do not claim that
+diagnostics resolve the underlying instability or recover Run075's missing field.
+Use one bounded recorded action gate with the same Luna medium player after
+validation; preserve every failure and stop on refusal or uncertainty.
+
+Run074 on `7e36594` passed its single combined construction-controls
 read in 81.060 ms: exact opener/dockyard callback bindings, canonical ordinary
 selection, settled panel and optional geometry returned. Five player RPCs all
 succeeded; acquire preceded the one capture and sole observation. Root made no
@@ -28,15 +54,15 @@ Preserve the initial close-guard refusal and corrected socket-path audit.
 
 Exact static follow-up binds the optional parent to the named own container's
 `e78` position and its traversal byte. The next observer handles only that typed
-identity join; unknown objects remain unread. This new branch is not live verified.
-The next construction adapter connects separate EnsureOpen and SelectBuilding
+identity join; unknown objects remain unread. Run075 verified the opener branch;
+the choice branch remains unverified. The construction adapter connects separate EnsureOpen and SelectBuilding
 receipts to the existing shared controller. It uses a private typed identity
 scope from the same witnessed observation, an exact Standard/Sprite candidate
 and one ordinary pointer attempt. All input domains block on unresolved
 construction delivery; no-ops and successful historical replays send no input.
 The profile is independently opted in and workers remain off for its first gate.
-Live action acceptance is pending. Next: validate the composition, then a bounded
-action/no-op/replay gate; do not repeat the passed named-binding probe alone.
+Live action acceptance is pending after Run075's refusal. Diagnose the changing
+witness before the next action/no-op/replay gate; do not repeat the passed named-binding probe alone.
 Map placement remains separate.
 
 Foundation commit `db7e2a3` passed host and actual Linux fixtures, but Windows CI

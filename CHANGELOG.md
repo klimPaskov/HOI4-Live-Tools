@@ -2,6 +2,15 @@
 
 ## Unreleased native preview
 
+- Record Run075's first construction-action refusal: the initial controls read
+  passed in 44 ms, but `ensure_open` returned `torn_read` before durable intent
+  or input. Luna stopped, released control and made no further game observations.
+  Four empty action journals, finalized recording and normal closure were audited.
+- Add opt-in construction witness diagnostics identifying the producer section,
+  first-read ordinal, read size and changed-byte position without addresses or
+  payload. Witness checks still refuse unchanged; no automatic retry is added.
+  Run075's exact changing field remains unknown.
+
 - Add an explicitly opted-in Linux construction action adapter for ensuring the
   panel is open and selecting one canonical ordinary building type. Pin private
   witnessed identities and the original point before one ordinary click; verify

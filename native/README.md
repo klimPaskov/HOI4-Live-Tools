@@ -90,9 +90,13 @@ Local gates and coordinates do not prove current-frame routing, global modal
 clearance or engine eligibility. Run073 failed its global registry-name check;
 Run074 passed the corrected requested-name lookup in 81 ms, resolving both named
 bindings, dockyard selection and optional geometry. Both local dispatch gates
-remained false because the optional parent pointers were nonnull. The next
-preview admits only an exact join to the named own window's typed parent and
-observes its traversal flag; that new branch is not yet live verified.
+remained false because the optional parent pointers were nonnull. The preview
+now admits only an exact join to the named own window's typed parent and observes
+its traversal flag. Run075 verified this join for the opener in a 44 ms read;
+the choice branch remains unverified. Construction torn-read errors include a
+producer section, first-read ordinal, size and changed-byte index. These are
+diagnostic locations within the snapshot, not addresses or memory contents;
+checks still fail without retry.
 This tool cannot open the panel, select a building or place construction.
 
 An owned Linux session can opt into `construction_profile` using
@@ -100,7 +104,8 @@ An owned Linux session can opt into `construction_profile` using
 with `ensure_open` and `select_building` stages; selection requires a canonical
 `building_id`. Both require an exclusive `lease_token` and stable `request_id`.
 The profile supports only the owned 512×288 client and exact Standard/Sprite
-controls. Live construction action acceptance is pending.
+controls. Run075's first opening attempt refused a changing snapshot before
+durable intent or input. Live construction action acceptance is pending.
 
 Each stage permits at most one ordinary click, with private identities and the
 original point checked again immediately before input. Already-matching state

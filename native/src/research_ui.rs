@@ -11,7 +11,7 @@ use crate::{
 };
 use serde_json::{json, Value};
 use std::{
-    cell::RefCell,
+    cell::{Cell, RefCell},
     collections::BTreeMap,
     time::{Instant, SystemTime, UNIX_EPOCH},
 };
@@ -20,18 +20,55 @@ use std::{
 /// may avoid duplicate reads, but their original bytes must pass finish below.
 pub(crate) struct Witnesses<'a> {
     process: &'a dyn Process,
-    reads: RefCell<BTreeMap<(u64, usize), Vec<u8>>>,
+    reads: RefCell<BTreeMap<(u64, usize), WitnessRead>>,
+    section: Cell<Option<&'static str>>,
+}
+struct WitnessRead {
+    bytes: Vec<u8>,
+    section: Option<&'static str>,
+    ordinal: usize,
+}
+impl WitnessRead {
+    fn changed(&self, message: &'static str, current: &[u8]) -> Error {
+        let Some(section) = self.section else {
+            return Error::new("torn_read", message);
+        };
+        let changed_byte = self
+            .bytes
+            .iter()
+            .zip(current)
+            .position(|(a, b)| a != b)
+            .unwrap_or(self.bytes.len().min(current.len()));
+        // Locations within a request only. Never expose addresses or payload,
+        // and never turn a failed witness into a successful or retried read.
+        Error::new(
+            "torn_read",
+            format!(
+                "{message}; section={section}; read={}; size={}; changed_byte={changed_byte}",
+                self.ordinal,
+                self.bytes.len()
+            ),
+        )
+    }
 }
 impl ReadMemory for Witnesses<'_> {
     fn read(&self, address: u64, size: usize) -> Result<Vec<u8>> {
         let bytes = self.process.read(address, size)?;
         let mut reads = self.reads.borrow_mut();
         if let Some(prior) = reads.get(&(address, size)) {
-            if *prior != bytes {
-                return Err(Error::new("torn_read", "Snapshot field changed"));
+            if prior.bytes != bytes {
+                return Err(prior.changed("Snapshot field changed", &bytes));
             }
         } else {
-            reads.insert((address, size), bytes.clone());
+            let ordinal = reads.len();
+            reads.insert(
+                (address, size),
+                WitnessRead {
+                    bytes: bytes.clone(),
+                    section: self.section.get(),
+                    ordinal,
+                },
+            );
         }
         Ok(bytes)
     }
@@ -41,7 +78,13 @@ impl Witnesses<'_> {
         Witnesses {
             process,
             reads: RefCell::new(BTreeMap::new()),
+            section: Cell::new(None),
         }
+    }
+    /// Opt-in producer labels for subsequent first reads. Repeated witnesses
+    /// retain the section and zero-based ordinal where they were first read.
+    pub(crate) fn section(&self, section: &'static str) {
+        self.section.set(Some(section));
     }
     pub(crate) fn finish(&self) -> Result<(usize, usize)> {
         let reads = self.reads.borrow();
@@ -61,8 +104,8 @@ impl Witnesses<'_> {
                     "Witness batch response length mismatch",
                 ));
             }
-            if current != prior {
-                return Err(Error::new("torn_read", "Snapshot witness changed"));
+            if *current != prior.bytes {
+                return Err(prior.changed("Snapshot witness changed", current));
             }
             bytes += size;
         }
@@ -442,10 +485,7 @@ fn observe(
 ) -> Result<(Value, Option<UiContext>)> {
     let start = Instant::now();
     process.begin_snapshot()?;
-    let observed = Witnesses {
-        process,
-        reads: RefCell::new(BTreeMap::new()),
-    };
+    let observed = Witnesses::new(process);
     let r = Reader::new(&observed);
     let base = process.image_base();
     let gs = r.u64(base + 0x44086a8)?;
@@ -706,10 +746,7 @@ fn observe_target(
 ) -> Result<(Value, Option<UiContext>)> {
     let start = Instant::now();
     process.begin_snapshot()?;
-    let observed = Witnesses {
-        process,
-        reads: RefCell::new(BTreeMap::new()),
-    };
+    let observed = Witnesses::new(process);
     let r = Reader::new(&observed);
     let base = process.image_base();
     let gs = r.u64(base + 0x44086a8)?;
@@ -984,7 +1021,14 @@ mod vectored_finish_tests {
     impl ReadMemory for Fake {
         fn read(&self, _: u64, n: usize) -> Result<Vec<u8>> {
             self.scalar.set(self.scalar.get() + 1);
-            Ok(vec![1; n])
+            Ok(vec![
+                if self.mode == 4 && self.scalar.get() > 1 {
+                    2
+                } else {
+                    1
+                };
+                n
+            ])
         }
         fn read_many(&self, requests: &[(u64, usize)]) -> Result<Vec<Vec<u8>>> {
             self.batch.set(self.batch.get() + 1);
@@ -997,6 +1041,7 @@ mod vectored_finish_tests {
                 3 => {
                     values[0].pop();
                 }
+                5 => values[1][3] = 2,
                 _ => {}
             }
             Ok(values)
@@ -1017,10 +1062,7 @@ mod vectored_finish_tests {
             batch: Cell::new(0),
             mode: 0,
         };
-        let w = Witnesses {
-            process: &f,
-            reads: RefCell::new(BTreeMap::new()),
-        };
+        let w = Witnesses::new(&f);
         w.read(0x10000, 4).unwrap();
         w.read(0x10010, 8).unwrap();
         assert_eq!(w.finish().unwrap(), (2, 12));
@@ -1035,13 +1077,90 @@ mod vectored_finish_tests {
                 batch: Cell::new(0),
                 mode,
             };
-            let w = Witnesses {
-                process: &f,
-                reads: RefCell::new(BTreeMap::new()),
-            };
+            let w = Witnesses::new(&f);
             w.read(0x10000, 4).unwrap();
             w.read(0x10010, 8).unwrap();
             assert_eq!(w.finish().unwrap_err().code, code);
+        }
+    }
+    #[test]
+    fn diagnostic_sections_do_not_add_reads_or_change_success_metrics() {
+        let f = Fake {
+            scalar: Cell::new(0),
+            batch: Cell::new(0),
+            mode: 0,
+        };
+        let w = Witnesses::new(&f);
+        w.section("opener");
+        w.read(0x10010, 8).unwrap();
+        w.section("choice");
+        w.read(0x10000, 4).unwrap();
+        w.read(0x10010, 8).unwrap();
+        assert_eq!(w.finish().unwrap(), (2, 12));
+        assert_eq!((f.scalar.get(), f.batch.get()), (3, 1));
+    }
+    #[test]
+    fn diagnostic_finish_identifies_first_read_without_address_or_payload() {
+        let f = Fake {
+            scalar: Cell::new(0),
+            batch: Cell::new(0),
+            mode: 5,
+        };
+        let w = Witnesses::new(&f);
+        w.section("opener");
+        // Reverse address order: diagnostic ordinal follows first observation,
+        // never BTree sorting or a claim about which mutation happened first.
+        w.read(0x10010, 8).unwrap();
+        w.section("choice");
+        w.read(0x10000, 4).unwrap();
+        w.read(0x10010, 8).unwrap();
+        let e = w.finish().unwrap_err();
+        assert_eq!(e.code, "torn_read");
+        assert_eq!(
+            e.message,
+            "Snapshot witness changed; section=opener; read=0; size=8; changed_byte=3"
+        );
+        assert_eq!((f.scalar.get(), f.batch.get()), (3, 1));
+    }
+    #[test]
+    fn diagnostic_repeated_read_preserves_original_section_and_refuses() {
+        let f = Fake {
+            scalar: Cell::new(0),
+            batch: Cell::new(0),
+            mode: 4,
+        };
+        let w = Witnesses::new(&f);
+        w.section("panel");
+        w.read(0x10000, 4).unwrap();
+        w.section("blockers");
+        let e = w.read(0x10000, 4).unwrap_err();
+        assert_eq!(e.code, "torn_read");
+        assert_eq!(
+            e.message,
+            "Snapshot field changed; section=panel; read=0; size=4; changed_byte=0"
+        );
+        assert_eq!((f.scalar.get(), f.batch.get()), (2, 0));
+    }
+    #[test]
+    fn unlabeled_witness_diagnostics_and_short_read_categories_stay_unchanged() {
+        for (mode, code, message) in [
+            (1, "torn_read", "Snapshot witness changed"),
+            (2, "short_read", "Witness batch response count mismatch"),
+            (3, "short_read", "Witness batch response length mismatch"),
+        ] {
+            let f = Fake {
+                scalar: Cell::new(0),
+                batch: Cell::new(0),
+                mode,
+            };
+            let w = Witnesses::new(&f);
+            if mode != 1 {
+                w.section("opener");
+            }
+            w.read(0x10000, 4).unwrap();
+            w.read(0x10010, 8).unwrap();
+            let e = w.finish().unwrap_err();
+            assert_eq!((e.code, e.message.as_str()), (code, message));
         }
     }
 }

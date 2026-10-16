@@ -315,9 +315,12 @@ pub(crate) fn observe(
     let trace = scope::Recorder::new(&witnesses);
     let r = Reader::new(&trace);
     let base = process.image_base();
+    witnesses.section("own_production");
     let (country, production) = economy::own_production(&r, base)?;
+    witnesses.section("campaign");
     let campaign = game::context_from_reader(&r, base)?;
     let [gs, idler, _] = campaign.anchors;
+    witnesses.section("interface");
     let registry = r.u64(idler + 0x4f8)?;
     exact(&r, registry, base + 0x42736f8)?;
     if r.u64(base + 0x45778e0)? != registry {
@@ -329,7 +332,9 @@ pub(crate) fn observe(
         return Err(invalid("Construction manager must belong to own idler"));
     }
     let mode = r.i32(manager + 0x3d8)?;
+    witnesses.section("selection");
     let selected = selection::observe(&r, base, manager)?;
+    witnesses.section("panel");
     let panel = r.u64(manager + 0x150)?;
     let mut panel_root = None;
     let panel_state = if panel == 0 {
@@ -343,6 +348,7 @@ pub(crate) fn observe(
         panel_root = Some(root);
         binding::local(&r, base, root, registry)?
     };
+    witnesses.section("gates");
     let flags150 = r.byte(registry + 0x150)?;
     let flags12 = r.byte(registry + 0x12)?;
     let receiver158 = r.u64(registry + 0x158)? == 0;
@@ -362,6 +368,7 @@ pub(crate) fn observe(
         "complete_engine_eligibility_available":false});
     let mut opener_identity = None;
     let mut choice_identity = None;
+    witnesses.section("opener");
     let opener = opener(
         &r,
         base,
@@ -372,6 +379,7 @@ pub(crate) fn observe(
         &trace,
         &mut opener_identity,
     )?;
+    witnesses.section("choice");
     let choice = choice(
         &r,
         base,
@@ -383,8 +391,10 @@ pub(crate) fn observe(
         &trace,
         &mut choice_identity,
     )?;
+    witnesses.section("blockers");
     trace.blockers(manager);
     let blockers = blockers(&r, base, country, idler, manager, registry)?;
+    witnesses.section("input_geometry");
     let geometry = if include_geometry {
         crate::gui::input_geometry_from_reader(&r, base)?
     } else {
