@@ -2,6 +2,8 @@ use super::*;
 use hoi4_live_native::construction::controls::snapshot as observe_controls;
 #[path = "controls/names.rs"]
 mod names;
+#[path = "controls/optional_gate.rs"]
+mod optional_gate;
 const REG: u64 = 0x200000;
 const MAN: u64 = 0x210000;
 const PANEL: u64 = 0x220000;

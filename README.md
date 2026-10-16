@@ -87,12 +87,12 @@ produced work and factory counters. It uses fresh building-template keys and
 explicit unsupported coverage. Luna verified one Linux dockyard line across
 advancing days in 31–39 ms per read. Optional location/UI reads matched one
 state-level dockyard and its label in 35–37 ms; that run retained a lease-order
-deviation. Optional UI reads also expose the canonical selected building; that
-addition has static/generated evidence only. General UI freshness, railway
-coverage and construction controls remain pending.
-The combined controls preview failed its first live read on a registry-name
-check. Its corrected lookup is awaiting live validation; no construction input
-adapter is enabled.
+deviation. A later combined read resolved the construction opener, dockyard
+choice, canonical selection and optional geometry in 81 ms, with correct lease
+ordering and no player input. Both local dispatch gates remained false.
+General UI freshness, railway coverage and construction actions remain pending.
+The next source handles a narrowly verified own-parent gate and adds durable
+construction-stage foundations; no construction input adapter is enabled.
 Army, economy and naval automation are still in development. See
 [the expansion plan](docs/CLAUSEWITZ_FOUNDATION.md) and
 [current acceptance work](docs/LINUX_RUST_HANDOFF.md).

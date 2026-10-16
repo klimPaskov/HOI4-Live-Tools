@@ -77,7 +77,7 @@ construction mode and canonical building key, even with an empty queue or closed
 panel. Mode 0 is inactive; modes 1 and 3 identify ordinary and railway choices.
 Other modes are explicitly unsupported and do not read template payload. Active
 choices require a fresh public catalog, matching ordinal and the railway cache
-relationship. This readback has static/generated evidence only; selection proves
+relationship. Run074 observed an ordinary dockyard selection; railway mode remains unverified. Selection proves
 neither placement eligibility nor effective map routing or delivered input.
 
 `hoi4_construction_controls({"building_id":"dockyard","include_geometry":true})`
@@ -87,11 +87,19 @@ fresh catalog identity and scoped politics/Focus/research blockers in one witnes
 snapshot. Geometry is optional and defaults off. Hidden construction panels omit
 choice enumeration; unknown concrete controls or renderers remain unavailable.
 Local gates and coordinates do not prove current-frame routing, global modal
-clearance or engine eligibility. Run073's only request failed before returning
-details because the original reader rejected any repeated registry name. The
-corrected preview requires only the requested key to be unique; full bounded
-validation remains. Its live validation is pending; this tool cannot
-open the panel, select a building or place construction.
+clearance or engine eligibility. Run073 failed its global registry-name check;
+Run074 passed the corrected requested-name lookup in 81 ms, resolving both named
+bindings, dockyard selection and optional geometry. Both local dispatch gates
+remained false because the optional parent pointers were nonnull. The next
+preview admits only an exact join to the named own window's typed parent and
+observes its traversal flag; that new branch is not yet live verified.
+This tool cannot open the panel, select a building or place construction.
+
+`construction_stage` supplies the unregistered durable foundation for separate
+EnsureOpen and SelectBuilding actions. Already-matching state produces a no-op;
+uncertain delivery remains blocking across restart, and terminal refusals retain
+their bounded diagnostic cause. A concrete witnessed observer, renderer policy,
+shared-domain integration and ordinary dispatcher are still required before use.
 
 An owned session can enable prepared research, Focus and durable daily plans.
 Recorded run030 verified four-slot worker assignment, idempotent updates,

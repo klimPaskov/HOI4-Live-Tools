@@ -33,6 +33,7 @@ mod node_unit_cache;
 mod info_research_button;
 
 pub mod construction;
+pub mod construction_stage;
 pub mod economy;
 pub mod production_lines;
 

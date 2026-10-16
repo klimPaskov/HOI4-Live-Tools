@@ -1,6 +1,7 @@
 //! Exact named Standard controls and FIRST VOID construction listeners.
 use super::*;
 use crate::node_reuse::Reuse;
+mod optional_gate;
 
 pub(super) fn local(r: &Reader<'_>, base: u64, window: u64, registry: u64) -> Result<Value> {
     if window == 0 {
@@ -166,15 +167,15 @@ pub(super) fn control(
     }
     let flags = u32::from_le_bytes(r.read(button + 0x74, 4)?.try_into().unwrap());
     let state = r.i32(button + 0xac)?;
-    let optional = r.u64(button + 0x1a8)? == 0;
+    let optional = optional_gate::observe(r, base, window, button)?;
     let blocked = r.byte(button + 0x201)?;
     let delegate = r.u64(button + 0xd0)? == 0;
     let callback = callback(r, base, owner, button, kind)?;
     out["callback"] = callback;
     out["local"] = json!({"state_ac_raw":state,"flags74_raw":flags,
-        "optional_gate_1a8_null":optional,"block201_raw":blocked,"delegate_d0_null":delegate,
+        "optional_gate_1a8_null":optional["absent"],"optional_gate":optional,"block201_raw":blocked,"delegate_d0_null":delegate,
         "event_mask_d8_raw":r.i32(button+0xd8)?,"shortcut_dc_raw":r.byte(button+0xdc)?,
-        "conservative_dispatch_ready":matches!(state,0|2) && flags&0xc00==0x800 && optional && blocked==0 && delegate});
+        "conservative_dispatch_ready":matches!(state,0|2) && flags&0xc00==0x800 && optional["clear"]==true && blocked==0 && delegate});
     if out["callback"]["verified"] != true {
         out["reason"] = json!("callback_binding_unavailable");
         return Ok(out);

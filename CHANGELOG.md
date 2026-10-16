@@ -2,11 +2,21 @@
 
 ## Unreleased native preview
 
+- Record Run074's single combined construction read: five successful player RPCs,
+  correct lease/capture ordering, 81 ms controls response and zero player input.
+  Preserve both false local dispatch gates and the recording-manifest cleanup
+  race; finalized recording, canonical release and normal process closure passed.
+- Observe Standard's optional parent gate only after joining the exact named own
+  window's typed position object. Unknown pointers/types remain unavailable.
+  Add durable EnsureOpen/SelectBuilding stage foundations with pinned identity,
+  no-op handling, once-only dispatch and persisted uncertainty/refusal causes.
+  No construction input adapter is registered; live action acceptance is pending.
+
 - Record Run073's failed combined controls read: correct lease ordering, one
   capture, zero player input and `Unique construction control names required`.
   Correct the overstrict registry policy to require only the requested name to
   be unique, including location text. Preserve full bounded validation and final
-  witnesses; the exact failing collection/name and live correction remain unverified.
+  witnesses; the exact failing collection/name remains unknown. Run074 later passed the corrected lookup.
 
 - Add read-only `hoi4_construction_controls` for one canonical building ID.
   One witnessed snapshot joins the nested topbar opener, catalog-backed choice,

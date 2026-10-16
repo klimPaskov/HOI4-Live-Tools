@@ -14,16 +14,29 @@ one day of advancement passed. The final native posting request timed out;
 observations and verified ordinary input. Neither a clean two-year run nor a
 full campaign has passed.
 
-Latest: Run073 on `eebe76f` failed its single combined construction-controls
-request in 26.716 ms with `Unique construction control names required`. Luna
-acquired before its one capture and sole game observation, then released without
-retry or input. Root's two setup clicks opened construction and selected dockyard;
-no map placement occurred. Audit verified canonical release, empty action journals,
-the 436.666-second recording, normal game exit 0 and absence of all owned processes.
-The error did not identify the failed collection or duplicate name. Static lookup
-review showed the reader's global-name uniqueness policy was overstrict; the next
-source requires uniqueness only for the requested key while still validating every
-bounded entry and final witness. Live correction and ordinary actions remain pending.
+Latest: Run074 on `7e36594` passed its single combined construction-controls
+read in 81.060 ms: exact opener/dockyard callback bindings, canonical ordinary
+selection, settled panel and optional geometry returned. Five player RPCs all
+succeeded; acquire preceded the one capture and sole observation. Root made no
+competing reads/input. Both local dispatch-ready flags remained false because
+optional parent pointers were nonnull. No construction input or placement occurred.
+Audit verified canonical release, empty action journals, unchanged 127 source
+inputs/26 helpers, the 286.333-second recording, normal exit 0 and closure of all
+owned processes. The stop helper raced a manifest rewrite; read-only recovery
+verified finalization without another signal, then one actual normal close ran.
+Preserve the initial close-guard refusal and corrected socket-path audit.
+
+Exact static follow-up binds the optional parent to the named own container's
+`e78` position and its traversal byte. The next observer handles only that typed
+identity join; unknown objects remain unread. This new branch is not live verified.
+The unregistered construction-stage foundation now supports separate EnsureOpen
+and SelectBuilding receipts, borrowed authority, pinned private identity and
+blocking durable uncertainty with exact bounded causes. Next: wire the witnessed
+observer/candidate and ordinary dispatcher, then a bounded action gate; do not
+repeat the passed named-binding probe alone. Map placement remains separate.
+
+Run073's original global-name uniqueness failure remains recorded; the exact
+collection and duplicate name were not retained. Run074 does not recover them.
 
 Run072 on `0822dcd` matched a paused dockyard's own state 56 and stored
 UI label Weser-Ems against installed public state/localization files. Luna's UI

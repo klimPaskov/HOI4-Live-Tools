@@ -1,6 +1,6 @@
 # Clausewitz-MCP Linux validation
 
-Updated 15 October 2026. This records preflight and partial licensed-game evidence for
+Updated 16 October 2026. This records preflight and partial licensed-game evidence for
 the [Linux-first migration](LINUX_RUST_HANDOFF.md). One **gpt-6-luna player at
 medium reasoning** used the guarded upstream MCP in an actual Linux Germany
 campaign. Focus, four research assignments, unpause and one day of advancement
@@ -4635,3 +4635,41 @@ preview permits unrelated duplicates while rejecting an ambiguous requested
 control, retaining all bounded paired-array checks and final witnesses. That
 correction does not identify the actual duplicate from Run073 and has not yet
 passed live validation. No construction input or campaign acceptance is claimed.
+
+## Run074: combined construction observation passed — 16 October 2026 UTC
+
+Immutable source `7e36594d6715fe6b69ec55c9457b65f9f26d7f71` passed 862 host
+Rust 1.86 tests, 953 Python tests (37 skips), compiler/format/Clippy/MSRV checks,
+974 reported actual Linux checks (972 substantive, including five X11 cases),
+and all nine exact-head CI jobs before launch.
+
+One Luna medium player made five successful RPCs: metadata discovery, lease
+acquisition, one `hoi4_construction_controls` request for dockyard with geometry,
+release and status. One owned capture followed acquisition and preceded the
+controls request. Root made no competing reads/input during this grant. The
+**81.060 ms** response resolved exact opener/choice callbacks, complete canonical
+choice coverage, paused GER at 1 January 1936 12:00, managed mode 17, selected
+ordinary mode 1/dockyard, settled construction panel and optional typed geometry.
+No retries or player input occurred. Routing, current-frame, global-modal and
+placement eligibility claims remained false, as did both local dispatch-ready
+flags. The optional parent pointers were nonnull; their identity/flag payload
+was not read by this immutable source. This is observation evidence only.
+
+Recorded setup used vanilla Normal/historical FAIR Germany, seven menu inputs
+through Start and two separate open/select clicks, with no map placement.
+One early campaign-unavailable response during loading remains recorded; three
+subsequent baseline overviews succeeded. Independent stopped audit verified
+canonical release/status zero, empty clock/research/Focus journals and unchanged
+127 source inputs/26 frozen helpers.
+
+Cleanup retained a helper race: the stop helper sent its owned supervisor signal,
+then failed to parse the manifest while it was being rewritten. The first close
+helper invocation refused missing integrity metadata before creating a close
+intent or sending input. A separate read-only recovery verified both recorder
+instances absent and the finalized **286.333-second** recording, without another
+signal. One actual ordinary game close then exited normally with code 0 in
+**2.211 seconds**. All four guest instances and six host broker/transport instances
+were absent. The first host closure receipt used shortened socket names; an
+amendment checked the actual protocol socket paths absent. Yama remained 1.
+The cleanup deviations do not erase the successful read or establish action or
+campaign acceptance.

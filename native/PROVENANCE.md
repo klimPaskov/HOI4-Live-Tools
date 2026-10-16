@@ -742,3 +742,31 @@ five container/button lookup scopes, target positions, ambiguity before payload,
 malformed later unrelated entries, unselected payload exclusion and final-witness
 changes; location-text fixtures cover the equivalent reader. Live correction
 remains unverified and no input authority is added.
+
+### Own optional parent gate and durable construction foundation
+
+Run074 resolved both named controls and their exact callbacks, but the null-only
+optional-gate policy refused local readiness. Its nonnull target identities and
+payloads were not read, so later static work cannot retroactively validate them.
+Exact Standard virtual `0xf0` resolves to `0x2e732e0..0x2e73343` (FDE `0x3ed57b4`)
+and stores the supplied parent into button `+0x1a8`. Exact Container constructor
+`0x2e7cc30..0x2e7f184` (FDE `0x3ed9964`) creates its `+0xe78` position with primary
+`0x43484f0`; at `0x2e7e38e..0x2e7e39b` it passes that object to the named button's
+virtual `0xf0`. Standard event handler `0x2e73a10..0x2e73a3a` requires its byte
+`+0x128` nonzero. Container show/hide helpers write that traversal byte to one/zero
+at `0x2e85a9d` / `0x2e85ee6`.
+
+The new observer accepts only absent gate or this exact own-window position join,
+with exact type before the single boolean payload byte. A different pointer or
+unknown type remains unavailable without optional payload reads. The same final
+witnesses cover all identities and flags. This does not enable input or prove
+frame currency, routing, engine eligibility or placement. Live validation of the
+nonnull branch is pending.
+
+The durable construction-stage module follows the existing research-stage file,
+lease and once-only intent policy, using construction-specific state and targets.
+Its backend must supply a same-witness private identity scope, admitted point,
+shared unresolved-domain guards and an ordinary dispatcher. It preserves actual
+bounded refusal causes and blocking uncertainty across restart. No runtime
+adapter or new MCP action is registered; generated module tests are not live
+construction-action evidence.
