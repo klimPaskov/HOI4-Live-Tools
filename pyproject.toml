@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "hoi4-live-tools"
 version = "1.1.0"
-description = "An MCP server that lets AI agents drive a running Hearts of Iron IV on Windows: launch, load, read the screen, play, test mods."
+description = "Cross-platform stdio MCP tools for Hearts of Iron IV observation and player actions."
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "Apache-2.0" }
@@ -13,6 +13,7 @@ authors = [{ name = "Klim Pashkov" }]
 keywords = ["hoi4", "hearts-of-iron-iv", "mcp", "modding", "testing", "agents"]
 classifiers = [
   "Operating System :: Microsoft :: Windows",
+  "Operating System :: MacOS :: MacOS X",
   "Programming Language :: Python :: 3",
   "Topic :: Games/Entertainment",
 ]
@@ -20,6 +21,11 @@ dependencies = [
   "numpy>=1.21",
   "Pillow>=9.0",
   "opencv-python-headless>=4.5",
+  "pyobjc-framework-Cocoa>=10,<12; sys_platform == 'darwin'",
+  "pyobjc-framework-Quartz>=10,<12; sys_platform == 'darwin'",
+  "pyobjc-framework-ApplicationServices>=10,<12; sys_platform == 'darwin'",
+  "pyobjc-framework-ScreenCaptureKit>=10,<12; sys_platform == 'darwin'",
+  "pyobjc-framework-Vision>=10,<12; sys_platform == 'darwin'",
 ]
 
 [project.scripts]
@@ -29,4 +35,4 @@ hoi4-live-tools = "hoi4_live.__main__:main"
 include = ["hoi4_live*"]
 
 [tool.setuptools.package-data]
-hoi4_live = ["ocr/ocr_host.ps1"]
+hoi4_live = ["ocr/ocr_host.ps1", "game/play_policy.json", "engine/clausewitz/LICENSE"]

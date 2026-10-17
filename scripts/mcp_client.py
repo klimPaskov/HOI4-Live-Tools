@@ -23,7 +23,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 class McpClient:
     def __init__(self, command=None, image_dir=None, transcript=None):
-        self.command = command or [os.path.join(ROOT, "hoi4-live-tools.cmd")]
+        self.command = command or [sys.executable, "-m", "hoi4_live"]
         self.image_dir = image_dir
         self.transcript = transcript
         self.next_id = 1
@@ -32,6 +32,8 @@ class McpClient:
         self.cv = threading.Condition()
         self.proc = None
         self.image_count = 0
+        self.write_lock = threading.RLock()
+        self.active_requests = {}
 
     def __enter__(self):
         self.proc = subprocess.Popen(self.command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
@@ -56,6 +58,8 @@ class McpClient:
         for raw in self.proc.stdout:
             msg = json.loads(raw.decode("utf-8"))
             if "id" in msg and ("result" in msg or "error" in msg):
+                with self.write_lock:
+                    self.active_requests.pop(msg["id"], None)
                 with self.cv:
                     self.responses[msg["id"]] = msg
                     self.cv.notify_all()
@@ -68,28 +72,62 @@ class McpClient:
             sys.stderr.write("[server] " + raw.decode("utf-8", "replace"))
 
     def send(self, msg):
-        self._log("client->server", msg)
-        self.proc.stdin.write((json.dumps(msg) + "\n").encode("utf-8"))
-        self.proc.stdin.flush()
+        # Cancellation may arrive from a second HTTP thread while a call waits.
+        # One complete JSON line must reach stdio without interleaved writes.
+        with self.write_lock:
+            self._log("client->server", msg)
+            self.proc.stdin.write((json.dumps(msg) + "\n").encode("utf-8"))
+            self.proc.stdin.flush()
+
+    def cancel_active_tool(self, reason="cancelled by bridge client"):
+        """Request cancellation of the one active tool, preserving the server.
+
+        This acknowledges only the notification, never an action rollback or
+        completion. The original request must still receive its terminal result.
+        """
+        with self.write_lock:
+            active = [rid for rid, method in self.active_requests.items() if method == "tools/call"]
+            if len(active) != 1:
+                return {"cancel_requested": False, "reason": "no_unique_active_tool"}
+            rid = active[0]
+            self.send({"jsonrpc": "2.0", "method": "notifications/cancelled",
+                       "params": {"requestId": rid, "reason": reason}})
+            return {"cancel_requested": True, "request_id": rid}
 
     def request(self, method, params=None, timeout=1200):
-        rid = self.next_id
-        self.next_id += 1
-        msg = {"jsonrpc": "2.0", "id": rid, "method": method}
-        if params is not None:
-            msg["params"] = params
-        self.send(msg)
-        deadline = time.time() + timeout
-        with self.cv:
-            while rid not in self.responses:
-                left = deadline - time.time()
-                if left <= 0:
-                    raise TimeoutError(f"{method} timed out")
-                self.cv.wait(left)
-            resp = self.responses.pop(rid)
-        resp = self._strip_images(resp)
-        self._log("server->client", resp)
-        return resp
+        with self.write_lock:
+            rid = self.next_id
+            self.next_id += 1
+            msg = {"jsonrpc": "2.0", "id": rid, "method": method}
+            if params is not None:
+                msg["params"] = params
+            self.send(msg)
+            self.active_requests[rid] = method
+        received = False
+        try:
+            deadline = time.monotonic() + timeout
+            with self.cv:
+                while rid not in self.responses:
+                    left = deadline - time.monotonic()
+                    if left <= 0:
+                        raise TimeoutError(f"{method} timed out")
+                    self.cv.wait(left)
+                resp = self.responses.pop(rid)
+                received = True
+            resp = self._strip_images(resp)
+            self._log("server->client", resp)
+            return resp
+        except TimeoutError:
+            # A client deadline does not mean the server stopped. Request its
+            # cooperative cancellation and retain the ID until its response.
+            if method == "tools/call":
+                self.send({"jsonrpc": "2.0", "method": "notifications/cancelled",
+                           "params": {"requestId": rid, "reason": "client request deadline exceeded"}})
+            raise
+        finally:
+            if received or method != "tools/call":
+                with self.write_lock:
+                    self.active_requests.pop(rid, None)
 
     def _strip_images(self, resp):
         res = resp.get("result")

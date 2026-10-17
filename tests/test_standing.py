@@ -123,7 +123,7 @@ class ClockWithOrdersTests(ClockCase):
         def spy(session, want, **kw):
             events.append(want)
             return orig(session, want, **kw)
-        self.session.standing.set("r", ["tech_done"], do=[call(tech="a")])
+        self.session.standing.set("r", ["tech_done"], do=[call(tech="a")], pause=True)
         self.feed(script={102: {"techs": 11}})
         with mock.patch.object(clock_mod, "set_running", spy):
             self.run_with_orders(budget_days=4)

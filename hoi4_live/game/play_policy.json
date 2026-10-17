@@ -1,0 +1,544 @@
+{
+  "version": 1,
+  "id": "hoi4-campaign-fair-meta-v1",
+  "default_mode": "fair",
+  "showcase_mode": "fair",
+  "modes": [
+    "fair",
+    "meta"
+  ],
+  "prohibited_in_both": [
+    "console",
+    "debug_launch",
+    "eval",
+    "fire_event",
+    "save_editing",
+    "memory_writes",
+    "hidden_enemy_intelligence",
+    "reload_to_undo"
+  ],
+  "fair_prohibited": [
+    "space_marines",
+    "naval_invasion_exploit_spam",
+    "paratrooper_exploit_spam",
+    "exploit_templates",
+    "ai_baiting",
+    "engine_bug_exploits"
+  ],
+  "fair_permitted_examples": [
+    "encirclements",
+    "concentrated_breakthroughs",
+    "air_superiority_before_offensives",
+    "defensive_lines",
+    "combined_arms",
+    "sound_economy"
+  ],
+  "meta_scope": "Competitive metas and exploits through reviewed ordinary player actions; all universal prohibitions still apply.",
+  "enforcement_limits": "Deterministic FAIR review can validate normal land orders against fresh own-army IDs, public target IDs, complete template composition and bounded order history. It cannot infer strategic intent or prove absence of every engine exploit. Unsupported actions require a separate reviewed adapter; raw input remains unavailable. No live acceptance is implied. There is no live semantic review provider; deterministic checks do not establish intent.",
+  "evidence_max_age_seconds": 5,
+  "review_sources": [
+    "own_country_telemetry",
+    "visible_screen",
+    "verified_read_only_memory"
+  ],
+  "fair_review_requirements": [
+    "ordinary_player_action",
+    "player_visible_state_only",
+    "reviewed_action_scope"
+  ],
+  "resume_review_requirements": [
+    "interruption_resume_without_rollback",
+    "save_content_hash_verified",
+    "campaign_identity_verified",
+    "latest_progress_verified"
+  ],
+  "tools": {
+    "hoi4_advance": {
+      "default_action": null,
+      "actions": {
+        "_call": "allow"
+      }
+    },
+    "hoi4_army": {
+      "default_action": "list",
+      "actions": {
+        "list": "allow",
+        "templates": "allow",
+        "design": "fair_review",
+        "recruit": "fair_review",
+        "deploy": "fair_review",
+        "create_army": "allow",
+        "assign": "allow",
+        "general": "allow",
+        "rename": "allow",
+        "army_group": "allow"
+      }
+    },
+    "hoi4_briefing": {
+      "default_action": null,
+      "actions": {
+        "_call": "allow"
+      }
+    },
+    "hoi4_click": {
+      "default_action": null,
+      "actions": {
+        "_call": "deny"
+      }
+    },
+    "hoi4_clock": {
+      "default_action": "status",
+      "actions": {
+        "status": "allow",
+        "join": "allow",
+        "stop": "allow",
+        "pause": "allow",
+        "resume": "allow"
+      }
+    },
+    "hoi4_console": {
+      "default_action": null,
+      "actions": {
+        "_call": "deny"
+      }
+    },
+    "hoi4_construction": {
+      "default_action": "queue",
+      "actions": {
+        "queue": "allow",
+        "buttons": "allow",
+        "build": "allow",
+        "plan": "allow"
+      }
+    },
+    "hoi4_decisions": {
+      "default_action": "list",
+      "actions": {
+        "list": "allow",
+        "details": "allow",
+        "take": "allow"
+      }
+    },
+    "hoi4_diplomacy": {
+      "default_action": "view",
+      "actions": {
+        "view": "allow",
+        "act": "fair_review",
+        "trade": "allow"
+      }
+    },
+    "hoi4_drag": {
+      "default_action": null,
+      "actions": {
+        "_call": "deny"
+      }
+    },
+    "hoi4_eval_effect": {
+      "default_action": null,
+      "actions": {
+        "_call": "deny"
+      }
+    },
+    "hoi4_fire_event": {
+      "default_action": null,
+      "actions": {
+        "_call": "deny"
+      }
+    },
+    "hoi4_focus": {
+      "default_action": "list",
+      "actions": {
+        "list": "allow",
+        "details": "allow",
+        "select": "allow",
+        "progress": "allow",
+        "cancel": "allow"
+      }
+    },
+    "hoi4_front": {
+      "default_action": "situation",
+      "actions": {
+        "situation": "allow",
+        "plan": "allow",
+        "order": "fair_review"
+      }
+    },
+    "hoi4_governor": {
+      "default_action": "status",
+      "actions": {
+        "plan": "allow",
+        "status": "allow",
+        "digest": "allow",
+        "start": "allow",
+        "stop": "allow"
+      }
+    },
+    "hoi4_hover": {
+      "default_action": null,
+      "actions": {
+        "_call": "allow"
+      }
+    },
+    "hoi4_journal": {
+      "default_action": "read",
+      "actions": {
+        "add": "allow",
+        "read": "allow",
+        "plan": "allow",
+        "report": "allow",
+        "summary": "allow"
+      }
+    },
+    "hoi4_key": {
+      "default_action": null,
+      "actions": {
+        "_call": "deny"
+      }
+    },
+    "hoi4_launch": {
+      "default_action": null,
+      "actions": {
+        "_call": "allow"
+      }
+    },
+    "hoi4_load": {
+      "default_action": null,
+      "actions": {
+        "_call": "resume_review"
+      }
+    },
+    "hoi4_lock": {
+      "default_action": "status",
+      "actions": {
+        "status": "allow",
+        "acquire": "allow",
+        "release": "allow",
+        "set_mode": "allow",
+        "record": "allow",
+        "set_images": "allow",
+        "set_pace": "allow"
+      }
+    },
+    "hoi4_logs": {
+      "default_action": null,
+      "actions": {
+        "_call": "allow"
+      }
+    },
+    "hoi4_map": {
+      "default_action": "view",
+      "actions": {
+        "modes": "allow",
+        "view": "allow",
+        "front": "allow",
+        "at": "allow",
+        "minimap": "allow"
+      }
+    },
+    "hoi4_memory": {
+      "default_action": null,
+      "actions": {
+        "_call": "allow"
+      }
+    },
+    "hoi4_navy_air": {
+      "default_action": "list",
+      "actions": {
+        "list": "allow",
+        "naval_mission": "allow",
+        "air_mission": "allow"
+      }
+    },
+    "hoi4_new_game": {
+      "default_action": null,
+      "actions": {
+        "_call": "allow"
+      }
+    },
+    "hoi4_ocr": {
+      "default_action": null,
+      "actions": {
+        "_call": "allow"
+      }
+    },
+    "hoi4_orders": {
+      "default_action": "status",
+      "actions": {
+        "status": "allow",
+        "front": "fair_review",
+        "offensive": "fair_review",
+        "spearhead": "fair_review",
+        "execute": "fair_review",
+        "hold": "allow",
+        "delete": "fair_review",
+        "attack": "fair_review",
+        "batch": "fair_review",
+        "paint": "fair_review",
+        "move": "fair_review"
+      }
+    },
+    "hoi4_peace": {
+      "default_action": "status",
+      "actions": {
+        "status": "allow",
+        "take": "fair_review",
+        "submit": "fair_review",
+        "exit": "allow",
+        "pass": "fair_review"
+      }
+    },
+    "hoi4_politics": {
+      "default_action": "view",
+      "actions": {
+        "view": "allow",
+        "options": "allow",
+        "change_law": "allow",
+        "hire": "allow"
+      }
+    },
+    "hoi4_popups": {
+      "default_action": "read",
+      "actions": {
+        "list": "allow",
+        "read": "allow",
+        "answer": "allow",
+        "answer_all": "allow"
+      }
+    },
+    "hoi4_production": {
+      "default_action": "lines",
+      "actions": {
+        "lines": "allow",
+        "add": "allow",
+        "assign": "allow",
+        "change": "allow",
+        "remove": "allow",
+        "fill": "allow"
+      }
+    },
+    "hoi4_research": {
+      "default_action": "slots",
+      "actions": {
+        "slots": "allow",
+        "list": "allow",
+        "start": "allow"
+      }
+    },
+    "hoi4_save": {
+      "default_action": null,
+      "actions": {
+        "_call": "allow"
+      }
+    },
+    "hoi4_save_query": {
+      "default_action": null,
+      "actions": {
+        "_call": "allow"
+      }
+    },
+    "hoi4_scenario": {
+      "default_action": null,
+      "actions": {
+        "_call": "deny"
+      }
+    },
+    "hoi4_screen": {
+      "default_action": null,
+      "actions": {
+        "_call": "allow"
+      }
+    },
+    "hoi4_screenshot": {
+      "default_action": null,
+      "actions": {
+        "_call": "allow"
+      }
+    },
+    "hoi4_scroll": {
+      "default_action": null,
+      "actions": {
+        "_call": "deny"
+      }
+    },
+    "hoi4_shutdown": {
+      "default_action": null,
+      "actions": {
+        "_call": "allow"
+      }
+    },
+    "hoi4_standing": {
+      "default_action": "list",
+      "actions": {
+        "list": "allow",
+        "set": "allow",
+        "remove": "allow",
+        "clear": "allow"
+      }
+    },
+    "hoi4_state": {
+      "default_action": null,
+      "actions": {
+        "_call": "allow"
+      }
+    },
+    "hoi4_status": {
+      "default_action": null,
+      "actions": {
+        "_call": "allow"
+      }
+    },
+    "hoi4_telemetry": {
+      "default_action": "status",
+      "actions": {
+        "status": "allow",
+        "install": "allow",
+        "enable": "allow",
+        "disable": "allow",
+        "restore": "allow",
+        "watch": "deny",
+        "read": "allow"
+      }
+    },
+    "hoi4_time": {
+      "default_action": "status",
+      "actions": {
+        "status": "allow",
+        "pause": "allow",
+        "run": "allow",
+        "speed": "allow",
+        "step": "allow"
+      }
+    },
+    "hoi4_type": {
+      "default_action": null,
+      "actions": {
+        "_call": "deny"
+      }
+    },
+    "hoi4_wait_for": {
+      "default_action": null,
+      "actions": {
+        "_call": "allow"
+      }
+    }
+  },
+  "allowed_launch_arguments": [
+    "-skiplauncher",
+    "-nolauncher",
+    "-windowed"
+  ],
+  "argument_denials": [
+    {
+      "tools": [
+        "*"
+      ],
+      "field": "mode",
+      "operator": "equals",
+      "value": "test",
+      "reason": "campaign_test_mode_escape"
+    },
+    {
+      "tools": [
+        "*"
+      ],
+      "field": "raw",
+      "operator": "truthy",
+      "reason": "unfiltered_state"
+    },
+    {
+      "tools": [
+        "*"
+      ],
+      "field": "save",
+      "operator": "equals",
+      "value": "fresh",
+      "reason": "observation_must_not_write_save"
+    },
+    {
+      "tools": [
+        "hoi4_launch"
+      ],
+      "field": "debug",
+      "operator": "truthy",
+      "reason": "debug_launch"
+    },
+    {
+      "tools": [
+        "hoi4_new_game"
+      ],
+      "field": "tag",
+      "operator": "truthy",
+      "reason": "console_tag_switch"
+    },
+    {
+      "tools": [
+        "hoi4_save_query"
+      ],
+      "field": "query",
+      "operator": "not_equals",
+      "value": "info",
+      "default": "info",
+      "reason": "hidden_enemy_intelligence"
+    },
+    {
+      "tools": [
+        "hoi4_logs"
+      ],
+      "field": "log",
+      "operator": "in",
+      "value": [
+        "game",
+        "text"
+      ],
+      "reason": "unfiltered_gameplay_logs"
+    },
+    {
+      "tools": [
+        "hoi4_briefing"
+      ],
+      "field": "log_notes",
+      "operator": "truthy",
+      "reason": "unfiltered_gameplay_logs"
+    },
+    {
+      "tools": [
+        "hoi4_state"
+      ],
+      "field": "sections",
+      "operator": "contains",
+      "value": "script",
+      "reason": "script_state"
+    }
+  ],
+  "showcase_modes": {
+    "GER": "fair",
+    "CHI": "fair",
+    "POL": "meta"
+  },
+  "fair_land_rules": {
+    "actions": [
+      "front",
+      "offensive",
+      "spearhead",
+      "attack",
+      "batch",
+      "execute"
+    ],
+    "max_armies_per_call": 40,
+    "max_distinct_targets_per_army_per_day": 4,
+    "min_line_battalions": 1,
+    "max_line_battalions": 25,
+    "max_leg_infantry_or_cavalry_with_line_armor": 0,
+    "line_roles": [
+      "leg_infantry",
+      "cavalry",
+      "armor",
+      "motorized",
+      "mechanized",
+      "artillery",
+      "anti_tank",
+      "anti_air"
+    ],
+    "notes": "Normal support companies are allowed. These numerical house limits bound target churn and prohibited template mixtures; they are not an AI-intent or universal exploit detector. Naval/paratrooper operations need a separate reviewed adapter."
+  }
+}

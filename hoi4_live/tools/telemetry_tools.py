@@ -2,6 +2,7 @@
 
 import os
 import re
+from pathlib import Path
 
 from ..errors import ToolError
 from ..game import process
@@ -44,7 +45,11 @@ def telemetry_status(session):
     st = store.status()
     data = {"installed": modgen.installed(cfg.user_dir), "mod_dir": modgen.mod_dir(cfg.user_dir),
             "generation": (man or {}).get("generation"), "watch": (man or {}).get("watch"),
-            "playset": ps, "store": st}
+            "campaign_compatible": modgen.campaign_compatible(man), "playset": ps, "store": st}
+    config_session = getattr(session, "config_session", None)
+    if config_session is not None:
+        data["config_backup"] = str(config_session.session_dir)
+        data["config_session_state"] = config_session.manifest["state"]
     running = bool(process.running_pids(cfg["window"]["process_name"]))
     if st.get("generation") and man:
         data["active_in_game"] = st["generation"] == man["generation"]
@@ -60,6 +65,71 @@ def telemetry_status(session):
     return data
 
 
+def _campaign_change(session, action, raw_version):
+    """Campaign configuration is reversible and owned by one durable session."""
+    from ..game.session_backup import ConfigSession
+    cfg = session.cfg
+    with session.ui_mutex:
+        if process.running_pids(cfg["window"]["process_name"]):
+            raise ToolError("campaign telemetry configuration requires the game to be closed",
+                            {"error": "game_running", "action": action})
+        config_session = getattr(session, "config_session", None)
+        try:
+            if action in ("restore", "disable"):
+                if config_session is None:
+                    raise ToolError("no owned configuration backup to restore; refusing legacy playset restore",
+                                    {"error": "config_session_missing"})
+                # ConfigSession refuses starting/running owned launches and
+                # preserves any unrelated byte changes as recovery conflicts.
+                rep = config_session.restore()
+                rep["backup_path"] = str(config_session.session_dir)
+                if not rep["conflicts"]:
+                    session.config_session = None
+                return result("campaign configuration restored" if not rep["conflicts"] else
+                              "configuration conflicts preserved; recovery is required", **rep)
+            if config_session is not None:
+                if (config_session.manifest["state"] != "active"
+                        or config_session.manifest["game"] is not None
+                        or config_session.user_dir != Path(cfg.user_dir).resolve()):
+                    raise ToolError("existing configuration session cannot be reused; restore it first",
+                                    {"error": "config_session_unavailable",
+                                     "backup_path": str(config_session.session_dir)})
+            else:
+                config_session = ConfigSession.begin(cfg.user_dir, Path(cfg.artifacts_dir) / "config_backups")
+                session.config_session = config_session
+            man = modgen.generate(cfg.user_dir, cfg.game_dir, raw_version,
+                                  watch=modgen.empty_watch(), campaign=True)
+            if action == "enable":
+                # A user may have started the game during generation. Do not
+                # write its playset after that change; leave the backup intact.
+                if process.running_pids(cfg["window"]["process_name"]):
+                    raise ToolError("game started while generating telemetry; playset left unchanged",
+                                    {"error": "game_running", "backup_path": str(config_session.session_dir)})
+                config_session.write_telemetry_mod(playset.ENTRY)
+            session._telemetry = None
+            return result("campaign telemetry generated" + (" and enabled exclusively" if action == "enable" else ""),
+                          manifest=man, backup_path=str(config_session.session_dir),
+                          config_session_id=config_session.manifest["session_id"],
+                          enabled_mods=[playset.ENTRY] if action == "enable" else None,
+                          note="launch the game to load this campaign generation")
+        except (OSError, RuntimeError, ValueError) as exc:
+            raise ToolError("campaign telemetry configuration failed: " + str(exc),
+                            {"error": "config_session_failed", "backup_path":
+                             str(config_session.session_dir) if config_session is not None else None}) from exc
+
+
+def _campaign_read_store(session):
+    man = modgen.read_manifest(session.cfg.user_dir)
+    if not modgen.campaign_compatible(man):
+        raise ToolError("campaign reads require campaign telemetry generated with no watches",
+                        {"error": "campaign_telemetry_required", "fix": "enable telemetry while the game is closed"})
+    store = session.telemetry
+    if store.status().get("generation") != man["generation"]:
+        raise ToolError("the running telemetry generation is unverified; wait for this campaign generation",
+                        {"error": "campaign_telemetry_not_active", "expected_generation": man["generation"]})
+    return store
+
+
 @tool("hoi4_telemetry",
       "The telemetry companion mod hoi4live_telemetry: a tiny generated mod that logs the player's numbers daily "
       "(political power, stability, war support, manpower, factories, divisions, fuel, convoys, resources, "
@@ -69,7 +139,9 @@ def telemetry_status(session):
       "(backed up first). disable: remove it from dlc_load.json. restore: put back the dlc_load.json from before "
       "the first enable. watch: add (or remove=true) player/global variables and flags to log daily. read: the "
       "latest telemetry records. The game loads mods only at launch: after install/enable/watch, restart it "
-      "(hoi4_launch restart=true) and load a save.",
+      "(hoi4_launch restart=true) and load a save. Campaign install/enable require a closed game, empty watches "
+      "and vanilla data; enable selects only observational telemetry under a durable configuration backup. "
+      "Campaign disable/restore restore that owned backup only after any owned game has exited.",
       {"properties": {
           "action": {"type": "string", "enum": ["status", "install", "enable", "disable", "restore", "watch", "read"],
                      "default": "status"},
@@ -95,6 +167,12 @@ def hoi4_telemetry(session, args):
     raw_version = process.game_version(cfg.game_dir)[1] if cfg.game_dir else None
     running = bool(process.running_pids(cfg["window"]["process_name"]))
     restart_note = "the running game keeps the old files until it is restarted" if running else None
+    if session.mode == "campaign":
+        if a == "watch" or args.get("raw"):
+            raise ToolError("campaign telemetry forbids watches and raw records",
+                            {"error": "campaign_telemetry_restricted"})
+        if a in ("install", "enable", "disable", "restore"):
+            return _campaign_change(session, a, raw_version)
     if a == "status":
         data = telemetry_status(session)
         st = data["store"]
@@ -135,7 +213,7 @@ def hoi4_telemetry(session, args):
         return result(f"watch list updated ({man['generation']})", watch=man["watch"],
                       note=restart_note or "launch the game to load it")
     # read
-    store = session.telemetry
+    store = _campaign_read_store(session) if session.mode == "campaign" else session.telemetry
     if args["raw"]:
         kinds = set(args.get("kinds") or [])
         rows = []
@@ -155,6 +233,9 @@ def hoi4_telemetry(session, args):
     snap = store.snapshot()
     if snap is None:
         raise ToolError("no telemetry records in game.log yet", telemetry_status(session))
+    if session.mode == "campaign":
+        from ..state.visibility import campaign_view
+        snap = campaign_view(snap, store.player())
     kinds = args.get("kinds")
     if kinds:
         keep = {"tag", "date", "n"}

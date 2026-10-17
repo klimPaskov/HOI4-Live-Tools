@@ -1,0 +1,1234 @@
+use super::*;
+use std::{
+    collections::VecDeque,
+    fs,
+    sync::atomic::{AtomicUsize, Ordering},
+};
+static NEXT: AtomicUsize = AtomicUsize::new(0);
+struct Scratch(std::path::PathBuf);
+impl Scratch {
+    fn new() -> Self {
+        let p = std::env::temp_dir().join(format!(
+            "hoi4-stage-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, Ordering::SeqCst)
+        ));
+        fs::create_dir(&p).unwrap();
+        Self(p)
+    }
+    fn journal(&self) -> std::path::PathBuf {
+        self.0.join("journal")
+    }
+}
+impl Drop for Scratch {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.0);
+    }
+}
+fn epoch() -> Epoch {
+    Epoch {
+        game: Identity {
+            pid: 120,
+            start_ticks: "456".into(),
+            exe: "/fixture/game".into(),
+            uid: 1000,
+        },
+        campaign: "fixture-epoch".into(),
+        player: "GER".into(),
+    }
+}
+fn target(stage: Stage) -> Target {
+    Target {
+        epoch: epoch(),
+        stage,
+        technology: "support_weapons".into(),
+        folder_id: None,
+        slot: 0,
+    }
+}
+fn authority() -> InputAuthority {
+    let mut a = InputAuthority::new("luna".into(), epoch()).unwrap();
+    a.acquire("luna", "a".repeat(32), 300, &epoch()).unwrap();
+    a
+}
+fn state() -> OwnState {
+    OwnState {
+        epoch: epoch(),
+        selected_slot: Some(0),
+        selected_folder: None,
+        tree_visible: true,
+        panel_visible: Some(false),
+        active_mode: Some(6),
+        researching: vec![None, None, None, None],
+        visible_info: vec![Some("support_weapons".into())],
+    }
+}
+fn reached() -> OwnState {
+    let mut s = state();
+    s.researching[0] = Some("support_weapons".into());
+    s
+}
+fn point() -> PointCandidate {
+    PointCandidate {
+        ideal_logical: [951, 173],
+        quantized_logical: [950, 175],
+        client_pixel: [190, 35],
+        expected_client: [512, 288],
+        current_frame_verified: false,
+        effective_routing_verified: false,
+        input_authorized: false,
+    }
+}
+struct Fake {
+    observations: VecDeque<Result<OwnState>>,
+    last: OwnState,
+    calls: usize,
+    dispatches: usize,
+    delivery: Delivery,
+    candidate: Candidate,
+    crash: bool,
+    slow: Duration,
+    expire_after_dispatch: bool,
+    input_idle: bool,
+}
+impl Fake {
+    fn new() -> Self {
+        Self {
+            observations: VecDeque::new(),
+            last: state(),
+            calls: 0,
+            dispatches: 0,
+            delivery: Delivery::Unknown,
+            candidate: Candidate::Point(point()),
+            crash: false,
+            slow: Duration::ZERO,
+            expire_after_dispatch: false,
+            input_idle: true,
+        }
+    }
+    fn successful() -> Self {
+        let mut f = Self::new();
+        f.observations = VecDeque::from([
+            Ok(state()),
+            Ok(state()),
+            Ok(state()),
+            Ok(state()),
+            Ok(reached()),
+        ]);
+        f
+    }
+}
+impl Backend for Fake {
+    fn confirm_input_idle(&mut self, _: &Candidate, _: Instant) -> Result<()> {
+        if self.input_idle {
+            Ok(())
+        } else {
+            Err(error("input_unavailable", "Generated held input"))
+        }
+    }
+    fn observe(&mut self) -> Result<OwnState> {
+        self.calls += 1;
+        thread::sleep(self.slow);
+        if let Some(result) = self.observations.pop_front() {
+            if let Ok(s) = &result {
+                self.last = s.clone();
+            }
+            result
+        } else {
+            Ok(self.last.clone())
+        }
+    }
+    fn candidate(&mut self, _: &Target) -> Result<Candidate> {
+        Ok(self.candidate.clone())
+    }
+    fn dispatch_once(&mut self, _: &Candidate, deadline: Instant) -> Delivery {
+        self.dispatches += 1;
+        if self.crash {
+            panic!("simulated loss after possible input");
+        }
+        if self.expire_after_dispatch {
+            // Consume the actual journal deadline only AFTER the fixture has
+            // recorded possible input. File sync/scheduler cost before dispatch
+            // must not accidentally turn this readback test into NotQueued.
+            thread::sleep(
+                deadline.saturating_duration_since(Instant::now()) + Duration::from_millis(1),
+            );
+        }
+        self.delivery
+    }
+}
+fn execute(
+    j: &mut Journal,
+    id: &str,
+    t: Target,
+    a: &InputAuthority,
+    g: &RwLock<bool>,
+    f: &mut Fake,
+    timeout: Duration,
+) -> Result<Execution> {
+    j.execute(id, t, &"a".repeat(32), a, g, f, timeout)
+}
+
+fn panel_state() -> OwnState {
+    let mut s = state();
+    s.tree_visible = false;
+    s.panel_visible = Some(true);
+    s.active_mode = Some(5);
+    s.selected_slot = Some(1);
+    s.visible_info.clear();
+    s
+}
+fn selected_empty_state() -> OwnState {
+    let mut s = state();
+    s.visible_info.clear();
+    s
+}
+#[test]
+fn selection_verifies_empty_canonical_slot_and_replays_without_input() {
+    let scratch = Scratch::new();
+    let a = authority();
+    let g = RwLock::new(true);
+    let mut j = Journal::open(&scratch.journal()).unwrap();
+    let mut f = Fake::new();
+    f.observations = VecDeque::from([
+        Ok(panel_state()),
+        Ok(panel_state()),
+        Ok(selected_empty_state()),
+    ]);
+    f.delivery = Delivery::ServerConfirmed;
+    let r = execute(
+        &mut j,
+        "select-0",
+        target(Stage::SelectSlot),
+        &a,
+        &g,
+        &mut f,
+        Duration::from_secs(1),
+    )
+    .unwrap();
+    assert!(r.current_state_verified && !r.historical);
+    assert_eq!(f.dispatches, 1);
+    assert_eq!(r.receipt.observed.selected_slot, Some(0));
+    assert!(r.receipt.observed.researching.iter().all(Option::is_none));
+    drop(j);
+    let mut j = Journal::open(&scratch.journal()).unwrap();
+    let r = execute(
+        &mut j,
+        "select-0",
+        target(Stage::SelectSlot),
+        &a,
+        &g,
+        &mut f,
+        Duration::from_secs(1),
+    )
+    .unwrap();
+    assert!(r.historical && !r.current_state_verified);
+    assert_eq!(f.dispatches, 1);
+}
+#[test]
+fn selection_refuses_nonempty_late_slot_and_unresolved_delivery_survives_restart() {
+    let scratch = Scratch::new();
+    let a = authority();
+    let g = RwLock::new(true);
+    let mut j = Journal::open(&scratch.journal()).unwrap();
+    let mut occupied = panel_state();
+    occupied.researching[0] = Some("infantry_weapons2".into());
+    let mut f = Fake::new();
+    f.observations = VecDeque::from([Ok(panel_state()), Ok(occupied)]);
+    assert_eq!(
+        execute(
+            &mut j,
+            "select-late",
+            target(Stage::SelectSlot),
+            &a,
+            &g,
+            &mut f,
+            Duration::from_secs(1)
+        )
+        .unwrap_err()
+        .code,
+        "research_precondition"
+    );
+    assert_eq!(f.dispatches, 0);
+    assert_eq!(j.file.metadata().unwrap().len(), 0);
+    f.last = panel_state();
+    assert_eq!(
+        execute(
+            &mut j,
+            "select-uncertain",
+            target(Stage::SelectSlot),
+            &a,
+            &g,
+            &mut f,
+            Duration::from_secs(1)
+        )
+        .unwrap_err()
+        .code,
+        "action_uncertain"
+    );
+    assert_eq!(f.dispatches, 1);
+    drop(j);
+    let mut j = Journal::open(&scratch.journal()).unwrap();
+    for stage in [
+        Stage::OpenPanel,
+        Stage::SelectSlot,
+        Stage::View,
+        Stage::Research,
+    ] {
+        assert_eq!(
+            execute(
+                &mut j,
+                "new-stage",
+                target(stage),
+                &a,
+                &g,
+                &mut f,
+                Duration::from_secs(1)
+            )
+            .unwrap_err()
+            .code,
+            "action_uncertain"
+        );
+    }
+    assert_eq!(f.dispatches, 1);
+}
+#[test]
+fn legacy_receipts_do_not_infer_a_visible_panel_and_selection_preserves_info() {
+    let mut value = serde_json::to_value(panel_state()).unwrap();
+    value.as_object_mut().unwrap().remove("panel_visible");
+    let old: OwnState = serde_json::from_value(value).unwrap();
+    assert_eq!(old.panel_visible, None);
+    assert!(old.preflight(&target(Stage::SelectSlot)).is_err());
+    let mut missing = selected_empty_state();
+    missing.panel_visible = None;
+    assert!(!missing.reached(&target(Stage::SelectSlot)));
+    let mut info = panel_state();
+    info.visible_info = vec![None];
+    assert!(info.preflight(&target(Stage::SelectSlot)).is_err());
+    let mut selected = selected_empty_state();
+    selected.researching[0] = Some("support_weapons".into());
+    assert!(!selected.reached(&target(Stage::SelectSlot)));
+}
+#[test]
+fn unknown_delivery_three_readbacks_verify_once_and_replay_is_historical() {
+    let scratch = Scratch::new();
+    let a = authority();
+    let g = RwLock::new(true);
+    let mut f = Fake::successful();
+    let mut j = Journal::open(&scratch.journal()).unwrap();
+    let r = execute(
+        &mut j,
+        "research-1",
+        target(Stage::Research),
+        &a,
+        &g,
+        &mut f,
+        Duration::from_secs(1),
+    )
+    .unwrap();
+    assert!(r.current_state_verified && !r.historical && !r.event_causality_verified);
+    assert_eq!(f.dispatches, 1);
+    assert_eq!(f.calls, 5);
+    assert_eq!(r.receipt.delivery, Some(Delivery::Unknown));
+    drop(j);
+    let mut j = Journal::open(&scratch.journal()).unwrap();
+    let replay = execute(
+        &mut j,
+        "research-1",
+        target(Stage::Research),
+        &a,
+        &g,
+        &mut f,
+        Duration::from_secs(1),
+    )
+    .unwrap();
+    assert!(replay.historical && !replay.current_state_verified);
+    assert_eq!(f.calls, 5);
+    assert_eq!(f.dispatches, 1);
+    assert_eq!(
+        execute(
+            &mut j,
+            "research-1",
+            target(Stage::View),
+            &a,
+            &g,
+            &mut f,
+            Duration::from_secs(1)
+        )
+        .unwrap_err()
+        .code,
+        "request_id_conflict"
+    );
+}
+#[test]
+fn crash_intent_survives_restart_and_blocks_new_id_and_stage() {
+    let scratch = Scratch::new();
+    let a = authority();
+    let g = RwLock::new(true);
+    let mut f = Fake::new();
+    f.crash = true;
+    let mut j = Journal::open(&scratch.journal()).unwrap();
+    assert!(
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| execute(
+            &mut j,
+            "view-1",
+            target(Stage::Research),
+            &a,
+            &g,
+            &mut f,
+            Duration::from_secs(1)
+        )))
+        .is_err()
+    );
+    drop(j);
+    let mut j = Journal::open(&scratch.journal()).unwrap();
+    f.crash = false;
+    for (id, stage) in [
+        ("view-1", Stage::Research),
+        ("fresh", Stage::Research),
+        ("other-stage", Stage::View),
+    ] {
+        assert_eq!(
+            execute(
+                &mut j,
+                id,
+                target(stage),
+                &a,
+                &g,
+                &mut f,
+                Duration::from_secs(1)
+            )
+            .unwrap_err()
+            .code,
+            "action_uncertain"
+        );
+    }
+    assert_eq!(f.dispatches, 1);
+}
+#[test]
+fn timeout_and_foreign_readback_quarantine_without_input_replay() {
+    for foreign in [false, true] {
+        let scratch = Scratch::new();
+        let a = authority();
+        let g = RwLock::new(true);
+        let mut f = Fake::new();
+        f.expire_after_dispatch = !foreign;
+        if foreign {
+            let mut s = state();
+            s.epoch.player = "CHI".into();
+            f.observations = VecDeque::from([Ok(state()), Ok(state()), Ok(s)]);
+        }
+        let mut j = Journal::open(&scratch.journal()).unwrap();
+        assert_eq!(
+            execute(
+                &mut j,
+                "attempt",
+                target(Stage::Research),
+                &a,
+                &g,
+                &mut f,
+                Duration::from_secs(5)
+            )
+            .unwrap_err()
+            .code,
+            "action_uncertain"
+        );
+        assert!(j.blocks_game(&epoch().game));
+        assert_eq!(f.dispatches, 1);
+        assert_eq!(
+            execute(
+                &mut j,
+                "fresh",
+                target(Stage::Research),
+                &a,
+                &g,
+                &mut f,
+                Duration::from_secs(1)
+            )
+            .unwrap_err()
+            .code,
+            "action_uncertain"
+        );
+        assert_eq!(f.dispatches, 1);
+    }
+}
+#[test]
+fn preflight_gate_lease_and_invalid_candidate_leave_plan_retryable() {
+    for case in 0..5 {
+        let scratch = Scratch::new();
+        let mut a = authority();
+        let g = RwLock::new(case != 0);
+        let mut f = Fake::new();
+        if case == 1 {
+            a.release(&"a".repeat(32), &epoch()).unwrap();
+        }
+        if case == 2 {
+            if let Candidate::Point(p) = &mut f.candidate {
+                p.client_pixel = [-1, 35];
+            }
+        }
+        if case == 3 {
+            if let Candidate::Point(p) = &mut f.candidate {
+                p.expected_client = [0, 288];
+            }
+        }
+        if case == 4 {
+            f.last.visible_info = vec![Some("other_technology".into())];
+        }
+        let mut j = Journal::open(&scratch.journal()).unwrap();
+        assert!(execute(
+            &mut j,
+            "attempt",
+            target(Stage::Research),
+            &a,
+            &g,
+            &mut f,
+            Duration::from_secs(1)
+        )
+        .is_err());
+        assert_eq!(f.dispatches, 0);
+        assert!(!j.blocks_game(&epoch().game));
+        assert_eq!(j.file.metadata().unwrap().len(), 0);
+    }
+}
+#[test]
+fn known_not_queued_is_durable_and_new_token_can_retry() {
+    let scratch = Scratch::new();
+    let a = authority();
+    let g = RwLock::new(true);
+    let mut f = Fake::new();
+    f.delivery = Delivery::NotQueued;
+    let mut j = Journal::open(&scratch.journal()).unwrap();
+    assert_eq!(
+        execute(
+            &mut j,
+            "first",
+            target(Stage::Research),
+            &a,
+            &g,
+            &mut f,
+            Duration::from_secs(1)
+        )
+        .unwrap_err()
+        .code,
+        "input_not_queued"
+    );
+    drop(j);
+    let mut j = Journal::open(&scratch.journal()).unwrap();
+    assert!(!j.blocks_game(&epoch().game));
+    assert_eq!(
+        execute(
+            &mut j,
+            "first",
+            target(Stage::Research),
+            &a,
+            &g,
+            &mut f,
+            Duration::from_secs(1)
+        )
+        .unwrap_err()
+        .code,
+        "input_not_queued"
+    );
+    assert_eq!(f.dispatches, 1);
+    f = Fake::successful();
+    execute(
+        &mut j,
+        "fresh",
+        target(Stage::Research),
+        &a,
+        &g,
+        &mut f,
+        Duration::from_secs(1),
+    )
+    .unwrap();
+    assert_eq!(f.dispatches, 1);
+}
+#[test]
+fn late_noop_cannot_claim_fresh_success_and_terminal_capacity_is_reserved() {
+    let scratch = Scratch::new();
+    let a = authority();
+    let g = RwLock::new(true);
+    let mut f = Fake::new();
+    f.last = reached();
+    f.slow = Duration::from_millis(30);
+    let mut j = Journal::open(&scratch.journal()).unwrap();
+    assert_eq!(
+        execute(
+            &mut j,
+            "late",
+            target(Stage::Research),
+            &a,
+            &g,
+            &mut f,
+            Duration::from_millis(5)
+        )
+        .unwrap_err()
+        .code,
+        "research_deadline"
+    );
+    assert_eq!(j.file.metadata().unwrap().len(), 0);
+    f = Fake::new();
+    // Windows append-only handles intentionally cannot resize files. Replace
+    // only this generated fixture handle with a writable, exclusively locked
+    // handle to prepare the full-capacity condition; production open is unchanged.
+    FileExt::unlock(&j.file).unwrap();
+    j.file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(scratch.journal())
+        .unwrap();
+    j.file.try_lock_exclusive().unwrap();
+    j.file.set_len(LIMIT - LINE as u64).unwrap();
+    assert_eq!(
+        execute(
+            &mut j,
+            "full",
+            target(Stage::Research),
+            &a,
+            &g,
+            &mut f,
+            Duration::from_secs(1)
+        )
+        .unwrap_err()
+        .code,
+        "journal_full"
+    );
+    assert_eq!(f.dispatches, 0);
+}
+#[test]
+fn malformed_transitions_tail_and_exclusive_writer_refuse() {
+    for delivery in [None, Some(Delivery::NotQueued)] {
+        let scratch = Scratch::new();
+        let mut j = Journal::open(&scratch.journal()).unwrap();
+        let intent = Receipt {
+            version: 1,
+            request_id: "one".into(),
+            target: target(Stage::Research),
+            status: Status::Intent,
+            delivery: None,
+            observed: state(),
+        };
+        j.append(intent.clone()).unwrap();
+        j.append(Receipt {
+            status: Status::Verified,
+            delivery,
+            observed: reached(),
+            ..intent
+        })
+        .unwrap();
+        drop(j);
+        assert!(matches!(Journal::open(&scratch.journal()),Err(e) if e.code=="invalid_journal"));
+    }
+    let scratch = Scratch::new();
+    let j = Journal::open(&scratch.journal()).unwrap();
+    assert!(matches!(Journal::open(&scratch.journal()),Err(e) if e.code=="journal_busy"));
+    drop(j);
+    OpenOptions::new()
+        .append(true)
+        .open(scratch.journal())
+        .unwrap()
+        .write_all(b"unfinished")
+        .unwrap();
+    assert!(matches!(Journal::open(&scratch.journal()),Err(e) if e.code=="invalid_journal"));
+}
+#[cfg(unix)]
+#[test]
+fn symlink_and_unprotected_existing_journal_refuse() {
+    use std::os::unix::fs::{symlink, PermissionsExt};
+    let scratch = Scratch::new();
+    let p = scratch.0.join("actual");
+    fs::write(&p, b"").unwrap();
+    symlink(&p, scratch.journal()).unwrap();
+    assert!(Journal::open(&scratch.journal()).is_err());
+    fs::remove_file(scratch.journal()).unwrap();
+    fs::write(scratch.journal(), b"").unwrap();
+    fs::set_permissions(scratch.journal(), fs::Permissions::from_mode(0o644)).unwrap();
+    assert!(matches!(Journal::open(&scratch.journal()),Err(e) if e.code=="invalid_journal"));
+}
+
+#[test]
+fn canonical_assignment_without_input_idle_stays_quarantined() {
+    let scratch = Scratch::new();
+    let a = authority();
+    let gate = RwLock::new(true);
+    let mut f = Fake::successful();
+    f.input_idle = false;
+    let mut journal = Journal::open(&scratch.journal()).unwrap();
+    assert_eq!(
+        execute(
+            &mut journal,
+            "held",
+            target(Stage::Research),
+            &a,
+            &gate,
+            &mut f,
+            Duration::from_secs(1)
+        )
+        .unwrap_err()
+        .code,
+        "action_uncertain"
+    );
+    assert_eq!(f.dispatches, 1);
+    assert!(journal.blocks_game(&epoch().game));
+    assert_eq!(
+        execute(
+            &mut journal,
+            "new",
+            target(Stage::Research),
+            &a,
+            &gate,
+            &mut f,
+            Duration::from_secs(1)
+        )
+        .unwrap_err()
+        .code,
+        "action_uncertain"
+    );
+    assert_eq!(f.dispatches, 1);
+}
+
+fn closed_map_state() -> OwnState {
+    let mut s = panel_state();
+    s.active_mode = Some(23);
+    s.panel_visible = Some(false);
+    s.selected_slot = None;
+    s
+}
+#[test]
+fn panel_shortcut_opens_once_and_already_open_never_toggles() {
+    let scratch = Scratch::new();
+    let mut j = Journal::open(&scratch.journal()).unwrap();
+    let a = authority();
+    let g = RwLock::new(true);
+    let mut f = Fake::new();
+    f.candidate = Candidate::OpenPanel;
+    f.delivery = Delivery::ServerConfirmed;
+    f.observations = VecDeque::from([
+        Ok(closed_map_state()),
+        Ok(closed_map_state()),
+        Ok(panel_state()),
+    ]);
+    let t = target(Stage::OpenPanel);
+    let first = execute(
+        &mut j,
+        "open",
+        t.clone(),
+        &a,
+        &g,
+        &mut f,
+        Duration::from_secs(1),
+    )
+    .unwrap();
+    assert!(first.current_state_verified && !first.historical);
+    assert_eq!(f.dispatches, 1);
+    drop(j);
+    let mut j = Journal::open(&scratch.journal()).unwrap();
+    let old = execute(
+        &mut j,
+        "open",
+        t.clone(),
+        &a,
+        &g,
+        &mut f,
+        Duration::from_secs(1),
+    )
+    .unwrap();
+    assert!(old.historical && !old.current_state_verified);
+    let noop = execute(
+        &mut j,
+        "open-again",
+        t,
+        &a,
+        &g,
+        &mut f,
+        Duration::from_secs(1),
+    )
+    .unwrap();
+    assert!(noop.current_state_verified && !noop.historical);
+    assert_eq!(noop.receipt.delivery, None);
+    assert_eq!(f.dispatches, 1);
+}
+#[test]
+fn panel_unknown_mode_info_occupied_and_wrong_input_kind_refuse() {
+    let mut states = vec![];
+    let mut s = closed_map_state();
+    s.active_mode = None;
+    states.push(s);
+    let mut s = closed_map_state();
+    s.active_mode = Some(0);
+    states.push(s);
+    let mut s = closed_map_state();
+    s.active_mode = Some(7);
+    states.push(s);
+    let mut s = closed_map_state();
+    s.panel_visible = None;
+    states.push(s);
+    let mut s = closed_map_state();
+    s.visible_info = vec![Some("support_weapons".into())];
+    states.push(s);
+    let mut s = closed_map_state();
+    s.researching[0] = Some("support_weapons".into());
+    states.push(s);
+    for s in states {
+        assert!(s.preflight(&target(Stage::OpenPanel)).is_err());
+        assert!(!s.reached(&target(Stage::OpenPanel)));
+    }
+    let scratch = Scratch::new();
+    let mut j = Journal::open(&scratch.journal()).unwrap();
+    let a = authority();
+    let g = RwLock::new(true);
+    let mut f = Fake::new();
+    f.last = closed_map_state();
+    assert_eq!(
+        execute(
+            &mut j,
+            "wrong-kind",
+            target(Stage::OpenPanel),
+            &a,
+            &g,
+            &mut f,
+            Duration::from_secs(1)
+        )
+        .unwrap_err()
+        .code,
+        "research_precondition"
+    );
+    assert_eq!(f.dispatches, 0);
+    assert_eq!(j.file.metadata().unwrap().len(), 0);
+}
+#[test]
+fn late_panel_change_refuses_without_consuming_retry() {
+    let scratch = Scratch::new();
+    let mut j = Journal::open(&scratch.journal()).unwrap();
+    let a = authority();
+    let g = RwLock::new(true);
+    let mut f = Fake::new();
+    f.candidate = Candidate::OpenPanel;
+    f.observations = VecDeque::from([Ok(closed_map_state()), Ok(panel_state())]);
+    assert_eq!(
+        execute(
+            &mut j,
+            "late-panel",
+            target(Stage::OpenPanel),
+            &a,
+            &g,
+            &mut f,
+            Duration::from_secs(1)
+        )
+        .unwrap_err()
+        .code,
+        "research_precondition"
+    );
+    assert_eq!(f.dispatches, 0);
+    assert_eq!(j.file.metadata().unwrap().len(), 0);
+}
+#[test]
+fn uncertain_panel_shortcut_blocks_all_stages_after_restart() {
+    let scratch = Scratch::new();
+    let mut j = Journal::open(&scratch.journal()).unwrap();
+    let a = authority();
+    let g = RwLock::new(true);
+    let mut f = Fake::new();
+    f.candidate = Candidate::OpenPanel;
+    f.last = closed_map_state();
+    assert_eq!(
+        execute(
+            &mut j,
+            "unknown-panel",
+            target(Stage::OpenPanel),
+            &a,
+            &g,
+            &mut f,
+            Duration::from_secs(1)
+        )
+        .unwrap_err()
+        .code,
+        "action_uncertain"
+    );
+    assert_eq!(f.dispatches, 1);
+    drop(j);
+    let mut j = Journal::open(&scratch.journal()).unwrap();
+    for stage in [
+        Stage::OpenPanel,
+        Stage::SelectSlot,
+        Stage::View,
+        Stage::Research,
+    ] {
+        assert_eq!(
+            execute(
+                &mut j,
+                "next",
+                target(stage),
+                &a,
+                &g,
+                &mut f,
+                Duration::from_secs(1)
+            )
+            .unwrap_err()
+            .code,
+            "action_uncertain"
+        );
+    }
+    assert_eq!(f.dispatches, 1);
+}
+fn category_target() -> Target {
+    let mut t = target(Stage::SelectCategory);
+    t.technology.clear();
+    t.folder_id = Some("industry_folder".into());
+    t
+}
+fn category_state(folder: Option<&str>) -> OwnState {
+    let mut s = selected_empty_state();
+    s.selected_folder = folder.map(str::to_owned);
+    s
+}
+#[test]
+fn category_once_exact_readback_and_durable_idempotent() {
+    let sc = Scratch::new();
+    let a = authority();
+    let g = RwLock::new(true);
+    let mut j = Journal::open(&sc.journal()).unwrap();
+    let mut f = Fake::new();
+    f.observations = VecDeque::from([
+        Ok(category_state(Some("electronics_folder"))),
+        Ok(category_state(Some("electronics_folder"))),
+        Ok(category_state(Some("industry_folder"))),
+    ]);
+    f.delivery = Delivery::ServerConfirmed;
+    let r = execute(
+        &mut j,
+        "category",
+        category_target(),
+        &a,
+        &g,
+        &mut f,
+        Duration::from_secs(1),
+    )
+    .unwrap();
+    assert!(r.current_state_verified);
+    assert_eq!(f.dispatches, 1);
+    drop(j);
+    let mut j = Journal::open(&sc.journal()).unwrap();
+    let r = execute(
+        &mut j,
+        "category",
+        category_target(),
+        &a,
+        &g,
+        &mut f,
+        Duration::from_secs(1),
+    )
+    .unwrap();
+    assert!(r.historical);
+    assert_eq!(f.dispatches, 1);
+}
+#[test]
+fn category_unknown_and_late_slot_info_or_folder_state_refuse() {
+    for (i, mut late) in [
+        category_state(None),
+        category_state(Some("electronics_folder")),
+        category_state(Some("electronics_folder")),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        if i == 1 {
+            late.researching[0] = Some("support_weapons".into());
+        }
+        if i == 2 {
+            late.visible_info.push(None);
+        }
+        let sc = Scratch::new();
+        let a = authority();
+        let g = RwLock::new(true);
+        let mut j = Journal::open(&sc.journal()).unwrap();
+        let mut f = Fake::new();
+        f.observations = VecDeque::from([Ok(category_state(Some("electronics_folder"))), Ok(late)]);
+        assert!(execute(
+            &mut j,
+            "latecat",
+            category_target(),
+            &a,
+            &g,
+            &mut f,
+            Duration::from_millis(100)
+        )
+        .is_err());
+        assert_eq!(f.dispatches, 0);
+    }
+}
+#[test]
+fn category_unknown_intent_restart_blocks_every_stage_id() {
+    let sc = Scratch::new();
+    let a = authority();
+    let g = RwLock::new(true);
+    let mut j = Journal::open(&sc.journal()).unwrap();
+    let mut f = Fake::new();
+    f.last = category_state(Some("electronics_folder"));
+    f.expire_after_dispatch = true;
+    assert!(execute(
+        &mut j,
+        "unknowncat",
+        category_target(),
+        &a,
+        &g,
+        &mut f,
+        Duration::from_secs(5)
+    )
+    .is_err());
+    assert_eq!(f.dispatches, 1);
+    drop(j);
+    let mut j = Journal::open(&sc.journal()).unwrap();
+    assert!(j.blocks_game(&epoch().game));
+    for stage in [
+        Stage::OpenPanel,
+        Stage::SelectSlot,
+        Stage::View,
+        Stage::Research,
+        Stage::SelectCategory,
+    ] {
+        let t = if stage == Stage::SelectCategory {
+            category_target()
+        } else {
+            target(stage)
+        };
+        assert!(execute(
+            &mut j,
+            "another",
+            t,
+            &a,
+            &g,
+            &mut f,
+            Duration::from_millis(20)
+        )
+        .is_err());
+    }
+    assert_eq!(f.dispatches, 1);
+}
+#[test]
+fn category_folder_validation_and_old_receipt_defaults() {
+    for folder in [None, Some(""), Some("../foreign"), Some("a\n")] {
+        let mut t = category_target();
+        t.folder_id = folder.map(str::to_owned);
+        assert!(t.validate_key().is_err());
+    }
+    for stage in [
+        Stage::OpenPanel,
+        Stage::SelectSlot,
+        Stage::View,
+        Stage::Research,
+    ] {
+        let mut v = serde_json::to_value(target(stage)).unwrap();
+        v.as_object_mut().unwrap().remove("folder_id");
+        let t: Target = serde_json::from_value(v).unwrap();
+        assert_eq!(t.folder_id, None);
+        t.validate_key().unwrap();
+    }
+    let mut v = serde_json::to_value(state()).unwrap();
+    v.as_object_mut().unwrap().remove("selected_folder");
+    let s: OwnState = serde_json::from_value(v).unwrap();
+    assert_eq!(s.selected_folder, None);
+}
+
+#[test]
+fn newer_category_info_or_occupancy_evidence_blocks_before_dispatch() {
+    let old = category_state(Some("electronics_folder"));
+    for occupied in [false, true] {
+        let mut latest = old.clone();
+        if !occupied {
+            latest.visible_info.push(None);
+        }
+        let joined = join_category_body(
+            &old,
+            latest,
+            &category_target(),
+            !occupied,
+            "electronics_folder",
+        );
+        assert!(joined.is_err());
+        let sc = Scratch::new();
+        let a = authority();
+        let g = RwLock::new(true);
+        let mut j = Journal::open(&sc.journal()).unwrap();
+        let mut f = Fake::new();
+        f.observations = VecDeque::from([Ok(old.clone()), joined]);
+        assert!(execute(
+            &mut j,
+            "newer-category",
+            category_target(),
+            &a,
+            &g,
+            &mut f,
+            Duration::from_millis(100)
+        )
+        .is_err());
+        assert_eq!(f.dispatches, 0);
+    }
+}
+
+#[test]
+fn real_candidate_mutex_contention_is_proven_before_intent_and_postdispatch_busy_is_unknown() {
+    struct LockedCandidate {
+        inner: Fake,
+        lock: std::sync::Arc<std::sync::Mutex<()>>,
+    }
+    impl Backend for LockedCandidate {
+        fn observe(&mut self) -> Result<OwnState> {
+            self.inner.observe()
+        }
+        fn candidate(&mut self, t: &Target) -> Result<Candidate> {
+            let _g = self
+                .lock
+                .try_lock()
+                .map_err(|_| error("input_busy", "Actual candidate mutex is held"))?;
+            self.inner.candidate(t)
+        }
+        fn confirm_input_idle(&mut self, c: &Candidate, d: Instant) -> Result<()> {
+            self.inner.confirm_input_idle(c, d)
+        }
+        fn dispatch_once(&mut self, c: &Candidate, d: Instant) -> Delivery {
+            self.inner.dispatch_once(c, d)
+        }
+    }
+    let scratch = Scratch::new();
+    let mut j = Journal::open(&scratch.journal()).unwrap();
+    let a = authority();
+    let gate = RwLock::new(true);
+    let lock = std::sync::Arc::new(std::sync::Mutex::new(()));
+    let (held_tx, held_rx) = std::sync::mpsc::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let l = lock.clone();
+    let holder = std::thread::spawn(move || {
+        let _g = l.lock().unwrap();
+        held_tx.send(()).unwrap();
+        release_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+    });
+    held_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+    let t = target(Stage::Research);
+    let mut f = LockedCandidate {
+        inner: Fake::new(),
+        lock,
+    };
+    let e = j
+        .execute(
+            "busy-before-intent",
+            t.clone(),
+            &"a".repeat(32),
+            &a,
+            &gate,
+            &mut f,
+            Duration::from_secs(5),
+        )
+        .unwrap_err();
+    assert_eq!(e.code, "input_busy");
+    assert_eq!(f.inner.dispatches, 0);
+    assert_eq!(j.file.metadata().unwrap().len(), 0);
+    assert_eq!(
+        j.failure_evidence("busy-before-intent", &t, &e),
+        FailureEvidence::BeforeIntent
+    );
+    release_tx.send(()).unwrap();
+    holder.join().unwrap();
+    let mut f = Fake::new();
+    f.delivery = Delivery::ServerConfirmed;
+    f.observations = VecDeque::from([
+        Ok(state()),
+        Ok(state()),
+        Err(error("input_busy", "Injected postdispatch read busy")),
+    ]);
+    let e = j
+        .execute(
+            "busy-after-dispatch",
+            t.clone(),
+            &"a".repeat(32),
+            &a,
+            &gate,
+            &mut f,
+            Duration::from_secs(5),
+        )
+        .unwrap_err();
+    assert_eq!(e.code, "action_uncertain");
+    assert_eq!(f.dispatches, 1);
+    assert_eq!(
+        j.failure_evidence("busy-after-dispatch", &t, &e),
+        FailureEvidence::Unknown
+    );
+    assert!(j.blocks_game(&t.epoch.game));
+}
+
+#[test]
+fn detailed_postinput_refusal_retains_intent_and_blocks_all_ids_after_restart() {
+    for case in 0..3 {
+        let sc = Scratch::new();
+        let mut j = Journal::open(&sc.journal()).unwrap();
+        let a = authority();
+        let g = RwLock::new(true);
+        let t = target(Stage::Research);
+        let mut f = Fake::new();
+        f.delivery = Delivery::ServerConfirmed;
+        f.observations = VecDeque::from([Ok(state()), Ok(state()), Ok(reached())]);
+        let cause = match case {
+            0 => {
+                f.observations[2] = Err(error(
+                    "invalid_research_owner",
+                    "Generated own slot mismatch",
+                ));
+                "invalid_research_owner: Generated own slot mismatch"
+            }
+            1 => {
+                let mut wrong = reached();
+                wrong.epoch.player = "CHI".into();
+                f.observations[2] = Ok(wrong);
+                "ownership_changed: Research own context or slot changed"
+            }
+            _ => {
+                f.input_idle = false;
+                "input_unavailable: Generated held input"
+            }
+        };
+        let e = execute(
+            &mut j,
+            "uncertain",
+            t.clone(),
+            &a,
+            &g,
+            &mut f,
+            Duration::from_secs(2),
+        )
+        .unwrap_err();
+        assert_eq!(e.code, "action_uncertain");
+        assert!(e.message.contains(cause), "{}", e.message);
+        assert_eq!(
+            j.failure_evidence("uncertain", &t, &e),
+            FailureEvidence::Unknown
+        );
+        assert_eq!(f.dispatches, 1);
+        // Windows enforces the journal's byte-range lock on a second reader.
+        // Inspect persisted bytes only after releasing the owning journal.
+        drop(j);
+        let bytes = fs::read(sc.journal()).unwrap();
+        assert_eq!(bytes.iter().filter(|b| **b == b'\n').count(), 1);
+        let mut j = Journal::open(&sc.journal()).unwrap();
+        assert!(j.blocks_game(&epoch().game));
+        for id in ["uncertain", "different-id"] {
+            assert_eq!(
+                execute(
+                    &mut j,
+                    id,
+                    t.clone(),
+                    &a,
+                    &g,
+                    &mut f,
+                    Duration::from_secs(2)
+                )
+                .unwrap_err()
+                .code,
+                "action_uncertain"
+            );
+        }
+        assert_eq!(f.dispatches, 1);
+        drop(j);
+        assert_eq!(fs::read(sc.journal()).unwrap(), bytes);
+    }
+}

@@ -42,6 +42,9 @@ def clear_windows(session, rounds=3):
     needs a decision."""
     done = {"answered": [], "notices": []}
     policy = game_popups.PopupPolicy("choices")
+    governor = getattr(session, "governor", None)
+    if governor is not None and governor.active():
+        policy = game_popups.PopupPolicy.parse(governor.policy.plan["events"])
     for _ in range(rounds):
         img = session.grab(focus=False)
         found = popups_mod.detect(img)

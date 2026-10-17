@@ -13,3 +13,6 @@ docs/evidence/*
 *.bin
 .venv/
 *.egg-info/
+
+# Rust build products; keep lockfile for the MCP executable
+native/target/

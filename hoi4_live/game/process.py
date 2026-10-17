@@ -16,6 +16,7 @@ from ..errors import ToolError
 DETACHED_PROCESS = 0x00000008
 CREATE_NEW_PROCESS_GROUP = 0x00000200
 CREATE_BREAKAWAY_FROM_JOB = 0x01000000
+_LAUNCHES = {}  # retain handles so an unexpected exit has an observable exit code
 
 
 def game_version(game_dir):
@@ -66,6 +67,7 @@ def launch(game_dir, args):
         # Detached from this process on POSIX; a macOS launch through `open` or the Steam URL is a Mac task.
         p = subprocess.Popen([exe] + list(args), cwd=game_dir, start_new_session=True, stdin=subprocess.DEVNULL,
                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, close_fds=True)
+        _LAUNCHES[p.pid] = p
         return p.pid
     flags = DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
     for extra in (CREATE_BREAKAWAY_FROM_JOB, 0):
@@ -73,6 +75,7 @@ def launch(game_dir, args):
             p = subprocess.Popen([exe] + list(args), cwd=game_dir, creationflags=flags | extra,
                                  stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                  close_fds=True)
+            _LAUNCHES[p.pid] = p
             return p.pid
         except OSError:
             if extra == 0:
@@ -80,13 +83,27 @@ def launch(game_dir, args):
     return None
 
 
+def launch_status(pid):
+    """Status only for our retained launch handle, never an arbitrary/recycled PID."""
+    child = _LAUNCHES.get(pid)
+    if child is None:
+        return None
+    code = child.poll()
+    return {"pid": pid, "running": code is None, "exit_code": code}
+
+
 def running_pids(name=None):
     return platform.current().find_processes(name or platform.current().game_process_name)
 
 
 def wait_exit(pid, timeout=60):
-    t0 = time.time()
-    while time.time() - t0 < timeout:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        child = _LAUNCHES.get(pid)
+        # poll reaps an exited owned POSIX child. kill(pid, 0) alone still sees
+        # its zombie and otherwise waits until the timeout despite actual exit.
+        if child is not None and child.poll() is not None:
+            return True
         if not platform.current().pid_alive(pid):
             return True
         time.sleep(1)

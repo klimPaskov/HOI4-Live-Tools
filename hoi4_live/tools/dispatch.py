@@ -17,6 +17,27 @@ from . import registry
 log = logging.getLogger("hoi4_live.dispatch")
 
 
+def _campaign_visibility(session, name, args):
+    if session.mode != "campaign":
+        return
+    if name == "hoi4_save_query" and args.get("query", "info") != "info":
+        raise ModeRefused("campaign save queries expose only info; use hoi4_state for player-visible state")
+    if name == "hoi4_logs" and args.get("log", "error") in ("game", "text"):
+        raise ModeRefused("raw gameplay logs can expose hidden state; use hoi4_telemetry read")
+    if name == "hoi4_telemetry" and (args.get("action") == "watch" or args.get("raw")):
+        raise ModeRefused("campaign telemetry uses filtered read snapshots; watch/raw are test-mode diagnostics")
+    if name == "hoi4_state" and (args.get("raw") or "script" in args.get("sections", [])):
+        raise ModeRefused("raw/script state is unavailable in campaign mode")
+    if name == "hoi4_briefing" and args.get("log_notes"):
+        raise ModeRefused("campaign briefings cannot include unfiltered gameplay logs")
+    if args.get("tag") and name in ("hoi4_state", "hoi4_briefing", "hoi4_front", "hoi4_army",
+                                    "hoi4_orders", "hoi4_navy_air", "hoi4_research", "hoi4_focus",
+                                    "hoi4_production", "hoi4_construction", "hoi4_politics", "hoi4_decisions"):
+        player = session.telemetry.player()
+        if not player or args["tag"] != player:
+            raise ModeRefused("campaign country state must be the resolved player; omit tag or wait for telemetry")
+
+
 def _guard(session, t):
     """Close notices and answer trivial events before a campaign action (see game/guard.py)."""
     if t.family not in ("campaign", "military") or t.name in guard.SKIP or not getattr(session, "guard_windows", True):
@@ -61,26 +82,34 @@ def call(session, name, arguments, progress=None, cancel=None):
     before = None
     try:
         args = validate(t.schema, arguments if arguments is not None else {}, "arguments")
+        if hasattr(session, "authorize_tool"):
+            session.authorize_tool(name, args, t.test_only)
+        _campaign_visibility(session, name, args)
+        if (getattr(session, "owned_process_only", False) and t.lock != "none"
+                and name not in ("hoi4_launch", "hoi4_telemetry")):
+            session.require_owned_game()
         if t.test_only and session.mode == "campaign":
-            raise ModeRefused(f"{name} is a test-mode tool and the session is in campaign mode "
-                              "(switch with hoi4_lock action=set_mode mode=test)")
+            raise ModeRefused(f"{name} is a test-mode tool and the session is in campaign mode; use a separate QA session")
         if t.test_only or name == "hoi4_save":
             from ..game import gamemode
             gamemode.check(session, name)
         prev = session.begin_call(name, progress, cancel)
+        # The registered wrapper guards direct/background calls. Dispatch has
+        # already authorized this exact request before popup/ownership handling.
+        handler = getattr(t.handler, "__wrapped__", t.handler)
         try:
             if t.lock == "acting":
                 with session.ui_mutex, session.lock.hold(name):
                     _guard(session, t)
                     before = _clock_state(session) if _watches_clock(t) else None
-                    value = t.handler(session, args)
+                    value = handler(session, args)
             elif t.lock == "self":
                 with session.ui_mutex:
                     _guard(session, t)
                     before = _clock_state(session) if _watches_clock(t) else None
-                    value = t.handler(session, args)
+                    value = handler(session, args)
             else:
-                value = t.handler(session, args)
+                value = handler(session, args)
         finally:
             session.end_call(prev)
         result = registry.coerce_result(value)
@@ -110,6 +139,9 @@ def call(session, name, arguments, progress=None, cancel=None):
     elapsed = round(time.time() - started, 2)
     if isinstance(result.data, dict):
         result.data.setdefault("elapsed_s", elapsed)
+        if session.mode == "campaign" and hasattr(session, "play_policy"):
+            result.data["play_mode"] = session.play_policy.mode
+            result.data["policy_sha256"] = session.play_policy.sha256
     log.info("tool %s -> %s in %.2fs", name, "error" if result.is_error else "ok", elapsed)
     mcp = result.to_mcp()
     path = getattr(session, "call_log_path", "")

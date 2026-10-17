@@ -17,7 +17,8 @@ log = logging.getLogger("hoi4_live.calllog")
 
 _WRITE = threading.Lock()
 KEEP = ("date", "stopped_by", "changed", "from", "to", "days_run", "mode", "path", "state", "ok", "error",
-        "action", "events_answered")
+        "action", "events_answered", "play_mode", "policy_sha256", "agent_pause_count",
+        "agent_pause_seconds_in_run", "agent_pause_ongoing", "wall_seconds_per_game_year")
 
 
 def _short(v, limit=120):

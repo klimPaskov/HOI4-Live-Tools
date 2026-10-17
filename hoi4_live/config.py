@@ -18,7 +18,8 @@ DEFAULTS = {
     "game_dir": "auto",
     "user_dir": "auto",
     "artifacts_dir": "artifacts",
-    "mode": "test",
+    "mode": "campaign",
+    "play_mode": "fair",
     "save_prefix": "hoi4live_",
     "lock": {"path": "%TEMP%/hoi4_live_desktop.lock", "stale_seconds": 600, "wait_seconds": 20},
     "window": {"process_name": "hoi4.exe", "title_prefix": "Hearts of Iron IV", "pin_client_to_origin": True},
@@ -56,6 +57,8 @@ def steam_game_dir():
 class Config:
     def __init__(self, data, source):
         self.data = data
+        if data["window"].get("process_name") == "auto":
+            data["window"]["process_name"] = platform.current().game_process_name
         self.source = source
         env = os.environ
         gd = env.get("HOI4_LIVE_GAME_DIR") or data["game_dir"]
@@ -65,6 +68,7 @@ class Config:
         art = env.get("HOI4_LIVE_ARTIFACTS") or data["artifacts_dir"]
         self.artifacts_dir = art if os.path.isabs(art) else os.path.join(ROOT, art)
         self.mode = env.get("HOI4_LIVE_MODE") or data["mode"]
+        self.play_mode = env.get("HOI4_LIVE_PLAY_MODE") or data.get("play_mode", "fair")
         self.save_prefix = data["save_prefix"]
         self.lock_path = os.path.expandvars(data["lock"]["path"].replace("%TEMP%", os.environ.get("TEMP") or platform.current().temp_dir()))
 
@@ -91,7 +95,8 @@ class Config:
 
     def summary(self):
         return {"config_file": self.source, "game_dir": self.game_dir, "user_dir": self.user_dir,
-                "artifacts_dir": self.artifacts_dir, "mode": self.mode, "lock_path": self.lock_path}
+                "artifacts_dir": self.artifacts_dir, "mode": self.mode, "play_mode": self.play_mode,
+                "lock_path": self.lock_path}
 
 
 _CONFIG = None
@@ -99,6 +104,7 @@ _CONFIG = None
 
 def load(path=None, overrides=None):
     data = copy.deepcopy(DEFAULTS)
+    data["window"]["process_name"] = platform.current().game_process_name
     path = path or os.environ.get("HOI4_LIVE_CONFIG") or os.path.join(ROOT, "config.json")
     source = None
     if os.path.exists(path):

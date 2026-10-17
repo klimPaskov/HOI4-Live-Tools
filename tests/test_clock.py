@@ -18,6 +18,36 @@ from hoi4_live.tools import campaign_loop_tools as loop
 from test_campaign_loop import day
 
 
+class ClockStateRetryTests(unittest.TestCase):
+    def test_transient_unknown_then_wanted_state_needs_no_input(self):
+        session = mock.Mock()
+        with mock.patch.object(clock_mod, "icon_state", side_effect=["unknown", "running"]), \
+             mock.patch.object(clock_mod.time, "sleep"):
+            self.assertTrue(clock_mod.set_running(session, True))
+        session.input.key.assert_not_called()
+
+    def test_persistent_unknown_is_bounded_and_never_toggles(self):
+        session = mock.Mock()
+        with mock.patch.object(clock_mod, "icon_state", return_value="unknown") as probe, \
+             mock.patch.object(clock_mod.time, "sleep"):
+            self.assertFalse(clock_mod.set_running(session, True))
+        self.assertEqual(probe.call_count, 3)
+        session.input.key.assert_not_called()
+
+    def test_only_confirmed_opposite_state_authorizes_toggle(self):
+        session = mock.Mock()
+        states = iter(["unknown", "paused", "running"])
+        def observe(_session):
+            state = next(states)
+            if state in ("unknown", "paused"):
+                session.input.key.assert_not_called()
+            return state
+        with mock.patch.object(clock_mod, "icon_state", side_effect=observe), \
+             mock.patch.object(clock_mod.time, "sleep"):
+            self.assertTrue(clock_mod.set_running(session, True))
+        session.input.key.assert_called_once_with("space")
+
+
 class FakeInput:
     def __init__(self):
         self.keys = []
@@ -93,6 +123,7 @@ class ClockCase(unittest.TestCase):
     def tearDown(self):
         if self.feeder:
             self.feeder.stop_flag = True
+            self.feeder.join(timeout=1)
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def set_running(self, session, want, **kw):
@@ -126,21 +157,55 @@ class ClockCase(unittest.TestCase):
 
 
 class FastClockTests(ClockCase):
-    def test_runs_the_budget_and_pauses(self):
+    def test_exception_pauses_and_releases_background_lease(self):
+        with mock.patch.object(clock_mod.guard, "drain", side_effect=RuntimeError("broken reader")):
+            with self.assertRaisesRegex(RuntimeError, "broken reader"):
+                self.run_loop()
+        self.assertFalse(self.state["running"])
+        self.session.lock.hold.assert_called_with("background campaign clock")
+        self.session.lock.hold.return_value.__exit__.assert_called()
+
+    def test_daily_hook_runs_once_for_newest_observation(self):
+        self.feed()
+        seen = []
+        def on_day(run, record):
+            seen.append(record["n"])
+            return [{"code": "governor_decision", "text": "new plan needed"}]
+        run = clock_mod.AdvanceRun(self.session, self.args(budget_days=30),
+                                   PopupPolicy.parse("choices"), on_day=on_day)
+        res = run.execute()
+        self.assertEqual(res["reasons"][0]["code"], "governor_decision")
+        self.assertEqual(len(seen), 1)
+        self.assertFalse(self.state["running"])
+
+    def test_missing_research_baseline_is_unknown(self):
+        run = clock_mod.AdvanceRun(self.session, self.args(), PopupPolicy.parse("choices"))
+        self.assertEqual(run._idle_slots(None), 0)
+
+    def test_runs_the_budget_and_keeps_running(self):
         self.feed()
         run, res = self.run_loop(budget_days=5)
         self.assertEqual(res["reasons"][0]["code"], "done")
         self.assertGreaterEqual(res["days"], 5)
-        self.assertFalse(self.state["running"], "the clock is paused at the end")
+        self.assertTrue(self.state["running"], "routine deadlines leave the game running")
         self.assertTrue(res["end_date"].startswith("1936.1."))
 
-    def test_stop_condition_fires_on_the_day_and_pauses(self):
-        self.feed(script={103: {"techs": 11}})
-        run, res = self.run_loop(budget_days=30, stop_on=["tech_done"], stop_on_used=["tech_done"])
+    def test_stop_condition_fires_on_the_day_and_keeps_running(self):
+        # Publish one day per clock poll rather than racing a 20 ms feeder
+        # against the CI scheduler. This proves reaction to the first completed
+        # observation without assuming any real-time thread scheduling bound.
+        counter = [100]
+        def publish(_seconds):
+            if self.state["running"]:
+                counter[0] += 1
+                self.store.add(day(counter[0], "1936.1.4.24",
+                                   techs=11 if counter[0] >= 103 else 10))
+        with mock.patch.object(clock_mod.time, "sleep", side_effect=publish):
+            run, res = self.run_loop(budget_days=30, stop_on=["tech_done"], stop_on_used=["tech_done"])
         self.assertEqual(res["reasons"][0]["code"], "tech_done")
-        self.assertLessEqual(res["days"], 4)
+        self.assertEqual(res["days"], 3)
         self.assertEqual(res["changes"]["techs"], [10, 11])
-        self.assertFalse(self.state["running"])
+        self.assertTrue(self.state["running"])
 
     def test_event_with_a_choice_stops_the_run_and_stays_paused(self):
         self.feed()
@@ -157,7 +222,7 @@ class FastClockTests(ClockCase):
         self.assertEqual(res["reasons"][0]["code"], "popup")
         self.assertEqual(res["data"]["events_waiting"][0]["title"], "Choice")
         self.assertEqual(calls, ["running"])
-        self.assertIn("space", self.session.input.keys, "the clock is frozen before the window is read")
+        self.assertFalse(self.state["running"], "an unresolved choice pauses after it is read")
 
     def test_answered_events_do_not_stop_the_run(self):
         self.feed()
@@ -219,6 +284,33 @@ class FastClockTests(ClockCase):
 
 
 class ShutdownTests(unittest.TestCase):
+    def test_input_closes_before_releasing_desktop_lease(self):
+        import helpers
+        session = helpers.make_session()
+        events = []
+        session.input = mock.Mock()
+        session.input.close.side_effect = lambda: events.append("input")
+        session.lock = mock.Mock()
+        session.lock.release_all.side_effect = lambda: events.append("lease")
+        session.shutdown()
+        self.assertEqual(events, ["input", "lease"])
+
+    def test_running_worker_defers_input_and_lease_teardown(self):
+        import helpers
+        session = helpers.make_session()
+        run = mock.Mock()
+        run.done = threading.Event()
+        session.clock = run
+        session.input = mock.Mock()
+        session.lock = mock.Mock()
+        self.assertFalse(session.shutdown())
+        session.input.close.assert_not_called()
+        session.lock.release_all.assert_not_called()
+        run.done.set()
+        session.shutdown()
+        session.input.close.assert_called_once()
+        session.lock.release_all.assert_called_once()
+
     def test_a_background_run_is_stopped_when_the_session_shuts_down(self):
         import helpers
         from hoi4_live.session import Session

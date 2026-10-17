@@ -95,6 +95,7 @@ def _head(kind, gen=None):
 
 def templates(spec):
     """{localisation key: line text} for a generation spec."""
+    _validate_campaign_spec(spec)
     gen = spec["generation"]
     T = {}
     T["day"] = _head("day", gen) + [
@@ -209,6 +210,21 @@ def templates(spec):
     T["ev_control"] = ev("control", False) + state
     T["hello"] = [("k", S("hello")), ("v", N(str(SCHEMA))), ("g", S(gen)), ("t", S("[THIS.GetTag]")),
                   ("n", N("[?global.num_days|0]"))]
+    if spec.get("focuses"):
+        for kind in ("fb", "fc", "fp", "fe"):
+            T[kind] = _head(kind, gen) + [("tree", N("[?hoi4live_ft|0]"))]
+        T["fb"] += [("total", N("[?hoi4live_fn|0]"))]
+        T["fc"] += [("fid", N("[?hoi4live_fid|0]"))]
+        T["fp"] += [("fid", N("[?hoi4live_fid|0]")), ("low", N("[?hoi4live_fp|0]"))]
+        T["fe"] += [("completed", N("[?hoi4live_fc|0]")), ("progressed", N("[?hoi4live_fpc|0]"))]
+    if spec.get("campaign", False):
+        # Remove the expressions before localization/script generation: filtering
+        # tool output alone would still collect exact foreign intelligence in logs.
+        from ..state.visibility import HIDDEN, PUBLIC_COUNTRY, PUBLIC_WAR
+        T["day"] = [(key, expr) for key, expr in T["day"] if key not in HIDDEN]
+        T["war"] = [(key, expr) for key, expr in T["war"] if key in PUBLIC_WAR]
+        for kind in ("wc", "wc_fac"):
+            T[kind] = [(key, expr) for key, expr in T[kind] if key in PUBLIC_COUNTRY]
     out = {}
     for key, fields in T.items():
         out[f"hoi4live_tlm_{key}"] = _render(fields)
@@ -301,6 +317,7 @@ def tech_scan_text(spec, kind, trigger):
 
 
 def effects_text(spec):
+    _validate_campaign_spec(spec)
     w = spec["watch"]
     watch_lines = []
     for i, f in enumerate(w["flags"]):
@@ -314,7 +331,7 @@ def effects_text(spec):
     else:
         watch_lines.append("\t# nothing registered (hoi4_telemetry action=watch)")
     watch_body = "\n".join(watch_lines)
-    return HEADER.format(display=DISPLAY_NAME, gen=spec["generation"]) + """
+    text = HEADER.format(display=DISPLAY_NAME, gen=spec["generation"]) + """
 # Country scope: the player's country. Daily lines.
 hoi4live_telemetry_daily = {
 	set_temp_variable = { hoi4live_war = 0 }
@@ -467,6 +484,19 @@ hoi4live_telemetry_weekly = {
 	}
 }
 """
+    if spec.get("campaign", False):
+        # Factory information for our occupied states may reflect enemy-held
+        # changes. Keep their public geography in `lost`, but do not collect
+        # their exact economy through the owned-state scan.
+        text = text.replace("hoi4live_telemetry_states = {\n\tevery_owned_state = {\n",
+                            "hoi4live_telemetry_states = {\n\tevery_owned_state = {\n"
+                            "\t\tlimit = { is_controlled_by = ROOT }\n")
+    if spec.get("focuses"):
+        from .focus import effects
+        text = text.replace("\thoi4live_telemetry_tech = yes\n",
+                            "\thoi4live_telemetry_tech = yes\n\thoi4live_telemetry_focus = yes\n")
+        text += "\n" + effects(spec["focuses"])
+    return text
 
 
 def localisation_text(language, lines):
@@ -612,11 +642,44 @@ def clean_watch(watch):
     return out
 
 
-def generate(user_dir, game_dir, game_version=None, watch=None, resources=None, equipment=None, techs=None):
-    """Write (or rewrite) the mod. Returns the manifest. Keeps the previous watch list when watch is None."""
+def _validate_campaign_spec(spec):
+    if not isinstance(spec.get("campaign", False), bool):
+        raise ToolError("campaign generation flag must be boolean")
+    if spec.get("campaign", False) and spec.get("watch") != empty_watch():
+        raise ToolError("campaign telemetry requires an explicitly empty watch list",
+                        {"error": "campaign_watch_forbidden"})
+
+
+def campaign_compatible(manifest):
+    """Older/test manifests are not proof of a campaign-safe generation."""
+    return (isinstance(manifest, dict) and manifest.get("campaign") is True
+            and manifest.get("schema") == SCHEMA and isinstance(manifest.get("generation"), str)
+            and bool(manifest.get("generation"))
+            and manifest.get("visibility") == "player_visible_v1"
+            and manifest.get("watch") == empty_watch())
+
+
+def generate(user_dir, game_dir, game_version=None, watch=None, resources=None, equipment=None, techs=None,
+             campaign=False, focuses=None):
+    """Write the mod; campaign builds never inherit watches or other enabled mods.
+
+    QA builds preserve the previous watch list when watch is None. Campaign
+    builds use explicit empty watches, remove foreign force/economy expressions,
+    and record their visibility contract in the manifest. This is offline source
+    generation; it does not establish that a running game loaded these files.
+    """
+    if not isinstance(campaign, bool):
+        raise ToolError("campaign generation flag must be boolean")
     old = read_manifest(user_dir) or {}
-    watch = clean_watch(old.get("watch") if watch is None else watch)
-    mods = mod_paths(user_dir)
+    if campaign:
+        if watch not in (None, {}, empty_watch()):
+            raise ToolError("campaign telemetry cannot watch variables or flags",
+                            {"error": "campaign_watch_forbidden"})
+        watch = empty_watch()
+        mods = []
+    else:
+        watch = clean_watch(old.get("watch") if watch is None else watch)
+        mods = mod_paths(user_dir)
     if resources is None:
         found = game_resources(game_dir, mods) if game_dir else []
         resources = found or list(DEFAULT_RESOURCES)
@@ -631,10 +694,12 @@ def generate(user_dir, game_dir, game_version=None, watch=None, resources=None, 
     for name in techs:
         if not NAME_RX.match(name):
             raise ToolError(f"invalid technology id '{name}'")
+    from .focus import catalog, installed_catalog
+    focuses = catalog(focuses) if focuses is not None else (installed_catalog(game_dir, mods) if game_dir else {})
     stamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
-    digest = hashlib.sha1(json.dumps([watch, resources, equipment, techs, SCHEMA]).encode()).hexdigest()[:6]
+    digest = hashlib.sha1(json.dumps([watch, resources, equipment, techs, focuses, SCHEMA, campaign]).encode()).hexdigest()[:6]
     spec = {"generation": f"{stamp}-{digest}", "watch": watch, "resources": list(resources),
-            "equipment": list(equipment), "techs": list(techs)}
+            "equipment": list(equipment), "techs": list(techs), "focuses": focuses, "campaign": campaign}
     root = mod_dir(user_dir)
     files = {
         "descriptor.mod": descriptor_text(_major_minor(game_version)),
@@ -656,8 +721,10 @@ def generate(user_dir, game_dir, game_version=None, watch=None, resources=None, 
     manifest = {"mod": MOD_NAME, "schema": SCHEMA, "generation": spec["generation"],
                 "generated_at": datetime.datetime.now().isoformat(timespec="seconds"),
                 "watch": watch, "resources": spec["resources"], "equipment": spec["equipment"],
-                "techs": spec["techs"], "line_keys": sorted(lines), "files": written, "descriptor": descriptor_path(user_dir),
-                "game_version": game_version}
+                "techs": spec["techs"], "focuses": focuses, "focus_observation_version": 1,
+                "line_keys": sorted(lines), "files": written, "descriptor": descriptor_path(user_dir),
+                "game_version": game_version, "campaign": campaign,
+                "visibility": "player_visible_v1" if campaign else "qa_unrestricted"}
     with open(manifest_path(user_dir), "w", encoding="utf-8") as f:
         json.dump(manifest, f, indent=1)
     return manifest

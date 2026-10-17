@@ -3,11 +3,12 @@ Copyright 2026 Klim Pashkov
 
 Licensed under the Apache License, Version 2.0 (see LICENSE).
 
-The release archive contains only this project's own code. The installer fetches these packages from PyPI into a
+The project includes MIT-licensed Clausewitz-MCP-derived code as described below. The installer fetches these packages from PyPI into a
 private virtual environment; each keeps its own license:
 
   numpy                    BSD-3-Clause
   Pillow                   MIT-CMU (HPND)
+  PyObjC                   MIT (macOS framework bindings)
   opencv-python-headless   Apache-2.0 (OpenCV); the wheel bundles FFmpeg under LGPL-2.1 and other components, see
                            the license files shipped in the wheel
 
@@ -15,10 +16,55 @@ HOI4 Live Tools reads and drives Hearts of Iron IV, a trademark of Paradox Inter
 tool: no game file is copied or redistributed, and it is not affiliated with or endorsed by Paradox Interactive.
 Windows.Media.Ocr, used for screen text, is part of Windows.
 
-Design and research acknowledgments:
-  smerss/Clausewitz-MCP — https://github.com/smerss/Clausewitz-MCP (MIT).
-  Its documented safety lessons, known-mistake hints, RTTI/serializer research,
-  bounded waits and per-day automation informed this project's review and
-  governor/memory architecture. No upstream source code was copied in this
-  publication work. Any future source reuse must retain that project's MIT
-  copyright and permission notice and record file-level provenance.
+Upstream foundation and attribution:
+  smerss/Clausewitz-MCP — https://github.com/smerss/Clausewitz-MCP
+  Copyright (c) 2026 smerss. Licensed under MIT.
+  Pinned commit: 97c85437081904d5ad07bae1623ec58d1c0a5b9e.
+
+  third_party/clausewitz_mcp contains unchanged runtime Python source and the
+  original license. UPSTREAM.json records each original path and SHA-256. Binary
+  caches, generated game tables and research dumps are not included.
+
+  hoi4_live/engine/clausewitz/memory.py is derived from calling/mem.py's typed
+  read methods. It extracts portable primitives; native access is provided by
+  owned Windows/macOS/Linux adapters. The original MIT notice and permission
+  text are retained in hoi4_live/engine/clausewitz/LICENSE and shipped with it.
+
+  The structured game model, ordinary-command vocabulary, bounded turn waits,
+  verified-order cache and province-graph ideas inform the ongoing integration.
+  native/src/{memory,game,calendar,technology,research,research_ui,technology_nodes,own_focus}.rs and native/src/platform/linux.rs port
+  those typed reads, own-country focus/research semantics, process interface and
+  calendar. native/PROVENANCE.md records source files; native/LICENSE.clausewitz
+  retains the MIT notice. Current Linux layouts were recovered independently.
+  The own economy and division observation APIs also consult Clausewitz-MCP
+  semantics. Their current-build trigger, handle and location layouts and all
+  renderer/input guards are independently recovered project work; observations
+  do not authorize engine calls or reveal foreign-unit payload.
+  native/src/production_lines/equipment.rs consults calling/game.py's
+  _load_equipment and production_lines for base-equipment naming semantics.
+  Fresh catalog membership, current-build layouts and own-line guards are
+  independent project code; no custom design or allocation authority is implied.
+  native/src/construction.rs and native/src/construction/buildings.rs consult
+  calling/game.py's construction_queue and building catalog semantics. Current
+  Linux types, scalar names and template joins were independently recovered;
+  cost and produced work are distinct. construction/location.rs independently
+  derives optional selected own-territory IDs with ownership/control and reciprocal
+  catalog/status guards. construction/ui.rs independently recovers current Linux
+  panel ownership, row-handle and named text bindings. construction/selection.rs
+  independently derives owned manager selection with fresh public template joins;
+  selection is not placement eligibility or routing authority. No foreign geography
+  payload or input is authorized.
+  construction/controls.rs and controls/binding.rs independently recover the
+  nested topbar path, canonical choice items, exact ordinary callback captures
+  and scoped local gates. Existing typed geometry is reused within one witnessed
+  read; these associations execute no callback and authorize no construction input.
+  native/src/graph_kernel.rs independently implements bounded components and
+  multi-source breadth-first search, consulting calling/doctrine.py and
+  calling/ragemicro.py. It operates on caller-supplied public/generated topology;
+  graph reachability establishes no military access, supply or action authority.
+  The node_binding module independently observes ordinary control/callback data
+  associations; it grants no input authority and executes no engine callback.
+
+  Private Linux validation proved selected ordinary actions, but a running-game
+  pause timed out. External engine posting remains quarantined. Source
+  inclusion alone does not enable upstream commands in campaign dispatch.

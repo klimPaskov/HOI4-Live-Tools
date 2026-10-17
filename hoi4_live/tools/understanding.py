@@ -47,6 +47,9 @@ def hoi4_state(session, args):
     raw = m.pop("_raw", None)
     if args["raw"]:
         m["raw"] = raw
+    if session.mode == "campaign":
+        from ..state.visibility import campaign_view
+        m = campaign_view(m, m["tag"])
     ov = m.get("overview") or {}
     src = "; ".join(f"{k} {v.get('as_of')}" + (f" ({v['age_days']:g} d old)" if v.get("age_days") else "")
                     for k, v in m["sources"].items() if v.get("as_of"))
@@ -99,6 +102,9 @@ def hoi4_briefing(session, args):
         sections.append("world")
     m = assemble.collect(session, args.get("tag"), sections, args["save"], args["screen"])
     m.pop("_raw", None)
+    if session.mode == "campaign":
+        from ..state.visibility import campaign_view
+        m = campaign_view(m, m["tag"])
     tag = m.get("tag") or "unknown"
     path = os.path.join(_state_dir(session), f"briefing_{tag}.json")
     prev = None

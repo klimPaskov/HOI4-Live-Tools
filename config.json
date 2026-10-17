@@ -2,7 +2,8 @@
   "game_dir": "auto",
   "user_dir": "auto",
   "artifacts_dir": "artifacts",
-  "mode": "test",
+  "mode": "campaign",
+  "play_mode": "fair",
   "save_prefix": "hoi4live_",
   "lock": {
     "path": "%TEMP%/hoi4_live_desktop.lock",
@@ -10,7 +11,7 @@
     "wait_seconds": 20
   },
   "window": {
-    "process_name": "hoi4.exe",
+    "process_name": "auto",
     "title_prefix": "Hearts of Iron IV",
     "pin_client_to_origin": true
   },

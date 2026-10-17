@@ -1,10 +1,11 @@
 """Session and safety tools: hoi4_status, hoi4_launch, hoi4_new_game, hoi4_load, hoi4_save, hoi4_shutdown, hoi4_lock."""
 
 import os
+import json
 import time
+import uuid
 
 from .. import __version__
-from ..desktop import win32
 from ..errors import ToolError
 from ..game import console, menu, process, saves, timectl, ui
 from ..perception import popups as popups_mod
@@ -29,6 +30,7 @@ def hoi4_status(session, args):
     data = {
         "server_version": __version__,
         "mode": session.mode,
+        "play_policy": session.play_policy.summary() if hasattr(session, "play_policy") else None,
         "game": {"running": bool(hwnd), "pids": process.running_pids(cfg["window"]["process_name"]),
                  "version": version, "game_dir": cfg.game_dir, "user_dir": cfg.user_dir},
         "playset": process.playset(cfg.user_dir),
@@ -40,6 +42,10 @@ def hoi4_status(session, args):
         "planned_tools": PLANNED,
     }
     data["logs_note"] = "seconds since last write"
+    identity = getattr(session, "launched_identity", None)
+    data["owned_launch"] = ({"pid": identity.pid, "creation_time": identity.creation_time,
+                              "executable_path": identity.executable_path} if identity else None)
+    data["owned_launch_status"] = process.launch_status(getattr(session, "launched_pid", None))
     try:
         from ..game import gamemode
         gm = gamemode.current(session)
@@ -80,6 +86,44 @@ def hoi4_status(session, args):
     return res
 
 
+def _validate_campaign_playset(cfg):
+    """Only vanilla or the reviewed observational helper may enter a campaign.
+
+    Other support mods require review before joining this allowlist. Never echo
+    an unrelated private mod's descriptor or display name into the error.
+    """
+    from ..telemetry import modgen, playset
+    try:
+        with open(playset.dlc_load_path(cfg.user_dir), encoding="utf-8") as stream:
+            data = json.load(stream)
+    except FileNotFoundError:
+        return
+    except (OSError, ValueError):
+        raise ToolError("campaign playset cannot be verified", {"error": "campaign_playset_unverified"})
+    enabled = data.get("enabled_mods", []) if isinstance(data, dict) else None
+    if not isinstance(enabled, list) or enabled not in ([], [playset.ENTRY]):
+        raise ToolError("campaign launch requires vanilla or only the reviewed observational telemetry mod; "
+                        "enable campaign telemetry while the game is closed to prepare a backed-up playset",
+                        {"error": "campaign_mods_unreviewed"})
+    if not enabled:
+        return
+    manifest = modgen.read_manifest(cfg.user_dir)
+    if not modgen.campaign_compatible(manifest):
+        raise ToolError("regenerate campaign-safe telemetry before launching",
+                        {"error": "campaign_telemetry_unverified"})
+    try:
+        descriptor = modgen._read_script(modgen.descriptor_path(cfg.user_dir))
+        expected = os.path.realpath(modgen.mod_dir(cfg.user_dir))
+        matches = (isinstance(descriptor, dict) and isinstance(descriptor.get("path"), str)
+                   and os.path.realpath(descriptor["path"]) == expected
+                   and not descriptor.get("replace_path") and not descriptor.get("dependencies"))
+    except (OSError, ValueError, TypeError):
+        matches = False
+    if not matches:
+        raise ToolError("telemetry descriptor does not resolve to the reviewed observational helper",
+                        {"error": "campaign_telemetry_descriptor_unverified"})
+
+
 @tool("hoi4_launch",
       "Start Hearts of Iron IV (normal, or -debug) with the current playset and wait for the main menu. If the game "
       "already runs it is left alone (restart=true quits it through its own menu first). The playset and settings "
@@ -95,20 +139,59 @@ def hoi4_status(session, args):
 def hoi4_launch(session, args):
     apply_mode(session, args)
     cfg = session.cfg
+    if process.running_pids(cfg["window"]["process_name"]) and not session.window.find():
+        raise ToolError("a game process is already running without a usable owned window; not launching another",
+                        {"error": "existing_process"})
     if session.window.find() and not args["restart"]:
         return result("HOI4 is already running; nothing launched", already_running=True,
                       pids=process.running_pids())
     if session.window.find() and args["restart"]:
+        session.require_owned_game()
         menu.quit_to_desktop(session)
         pid = session.window.pid
         if not process.wait_exit(pid, 90):
             raise ToolError("the running game did not exit through its menu; not relaunching")
+        if getattr(session, "config_session", None) is not None:
+            restored = session.restore_configs_after_exit()
+            if restored and restored["conflicts"]:
+                raise ToolError("configuration changed outside recorded writes; resolve preserved backup conflicts before relaunch",
+                                {"config_restore": restored})
     crashes_before = process.crash_dirs(cfg.user_dir)
     t0 = time.time()
     launch_args = list(cfg["launch"]["debug_args" if args["debug"] else "args"])
-    pid = process.launch(cfg.game_dir, launch_args)
+    if session.mode == "campaign":
+        session.play_policy.validate_launch_arguments(launch_args)
+        _validate_campaign_playset(cfg)
+    session.platform.preflight_game_launch()
+    backup = session.prepare_config_session() if session.mode == "campaign" else None
+    if backup:
+        session.config_owner_id = uuid.uuid4().hex
+        backup.mark_game_starting(session.config_owner_id)
+    from ..game import gamemode
+    gamemode.begin_run(session, t0)
+    try:
+        pid = process.launch(cfg.game_dir, launch_args)
+    except (OSError, ToolError):
+        if backup:
+            backup.mark_game_exited(session.config_owner_id)
+            backup.restore()
+        raise
     session.launched_pid = pid
-    data = {"pid": pid, "args": launch_args, "debug": args["debug"]}
+    session.launched_identity = session.platform.capture_process_identity(pid, cfg.game_exe)
+    if backup:
+        backup.mark_game_started(session.config_owner_id)
+    if hasattr(session.window, "bind_identity"):
+        session.window.bind_identity(session.launched_identity)
+    elif hasattr(session.window, "expected_identity"):
+        session.window.expected_identity = session.launched_identity
+    if getattr(session, "_memory_process", None) is not None:
+        session._memory_process.close()
+    session._memory_process = session._memory_reader = None
+    session._telemetry = None
+    session.date_uncertain = True
+    data = {"pid": pid, "args": launch_args, "debug": args["debug"],
+            "owned_launch": {"pid": pid, "creation_time": session.launched_identity.creation_time,
+                             "executable_path": session.launched_identity.executable_path}}
     # window
     deadline = t0 + args["timeout_s"]
     while time.time() < deadline and not session.window.find():
@@ -153,10 +236,15 @@ def hoi4_launch(session, args):
 @tool("hoi4_new_game",
       "Start a new game from the main menu (or from a running game with exit_to_menu=true): Single Player, New "
       "Game, the scenario (bookmark label, e.g. '1939'), a major country by its name on the Select Country screen, "
-      "START. In test mode `tag` switches to any country afterwards with the console. Waits until the map is up.",
+      "START. start=false stops at the ready screen for rules review. In test mode `tag` switches to any "
+      "country afterwards with the console. Otherwise waits until the map is up.",
       {"properties": {
           "bookmark": {"type": "string", "description": "scenario label regex, e.g. '1936' or 'August, 1939'"},
           "country": {"type": "string", "description": "a major's name as shown, e.g. 'United States', 'German Reich'"},
+          "start": {"type": "boolean", "default": True,
+                    "description": "false prepares the ready screen without clicking START"},
+          "rules": {"type": "string", "enum": ["inspect", "reset_defaults"],
+                    "description": "with start=false, inspect custom rules or click their normal Reset and Apply"},
           "exit_to_menu": {"type": "boolean", "default": False,
                            "description": "resign the running game first (unsaved progress is lost)"},
           "tag": {"type": "string", "pattern": "^[A-Z][A-Z0-9]{2}$", "description": "switch to this tag (test mode)"},
@@ -167,6 +255,10 @@ def hoi4_launch(session, args):
                 {"args": {"bookmark": "1939", "country": "Soviet Union", "exit_to_menu": True}}])
 def hoi4_new_game(session, args):
     apply_mode(session, args)
+    if args.get("tag") and not args.get("start", True):
+        raise ToolError("tag switching requires starting a test-mode game", {"field": "tag"})
+    if args.get("rules") and args.get("start", True):
+        raise ToolError("rules review requires start=false", {"field": "start"})
     pre = None
     if session.window.find():
         state, _ = ui.classify(session)
@@ -175,9 +267,15 @@ def hoi4_new_game(session, args):
                 raise ToolError("a game is running; pass exit_to_menu=true to resign it (save first if needed)",
                                 {"field": "exit_to_menu"})
             pre = menu.quit_to_main_menu(session)
-    rep = menu.new_game(session, country=args.get("country"), bookmark=args.get("bookmark"))
+    rep = menu.new_game(session, country=args.get("country"), bookmark=args.get("bookmark"),
+                        start=args.get("start", True))
     if pre:
         rep["exited_previous_game"] = pre
+    if rep.get("prepared"):
+        if args.get("rules"):
+            rep["rules_review"] = menu.review_setup_rules(session, reset=args["rules"] == "reset_defaults")
+        return attach(ToolResult("new game prepared; review rules before START", rep),
+                      session, session.grab(), "new_game_prepared")
     if args.get("tag"):
         if session.mode != "test":
             raise ToolError("tag switching is a console command; use test mode")
@@ -203,7 +301,11 @@ def hoi4_new_game(session, args):
       examples=[{"args": {"save": "qa_001_fresh_head"}, "note": "fresh 1936 USA test save"}])
 def hoi4_load(session, args):
     apply_mode(session, args)
+    from ..game import gamemode
+    gamemode.begin_run(session)
     rep = saves.load(session, args["save"], args.get("timeout_s"))
+    if rep.get("date_matches") is True:
+        gamemode.bind_save(session, saves.save_path(session, args["save"]))
     if rep.get("date_on_screen"):
         # the telemetry log still holds the days of the timeline that was left: drop those after the loaded date
         rep["telemetry_days_dropped"] = session.telemetry.drop_after(rep["date_on_screen"])
@@ -226,6 +328,8 @@ def hoi4_load(session, args):
       examples=[{"args": {"name": "smoke"}, "note": "writes save games/hoi4live_smoke.hoi4"}])
 def hoi4_save(session, args):
     rep = saves.save(session, args["name"], args["overwrite"])
+    from ..game import gamemode
+    gamemode.bind_save(session, rep["path"])
     return result(f"saved {rep['name']}.hoi4 ({rep['size_mb']} MB, {rep.get('player')}, {rep.get('date')})", **rep)
 
 
@@ -242,16 +346,24 @@ def hoi4_shutdown(session, args):
     if not args["confirm"]:
         raise ToolError("confirm must be true to quit the game", {"field": "confirm"})
     if not session.window.find():
-        return result("HOI4 is not running")
+        restored = None
+        if getattr(session, "config_session", None) is not None:
+            restored = session.restore_configs_after_exit()
+        return result("HOI4 is not running", config_restore=restored)
     pid = session.window.pid
+    session.require_owned_game()
     if args["force"]:
         if pid != session.launched_pid:
             raise ToolError("force only terminates a game this server launched; quit it through the menu instead")
         process.kill(pid)
-        return result(f"terminated pid {pid}", pid=pid)
+        exited = process.wait_exit(pid, 30)
+        restored = session.restore_configs_after_exit() if exited and getattr(session, "config_session", None) else None
+        return result(f"termination requested for pid {pid}", pid=pid, exited=exited, config_restore=restored)
     menu.quit_to_desktop(session)
     exited = process.wait_exit(pid, 120)
-    return result("game exited" if exited else "quit requested; the game is still closing", pid=pid, exited=exited)
+    restored = session.restore_configs_after_exit() if exited and getattr(session, "config_session", None) else None
+    return result("game exited" if exited else "quit requested; the game is still closing", pid=pid, exited=exited,
+                  config_restore=restored)
 
 
 @tool("hoi4_lock",
@@ -286,7 +398,7 @@ def hoi4_lock(session, args):
     elif a == "set_mode":
         if not args.get("mode"):
             raise ToolError("set_mode needs mode", {"field": "mode"})
-        session.mode = args["mode"]
+        apply_mode(session, args)
     elif a == "set_pace":
         from .. import perf
         p = args.get("pace")

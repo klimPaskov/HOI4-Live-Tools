@@ -1,4 +1,4 @@
-"""Ironman, multiplayer, difficulty and mods of the running game, read from the header of the newest save.
+"""Game mode from a save associated with the current owned run.
 
 An Ironman save is binary (`HOI4bin`), a plain text save starts `HOI4txt`; the text header lists `player_countries`
 (more than one entry or a named user means multiplayer), `difficulty`, `mods` and the `ironman=` flag of the
@@ -7,6 +7,8 @@ clock. `hoi4_status` reports the mode, and `check()` is what tools that need the
 refuse with an explanation. The signals come from save files only: an Ironman launch has not been verified live.
 """
 
+import copy
+import math
 import os
 import re
 import time
@@ -50,36 +52,118 @@ def newest_save(session):
         files = [os.path.join(d, f) for f in os.listdir(d) if f.lower().endswith(".hoi4")]
     except OSError:
         return None
-    return max(files, key=os.path.getmtime) if files else None
+    candidates = []
+    for path in files:
+        try:
+            candidates.append((os.path.getmtime(path), path))
+        except OSError:
+            pass
+    return max(candidates)[1] if candidates else None
+
+
+def begin_run(session, started_wall=None):
+    """Forget unrelated save metadata at owned launch or before a new campaign."""
+    session._game_mode_started_wall = time.time() if started_wall is None else started_wall
+    session._game_mode_save = None
+    session._mode_cache = None
+    session._game_mode_baseline = _baseline_saves(session)
+
+
+def _baseline_saves(session):
+    """Exclude unchanged prelaunch files even on coarse wall clocks.
+
+    Metadata inventory is bounded; an unreadable or oversized directory leaves
+    automatic association unavailable, while a verified save/load still works.
+    """
+    baseline = set()
+    try:
+        with os.scandir(session.cfg.saves_dir) as entries:
+            for count, entry in enumerate(entries):
+                if count >= 4096:
+                    return None
+                if entry.name.lower().endswith(".hoi4"):
+                    baseline.add(_signature(entry.path))
+    except FileNotFoundError:
+        return baseline
+    except (OSError, AttributeError, TypeError):
+        return None
+    return baseline
+
+
+def _signature(path):
+    st = os.stat(path)
+    return (os.path.realpath(path), st.st_dev, st.st_ino, st.st_size, st.st_mtime_ns)
+
+
+def bind_save(session, path):
+    """Called ONLY after a verified ordinary save/load, never for a guessed newest save."""
+    signature = _signature(path)
+    session._game_mode_save = (signature, time.time())
+    session._mode_cache = None
 
 
 def current(session):
-    """The mode read from the newest save of the running game; cached per file and modification time."""
-    p = newest_save(session)
-    if not p:
-        return {"known": False}
-    key = (p, os.path.getmtime(p))
+    """Only verified loaded/saved files or saves newer than this owned run qualify.
+
+    A recent save from another campaign is not the current game at the menu.
+    No run anchor means unknown; file timestamps alone cannot establish a run.
+    """
+    now = time.time()
+    started = getattr(session, "_game_mode_started_wall", None)
+    bound = getattr(session, "_game_mode_save", None)
+    p = None
+    source = None
+    if isinstance(bound, tuple) and len(bound) == 2:
+        signature, observed = bound
+        try:
+            if (0 <= now - observed <= FRESH_SECONDS and _signature(signature[0]) == signature):
+                p, source = signature[0], "verified_save_or_load"
+        except (OSError, TypeError, ValueError, IndexError):
+            pass
+    if p is None:
+        if (type(started) not in (int, float) or not math.isfinite(started) or not 0 < started <= now):
+            return {"known": False, "reason": "no_current_run_save_evidence"}
+        baseline = getattr(session, "_game_mode_baseline", None)
+        if not isinstance(baseline, set):
+            return {"known": False, "reason": "prelaunch_save_inventory_unavailable"}
+        p = newest_save(session)
+        try:
+            if p and _signature(p) in baseline:
+                return {"known": False, "reason": "unchanged_prelaunch_save"}
+            written = os.path.getmtime(p) if p else None
+        except OSError:
+            written = None
+        if written is None or written < started or not 0 <= now - written <= FRESH_SECONDS:
+            return {"known": False, "reason": "no_fresh_save_from_current_run"}
+        source = "save_written_during_current_run"
+    try:
+        key = (_signature(p), started, source)
+    except OSError:
+        return {"known": False, "reason": "save_unavailable"}
     cache = getattr(session, "_mode_cache", None)
-    if cache and cache[0] == key:
-        return cache[1]
+    if isinstance(cache, tuple) and cache[0] == key:
+        return copy.deepcopy(cache[1])
     try:
         h = read_header(p)
-        h["known"] = True
+        if _signature(p) != key[0]:
+            return {"known": False, "reason": "save_changed_while_reading"}
+        h.update(known=True, source=source)
     except OSError:
         h = {"known": False}
     session._mode_cache = (key, h)
-    return h
+    return copy.deepcopy(h)
 
 
 FRESH_SECONDS = 6 * 3600
 
 
 def check(session, what):
-    """Raise ToolError when the game is Ironman or multiplayer (`what` is not possible there). Only a save written in
-    the last six hours counts: an old Ironman save says nothing about the game that runs now."""
+    """Refuse incompatible actions only on fresh, current-run save evidence.
+
+    A verified load can bind an older file; an unrelated recent save cannot.
+    Unknown save metadata does not invent an Ironman or multiplayer claim.
+    """
     m = current(session)
-    if m.get("known") and time.time() - os.path.getmtime(os.path.join(session.cfg.saves_dir, m["file"])) > FRESH_SECONDS:
-        return m
     if m.get("ironman"):
         raise ToolError(f"{what} is not possible in an Ironman game (no console, no manual saves)",
                         {"game_mode": m, "error": "ironman"})

@@ -104,7 +104,7 @@ def _hours(date_text):
       "a change at the front) or when `days` or the date `until` is reached. Popups are answered by the policy "
       "(popups: choices = news and one-option events are answered, an event with a real choice stops the run and is "
       "returned with its text and options for the agent to answer; rules can pre-decide events by title or text). "
-      "The result lists why it stopped, what changed, the popups answered and still open, the attention items and "
+      "Fast runs keep the simulation running when they return for routine events or deadlines. The result lists why it returned, what changed, the popups answered and still open, the attention items and "
       "the tool calls that answer them; each run is written to the journal. Without the telemetry mod only the date, "
       "popups and focus notices stop a run.",
       {"properties": {
@@ -159,6 +159,10 @@ def hoi4_advance(session, args):
         return _advance_fast(session, args, policy, stop_on)
     if args.get("background"):
         raise ToolError("background runs need the telemetry day records (engine fast)", {"field": "background"})
+    if session.mode == "campaign":
+        raise ToolError("campaign advances require fresh telemetry; the legacy screen loop pauses between chunks",
+                        {"error": "capability_unavailable", "capability": "live advance",
+                         "remedy": "Enable observational telemetry before launching, then run the clock normally until a day record arrives"})
     return _advance_screen(session, args, policy, stop_on)
 
 
@@ -182,7 +186,13 @@ def _advance_fast(session, args, policy, stop_on):
                         {"state": "running", "progress": cur.progress})
     store = session.telemetry
     # the screen's date says which timeline the game is on: days logged after it belong to a game that was left
-    d0, _ = timectl.read_date(session)
+    try:
+        # Only this server's launch can use memory. The cheap clock reader avoids
+        # both country traversal and an OCR pause at the start of each advance.
+        memory_date = session.memory_snapshot(clock_only=True).get("date") if getattr(session, "launched_identity", None) else None
+    except ToolError:
+        memory_date = None  # unknown builds retain the existing screen fallback
+    d0 = {"hoi4": memory_date} if memory_date else timectl.read_date(session)[0]
     start_text = d0.get("hoi4") if "error" not in d0 else None
     if start_text:
         store.drop_after(start_text)
@@ -197,7 +207,11 @@ def _advance_fast(session, args, policy, stop_on):
     a["stop_on_used"] = stop_on
     a["stop_on"] = stop_on
     from ..state import standing
-    run = clock_mod.AdvanceRun(session, a, policy, on_reasons=standing.hook(session))
+    governor = getattr(session, "governor", None)
+    managed = governor is not None and governor.active()
+    run = clock_mod.AdvanceRun(session, a, policy,
+                              on_reasons=None if managed else standing.hook(session),
+                              on_day=governor.on_day if managed else None)
     session.clock = run
     if args.get("background"):
         run.start()
@@ -453,7 +467,7 @@ CALL = {"type": "object", "properties": {"tool": {"type": "string"}, "args": {"t
       "construction_done, production_idle, pp_high, low_stability, war_started, ...) and WHAT: `do` (tool calls run "
       "every time) or `queue` (a list of calls; each firing runs the next entry, so you write your priorities "
       "once; entries may be lists of calls). They run inside hoi4_advance (also a background one) while it "
-      "watches the telemetry; the game is paused around them unless pause=false. An empty queue or a failed call "
+      "watches the telemetry; time keeps running unless pause=true is explicitly requested. An empty queue or a failed call "
       "stops the run with standing_queue_empty / standing_failed and says why. set with append=true adds queue "
       "entries to an existing rule. Orders execute decisions; they choose nothing.",
       {"properties": {
@@ -464,7 +478,7 @@ CALL = {"type": "object", "properties": {"tool": {"type": "string"}, "args": {"t
           "queue": {"type": "array", "items": {"anyOf": [CALL, {"type": "array", "items": CALL}]},
                     "description": "one entry (a call or a list of calls) per firing"},
           "append": {"type": "boolean", "default": False, "description": "set: add `queue` entries to the rule"},
-          "pause": {"type": "boolean", "default": True, "description": "pause the game while the rule runs"},
+          "pause": {"type": "boolean", "default": False, "description": "pause for a bounded action that requires it"},
           "max_fires": {"type": "integer", "minimum": 1},
           "on_fail": {"type": "string", "enum": ["stop", "skip"], "default": "stop",
                       "description": "queue rules: stop the run on a failed call (default), or skip the entry "

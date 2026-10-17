@@ -19,8 +19,26 @@ TAG = {"type": "string", "pattern": "^[A-Z][A-Z0-9]{2}$", "description": "defaul
 # ============================================================================================== hoi4_focus
 def _focus_context(session, tag, save):
     tag = cc.player_tag(session, tag)
-    sv, src = cc.save_model(session, tag, ["focus"], save)
-    f = (sv or {}).get("focus") or {}
+    sv, f = {}, {}
+    if save == "telemetry":
+        src = {"focus": "unknown", "current_known": False}
+        snap = session.telemetry.snapshot(tag) if tag else None
+        obs = (snap or {}).get("focus")
+        if isinstance(obs, dict):
+            from ..game import timectl
+            from ..state.assemble import days_between
+            screen_date, _ = timectl.read_date(session)
+            age = days_between(obs.get("as_of_date"), screen_date.get("hoi4"))
+            if (age is not None and 0 <= age <= 1 and obs.get("tag") == tag
+                    and obs.get("day") == snap.get("n")):
+                f = dict(obs)
+                src = {"focus": "telemetry", "as_of": obs.get("as_of_date"),
+                       "generation": obs.get("generation"), "current_known": False}
+            else:
+                src["note"] = "focus telemetry is stale or screen date is unverified"
+    else:
+        sv, src = cc.save_model(session, tag, ["focus"], save)
+        f = (sv or {}).get("focus") or {}
     idx = focus_data.for_session(session)
     tree = f.get("tree") or ((sv or {}).get("overview") or {}).get("focus_tree")
     if not tree and tag:
@@ -37,7 +55,7 @@ def _focus_context(session, tag, save):
       "the game's detail window for one focus (requirements met/unmet in colour, days, description, effects). "
       "select: start a focus through the tree view (search box, detail window, Start), verified on the politics "
       "panel. progress: the current focus and its progress. cancel: cancel the focus in progress. The focus is an "
-      "id or its localised name.",
+      "id or its localised name; campaign selection requires the exact installed ID and unique screen verification.",
       {"properties": {
           "action": {"type": "string", "enum": ["list", "details", "select", "progress", "cancel"], "default": "list"},
           "focus": {"type": "string", "description": "focus id or localised name (details, select)"},
@@ -52,7 +70,7 @@ def _focus_context(session, tag, save):
           "replace": {"type": "boolean", "default": False,
                       "description": "select: cancel the focus in progress first"},
           "force": {"type": "boolean", "default": False,
-                    "description": "select even when the detail window shows unmet requirements"},
+                    "description": "test mode only: select even when the detail window shows unmet requirements"},
           "screen": {"type": "boolean", "default": False, "description": "list: also read the current focus on screen"},
           "keep_open": {"type": "boolean", "default": False, "description": "leave the focus tree open"},
           "limit": {"type": "integer", "minimum": 1, "maximum": 400, "default": 40},
@@ -65,6 +83,10 @@ def _focus_context(session, tag, save):
                 {"args": {"action": "list", "status": "all", "filter": "industr", "limit": 20}}])
 def hoi4_focus(session, args):
     a = args["action"]
+    campaign = session.mode == "campaign"
+    if campaign and a == "select" and args.get("force"):
+        raise ToolError("campaign focus selection requires verified requirements; force is unavailable",
+                        {"error": "focus_requirements_unverified"})
     tag, tree, focuses, saved, src = _focus_context(session, args.get("tag"), args["save"])
     if a == "list":
         return _focus_list(session, args, tag, tree, focuses, saved, src)
@@ -74,11 +96,13 @@ def hoi4_focus(session, args):
         with session.lock.hold("hoi4_focus cancel"):
             panels.open_panel(session, "politics")
             before = focusview.read_button(session)
+            if campaign and (before.get("unread") or not before.get("text")):
+                raise ToolError("current focus button is unreadable; not cancelling", {"error": "focus_state_unknown"})
             if not before.get("current"):
                 raise ToolError("no focus in progress", {"button": before})
             focusview.cancel_current(session)
             after = focusview.read_button(session)
-            if after.get("current"):
+            if after.get("current") or (campaign and (after.get("unread") or not after.get("text"))):
                 cc.fail(session, "the focus is still in progress after cancelling", {"after": after})
             from ..state import focustimer
             focustimer.clear(session)
@@ -87,32 +111,50 @@ def hoi4_focus(session, args):
                               "verified_by": "politics panel focus button"}, "focus_cancel")
     if not args.get("focus"):
         raise ToolError(f"{a} needs focus (an id or a localised name)", {"field": "focus"})
-    rows = focus_data.plan(focuses, saved.get("completed"), saved.get("current"),
-                           cc.names(session, list(focuses)))
+    focus_names = cc.names(session, list(focuses))
+    rows = focus_data.plan(focuses, saved.get("completed"), saved.get("current"), focus_names)
     row, others = focus_data.match_name(rows, args["focus"])
     if row is None and others:
         raise ToolError(f"'{args['focus']}' matches several focuses", {"candidates": [
             {"id": r["id"], "name": r["name"]} for r in others[:15]]})
     name = row["name"] if row else args["focus"]
+    if campaign and a == "select" and (row is None or args["focus"] != row["id"]):
+        raise ToolError("campaign focus selection requires an installed focus ID", {"error": "focus_id_required"})
     with session.lock.hold(f"hoi4_focus {a}"):
         if a == "select":
             panels.open_panel(session, "politics")
             before = focusview.read_button(session)
+            if campaign and (before.get("unread") or not before.get("text")):
+                raise ToolError("current focus button is unreadable; not treating it as idle",
+                                {"error": "focus_state_unknown"})
             if before.get("current"):
                 _q0, _rx0 = focusview.placeholder_pattern(name)
-                if (_rx0 and _rx0.search(before["current"])) or panels.similar(before["current"], name) >= 0.9:
+                current_id = focusview.title_focus_id(before["current"], focus_names) if campaign else None
+                if campaign and current_id is None:
+                    raise ToolError("current focus title does not resolve to a unique installed ID",
+                                    {"error": "focus_state_unknown"})
+                same = (current_id == row["id"] if campaign else
+                        ((_rx0 and _rx0.search(before["current"])) or panels.similar(before["current"], name) >= 0.9))
+                if same:
                     return cc.finish(session, f"{name} is already in progress",
                                      {"action": "select", "focus": row and row["id"], "before": before["current"],
-                                      "after": before["current"], "changed": False}, "focus_already")
+                                      "after": before["current"], "changed": False,
+                                      "verified_focus_id": current_id}, "focus_already")
                 if args.get("if_idle"):
                     panels.close(session)
                     return ToolResult(f"deferred: {before['current']} is still in progress",
                                       {"action": "select", "focus": row and row["id"], "before": before["current"],
-                                       "changed": False, "deferred": True})
+                                       "changed": False, "deferred": True,
+                                       "verified_current_focus_id": current_id})
                 if not args["replace"]:
                     raise ToolError(f"a focus is in progress ({before['current']}); pass replace=true to cancel it "
                                     "first", {"current": before["current"]})
                 focusview.cancel_current(session)
+                if campaign:
+                    cancelled = focusview.read_button(session)
+                    if cancelled.get("current") or cancelled.get("unread") or not cancelled.get("text"):
+                        raise ToolError("focus cancellation is unverified; not selecting another focus",
+                                        {"error": "focus_state_unknown"})
         focusview.open_tree(session)
         detail, found, tried = focusview.open_detail(session, name, search_text=args.get("search"))
         if not detail:
@@ -131,6 +173,13 @@ def hoi4_focus(session, args):
                              f"{'; '.join(detail['unmet']) or 'none on screen'}", data, "focus_details",
                              img=None)
         # select
+        if campaign:
+            if focusview.title_focus_id(detail.get("title"), focus_names) != row["id"]:
+                raise ToolError("focus detail title does not uniquely verify the requested ID",
+                                {"error": "focus_identity_unverified", "focus": row["id"]})
+            if detail.get("start_enabled") is not True or detail.get("unmet") != []:
+                raise ToolError("focus requirements and Start button are not verified",
+                                {"error": "focus_requirements_unverified", "focus": row["id"]})
         if detail.get("start_enabled") is False and not detail["unmet"] and not args["force"]:
             raise ToolError(f"{name} cannot be started: the Start button is disabled (a requirement is not met; "
                             "hoi4_focus action=details shows the lines)", dict(data, error="requirements"))
@@ -151,6 +200,9 @@ def hoi4_focus(session, args):
         _q, _rx = focusview.placeholder_pattern(name)
         shows_it = bool(after and after.get("current") and
                         ((_rx and _rx.search(after["current"])) or panels.similar(after["current"], name) >= 0.75))
+        if campaign:
+            shows_it = bool(after and not after.get("unread")
+                            and focusview.title_focus_id(after.get("current"), focus_names) == row["id"])
         if not shows_it:
             if panels.current(session) == "focus_tree":
                 focusview.close_detail(session)
@@ -159,6 +211,8 @@ def hoi4_focus(session, args):
                              f"{(after or {}).get('current') or 'no focus'})", dict(data, after=after), "focus_select")
         data.update({"action": "select", "before": None, "after": after["current"], "changed": True,
                      "verified_by": "politics panel focus button"})
+        if campaign:
+            data["verified_focus_id"] = row["id"]
         from ..state import focustimer
         focustimer.start(session, args["focus"], name, detail.get("days"))
         return cc.finish(session, f"started {name} ({detail.get('days')} days)", data, "focus_select")
@@ -174,9 +228,8 @@ def _focus_list(session, args, tag, tree, focuses, saved, src):
         with session.lock.hold("hoi4_focus list"):
             panels.open_panel(session, "politics")
             screen_current = focusview.read_button(session).get("current")
-    if screen_current and (not current or panels.similar(nm.get(current, current), screen_current) < 0.8):
-        hit = next((fid for fid in focuses if panels.similar(nm.get(fid, fid), screen_current) >= 0.9), None)
-        current = hit or current
+    if screen_current:
+        current = focusview.title_focus_id(screen_current, nm)
     rows = focus_data.plan(focuses, saved.get("completed"), current, nm)
     if args["status"] != "all":
         rows = [r for r in rows if r["status"] == args["status"]]
@@ -189,8 +242,11 @@ def _focus_list(session, args, tag, tree, focuses, saved, src):
     data = {"tag": tag, "tree": tree, "current": current, "current_name": nm.get(current) if current else None,
             "screen_current": screen_current, "completed": len(saved.get("completed") or []),
             "focuses": rows, "shown": len(rows), "matching": total, "sources": src,
-            "note": "status comes from prerequisites and exclusions in the files and the completed list of the "
-                    "save; script conditions ('requires') are checked by the game: use action=details"}
+            "availability_verified": False,
+            "completed_known": "completed" in saved,
+            "note": "status is a prerequisite/exclusion estimate using the stated observation source; "
+                    "missing completion history is unknown. Script conditions and actual availability "
+                    "require the game's detail view"}
     summ = (f"{tag} {tree}: {total} {args['status']} focus(es)" +
             (f"; in progress: {data['current_name'] or screen_current}" if (current or screen_current) else
              "; no focus in progress") + ". " + "; ".join(f"{r['name']} ({r['days']} d)" for r in rows[:8]))
@@ -208,8 +264,10 @@ def _focus_progress(session, tag, tree, focuses, saved, src):
     nm = cc.names(session, list(focuses))
     cur = None
     if btn.get("current"):
-        cur = next((fid for fid in focuses if panels.similar(nm.get(fid, fid), btn["current"]) >= 0.85), None)
-    data = {"tag": tag, "screen_current": btn.get("current"), "focus": cur, "sources": src}
+        cur = focusview.title_focus_id(btn["current"], nm)
+    known = bool(btn.get("text") and not btn.get("unread") and (not btn.get("current") or cur))
+    data = {"tag": tag, "screen_current": btn.get("current"), "focus": cur,
+            "current_known": known, "sources": src}
     if cur:
         total = int(focuses[cur]["cost"] * focus_data.DAYS_PER_COST)
         data["total_days"] = total
@@ -218,7 +276,7 @@ def _focus_progress(session, tag, tree, focuses, saved, src):
             data.update({"progress_days_at_save": done, "remaining_days_at_save": max(0, total - done),
                          "save_date": src.get("as_of")})
     summ = (f"in progress: {btn['current']}" + (f" ({data.get('total_days')} days in all)" if cur else "")
-            if btn.get("current") else "no focus in progress")
+            if btn.get("current") else ("no focus in progress" if known else "current focus unknown"))
     return cc.finish(session, summ, data, "focus_progress", img=img)
 
 

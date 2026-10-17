@@ -85,3 +85,38 @@ class WindowsPlatform(Platform):
     def process_image(self, pid):
         from ..desktop import win32
         return win32.process_image(pid)
+
+    def capture_process_identity(self, pid, expected_executable_path=None):
+        # Query metadata for any process (desktop leases belong to Python, not
+        # HOI4). The game memory reader retains its stricter HOI4-only validator.
+        import ntpath
+        from ..memory.winproc import WindowsAPI, OwnershipError, PROCESS_QUERY_INFORMATION
+        if type(pid) is not int or pid <= 0:
+            raise OwnershipError("invalid process PID")
+        api = WindowsAPI()
+        handle = api.open_process(pid, PROCESS_QUERY_INFORMATION)
+        try:
+            identity = api.get_process_identity(handle, pid)
+            if expected_executable_path is not None:
+                key = lambda path: ntpath.normcase(ntpath.normpath(path))
+                if key(identity.executable_path) != key(expected_executable_path):
+                    raise OwnershipError("process executable identity does not match")
+            return identity
+        finally:
+            api.close(handle)
+
+    def make_window(self, *args, **kwargs):
+        from .windows_window import GameWindow
+        return GameWindow(*args, **kwargs)
+
+    def make_capturer(self, *args, **kwargs):
+        from .windows_capture import Capturer
+        return Capturer(*args, **kwargs)
+
+    def make_input(self, *args, **kwargs):
+        from .windows_input import Input
+        return Input(*args, **kwargs)
+
+    def clipboard(self):
+        from . import windows_clipboard
+        return windows_clipboard

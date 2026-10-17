@@ -3,7 +3,9 @@ label matching, the tech tree calibration, the advisor list, the decisions panel
 The OCR tests need the Windows OCR host; the calibration test needs the game files."""
 
 import os
+import sys
 import unittest
+from unittest import mock
 
 import numpy as np
 from PIL import Image
@@ -11,6 +13,7 @@ from PIL import Image
 from helpers import FIXTURES, needs_fixture
 
 from hoi4_live import config
+from hoi4_live.perception import glyphs
 from hoi4_live.game import (decisionsview, diplomacyview, focusview, panels, politicsview, productionview,
                             researchview)
 
@@ -115,6 +118,7 @@ class CalibrationTests(unittest.TestCase):
         self.assertLessEqual(abs(oy + cy - 350), 8)
 
 
+@unittest.skipUnless(sys.platform == "win32", "screenshot text and word boxes calibrated against Windows OCR")
 class OcrViewTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -150,12 +154,21 @@ class OcrViewTests(unittest.TestCase):
         # Mexico's list after adding a line: the lines short of equipment carry a warning triangle after the number,
         # which OCR reads as "4a Mondragón M94" / "2 a Towed Artillery"
         s = FakeSession(canvas(("production_lines_mex_0_362.png", 0, 362)), self.ocr)
-        lines = productionview.read_lines(s)
+        with mock.patch.object(glyphs, "font", return_value=None):
+            lines = productionview.read_lines(s)
         self.assertEqual([l["number"] for l in lines], [1, 2, 3, 4])
-        self.assertEqual([l["factories"] for l in lines], [1, 1, 2, 1])
+        self.assertEqual([l["factories"] for l in lines], [None, None, None, None])
         self.assertGreaterEqual(panels.similar(lines[1]["name"], "Towed Artillery"), 0.95)
         self.assertGreaterEqual(panels.similar(lines[3]["name"], "Mondragón M94"), 0.9)
         self.assertEqual(lines[3]["type"], "Basic Infantry Equipment")
+
+    def test_production_factory_counts_with_game_fonts(self):
+        gd = config.get().game_dir
+        if any(glyphs.font(gd, name) is None for name in ("hoi_18b", "hoi_16mbs")):
+            self.skipTest("factory-count glyph matching requires installed game fonts")
+        s = FakeSession(canvas(("production_lines_mex_0_362.png", 0, 362)), self.ocr)
+        lines = productionview.read_lines(s)
+        self.assertEqual([l["factories"] for l in lines], [1, 1, 2, 1])
 
     def test_decision_rows(self):
         s = FakeSession(canvas(("decisions_panel_crop.jpg", 0, 80)), self.ocr)

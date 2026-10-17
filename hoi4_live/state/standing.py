@@ -76,7 +76,7 @@ class StandingOrders:
             raise ToolError(f"{where}: empty call list", {"field": where})
         return out
 
-    def set(self, name, when, do=None, queue=None, pause=True, max_fires=None, min_gap_days=0, replace=True,
+    def set(self, name, when, do=None, queue=None, pause=False, max_fires=None, min_gap_days=0, replace=True,
             on_fail="stop"):
         if not name:
             raise ToolError("a standing order needs a name", {"field": "name"})

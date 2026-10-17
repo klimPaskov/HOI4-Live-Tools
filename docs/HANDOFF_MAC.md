@@ -1,5 +1,18 @@
 # Mac handoff: start here
 
+**Current direction:** the user superseded Mac live testing with the
+[Linux-first Rust objective](LINUX_RUST_HANDOFF.md). Read that and the
+[current live evidence](CLAUSEWITZ_VALIDATION.md) before resuming. Recorded Linux
+Luna runs have verified Rust clock controls and four-slot research through
+5 January 1936. Focus and daily execution remain in development; campaign
+acceptance is not passed.
+
+**Earlier Mac continuation:** read [Mac continuation checkpoint](MAC_CONTINUATION_STATUS.md)
+first for implemented Mac support, the locked-desktop smoke-test blocker, remaining
+internal gaps and the Germany/China FAIR plus Poland META assignment. Use the new
+[campaign playbook](../skills/hoi4-campaign-playbook/SKILL.md). The implementation
+status below records the original handoff and is superseded by that checkpoint.
+
 11 October 2026. Public source: <https://github.com/klimPaskov/HOI4-Live-Tools>.
 This is the single entry point for continuing with Codex on a Mac. Read the root
 [AGENTS.md](../AGENTS.md), then continue on `wip/governor-memory` or a feature

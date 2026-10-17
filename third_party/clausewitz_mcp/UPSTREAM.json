@@ -1,0 +1,142 @@
+{
+  "repository": "https://github.com/smerss/Clausewitz-MCP",
+  "commit": "97c85437081904d5ad07bae1623ec58d1c0a5b9e",
+  "license": "MIT",
+  "copyright": "Copyright (c) 2026 smerss",
+  "purpose": "Pinned upstream source foundation for cross-platform integration; not an enabled native campaign adapter",
+  "excluded": "Binary caches, game-derived tables, assets and research dumps; regenerate build data locally with independent validation",
+  "files": {
+    "LICENSE": {
+      "sha256": "8c063638a0cde4e7122ade7a5eaa6a172964e85bc6e107ce561ed1837d8a4cd3",
+      "modified": false
+    },
+    "calling/api.py": {
+      "sha256": "abd76ab25eded578b321013ede9b196f0c7d3a0f5f882a87ac7d208fd6585eec",
+      "modified": false
+    },
+    "calling/armyops.py": {
+      "sha256": "29d39d4febf86eb5f94397d7f818a7dd0ff5f2e3831fdec2e351c0e102085189",
+      "modified": false
+    },
+    "calling/call.py": {
+      "sha256": "9da5974ce053ad65069a3e452c2290c5da8f3910c24423dfde3a12249b855f10",
+      "modified": false
+    },
+    "calling/cmdauto.py": {
+      "sha256": "1b5b3a5e3ebb4a9a1cc5b76a9b6db8f283b754096d99bb485cf2ee7009ea92e5",
+      "modified": false
+    },
+    "calling/cmdctor.py": {
+      "sha256": "cbdf9a5b9c31b06e0988b187ede9f1de28778aa22f39a6ecef11ac6a0b383389",
+      "modified": false
+    },
+    "calling/combat.py": {
+      "sha256": "8f5d3ba7a0e81bd3c54462f4565cfa6077e0b8dc264ded00b32ec413c60c3df7",
+      "modified": false
+    },
+    "calling/commands.py": {
+      "sha256": "e83be3c8a1f07d0539f9e4cb4d079d24ada606b591581f3ccdb45fe6b40c067a",
+      "modified": false
+    },
+    "calling/config.py": {
+      "sha256": "9699a345f61ab887375827c8aa2ea30fb3a4c0ec9e7aa752057841d41c80ce29",
+      "modified": false
+    },
+    "calling/diplomacy.py": {
+      "sha256": "f6124c630c1b13db22b4a9fa68cdb7bea6e8d2b2144688aeb3465da714fc66c1",
+      "modified": false
+    },
+    "calling/doctrine.py": {
+      "sha256": "df0c528df402fb3b1ea56c469aa669e99481fe22d96307282d0e81d17cced916",
+      "modified": false
+    },
+    "calling/elf.py": {
+      "sha256": "c2b1a3a1fcc202ca1c9efd145029d9d0ebaefc164db7a0c2368e0471e2ef05b9",
+      "modified": false
+    },
+    "calling/explore.py": {
+      "sha256": "eb4080092b8083fe254bb9e8f66013b40f2c9713f81c5c45b46198cae51ae218",
+      "modified": false
+    },
+    "calling/fieldmap.py": {
+      "sha256": "6b2e4d4c1054a100c16ba85bc8684a53764370820a5d6791e7d19a24188a40eb",
+      "modified": false
+    },
+    "calling/game.py": {
+      "sha256": "90fe28cf01f4fead6f9e6718668e66527543fcaa88ef31d1bb05d710f5c86fd3",
+      "modified": false
+    },
+    "calling/legality.py": {
+      "sha256": "99fcd4f8205edd378b08369935053174ecea42e0e18fc1d5165f6dd2bac3fe26",
+      "modified": false
+    },
+    "calling/mapdata.py": {
+      "sha256": "940269e13a3985e4854100ec670958af403adc90287820d49f8d140b929228de",
+      "modified": false
+    },
+    "calling/mem.py": {
+      "sha256": "04b121aadb8d1f44c1df5262ed8b613517e21e9ed2807ee72a0d39b9aabb3143",
+      "modified": false
+    },
+    "calling/objindex.py": {
+      "sha256": "7c535533ebb584d7f6ef73fc3604c63121491e6dab0c48b7c4b33d4cfbafb9a4",
+      "modified": false
+    },
+    "calling/offsets.py": {
+      "sha256": "e192abbbdd5592f8039b23c564e7c213641ca78fa274e0790a9c97e017c25630",
+      "modified": false
+    },
+    "calling/plan_ger.py": {
+      "sha256": "90571bdb9a2bd1a6ef939aab429c0262e31c0000836db5ae0eaf01a95aad310a",
+      "modified": false
+    },
+    "calling/process/__init__.py": {
+      "sha256": "b6f86631fe37808046c9905d29a9c02f6c190266bc51cb96b9fedebdb3556f85",
+      "modified": false
+    },
+    "calling/process/linux.py": {
+      "sha256": "bc8f02ddd98f65931e78d800841c8ba5945d9eff6b40012d7f0ad7414277f6df",
+      "modified": false
+    },
+    "calling/ragemicro.py": {
+      "sha256": "7ed7ae2afa8575d699995c06671782a40cdd57d8b85bee9eaad7e821090bdcb6",
+      "modified": false
+    },
+    "calling/rtti.py": {
+      "sha256": "39ef8b77ed07a32bf4904537f9d890838be22dc9d3e3d948a2a45aa8f886510c",
+      "modified": false
+    },
+    "calling/savereader.py": {
+      "sha256": "fcc6befb37c92eba3e629463fb4532aa2fc3796cfcd2825ed336fef75f6e176b",
+      "modified": false
+    },
+    "calling/session.py": {
+      "sha256": "6bd924242f062e15163b604a6d087a032b0d65d342b520fb4de25ef9caa5bf2b",
+      "modified": false
+    },
+    "calling/stats.py": {
+      "sha256": "08c1c4cb91389714ff2856dca48d5acf1c2c56dd156eb19f2f2c0cd51c32a87c",
+      "modified": false
+    },
+    "calling/tables/_generate.py": {
+      "sha256": "130061f8d531967db1478e6da4921119a20d9b3b4c3bb993259c422b2026da12",
+      "modified": false
+    },
+    "calling/turnloop.py": {
+      "sha256": "7b564a3519d03b26c18495d1f7006ccfcc8761c72abbaf0eafb0fa3ee43ec3f4",
+      "modified": false
+    },
+    "calling/unitorders.py": {
+      "sha256": "e5ab36da9ed1c157eb377a349805d0e48eaf980a03d910d2858fda2836fef5fd",
+      "modified": false
+    },
+    "clausewitz.py": {
+      "sha256": "f29c8393be92319b6dc112e8233886ffe0329854a2ca737bf517cddac4a9bc6b",
+      "modified": false
+    },
+    "mcp/server.py": {
+      "sha256": "01b4785e9bc4f666b6f960e82740b977991bbd6f566120a73f49f92e5a34b46d",
+      "modified": false
+    }
+  }
+}

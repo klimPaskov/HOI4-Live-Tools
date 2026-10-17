@@ -237,6 +237,7 @@ class FakeSession:
     """Just enough of Session for hoi4_advance: artifacts_dir, telemetry (refreshed on access), check_cancel."""
 
     def __init__(self, tmp, store):
+        self.mode = "test"  # these fixtures exercise the explicit QA screen engine
         self.cfg = mock.Mock(artifacts_dir=tmp)
         self._store = store
         self.last_tag = None

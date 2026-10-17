@@ -295,6 +295,10 @@ def _click_ok(session):
 def quit_to_desktop(session):
     """Pause menu -> Exit Game (-> confirm), the game's own exit flow. An exit confirmation that is already open
     (a previous attempt) is confirmed directly: that dialog ignores Esc."""
+    state, _ = ui.classify(session)
+    if state["screen"] == "main_menu":
+        clicked = ui.click_text(session, r"quit", exact=True)
+        return {"exit_requested": True, "from": "main_menu", "clicked": clicked}
     img, res = ui.ocr_screen(session, region=_center(session), scale=1.5)
     if any(re.search(r"sure you want to exit", l.text, re.I) for l in res.lines):
         return {"confirmed": _click_ok(session), "dialog_was_open": True}
@@ -321,10 +325,35 @@ def _wait_text(session, pattern, timeout=60, exact=False, scale=1.5):
     raise ToolError(f"'{pattern}' did not appear within {timeout} s")
 
 
-def new_game(session, country=None, bookmark=None, timeout=600):
+def review_setup_rules(session, reset=False):
+    """Open only the ready screen's rules dialog; optionally use its normal Reset.
+
+    Keep the dialog evidence and return to ready. A button click is not a
+    complete structured readback of every rule, so report that limit explicitly.
+    """
+    _, ready, _ = ui.find_text(session, r"start", exact=True)
+    _, back, _ = ui.find_text(session, r"back\s*to\s*menu")
+    if not ready or not back:
+        raise ToolError("game rules inspection requires the pre-game ready screen")
+    steps = [ui.click_text(session, r"custom\s*game\s*rules", exact=True)]
+    _wait_text(session, r"load\s*preset", 15)
+    if reset:
+        steps.append(ui.click_text(session, r"reset", exact=True))
+        session.sleep(0.5)
+    img, res = ui.ocr_screen(session, scale=1.5)
+    evidence = session.artifact(img, "setup_rules")
+    steps.append(ui.click_text(session, r"apply", exact=True))
+    _wait_text(session, r"start", 15, exact=True)
+    return {"steps": steps, "reset_requested": reset, "screen": evidence,
+            "visible_text": [line.text for line in res.lines],
+            "all_rule_values_verified": False}
+
+
+def new_game(session, country=None, bookmark=None, timeout=600, start=True):
     """Main menu -> Single Player -> New Game -> Select Scenario (optional bookmark by its label, e.g. '1939')
     -> Select Country (a major by its name; the default selection otherwise) -> START -> map.
 
+    start=False returns at the ready screen for rules review before starting.
     Minor countries have no name on that screen (flags only); start as a major and switch with the console
     `tag` command in test mode, or pick on the map in a later phase."""
     from ..perception import topbar
@@ -373,6 +402,10 @@ def new_game(session, country=None, bookmark=None, timeout=600):
         st = "ready"
     if st != "ready":
         raise ToolError(f"new_game starts from the main menu or a pre-game screen (now: {st})")
+    if not start:
+        return {"steps": steps, "prepared": True, "started": False, "stage": "ready"}
+    from . import gamemode
+    gamemode.begin_run(session)
     steps.append(ui.click_text(session, r"start", exact=True, prefer="bottom"))
     t0 = time.time()
     while time.time() - t0 < timeout:

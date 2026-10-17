@@ -20,9 +20,12 @@ that point belong to an abandoned timeline and are dropped.
 import collections
 import datetime
 import json
+import math
 import os
 import re
 import time
+
+from .focus import FocusLedger, KINDS as FOCUS_KINDS
 
 LINE_RX = re.compile(r"^\[(\d\d):(\d\d):(\d\d)\]\[(\d{1,4})\.(\d{1,2})\.(\d{1,2})\.(\d{1,2})\]\[[^\]]*\]:\s*HOI4LIVE\s+(.+?)\s*$")
 STRING_VALUE = re.compile(r'(?<=":")(.*?)(?="(?:,"[A-Za-z0-9_]+":|\}))')
@@ -125,6 +128,7 @@ class TelemetryStore:
         self.latest = {}                         # kind -> {tag -> record}   (single-record kinds)
         self.groups = {}                         # kind -> {"n": n, "rows": [...]}
         self.history = collections.defaultdict(collections.deque)   # tag -> deque of day records
+        self.daily_metrics = {}                  # eq/res -> tag -> bounded {day counter: record}
         self.events = collections.deque(maxlen=self.max_events)
         self.lines = 0
         self.bad = 0
@@ -132,8 +136,12 @@ class TelemetryStore:
         self.restarts = 0
         self.rewinds = 0
         self.generation = None
+        self.schema = None
         self.rs_counts = {}                        # day counter -> set of technologies being researched
         self.techs = getattr(self, "techs", [])    # technology ids; the `tid` of kt and rs records indexes them
+        if not hasattr(self, "focus_ledger"):
+            self.focus_ledger = FocusLedger(self.history_days)
+        self.focus_ledger.clear()
 
     # ------------------------------------------------------------------ input
     def refresh(self):
@@ -176,9 +184,33 @@ class TelemetryStore:
 
     def add(self, rec):
         self.lines += 1
+        # Log order resolves records sharing the game's one-second timestamp.
+        # Never trust a supplied sequence or mutate a caller's fixture/record.
+        # Reset also clears every observation, so sequence reuse cannot bridge
+        # a file restart. Generation boundaries retain this monotonic counter.
+        rec = dict(rec, _sequence=self.lines)
         k = rec["k"]
         n = rec.get("n")
         tag = rec.get("t")
+        if k in ("day", "hello") and isinstance(rec.get("g"), str) and rec["g"]:
+            schema = rec.get("v")
+            schema = schema if type(schema) is int and schema > 0 else None
+            if self.generation != rec["g"] or self.schema != schema:
+                # No observation from the previous generation may supply a
+                # country, day, queue or metric for this campaign. Preserve the
+                # file cursor and configured catalogs, but discard all batches.
+                self.latest.clear()
+                self.groups.clear()
+                self.history.clear()
+                self.events.clear()
+                self.rs_counts.clear()
+                self.daily_metrics.clear()
+                self.focus_ledger.clear()
+            self.generation, self.schema = rec["g"], schema
+        if k in FOCUS_KINDS:
+            self.focus_ledger.add(rec, self.day(tag) if tag else None)
+            self.last = rec
+            return
         if k == "day":
             hist = self.history[tag]
             if hist and isinstance(n, (int, float)) and n <= hist[-1].get("n", -1):
@@ -187,8 +219,7 @@ class TelemetryStore:
             hist.append(rec)
             while len(hist) > self.history_days:
                 hist.popleft()
-            if rec.get("g"):
-                self.generation = rec["g"]
+            self._prune_daily_metrics(tag)
         if k == "rs" and isinstance(n, (int, float)):
             tid = rec.get("tid")
             name = self.techs[int(tid)] if isinstance(tid, (int, float)) and 0 <= int(tid) < len(self.techs) else tid
@@ -199,8 +230,6 @@ class TelemetryStore:
             self.events.append(rec)
         elif k in SINGLE:
             self.latest.setdefault(k, {})[tag] = rec
-            if k == "hello" and rec.get("g"):
-                self.generation = rec["g"]
         else:
             g = self.groups.get(k)
             # one tick = the same day counter and the same moment (a reloaded save repeats a day counter later)
@@ -209,14 +238,42 @@ class TelemetryStore:
             g["rows"].append(rec)
             g["_wall"] = rec.get("_wall", 0)
         self.last = rec
+        if k in ("eq", "res"):
+            self._remember_daily_metrics(rec)
+
+    def _prune_daily_metrics(self, tag):
+        days = {record.get("n") for record in self.history.get(tag, ())}
+        for by_tag in self.daily_metrics.values():
+            records = by_tag.get(tag, {})
+            for old in [counter for counter in records if counter not in days]:
+                del records[old]
+
+    def _remember_daily_metrics(self, rec):
+        tag, counter = rec.get("t"), rec.get("n")
+        anchor = self.day(tag) if tag else None
+        if (anchor is None or not isinstance(counter, (int, float)) or isinstance(counter, bool)
+                or not math.isfinite(counter) or counter != int(counter)
+                or anchor.get("n") != counter or not self.generation or self.schema is None
+                or anchor.get("g") != self.generation or anchor.get("v") != self.schema
+                or anchor.get("_date") != rec.get("_date")
+                or rec.get("g", self.generation) != self.generation
+                or rec.get("v", self.schema) != self.schema
+                or type(rec.get("v", self.schema)) is not int):
+            return
+        record = dict(rec, _generation=self.generation, _schema=self.schema)
+        records = self.daily_metrics.setdefault(rec["k"], {}).setdefault(tag, {})
+        records[counter] = record
+        self._prune_daily_metrics(tag)
 
     def _rewind(self, n):
         """A save from before day n was loaded: forget history, events and ticks from day n on."""
         self.rewinds += 1
+        self.focus_ledger.clear()
         for x in [x for x in self.rs_counts if x >= n]:
             del self.rs_counts[x]
         for tag, hist in self.history.items():
             self.history[tag] = collections.deque(r for r in hist if r.get("n", 0) < n)
+            self._prune_daily_metrics(tag)
         self.events = collections.deque((e for e in self.events if e.get("n", 0) < n), maxlen=self.max_events)
         for k in [k for k, g in self.groups.items() if (g.get("n") or 0) >= n]:
             del self.groups[k]
@@ -252,6 +309,15 @@ class TelemetryStore:
         """The manifest's technology list (the telemetry's tid is an index into it)."""
         self.techs = list(techs or [])
 
+    def set_focus_catalog(self, focuses, generation):
+        self.focus_ledger.configure(focuses, generation)
+
+    def focus_snapshot(self, tag, day):
+        """Closed exact-day own-tree batch; active/current focus remains unknown."""
+        if self.focus_ledger.generation != self.generation:
+            return None
+        return self.focus_ledger.get(tag, day)
+
     def _tech_ids(self, rows):
         out = []
         for r in rows:
@@ -283,12 +349,31 @@ class TelemetryStore:
 
     # ------------------------------------------------------------------ queries
     def player(self):
-        """Tag of the most recent `day` record."""
+        """Daily identity, or one current-generation human handshake before day one.
+
+        The generated hello is scoped to human countries. Multiple handshakes
+        cannot identify the local player, so that case stays unknown. This
+        fallback establishes identity only; day/snapshot remain unavailable.
+        Session callers separately verify the installed campaign manifest.
+        """
         best = None
         for tag, hist in self.history.items():
             if hist and (best is None or hist[-1]["_wall"] >= best[1]):
                 best = (tag, hist[-1]["_wall"])
-        return best[0] if best else None
+        if best:
+            return best[0]
+        candidates = []
+        for tag, rec in self.latest.get("hello", {}).items():
+            counter, wall = rec.get("n"), rec.get("_wall")
+            if (isinstance(tag, str) and re.fullmatch(r"[A-Z][A-Z0-9]{2}", tag)
+                    and self.generation and self.schema is not None
+                    and rec.get("g") == self.generation and rec.get("v") == self.schema
+                    and type(rec.get("v")) is int
+                    and type(counter) in (int, float) and math.isfinite(counter)
+                    and counter == int(counter)
+                    and type(wall) in (int, float) and math.isfinite(wall)):
+                candidates.append(tag)
+        return candidates[0] if len(candidates) == 1 else None
 
     def day(self, tag=None):
         tag = tag or self.player()
@@ -298,6 +383,25 @@ class TelemetryStore:
     def get(self, kind, tag=None):
         tag = tag or self.player()
         return (self.latest.get(kind) or {}).get(tag)
+
+    def get_at(self, kind, tag, n):
+        """Exact retained eq/res batch for one country/day, or None if unavailable.
+
+        The caller establishes completion using a later day record. Never
+        substitutes a newer record, another country, or another generation.
+        Private provenance fields identify the bounding day's generation/schema.
+        A copy protects the stored batch from caller mutation.
+        """
+        if kind not in ("eq", "res") or not isinstance(tag, str) or not tag:
+            return None
+        if (not isinstance(n, (int, float)) or isinstance(n, bool)
+                or not math.isfinite(n) or n != int(n)):
+            return None
+        record = self.daily_metrics.get(kind, {}).get(tag, {}).get(n)
+        if (record is None or record.get("_generation") != self.generation
+                or record.get("_schema") != self.schema):
+            return None
+        return dict(record)
 
     def group(self, kind, current_n=None):
         """Rows of the latest tick of a multi-line kind; [] when that tick is older than current_n (for example
@@ -348,6 +452,11 @@ class TelemetryStore:
             return None
         n = d.get("n")
         out = {"tag": tag, "date": d["_date"], "n": n, "wall": d["_wall"], "day": _public(d)}
+        focus = self.focus_snapshot(tag, n)
+        if focus is not None:
+            out["focus"] = focus
+        elif self.focus_ledger.trees:
+            out["focus_unknown"] = "no complete focus batch for this country and day"
         for kind in ("pol", "fac", "subject", "res", "eq", "watch"):
             r = self.get(kind, tag)
             if r and r.get("n") == n:

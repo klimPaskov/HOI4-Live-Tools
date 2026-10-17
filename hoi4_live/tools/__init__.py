@@ -13,4 +13,6 @@ from . import telemetry_tools, understanding  # noqa: F401  (phase 2)
 from . import economy_tools, politics_tools  # noqa: F401  (phase 3)
 from . import military_tools, front_tools  # noqa: F401  (phase 4, 7)
 from . import campaign_loop_tools  # noqa: F401  (phase 5)
+from . import memory_tools  # noqa: F401 (guarded Windows reads)
+from . import governor_tools  # noqa: F401 (daily routine and event-driven waits)
 from .registry import all_tools, get  # noqa: F401

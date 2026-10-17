@@ -20,12 +20,14 @@ import abc
 import os
 import tempfile
 
+from ..errors import CapabilityUnavailable
 
-class PlatformNotSupported(NotImplementedError):
+
+class PlatformNotSupported(CapabilityUnavailable):
     """A platform feature has no backend on this OS yet."""
 
     def __init__(self, feature, platform_name):
-        super().__init__("%s is not implemented for %s yet" % (feature, platform_name))
+        super().__init__(feature, platform_name, "no verified backend is available")
         self.feature = feature
         self.platform_name = platform_name
 
@@ -75,6 +77,9 @@ class Platform(abc.ABC):
     def process_image(self, pid):
         raise PlatformNotSupported("process image path", self.name)
 
+    def capture_process_identity(self, pid, expected_executable_path=None):
+        raise PlatformNotSupported("exact process identity", self.name)
+
     # ---- not yet behind the interface (see the module docstring) ------------------------------------------------
     def make_window(self, **kwargs):
         raise PlatformNotSupported("window discovery", self.name)
@@ -90,6 +95,10 @@ class Platform(abc.ABC):
 
     def launch_game(self, game_dir, args):
         raise PlatformNotSupported("game launch", self.name)
+
+    def preflight_game_launch(self):
+        """Check prerequisites without starting or changing the game."""
+        return None
 
     def recording_input_args(self, window, fps):
         raise PlatformNotSupported("screen recording", self.name)
