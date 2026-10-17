@@ -128,7 +128,9 @@ evidence, not input authority. Post-input readback is unchanged.
 map placement. It reports the game's own Find view (visibility flags, query, the
 first result row joined to the state catalog), the camera look-at point and the
 requested own state's template map position, including whether the camera is
-centred on it. It types, clicks and moves nothing. Live agreement is pending.
+centred on it. It types, clicks and moves nothing. Run082 confirmed the camera,
+state-template position and unopened Find view live; opened-view results are
+not yet exercised.
 
 Each stage permits at most one ordinary click, with private identities and the
 original point checked again immediately before input. Already-matching state

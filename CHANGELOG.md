@@ -2,6 +2,12 @@
 
 ## Unreleased native preview
 
+- Run082 on `62bcbab` passed the read-only Find view gate at 512x288 with the
+  Haiku 5.5 player: all calls succeeded in about 32 ms with no input. The start
+  camera's look-at `[3010, 9.5, 1568]` sits about two map units from
+  Brandenburg's state-template position `[3008, 1569]`, the unopened Find view
+  reported hidden with no results, and a foreign state's anchor stayed unread.
+  Opening, typing, result rows and placement remain unexercised.
 - Run081 on `350a633` passed preflight (no torn snapshot) and the Find view
   observer's first live call named the real type at the state's anchor field:
   a state template (`CStateTemplate`), not a province. The observer now reads
