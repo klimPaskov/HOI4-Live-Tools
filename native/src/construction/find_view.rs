@@ -12,7 +12,7 @@ const FIND_VIEW: u64 = 0x4318868;
 const RESULT_ROW: u64 = 0x4318b08;
 const CONTAINER: u64 = 0x4347d58;
 const STATE: u64 = 0x41fba98;
-const PROVINCE: u64 = 0x41fb728;
+const STATE_TEMPLATE: u64 = 0x41fc068;
 const STATE_KIND: i32 = 2;
 /// Reviewed camera setter writes this look-at height for every centring.
 const LOOK_AT_HEIGHT: f32 = 9.5;
@@ -113,24 +113,22 @@ fn target(
     if state_object(r, base, gs, state)? != id {
         return Err(invalid("Requested state ID/catalog mismatch"));
     }
-    // Authorization precedes anchor province payload.
+    // Authorization precedes anchor template payload.
     if !location::own_state(r, base, state, own_tag)? {
         return Ok(
             json!({"state_id":id,"own_owned_and_controlled":false,"anchor":null,
             "camera_centered":false}),
         );
     }
-    let province = r.u64(state + 0x20)?;
-    typed(r, base, province, PROVINCE, "anchor province")?;
-    let province_id = r.i32(province + 0xa4)?;
-    if r.u64(province + 0xe0)? != state || province_id <= 0 {
-        return Err(invalid("State anchor province must belong to its state"));
-    }
-    let x = r.i32(province + 0x140)?;
-    let y = r.i32(province + 0x144)?;
+    // The camera centring routine 0x207b9a0 reads this exact state template's
+    // map position (Run081 observed the CStateTemplate primary here).
+    let template = r.u64(state + 0x20)?;
+    typed(r, base, template, STATE_TEMPLATE, "state template")?;
+    let x = r.i32(template + 0x140)?;
+    let y = r.i32(template + 0x144)?;
     let centered = look_at.len() == 3 && look_at[0] == x as f32 && look_at[2] == y as f32;
     Ok(json!({"state_id":id,"own_owned_and_controlled":true,
-        "anchor":{"province_id":province_id,"map_position":[x,y]},"camera_centered":centered}))
+        "anchor":{"kind":"state_template_map_position","map_position":[x,y]},"camera_centered":centered}))
 }
 pub fn snapshot(process: &dyn Process, state_id: Option<i32>) -> Result<Value> {
     let start = Instant::now();
@@ -208,5 +206,5 @@ pub fn snapshot(process: &dyn Process, state_id: Option<i32>) -> Result<Value> {
     )
 }
 pub(crate) fn tool() -> Value {
-    json!({"name":"hoi4_construction_find_view","description":"Read-only own map Find view (visibility flags, bounded query, first result row joined to the state catalog), camera eye/look-at, and an optional requested own state's anchor province with camera-centred comparison. No input, search, camera movement, placement, eligibility or routing authority. Never pauses or moves the cursor.","inputSchema":{"type":"object","properties":{"state_id":{"type":"integer","minimum":1,"maximum":4095}},"additionalProperties":false},"annotations":{"readOnlyHint":true}})
+    json!({"name":"hoi4_construction_find_view","description":"Read-only own map Find view (visibility flags, bounded query, first result row joined to the state catalog), camera eye/look-at, and an optional requested own state's template map position with camera-centred comparison. No input, search, camera movement, placement, eligibility or routing authority. Never pauses or moves the cursor.","inputSchema":{"type":"object","properties":{"state_id":{"type":"integer","minimum":1,"maximum":4095}},"additionalProperties":false},"annotations":{"readOnlyHint":true}})
 }

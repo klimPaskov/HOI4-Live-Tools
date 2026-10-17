@@ -810,7 +810,9 @@ is the idler. Refresh `0x2a3bc60` filters candidates into the result array at
 state catalog `gs+0x2c8`). The first row `+0x8c0` is a `CSearchableGridBoxItem`
 (`0x4318b08`) with kind `+0x2b8` and object `+0x2a0/+0x2a8/+0x2b0`; Return
 (`0x2a3c250`) activates it through `0x2a3f060`, which centres the camera on the
-state's `+0x20` province position `+0x140/+0x144` (`0x207b9a0`). The camera is
+state's `+0x20` state template (`CStateTemplate`, `0x41fc068`) map position
+`+0x140/+0x144` (`0x207b9a0`). Run081 observed that template type live; an
+earlier reading of this field as a province was wrong. The camera is
 idler `+0x750`; setter `0x13d2a70` writes the look-at `+0x6a4/+0x6a8/+0x6ac` with
 height 9.5. The observer reports these facts read-only; it neither types, clicks
 nor moves the camera. Live agreement is pending.

@@ -2,6 +2,11 @@
 
 ## Unreleased native preview
 
+- Run081 on `350a633` passed preflight (no torn snapshot) and the Find view
+  observer's first live call named the real type at the state's anchor field:
+  a state template (`CStateTemplate`), not a province. The observer now reads
+  that template's map position, which the game's camera centring uses. No input
+  occurred; recording, clock gates, release and closure passed.
 - Run080 stopped at preflight: the pregrant read-only `hoi4_construction_controls`
   read returned the recurring opener torn read (`read=171; size=4;
   changed_byte=1`). No grant or player call happened. Every such refusal so far

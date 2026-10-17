@@ -10,7 +10,7 @@ const ENTRIES: u64 = 0x450000;
 const ROW: u64 = 0x460000;
 const CAMERA: u64 = 0x470000;
 const STATE: u64 = 0xe0000;
-const PROVINCE: u64 = 0xe1000;
+const TEMPLATE: u64 = 0xe2000;
 
 fn floats(f: &mut Fixture, address: u64, values: &[f32]) {
     for (i, v) in values.iter().enumerate() {
@@ -48,9 +48,11 @@ fn find_fixture() -> Fixture {
     for offset in [0x2a0, 0x2a8, 0x2b0] {
         f.word(ROW + offset, STATE);
     }
-    f.word(STATE + 0x20, PROVINCE);
-    f.number(PROVINCE + 0x140, 3120);
-    f.number(PROVINCE + 0x144, 1480);
+    f.word(STATE + 0x20, TEMPLATE);
+    f.region(TEMPLATE, 0x150);
+    f.word(TEMPLATE, BASE + 0x41fc068);
+    f.number(TEMPLATE + 0x140, 3120);
+    f.number(TEMPLATE + 0x144, 1480);
     f.word(0x32750, CAMERA);
     f.region(CAMERA, 0x700);
     floats(
@@ -78,7 +80,7 @@ fn find_view_joins_first_state_row_entry_catalog_and_centred_camera() {
     assert_eq!(view["results"]["first_row"]["supported"], true);
     assert_eq!(v["camera"]["look_at"], json!([3120.0, 9.5, 1480.0]));
     assert_eq!(v["target"]["own_owned_and_controlled"], true);
-    assert_eq!(v["target"]["anchor"]["province_id"], 2);
+    assert_eq!(v["target"]["anchor"]["kind"], "state_template_map_position");
     assert_eq!(v["target"]["anchor"]["map_position"], json!([3120, 1480]));
     assert_eq!(v["target"]["camera_centered"], true);
     for flag in [
@@ -106,7 +108,7 @@ fn foreign_state_never_reads_anchor_province_payload() {
     let v = find_view(&f, Some(1)).unwrap();
     assert_eq!(v["target"]["own_owned_and_controlled"], false);
     assert!(v["target"]["anchor"].is_null());
-    production_not_read(&f, &[STATE + 0x20, PROVINCE + 0x140]);
+    production_not_read(&f, &[STATE + 0x20, TEMPLATE + 0x140]);
 }
 
 #[test]
@@ -159,10 +161,10 @@ fn state_id_bounds_are_explicit() {
 #[test]
 fn type_refusals_name_the_object_and_image_relative_primary_only() {
     let mut f = find_fixture();
-    f.word(PROVINCE, BASE + 0x41fb7a8);
+    f.word(TEMPLATE, BASE + 0x41fb728);
     let e = find_view(&f, Some(1)).unwrap_err();
-    assert!(e.message.contains("anchor province"));
-    assert!(e.message.contains("observed rva_41fb7a8"));
+    assert!(e.message.contains("state template"));
+    assert!(e.message.contains("observed rva_41fb728"));
     let mut f = find_fixture();
     f.word(FIND, 0x7f00_0000_0000);
     let e = find_view(&f, None).unwrap_err();

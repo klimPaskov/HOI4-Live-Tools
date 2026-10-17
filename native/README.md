@@ -127,8 +127,8 @@ evidence, not input authority. Post-input readback is unchanged.
 `hoi4_construction_find_view({"state_id":64})` is a read-only preview for future
 map placement. It reports the game's own Find view (visibility flags, query, the
 first result row joined to the state catalog), the camera look-at point and the
-requested own state's anchor province, including whether the camera is centred on
-it. It types, clicks and moves nothing. Live agreement is pending.
+requested own state's template map position, including whether the camera is
+centred on it. It types, clicks and moves nothing. Live agreement is pending.
 
 Each stage permits at most one ordinary click, with private identities and the
 original point checked again immediately before input. Already-matching state
