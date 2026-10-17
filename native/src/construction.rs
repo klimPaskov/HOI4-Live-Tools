@@ -72,6 +72,157 @@ fn members(r: &Reader<'_>, address: u64, bound: usize) -> Result<Vec<u64>> {
     Ok(result)
 }
 
+/// All own construction lines inside the CALLER's witnessed bracket.
+pub(crate) struct Lines {
+    pub(crate) rows: Vec<Value>,
+    pub(crate) unsupported: Vec<Value>,
+    pub(crate) total: usize,
+    pub(crate) building_count: usize,
+    pub(crate) unavailable_buildings: usize,
+    pub(crate) anomalous: usize,
+    pub(crate) locations: usize,
+}
+pub(crate) fn lines_in(
+    r: &Reader<'_>,
+    base: u64,
+    production: u64,
+    own_tag: i32,
+    include_location: bool,
+) -> Result<Lines> {
+    let entries = members(r, production + 0x70, LINE_LIMIT)?;
+    let mut rows = Vec::new();
+    let mut unsupported = Vec::new();
+    let mut handles = BTreeSet::new();
+    let mut catalog = None;
+    let mut unavailable_buildings = 0;
+    let mut building_count = 0;
+    let mut anomalous = 0;
+    let mut locations = 0;
+    for (index, &line) in entries.iter().enumerate() {
+        let primary = r.u64(line)?;
+        let is_building = primary == base + 0x4205680;
+        if !is_building && primary != base + 0x42ee398 {
+            let name = match primary_type_encoding(r, base, primary) {
+                Ok(name) => Some(name),
+                Err(error) if error.code == "invalid_gui_type" => None,
+                Err(error) => return Err(error),
+            };
+            unsupported.push(json!({"entry_index":index,"type_encoding":name,
+                "ownership_verified":false,"field_layout_available":false,"input_authorized":false}));
+            continue;
+        }
+        // Membership alone does not prove a known line's reciprocal owner.
+        if r.u64(line + 0x20)? != production {
+            return Err(invalid(
+                "Construction line must belong to own production status",
+            ));
+        }
+        // Shared serializer and both allocators prove the full eight bytes.
+        // Railway uses a dynamic kind; only buildings corroborate kind 0x3b.
+        let handle = r.u64(line + 8)?;
+        if handle == 0 || (is_building && handle as u32 != 0x3b) || !handles.insert(handle) {
+            return Err(invalid("Unique nonzero full construction handle required"));
+        }
+        let active = r.i32(line + 0x14)?;
+        let damaged = r.i32(line + 0x18)?;
+        let cost = signed(r, line + 0x28)?;
+        let speed = signed(r, line + 0x30)?;
+        let produced = signed(r, line + 0x38)?;
+        let queued = r.i32(line + 0x40)?;
+        let priority = r.i32(line + 0x44)?;
+        let amount = r.i32(line + 0x48)?;
+        let mut numeric_policy = [cost, speed, produced]
+            .iter()
+            .all(|v| (0..=RAW_LIMIT).contains(v))
+            && [active, damaged, queued, priority, amount]
+                .iter()
+                .all(|v| (0..=COUNTER_LIMIT).contains(v));
+        let mut location = location::unavailable(if include_location {
+            "railway_location_unavailable"
+        } else {
+            "not_requested"
+        });
+        let details = if is_building {
+            building_count += 1;
+            let repairs = r.i32(line + 0x78)?;
+            let conversion = boolean(r, line + 0x8c)?;
+            let allied = boolean(r, line + 0x99)?;
+            numeric_policy &= (0..=COUNTER_LIMIT).contains(&repairs);
+            let building = buildings::observe(r, base, line, &mut catalog)?;
+            unavailable_buildings += usize::from(building.key.is_none());
+            if include_location {
+                location = match building.identity {
+                    Some((building, template, ordinal)) => {
+                        location::observe(r, base, own_tag, building, template, ordinal)?
+                    }
+                    None => location::unavailable("building_identity_unavailable"),
+                };
+                locations += usize::from(location["available"] == true);
+            }
+            json!({"building_id":building.key,"building_id_unavailable_reason":building.unavailable,
+                "to_repair_raw_signed":repairs,"conversion":conversion,"allied_build":allied})
+        } else {
+            Value::Null
+        };
+        anomalous += usize::from(!numeric_policy);
+        let fraction = if numeric_policy && cost > 0 {
+            json!({"numerator":produced.to_string(),"denominator":cost.to_string()})
+        } else {
+            Value::Null
+        };
+        rows.push(json!({"entry_index":index,"line_kind":if is_building {"building"} else {"railway"},
+            "line_handle":format!("0x{handle:016x}"),
+            "handle_scope":"own_current_snapshot_collection",
+            "cost_raw_signed":cost.to_string(),"speed_raw_signed":speed.to_string(),
+            "produced_raw_signed":produced.to_string(),"active_factories_raw_signed":active,
+            "damaged_factories_raw_signed":damaged,"queued_factories_raw_signed":queued,
+            "priority_raw_signed":priority,"amount_raw_signed":amount,
+            "numeric_policy_satisfied":numeric_policy,"produced_over_cost":fraction,
+            "fraction_unavailable_reason":if !numeric_policy {json!("anomalous_numeric_policy")} else if cost==0 {json!("zero_cost")} else {Value::Null},
+            "building":details,"location_available":location["available"],"location":location,
+            "input_authorized":false}));
+    }
+    Ok(Lines {
+        total: entries.len(),
+        rows,
+        unsupported,
+        building_count,
+        unavailable_buildings,
+        anomalous,
+        locations,
+    })
+}
+/// Queued amount of one canonical building in one own state versus elsewhere.
+/// Complete only when every line of that building has a proven own location.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct QueueSummary {
+    pub(crate) in_state: i64,
+    pub(crate) elsewhere: i64,
+    pub(crate) complete: bool,
+}
+pub(crate) fn queue_summary(lines: &Lines, building: &str, state_id: i32) -> QueueSummary {
+    let mut summary = QueueSummary {
+        in_state: 0,
+        elsewhere: 0,
+        complete: lines.unsupported.is_empty() && lines.anomalous == 0,
+    };
+    for row in &lines.rows {
+        if row["line_kind"] != "building" || row["building"]["building_id"] != building {
+            continue;
+        }
+        let amount = row["amount_raw_signed"].as_i64().unwrap_or(-1);
+        if amount < 0 || row["location_available"] != true {
+            summary.complete = false;
+            continue;
+        }
+        if row["location"]["state_id"].as_i64() == Some(i64::from(state_id)) {
+            summary.in_state += amount;
+        } else {
+            summary.elsewhere += amount;
+        }
+    }
+    summary
+}
 pub fn snapshot(process: &dyn Process) -> Result<Value> {
     page(process, 0, 32)
 }
@@ -113,99 +264,17 @@ pub fn page_with_options(
         0
     };
     let context = game::context_from_reader(&r, base)?;
-    let entries = members(&r, production + 0x70, LINE_LIMIT)?;
-    let mut rows = Vec::new();
-    let mut unsupported = Vec::new();
-    let mut handles = BTreeSet::new();
-    let mut catalog = None;
-    let mut unavailable_buildings = 0;
-    let mut building_count = 0;
-    let mut anomalous = 0;
-    let mut locations = 0;
-    for (index, &line) in entries.iter().enumerate() {
-        let primary = r.u64(line)?;
-        let is_building = primary == base + 0x4205680;
-        if !is_building && primary != base + 0x42ee398 {
-            let name = match primary_type_encoding(&r, base, primary) {
-                Ok(name) => Some(name),
-                Err(error) if error.code == "invalid_gui_type" => None,
-                Err(error) => return Err(error),
-            };
-            unsupported.push(json!({"entry_index":index,"type_encoding":name,
-                "ownership_verified":false,"field_layout_available":false,"input_authorized":false}));
-            continue;
-        }
-        // Membership alone does not prove a known line's reciprocal owner.
-        if r.u64(line + 0x20)? != production {
-            return Err(invalid(
-                "Construction line must belong to own production status",
-            ));
-        }
-        // Shared serializer and both allocators prove the full eight bytes.
-        // Railway uses a dynamic kind; only buildings corroborate kind 0x3b.
-        let handle = r.u64(line + 8)?;
-        if handle == 0 || (is_building && handle as u32 != 0x3b) || !handles.insert(handle) {
-            return Err(invalid("Unique nonzero full construction handle required"));
-        }
-        let active = r.i32(line + 0x14)?;
-        let damaged = r.i32(line + 0x18)?;
-        let cost = signed(&r, line + 0x28)?;
-        let speed = signed(&r, line + 0x30)?;
-        let produced = signed(&r, line + 0x38)?;
-        let queued = r.i32(line + 0x40)?;
-        let priority = r.i32(line + 0x44)?;
-        let amount = r.i32(line + 0x48)?;
-        let mut numeric_policy = [cost, speed, produced]
-            .iter()
-            .all(|v| (0..=RAW_LIMIT).contains(v))
-            && [active, damaged, queued, priority, amount]
-                .iter()
-                .all(|v| (0..=COUNTER_LIMIT).contains(v));
-        let mut location = location::unavailable(if include_location {
-            "railway_location_unavailable"
-        } else {
-            "not_requested"
-        });
-        let details = if is_building {
-            building_count += 1;
-            let repairs = r.i32(line + 0x78)?;
-            let conversion = boolean(&r, line + 0x8c)?;
-            let allied = boolean(&r, line + 0x99)?;
-            numeric_policy &= (0..=COUNTER_LIMIT).contains(&repairs);
-            let building = buildings::observe(&r, base, line, &mut catalog)?;
-            unavailable_buildings += usize::from(building.key.is_none());
-            if include_location {
-                location = match building.identity {
-                    Some((building, template, ordinal)) => {
-                        location::observe(&r, base, own_tag, building, template, ordinal)?
-                    }
-                    None => location::unavailable("building_identity_unavailable"),
-                };
-                locations += usize::from(location["available"] == true);
-            }
-            json!({"building_id":building.key,"building_id_unavailable_reason":building.unavailable,
-                "to_repair_raw_signed":repairs,"conversion":conversion,"allied_build":allied})
-        } else {
-            Value::Null
-        };
-        anomalous += usize::from(!numeric_policy);
-        let fraction = if numeric_policy && cost > 0 {
-            json!({"numerator":produced.to_string(),"denominator":cost.to_string()})
-        } else {
-            Value::Null
-        };
-        rows.push(json!({"entry_index":index,"line_kind":if is_building {"building"} else {"railway"},
-            "line_handle":format!("0x{handle:016x}"),
-            "handle_scope":"own_current_snapshot_collection",
-            "cost_raw_signed":cost.to_string(),"speed_raw_signed":speed.to_string(),
-            "produced_raw_signed":produced.to_string(),"active_factories_raw_signed":active,
-            "damaged_factories_raw_signed":damaged,"queued_factories_raw_signed":queued,
-            "priority_raw_signed":priority,"amount_raw_signed":amount,
-            "numeric_policy_satisfied":numeric_policy,"produced_over_cost":fraction,
-            "fraction_unavailable_reason":if !numeric_policy {json!("anomalous_numeric_policy")} else if cost==0 {json!("zero_cost")} else {Value::Null},
-            "building":details,"location_available":location["available"],"location":location,
-            "input_authorized":false}));
-    }
+    let Lines {
+        rows: mut_rows,
+        unsupported: mut_unsupported,
+        total,
+        building_count,
+        unavailable_buildings,
+        anomalous,
+        locations,
+    } = lines_in(&r, base, production, own_tag, include_location)?;
+    let mut rows = mut_rows;
+    let mut unsupported = mut_unsupported;
     let mut ui = if include_ui {
         ui::observe(&r, base, &rows)?
     } else {
@@ -213,7 +282,6 @@ pub fn page_with_options(
     };
     let (end_calls, end_bytes) = witnesses.finish()?;
     process.check()?;
-    let total = entries.len();
     let known = rows.len();
     let unknown = unsupported.len();
     let end = total.min(offset + limit);
@@ -260,4 +328,49 @@ pub fn page_with_options(
             "elapsed_ms":start.elapsed().as_secs_f64()*1000.0,"read_calls_kind":"logical_read_requests",
             "read_calls":r.calls.get()+end_calls as u64,"read_bytes":r.bytes.get()+end_bytes}}),
     )
+}
+
+#[cfg(test)]
+mod queue_summary_tests {
+    use super::*;
+    fn line(building: &str, state: Option<i64>, amount: i64) -> Value {
+        json!({"line_kind":"building","building":{"building_id":building},"amount_raw_signed":amount,
+            "location_available":state.is_some(),"location":{"state_id":state}})
+    }
+    fn lines(rows: Vec<Value>) -> Lines {
+        Lines {
+            total: rows.len(),
+            rows,
+            unsupported: Vec::new(),
+            building_count: 0,
+            unavailable_buildings: 0,
+            anomalous: 0,
+            locations: 0,
+        }
+    }
+    #[test]
+    fn sums_only_the_requested_building_and_needs_every_location() {
+        let l = lines(vec![
+            line("arms_factory", Some(64), 2),
+            line("arms_factory", Some(64), 1),
+            line("arms_factory", Some(65), 4),
+            line("dockyard", Some(64), 7),
+            json!({"line_kind":"railway"}),
+        ]);
+        assert_eq!(
+            queue_summary(&l, "arms_factory", 64),
+            QueueSummary {
+                in_state: 3,
+                elsewhere: 4,
+                complete: true
+            }
+        );
+        let l = lines(vec![line("arms_factory", None, 1)]);
+        assert!(!queue_summary(&l, "arms_factory", 64).complete);
+        let l = lines(vec![line("arms_factory", Some(64), -1)]);
+        assert!(!queue_summary(&l, "arms_factory", 64).complete);
+        let mut l = lines(vec![line("arms_factory", Some(64), 1)]);
+        l.unsupported.push(json!({"entry_index":1}));
+        assert!(!queue_summary(&l, "arms_factory", 64).complete);
+    }
 }

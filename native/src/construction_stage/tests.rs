@@ -44,8 +44,11 @@ fn target(stage: Stage) -> Target {
     Target {
         epoch: epoch(),
         stage,
-        building_id: (stage == Stage::SelectBuilding).then(|| "dockyard".into()),
-        state_id: matches!(stage, Stage::FindQuery | Stage::FindActivate).then_some(64),
+        building_id: matches!(stage, Stage::SelectBuilding | Stage::Place)
+            .then(|| "dockyard".into()),
+        state_id: matches!(stage, Stage::FindQuery | Stage::FindActivate | Stage::Place)
+            .then_some(64),
+        amount: (stage == Stage::Place).then_some(2),
     }
 }
 fn find_before(stage: Stage) -> Option<FindState> {
@@ -68,6 +71,15 @@ fn find_before(stage: Stage) -> Option<FindState> {
             first_state_id: None,
             target_owned: Some(true),
             camera_centered: Some(false),
+        }),
+        Stage::Place => Some(FindState {
+            visible: Some(false),
+            text_focused: Some(true),
+            query: query("64"),
+            first_kind: Some(2),
+            first_state_id: Some(64),
+            target_owned: Some(true),
+            camera_centered: Some(true),
         }),
         Stage::FindActivate => Some(FindState {
             visible: Some(true),
@@ -95,8 +107,8 @@ fn before(stage: Stage) -> OwnState {
         } else {
             PanelState::Shown
         },
-        selected_mode: Some(0),
-        selected_building: None,
+        selected_mode: Some(if stage == Stage::Place { 1 } else { 0 }),
+        selected_building: (stage == Stage::Place).then(|| "dockyard".into()),
         catalog_coverage: if stage == Stage::EnsureOpen {
             Coverage::NotChecked
         } else {
@@ -111,10 +123,19 @@ fn before(stage: Stage) -> OwnState {
         scoped_blockers_clear: Some(true),
         local_dispatch_ready: Some(true),
         find: find_before(stage),
+        placement: (stage == Stage::Place).then_some(PlacementState {
+            in_state: 1,
+            elsewhere: 3,
+            complete: true,
+        }),
     }
 }
 fn reached(stage: Stage) -> OwnState {
     let mut state = before(stage);
+    if let Some(p) = state.placement.as_mut() {
+        p.in_state = 2;
+        return state;
+    }
     if let Some(find) = state.find.as_mut() {
         match stage {
             Stage::FindOpen => {
@@ -1848,4 +1869,85 @@ fn find_target_shapes_and_legacy_receipts_stay_compatible() {
     assert!(!state.contains("find"));
     let parsed: Target = serde_json::from_str(&text).unwrap();
     assert_eq!(parsed, target(Stage::EnsureOpen));
+}
+
+#[test]
+fn place_clicks_once_and_completes_only_at_the_exact_target_amount() {
+    let place = target(Stage::Place);
+    let state = before(Stage::Place);
+    assert!(state.preflight(&place).is_ok() && !state.reached(&place));
+    assert!(reached(Stage::Place).reached(&place));
+    // Wrong total, incomplete queue, camera away, open Find view or other
+    // selection refuse before input.
+    for change in 0..6 {
+        let mut s = before(Stage::Place);
+        match change {
+            0 => s.placement.as_mut().unwrap().in_state = 0,
+            1 => s.placement.as_mut().unwrap().complete = false,
+            2 => s.find.as_mut().unwrap().camera_centered = Some(false),
+            3 => s.find.as_mut().unwrap().visible = Some(true),
+            4 => s.selected_building = Some("arms_factory".into()),
+            _ => s.panel = PanelState::Hidden,
+        }
+        assert!(s.preflight(&place).is_err(), "{change}");
+    }
+    // One pointer input through the durable journal; keyboard inputs refuse.
+    let s = Scratch::new();
+    let mut j = Journal::open(&s.path()).unwrap();
+    let mut f = Fake::success(Stage::Place);
+    f.delivery = Delivery::ServerConfirmed;
+    let out = execute(
+        &mut j,
+        "place-1",
+        place.clone(),
+        &authority(),
+        &RwLock::new(true),
+        &Domains::default(),
+        &mut f,
+        TIME,
+    )
+    .unwrap();
+    assert_eq!((f.dispatches, f.possible_inputs), (1, 1));
+    assert_eq!(out.receipt.status, Status::Verified);
+    assert_eq!(out.receipt.observed.placement.as_ref().unwrap().in_state, 2);
+    for input in [Input::FindKey, Input::Return, Input::Digits("64".into())] {
+        let s = Scratch::new();
+        let mut j = Journal::open(&s.path()).unwrap();
+        let mut f = Fake::success(Stage::Place);
+        f.candidate.input = input;
+        assert!(execute(
+            &mut j,
+            "place-k",
+            place.clone(),
+            &authority(),
+            &RwLock::new(true),
+            &Domains::default(),
+            &mut f,
+            TIME
+        )
+        .is_err());
+        assert_eq!(f.dispatches, 0);
+    }
+}
+#[test]
+fn place_target_shape_requires_building_state_and_bounded_amount() {
+    let mut t = target(Stage::Place);
+    assert!(t.validate().is_ok());
+    for amount in [None, Some(0), Some(1001)] {
+        t.amount = amount;
+        assert!(t.validate().is_err(), "{amount:?}");
+    }
+    let mut t = target(Stage::Place);
+    t.building_id = Some("rail_way".into());
+    assert!(t.validate().is_err());
+    let mut t = target(Stage::Place);
+    t.state_id = None;
+    assert!(t.validate().is_err());
+    let mut t = target(Stage::EnsureOpen);
+    t.amount = Some(1);
+    assert!(t.validate().is_err());
+    // Placement facts only on Place.
+    let mut s = before(Stage::SelectBuilding);
+    s.placement = before(Stage::Place).placement;
+    assert!(s.validate(&target(Stage::SelectBuilding)).is_err());
 }

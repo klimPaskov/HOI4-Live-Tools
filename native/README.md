@@ -132,6 +132,11 @@ state's template position). Each is one durable ordinary input; callers never
 supply keys or coordinates. Run086 passed all three live, with historical
 replays and a zero-input no-op.
 
+`place` then takes `building_id`, `state_id` and the desired total `amount` of
+that building queued in that own state. With the building selected and the
+camera centred on the state, it clicks the owned client centre once and verifies
+the new total from the same-snapshot construction queue. Not yet live-accepted.
+
 `hoi4_construction_find_view({"state_id":64})` is a read-only preview for future
 map placement. It reports the game's own Find view (visibility flags, query, the
 first result row joined to the state catalog), the camera look-at point and the

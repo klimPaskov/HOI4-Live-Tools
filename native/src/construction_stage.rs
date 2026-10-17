@@ -32,10 +32,17 @@ pub enum Stage {
     FindQuery,
     /// Press Return to activate the verified first state result.
     FindActivate,
+    /// One left click at the owned client centre with the canonical building
+    /// selected and the camera centred on the own state: ensure its queued total.
+    Place,
 }
 impl Stage {
     pub fn is_find(self) -> bool {
         matches!(self, Self::FindOpen | Self::FindQuery | Self::FindActivate)
+    }
+    /// Stages that observe the own Find view and camera.
+    pub fn uses_find_view(self) -> bool {
+        self.is_find() || self == Self::Place
     }
 }
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -63,6 +70,9 @@ pub struct Target {
     /// Own state ID for FindQuery/FindActivate; absent (and unserialized) otherwise.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub state_id: Option<i32>,
+    /// Place only: desired total queued amount of building_id in state_id.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub amount: Option<u32>,
 }
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub enum PanelState {
@@ -102,6 +112,19 @@ pub struct OwnState {
     /// Same-witness own Find view facts; only for Find stages, never serialized otherwise.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub find: Option<FindState>,
+    /// Place only: same-witness queued amount of the requested building.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub placement: Option<PlacementState>,
+}
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct PlacementState {
+    /// Sum of line amounts of the requested building located in the own state.
+    pub in_state: i64,
+    /// Sum for the same building located elsewhere.
+    pub elsewhere: i64,
+    /// Every line of that building has a proven own location and valid amount.
+    pub complete: bool,
 }
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -148,15 +171,30 @@ fn key(value: &str) -> Result<()> {
 impl Target {
     pub fn validate(&self) -> Result<()> {
         match (self.stage, self.building_id.as_deref()) {
-            (Stage::FindOpen, None) if self.state_id.is_none() => Ok(()),
-            (Stage::FindQuery | Stage::FindActivate, None) => {
+            (Stage::FindOpen, None) if self.state_id.is_none() && self.amount.is_none() => Ok(()),
+            (Stage::FindQuery | Stage::FindActivate, None) if self.amount.is_none() => {
                 state_digits(self.state_id.unwrap_or(0)).map(|_| ())
             }
-            (Stage::EnsureOpen, None) if self.state_id.is_none() => Ok(()),
-            (Stage::SelectBuilding, Some(_)) if self.state_id.is_some() => Err(error(
-                "invalid_arguments",
-                "Stage requires its exact canonical target shape",
-            )),
+            (Stage::Place, Some(id)) => {
+                key(id)?;
+                state_digits(self.state_id.unwrap_or(0))?;
+                if id == "rail_way" || !self.amount.is_some_and(|n| (1..=1000).contains(&n)) {
+                    return Err(error(
+                        "invalid_arguments",
+                        "Place requires an ordinary building and a bounded target amount",
+                    ));
+                }
+                Ok(())
+            }
+            (Stage::EnsureOpen, None) if self.state_id.is_none() && self.amount.is_none() => Ok(()),
+            (Stage::SelectBuilding, Some(_))
+                if self.state_id.is_some() || self.amount.is_some() =>
+            {
+                Err(error(
+                    "invalid_arguments",
+                    "Stage requires its exact canonical target shape",
+                ))
+            }
             (Stage::SelectBuilding, Some(id)) => {
                 key(id)?;
                 if id == "rail_way" {
@@ -202,7 +240,13 @@ impl OwnState {
                 "Choice membership requires complete catalog and choice coverage",
             ));
         }
-        match (&self.find, target.stage.is_find()) {
+        if self.placement.is_some() != (target.stage == Stage::Place) {
+            return Err(error(
+                "invalid_construction_state",
+                "Placement facts belong exactly to Place",
+            ));
+        }
+        match (&self.find, target.stage.uses_find_view()) {
             (Some(find), true) => {
                 if find
                     .query
@@ -227,6 +271,11 @@ impl OwnState {
         Ok(())
     }
     pub fn reached(&self, target: &Target) -> bool {
+        if target.stage == Stage::Place {
+            return self.placement.as_ref().is_some_and(|p| {
+                p.complete && target.amount.is_some_and(|n| p.in_state == i64::from(n))
+            });
+        }
         if target.stage.is_find() {
             let Some(f) = &self.find else {
                 return false;
@@ -253,7 +302,7 @@ impl OwnState {
         }
         match target.stage {
             Stage::EnsureOpen => true,
-            Stage::FindOpen | Stage::FindQuery | Stage::FindActivate => false,
+            Stage::FindOpen | Stage::FindQuery | Stage::FindActivate | Stage::Place => false,
             Stage::SelectBuilding => {
                 self.selected_mode == Some(1)
                     && self.selected_building.as_deref() == target.building_id.as_deref()
@@ -278,6 +327,35 @@ impl OwnState {
                 .ok_or_else(|| error("construction_precondition", "Find view facts required"))
         };
         match target.stage {
+            Stage::Place => {
+                require(
+                    self.managed_mode == Some(17) && self.panel == PanelState::Shown,
+                    "Place requires the positively shown construction panel",
+                )?;
+                require(
+                    self.selected_mode == Some(1)
+                        && self.selected_building.as_deref() == target.building_id.as_deref()
+                        && self.catalog_coverage == Coverage::Complete,
+                    "Place requires the requested canonical ordinary building selected",
+                )?;
+                let f = find()?;
+                require(
+                    f.visible == Some(false)
+                        && f.target_owned == Some(true)
+                        && f.camera_centered == Some(true),
+                    "Place requires the closed Find view and the camera on the own state",
+                )?;
+                let p = self.placement.as_ref().ok_or_else(|| {
+                    error("construction_precondition", "Placement facts required")
+                })?;
+                require(
+                    p.complete
+                        && target
+                            .amount
+                            .is_some_and(|n| p.in_state + 1 == i64::from(n)),
+                    "Place requires a complete queue exactly one below the target amount",
+                )?;
+            }
             Stage::FindOpen => {
                 require(
                     find()?.visible == Some(false),
@@ -1043,7 +1121,7 @@ impl Journal {
                 ));
             }
             let admitted = match (&candidate.input, target.stage) {
-                (Input::Point(point), Stage::EnsureOpen | Stage::SelectBuilding) => {
+                (Input::Point(point), Stage::EnsureOpen | Stage::SelectBuilding | Stage::Place) => {
                     !(point.input_authorized
                         || point.current_frame_verified
                         || point.effective_routing_verified

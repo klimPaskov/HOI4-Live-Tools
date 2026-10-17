@@ -412,7 +412,7 @@ impl Scopes {
                 }
                 Target::Choice(target)
             }
-            Stage::FindOpen | Stage::FindQuery | Stage::FindActivate => {
+            Stage::FindOpen | Stage::FindQuery | Stage::FindActivate | Stage::Place => {
                 let find = self
                     .find
                     .clone()

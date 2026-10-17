@@ -266,3 +266,18 @@ fn protocol_accepts_only_boolean_location_option_for_construction() {
         assert!(v.to_string().contains("invalid_arguments"));
     }
 }
+
+#[test]
+fn queue_summary_counts_requested_building_amounts_inside_and_outside_state() {
+    let f = located();
+    let page = page_with_location(&f, 0, 32, true).unwrap();
+    // Both located lines are in state 1: infrastructure (amount 3) at state level.
+    let infra = page["lines"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|l| l["building"]["building_id"] == "infrastructure")
+        .map(|l| l["amount_raw_signed"].as_i64().unwrap())
+        .sum::<i64>();
+    assert_eq!(infra, 3);
+}

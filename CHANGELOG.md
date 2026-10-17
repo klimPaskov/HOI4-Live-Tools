@@ -2,6 +2,13 @@
 
 ## Unreleased native preview
 
+- Add the opt-in `place` construction stage: with the canonical building
+  selected, the construction panel shown, the game's Find view closed and the
+  camera centred on an own state, one left click at the owned client centre must
+  bring the queued amount of that building in that state to the requested
+  total. The queue is read in the same snapshot, every line of the building
+  must have a proven own location, and a click landing elsewhere never counts.
+  Asking for an already-reached total is a no-op. Not yet live-accepted.
 - Run086 on `3f3d731` passed the keyboard Find gate live at 512x288 with the
   Haiku 5.5 player: `find_open` (382 ms), `find_query` for state 64 (437 ms;
   first of 21 results was the state) and `find_activate` (303 ms) were each one

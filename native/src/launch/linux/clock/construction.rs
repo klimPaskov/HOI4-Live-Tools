@@ -42,9 +42,10 @@ impl Service {
 }
 pub(super) fn tool() -> Value {
     json!({"name":"hoi4_construction_attempt",
-        "description":"Preview: ensure the own construction panel is open, select one canonical ordinary building type, or use the game's own map Find view (find_open presses its f shortcut, find_query types an own state ID, find_activate presses Return to centre the camera on the verified first state row). Already-matching state is a no-op. At most one ordinary input per durable request, verified by own canonical readback. Requires the owned profile and exclusive lease. Unknown outcomes block all input; never replay uncertain requests. No map placement, coordinates or engine calls. Find stages are not yet live-accepted.",
+        "description":"Preview: ensure the own construction panel is open, select one canonical ordinary building type, or use the game's own map Find view (find_open presses its f shortcut, find_query types an own state ID, find_activate presses Return to centre the camera on the verified first state row), or place: with the building selected and the camera centred on the own state, one left click at the client centre to reach the requested total queued amount of that building in that state. Already-matching state is a no-op. At most one ordinary input per durable request, verified by own canonical readback. Requires the owned profile and exclusive lease. Unknown outcomes block all input; never replay uncertain requests. No map placement, coordinates or engine calls. Find stages are not yet live-accepted.",
         "inputSchema":{"type":"object","properties":{
-            "stage":{"enum":["ensure_open","select_building","find_open","find_query","find_activate"]},
+            "stage":{"enum":["ensure_open","select_building","find_open","find_query","find_activate","place"]},
+            "amount":{"type":"integer","minimum":1,"maximum":1000},
             "building_id":{"type":"string","minLength":1,"maxLength":128},
             "state_id":{"type":"integer","minimum":1,"maximum":4095},
             "request_id":{"type":"string","minLength":1,"maxLength":128},
@@ -53,13 +54,15 @@ pub(super) fn tool() -> Value {
             "oneOf":[{"properties":{"stage":{"const":"ensure_open"}},"not":{"anyOf":[{"required":["building_id"]},{"required":["state_id"]}]}},
                 {"properties":{"stage":{"const":"select_building"}},"required":["building_id"],"not":{"required":["state_id"]}},
                 {"properties":{"stage":{"const":"find_open"}},"not":{"anyOf":[{"required":["building_id"]},{"required":["state_id"]}]}},
-                {"properties":{"stage":{"enum":["find_query","find_activate"]}},"required":["state_id"],"not":{"required":["building_id"]}}],
+                {"properties":{"stage":{"enum":["find_query","find_activate"]}},"required":["state_id"],"not":{"anyOf":[{"required":["building_id"]},{"required":["amount"]}]}},
+                {"properties":{"stage":{"const":"place"}},"required":["building_id","state_id","amount"]}],
             "additionalProperties":false}})
 }
 struct Arguments<'a> {
     stage: stage::Stage,
     building: Option<&'a str>,
     state: Option<i32>,
+    amount: Option<u32>,
     id: &'a str,
     token: &'a str,
 }
@@ -70,6 +73,7 @@ fn parse(args: &serde_json::Map<String, Value>) -> Result<Arguments<'_>> {
             "stage",
             "building_id",
             "state_id",
+            "amount",
             "request_id",
             "lease_token",
         ],
@@ -82,6 +86,26 @@ fn parse(args: &serde_json::Map<String, Value>) -> Result<Arguments<'_>> {
         crate::construction::find_view::validate_state_id(id)
     };
     let stage_name = string(args, "stage")?;
+    if stage_name == "place" {
+        let key = string(args, "building_id")?;
+        observation::validate_key(key)?;
+        let amount = args
+            .get("amount")
+            .and_then(Value::as_u64)
+            .filter(|n| (1..=1000).contains(n))
+            .ok_or_else(|| Error::new("invalid_arguments", "Bounded integer amount required"))?;
+        return Ok(Arguments {
+            stage: stage::Stage::Place,
+            building: Some(key),
+            state: Some(state_id()?),
+            amount: Some(amount as u32),
+            id: string(args, "request_id")?,
+            token: string(args, "lease_token")?,
+        });
+    }
+    if args.contains_key("amount") {
+        return Err(Error::new("invalid_arguments", "Only place takes amount"));
+    }
     if stage_name.starts_with("find_") {
         if args.contains_key("building_id") {
             return Err(Error::new(
@@ -104,6 +128,7 @@ fn parse(args: &serde_json::Map<String, Value>) -> Result<Arguments<'_>> {
             stage,
             building: None,
             state,
+            amount: None,
             id: string(args, "request_id")?,
             token: string(args, "lease_token")?,
         });
@@ -138,6 +163,7 @@ fn parse(args: &serde_json::Map<String, Value>) -> Result<Arguments<'_>> {
         stage: selected,
         building,
         state: None,
+        amount: None,
         id: string(args, "request_id")?,
         token: string(args, "lease_token")?,
     })
@@ -157,6 +183,7 @@ pub(super) fn call(
         stage: args.stage,
         building_id: args.building.map(str::to_owned),
         state_id: args.state,
+        amount: args.amount,
     };
     target.validate()?;
     controller.authority.authorize(args.token, &target.epoch)?;
@@ -270,9 +297,13 @@ fn observed_with(
             process,
             target.building_id.as_deref().unwrap_or("dockyard"),
             !target.stage.is_find(),
-            target.stage.is_find().then_some(observation::FindRead {
-                state_id: target.state_id,
-            }),
+            target
+                .stage
+                .uses_find_view()
+                .then_some(observation::FindRead {
+                    state_id: target.state_id,
+                    placement: target.stage == stage::Stage::Place,
+                }),
         )
     })?;
     // Only the producer above is recoverable. Ownership acceptance, state and
@@ -618,6 +649,38 @@ mod tests {
         open_with_state["state_id"] = json!(64);
         assert!(parse(open_with_state.as_object().unwrap()).is_err());
         let select = json!({"stage":"select_building","building_id":"dockyard","state_id":64,"request_id":"s","lease_token":"t"});
+        assert!(parse(select.as_object().unwrap()).is_err());
+    }
+    #[test]
+    fn place_requires_building_state_and_bounded_amount_only() {
+        let value = json!({"stage":"place","building_id":"arms_factory","state_id":64,"amount":6,"request_id":"p","lease_token":"t"});
+        let args = parse(value.as_object().unwrap()).unwrap();
+        assert_eq!(
+            (args.stage, args.building, args.state, args.amount),
+            (stage::Stage::Place, Some("arms_factory"), Some(64), Some(6))
+        );
+        for (key, bad) in [
+            ("amount", json!(0)),
+            ("amount", json!(1001)),
+            ("amount", json!("6")),
+            ("state_id", json!(0)),
+            ("building_id", json!("rail way")),
+        ] {
+            let mut changed = value.clone();
+            changed[key] = bad;
+            assert!(parse(changed.as_object().unwrap()).is_err(), "{key}");
+        }
+        for key in ["amount", "state_id", "building_id"] {
+            let mut changed = value.clone();
+            changed.as_object_mut().unwrap().remove(key);
+            assert!(parse(changed.as_object().unwrap()).is_err(), "{key}");
+        }
+        for (key, data) in [("x", json!(256)), ("y", json!(144)), ("key", json!("f"))] {
+            let mut changed = value.clone();
+            changed[key] = data;
+            assert!(parse(changed.as_object().unwrap()).is_err(), "{key}");
+        }
+        let select = json!({"stage":"select_building","building_id":"dockyard","amount":1,"request_id":"s","lease_token":"t"});
         assert!(parse(select.as_object().unwrap()).is_err());
     }
     #[test]

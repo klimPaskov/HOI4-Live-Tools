@@ -307,6 +307,8 @@ pub fn snapshot(process: &dyn Process, key: &str, include_geometry: bool) -> Res
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct FindRead {
     pub(crate) state_id: Option<i32>,
+    /// Place only: also sum the requested building's queued amount in the state.
+    pub(crate) placement: bool,
 }
 pub(crate) fn observe(
     process: &dyn Process,
@@ -416,6 +418,15 @@ pub(crate) fn observe(
                 request.state_id,
             )?;
             find_identity = Some(identity);
+            let mut value = value;
+            if let (true, Some(state_id)) = (request.placement, request.state_id) {
+                // Same witnessed snapshot; full own collection, then one summary.
+                let lines = super::lines_in(&r, base, production, own_tag, true)?;
+                let summary = super::queue_summary(&lines, key, state_id);
+                value["placement"] = json!({"building_id":key,"state_id":state_id,
+                    "in_state":summary.in_state,"elsewhere":summary.elsewhere,
+                    "complete":summary.complete,"line_total":lines.total});
+            }
             value
         }
         None => json!(null),
