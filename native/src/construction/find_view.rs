@@ -18,7 +18,8 @@ const STATE_TEMPLATE: u64 = 0x41fc068;
 const STATE_KIND: i32 = 2;
 /// Reviewed camera setter writes this look-at height for every centring.
 const LOOK_AT_HEIGHT: f32 = 9.5;
-const RESULT_BOUND: usize = 256;
+/// Only entry 0 is read; the count bound matches the reader's array limit.
+const RESULT_BOUND: usize = 20_000;
 const ENTRY: usize = 0x50;
 
 pub fn validate_state_id(id: i64) -> Result<i32> {
@@ -70,6 +71,12 @@ fn state_object(r: &Reader<'_>, base: u64, gs: u64, object: u64) -> Result<i32> 
     }
     Ok(id)
 }
+fn refreshing() -> crate::error::Error {
+    crate::error::Error::new(
+        "torn_read",
+        "Find first row and first result entry disagree; results refreshing",
+    )
+}
 fn first_row(r: &Reader<'_>, base: u64, gs: u64, find: u64) -> Result<Value> {
     let (_, data, count) = r.array_header(find + 0x8c8)?;
     if count > RESULT_BOUND || (count > 0 && data % 8 != 0) {
@@ -97,15 +104,15 @@ fn first_row(r: &Reader<'_>, base: u64, gs: u64, find: u64) -> Result<Value> {
     let entry_object = u64::from_le_bytes(entry[0x40..0x48].try_into().unwrap());
     let entry_kind = i32::from_le_bytes(entry[0x48..0x4c].try_into().unwrap());
     if entry_kind != kind {
-        return Err(invalid("Find first row kind must match first result entry"));
+        // Typing refreshes results per key; a row/entry disagreement is a
+        // snapshot taken mid-refresh, not a layout fact.
+        return Err(refreshing());
     }
     let mut first = json!({"kind_raw":kind,"state_id":null,"supported":kind==STATE_KIND});
     if let Some(field) = field {
         let object = r.u64(row + field)?;
         if object == 0 || object != entry_object {
-            return Err(invalid(
-                "Find first row object must match first result entry",
-            ));
+            return Err(refreshing());
         }
         if kind == STATE_KIND {
             first["state_id"] = json!(state_object(r, base, gs, object)?);

@@ -221,3 +221,21 @@ fn province_first_row_reports_its_kind_without_a_state() {
     f.word(ROW + 0x2b0, 0);
     assert!(find_view(&f, None).is_err());
 }
+
+#[test]
+fn row_entry_disagreement_is_a_torn_refresh_and_large_result_lists_are_read_by_entry0() {
+    let mut f = find_fixture();
+    f.number(ENTRIES + 0x48, 3);
+    assert_eq!(find_view(&f, None).unwrap_err().code, "torn_read");
+    let mut f = find_fixture();
+    f.word(ROW + 0x2a8, 0);
+    assert_eq!(find_view(&f, None).unwrap_err().code, "torn_read");
+    // A long result list (e.g. many province IDs containing the digits) is fine.
+    let mut f = find_fixture();
+    f.number(FIND + 0x8c8 + 8, 900);
+    f.number(FIND + 0x8c8 + 12, 900);
+    assert_eq!(
+        find_view(&f, None).unwrap()["find_view"]["results"]["result_count"],
+        900
+    );
+}

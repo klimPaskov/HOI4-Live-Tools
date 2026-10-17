@@ -2,6 +2,11 @@
 
 ## Unreleased native preview
 
+- Run085 on `679f9e0` passed `find_open` live again; `find_query`'s readback
+  refused because typing matched more than an arbitrary 256 results. Only the
+  first entry is read, so the bound is now the reader's array limit, and a
+  first-row/entry disagreement during refresh is reported as a torn read that
+  post-input readback waits out.
 - Run084 on `236e3bc` passed `find_open` live: one server-confirmed `f` opened
   the game's Find view with its edit box focused, and the identical replay was
   historical. `find_query` typed the digits but its readback refused, because
