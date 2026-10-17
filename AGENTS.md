@@ -29,6 +29,17 @@ For campaign strategy and FAIR/META rules, read
   one-call fixes, event-driven waits, verified ID-based actions, shortage repair
   and war/naval-invasion automation. Observations never pause; stop only for a
   genuine blocking decision. Idempotent retries preserve unfinished plan entries.
+- Live and very fast: the game keeps running while the model plans and tools act;
+  reads never pause; the model wakes only for events, deadlines or real decisions.
+  Report pause count/seconds and real time per game year; avoidable pauses are defects.
+- Two play modes, logged per session: FAIR (default) follows common HOI4
+  multiplayer rules (no space marines, invasion/para exploit spam, exploit
+  templates, AI-baiting or engine-bug exploits; enforced from one reviewed policy
+  file) yet plays cleverly (encirclements, breakthroughs, air superiority,
+  defensive lines); META allows metas and exploits a human can do via the UI.
+  Cheating is forbidden in both. Showcases run in FAIR mode.
+- Reference: https://github.com/smerss/Clausewitz-MCP (MIT): memory reads,
+  command-queue posting, wait_for, micro engine, encirclement search.
 - Campaigns use Normal difficulty, vanilla rules, historical AI and observational
   telemetry only. No console/debug/eval/fire_event, save editing, hidden enemy
   intelligence or reload-to-undo. Test-mode features are for separate mod QA and
@@ -53,6 +64,4 @@ For campaign strategy and FAIR/META rules, read
 - Preserve `wip/governor-memory`; release only tested changes. Version/changelog,
   audited archives and release pins for HOI4 Mod Setup/Agentic HOI4 Modding must
   agree. Windows downstream pins move only after the release is accepted.
-- Every new commit message ends with a blank line and:
-
-  `Co-Authored-By: Codex (gpt-6.1-sol) <noreply@openai.com>`
+- Never add Co-Authored-By, "Generated with" or any AI attribution line to commits or PRs: the user is the sole author.
