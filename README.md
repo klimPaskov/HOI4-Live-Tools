@@ -86,6 +86,8 @@ game it did not start.
   daily plans that survive restarts without repeating input.
 - **Construction:** opening the construction panel and selecting a building type
   (dockyard), with replay-safe receipts. Run077 passed this gate on 17 October 2026.
+- **Map search:** opening the game's own Find view, typing a state ID and jumping
+  the camera to that state, verified from game memory (Run086, 17 October 2026).
 
 ### Not done yet
 

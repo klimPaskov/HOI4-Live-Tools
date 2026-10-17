@@ -2,6 +2,13 @@
 
 ## Unreleased native preview
 
+- Run086 on `3f3d731` passed the keyboard Find gate live at 512x288 with the
+  Haiku 5.5 player: `find_open` (382 ms), `find_query` for state 64 (437 ms;
+  first of 21 results was the state) and `find_activate` (303 ms) were each one
+  server-confirmed ordinary input with canonical readback. Their identical
+  replays were historical, a separate activate request was a zero-input no-op,
+  and the camera look-at moved to Brandenburg's template position `[3008,
+  1569]` with the view closed. Map placement and queueing are still pending.
 - Run085 on `679f9e0` passed `find_open` live again; `find_query`'s readback
   refused because typing matched more than an arbitrary 256 results. Only the
   first entry is read, so the bound is now the reader's array limit, and a

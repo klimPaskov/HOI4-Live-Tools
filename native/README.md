@@ -129,7 +129,8 @@ The same tool has three keyboard Find stages for future map placement:
 (decimal digits into the focused empty query) and `find_activate` (Return on the
 verified first state row, read back as a closed view with the camera on the
 state's template position). Each is one durable ordinary input; callers never
-supply keys or coordinates. These stages are not yet live-accepted.
+supply keys or coordinates. Run086 passed all three live, with historical
+replays and a zero-input no-op.
 
 `hoi4_construction_find_view({"state_id":64})` is a read-only preview for future
 map placement. It reports the game's own Find view (visibility flags, query, the
