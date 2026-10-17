@@ -176,12 +176,14 @@ fn find_model(d: &Value, target: &Target) -> Result<OwnState> {
     let gates = &d["local_gui_gates"];
     let common_gates = gates["gui_global_join_verified"] == true
         && gates["flag150_raw"] == 0
-        && gates["flag12_raw"] == 0
-        && gates["receiver158_null"] == true;
-    // FindOpen needs no text receiver; typing and Return need exactly the Find box.
+        && gates["flag12_raw"] == 0;
+    // FindOpen needs no keyboard focus or text receiver; typing and Return need
+    // exactly the Find edit box as keyboard focus and its embedded text receiver.
     let ready = common_gates
         && match target.stage {
-            Stage::FindOpen => gates["text_receiver230_null"] == true,
+            Stage::FindOpen => {
+                gates["receiver158_null"] == true && gates["text_receiver230_null"] == true
+            }
             _ => text_focused == Some(true),
         };
     let mode = d["selection"]["mode_raw"]
@@ -396,7 +398,7 @@ mod tests {
         t.state_id = matches!(stage, Stage::FindQuery | Stage::FindActivate).then_some(64);
         let mut d = data(Stage::EnsureOpen);
         d["local_gui_gates"] = json!({"gui_global_join_verified":true,"flag150_raw":0,"flag12_raw":0,
-            "receiver158_null":true,"text_receiver230_null":stage == Stage::FindOpen,
+            "receiver158_null":stage == Stage::FindOpen,"text_receiver230_null":stage == Stage::FindOpen,
             "conservative_local_gate_clear":stage == Stage::FindOpen});
         let open = stage != Stage::FindOpen;
         d["find"] = json!({"find_view":{"materialized":true,

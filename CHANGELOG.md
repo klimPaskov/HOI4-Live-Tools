@@ -2,6 +2,12 @@
 
 ## Unreleased native preview
 
+- Run083 on `10907e9` sent the first Find stage: the `f` shortcut was
+  server-confirmed and the game's Find view opened, but readback compared the
+  GUI text receiver with the edit box itself. In this build the receiver is the
+  box's embedded receiver (as already proven for the Focus search box), so the
+  stage ended durably uncertain and no further input followed. Focus is now
+  read as keyboard focus on the box plus its embedded text receiver.
 - Add three opt-in keyboard Find stages to `hoi4_construction_attempt`:
   `find_open` presses the game's own `f` shortcut for its map Find view,
   `find_query` types an own state ID's digits into the focused empty query, and

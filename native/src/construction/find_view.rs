@@ -11,6 +11,8 @@ use std::time::Instant;
 const FIND_VIEW: u64 = 0x4318868;
 const RESULT_ROW: u64 = 0x4318b08;
 const CONTAINER: u64 = 0x4347d58;
+/// CEditBox embedded text receiver, as in the live-verified Focus search box.
+const TEXT_RECEIVER: u64 = 0x4349be8;
 const STATE: u64 = 0x41fba98;
 const STATE_TEMPLATE: u64 = 0x41fc068;
 const STATE_KIND: i32 = 2;
@@ -176,11 +178,21 @@ pub(crate) fn observe_in(
             "visible_flag":flags&8!=0,"close_requested_flag":flags&0x10!=0,
             "settled_visibility_verified":false});
         text_box = r.u64(find + 0x870)?;
+        // GUI+158 is keyboard focus (the edit box); GUI+230 is the separate text
+        // receiver embedded at edit+1a0 (Run083 saw the view open but +230 never
+        // equal to the box itself). Unknown receiver layout stays unknown.
         view["text_box_focused"] = if text_box == 0 {
             json!(null)
         } else {
             pointer(text_box)?;
-            json!(r.u64(registry + 0x230)? == text_box)
+            if r.u64(text_box + 0x1a0)? == base + TEXT_RECEIVER {
+                json!(
+                    r.u64(registry + 0x158)? == text_box
+                        && r.u64(registry + 0x230)? == text_box + 0x1a0
+                )
+            } else {
+                json!(null)
+            }
         };
         view["query"] = query(r, find + 0x878)?;
         view["results"] = first_row(r, base, gs, find)?;

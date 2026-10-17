@@ -34,8 +34,10 @@ fn find_fixture() -> Fixture {
     f.word(WINDOW, BASE + 0x4347d58);
     f.put(WINDOW + 0xa5, &[8]);
     f.word(FIND + 0x870, TEXT);
-    f.region(TEXT, 0x100);
-    f.word(REGISTRY + 0x230, TEXT);
+    f.region(TEXT, 0x200);
+    f.word(TEXT + 0x1a0, BASE + 0x4349be8);
+    f.word(REGISTRY + 0x158, TEXT);
+    f.word(REGISTRY + 0x230, TEXT + 0x1a0);
     f.string(FIND + 0x878, "1");
     f.array(FIND + 0x8c8, ENTRIES, 1);
     f.region(ENTRIES, 0x50);
@@ -171,4 +173,23 @@ fn type_refusals_name_the_object_and_image_relative_primary_only() {
     assert!(e.message.contains("object type differs"));
     assert!(e.message.contains("outside_image"));
     assert!(!e.message.contains("7f0000000000"));
+}
+
+#[test]
+fn text_focus_needs_keyboard_focus_and_embedded_receiver_of_exact_edit_box() {
+    let mut f = find_fixture();
+    f.word(REGISTRY + 0x230, TEXT);
+    assert_eq!(
+        find_view(&f, None).unwrap()["find_view"]["text_box_focused"],
+        false
+    );
+    let mut f = find_fixture();
+    f.word(REGISTRY + 0x158, 0);
+    assert_eq!(
+        find_view(&f, None).unwrap()["find_view"]["text_box_focused"],
+        false
+    );
+    let mut f = find_fixture();
+    f.word(TEXT + 0x1a0, BASE + 0x4347d58);
+    assert!(find_view(&f, None).unwrap()["find_view"]["text_box_focused"].is_null());
 }
