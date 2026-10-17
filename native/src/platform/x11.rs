@@ -31,6 +31,10 @@ pub enum ControlKey {
     Pause,
     Slower,
     Faster,
+    /// The game's own `open_find_view_button` shortcut ("f" in mapmodes_interface.gui).
+    FindView,
+    /// One Return; the Find view activates its first result row.
+    Return,
 }
 
 impl ControlKey {
@@ -41,6 +45,8 @@ impl ControlKey {
             Self::Pause => 0x20,
             Self::Slower => 0xffad,
             Self::Faster => 0xffab,
+            Self::FindView => 0x66,
+            Self::Return => 0xff0d,
         }
     }
 }

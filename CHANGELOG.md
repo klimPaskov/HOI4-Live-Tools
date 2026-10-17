@@ -2,6 +2,14 @@
 
 ## Unreleased native preview
 
+- Add three opt-in keyboard Find stages to `hoi4_construction_attempt`:
+  `find_open` presses the game's own `f` shortcut for its map Find view,
+  `find_query` types an own state ID's digits into the focused empty query, and
+  `find_activate` presses Return to activate the verified first state row. Each
+  is one durable ordinary input with same-snapshot readback: view visible with a
+  focused text box, exact query and first state row, then a closed view with the
+  camera look-at on the state's template position. Existing receipts and the
+  public controls output are unchanged. Not yet live-accepted.
 - Run082 on `62bcbab` passed the read-only Find view gate at 512x288 with the
   Haiku 5.5 player: all calls succeeded in about 32 ms with no input. The start
   camera's look-at `[3010, 9.5, 1568]` sits about two map units from

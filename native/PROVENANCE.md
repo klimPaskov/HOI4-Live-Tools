@@ -816,3 +816,13 @@ earlier reading of this field as a province was wrong. The camera is
 idler `+0x750`; setter `0x13d2a70` writes the look-at `+0x6a4/+0x6a8/+0x6ac` with
 height 9.5. The observer reports these facts read-only; it neither types, clicks
 nor moves the camera. Live agreement is pending.
+
+## Keyboard Find stages
+
+The `find_open`, `find_query` and `find_activate` construction stages use facts
+recorded above plus the game's own interface file, where
+`open_find_view_button` declares `shortcut = "f"` (`mapmodes_interface.gui`).
+Open `0x2a3ba80` clears the query and focuses the text box; `0x2a3c250` activates
+the first result row (`+0x8c0`) through `0x2a3f060`. Visibility uses the exact
+container's local bit 3; close `0x2a3bbe0` hides the window before setting bit
+`0x10`, which persists while hidden. No upstream code was copied.

@@ -108,17 +108,19 @@ fn target(
     own_tag: i32,
     id: i32,
     look_at: &[f32],
-) -> Result<Value> {
+) -> Result<(Value, u64, Option<u64>)> {
     let state = location::catalog_pointer(r, gs + 0x2c8, id, 4096)?;
     if state_object(r, base, gs, state)? != id {
         return Err(invalid("Requested state ID/catalog mismatch"));
     }
     // Authorization precedes anchor template payload.
     if !location::own_state(r, base, state, own_tag)? {
-        return Ok(
+        return Ok((
             json!({"state_id":id,"own_owned_and_controlled":false,"anchor":null,
             "camera_centered":false}),
-        );
+            state,
+            None,
+        ));
     }
     // The camera centring routine 0x207b9a0 reads this exact state template's
     // map position (Run081 observed the CStateTemplate primary here).
@@ -127,8 +129,88 @@ fn target(
     let x = r.i32(template + 0x140)?;
     let y = r.i32(template + 0x144)?;
     let centered = look_at.len() == 3 && look_at[0] == x as f32 && look_at[2] == y as f32;
-    Ok(json!({"state_id":id,"own_owned_and_controlled":true,
-        "anchor":{"kind":"state_template_map_position","map_position":[x,y]},"camera_centered":centered}))
+    Ok((
+        json!({"state_id":id,"own_owned_and_controlled":true,
+        "anchor":{"kind":"state_template_map_position","map_position":[x,y]},"camera_centered":centered}),
+        state,
+        Some(template),
+    ))
+}
+/// Stable own identities pinned by Find stages; semantic view facts excluded.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct FindIdentity {
+    pub(crate) find: u64,
+    pub(crate) window: u64,
+    pub(crate) text_box: u64,
+    pub(crate) camera: u64,
+    pub(crate) state: Option<u64>,
+    pub(crate) template: Option<u64>,
+}
+/// Find view, camera and optional requested state inside the CALLER's witnessed
+/// bracket. The caller already proved own production, campaign and manager.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn observe_in(
+    r: &Reader<'_>,
+    base: u64,
+    gs: u64,
+    idler: u64,
+    registry: u64,
+    manager: u64,
+    own_tag: i32,
+    state_id: Option<i32>,
+) -> Result<(Value, FindIdentity)> {
+    let find = r.u64(manager + 0x190)?;
+    typed(r, base, find, FIND_VIEW, "object")?;
+    if r.u64(find + 0x860)? != idler {
+        return Err(invalid("Find view must belong to own idler"));
+    }
+    let window = r.u64(find + 0x868)?;
+    let mut text_box = 0;
+    let mut view = json!({"materialized":window!=0,"window":null,"query":null,
+        "text_box_focused":null,"results":null});
+    if window != 0 {
+        pointer(window)?;
+        let flags = r.byte(window + 0xa5)?;
+        let container = r.u64(window)? == base + CONTAINER;
+        view["window"] = json!({"exact_container":container,"flags_raw":flags,
+            "visible_flag":flags&8!=0,"close_requested_flag":flags&0x10!=0,
+            "settled_visibility_verified":false});
+        text_box = r.u64(find + 0x870)?;
+        view["text_box_focused"] = if text_box == 0 {
+            json!(null)
+        } else {
+            pointer(text_box)?;
+            json!(r.u64(registry + 0x230)? == text_box)
+        };
+        view["query"] = query(r, find + 0x878)?;
+        view["results"] = first_row(r, base, gs, find)?;
+    }
+    let camera = r.u64(idler + 0x750)?;
+    pointer(camera)?;
+    let values = floats(&r.read(camera + 0x698, 0x18)?);
+    let (eye, look_at) = values.split_at(3);
+    if !values.iter().all(|v| v.is_finite()) || look_at[1] != LOOK_AT_HEIGHT {
+        return Err(invalid("Camera look-at outside reviewed invariant"));
+    }
+    let (requested, state, template) = match state_id {
+        Some(id) => {
+            let (value, state, template) = target(r, base, gs, own_tag, id, look_at)?;
+            (value, Some(state), template)
+        }
+        None => (json!(null), None, None),
+    };
+    Ok((
+        json!({"find_view":view,"camera":{"eye":eye,"look_at":look_at,"look_at_height_invariant":true},
+            "target":requested}),
+        FindIdentity {
+            find,
+            window,
+            text_box,
+            camera,
+            state,
+            template,
+        },
+    ))
 }
 pub fn snapshot(process: &dyn Process, state_id: Option<i32>) -> Result<Value> {
     let start = Instant::now();
@@ -151,52 +233,14 @@ pub fn snapshot(process: &dyn Process, state_id: Option<i32>) -> Result<Value> {
         return Err(invalid("Construction manager must belong to own idler"));
     }
     witnesses.section("find_view");
-    let find = r.u64(manager + 0x190)?;
-    typed(&r, base, find, FIND_VIEW, "object")?;
-    if r.u64(find + 0x860)? != idler {
-        return Err(invalid("Find view must belong to own idler"));
-    }
-    let window = r.u64(find + 0x868)?;
-    let mut view = json!({"materialized":window!=0,"window":null,"query":null,
-        "text_box_focused":null,"results":null});
-    if window != 0 {
-        pointer(window)?;
-        let flags = r.byte(window + 0xa5)?;
-        let container = r.u64(window)? == base + CONTAINER;
-        view["window"] = json!({"exact_container":container,"flags_raw":flags,
-            "visible_flag":flags&8!=0,"close_requested_flag":flags&0x10!=0,
-            "settled_visibility_verified":false});
-        let text_box = r.u64(find + 0x870)?;
-        view["text_box_focused"] = if text_box == 0 {
-            json!(null)
-        } else {
-            pointer(text_box)?;
-            json!(r.u64(registry + 0x230)? == text_box)
-        };
-        view["query"] = query(&r, find + 0x878)?;
-        view["results"] = first_row(&r, base, gs, find)?;
-    }
-    witnesses.section("camera");
-    let camera = r.u64(idler + 0x750)?;
-    pointer(camera)?;
-    let values = floats(&r.read(camera + 0x698, 0x18)?);
-    let (eye, look_at) = values.split_at(3);
-    if !values.iter().all(|v| v.is_finite()) || look_at[1] != LOOK_AT_HEIGHT {
-        return Err(invalid("Camera look-at outside reviewed invariant"));
-    }
-    witnesses.section("target");
-    let requested = match state_id {
-        Some(id) => target(&r, base, gs, own_tag, id, look_at)?,
-        None => json!(null),
-    };
+    let (observed, _) = observe_in(&r, base, gs, idler, registry, manager, own_tag, state_id)?;
     let (calls, bytes) = witnesses.finish()?;
     process.check()?;
     Ok(
         json!({"source":"native own construction find view","build_id":game::BUILD_ID,
         "scope":"own_find_view_camera_and_requested_own_state","player":campaign.player,
-        "date_raw":campaign.date_raw,"paused":campaign.paused,"find_view":view,
-        "camera":{"eye":eye,"look_at":look_at,"look_at_height_invariant":true},
-        "target":requested,"input_authorized":false,"placement_eligibility_verified":false,
+        "date_raw":campaign.date_raw,"paused":campaign.paused,"find_view":observed["find_view"],
+        "camera":observed["camera"],"target":observed["target"],"input_authorized":false,"placement_eligibility_verified":false,
         "effective_routing_verified":false,"current_frame_verified":false,
         "live_validation":"pending","observation_paused_game":false,
         "freshness":{"observed_unix_ms":crate::daily_observation::unix_ms()?,

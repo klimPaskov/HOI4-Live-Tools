@@ -300,13 +300,19 @@ fn blockers(
 
 /// Own local UI only. No queue, map, foreign location or input operation occurs.
 pub fn snapshot(process: &dyn Process, key: &str, include_geometry: bool) -> Result<Value> {
-    Ok(observe(process, key, include_geometry)?.value)
+    Ok(observe(process, key, include_geometry, None)?.value)
 }
 
+/// Optional same-snapshot Find view read for Find stages.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct FindRead {
+    pub(crate) state_id: Option<i32>,
+}
 pub(crate) fn observe(
     process: &dyn Process,
     key: &str,
     include_geometry: bool,
+    find: Option<FindRead>,
 ) -> Result<Observation> {
     validate_key(key)?;
     let start = Instant::now();
@@ -394,6 +400,26 @@ pub(crate) fn observe(
     witnesses.section("blockers");
     trace.blockers(manager);
     let blockers = blockers(&r, base, country, idler, manager, registry)?;
+    witnesses.section("find_view");
+    let mut find_identity = None;
+    let find_value = match find {
+        Some(request) => {
+            let own_tag = r.i32(country + 8)?;
+            let (value, identity) = super::find_view::observe_in(
+                &r,
+                base,
+                gs,
+                idler,
+                registry,
+                manager,
+                own_tag,
+                request.state_id,
+            )?;
+            find_identity = Some(identity);
+            value
+        }
+        None => json!(null),
+    };
     witnesses.section("input_geometry");
     let geometry = if include_geometry {
         crate::gui::input_geometry_from_reader(&r, base)?
@@ -416,6 +442,7 @@ pub(crate) fn observe(
         opener: opener_identity,
         choice: choice_identity,
         include_geometry,
+        find: find_identity,
         words: trace.finish(),
     };
     let value = json!({"source":"native own construction controls","build_id":game::BUILD_ID,
@@ -429,6 +456,10 @@ pub(crate) fn observe(
         "observation_paused_game":false,
         "freshness":{"observed_unix_ms":crate::daily_observation::unix_ms()?,"elapsed_ms":start.elapsed().as_secs_f64()*1000.0,
             "read_calls_kind":"logical_read_requests","read_calls":r.calls.get()+calls as u64,"read_bytes":r.bytes.get()+bytes}});
+    let mut value = value;
+    if find.is_some() {
+        value["find"] = find_value;
+    }
     Ok(Observation {
         value,
         campaign,

@@ -2,8 +2,21 @@
 use super::*;
 use x11rb::protocol::xkb::{ConnectionExt as _, ID};
 
+/// Bounded decimal own state ID text: 1..4095, no leading zero.
+pub(crate) fn validate_digits(text: &str) -> Result<()> {
+    if text.is_empty()
+        || text.len() > 4
+        || text.starts_with('0')
+        || !text.bytes().all(|b| b.is_ascii_digit())
+    {
+        return Err(xerror("Bounded decimal state digits required"));
+    }
+    Ok(())
+}
 fn keycodes(min: u8, count: u8, stride: usize, symbols: &[u32], text: &str) -> Result<Vec<u8>> {
-    crate::focus_stage::validate_query(text)?;
+    if crate::focus_stage::validate_query(text).is_err() {
+        validate_digits(text)?;
+    }
     if stride == 0 || symbols.len() != usize::from(count) * stride {
         return Err(xerror("Malformed text keyboard mapping"));
     }
@@ -57,7 +70,9 @@ fn search_codes(
 impl X11Controls {
     fn search_codes(&self, process: &dyn Process, text: Option<&str>) -> Result<Vec<u8>> {
         if let Some(text) = text {
-            crate::focus_stage::validate_query(text)?;
+            if crate::focus_stage::validate_query(text).is_err() {
+                validate_digits(text)?;
+            }
         }
         // Reuse exact process/window/foreground ownership and idle-input checks.
         self.check(process, &ControlKey::Pause)?;
@@ -132,6 +147,22 @@ impl X11Controls {
         before_queue: impl FnOnce() -> Result<()>,
     ) -> Result<()> {
         self.send_search_until_checked(process, Some(text), deadline, before_queue)
+    }
+    pub fn preflight_digits(&self, process: &dyn Process, digits: &str) -> Result<()> {
+        validate_digits(digits)?;
+        self.search_codes(process, Some(digits)).map(|_| ())
+    }
+    /// Caller persists intent, owns the lease and pins the focused empty Find
+    /// query. Unshifted digit keys only; any error after `before_queue` is uncertain.
+    pub fn send_digits_until_checked(
+        &self,
+        process: &dyn Process,
+        digits: &str,
+        deadline: Instant,
+        before_queue: impl FnOnce() -> Result<()>,
+    ) -> Result<()> {
+        validate_digits(digits)?;
+        self.send_search_until_checked(process, Some(digits), deadline, before_queue)
     }
     pub fn preflight_search_next(&self, process: &dyn Process) -> Result<()> {
         self.search_codes(process, None).map(|_| ())
@@ -229,5 +260,23 @@ mod tests {
         assert!(keycodes(8, 2, 2, &map, "a").is_err());
         assert!(keycodes(8, 2, 2, &[65, 97, 98, 66], "a").is_err());
         assert!(keycodes(8, 2, 2, &[97, 65, 97, 65], "a").is_err());
+    }
+    #[test]
+    fn state_digits_are_bounded_unique_unshifted_decimal_keys_only() {
+        let map = [
+            u32::from(b'6'),
+            u32::from(b'^'),
+            u32::from(b'4'),
+            u32::from(b'$'),
+            u32::from(b'0'),
+            u32::from(b')'),
+        ];
+        assert_eq!(keycodes(8, 3, 2, &map, "64").unwrap(), vec![8, 9]);
+        assert_eq!(keycodes(8, 3, 2, &map, "4060").unwrap(), vec![9, 10, 8, 10]);
+        for text in ["", "0", "064", "40604", "-6", "6 4", "6\n", "6a", "+64"] {
+            assert!(validate_digits(text).is_err(), "{text}");
+        }
+        assert!(keycodes(8, 3, 2, &map, "65").is_err());
+        assert!(keycodes(8, 2, 2, &[54, 94, 54, 36], "6").is_err());
     }
 }

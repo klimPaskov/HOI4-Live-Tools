@@ -26,6 +26,17 @@ pub mod read_recovery;
 pub enum Stage {
     EnsureOpen,
     SelectBuilding,
+    /// Open the game's own map Find view with its fixed `f` shortcut.
+    FindOpen,
+    /// Type the decimal own state ID into the focused, empty Find query.
+    FindQuery,
+    /// Press Return to activate the verified first state result.
+    FindActivate,
+}
+impl Stage {
+    pub fn is_find(self) -> bool {
+        matches!(self, Self::FindOpen | Self::FindQuery | Self::FindActivate)
+    }
 }
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub enum Delivery {
@@ -49,6 +60,9 @@ pub struct Target {
     pub stage: Stage,
     /// Required only for SelectBuilding. Never a localized label or icon ID.
     pub building_id: Option<String>,
+    /// Own state ID for FindQuery/FindActivate; absent (and unserialized) otherwise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub state_id: Option<i32>,
 }
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub enum PanelState {
@@ -85,6 +99,31 @@ pub struct OwnState {
     /// Requested named control's exact type/flags/listener/full-tail gates.
     /// Geometry and renderer/profile admission are still backend-required.
     pub local_dispatch_ready: Option<bool>,
+    /// Same-witness own Find view facts; only for Find stages, never serialized otherwise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub find: Option<FindState>,
+}
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct FindState {
+    /// Exact own Find window local visible flag; None when unmaterialized.
+    pub visible: Option<bool>,
+    /// The GUI text receiver is exactly the Find text box.
+    pub text_focused: Option<bool>,
+    /// Bounded printable ASCII query, or None when unsupported/unavailable.
+    pub query: Option<String>,
+    /// First result row's catalog-joined state ID, when it is a state row.
+    pub first_state_id: Option<i32>,
+    /// Requested state is own owned and controlled (Find query/activate only).
+    pub target_owned: Option<bool>,
+    /// Camera look-at equals the requested state's template map position.
+    pub camera_centered: Option<bool>,
+}
+pub fn state_digits(id: i32) -> Result<String> {
+    if !(1..4096).contains(&id) {
+        return Err(error("invalid_arguments", "Bounded own state ID required"));
+    }
+    Ok(id.to_string())
 }
 fn error(code: &'static str, message: &str) -> Error {
     Error::new(code, message)
@@ -106,7 +145,15 @@ fn key(value: &str) -> Result<()> {
 impl Target {
     pub fn validate(&self) -> Result<()> {
         match (self.stage, self.building_id.as_deref()) {
-            (Stage::EnsureOpen, None) => Ok(()),
+            (Stage::FindOpen, None) if self.state_id.is_none() => Ok(()),
+            (Stage::FindQuery | Stage::FindActivate, None) => {
+                state_digits(self.state_id.unwrap_or(0)).map(|_| ())
+            }
+            (Stage::EnsureOpen, None) if self.state_id.is_none() => Ok(()),
+            (Stage::SelectBuilding, Some(_)) if self.state_id.is_some() => Err(error(
+                "invalid_arguments",
+                "Stage requires its exact canonical target shape",
+            )),
             (Stage::SelectBuilding, Some(id)) => {
                 key(id)?;
                 if id == "rail_way" {
@@ -152,14 +199,58 @@ impl OwnState {
                 "Choice membership requires complete catalog and choice coverage",
             ));
         }
+        match (&self.find, target.stage.is_find()) {
+            (Some(find), true) => {
+                if find
+                    .query
+                    .as_ref()
+                    .is_some_and(|q| q.len() > 64 || !q.bytes().all(|b| (0x20..0x7f).contains(&b)))
+                    || find.first_state_id.is_some_and(|v| !(1..4096).contains(&v))
+                {
+                    return Err(error(
+                        "invalid_construction_state",
+                        "Bounded own Find view facts required",
+                    ));
+                }
+            }
+            (None, false) => {}
+            _ => {
+                return Err(error(
+                    "invalid_construction_state",
+                    "Find view facts belong exactly to Find stages",
+                ))
+            }
+        }
         Ok(())
     }
     pub fn reached(&self, target: &Target) -> bool {
+        if target.stage.is_find() {
+            let Some(f) = &self.find else {
+                return false;
+            };
+            let digits = target.state_id.and_then(|v| state_digits(v).ok());
+            let open = f.visible == Some(true) && f.text_focused == Some(true);
+            return match target.stage {
+                Stage::FindOpen => open,
+                Stage::FindQuery => {
+                    open && digits.is_some()
+                        && f.query == digits
+                        && f.first_state_id == target.state_id
+                }
+                Stage::FindActivate => {
+                    f.visible == Some(false)
+                        && f.target_owned == Some(true)
+                        && f.camera_centered == Some(true)
+                }
+                _ => false,
+            };
+        }
         if self.managed_mode != Some(17) || self.panel != PanelState::Shown {
             return false;
         }
         match target.stage {
             Stage::EnsureOpen => true,
+            Stage::FindOpen | Stage::FindQuery | Stage::FindActivate => false,
             Stage::SelectBuilding => {
                 self.selected_mode == Some(1)
                     && self.selected_building.as_deref() == target.building_id.as_deref()
@@ -178,7 +269,42 @@ impl OwnState {
                 Err(error("construction_precondition", why))
             }
         };
+        let find = || {
+            self.find
+                .as_ref()
+                .ok_or_else(|| error("construction_precondition", "Find view facts required"))
+        };
         match target.stage {
+            Stage::FindOpen => {
+                require(
+                    find()?.visible == Some(false),
+                    "FindOpen requires the materialized Find view positively hidden",
+                )?;
+            }
+            Stage::FindQuery | Stage::FindActivate => {
+                let f = find()?;
+                require(
+                    f.visible == Some(true) && f.text_focused == Some(true),
+                    "Find input requires the visible Find view with its focused text box",
+                )?;
+                require(
+                    f.target_owned == Some(true),
+                    "Requested state must be own owned and controlled",
+                )?;
+                if target.stage == Stage::FindQuery {
+                    require(
+                        f.query.as_deref() == Some(""),
+                        "FindQuery requires an empty query",
+                    )?;
+                } else {
+                    require(
+                        f.query.is_some()
+                            && f.query == target.state_id.and_then(|v| state_digits(v).ok())
+                            && f.first_state_id == target.state_id,
+                        "FindActivate requires the exact query and first state row",
+                    )?;
+                }
+            }
             Stage::EnsureOpen => {
                 require(
                     self.managed_mode == Some(23),
@@ -244,9 +370,22 @@ pub struct Observation<S> {
     pub state: OwnState,
     pub scope: S,
 }
+/// Exactly one ordinary input, derived by the backend from witnessed state.
+/// Keys and digits are fixed by stage/target; callers never supply keys.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Input {
+    /// EnsureOpen/SelectBuilding: one admitted left click.
+    Point(PointCandidate),
+    /// FindOpen: the game's own `f` shortcut for the Find view.
+    FindKey,
+    /// FindQuery: the requested state's decimal digits, unshifted only.
+    Digits(String),
+    /// FindActivate: one Return, which activates the first result row.
+    Return,
+}
 #[derive(Clone, Debug)]
 pub struct Candidate<S> {
-    pub point: PointCandidate,
+    pub input: Input,
     pub scope: S,
 }
 pub trait Backend {
@@ -897,20 +1036,28 @@ impl Journal {
                     "Candidate replaced the pinned construction scope",
                 ));
             }
-            let point = &candidate.point;
-            if point.input_authorized
-                || point.current_frame_verified
-                || point.effective_routing_verified
-                || point
-                    .expected_client
-                    .iter()
-                    .any(|v| !(1..=16384).contains(v))
-                || point
-                    .client_pixel
-                    .iter()
-                    .zip(point.expected_client)
-                    .any(|(v, n)| *v < 0 || *v >= i32::from(n))
-            {
+            let admitted = match (&candidate.input, target.stage) {
+                (Input::Point(point), Stage::EnsureOpen | Stage::SelectBuilding) => {
+                    !(point.input_authorized
+                        || point.current_frame_verified
+                        || point.effective_routing_verified
+                        || point
+                            .expected_client
+                            .iter()
+                            .any(|v| !(1..=16384).contains(v))
+                        || point
+                            .client_pixel
+                            .iter()
+                            .zip(point.expected_client)
+                            .any(|(v, n)| *v < 0 || *v >= i32::from(n)))
+                }
+                (Input::FindKey, Stage::FindOpen) | (Input::Return, Stage::FindActivate) => true,
+                (Input::Digits(digits), Stage::FindQuery) => {
+                    target.state_id.and_then(|v| state_digits(v).ok()).as_ref() == Some(digits)
+                }
+                _ => false,
+            };
+            if !admitted {
                 return Err(error(
                     "construction_precondition",
                     "Bounded conditional candidate cannot assert frame/routing/input authority",
