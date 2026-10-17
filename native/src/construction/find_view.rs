@@ -28,6 +28,23 @@ pub fn validate_state_id(id: i64) -> Result<i32> {
     }
     Ok(id as i32)
 }
+/// Exact type check with an object-specific refusal. The observed primary is
+/// reported image-relative (static RVA), never as a live absolute address.
+fn typed(r: &Reader<'_>, base: u64, address: u64, rva: u64, what: &str) -> Result<()> {
+    pointer(address)?;
+    let primary = r.u64(address)?;
+    if primary != base + rva {
+        let observed = primary
+            .checked_sub(base)
+            .filter(|v| *v < 0x1000_0000)
+            .map_or("outside_image".to_string(), |v| format!("rva_{v:x}"));
+        return Err(crate::error::Error::new(
+            "invalid_construction",
+            format!("Find view {what} type differs (expected rva_{rva:x}, observed {observed})"),
+        ));
+    }
+    Ok(())
+}
 fn query(r: &Reader<'_>, address: u64) -> Result<Value> {
     let text = r.string_bounded(address, 64)?;
     Ok(if text.bytes().all(|b| (0x20..0x7f).contains(&b)) {
@@ -44,7 +61,7 @@ fn floats(bytes: &[u8]) -> Vec<f32> {
 }
 /// One state-kind row or entry object, joined to the fresh state catalog.
 fn state_object(r: &Reader<'_>, base: u64, gs: u64, object: u64) -> Result<i32> {
-    location::exact(r, object, base + STATE)?;
+    typed(r, base, object, STATE, "state")?;
     let id = r.i32(object + 0x48)?;
     if location::catalog_pointer(r, gs + 0x2c8, id, 4096)? != object {
         return Err(invalid("Find result state must join its current catalog"));
@@ -64,7 +81,7 @@ fn first_row(r: &Reader<'_>, base: u64, gs: u64, find: u64) -> Result<Value> {
     if count == 0 {
         return Err(invalid("Find first row requires a result entry"));
     }
-    location::exact(r, row, base + RESULT_ROW)?;
+    typed(r, base, row, RESULT_ROW, "first row")?;
     let kind = r.i32(row + 0x2b8)?;
     let object = r.u64(row + 0x2a8)?;
     // The row is built from entry0; both must name the same kind and object.
@@ -104,7 +121,7 @@ fn target(
         );
     }
     let province = r.u64(state + 0x20)?;
-    location::exact(r, province, base + PROVINCE)?;
+    typed(r, base, province, PROVINCE, "anchor province")?;
     let province_id = r.i32(province + 0xa4)?;
     if r.u64(province + 0xe0)? != state || province_id <= 0 {
         return Err(invalid("State anchor province must belong to its state"));
@@ -129,7 +146,7 @@ pub fn snapshot(process: &dyn Process, state_id: Option<i32>) -> Result<Value> {
     let [gs, idler, _] = campaign.anchors;
     witnesses.section("interface");
     let registry = r.u64(idler + 0x4f8)?;
-    location::exact(&r, registry, base + 0x42736f8)?;
+    typed(&r, base, registry, 0x42736f8, "registry")?;
     let manager = r.u64(idler + 0x6b8)?;
     pointer(manager)?;
     if r.u64(manager + 0x180)? != idler {
@@ -137,7 +154,7 @@ pub fn snapshot(process: &dyn Process, state_id: Option<i32>) -> Result<Value> {
     }
     witnesses.section("find_view");
     let find = r.u64(manager + 0x190)?;
-    location::exact(&r, find, base + FIND_VIEW)?;
+    typed(&r, base, find, FIND_VIEW, "object")?;
     if r.u64(find + 0x860)? != idler {
         return Err(invalid("Find view must belong to own idler"));
     }

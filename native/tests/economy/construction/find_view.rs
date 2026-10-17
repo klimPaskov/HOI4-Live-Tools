@@ -155,3 +155,18 @@ fn state_id_bounds_are_explicit() {
     assert!(validate_state_id(4096).is_err());
     assert_eq!(validate_state_id(64).unwrap(), 64);
 }
+
+#[test]
+fn type_refusals_name_the_object_and_image_relative_primary_only() {
+    let mut f = find_fixture();
+    f.word(PROVINCE, BASE + 0x41fb7a8);
+    let e = find_view(&f, Some(1)).unwrap_err();
+    assert!(e.message.contains("anchor province"));
+    assert!(e.message.contains("observed rva_41fb7a8"));
+    let mut f = find_fixture();
+    f.word(FIND, 0x7f00_0000_0000);
+    let e = find_view(&f, None).unwrap_err();
+    assert!(e.message.contains("object type differs"));
+    assert!(e.message.contains("outside_image"));
+    assert!(!e.message.contains("7f0000000000"));
+}

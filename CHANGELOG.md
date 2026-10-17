@@ -2,6 +2,12 @@
 
 ## Unreleased native preview
 
+- Run079 on `e58058b` tested the read-only Find view observer at 512x288 with the
+  Haiku 5.5 player. Its first call refused with a shared type-check message, so
+  no Find view, camera or anchor values were obtained. Recording, four clock-skew
+  gates (all under 0.04 s), lease release, normal exit and exact-process closure
+  passed. The observer now names the object and its image-relative type on any
+  type refusal.
 - Add read-only `hoi4_construction_find_view`: the game's Find view state, first
   result row joined to the state catalog, camera look-at and an optional own
   state's anchor province, as groundwork for map placement. No input; live
