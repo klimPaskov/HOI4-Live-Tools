@@ -27,6 +27,17 @@ input profiles are 512x288 only, so a 1080p profile must be built and verified
 before such a run. Run077 is not campaign acceptance; economy/warfare automation,
 the clean two-year gate and the full campaigns remain pending.
 
+1080p calibration, 17 October 2026: branch `codex/linux-1080p-profile`
+(`6f0a77d`) adds a fixture-tested `linux_builtin_absolute_1920x1080_v1` profile,
+with nine passing CI jobs and passing actual Linux fixtures. An owned calibration
+game at 1920x1080 (`gui_scale=1.0`, display resized to 2560x1440) rendered a true
+1080p window but stayed on "Loading GUI": the progress bar moved from 2.8% to
+2.9% between minutes 22 and 32. At 512x288 the whole startup takes about six
+minutes. No menu input, recorder, binding or player grant happened; the owner
+closed its own child once and the display was restored to 1280x720. 1080p live
+play is not practical on this QEMU TCG VM. It needs a KVM or native Linux host,
+or a native Windows/macOS adapter on real hardware.
+
 Latest: Run076 on `7181858` failed its first `ensure_open` action with
 `torn_read: Snapshot witness changed; section=opener; read=171; size=4;
 changed_byte=1` in 113.942 ms. Initial controls passed in 71.913 ms. The six
