@@ -798,3 +798,19 @@ all journals; unresolved construction blocks clock, research, Focus and workers.
 This introduces no native command posting, map placement or frame/routing proof.
 Generated identity-replacement and protocol-shape checks are not live action
 acceptance; that remains pending.
+
+## Read-only Find view and camera look-at
+
+`construction/find_view.rs` is independently recovered for the same pinned Linux
+ELF; no upstream code was copied. The 1.1.0 Python tools' use of the game's Find
+view to centre the camera informed the approach. Manager construction `0x17037b0`
+stores the `CFindView` (vtable `0x4318868`) at manager `+0x190`; its owner `+0x860`
+is the idler. Refresh `0x2a3bc60` filters candidates into the result array at
+`+0x8c8` (0x50-byte entries: object `+0x40`, kind `+0x48`, state kind 2 from the
+state catalog `gs+0x2c8`). The first row `+0x8c0` is a `CSearchableGridBoxItem`
+(`0x4318b08`) with kind `+0x2b8` and object `+0x2a0/+0x2a8/+0x2b0`; Return
+(`0x2a3c250`) activates it through `0x2a3f060`, which centres the camera on the
+state's `+0x20` province position `+0x140/+0x144` (`0x207b9a0`). The camera is
+idler `+0x750`; setter `0x13d2a70` writes the look-at `+0x6a4/+0x6a8/+0x6ac` with
+height 9.5. The observer reports these facts read-only; it neither types, clicks
+nor moves the camera. Live agreement is pending.

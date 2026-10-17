@@ -124,6 +124,12 @@ journal execution and transport never retry. Other errors stop immediately.
 and in errors without changing their terminal category; it is historical read
 evidence, not input authority. Post-input readback is unchanged.
 
+`hoi4_construction_find_view({"state_id":64})` is a read-only preview for future
+map placement. It reports the game's own Find view (visibility flags, query, the
+first result row joined to the state catalog), the camera look-at point and the
+requested own state's anchor province, including whether the camera is centred on
+it. It types, clicks and moves nothing. Live agreement is pending.
+
 Each stage permits at most one ordinary click, with private identities and the
 original point checked again immediately before input. Already-matching state
 produces a durable no-op. Identical successful requests return historical

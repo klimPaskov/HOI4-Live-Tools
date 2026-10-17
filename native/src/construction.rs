@@ -4,6 +4,7 @@
 //! keyword initializers and arithmetic; see PROVENANCE.md. No engine calls.
 mod buildings;
 pub mod controls;
+pub mod find_view;
 mod location;
 mod selection;
 mod ui;

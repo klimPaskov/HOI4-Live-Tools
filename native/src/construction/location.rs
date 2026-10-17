@@ -8,7 +8,7 @@ use serde_json::{json, Value};
 pub(super) fn unavailable(reason: &str) -> Value {
     json!({"available":false,"reason":reason,"input_authorized":false})
 }
-fn exact(r: &Reader<'_>, address: u64, primary: u64) -> Result<()> {
+pub(super) fn exact(r: &Reader<'_>, address: u64, primary: u64) -> Result<()> {
     pointer(address)?;
     if r.u64(address)? != primary {
         return Err(invalid("Exact construction location primary required"));
@@ -26,7 +26,7 @@ fn entry(r: &Reader<'_>, header: u64, index: i32, stride: usize, bound: usize) -
     // Read exactly the selected entry; never enumerate a geographic catalog.
     r.read(data + index as u64 * stride as u64, stride)
 }
-fn catalog_pointer(r: &Reader<'_>, header: u64, id: i32, bound: usize) -> Result<u64> {
+pub(super) fn catalog_pointer(r: &Reader<'_>, header: u64, id: i32, bound: usize) -> Result<u64> {
     if id <= 0 {
         return Err(invalid("Positive construction location ID required"));
     }
@@ -34,7 +34,7 @@ fn catalog_pointer(r: &Reader<'_>, header: u64, id: i32, bound: usize) -> Result
         entry(r, header, id, 8, bound)?.try_into().unwrap(),
     ))
 }
-fn own_state(r: &Reader<'_>, base: u64, state: u64, tag: i32) -> Result<bool> {
+pub(super) fn own_state(r: &Reader<'_>, base: u64, state: u64, tag: i32) -> Result<bool> {
     exact(r, state, base + 0x41fba98)?;
     // Authorization fields precede state ID or any reciprocal building data.
     Ok(r.i32(state + 0xc8)? == tag && r.i32(state + 0xcc)? == tag)

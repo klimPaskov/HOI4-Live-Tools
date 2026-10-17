@@ -2,6 +2,12 @@
 
 ## Unreleased native preview
 
+- Add read-only `hoi4_construction_find_view`: the game's Find view state, first
+  result row joined to the state catalog, camera look-at and an optional own
+  state's anchor province, as groundwork for map placement. No input; live
+  agreement pending. Record the 1080p calibration finding: an owned 1920x1080
+  game stayed on Loading GUI for over 30 minutes on the QEMU TCG VM, so live
+  runs stay at 512x288 there until a KVM or native host exists.
 - Run077 on `5e61fec` passed the bounded Linux construction action gate: one
   ordinary click opened the construction panel (1.59 s) and one selected the
   dockyard (0.85 s), each with server-confirmed delivery and canonical readback.

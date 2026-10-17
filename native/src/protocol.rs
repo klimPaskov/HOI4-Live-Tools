@@ -48,6 +48,10 @@ fn tools(commands: Option<&dyn Commands>) -> Value {
         .as_array_mut()
         .unwrap()
         .push(construction::controls::tool());
+    value["tools"]
+        .as_array_mut()
+        .unwrap()
+        .push(construction::find_view::tool());
     if let Some(commands) = commands {
         value["tools"]
             .as_array_mut()
@@ -535,6 +539,20 @@ impl Server {
                         Error::new("invalid_arguments", "include_geometry must be boolean")
                     })?;
                 construction::controls::snapshot(self.process()?, key, geometry)
+            }
+            "hoi4_construction_find_view" => {
+                if object.keys().any(|k| k != "state_id") {
+                    return Err(Error::new("invalid_arguments", "Only state_id accepted"));
+                }
+                let state = match object.get("state_id") {
+                    None => None,
+                    Some(v) => Some(construction::find_view::validate_state_id(
+                        v.as_i64().ok_or_else(|| {
+                            Error::new("invalid_arguments", "state_id must be an integer")
+                        })?,
+                    )?),
+                };
+                construction::find_view::snapshot(self.process()?, state)
             }
             "hoi4_production_lines" | "hoi4_construction_queue" => {
                 if object.keys().any(|k| {

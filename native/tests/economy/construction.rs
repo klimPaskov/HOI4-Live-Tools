@@ -3,6 +3,8 @@ use hoi4_live_native::construction::{page, snapshot};
 use serde_json::json;
 #[path = "construction/controls.rs"]
 mod controls;
+#[path = "construction/find_view.rs"]
+mod find_view;
 #[path = "construction/locations.rs"]
 mod locations;
 #[path = "construction/ui.rs"]
