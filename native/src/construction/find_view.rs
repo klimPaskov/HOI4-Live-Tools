@@ -85,20 +85,31 @@ fn first_row(r: &Reader<'_>, base: u64, gs: u64, find: u64) -> Result<Value> {
     }
     typed(r, base, row, RESULT_ROW, "first row")?;
     let kind = r.i32(row + 0x2b8)?;
-    let object = r.u64(row + 0x2a8)?;
-    // The row is built from entry0; both must name the same kind and object.
+    // Fresh rows (2a3ede0) fill all three object fields; recycled rows (2a3f160)
+    // fill only their kind's field and zero the others (Run084).
+    let field = match kind {
+        1 => Some(0x2a0),
+        STATE_KIND => Some(0x2a8),
+        3 => Some(0x2b0),
+        _ => None,
+    };
     let entry = r.read(data, ENTRY)?;
     let entry_object = u64::from_le_bytes(entry[0x40..0x48].try_into().unwrap());
     let entry_kind = i32::from_le_bytes(entry[0x48..0x4c].try_into().unwrap());
-    if entry_kind != kind || entry_object != object {
-        return Err(invalid("Find first row must match first result entry"));
+    if entry_kind != kind {
+        return Err(invalid("Find first row kind must match first result entry"));
     }
     let mut first = json!({"kind_raw":kind,"state_id":null,"supported":kind==STATE_KIND});
-    if kind == STATE_KIND {
-        if r.u64(row + 0x2a0)? != object || r.u64(row + 0x2b0)? != object {
-            return Err(invalid("Find state row object copies disagree"));
+    if let Some(field) = field {
+        let object = r.u64(row + field)?;
+        if object == 0 || object != entry_object {
+            return Err(invalid(
+                "Find first row object must match first result entry",
+            ));
         }
-        first["state_id"] = json!(state_object(r, base, gs, object)?);
+        if kind == STATE_KIND {
+            first["state_id"] = json!(state_object(r, base, gs, object)?);
+        }
     }
     out["first_row"] = first;
     Ok(out)

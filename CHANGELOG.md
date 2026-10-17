@@ -2,6 +2,13 @@
 
 ## Unreleased native preview
 
+- Run084 on `236e3bc` passed `find_open` live: one server-confirmed `f` opened
+  the game's Find view with its edit box focused, and the identical replay was
+  historical. `find_query` typed the digits but its readback refused, because
+  recycled result rows keep their object only in a kind-specific field. The
+  observer now reads rows by kind; `find_query` verifies the typed query and a
+  refreshed first row, and `find_activate` refuses before input unless the first
+  row is the requested state (a province can also match a numeric ID).
 - Run083 on `10907e9` sent the first Find stage: the `f` shortcut was
   server-confirmed and the game's Find view opened, but readback compared the
   GUI text receiver with the edit box itself. In this build the receiver is the

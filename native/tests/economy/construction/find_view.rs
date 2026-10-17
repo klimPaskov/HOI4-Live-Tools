@@ -118,8 +118,16 @@ fn row_entry_disagreement_and_uncataloged_state_refuse() {
     let mut f = find_fixture();
     f.number(ENTRIES + 0x48, 1);
     assert!(find_view(&f, None).is_err());
+    // Recycled state rows zero the other kinds' object fields (2a3f160).
     let mut f = find_fixture();
-    f.word(ROW + 0x2b0, STATE + 8);
+    f.word(ROW + 0x2a0, 0);
+    f.word(ROW + 0x2b0, 0);
+    assert_eq!(
+        find_view(&f, None).unwrap()["find_view"]["results"]["first_row"]["state_id"],
+        1
+    );
+    let mut f = find_fixture();
+    f.word(ROW + 0x2a8, STATE + 8);
     assert!(find_view(&f, None).is_err());
     let mut f = find_fixture();
     f.number(STATE + 0x48, 2);
@@ -192,4 +200,24 @@ fn text_focus_needs_keyboard_focus_and_embedded_receiver_of_exact_edit_box() {
     let mut f = find_fixture();
     f.word(TEXT + 0x1a0, BASE + 0x4347d58);
     assert!(find_view(&f, None).unwrap()["find_view"]["text_box_focused"].is_null());
+}
+
+#[test]
+fn province_first_row_reports_its_kind_without_a_state() {
+    let mut f = find_fixture();
+    let province = 0xe1000;
+    f.number(ENTRIES + 0x48, 3);
+    f.word(ENTRIES + 0x40, province);
+    f.number(ROW + 0x2b8, 3);
+    for offset in [0x2a0, 0x2a8] {
+        f.word(ROW + offset, 0);
+    }
+    f.word(ROW + 0x2b0, province);
+    let v = find_view(&f, None).unwrap();
+    let first = &v["find_view"]["results"]["first_row"];
+    assert_eq!(first["kind_raw"], 3);
+    assert!(first["state_id"].is_null());
+    assert_eq!(first["supported"], false);
+    f.word(ROW + 0x2b0, 0);
+    assert!(find_view(&f, None).is_err());
 }

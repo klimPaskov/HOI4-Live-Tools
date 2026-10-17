@@ -112,6 +112,9 @@ pub struct FindState {
     pub text_focused: Option<bool>,
     /// Bounded printable ASCII query, or None when unsupported/unavailable.
     pub query: Option<String>,
+    /// First result row's literal kind (2 = state), when a first row exists.
+    #[serde(default)]
+    pub first_kind: Option<i32>,
     /// First result row's catalog-joined state ID, when it is a state row.
     pub first_state_id: Option<i32>,
     /// Requested state is own owned and controlled (Find query/activate only).
@@ -232,10 +235,10 @@ impl OwnState {
             let open = f.visible == Some(true) && f.text_focused == Some(true);
             return match target.stage {
                 Stage::FindOpen => open,
+                // Typing is verified by its own effect: the exact query and a
+                // refreshed first row. Which row comes first is Activate's precondition.
                 Stage::FindQuery => {
-                    open && digits.is_some()
-                        && f.query == digits
-                        && f.first_state_id == target.state_id
+                    open && digits.is_some() && f.query == digits && f.first_kind.is_some()
                 }
                 Stage::FindActivate => {
                     f.visible == Some(false)
@@ -299,9 +302,12 @@ impl OwnState {
                 } else {
                     require(
                         f.query.is_some()
-                            && f.query == target.state_id.and_then(|v| state_digits(v).ok())
-                            && f.first_state_id == target.state_id,
-                        "FindActivate requires the exact query and first state row",
+                            && f.query == target.state_id.and_then(|v| state_digits(v).ok()),
+                        "FindActivate requires the exact typed query",
+                    )?;
+                    require(
+                        f.first_kind == Some(2) && f.first_state_id == target.state_id,
+                        "FindActivate requires the requested own state as the first result row",
                     )?;
                 }
             }

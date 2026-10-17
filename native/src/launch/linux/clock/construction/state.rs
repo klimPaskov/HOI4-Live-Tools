@@ -153,6 +153,9 @@ fn find_model(d: &Value, target: &Target) -> Result<OwnState> {
     };
     let text_focused = view["text_box_focused"].as_bool();
     let first = &view["results"]["first_row"];
+    let first_kind = first["kind_raw"]
+        .as_i64()
+        .and_then(|v| i32::try_from(v).ok());
     let first_state_id = (first["supported"] == true)
         .then(|| {
             first["state_id"]
@@ -210,6 +213,7 @@ fn find_model(d: &Value, target: &Target) -> Result<OwnState> {
             visible,
             text_focused,
             query: view["query"].as_str().map(str::to_owned),
+            first_kind,
             first_state_id,
             target_owned,
             camera_centered,

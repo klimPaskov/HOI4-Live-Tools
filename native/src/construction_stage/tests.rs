@@ -55,6 +55,7 @@ fn find_before(stage: Stage) -> Option<FindState> {
             visible: Some(false),
             text_focused: Some(false),
             query: query(""),
+            first_kind: None,
             first_state_id: None,
             target_owned: None,
             camera_centered: None,
@@ -63,6 +64,7 @@ fn find_before(stage: Stage) -> Option<FindState> {
             visible: Some(true),
             text_focused: Some(true),
             query: query(""),
+            first_kind: None,
             first_state_id: None,
             target_owned: Some(true),
             camera_centered: Some(false),
@@ -71,6 +73,7 @@ fn find_before(stage: Stage) -> Option<FindState> {
             visible: Some(true),
             text_focused: Some(true),
             query: query("64"),
+            first_kind: Some(2),
             first_state_id: Some(64),
             target_owned: Some(true),
             camera_centered: Some(false),
@@ -120,6 +123,7 @@ fn reached(stage: Stage) -> OwnState {
             }
             Stage::FindQuery => {
                 find.query = Some("64".into());
+                find.first_kind = Some(2);
                 find.first_state_id = Some(64);
             }
             _ => {
@@ -1791,12 +1795,13 @@ fn find_preconditions_and_completion_are_exact() {
         }
         assert!(changed.preflight(&query).is_err(), "{change}");
     }
-    // Query completion needs the exact digits AND the first state row.
+    // Query completion is its own effect: exact digits AND a refreshed first row
+    // of any kind. Which row comes first only gates FindActivate.
     state.find.as_mut().unwrap().query = Some("64".into());
     assert!(!state.reached(&query));
-    state.find.as_mut().unwrap().first_state_id = Some(64);
+    state.find.as_mut().unwrap().first_kind = Some(3);
     assert!(state.reached(&query));
-    state.find.as_mut().unwrap().first_state_id = Some(640);
+    state.find.as_mut().unwrap().query = Some("640".into());
     assert!(!state.reached(&query));
     // Activate completes only on a closed view with the camera on the own state.
     let activate = target(Stage::FindActivate);
@@ -1804,6 +1809,11 @@ fn find_preconditions_and_completion_are_exact() {
     assert!(state.preflight(&activate).is_ok());
     state.find.as_mut().unwrap().first_state_id = Some(65);
     assert!(state.preflight(&activate).is_err());
+    // A province (or other kind) first row refuses before Return.
+    let mut province_first = before(Stage::FindActivate);
+    province_first.find.as_mut().unwrap().first_kind = Some(3);
+    province_first.find.as_mut().unwrap().first_state_id = None;
+    assert!(province_first.preflight(&activate).is_err());
     let mut done = reached(Stage::FindActivate);
     assert!(done.reached(&activate));
     done.find.as_mut().unwrap().camera_centered = Some(false);
