@@ -60,6 +60,20 @@ fn tools(commands: Option<&dyn Commands>) -> Value {
     }
     value
 }
+/// Bounded whole-snapshot replacement for read-only construction tools, the same
+/// policy as action pre-input reads: only torn_read, at most four reads.
+fn read_only_recovered(producer: impl FnMut() -> Result<Value>) -> Result<Value> {
+    use crate::construction_stage::read_recovery::{observe, Phase, Report};
+    let mut report = Report::default();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+    match observe(Phase::ReadOnly, deadline, producer, &mut report) {
+        Ok(mut value) => {
+            value["discarded_torn_snapshots"] = report.value("");
+            Ok(value)
+        }
+        Err(error) => Err(report.with_error(error, "")),
+    }
+}
 fn content(value: Value) -> Value {
     json!({"content":[{"type":"text","text":serde_json::to_string(&value).unwrap()}]})
 }
@@ -538,7 +552,8 @@ impl Server {
                     .ok_or_else(|| {
                         Error::new("invalid_arguments", "include_geometry must be boolean")
                     })?;
-                construction::controls::snapshot(self.process()?, key, geometry)
+                let process = self.process()?;
+                read_only_recovered(|| construction::controls::snapshot(process, key, geometry))
             }
             "hoi4_construction_find_view" => {
                 if object.keys().any(|k| k != "state_id") {
@@ -552,7 +567,8 @@ impl Server {
                         })?,
                     )?),
                 };
-                construction::find_view::snapshot(self.process()?, state)
+                let process = self.process()?;
+                read_only_recovered(|| construction::find_view::snapshot(process, state))
             }
             "hoi4_production_lines" | "hoi4_construction_queue" => {
                 if object.keys().any(|k| {
@@ -1450,5 +1466,44 @@ mod tests {
             same_wait_context(&before, &current, 102).unwrap_err().code,
             "wait_context_changed"
         );
+    }
+
+    #[test]
+    fn read_only_tools_replace_only_whole_torn_snapshots_and_report_them() {
+        use std::cell::Cell;
+        let calls = Cell::new(0);
+        let value = read_only_recovered(|| {
+            calls.set(calls.get() + 1);
+            if calls.get() == 1 {
+                Err(Error::new(
+                    "torn_read",
+                    "Snapshot witness changed; section=opener",
+                ))
+            } else {
+                Ok(json!({"ok":true}))
+            }
+        })
+        .unwrap();
+        assert_eq!(calls.get(), 2);
+        assert_eq!(value["ok"], true);
+        let discarded = value["discarded_torn_snapshots"].as_array().unwrap();
+        assert_eq!(discarded.len(), 1);
+        assert_eq!(discarded[0]["phase"], "read_only");
+        assert_eq!(discarded[0]["input_authorized"], false);
+        let calls = Cell::new(0);
+        let error = read_only_recovered(|| {
+            calls.set(calls.get() + 1);
+            Err(Error::new("invalid_construction", "type differs"))
+        })
+        .unwrap_err();
+        assert_eq!((calls.get(), error.code), (1, "invalid_construction"));
+        let calls = Cell::new(0);
+        let error = read_only_recovered(|| {
+            calls.set(calls.get() + 1);
+            Err(Error::new("torn_read", "always"))
+        })
+        .unwrap_err();
+        assert_eq!((calls.get(), error.code), (4, "torn_read"));
+        assert!(error.message.contains("discarded_preinput_reads"));
     }
 }

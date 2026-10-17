@@ -2,6 +2,14 @@
 
 ## Unreleased native preview
 
+- Run080 stopped at preflight: the pregrant read-only `hoi4_construction_controls`
+  read returned the recurring opener torn read (`read=171; size=4;
+  changed_byte=1`). No grant or player call happened. Every such refusal so far
+  followed a root click on the construction opener, with the pointer left over
+  that button; its hover state is the likely changing field (unproven). The
+  read-only construction controls and Find view tools now use the same bounded
+  whole-snapshot recovery as action pre-input reads and report discarded
+  snapshots.
 - Run079 on `e58058b` tested the read-only Find view observer at 512x288 with the
   Haiku 5.5 player. Its first call refused with a shared type-check message, so
   no Find view, camera or anchor values were obtained. Recording, four clock-skew
