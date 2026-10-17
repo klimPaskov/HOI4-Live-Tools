@@ -93,9 +93,11 @@ ordering and no player input. Both local dispatch gates remained false.
 General UI freshness, railway coverage and construction actions remain pending.
 The preview adds an explicit Linux opt-in for opening the construction panel and
 selecting a building type, with durable receipts and uncertainty blocking all
-shared input. Its first live opening attempt refused a changing snapshot before
-input; the preceding controls read took 44 ms and verified the opener's optional
-parent gate. Live action acceptance is pending; map placement is unavailable.
+shared input. Two live opening attempts refused changing snapshots before input;
+the latest diagnostic narrows the change to a four-byte opener read. The preview
+now permits bounded fresh reads after torn pre-input snapshots, preserving every
+refusal and the original deadline. Live action acceptance is pending; map
+placement is unavailable.
 Army, economy and naval automation are still in development. See
 [the expansion plan](docs/CLAUSEWITZ_FOUNDATION.md) and
 [current acceptance work](docs/LINUX_RUST_HANDOFF.md).

@@ -2,6 +2,17 @@
 
 ## Unreleased native preview
 
+- Record Run076's repeated pre-input construction refusal: controls passed in
+  72 ms, then opening refused in 114 ms with `section=opener; read=171; size=4;
+  changed_byte=1`. Empty action journals prove no input. Canonical release,
+  finalized recording, normal game exit and exact-process closure passed.
+  The request-relative ordinal alone does not identify the semantic field.
+- Bound construction pre-input torn-snapshot recovery to four whole producer
+  reads, one second after the first rejection, 25 ms intervals and the original
+  lease/call deadline. Explicit initial, candidate, before-intent, after-intent
+  and final dispatch-check phases preserve rejected-read diagnostics. Context
+  acceptance, predicates, scope/point checks, journals and input never retry;
+  post-input readback is unchanged. Live action acceptance remains pending.
 - Record Run075's first construction-action refusal: the initial controls read
   passed in 44 ms, but `ensure_open` returned `torn_read` before durable intent
   or input. Luna stopped, released control and made no further game observations.

@@ -104,8 +104,20 @@ An owned Linux session can opt into `construction_profile` using
 with `ensure_open` and `select_building` stages; selection requires a canonical
 `building_id`. Both require an exclusive `lease_token` and stable `request_id`.
 The profile supports only the owned 512×288 client and exact Standard/Sprite
-controls. Run075's first opening attempt refused a changing snapshot before
-durable intent or input. Live construction action acceptance is pending.
+controls. Run075 and Run076 refused changing snapshots before durable intent or
+input. Run076's initial controls read passed in 72 ms; its opening request refused
+in 114 ms with `section=opener; read=171; size=4; changed_byte=1`. The semantic
+field remains unproved. Live construction action acceptance is pending.
+
+The action adapter may replace a wholly discarded `torn_read` producer snapshot
+with up to three fresh snapshots, using 25 ms intervals, a one-second window
+after the first rejection and the original lease/call deadline. This applies
+separately to initial state, candidate, before-intent, after-intent and final
+dispatch-check reads. Context acceptance, state/scope/geometry decisions,
+journal execution and transport never retry. Other errors stop immediately.
+`discarded_preinput_reads` preserves bounded phase/cause diagnostics on success
+and in errors without changing their terminal category; it is historical read
+evidence, not input authority. Post-input readback is unchanged.
 
 Each stage permits at most one ordinary click, with private identities and the
 original point checked again immediately before input. Already-matching state

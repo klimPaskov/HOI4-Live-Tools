@@ -130,6 +130,7 @@ pub(super) fn call(
         display: service.display,
         xauthority: &service.xauthority,
         until,
+        rejected_reads: stage::read_recovery::Report::default(),
     };
     let timeout = until.saturating_duration_since(Instant::now());
     if timeout.is_zero() {
@@ -138,7 +139,7 @@ pub(super) fn call(
             "Construction deadline ended before execution",
         ));
     }
-    let execution = service.journal.execute(
+    let result = service.journal.execute(
         args.id,
         target,
         args.token,
@@ -147,9 +148,11 @@ pub(super) fn call(
         &domains,
         &mut backend,
         timeout,
-    )?;
+    );
+    let execution = result.map_err(|error| backend.rejected_reads.with_error(error, args.token))?;
     Ok(
         json!({"execution":execution,"map_placement_available":false,
+        "discarded_preinput_reads":backend.rejected_reads.value(args.token),
         "effective_routing_verified":false,"current_frame_verified":false,"global_modal_clear_verified":false,
         "full_campaign_acceptance":false}),
     )
@@ -177,11 +180,25 @@ struct ConstructionBackend<'a> {
     display: u16,
     xauthority: &'a Path,
     until: Instant,
+    rejected_reads: stage::read_recovery::Report,
 }
 fn observed(
     process: &dyn Process,
     guard: &mut Guard,
     target: &stage::Target,
+) -> Result<(
+    observation::Observation,
+    stage::Observation<observation::Scope>,
+)> {
+    observed_with(process, guard, target, |producer| producer())
+}
+fn observed_with(
+    process: &dyn Process,
+    guard: &mut Guard,
+    target: &stage::Target,
+    read: impl FnOnce(
+        &mut dyn FnMut() -> Result<observation::Observation>,
+    ) -> Result<observation::Observation>,
 ) -> Result<(
     observation::Observation,
     stage::Observation<observation::Scope>,
@@ -193,15 +210,35 @@ fn observed(
         ));
     }
     // EnsureOpen does not depend on choice materialization or this public key.
-    let o = observation::observe(
-        process,
-        target.building_id.as_deref().unwrap_or("dockyard"),
-        true,
-    )?;
+    let o = read(&mut || {
+        observation::observe(
+            process,
+            target.building_id.as_deref().unwrap_or("dockyard"),
+            true,
+        )
+    })?;
+    // Only the producer above is recoverable. Ownership acceptance, state and
+    // scope decisions always run once against the complete fresh observation.
     guard.accept_context(process, &o.campaign)?;
     let state = state::model(&o.value, target)?;
     let scope = o.scope(target.stage)?;
     Ok((o, stage::Observation { state, scope }))
+}
+impl ConstructionBackend<'_> {
+    fn before_input(
+        &mut self,
+        target: &stage::Target,
+        phase: stage::read_recovery::Phase,
+        deadline: Instant,
+    ) -> Result<(
+        observation::Observation,
+        stage::Observation<observation::Scope>,
+    )> {
+        let deadline = deadline.min(self.until);
+        observed_with(self.process, self.guard, target, |producer| {
+            stage::read_recovery::observe(phase, deadline, producer, &mut self.rejected_reads)
+        })
+    }
 }
 fn check_scope(expected: &observation::Scope, actual: &observation::Scope) -> Result<()> {
     if expected != actual {
@@ -230,6 +267,15 @@ impl stage::Backend for ConstructionBackend<'_> {
         }
         Ok(state)
     }
+    fn observe_before_input(
+        &mut self,
+        target: &stage::Target,
+        phase: stage::read_recovery::Phase,
+        deadline: Instant,
+    ) -> Result<stage::Observation<Self::Scope>> {
+        self.before_input(target, phase, deadline)
+            .map(|(_, state)| state)
+    }
     fn candidate(
         &mut self,
         target: &stage::Target,
@@ -243,7 +289,8 @@ impl stage::Backend for ConstructionBackend<'_> {
                 "Construction candidate deadline ended",
             ));
         }
-        let (o, fresh) = observed(self.process, self.guard, target)?;
+        let (o, fresh) =
+            self.before_input(target, stage::read_recovery::Phase::Candidate, deadline)?;
         check_scope(scope, &fresh.scope)?;
         let point = state::point(&o.value, target, self.profile)?;
         Ok(stage::Candidate {
@@ -261,6 +308,7 @@ impl stage::Backend for ConstructionBackend<'_> {
         let process = self.process;
         let guard = &mut *self.guard;
         let profile = self.profile;
+        let rejected_reads = &mut self.rejected_reads;
         let prepared = self.controls.prepare_left_click_until(
             process,
             PointerDisplay {
@@ -276,7 +324,14 @@ impl stage::Backend for ConstructionBackend<'_> {
             Err(e) => return stage::DispatchOutcome::NotQueued(e),
         };
         let result = prepared.dispatch_once_checked(|| {
-            let (o, fresh) = observed(process, guard, target)?;
+            let (o, fresh) = observed_with(process, guard, target, |producer| {
+                stage::read_recovery::observe(
+                    stage::read_recovery::Phase::DispatchCheck,
+                    deadline,
+                    producer,
+                    rejected_reads,
+                )
+            })?;
             check_scope(&original.scope, &fresh.scope)?;
             if fresh.state.reached(target) {
                 return Err(Error::new(

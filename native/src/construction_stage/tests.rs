@@ -141,6 +141,7 @@ struct Fake {
     exhaust_on_idle: bool,
     dispatch_error: bool,
     deadline: Option<Instant>,
+    preinput_phases: Vec<read_recovery::Phase>,
 }
 impl Fake {
     fn new(stage: Stage) -> Self {
@@ -163,6 +164,7 @@ impl Fake {
             exhaust_on_idle: false,
             dispatch_error: false,
             deadline: None,
+            preinput_phases: Vec::new(),
         }
     }
     fn success(stage: Stage) -> Self {
@@ -196,6 +198,20 @@ impl Backend for Fake {
             Ok(self.last.clone())
         }
     }
+    fn observe_before_input(
+        &mut self,
+        target: &Target,
+        phase: read_recovery::Phase,
+        deadline: Instant,
+    ) -> Result<Observation<u64>> {
+        if let Some(prior) = self.deadline {
+            assert_eq!(prior, deadline);
+        } else {
+            self.deadline = Some(deadline);
+        }
+        self.preinput_phases.push(phase);
+        self.observe(target)
+    }
     fn candidate(
         &mut self,
         _: &Target,
@@ -204,7 +220,7 @@ impl Backend for Fake {
     ) -> Result<Candidate<u64>> {
         assert_eq!(*expected, 1);
         self.candidates += 1;
-        self.deadline = Some(deadline);
+        self.same_deadline(deadline);
         Ok(self.candidate.clone())
     }
     fn dispatch_once(
@@ -270,6 +286,193 @@ fn execute(
     j.execute(id, t, TOKEN, a, g, domains, f, timeout)
 }
 const TIME: Duration = Duration::from_secs(2);
+
+struct RecoveringFake {
+    inner: Fake,
+    report: read_recovery::Report,
+    persistent: Option<read_recovery::Phase>,
+}
+impl RecoveringFake {
+    fn producer(&mut self, phase: read_recovery::Phase, deadline: Instant) -> Result<()> {
+        let mut calls = 0;
+        read_recovery::observe(
+            phase,
+            deadline,
+            || {
+                calls += 1;
+                if calls == 1 || self.persistent == Some(phase) {
+                    Err(error("torn_read", "Snapshot witness changed; section=opener; read=171; size=4; changed_byte=1"))
+                } else {
+                    Ok(())
+                }
+            },
+            &mut self.report,
+        )
+    }
+}
+impl Backend for RecoveringFake {
+    type Scope = u64;
+    fn observe(&mut self, target: &Target) -> Result<Observation<u64>> {
+        // Post-input reads never enter the pre-input recovery path.
+        self.inner.observe(target)
+    }
+    fn observe_before_input(
+        &mut self,
+        target: &Target,
+        phase: read_recovery::Phase,
+        deadline: Instant,
+    ) -> Result<Observation<u64>> {
+        self.producer(phase, deadline)?;
+        self.inner.observe_before_input(target, phase, deadline)
+    }
+    fn candidate(
+        &mut self,
+        target: &Target,
+        scope: &u64,
+        deadline: Instant,
+    ) -> Result<Candidate<u64>> {
+        self.producer(read_recovery::Phase::Candidate, deadline)?;
+        self.inner.candidate(target, scope, deadline)
+    }
+    fn dispatch_once(
+        &mut self,
+        target: &Target,
+        point: &Candidate<u64>,
+        deadline: Instant,
+    ) -> DispatchOutcome {
+        if let Err(cause) = self.producer(read_recovery::Phase::DispatchCheck, deadline) {
+            return DispatchOutcome::NotQueued(cause);
+        }
+        self.inner.dispatch_once(target, point, deadline)
+    }
+    fn confirm_input_idle(&mut self, point: &Candidate<u64>, deadline: Instant) -> Result<()> {
+        self.inner.confirm_input_idle(point, deadline)
+    }
+}
+
+#[test]
+fn explicit_read_phases_preserve_single_input_and_historical_replay() {
+    use read_recovery::Phase::*;
+    for stage in [Stage::EnsureOpen, Stage::SelectBuilding] {
+        let s = Scratch::new();
+        let a = authority();
+        let gate = RwLock::new(true);
+        let domains = Domains::default();
+        let mut f = RecoveringFake {
+            inner: Fake::success(stage),
+            report: Default::default(),
+            persistent: None,
+        };
+        f.inner.delivery = Delivery::ServerConfirmed;
+        let mut j = Journal::open(&s.path()).unwrap();
+        let result = j
+            .execute(
+                "recover-once",
+                target(stage),
+                TOKEN,
+                &a,
+                &gate,
+                &domains,
+                &mut f,
+                TIME,
+            )
+            .unwrap();
+        assert_eq!(result.receipt.status, Status::Verified);
+        assert_eq!(
+            f.inner.preinput_phases,
+            [Initial, BeforeIntent, AfterIntent]
+        );
+        assert_eq!(f.inner.dispatches, 1);
+        assert_eq!(f.inner.possible_inputs, 1);
+        let report = f.report.value(TOKEN);
+        let phases: Vec<_> = report
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|r| r["phase"].as_str().unwrap())
+            .collect();
+        assert_eq!(
+            phases,
+            [
+                "initial",
+                "candidate",
+                "before_intent",
+                "after_intent",
+                "dispatch_check"
+            ]
+        );
+        let observed = f.inner.observations;
+        let replay = j
+            .execute(
+                "recover-once",
+                target(stage),
+                TOKEN,
+                &a,
+                &gate,
+                &domains,
+                &mut f,
+                TIME,
+            )
+            .unwrap();
+        assert!(replay.historical);
+        assert_eq!(replay.receipt, result.receipt);
+        assert_eq!(f.inner.observations, observed);
+        assert_eq!(f.inner.dispatches, 1);
+        assert_eq!(f.report.value(TOKEN), report);
+    }
+}
+
+#[test]
+fn persistent_read_refusal_preserves_before_intent_or_durable_not_queued_boundary() {
+    use read_recovery::Phase::*;
+    for phase in [Initial, Candidate, BeforeIntent, AfterIntent, DispatchCheck] {
+        let s = Scratch::new();
+        let a = authority();
+        let gate = RwLock::new(true);
+        let domains = Domains::default();
+        let mut f = RecoveringFake {
+            inner: Fake::success(Stage::EnsureOpen),
+            report: Default::default(),
+            persistent: Some(phase),
+        };
+        let mut j = Journal::open(&s.path()).unwrap();
+        let t = target(Stage::EnsureOpen);
+        let error = j
+            .execute(
+                "persistent",
+                t.clone(),
+                TOKEN,
+                &a,
+                &gate,
+                &domains,
+                &mut f,
+                TIME,
+            )
+            .unwrap_err();
+        assert_eq!(f.inner.dispatches, 0);
+        assert_eq!(f.inner.possible_inputs, 0);
+        if matches!(phase, AfterIntent | DispatchCheck) {
+            assert_eq!(error.code, "input_not_queued");
+            assert_eq!(
+                j.failure_evidence("persistent", &t, &error),
+                FailureEvidence::ConfirmedNotQueued
+            );
+            let before = f.report.value(TOKEN);
+            let error = j
+                .execute("persistent", t, TOKEN, &a, &gate, &domains, &mut f, TIME)
+                .unwrap_err();
+            assert_eq!(error.code, "input_not_queued");
+            assert_eq!(f.report.value(TOKEN), before);
+        } else {
+            assert_eq!(error.code, "torn_read");
+            assert_eq!(
+                j.failure_evidence("persistent", &t, &error),
+                FailureEvidence::BeforeIntent
+            );
+            assert!(j.receipts.is_empty());
+        }
+    }
+}
 
 #[test]
 fn already_reached_stages_noop_and_restart_replays_without_observation_or_input() {

@@ -1,4 +1,4 @@
-//! Two durable ordinary construction stages; no runtime adapter is registered.
+//! Two durable ordinary construction stages with an independently opted-in adapter.
 //! The backend supplies witnessed own state, a stable private identity scope,
 //! an admitted PointCandidate, and at most one ordinary pointer dispatch.
 use crate::{
@@ -19,6 +19,8 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
+
+pub mod read_recovery;
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub enum Stage {
@@ -252,6 +254,17 @@ pub trait Backend {
     /// Ownership/positive player checks must precede any state payload read.
     /// Foreign/unknown roots must fail without traversing their payload.
     fn observe(&mut self, target: &Target) -> Result<Observation<Self::Scope>>;
+    /// A read-only pre-input phase, bounded by the original lease/call deadline.
+    /// Implementations may discard torn producer snapshots, never retry context
+    /// acceptance, state/scope decisions, journal execution or possible input.
+    fn observe_before_input(
+        &mut self,
+        target: &Target,
+        _phase: read_recovery::Phase,
+        _deadline: Instant,
+    ) -> Result<Observation<Self::Scope>> {
+        self.observe(target)
+    }
     /// Actual named renderer/resource/hierarchy and reviewed owned client codec
     /// must admit the point. No fallback caller coordinates or keyboard toggle.
     fn candidate(
@@ -867,7 +880,8 @@ impl Journal {
             }
             domains_clear(domains, &target.epoch.game)?;
             live(authority, token, &target, deadline, gate)?;
-            let before = backend.observe(&target)?;
+            let before =
+                backend.observe_before_input(&target, read_recovery::Phase::Initial, deadline)?;
             live(authority, token, &target, deadline, gate)?;
             before.state.validate(&target)?;
             let scope = before.scope;
@@ -902,7 +916,11 @@ impl Journal {
                     "Bounded conditional candidate cannot assert frame/routing/input authority",
                 ));
             }
-            let fresh = backend.observe(&target)?;
+            let fresh = backend.observe_before_input(
+                &target,
+                read_recovery::Phase::BeforeIntent,
+                deadline,
+            )?;
             fresh.state.validate(&target)?;
             if fresh.scope != scope {
                 return Err(error(
@@ -944,7 +962,11 @@ impl Journal {
             let final_check = (|| -> Result<()> {
                 live(authority, token, &target, deadline, gate)?;
                 domains_clear(domains, &target.epoch.game)?;
-                let state = backend.observe(&target)?;
+                let state = backend.observe_before_input(
+                    &target,
+                    read_recovery::Phase::AfterIntent,
+                    deadline,
+                )?;
                 state.state.validate(&target)?;
                 if state.scope != scope {
                     return Err(error(

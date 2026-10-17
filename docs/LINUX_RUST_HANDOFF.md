@@ -7,14 +7,50 @@ Do not resume Mac campaigns or control the shared Windows game.
 
 ## Current checkpoint
 
-The licensed Linux game and upstream Clausewitz-MCP have been exercised by one
-Luna player at medium reasoning. Focus, four research assignments, unpause and
-one day of advancement passed. The final native posting request timed out;
-**that adapter remains quarantined**. The Rust preview uses structured process
-observations and verified ordinary input. Neither a clean two-year run nor a
-full campaign has passed.
+Session checkpoint, 17 October 2026: the construction recovery follow-up
+described below is committed on `codex/linux-native-rust` directly after
+`7181858`. Its 137 native input hashes match the validated tree. Final
+validation passed 922 Rust 1.86 host tests, 953 Python tests (37 skipped; the
+local workspace held preserved unrelated WIP), host/Linux/Windows Clippy, Linux
+MSRV/all-target checks, formatting and the static Linux release build. Actual
+Linux fixtures passed 1,039 reported checks (1,037 substantive, including five
+X11 cases). These are offline checks, not live construction acceptance.
 
-Latest: Run075 on `583ca49` failed its first `ensure_open` action with
+Run076 is closed; exact absence of its four guest processes was rechecked on
+17 October. Run077 has not been installed or launched. Next: verify all nine
+exact-head CI jobs for the recovery commit, bind and validate the Run077
+helpers, then run the bounded construction action/no-op/replay gate. User
+direction (17 October): the single exclusive-input player is now one Haiku 5.5
+agent at medium reasoning; do not use Luna. The player role, gate and
+no-competing-input rules are otherwise unchanged. Preserve all unrelated
+Python WIP and keep private evidence locations outside Git.
+
+Latest: Run076 on `7181858` failed its first `ensure_open` action with
+`torn_read: Snapshot witness changed; section=opener; read=171; size=4;
+changed_byte=1` in 113.942 ms. Initial controls passed in 71.913 ms. The six
+player RPCs followed the declared order, stopped on refusal and canonically
+released control. All four action journals are empty; immutable intent-before-
+dispatch ordering proves no player input. The ordinal is request-relative;
+its semantic field remains unproved. Do not attribute it to Run075's failure.
+
+First preflight passed. Preserve one early `campaign_unavailable` response and
+the additional read-only capture while the UI was loading. There was no setup
+misclick or pregrant retry. Independent audit passed 62 checks: source 136 inputs,
+26 helpers and nine exact-head CI jobs; recording before Start, finalized
+233.333-second recording (recorder exit 255), normal exit 0 in 2.296 seconds,
+and absence of all four guest and six host instances and both broker sockets.
+
+The follow-up adds bounded whole-producer recovery for torn pre-input snapshots:
+at most four reads per explicit initial/candidate/before-intent/after-intent/
+dispatch-check phase, one second after the first rejection, 25 ms intervals,
+and the original lease/call deadline. Context acceptance and all state, scope,
+point, journal and input decisions remain outside recovery. Rejected samples
+retain their phase and cause; terminal error categories never become retryable
+action evidence. Post-input readback is unchanged. Validate this source before
+one bounded recorded action/no-op/replay gate with the single medium player.
+This recovery policy does not establish the changing field or live correctness.
+
+Run075 on `583ca49` failed its first `ensure_open` action with
 `torn_read: Snapshot witness changed` in 38.892 ms. The preceding controls read
 passed in 43.774 ms, including the opener's exact optional-parent join and clear
 local gate. Six player RPCs followed the declared order; Luna stopped on the
@@ -32,13 +68,11 @@ both brokers are closed. Preserve the initial capture-copy basename refusal
 and host cleanup identity-format refusal; neither caused an extra game input.
 The original 136 source inputs and 26 helpers were verified unchanged after close.
 
-Next: identify the changing witness before admitting construction actions.
-The diagnostic follow-up adds producer section, first-read ordinal, size and
+The diagnostic follow-up added producer section, first-read ordinal, size and
 changed-byte position to construction torn-read errors, without addresses or
 payload. It changes no witness predicate and adds no retry. Do not claim that
 diagnostics resolve the underlying instability or recover Run075's missing field.
-Use one bounded recorded action gate with the same Luna medium player after
-validation; preserve every failure and stop on refusal or uncertainty.
+Run076 above records the resulting annotated refusal unchanged.
 
 Run074 on `7e36594` passed its single combined construction-controls
 read in 81.060 ms: exact opener/dockyard callback bindings, canonical ordinary
@@ -472,7 +506,7 @@ an ordinary yield is neither a missing MCP response nor permission for a new cal
 1. The manual Run068 and worker Run070 search gates passed. Move to ordinary
    economy/construction/production controls and wider standing plans. Validate
    exact own target identity, eligibility and state changes against the installed
-   build before admitting actions. Keep one existing Luna medium player, fixed
+   build before admitting actions. Keep one Haiku 5.5 medium player, fixed
    bounds, recorded campaign Start and independent stopped-journal audit.
    Any post-failure diagnostic exception must be fixed before the input grant.
    Earlier missing evidence remains unknown; later success does not repair it.
