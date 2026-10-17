@@ -2,6 +2,12 @@
 
 ## Unreleased native preview
 
+- Add the `linux_builtin_absolute_1920x1080_v1` input profile for research,
+  Focus and construction. It requires an owned 1920×1080 client with equal
+  1920×1080 logical graphics and derives every point from named renderer
+  geometry through the existing codec. The 512×288 profile is unchanged. Unknown
+  sizes, other GUI scales and mixed-size bindings refuse. Fixture tests only;
+  live use is pending.
 - Run077 on `5e61fec` passed the bounded Linux construction action gate: one
   ordinary click opened the construction panel (1.59 s) and one selected the
   dockyard (0.85 s), each with server-confirmed delivery and canonical readback.

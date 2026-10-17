@@ -141,7 +141,7 @@ Normal difficulty, historical AI and the selected own-player tag.
 | `window` | Verified owned X11 window ID |
 | `window_class` | Exact complete `WM_CLASS` property as a byte array |
 | `menu_evidence_ids` | IDs in the private recording/journal proving ordinary singleplayer setup |
-| `research_profile` | Optional owner-reviewed `linux_builtin_absolute_512x288_v1`; omission keeps clock-only input |
+| `research_profile` | Optional owner-reviewed `linux_builtin_absolute_512x288_v1` or `linux_builtin_absolute_1920x1080_v1`; omission keeps clock-only input |
 
 ```sh
 native/target/release/hoi4-live-native --bind-input /absolute/private/run /absolute/private/input.json
@@ -186,7 +186,12 @@ it does not verify strategic actions or a complete campaign. See the
 The owner may add `"research_profile": "linux_builtin_absolute_512x288_v1"`
 to the private binding after corroborating its owned client. This narrow profile
 requires a 512×288 client, 2560×1440 logical graphics and the verified builtin
-absolute SDL/X11 association. Other profiles are unavailable. Omission preserves
+absolute SDL/X11 association. The separate
+`linux_builtin_absolute_1920x1080_v1` profile requires a 1920×1080 client with
+equal 1920×1080 logical graphics; read `hoi4_input_geometry` before binding,
+because the game derives its logical size from settings. All opted-in profiles
+must name the same size. The 1080p profile has fixture tests only; live use is
+pending. Other profiles are unavailable. Omission preserves
 clock-only input. Recorded run 019 passed the assembled owner adapter with
 exclusive Luna medium input: exact-ID selection/assignment, independent canonical
 slot readback and counter advancement. Later runs verified panel opening and
@@ -235,8 +240,8 @@ The private owned input binding can separately enable
 `"focus_profile": "linux_builtin_absolute_512x288_v1"` and
 `"daily_prepared_research": true`. Both default off. The daily preview also
 requires the research profile. These are owner settings, not player-supplied
-geometry; they require the same reviewed 512×288 client and 2560×1440 logical
-profile used by research. Their installed-game acceptance is pending.
+geometry; they require the same reviewed client size as research (512×288 with
+2560×1440 logical, or 1920×1080 with equal logical). Their installed-game acceptance is pending.
 
 `hoi4_focus_attempt` accepts `stage`, `focus_id`, `request_id` and `lease_token`.
 Stages are `open_politics`, `close_politics`, `open_focus`, `view` and `start`. Each attempts at

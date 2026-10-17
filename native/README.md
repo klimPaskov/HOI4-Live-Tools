@@ -114,6 +114,15 @@ Each action discarded one torn opener snapshot after intent and before input.
 Its recording failed after a guest clock step, so map placement and campaign
 acceptance remain pending.
 
+The research, Focus and construction profiles may instead name
+`linux_builtin_absolute_1920x1080_v1`: an owned 1920×1080 client whose fresh
+graphics report the same 1920×1080 logical size (ratio 1). Points still come
+only from named renderer/control geometry through the owned-client codec; no
+512×288 coordinate is rescaled. Any other physical, logical or window size
+refuses, as does a binding whose profiles name different sizes. The game derives
+its logical size from settings, so an owner must read `hoi4_input_geometry`
+before binding. This profile has fixture tests only; live use is pending.
+
 The action adapter may replace a wholly discarded `torn_read` producer snapshot
 with up to three fresh snapshots, using 25 ms intervals, a one-second window
 after the first rejection and the original lease/call deadline. This applies

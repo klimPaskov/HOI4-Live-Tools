@@ -2,7 +2,9 @@
 use super::*;
 use crate::{
     platform::x11::{PointerDelivery, PointerDisplay},
-    research, research_candidate_observation as candidate, research_stage as stage, research_ui,
+    research,
+    research_candidate_observation::{self as candidate, BuiltinClient},
+    research_stage as stage, research_ui,
 };
 
 #[derive(Clone, Copy, Deserialize, Serialize)]
@@ -10,6 +12,16 @@ use crate::{
 pub(super) enum Profile {
     #[serde(rename = "linux_builtin_absolute_512x288_v1")]
     LinuxBuiltinAbsolute512x288V1,
+    #[serde(rename = "linux_builtin_absolute_1920x1080_v1")]
+    LinuxBuiltinAbsolute1920x1080V1,
+}
+impl Profile {
+    pub(super) const fn client(self) -> BuiltinClient {
+        match self {
+            Self::LinuxBuiltinAbsolute512x288V1 => BuiltinClient::Absolute512x288,
+            Self::LinuxBuiltinAbsolute1920x1080V1 => BuiltinClient::Absolute1920x1080,
+        }
+    }
 }
 pub(super) struct Service {
     pub(super) journal: stage::Journal,
@@ -19,20 +31,14 @@ pub(super) struct Service {
 }
 impl Service {
     pub(super) fn bind(
-        _profile: Profile,
+        profile: Profile,
         window: u32,
         display: &Display,
         directory: &Path,
     ) -> Result<Self> {
         Ok(Self {
             journal: stage::Journal::open(&directory.join("research-actions.jsonl"))?,
-            profile: candidate::OwnedClientProfile {
-                window,
-                client: [512, 288],
-                logical: [2560, 1440],
-                os_binding_verified: true,
-                reviewed_builtin_client_origin: true,
-            },
+            profile: profile.client().owned(window),
             display: display.number,
             authority: display.xauthority.clone(),
         })
@@ -665,7 +671,29 @@ mod tests {
             serde_json::to_value(Profile::LinuxBuiltinAbsolute512x288V1).unwrap(),
             json!("linux_builtin_absolute_512x288_v1")
         );
-        assert!(serde_json::from_value::<Profile>(json!("generic")).is_err());
+        assert_eq!(
+            serde_json::to_value(Profile::LinuxBuiltinAbsolute1920x1080V1).unwrap(),
+            json!("linux_builtin_absolute_1920x1080_v1")
+        );
+        for (profile, client) in [
+            (
+                Profile::LinuxBuiltinAbsolute512x288V1,
+                BuiltinClient::Absolute512x288,
+            ),
+            (
+                Profile::LinuxBuiltinAbsolute1920x1080V1,
+                BuiltinClient::Absolute1920x1080,
+            ),
+        ] {
+            assert_eq!(profile.client(), client);
+        }
+        for unknown in [
+            "generic",
+            "linux_builtin_absolute_1280x720_v1",
+            "linux_builtin_absolute_3840x2160_v1",
+        ] {
+            assert!(serde_json::from_value::<Profile>(json!(unknown)).is_err());
+        }
         assert!(tool()["inputSchema"]["properties"].get("x").is_none());
     }
     #[test]

@@ -54,6 +54,26 @@ impl Binding {
         }
         Ok(())
     }
+    /// Every opted-in profile binds the same owned window, so all must name one
+    /// reviewed client size. A mixed binding has no single codec and refuses.
+    fn validate_client_profiles(&self) -> Result<()> {
+        let mut clients = [
+            self.research_profile.map(research::Profile::client),
+            self.focus_profile.map(focus::Profile::client),
+            self.construction_profile.map(construction::Profile::client),
+        ]
+        .into_iter()
+        .flatten();
+        if let Some(first) = clients.next() {
+            if clients.any(|client| client != first) {
+                return Err(Error::new(
+                    "invalid_input_binding",
+                    "All owned input profiles must name one client size",
+                ));
+            }
+        }
+        Ok(())
+    }
 }
 struct Guard {
     epoch: Epoch,
@@ -182,6 +202,7 @@ impl ClockService {
             ));
         }
         binding.validate_daily_focus()?;
+        binding.validate_client_profiles()?;
         let observed: ClockContext = game::clock_context(process)?;
         if observed.player != binding.player
             || observed.difficulty != 2
@@ -933,5 +954,49 @@ mod tests {
         let mut invalid = value;
         invalid["daily_focus"] = json!(1);
         assert!(serde_json::from_value::<Binding>(invalid).is_err());
+    }
+    #[test]
+    fn owned_input_profiles_must_name_one_client_size() {
+        let value = json!({"game":{"pid":123,"start_ticks":"456","exe":"/generated/game","uid":1000},"controller":"generated","player":"GER","window":1,"window_class":[],"menu_evidence_ids":["setup"]});
+        let small = "linux_builtin_absolute_512x288_v1";
+        let full = "linux_builtin_absolute_1920x1080_v1";
+        let binding = |research: Option<&str>, focus: Option<&str>, construction: Option<&str>| {
+            let mut v = value.clone();
+            for (key, profile) in [
+                ("research_profile", research),
+                ("focus_profile", focus),
+                ("construction_profile", construction),
+            ] {
+                if let Some(profile) = profile {
+                    v[key] = json!(profile);
+                }
+            }
+            serde_json::from_value::<Binding>(v).unwrap()
+        };
+        for (research, focus, construction) in [
+            (None, None, None),
+            (Some(small), Some(small), Some(small)),
+            (Some(full), Some(full), Some(full)),
+            (Some(full), None, Some(full)),
+            (None, Some(full), None),
+        ] {
+            assert!(binding(research, focus, construction)
+                .validate_client_profiles()
+                .is_ok());
+        }
+        for (research, focus, construction) in [
+            (Some(small), Some(full), None),
+            (Some(full), None, Some(small)),
+            (None, Some(small), Some(full)),
+            (Some(full), Some(full), Some(small)),
+        ] {
+            assert_eq!(
+                binding(research, focus, construction)
+                    .validate_client_profiles()
+                    .unwrap_err()
+                    .code,
+                "invalid_input_binding"
+            );
+        }
     }
 }

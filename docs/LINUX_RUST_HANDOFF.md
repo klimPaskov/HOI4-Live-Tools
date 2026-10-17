@@ -22,9 +22,13 @@ wall-clock timestamps and spent the run encoding duplicate frames, and no frame
 after the step was recorded. Next runs must refuse to start the recorder unless
 guest/host clock skew is below two seconds. User direction (17 October): the
 single exclusive-input player is one Haiku 5.5 agent at medium reasoning (not
-Luna), and later runs should use a standard 1920x1080 game window. The current
-input profiles are 512x288 only, so a 1080p profile must be built and verified
-before such a run. Run077 is not campaign acceptance; economy/warfare automation,
+Luna), and later runs should use a standard 1920x1080 game window. A separate
+`linux_builtin_absolute_1920x1080_v1` profile now requires a 1920x1080 client
+with equal logical graphics; the 512x288 profile is unchanged. Static analysis
+shows the game computes logical size as max(physical, an aspect-adjusted
+minimum) divided by a settings scale, but which settings value gives ratio 1 is
+not proved. Before binding, the next run must read `hoi4_input_geometry` and
+stop if it is not 1920x1080 physical and logical. Live use is pending. Run077 is not campaign acceptance; economy/warfare automation,
 the clean two-year gate and the full campaigns remain pending.
 
 Latest: Run076 on `7181858` failed its first `ensure_open` action with
