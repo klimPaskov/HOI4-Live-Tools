@@ -7,23 +7,25 @@ Do not resume Mac campaigns or control the shared Windows game.
 
 ## Current checkpoint
 
-Session checkpoint, 17 October 2026: the construction recovery follow-up
-described below is committed on `codex/linux-native-rust` directly after
-`7181858`. Its 137 native input hashes match the validated tree. Final
-validation passed 922 Rust 1.86 host tests, 953 Python tests (37 skipped; the
-local workspace held preserved unrelated WIP), host/Linux/Windows Clippy, Linux
-MSRV/all-target checks, formatting and the static Linux release build. Actual
-Linux fixtures passed 1,039 reported checks (1,037 substantive, including five
-X11 cases). These are offline checks, not live construction acceptance.
+Session checkpoint, 17 October 2026: the construction recovery follow-up is
+committed as `5e61fec` with nine successful exact-head CI jobs. Run077 on that
+commit passed the construction action gate: ensure_open and select_building
+dockyard each delivered one server-confirmed ordinary click with canonical
+readback, identical replays returned historical receipts, and both no-op IDs
+verified with no delivery. Each action discarded one torn `opener` snapshot in
+the after-intent phase before input. Canonical lease release, normal exit 0 and
+exact absence of four guest and six host instances passed.
 
-Run076 is closed; exact absence of its four guest processes was rechecked on
-17 October. Run077 has not been installed or launched. Next: verify all nine
-exact-head CI jobs for the recovery commit, bind and validate the Run077
-helpers, then run the bounded construction action/no-op/replay gate. User
-direction (17 October): the single exclusive-input player is now one Haiku 5.5
-agent at medium reasoning; do not use Luna. The player role, gate and
-no-competing-input rules are otherwise unchanged. Preserve all unrelated
-Python WIP and keep private evidence locations outside Git.
+The Run077 recording FAILED: the guest clock stepped forward about 5 h 42 m
+between first-packet verification and the first menu click, ffmpeg x11grab used
+wall-clock timestamps and spent the run encoding duplicate frames, and no frame
+after the step was recorded. Next runs must refuse to start the recorder unless
+guest/host clock skew is below two seconds. User direction (17 October): the
+single exclusive-input player is one Haiku 5.5 agent at medium reasoning (not
+Luna), and later runs should use a standard 1920x1080 game window. The current
+input profiles are 512x288 only, so a 1080p profile must be built and verified
+before such a run. Run077 is not campaign acceptance; economy/warfare automation,
+the clean two-year gate and the full campaigns remain pending.
 
 Latest: Run076 on `7181858` failed its first `ensure_open` action with
 `torn_read: Snapshot witness changed; section=opener; read=171; size=4;

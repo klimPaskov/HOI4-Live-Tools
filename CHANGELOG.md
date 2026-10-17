@@ -2,6 +2,17 @@
 
 ## Unreleased native preview
 
+- Run077 on `5e61fec` passed the bounded Linux construction action gate: one
+  ordinary click opened the construction panel (1.59 s) and one selected the
+  dockyard (0.85 s), each with server-confirmed delivery and canonical readback.
+  Both identical replays returned the historical receipt without input, and both
+  no-op requests verified with no delivery. Each action discarded exactly one torn
+  `opener` snapshot after intent and before input, then used a fresh coherent
+  read. Lease release, normal game exit and exact-process closure passed. The
+  recording failed: a guest clock step made ffmpeg spend its run filling
+  duplicate frames, so the grant window is not on video. This is a construction
+  action gate, not campaign acceptance. The player was Claude Haiku 5.5 at medium
+  reasoning.
 - Record Run076's repeated pre-input construction refusal: controls passed in
   72 ms, then opening refused in 114 ms with `section=opener; read=171; size=4;
   changed_byte=1`. Empty action journals prove no input. Canonical release,

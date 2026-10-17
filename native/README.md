@@ -107,7 +107,12 @@ The profile supports only the owned 512×288 client and exact Standard/Sprite
 controls. Run075 and Run076 refused changing snapshots before durable intent or
 input. Run076's initial controls read passed in 72 ms; its opening request refused
 in 114 ms with `section=opener; read=171; size=4; changed_byte=1`. The semantic
-field remains unproved. Live construction action acceptance is pending.
+field remains unproved. Run077 on the recovery commit then passed the bounded
+action gate: one verified click each for `ensure_open` and `select_building`
+dockyard, identical historical replays without input, and two zero-input no-ops.
+Each action discarded one torn opener snapshot after intent and before input.
+Its recording failed after a guest clock step, so map placement and campaign
+acceptance remain pending.
 
 The action adapter may replace a wholly discarded `torn_read` producer snapshot
 with up to three fresh snapshots, using 25 ms intervals, a one-second window
