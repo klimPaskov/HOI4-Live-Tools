@@ -2,6 +2,24 @@
 
 ## Unreleased native preview
 
+- Run092 (18 October 2026, `b0b9b35`, package v87, Haiku 5.5 player, 512x288)
+  passed the map placement gate for a coastal building. The server selected a
+  dockyard, used the Find view to centre the camera on West Prussia (state 63)
+  and queued one dockyard with one map click. place verified in 1.7 s with
+  `{in_state 1, elsewhere 0, complete true}`. The open, select and place replays
+  returned identical historical receipts, and a second place ID was a zero-input
+  no-op. The final queue held exactly one dockyard of amount 1 in state 63
+  (location kind state). In this game data a dockyard is a coastal-only state
+  building, so the client-centre click needed no province target. The state's
+  Find anchor was predicted offline at map position (3059, 1599): the rounded
+  bounding-box centre of its provinces, which also reproduces Brandenburg's live
+  anchor. That point is inside coastal province 9361, 8 map pixels from the
+  nearest outside pixel, which is sea. The live anchor matched exactly, and the
+  private broker required that match before any Find key or map click. Lease
+  release, exit 0, recording and instance absence passed. True provincial
+  buildings (naval bases, bunkers) remain untested.
+- New fixtures: placement summaries count dockyard lines by state and
+  province-located lines by the state their province joins.
 - Run091 (18 October 2026, `7f0728c`, Haiku 5.5 player, 512x288) passed the
   map placement gate. ensure_open, select_building(arms_factory), find_open,
   find_query(64), find_activate(64) and place(arms_factory, state 64, amount 1)

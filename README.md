@@ -91,11 +91,12 @@ game it did not start.
 - **Building placement:** with a building selected and the camera on an own
   state, one map click queues it there. The result is verified as the exact
   queued amount of that building in that state. Run091 placed an arms factory in
-  Brandenburg on 18 October 2026.
+  Brandenburg on 18 October 2026, and Run092 placed a dockyard in West Prussia,
+  a coastal state, the same day.
 
 ### Not done yet
 
-- Provincial buildings (dockyards, forts), production changes, army, air and naval control.
+- Provincial buildings (naval bases, forts, coastal forts), production changes, army, air and naval control.
 - Economy and warfare automation (standing plans, shortage repair, invasions).
 - Native Windows and macOS adapters.
 - The clean two-year run and the recorded FAIR Germany and China campaigns.

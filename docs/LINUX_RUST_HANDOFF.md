@@ -16,8 +16,14 @@ fixed three faults on the way: an over-strict broker check of Find receipts; a
 location reader that accepted only the constructor status flags 1/2 while a live
 state status carried 6; and a torn confirmation read after input-idle that was
 not retried. The private broker now allows two read-only queue diagnostics, only
-after an uncertain place. Next: provincial buildings (dockyard on a coastal
-province), then production changes and standing economy plans.
+after an uncertain place.
+
+Run092 on `b0b9b35` (package v87) then placed one dockyard in West Prussia
+(state 63) the same way. Dockyards are coastal-only state buildings in this game
+data, so no province target was needed. The broker pinned the state's Find
+anchor to the offline-predicted coastal point (3059, 1599), and the live anchor
+matched. Next: a true provincial building (naval base or coastal bunker), which
+needs a province target, then production changes and standing economy plans.
 
 Session checkpoint, 17 October 2026: the construction recovery follow-up is
 committed as `5e61fec` with nine successful exact-head CI jobs. Run077 on that

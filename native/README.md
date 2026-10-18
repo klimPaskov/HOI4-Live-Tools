@@ -136,7 +136,11 @@ replays and a zero-input no-op.
 that building queued in that own state. With the building selected and the
 camera centred on the state, it clicks the owned client centre once and verifies
 the new total from the same-snapshot construction queue. Run091 accepted it live for
-one arms_factory in state 64; provincial buildings are not yet live-tested.
+one arms_factory in state 64, and Run092 for one dockyard in coastal state 63.
+In this game data a dockyard is a coastal-only state building (shared slots,
+`state_max`), so any click inside the state queues it there. True provincial
+buildings (naval bases, bunkers, coastal bunkers) need a province target and
+are not yet live-tested.
 
 `hoi4_construction_find_view({"state_id":64})` is a read-only preview for future
 map placement. It reports the game's own Find view (visibility flags, query, the
