@@ -215,6 +215,12 @@ pub(super) fn take(process: &dyn Process, keys: &MacKeys, key: &str) -> Result<(
         .find(|r| r.key == key && !r.timed)
         .cloned()
         .ok_or_else(|| Error::new("invalid_target", "This decision is not offered now"))?;
+    if before.iter().any(|r| r.key == key && r.timed) {
+        return Err(Error::new(
+            "invalid_target",
+            "This decision is already in effect (its timer is running)",
+        ));
+    }
     if !row.enabled {
         return Err(Error::new(
             "invalid_target",

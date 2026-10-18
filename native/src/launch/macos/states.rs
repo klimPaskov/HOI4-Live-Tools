@@ -109,6 +109,22 @@ pub(super) fn lookup(process: &dyn Process, dir: &Path, query: &str) -> Result<V
     if wanted.is_empty() {
         return Err(Error::new("invalid_arguments", "Empty state query"));
     }
+    let query = query.trim();
+    // A country tag (e.g. GER, POL) lists the states that country owns.
+    if query.len() == 3 && query.bytes().all(|b| b.is_ascii_uppercase()) {
+        let all = names(dir)?;
+        let mut rows = Vec::new();
+        for (id, name) in all {
+            if let Ok((owner, controller)) = read(process, |r, i| holders(r, i, id)) {
+                if owner == query || controller == query {
+                    rows.push(
+                        json!({"state_id":id,"name":name,"owner":owner,"controller":controller}),
+                    );
+                }
+            }
+        }
+        return Ok(json!({"states":rows}));
+    }
     let found: Vec<(i32, String)> = names(dir)?
         .into_iter()
         .filter(|(id, name)| fold(name).contains(&wanted) || id.to_string() == wanted)
