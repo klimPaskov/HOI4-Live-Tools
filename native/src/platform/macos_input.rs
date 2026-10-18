@@ -1,7 +1,8 @@
-//! Ordinary macOS key input to one owned game window. A key is posted only while
-//! the front-most on-screen window belongs to the owned process; anything else
-//! refuses before sending. Needs the Accessibility permission of the
-//! responsible app. No cursor movement, text, activation or engine call here.
+//! Ordinary macOS key and mouse input to one owned game window. An event is
+//! posted only while the front-most on-screen window belongs to the owned
+//! process; anything else refuses before sending. Needs the Accessibility
+//! permission of the responsible app. Clicks target game-logical points inside
+//! the owned window's content rectangle. No text, activation or engine call.
 use crate::error::{Error, Result};
 use std::ffi::c_void;
 
@@ -18,8 +19,16 @@ extern "C" {
 extern "C" {
     static kCGWindowOwnerPID: CFTypeRef;
     static kCGWindowLayer: CFTypeRef;
+    static kCGWindowBounds: CFTypeRef;
     fn CGWindowListCopyWindowInfo(option: u32, relative_to: u32) -> CFTypeRef;
+    fn CGRectMakeWithDictionaryRepresentation(dict: CFTypeRef, rect: *mut Rect) -> bool;
     fn CGEventCreateKeyboardEvent(source: CFTypeRef, key: u16, down: bool) -> CFTypeRef;
+    fn CGEventCreateMouseEvent(
+        source: CFTypeRef,
+        kind: u32,
+        point: Point,
+        button: u32,
+    ) -> CFTypeRef;
     fn CGEventPost(tap: u32, event: CFTypeRef);
 }
 #[link(name = "ApplicationServices", kind = "framework")]
@@ -30,6 +39,23 @@ const ON_SCREEN_ONLY: u32 = 1;
 const EXCLUDE_DESKTOP: u32 = 1 << 4;
 const NUMBER_SINT32: isize = 3;
 const HID_EVENT_TAP: u32 = 0;
+const LEFT_MOUSE_DOWN: u32 = 1;
+const LEFT_MOUSE_UP: u32 = 2;
+const MOUSE_MOVED: u32 = 5;
+const LEFT_BUTTON: u32 = 0;
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Point {
+    pub x: f64,
+    pub y: f64,
+}
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Rect {
+    pub origin: Point,
+    pub size: Point,
+}
 
 /// Stationary game keys used by the clock adapter (macOS virtual key codes).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -40,15 +66,103 @@ pub enum Key {
     Faster,
     /// Keypad minus lowers game speed.
     Slower,
+    /// Escape closes the current panel.
+    Escape,
+    /// An ordinary letter hotkey, `a`..=`z`.
+    Letter(char),
 }
 impl Key {
     fn code(self) -> u16 {
+        // ANSI virtual key codes indexed a..z.
+        const LETTERS: [u16; 26] = [
+            0, 11, 8, 2, 14, 3, 5, 4, 34, 38, 40, 37, 46, 45, 31, 35, 12, 15, 1, 17, 32, 9, 13, 7,
+            16, 6,
+        ];
         match self {
             Self::Pause => 49,
             Self::Faster => 69,
             Self::Slower => 78,
+            Self::Escape => 53,
+            Self::Letter(c) => LETTERS[(c as u8 - b'a') as usize],
         }
     }
+    /// Only lowercase ASCII letters are ordinary hotkeys here.
+    pub fn letter(c: char) -> Result<Self> {
+        if c.is_ascii_lowercase() {
+            Ok(Self::Letter(c))
+        } else {
+            Err(Error::new("invalid_arguments", "Unsupported hotkey"))
+        }
+    }
+}
+
+/// Content rectangle (global points) of the owned process's largest normal
+/// on-screen window, assuming its client area is `game` logical pixels with a
+/// title bar above it. Refuses unexpected scales or decorations.
+pub fn owned_content(pid: i32, game: (u32, u32)) -> Result<Rect> {
+    // SAFETY: the returned array is released below; entries are borrowed.
+    let bounds = unsafe {
+        let list = CGWindowListCopyWindowInfo(ON_SCREEN_ONLY | EXCLUDE_DESKTOP, 0);
+        if list.is_null() {
+            return Err(Error::new("input_unavailable", "Window list unavailable"));
+        }
+        let mut best: Option<Rect> = None;
+        for index in 0..CFArrayGetCount(list) {
+            let window = CFArrayGetValueAtIndex(list, index);
+            if number(window, kCGWindowLayer) != Some(0)
+                || number(window, kCGWindowOwnerPID) != Some(pid)
+            {
+                continue;
+            }
+            let mut rect = Rect::default();
+            let dict = CFDictionaryGetValue(window, kCGWindowBounds);
+            if !dict.is_null()
+                && CGRectMakeWithDictionaryRepresentation(dict, &mut rect)
+                && best.is_none_or(|b| rect.size.x * rect.size.y > b.size.x * b.size.y)
+            {
+                best = Some(rect);
+            }
+        }
+        CFRelease(list);
+        best
+    };
+    let bounds = bounds.ok_or_else(|| {
+        Error::new(
+            "input_target_unavailable",
+            "Owned game window is not on screen",
+        )
+    })?;
+    content_from_bounds(bounds, game)
+}
+fn content_from_bounds(bounds: Rect, game: (u32, u32)) -> Result<Rect> {
+    let (w, h) = (f64::from(game.0), f64::from(game.1));
+    let title = bounds.size.y - h;
+    if bounds.size.x != w || !(0.0..=40.0).contains(&title) {
+        return Err(Error::new(
+            "input_geometry_unverified",
+            "Owned window is not an unscaled windowed game of the expected size",
+        ));
+    }
+    Ok(Rect {
+        origin: Point {
+            x: bounds.origin.x,
+            y: bounds.origin.y + title,
+        },
+        size: Point { x: w, y: h },
+    })
+}
+/// Global point for a game-logical pixel; refuses points outside the client.
+pub fn client_point(content: Rect, x: f64, y: f64) -> Result<Point> {
+    if !(0.0..content.size.x).contains(&x) || !(0.0..content.size.y).contains(&y) {
+        return Err(Error::new(
+            "invalid_arguments",
+            "Point outside the owned game client area",
+        ));
+    }
+    Ok(Point {
+        x: content.origin.x + x,
+        y: content.origin.y + y,
+    })
 }
 
 fn number(dict: CFTypeRef, key: CFTypeRef) -> Option<i32> {
@@ -106,6 +220,29 @@ impl MacKeys {
         }
         Ok(())
     }
+    /// One left click at a game-logical point after a fresh front-most check:
+    /// move, settle, press, release. The cursor stays where it clicked.
+    pub fn click(&self, game: (u32, u32), x: f64, y: f64) -> Result<Point> {
+        self.preflight()?;
+        let point = client_point(owned_content(self.pid, game)?, x, y)?;
+        for (kind, pause) in [
+            (MOUSE_MOVED, 60),
+            (LEFT_MOUSE_DOWN, 50),
+            (LEFT_MOUSE_UP, 40),
+        ] {
+            // SAFETY: a null source is allowed; the event is released after posting.
+            unsafe {
+                let event = CGEventCreateMouseEvent(std::ptr::null(), kind, point, LEFT_BUTTON);
+                if event.is_null() {
+                    return Err(Error::new("input_unavailable", "Mouse event unavailable"));
+                }
+                CGEventPost(HID_EVENT_TAP, event);
+                CFRelease(event);
+            }
+            std::thread::sleep(std::time::Duration::from_millis(pause));
+        }
+        Ok(point)
+    }
     /// One key press (down, then up) after a fresh front-most check.
     pub fn press(&self, key: Key) -> Result<()> {
         self.preflight()?;
@@ -134,6 +271,35 @@ mod tests {
             [Key::Pause, Key::Faster, Key::Slower].map(Key::code),
             [49, 69, 78]
         );
+    }
+    #[test]
+    fn letters_map_to_ansi_codes() {
+        assert_eq!(Key::letter('a').unwrap().code(), 0);
+        assert_eq!(Key::letter('t').unwrap().code(), 17);
+        assert_eq!(Key::letter('z').unwrap().code(), 6);
+        assert!(Key::letter('A').is_err());
+    }
+    #[test]
+    fn content_sits_below_the_title_bar_and_refuses_scaling() {
+        let bounds = Rect {
+            origin: Point { x: 0.0, y: 53.0 },
+            size: Point {
+                x: 1920.0,
+                y: 1108.0,
+            },
+        };
+        let content = content_from_bounds(bounds, (1920, 1080)).unwrap();
+        assert_eq!(content.origin, Point { x: 0.0, y: 81.0 });
+        assert_eq!(
+            client_point(content, 10.0, 20.0).unwrap(),
+            Point { x: 10.0, y: 101.0 }
+        );
+        assert!(client_point(content, 1920.0, 0.0).is_err());
+        let scaled = Rect {
+            size: Point { x: 960.0, y: 568.0 },
+            ..bounds
+        };
+        assert!(content_from_bounds(scaled, (1920, 1080)).is_err());
     }
     #[test]
     fn window_list_query_is_safe_without_permissions() {
