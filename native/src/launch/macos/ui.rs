@@ -179,6 +179,59 @@ pub(super) fn close_menu(
     }
     Ok(())
 }
+/// Top bar (interface manager +0x188, root +0x68) button `name` rectangle.
+fn topbar_rect(r: &Reader<'_>, image: u64, name: &str) -> Result<gui_tree::Rect> {
+    fn find(
+        r: &Reader<'_>,
+        image: u64,
+        object: u64,
+        name: &str,
+        depth: u32,
+    ) -> Result<Option<u64>> {
+        for child in gui_tree::children(r, object)? {
+            if gui_tree::name(r, child, image)?.as_deref() == Some(name) {
+                return Ok(Some(child));
+            }
+            if depth < 6 {
+                if let Some(inner) = gui_tree::container(r, child, image)? {
+                    if let Some(found) = find(r, image, inner, name, depth + 1)? {
+                        return Ok(Some(found));
+                    }
+                }
+            }
+        }
+        Ok(None)
+    }
+    let idler = r.u64(image + game::layout(r).idler_global)?;
+    let topbar = r.u64(r.u64(idler + MANAGER)? + 0x188)?;
+    let root = gui_tree::container(r, r.u64(topbar + 0x68)?, image)?
+        .ok_or_else(|| Error::new("invalid_gui", "Topbar root unavailable"))?;
+    let button = find(r, image, root, name, 0)?
+        .ok_or_else(|| Error::new("gui_target_unavailable", "Top bar button not found"))?;
+    gui_tree::rect(r, image, button, (1920, 1080))
+}
+/// Open the politics view: the Q hotkey, and when it does nothing (it was
+/// seen to stop working after a focus completed) a click on the player flag,
+/// which is the button that owns that shortcut.
+pub(super) fn open_politics(
+    process: &dyn Process,
+    keys: &crate::platform::macos_input::MacKeys,
+    open: impl Fn(&Reader<'_>, u64) -> Result<bool>,
+) -> Result<()> {
+    use crate::platform::macos_input::Key;
+    keys.press(Key::letter('q')?)?;
+    if wait(process, "open politics", &open).is_ok() {
+        return Ok(());
+    }
+    // The flag is drawn with a sprite class without reviewed geometry; it sits
+    // at the top-left corner of the top bar (topbar.gui: position 12,14).
+    let (x, y) = match read(process, |r, i| topbar_rect(r, i, "player_flag")) {
+        Ok(rect) => rect.center(),
+        Err(_) => (45.0, 48.0),
+    };
+    keys.click((1920, 1080), x, y)?;
+    wait(process, "open politics", &open)
+}
 /// The game's accept/decline dialog for a command (e.g. replacing a law).
 const ACCEPT_DIALOG_VTABLE: u64 = 0x342f1d0;
 /// The game's reassign-commander confirmation (CChangeGroupLeaderDialog); it

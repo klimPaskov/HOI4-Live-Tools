@@ -10,10 +10,7 @@ use crate::{
     gui_tree::{self, Rect},
     memory::{Reader, StringAbi},
     own_focus,
-    platform::{
-        macos_input::{Key, MacKeys},
-        Process,
-    },
+    platform::{macos_input::MacKeys, Process},
 };
 use serde_json::Value;
 use std::{
@@ -253,8 +250,7 @@ pub(super) fn start(process: &dyn Process, keys: &MacKeys, key: &str) -> Result<
     clear_notices(process, keys)?;
     if !read(process, |r, i| open(r, i, u.focus_view))? {
         if !read(process, |r, i| open(r, i, u.politics_view))? {
-            keys.press(Key::letter('q')?)?;
-            wait(process, "open politics", |r, i| open(r, i, u.politics_view))?;
+            super::ui::open_politics(process, keys, |r, i| open(r, i, u.politics_view))?;
         }
         click(settled(process, "focus button", focus_button)?)?;
         wait(process, "open focus tree", |r, i| open(r, i, u.focus_view))?;

@@ -34,6 +34,7 @@ extern "C" {
     fn CGRectMakeWithDictionaryRepresentation(dict: CFTypeRef, rect: *mut Rect) -> bool;
     fn CGEventCreateKeyboardEvent(source: CFTypeRef, key: u16, down: bool) -> CFTypeRef;
     fn CGEventSetFlags(event: CFTypeRef, flags: u64);
+    fn CGEventSourceFlagsState(state: i32) -> u64;
     fn CGEventSetType(event: CFTypeRef, kind: u32);
     fn CGEventCreateMouseEvent(
         source: CFTypeRef,
@@ -557,6 +558,15 @@ impl MacKeys {
     }
     fn press_raw(&self, code: u16) -> Result<()> {
         self.preflight()?;
+        // A stuck Fn flag turns letter keys into system shortcuts (Fn+Q opens
+        // Quick Note and steals focus), so refuse instead of typing into them.
+        // SAFETY: no pointers; reads the HID system modifier state.
+        if unsafe { CGEventSourceFlagsState(1) } & 0x80_0000 != 0 {
+            return Err(Error::new(
+                "input_modifier_stuck",
+                "The Fn modifier is held or stuck; no key was sent",
+            ));
+        }
         for down in [true, false] {
             // SAFETY: a null source is allowed; the event is released after posting.
             unsafe {

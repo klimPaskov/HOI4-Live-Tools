@@ -8,10 +8,7 @@ use crate::{
     game,
     gui_tree::{self, Rect},
     memory::{Reader, StringAbi},
-    platform::{
-        macos_input::{Key, MacKeys},
-        Process,
-    },
+    platform::{macos_input::MacKeys, Process},
 };
 use serde_json::{json, Value};
 
@@ -294,8 +291,7 @@ fn open_slot(process: &dyn Process, keys: &MacKeys, category: &str, index: usize
     decline_stale(process, keys)?;
     clear_notices(process, keys)?;
     if !read(process, open)? {
-        keys.press(Key::letter('q')?)?;
-        wait(process, "open politics", open)?;
+        super::ui::open_politics(process, keys, open)?;
     }
     let rect = settled(process, "idea slot", |r, i| {
         gui_tree::rect(r, i, slot(r, i, category, index)?.1, GAME)
