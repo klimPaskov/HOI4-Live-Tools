@@ -142,6 +142,36 @@ fn membership(r: &Reader<'_>, image: u64) -> Result<BTreeMap<String, u64>> {
     }
     Ok(out)
 }
+/// division id -> state id where it stands (None while moving or unknown).
+fn division_states(r: &Reader<'_>, image: u64) -> Result<BTreeMap<String, Option<i32>>> {
+    let u = ui(r)?;
+    let l = crate::construction::layout(r);
+    let country = own_country(r, image)?;
+    let (_, data, count) = r.array_header(country + u.country_divisions)?;
+    let mut out = BTreeMap::new();
+    for index in 0..count.min(4096) as u64 {
+        let division = r.u64(data + index * 8)?;
+        let handle = r.read(division + u.division_handle, 8)?;
+        let id = format!(
+            "{:08x}:{:08x}",
+            u32::from_le_bytes(handle[..4].try_into().unwrap()),
+            u32::from_le_bytes(handle[4..].try_into().unwrap())
+        );
+        let location = r.u64(division + u.division_location)?;
+        let state = if location != 0 && r.u64(location)? == image + l.province_vtable {
+            let state = r.u64(location + l.province_state)?;
+            if state != 0 && r.u64(state)? == image + l.state_vtable {
+                Some(r.i32(state + l.state_id)?)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        out.insert(id, state);
+    }
+    Ok(out)
+}
 fn army_name(r: &Reader<'_>, group: u64) -> Result<String> {
     r.string_bounded(group + ui(r)?.group_name, 128)
 }
@@ -176,7 +206,18 @@ pub(super) fn armies(process: &dyn Process) -> Result<Value> {
                 )
             })
             .collect::<Result<Vec<_>>>()?;
-        Ok(json!({"armies":armies,"unassigned":unassigned}))
+        let places = division_states(r, image)?;
+        let mut by_state: BTreeMap<i32, usize> = BTreeMap::new();
+        for id in &unassigned {
+            if let Some(Some(state)) = places.get(id) {
+                *by_state.entry(*state).or_default() += 1;
+            }
+        }
+        let by_state: Vec<Value> = by_state
+            .into_iter()
+            .map(|(state, n)| json!({"state_id":state,"divisions":n}))
+            .collect();
+        Ok(json!({"armies":armies,"unassigned":unassigned,"unassigned_by_state":by_state}))
     })
 }
 fn selection_size(r: &Reader<'_>, image: u64) -> Result<u64> {
@@ -230,6 +271,13 @@ pub(super) fn create(process: &dyn Process, keys: &MacKeys, state: i32) -> Resul
         Ok(membership(r, i)?
             .values()
             .any(|g| *g != 0 && !groups_before.contains(g)))
+    })
+    .map_err(|_| {
+        Error::new(
+            "input_readback_failed",
+            "No new army: the divisions around this state may already belong to an army \
+             (see hoi4_armies), or none are there",
+        )
     })
 }
 
