@@ -10,7 +10,10 @@ use crate::{
     game,
     gui_tree::{self, Rect},
     memory::{Reader, StringAbi},
-    platform::{macos_input::MacKeys, Process},
+    platform::{
+        macos_input::{Capture, MacKeys},
+        Process,
+    },
 };
 use serde_json::{json, Value};
 
@@ -96,6 +99,9 @@ struct Open {
     title: String,
     options: Vec<String>,
     centres: Option<Vec<(f64, f64)>>,
+    /// News windows: options are found on screen below this point within
+    /// this column (centre x, half width, top y).
+    scan: Option<(f64, f64, f64)>,
 }
 
 fn open_events(r: &Reader<'_>, image: u64) -> Result<Vec<Open>> {
@@ -138,19 +144,23 @@ fn open_events(r: &Reader<'_>, image: u64) -> Result<Vec<Open>> {
             };
             options.push(text);
         }
-        let centres = option_centres(r, image, window, grid, &kind, options.len())?;
+        let (centres, scan) = option_centres(r, image, window, grid, &kind, options.len())?;
         out.push(Open {
             event,
             id,
             title,
             options,
             centres,
+            scan,
         });
     }
     Ok(out)
 }
-/// Option centres from the live picture rectangle and local layout; `None`
-/// for a window variant whose layout is not reviewed.
+type Centres = (Option<Vec<(f64, f64)>>, Option<(f64, f64, f64)>);
+/// Option centres from the live picture rectangle and local layout (the
+/// plain window keeps picture and options in bottom_Window). The news window
+/// moves its options below a description of variable height, so it yields
+/// a screen column to search instead. Unreviewed variants yield neither.
 fn option_centres(
     r: &Reader<'_>,
     image: u64,
@@ -158,20 +168,15 @@ fn option_centres(
     grid: u64,
     kind: &str,
     count: usize,
-) -> Result<Option<Vec<(f64, f64)>>> {
+) -> Result<Centres> {
     let u = ui(r)?;
-    // Offset of the grid's parent from the picture's parent: the plain event
-    // window keeps both in bottom_Window; the news window puts the picture
-    // in top_Window (0, 0) and the grid in bottom_Window (0, 221).
-    let parents = match kind {
-        "EventWindow" => (0, 0),
-        "EventWindow_News" => (0, 221),
-        _ => return Ok(None),
-    };
+    if kind != "EventWindow" && kind != "EventWindow_News" {
+        return Ok((None, None));
+    }
     let Some(picture) = find(r, image, window, "event_picture", 0)? else {
-        return Ok(None);
+        return Ok((None, None));
     };
-    let Rect { x, y, .. } = gui_tree::rect(r, image, picture, GAME)?;
+    let Rect { x, y, h, .. } = gui_tree::rect(r, image, picture, GAME)?;
     let (px, py) = pair(r, picture + u.icon_position)?;
     let (gx, gy) = pair(r, grid + u.grid_position)?;
     let (sw, sh) = pair(r, grid + u.grid_slot)?;
@@ -181,18 +186,68 @@ fn option_centres(
             "Bounded event layout required",
         ));
     }
-    let left = x - px + parents.0 + gx;
-    let top = y - py + parents.1 + gy;
-    Ok(Some(
-        (0..count)
-            .map(|i| {
-                (
-                    f64::from(left) + f64::from(sw) / 2.0,
-                    f64::from(top) + f64::from(sh) * (i as f64 + 0.5),
-                )
-            })
-            .collect(),
+    let left = x - px + gx;
+    if kind == "EventWindow_News" {
+        let centre = f64::from(left) + f64::from(sw) / 2.0;
+        return Ok((
+            None,
+            Some((centre, f64::from(sw) / 2.0 - 30.0, f64::from(y + h + 20))),
+        ));
+    }
+    let top = y - py + gy;
+    Ok((
+        Some(
+            (0..count)
+                .map(|i| {
+                    (
+                        f64::from(left) + f64::from(sw) / 2.0,
+                        f64::from(top) + f64::from(sh) * (i as f64 + 0.5),
+                    )
+                })
+                .collect(),
+        ),
+        None,
     ))
+}
+/// Dark option bars (rows mostly darker than the newspaper) in a column of
+/// the capture: (top, bottom) of each band 20..60 px tall, top to bottom.
+fn dark_bands(capture: &Capture, centre: f64, half: f64, from: f64) -> Vec<(f64, f64)> {
+    let dark = |y: f64| {
+        let mut n = 0;
+        let mut hits = 0;
+        let mut x = centre - half;
+        while x <= centre + half {
+            if let Some((r, g, b)) = capture.rgb(x, y) {
+                n += 1;
+                if (u32::from(r) + u32::from(g) + u32::from(b)) < 270 {
+                    hits += 1;
+                }
+            }
+            x += 10.0;
+        }
+        n > 0 && hits * 10 >= n * 6
+    };
+    let mut bands = Vec::new();
+    let mut start: Option<f64> = None;
+    let mut last = from;
+    let mut y = from;
+    while y < 1060.0 {
+        if dark(y) {
+            if start.is_none() {
+                start = Some(y);
+            }
+            last = y;
+        } else if let Some(s) = start {
+            if y - last > 4.0 {
+                if (20.0..=60.0).contains(&(last - s)) {
+                    bands.push((s, last));
+                }
+                start = None;
+            }
+        }
+        y += 2.0;
+    }
+    bands
 }
 
 /// Open events in list order; the last one is drawn on top.
@@ -201,7 +256,7 @@ pub(super) fn list(process: &dyn Process) -> Result<Value> {
     let last = open.len().saturating_sub(1);
     Ok(json!({"events":open.iter().enumerate().map(|(i, e)| json!({
         "event":e.id,"title":e.title,"options":e.options,"on_top":i == last,
-        "answerable":e.centres.is_some()})).collect::<Vec<_>>()}))
+        "answerable":e.centres.is_some() || e.scan.is_some()})).collect::<Vec<_>>()}))
 }
 /// Ids of the open events, in list order.
 pub(super) fn open_ids(r: &Reader<'_>, image: u64) -> Result<Vec<String>> {
@@ -225,12 +280,25 @@ pub(super) fn choose(process: &dyn Process, keys: &MacKeys, id: &str, option: us
             format!("Answer the event on top first: {}", top.id),
         ));
     }
-    let centres = top.centres.clone().ok_or_else(|| {
-        Error::new(
-            "capability_unavailable",
-            "This event window layout is not reviewed",
-        )
-    })?;
+    let centres = match (&top.centres, top.scan) {
+        (Some(c), _) => c.clone(),
+        (None, Some((centre, half, from))) => {
+            let bands = dark_bands(&keys.capture(GAME)?, centre, half, from);
+            if bands.len() < top.options.len() {
+                return Err(Error::new(
+                    "gui_target_unavailable",
+                    "News event options not found on screen",
+                ));
+            }
+            bands.iter().map(|(a, b)| (centre, (a + b) / 2.0)).collect()
+        }
+        (None, None) => {
+            return Err(Error::new(
+                "capability_unavailable",
+                "This event window layout is not reviewed",
+            ))
+        }
+    };
     let &(x, y) = centres
         .get(option)
         .ok_or_else(|| Error::new("invalid_arguments", "No such event option"))?;
@@ -247,4 +315,35 @@ pub(super) fn choose(process: &dyn Process, keys: &MacKeys, id: &str, option: us
         }
         Ok(!now.iter().any(|e| e.event == event))
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn news_option_bars_are_found_below_the_text() {
+        let (width, height) = (1920usize, 1080usize);
+        let mut data = vec![200u8; width * height * 4];
+        let mut paint = |y0: usize, y1: usize, x0: usize, x1: usize| {
+            for y in y0..y1 {
+                for x in x0..x1 {
+                    let o = (y * width + x) * 4;
+                    data[o..o + 3].copy_from_slice(&[30, 30, 30]);
+                }
+            }
+        };
+        paint(612, 614, 790, 820); // a line of text
+        paint(738, 777, 760, 1110); // the option bar
+        paint(797, 800, 700, 1200); // the window's bottom edge
+        let capture = Capture {
+            width,
+            height,
+            stride: width * 4,
+            scale: 1.0,
+            data,
+        };
+        let bands = dark_bands(&capture, 908.0, 120.0, 494.0);
+        assert_eq!(bands.len(), 1);
+        assert!((bands[0].0 - 738.0).abs() <= 2.0 && (bands[0].1 - 776.0).abs() <= 2.0);
+    }
 }

@@ -290,6 +290,21 @@ fn uncertain_dispatch_that_did_not_apply_settles_as_not_applied() {
         .unwrap();
     assert_eq!(settled.status, Status::NotApplied);
     assert_eq!(backend.dispatches, 1);
+    // The settled journal reopens and keeps the outcome.
+    drop(journal);
+    let mut reopened = Journal::open(&temp.path()).unwrap();
+    assert_eq!(
+        reopened
+            .execute(
+                "pause",
+                &epoch,
+                Action::SetPaused(true),
+                &mut backend,
+                TIMEOUT
+            )
+            .unwrap(),
+        settled
+    );
 }
 #[test]
 fn failed_preflight_leaves_plan_entry_retryable_and_target_noop_is_recorded() {

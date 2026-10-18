@@ -189,16 +189,24 @@ impl Journal {
                     "Verified receipt has no target witness",
                 ));
             }
+            if record.status == Status::NotApplied && record.action.reached(&record.observed) {
+                return Err(Error::new(
+                    "invalid_journal",
+                    "Not-applied receipt shows its target",
+                ));
+            }
             if let Some(previous) = receipts.get(&record.id) {
                 if previous.status != Status::Dispatching
-                    || record.status != Status::Verified
-                    || previous.epoch != record.epoch
+                    || record.status == Status::Dispatching
+                    || !same_campaign(&previous.epoch, &record.epoch)
                     || previous.action != record.action
                     || previous.dispatched != record.dispatched
                 {
                     return Err(Error::new("invalid_journal", "Invalid receipt transition"));
                 }
-            } else if record.status == Status::Verified && record.dispatched {
+            } else if (record.status == Status::Verified && record.dispatched)
+                || record.status == Status::NotApplied
+            {
                 return Err(Error::new("invalid_journal", "Dispatch witness missing"));
             }
             receipts.insert(record.id.clone(), record);
@@ -283,6 +291,7 @@ impl Journal {
                         Status::NotApplied
                     };
                     settled.observed = current;
+                    settled.epoch = epoch.clone();
                     self.append(settled)
                 }
             };
