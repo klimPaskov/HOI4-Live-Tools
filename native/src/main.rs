@@ -51,6 +51,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Some(_) => return Err("Unknown argument".into()),
     };
+    // macOS: optional ordinary clock input bound to the owned session.
+    let mac_input = match args.next().as_deref() {
+        None => None,
+        Some("--mac-input") if cfg!(target_os = "macos") => Some(PathBuf::from(
+            args.next().ok_or("--mac-input requires a run directory")?,
+        )),
+        Some(_) => return Err("Unexpected extra argument".into()),
+    };
     if args.next().is_some() {
         return Err("Unexpected extra argument".into());
     }
@@ -68,9 +76,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         process,
         unavailable,
     };
+    #[cfg(target_os = "macos")]
+    let commands = match (&mac_input, &server.process) {
+        (Some(directory), Some(process)) => {
+            Some(launch::macos::MacClock::bind(process.as_ref(), directory)?)
+        }
+        (Some(_), None) => return Err("--mac-input requires an open owned session".into()),
+        _ => None,
+    };
+    #[cfg(not(target_os = "macos"))]
+    let _ = &mac_input;
     let stdin = io::stdin();
     let stdout = io::stdout();
     hoi4_live_native::framing::serve(stdin.lock(), stdout.lock(), |message| {
+        #[cfg(target_os = "macos")]
+        if let Some(commands) = &commands {
+            return server.handle_with_commands(message, Some(commands));
+        }
         server.handle(message)
     })?;
     Ok(())

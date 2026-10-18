@@ -32,6 +32,8 @@ pub trait Process: ReadMemory {
 mod linux;
 #[cfg(target_os = "macos")]
 pub mod macos;
+#[cfg(target_os = "macos")]
+pub mod macos_input;
 #[cfg(target_os = "linux")]
 mod unix_socket;
 #[cfg(target_os = "linux")]
