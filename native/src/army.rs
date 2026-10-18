@@ -13,6 +13,37 @@ use std::{
     collections::BTreeSet,
     time::{Instant, SystemTime, UNIX_EPOCH},
 };
+/// Division-list layout of one inspected build.
+struct Layout {
+    country_divisions: u64,
+    division_vtable: u64,
+    strength: u64,
+    organisation: u64,
+    province_id: u64,
+}
+/// Linux ELF a4971c9e (libstdc++).
+const LINUX: Layout = Layout {
+    country_divisions: 0x290,
+    division_vtable: 0x4277fe8,
+    strength: 0x420,
+    organisation: 0x428,
+    province_id: 0xa4,
+};
+/// macOS Mach-O 089EA519 (libc++), mapped live on 18 October 2026: the list of
+/// 30 CArmy divisions and the field offsets agree with aligned methods.
+const MACOS: Layout = Layout {
+    country_divisions: 0x250,
+    division_vtable: 0x32af5a8,
+    strength: 0x418,
+    organisation: 0x420,
+    province_id: 0x9c,
+};
+fn layout(r: &Reader<'_>) -> &'static Layout {
+    match r.string_abi() {
+        crate::memory::StringAbi::LibStdCxx => &LINUX,
+        crate::memory::StringAbi::LibCxx => &MACOS,
+    }
+}
 fn exact(r: &Reader<'_>, p: u64, v: u64) -> Result<()> {
     if p % 8 != 0 || r.u64(p)? != v {
         return Err(Error::new(
@@ -42,27 +73,32 @@ pub fn snapshot(process: &dyn Process) -> Result<Value> {
             "Bound owned process identity required",
         )
     })?;
+    // Linux start ticks are integer clock ticks; macOS start times are
+    // fractional seconds. Either must be a positive number.
     if identity.pid <= 0
         || identity
             .start_ticks
-            .parse::<u64>()
+            .parse::<f64>()
             .ok()
-            .filter(|n| *n > 0)
+            .filter(|n| *n > 0.0)
             .is_none()
     {
         return Err(Error::new(
             "identity_unavailable",
-            "Valid Linux process creation identity required",
+            "Valid process creation identity required",
         ));
     }
     let w = Witnesses::new(process);
     let r = Reader::new(&w);
     let base = process.image_base();
-    let gs = r.u64(base + 0x44086a8)?;
-    exact(&r, gs, base + 0x42c7598)?;
-    let idler = r.u64(base + 0x44085f8)?;
-    exact(&r, idler, base + 0x42c9a88)?;
-    let tag = r.i32(gs + 0x518)?;
+    let g = game::layout(&r);
+    let l = layout(&r);
+    let provinces = crate::construction::layout(&r).gs_provinces;
+    let gs = r.u64(base + g.gs_global)?;
+    exact(&r, gs, base + g.gs_vtable)?;
+    let idler = r.u64(base + g.idler_global)?;
+    exact(&r, idler, base + g.idler_vtable)?;
+    let tag = r.i32(gs + g.player_tag)?;
     if !(1..4096).contains(&tag) {
         return Err(Error::new(
             "player_unavailable",
@@ -70,7 +106,7 @@ pub fn snapshot(process: &dyn Process) -> Result<Value> {
         ));
     }
     let index = i32::from_le_bytes(
-        entry(&r, gs + 0x340, tag as usize, 4, 4096)?
+        entry(&r, gs + g.tag_country_index, tag as usize, 4, 4096)?
             .try_into()
             .unwrap(),
     );
@@ -78,16 +114,16 @@ pub fn snapshot(process: &dyn Process) -> Result<Value> {
         return Err(Error::new("player_unavailable", "Own country absent"));
     }
     let country = u64::from_le_bytes(
-        entry(&r, gs + 0x310, index as usize, 8, 4096)?
+        entry(&r, gs + g.countries, index as usize, 8, 4096)?
             .try_into()
             .unwrap(),
     );
-    exact(&r, country, base + 0x41fafb0)?;
+    exact(&r, country, base + g.country_vtable)?;
     if r.i32(country + 8)? != tag {
         return Err(Error::new("invalid_army_owner", "Own country tag required"));
     }
     let context = game::context_from_reader(&r, base)?;
-    let (h, data, count) = r.array_header(country + 0x290)?;
+    let (h, data, count) = r.array_header(country + l.country_divisions)?;
     let cap = i32::from_le_bytes(h[8..12].try_into().unwrap());
     if cap > 4096 || data % 8 != 0 {
         return Err(Error::new(
@@ -111,7 +147,7 @@ pub fn snapshot(process: &dyn Process) -> Result<Value> {
                 "Duplicate own list pointer",
             ));
         }
-        exact(&r, army, base + 0x4277fe8)?;
+        exact(&r, army, base + l.division_vtable)?;
         if r.i32(army + 0x1d8)? != tag {
             return Err(Error::new(
                 "invalid_army_owner",
@@ -137,15 +173,15 @@ pub fn snapshot(process: &dyn Process) -> Result<Value> {
                     "Aligned own location required",
                 ));
             }
-            if r.u64(location_pointer)? != base + 0x41fb728 {
+            if r.u64(location_pointer)? != base + crate::construction::layout(&r).province_vtable {
                 json!({"available":false,"reason":"unknown_province_layout"})
             } else {
-                let id = r.i32(location_pointer + 0xa4)?;
+                let id = r.i32(location_pointer + l.province_id)?;
                 if id <= 0 {
                     json!({"available":false,"reason":"location_id_absent"})
                 } else {
                     let joined = u64::from_le_bytes(
-                        entry(&r, gs + 0x2b0, id as usize, 8, 20000)?
+                        entry(&r, gs + provinces, id as usize, 8, 20000)?
                             .try_into()
                             .unwrap(),
                     );
@@ -159,13 +195,14 @@ pub fn snapshot(process: &dyn Process) -> Result<Value> {
                 }
             }
         };
-        let strength = i64::from_le_bytes(r.read(army + 0x420, 8)?.try_into().unwrap());
-        let organisation = i64::from_le_bytes(r.read(army + 0x428, 8)?.try_into().unwrap());
+        let strength = i64::from_le_bytes(r.read(army + l.strength, 8)?.try_into().unwrap());
+        let organisation =
+            i64::from_le_bytes(r.read(army + l.organisation, 8)?.try_into().unwrap());
         output.push(json!({"id":format!("{kind:08x}:{token:08x}"),"handle_words":{"type_word":kind,"opaque_token_word":token},"location":location,"strength_raw_signed_decimal":strength.to_string(),"organisation_raw_signed_decimal":organisation.to_string(),"absolute_units_available":false,"input_authorized":false}));
     }
     let (end_calls, end_bytes) = w.finish()?;
     process.check()?;
     Ok(
-        json!({"source":"native own division snapshot","build_id":game::BUILD_ID,"owned":true,"player":context.player,"identity_scope":{"pid":identity.pid,"process_start_ticks":identity.start_ticks,"playthrough_id":context.playthrough_id,"meaning":"complete handle in this owned process/campaign observation; not persistent across reloads or pointer/ID reuse"},"count":count,"divisions":output,"unavailable":{"registry_publication":true,"handle_generation_semantics":true,"persistent_unit_ids":true,"normalised_strength_organisation":true,"viewport_visibility":true,"commands":true},"input_authorized":false,"observation_paused_game":false,"freshness":{"observed_unix_ms":SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),"elapsed_ms":start.elapsed().as_secs_f64()*1000.0,"read_calls_kind":"logical_read_requests","read_calls":r.calls.get()+end_calls as u64,"read_bytes":r.bytes.get()+end_bytes}}),
+        json!({"source":"native own division snapshot","build_id":g.build_id,"owned":true,"player":context.player,"identity_scope":{"pid":identity.pid,"process_start_ticks":identity.start_ticks,"playthrough_id":context.playthrough_id,"meaning":"complete handle in this owned process/campaign observation; not persistent across reloads or pointer/ID reuse"},"count":count,"divisions":output,"unavailable":{"registry_publication":true,"handle_generation_semantics":true,"persistent_unit_ids":true,"normalised_strength_organisation":true,"viewport_visibility":true,"commands":true},"input_authorized":false,"observation_paused_game":false,"freshness":{"observed_unix_ms":SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),"elapsed_ms":start.elapsed().as_secs_f64()*1000.0,"read_calls_kind":"logical_read_requests","read_calls":r.calls.get()+end_calls as u64,"read_bytes":r.bytes.get()+end_bytes}}),
     )
 }
