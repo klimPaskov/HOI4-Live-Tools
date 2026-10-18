@@ -283,7 +283,15 @@ pub(super) fn choose(process: &dyn Process, keys: &MacKeys, id: &str, option: us
     let centres = match (&top.centres, top.scan) {
         (Some(c), _) => c.clone(),
         (None, Some((centre, half, from))) => {
-            let bands = dark_bands(&keys.capture(GAME)?, centre, half, from);
+            // The window fades in; capture again until its bars are drawn.
+            let mut bands = Vec::new();
+            for _ in 0..6 {
+                bands = dark_bands(&keys.capture(GAME)?, centre, half, from);
+                if bands.len() >= top.options.len() {
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(250));
+            }
             if bands.len() < top.options.len() {
                 return Err(Error::new(
                     "gui_target_unavailable",
