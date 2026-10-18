@@ -178,7 +178,24 @@ impl GameJournal {
             if previous.status != Status::Dispatching {
                 return Ok(previous);
             }
-            return self.settle(previous, settle);
+            return match self.settle(previous.clone(), settle) {
+                // Its state cannot even be read (the target never existed):
+                // nothing was sent, so settle it as not applied.
+                Err(error)
+                    if matches!(
+                        error.code,
+                        "invalid_target" | "invalid_arguments" | "capability_unavailable"
+                    ) =>
+                {
+                    self.append(Receipt {
+                        status: Status::NotApplied,
+                        detail: serde_json::json!({"refused": error.message}),
+                        unix_ms: now(),
+                        ..previous
+                    })
+                }
+                other => other,
+            };
         }
         if let Some(open) = self.unresolved() {
             return Err(Error::new(
@@ -202,11 +219,27 @@ impl GameJournal {
             Ok(()) => self.settle(intent, settle),
             Err(error) => {
                 // Settle from fresh state; an unprovable outcome stays quarantined.
-                let settled = self.settle(intent, settle);
+                let settled = self.settle(intent.clone(), settle);
                 match settled {
                     Ok(receipt) if receipt.status == Status::Verified => Ok(receipt),
                     Ok(_) => Err(error),
-                    Err(_) => Err(error),
+                    Err(_) => {
+                        // A refusal raised before any input (unknown army, bad
+                        // argument) proves nothing was sent; settling it as not
+                        // applied keeps one bad call from quarantining input.
+                        if matches!(
+                            error.code,
+                            "invalid_target" | "invalid_arguments" | "capability_unavailable"
+                        ) {
+                            let _ = self.append(Receipt {
+                                status: Status::NotApplied,
+                                detail: serde_json::json!({"refused": error.message.clone()}),
+                                unix_ms: now(),
+                                ..intent
+                            });
+                        }
+                        Err(error)
+                    }
                 }
             }
         }
@@ -263,6 +296,33 @@ mod tests {
     }
     fn journal(dir: &std::path::Path) -> GameJournal {
         GameJournal::open(&dir.join("game-actions.jsonl")).unwrap()
+    }
+
+    #[test]
+    fn refusal_before_input_does_not_quarantine() {
+        let dir = dir("refusal");
+        let mut j = journal(&dir);
+        let e = epoch();
+        let err = j
+            .execute(
+                "bad-target",
+                &e,
+                json!({"kind":"x"}),
+                &mut || Err(Error::new("invalid_target", "no such army")),
+                &mut || Err(Error::new("invalid_target", "no such army")),
+            )
+            .unwrap_err();
+        assert_eq!(err.code, "invalid_target");
+        let next = j
+            .execute(
+                "next",
+                &e,
+                json!({"kind":"y"}),
+                &mut || Ok(Outcome::Reached(json!({}))),
+                &mut || Ok(()),
+            )
+            .unwrap();
+        assert_eq!(next.status, Status::Verified);
     }
 
     #[test]
