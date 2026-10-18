@@ -1,6 +1,9 @@
-//! Ordinary clock input for one owned macOS game: exclusive lease, durable
-//! journal, CGEvent keys only while the owned window is front-most, and fresh
-//! memory readback for every step. Same tool contract as the Linux adapter.
+//! Ordinary input for one owned macOS game: exclusive lease, durable
+//! journals, CGEvent keys and clicks only while the owned window is front-most,
+//! and fresh memory readback for every step. The clock keeps the Linux tool
+//! contract; research starts are driven by live GUI geometry.
+mod journal;
+mod research;
 use crate::{
     actions::{Action, Backend, Epoch, Journal, State},
     error::{Error, Result},
@@ -81,6 +84,7 @@ struct Control {
     guard: Guard,
     authority: InputAuthority,
     journal: Journal,
+    actions: journal::GameJournal,
 }
 
 pub struct MacClock {
@@ -113,6 +117,7 @@ impl MacClock {
             state: Mutex::new(Control {
                 authority: InputAuthority::new(config.controller, epoch.clone())?,
                 journal: Journal::open(&directory.join("clock-actions.jsonl"))?,
+                actions: journal::GameJournal::open(&directory.join("game-actions.jsonl"))?,
                 guard: Guard {
                     epoch,
                     anchors: context.anchors,
@@ -208,14 +213,18 @@ impl Commands for MacClock {
                 {"properties":{"op":{"const":"renew"},"lease_token":{"type":"string"},"seconds":{"type":"integer","minimum":30,"maximum":900}},"required":["op","lease_token"],"additionalProperties":false},
                 {"properties":{"op":{"const":"release"},"lease_token":{"type":"string"}},"required":["op","lease_token"],"additionalProperties":false},
                 {"properties":{"op":{"const":"status"}},"required":["op"],"additionalProperties":false}]}}),
+            json!({"name":"hoi4_research_start","description":"Start an own technology in an empty research slot with ordinary input (research panel, slot, folder tab, tile, Research), each click located from the live GUI and each stage verified from memory; succeeds only when the slot holds the technology. Refuses researched, already-assigned or busy-slot targets before any input. A tile scrolled out of view is refused. Stable request_id; an unresolved dispatch is settled only by retrying its own request_id.","inputSchema":{"type":"object","properties":{"technology":{"type":"string","maxLength":128},"slot":{"type":"integer","minimum":0,"maximum":15},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["technology","slot","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_time","description":"Set desired pause or internal speed 0..4 with ordinary keys (Space, keypad +/-) sent only while the owned game window is front-most, each verified by fresh memory readback. Supply exactly one target and a stable request_id; uncertain dispatches are never replayed.","inputSchema":{"type":"object","properties":{"paused":{"type":"boolean"},"speed":{"type":"integer","minimum":0,"maximum":4},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["request_id","lease_token"],"additionalProperties":false}}),
         ]
     }
     fn supports(&self, name: &str) -> bool {
-        matches!(name, "hoi4_input_lease" | "hoi4_time")
+        matches!(
+            name,
+            "hoi4_input_lease" | "hoi4_time" | "hoi4_research_start"
+        )
     }
     fn capabilities(&self) -> Value {
-        json!({"transport":"ordinary macOS CGEvent keys to the front-most owned window","actions":["set_paused","set_speed"],"lease":"exclusive configured controller","native_posting":false,"full_campaign_acceptance":false})
+        json!({"transport":"ordinary macOS CGEvent keys to the front-most owned window","actions":["set_paused","set_speed","research_start"],"lease":"exclusive configured controller","native_posting":false,"full_campaign_acceptance":false})
     }
     fn call(&self, process: &dyn Process, name: &str, arguments: &Value) -> Result<Value> {
         let args = arguments
@@ -229,6 +238,7 @@ impl Commands for MacClock {
             guard,
             authority,
             journal,
+            actions,
         } = &mut *state;
         if name == "hoi4_input_lease" {
             let op = string(args, "op")?;
@@ -266,6 +276,58 @@ impl Commands for MacClock {
                 }
                 _ => Err(Error::new("invalid_arguments", "Unknown lease operation")),
             };
+        }
+        if name == "hoi4_research_start" {
+            allowed(args, &["technology", "slot", "request_id", "lease_token"])?;
+            let key = string(args, "technology")?;
+            if key.is_empty()
+                || key.len() > 128
+                || !key.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
+            {
+                return Err(Error::new("invalid_arguments", "Invalid technology key"));
+            }
+            let slot = args
+                .get("slot")
+                .and_then(Value::as_u64)
+                .filter(|v| *v <= 15)
+                .ok_or_else(|| Error::new("invalid_arguments", "slot must be 0..15"))?
+                as usize;
+            let id = string(args, "request_id")?;
+            let token = string(args, "lease_token")?;
+            let epoch = guard.observe(process)?.epoch;
+            authority.authorize(token, &epoch)?;
+            let action = json!({"kind":"research_start","technology":key,"slot":slot});
+            let before = research::assignments(process)?;
+            if actions.receipt_exists(id) {
+                // A retry only settles or replays its receipt; it never refuses on new state.
+            } else {
+                research::check(&before, key, slot)?;
+                self.keys.preflight()?;
+            }
+            let keys = &self.keys;
+            let mut settle = || {
+                let now = research::assignments(process)?;
+                let target = now.slots.get(slot).cloned().flatten();
+                let others_kept = now
+                    .slots
+                    .iter()
+                    .enumerate()
+                    .all(|(i, s)| i == slot || before.slots.get(i) == Some(s));
+                let detail = json!({"slots":now.slots});
+                Ok(if target.as_deref() == Some(key) {
+                    journal::Outcome::Reached(detail)
+                } else if target.is_none() && others_kept {
+                    journal::Outcome::Unchanged(detail)
+                } else {
+                    journal::Outcome::Unknown
+                })
+            };
+            let mut dispatch = || {
+                authority.authorize(token, &epoch)?;
+                research::start(process, keys, key, slot)
+            };
+            let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
+            return Ok(json!({"receipt":receipt}));
         }
         allowed(args, &["paused", "speed", "request_id", "lease_token"])?;
         let id = string(args, "request_id")?;

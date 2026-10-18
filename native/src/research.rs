@@ -234,6 +234,37 @@ fn observe(
     value["freshness"] = json!({"observed_unix_ms":SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),"elapsed_ms":start.elapsed().as_secs_f64()*1000.0,"read_calls":r.calls.get()+end_calls as u64,"read_bytes":r.bytes.get()+end_bytes});
     Ok((value, context))
 }
+#[cfg(target_os = "macos")]
+/// Own slot assignments (technology key per slot) and the complete researched
+/// set, validated page by page from one reader. Caller owns the process bracket.
+pub(crate) fn assignments(
+    r: &Reader<'_>,
+    base: u64,
+) -> Result<(Vec<Option<String>>, BTreeSet<String>)> {
+    let mut completed = BTreeSet::new();
+    let mut slots = Vec::new();
+    let mut offset = 0;
+    loop {
+        let (value, _) = observe_from_reader(r, base, offset, 100, false)?;
+        if offset == 0 {
+            slots = value["slots"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|s| s["researching"].as_str().map(String::from))
+                .collect();
+        }
+        for done in value["researched"].as_array().into_iter().flatten() {
+            if let Some(id) = done["id"].as_str() {
+                completed.insert(id.to_string());
+            }
+        }
+        match value["next_offset"].as_u64() {
+            Some(next) if next as usize > offset => offset = next as usize,
+            _ => return Ok((slots, completed)),
+        }
+    }
+}
 /// Unchanged canonical validation core; caller owns witnesses/process bracket.
 pub(crate) fn observe_from_reader(
     r: &Reader<'_>,
