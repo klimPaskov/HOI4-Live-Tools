@@ -2,6 +2,26 @@
 
 ## Unreleased native preview
 
+- Campaign actions on macOS (native MCP, Steam 1.19.3 x86_64 under Rosetta,
+  Mach-O 089EA519), each driven by ordinary CGEvent input to the owned,
+  front-most window, targeted from the live GUI tree and verified by fresh
+  memory readback, with an idempotent action journal: time, research (with
+  tree scrolling), national focus (tree panning), production lines (add/set,
+  offered designs listed on refusal), construction, laws, designers and
+  advisors, decisions, division training with deployment locations, army
+  creation, army groups and field marshals, front and offensive lines
+  (found by comparing captures before and after front-line mode),
+  battle-plan execute/stop, event answers (including newspaper-style news
+  windows), diplomacy (list, Justify War goal, sent actions), and air wings
+  and missions. Reads add armies by group, unassigned divisions by state,
+  states by name or country tag, open events and an open peace conference.
+  Not yet supported: the peace conference itself, naval and invasion actions,
+  splitting an existing army (the division list ignores modifier clicks).
+- A country-agnostic campaign playbook (`skills/hoi4-campaign-playbook/
+  references/generic-playbook.md`): army caps, army groups and field marshals,
+  templates, build-up, planning and encirclement, the peace conference and
+  common mistakes, from a cited research run checked against the 1.19.3 files.
+
 - First native macOS read. `hoi4_overview` now selects a per-build layout:
   Linux ELF a4971c9e or macOS Mach-O 089EA519 (1.19.3.0 c01a under Rosetta).
   On the owned 1920x1080 game on 18 October 2026 it returned the player, date,
