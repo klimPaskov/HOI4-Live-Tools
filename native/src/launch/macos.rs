@@ -12,6 +12,7 @@ mod mapdata;
 mod politics;
 mod production;
 mod research;
+mod states;
 mod ui;
 use crate::{
     actions::{Action, Backend, Epoch, Journal, State},
@@ -237,6 +238,7 @@ impl Commands for MacClock {
             json!({"name":"hoi4_army_front","description":"Give an own army a front-line order along the border nearest a state: army card, front-line drawing (Z), Find view centres the state, one click on the nearest highlighted border. Verified by one more battle-plan order on the army.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"state_id":{"type":"integer","minimum":1,"maximum":4095},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","state_id","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_army_plan","description":"Execute or stop an own army's battle plan with the army card's play or stop button. Verified by the card's executing state.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"execute":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","execute","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_army_offensive","description":"Draw an offensive line for an own army that already holds a front line, into a target state: army card, Find view centres the state, offensive-line drawing (X), one right-button drag from the army's side to the state. Verified by new battle-plan orders on the army; execute the plan afterwards.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"state_id":{"type":"integer","minimum":1,"maximum":4095},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","state_id","request_id","lease_token"],"additionalProperties":false}}),
+            json!({"name":"hoi4_states","description":"Find states by English name (accent-insensitive substring, or the exact ID) with their owner and controller as the political map shows them. Pure read.","inputSchema":{"type":"object","properties":{"query":{"type":"string"}},"required":["query"],"additionalProperties":false}}),
             json!({"name":"hoi4_army_create","description":"Create one army from the own divisions shown around a state: Find view centres the state, a box selection picks own divisions there, the new-army card creates the army. Verified by a new army in memory; returns its divisions.","inputSchema":{"type":"object","properties":{"state_id":{"type":"integer","minimum":1,"maximum":4095},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["state_id","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_time","description":"Set desired pause or internal speed 0..4 with ordinary keys (Space, keypad +/-) sent only while the owned game window is front-most, each verified by fresh memory readback. Supply exactly one target and a stable request_id; uncertain dispatches are never replayed.","inputSchema":{"type":"object","properties":{"paused":{"type":"boolean"},"speed":{"type":"integer","minimum":0,"maximum":4},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["request_id","lease_token"],"additionalProperties":false}}),
         ]
@@ -258,6 +260,7 @@ impl Commands for MacClock {
                 | "hoi4_division_templates"
                 | "hoi4_train"
                 | "hoi4_armies"
+                | "hoi4_states"
                 | "hoi4_army_create"
                 | "hoi4_army_front"
                 | "hoi4_army_plan"
@@ -274,6 +277,18 @@ impl Commands for MacClock {
         if name == "hoi4_armies" {
             allowed(args, &[])?;
             return armies::armies(process);
+        }
+        if name == "hoi4_states" {
+            allowed(args, &["query"])?;
+            let query = string(args, "query")?;
+            if query.len() > 64 || query.chars().any(char::is_control) {
+                return Err(Error::new("invalid_arguments", "Invalid state query"));
+            }
+            let exe = &process
+                .identity()
+                .ok_or_else(|| Error::new("map_data_unavailable", "Game identity unavailable"))?
+                .exe;
+            return states::lookup(process, &mapdata::game_dir(exe)?, query);
         }
         if name == "hoi4_division_templates" {
             allowed(args, &[])?;
