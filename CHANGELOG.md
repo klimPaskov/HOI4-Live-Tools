@@ -2,6 +2,15 @@
 
 ## Unreleased native preview
 
+- Run091 (18 October 2026, `7f0728c`, Haiku 5.5 player, 512x288) passed the
+  map placement gate. ensure_open, select_building(arms_factory), find_open,
+  find_query(64), find_activate(64) and place(arms_factory, state 64, amount 1)
+  each sent one server-confirmed ordinary input with canonical readback; place
+  verified in 1.9 s with `{in_state 1, elsewhere 0, complete true}`. The open,
+  select and place replays returned identical historical receipts, and a second
+  place ID was a zero-input no-op. The final queue held exactly one arms_factory
+  of amount 1 located in Brandenburg. Lease release, exit 0, recording and
+  instance absence passed. Provincial placement is not yet live-tested.
 - Re-observe after a torn terminal witness. Run090 (v85) proved the placed
   arms_factory located in state 64 (`status_flags_raw` 6), but the confirmation
   read after input-idle tore in the panel's choice list and the stage recorded

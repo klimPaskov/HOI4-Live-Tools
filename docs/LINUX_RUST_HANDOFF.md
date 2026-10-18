@@ -7,6 +7,18 @@ Do not resume Mac campaigns or control the shared Windows game.
 
 ## Current checkpoint
 
+Session checkpoint, 18 October 2026: Run091 on `7f0728c` (package v86) passed
+the map placement gate with the Haiku 5.5 player at 512x288. The server opened
+the construction panel, selected arms_factory, used the game's own Find view to
+centre the camera on Brandenburg (state 64), and queued one arms_factory with a
+single map click, verified from the same-snapshot queue. Runs 087–090 found and
+fixed three faults on the way: an over-strict broker check of Find receipts; a
+location reader that accepted only the constructor status flags 1/2 while a live
+state status carried 6; and a torn confirmation read after input-idle that was
+not retried. The private broker now allows two read-only queue diagnostics, only
+after an uncertain place. Next: provincial buildings (dockyard on a coastal
+province), then production changes and standing economy plans.
+
 Session checkpoint, 17 October 2026: the construction recovery follow-up is
 committed as `5e61fec` with nine successful exact-head CI jobs. Run077 on that
 commit passed the construction action gate: ensure_open and select_building
