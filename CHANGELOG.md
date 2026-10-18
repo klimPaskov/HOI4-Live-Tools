@@ -15,8 +15,9 @@
   windows), diplomacy (list, Justify War goal, sent actions), and air wings
   and missions. Reads add armies by group, unassigned divisions by state,
   states by name or country tag, open events and an open peace conference.
-  Not yet supported: the peace conference itself, naval and invasion actions,
-  splitting an existing army (the division list ignores modifier clicks).
+  Army groups, field marshals and army splitting (Shift range selection in the
+  division list needs a real modifier event). Not yet supported: the peace
+  conference itself and naval and invasion actions.
 - A country-agnostic campaign playbook (`skills/hoi4-campaign-playbook/
   references/generic-playbook.md`): army caps, army groups and field marshals,
   templates, build-up, planning and encirclement, the peace conference and

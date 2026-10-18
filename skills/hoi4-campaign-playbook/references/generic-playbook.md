@@ -17,10 +17,11 @@ Germany, Poland and China appear only as worked examples.
   **50%**; personality traits pass down in full. A marshal who leads a single
   army directly loses his marshal traits. Make army groups, not one marshal
   per army.
-- The unit-selection list cannot be range-selected with synthetic input, so
-  **form armies as divisions arrive**: deploy new divisions to several border
-  states and create one army per state of at most 24 divisions at once.
-  Splitting an oversized army later is not possible through the tools.
+- **Form armies as divisions arrive**, at most 24 each: deploy new divisions to
+  several border states and create one army per state. An oversized army can be
+  split with `hoi4_army_split` (first N divisions, N up to 19, into a new army).
+  A stack of unassigned divisions in one province becomes one big army with
+  `hoi4_army_create`; peel 19 at a time off it.
 - A training line without a **deployment location** never deploys its finished
   division *(live: twenty divisions waited for months)*. Set a location on
   every line (`hoi4_train` with `deploy_state_id`, or `hoi4_deploy_locations`).
