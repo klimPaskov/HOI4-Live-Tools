@@ -592,9 +592,15 @@ publishing IDs or reading reciprocal building data. Province control is checked
 before following its parent pointer. Other territory payload is never traversed.
 
 Getter `0x887850` treats positive status `+0x70` as a country override; it does
-not establish territorial authority. Exact flags 1/2 and override zero are
-conservative supported-path policies, not general engine invariants. The reader
-does not infer inherited controller values, occupation or allied eligibility.
+not establish territorial authority. Override zero is a conservative
+supported-path policy. The constructors store flags exactly 1 or 2, but the engine
+tests only bit 0, and Run089 found a queued state building whose live status
+carried other bits. The reader therefore takes the kind from bit 0 and rejects
+negative values. It publishes a location only after the exact embedded status
+address, catalog ID join and reciprocal building slot all hold, and it reports the
+raw flags. For a value other than 1 or 2, a failed proof reports
+`unproven_location_status_kind` and never guesses an ID. The reader does not infer
+inherited controller values, occupation or allied eligibility.
 
 Getter `0x884be0`, writer `0x885400` and map initializer `0x884920` establish the
 status `+0x20` int32 map and `+0x38` building-pointer array, with standard signed

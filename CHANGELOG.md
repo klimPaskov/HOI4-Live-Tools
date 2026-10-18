@@ -2,6 +2,18 @@
 
 ## Unreleased native preview
 
+- Prove construction locations of state buildings queued live. Run089 showed that
+  one map click queued exactly one arms_factory line (amount 1, 15 factories), but
+  its building status carried flag bits beyond the constructor's 2, so the location
+  join refused it as `unsupported_location_status_flags` and the place stage
+  stayed uncertain. The reader now takes province or state from bit 0, as the
+  engine does. It still requires the exact embedded status, catalog ID and
+  reciprocal building slot, and it reports `status_flags_raw`.
+- Runs 087–089 (18 October 2026, Haiku 5.5 player, 512x288): ensure_open,
+  select_building(arms_factory) and all three Find stages pass with the
+  construction panel open. Run087 stopped on an over-strict broker check of Find
+  receipts. In Runs 088 and 089 the place click was delivered and a new queue line
+  appeared, but the verifier could not prove its location, as above.
 - Add the opt-in `place` construction stage: with the canonical building
   selected, the construction panel shown, the game's Find view closed and the
   camera centred on an own state, one left click at the owned client centre must

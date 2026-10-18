@@ -53,16 +53,42 @@ pub(super) fn observe(
     }
     exact(r, status, base + 0x41b4768)?;
     let flags = r.i32(status + 0x68)?;
-    if flags != 1 && flags != 2 {
+    if flags < 0 {
         return Ok(unavailable("unsupported_location_status_flags"));
     }
     if r.i32(status + 0x70)? != 0 {
         return Ok(unavailable("national_location_override_unsupported"));
     }
+    // Constructors store exactly 2 (state) or 1 (province) and the engine tests
+    // only bit 0; Run089 found a queued state building whose live status carried
+    // other bits. Bit 0 picks the kind; the exact embedded status address,
+    // catalog ID join and reciprocal building slot are the proof. A failed proof
+    // stays a hard error only for the constructor values.
+    let constructor_flags = flags == 1 || flags == 2;
+    match joined(r, base, own_tag, building, template, ordinal, status, flags) {
+        Err(error) if !constructor_flags && error.code == "invalid_construction" => {
+            let mut value = unavailable("unproven_location_status_kind");
+            value["status_flags_raw"] = json!(flags);
+            Ok(value)
+        }
+        result => result,
+    }
+}
+#[allow(clippy::too_many_arguments)]
+fn joined(
+    r: &Reader<'_>,
+    base: u64,
+    own_tag: i32,
+    building: u64,
+    template: u64,
+    ordinal: usize,
+    status: u64,
+    flags: i32,
+) -> Result<Value> {
     let id = r.i32(status + 0x6c)?;
     let gs = r.u64(base + 0x44086a8)?;
     exact(r, gs, base + 0x42c7598)?;
-    let (state, province) = if flags == 2 {
+    let (state, province) = if flags & 1 == 0 {
         (catalog_pointer(r, gs + 0x2c8, id, 4096)?, None)
     } else {
         let province = catalog_pointer(r, gs + 0x2b0, id, 20000)?;
@@ -113,7 +139,7 @@ pub(super) fn observe(
     }
     Ok(
         json!({"available":true,"state_id":state_id,"province_id":province_id,
-        "kind":if province.is_some(){"province"}else{"state"},
+        "kind":if province.is_some(){"province"}else{"state"},"status_flags_raw":flags,
         "scope":"own_owned_and_controlled_territory",
         "identity":"current_catalog_ids_and_embedded_building_status",
         "input_authorized":false}),
