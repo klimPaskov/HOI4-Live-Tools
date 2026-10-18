@@ -30,6 +30,13 @@ extern "C" {
         button: u32,
     ) -> CFTypeRef;
     fn CGEventPost(tap: u32, event: CFTypeRef);
+    fn CGEventCreateScrollWheelEvent(
+        source: CFTypeRef,
+        units: u32,
+        wheel_count: u32,
+        wheel1: i32,
+        ...
+    ) -> CFTypeRef;
 }
 #[link(name = "ApplicationServices", kind = "framework")]
 extern "C" {
@@ -279,6 +286,30 @@ impl MacKeys {
         }
         std::thread::sleep(pause * 4);
         post(LEFT_MOUSE_UP, b)
+    }
+    /// One vertical scroll-wheel step (pixel units, positive scrolls up) with the
+    /// cursor at a game-logical point, after a fresh front-most check.
+    pub fn scroll(&self, game: (u32, u32), at: (f64, f64), pixels: i32) -> Result<()> {
+        self.preflight()?;
+        let point = client_point(owned_content(self.pid, game)?, at.0, at.1)?;
+        // SAFETY: a null source is allowed; events are released after posting.
+        unsafe {
+            let moved = CGEventCreateMouseEvent(std::ptr::null(), MOUSE_MOVED, point, LEFT_BUTTON);
+            if moved.is_null() {
+                return Err(Error::new("input_unavailable", "Mouse event unavailable"));
+            }
+            CGEventPost(HID_EVENT_TAP, moved);
+            CFRelease(moved);
+            std::thread::sleep(std::time::Duration::from_millis(60));
+            let wheel = CGEventCreateScrollWheelEvent(std::ptr::null(), 0, 1, pixels);
+            if wheel.is_null() {
+                return Err(Error::new("input_unavailable", "Scroll event unavailable"));
+            }
+            CGEventPost(HID_EVENT_TAP, wheel);
+            CFRelease(wheel);
+        }
+        std::thread::sleep(std::time::Duration::from_millis(120));
+        Ok(())
     }
     /// One key press (down, then up) after a fresh front-most check.
     pub fn press(&self, key: Key) -> Result<()> {

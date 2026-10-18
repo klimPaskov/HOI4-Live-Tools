@@ -26,6 +26,9 @@ pub enum Status {
     Dispatching,
     Verified,
     NotApplied,
+    /// Fully observed outcome that differs from the target (e.g. a line was
+    /// added but its factory count could not be set). Settled, not uncertain.
+    Diverged,
 }
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(deny_unknown_fields)]
@@ -42,6 +45,7 @@ pub struct Receipt {
 pub enum Outcome {
     Reached(Value),
     Unchanged(Value),
+    Diverged(Value),
     Unknown,
 }
 
@@ -215,6 +219,7 @@ impl GameJournal {
         let (status, detail) = match settle()? {
             Outcome::Reached(v) => (Status::Verified, v),
             Outcome::Unchanged(v) => (Status::NotApplied, v),
+            Outcome::Diverged(v) => (Status::Diverged, v),
             Outcome::Unknown => {
                 return Err(Error::new(
                     "action_uncertain",

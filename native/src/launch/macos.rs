@@ -4,6 +4,7 @@
 //! contract; research starts are driven by live GUI geometry.
 mod focus;
 mod journal;
+mod production;
 mod research;
 mod ui;
 use crate::{
@@ -217,17 +218,24 @@ impl Commands for MacClock {
                 {"properties":{"op":{"const":"status"}},"required":["op"],"additionalProperties":false}]}}),
             json!({"name":"hoi4_research_start","description":"Start an own technology in an empty research slot with ordinary input (research panel, slot, folder tab, tile, Research), each click located from the live GUI and each stage verified from memory; succeeds only when the slot holds the technology. Refuses researched, already-assigned or busy-slot targets before any input. A tile scrolled out of view is refused. Stable request_id; an unresolved dispatch is settled only by retrying its own request_id.","inputSchema":{"type":"object","properties":{"technology":{"type":"string","maxLength":128},"slot":{"type":"integer","minimum":0,"maximum":15},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["technology","slot","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_focus_start","description":"Start an own national focus with ordinary input (politics panel, focus button, drag-panning the tree until the node is in view, the node, Start), each target located from the live GUI and each stage verified from memory; succeeds only when own focus progress names the focus as active. Refuses completed or already-active focuses, or any while another focus is active, before input. Stable request_id; an unresolved dispatch is settled only by retrying its own request_id.","inputSchema":{"type":"object","properties":{"focus":{"type":"string","maxLength":128},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["focus","request_id","lease_token"],"additionalProperties":false}}),
+            json!({"name":"hoi4_production_add","description":"Add one own military production line for a base equipment type (e.g. infantry_equipment, artillery_equipment, light_tank_equipment, fighter_equipment) with ordinary input: production panel, category button, the design in the selection window, then +/- until the line requests the given factories. Verified from the own line collection. Refuses equipment with no producible design. Naval lines are not supported yet.","inputSchema":{"type":"object","properties":{"equipment":{"type":"string","maxLength":128},"factories":{"type":"integer","minimum":1,"maximum":150},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["equipment","factories","request_id","lease_token"],"additionalProperties":false}}),
+            json!({"name":"hoi4_production_set","description":"Set the requested factories of an own production line, addressed by its entry_index and equipment_id from hoi4_production_lines, with the line's ordinary +/- buttons; each click is verified from memory. 0 keeps the line with no factories.","inputSchema":{"type":"object","properties":{"line":{"type":"integer","minimum":0,"maximum":2047},"equipment":{"type":"string","maxLength":128},"factories":{"type":"integer","minimum":0,"maximum":150},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["line","equipment","factories","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_time","description":"Set desired pause or internal speed 0..4 with ordinary keys (Space, keypad +/-) sent only while the owned game window is front-most, each verified by fresh memory readback. Supply exactly one target and a stable request_id; uncertain dispatches are never replayed.","inputSchema":{"type":"object","properties":{"paused":{"type":"boolean"},"speed":{"type":"integer","minimum":0,"maximum":4},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["request_id","lease_token"],"additionalProperties":false}}),
         ]
     }
     fn supports(&self, name: &str) -> bool {
         matches!(
             name,
-            "hoi4_input_lease" | "hoi4_time" | "hoi4_research_start" | "hoi4_focus_start"
+            "hoi4_input_lease"
+                | "hoi4_time"
+                | "hoi4_research_start"
+                | "hoi4_focus_start"
+                | "hoi4_production_add"
+                | "hoi4_production_set"
         )
     }
     fn capabilities(&self) -> Value {
-        json!({"transport":"ordinary macOS CGEvent keys to the front-most owned window","actions":["set_paused","set_speed","research_start","focus_start"],"lease":"exclusive configured controller","native_posting":false,"full_campaign_acceptance":false})
+        json!({"transport":"ordinary macOS CGEvent keys to the front-most owned window","actions":["set_paused","set_speed","research_start","focus_start","production_add","production_set"],"lease":"exclusive configured controller","native_posting":false,"full_campaign_acceptance":false})
     }
     fn call(&self, process: &dyn Process, name: &str, arguments: &Value) -> Result<Value> {
         let args = arguments
@@ -328,6 +336,127 @@ impl Commands for MacClock {
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
                 research::start(process, keys, key, slot)
+            };
+            let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
+            return Ok(json!({"receipt":receipt}));
+        }
+        if name == "hoi4_production_add" || name == "hoi4_production_set" {
+            let adding = name == "hoi4_production_add";
+            if adding {
+                allowed(
+                    args,
+                    &["equipment", "factories", "request_id", "lease_token"],
+                )?;
+            } else {
+                allowed(
+                    args,
+                    &[
+                        "line",
+                        "equipment",
+                        "factories",
+                        "request_id",
+                        "lease_token",
+                    ],
+                )?;
+            }
+            let key = string(args, "equipment")?;
+            if key.is_empty()
+                || key.len() > 128
+                || !key.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
+            {
+                return Err(Error::new("invalid_arguments", "Invalid equipment key"));
+            }
+            let factories = args
+                .get("factories")
+                .and_then(Value::as_i64)
+                .filter(|v| (i64::from(adding)..=150).contains(v))
+                .ok_or_else(|| Error::new("invalid_arguments", "factories out of range"))?
+                as i32;
+            let index = if adding {
+                None
+            } else {
+                Some(
+                    args.get("line")
+                        .and_then(Value::as_u64)
+                        .filter(|v| *v < 2048)
+                        .ok_or_else(|| Error::new("invalid_arguments", "line must be 0..2047"))?
+                        as usize,
+                )
+            };
+            let id = string(args, "request_id")?;
+            let token = string(args, "lease_token")?;
+            let epoch = guard.observe(process)?.epoch;
+            authority.authorize(token, &epoch)?;
+            let action = json!({"kind":name.trim_start_matches("hoi4_"),"equipment":key,"factories":factories,"line":index});
+            let before = production::lines(process)?;
+            let retry = actions.receipt_exists(id);
+            if !retry {
+                if let Some(index) = index {
+                    if before.get(index).and_then(|l| l.key.as_deref()) != Some(key) {
+                        return Err(Error::new(
+                            "invalid_target",
+                            "No own line with this index and equipment",
+                        ));
+                    }
+                }
+                self.keys.preflight()?;
+            }
+            let keys = &self.keys;
+            let mut settle = || {
+                let now = production::lines(process)?;
+                let detail = json!({"lines":now.iter().map(|l| json!({"equipment":l.key,"factories":l.requested})).collect::<Vec<_>>()});
+                let with_key: Vec<_> = now
+                    .iter()
+                    .filter(|l| l.key.as_deref() == Some(key))
+                    .collect();
+                if retry {
+                    // No pre-dispatch snapshot: settle only from what is observable now.
+                    return Ok(if with_key.iter().any(|l| l.requested == factories) {
+                        journal::Outcome::Reached(detail)
+                    } else if index.is_some() || !with_key.is_empty() {
+                        journal::Outcome::Diverged(detail)
+                    } else {
+                        journal::Outcome::Unchanged(detail)
+                    });
+                }
+                Ok(match index {
+                    None => {
+                        let added: Vec<_> = now
+                            .iter()
+                            .filter(|l| !before.iter().any(|b| b.handle == l.handle))
+                            .collect();
+                        if added
+                            .iter()
+                            .any(|l| l.key.as_deref() == Some(key) && l.requested == factories)
+                        {
+                            journal::Outcome::Reached(detail)
+                        } else if added.is_empty() {
+                            journal::Outcome::Unchanged(detail)
+                        } else {
+                            journal::Outcome::Diverged(detail)
+                        }
+                    }
+                    Some(index) => {
+                        let line = &before[index];
+                        match now.iter().find(|l| l.handle == line.handle) {
+                            Some(l) if l.requested == factories => {
+                                journal::Outcome::Reached(detail)
+                            }
+                            Some(l) if l.requested == line.requested => {
+                                journal::Outcome::Unchanged(detail)
+                            }
+                            Some(_) => journal::Outcome::Diverged(detail),
+                            None => journal::Outcome::Unknown,
+                        }
+                    }
+                })
+            };
+            let mut dispatch = || {
+                authority.authorize(token, &epoch)?;
+                match index {
+                    None => production::add(process, keys, key, factories),
+                    Some(index) => production::set(process, keys, index, key, factories),
+                }
             };
             let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
             return Ok(json!({"receipt":receipt}));

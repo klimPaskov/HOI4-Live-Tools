@@ -47,6 +47,59 @@ const MACOS: Layout = Layout {
     variant_type: 0x3e0,
     equipment_type_vtable: 0x3379328,
 };
+#[cfg(target_os = "macos")]
+/// One own equipment line as the input adapters see it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct OwnLine {
+    pub handle: u64,
+    pub naval: bool,
+    pub key: Option<String>,
+    pub requested: i32,
+}
+#[cfg(target_os = "macos")]
+/// Own military/naval equipment lines in collection order, with base equipment
+/// keys where the variant has an exact base type. Caller owns the read bracket.
+pub(crate) fn own_lines(r: &Reader<'_>, base: u64) -> Result<Vec<OwnLine>> {
+    let l = layout(r);
+    let (_, production) = economy::own_production(r, base)?;
+    let (_, data, count) = r.array_header(production + 0x58)?;
+    if count > LINE_LIMIT {
+        return Err(Error::new(
+            "invalid_production_array",
+            "Line collection exceeds bound",
+        ));
+    }
+    let mut out = Vec::new();
+    for index in 0..count as u64 {
+        let line = r.u64(data + index * 8)?;
+        let primary = r.u64(line)?;
+        let naval = primary == base + l.naval_line_vtable;
+        if !naval && primary != base + l.military_line_vtable {
+            continue;
+        }
+        if r.u64(line + 0x20)? != production {
+            return Err(Error::new("invalid_production_owner", "Own line required"));
+        }
+        let variant = r.u64(line + 0x88)?;
+        let key = if variant != 0 && r.u64(variant)? == base + l.variant_vtable {
+            let kind = r.u64(variant + l.variant_type)?;
+            if kind != 0 && r.u64(kind)? == base + l.equipment_type_vtable {
+                Some(r.string_bounded(kind + 0x10, 128)?)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        out.push(OwnLine {
+            handle: r.u64(line + 8)?,
+            naval,
+            key,
+            requested: r.i32(line + 0xe8)?,
+        });
+    }
+    Ok(out)
+}
 pub(crate) fn layout(r: &Reader<'_>) -> &'static Layout {
     match r.string_abi() {
         crate::memory::StringAbi::LibStdCxx => &LINUX,

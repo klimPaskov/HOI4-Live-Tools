@@ -92,8 +92,11 @@ fn notices(r: &Reader<'_>, image: u64) -> Result<Vec<gui_tree::Rect>> {
             continue;
         }
         if let Some(ok) = gui_tree::child(r, image, root, "ok_button")? {
+            // A notice whose button is laid out off screen cannot block a click.
             if gui_tree::shown(r, ok)? {
-                out.push(gui_tree::rect(r, image, ok, (1920, 1080))?);
+                if let Ok(rect) = gui_tree::rect(r, image, ok, (1920, 1080)) {
+                    out.push(rect);
+                }
             }
         }
     }
