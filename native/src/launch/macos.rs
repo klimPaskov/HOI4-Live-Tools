@@ -6,6 +6,7 @@ mod armies;
 mod construction;
 mod decisions;
 mod deployment;
+mod events;
 mod focus;
 mod journal;
 mod mapdata;
@@ -239,6 +240,8 @@ impl Commands for MacClock {
             json!({"name":"hoi4_army_plan","description":"Execute or stop an own army's battle plan with the army card's play or stop button. Verified by the card's executing state.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"execute":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","execute","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_army_offensive","description":"Draw an offensive line for an own army that already holds a front line, into a target state: army card, Find view centres the state, offensive-line drawing (X), one right-button drag from the army's side to the state. Verified by new battle-plan orders on the army; execute the plan afterwards.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"state_id":{"type":"integer","minimum":1,"maximum":4095},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","state_id","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_states","description":"Find states by English name (accent-insensitive substring, or the exact ID) with their owner and controller as the political map shows them. Pure read.","inputSchema":{"type":"object","properties":{"query":{"type":"string"}},"required":["query"],"additionalProperties":false}}),
+            json!({"name":"hoi4_events","description":"Open event windows in order (the last is on top) with their title and option texts. Pure read; no lease needed.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}}),
+            json!({"name":"hoi4_event_choose","description":"Choose an option (0-based, in listed order) of the open event on top by clicking it. Verified when exactly that event window closes.","inputSchema":{"type":"object","properties":{"event":{"type":"string"},"option":{"type":"integer","minimum":0,"maximum":7},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["event","option","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_army_create","description":"Create one army from the own divisions shown around a state: Find view centres the state, a box selection picks own divisions there, the new-army card creates the army. Verified by a new army in memory; returns its divisions.","inputSchema":{"type":"object","properties":{"state_id":{"type":"integer","minimum":1,"maximum":4095},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["state_id","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_time","description":"Set desired pause or internal speed 0..4 with ordinary keys (Space, keypad +/-) sent only while the owned game window is front-most, each verified by fresh memory readback. Supply exactly one target and a stable request_id; uncertain dispatches are never replayed.","inputSchema":{"type":"object","properties":{"paused":{"type":"boolean"},"speed":{"type":"integer","minimum":0,"maximum":4},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["request_id","lease_token"],"additionalProperties":false}}),
         ]
@@ -261,6 +264,8 @@ impl Commands for MacClock {
                 | "hoi4_train"
                 | "hoi4_armies"
                 | "hoi4_states"
+                | "hoi4_events"
+                | "hoi4_event_choose"
                 | "hoi4_army_create"
                 | "hoi4_army_front"
                 | "hoi4_army_plan"
@@ -268,7 +273,7 @@ impl Commands for MacClock {
         )
     }
     fn capabilities(&self) -> Value {
-        json!({"transport":"ordinary macOS CGEvent keys to the front-most owned window","actions":["set_paused","set_speed","research_start","focus_start","production_add","production_set","construction_add","politics_options","politics_choose","decisions_list","decision_take","train","army_create","army_front","army_plan","army_offensive"],"lease":"exclusive configured controller","native_posting":false,"full_campaign_acceptance":false})
+        json!({"transport":"ordinary macOS CGEvent keys to the front-most owned window","actions":["set_paused","set_speed","research_start","focus_start","production_add","production_set","construction_add","politics_options","politics_choose","decisions_list","decision_take","train","army_create","army_front","army_plan","army_offensive","event_choose"],"lease":"exclusive configured controller","native_posting":false,"full_campaign_acceptance":false})
     }
     fn call(&self, process: &dyn Process, name: &str, arguments: &Value) -> Result<Value> {
         let args = arguments
@@ -277,6 +282,10 @@ impl Commands for MacClock {
         if name == "hoi4_armies" {
             allowed(args, &[])?;
             return armies::armies(process);
+        }
+        if name == "hoi4_events" {
+            allowed(args, &[])?;
+            return events::list(process);
         }
         if name == "hoi4_states" {
             allowed(args, &["query"])?;
@@ -519,6 +528,46 @@ impl Commands for MacClock {
                     None => production::add(process, keys, key, factories),
                     Some(index) => production::set(process, keys, index, key, factories),
                 }
+            };
+            let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
+            return Ok(json!({"receipt":receipt}));
+        }
+        if name == "hoi4_event_choose" {
+            allowed(args, &["event", "option", "request_id", "lease_token"])?;
+            let event = string(args, "event")?;
+            if event.is_empty() || event.len() > 128 || event.chars().any(char::is_control) {
+                return Err(Error::new("invalid_arguments", "Invalid event id"));
+            }
+            let option = args
+                .get("option")
+                .and_then(Value::as_u64)
+                .filter(|v| *v < 8)
+                .ok_or_else(|| Error::new("invalid_arguments", "option must be 0..7"))?
+                as usize;
+            let id = string(args, "request_id")?;
+            let token = string(args, "lease_token")?;
+            let epoch = guard.observe(process)?.epoch;
+            authority.authorize(token, &epoch)?;
+            let retry = actions.receipt_exists(id);
+            if !retry {
+                self.keys.preflight()?;
+            }
+            let action = json!({"kind":"event_choose","event":event,"option":option});
+            let keys = &self.keys;
+            let mut settle = || {
+                let open = events::is_open(process, event)?;
+                let detail = json!({"event":event,"open":open});
+                Ok(if !open {
+                    journal::Outcome::Reached(detail)
+                } else if retry {
+                    journal::Outcome::Diverged(detail)
+                } else {
+                    journal::Outcome::Unchanged(detail)
+                })
+            };
+            let mut dispatch = || {
+                authority.authorize(token, &epoch)?;
+                events::choose(process, keys, event, option)
             };
             let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
             return Ok(json!({"receipt":receipt}));
