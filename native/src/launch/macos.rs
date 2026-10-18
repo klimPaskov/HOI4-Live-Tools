@@ -6,6 +6,7 @@ mod armies;
 mod construction;
 mod decisions;
 mod deployment;
+mod diplomacy;
 mod events;
 mod focus;
 mod journal;
@@ -242,6 +243,8 @@ impl Commands for MacClock {
             json!({"name":"hoi4_states","description":"Find states by English name (accent-insensitive substring, or the exact ID) with their owner and controller as the political map shows them. Pure read.","inputSchema":{"type":"object","properties":{"query":{"type":"string"}},"required":["query"],"additionalProperties":false}}),
             json!({"name":"hoi4_events","description":"Open event windows in order (the last is on top) with their title and option texts. Pure read; no lease needed.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}}),
             json!({"name":"hoi4_event_choose","description":"Choose an option (0-based, in listed order) of the open event on top by clicking it. Verified when exactly that event window closes.","inputSchema":{"type":"object","properties":{"event":{"type":"string"},"option":{"type":"integer","minimum":0,"maximum":7},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["event","option","request_id","lease_token"],"additionalProperties":false}}),
+            json!({"name":"hoi4_diplomacy","description":"Open the diplomacy view for the owner of a state (Find view centres the state, one click selects the country) and list the offered actions with enabled state, cost and whether the AI would refuse. Changes nothing in the game.","inputSchema":{"type":"object","properties":{"state_id":{"type":"integer","minimum":1,"maximum":4095},"lease_token":{"type":"string"}},"required":["state_id","lease_token"],"additionalProperties":false}}),
+            json!({"name":"hoi4_diplomacy_act","description":"Take one diplomatic action (exact listed name, e.g. Declare war, Justify War goal, Guarantee independence, Improve relations) toward the owner of a state. Justify War goal also needs war_goal (e.g. Conquer) and 1..5 states by name. Verified when the offered actions change or political power is spent.","inputSchema":{"type":"object","properties":{"state_id":{"type":"integer","minimum":1,"maximum":4095},"action":{"type":"string"},"war_goal":{"type":"string"},"states":{"type":"array","items":{"type":"string"},"maxItems":5},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["state_id","action","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_army_create","description":"Create one army from the own divisions shown around a state: Find view centres the state, a box selection picks own divisions there, the new-army card creates the army. Verified by a new army in memory; returns its divisions.","inputSchema":{"type":"object","properties":{"state_id":{"type":"integer","minimum":1,"maximum":4095},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["state_id","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_time","description":"Set desired pause or internal speed 0..4 with ordinary keys (Space, keypad +/-) sent only while the owned game window is front-most, each verified by fresh memory readback. Supply exactly one target and a stable request_id; uncertain dispatches are never replayed.","inputSchema":{"type":"object","properties":{"paused":{"type":"boolean"},"speed":{"type":"integer","minimum":0,"maximum":4},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["request_id","lease_token"],"additionalProperties":false}}),
         ]
@@ -266,6 +269,8 @@ impl Commands for MacClock {
                 | "hoi4_states"
                 | "hoi4_events"
                 | "hoi4_event_choose"
+                | "hoi4_diplomacy"
+                | "hoi4_diplomacy_act"
                 | "hoi4_army_create"
                 | "hoi4_army_front"
                 | "hoi4_army_plan"
@@ -273,7 +278,7 @@ impl Commands for MacClock {
         )
     }
     fn capabilities(&self) -> Value {
-        json!({"transport":"ordinary macOS CGEvent keys to the front-most owned window","actions":["set_paused","set_speed","research_start","focus_start","production_add","production_set","construction_add","politics_options","politics_choose","decisions_list","decision_take","train","army_create","army_front","army_plan","army_offensive","event_choose"],"lease":"exclusive configured controller","native_posting":false,"full_campaign_acceptance":false})
+        json!({"transport":"ordinary macOS CGEvent keys to the front-most owned window","actions":["set_paused","set_speed","research_start","focus_start","production_add","production_set","construction_add","politics_options","politics_choose","decisions_list","decision_take","train","army_create","army_front","army_plan","army_offensive","event_choose","diplomacy","diplomacy_act"],"lease":"exclusive configured controller","native_posting":false,"full_campaign_acceptance":false})
     }
     fn call(&self, process: &dyn Process, name: &str, arguments: &Value) -> Result<Value> {
         let args = arguments
@@ -528,6 +533,92 @@ impl Commands for MacClock {
                     None => production::add(process, keys, key, factories),
                     Some(index) => production::set(process, keys, index, key, factories),
                 }
+            };
+            let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
+            return Ok(json!({"receipt":receipt}));
+        }
+        if name == "hoi4_diplomacy" || name == "hoi4_diplomacy_act" {
+            let act = name == "hoi4_diplomacy_act";
+            if act {
+                allowed(
+                    args,
+                    &[
+                        "state_id",
+                        "action",
+                        "war_goal",
+                        "states",
+                        "request_id",
+                        "lease_token",
+                    ],
+                )?;
+            } else {
+                allowed(args, &["state_id", "lease_token"])?;
+            }
+            let state = args
+                .get("state_id")
+                .and_then(Value::as_i64)
+                .filter(|v| (1..4096).contains(v))
+                .ok_or_else(|| Error::new("invalid_arguments", "state_id must be 1..4095"))?
+                as i32;
+            let token = string(args, "lease_token")?;
+            let epoch = guard.observe(process)?.epoch;
+            authority.authorize(token, &epoch)?;
+            self.keys.preflight()?;
+            if !act {
+                return diplomacy::actions(process, &self.keys, state);
+            }
+            let action_name = string(args, "action")?;
+            let text_ok =
+                |v: &str| !v.is_empty() && v.len() <= 128 && !v.chars().any(char::is_control);
+            if !text_ok(action_name) {
+                return Err(Error::new("invalid_arguments", "Invalid action name"));
+            }
+            let kind = match args.get("war_goal") {
+                None => None,
+                Some(v) => Some(
+                    v.as_str()
+                        .filter(|v| text_ok(v))
+                        .ok_or_else(|| Error::new("invalid_arguments", "Invalid war_goal"))?,
+                ),
+            };
+            let states = match args.get("states") {
+                None => Vec::new(),
+                Some(v) => v
+                    .as_array()
+                    .filter(|a| a.len() <= 5)
+                    .ok_or_else(|| {
+                        Error::new("invalid_arguments", "states must list up to 5 names")
+                    })?
+                    .iter()
+                    .map(|s| {
+                        s.as_str()
+                            .filter(|s| text_ok(s))
+                            .map(str::to_string)
+                            .ok_or_else(|| Error::new("invalid_arguments", "Invalid state name"))
+                    })
+                    .collect::<Result<Vec<_>>>()?,
+            };
+            let id = string(args, "request_id")?;
+            let retry = actions.receipt_exists(id);
+            let action = json!({"kind":"diplomacy_act","state_id":state,"action":action_name,"war_goal":kind,"states":states});
+            let keys = &self.keys;
+            // The dispatch verifies the change itself; its result decides.
+            let verified = std::cell::Cell::new(false);
+            let mut settle = || {
+                let now = diplomacy::current(process)?;
+                Ok(if verified.get() {
+                    journal::Outcome::Reached(json!({"actions":now}))
+                } else if retry {
+                    journal::Outcome::Diverged(json!({"actions":now}))
+                } else {
+                    journal::Outcome::Unchanged(json!({"actions":now}))
+                })
+            };
+            let mut dispatch = || {
+                authority.authorize(token, &epoch)?;
+                diplomacy::act(process, keys, state, action_name, kind, &states)?;
+                verified.set(true);
+                Ok(())
             };
             let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
             return Ok(json!({"receipt":receipt}));
