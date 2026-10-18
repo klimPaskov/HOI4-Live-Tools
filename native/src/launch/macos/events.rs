@@ -250,13 +250,29 @@ fn dark_bands(capture: &Capture, centre: f64, half: f64, from: f64) -> Vec<(f64,
     bands
 }
 
+/// Whether the peace conference window is open (interface manager +0x240
+/// holds CPeaceConferenceWindow, whose window is at +0x3da0; macOS 089EA519,
+/// found live on 18 October 2026 while closed).
+fn peace_conference_open(r: &Reader<'_>, image: u64) -> Result<bool> {
+    ui(r)?;
+    let idler = r.u64(image + game::layout(r).idler_global)?;
+    let view = r.u64(r.u64(idler + 0x670)? + 0x240)?;
+    let window = r.u64(view + 0x3da0)?;
+    match gui_tree::container(r, base_of(r, image, window)?, image)? {
+        Some(object) => gui_tree::visible(r, object),
+        None => Ok(false),
+    }
+}
 /// Open events in list order; the last one is drawn on top.
 pub(super) fn list(process: &dyn Process) -> Result<Value> {
     let open = read(process, open_events)?;
+    let peace = read(process, peace_conference_open).unwrap_or(false);
     let last = open.len().saturating_sub(1);
-    Ok(json!({"events":open.iter().enumerate().map(|(i, e)| json!({
+    Ok(
+        json!({"peace_conference_open":peace,"events":open.iter().enumerate().map(|(i, e)| json!({
         "event":e.id,"title":e.title,"options":e.options,"on_top":i == last,
-        "answerable":e.centres.is_some() || e.scan.is_some()})).collect::<Vec<_>>()}))
+        "answerable":e.centres.is_some() || e.scan.is_some()})).collect::<Vec<_>>()}),
+    )
 }
 /// Ids of the open events, in list order.
 pub(super) fn open_ids(r: &Reader<'_>, image: u64) -> Result<Vec<String>> {
