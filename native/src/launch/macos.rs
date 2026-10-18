@@ -191,7 +191,9 @@ impl Backend for ClockBackend<'_> {
     }
     fn preflight(&mut self, _action: &Action, before: &State) -> Result<()> {
         self.live(&before.epoch)?;
-        self.keys.preflight()
+        self.keys.preflight()?;
+        // The game menu pauses the game and swallows the clock keys.
+        ui::close_menu(self.process, self.keys)
     }
     fn dispatch(&mut self, action: &Action, _before: &State) -> Result<()> {
         for _ in 0..4 {

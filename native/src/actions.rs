@@ -61,6 +61,9 @@ impl Action {
 pub enum Status {
     Dispatching,
     Verified,
+    /// A retried uncertain dispatch whose target fresh state does not show;
+    /// settled by reading only, never by sending the key again.
+    NotApplied,
 }
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -261,18 +264,27 @@ impl Journal {
             return Err(Error::new("journal_failed", "Journal requires recovery"));
         }
         if let Some(previous) = self.receipts.get(id) {
-            if previous.epoch != *epoch || previous.action != action {
+            if !same_campaign(&previous.epoch, epoch) || previous.action != action {
                 return Err(Error::new(
                     "idempotency_conflict",
                     "Request ID is already bound to a different action or epoch",
                 ));
             }
             return match previous.status {
-                Status::Verified => Ok(previous.clone()),
-                Status::Dispatching => Err(Error::new(
-                    "action_uncertain",
-                    "Previous dispatch has no durable verification; never replay automatically",
-                )),
+                Status::Verified | Status::NotApplied => Ok(previous.clone()),
+                Status::Dispatching => {
+                    // Settle from fresh state without sending anything again.
+                    let mut settled = previous.clone();
+                    let current = backend.observe()?;
+                    check_state(epoch, &current)?;
+                    settled.status = if settled.action.reached(&current) {
+                        Status::Verified
+                    } else {
+                        Status::NotApplied
+                    };
+                    settled.observed = current;
+                    self.append(settled)
+                }
             };
         }
         // An uncertain command blocks new IDs too; otherwise callers could
@@ -362,6 +374,16 @@ fn validate_id(id: &str) -> Result<()> {
         ));
     }
     Ok(())
+}
+/// The same owned process, player and playthrough; the campaign prefix is
+/// recomputed by each server start, so a restarted server can still settle
+/// its own earlier receipt.
+fn same_campaign(a: &Epoch, b: &Epoch) -> bool {
+    let playthrough = |e: &Epoch| match e.campaign.split_once(':') {
+        Some((_, p)) => p.to_string(),
+        None => e.campaign.clone(),
+    };
+    a.game == b.game && a.player == b.player && playthrough(a) == playthrough(b)
 }
 fn check_state(epoch: &Epoch, state: &State) -> Result<()> {
     if state.epoch != *epoch || state.speed > 4 {

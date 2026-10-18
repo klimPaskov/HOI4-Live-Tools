@@ -140,14 +140,11 @@ pub(super) fn queued(process: &dyn Process, key: &str, state: i32) -> Result<i64
         .sum())
 }
 fn leave(process: &dyn Process, keys: &MacKeys) {
-    // Switch placement mode off: Escape closes the panel and the selection.
-    for _ in 0..2 {
-        if read(process, |r, i| Ok(selection(r, i)?.0 == 0 && !open(r, i)?)).unwrap_or(true) {
-            return;
-        }
-        let _ = keys.press(Key::Escape);
-        thread::sleep(Duration::from_millis(250));
-    }
+    // Switch placement mode off: Escape closes the selection, then the
+    // panel; each Escape is given time to act so none reaches the game menu.
+    super::ui::dismiss(process, keys, |r, i| {
+        Ok(selection(r, i)?.0 == 0 && !open(r, i)?)
+    });
 }
 
 /// Queue `count` more of building `key` in own state `state`.

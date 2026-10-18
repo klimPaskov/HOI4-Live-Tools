@@ -173,7 +173,7 @@ fn verified_receipt_survives_restart_without_second_dispatch() {
     );
 }
 #[test]
-fn crash_after_dispatch_cannot_be_replayed_or_bypassed_with_new_id() {
+fn crash_after_dispatch_cannot_be_replayed_or_bypassed_but_settles_by_reading() {
     let temp = Temp::new("crash");
     let mut backend = Fake::new();
     backend.dispatch_error = true;
@@ -197,15 +197,19 @@ fn crash_after_dispatch_cannot_be_replayed_or_bypassed_with_new_id() {
     drop(journal);
     backend.dispatch_error = false;
     let mut reopened = Journal::open(&temp.path()).unwrap();
-    for id in ["pause", "new-id"] {
-        assert_eq!(
-            reopened
-                .execute(id, &epoch, Action::SetPaused(true), &mut backend, TIMEOUT)
-                .unwrap_err()
-                .code,
-            "action_uncertain"
-        );
-    }
+    assert_eq!(
+        reopened
+            .execute(
+                "new-id",
+                &epoch,
+                Action::SetPaused(true),
+                &mut backend,
+                TIMEOUT
+            )
+            .unwrap_err()
+            .code,
+        "action_uncertain"
+    );
     // A changed campaign identifier cannot evade quarantine for the same PID.
     backend.state.epoch.campaign = "new-campaign".into();
     let changed = backend.state.epoch.clone();
@@ -222,6 +226,69 @@ fn crash_after_dispatch_cannot_be_replayed_or_bypassed_with_new_id() {
             .code,
         "action_uncertain"
     );
+    assert_eq!(backend.dispatches, 1);
+    // Retrying the uncertain request itself settles it from fresh state,
+    // without sending the key again, and lifts the quarantine.
+    backend.state.epoch = epoch.clone();
+    let settled = reopened
+        .execute(
+            "pause",
+            &epoch,
+            Action::SetPaused(true),
+            &mut backend,
+            TIMEOUT,
+        )
+        .unwrap();
+    assert_eq!(settled.status, Status::Verified);
+    assert_eq!(backend.dispatches, 1);
+    backend.state.paused = false;
+    assert_eq!(
+        reopened
+            .execute(
+                "pause-2",
+                &epoch,
+                Action::SetPaused(true),
+                &mut backend,
+                TIMEOUT
+            )
+            .unwrap()
+            .status,
+        Status::Verified
+    );
+    assert_eq!(backend.dispatches, 2);
+}
+#[test]
+fn uncertain_dispatch_that_did_not_apply_settles_as_not_applied() {
+    let temp = Temp::new("notapplied");
+    let mut backend = Fake::new();
+    backend.dispatch_error = true;
+    let epoch = backend.state.epoch.clone();
+    let mut journal = Journal::open(&temp.path()).unwrap();
+    assert_eq!(
+        journal
+            .execute(
+                "pause",
+                &epoch,
+                Action::SetPaused(true),
+                &mut backend,
+                TIMEOUT
+            )
+            .unwrap_err()
+            .code,
+        "action_uncertain"
+    );
+    backend.state.paused = false;
+    backend.dispatch_error = false;
+    let settled = journal
+        .execute(
+            "pause",
+            &epoch,
+            Action::SetPaused(true),
+            &mut backend,
+            TIMEOUT,
+        )
+        .unwrap();
+    assert_eq!(settled.status, Status::NotApplied);
     assert_eq!(backend.dispatches, 1);
 }
 #[test]
