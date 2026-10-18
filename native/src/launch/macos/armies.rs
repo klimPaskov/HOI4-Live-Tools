@@ -35,6 +35,15 @@ struct Ui {
     province_id: u64,
     order_vtable: u64,
     order_children: [u64; 2],
+    armies_view: u64,
+    leader_window: u64,
+    leader_window_root: u64,
+    grid_items: u64,
+    item_container: u64,
+    text: u64,
+    group_leader: u64,
+    leader_name: u64,
+    container_vtable: u64,
 }
 /// macOS Mach-O 089EA519, mapped live on 18 October 2026 (Germany test run):
 /// a box selection set the idler's selection size (+0x540) to 7 and the
@@ -60,7 +69,25 @@ const MACOS: Ui = Ui {
     order_vtable: 0x3313328,
     // Drawing an offensive line added one COrderInstance under each list.
     order_children: [0x1c8, 0x2a0],
+    // Commander list of the army panel: CArmiesView (+0x1d8) holds the
+    // CArmyLeaderWindow (+0x420, root +0x4b8); choosing a general set the
+    // group's leader (+0x88, name +0x38).
+    armies_view: 0x1d8,
+    leader_window: 0x420,
+    leader_window_root: 0x4b8,
+    grid_items: 0x190,
+    item_container: 0x10,
+    text: 0x100,
+    group_leader: 0x88,
+    leader_name: 0x38,
+    container_vtable: 0x34ac0b0,
 };
+/// The army panel's commander portrait ("Click to assign") while an army is
+/// selected, and the commander list's visible row band; portraits are drawn
+/// 90 px tall from the bottom of their texture rectangle.
+const COMMANDER_SLOT: (f64, f64) = (33.0, 160.0);
+const LEADER_ROWS: (i32, i32) = (320, 810);
+const PORTRAIT_DRAWN: i32 = 90;
 const GAME: (u32, u32) = (1920, 1080);
 
 fn ui(r: &Reader<'_>) -> Result<&'static Ui> {
@@ -134,7 +161,19 @@ pub(super) fn armies(process: &dyn Process) -> Result<Value> {
         let armies = groups
             .into_iter()
             .map(|(group, ids)| {
-                Ok(json!({"army":army_name(r, group)?,"division_count":ids.len(),"divisions":ids}))
+                let name = army_name(r, group)?;
+                let leader = r.u64(group + ui(r)?.group_leader)?;
+                let commander = if leader == 0 {
+                    None
+                } else {
+                    Some(r.string_bounded(leader + ui(r)?.leader_name, 128)?)
+                };
+                let orders = r.array_header(group + ui(r)?.group_orders)?.2;
+                let executing = executing(r, image, &name).ok();
+                Ok(
+                    json!({"army":name,"commander":commander,"battle_plan_orders":orders,
+                    "plan_executing":executing,"division_count":ids.len(),"divisions":ids}),
+                )
             })
             .collect::<Result<Vec<_>>>()?;
         Ok(json!({"armies":armies,"unassigned":unassigned}))
@@ -396,5 +435,141 @@ pub(super) fn offensive(
     keys.right_drag(GAME, from, to)?;
     wait(process, "offensive line placed", |r, i| {
         Ok(plan_nodes(r, i, army)? > before)
+    })
+}
+/// Name of the commander of `army`, if any.
+pub(super) fn commander(r: &Reader<'_>, image: u64, army: &str) -> Result<Option<String>> {
+    let u = ui(r)?;
+    let leader = r.u64(group_named(r, image, army)? + u.group_leader)?;
+    if leader == 0 {
+        return Ok(None);
+    }
+    Ok(Some(r.string_bounded(leader + u.leader_name, 128)?))
+}
+fn leader_root(r: &Reader<'_>, image: u64) -> Result<u64> {
+    let u = ui(r)?;
+    let idler = r.u64(image + game::layout(r).idler_global)?;
+    let view = r.u64(r.u64(idler + u.manager)? + u.armies_view)?;
+    let window = r.u64(view + u.leader_window)?;
+    let root = r.u64(window + u.leader_window_root)?;
+    if r.u64(root)? != image + u.container_vtable {
+        return Err(Error::new("invalid_gui", "Commander list window required"));
+    }
+    gui_tree::container(r, root + 0x30, image)?
+        .ok_or_else(|| Error::new("invalid_gui", "Commander list window required"))
+}
+fn leader_list_open(r: &Reader<'_>, image: u64) -> Result<bool> {
+    gui_tree::visible(r, leader_root(r, image)?)
+}
+/// (general name, portrait rectangle) for each row of the commander list.
+fn leader_rows(r: &Reader<'_>, image: u64) -> Result<Vec<(String, Rect)>> {
+    let u = ui(r)?;
+    let root = leader_root(r, image)?;
+    let mut grid = None;
+    for child in gui_tree::children(r, root)? {
+        if let Some(inner) = gui_tree::container(r, child, image)? {
+            if let Some(found) = gui_tree::child(r, image, inner, "leaders_grid")? {
+                grid = Some(found);
+            }
+        }
+    }
+    let grid =
+        grid.ok_or_else(|| Error::new("gui_target_unavailable", "Commander list not found"))?;
+    let (_, data, count) = r.array_header(grid + u.grid_items)?;
+    let mut out = Vec::new();
+    for index in 0..count.min(256) as u64 {
+        let item = r.u64(data + index * 8)?;
+        let entry = r.u64(item + u.item_container)?;
+        let base = if r.u64(entry)? == image + u.container_vtable {
+            entry + 0x30
+        } else {
+            entry
+        };
+        let Some(frame) = gui_tree::container(r, base, image)? else {
+            continue;
+        };
+        let (Some(name), Some(button)) = (
+            gui_tree::child(r, image, frame, "name")?,
+            gui_tree::child(r, image, frame, "leader_button")?,
+        ) else {
+            continue;
+        };
+        let name = r.string_bounded(name + u.text, 128)?;
+        if let Ok(rect) = gui_tree::rect_unclipped(r, image, button, GAME) {
+            out.push((name, rect));
+        }
+    }
+    Ok(out)
+}
+
+/// Assign general `general` to `army` from the army panel's commander list.
+/// Verified when the army's commander is that general.
+pub(super) fn assign_commander(
+    process: &dyn Process,
+    keys: &MacKeys,
+    army: &str,
+    general: &str,
+) -> Result<()> {
+    clear_notices(process, keys)?;
+    if read(process, |r, i| commander(r, i, army))?.is_some_and(|c| c.eq_ignore_ascii_case(general))
+    {
+        return Ok(());
+    }
+    let card = read(process, |r, i| card_rect(r, i, army, "portrait_btn"))?;
+    let (x, y) = card.center();
+    keys.click(GAME, x, y)?;
+    wait(process, "select army", |r, i| Ok(selection_size(r, i)? > 0))?;
+    std::thread::sleep(std::time::Duration::from_millis(250));
+    keys.click(GAME, COMMANDER_SLOT.0, COMMANDER_SLOT.1)?;
+    wait(process, "commander list open", leader_list_open)?;
+    let wanted = general.to_lowercase();
+    let find = |r: &Reader<'_>, i: u64| -> Result<Option<Rect>> {
+        Ok(leader_rows(r, i)?
+            .into_iter()
+            .find(|(n, _)| n.to_lowercase() == wanted)
+            .map(|(_, rect)| rect))
+    };
+    let Some(mut rect) = settled(process, "commander list", find)? else {
+        let names: Vec<String> = read(process, leader_rows)?
+            .into_iter()
+            .map(|(n, _)| n)
+            .collect();
+        super::ui::dismiss(process, keys, |r, i| Ok(!leader_list_open(r, i)?));
+        return Err(Error::new(
+            "invalid_target",
+            format!("No such general in the list: {}", names.join(", ")),
+        ));
+    };
+    for _ in 0..40 {
+        let bottom = rect.y + rect.h;
+        let top = bottom - PORTRAIT_DRAWN;
+        if top >= LEADER_ROWS.0 && bottom <= LEADER_ROWS.1 {
+            break;
+        }
+        if !read(process, leader_list_open)? {
+            return Err(Error::new("input_readback_failed", "Commander list closed"));
+        }
+        let pixels = if top < LEADER_ROWS.0 { 240 } else { -240 };
+        keys.scroll(GAME, (960.0, 560.0), pixels)?;
+        rect = read(process, find)?
+            .ok_or_else(|| Error::new("gui_target_unavailable", "General left the list"))?;
+    }
+    let rect = settled(process, "general row", |r, i| {
+        find(r, i)?.ok_or_else(|| Error::new("gui_target_unavailable", "General left the list"))
+    })?;
+    let bottom = rect.y + rect.h;
+    if bottom - PORTRAIT_DRAWN < LEADER_ROWS.0 || bottom > LEADER_ROWS.1 {
+        return Err(Error::new(
+            "gui_target_unavailable",
+            "General row not in view",
+        ));
+    }
+    keys.click(
+        GAME,
+        f64::from(rect.x) + 34.0,
+        f64::from(bottom - PORTRAIT_DRAWN / 2),
+    )?;
+    wait(process, "commander assigned", |r, i| {
+        Ok(commander(r, i, army)?.is_some_and(|c| c.to_lowercase() == wanted))
     })
 }

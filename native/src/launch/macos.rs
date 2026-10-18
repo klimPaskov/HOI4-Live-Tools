@@ -245,6 +245,7 @@ impl Commands for MacClock {
             json!({"name":"hoi4_event_choose","description":"Choose an option (0-based, in listed order) of the open event on top by clicking it. Verified when exactly that event window closes.","inputSchema":{"type":"object","properties":{"event":{"type":"string"},"option":{"type":"integer","minimum":0,"maximum":7},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["event","option","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_diplomacy","description":"Open the diplomacy view for the owner of a state (Find view centres the state, one click selects the country) and list the offered actions with enabled state, cost and whether the AI would refuse. Changes nothing in the game.","inputSchema":{"type":"object","properties":{"state_id":{"type":"integer","minimum":1,"maximum":4095},"lease_token":{"type":"string"}},"required":["state_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_diplomacy_act","description":"Take one diplomatic action (exact listed name, e.g. Declare war, Justify War goal, Guarantee independence, Improve relations) toward the owner of a state. Justify War goal also needs war_goal (e.g. Conquer) and 1..5 states by name. Verified when the offered actions change or political power is spent.","inputSchema":{"type":"object","properties":{"state_id":{"type":"integer","minimum":1,"maximum":4095},"action":{"type":"string"},"war_goal":{"type":"string"},"states":{"type":"array","items":{"type":"string"},"maxItems":5},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["state_id","action","request_id","lease_token"],"additionalProperties":false}}),
+            json!({"name":"hoi4_army_commander","description":"Assign a general (exact name as listed) to an own army from the army panel's commander list. Verified when the army's commander is that general.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"general":{"type":"string"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","general","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_army_create","description":"Create one army from the own divisions shown around a state: Find view centres the state, a box selection picks own divisions there, the new-army card creates the army. Verified by a new army in memory; returns its divisions.","inputSchema":{"type":"object","properties":{"state_id":{"type":"integer","minimum":1,"maximum":4095},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["state_id","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_time","description":"Set desired pause or internal speed 0..4 with ordinary keys (Space, keypad +/-) sent only while the owned game window is front-most, each verified by fresh memory readback. Supply exactly one target and a stable request_id; uncertain dispatches are never replayed.","inputSchema":{"type":"object","properties":{"paused":{"type":"boolean"},"speed":{"type":"integer","minimum":0,"maximum":4},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["request_id","lease_token"],"additionalProperties":false}}),
         ]
@@ -275,10 +276,11 @@ impl Commands for MacClock {
                 | "hoi4_army_front"
                 | "hoi4_army_plan"
                 | "hoi4_army_offensive"
+                | "hoi4_army_commander"
         )
     }
     fn capabilities(&self) -> Value {
-        json!({"transport":"ordinary macOS CGEvent keys to the front-most owned window","actions":["set_paused","set_speed","research_start","focus_start","production_add","production_set","construction_add","politics_options","politics_choose","decisions_list","decision_take","train","army_create","army_front","army_plan","army_offensive","event_choose","diplomacy","diplomacy_act"],"lease":"exclusive configured controller","native_posting":false,"full_campaign_acceptance":false})
+        json!({"transport":"ordinary macOS CGEvent keys to the front-most owned window","actions":["set_paused","set_speed","research_start","focus_start","production_add","production_set","construction_add","politics_options","politics_choose","decisions_list","decision_take","train","army_create","army_front","army_plan","army_offensive","event_choose","diplomacy","diplomacy_act","army_commander"],"lease":"exclusive configured controller","native_posting":false,"full_campaign_acceptance":false})
     }
     fn call(&self, process: &dyn Process, name: &str, arguments: &Value) -> Result<Value> {
         let args = arguments
@@ -659,6 +661,51 @@ impl Commands for MacClock {
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
                 events::choose(process, keys, event, option)
+            };
+            let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
+            return Ok(json!({"receipt":receipt}));
+        }
+        if name == "hoi4_army_commander" {
+            allowed(args, &["army", "general", "request_id", "lease_token"])?;
+            let army = string(args, "army")?;
+            let general = string(args, "general")?;
+            for v in [army, general] {
+                if v.is_empty() || v.len() > 128 || v.chars().any(char::is_control) {
+                    return Err(Error::new(
+                        "invalid_arguments",
+                        "Invalid army or general name",
+                    ));
+                }
+            }
+            let id = string(args, "request_id")?;
+            let token = string(args, "lease_token")?;
+            let epoch = guard.observe(process)?.epoch;
+            authority.authorize(token, &epoch)?;
+            let retry = actions.receipt_exists(id);
+            if !retry {
+                self.keys.preflight()?;
+            }
+            let action = json!({"kind":"army_commander","army":army,"general":general});
+            let keys = &self.keys;
+            let mut settle = || {
+                let now = ui::read(process, |r, i| armies::commander(r, i, army))?;
+                let detail = json!({"army":army,"commander":now});
+                Ok(
+                    if now
+                        .as_deref()
+                        .is_some_and(|c| c.eq_ignore_ascii_case(general))
+                    {
+                        journal::Outcome::Reached(detail)
+                    } else if retry {
+                        journal::Outcome::Diverged(detail)
+                    } else {
+                        journal::Outcome::Unchanged(detail)
+                    },
+                )
+            };
+            let mut dispatch = || {
+                authority.authorize(token, &epoch)?;
+                armies::assign_commander(process, keys, army, general)
             };
             let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
             return Ok(json!({"receipt":receipt}));
