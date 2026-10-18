@@ -1,7 +1,8 @@
 //! Shared fresh-read helpers for ordinary macOS UI actions.
 use crate::{
     error::{Error, Result},
-    memory::Reader,
+    game, gui_tree,
+    memory::{Reader, StringAbi},
     platform::Process,
 };
 use std::{
@@ -61,6 +62,79 @@ pub(super) fn wait(
     }
 }
 
+/// No-decision notices the server may acknowledge (only an OK button): research
+/// finished, focus finished, peace summary and world tension pop-ups (macOS
+/// 089EA519). Decisions such as events are never answered here.
+const NOTICE_VTABLES: [u64; 4] = [0x3472580, 0x3472af8, 0x3472c10, 0x3493e80];
+const GUI_FROM_IDLER: u64 = 0x4c0;
+const POPUP_LIST: u64 = 0x9e0;
+const POPUP_ROOT: u64 = 0x430;
+
+/// Shown notice pop-ups (list order) with their OK button rectangles.
+fn notices(r: &Reader<'_>, image: u64) -> Result<Vec<gui_tree::Rect>> {
+    if r.string_abi() != StringAbi::LibCxx {
+        return Ok(Vec::new());
+    }
+    let idler = r.u64(image + game::layout(r).idler_global)?;
+    let gui = r.u64(idler + GUI_FROM_IDLER)?;
+    let (_, data, count) = r.array_header(gui + POPUP_LIST)?;
+    let mut out = Vec::new();
+    for index in 0..count.min(32) as u64 {
+        let window = r.u64(data + index * 8)?;
+        let kind = r.u64(window)?;
+        if !NOTICE_VTABLES.iter().any(|vt| image + vt == kind) {
+            continue;
+        }
+        let Some(root) = gui_tree::container(r, r.u64(window + POPUP_ROOT)?, image)? else {
+            continue;
+        };
+        if !gui_tree::visible(r, root)? {
+            continue;
+        }
+        if let Some(ok) = gui_tree::child(r, image, root, "ok_button")? {
+            if gui_tree::shown(r, ok)? {
+                out.push(gui_tree::rect(r, image, ok, (1920, 1080))?);
+            }
+        }
+    }
+    Ok(out)
+}
+/// Acknowledge shown notice pop-ups so they cannot swallow the next click.
+/// Stacking order is not in the list, so candidates are tried from the end;
+/// a click counts when any notice closes (a covered OK lands harmlessly on the
+/// covering pop-up's body).
+pub(super) fn clear_notices(
+    process: &dyn Process,
+    keys: &crate::platform::macos_input::MacKeys,
+) -> Result<usize> {
+    let mut cleared = 0;
+    let mut misses = 0;
+    loop {
+        let shown = settled(process, "notice", notices)?;
+        let Some(&target) = shown.iter().rev().nth(misses) else {
+            return if shown.is_empty() {
+                Ok(cleared)
+            } else {
+                Err(Error::new("ui_blocked", "Notice pop-ups did not close"))
+            };
+        };
+        if cleared + misses >= 12 {
+            return Err(Error::new("ui_blocked", "Too many notice pop-ups"));
+        }
+        let (x, y) = target.center();
+        keys.click((1920, 1080), x, y)?;
+        let before = shown.len();
+        match wait(process, "dismiss notice", |r, i| {
+            Ok(notices(r, i)?.len() < before)
+        }) {
+            Ok(()) => {
+                cleared += 1;
+                misses = 0;
+            }
+            Err(_) => misses += 1,
+        }
+    }
+}
 /// Press Escape (at most three times) until `closed` holds; best effort, used
 /// to leave the UI tidy after the game refuses a target.
 pub(super) fn dismiss(

@@ -3,7 +3,7 @@
 //! the detail window's Research button. Every click target comes from the live
 //! GUI tree of the same fresh read, and every stage waits for the matching
 //! memory change. Success is the slot holding the technology in memory.
-use super::ui::{dismiss, read, settled, wait};
+use super::ui::{clear_notices, dismiss, read, settled, wait};
 use crate::{
     error::{Error, Result},
     game,
@@ -179,6 +179,14 @@ fn tiles(r: &Reader<'_>, image: u64, key: &str) -> Result<Vec<(String, u64, u64)
     }
     Ok(found)
 }
+fn tab_shown(r: &Reader<'_>, image: u64, folder: &str) -> Result<bool> {
+    let tree = root(r, image, ui(r)?.tree_view)?;
+    let tabs = named(r, image, tree, "folder_tabs")?;
+    match gui_tree::child(r, image, tabs, &format!("{folder}_tab"))? {
+        Some(tab) => gui_tree::shown(r, tab),
+        None => Ok(false),
+    }
+}
 fn tab_rect(r: &Reader<'_>, image: u64, folder: &str) -> Result<Rect> {
     let tree = root(r, image, ui(r)?.tree_view)?;
     let tabs = named(r, image, tree, "folder_tabs")?;
@@ -256,9 +264,11 @@ pub(super) fn start(process: &dyn Process, keys: &MacKeys, key: &str, slot: usiz
     let image = process.image_base();
     let u = &MACOS;
     let click = |rect: Rect| {
+        clear_notices(process, keys)?;
         let (x, y) = rect.center();
         keys.click(GAME, x, y).map(|_| ())
     };
+    clear_notices(process, keys)?;
     // Escape closes an open detail window before the tree itself.
     for attempt in 0..3 {
         if !read(process, |r, i| open(r, i, ui(r)?.tree_view))? {
@@ -296,12 +306,17 @@ pub(super) fn start(process: &dyn Process, keys: &MacKeys, key: &str, slot: usiz
     let icon = match shown {
         Some(icon) => icon,
         None => {
-            // Prefer a folder whose tab is laid out on screen (DLC variants hide theirs).
+            // Only a shown tab belongs to the active variant (DLC variants hide theirs).
             let (name, folder, icon) = matches
                 .iter()
-                .find(|(name, _, _)| read(process, |r, i| tab_rect(r, i, name)).is_ok())
+                .find(|(name, _, _)| read(process, |r, i| tab_shown(r, i, name)).unwrap_or(false))
                 .cloned()
-                .ok_or_else(|| Error::new("gui_target_unavailable", "No visible folder tab"))?;
+                .ok_or_else(|| {
+                    Error::new(
+                        "invalid_target",
+                        "The technology's folder is not active in this game (inactive DLC variant)",
+                    )
+                })?;
             click(settled(process, "folder tab", |r, i| {
                 tab_rect(r, i, &name)
             })?)?;

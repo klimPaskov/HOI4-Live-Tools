@@ -35,6 +35,9 @@ pub(crate) struct Layout {
     sprite_frames: u64,
     /// Button state; the engine stores 3 for a disabled button.
     button_state: u64,
+    /// Widget flags byte relative to a GUI-object base; bit `visible_bit` is set
+    /// while the widget is shown (the container visibility byte is the same one).
+    widget_flags: u64,
 }
 /// macOS Mach-O 089EA519 (libc++), mapped live on 18 October 2026 from the
 /// topbar: children/type/name joins, a visible/hidden split of named views,
@@ -59,6 +62,7 @@ const MACOS: Layout = Layout {
     sprite_size: 0x8c,
     sprite_frames: 0x78,
     button_state: 0x9c,
+    widget_flags: 0x65,
 };
 pub(crate) fn layout(r: &Reader<'_>) -> Result<&'static Layout> {
     match r.string_abi() {
@@ -121,6 +125,11 @@ pub(crate) fn container(r: &Reader<'_>, pointer: u64, image: u64) -> Result<Opti
     }
     let object = pointer.wrapping_sub(l.container_base);
     Ok((r.u64(object)? == image + l.container_vtable).then_some(object))
+}
+/// Whether any widget (by GUI-object base) is shown.
+pub(crate) fn shown(r: &Reader<'_>, base: u64) -> Result<bool> {
+    let l = layout(r)?;
+    Ok(r.byte(base + l.widget_flags)? & l.visible_bit != 0)
 }
 /// Whether a button is disabled by the game (state 3), e.g. Research for a
 /// technology whose prerequisites are missing.

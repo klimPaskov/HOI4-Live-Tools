@@ -3,7 +3,7 @@
 //! focus symbol, then the detail window's Start button. Targets come from the
 //! live GUI tree (zoom-aware), each stage waits for its memory change, and
 //! success is the own focus progress naming the focus as active.
-use super::ui::{dismiss, read, settled, wait};
+use super::ui::{clear_notices, dismiss, read, settled, wait};
 use crate::{
     error::{Error, Result},
     game,
@@ -241,9 +241,11 @@ pub(super) fn check(before: &Progress, key: &str) -> Result<()> {
 pub(super) fn start(process: &dyn Process, keys: &MacKeys, key: &str) -> Result<()> {
     let u = &MACOS;
     let click = |rect: Rect| {
+        clear_notices(process, keys)?;
         let (x, y) = rect.center();
         keys.click(GAME, x, y).map(|_| ())
     };
+    clear_notices(process, keys)?;
     if !read(process, |r, i| open(r, i, u.focus_view))? {
         if !read(process, |r, i| open(r, i, u.politics_view))? {
             keys.press(Key::letter('q')?)?;
