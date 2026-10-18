@@ -562,10 +562,26 @@ impl MacKeys {
         // Quick Note and steals focus), so refuse instead of typing into them.
         // SAFETY: no pointers; reads the HID system modifier state.
         if unsafe { CGEventSourceFlagsState(1) } & 0x80_0000 != 0 {
-            return Err(Error::new(
-                "input_modifier_stuck",
-                "The Fn modifier is held or stuck; no key was sent",
-            ));
+            // Release it with a flags-changed event for the Fn key; if it is
+            // really held by a finger the flag returns and nothing is sent.
+            // SAFETY: a null source is allowed; the event is released after posting.
+            unsafe {
+                let event = CGEventCreateKeyboardEvent(std::ptr::null(), 63, false);
+                if !event.is_null() {
+                    CGEventSetType(event, 12);
+                    CGEventSetFlags(event, 0);
+                    CGEventPost(HID_EVENT_TAP, event);
+                    CFRelease(event);
+                }
+            }
+            std::thread::sleep(std::time::Duration::from_millis(150));
+            // SAFETY: no pointers; reads the HID system modifier state.
+            if unsafe { CGEventSourceFlagsState(1) } & 0x80_0000 != 0 {
+                return Err(Error::new(
+                    "input_modifier_stuck",
+                    "The Fn modifier is held or stuck; no key was sent",
+                ));
+            }
         }
         for down in [true, false] {
             // SAFETY: a null source is allowed; the event is released after posting.
