@@ -301,11 +301,18 @@ pub(super) fn create(process: &dyn Process, keys: &MacKeys, state: i32) -> Resul
     let (x, y) = card.center();
     keys.click(GAME, x, y)?;
     // "Reassign Armies" appears when the box selection took every division
-    // of an existing army (it would be removed). Armies standing in the same
-    // place are reorganised into the new one: accept, then recreate small
-    // armies afterwards if needed.
+    // of an existing army, which would be deleted with its orders. Never
+    // accept: decline and say what to do instead (accepting once merged two
+    // armies of 24 and 19 divisions into one of 52).
     std::thread::sleep(std::time::Duration::from_millis(500));
-    super::ui::accept_command(process, keys)?;
+    if read(process, super::ui::reassign_open)? {
+        super::ui::decline_stale(process, keys)?;
+        return Err(Error::new(
+            "invalid_target",
+            "Divisions of an existing army stand here, so a new army would delete it: deploy new divisions \
+             to another state (hoi4_train deploy_state_id) or use hoi4_army_split on that army",
+        ));
+    }
     wait(process, "army created", |r, i| {
         Ok(membership(r, i)?
             .values()

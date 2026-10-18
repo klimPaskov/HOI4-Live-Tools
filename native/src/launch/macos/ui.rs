@@ -269,6 +269,21 @@ fn command_dialog(r: &Reader<'_>, image: u64, button: &str) -> Result<Option<gui
     }
     Ok(None)
 }
+/// Whether a "Reassign Armies" confirmation is open.
+pub(super) fn reassign_open(r: &Reader<'_>, image: u64) -> Result<bool> {
+    if r.string_abi() != StringAbi::LibCxx {
+        return Ok(false);
+    }
+    let idler = r.u64(image + game::layout(r).idler_global)?;
+    let gui = r.u64(idler + GUI_FROM_IDLER)?;
+    let (_, data, count) = r.array_header(gui + POPUP_LIST)?;
+    for index in 0..count.min(32) as u64 {
+        if r.u64(r.u64(data + index * 8)?)? == image + REASSIGN_ARMIES_DIALOG_VTABLE {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
 /// Decline a command dialog left open by an earlier, interrupted action.
 pub(super) fn decline_stale(
     process: &dyn Process,
