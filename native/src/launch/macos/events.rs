@@ -4,7 +4,7 @@
 //! the options grid (the engine lays the grid out from the window's .gui).
 //! Only the newest window (drawn on top) is answered; verified when exactly
 //! that event window closes.
-use super::ui::{clear_notices, read, settled, wait};
+use super::ui::{close_menu, read, settled, wait};
 use crate::{
     error::{Error, Result},
     game,
@@ -203,6 +203,10 @@ pub(super) fn list(process: &dyn Process) -> Result<Value> {
         "event":e.id,"title":e.title,"options":e.options,"on_top":i == last,
         "answerable":e.centres.is_some()})).collect::<Vec<_>>()}))
 }
+/// Ids of the open events, in list order.
+pub(super) fn open_ids(r: &Reader<'_>, image: u64) -> Result<Vec<String>> {
+    Ok(open_events(r, image)?.into_iter().map(|e| e.id).collect())
+}
 /// Whether event `id` is open.
 pub(super) fn is_open(process: &dyn Process, id: &str) -> Result<bool> {
     Ok(read(process, open_events)?.iter().any(|e| e.id == id))
@@ -210,7 +214,7 @@ pub(super) fn is_open(process: &dyn Process, id: &str) -> Result<bool> {
 
 /// Choose option `option` (0-based) of the open event `id`.
 pub(super) fn choose(process: &dyn Process, keys: &MacKeys, id: &str, option: usize) -> Result<()> {
-    clear_notices(process, keys)?;
+    close_menu(process, keys)?;
     let open = settled(process, "event window", open_events)?;
     let Some(top) = open.last() else {
         return Err(Error::new("invalid_target", "No event window is open"));

@@ -110,6 +110,16 @@ pub(super) fn clear_notices(
     process: &dyn Process,
     keys: &crate::platform::macos_input::MacKeys,
 ) -> Result<usize> {
+    close_menu(process, keys)?;
+    // An event window is drawn over notices and panels; clicks would land on
+    // it, so the player answers events before anything else.
+    let open = read(process, super::events::open_ids)?;
+    if !open.is_empty() {
+        return Err(Error::new(
+            "events_open",
+            format!("Answer the open event(s) first: {}", open.join(", ")),
+        ));
+    }
     let mut cleared = 0;
     let mut misses = 0;
     loop {
@@ -137,6 +147,34 @@ pub(super) fn clear_notices(
             Err(_) => misses += 1,
         }
     }
+}
+/// The in-game menu (Escape on a free map): interface manager +0x218 holds
+/// CInGameMenu whose window (+0x2678) shows while the menu is open (macOS
+/// 089EA519, mapped live on 18 October 2026).
+const MENU: u64 = 0x218;
+const MENU_WINDOW: u64 = 0x2678;
+fn menu_open(r: &Reader<'_>, image: u64) -> Result<bool> {
+    if r.string_abi() != StringAbi::LibCxx {
+        return Ok(false);
+    }
+    let idler = r.u64(image + game::layout(r).idler_global)?;
+    let menu = r.u64(r.u64(idler + MANAGER)? + MENU)?;
+    let window = r.u64(menu + MENU_WINDOW)?;
+    match gui_tree::container(r, window + 0x30, image)? {
+        Some(object) => gui_tree::visible(r, object),
+        None => Err(Error::new("invalid_gui", "Game menu window required")),
+    }
+}
+/// Close the game menu if an earlier input left it open (Escape closes it).
+pub(super) fn close_menu(
+    process: &dyn Process,
+    keys: &crate::platform::macos_input::MacKeys,
+) -> Result<()> {
+    if read(process, menu_open)? {
+        keys.press(crate::platform::macos_input::Key::Escape)?;
+        wait(process, "game menu closed", |r, i| Ok(!menu_open(r, i)?))?;
+    }
+    Ok(())
 }
 /// The game's accept/decline dialog for a command (e.g. replacing a law).
 const ACCEPT_DIALOG_VTABLE: u64 = 0x342f1d0;
@@ -310,7 +348,15 @@ pub(super) fn dismiss(
         {
             return;
         }
-        thread::sleep(Duration::from_millis(250));
+        // A closing window can take a moment; an Escape too many would open
+        // the game menu, so wait for this one to take effect first.
+        let deadline = Instant::now() + Duration::from_millis(1200);
+        while Instant::now() < deadline {
+            if read(process, &closed).unwrap_or(true) {
+                return;
+            }
+            thread::sleep(Duration::from_millis(40));
+        }
     }
 }
 /// A click target whose rectangle is identical in two reads 60 ms apart, so
@@ -321,10 +367,22 @@ pub(super) fn settled<T: PartialEq>(
     f: impl Fn(&Reader<'_>, u64) -> Result<T>,
 ) -> Result<T> {
     let deadline = Instant::now() + SETTLE_WAIT;
-    let mut last = read(process, &f)?;
+    // A panel sliding in reports its widgets off screen for a moment.
+    let attempt = || loop {
+        match read(process, &f) {
+            Err(e)
+                if Instant::now() < deadline
+                    && matches!(e.code, "gui_geometry_unavailable" | "invalid_gui_geometry") =>
+            {
+                thread::sleep(Duration::from_millis(60));
+            }
+            result => return result,
+        }
+    };
+    let mut last = attempt()?;
     loop {
         thread::sleep(Duration::from_millis(60));
-        let now = read(process, &f)?;
+        let now = attempt()?;
         if now == last {
             return Ok(now);
         }
