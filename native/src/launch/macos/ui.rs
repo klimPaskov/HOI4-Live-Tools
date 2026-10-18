@@ -138,6 +138,74 @@ pub(super) fn clear_notices(
         }
     }
 }
+/// The game's accept/decline dialog for a command (e.g. replacing a law).
+const ACCEPT_DIALOG_VTABLE: u64 = 0x342f1d0;
+
+fn command_dialog(r: &Reader<'_>, image: u64, button: &str) -> Result<Option<gui_tree::Rect>> {
+    if r.string_abi() != StringAbi::LibCxx {
+        return Ok(None);
+    }
+    let idler = r.u64(image + game::layout(r).idler_global)?;
+    let gui = r.u64(idler + GUI_FROM_IDLER)?;
+    let (_, data, count) = r.array_header(gui + POPUP_LIST)?;
+    for index in 0..count.min(32) as u64 {
+        let window = r.u64(data + index * 8)?;
+        if r.u64(window)? != image + ACCEPT_DIALOG_VTABLE {
+            continue;
+        }
+        let Some(root) = gui_tree::container(r, r.u64(window + POPUP_ROOT)?, image)? else {
+            continue;
+        };
+        if !gui_tree::visible(r, root)? {
+            continue;
+        }
+        if let Some(widget) = gui_tree::child(r, image, root, button)? {
+            return Ok(Some(gui_tree::rect(r, image, widget, (1920, 1080))?));
+        }
+    }
+    Ok(None)
+}
+/// Decline a command dialog left open by an earlier, interrupted action.
+pub(super) fn decline_stale(
+    process: &dyn Process,
+    keys: &crate::platform::macos_input::MacKeys,
+) -> Result<()> {
+    if let Some(rect) = read(process, |r, i| command_dialog(r, i, "decline_button"))? {
+        let (x, y) = rect.center();
+        keys.click((1920, 1080), x, y)?;
+        wait(process, "decline dialog", |r, i| {
+            Ok(command_dialog(r, i, "decline_button")?.is_none())
+        })?;
+    }
+    Ok(())
+}
+/// After the requested click: accept the game's confirmation of exactly that
+/// command if it appears within a short bound. Returns whether one was accepted.
+pub(super) fn accept_command(
+    process: &dyn Process,
+    keys: &crate::platform::macos_input::MacKeys,
+) -> Result<bool> {
+    let deadline = Instant::now() + Duration::from_millis(1200);
+    loop {
+        if let Some(rect) = read(process, |r, i| command_dialog(r, i, "accept_button"))? {
+            let rect = settled(process, "accept", |r, i| {
+                command_dialog(r, i, "accept_button")?
+                    .ok_or_else(|| Error::new("input_readback_failed", "Dialog closed"))
+            })
+            .unwrap_or(rect);
+            let (x, y) = rect.center();
+            keys.click((1920, 1080), x, y)?;
+            wait(process, "accept dialog", |r, i| {
+                Ok(command_dialog(r, i, "accept_button")?.is_none())
+            })?;
+            return Ok(true);
+        }
+        if Instant::now() >= deadline {
+            return Ok(false);
+        }
+        thread::sleep(Duration::from_millis(40));
+    }
+}
 /// Press Escape (at most three times) until `closed` holds; best effort, used
 /// to leave the UI tidy after the game refuses a target.
 pub(super) fn dismiss(

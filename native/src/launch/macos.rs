@@ -5,6 +5,7 @@
 mod construction;
 mod focus;
 mod journal;
+mod politics;
 mod production;
 mod research;
 mod ui;
@@ -222,6 +223,8 @@ impl Commands for MacClock {
             json!({"name":"hoi4_production_add","description":"Add one own military production line for a base equipment type (e.g. infantry_equipment, artillery_equipment, light_tank_equipment, fighter_equipment) with ordinary input: production panel, category button, the design in the selection window, then +/- until the line requests the given factories. Verified from the own line collection. Refuses equipment with no producible design. Naval lines are not supported yet.","inputSchema":{"type":"object","properties":{"equipment":{"type":"string","maxLength":128},"factories":{"type":"integer","minimum":1,"maximum":150},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["equipment","factories","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_production_set","description":"Set the requested factories of an own production line, addressed by its entry_index and equipment_id from hoi4_production_lines, with the line's ordinary +/- buttons; each click is verified from memory. 0 keeps the line with no factories.","inputSchema":{"type":"object","properties":{"line":{"type":"integer","minimum":0,"maximum":2047},"equipment":{"type":"string","maxLength":128},"factories":{"type":"integer","minimum":0,"maximum":150},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["line","equipment","factories","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_construction_add","description":"Queue more of a building in an own state with ordinary input: construction panel, the building button, the game's Find view to centre the state (F, state_id, Return), then clicks at the screen centre. Verified from the own construction queue (the building located in that state); placement mode is switched off afterwards. Building keys: arms_factory, industrial_complex, dockyard, infrastructure, air_base, anti_air_building, radar_station, synthetic_refinery, fuel_silo, rocket_site, ... (state buildings only).","inputSchema":{"type":"object","properties":{"building":{"type":"string","maxLength":64},"state_id":{"type":"integer","minimum":1,"maximum":4095},"count":{"type":"integer","minimum":1,"maximum":10,"default":1},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["building","state_id","request_id","lease_token"],"additionalProperties":false}}),
+            json!({"name":"hoi4_politics_options","description":"List the ideas offered for one politics slot (opens the slot's selection window and closes it again; changes nothing). category: government (slots 0 mobilization law, 1 trade law, 2 economy law, 3-5 political advisors), research_production (designers) or military_staff. Returns each idea key with the game's enabled state and the slot's current idea.","inputSchema":{"type":"object","properties":{"category":{"type":"string","enum":["government","research_production","military_staff"]},"slot":{"type":"integer","minimum":0,"maximum":7},"lease_token":{"type":"string"}},"required":["category","slot","lease_token"],"additionalProperties":false}}),
+            json!({"name":"hoi4_politics_choose","description":"Take an idea (law, advisor, designer) for one politics slot with ordinary input; verified when the slot holds the idea in memory. Refuses ideas the game disables. Same category/slot numbering as hoi4_politics_options.","inputSchema":{"type":"object","properties":{"category":{"type":"string","enum":["government","research_production","military_staff"]},"slot":{"type":"integer","minimum":0,"maximum":7},"idea":{"type":"string","maxLength":128},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["category","slot","idea","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_time","description":"Set desired pause or internal speed 0..4 with ordinary keys (Space, keypad +/-) sent only while the owned game window is front-most, each verified by fresh memory readback. Supply exactly one target and a stable request_id; uncertain dispatches are never replayed.","inputSchema":{"type":"object","properties":{"paused":{"type":"boolean"},"speed":{"type":"integer","minimum":0,"maximum":4},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["request_id","lease_token"],"additionalProperties":false}}),
         ]
     }
@@ -235,10 +238,12 @@ impl Commands for MacClock {
                 | "hoi4_production_add"
                 | "hoi4_production_set"
                 | "hoi4_construction_add"
+                | "hoi4_politics_options"
+                | "hoi4_politics_choose"
         )
     }
     fn capabilities(&self) -> Value {
-        json!({"transport":"ordinary macOS CGEvent keys to the front-most owned window","actions":["set_paused","set_speed","research_start","focus_start","production_add","production_set","construction_add"],"lease":"exclusive configured controller","native_posting":false,"full_campaign_acceptance":false})
+        json!({"transport":"ordinary macOS CGEvent keys to the front-most owned window","actions":["set_paused","set_speed","research_start","focus_start","production_add","production_set","construction_add","politics_options","politics_choose"],"lease":"exclusive configured controller","native_posting":false,"full_campaign_acceptance":false})
     }
     fn call(&self, process: &dyn Process, name: &str, arguments: &Value) -> Result<Value> {
         let args = arguments
@@ -460,6 +465,76 @@ impl Commands for MacClock {
                     None => production::add(process, keys, key, factories),
                     Some(index) => production::set(process, keys, index, key, factories),
                 }
+            };
+            let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
+            return Ok(json!({"receipt":receipt}));
+        }
+        if name == "hoi4_politics_options" || name == "hoi4_politics_choose" {
+            let choosing = name == "hoi4_politics_choose";
+            if choosing {
+                allowed(
+                    args,
+                    &["category", "slot", "idea", "request_id", "lease_token"],
+                )?;
+            } else {
+                allowed(args, &["category", "slot", "lease_token"])?;
+            }
+            let category = string(args, "category")?;
+            if !["government", "research_production", "military_staff"].contains(&category) {
+                return Err(Error::new("invalid_arguments", "Unknown category"));
+            }
+            let index = args
+                .get("slot")
+                .and_then(Value::as_u64)
+                .filter(|v| *v <= 7)
+                .ok_or_else(|| Error::new("invalid_arguments", "slot must be 0..7"))?
+                as usize;
+            let token = string(args, "lease_token")?;
+            let epoch = guard.observe(process)?.epoch;
+            authority.authorize(token, &epoch)?;
+            let before = politics::current(process, category, index)?;
+            if !choosing {
+                self.keys.preflight()?;
+                let options = politics::list(process, &self.keys, category, index)?;
+                return Ok(
+                    json!({"category":category,"slot":index,"current":before,"options":options}),
+                );
+            }
+            let idea = string(args, "idea")?;
+            if idea.is_empty()
+                || idea.len() > 128
+                || !idea.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
+            {
+                return Err(Error::new("invalid_arguments", "Invalid idea key"));
+            }
+            let id = string(args, "request_id")?;
+            let retry = actions.receipt_exists(id);
+            if !retry {
+                if before.as_deref() == Some(idea) {
+                    return Err(Error::new(
+                        "invalid_target",
+                        "The slot already holds this idea",
+                    ));
+                }
+                self.keys.preflight()?;
+            }
+            let action =
+                json!({"kind":"politics_choose","category":category,"slot":index,"idea":idea});
+            let keys = &self.keys;
+            let mut settle = || {
+                let now = politics::current(process, category, index)?;
+                let detail = json!({"current":now});
+                Ok(if now.as_deref() == Some(idea) {
+                    journal::Outcome::Reached(detail)
+                } else if now == before {
+                    journal::Outcome::Unchanged(detail)
+                } else {
+                    journal::Outcome::Diverged(detail)
+                })
+            };
+            let mut dispatch = || {
+                authority.authorize(token, &epoch)?;
+                politics::choose(process, keys, category, index, idea)
             };
             let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
             return Ok(json!({"receipt":receipt}));
