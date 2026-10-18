@@ -179,6 +179,9 @@ pub(super) fn close_menu(
 }
 /// The game's accept/decline dialog for a command (e.g. replacing a law).
 const ACCEPT_DIALOG_VTABLE: u64 = 0x342f1d0;
+/// The game's reassign-commander confirmation (CChangeGroupLeaderDialog); it
+/// has the same accept and decline buttons.
+const REASSIGN_DIALOG_VTABLE: u64 = 0x3437028;
 
 fn command_dialog(r: &Reader<'_>, image: u64, button: &str) -> Result<Option<gui_tree::Rect>> {
     if r.string_abi() != StringAbi::LibCxx {
@@ -189,7 +192,8 @@ fn command_dialog(r: &Reader<'_>, image: u64, button: &str) -> Result<Option<gui
     let (_, data, count) = r.array_header(gui + POPUP_LIST)?;
     for index in 0..count.min(32) as u64 {
         let window = r.u64(data + index * 8)?;
-        if r.u64(window)? != image + ACCEPT_DIALOG_VTABLE {
+        let kind = r.u64(window)?;
+        if kind != image + ACCEPT_DIALOG_VTABLE && kind != image + REASSIGN_DIALOG_VTABLE {
             continue;
         }
         let Some(root) = gui_tree::container(r, r.u64(window + POPUP_ROOT)?, image)? else {

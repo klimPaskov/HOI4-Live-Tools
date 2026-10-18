@@ -33,6 +33,7 @@ extern "C" {
     fn CGWindowListCopyWindowInfo(option: u32, relative_to: u32) -> CFTypeRef;
     fn CGRectMakeWithDictionaryRepresentation(dict: CFTypeRef, rect: *mut Rect) -> bool;
     fn CGEventCreateKeyboardEvent(source: CFTypeRef, key: u16, down: bool) -> CFTypeRef;
+    fn CGEventSetFlags(event: CFTypeRef, flags: u64);
     fn CGEventCreateMouseEvent(
         source: CFTypeRef,
         kind: u32,
@@ -380,6 +381,55 @@ impl MacKeys {
     /// fresh front-most check. Used to pan views; never to move game objects.
     pub fn drag(&self, game: (u32, u32), from: (f64, f64), to: (f64, f64)) -> Result<()> {
         self.drag_with(game, from, to, false)
+    }
+    /// One left click with Shift held (adds an army card to the selection),
+    /// after a fresh front-most check.
+    pub fn shift_click(&self, game: (u32, u32), x: f64, y: f64) -> Result<Point> {
+        const SHIFT_KEY: u16 = 56;
+        const SHIFT_FLAG: u64 = 1 << 17;
+        self.preflight()?;
+        let point = client_point(owned_content(self.pid, game)?, x, y)?;
+        // SAFETY: a null source is allowed; every event is released after posting.
+        unsafe {
+            let post = |event: CFTypeRef, flags: u64| -> Result<()> {
+                if event.is_null() {
+                    return Err(Error::new("input_unavailable", "Input event unavailable"));
+                }
+                CGEventSetFlags(event, flags);
+                CGEventPost(HID_EVENT_TAP, event);
+                CFRelease(event);
+                Ok(())
+            };
+            post(
+                CGEventCreateMouseEvent(std::ptr::null(), MOUSE_MOVED, point, LEFT_BUTTON),
+                0,
+            )?;
+            std::thread::sleep(std::time::Duration::from_millis(60));
+            post(
+                CGEventCreateKeyboardEvent(std::ptr::null(), SHIFT_KEY, true),
+                SHIFT_FLAG,
+            )?;
+            std::thread::sleep(std::time::Duration::from_millis(40));
+            let result = (|| {
+                post(
+                    CGEventCreateMouseEvent(std::ptr::null(), LEFT_MOUSE_DOWN, point, LEFT_BUTTON),
+                    SHIFT_FLAG,
+                )?;
+                std::thread::sleep(std::time::Duration::from_millis(50));
+                post(
+                    CGEventCreateMouseEvent(std::ptr::null(), LEFT_MOUSE_UP, point, LEFT_BUTTON),
+                    SHIFT_FLAG,
+                )
+            })();
+            std::thread::sleep(std::time::Duration::from_millis(40));
+            // Always release Shift, even when the click failed.
+            post(
+                CGEventCreateKeyboardEvent(std::ptr::null(), SHIFT_KEY, false),
+                0,
+            )?;
+            result?;
+        }
+        Ok(point)
     }
     /// One right click at a game-logical point after a fresh front-most check.
     pub fn right_click(&self, game: (u32, u32), x: f64, y: f64) -> Result<Point> {

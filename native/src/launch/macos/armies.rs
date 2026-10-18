@@ -44,6 +44,7 @@ struct Ui {
     group_leader: u64,
     leader_name: u64,
     container_vtable: u64,
+    army_group: u64,
 }
 /// macOS Mach-O 089EA519, mapped live on 18 October 2026 (Germany test run):
 /// a box selection set the idler's selection size (+0x540) to 7 and the
@@ -81,6 +82,10 @@ const MACOS: Ui = Ui {
     group_leader: 0x88,
     leader_name: 0x38,
     container_vtable: 0x34ac0b0,
+    // An army's CArmyGroup (name +0x160, leader +0x88 like an army); its
+    // card's group handle is the army group's +0x8. Mapped live on
+    // 18 October 2026 after grouping Army 7 and Army 8.
+    army_group: 0x1b0,
 };
 /// The army panel's commander portrait ("Click to assign") while an army is
 /// selected, and the commander list's visible row band; portraits are drawn
@@ -200,8 +205,14 @@ pub(super) fn armies(process: &dyn Process) -> Result<Value> {
                 };
                 let orders = r.array_header(group + ui(r)?.group_orders)?.2;
                 let executing = executing(r, image, &name).ok();
+                let parent = r.u64(group + ui(r)?.army_group)?;
+                let army_group = if parent == 0 {
+                    None
+                } else {
+                    Some(army_name(r, parent)?)
+                };
                 Ok(
-                    json!({"army":name,"commander":commander,"battle_plan_orders":orders,
+                    json!({"army":name,"army_group":army_group,"commander":commander,"battle_plan_orders":orders,
                     "plan_executing":executing,"division_count":ids.len(),"divisions":ids}),
                 )
             })
@@ -217,15 +228,31 @@ pub(super) fn armies(process: &dyn Process) -> Result<Value> {
             .into_iter()
             .map(|(state, n)| json!({"state_id":state,"divisions":n}))
             .collect();
-        Ok(json!({"armies":armies,"unassigned":unassigned,"unassigned_by_state":by_state}))
+        let groups = army_groups(r, image)?
+            .into_iter()
+            .map(|g| {
+                let leader = r.u64(g + ui(r)?.group_leader)?;
+                let marshal = if leader == 0 {
+                    None
+                } else {
+                    Some(r.string_bounded(leader + ui(r)?.leader_name, 128)?)
+                };
+                Ok(json!({"army_group":army_name(r, g)?,"field_marshal":marshal}))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        Ok(
+            json!({"army_groups":groups,"armies":armies,"unassigned":unassigned,
+            "unassigned_by_state":by_state}),
+        )
     })
 }
 fn selection_size(r: &Reader<'_>, image: u64) -> Result<u64> {
     let idler = r.u64(image + game::layout(r).idler_global)?;
     r.u64(idler + ui(r)?.selection_size)
 }
-/// The new-army card: the rightmost portrait button of the army card bar.
-fn new_army_card(r: &Reader<'_>, image: u64) -> Result<Rect> {
+/// The new-army card (rightmost portrait button of the card bar) or, with
+/// `leftmost`, the new-army-group card.
+fn new_card(r: &Reader<'_>, image: u64, leftmost: bool) -> Result<Rect> {
     let u = ui(r)?;
     let idler = r.u64(image + game::layout(r).idler_global)?;
     let bar = r.u64(r.u64(idler + u.manager)? + u.leader_view)?;
@@ -242,7 +269,7 @@ fn new_army_card(r: &Reader<'_>, image: u64) -> Result<Rect> {
         };
         if let Some(button) = gui_tree::child(r, image, window, "portrait_btn")? {
             if let Ok(rect) = gui_tree::rect(r, image, button, GAME) {
-                if best.is_none_or(|b| rect.x > b.x) {
+                if best.is_none_or(|b| if leftmost { rect.x < b.x } else { rect.x > b.x }) {
                     best = Some(rect);
                 }
             }
@@ -263,7 +290,7 @@ pub(super) fn create(process: &dyn Process, keys: &MacKeys, state: i32) -> Resul
     })?;
     let before = read(process, membership)?;
     let groups_before: BTreeSet<u64> = before.values().copied().collect();
-    let card = read(process, new_army_card)?;
+    let card = read(process, |r, i| new_card(r, i, false))?;
     clear_notices(process, keys)?;
     let (x, y) = card.center();
     keys.click(GAME, x, y)?;
@@ -281,12 +308,25 @@ pub(super) fn create(process: &dyn Process, keys: &MacKeys, state: i32) -> Resul
     })
 }
 
-/// The own orders group named `army` (names must be unique).
+/// Own army groups (from the own armies).
+fn army_groups(r: &Reader<'_>, image: u64) -> Result<BTreeSet<u64>> {
+    let u = ui(r)?;
+    let mut out = BTreeSet::new();
+    for group in membership(r, image)?.into_values().filter(|g| *g != 0) {
+        let parent = r.u64(group + u.army_group)?;
+        if parent != 0 {
+            out.insert(parent);
+        }
+    }
+    Ok(out)
+}
+/// The own army or army group named `army` (names must be unique).
 fn group_named(r: &Reader<'_>, image: u64, army: &str) -> Result<u64> {
-    let groups: BTreeSet<u64> = membership(r, image)?
+    let mut groups: BTreeSet<u64> = membership(r, image)?
         .into_values()
         .filter(|g| *g != 0)
         .collect();
+    groups.extend(army_groups(r, image)?);
     let mut found = None;
     for group in groups {
         if army_name(r, group)? == army {
@@ -669,10 +709,16 @@ pub(super) fn assign_commander(
     {
         return Ok(());
     }
-    let card = read(process, |r, i| card_rect(r, i, army, "portrait_btn"))?;
+    // An army or an army group is selected by its own card; the group's
+    // panel then offers its field marshal slot at the same place.
+    let card = settled(process, "card", |r, i| {
+        card_rect(r, i, army, "portrait_btn")
+    })?;
     let (x, y) = card.center();
     keys.click(GAME, x, y)?;
-    wait(process, "select army", |r, i| Ok(selection_size(r, i)? > 0))?;
+    wait(process, "select", |r, i| {
+        Ok(selection_size(r, i)? & 0xffff_ffff > 0)
+    })?;
     std::thread::sleep(std::time::Duration::from_millis(250));
     keys.click(GAME, COMMANDER_SLOT.0, COMMANDER_SLOT.1)?;
     wait(process, "commander list open", leader_list_open)?;
@@ -723,7 +769,48 @@ pub(super) fn assign_commander(
         f64::from(rect.x) + 34.0,
         f64::from(bottom - PORTRAIT_DRAWN / 2),
     )?;
+    // Moving a commander who leads another army asks for confirmation.
+    super::ui::accept_command(process, keys)?;
     wait(process, "commander assigned", |r, i| {
         Ok(commander(r, i, army)?.is_some_and(|c| c.to_lowercase() == wanted))
+    })
+}
+
+/// Group own armies `names` into a new army group: the first army's card,
+/// the others' cards with Shift, then the new-army-group card. Verified when
+/// all of them belong to one army group that did not exist before.
+pub(super) fn create_group(process: &dyn Process, keys: &MacKeys, names: &[String]) -> Result<()> {
+    clear_notices(process, keys)?;
+    let u = &MACOS;
+    let before = read(process, army_groups)?;
+    let mut size = 0;
+    for (index, name) in names.iter().enumerate() {
+        let count = read(process, |r, i| {
+            let group = group_named(r, i, name)?;
+            Ok(membership(r, i)?.values().filter(|g| **g == group).count() as u64)
+        })?;
+        size += count;
+        let card = settled(process, "army card", |r, i| {
+            card_rect(r, i, name, "portrait_btn")
+        })?;
+        let (x, y) = card.center();
+        if index == 0 {
+            keys.click(GAME, x, y)?;
+        } else {
+            keys.shift_click(GAME, x, y)?;
+        }
+        wait(process, "army selected", |r, i| {
+            Ok(selection_size(r, i)? & 0xffff_ffff == size)
+        })?;
+    }
+    let card = settled(process, "new army group card", |r, i| new_card(r, i, true))?;
+    let (x, y) = card.center();
+    keys.click(GAME, x, y)?;
+    wait(process, "army group created", |r, i| {
+        let parents: BTreeSet<u64> = names
+            .iter()
+            .map(|n| r.u64(group_named(r, i, n)? + u.army_group))
+            .collect::<Result<_>>()?;
+        Ok(parents.len() == 1 && parents.iter().all(|p| *p != 0 && !before.contains(p)))
     })
 }

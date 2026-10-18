@@ -249,9 +249,10 @@ impl Commands for MacClock {
             json!({"name":"hoi4_event_choose","description":"Choose an option (0-based, in listed order) of the open event on top by clicking it. Verified when exactly that event window closes.","inputSchema":{"type":"object","properties":{"event":{"type":"string"},"option":{"type":"integer","minimum":0,"maximum":7},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["event","option","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_diplomacy","description":"Open the diplomacy view for the owner of a state (Find view centres the state, one click selects the country) and list the offered actions with enabled state, cost and whether the AI would refuse. Changes nothing in the game.","inputSchema":{"type":"object","properties":{"state_id":{"type":"integer","minimum":1,"maximum":4095},"lease_token":{"type":"string"}},"required":["state_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_diplomacy_act","description":"Take one diplomatic action (exact listed name, e.g. Declare war, Justify War goal, Guarantee independence, Improve relations) toward the owner of a state. Justify War goal also needs war_goal (e.g. Conquer) and 1..5 states by name. Verified when the offered actions change or political power is spent.","inputSchema":{"type":"object","properties":{"state_id":{"type":"integer","minimum":1,"maximum":4095},"action":{"type":"string"},"war_goal":{"type":"string"},"states":{"type":"array","items":{"type":"string"},"maxItems":5},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["state_id","action","request_id","lease_token"],"additionalProperties":false}}),
-            json!({"name":"hoi4_army_commander","description":"Assign a general (exact name as listed) to an own army from the army panel's commander list. Verified when the army's commander is that general.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"general":{"type":"string"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","general","request_id","lease_token"],"additionalProperties":false}}),
+            json!({"name":"hoi4_army_commander","description":"Assign a general (exact name as listed) to an own army, or a field marshal to an own army group (use the army group's name), from the panel's commander list. Verified when the army's commander is that general.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"general":{"type":"string"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","general","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_air_wings","description":"Own air wings with air base, assigned region and missions, from the Air Forces Overview (opens it). Changes nothing in the game.","inputSchema":{"type":"object","properties":{"lease_token":{"type":"string"}},"required":["lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_air_mission","description":"Give an own air wing (exact name) a mission over the strategic region containing a state: wing row, mission button, Find view centres the state, right click assigns. Missions: air_superiority, cas, interception, strategic_bombing, naval_strike, kamikaze, port_strike, logistics_strike, air_supply, training, naval_mines, naval_minesweeping, recon, naval_patrol. Verified when the wing shows a changed region or mission.","inputSchema":{"type":"object","properties":{"wing":{"type":"string"},"mission":{"type":"string"},"state_id":{"type":"integer","minimum":1,"maximum":4095},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["wing","mission","state_id","request_id","lease_token"],"additionalProperties":false}}),
+            json!({"name":"hoi4_army_group_create","description":"Group two or more own armies into a new army group (army cards with Shift, then the new-army-group card). Give it a field marshal with hoi4_army_commander using the army group's name. Verified when all the armies belong to one new army group.","inputSchema":{"type":"object","properties":{"armies":{"type":"array","items":{"type":"string"},"minItems":2,"maxItems":12},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["armies","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_army_create","description":"Create one army from the own divisions shown around a state: Find view centres the state, a box selection picks own divisions there, the new-army card creates the army. Verified by a new army in memory; returns its divisions.","inputSchema":{"type":"object","properties":{"state_id":{"type":"integer","minimum":1,"maximum":4095},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["state_id","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_time","description":"Set desired pause or internal speed 0..4 with ordinary keys (Space, keypad +/-) sent only while the owned game window is front-most, each verified by fresh memory readback. Supply exactly one target and a stable request_id; uncertain dispatches are never replayed.","inputSchema":{"type":"object","properties":{"paused":{"type":"boolean"},"speed":{"type":"integer","minimum":0,"maximum":4},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["request_id","lease_token"],"additionalProperties":false}}),
         ]
@@ -284,12 +285,13 @@ impl Commands for MacClock {
                 | "hoi4_army_plan"
                 | "hoi4_army_offensive"
                 | "hoi4_army_commander"
+                | "hoi4_army_group_create"
                 | "hoi4_air_wings"
                 | "hoi4_air_mission"
         )
     }
     fn capabilities(&self) -> Value {
-        json!({"transport":"ordinary macOS CGEvent keys to the front-most owned window","actions":["set_paused","set_speed","research_start","focus_start","production_add","production_set","construction_add","politics_options","politics_choose","decisions_list","decision_take","train","deploy_locations","army_create","army_front","army_plan","army_offensive","event_choose","diplomacy","diplomacy_act","army_commander","air_wings","air_mission"],"lease":"exclusive configured controller","native_posting":false,"full_campaign_acceptance":false})
+        json!({"transport":"ordinary macOS CGEvent keys to the front-most owned window","actions":["set_paused","set_speed","research_start","focus_start","production_add","production_set","construction_add","politics_options","politics_choose","decisions_list","decision_take","train","deploy_locations","army_create","army_front","army_plan","army_offensive","event_choose","diplomacy","diplomacy_act","army_commander","army_group_create","air_wings","air_mission"],"lease":"exclusive configured controller","native_posting":false,"full_campaign_acceptance":false})
     }
     fn call(&self, process: &dyn Process, name: &str, arguments: &Value) -> Result<Value> {
         let args = arguments
@@ -726,6 +728,53 @@ impl Commands for MacClock {
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
                 air::assign(process, keys, wing, mission, state)?;
+                verified.set(true);
+                Ok(())
+            };
+            let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
+            return Ok(json!({"receipt":receipt}));
+        }
+        if name == "hoi4_army_group_create" {
+            allowed(args, &["armies", "request_id", "lease_token"])?;
+            let names: Vec<String> = args
+                .get("armies")
+                .and_then(Value::as_array)
+                .filter(|a| (2..=12).contains(&a.len()))
+                .ok_or_else(|| Error::new("invalid_arguments", "armies must list 2..12 names"))?
+                .iter()
+                .map(|v| {
+                    v.as_str()
+                        .filter(|s| {
+                            !s.is_empty() && s.len() <= 128 && !s.chars().any(char::is_control)
+                        })
+                        .map(str::to_string)
+                        .ok_or_else(|| Error::new("invalid_arguments", "Invalid army name"))
+                })
+                .collect::<Result<_>>()?;
+            let id = string(args, "request_id")?;
+            let token = string(args, "lease_token")?;
+            let epoch = guard.observe(process)?.epoch;
+            authority.authorize(token, &epoch)?;
+            let retry = actions.receipt_exists(id);
+            if !retry {
+                self.keys.preflight()?;
+            }
+            let action = json!({"kind":"army_group_create","armies":names});
+            let keys = &self.keys;
+            let verified = std::cell::Cell::new(false);
+            let mut settle = || {
+                let now = armies::armies(process)?;
+                Ok(if verified.get() {
+                    journal::Outcome::Reached(now)
+                } else if retry {
+                    journal::Outcome::Diverged(now)
+                } else {
+                    journal::Outcome::Unchanged(now)
+                })
+            };
+            let mut dispatch = || {
+                authority.authorize(token, &epoch)?;
+                armies::create_group(process, keys, &names)?;
                 verified.set(true);
                 Ok(())
             };
