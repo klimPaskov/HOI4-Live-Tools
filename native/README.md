@@ -124,6 +124,28 @@ journal execution and transport never retry. Other errors stop immediately.
 and in errors without changing their terminal category; it is historical read
 evidence, not input authority. Post-input readback is unchanged.
 
+The same tool has three keyboard Find stages for future map placement:
+`find_open` (the game's own `f` shortcut), `find_query` with an own `state_id`
+(decimal digits into the focused empty query) and `find_activate` (Return on the
+verified first state row, read back as a closed view with the camera on the
+state's template position). Each is one durable ordinary input; callers never
+supply keys or coordinates. Run086 passed all three live, with historical
+replays and a zero-input no-op.
+
+`place` then takes `building_id`, `state_id` and the desired total `amount` of
+that building queued in that own state. With the building selected and the
+camera centred on the state, it clicks the owned client centre once and verifies
+the new total from the same-snapshot construction queue. Run091 accepted it live for
+one arms_factory in state 64; provincial buildings are not yet live-tested.
+
+`hoi4_construction_find_view({"state_id":64})` is a read-only preview for future
+map placement. It reports the game's own Find view (visibility flags, query, the
+first result row joined to the state catalog), the camera look-at point and the
+requested own state's template map position, including whether the camera is
+centred on it. It types, clicks and moves nothing. Run082 confirmed the camera,
+state-template position and unopened Find view live; opened-view results are
+not yet exercised.
+
 Each stage permits at most one ordinary click, with private identities and the
 original point checked again immediately before input. Already-matching state
 produces a durable no-op. Identical successful requests return historical

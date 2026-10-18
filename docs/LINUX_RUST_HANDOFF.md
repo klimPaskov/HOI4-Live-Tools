@@ -7,6 +7,18 @@ Do not resume Mac campaigns or control the shared Windows game.
 
 ## Current checkpoint
 
+Session checkpoint, 18 October 2026: Run091 on `7f0728c` (package v86) passed
+the map placement gate with the Haiku 5.5 player at 512x288. The server opened
+the construction panel, selected arms_factory, used the game's own Find view to
+centre the camera on Brandenburg (state 64), and queued one arms_factory with a
+single map click, verified from the same-snapshot queue. Runs 087–090 found and
+fixed three faults on the way: an over-strict broker check of Find receipts; a
+location reader that accepted only the constructor status flags 1/2 while a live
+state status carried 6; and a torn confirmation read after input-idle that was
+not retried. The private broker now allows two read-only queue diagnostics, only
+after an uncertain place. Next: provincial buildings (dockyard on a coastal
+province), then production changes and standing economy plans.
+
 Session checkpoint, 17 October 2026: the construction recovery follow-up is
 committed as `5e61fec` with nine successful exact-head CI jobs. Run077 on that
 commit passed the construction action gate: ensure_open and select_building
@@ -26,6 +38,17 @@ Luna), and later runs should use a standard 1920x1080 game window. The current
 input profiles are 512x288 only, so a 1080p profile must be built and verified
 before such a run. Run077 is not campaign acceptance; economy/warfare automation,
 the clean two-year gate and the full campaigns remain pending.
+
+1080p calibration, 17 October 2026: branch `codex/linux-1080p-profile`
+(`6f0a77d`) adds a fixture-tested `linux_builtin_absolute_1920x1080_v1` profile,
+with nine passing CI jobs and passing actual Linux fixtures. An owned calibration
+game at 1920x1080 (`gui_scale=1.0`, display resized to 2560x1440) rendered a true
+1080p window but stayed on "Loading GUI": the progress bar moved from 2.8% to
+2.9% between minutes 22 and 32. At 512x288 the whole startup takes about six
+minutes. No menu input, recorder, binding or player grant happened; the owner
+closed its own child once and the display was restored to 1280x720. 1080p live
+play is not practical on this QEMU TCG VM. It needs a KVM or native Linux host,
+or a native Windows/macOS adapter on real hardware.
 
 Latest: Run076 on `7181858` failed its first `ensure_open` action with
 `torn_read: Snapshot witness changed; section=opener; read=171; size=4;

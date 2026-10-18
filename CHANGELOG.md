@@ -2,6 +2,104 @@
 
 ## Unreleased native preview
 
+- Run091 (18 October 2026, `7f0728c`, Haiku 5.5 player, 512x288) passed the
+  map placement gate. ensure_open, select_building(arms_factory), find_open,
+  find_query(64), find_activate(64) and place(arms_factory, state 64, amount 1)
+  each sent one server-confirmed ordinary input with canonical readback; place
+  verified in 1.9 s with `{in_state 1, elsewhere 0, complete true}`. The open,
+  select and place replays returned identical historical receipts, and a second
+  place ID was a zero-input no-op. The final queue held exactly one arms_factory
+  of amount 1 located in Brandenburg. Lease release, exit 0, recording and
+  instance absence passed. Provincial placement is not yet live-tested.
+- Re-observe after a torn terminal witness. Run090 (v85) proved the placed
+  arms_factory located in state 64 (`status_flags_raw` 6), but the confirmation
+  read after input-idle tore in the panel's choice list and the stage recorded
+  uncertainty, although the last whole snapshot had already reached the target.
+  A torn confirmation read now restarts observation and idle confirmation within
+  the same original deadline. A persistently torn witness never verifies.
+- Prove construction locations of state buildings queued live. Run089 showed that
+  one map click queued exactly one arms_factory line (amount 1, 15 factories), but
+  its building status carried flag bits beyond the constructor's 2, so the location
+  join refused it as `unsupported_location_status_flags` and the place stage
+  stayed uncertain. The reader now takes province or state from bit 0, as the
+  engine does. It still requires the exact embedded status, catalog ID and
+  reciprocal building slot, and it reports `status_flags_raw`.
+- Runs 087–089 (18 October 2026, Haiku 5.5 player, 512x288): ensure_open,
+  select_building(arms_factory) and all three Find stages pass with the
+  construction panel open. Run087 stopped on an over-strict broker check of Find
+  receipts. In Runs 088 and 089 the place click was delivered and a new queue line
+  appeared, but the verifier could not prove its location, as above.
+- Add the opt-in `place` construction stage: with the canonical building
+  selected, the construction panel shown, the game's Find view closed and the
+  camera centred on an own state, one left click at the owned client centre must
+  bring the queued amount of that building in that state to the requested
+  total. The queue is read in the same snapshot, every line of the building
+  must have a proven own location, and a click landing elsewhere never counts.
+  Asking for an already-reached total is a no-op. Not yet live-accepted.
+- Run086 on `3f3d731` passed the keyboard Find gate live at 512x288 with the
+  Haiku 5.5 player: `find_open` (382 ms), `find_query` for state 64 (437 ms;
+  first of 21 results was the state) and `find_activate` (303 ms) were each one
+  server-confirmed ordinary input with canonical readback. Their identical
+  replays were historical, a separate activate request was a zero-input no-op,
+  and the camera look-at moved to Brandenburg's template position `[3008,
+  1569]` with the view closed. Map placement and queueing are still pending.
+- Run085 on `679f9e0` passed `find_open` live again; `find_query`'s readback
+  refused because typing matched more than an arbitrary 256 results. Only the
+  first entry is read, so the bound is now the reader's array limit, and a
+  first-row/entry disagreement during refresh is reported as a torn read that
+  post-input readback waits out.
+- Run084 on `236e3bc` passed `find_open` live: one server-confirmed `f` opened
+  the game's Find view with its edit box focused, and the identical replay was
+  historical. `find_query` typed the digits but its readback refused, because
+  recycled result rows keep their object only in a kind-specific field. The
+  observer now reads rows by kind; `find_query` verifies the typed query and a
+  refreshed first row, and `find_activate` refuses before input unless the first
+  row is the requested state (a province can also match a numeric ID).
+- Run083 on `10907e9` sent the first Find stage: the `f` shortcut was
+  server-confirmed and the game's Find view opened, but readback compared the
+  GUI text receiver with the edit box itself. In this build the receiver is the
+  box's embedded receiver (as already proven for the Focus search box), so the
+  stage ended durably uncertain and no further input followed. Focus is now
+  read as keyboard focus on the box plus its embedded text receiver.
+- Add three opt-in keyboard Find stages to `hoi4_construction_attempt`:
+  `find_open` presses the game's own `f` shortcut for its map Find view,
+  `find_query` types an own state ID's digits into the focused empty query, and
+  `find_activate` presses Return to activate the verified first state row. Each
+  is one durable ordinary input with same-snapshot readback: view visible with a
+  focused text box, exact query and first state row, then a closed view with the
+  camera look-at on the state's template position. Existing receipts and the
+  public controls output are unchanged. Not yet live-accepted.
+- Run082 on `62bcbab` passed the read-only Find view gate at 512x288 with the
+  Haiku 5.5 player: all calls succeeded in about 32 ms with no input. The start
+  camera's look-at `[3010, 9.5, 1568]` sits about two map units from
+  Brandenburg's state-template position `[3008, 1569]`, the unopened Find view
+  reported hidden with no results, and a foreign state's anchor stayed unread.
+  Opening, typing, result rows and placement remain unexercised.
+- Run081 on `350a633` passed preflight (no torn snapshot) and the Find view
+  observer's first live call named the real type at the state's anchor field:
+  a state template (`CStateTemplate`), not a province. The observer now reads
+  that template's map position, which the game's camera centring uses. No input
+  occurred; recording, clock gates, release and closure passed.
+- Run080 stopped at preflight: the pregrant read-only `hoi4_construction_controls`
+  read returned the recurring opener torn read (`read=171; size=4;
+  changed_byte=1`). No grant or player call happened. Every such refusal so far
+  followed a root click on the construction opener, with the pointer left over
+  that button; its hover state is the likely changing field (unproven). The
+  read-only construction controls and Find view tools now use the same bounded
+  whole-snapshot recovery as action pre-input reads and report discarded
+  snapshots.
+- Run079 on `e58058b` tested the read-only Find view observer at 512x288 with the
+  Haiku 5.5 player. Its first call refused with a shared type-check message, so
+  no Find view, camera or anchor values were obtained. Recording, four clock-skew
+  gates (all under 0.04 s), lease release, normal exit and exact-process closure
+  passed. The observer now names the object and its image-relative type on any
+  type refusal.
+- Add read-only `hoi4_construction_find_view`: the game's Find view state, first
+  result row joined to the state catalog, camera look-at and an optional own
+  state's anchor province, as groundwork for map placement. No input; live
+  agreement pending. Record the 1080p calibration finding: an owned 1920x1080
+  game stayed on Loading GUI for over 30 minutes on the QEMU TCG VM, so live
+  runs stay at 512x288 there until a KVM or native host exists.
 - Run077 on `5e61fec` passed the bounded Linux construction action gate: one
   ordinary click opened the construction panel (1.59 s) and one selected the
   dockyard (0.85 s), each with server-confirmed delivery and canonical readback.

@@ -1,6 +1,8 @@
 //! Conversion of a same-witness construction observation, never caller JSON.
 use crate::{
-    construction_stage::{Coverage, OwnState, PanelState, Stage, Target},
+    construction_stage::{
+        Coverage, FindState, OwnState, PanelState, PlacementState, Stage, Target,
+    },
     error::{Error, Result},
     research_attempt::{self, PointCandidate},
     research_candidate_observation::{self as candidate, OwnedClientProfile},
@@ -49,6 +51,12 @@ pub(super) fn model(d: &Value, target: &Target) -> Result<OwnState> {
     {
         return Err(bad("Exact own construction observation required"));
     }
+    if target.stage.is_find() {
+        return find_model(d, target);
+    }
+    if target.stage == Stage::Place {
+        return place_model(d, target);
+    }
     if target.stage == Stage::SelectBuilding
         && d["building_id"].as_str() != target.building_id.as_deref()
     {
@@ -78,6 +86,7 @@ pub(super) fn model(d: &Value, target: &Target) -> Result<OwnState> {
     let control = match target.stage {
         Stage::EnsureOpen => &d["opener"],
         Stage::SelectBuilding => choice,
+        _ => return Err(bad("Find stages use their own model")),
     };
     let mut ready = control["available"] == true
         && control["control_type_encoding"] == "15CButtonStandard"
@@ -94,6 +103,7 @@ pub(super) fn model(d: &Value, target: &Target) -> Result<OwnState> {
             ready &= choice["canonical_choice_join_verified"] == true
                 && choice["window"]["settled_visible"] == true;
         }
+        _ => unreachable!("Find stages returned above"),
     }
     let state = OwnState {
         epoch: target.epoch.clone(),
@@ -126,6 +136,178 @@ pub(super) fn model(d: &Value, target: &Target) -> Result<OwnState> {
                 && d["local_gui_gates"]["conservative_local_gate_clear"] == true,
         ),
         local_dispatch_ready: Some(ready),
+        find: None,
+        placement: None,
+    };
+    state.validate(target)?;
+    Ok(state)
+}
+/// Find stages: own Find view facts from the SAME controls snapshot. Visibility
+/// is the exact own container's local visible bit; close (2a3bbe0) hides the
+/// window before setting bit 0x10, which then persists while hidden.
+fn find_facts(d: &Value, target: &Target) -> Result<FindState> {
+    let f = &d["find"];
+    let view = &f["find_view"];
+    if !f.is_object() || f["camera"]["look_at_height_invariant"] != true {
+        return Err(bad("Same-snapshot own Find view required"));
+    }
+    let window = &view["window"];
+    let visible = match view["materialized"].as_bool() {
+        Some(true) if window["exact_container"] == true => window["visible_flag"].as_bool(),
+        Some(_) => None,
+        None => return Err(bad("Typed Find view materialization required")),
+    };
+    let text_focused = view["text_box_focused"].as_bool();
+    let first = &view["results"]["first_row"];
+    let first_kind = first["kind_raw"]
+        .as_i64()
+        .and_then(|v| i32::try_from(v).ok());
+    let first_state_id = (first["supported"] == true)
+        .then(|| {
+            first["state_id"]
+                .as_i64()
+                .and_then(|v| i32::try_from(v).ok())
+        })
+        .flatten();
+    let requested = &f["target"];
+    let (target_owned, camera_centered) = match target.state_id {
+        Some(id) => {
+            if requested["state_id"].as_i64() != Some(i64::from(id)) {
+                return Err(bad("Requested own state differs from Find observation"));
+            }
+            (
+                requested["own_owned_and_controlled"].as_bool(),
+                requested["camera_centered"].as_bool(),
+            )
+        }
+        None => (None, None),
+    };
+    Ok(FindState {
+        visible,
+        text_focused,
+        query: view["query"].as_str().map(str::to_owned),
+        first_kind,
+        first_state_id,
+        target_owned,
+        camera_centered,
+    })
+}
+fn find_model(d: &Value, target: &Target) -> Result<OwnState> {
+    let find = find_facts(d, target)?;
+    let text_focused = find.text_focused;
+    let gates = &d["local_gui_gates"];
+    let common_gates = gates["gui_global_join_verified"] == true
+        && gates["flag150_raw"] == 0
+        && gates["flag12_raw"] == 0;
+    // FindOpen needs no keyboard focus or text receiver; typing and Return need
+    // exactly the Find edit box as keyboard focus and its embedded text receiver.
+    let ready = common_gates
+        && match target.stage {
+            Stage::FindOpen => {
+                gates["receiver158_null"] == true && gates["text_receiver230_null"] == true
+            }
+            _ => text_focused == Some(true),
+        };
+    let mode = d["selection"]["mode_raw"]
+        .as_i64()
+        .and_then(|v| i32::try_from(v).ok());
+    let state = OwnState {
+        epoch: target.epoch.clone(),
+        managed_mode: d["managed_mode_raw"]
+            .as_i64()
+            .and_then(|v| i32::try_from(v).ok()),
+        panel: panel(&d["panel"])?,
+        selected_mode: mode,
+        selected_building: None,
+        catalog_coverage: Coverage::NotChecked,
+        choice_coverage: Coverage::Unavailable,
+        requested_choice_present: false,
+        scoped_blockers_clear: Some(
+            d["scoped_blockers"]["available"] == true
+                && d["scoped_blockers"]["conservative_scoped_clear"] == true
+                && gates["gui_global_join_verified"] == true,
+        ),
+        local_dispatch_ready: Some(ready),
+        find: Some(find),
+        placement: None,
+    };
+    state.validate(target)?;
+    Ok(state)
+}
+/// Place: ordinary selection plus same-snapshot Find/camera and queued amount.
+/// The Find edit box may still hold keyboard focus after activation; that is the
+/// only receiver identity tolerated besides none.
+fn place_model(d: &Value, target: &Target) -> Result<OwnState> {
+    if d["building_id"].as_str() != target.building_id.as_deref() {
+        return Err(bad("Requested canonical construction key differs"));
+    }
+    let find = find_facts(d, target)?;
+    let p = &d["find"]["placement"];
+    if p["building_id"].as_str() != target.building_id.as_deref()
+        || p["state_id"].as_i64() != target.state_id.map(i64::from)
+    {
+        return Err(bad("Same-snapshot placement summary required"));
+    }
+    let amount = |key: &str| {
+        p[key]
+            .as_i64()
+            .filter(|v| (0..=1_000_000).contains(v))
+            .ok_or_else(|| bad("Bounded queued amount required"))
+    };
+    let placement = PlacementState {
+        in_state: amount("in_state")?,
+        elsewhere: amount("elsewhere")?,
+        complete: p["complete"] == true,
+    };
+    let selected = &d["selection"];
+    let mode = selected["mode_raw"]
+        .as_i64()
+        .and_then(|v| i32::try_from(v).ok())
+        .ok_or_else(|| bad("Literal construction selection mode required"))?;
+    let ordinary = mode == 1
+        && selected["supported"] == true
+        && selected["active"] == true
+        && selected["reason"] == "ordinary_construction_choice";
+    let selected_building = if ordinary {
+        Some(
+            selected["building_id"]
+                .as_str()
+                .ok_or_else(|| bad("Fresh canonical selected building required"))?
+                .to_owned(),
+        )
+    } else {
+        None
+    };
+    let gates = &d["local_gui_gates"];
+    let receivers_clear =
+        gates["receiver158_null"] == true && gates["text_receiver230_null"] == true;
+    let ready = gates["gui_global_join_verified"] == true
+        && gates["flag150_raw"] == 0
+        && gates["flag12_raw"] == 0
+        && (receivers_clear || find.text_focused == Some(true));
+    let state = OwnState {
+        epoch: target.epoch.clone(),
+        managed_mode: d["managed_mode_raw"]
+            .as_i64()
+            .and_then(|v| i32::try_from(v).ok()),
+        panel: panel(&d["panel"])?,
+        selected_mode: Some(mode),
+        selected_building,
+        catalog_coverage: if ordinary {
+            Coverage::Complete
+        } else {
+            Coverage::NotChecked
+        },
+        choice_coverage: Coverage::Unavailable,
+        requested_choice_present: false,
+        scoped_blockers_clear: Some(
+            d["scoped_blockers"]["available"] == true
+                && d["scoped_blockers"]["conservative_scoped_clear"] == true
+                && gates["gui_global_join_verified"] == true,
+        ),
+        local_dispatch_ready: Some(ready),
+        find: Some(find),
+        placement: Some(placement),
     };
     state.validate(target)?;
     Ok(state)
@@ -136,9 +318,31 @@ pub(super) fn point(
     profile: &OwnedClientProfile,
 ) -> Result<PointCandidate> {
     model(d, target)?.preflight(target)?;
+    if target.stage == Stage::Place {
+        // The camera centres the state's template position on the 3D view centre;
+        // click the owned client centre through the same verified codec.
+        let codec = candidate::codec(&d["input_geometry"], profile)?;
+        let half = |v: u16| i32::from(v) / 2;
+        return Ok(PointCandidate {
+            ideal_logical: [
+                half(codec.graphics_logical[0]),
+                half(codec.graphics_logical[1]),
+            ],
+            quantized_logical: [
+                half(codec.graphics_logical[0]),
+                half(codec.graphics_logical[1]),
+            ],
+            client_pixel: [half(codec.client[0]), half(codec.client[1])],
+            expected_client: codec.client,
+            current_frame_verified: false,
+            effective_routing_verified: false,
+            input_authorized: false,
+        });
+    }
     let control = match target.stage {
         Stage::EnsureOpen => &d["opener"],
         Stage::SelectBuilding => &d["choice"],
+        _ => return Err(bad("Find stages have no pointer candidate")),
     };
     if d["geometry_requested"] != true
         || control["renderer_type_encoding"] != "7CSprite"
@@ -170,6 +374,8 @@ mod tests {
             },
             stage,
             building_id: (stage == Stage::SelectBuilding).then(|| "dockyard".into()),
+            state_id: None,
+            amount: None,
         }
     }
     fn data(stage: Stage) -> Value {
@@ -302,5 +508,112 @@ mod tests {
         let mut open = data(Stage::EnsureOpen);
         open["opener_engine_gates"]["known_scalar_gate_clear"] = json!(false);
         assert!(point(&open, &target(Stage::EnsureOpen), &profile()).is_err());
+    }
+    fn find_data(stage: Stage) -> (Value, Target) {
+        let mut t = target(stage);
+        t.state_id = matches!(stage, Stage::FindQuery | Stage::FindActivate).then_some(64);
+        let mut d = data(Stage::EnsureOpen);
+        d["local_gui_gates"] = json!({"gui_global_join_verified":true,"flag150_raw":0,"flag12_raw":0,
+            "receiver158_null":stage == Stage::FindOpen,"text_receiver230_null":stage == Stage::FindOpen,
+            "conservative_local_gate_clear":stage == Stage::FindOpen});
+        let open = stage != Stage::FindOpen;
+        d["find"] = json!({"find_view":{"materialized":true,
+            "window":{"exact_container":true,"flags_raw":if open {8} else {0},"visible_flag":open,"close_requested_flag":false,"settled_visibility_verified":false},
+            "text_box_focused":open,"query":if stage == Stage::FindActivate {"64"} else {""},
+            "results":{"result_count":0,"first_row":null}},
+            "camera":{"eye":[0.0,300.0,0.0],"look_at":[0.0,9.5,0.0],"look_at_height_invariant":true},
+            "target":if open {json!({"state_id":64,"own_owned_and_controlled":true,"anchor":{"kind":"state_template_map_position","map_position":[1,2]},"camera_centered":false})} else {json!(null)}});
+        if stage == Stage::FindActivate {
+            d["find"]["find_view"]["results"] =
+                json!({"result_count":1,"first_row":{"kind_raw":2,"state_id":64,"supported":true}});
+        }
+        (d, t)
+    }
+    #[test]
+    fn find_model_uses_same_snapshot_view_facts_and_receiver_gates() {
+        for stage in [Stage::FindOpen, Stage::FindQuery, Stage::FindActivate] {
+            let (d, t) = find_data(stage);
+            let state = model(&d, &t).unwrap();
+            assert!(state.preflight(&t).is_ok(), "{stage:?}");
+            assert!(!state.reached(&t));
+            assert!(point(&d, &t, &profile()).is_err());
+        }
+        // A previously closed view (persistent 0x10) can be reopened; a foreign
+        // container makes visibility unknown.
+        let (mut d, t) = find_data(Stage::FindOpen);
+        d["find"]["find_view"]["window"]["close_requested_flag"] = json!(true);
+        d["find"]["find_view"]["window"]["flags_raw"] = json!(0x10);
+        assert!(model(&d, &t).unwrap().preflight(&t).is_ok());
+        let (mut d, t) = find_data(Stage::FindQuery);
+        d["find"]["find_view"]["window"]["exact_container"] = json!(false);
+        assert!(model(&d, &t).unwrap().preflight(&t).is_err());
+        // Typing needs exactly the Find text box as receiver.
+        let (mut d, t) = find_data(Stage::FindQuery);
+        d["find"]["find_view"]["text_box_focused"] = json!(false);
+        assert!(model(&d, &t).unwrap().preflight(&t).is_err());
+        // The observation must be for the requested state.
+        let (mut d, t) = find_data(Stage::FindActivate);
+        d["find"]["target"]["state_id"] = json!(65);
+        assert!(model(&d, &t).is_err());
+        // Missing camera invariant or Find section refuses.
+        let (mut d, t) = find_data(Stage::FindOpen);
+        d["find"]["camera"]["look_at_height_invariant"] = json!(false);
+        assert!(model(&d, &t).is_err());
+        let (mut d, t) = find_data(Stage::FindOpen);
+        d["find"] = json!(null);
+        assert!(model(&d, &t).is_err());
+        // Activation completes only with the view closed and the camera centred.
+        let (mut d, t) = find_data(Stage::FindActivate);
+        d["find"]["find_view"]["window"]["visible_flag"] = json!(false);
+        d["find"]["target"]["camera_centered"] = json!(true);
+        assert!(model(&d, &t).unwrap().reached(&t));
+    }
+    fn place_data() -> (Value, Target) {
+        let (mut d, _) = find_data(Stage::FindActivate);
+        let mut t = target(Stage::Place);
+        t.building_id = Some("dockyard".into());
+        t.state_id = Some(64);
+        t.amount = Some(2);
+        d["managed_mode_raw"] = json!(17);
+        d["panel"] =
+            json!({"materialized":true,"flags_raw":8,"states_raw":[0,0],"settled_visible":true});
+        d["selection"] = json!({"mode_raw":1,"supported":true,"active":true,"reason":"ordinary_construction_choice","building_id":"dockyard"});
+        d["find"]["find_view"]["window"]["visible_flag"] = json!(false);
+        d["find"]["target"]["camera_centered"] = json!(true);
+        d["find"]["placement"] = json!({"building_id":"dockyard","state_id":64,"in_state":1,"elsewhere":3,"complete":true,"line_total":5});
+        (d, t)
+    }
+    #[test]
+    fn place_model_uses_same_snapshot_queue_and_clicks_the_owned_client_centre() {
+        let (d, t) = place_data();
+        let state = model(&d, &t).unwrap();
+        assert!(state.preflight(&t).is_ok());
+        let p = point(&d, &t, &profile()).unwrap();
+        assert_eq!(p.client_pixel, [256, 144]);
+        assert_eq!(p.expected_client, [512, 288]);
+        assert!(!p.input_authorized && !p.current_frame_verified && !p.effective_routing_verified);
+        let mut done = d.clone();
+        done["find"]["placement"]["in_state"] = json!(2);
+        assert!(model(&done, &t).unwrap().reached(&t));
+        for (path, value) in [
+            ("/find/placement/state_id", json!(65)),
+            ("/find/placement/building_id", json!("arms_factory")),
+            ("/find/placement/in_state", json!(-1)),
+        ] {
+            let mut changed = d.clone();
+            *changed.pointer_mut(path).unwrap() = value;
+            assert!(model(&changed, &t).is_err(), "{path}");
+        }
+        let mut changed = d.clone();
+        changed["find"]["placement"]["complete"] = json!(false);
+        assert!(model(&changed, &t).unwrap().preflight(&t).is_err());
+        let mut changed = d.clone();
+        changed["selection"]["building_id"] = json!("arms_factory");
+        assert!(model(&changed, &t).unwrap().preflight(&t).is_err());
+        // A foreign keyboard receiver (not the Find box) blocks the click.
+        let mut changed = d.clone();
+        changed["find"]["find_view"]["text_box_focused"] = json!(false);
+        changed["local_gui_gates"]["receiver158_null"] = json!(false);
+        assert!(model(&changed, &t).unwrap().preflight(&t).is_err());
     }
 }

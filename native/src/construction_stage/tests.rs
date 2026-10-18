@@ -44,7 +44,53 @@ fn target(stage: Stage) -> Target {
     Target {
         epoch: epoch(),
         stage,
-        building_id: (stage == Stage::SelectBuilding).then(|| "dockyard".into()),
+        building_id: matches!(stage, Stage::SelectBuilding | Stage::Place)
+            .then(|| "dockyard".into()),
+        state_id: matches!(stage, Stage::FindQuery | Stage::FindActivate | Stage::Place)
+            .then_some(64),
+        amount: (stage == Stage::Place).then_some(2),
+    }
+}
+fn find_before(stage: Stage) -> Option<FindState> {
+    let query = |q: &str| Some(q.to_owned());
+    match stage {
+        Stage::FindOpen => Some(FindState {
+            visible: Some(false),
+            text_focused: Some(false),
+            query: query(""),
+            first_kind: None,
+            first_state_id: None,
+            target_owned: None,
+            camera_centered: None,
+        }),
+        Stage::FindQuery => Some(FindState {
+            visible: Some(true),
+            text_focused: Some(true),
+            query: query(""),
+            first_kind: None,
+            first_state_id: None,
+            target_owned: Some(true),
+            camera_centered: Some(false),
+        }),
+        Stage::Place => Some(FindState {
+            visible: Some(false),
+            text_focused: Some(true),
+            query: query("64"),
+            first_kind: Some(2),
+            first_state_id: Some(64),
+            target_owned: Some(true),
+            camera_centered: Some(true),
+        }),
+        Stage::FindActivate => Some(FindState {
+            visible: Some(true),
+            text_focused: Some(true),
+            query: query("64"),
+            first_kind: Some(2),
+            first_state_id: Some(64),
+            target_owned: Some(true),
+            camera_centered: Some(false),
+        }),
+        _ => None,
     }
 }
 fn authority() -> InputAuthority {
@@ -61,8 +107,8 @@ fn before(stage: Stage) -> OwnState {
         } else {
             PanelState::Shown
         },
-        selected_mode: Some(0),
-        selected_building: None,
+        selected_mode: Some(if stage == Stage::Place { 1 } else { 0 }),
+        selected_building: (stage == Stage::Place).then(|| "dockyard".into()),
         catalog_coverage: if stage == Stage::EnsureOpen {
             Coverage::NotChecked
         } else {
@@ -76,10 +122,39 @@ fn before(stage: Stage) -> OwnState {
         requested_choice_present: stage == Stage::SelectBuilding,
         scoped_blockers_clear: Some(true),
         local_dispatch_ready: Some(true),
+        find: find_before(stage),
+        placement: (stage == Stage::Place).then_some(PlacementState {
+            in_state: 1,
+            elsewhere: 3,
+            complete: true,
+        }),
     }
 }
 fn reached(stage: Stage) -> OwnState {
     let mut state = before(stage);
+    if let Some(p) = state.placement.as_mut() {
+        p.in_state = 2;
+        return state;
+    }
+    if let Some(find) = state.find.as_mut() {
+        match stage {
+            Stage::FindOpen => {
+                find.visible = Some(true);
+                find.text_focused = Some(true);
+            }
+            Stage::FindQuery => {
+                find.query = Some("64".into());
+                find.first_kind = Some(2);
+                find.first_state_id = Some(64);
+            }
+            _ => {
+                find.visible = Some(false);
+                find.text_focused = Some(false);
+                find.camera_centered = Some(true);
+            }
+        }
+        return state;
+    }
     state.managed_mode = Some(17);
     state.panel = PanelState::Shown;
     if stage == Stage::SelectBuilding {
@@ -90,6 +165,12 @@ fn reached(stage: Stage) -> OwnState {
 }
 fn observation(state: OwnState, scope: u64) -> Observation<u64> {
     Observation { state, scope }
+}
+fn point_mut(candidate: &mut Candidate<u64>) -> &mut PointCandidate {
+    match &mut candidate.input {
+        Input::Point(point) => point,
+        _ => panic!("pointer fixture"),
+    }
 }
 fn point() -> PointCandidate {
     PointCandidate {
@@ -155,7 +236,7 @@ impl Fake {
             idle_checks: 0,
             candidate: Candidate {
                 scope: 1,
-                point: point(),
+                input: Input::Point(point()),
             },
             delivery: Delivery::Unknown,
             panic_dispatch: false,
@@ -1098,6 +1179,63 @@ fn canonical_readback_without_idle_confirmation_remains_uncertain() {
     assert_eq!(j.receipts["held"].uncertainty, Some(Uncertainty::InputIdle));
 }
 #[test]
+fn torn_terminal_witness_is_reobserved_within_the_original_deadline() {
+    let s = Scratch::new();
+    let mut j = Journal::open(&s.path()).unwrap();
+    let mut f = Fake::success(Stage::EnsureOpen);
+    // Run090: the read after input-idle confirmation tore once.
+    f.states[4] = Err(error(
+        "torn_read",
+        "Snapshot witness changed; section=choice; read=598; size=72; changed_byte=16",
+    ));
+    f.states
+        .extend((0..2).map(|_| Ok(observation(reached(Stage::EnsureOpen), 1))));
+    let e = execute(
+        &mut j,
+        "torn-terminal",
+        target(Stage::EnsureOpen),
+        &authority(),
+        &RwLock::new(true),
+        &Domains::default(),
+        &mut f,
+        TIME,
+    )
+    .unwrap();
+    assert_eq!(e.receipt.status, Status::Verified);
+    assert_eq!(f.dispatches, 1);
+    assert_eq!(f.idle_checks, 2);
+}
+#[test]
+fn persistently_torn_terminal_witness_never_verifies() {
+    let s = Scratch::new();
+    let mut j = Journal::open(&s.path()).unwrap();
+    let mut f = Fake::success(Stage::EnsureOpen);
+    f.states.truncate(4);
+    f.states.extend(
+        std::iter::repeat_with(|| Err(error("torn_read", "Snapshot witness changed"))).take(4000),
+    );
+    assert_eq!(
+        execute(
+            &mut j,
+            "always-torn",
+            target(Stage::EnsureOpen),
+            &authority(),
+            &RwLock::new(true),
+            &Domains::default(),
+            &mut f,
+            Duration::from_millis(300)
+        )
+        .unwrap_err()
+        .code,
+        "action_uncertain"
+    );
+    assert_eq!(f.dispatches, 1);
+    assert_eq!(
+        j.receipts["always-torn"].uncertainty,
+        Some(Uncertainty::DeadlineOrAuthority)
+    );
+}
+#[test]
 fn final_post_idle_scope_change_cannot_be_verified() {
     let s = Scratch::new();
     let mut j = Journal::open(&s.path()).unwrap();
@@ -1130,11 +1268,11 @@ fn candidate_cannot_assert_authority_or_escape_its_client_bounds() {
         let mut j = Journal::open(&s.path()).unwrap();
         let mut f = Fake::new(Stage::EnsureOpen);
         match i {
-            0 => f.candidate.point.input_authorized = true,
-            1 => f.candidate.point.current_frame_verified = true,
-            2 => f.candidate.point.effective_routing_verified = true,
-            3 => f.candidate.point.client_pixel[0] = 512,
-            _ => f.candidate.point.expected_client[0] = 0,
+            0 => point_mut(&mut f.candidate).input_authorized = true,
+            1 => point_mut(&mut f.candidate).current_frame_verified = true,
+            2 => point_mut(&mut f.candidate).effective_routing_verified = true,
+            3 => point_mut(&mut f.candidate).client_pixel[0] = 512,
+            _ => point_mut(&mut f.candidate).expected_client[0] = 0,
         }
         assert_eq!(
             execute(
@@ -1616,4 +1754,257 @@ fn failure_evidence_never_downgrades_unresolved_intent_or_terminal_uncertainty()
             );
         }
     }
+}
+
+fn find_input(stage: Stage) -> Input {
+    match stage {
+        Stage::FindOpen => Input::FindKey,
+        Stage::FindQuery => Input::Digits("64".into()),
+        _ => Input::Return,
+    }
+}
+#[test]
+fn find_stages_send_one_fixed_keyboard_input_after_durable_intent() {
+    for stage in [Stage::FindOpen, Stage::FindQuery, Stage::FindActivate] {
+        let s = Scratch::new();
+        let mut j = Journal::open(&s.path()).unwrap();
+        let mut f = Fake::success(stage);
+        f.candidate.input = find_input(stage);
+        f.delivery = Delivery::ServerConfirmed;
+        let out = execute(
+            &mut j,
+            "find-1",
+            target(stage),
+            &authority(),
+            &RwLock::new(true),
+            &Domains::default(),
+            &mut f,
+            TIME,
+        )
+        .unwrap();
+        assert_eq!((f.dispatches, f.possible_inputs), (1, 1), "{stage:?}");
+        assert_eq!(out.receipt.status, Status::Verified);
+        assert_eq!(out.receipt.target.state_id, target(stage).state_id);
+        assert!(out.receipt.observed.find.is_some());
+        drop(j);
+        let lines: Vec<Receipt> = fs::read_to_string(s.path())
+            .unwrap()
+            .lines()
+            .map(|line| serde_json::from_str(line).unwrap())
+            .collect();
+        assert_eq!(
+            lines.iter().map(|r| r.status).collect::<Vec<_>>(),
+            [Status::Intent, Status::Verified]
+        );
+    }
+}
+#[test]
+fn find_stages_refuse_mismatched_keyboard_or_pointer_input_before_intent() {
+    for stage in [Stage::FindOpen, Stage::FindQuery, Stage::FindActivate] {
+        for input in [
+            Input::Point(point()),
+            Input::FindKey,
+            Input::Return,
+            Input::Digits("65".into()),
+            Input::Digits("64".into()),
+        ] {
+            if input == find_input(stage) {
+                continue;
+            }
+            let s = Scratch::new();
+            let mut j = Journal::open(&s.path()).unwrap();
+            let mut f = Fake::success(stage);
+            f.candidate.input = input.clone();
+            let error = execute(
+                &mut j,
+                "find-x",
+                target(stage),
+                &authority(),
+                &RwLock::new(true),
+                &Domains::default(),
+                &mut f,
+                TIME,
+            )
+            .unwrap_err();
+            assert_eq!(
+                error.code, "construction_precondition",
+                "{stage:?} {input:?}"
+            );
+            assert_eq!(f.dispatches, 0);
+            assert!(!j.blocks_game(&epoch().game));
+        }
+    }
+    // Pointer stages never accept keyboard candidates either.
+    let s = Scratch::new();
+    let mut j = Journal::open(&s.path()).unwrap();
+    let mut f = Fake::success(Stage::EnsureOpen);
+    f.candidate.input = Input::FindKey;
+    assert!(execute(
+        &mut j,
+        "open-key",
+        target(Stage::EnsureOpen),
+        &authority(),
+        &RwLock::new(true),
+        &Domains::default(),
+        &mut f,
+        TIME
+    )
+    .is_err());
+    assert_eq!(f.dispatches, 0);
+}
+#[test]
+fn find_preconditions_and_completion_are_exact() {
+    // Open needs the view positively hidden; query needs focused empty query and own state.
+    let open = target(Stage::FindOpen);
+    let mut state = before(Stage::FindOpen);
+    assert!(state.preflight(&open).is_ok() && !state.reached(&open));
+    state.find.as_mut().unwrap().visible = None;
+    assert!(state.preflight(&open).is_err());
+    let query = target(Stage::FindQuery);
+    let mut state = before(Stage::FindQuery);
+    assert!(state.preflight(&query).is_ok());
+    for change in 0..3 {
+        let mut changed = state.clone();
+        let f = changed.find.as_mut().unwrap();
+        match change {
+            0 => f.query = Some("6".into()),
+            1 => f.text_focused = Some(false),
+            _ => f.target_owned = Some(false),
+        }
+        assert!(changed.preflight(&query).is_err(), "{change}");
+    }
+    // Query completion is its own effect: exact digits AND a refreshed first row
+    // of any kind. Which row comes first only gates FindActivate.
+    state.find.as_mut().unwrap().query = Some("64".into());
+    assert!(!state.reached(&query));
+    state.find.as_mut().unwrap().first_kind = Some(3);
+    assert!(state.reached(&query));
+    state.find.as_mut().unwrap().query = Some("640".into());
+    assert!(!state.reached(&query));
+    // Activate completes only on a closed view with the camera on the own state.
+    let activate = target(Stage::FindActivate);
+    let mut state = before(Stage::FindActivate);
+    assert!(state.preflight(&activate).is_ok());
+    state.find.as_mut().unwrap().first_state_id = Some(65);
+    assert!(state.preflight(&activate).is_err());
+    // A province (or other kind) first row refuses before Return.
+    let mut province_first = before(Stage::FindActivate);
+    province_first.find.as_mut().unwrap().first_kind = Some(3);
+    province_first.find.as_mut().unwrap().first_state_id = None;
+    assert!(province_first.preflight(&activate).is_err());
+    let mut done = reached(Stage::FindActivate);
+    assert!(done.reached(&activate));
+    done.find.as_mut().unwrap().camera_centered = Some(false);
+    assert!(!done.reached(&activate));
+    // Find facts on pointer stages, or missing on Find stages, are invalid.
+    let mut pointer = before(Stage::EnsureOpen);
+    pointer.find = find_before(Stage::FindOpen);
+    assert!(pointer.validate(&target(Stage::EnsureOpen)).is_err());
+    let mut missing = before(Stage::FindOpen);
+    missing.find = None;
+    assert!(missing.validate(&open).is_err());
+}
+#[test]
+fn find_target_shapes_and_legacy_receipts_stay_compatible() {
+    let mut t = target(Stage::FindQuery);
+    t.state_id = None;
+    assert!(t.validate().is_err());
+    for id in [0, 4096, -1] {
+        t.state_id = Some(id);
+        assert!(t.validate().is_err(), "{id}");
+    }
+    let mut open = target(Stage::FindOpen);
+    open.state_id = Some(64);
+    assert!(open.validate().is_err());
+    let mut select = target(Stage::SelectBuilding);
+    select.state_id = Some(64);
+    assert!(select.validate().is_err());
+    // Legacy pointer receipts serialize exactly as before: no state_id or find keys.
+    let text = serde_json::to_string(&target(Stage::EnsureOpen)).unwrap();
+    assert!(!text.contains("state_id"));
+    let state = serde_json::to_string(&before(Stage::EnsureOpen)).unwrap();
+    assert!(!state.contains("find"));
+    let parsed: Target = serde_json::from_str(&text).unwrap();
+    assert_eq!(parsed, target(Stage::EnsureOpen));
+}
+
+#[test]
+fn place_clicks_once_and_completes_only_at_the_exact_target_amount() {
+    let place = target(Stage::Place);
+    let state = before(Stage::Place);
+    assert!(state.preflight(&place).is_ok() && !state.reached(&place));
+    assert!(reached(Stage::Place).reached(&place));
+    // Wrong total, incomplete queue, camera away, open Find view or other
+    // selection refuse before input.
+    for change in 0..6 {
+        let mut s = before(Stage::Place);
+        match change {
+            0 => s.placement.as_mut().unwrap().in_state = 0,
+            1 => s.placement.as_mut().unwrap().complete = false,
+            2 => s.find.as_mut().unwrap().camera_centered = Some(false),
+            3 => s.find.as_mut().unwrap().visible = Some(true),
+            4 => s.selected_building = Some("arms_factory".into()),
+            _ => s.panel = PanelState::Hidden,
+        }
+        assert!(s.preflight(&place).is_err(), "{change}");
+    }
+    // One pointer input through the durable journal; keyboard inputs refuse.
+    let s = Scratch::new();
+    let mut j = Journal::open(&s.path()).unwrap();
+    let mut f = Fake::success(Stage::Place);
+    f.delivery = Delivery::ServerConfirmed;
+    let out = execute(
+        &mut j,
+        "place-1",
+        place.clone(),
+        &authority(),
+        &RwLock::new(true),
+        &Domains::default(),
+        &mut f,
+        TIME,
+    )
+    .unwrap();
+    assert_eq!((f.dispatches, f.possible_inputs), (1, 1));
+    assert_eq!(out.receipt.status, Status::Verified);
+    assert_eq!(out.receipt.observed.placement.as_ref().unwrap().in_state, 2);
+    for input in [Input::FindKey, Input::Return, Input::Digits("64".into())] {
+        let s = Scratch::new();
+        let mut j = Journal::open(&s.path()).unwrap();
+        let mut f = Fake::success(Stage::Place);
+        f.candidate.input = input;
+        assert!(execute(
+            &mut j,
+            "place-k",
+            place.clone(),
+            &authority(),
+            &RwLock::new(true),
+            &Domains::default(),
+            &mut f,
+            TIME
+        )
+        .is_err());
+        assert_eq!(f.dispatches, 0);
+    }
+}
+#[test]
+fn place_target_shape_requires_building_state_and_bounded_amount() {
+    let mut t = target(Stage::Place);
+    assert!(t.validate().is_ok());
+    for amount in [None, Some(0), Some(1001)] {
+        t.amount = amount;
+        assert!(t.validate().is_err(), "{amount:?}");
+    }
+    let mut t = target(Stage::Place);
+    t.building_id = Some("rail_way".into());
+    assert!(t.validate().is_err());
+    let mut t = target(Stage::Place);
+    t.state_id = None;
+    assert!(t.validate().is_err());
+    let mut t = target(Stage::EnsureOpen);
+    t.amount = Some(1);
+    assert!(t.validate().is_err());
+    // Placement facts only on Place.
+    let mut s = before(Stage::SelectBuilding);
+    s.placement = before(Stage::Place).placement;
+    assert!(s.validate(&target(Stage::SelectBuilding)).is_err());
 }

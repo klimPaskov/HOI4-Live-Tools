@@ -552,7 +552,7 @@ fn unchanged_public_json_and_read_counts_match_original_observer_golden() {
 #[test]
 fn scope_and_clock_context_use_completed_same_witness_observation_without_new_reads() {
     let f = controls_fixture();
-    let o = observed(&f, "infrastructure", false).unwrap();
+    let o = observed(&f, "infrastructure", false, None).unwrap();
     let reads = f.tracked_reads.borrow().clone();
     let checks = f.checks.get();
     assert_eq!(o.campaign.player, "GER");
@@ -565,7 +565,7 @@ fn scope_and_clock_context_use_completed_same_witness_observation_without_new_re
 #[test]
 fn requested_geometry_requires_materialized_identity_but_noop_scope_can_omit_geometry() {
     let f = geometry_fixture();
-    let o = observed(&f, "infrastructure", true).unwrap();
+    let o = observed(&f, "infrastructure", true, None).unwrap();
     assert_eq!(
         o.value["opener"]["render_diagnostic"]["reason"],
         "renderer_unmaterialized"
@@ -576,16 +576,16 @@ fn requested_geometry_requires_materialized_identity_but_noop_scope_can_omit_geo
             "construction_scope_unavailable"
         );
     }
-    let o = observed(&controls_fixture(), "infrastructure", false).unwrap();
+    let o = observed(&controls_fixture(), "infrastructure", false, None).unwrap();
     assert!(o.scope(Stage::EnsureOpen).is_ok());
 }
 #[test]
 fn ensure_open_excludes_choice_materialization_and_selection_semantics() {
-    let shown = observed(&controls_fixture(), "infrastructure", false).unwrap();
+    let shown = observed(&controls_fixture(), "infrastructure", false, None).unwrap();
     let mut hidden = controls_fixture();
     hidden.put(CONSTRUCTION_ROOT + 0xa5, &[0]);
     hidden.number(MAN + 0x3d8, 23);
-    let hidden = observed(&hidden, "infrastructure", false).unwrap();
+    let hidden = observed(&hidden, "infrastructure", false, None).unwrap();
     assert_eq!(
         shown.scope(Stage::EnsureOpen).unwrap(),
         hidden.scope(Stage::EnsureOpen).unwrap()
@@ -595,7 +595,7 @@ fn ensure_open_excludes_choice_materialization_and_selection_semantics() {
     selected.number(MAN + 0x3f0, 1);
     selected.word(MAN + 0x3e8, TEMPLATE);
     selected.word(DB + 0x3a8, OTHER);
-    let selected = observed(&selected, "infrastructure", false).unwrap();
+    let selected = observed(&selected, "infrastructure", false, None).unwrap();
     assert_eq!(selected.value["selection"]["building_id"], "infrastructure");
     assert_eq!(
         shown.scope(Stage::EnsureOpen).unwrap(),
@@ -608,7 +608,7 @@ fn ensure_open_excludes_choice_materialization_and_selection_semantics() {
 }
 #[test]
 fn same_looking_callback_capture_and_named_button_replacements_change_only_target_scope() {
-    let original = observed(&controls_fixture(), "infrastructure", false).unwrap();
+    let original = observed(&controls_fixture(), "infrastructure", false, None).unwrap();
     for capture_only in [false, true] {
         let mut f = controls_fixture();
         if capture_only {
@@ -625,7 +625,7 @@ fn same_looking_callback_capture_and_named_button_replacements_change_only_targe
             f.word(INTEL + 0x3000, replacement);
             f.word(TOP + 0x4db8, replacement);
         }
-        let changed = observed(&f, "infrastructure", false).unwrap();
+        let changed = observed(&f, "infrastructure", false, None).unwrap();
         assert_eq!(
             scalar_value(original.value.clone()),
             scalar_value(changed.value.clone())
@@ -642,7 +642,7 @@ fn same_looking_callback_capture_and_named_button_replacements_change_only_targe
 }
 #[test]
 fn same_looking_choice_item_and_template_replacements_never_rebind_select_scope() {
-    let original = observed(&controls_fixture(), "infrastructure", false).unwrap();
+    let original = observed(&controls_fixture(), "infrastructure", false, None).unwrap();
     for item_only in [false, true] {
         let mut f = controls_fixture();
         if item_only {
@@ -658,7 +658,7 @@ fn same_looking_choice_item_and_template_replacements_never_rebind_select_scope(
             f.word(LIST + 8, replacement);
             f.word(ITEM + 0x20, replacement);
         }
-        let changed = observed(&f, "infrastructure", false).unwrap();
+        let changed = observed(&f, "infrastructure", false, None).unwrap();
         assert_eq!(
             scalar_value(original.value.clone()),
             scalar_value(changed.value.clone())
@@ -675,11 +675,11 @@ fn same_looking_choice_item_and_template_replacements_never_rebind_select_scope(
 }
 #[test]
 fn essential_same_looking_owned_blocker_root_replacement_changes_both_scopes() {
-    let original = observed(&controls_fixture(), "infrastructure", false).unwrap();
+    let original = observed(&controls_fixture(), "infrastructure", false, None).unwrap();
     let mut f = controls_fixture();
     copy_region(&mut f, FROOT, 0x650000, 0xf00);
     f.word(FOCUS + 0x2f8, 0x650000);
-    let changed = observed(&f, "infrastructure", false).unwrap();
+    let changed = observed(&f, "infrastructure", false, None).unwrap();
     assert_eq!(
         scalar_value(original.value.clone()),
         scalar_value(changed.value.clone())
@@ -693,7 +693,7 @@ fn essential_same_looking_owned_blocker_root_replacement_changes_both_scopes() {
 }
 #[test]
 fn exact_sprite_resource_and_parent_identities_are_pinned_not_geometry_numbers() {
-    let original = observed(&sprite_fixture(), "infrastructure", true).unwrap();
+    let original = observed(&sprite_fixture(), "infrastructure", true, None).unwrap();
     assert_eq!(
         original.value["opener"]["renderer_type_encoding"],
         "7CSprite"
@@ -720,7 +720,7 @@ fn exact_sprite_resource_and_parent_identities_are_pinned_not_geometry_numbers()
                 f.word(POS_B + 0x2000, 0x680000);
             }
         }
-        let changed = observed(&f, "infrastructure", true).unwrap();
+        let changed = observed(&f, "infrastructure", true, None).unwrap();
         assert_eq!(
             scalar_value(original.value.clone()),
             scalar_value(changed.value.clone())
@@ -737,7 +737,7 @@ fn exact_sprite_resource_and_parent_identities_are_pinned_not_geometry_numbers()
     let mut f = sprite_fixture();
     f.number(RESOURCE + 0xa4, 240);
     f.put(RENDER + 0xb0, &2f32.to_le_bytes());
-    let changed = observed(&f, "infrastructure", true).unwrap();
+    let changed = observed(&f, "infrastructure", true, None).unwrap();
     assert_eq!(
         original.scope(Stage::EnsureOpen).unwrap(),
         changed.scope(Stage::EnsureOpen).unwrap()
@@ -751,13 +751,13 @@ fn exact_sprite_resource_and_parent_identities_are_pinned_not_geometry_numbers()
 fn missing_or_foreign_identities_leave_public_unavailable_and_refuse_action_scope() {
     let mut f = controls_fixture();
     f.word(FOCUS + 0x11d8, 0xdead0000);
-    let o = observed(&f, "infrastructure", false).unwrap();
+    let o = observed(&f, "infrastructure", false, None).unwrap();
     assert_eq!(o.value["scoped_blockers"]["available"], false);
     assert!(o.scope(Stage::EnsureOpen).is_err());
     production_not_read(&f, &[FROOT, FROOT + 0xa5]);
     let mut f = controls_fixture();
     f.word(ITEM, BASE + 0x43100f9);
-    let o = observed(&f, "infrastructure", false).unwrap();
+    let o = observed(&f, "infrastructure", false, None).unwrap();
     assert_eq!(o.value["choice"]["complete_choice_coverage"], false);
     assert!(o.scope(Stage::EnsureOpen).is_ok());
     assert!(o.scope(Stage::SelectBuilding).is_err());
@@ -766,7 +766,7 @@ fn missing_or_foreign_identities_leave_public_unavailable_and_refuse_action_scop
 #[test]
 fn scope_identities_and_nonidentity_geometry_bytes_still_fail_final_witness_drift() {
     let baseline = sprite_fixture();
-    observed(&baseline, "infrastructure", true).unwrap();
+    observed(&baseline, "infrastructure", true, None).unwrap();
     for (address, width) in [
         (TOP + 0x21f0 + 8, 8),
         (FOCUS + 0x2f8, 8),
@@ -786,7 +786,10 @@ fn scope_identities_and_nonidentity_geometry_bytes_still_fail_final_witness_drif
             bytes,
         ));
         assert_eq!(
-            observed(&f, "infrastructure", true).err().unwrap().code,
+            observed(&f, "infrastructure", true, None)
+                .err()
+                .unwrap()
+                .code,
             "torn_read"
         );
     }

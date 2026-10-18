@@ -592,9 +592,15 @@ publishing IDs or reading reciprocal building data. Province control is checked
 before following its parent pointer. Other territory payload is never traversed.
 
 Getter `0x887850` treats positive status `+0x70` as a country override; it does
-not establish territorial authority. Exact flags 1/2 and override zero are
-conservative supported-path policies, not general engine invariants. The reader
-does not infer inherited controller values, occupation or allied eligibility.
+not establish territorial authority. Override zero is a conservative
+supported-path policy. The constructors store flags exactly 1 or 2, but the engine
+tests only bit 0, and Run089 found a queued state building whose live status
+carried other bits. The reader therefore takes the kind from bit 0 and rejects
+negative values. It publishes a location only after the exact embedded status
+address, catalog ID join and reciprocal building slot all hold, and it reports the
+raw flags. For a value other than 1 or 2, a failed proof reports
+`unproven_location_status_kind` and never guesses an ID. The reader does not infer
+inherited controller values, occupation or allied eligibility.
 
 Getter `0x884be0`, writer `0x885400` and map initializer `0x884920` establish the
 status `+0x20` int32 map and `+0x38` building-pointer array, with standard signed
@@ -798,3 +804,31 @@ all journals; unresolved construction blocks clock, research, Focus and workers.
 This introduces no native command posting, map placement or frame/routing proof.
 Generated identity-replacement and protocol-shape checks are not live action
 acceptance; that remains pending.
+
+## Read-only Find view and camera look-at
+
+`construction/find_view.rs` is independently recovered for the same pinned Linux
+ELF; no upstream code was copied. The 1.1.0 Python tools' use of the game's Find
+view to centre the camera informed the approach. Manager construction `0x17037b0`
+stores the `CFindView` (vtable `0x4318868`) at manager `+0x190`; its owner `+0x860`
+is the idler. Refresh `0x2a3bc60` filters candidates into the result array at
+`+0x8c8` (0x50-byte entries: object `+0x40`, kind `+0x48`, state kind 2 from the
+state catalog `gs+0x2c8`). The first row `+0x8c0` is a `CSearchableGridBoxItem`
+(`0x4318b08`) with kind `+0x2b8` and object `+0x2a0/+0x2a8/+0x2b0`; Return
+(`0x2a3c250`) activates it through `0x2a3f060`, which centres the camera on the
+state's `+0x20` state template (`CStateTemplate`, `0x41fc068`) map position
+`+0x140/+0x144` (`0x207b9a0`). Run081 observed that template type live; an
+earlier reading of this field as a province was wrong. The camera is
+idler `+0x750`; setter `0x13d2a70` writes the look-at `+0x6a4/+0x6a8/+0x6ac` with
+height 9.5. The observer reports these facts read-only; it neither types, clicks
+nor moves the camera. Live agreement is pending.
+
+## Keyboard Find stages
+
+The `find_open`, `find_query` and `find_activate` construction stages use facts
+recorded above plus the game's own interface file, where
+`open_find_view_button` declares `shortcut = "f"` (`mapmodes_interface.gui`).
+Open `0x2a3ba80` clears the query and focuses the text box; `0x2a3c250` activates
+the first result row (`+0x8c0`) through `0x2a3f060`. Visibility uses the exact
+container's local bit 3; close `0x2a3bbe0` hides the window before setting bit
+`0x10`, which persists while hidden. No upstream code was copied.

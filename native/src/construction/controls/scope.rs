@@ -37,6 +37,7 @@ struct Common {
 enum Target {
     Opener(Opener),
     Choice(Choice),
+    Find(crate::construction::find_view::FindIdentity),
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct Callback {
@@ -366,14 +367,17 @@ pub(super) struct Scopes {
     pub(super) opener: Option<Opener>,
     pub(super) choice: Option<Choice>,
     pub(super) include_geometry: bool,
+    pub(super) find: Option<crate::construction::find_view::FindIdentity>,
     pub(super) words: Words,
 }
 impl Scopes {
     pub(super) fn scope(&self, stage: Stage) -> Result<Scope> {
-        let root = self
-            .panel_root
-            .filter(|p| *p != 0)
-            .ok_or_else(|| missing("Materialized own construction panel/root required"))?;
+        // Find stages pin the Find view instead; the panel may be unmaterialized.
+        let root = match self.panel_root.filter(|p| *p != 0) {
+            Some(root) => root,
+            None if stage.is_find() => 0,
+            None => return Err(missing("Materialized own construction panel/root required")),
+        };
         let common = Common {
             base: self.base,
             campaign_anchors: self.anchors,
@@ -407,6 +411,22 @@ impl Scopes {
                     target.control.geometry = self.words.geometry(self.base, &target.control)?;
                 }
                 Target::Choice(target)
+            }
+            Stage::FindOpen | Stage::FindQuery | Stage::FindActivate | Stage::Place => {
+                let find = self
+                    .find
+                    .clone()
+                    .ok_or_else(|| missing("Exact own Find view identity required"))?;
+                if find.window == 0
+                    || find.text_box == 0
+                    || (stage != Stage::FindOpen
+                        && (find.state.is_none() || find.template.is_none()))
+                {
+                    return Err(missing(
+                        "Materialized Find view, text box and own state template required",
+                    ));
+                }
+                Target::Find(find)
             }
         };
         Ok(Scope { common, target })

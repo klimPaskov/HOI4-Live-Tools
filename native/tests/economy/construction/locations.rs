@@ -122,8 +122,8 @@ fn foreign_owner_or_controller_excludes_ids_and_building_membership_payload() {
     );
 }
 #[test]
-fn national_overrides_and_unknown_status_kinds_never_reach_geographic_ids() {
-    for (offset, value) in [(0x68, 0), (0x68, 3), (0x68, -1), (0x70, 1), (0x70, -1)] {
+fn national_overrides_and_negative_status_flags_never_reach_geographic_ids() {
+    for (offset, value) in [(0x68, -1), (0x70, 1), (0x70, -1)] {
         let mut f = located();
         f.number(STATE_STATUS + offset, value);
         let v = observe(&f).unwrap();
@@ -133,6 +133,47 @@ fn national_overrides_and_unknown_status_kinds_never_reach_geographic_ids() {
             &[STATE_STATUS + 0x6c, STATE_STATUS + 0x20, TEMPLATE + 0x2b8],
         );
     }
+}
+#[test]
+fn runtime_status_bits_keep_bit_zero_kind_and_require_the_full_embedded_proof() {
+    // Run089: a queued state building's live status carried bits beyond the
+    // constructor's 2. Bit 0 alone picks province/state, as the engine tests.
+    for (status, flags, line, kind) in [
+        (STATE_STATUS, 0, 0, "state"),
+        (STATE_STATUS, 6, 0, "state"),
+        (PROVINCE_STATUS, 5, 2, "province"),
+    ] {
+        let mut f = located();
+        f.number(status + 0x68, flags);
+        let v = observe(&f).unwrap();
+        let location = &v["lines"][line]["location"];
+        assert_eq!(location["available"], true, "{flags}");
+        assert_eq!(location["kind"], kind);
+        assert_eq!(location["state_id"], 1);
+        assert_eq!(location["status_flags_raw"], flags);
+    }
+    // A non-constructor value whose bit-0 kind fails the embedded proof is an
+    // unproven location, not a page error and never a guessed ID.
+    for (status, flags, line, entry) in [
+        (STATE_STATUS, 3, 0, 0xf1008),
+        (PROVINCE_STATUS, 4, 2, 0xf0010),
+    ] {
+        let mut f = located();
+        f.number(status + 0x68, flags);
+        // The other kind's catalog entry for this ID holds no object.
+        f.word(entry, 0);
+        let v = observe(&f).unwrap();
+        let location = &v["lines"][line]["location"];
+        assert_eq!(location["available"], false, "{flags}");
+        assert_eq!(location["reason"], "unproven_location_status_kind");
+        assert_eq!(location["status_flags_raw"], flags);
+        assert!(location.get("state_id").is_none());
+    }
+    // Constructor values keep the hard error on a failed embedded proof.
+    let mut f = located();
+    f.number(STATE_STATUS + 0x68, 1);
+    f.word(0xf1008, 0);
+    assert_eq!(observe(&f).unwrap_err().code, "invalid_construction");
 }
 #[test]
 fn bad_ids_types_catalogs_and_reciprocal_links_refuse() {
@@ -265,4 +306,19 @@ fn protocol_accepts_only_boolean_location_option_for_construction() {
         let v=s.handle(json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"hoi4_production_lines","arguments":{"include_location":value}}})).unwrap();
         assert!(v.to_string().contains("invalid_arguments"));
     }
+}
+
+#[test]
+fn queue_summary_counts_requested_building_amounts_inside_and_outside_state() {
+    let f = located();
+    let page = page_with_location(&f, 0, 32, true).unwrap();
+    // Both located lines are in state 1: infrastructure (amount 3) at state level.
+    let infra = page["lines"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|l| l["building"]["building_id"] == "infrastructure")
+        .map(|l| l["amount_raw_signed"].as_i64().unwrap())
+        .sum::<i64>();
+    assert_eq!(infra, 3);
 }

@@ -17,12 +17,12 @@ pub enum Phase {
     BeforeIntent,
     AfterIntent,
     DispatchCheck,
+    /// A read-only tool snapshot; never part of an action's input authority.
+    ReadOnly,
 }
 
 #[derive(Default)]
-#[cfg_attr(not(any(target_os = "linux", test)), allow(dead_code))]
 pub(crate) struct Report(Vec<(Phase, Error)>);
-#[cfg_attr(not(any(target_os = "linux", test)), allow(dead_code))]
 impl Report {
     pub(crate) fn value(&self, token: &str) -> serde_json::Value {
         serde_json::json!(self
@@ -51,7 +51,6 @@ impl Report {
     }
 }
 
-#[cfg(any(target_os = "linux", test))]
 pub(crate) fn observe<T>(
     phase: Phase,
     until: Instant,
@@ -75,7 +74,6 @@ fn deadline() -> Error {
     )
 }
 
-#[cfg_attr(not(any(target_os = "linux", test)), allow(dead_code))]
 fn recover<T>(
     phase: Phase,
     until: Instant,

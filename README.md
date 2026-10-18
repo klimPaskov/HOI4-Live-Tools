@@ -86,10 +86,16 @@ game it did not start.
   daily plans that survive restarts without repeating input.
 - **Construction:** opening the construction panel and selecting a building type
   (dockyard), with replay-safe receipts. Run077 passed this gate on 17 October 2026.
+- **Map search:** opening the game's own Find view, typing a state ID and jumping
+  the camera to that state, verified from game memory (Run086, 17 October 2026).
+- **Building placement:** with a building selected and the camera on an own
+  state, one map click queues it there. The result is verified as the exact
+  queued amount of that building in that state. Run091 placed an arms factory in
+  Brandenburg on 18 October 2026.
 
 ### Not done yet
 
-- Placing buildings on the map, production changes, army, air and naval control.
+- Provincial buildings (dockyards, forts), production changes, army, air and naval control.
 - Economy and warfare automation (standing plans, shortage repair, invasions).
 - Native Windows and macOS adapters.
 - The clean two-year run and the recorded FAIR Germany and China campaigns.
@@ -119,7 +125,7 @@ and cannot be reached by campaign automation.
 | --- | --- | --- |
 | Python / Windows (1.1.0) | Mod-testing tools and recorded play attempts | Clean campaign acceptance |
 | Python / macOS | Platform work and limited diagnostic play | Reliable live acceptance |
-| Rust / Linux | Owned launch, fast state reads, time, research, Focus, daily plans, construction panel and building selection | Map placement, economy, army and naval control; campaign acceptance |
+| Rust / Linux | Owned launch, fast state reads, time, research, Focus, daily plans, construction panel, map search and state-building placement | Provincial placement, economy, army and naval control; campaign acceptance |
 | Rust / Windows and macOS | Portable protocol and fixture tests in CI | Native adapters and live tests |
 
 Passing tests or listing a tool does not mean live play works. Only recorded live
