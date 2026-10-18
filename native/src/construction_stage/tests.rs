@@ -1179,6 +1179,63 @@ fn canonical_readback_without_idle_confirmation_remains_uncertain() {
     assert_eq!(j.receipts["held"].uncertainty, Some(Uncertainty::InputIdle));
 }
 #[test]
+fn torn_terminal_witness_is_reobserved_within_the_original_deadline() {
+    let s = Scratch::new();
+    let mut j = Journal::open(&s.path()).unwrap();
+    let mut f = Fake::success(Stage::EnsureOpen);
+    // Run090: the read after input-idle confirmation tore once.
+    f.states[4] = Err(error(
+        "torn_read",
+        "Snapshot witness changed; section=choice; read=598; size=72; changed_byte=16",
+    ));
+    f.states
+        .extend((0..2).map(|_| Ok(observation(reached(Stage::EnsureOpen), 1))));
+    let e = execute(
+        &mut j,
+        "torn-terminal",
+        target(Stage::EnsureOpen),
+        &authority(),
+        &RwLock::new(true),
+        &Domains::default(),
+        &mut f,
+        TIME,
+    )
+    .unwrap();
+    assert_eq!(e.receipt.status, Status::Verified);
+    assert_eq!(f.dispatches, 1);
+    assert_eq!(f.idle_checks, 2);
+}
+#[test]
+fn persistently_torn_terminal_witness_never_verifies() {
+    let s = Scratch::new();
+    let mut j = Journal::open(&s.path()).unwrap();
+    let mut f = Fake::success(Stage::EnsureOpen);
+    f.states.truncate(4);
+    f.states.extend(
+        std::iter::repeat_with(|| Err(error("torn_read", "Snapshot witness changed"))).take(4000),
+    );
+    assert_eq!(
+        execute(
+            &mut j,
+            "always-torn",
+            target(Stage::EnsureOpen),
+            &authority(),
+            &RwLock::new(true),
+            &Domains::default(),
+            &mut f,
+            Duration::from_millis(300)
+        )
+        .unwrap_err()
+        .code,
+        "action_uncertain"
+    );
+    assert_eq!(f.dispatches, 1);
+    assert_eq!(
+        j.receipts["always-torn"].uncertainty,
+        Some(Uncertainty::DeadlineOrAuthority)
+    );
+}
+#[test]
 fn final_post_idle_scope_change_cannot_be_verified() {
     let s = Scratch::new();
     let mut j = Journal::open(&s.path()).unwrap();

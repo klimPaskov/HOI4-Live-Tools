@@ -1335,19 +1335,30 @@ impl Journal {
                             }
                             // Idle acknowledgement is not a canonical state read.
                             // Require another same-scope witnessed result afterwards.
-                            let terminal = match backend.observe(&target) {
-                                Ok(v) => v,
-                                Err(cause) => {
-                                    return Err(self.uncertain(
-                                        token,
-                                        &intent,
-                                        delivery,
-                                        last,
-                                        Uncertainty::Observation,
-                                        cause,
-                                    ))
-                                }
-                            };
+                            let terminal =
+                                match backend.observe(&target) {
+                                    Ok(v) => v,
+                                    // A torn terminal witness proves nothing either way
+                                    // (Run090 tore in the panel's choice list right after
+                                    // the place click). Re-observe and re-confirm idle
+                                    // from the top within the same original deadline.
+                                    Err(e) if e.code == "torn_read" => {
+                                        thread::sleep(Duration::from_millis(20).min(
+                                            deadline.saturating_duration_since(Instant::now()),
+                                        ));
+                                        continue;
+                                    }
+                                    Err(cause) => {
+                                        return Err(self.uncertain(
+                                            token,
+                                            &intent,
+                                            delivery,
+                                            last,
+                                            Uncertainty::Observation,
+                                            cause,
+                                        ))
+                                    }
+                                };
                             if let Err(cause) = terminal.state.validate(&target) {
                                 return Err(self.uncertain(
                                     token,

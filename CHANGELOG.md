@@ -2,6 +2,12 @@
 
 ## Unreleased native preview
 
+- Re-observe after a torn terminal witness. Run090 (v85) proved the placed
+  arms_factory located in state 64 (`status_flags_raw` 6), but the confirmation
+  read after input-idle tore in the panel's choice list and the stage recorded
+  uncertainty, although the last whole snapshot had already reached the target.
+  A torn confirmation read now restarts observation and idle confirmation within
+  the same original deadline. A persistently torn witness never verifies.
 - Prove construction locations of state buildings queued live. Run089 showed that
   one map click queued exactly one arms_factory line (amount 1, 15 factories), but
   its building status carried flag bits beyond the constructor's 2, so the location
