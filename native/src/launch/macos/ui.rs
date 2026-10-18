@@ -112,6 +112,8 @@ pub(super) fn clear_notices(
     keys: &crate::platform::macos_input::MacKeys,
 ) -> Result<usize> {
     close_menu(process, keys)?;
+    // A confirmation left open by an interrupted action blocks every click.
+    decline_stale(process, keys)?;
     // An event window is drawn over notices and panels; clicks would land on
     // it, so the player answers events before anything else.
     let open = read(process, super::events::open_ids)?;
@@ -182,6 +184,9 @@ const ACCEPT_DIALOG_VTABLE: u64 = 0x342f1d0;
 /// The game's reassign-commander confirmation (CChangeGroupLeaderDialog); it
 /// has the same accept and decline buttons.
 const REASSIGN_DIALOG_VTABLE: u64 = 0x3437028;
+/// "Reassign Armies": taking every division out of an army would delete it
+/// and its orders (CReassignFullOrdersGroupDialog); same accept/decline buttons.
+const REASSIGN_ARMIES_DIALOG_VTABLE: u64 = 0x347dba8;
 
 fn command_dialog(r: &Reader<'_>, image: u64, button: &str) -> Result<Option<gui_tree::Rect>> {
     if r.string_abi() != StringAbi::LibCxx {
@@ -193,7 +198,10 @@ fn command_dialog(r: &Reader<'_>, image: u64, button: &str) -> Result<Option<gui
     for index in 0..count.min(32) as u64 {
         let window = r.u64(data + index * 8)?;
         let kind = r.u64(window)?;
-        if kind != image + ACCEPT_DIALOG_VTABLE && kind != image + REASSIGN_DIALOG_VTABLE {
+        if kind != image + ACCEPT_DIALOG_VTABLE
+            && kind != image + REASSIGN_DIALOG_VTABLE
+            && kind != image + REASSIGN_ARMIES_DIALOG_VTABLE
+        {
             continue;
         }
         let Some(root) = gui_tree::container(r, r.u64(window + POPUP_ROOT)?, image)? else {

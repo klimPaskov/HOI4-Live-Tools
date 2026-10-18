@@ -300,6 +300,12 @@ pub(super) fn create(process: &dyn Process, keys: &MacKeys, state: i32) -> Resul
     clear_notices(process, keys)?;
     let (x, y) = card.center();
     keys.click(GAME, x, y)?;
+    // "Reassign Armies" appears when the box selection took every division
+    // of an existing army (it would be removed). Armies standing in the same
+    // place are reorganised into the new one: accept, then recreate small
+    // armies afterwards if needed.
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    super::ui::accept_command(process, keys)?;
     wait(process, "army created", |r, i| {
         Ok(membership(r, i)?
             .values()

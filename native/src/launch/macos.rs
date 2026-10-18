@@ -1043,7 +1043,7 @@ impl Commands for MacClock {
                 let now = armies::armies(process)?;
                 Ok(if retry {
                     journal::Outcome::Diverged(now)
-                } else if count(&now) > count(&before) {
+                } else if count(&now) != count(&before) || now["armies"] != before["armies"] {
                     journal::Outcome::Reached(now)
                 } else {
                     journal::Outcome::Unchanged(now)
