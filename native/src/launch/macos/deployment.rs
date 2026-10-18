@@ -1,7 +1,7 @@
 //! Train own divisions with ordinary input: deployment panel (U) and the
 //! template's Train button, once per division. Each click must add one
 //! training line for that template to the own deployment queue in memory.
-use super::ui::{clear_notices, read, settled, wait};
+use super::ui::{clear_notices, find_state, read, settled, wait};
 use crate::{
     error::{Error, Result},
     game,
@@ -25,6 +25,9 @@ struct Ui {
     country_deployment: u64,
     conveyors: u64,
     conveyor_template: u64,
+    location_label: u64,
+    grid_items: u64,
+    item_container: u64,
 }
 /// macOS Mach-O 089EA519, mapped live on 18 October 2026 (Germany test run):
 /// the template window's rows (+0xb90) follow the country's template list
@@ -42,7 +45,14 @@ const MACOS: Ui = Ui {
     country_deployment: 0xd18,
     conveyors: 0x50,
     conveyor_template: 0x18,
+    // Label of a training line's location button: a line without a location
+    // never deploys its trained division. Mapped live on 18 October 2026.
+    location_label: 0x158,
+    grid_items: 0x190,
+    item_container: 0x10,
 };
+/// Visible band of the deployment list.
+const LIST: (i32, i32) = (360, 1050);
 const GAME: (u32, u32) = (1920, 1080);
 
 fn ui(r: &Reader<'_>) -> Result<&'static Ui> {
@@ -167,4 +177,134 @@ pub(super) fn train(process: &dyn Process, keys: &MacKeys, name: &str, count: us
         })?;
     }
     Ok(())
+}
+
+/// Location labels and buttons of the training lines, in list order. The
+/// conveyor's own province field is only a pending choice the game clears
+/// once applied, so the drawn label is the reliable state: a state name, or
+/// "No location set".
+fn location_rows(r: &Reader<'_>, image: u64) -> Result<Vec<(bool, Option<Rect>)>> {
+    let u = ui(r)?;
+    let root = gui_tree::container(r, r.u64(view(r, image)? + u.view_root)?, image)?
+        .ok_or_else(|| Error::new("invalid_gui", "Deployment view root unavailable"))?;
+    let grid = find(r, image, root, "deployments_list_gridbox", 0)?
+        .ok_or_else(|| Error::new("gui_target_unavailable", "Deployment list not found"))?;
+    let items = pointers(r, grid + u.grid_items, 1024)?;
+    let mut out = Vec::new();
+    for item in items {
+        let kind =
+            crate::research_ui::primary_type_encoding(r, image, r.u64(item)?).unwrap_or_default();
+        if kind != "31CMilitaryDeploymentConveyorView" {
+            continue;
+        }
+        let Some(frame) = gui_tree::container(r, r.u64(item + u.item_container)?, image)? else {
+            continue;
+        };
+        if let Some(button) = gui_tree::child(r, image, frame, "deploy_location_button")? {
+            let label = r.string_bounded(button + u.location_label, 128)?;
+            let located = !label.is_empty() && !label.contains("No location set");
+            out.push((
+                located,
+                gui_tree::rect_unclipped(r, image, button, GAME).ok(),
+            ));
+        }
+    }
+    Ok(out)
+}
+/// Training lines without a deployment location.
+pub(super) fn unlocated(r: &Reader<'_>, image: u64) -> Result<usize> {
+    Ok(location_rows(r, image)?.iter().filter(|(l, _)| !l).count())
+}
+/// Location buttons of training lines without a location, in list order.
+fn location_buttons(r: &Reader<'_>, image: u64) -> Result<Vec<Rect>> {
+    Ok(location_rows(r, image)?
+        .into_iter()
+        .filter(|(l, _)| !l)
+        .filter_map(|(_, rect)| rect)
+        .collect())
+}
+fn find(r: &Reader<'_>, image: u64, object: u64, name: &str, depth: u32) -> Result<Option<u64>> {
+    for child in gui_tree::children(r, object)? {
+        if gui_tree::name(r, child, image)?.as_deref() == Some(name) {
+            return Ok(Some(child));
+        }
+        if depth < 5 {
+            if let Some(inner) = gui_tree::container(r, child, image)? {
+                if let Some(found) = find(r, image, inner, name, depth + 1)? {
+                    return Ok(Some(found));
+                }
+            }
+        }
+    }
+    Ok(None)
+}
+
+/// Give every training line without a location the own state `state`: the
+/// Find view centres the state, then each line's location button and one
+/// click on the state. Verified by one fewer unlocated line per step.
+pub(super) fn set_locations(process: &dyn Process, keys: &MacKeys, state: i32) -> Result<usize> {
+    clear_notices(process, keys)?;
+    let total = read(process, unlocated)?;
+    if total == 0 {
+        return Ok(0);
+    }
+    find_state(process, keys, state)?;
+    if !read(process, open)? {
+        keys.press(Key::letter('u')?)?;
+        wait(process, "open deployment", open)?;
+    }
+    let mut done = 0;
+    for _ in 0..total.min(64) {
+        let before = read(process, unlocated)?;
+        if before == 0 {
+            break;
+        }
+        // Scroll the first unlocated line's button into the list area.
+        let mut rect = None;
+        for _ in 0..40 {
+            let found = read(process, location_buttons)?.first().copied();
+            match found {
+                Some(r) if r.y >= LIST.0 && r.y + r.h <= LIST.1 => {
+                    rect = Some(r);
+                    break;
+                }
+                Some(r) => {
+                    let pixels = if r.y < LIST.0 { 240 } else { -240 };
+                    keys.scroll(GAME, (180.0, 700.0), pixels)?;
+                }
+                None => break,
+            }
+        }
+        if rect.is_none() {
+            return Err(Error::new(
+                "gui_target_unavailable",
+                "Training line location button not in view",
+            ));
+        }
+        // The panel slides in and the list scrolls smoothly; click a resting target.
+        let rect = settled(process, "location button", |r, i| {
+            location_buttons(r, i)?
+                .first()
+                .copied()
+                .filter(|r| r.y >= LIST.0 && r.y + r.h <= LIST.1)
+                .ok_or_else(|| Error::new("gui_target_unavailable", "Location button moved"))
+        })?;
+        // The text sprite is wider (446 px) than the drawn location field
+        // (about 230 px from its left edge); click the field's middle.
+        let (x, y) = (f64::from(rect.x) + 115.0, rect.center().1);
+        keys.click(GAME, x, y)?;
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        keys.click(GAME, 960.0, 540.0)?;
+        wait(process, "deployment location set", |r, i| {
+            Ok(unlocated(r, i)? < before)
+        })
+        .map_err(|_| {
+            Error::new(
+                "input_readback_failed",
+                "No location was set (the state must be own and able to receive divisions)",
+            )
+        })?;
+        done += 1;
+    }
+    Ok(done)
 }
