@@ -14,12 +14,22 @@ extern "C" {
     fn CFDictionaryGetValue(dict: CFTypeRef, key: CFTypeRef) -> CFTypeRef;
     fn CFNumberGetValue(number: CFTypeRef, kind: isize, out: *mut c_void) -> bool;
     fn CFRelease(value: CFTypeRef);
+    fn CFDataGetLength(data: CFTypeRef) -> isize;
+    fn CFDataGetBytePtr(data: CFTypeRef) -> *const u8;
 }
 #[link(name = "CoreGraphics", kind = "framework")]
 extern "C" {
     static kCGWindowOwnerPID: CFTypeRef;
     static kCGWindowLayer: CFTypeRef;
     static kCGWindowBounds: CFTypeRef;
+    static kCGWindowNumber: CFTypeRef;
+    fn CGWindowListCreateImage(rect: Rect, option: u32, window: u32, image: u32) -> CFTypeRef;
+    fn CGImageGetWidth(image: CFTypeRef) -> usize;
+    fn CGImageGetHeight(image: CFTypeRef) -> usize;
+    fn CGImageGetBytesPerRow(image: CFTypeRef) -> usize;
+    fn CGImageGetBitsPerPixel(image: CFTypeRef) -> usize;
+    fn CGImageGetDataProvider(image: CFTypeRef) -> CFTypeRef;
+    fn CGDataProviderCopyData(provider: CFTypeRef) -> CFTypeRef;
     fn CGWindowListCopyWindowInfo(option: u32, relative_to: u32) -> CFTypeRef;
     fn CGRectMakeWithDictionaryRepresentation(dict: CFTypeRef, rect: *mut Rect) -> bool;
     fn CGEventCreateKeyboardEvent(source: CFTypeRef, key: u16, down: bool) -> CFTypeRef;
@@ -104,6 +114,109 @@ impl Key {
         } else {
             Err(Error::new("invalid_arguments", "Unsupported hotkey"))
         }
+    }
+}
+
+/// One capture of the owned game's client area: BGRA pixels at `scale`
+/// physical pixels per game pixel.
+pub struct Capture {
+    pub width: usize,
+    pub height: usize,
+    pub stride: usize,
+    pub scale: f64,
+    pub data: Vec<u8>,
+}
+impl Capture {
+    /// (r, g, b) at a game-logical pixel, if inside the capture.
+    pub fn rgb(&self, x: f64, y: f64) -> Option<(u8, u8, u8)> {
+        let px = (x * self.scale) as usize;
+        let py = (y * self.scale) as usize;
+        if px >= self.width || py >= self.height {
+            return None;
+        }
+        let o = py * self.stride + px * 4;
+        Some((self.data[o + 2], self.data[o + 1], self.data[o]))
+    }
+}
+/// Window number and bounds of the owned process's largest normal on-screen window.
+fn owned_window(pid: i32) -> Result<(u32, Rect)> {
+    // SAFETY: the returned array is released below; entries are borrowed.
+    unsafe {
+        let list = CGWindowListCopyWindowInfo(ON_SCREEN_ONLY | EXCLUDE_DESKTOP, 0);
+        if list.is_null() {
+            return Err(Error::new("input_unavailable", "Window list unavailable"));
+        }
+        let mut best: Option<(u32, Rect)> = None;
+        for index in 0..CFArrayGetCount(list) {
+            let window = CFArrayGetValueAtIndex(list, index);
+            if number(window, kCGWindowLayer) != Some(0)
+                || number(window, kCGWindowOwnerPID) != Some(pid)
+            {
+                continue;
+            }
+            let mut rect = Rect::default();
+            let dict = CFDictionaryGetValue(window, kCGWindowBounds);
+            let Some(id) = number(window, kCGWindowNumber) else {
+                continue;
+            };
+            if !dict.is_null()
+                && CGRectMakeWithDictionaryRepresentation(dict, &mut rect)
+                && best.is_none_or(|(_, b)| rect.size.x * rect.size.y > b.size.x * b.size.y)
+            {
+                best = Some((id as u32, rect));
+            }
+        }
+        CFRelease(list);
+        best.ok_or_else(|| {
+            Error::new(
+                "input_target_unavailable",
+                "Owned game window is not on screen",
+            )
+        })
+    }
+}
+/// Capture the owned window's client area (needs Screen Recording permission).
+pub fn capture_client(pid: i32, game: (u32, u32)) -> Result<Capture> {
+    let (id, bounds) = owned_window(pid)?;
+    let content = content_from_bounds(bounds, game)?;
+    // SAFETY: CoreGraphics objects are released below; the copied bytes are owned.
+    unsafe {
+        // kCGWindowListOptionIncludingWindow, kCGWindowImageBoundsIgnoreFraming.
+        let image = CGWindowListCreateImage(content, 1 << 3, id, 1);
+        if image.is_null() {
+            return Err(Error::new(
+                "capture_unavailable",
+                "Window capture unavailable (Screen Recording permission or locked screen)",
+            ));
+        }
+        let width = CGImageGetWidth(image);
+        let height = CGImageGetHeight(image);
+        let stride = CGImageGetBytesPerRow(image);
+        let bits = CGImageGetBitsPerPixel(image);
+        let data = CGDataProviderCopyData(CGImageGetDataProvider(image));
+        CFRelease(image);
+        if data.is_null() || bits != 32 {
+            if !data.is_null() {
+                CFRelease(data);
+            }
+            return Err(Error::new(
+                "capture_unavailable",
+                "Unexpected capture format",
+            ));
+        }
+        let len = CFDataGetLength(data) as usize;
+        let bytes = std::slice::from_raw_parts(CFDataGetBytePtr(data), len).to_vec();
+        CFRelease(data);
+        if len < stride * height {
+            return Err(Error::new("capture_unavailable", "Short capture"));
+        }
+        Ok(Capture {
+            width,
+            height,
+            stride,
+            scale: width as f64 / f64::from(game.0),
+            data: bytes,
+        })
     }
 }
 
@@ -209,6 +322,11 @@ pub fn frontmost_window_owner() -> Result<Option<i32>> {
 
 pub struct MacKeys {
     pid: i32,
+}
+impl MacKeys {
+    pub fn capture(&self, game: (u32, u32)) -> Result<Capture> {
+        capture_client(self.pid, game)
+    }
 }
 impl MacKeys {
     pub fn new(pid: i32) -> Self {

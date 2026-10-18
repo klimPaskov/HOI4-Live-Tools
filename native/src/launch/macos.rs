@@ -233,6 +233,8 @@ impl Commands for MacClock {
             json!({"name":"hoi4_division_templates","description":"Own division template names (for hoi4_train) and how many training lines each has queued. Pure read; no lease needed.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}}),
             json!({"name":"hoi4_train","description":"Queue divisions of an own template with ordinary input (deployment panel, the template's Train button once per division). Each click is verified by one more training line for that template in the own deployment queue.","inputSchema":{"type":"object","properties":{"template":{"type":"string","maxLength":128},"count":{"type":"integer","minimum":1,"maximum":24},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["template","count","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_armies","description":"Own armies (name, division ids) and unassigned division ids. Pure read; no lease needed.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}}),
+            json!({"name":"hoi4_army_front","description":"Give an own army a front-line order along the border nearest a state: army card, front-line drawing (Z), Find view centres the state, one click on the nearest highlighted border. Verified by one more battle-plan order on the army.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"state_id":{"type":"integer","minimum":1,"maximum":4095},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","state_id","request_id","lease_token"],"additionalProperties":false}}),
+            json!({"name":"hoi4_army_plan","description":"Execute or stop an own army's battle plan with the army card's play or stop button. Verified by the card's executing state.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"execute":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","execute","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_army_create","description":"Create one army from the own divisions shown around a state: Find view centres the state, a box selection picks own divisions there, the new-army card creates the army. Verified by a new army in memory; returns its divisions.","inputSchema":{"type":"object","properties":{"state_id":{"type":"integer","minimum":1,"maximum":4095},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["state_id","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_time","description":"Set desired pause or internal speed 0..4 with ordinary keys (Space, keypad +/-) sent only while the owned game window is front-most, each verified by fresh memory readback. Supply exactly one target and a stable request_id; uncertain dispatches are never replayed.","inputSchema":{"type":"object","properties":{"paused":{"type":"boolean"},"speed":{"type":"integer","minimum":0,"maximum":4},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["request_id","lease_token"],"additionalProperties":false}}),
         ]
@@ -255,10 +257,12 @@ impl Commands for MacClock {
                 | "hoi4_train"
                 | "hoi4_armies"
                 | "hoi4_army_create"
+                | "hoi4_army_front"
+                | "hoi4_army_plan"
         )
     }
     fn capabilities(&self) -> Value {
-        json!({"transport":"ordinary macOS CGEvent keys to the front-most owned window","actions":["set_paused","set_speed","research_start","focus_start","production_add","production_set","construction_add","politics_options","politics_choose","decisions_list","decision_take","train","army_create"],"lease":"exclusive configured controller","native_posting":false,"full_campaign_acceptance":false})
+        json!({"transport":"ordinary macOS CGEvent keys to the front-most owned window","actions":["set_paused","set_speed","research_start","focus_start","production_add","production_set","construction_add","politics_options","politics_choose","decisions_list","decision_take","train","army_create","army_front","army_plan"],"lease":"exclusive configured controller","native_posting":false,"full_campaign_acceptance":false})
     }
     fn call(&self, process: &dyn Process, name: &str, arguments: &Value) -> Result<Value> {
         let args = arguments
@@ -497,6 +501,87 @@ impl Commands for MacClock {
                     None => production::add(process, keys, key, factories),
                     Some(index) => production::set(process, keys, index, key, factories),
                 }
+            };
+            let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
+            return Ok(json!({"receipt":receipt}));
+        }
+        if name == "hoi4_army_plan" {
+            allowed(args, &["army", "execute", "request_id", "lease_token"])?;
+            let army = string(args, "army")?;
+            if army.is_empty() || army.len() > 128 || army.chars().any(char::is_control) {
+                return Err(Error::new("invalid_arguments", "Invalid army name"));
+            }
+            let run = args
+                .get("execute")
+                .and_then(Value::as_bool)
+                .ok_or_else(|| Error::new("invalid_arguments", "execute must be a boolean"))?;
+            let id = string(args, "request_id")?;
+            let token = string(args, "lease_token")?;
+            let epoch = guard.observe(process)?.epoch;
+            authority.authorize(token, &epoch)?;
+            let state = || ui::read(process, |r, i| armies::executing(r, i, army));
+            let retry = actions.receipt_exists(id);
+            if !retry {
+                self.keys.preflight()?;
+            }
+            let action = json!({"kind":"army_plan","army":army,"execute":run});
+            let keys = &self.keys;
+            let mut settle = || {
+                let now = state()?;
+                let detail = json!({"army":army,"executing":now});
+                Ok(if now == run {
+                    journal::Outcome::Reached(detail)
+                } else if retry {
+                    journal::Outcome::Diverged(detail)
+                } else {
+                    journal::Outcome::Unchanged(detail)
+                })
+            };
+            let mut dispatch = || {
+                authority.authorize(token, &epoch)?;
+                armies::execute(process, keys, army, run)
+            };
+            let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
+            return Ok(json!({"receipt":receipt}));
+        }
+        if name == "hoi4_army_front" {
+            allowed(args, &["army", "state_id", "request_id", "lease_token"])?;
+            let army = string(args, "army")?;
+            if army.is_empty() || army.len() > 128 || army.chars().any(char::is_control) {
+                return Err(Error::new("invalid_arguments", "Invalid army name"));
+            }
+            let state = args
+                .get("state_id")
+                .and_then(Value::as_i64)
+                .filter(|v| (1..4096).contains(v))
+                .ok_or_else(|| Error::new("invalid_arguments", "state_id must be 1..4095"))?
+                as i32;
+            let id = string(args, "request_id")?;
+            let token = string(args, "lease_token")?;
+            let epoch = guard.observe(process)?.epoch;
+            authority.authorize(token, &epoch)?;
+            let orders = || ui::read(process, |r, i| armies::orders(r, i, army));
+            let before = orders()?;
+            let retry = actions.receipt_exists(id);
+            if !retry {
+                self.keys.preflight()?;
+            }
+            let action = json!({"kind":"army_front","army":army,"state_id":state});
+            let keys = &self.keys;
+            let mut settle = || {
+                let now = orders()?;
+                let detail = json!({"army":army,"orders":now});
+                Ok(if retry {
+                    journal::Outcome::Diverged(detail)
+                } else if now > before {
+                    journal::Outcome::Reached(detail)
+                } else {
+                    journal::Outcome::Unchanged(detail)
+                })
+            };
+            let mut dispatch = || {
+                authority.authorize(token, &epoch)?;
+                armies::front(process, keys, army, state)
             };
             let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
             return Ok(json!({"receipt":receipt}));
