@@ -34,6 +34,13 @@ struct Ui {
     entry_vtable: u64,
     entry_container: u64,
     entry_idea: u64,
+    advisor_slot_vtable: u64,
+    advisor_button: u64,
+    advisor_character: u64,
+    character_key: u64,
+    gui_from_idler: u64,
+    root_windows: u64,
+    character_entry_vtable: u64,
 }
 /// macOS Mach-O 089EA519, mapped live on 18 October 2026 (Germany test run):
 /// category entries and their slots (group, current idea, button), the
@@ -59,6 +66,13 @@ const MACOS: Ui = Ui {
     entry_vtable: 0x3471468,
     entry_container: 0x10,
     entry_idea: 0x30,
+    advisor_slot_vtable: 0x34969c0,
+    advisor_button: 0x28,
+    advisor_character: 0x430,
+    character_key: 0x38,
+    gui_from_idler: 0x4c0,
+    root_windows: 0x168,
+    character_entry_vtable: 0x3496048,
 };
 const GAME: (u32, u32) = (1920, 1080);
 
@@ -118,8 +132,25 @@ fn idea_key(r: &Reader<'_>, idea: u64) -> Result<Option<String>> {
     let key = r.string_bounded(idea + ui(r)?.idea_key, 128)?;
     Ok((!key.is_empty() && key != "null").then_some(key))
 }
-/// (current idea, button widget) of slot `slot` in category `category`.
-fn slot(r: &Reader<'_>, image: u64, category: &str, slot: usize) -> Result<(Option<String>, u64)> {
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Kind {
+    Idea,
+    Advisor,
+}
+fn character_key(r: &Reader<'_>, character: u64) -> Result<Option<String>> {
+    if character == 0 {
+        return Ok(None);
+    }
+    let key = r.string_bounded(character + ui(r)?.character_key, 128)?;
+    Ok((!key.is_empty()).then_some(key))
+}
+/// (current idea or advisor, button widget, kind) of slot `slot` in `category`.
+fn slot(
+    r: &Reader<'_>,
+    image: u64,
+    category: &str,
+    slot: usize,
+) -> Result<(Option<String>, u64, Kind)> {
     let u = ui(r)?;
     let root = gui_tree::container(r, r.u64(view(r, image)? + u.view_root)?, image)?
         .ok_or_else(|| Error::new("invalid_gui", "Politics view root unavailable"))?;
@@ -144,11 +175,12 @@ fn slot(r: &Reader<'_>, image: u64, category: &str, slot: usize) -> Result<(Opti
         let item = *items(r, slots)?
             .get(slot)
             .ok_or_else(|| Error::new("invalid_arguments", "Slot outside this category"))?;
+        if r.u64(item)? == image + u.advisor_slot_vtable {
+            let current = character_key(r, r.u64(item + u.advisor_character)?)?;
+            return Ok((current, r.u64(item + u.advisor_button)?, Kind::Advisor));
+        }
         if r.u64(item)? != image + u.slot_vtable {
-            return Err(Error::new(
-                "capability_unavailable",
-                "This slot is an advisor/leader slot, which is not supported yet",
-            ));
+            return Err(Error::new("invalid_gui", "Unknown politics slot class"));
         }
         let current = idea_key(r, r.u64(item + u.slot_idea)?)?;
         let button = r.u64(item + u.slot_button)?;
@@ -158,7 +190,7 @@ fn slot(r: &Reader<'_>, image: u64, category: &str, slot: usize) -> Result<(Opti
                 "This slot is not available yet",
             ));
         }
-        return Ok((current, button));
+        return Ok((current, button, Kind::Idea));
     }
     Err(Error::new("invalid_arguments", "Unknown idea category"))
 }
@@ -168,12 +200,61 @@ fn window_root(r: &Reader<'_>, image: u64) -> Result<u64> {
     gui_tree::container(r, r.u64(window + u.window_root)?, image)?
         .ok_or_else(|| Error::new("invalid_gui", "Selection window root unavailable"))
 }
+/// The shown character (advisor) selection window, if any.
+fn character_window(r: &Reader<'_>, image: u64) -> Result<Option<u64>> {
+    let u = ui(r)?;
+    let idler = r.u64(image + game::layout(r).idler_global)?;
+    let gui = r.u64(idler + u.gui_from_idler)?;
+    let (_, data, count) = r.array_header(gui + u.root_windows)?;
+    for index in 0..count.min(1024) as u64 {
+        let base = r.u64(data + index * 8)?;
+        if gui_tree::name(r, base, image)?.as_deref() != Some("command_character_view_window") {
+            continue;
+        }
+        if let Some(window) = gui_tree::container(r, base, image)? {
+            if gui_tree::visible(r, window)? {
+                return Ok(Some(window));
+            }
+        }
+    }
+    Ok(None)
+}
 fn window_open(r: &Reader<'_>, image: u64) -> Result<bool> {
-    gui_tree::visible(r, window_root(r, image)?)
+    Ok(gui_tree::visible(r, window_root(r, image)?)? || character_window(r, image)?.is_some())
+}
+fn advisor_options(r: &Reader<'_>, image: u64) -> Result<Vec<(String, bool, Rect)>> {
+    let u = ui(r)?;
+    let Some(window) = character_window(r, image)? else {
+        return Ok(Vec::new());
+    };
+    let mut all = Vec::new();
+    grids(r, image, window, 0, &mut all)?;
+    let mut out = Vec::new();
+    for entry in all
+        .into_iter()
+        .map(|g| items(r, g))
+        .collect::<Result<Vec<_>>>()?
+        .concat()
+    {
+        if r.u64(entry)? != image + u.character_entry_vtable {
+            continue;
+        }
+        let Some(key) = character_key(r, r.u64(entry + u.advisor_character)?)? else {
+            continue;
+        };
+        let button = r.u64(entry + u.advisor_button)?;
+        if let Ok(rect) = gui_tree::rect(r, image, button, GAME) {
+            out.push((key, !gui_tree::disabled(r, button)?, rect));
+        }
+    }
+    Ok(out)
 }
 /// Options of the open selection window: (idea key, enabled, rectangle).
 fn options(r: &Reader<'_>, image: u64) -> Result<Vec<(String, bool, Rect)>> {
     let u = ui(r)?;
+    if character_window(r, image)?.is_some() {
+        return advisor_options(r, image);
+    }
     let root = window_root(r, image)?;
     let mut all = Vec::new();
     grids(r, image, root, 0, &mut all)?;
