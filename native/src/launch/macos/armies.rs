@@ -333,30 +333,56 @@ fn card_rect(r: &Reader<'_>, image: u64, army: &str, name: &str) -> Result<Rect>
     gui_tree::rect(r, image, card_widget(r, image, army, name)?, GAME)
 }
 
+/// Select exactly `army` with its card: the selection must hold all of its
+/// divisions, not a selection left over from before.
+fn select_army(process: &dyn Process, keys: &MacKeys, army: &str) -> Result<Rect> {
+    let size = read(process, |r, i| {
+        let group = group_named(r, i, army)?;
+        Ok(membership(r, i)?.values().filter(|g| **g == group).count() as u64)
+    })?;
+    let card = read(process, |r, i| card_rect(r, i, army, "portrait_btn"))?;
+    let (x, y) = card.center();
+    keys.click(GAME, x, y)?;
+    wait(process, "select army", |r, i| {
+        Ok(selection_size(r, i)? & 0xffff_ffff == size)
+    })?;
+    std::thread::sleep(std::time::Duration::from_millis(300));
+    Ok(card)
+}
 /// Screen areas covered by the top bar, the selected army's panel, the
 /// battle-plan toolbar and the army card bar.
 fn covered(x: f64, y: f64) -> bool {
-    y < 90.0 || (x < 450.0 && y < 520.0) || y > 830.0
+    // The army panel lists divisions as green bars and grows with the
+    // army (to y 930 for 43 divisions), so the whole left strip is out.
+    y < 90.0 || x < 450.0 || y > 830.0 || (x > 1560.0 && y < 300.0)
 }
-/// Up to `count` distinct bright-green front dashes (a solid 5x5 patch)
-/// nearest the screen centre.
-fn nearest_dashes(capture: &Capture, count: usize) -> Vec<(f64, f64)> {
-    let green = |x: f64, y: f64| {
-        capture.rgb(x, y).is_some_and(|(r, g, b)| {
-            g > 150 && i32::from(g) > i32::from(r) + 25 && i32::from(g) > i32::from(b) + 60
-        })
+/// Up to `count` distinct solid 7x7 patches that front-line drawing changed
+/// (strongly, in every pixel), nearest the screen centre.
+fn highlighted(
+    plain: &Capture,
+    drawing: &Capture,
+    skip: &dyn Fn(f64, f64) -> bool,
+    count: usize,
+) -> Vec<(f64, f64)> {
+    let changed = |x: f64, y: f64| match (plain.rgb(x, y), drawing.rgb(x, y)) {
+        (Some(a), Some(b)) => {
+            let d = |p: u8, q: u8| (i32::from(p) - i32::from(q)).abs();
+            d(a.0, b.0) + d(a.1, b.1) + d(a.2, b.2) > 90
+        }
+        _ => false,
     };
     let mut found: Vec<(f64, f64, f64)> = Vec::new();
     let mut y = 0.0;
-    while y < 1076.0 {
+    while y < 1072.0 {
         let mut x = 0.0;
-        while x < 1916.0 {
+        while x < 1912.0 {
             if !covered(x, y)
-                && green(x, y)
-                && (0..5).all(|dy| (0..5).all(|dx| green(x + f64::from(dx), y + f64::from(dy))))
+                && !skip(x, y)
+                && changed(x, y)
+                && (0..7).all(|dy| (0..7).all(|dx| changed(x + f64::from(dx), y + f64::from(dy))))
             {
                 let d = (x - 960.0).powi(2) + (y - 540.0).powi(2);
-                found.push((d, x + 2.0, y + 2.0));
+                found.push((d, x + 3.0, y + 3.0));
             }
             x += 3.0;
         }
@@ -397,13 +423,7 @@ fn own_states(r: &Reader<'_>, image: u64) -> Result<Vec<i32>> {
     }
     Ok(out)
 }
-pub(super) fn front(
-    process: &dyn Process,
-    keys: &MacKeys,
-    game_dir: &std::path::Path,
-    army: &str,
-    state: i32,
-) -> Result<()> {
+pub(super) fn front(process: &dyn Process, keys: &MacKeys, army: &str, state: i32) -> Result<()> {
     clear_notices(process, keys)?;
     let own = read(process, own_states)?;
     if own.contains(&state) {
@@ -412,57 +432,37 @@ pub(super) fn front(
             "This state is own; choose a state of the country to face",
         ));
     }
-    let (dx, dy) = super::mapdata::toward_own(game_dir, state, &own)?;
     let before = read(process, |r, i| orders(r, i, army))?;
-    let card = read(process, |r, i| card_rect(r, i, army, "portrait_btn"))?;
-    let (x, y) = card.center();
-    keys.click(GAME, x, y)?;
-    wait(process, "select army", |r, i| Ok(selection_size(r, i)? > 0))?;
-    keys.press(Key::letter('z')?)?;
-    std::thread::sleep(std::time::Duration::from_millis(200));
+    let card = select_army(process, keys, army)?;
     find_state(process, keys, state)?;
-    std::thread::sleep(std::time::Duration::from_millis(300));
-    // Only a click on a highlighted front places the order; elsewhere the
-    // game just shows a tooltip. First the highlighted dash nearest the
-    // centre in a capture, then a fine probe from the state's centre toward
-    // the nearest own province, where the shared border lies.
-    let placed = |process: &dyn Process| -> Result<bool> {
-        let deadline = std::time::Instant::now() + std::time::Duration::from_millis(500);
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    // The fronts this army can take are highlighted only in front-line
+    // drawing, in a colour that varies by army and lighting; compare one
+    // capture before Z with one after it, at the same camera position.
+    let plain = keys.capture(GAME)?;
+    keys.press(Key::letter('z')?)?;
+    std::thread::sleep(std::time::Duration::from_millis(600));
+    let drawing = keys.capture(GAME)?;
+    // The card's tooltip may change under the resting cursor.
+    let tooltip =
+        |x: f64, y: f64| x > f64::from(card.x) - 60.0 && x < f64::from(card.x) + 460.0 && y > 680.0;
+    let candidates = highlighted(&plain, &drawing, &tooltip, 4);
+    for (x, y) in candidates {
+        keys.click(GAME, x, y)?;
+        let deadline = std::time::Instant::now() + std::time::Duration::from_millis(600);
         while std::time::Instant::now() < deadline {
             if read(process, |r, i| orders(r, i, army))? > before {
-                return Ok(true);
+                return Ok(());
             }
             std::thread::sleep(std::time::Duration::from_millis(40));
         }
-        Ok(false)
-    };
-    if let Ok(capture) = keys.capture(GAME) {
-        for (x, y) in nearest_dashes(&capture, 3) {
-            keys.click(GAME, x, y)?;
-            if placed(process)? {
-                return Ok(());
-            }
-        }
     }
-    let mut step = 0.0;
-    while step <= 640.0 {
-        step += 20.0;
-        let (x, y) = (960.0 + dx * step, 540.0 + dy * step);
-        if !(320.0..=1880.0).contains(&x) || !(120.0..=880.0).contains(&y) {
-            break;
-        }
-        if covered(x, y) {
-            continue;
-        }
-        keys.click(GAME, x, y)?;
-        if placed(process)? {
-            return Ok(());
-        }
-    }
+    // Leave front-line drawing without touching the map.
     let _ = keys.press(Key::Escape);
     Err(Error::new(
         "input_readback_failed",
-        "No front line was placed: no highlighted front toward this country was found near the state",
+        "No front line was placed: no highlighted front toward this country near the state \
+         (the border may already be fully covered by other fronts)",
     ))
 }
 

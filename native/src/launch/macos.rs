@@ -876,7 +876,6 @@ impl Commands for MacClock {
             let token = string(args, "lease_token")?;
             let epoch = guard.observe(process)?.epoch;
             authority.authorize(token, &epoch)?;
-            let game_dir = mapdata::game_dir(&epoch.game.exe)?;
             let orders = || ui::read(process, |r, i| armies::orders(r, i, army));
             let before = orders()?;
             let retry = actions.receipt_exists(id);
@@ -898,7 +897,7 @@ impl Commands for MacClock {
             };
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
-                armies::front(process, keys, &game_dir, army, state)
+                armies::front(process, keys, army, state)
             };
             let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
             return Ok(json!({"receipt":receipt}));
