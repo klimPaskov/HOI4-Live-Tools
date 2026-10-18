@@ -127,7 +127,17 @@ fn button(r: &Reader<'_>, image: u64, key: &str) -> Result<Option<Rect>> {
 
 /// Queued amount of `key` in state `state` (own located building lines).
 pub(super) fn queued(process: &dyn Process, key: &str, state: i32) -> Result<i64> {
-    let value = construction::page_with_location(process, 0, 128, true)?;
+    // The queue is rewritten on game days; retry a torn snapshot.
+    let mut attempt = 0;
+    let value = loop {
+        match construction::page_with_location(process, 0, 128, true) {
+            Err(e) if e.code == "torn_read" && attempt < 8 => {
+                attempt += 1;
+                thread::sleep(Duration::from_millis(10 * attempt));
+            }
+            result => break result?,
+        }
+    };
     Ok(value["lines"]
         .as_array()
         .into_iter()

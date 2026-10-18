@@ -223,9 +223,12 @@ pub(super) fn take(process: &dyn Process, keys: &MacKeys, key: &str) -> Result<(
     }
     // Scroll the row into the list area, only while the panel is open.
     let mut rect = row.rect;
+    // At either end the list cannot scroll; a row then may sit up to the
+    // panel's edge, just outside the comfortable band.
+    let mut band = LIST;
     for _ in 0..40 {
         match rect {
-            Some(r) if r.y >= LIST.0 && r.y + r.h <= LIST.1 => break,
+            Some(r) if r.y >= band.0 && r.y + r.h <= band.1 => break,
             _ => {}
         }
         if !read(process, open)? {
@@ -236,19 +239,23 @@ pub(super) fn take(process: &dyn Process, keys: &MacKeys, key: &str) -> Result<(
             _ => -240,
         };
         keys.scroll(GAME, (175.0, 600.0), pixels)?;
+        let previous = rect;
         rect = read(process, |r, i| {
             Ok(rows(r, i)?
                 .into_iter()
                 .find(|x| x.key == key && !x.timed)
                 .and_then(|x| x.rect))
         })?;
+        if rect.is_some() && rect == previous {
+            band = (LIST.0 - 20, LIST.1 + 22);
+        }
     }
     let rect = settled(process, "decision button", |r, i| {
         rows(r, i)?
             .into_iter()
             .find(|x| x.key == key && !x.timed)
             .and_then(|x| x.rect)
-            .filter(|r| r.y >= LIST.0 && r.y + r.h <= LIST.1)
+            .filter(|r| r.y >= band.0 && r.y + r.h <= band.1)
             .ok_or_else(|| Error::new("gui_target_unavailable", "Decision row not in view"))
     })?;
     clear_notices(process, keys)?;

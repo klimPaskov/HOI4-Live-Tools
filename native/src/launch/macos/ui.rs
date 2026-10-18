@@ -24,14 +24,15 @@ pub(super) fn read<T>(
         let r = Reader::new(process);
         match f(&r, process.image_base()) {
             Err(e)
-                if attempt < 3
+                if attempt < 8
                     && matches!(
                         e.code,
                         "torn_read" | "short_read" | "invalid_gui" | "invalid_array"
                     ) =>
             {
+                // A busy game day can rewrite the same data for a while.
                 attempt += 1;
-                thread::sleep(Duration::from_millis(5));
+                thread::sleep(Duration::from_millis(5 * attempt));
             }
             result => {
                 process.check()?;

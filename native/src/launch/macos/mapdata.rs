@@ -127,6 +127,40 @@ pub(super) fn direction_to(dir: &Path, state: i32, provinces: &[i32]) -> Result<
     Ok((dx / len, dy / len))
 }
 
+/// Unit screen direction from the centre of state `state` toward the nearest
+/// province of `own` states (where a shared front would lie).
+pub(super) fn toward_own(dir: &Path, state: i32, own: &[i32]) -> Result<(f64, f64)> {
+    let pos = positions(dir)?;
+    let target = mean(
+        state_provinces(dir, state)?
+            .iter()
+            .filter_map(|p| pos.get(p).copied()),
+    )
+    .ok_or_else(|| Error::new("map_data_unavailable", "State position unknown"))?;
+    let mut best: Option<((f64, f64), f64)> = None;
+    for &s in own {
+        let Ok(provinces) = state_provinces(dir, s) else {
+            continue;
+        };
+        for p in provinces {
+            if let Some(&(x, z)) = pos.get(&p) {
+                let d = (x - target.0).powi(2) + (z - target.1).powi(2);
+                if best.is_none_or(|(_, b)| d < b) {
+                    best = Some(((x, z), d));
+                }
+            }
+        }
+    }
+    let ((x, z), _) =
+        best.ok_or_else(|| Error::new("map_data_unavailable", "Own territory position unknown"))?;
+    let (dx, dy) = (x - target.0, target.1 - z);
+    let len = (dx * dx + dy * dy).sqrt();
+    if len < 1.0 {
+        return Ok((0.0, 0.0));
+    }
+    Ok((dx / len, dy / len))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

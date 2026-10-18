@@ -139,6 +139,11 @@ fn inside(rect: &Rect) -> bool {
     let (x, y) = rect.center();
     (SAFE.0..SAFE.2).contains(&x) && (SAFE.1..SAFE.3).contains(&y)
 }
+/// The visible tree area, for a node the tree cannot scroll any further.
+fn on_tree(rect: &Rect) -> bool {
+    let (x, y) = rect.center();
+    (240.0..1900.0).contains(&x) && (180.0..1040.0).contains(&y)
+}
 /// A tree-area point at least 24 px from every focus widget.
 fn background(all: &[Rect]) -> Option<(f64, f64)> {
     let clear = |x: f64, y: f64| {
@@ -290,6 +295,7 @@ pub(super) fn start(process: &dyn Process, keys: &MacKeys, key: &str) -> Result<
         )
     })?;
     let mut symbol = None;
+    let mut previous: Option<Rect> = None;
     for _ in 0..12 {
         let (target, all) = read(process, |r, i| symbols(r, i, key))?;
         let rect = target.ok_or_else(|| {
@@ -298,10 +304,15 @@ pub(super) fn start(process: &dyn Process, keys: &MacKeys, key: &str) -> Result<
                 "Focus has no node in the own tree",
             )
         })?;
-        if inside(&rect) {
+        let stuck = previous.is_some_and(|p| {
+            let (a, b) = (p.center(), rect.center());
+            (a.0 - b.0).abs() < 5.0 && (a.1 - b.1).abs() < 5.0
+        });
+        if inside(&rect) || (stuck && on_tree(&rect)) {
             symbol = Some(rect);
             break;
         }
+        previous = Some(rect);
         let (cx, cy) = rect.center();
         let from = background(&all)
             .ok_or_else(|| Error::new("gui_target_unavailable", "No empty tree area to pan"))?;
@@ -328,7 +339,7 @@ pub(super) fn start(process: &dyn Process, keys: &MacKeys, key: &str) -> Result<
             .0
             .ok_or_else(|| Error::new("gui_target_unavailable", "Focus node disappeared"))
     })?;
-    if !inside(&symbol) {
+    if !on_tree(&symbol) {
         return Err(Error::new(
             "gui_target_unavailable",
             "Focus node drifted out of the tree area",

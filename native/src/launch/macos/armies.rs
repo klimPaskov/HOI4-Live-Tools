@@ -337,8 +337,41 @@ fn card_rect(r: &Reader<'_>, image: u64, army: &str, name: &str) -> Result<Rect>
 /// card selects the army, Z enters front-line drawing, the Find view centres
 /// the state and one click inside it places the front along that country's
 /// border. Verified by one more battle-plan order on the army.
-pub(super) fn front(process: &dyn Process, keys: &MacKeys, army: &str, state: i32) -> Result<()> {
+/// Own state ids (owner is the player).
+fn own_states(r: &Reader<'_>, image: u64) -> Result<Vec<i32>> {
+    let g = game::layout(r);
+    let l = crate::construction::layout(r);
+    let gs = r.u64(image + g.gs_global)?;
+    let tag = r.i32(gs + g.player_tag)?;
+    let (_, data, count) = r.array_header(gs + l.gs_states)?;
+    let mut out = Vec::new();
+    for index in 1..count.min(4096) as u64 {
+        let state = r.u64(data + index * 8)?;
+        if state != 0
+            && r.u64(state)? == image + l.state_vtable
+            && r.i32(state + l.state_owner)? == tag
+        {
+            out.push(r.i32(state + l.state_id)?);
+        }
+    }
+    Ok(out)
+}
+pub(super) fn front(
+    process: &dyn Process,
+    keys: &MacKeys,
+    game_dir: &std::path::Path,
+    army: &str,
+    state: i32,
+) -> Result<()> {
     clear_notices(process, keys)?;
+    let own = read(process, own_states)?;
+    if own.contains(&state) {
+        return Err(Error::new(
+            "invalid_target",
+            "This state is own; choose a state of the country to face",
+        ));
+    }
+    let (dx, dy) = super::mapdata::toward_own(game_dir, state, &own)?;
     let before = read(process, |r, i| orders(r, i, army))?;
     let card = read(process, |r, i| card_rect(r, i, army, "portrait_btn"))?;
     let (x, y) = card.center();
@@ -348,16 +381,32 @@ pub(super) fn front(process: &dyn Process, keys: &MacKeys, army: &str, state: i3
     std::thread::sleep(std::time::Duration::from_millis(200));
     find_state(process, keys, state)?;
     std::thread::sleep(std::time::Duration::from_millis(300));
-    keys.click(GAME, 960.0, 540.0)?;
-    wait(process, "front line placed", |r, i| {
-        Ok(orders(r, i, army)? > before)
-    })
-    .map_err(|_| {
-        Error::new(
-            "input_readback_failed",
-            "No front line was placed (the state's owner may not border this army's area)",
-        )
-    })
+    // Only a click on a highlighted front places the order; elsewhere the
+    // game just shows a tooltip. Probe from the state's centre toward the
+    // nearest own province, where the shared border lies.
+    for step in [0.0, 40.0, 80.0, 120.0, 170.0, 230.0, 300.0, 380.0, 470.0] {
+        let (x, y) = (960.0 + dx * step, 540.0 + dy * step);
+        if !(320.0..=1880.0).contains(&x) || !(120.0..=880.0).contains(&y) {
+            break;
+        }
+        if x < 440.0 && y < 420.0 {
+            // Under the selected army's panel.
+            continue;
+        }
+        keys.click(GAME, x, y)?;
+        let deadline = std::time::Instant::now() + std::time::Duration::from_millis(500);
+        while std::time::Instant::now() < deadline {
+            if read(process, |r, i| orders(r, i, army))? > before {
+                return Ok(());
+            }
+            std::thread::sleep(std::time::Duration::from_millis(40));
+        }
+    }
+    let _ = keys.press(Key::Escape);
+    Err(Error::new(
+        "input_readback_failed",
+        "No front line was placed: no highlighted front toward this country was found near the state",
+    ))
 }
 
 /// Whether the army's battle plan is executing (the card's execute animation).
