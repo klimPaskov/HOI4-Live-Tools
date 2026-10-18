@@ -2,23 +2,16 @@
 //! state: the game's Find view centres the state, a box selection picks the
 //! own divisions there, and the new-army card creates the army. Verified by a
 //! new orders group in memory holding the selected divisions.
-use super::ui::{clear_notices, read, wait};
+use super::ui::{clear_notices, find_state, read, wait};
 use crate::{
     error::{Error, Result},
     game,
     gui_tree::{self, Rect},
     memory::{Reader, StringAbi},
-    platform::{
-        macos_input::{Key, MacKeys},
-        Process,
-    },
+    platform::{macos_input::MacKeys, Process},
 };
 use serde_json::{json, Value};
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    thread,
-    time::Duration,
-};
+use std::collections::{BTreeMap, BTreeSet};
 
 struct Ui {
     country_divisions: u64,
@@ -27,9 +20,7 @@ struct Ui {
     division_handle: u64,
     group_name: u64,
     selection_size: u64,
-    find_view: u64,
     manager: u64,
-    find_window: u64,
     leader_view_vtable: u64,
     leader_view: u64,
     leader_portraits: u64,
@@ -46,16 +37,13 @@ const MACOS: Ui = Ui {
     division_handle: 0x18,
     group_name: 0x160,
     selection_size: 0x540,
-    find_view: 0x190,
     manager: 0x670,
-    find_window: 0xc38,
     leader_view_vtable: 0x3463220,
     leader_view: 0x1c0,
     leader_portraits: 0x38,
     portrait_window: 0x28,
 };
 const GAME: (u32, u32) = (1920, 1080);
-const DIGITS: [u16; 10] = [29, 18, 19, 20, 21, 23, 22, 26, 28, 25];
 
 fn ui(r: &Reader<'_>) -> Result<&'static Ui> {
     match r.string_abi() {
@@ -138,15 +126,6 @@ fn selection_size(r: &Reader<'_>, image: u64) -> Result<u64> {
     let idler = r.u64(image + game::layout(r).idler_global)?;
     r.u64(idler + ui(r)?.selection_size)
 }
-fn find_open(r: &Reader<'_>, image: u64) -> Result<bool> {
-    let u = ui(r)?;
-    let idler = r.u64(image + game::layout(r).idler_global)?;
-    let find = r.u64(r.u64(idler + u.manager)? + u.find_view)?;
-    match gui_tree::container(r, r.u64(find + u.find_window)?, image)? {
-        Some(window) => gui_tree::visible(r, window),
-        None => Ok(false),
-    }
-}
 /// The new-army card: the rightmost portrait button of the army card bar.
 fn new_army_card(r: &Reader<'_>, image: u64) -> Result<Rect> {
     let u = ui(r)?;
@@ -179,14 +158,7 @@ pub(super) fn create(process: &dyn Process, keys: &MacKeys, state: i32) -> Resul
     clear_notices(process, keys)?;
     // The selection box stays clear of the left-hand panels; Escape is not used
     // because on a free map it opens the game menu.
-    keys.press(Key::letter('f')?)?;
-    wait(process, "open find", find_open)?;
-    for digit in state.to_string().bytes() {
-        keys.press_code(DIGITS[(digit - b'0') as usize])?;
-    }
-    keys.press(Key::Return)?;
-    wait(process, "find closes", |r, i| Ok(!find_open(r, i)?))?;
-    thread::sleep(Duration::from_millis(500));
+    find_state(process, keys, state)?;
     keys.drag(GAME, (560.0, 260.0), (1360.0, 860.0))?;
     wait(process, "select divisions", |r, i| {
         Ok(selection_size(r, i)? > 0)

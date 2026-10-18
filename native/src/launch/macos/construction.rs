@@ -3,7 +3,7 @@
 //! centre the camera on the state, then clicks at the screen centre. Success
 //! is the own construction queue holding the requested extra amount of that
 //! building in that state; placement mode is switched off again afterwards.
-use super::ui::{clear_notices, read, settled, wait};
+use super::ui::{clear_notices, find_state, read, settled, wait};
 use crate::{
     construction,
     error::{Error, Result},
@@ -28,9 +28,6 @@ struct Ui {
     template_key: u64,
     selected_template: u64,
     selection_mode: u64,
-    find_view: u64,
-    find_idler: u64,
-    find_window: u64,
 }
 /// macOS Mach-O 089EA519, mapped live on 18 October 2026 (Germany test run):
 /// choice items and their templates, the manager's selection (template
@@ -47,9 +44,6 @@ const MACOS: Ui = Ui {
     template_key: 0x228,
     selected_template: 0x3b8,
     selection_mode: 0x3c0,
-    find_view: 0x190,
-    find_idler: 0xc30,
-    find_window: 0xc38,
 };
 const GAME: (u32, u32) = (1920, 1080);
 const GRIDS: [(&str, &str); 4] = [
@@ -58,8 +52,6 @@ const GRIDS: [(&str, &str); 4] = [
     ("possible_province_constructions", "province_item_grid"),
     ("possible_facility_constructions", "facility_item_grid"),
 ];
-/// ANSI virtual key codes of the digits 0..9.
-const DIGITS: [u16; 10] = [29, 18, 19, 20, 21, 23, 22, 26, 28, 25];
 
 fn ui(r: &Reader<'_>) -> Result<&'static Ui> {
     match r.string_abi() {
@@ -95,18 +87,6 @@ fn selection(r: &Reader<'_>, image: u64) -> Result<(i32, Option<String>)> {
         None
     };
     Ok((mode, key))
-}
-fn find_open(r: &Reader<'_>, image: u64) -> Result<bool> {
-    let u = ui(r)?;
-    let find = r.u64(manager(r, image)? + u.find_view)?;
-    let idler = r.u64(image + game::layout(r).idler_global)?;
-    if r.u64(find + u.find_idler)? != idler {
-        return Err(Error::new("invalid_gui", "Own Find view required"));
-    }
-    match gui_tree::container(r, r.u64(find + u.find_window)?, image)? {
-        Some(window) => gui_tree::visible(r, window),
-        None => Ok(false),
-    }
 }
 fn button(r: &Reader<'_>, image: u64, key: &str) -> Result<Option<Rect>> {
     let u = ui(r)?;
@@ -199,14 +179,7 @@ pub(super) fn add(
         Ok(selection(r, i)?.1.as_deref() == Some(key))
     })?;
     let result = (|| {
-        keys.press(Key::letter('f')?)?;
-        wait(process, "open find", find_open)?;
-        for digit in state.to_string().bytes() {
-            keys.press_code(DIGITS[(digit - b'0') as usize])?;
-        }
-        keys.press(Key::Return)?;
-        wait(process, "find closes", |r, i| Ok(!find_open(r, i)?))?;
-        thread::sleep(Duration::from_millis(400));
+        find_state(process, keys, state)?;
         for _ in 0..count.min(20) {
             if read(process, selection)?.1.as_deref() != Some(key) {
                 return Err(Error::new(

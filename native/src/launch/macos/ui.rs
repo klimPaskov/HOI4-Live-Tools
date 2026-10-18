@@ -206,6 +206,93 @@ pub(super) fn accept_command(
         thread::sleep(Duration::from_millis(40));
     }
 }
+/// The game's Find view (interface manager +0x190) on macOS 089EA519: own
+/// idler +0xc30, window +0xc38, query text +0xc48, highlighted result
+/// +0xc88 whose state is at +0x3f8 (state ID +0x40).
+const MANAGER: u64 = 0x670;
+const FIND_VIEW: u64 = 0x190;
+const FIND_IDLER: u64 = 0xc30;
+const FIND_WINDOW: u64 = 0xc38;
+const FIND_TEXT: u64 = 0xc48;
+const FIND_SELECTED: u64 = 0xc88;
+const RESULT_STATE: u64 = 0x3f8;
+const STATE_ID: u64 = 0x40;
+const DIGITS: [u16; 10] = [29, 18, 19, 20, 21, 23, 22, 26, 28, 25];
+const BACKSPACE: u16 = 51;
+
+fn find_view(r: &Reader<'_>, image: u64) -> Result<u64> {
+    let idler = r.u64(image + game::layout(r).idler_global)?;
+    let find = r.u64(r.u64(idler + MANAGER)? + FIND_VIEW)?;
+    if r.u64(find + FIND_IDLER)? != idler {
+        return Err(Error::new("invalid_gui", "Own Find view required"));
+    }
+    Ok(find)
+}
+pub(super) fn find_open(r: &Reader<'_>, image: u64) -> Result<bool> {
+    let find = find_view(r, image)?;
+    match gui_tree::container(r, r.u64(find + FIND_WINDOW)?, image)? {
+        Some(window) => gui_tree::visible(r, window),
+        None => Ok(false),
+    }
+}
+/// (query text, highlighted state ID if the highlighted result is a state).
+fn find_result(r: &Reader<'_>, image: u64) -> Result<(String, Option<i32>)> {
+    let find = find_view(r, image)?;
+    let text = r.string_bounded(find + FIND_TEXT, 64)?;
+    let row = r.u64(find + FIND_SELECTED)?;
+    if row == 0 {
+        return Ok((text, None));
+    }
+    let state = r.u64(row + RESULT_STATE)?;
+    let id = if state != 0 && r.u64(state)? == image + crate::construction::layout(r).state_vtable {
+        Some(r.i32(state + STATE_ID)?)
+    } else {
+        None
+    };
+    Ok((text, id))
+}
+/// Centre the camera on own or foreign state `state` with the game's Find
+/// view; Return is pressed only when the query and the highlighted state both
+/// match, otherwise Find is closed and the step refused.
+pub(super) fn find_state(
+    process: &dyn Process,
+    keys: &crate::platform::macos_input::MacKeys,
+    state: i32,
+) -> Result<()> {
+    use crate::platform::macos_input::Key;
+    keys.press(Key::letter('f')?)?;
+    wait(process, "open find", find_open)?;
+    thread::sleep(Duration::from_millis(150));
+    // The box keeps the previous query; erase it before typing.
+    let previous = read(process, |r, i| Ok(find_result(r, i)?.0.chars().count()))?;
+    for _ in 0..previous.min(64) {
+        keys.press_code(BACKSPACE)?;
+        thread::sleep(Duration::from_millis(30));
+    }
+    wait(process, "find query cleared", |r, i| {
+        Ok(find_result(r, i)?.0.is_empty())
+    })?;
+    let query = state.to_string();
+    for digit in query.bytes() {
+        keys.press_code(DIGITS[(digit - b'0') as usize])?;
+        thread::sleep(Duration::from_millis(60));
+    }
+    let matched = wait(process, "find result", |r, i| {
+        let (text, id) = find_result(r, i)?;
+        Ok(text == query && id == Some(state))
+    });
+    if let Err(error) = matched {
+        let _ = keys.press(Key::Escape);
+        return Err(Error::new(
+            "input_readback_failed",
+            format!("Find did not highlight state {state}: {}", error.message),
+        ));
+    }
+    keys.press(Key::Return)?;
+    wait(process, "find closes", |r, i| Ok(!find_open(r, i)?))?;
+    thread::sleep(Duration::from_millis(400));
+    Ok(())
+}
 /// Press Escape (at most three times) until `closed` holds; best effort, used
 /// to leave the UI tidy after the game refuses a target.
 pub(super) fn dismiss(
