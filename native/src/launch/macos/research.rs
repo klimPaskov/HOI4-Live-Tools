@@ -324,11 +324,30 @@ pub(super) fn start(process: &dyn Process, keys: &MacKeys, key: &str, slot: usiz
             icon
         }
     };
-    let tile = settled(process, "tile", |r, i| gui_tree::rect(r, i, icon, GAME))?;
-    if tile.y < 140 {
+    // Later technologies sit below the visible part of a folder; scroll the
+    // tree (only while it is open) until the tile is inside the tree area.
+    let in_view = |t: &Rect| t.y >= 140 && t.y + t.h <= 1040;
+    for _ in 0..30 {
+        let tile = read(process, |r, i| gui_tree::rect_unclipped(r, i, icon, GAME))?;
+        if in_view(&tile) {
+            break;
+        }
+        if !read(process, |r, i| open(r, i, u.tree_view))? {
+            return Err(Error::new(
+                "input_readback_failed",
+                "Technology tree closed",
+            ));
+        }
+        let pixels = if tile.y < 140 { 240 } else { -240 };
+        keys.scroll(GAME, (1700.0, 600.0), pixels)?;
+    }
+    let tile = settled(process, "tile", |r, i| {
+        gui_tree::rect_unclipped(r, i, icon, GAME)
+    })?;
+    if !in_view(&tile) {
         return Err(Error::new(
             "gui_target_unavailable",
-            "Technology tile is scrolled out of the tree area",
+            "Technology tile could not be scrolled into the tree area",
         ));
     }
     click(tile)?;
