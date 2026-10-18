@@ -260,22 +260,28 @@ fn new_card(r: &Reader<'_>, image: u64, leftmost: bool) -> Result<Rect> {
         return Err(Error::new("invalid_gui", "Exact army card bar required"));
     }
     let (_, data, count) = r.array_header(bar + u.leader_portraits)?;
-    let mut best: Option<Rect> = None;
+    // The two "new" cards have no group handle: the first in the bar's list
+    // creates an army group, the last an army. Their screen position changes
+    // when the bar wraps into rows, so the list order decides.
+    let mut empty = Vec::new();
     for index in 0..count.min(64) as u64 {
         let portrait = r.u64(data + index * 8)?;
-        let Some(window) = gui_tree::container(r, r.u64(portrait + u.portrait_window)?, image)?
-        else {
-            continue;
-        };
-        if let Some(button) = gui_tree::child(r, image, window, "portrait_btn")? {
-            if let Ok(rect) = gui_tree::rect(r, image, button, GAME) {
-                if best.is_none_or(|b| if leftmost { rect.x < b.x } else { rect.x > b.x }) {
-                    best = Some(rect);
-                }
-            }
+        if r.u64(portrait + u.portrait_group)? == 0 {
+            empty.push(portrait);
         }
     }
-    best.ok_or_else(|| Error::new("gui_target_unavailable", "New army card not found"))
+    let portrait = if leftmost {
+        empty.first()
+    } else {
+        empty.last()
+    }
+    .copied()
+    .ok_or_else(|| Error::new("gui_target_unavailable", "New army card not found"))?;
+    let window = gui_tree::container(r, r.u64(portrait + u.portrait_window)?, image)?
+        .ok_or_else(|| Error::new("invalid_gui", "New army card window required"))?;
+    let button = gui_tree::child(r, image, window, "portrait_btn")?
+        .ok_or_else(|| Error::new("gui_target_unavailable", "New army card not found"))?;
+    gui_tree::rect(r, image, button, GAME)
 }
 
 /// Create an army from own divisions around state `state`.
@@ -812,5 +818,74 @@ pub(super) fn create_group(process: &dyn Process, keys: &MacKeys, names: &[Strin
             .map(|n| r.u64(group_named(r, i, n)? + u.army_group))
             .collect::<Result<_>>()?;
         Ok(parents.len() == 1 && parents.iter().all(|p| *p != 0 && !before.contains(p)))
+    })
+}
+
+/// First division row of the selected army's panel (game pixels), the row
+/// pitch and the rows visible before the list scrolls.
+const PANEL_ROW: (f64, f64) = (200.0, 252.0);
+const PANEL_PITCH: f64 = 33.0;
+const PANEL_ROWS: usize = 19;
+
+/// Split the first `count` divisions of `army` (list order) into a new army:
+/// the army's card, the first row, Shift on row `count`, then the new-army
+/// card. Verified by a new army holding exactly those divisions.
+pub(super) fn split(process: &dyn Process, keys: &MacKeys, army: &str, count: usize) -> Result<()> {
+    if count == 0 || count > PANEL_ROWS {
+        return Err(Error::new(
+            "invalid_arguments",
+            format!("count must be 1..{PANEL_ROWS} (the rows visible without scrolling)"),
+        ));
+    }
+    clear_notices(process, keys)?;
+    let total = read(process, |r, i| {
+        let group = group_named(r, i, army)?;
+        Ok(membership(r, i)?.values().filter(|g| **g == group).count())
+    })?;
+    if count >= total {
+        return Err(Error::new(
+            "invalid_target",
+            "The army has no more divisions than the split would take",
+        ));
+    }
+    // The game may rebuild the source army's group object, so the new army
+    // is recognised by its name and size, not by its pointer.
+    let names_before: BTreeSet<String> = read(process, |r, i| {
+        membership(r, i)?
+            .values()
+            .filter(|g| **g != 0)
+            .map(|g| army_name(r, *g))
+            .collect()
+    })?;
+    select_army(process, keys, army)?;
+    keys.click(GAME, PANEL_ROW.0, PANEL_ROW.1)?;
+    wait(process, "first division selected", |r, i| {
+        Ok(selection_size(r, i)? & 0xffff_ffff == 1)
+    })?;
+    if count > 1 {
+        keys.shift_click(
+            GAME,
+            PANEL_ROW.0,
+            PANEL_ROW.1 + PANEL_PITCH * (count - 1) as f64,
+        )?;
+    }
+    wait(process, "divisions selected", |r, i| {
+        Ok(selection_size(r, i)? & 0xffff_ffff == count as u64)
+    })?;
+    let card = settled(process, "new army card", |r, i| new_card(r, i, false))?;
+    let (x, y) = card.center();
+    keys.click(GAME, x, y)?;
+    wait(process, "army created", |r, i| {
+        let now = membership(r, i)?;
+        let mut sizes: BTreeMap<u64, usize> = BTreeMap::new();
+        for g in now.values().filter(|g| **g != 0) {
+            *sizes.entry(*g).or_default() += 1;
+        }
+        for (g, n) in sizes {
+            if n == count && !names_before.contains(&army_name(r, g)?) {
+                return Ok(true);
+            }
+        }
+        Ok(false)
     })
 }

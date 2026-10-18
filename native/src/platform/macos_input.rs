@@ -34,6 +34,7 @@ extern "C" {
     fn CGRectMakeWithDictionaryRepresentation(dict: CFTypeRef, rect: *mut Rect) -> bool;
     fn CGEventCreateKeyboardEvent(source: CFTypeRef, key: u16, down: bool) -> CFTypeRef;
     fn CGEventSetFlags(event: CFTypeRef, flags: u64);
+    fn CGEventSetType(event: CFTypeRef, kind: u32);
     fn CGEventCreateMouseEvent(
         source: CFTypeRef,
         kind: u32,
@@ -382,13 +383,17 @@ impl MacKeys {
     pub fn drag(&self, game: (u32, u32), from: (f64, f64), to: (f64, f64)) -> Result<()> {
         self.drag_with(game, from, to, false)
     }
-    /// One left click with Shift held (adds an army card to the selection),
-    /// after a fresh front-most check.
+    /// One left click with Shift held, after a fresh front-most check. The
+    /// game reads Shift through a modifier (flags-changed) event carrying the
+    /// device-dependent left-shift bit; a plain key-down or flags on the mouse
+    /// events alone reach army cards but not the division list.
     pub fn shift_click(&self, game: (u32, u32), x: f64, y: f64) -> Result<Point> {
         const SHIFT_KEY: u16 = 56;
-        const SHIFT_FLAG: u64 = 1 << 17;
+        const SHIFT_FLAGS: u64 = 0x2_0002;
+        const FLAGS_CHANGED: u32 = 12;
         self.preflight()?;
         let point = client_point(owned_content(self.pid, game)?, x, y)?;
+        let pause = |ms: u64| std::thread::sleep(std::time::Duration::from_millis(ms));
         // SAFETY: a null source is allowed; every event is released after posting.
         unsafe {
             let post = |event: CFTypeRef, flags: u64| -> Result<()> {
@@ -400,33 +405,34 @@ impl MacKeys {
                 CFRelease(event);
                 Ok(())
             };
+            let modifier = |down: bool| -> Result<()> {
+                let event = CGEventCreateKeyboardEvent(std::ptr::null(), SHIFT_KEY, down);
+                if !event.is_null() {
+                    CGEventSetType(event, FLAGS_CHANGED);
+                }
+                post(event, if down { SHIFT_FLAGS } else { 0 })
+            };
             post(
                 CGEventCreateMouseEvent(std::ptr::null(), MOUSE_MOVED, point, LEFT_BUTTON),
                 0,
             )?;
-            std::thread::sleep(std::time::Duration::from_millis(60));
-            post(
-                CGEventCreateKeyboardEvent(std::ptr::null(), SHIFT_KEY, true),
-                SHIFT_FLAG,
-            )?;
-            std::thread::sleep(std::time::Duration::from_millis(40));
+            pause(100);
+            modifier(true)?;
+            pause(250);
             let result = (|| {
                 post(
                     CGEventCreateMouseEvent(std::ptr::null(), LEFT_MOUSE_DOWN, point, LEFT_BUTTON),
-                    SHIFT_FLAG,
+                    SHIFT_FLAGS,
                 )?;
-                std::thread::sleep(std::time::Duration::from_millis(50));
+                pause(60);
                 post(
                     CGEventCreateMouseEvent(std::ptr::null(), LEFT_MOUSE_UP, point, LEFT_BUTTON),
-                    SHIFT_FLAG,
+                    SHIFT_FLAGS,
                 )
             })();
-            std::thread::sleep(std::time::Duration::from_millis(40));
+            pause(150);
             // Always release Shift, even when the click failed.
-            post(
-                CGEventCreateKeyboardEvent(std::ptr::null(), SHIFT_KEY, false),
-                0,
-            )?;
+            modifier(false)?;
             result?;
         }
         Ok(point)
