@@ -22,9 +22,24 @@ owned window, and every action is verified by memory readback.
 `hoi4_time`, `hoi4_research_start` (790 ms, slot verified) and
 `hoi4_focus_start` (1.17 s including a tree pan, active focus verified) passed
 live on the Germany test run, with a game-action journal that records intent
-before input and never replays an unresolved dispatch. Production,
-construction, army and recording integration on macOS remain pending; the
-first Haiku 5.5 play session uses only time, research and Focus.
+before input and never replays an unresolved dispatch.
+
+Later the same day the macOS server gained every action a 1936–1938 campaign
+needs, each verified live on the Germany test run m004 from memory, never from
+pixels alone: production add/set, construction add, laws, designers and
+advisors (with the game's confirmation dialog), decisions, training,
+armies (create, commander, front line, offensive line, execute/stop plan),
+event answers, diplomacy (list, Justify War goal with type and states,
+Improve relations and other sent actions) and air missions. Supporting reads
+list armies, air wings, open events and states by name with owner and
+controller. Front lines use a click inside the target state in front-line
+mode; offensive lines use a right-button drag oriented by the install's own
+province positions; event options and war-goal rows have no laid-out sprite,
+so their centres come from a live anchor plus live local positions or a
+measured in-dialog offset, and each choice is checked from the dialog's own
+text. Declare war and the peace conference are not yet exercised (no war
+goal had completed), nor are naval actions. A fresh recorded FAIR Germany
+campaign (m005) started on 18 October 2026 with the Haiku 5.5 medium player.
 
 Session checkpoint, 18 October 2026: Run091 on `7f0728c` (package v86) passed
 the map placement gate with the Haiku 5.5 player at 512x288. The server opened
