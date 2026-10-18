@@ -30,6 +30,8 @@ pub trait Process: ReadMemory {
 }
 #[cfg(target_os = "linux")]
 mod linux;
+#[cfg(target_os = "macos")]
+pub mod macos;
 #[cfg(target_os = "linux")]
 mod unix_socket;
 #[cfg(target_os = "linux")]
@@ -49,12 +51,16 @@ pub fn open(path: &Path) -> Result<Box<dyn Process + Send + Sync>> {
     {
         Ok(Box::new(linux::LinuxProcess::open(path)?))
     }
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(target_os = "macos")]
+    {
+        Ok(Box::new(macos::MacProcess::open(path)?))
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
     {
         let _ = path;
         Err(Error::new(
             "platform_unavailable",
-            "Native Windows/macOS build adapters remain unverified",
+            "Native Windows build adapter remains unverified",
         ))
     }
 }

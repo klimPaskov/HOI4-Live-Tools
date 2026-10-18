@@ -2,6 +2,14 @@
 
 ## Unreleased native preview
 
+- Start the native macOS adapter. `platform::macos` attaches read-only to one
+  owned game process (the x86_64 Mach-O build 1.19.3.0 under Rosetta) through
+  its task port. It verifies the executable SHA-256 and LC_UUID, the process
+  start time, path and non-root uid on every check, and finds the image by its
+  Mach-O header and UUID. The reader decodes libc++ strings for this build. The
+  binary must be ad-hoc signed with `native/macos/debugger.entitlements`, and
+  the user must hold Developer Tools task access. No game layout is wired yet,
+  so macOS tools still refuse.
 - Run092 (18 October 2026, `b0b9b35`, package v87, Haiku 5.5 player, 512x288)
   passed the map placement gate for a coastal building. The server selected a
   dockyard, used the Find view to centre the camera on West Prussia (state 63)

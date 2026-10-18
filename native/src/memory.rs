@@ -22,8 +22,22 @@ pub fn validate_read_batch(requests: &[(u64, usize)]) -> Result<usize> {
     }
     Ok(total)
 }
+/// C++ standard library string layout of the inspected game build.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StringAbi {
+    /// libstdc++ (Linux ELF): pointer, size, 16-byte SSO buffer; 32 bytes.
+    LibStdCxx,
+    /// libc++ (macOS Mach-O x86_64): 24 bytes; byte 0 bit 0 selects the long
+    /// form {capacity|1, size, data}, otherwise byte 0 holds size << 1 and up
+    /// to 22 bytes follow inline.
+    LibCxx,
+}
 pub trait ReadMemory {
     fn read(&self, address: u64, size: usize) -> Result<Vec<u8>>;
+    /// The string layout every `Reader::string` decodes for this process.
+    fn string_abi(&self) -> StringAbi {
+        StringAbi::LibStdCxx
+    }
     /// Ordered all-or-error results; fallback keeps portable injected backends.
     /// Validate the complete batch before touching any payload. No cached bytes.
     fn read_many(&self, requests: &[(u64, usize)]) -> Result<Vec<Vec<u8>>> {
@@ -41,6 +55,7 @@ pub trait ReadMemory {
 }
 pub struct Reader<'a> {
     memory: &'a dyn ReadMemory,
+    abi: StringAbi,
     pub calls: Cell<u64>,
     pub bytes: Cell<usize>,
 }
@@ -48,6 +63,7 @@ impl<'a> Reader<'a> {
     pub fn new(memory: &'a dyn ReadMemory) -> Self {
         Self {
             memory,
+            abi: memory.string_abi(),
             calls: Cell::new(0),
             bytes: Cell::new(0),
         }
@@ -95,6 +111,9 @@ impl<'a> Reader<'a> {
                 "String acceptance bound exceeds reader limit",
             ));
         }
+        if self.abi == StringAbi::LibCxx {
+            return self.libcxx_string(a, limit);
+        }
         let header = self.read(a, 32)?;
         let ptr = u64::from_le_bytes(header[..8].try_into().unwrap());
         let size = u64::from_le_bytes(header[8..16].try_into().unwrap());
@@ -109,6 +128,34 @@ impl<'a> Reader<'a> {
             self.read(ptr, size as usize)?
         };
         if self.read(a, 32)? != header {
+            return Err(Error::new("torn_read", "String header changed"));
+        }
+        String::from_utf8(bytes).map_err(|_| Error::new("invalid_string", "Invalid UTF-8"))
+    }
+    fn libcxx_string(&self, a: u64, limit: usize) -> Result<String> {
+        let header = self.read(a, 24)?;
+        let bytes = if header[0] & 1 == 0 {
+            let size = usize::from(header[0] >> 1);
+            if size > 22 || size > limit {
+                return Err(Error::new("invalid_string", "Invalid bounded short string"));
+            }
+            header[1..1 + size].to_vec()
+        } else {
+            let capacity = u64::from_le_bytes(header[..8].try_into().unwrap()) & !1;
+            let size = u64::from_le_bytes(header[8..16].try_into().unwrap());
+            let ptr = u64::from_le_bytes(header[16..24].try_into().unwrap());
+            // libc++ may keep the long form for short content; size never
+            // exceeds the allocation it records.
+            if size > limit as u64 || size > capacity {
+                return Err(Error::new("invalid_string", "Invalid bounded long string"));
+            }
+            if size == 0 {
+                Vec::new()
+            } else {
+                self.read(ptr, size as usize)?
+            }
+        };
+        if self.read(a, 24)? != header {
             return Err(Error::new("torn_read", "String header changed"));
         }
         String::from_utf8(bytes).map_err(|_| Error::new("invalid_string", "Invalid UTF-8"))
@@ -201,6 +248,68 @@ mod tests {
             }
             Ok(d)
         }
+    }
+    struct Cxx(Fake);
+    impl ReadMemory for Cxx {
+        fn read(&self, a: u64, n: usize) -> Result<Vec<u8>> {
+            self.0.read(a, n)
+        }
+        fn string_abi(&self) -> StringAbi {
+            StringAbi::LibCxx
+        }
+    }
+    fn cxx(header: &[u8], tail: &[u8], torn: bool) -> Cxx {
+        let mut data = vec![0; 128];
+        data[..header.len()].copy_from_slice(header);
+        data[64..64 + tail.len()].copy_from_slice(tail);
+        Cxx(Fake {
+            data,
+            torn,
+            calls: Cell::new(0),
+        })
+    }
+    #[test]
+    fn libcxx_short_and_long_strings_decode_and_bound() {
+        let mut short = vec![(3u8) << 1];
+        short.extend_from_slice(b"GER");
+        assert_eq!(
+            Reader::new(&cxx(&short, b"", false))
+                .string(0x10000)
+                .unwrap(),
+            "GER"
+        );
+        let mut long = Vec::new();
+        long.extend_from_slice(&(48u64 | 1).to_le_bytes());
+        long.extend_from_slice(&36u64.to_le_bytes());
+        long.extend_from_slice(&0x10040u64.to_le_bytes());
+        let id = b"8bbca47d-43f1-47c2-b52a-af4c4821bac0";
+        let r = cxx(&long, id, false);
+        assert_eq!(
+            Reader::new(&r).string(0x10000).unwrap(),
+            String::from_utf8_lossy(id)
+        );
+        assert_eq!(
+            Reader::new(&r)
+                .string_bounded(0x10000, 35)
+                .unwrap_err()
+                .code,
+            "invalid_string"
+        );
+        // Size beyond the recorded allocation, or an over-long inline size.
+        let mut bad = long.clone();
+        bad[8..16].copy_from_slice(&64u64.to_le_bytes());
+        assert!(Reader::new(&cxx(&bad, id, false)).string(0x10000).is_err());
+        assert!(Reader::new(&cxx(&[46], b"", false))
+            .string(0x10000)
+            .is_err());
+        // The header is re-read after the payload.
+        assert_eq!(
+            Reader::new(&cxx(&short, b"", true))
+                .string(0x10000)
+                .unwrap_err()
+                .code,
+            "torn_read"
+        );
     }
     fn array(size: i32, cap: i32, torn: bool) -> Fake {
         let mut data = vec![0; 64];
