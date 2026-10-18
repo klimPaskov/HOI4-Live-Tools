@@ -61,6 +61,10 @@ const LEFT_MOUSE_UP: u32 = 2;
 const MOUSE_MOVED: u32 = 5;
 const LEFT_MOUSE_DRAGGED: u32 = 6;
 const LEFT_BUTTON: u32 = 0;
+const RIGHT_MOUSE_DOWN: u32 = 3;
+const RIGHT_MOUSE_UP: u32 = 4;
+const RIGHT_MOUSE_DRAGGED: u32 = 7;
+const RIGHT_BUTTON: u32 = 1;
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -375,14 +379,47 @@ impl MacKeys {
     /// One left-button drag between game-logical points in small steps, after a
     /// fresh front-most check. Used to pan views; never to move game objects.
     pub fn drag(&self, game: (u32, u32), from: (f64, f64), to: (f64, f64)) -> Result<()> {
+        self.drag_with(game, from, to, false)
+    }
+    /// One right-button drag between game-logical points (battle-plan lines),
+    /// after a fresh front-most check.
+    pub fn right_drag(&self, game: (u32, u32), from: (f64, f64), to: (f64, f64)) -> Result<()> {
+        self.drag_with(game, from, to, true)
+    }
+    fn drag_with(
+        &self,
+        game: (u32, u32),
+        from: (f64, f64),
+        to: (f64, f64),
+        right: bool,
+    ) -> Result<()> {
         self.preflight()?;
+        let (down, dragged, up, button, steps, step_ms) = if right {
+            (
+                RIGHT_MOUSE_DOWN,
+                RIGHT_MOUSE_DRAGGED,
+                RIGHT_MOUSE_UP,
+                RIGHT_BUTTON,
+                24,
+                30,
+            )
+        } else {
+            (
+                LEFT_MOUSE_DOWN,
+                LEFT_MOUSE_DRAGGED,
+                LEFT_MOUSE_UP,
+                LEFT_BUTTON,
+                12,
+                16,
+            )
+        };
         let content = owned_content(self.pid, game)?;
         let a = client_point(content, from.0, from.1)?;
         let b = client_point(content, to.0, to.1)?;
         let post = |kind: u32, point: Point| -> Result<()> {
             // SAFETY: a null source is allowed; the event is released after posting.
             unsafe {
-                let event = CGEventCreateMouseEvent(std::ptr::null(), kind, point, LEFT_BUTTON);
+                let event = CGEventCreateMouseEvent(std::ptr::null(), kind, point, button);
                 if event.is_null() {
                     return Err(Error::new("input_unavailable", "Mouse event unavailable"));
                 }
@@ -394,19 +431,19 @@ impl MacKeys {
         let pause = std::time::Duration::from_millis(16);
         post(MOUSE_MOVED, a)?;
         std::thread::sleep(pause * 4);
-        post(LEFT_MOUSE_DOWN, a)?;
+        post(down, a)?;
         std::thread::sleep(pause * 4);
-        for step in 1..=12 {
-            let t = f64::from(step) / 12.0;
+        for step in 1..=steps {
+            let t = f64::from(step) / f64::from(steps);
             let p = Point {
                 x: a.x + (b.x - a.x) * t,
                 y: a.y + (b.y - a.y) * t,
             };
-            post(LEFT_MOUSE_DRAGGED, p)?;
-            std::thread::sleep(pause);
+            post(dragged, p)?;
+            std::thread::sleep(std::time::Duration::from_millis(step_ms));
         }
         std::thread::sleep(pause * 4);
-        post(LEFT_MOUSE_UP, b)
+        post(up, b)
     }
     /// One vertical scroll-wheel step (pixel units, positive scrolls up) with the
     /// cursor at a game-logical point, after a fresh front-most check.

@@ -9,7 +9,7 @@ use crate::{
     gui_tree::{self, Rect},
     memory::{Reader, StringAbi},
     platform::{
-        macos_input::{Capture, Key, MacKeys},
+        macos_input::{Key, MacKeys},
         Process,
     },
 };
@@ -31,6 +31,10 @@ struct Ui {
     portrait_group: u64,
     group_handle: u64,
     group_orders: u64,
+    division_location: u64,
+    province_id: u64,
+    order_vtable: u64,
+    order_children: [u64; 2],
 }
 /// macOS Mach-O 089EA519, mapped live on 18 October 2026 (Germany test run):
 /// a box selection set the idler's selection size (+0x540) to 7 and the
@@ -51,6 +55,11 @@ const MACOS: Ui = Ui {
     portrait_group: 0x30,
     group_handle: 0x8,
     group_orders: 0x98,
+    division_location: 0x1f0,
+    province_id: 0x9c,
+    order_vtable: 0x3313328,
+    // Drawing an offensive line added one COrderInstance under each list.
+    order_children: [0x1c8, 0x2a0],
 };
 const GAME: (u32, u32) = (1920, 1080);
 
@@ -237,48 +246,10 @@ fn card_rect(r: &Reader<'_>, image: u64, army: &str, name: &str) -> Result<Rect>
     gui_tree::rect(r, image, card_widget(r, image, army, name)?, GAME)
 }
 
-/// Areas covered by the top bar, the left-hand panels and the card bar.
-fn map_area(x: f64, y: f64) -> bool {
-    (90.0..=900.0).contains(&y) && !(x < 300.0 && y < 340.0)
-}
-/// Front-line drawing mode marks the borders an order can follow with bright
-/// green dashes; the target is the solid dash patch nearest the screen
-/// centre, where the Find view has put the enemy state.
-fn nearest_dash(capture: &Capture) -> Option<(f64, f64)> {
-    let green = |x: f64, y: f64| {
-        capture.rgb(x, y).is_some_and(|(r, g, b)| {
-            g > 150 && i32::from(g) > i32::from(r) + 25 && i32::from(g) > i32::from(b) + 60
-        })
-    };
-    let (w, h) = (
-        capture.width as f64 / capture.scale,
-        capture.height as f64 / capture.scale,
-    );
-    let mut best: Option<(f64, f64, f64)> = None;
-    let mut y = 0.0;
-    while y + 2.0 < h {
-        let mut x = 0.0;
-        while x + 2.0 < w {
-            if map_area(x, y)
-                && green(x, y)
-                && (0..3).all(|dy| (0..3).all(|dx| green(x + f64::from(dx), y + f64::from(dy))))
-            {
-                let d = (x - 960.0).powi(2) + (y - 540.0).powi(2);
-                if best.is_none_or(|b| d < b.0) {
-                    best = Some((d, x + 1.0, y + 1.0));
-                }
-            }
-            x += 1.0;
-        }
-        y += 1.0;
-    }
-    best.map(|b| (b.1, b.2))
-}
-
-/// Draw a front line for `army` along the border nearest state `state`: the
-/// army card selects the army, Z enters front-line drawing, the Find view
-/// centres the state and one click on the nearest highlighted border places
-/// the order. Verified by one more battle-plan order on the army.
+/// Give `army` a front line against the owner of state `state`: the army
+/// card selects the army, Z enters front-line drawing, the Find view centres
+/// the state and one click inside it places the front along that country's
+/// border. Verified by one more battle-plan order on the army.
 pub(super) fn front(process: &dyn Process, keys: &MacKeys, army: &str, state: i32) -> Result<()> {
     clear_notices(process, keys)?;
     let before = read(process, |r, i| orders(r, i, army))?;
@@ -289,17 +260,16 @@ pub(super) fn front(process: &dyn Process, keys: &MacKeys, army: &str, state: i3
     keys.press(Key::letter('z')?)?;
     std::thread::sleep(std::time::Duration::from_millis(200));
     find_state(process, keys, state)?;
-    std::thread::sleep(std::time::Duration::from_millis(400));
-    let capture = keys.capture(GAME)?;
-    let Some((x, y)) = nearest_dash(&capture) else {
-        return Err(Error::new(
-            "gui_target_unavailable",
-            "No front this army can follow is highlighted near the state",
-        ));
-    };
-    keys.click(GAME, x, y)?;
+    std::thread::sleep(std::time::Duration::from_millis(300));
+    keys.click(GAME, 960.0, 540.0)?;
     wait(process, "front line placed", |r, i| {
         Ok(orders(r, i, army)? > before)
+    })
+    .map_err(|_| {
+        Error::new(
+            "input_readback_failed",
+            "No front line was placed (the state's owner may not border this army's area)",
+        )
     })
 }
 
@@ -338,37 +308,93 @@ pub(super) fn execute(process: &dyn Process, keys: &MacKeys, army: &str, run: bo
     })
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    fn capture(green: &[(usize, usize)]) -> Capture {
-        let (width, height) = (1920, 1080);
-        let mut data = vec![40u8; width * height * 4];
-        for &(x0, y0) in green {
-            for y in y0..y0 + 4 {
-                for x in x0..x0 + 4 {
-                    let o = (y * width + x) * 4;
-                    data[o..o + 3].copy_from_slice(&[60, 220, 90]);
+/// Province IDs where the divisions of `army` stand.
+fn army_provinces(r: &Reader<'_>, image: u64, army: &str) -> Result<Vec<i32>> {
+    let u = ui(r)?;
+    let group = group_named(r, image, army)?;
+    let country = own_country(r, image)?;
+    let province_vtable = image + crate::construction::layout(r).province_vtable;
+    let (_, data, count) = r.array_header(country + u.country_divisions)?;
+    let mut out = Vec::new();
+    for index in 0..count.min(4096) as u64 {
+        let division = r.u64(data + index * 8)?;
+        if r.u64(division + u.division_group)? != group {
+            continue;
+        }
+        let location = r.u64(division + u.division_location)?;
+        if location != 0 && r.u64(location)? == province_vtable {
+            out.push(r.i32(location + u.province_id)?);
+        }
+    }
+    Ok(out)
+}
+/// All battle-plan order nodes of `army` (top orders and their sub-orders).
+pub(super) fn plan_nodes(r: &Reader<'_>, image: u64, army: &str) -> Result<usize> {
+    let u = ui(r)?;
+    let group = group_named(r, image, army)?;
+    let mut stack = vec![];
+    let (_, data, count) = r.array_header(group + u.group_orders)?;
+    for index in 0..count.min(64) as u64 {
+        stack.push((r.u64(data + index * 8)?, 0));
+    }
+    let mut seen = 0;
+    while let Some((order, depth)) = stack.pop() {
+        if r.u64(order)? != image + u.order_vtable {
+            return Err(Error::new(
+                "invalid_army_type",
+                "Exact battle-plan order required",
+            ));
+        }
+        seen += 1;
+        if seen > 512 {
+            return Err(Error::new("invalid_array", "Battle plan exceeds bound"));
+        }
+        if depth < 6 {
+            for list in u.order_children {
+                let (_, data, count) = r.array_header(order + list)?;
+                for index in 0..count.min(64) as u64 {
+                    stack.push((r.u64(data + index * 8)?, depth + 1));
                 }
             }
         }
-        Capture {
-            width,
-            height,
-            stride: width * 4,
-            scale: 1.0,
-            data,
-        }
     }
-    #[test]
-    fn nearest_dash_prefers_the_centre_and_skips_ui() {
-        assert_eq!(nearest_dash(&capture(&[])), None);
-        // Top bar, left panel and card bar are never targets.
-        assert_eq!(
-            nearest_dash(&capture(&[(960, 40), (100, 200), (960, 950)])),
-            None
-        );
-        let found = nearest_dash(&capture(&[(500, 500), (1000, 560)])).unwrap();
-        assert_eq!(found, (1001.0, 561.0));
+    Ok(seen)
+}
+
+/// Draw an offensive line for `army` (which must already hold a front line)
+/// into state `state`: the army card selects the army, X enters offensive-line
+/// drawing, the Find view centres the state and one right-button drag runs
+/// from the army's side to the state; the game joins it to the front.
+/// Verified by new battle-plan order nodes on the army.
+pub(super) fn offensive(
+    process: &dyn Process,
+    keys: &MacKeys,
+    game_dir: &std::path::Path,
+    army: &str,
+    state: i32,
+) -> Result<()> {
+    clear_notices(process, keys)?;
+    if read(process, |r, i| orders(r, i, army))? == 0 {
+        return Err(Error::new(
+            "invalid_target",
+            "This army has no front line; draw one first",
+        ));
     }
+    let provinces = read(process, |r, i| army_provinces(r, i, army))?;
+    let (dx, dy) = super::mapdata::direction_to(game_dir, state, &provinces)?;
+    let before = read(process, |r, i| plan_nodes(r, i, army))?;
+    let card = read(process, |r, i| card_rect(r, i, army, "portrait_btn"))?;
+    let (x, y) = card.center();
+    keys.click(GAME, x, y)?;
+    wait(process, "select army", |r, i| Ok(selection_size(r, i)? > 0))?;
+    find_state(process, keys, state)?;
+    keys.press(Key::letter('x')?)?;
+    std::thread::sleep(std::time::Duration::from_millis(300));
+    let clamp = |x: f64, y: f64| (x.clamp(320.0, 1880.0), y.clamp(120.0, 880.0));
+    let from = clamp(960.0 + dx * 260.0, 540.0 + dy * 260.0);
+    let to = clamp(960.0 - dx * 40.0, 540.0 - dy * 40.0);
+    keys.right_drag(GAME, from, to)?;
+    wait(process, "offensive line placed", |r, i| {
+        Ok(plan_nodes(r, i, army)? > before)
+    })
 }
