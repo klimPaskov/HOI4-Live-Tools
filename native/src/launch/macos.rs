@@ -5,6 +5,7 @@
 mod focus;
 mod journal;
 mod research;
+mod ui;
 use crate::{
     actions::{Action, Backend, Epoch, Journal, State},
     error::{Error, Result},

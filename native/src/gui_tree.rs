@@ -33,6 +33,8 @@ pub(crate) struct Layout {
     sprite_type: u64,
     sprite_size: u64,
     sprite_frames: u64,
+    /// Button state; the engine stores 3 for a disabled button.
+    button_state: u64,
 }
 /// macOS Mach-O 089EA519 (libc++), mapped live on 18 October 2026 from the
 /// topbar: children/type/name joins, a visible/hidden split of named views,
@@ -56,6 +58,7 @@ const MACOS: Layout = Layout {
     sprite_type: 0x8,
     sprite_size: 0x8c,
     sprite_frames: 0x78,
+    button_state: 0x9c,
 };
 pub(crate) fn layout(r: &Reader<'_>) -> Result<&'static Layout> {
     match r.string_abi() {
@@ -118,6 +121,11 @@ pub(crate) fn container(r: &Reader<'_>, pointer: u64, image: u64) -> Result<Opti
     }
     let object = pointer.wrapping_sub(l.container_base);
     Ok((r.u64(object)? == image + l.container_vtable).then_some(object))
+}
+/// Whether a button is disabled by the game (state 3), e.g. Research for a
+/// technology whose prerequisites are missing.
+pub(crate) fn disabled(r: &Reader<'_>, button: u64) -> Result<bool> {
+    Ok(r.i32(button + layout(r)?.button_state)? == 3)
 }
 /// Direct child of a container object with this name.
 pub(crate) fn child(r: &Reader<'_>, image: u64, object: u64, wanted: &str) -> Result<Option<u64>> {

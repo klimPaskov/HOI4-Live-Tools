@@ -3,6 +3,7 @@
 //! focus symbol, then the detail window's Start button. Targets come from the
 //! live GUI tree (zoom-aware), each stage waits for its memory change, and
 //! success is the own focus progress naming the focus as active.
+use super::ui::{dismiss, read, settled, wait};
 use crate::{
     error::{Error, Result},
     game,
@@ -62,7 +63,7 @@ const MACOS: Ui = Ui {
     panel_selected: 0xba8,
 };
 const GAME: (u32, u32) = (1920, 1080);
-const STAGE_WAIT: Duration = Duration::from_secs(3);
+const START_WAIT: Duration = Duration::from_secs(3);
 /// Tree area clear of the title bar, filter buttons and the bottom scrollbar.
 const SAFE: (f64, f64, f64, f64) = (260.0, 200.0, 1860.0, 1000.0);
 
@@ -73,29 +74,6 @@ fn ui(r: &Reader<'_>) -> Result<&'static Ui> {
             "capability_unavailable",
             "Focus input is not reviewed for this build",
         )),
-    }
-}
-fn read<T>(process: &dyn Process, f: impl Fn(&Reader<'_>, u64) -> Result<T>) -> Result<T> {
-    let mut attempt = 0;
-    loop {
-        process.begin_snapshot()?;
-        let r = Reader::new(process);
-        match f(&r, process.image_base()) {
-            Err(e)
-                if attempt < 3
-                    && matches!(
-                        e.code,
-                        "torn_read" | "short_read" | "invalid_gui" | "invalid_array"
-                    ) =>
-            {
-                attempt += 1;
-                thread::sleep(Duration::from_millis(5));
-            }
-            result => {
-                process.check()?;
-                return result;
-            }
-        }
     }
 }
 fn view(r: &Reader<'_>, image: u64, slot: u64) -> Result<u64> {
@@ -187,7 +165,7 @@ fn background(all: &[Rect]) -> Option<(f64, f64)> {
     None
 }
 /// Visible detail window for `key` and its Start button rectangle.
-fn detail(r: &Reader<'_>, image: u64, key: &str) -> Result<Option<Rect>> {
+fn detail(r: &Reader<'_>, image: u64, key: &str) -> Result<Option<(Rect, bool)>> {
     let u = ui(r)?;
     let focus = view(r, image, u.focus_view)?;
     let (_, data, count) = r.array_header(focus + u.panels)?;
@@ -210,29 +188,13 @@ fn detail(r: &Reader<'_>, image: u64, key: &str) -> Result<Option<Rect>> {
             continue;
         }
         if let Some(start) = gui_tree::child(r, image, window, "start")? {
-            return Ok(Some(gui_tree::rect(r, image, start, GAME)?));
+            return Ok(Some((
+                gui_tree::rect(r, image, start, GAME)?,
+                gui_tree::disabled(r, start)?,
+            )));
         }
     }
     Ok(None)
-}
-fn wait(
-    process: &dyn Process,
-    stage: &str,
-    f: impl Fn(&Reader<'_>, u64) -> Result<bool>,
-) -> Result<()> {
-    let deadline = Instant::now() + STAGE_WAIT;
-    loop {
-        if read(process, &f)? {
-            return Ok(());
-        }
-        if Instant::now() >= deadline {
-            return Err(Error::new(
-                "input_readback_failed",
-                format!("{stage}: expected game change not observed"),
-            ));
-        }
-        thread::sleep(Duration::from_millis(30));
-    }
 }
 
 pub(super) struct Progress {
@@ -287,7 +249,7 @@ pub(super) fn start(process: &dyn Process, keys: &MacKeys, key: &str) -> Result<
             keys.press(Key::letter('q')?)?;
             wait(process, "open politics", |r, i| open(r, i, u.politics_view))?;
         }
-        click(read(process, focus_button)?)?;
+        click(settled(process, "focus button", focus_button)?)?;
         wait(process, "open focus tree", |r, i| open(r, i, u.focus_view))?;
     }
     // The tree must show the own country before any node is trusted.
@@ -347,14 +309,35 @@ pub(super) fn start(process: &dyn Process, keys: &MacKeys, key: &str) -> Result<
             "Focus could not be panned into view",
         )
     })?;
+    let _ = symbol;
+    // Panning can coast; click only a node that has stopped inside the tree area.
+    let symbol = settled(process, "focus node", |r, i| {
+        symbols(r, i, key)?
+            .0
+            .ok_or_else(|| Error::new("gui_target_unavailable", "Focus node disappeared"))
+    })?;
+    if !inside(&symbol) {
+        return Err(Error::new(
+            "gui_target_unavailable",
+            "Focus node drifted out of the tree area",
+        ));
+    }
     click(symbol)?;
     wait(process, "open focus detail", |r, i| {
         Ok(detail(r, i, key)?.is_some())
     })?;
-    let button = read(process, |r, i| detail(r, i, key))?
-        .ok_or_else(|| Error::new("input_readback_failed", "Focus detail closed"))?;
+    let (button, disabled) = settled(process, "start button", |r, i| {
+        detail(r, i, key)?.ok_or_else(|| Error::new("input_readback_failed", "Focus detail closed"))
+    })?;
+    if disabled {
+        dismiss(process, keys, |r, i| Ok(detail(r, i, key)?.is_none()));
+        return Err(Error::new(
+            "invalid_target",
+            "The game disables Start for this focus (requirements unmet or exclusive)",
+        ));
+    }
     click(button)?;
-    let deadline = Instant::now() + STAGE_WAIT;
+    let deadline = Instant::now() + START_WAIT;
     loop {
         if progress(process)?.active.as_deref() == Some(key) {
             return Ok(());

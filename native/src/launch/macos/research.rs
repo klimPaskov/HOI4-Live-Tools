@@ -3,6 +3,7 @@
 //! the detail window's Research button. Every click target comes from the live
 //! GUI tree of the same fresh read, and every stage waits for the matching
 //! memory change. Success is the slot holding the technology in memory.
+use super::ui::{dismiss, read, settled, wait};
 use crate::{
     error::{Error, Result},
     game,
@@ -14,11 +15,7 @@ use crate::{
     },
     research,
 };
-use std::{
-    collections::BTreeSet,
-    thread,
-    time::{Duration, Instant},
-};
+use std::collections::BTreeSet;
 
 /// Research UI joins of one inspected build.
 struct Ui {
@@ -64,7 +61,6 @@ const MACOS: Ui = Ui {
     info_research: 0xfd0,
 };
 const GAME: (u32, u32) = (1920, 1080);
-const STAGE_WAIT: Duration = Duration::from_secs(3);
 
 fn ui(r: &Reader<'_>) -> Result<&'static Ui> {
     match r.string_abi() {
@@ -73,31 +69,6 @@ fn ui(r: &Reader<'_>) -> Result<&'static Ui> {
             "capability_unavailable",
             "Research input is not reviewed for this build",
         )),
-    }
-}
-
-/// One fresh read bracket; transient UI churn is retried a few times.
-fn read<T>(process: &dyn Process, f: impl Fn(&Reader<'_>, u64) -> Result<T>) -> Result<T> {
-    let mut attempt = 0;
-    loop {
-        process.begin_snapshot()?;
-        let r = Reader::new(process);
-        match f(&r, process.image_base()) {
-            Err(e)
-                if attempt < 3
-                    && matches!(
-                        e.code,
-                        "torn_read" | "short_read" | "invalid_gui" | "invalid_array"
-                    ) =>
-            {
-                attempt += 1;
-                thread::sleep(Duration::from_millis(5));
-            }
-            result => {
-                process.check()?;
-                return result;
-            }
-        }
     }
 }
 
@@ -216,7 +187,7 @@ fn tab_rect(r: &Reader<'_>, image: u64, folder: &str) -> Result<Rect> {
     gui_tree::rect(r, image, tab, GAME)
 }
 /// Visible info window for `key` and its Research button rectangle.
-fn info(r: &Reader<'_>, image: u64, key: &str) -> Result<Option<Rect>> {
+fn info(r: &Reader<'_>, image: u64, key: &str) -> Result<Option<(Rect, bool)>> {
     let u = ui(r)?;
     let idler = r.u64(image + game::layout(r).idler_global)?;
     let view = r.u64(r.u64(idler + u.manager)? + u.tree_view)?;
@@ -238,35 +209,14 @@ fn info(r: &Reader<'_>, image: u64, key: &str) -> Result<Option<Rect>> {
         }
         let template = r.u64(technology + u.technology_template)?;
         if r.string_bounded(template + u.template_key, 256)? == key {
-            return Ok(Some(gui_tree::rect(
-                r,
-                image,
-                r.u64(window + u.info_research)?,
-                GAME,
-            )?));
+            let button = r.u64(window + u.info_research)?;
+            return Ok(Some((
+                gui_tree::rect(r, image, button, GAME)?,
+                gui_tree::disabled(r, button)?,
+            )));
         }
     }
     Ok(None)
-}
-
-fn wait(
-    process: &dyn Process,
-    stage: &str,
-    f: impl Fn(&Reader<'_>, u64) -> Result<bool>,
-) -> Result<()> {
-    let deadline = Instant::now() + STAGE_WAIT;
-    loop {
-        if read(process, &f)? {
-            return Ok(());
-        }
-        if Instant::now() >= deadline {
-            return Err(Error::new(
-                "input_readback_failed",
-                format!("{stage}: expected game change not observed"),
-            ));
-        }
-        thread::sleep(Duration::from_millis(30));
-    }
 }
 
 pub(super) struct Assignments {
@@ -309,9 +259,16 @@ pub(super) fn start(process: &dyn Process, keys: &MacKeys, key: &str, slot: usiz
         let (x, y) = rect.center();
         keys.click(GAME, x, y).map(|_| ())
     };
-    if read(process, |r, i| open(r, i, ui(r)?.tree_view))? {
+    // Escape closes an open detail window before the tree itself.
+    for attempt in 0..3 {
+        if !read(process, |r, i| open(r, i, ui(r)?.tree_view))? {
+            break;
+        }
         keys.press(Key::Escape)?;
-        wait(process, "close tree", |r, i| Ok(!open(r, i, u.tree_view)?))?;
+        let closed = wait(process, "close tree", |r, i| Ok(!open(r, i, u.tree_view)?));
+        if closed.is_err() && attempt == 2 {
+            return closed;
+        }
     }
     if !read(process, |r, i| open(r, i, ui(r)?.technology_view))? {
         keys.press(Key::letter('w')?)?;
@@ -319,7 +276,7 @@ pub(super) fn start(process: &dyn Process, keys: &MacKeys, key: &str, slot: usiz
             open(r, i, u.technology_view)
         })?;
     }
-    click(read(process, |r, _| slot_rect(r, image, slot))?)?;
+    click(settled(process, "slot", |r, _| slot_rect(r, image, slot))?)?;
     wait(process, "open tree", |r, i| open(r, i, u.tree_view))?;
     let matches = read(process, |r, i| tiles(r, i, key))?;
     if matches.is_empty() {
@@ -345,12 +302,14 @@ pub(super) fn start(process: &dyn Process, keys: &MacKeys, key: &str, slot: usiz
                 .find(|(name, _, _)| read(process, |r, i| tab_rect(r, i, name)).is_ok())
                 .cloned()
                 .ok_or_else(|| Error::new("gui_target_unavailable", "No visible folder tab"))?;
-            click(read(process, |r, i| tab_rect(r, i, &name))?)?;
+            click(settled(process, "folder tab", |r, i| {
+                tab_rect(r, i, &name)
+            })?)?;
             wait(process, "open folder", |r, _| gui_tree::visible(r, folder))?;
             icon
         }
     };
-    let tile = read(process, |r, i| gui_tree::rect(r, i, icon, GAME))?;
+    let tile = settled(process, "tile", |r, i| gui_tree::rect(r, i, icon, GAME))?;
     if tile.y < 140 {
         return Err(Error::new(
             "gui_target_unavailable",
@@ -361,8 +320,17 @@ pub(super) fn start(process: &dyn Process, keys: &MacKeys, key: &str, slot: usiz
     wait(process, "open technology detail", |r, i| {
         Ok(info(r, i, key)?.is_some())
     })?;
-    let button = read(process, |r, i| info(r, i, key))?
-        .ok_or_else(|| Error::new("input_readback_failed", "Technology detail closed"))?;
+    let (button, disabled) = settled(process, "research button", |r, i| {
+        info(r, i, key)?
+            .ok_or_else(|| Error::new("input_readback_failed", "Technology detail closed"))
+    })?;
+    if disabled {
+        dismiss(process, keys, |r, i| Ok(!open(r, i, u.tree_view)?));
+        return Err(Error::new(
+            "invalid_target",
+            "The game disables Research for this technology (missing prerequisite or exclusive choice)",
+        ));
+    }
     click(button)?;
     wait(process, "start research", |r, base| {
         let (slots, _) = research::assignments(r, base)?;
