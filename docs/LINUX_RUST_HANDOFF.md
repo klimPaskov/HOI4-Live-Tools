@@ -7,6 +7,25 @@ Do not resume Mac campaigns or control the shared Windows game.
 
 ## Current checkpoint
 
+macOS checkpoint, 18 October 2026 (native Steam 1.19.3 x86_64 under Rosetta,
+windowed 1920x1080, owned test runs only): the native server reads the
+overview, research, technology catalog, economy, equipment lines,
+construction queue and Focus completion through the task port in 0.1–8 ms.
+Each reader takes its offsets from a per-build layout table; the macOS values
+were mapped live (RTTI vtables, sole globals, back-references) and ambiguous
+fields were resolved by aligning the same virtual methods of both builds.
+Input does not port the Linux X11/SDL stages. Click targets come from the live
+GUI tree: widget names from GUI types, rectangles from laid-out sprite
+renderers (centre-origin translation plus frame or text-sprite size, zoom-aware
+in the focus tree). CGEvent keys, clicks and drags go only to the front-most
+owned window, and every action is verified by memory readback.
+`hoi4_time`, `hoi4_research_start` (790 ms, slot verified) and
+`hoi4_focus_start` (1.17 s including a tree pan, active focus verified) passed
+live on the Germany test run, with a game-action journal that records intent
+before input and never replays an unresolved dispatch. Production,
+construction, army and recording integration on macOS remain pending; the
+first Haiku 5.5 play session uses only time, research and Focus.
+
 Session checkpoint, 18 October 2026: Run091 on `7f0728c` (package v86) passed
 the map placement gate with the Haiku 5.5 player at 512x288. The server opened
 the construction panel, selected arms_factory, used the game's own Find view to
