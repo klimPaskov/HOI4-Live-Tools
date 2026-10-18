@@ -373,4 +373,38 @@ mod queue_summary_tests {
         l.unsupported.push(json!({"entry_index":1}));
         assert!(!queue_summary(&l, "arms_factory", 64).complete);
     }
+    #[test]
+    fn coastal_and_provincial_lines_count_toward_their_own_state() {
+        // A dockyard is a coastal-only state building; a province-located line
+        // (naval base) still belongs to the state its province joins.
+        let mut naval = line("naval_base", Some(63), 1);
+        naval["location"]["province_id"] = json!(9361);
+        naval["location"]["kind"] = json!("province");
+        let l = lines(vec![
+            line("dockyard", Some(63), 1),
+            line("dockyard", Some(62), 2),
+            naval.clone(),
+            line("arms_factory", Some(63), 5),
+        ]);
+        assert_eq!(
+            queue_summary(&l, "dockyard", 63),
+            QueueSummary {
+                in_state: 1,
+                elsewhere: 2,
+                complete: true
+            }
+        );
+        assert_eq!(
+            queue_summary(&l, "naval_base", 63),
+            QueueSummary {
+                in_state: 1,
+                elsewhere: 0,
+                complete: true
+            }
+        );
+        naval["location_available"] = json!(false);
+        let l = lines(vec![line("dockyard", Some(63), 1), naval]);
+        assert!(queue_summary(&l, "dockyard", 63).complete);
+        assert!(!queue_summary(&l, "naval_base", 63).complete);
+    }
 }

@@ -659,6 +659,12 @@ mod tests {
             (args.stage, args.building, args.state, args.amount),
             (stage::Stage::Place, Some("arms_factory"), Some(64), Some(6))
         );
+        let coastal = json!({"stage":"place","building_id":"dockyard","state_id":63,"amount":1,"request_id":"d","lease_token":"t"});
+        let args = parse(coastal.as_object().unwrap()).unwrap();
+        assert_eq!(
+            (args.stage, args.building, args.state, args.amount),
+            (stage::Stage::Place, Some("dockyard"), Some(63), Some(1))
+        );
         for (key, bad) in [
             ("amount", json!(0)),
             ("amount", json!(1001)),
