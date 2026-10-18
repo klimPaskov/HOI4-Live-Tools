@@ -29,23 +29,24 @@ pub(super) fn observe(
     line: u64,
     catalog: &mut Option<Catalog>,
 ) -> Result<Building> {
+    let l = super::layout(r);
     let building = r.u64(line + 0x70)?;
     if building == 0 {
         return Ok(Building::unavailable("no_building"));
     }
     pointer(building)?;
-    if r.u64(building)? != base + 0x41b3e60 {
+    if r.u64(building)? != base + l.building_vtable {
         return Ok(Building::unavailable("unsupported_building_type"));
     }
-    let template = r.u64(building + 0x1c0)?;
+    let template = r.u64(building + l.building_template)?;
     if template == 0 {
         return Ok(Building::unavailable("no_template"));
     }
     pointer(template)?;
     if catalog.is_none() {
-        let db = r.u64(base + 0x439f400)?;
+        let db = r.u64(base + l.database_global)?;
         pointer(db)?;
-        if r.u64(db)? != base + 0x41b3ed8 {
+        if r.u64(db)? != base + l.database_vtable {
             return Err(invalid("Exact building database primary required"));
         }
         *catalog = Some(Catalog {
@@ -62,7 +63,7 @@ pub(super) fn observe(
     let Some(&ordinal) = catalog.members.get(&template) else {
         return Ok(Building::unavailable("template_outside_reviewed_catalog"));
     };
-    if r.u64(template)? != base + 0x41b49c8 {
+    if r.u64(template)? != base + l.template_vtable {
         return Ok(Building::unavailable("unsupported_template_type"));
     }
     // BuildingReference constructors require this flag before using a template;
@@ -75,7 +76,7 @@ pub(super) fn observe(
     } else {
         // The parser key is copied here by the template constructor. Neither
         // building+8 nor template+8 is a catalog index. Localized names are separate.
-        let key = r.string_bounded(template + 0x248, 128)?;
+        let key = r.string_bounded(template + l.template_key, 128)?;
         if key.is_empty() || !key.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_') {
             return Err(invalid("Bounded canonical building key required"));
         }

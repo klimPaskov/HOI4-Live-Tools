@@ -23,9 +23,10 @@ pub(super) fn observe(r: &Reader<'_>, base: u64, manager: u64) -> Result<Value> 
     // Never follow the default/sentinel pointer for inactive or unknown modes.
     let selected = r.u64(manager + 0x3e8)?;
     pointer(selected)?;
-    let db = r.u64(base + 0x439f400)?;
+    let l = super::layout(r);
+    let db = r.u64(base + l.database_global)?;
     pointer(db)?;
-    if r.u64(db)? != base + 0x41b3ed8 {
+    if r.u64(db)? != base + l.database_vtable {
         return Err(invalid(
             "Exact selection building database primary required",
         ));
@@ -35,14 +36,14 @@ pub(super) fn observe(r: &Reader<'_>, base: u64, manager: u64) -> Result<Value> 
     let Some(ordinal) = catalog.iter().position(|p| *p == selected) else {
         return Err(invalid("Selected building must belong to fresh catalog"));
     };
-    if r.u64(selected)? != base + 0x41b49c8 || !boolean(r, selected + 0x18)? {
+    if r.u64(selected)? != base + l.template_vtable || !boolean(r, selected + 0x18)? {
         return Err(invalid("Exact valid selected building template required"));
     }
-    let stored_ordinal = r.i32(selected + 0x2b8)?;
+    let stored_ordinal = r.i32(selected + l.template_ordinal)?;
     if stored_ordinal < 0 || stored_ordinal as usize != ordinal {
         return Err(invalid("Selected building ordinal must match catalog slot"));
     }
-    let key = r.string_bounded(selected + 0x248, 128)?;
+    let key = r.string_bounded(selected + l.template_key, 128)?;
     if key.is_empty() || !key.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_') {
         return Err(invalid("Bounded canonical selected building key required"));
     }

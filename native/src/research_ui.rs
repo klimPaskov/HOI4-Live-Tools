@@ -52,6 +52,9 @@ impl WitnessRead {
     }
 }
 impl ReadMemory for Witnesses<'_> {
+    fn string_abi(&self) -> crate::memory::StringAbi {
+        self.process.string_abi()
+    }
     fn read(&self, address: u64, size: usize) -> Result<Vec<u8>> {
         let bytes = self.process.read(address, size)?;
         let mut reads = self.reads.borrow_mut();
@@ -168,7 +171,8 @@ pub(crate) fn primary_type_encoding(r: &Reader<'_>, base: u64, table: u64) -> Re
     let in_section = |p: u64, size: u64, low: u64, high: u64| {
         p >= base + low && p.checked_add(size).is_some_and(|end| end <= base + high)
     };
-    let metadata = |p, size| in_section(p, size, 0x41adde0, 0x436d9f8);
+    let l = crate::game::layout(r);
+    let metadata = |p, size| in_section(p, size, l.type_metadata.0, l.type_metadata.1);
     if !metadata(table.saturating_sub(16), 24)
         || i64::from_le_bytes(r.read(table - 16, 8)?.try_into().unwrap()) != 0
     {
@@ -185,7 +189,7 @@ pub(crate) fn primary_type_encoding(r: &Reader<'_>, base: u64, table: u64) -> Re
         ));
     }
     let name = r.u64(info + 8)?;
-    if !in_section(name, 128, 0x3506000, 0x3975f39) {
+    if !in_section(name, 128, l.type_names.0, l.type_names.1) {
         return Err(Error::new(
             "invalid_gui_type",
             "GUI type name outside verified image",
@@ -1007,6 +1011,42 @@ pub fn category_command_owned(process: &dyn Process, key: &str) -> Result<(Value
         body,
         context.expect("Own category command context requested"),
     ))
+}
+
+#[cfg(test)]
+mod string_abi_tests {
+    use super::*;
+    use crate::memory::StringAbi;
+    struct LibCxxProcess;
+    impl ReadMemory for LibCxxProcess {
+        fn read(&self, _: u64, n: usize) -> Result<Vec<u8>> {
+            Ok(vec![0; n])
+        }
+        fn string_abi(&self) -> StringAbi {
+            StringAbi::LibCxx
+        }
+    }
+    impl Process for LibCxxProcess {
+        fn check(&self) -> Result<()> {
+            Ok(())
+        }
+        fn image_base(&self) -> u64 {
+            0
+        }
+    }
+    /// Wrapped readers select the per-build layout; a default ABI here would
+    /// silently apply the Linux layout to a macOS process.
+    #[test]
+    fn witnesses_keep_the_process_string_abi() {
+        let process = LibCxxProcess;
+        let witnesses = Witnesses::new(&process);
+        let reader = Reader::new(&witnesses);
+        assert_eq!(reader.string_abi(), StringAbi::LibCxx);
+        assert_eq!(
+            crate::game::layout(&reader).build_id,
+            "089EA519-6780-353B-8E39-4E9309B444D4"
+        );
+    }
 }
 
 #[cfg(test)]

@@ -18,6 +18,47 @@ mod completion;
 mod search;
 pub use completion::snapshot as completion_snapshot;
 
+/// Focus tree/progress/catalog layout of one inspected build.
+#[derive(Debug)]
+pub(crate) struct Layout {
+    pub(crate) progress_vtable: u64,
+    pub(crate) tree_vtable: u64,
+    pub(crate) database_global: u64,
+    pub(crate) database_vtable: u64,
+    pub(crate) focus_vtable: u64,
+    pub(crate) tree_focuses: u64,
+    pub(crate) focus_tree: u64,
+}
+/// Linux ELF a4971c9e (libstdc++).
+const LINUX: Layout = Layout {
+    progress_vtable: 0x4202638,
+    tree_vtable: 0x4202410,
+    database_global: 0x439faf0,
+    database_vtable: 0x4202590,
+    focus_vtable: 0x42024d0,
+    tree_focuses: 0x30,
+    focus_tree: 0x160,
+};
+/// macOS Mach-O 089EA519 (libc++), mapped live on 18 October 2026: vtables by
+/// RTTI name, database by its sole global, tree membership by the canonical
+/// list and focus ownership by its reciprocal tree pointer. Progress fields
+/// match the shared accesses of both builds' code.
+const MACOS: Layout = Layout {
+    progress_vtable: 0x33865d0,
+    tree_vtable: 0x33863a8,
+    database_global: 0x34d0a10,
+    database_vtable: 0x3386528,
+    focus_vtable: 0x3386468,
+    tree_focuses: 0x28,
+    focus_tree: 0x130,
+};
+pub(crate) fn layout(r: &Reader<'_>) -> &'static Layout {
+    match r.string_abi() {
+        crate::memory::StringAbi::LibStdCxx => &LINUX,
+        crate::memory::StringAbi::LibCxx => &MACOS,
+    }
+}
+
 struct Witnesses<'a> {
     process: &'a dyn Process,
     reads: RefCell<BTreeMap<(u64, usize), WitnessRead>>,
@@ -29,6 +70,9 @@ struct WitnessRead {
     section: &'static str,
 }
 impl ReadMemory for Witnesses<'_> {
+    fn string_abi(&self) -> crate::memory::StringAbi {
+        self.process.string_abi()
+    }
     fn read(&self, a: u64, n: usize) -> Result<Vec<u8>> {
         let bytes = self.process.read(a, n)?;
         let mut reads = self.reads.borrow_mut();

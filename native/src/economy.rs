@@ -68,11 +68,12 @@ fn own_entry(r: &Reader<'_>, a: u64, index: usize, stride: usize) -> Result<Vec<
 /// Existing own tag/country/production join. Caller owns process brackets and
 /// final witnesses; no aggregate-count or GUI semantics follow from this root.
 pub(crate) fn own_production(r: &Reader<'_>, base: u64) -> Result<(u64, u64)> {
-    let gs = r.u64(base + 0x44086a8)?;
-    exact(r, gs, base + 0x42c7598)?;
-    let idler = r.u64(base + 0x44085f8)?;
-    exact(r, idler, base + 0x42c9a88)?;
-    let tag = r.i32(gs + 0x518)?;
+    let g = game::layout(r);
+    let gs = r.u64(base + g.gs_global)?;
+    exact(r, gs, base + g.gs_vtable)?;
+    let idler = r.u64(base + g.idler_global)?;
+    exact(r, idler, base + g.idler_vtable)?;
+    let tag = r.i32(gs + g.player_tag)?;
     if !(1..4096).contains(&tag) {
         return Err(Error::new(
             "player_unavailable",
@@ -80,7 +81,7 @@ pub(crate) fn own_production(r: &Reader<'_>, base: u64) -> Result<(u64, u64)> {
         ));
     }
     let index = i32::from_le_bytes(
-        own_entry(r, gs + 0x340, tag as usize, 4)?
+        own_entry(r, gs + g.tag_country_index, tag as usize, 4)?
             .try_into()
             .unwrap(),
     );
@@ -88,19 +89,19 @@ pub(crate) fn own_production(r: &Reader<'_>, base: u64) -> Result<(u64, u64)> {
         return Err(Error::new("player_unavailable", "Own country index absent"));
     }
     let country = u64::from_le_bytes(
-        own_entry(r, gs + 0x310, index as usize, 8)?
+        own_entry(r, gs + g.countries, index as usize, 8)?
             .try_into()
             .unwrap(),
     );
-    exact(r, country, base + 0x41fafb0)?;
+    exact(r, country, base + g.country_vtable)?;
     if r.i32(country + 8)? != tag {
         return Err(Error::new(
             "invalid_economy_owner",
             "Own country tag join required",
         ));
     }
-    let production = r.u64(country + 0xf40)?;
-    exact(r, production, base + 0x42066f8)?;
+    let production = r.u64(country + g.country_production)?;
+    exact(r, production, base + g.production_vtable)?;
     if r.u64(production + 0x290)? != country {
         return Err(Error::new(
             "invalid_economy_owner",
@@ -116,8 +117,9 @@ pub fn snapshot(process: &dyn Process) -> Result<Value> {
     let r = Reader::new(&w);
     let base = process.image_base();
     let (country, production) = own_production(&r, base)?;
-    let politics = r.u64(country + 0xf68)?;
-    exact(&r, politics, base + 0x4202e30)?;
+    let g = game::layout(&r);
+    let politics = r.u64(country + g.country_politics)?;
+    exact(&r, politics, base + g.politics_vtable)?;
     if r.u64(politics + 0xc8)? != country {
         return Err(Error::new(
             "invalid_economy_owner",
@@ -156,6 +158,6 @@ pub fn snapshot(process: &dyn Process) -> Result<Value> {
     let (end_calls, end_bytes) = w.finish()?;
     process.check()?;
     Ok(
-        json!({"source":"native own economy trigger counts","build_id":game::BUILD_ID,"owned":true,"player":context.player,"factory_trigger_count":{"military":military,"naval":naval,"civilian":civilian},"civilian_factories_available_for_projects":project,"political_power":{"raw_signed":pp,"raw_units_per_point":FIXED,"exact_rational":{"numerator":pp,"denominator":FIXED},"integer_trigger_count":pp/FIXED},"unavailable":{"ui_factory_totals":true,"idle_builders":true,"stability":true,"war_support":true,"shortages":true},"freshness":{"observed_unix_ms":SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),"elapsed_ms":started.elapsed().as_secs_f64()*1000.0,"read_calls_kind":"logical_read_requests","read_calls":r.calls.get()+end_calls as u64,"read_bytes":r.bytes.get()+end_bytes},"observation_paused_game":false,"input_authorized":false}),
+        json!({"source":"native own economy trigger counts","build_id":g.build_id,"owned":true,"player":context.player,"factory_trigger_count":{"military":military,"naval":naval,"civilian":civilian},"civilian_factories_available_for_projects":project,"political_power":{"raw_signed":pp,"raw_units_per_point":FIXED,"exact_rational":{"numerator":pp,"denominator":FIXED},"integer_trigger_count":pp/FIXED},"unavailable":{"ui_factory_totals":true,"idle_builders":true,"stability":true,"war_support":true,"shortages":true},"freshness":{"observed_unix_ms":SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),"elapsed_ms":started.elapsed().as_secs_f64()*1000.0,"read_calls_kind":"logical_read_requests","read_calls":r.calls.get()+end_calls as u64,"read_bytes":r.bytes.get()+end_bytes},"observation_paused_game":false,"input_authorized":false}),
     )
 }

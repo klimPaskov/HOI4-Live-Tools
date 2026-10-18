@@ -39,6 +39,9 @@ struct Timed<'a> {
     until: Instant,
 }
 impl ReadMemory for Timed<'_> {
+    fn string_abi(&self) -> crate::memory::StringAbi {
+        self.inner.string_abi()
+    }
     fn read(&self, a: u64, n: usize) -> Result<Vec<u8>> {
         deadline(self.until)?;
         let result = self.inner.read(a, n);

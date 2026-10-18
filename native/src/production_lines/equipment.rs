@@ -40,12 +40,13 @@ fn word(r: &Reader<'_>, address: u64) -> Result<u32> {
 }
 impl Catalog {
     fn load(r: &Reader<'_>, base: u64) -> Result<Self> {
-        let db = r.u64(base + 0x439f440)?;
+        let l = super::layout(r);
+        let db = r.u64(base + l.equipment_db_global)?;
         pointer(db)?;
-        if r.u64(db)? != base + 0x41f72d8 {
+        if r.u64(db)? != base + l.equipment_db_vtable {
             return Err(invalid("Exact equipment database primary required"));
         }
-        let (header, data, count) = r.array_header(db + 0x60)?;
+        let (header, data, count) = r.array_header(db + l.equipment_catalog)?;
         let capacity = i32::from_le_bytes(header[8..12].try_into().unwrap()) as usize;
         if capacity > CATALOG_LIMIT || (count > 0 && data % 8 != 0) {
             return Err(invalid("Bounded aligned base-equipment catalog required"));
@@ -80,15 +81,16 @@ pub(super) fn observe(
     line: u64,
     catalog: &mut Option<Catalog>,
 ) -> Result<Equipment> {
+    let l = super::layout(r);
     let variant = r.u64(line + 0x88)?;
     if variant == 0 {
         return Ok(Equipment::unavailable("no_variant"));
     }
     pointer(variant)?;
-    if r.u64(variant)? != base + 0x41fa1a0 {
+    if r.u64(variant)? != base + l.variant_vtable {
         return Ok(Equipment::unavailable("unsupported_variant_type"));
     }
-    let equipment_type = r.u64(variant + 0x3f0)?;
+    let equipment_type = r.u64(variant + l.variant_type)?;
     if equipment_type == 0 {
         return Ok(Equipment::unavailable("no_type"));
     }
@@ -100,7 +102,7 @@ pub(super) fn observe(
     if !catalog.members.contains(&equipment_type) {
         return Ok(Equipment::unavailable("type_outside_reviewed_base_catalog"));
     }
-    if r.u64(equipment_type)? != base + 0x41f8810 {
+    if r.u64(equipment_type)? != base + l.equipment_type_vtable {
         return Ok(Equipment::unavailable("unsupported_equipment_type"));
     }
     let intern = word(r, variant + 0x14)?;

@@ -197,6 +197,9 @@ impl<'a> Recorder<'a> {
     }
 }
 impl ReadMemory for Recorder<'_> {
+    fn string_abi(&self) -> crate::memory::StringAbi {
+        self.inner.string_abi()
+    }
     fn read(&self, address: u64, size: usize) -> Result<Vec<u8>> {
         let bytes = self.inner.read(address, size)?;
         let follow = self.sites.borrow().get(&address).copied();

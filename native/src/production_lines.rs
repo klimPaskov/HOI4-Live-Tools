@@ -12,6 +12,47 @@ use crate::{
     research_ui::{primary_type_encoding, Witnesses},
 };
 use serde_json::{json, Value};
+/// Production-line and equipment layout of one inspected build.
+#[derive(Debug)]
+pub(crate) struct Layout {
+    military_line_vtable: u64,
+    naval_line_vtable: u64,
+    equipment_db_global: u64,
+    equipment_db_vtable: u64,
+    equipment_catalog: u64,
+    variant_vtable: u64,
+    variant_type: u64,
+    equipment_type_vtable: u64,
+}
+/// Linux ELF a4971c9e (libstdc++).
+const LINUX: Layout = Layout {
+    military_line_vtable: 0x42ede08,
+    naval_line_vtable: 0x42edf88,
+    equipment_db_global: 0x439f440,
+    equipment_db_vtable: 0x41f72d8,
+    equipment_catalog: 0x60,
+    variant_vtable: 0x41fa1a0,
+    variant_type: 0x3f0,
+    equipment_type_vtable: 0x41f8810,
+};
+/// macOS Mach-O 089EA519 (libc++), mapped live on 18 October 2026: vtables by
+/// RTTI name, database by its sole global, catalog from the shared accessors.
+const MACOS: Layout = Layout {
+    military_line_vtable: 0x338a030,
+    naval_line_vtable: 0x338a1b0,
+    equipment_db_global: 0x34d0be0,
+    equipment_db_vtable: 0x3377a90,
+    equipment_catalog: 0x50,
+    variant_vtable: 0x337aac8,
+    variant_type: 0x3e0,
+    equipment_type_vtable: 0x3379328,
+};
+pub(crate) fn layout(r: &Reader<'_>) -> &'static Layout {
+    match r.string_abi() {
+        crate::memory::StringAbi::LibStdCxx => &LINUX,
+        crate::memory::StringAbi::LibCxx => &MACOS,
+    }
+}
 use std::{
     collections::BTreeSet,
     time::{Instant, SystemTime, UNIX_EPOCH},
@@ -56,6 +97,7 @@ fn observe(
     let base = process.image_base();
     let (country, production) = economy::own_production(&reader, base)?;
     let campaign = game::context_from_reader(&reader, base)?;
+    let l = layout(&reader);
     let (header, data, count) = reader.array_header(production + 0x58)?;
     let capacity = i32::from_le_bytes(header[8..12].try_into().unwrap()) as usize;
     if capacity > LINE_LIMIT || (count > 0 && data % 8 != 0) {
@@ -91,9 +133,9 @@ fn observe(
     let mut equipment_unavailable = 0;
     for (index, &line) in entries.iter().enumerate() {
         let primary = reader.u64(line)?;
-        let (kind, expected_word) = if primary == base + 0x42ede08 {
+        let (kind, expected_word) = if primary == base + l.military_line_vtable {
             ("military", 0x38u32)
-        } else if primary == base + 0x42edf88 {
+        } else if primary == base + l.naval_line_vtable {
             ("naval", 0x39u32)
         } else {
             let metadata = match primary_type_encoding(&reader, base, primary) {
@@ -159,7 +201,7 @@ fn observe(
         own: [country, production],
         entries,
     };
-    let mut value = json!({"source":"native own equipment production lines","build_id":game::BUILD_ID,
+    let mut value = json!({"source":"native own equipment production lines","build_id":game::layout(&reader).build_id,
         "scope":"own_equipment_line_collection_only","owned":true,"player":context.campaign.player,
         "handle_scope":{"kind":"own_current_snapshot_collection","player":context.campaign.player,
             "playthrough_id":context.campaign.playthrough_id,"date_raw":context.campaign.date_raw,

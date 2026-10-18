@@ -82,6 +82,95 @@ pub(crate) struct Lines {
     pub(crate) anomalous: usize,
     pub(crate) locations: usize,
 }
+/// Construction queue, building and location layout of one inspected build.
+/// Queued-line fields (+0x28..+0x99) are shared with the Linux line layout;
+/// the macOS base fields through +0x88 were matched live on equipment lines.
+#[derive(Debug)]
+pub(crate) struct Layout {
+    building_line_vtable: u64,
+    railway_line_vtable: u64,
+    pub(crate) building_vtable: u64,
+    pub(crate) building_status: u64,
+    pub(crate) building_template: u64,
+    pub(crate) database_global: u64,
+    pub(crate) database_vtable: u64,
+    pub(crate) template_vtable: u64,
+    pub(crate) template_key: u64,
+    pub(crate) template_ordinal: u64,
+    pub(crate) status_vtable: u64,
+    pub(crate) state_vtable: u64,
+    pub(crate) state_owner: u64,
+    pub(crate) state_controller: u64,
+    pub(crate) state_id: u64,
+    pub(crate) state_status: u64,
+    pub(crate) province_vtable: u64,
+    pub(crate) province_owner: u64,
+    pub(crate) province_state: u64,
+    pub(crate) province_id: u64,
+    pub(crate) province_status: u64,
+    pub(crate) gs_provinces: u64,
+    pub(crate) gs_states: u64,
+}
+/// Linux ELF a4971c9e (libstdc++).
+const LINUX: Layout = Layout {
+    building_line_vtable: 0x4205680,
+    railway_line_vtable: 0x42ee398,
+    building_vtable: 0x41b3e60,
+    building_status: 0x1b8,
+    building_template: 0x1c0,
+    database_global: 0x439f400,
+    database_vtable: 0x41b3ed8,
+    template_vtable: 0x41b49c8,
+    template_key: 0x248,
+    template_ordinal: 0x2b8,
+    status_vtable: 0x41b4768,
+    state_vtable: 0x41fba98,
+    state_owner: 0xc8,
+    state_controller: 0xcc,
+    state_id: 0x48,
+    state_status: 0x120,
+    province_vtable: 0x41fb728,
+    province_owner: 0x1a8,
+    province_state: 0xe0,
+    province_id: 0xa4,
+    province_status: 0x1b0,
+    gs_provinces: 0x2b0,
+    gs_states: 0x2c8,
+};
+/// macOS Mach-O 089EA519 (libc++), mapped live on 18 October 2026: vtables by
+/// RTTI name, the database by its sole global, keys/ordinals by catalog
+/// contents, state/province IDs by catalog index and owners by own tag.
+const MACOS: Layout = Layout {
+    building_line_vtable: 0x3389c40,
+    railway_line_vtable: 0x338a7a8,
+    building_vtable: 0x332dcb0,
+    building_status: 0x1a8,
+    building_template: 0x1b0,
+    database_global: 0x34d0ac0,
+    database_vtable: 0x332dd28,
+    template_vtable: 0x332e908,
+    template_key: 0x228,
+    template_ordinal: 0x290,
+    status_vtable: 0x332e6a8,
+    state_vtable: 0x337caf0,
+    state_owner: 0xc0,
+    state_controller: 0xc4,
+    state_id: 0x40,
+    state_status: 0x110,
+    province_vtable: 0x337c7e8,
+    province_owner: 0x188,
+    province_state: 0xc0,
+    province_id: 0x9c,
+    province_status: 0x190,
+    gs_provinces: 0x278,
+    gs_states: 0x290,
+};
+pub(crate) fn layout(r: &Reader<'_>) -> &'static Layout {
+    match r.string_abi() {
+        crate::memory::StringAbi::LibStdCxx => &LINUX,
+        crate::memory::StringAbi::LibCxx => &MACOS,
+    }
+}
 pub(crate) fn lines_in(
     r: &Reader<'_>,
     base: u64,
@@ -89,6 +178,7 @@ pub(crate) fn lines_in(
     own_tag: i32,
     include_location: bool,
 ) -> Result<Lines> {
+    let l = layout(r);
     let entries = members(r, production + 0x70, LINE_LIMIT)?;
     let mut rows = Vec::new();
     let mut unsupported = Vec::new();
@@ -100,8 +190,8 @@ pub(crate) fn lines_in(
     let mut locations = 0;
     for (index, &line) in entries.iter().enumerate() {
         let primary = r.u64(line)?;
-        let is_building = primary == base + 0x4205680;
-        if !is_building && primary != base + 0x42ee398 {
+        let is_building = primary == base + l.building_line_vtable;
+        if !is_building && primary != base + l.railway_line_vtable {
             let name = match primary_type_encoding(r, base, primary) {
                 Ok(name) => Some(name),
                 Err(error) if error.code == "invalid_gui_type" => None,
@@ -301,7 +391,7 @@ pub fn page_with_options(
         });
     }
     Ok(
-        json!({"source":"native own construction queue","build_id":game::BUILD_ID,
+        json!({"source":"native own construction queue","build_id":game::layout(&r).build_id,
         "scope":"own_production_construction_collection_only","player":context.player,
         "handle_scope":{"kind":"own_current_snapshot_collection","player":context.player,
             "playthrough_id":context.playthrough_id,"date_raw":context.date_raw,
