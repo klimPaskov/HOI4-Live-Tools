@@ -154,6 +154,23 @@ pub(crate) fn children(r: &Reader<'_>, object: u64) -> Result<Vec<u64>> {
 
 /// Screen rectangle in game pixels of a widget with a laid-out sprite.
 pub(crate) fn rect(r: &Reader<'_>, image: u64, base: u64, screen: (u32, u32)) -> Result<Rect> {
+    let Rect { x, y, w, h } = rect_unclipped(r, image, base, screen)?;
+    let inside = x + w > 0 && y + h > 0 && x < screen.0 as i32 && y < screen.1 as i32;
+    if !inside {
+        return Err(Error::new(
+            "gui_geometry_unavailable",
+            "Widget is off screen",
+        ));
+    }
+    Ok(Rect { x, y, w, h })
+}
+/// Rectangle without the on-screen requirement (for panning targets into view).
+pub(crate) fn rect_unclipped(
+    r: &Reader<'_>,
+    image: u64,
+    base: u64,
+    screen: (u32, u32),
+) -> Result<Rect> {
     let l = layout(r)?;
     let primary = r.u64(base)?;
     let Some(&(_, offset)) = l.renderers.iter().find(|(vt, _)| image + vt == primary) else {
@@ -199,14 +216,33 @@ pub(crate) fn rect(r: &Reader<'_>, image: u64, base: u64, screen: (u32, u32)) ->
     }
     let x = (f64::from(screen.0) / 2.0 + f64::from(tx)).round() as i32;
     let y = (f64::from(screen.1) / 2.0 - f64::from(ty)).round() as i32 - h;
-    let inside = x + w > 0 && y + h > 0 && x < screen.0 as i32 && y < screen.1 as i32;
-    if !inside {
+    Ok(Rect { x, y, w, h })
+}
+
+/// Rectangle of a widget inside a zoomed view: the renderer translation is
+/// already scaled, the texture size is not.
+pub(crate) fn rect_zoomed(
+    r: &Reader<'_>,
+    image: u64,
+    base: u64,
+    screen: (u32, u32),
+    zoom: f32,
+) -> Result<Rect> {
+    if !(0.1..=4.0).contains(&zoom) {
         return Err(Error::new(
-            "gui_geometry_unavailable",
-            "Widget is off screen",
+            "invalid_gui_geometry",
+            "Bounded view zoom required",
         ));
     }
-    Ok(Rect { x, y, w, h })
+    let plain = rect_unclipped(r, image, base, screen)?;
+    let w = (f64::from(plain.w) * f64::from(zoom)).round() as i32;
+    let h = (f64::from(plain.h) * f64::from(zoom)).round() as i32;
+    Ok(Rect {
+        x: plain.x,
+        y: plain.y + plain.h - h,
+        w,
+        h,
+    })
 }
 
 #[cfg(test)]

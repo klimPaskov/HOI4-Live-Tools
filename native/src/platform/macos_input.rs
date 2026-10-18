@@ -42,6 +42,7 @@ const HID_EVENT_TAP: u32 = 0;
 const LEFT_MOUSE_DOWN: u32 = 1;
 const LEFT_MOUSE_UP: u32 = 2;
 const MOUSE_MOVED: u32 = 5;
+const LEFT_MOUSE_DRAGGED: u32 = 6;
 const LEFT_BUTTON: u32 = 0;
 
 #[repr(C)]
@@ -242,6 +243,42 @@ impl MacKeys {
             std::thread::sleep(std::time::Duration::from_millis(pause));
         }
         Ok(point)
+    }
+    /// One left-button drag between game-logical points in small steps, after a
+    /// fresh front-most check. Used to pan views; never to move game objects.
+    pub fn drag(&self, game: (u32, u32), from: (f64, f64), to: (f64, f64)) -> Result<()> {
+        self.preflight()?;
+        let content = owned_content(self.pid, game)?;
+        let a = client_point(content, from.0, from.1)?;
+        let b = client_point(content, to.0, to.1)?;
+        let post = |kind: u32, point: Point| -> Result<()> {
+            // SAFETY: a null source is allowed; the event is released after posting.
+            unsafe {
+                let event = CGEventCreateMouseEvent(std::ptr::null(), kind, point, LEFT_BUTTON);
+                if event.is_null() {
+                    return Err(Error::new("input_unavailable", "Mouse event unavailable"));
+                }
+                CGEventPost(HID_EVENT_TAP, event);
+                CFRelease(event);
+            }
+            Ok(())
+        };
+        let pause = std::time::Duration::from_millis(16);
+        post(MOUSE_MOVED, a)?;
+        std::thread::sleep(pause * 4);
+        post(LEFT_MOUSE_DOWN, a)?;
+        std::thread::sleep(pause * 4);
+        for step in 1..=12 {
+            let t = f64::from(step) / 12.0;
+            let p = Point {
+                x: a.x + (b.x - a.x) * t,
+                y: a.y + (b.y - a.y) * t,
+            };
+            post(LEFT_MOUSE_DRAGGED, p)?;
+            std::thread::sleep(pause);
+        }
+        std::thread::sleep(pause * 4);
+        post(LEFT_MOUSE_UP, b)
     }
     /// One key press (down, then up) after a fresh front-most check.
     pub fn press(&self, key: Key) -> Result<()> {

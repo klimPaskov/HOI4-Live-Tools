@@ -2,6 +2,7 @@
 //! journals, CGEvent keys and clicks only while the owned window is front-most,
 //! and fresh memory readback for every step. The clock keeps the Linux tool
 //! contract; research starts are driven by live GUI geometry.
+mod focus;
 mod journal;
 mod research;
 use crate::{
@@ -214,17 +215,18 @@ impl Commands for MacClock {
                 {"properties":{"op":{"const":"release"},"lease_token":{"type":"string"}},"required":["op","lease_token"],"additionalProperties":false},
                 {"properties":{"op":{"const":"status"}},"required":["op"],"additionalProperties":false}]}}),
             json!({"name":"hoi4_research_start","description":"Start an own technology in an empty research slot with ordinary input (research panel, slot, folder tab, tile, Research), each click located from the live GUI and each stage verified from memory; succeeds only when the slot holds the technology. Refuses researched, already-assigned or busy-slot targets before any input. A tile scrolled out of view is refused. Stable request_id; an unresolved dispatch is settled only by retrying its own request_id.","inputSchema":{"type":"object","properties":{"technology":{"type":"string","maxLength":128},"slot":{"type":"integer","minimum":0,"maximum":15},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["technology","slot","request_id","lease_token"],"additionalProperties":false}}),
+            json!({"name":"hoi4_focus_start","description":"Start an own national focus with ordinary input (politics panel, focus button, drag-panning the tree until the node is in view, the node, Start), each target located from the live GUI and each stage verified from memory; succeeds only when own focus progress names the focus as active. Refuses completed or already-active focuses, or any while another focus is active, before input. Stable request_id; an unresolved dispatch is settled only by retrying its own request_id.","inputSchema":{"type":"object","properties":{"focus":{"type":"string","maxLength":128},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["focus","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_time","description":"Set desired pause or internal speed 0..4 with ordinary keys (Space, keypad +/-) sent only while the owned game window is front-most, each verified by fresh memory readback. Supply exactly one target and a stable request_id; uncertain dispatches are never replayed.","inputSchema":{"type":"object","properties":{"paused":{"type":"boolean"},"speed":{"type":"integer","minimum":0,"maximum":4},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["request_id","lease_token"],"additionalProperties":false}}),
         ]
     }
     fn supports(&self, name: &str) -> bool {
         matches!(
             name,
-            "hoi4_input_lease" | "hoi4_time" | "hoi4_research_start"
+            "hoi4_input_lease" | "hoi4_time" | "hoi4_research_start" | "hoi4_focus_start"
         )
     }
     fn capabilities(&self) -> Value {
-        json!({"transport":"ordinary macOS CGEvent keys to the front-most owned window","actions":["set_paused","set_speed","research_start"],"lease":"exclusive configured controller","native_posting":false,"full_campaign_acceptance":false})
+        json!({"transport":"ordinary macOS CGEvent keys to the front-most owned window","actions":["set_paused","set_speed","research_start","focus_start"],"lease":"exclusive configured controller","native_posting":false,"full_campaign_acceptance":false})
     }
     fn call(&self, process: &dyn Process, name: &str, arguments: &Value) -> Result<Value> {
         let args = arguments
@@ -325,6 +327,41 @@ impl Commands for MacClock {
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
                 research::start(process, keys, key, slot)
+            };
+            let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
+            return Ok(json!({"receipt":receipt}));
+        }
+        if name == "hoi4_focus_start" {
+            allowed(args, &["focus", "request_id", "lease_token"])?;
+            let key = string(args, "focus")?;
+            if key.is_empty()
+                || key.len() > 128
+                || !key.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
+            {
+                return Err(Error::new("invalid_arguments", "Invalid focus key"));
+            }
+            let id = string(args, "request_id")?;
+            let token = string(args, "lease_token")?;
+            let epoch = guard.observe(process)?.epoch;
+            authority.authorize(token, &epoch)?;
+            let action = json!({"kind":"focus_start","focus":key});
+            if !actions.receipt_exists(id) {
+                focus::check(&focus::progress(process)?, key)?;
+                self.keys.preflight()?;
+            }
+            let keys = &self.keys;
+            let mut settle = || {
+                let now = focus::progress(process)?;
+                let detail = json!({"active":now.active});
+                Ok(match now.active.as_deref() {
+                    Some(active) if active == key => journal::Outcome::Reached(detail),
+                    None => journal::Outcome::Unchanged(detail),
+                    Some(_) => journal::Outcome::Unknown,
+                })
+            };
+            let mut dispatch = || {
+                authority.authorize(token, &epoch)?;
+                focus::start(process, keys, key)
             };
             let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
             return Ok(json!({"receipt":receipt}));
