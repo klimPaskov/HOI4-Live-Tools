@@ -180,6 +180,16 @@ impl MacProcess {
         Ok(process)
     }
     /// The main image is the x86_64 MH_EXECUTE header carrying the verified UUID.
+    /// UUID of a Mach-O image mapped at `address`: header first, then exactly
+    /// its declared load commands (bounded), never a guessed window.
+    fn image_uuid(&self, address: u64) -> Option<String> {
+        let header = self.read(address, 32).ok()?;
+        let size = u32::from_le_bytes(header[20..24].try_into().unwrap()) as usize;
+        if u32::from_le_bytes(header[..4].try_into().unwrap()) != MH_MAGIC_64 || size > 1 << 16 {
+            return None;
+        }
+        macho_uuid(&self.read(address, 32 + size).ok()?).ok()
+    }
     fn find_image(&self) -> Result<u64> {
         let (mut address, mut depth) = (0u64, 0u32);
         for _ in 0..1_000_000 {
@@ -203,10 +213,8 @@ impl MacProcess {
                 depth += 1;
                 continue;
             }
-            if let Ok(header) = self.read(address, 4096) {
-                if macho_uuid(&header).ok().as_deref() == Some(BUILD_UUID) {
-                    return Ok(address);
-                }
+            if self.image_uuid(address).as_deref() == Some(BUILD_UUID) {
+                return Ok(address);
             }
             address = address.saturating_add(size);
         }

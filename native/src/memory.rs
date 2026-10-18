@@ -92,6 +92,9 @@ impl<'a> Reader<'a> {
         }
         Ok(data)
     }
+    pub fn string_abi(&self) -> StringAbi {
+        self.abi
+    }
     pub fn u64(&self, a: u64) -> Result<u64> {
         Ok(u64::from_le_bytes(self.read(a, 8)?.try_into().unwrap()))
     }

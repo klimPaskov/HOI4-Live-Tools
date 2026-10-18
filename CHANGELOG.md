@@ -2,6 +2,14 @@
 
 ## Unreleased native preview
 
+- First native macOS read. `hoi4_overview` now selects a per-build layout:
+  Linux ELF a4971c9e or macOS Mach-O 089EA519 (1.19.3.0 c01a under Rosetta).
+  On the owned 1920x1080 game on 18 October 2026 it returned the player, date,
+  speed, pause, difficulty, historical AI, Focus and research slots in about
+  0.4 ms (99 reads). The Mac offsets were mapped live from RTTI roots and value
+  changes across unpause, speed and player switches, and kept in a private
+  evidence table. The image search now reads the declared Mach-O load commands
+  in full. Other macOS tools and all macOS input remain unported.
 - Start the native macOS adapter. `platform::macos` attaches read-only to one
   owned game process (the x86_64 Mach-O build 1.19.3.0 under Rosetta) through
   its task port. It verifies the executable SHA-256 and LC_UUID, the process
