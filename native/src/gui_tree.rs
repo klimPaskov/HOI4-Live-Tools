@@ -136,6 +136,10 @@ pub(crate) fn shown(r: &Reader<'_>, base: u64) -> Result<bool> {
 pub(crate) fn disabled(r: &Reader<'_>, button: u64) -> Result<bool> {
     Ok(r.i32(button + layout(r)?.button_state)? == 3)
 }
+/// Raw button state (0 normal, 2 toggled on, 3 disabled).
+pub(crate) fn button_state(r: &Reader<'_>, button: u64) -> Result<i32> {
+    r.i32(button + layout(r)?.button_state)
+}
 /// Direct child of a container object with this name.
 pub(crate) fn child(r: &Reader<'_>, image: u64, object: u64, wanted: &str) -> Result<Option<u64>> {
     for child in children(r, object)? {

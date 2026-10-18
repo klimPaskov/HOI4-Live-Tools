@@ -381,6 +381,28 @@ impl MacKeys {
     pub fn drag(&self, game: (u32, u32), from: (f64, f64), to: (f64, f64)) -> Result<()> {
         self.drag_with(game, from, to, false)
     }
+    /// One right click at a game-logical point after a fresh front-most check.
+    pub fn right_click(&self, game: (u32, u32), x: f64, y: f64) -> Result<Point> {
+        self.preflight()?;
+        let point = client_point(owned_content(self.pid, game)?, x, y)?;
+        for (kind, button, pause) in [
+            (MOUSE_MOVED, LEFT_BUTTON, 60),
+            (RIGHT_MOUSE_DOWN, RIGHT_BUTTON, 50),
+            (RIGHT_MOUSE_UP, RIGHT_BUTTON, 40),
+        ] {
+            // SAFETY: a null source is allowed; the event is released after posting.
+            unsafe {
+                let event = CGEventCreateMouseEvent(std::ptr::null(), kind, point, button);
+                if event.is_null() {
+                    return Err(Error::new("input_unavailable", "Mouse event unavailable"));
+                }
+                CGEventPost(HID_EVENT_TAP, event);
+                CFRelease(event);
+            }
+            std::thread::sleep(std::time::Duration::from_millis(pause));
+        }
+        Ok(point)
+    }
     /// One right-button drag between game-logical points (battle-plan lines),
     /// after a fresh front-most check.
     pub fn right_drag(&self, game: (u32, u32), from: (f64, f64), to: (f64, f64)) -> Result<()> {
