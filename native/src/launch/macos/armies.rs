@@ -9,7 +9,7 @@ use crate::{
     gui_tree::{self, Rect},
     memory::{Reader, StringAbi},
     platform::{
-        macos_input::{Key, MacKeys},
+        macos_input::{Capture, Key, MacKeys},
         Process,
     },
 };
@@ -333,6 +333,47 @@ fn card_rect(r: &Reader<'_>, image: u64, army: &str, name: &str) -> Result<Rect>
     gui_tree::rect(r, image, card_widget(r, image, army, name)?, GAME)
 }
 
+/// Screen areas covered by the top bar, the selected army's panel, the
+/// battle-plan toolbar and the army card bar.
+fn covered(x: f64, y: f64) -> bool {
+    y < 90.0 || (x < 450.0 && y < 520.0) || y > 830.0
+}
+/// Up to `count` distinct bright-green front dashes (a solid 5x5 patch)
+/// nearest the screen centre.
+fn nearest_dashes(capture: &Capture, count: usize) -> Vec<(f64, f64)> {
+    let green = |x: f64, y: f64| {
+        capture.rgb(x, y).is_some_and(|(r, g, b)| {
+            g > 150 && i32::from(g) > i32::from(r) + 25 && i32::from(g) > i32::from(b) + 60
+        })
+    };
+    let mut found: Vec<(f64, f64, f64)> = Vec::new();
+    let mut y = 0.0;
+    while y < 1076.0 {
+        let mut x = 0.0;
+        while x < 1916.0 {
+            if !covered(x, y)
+                && green(x, y)
+                && (0..5).all(|dy| (0..5).all(|dx| green(x + f64::from(dx), y + f64::from(dy))))
+            {
+                let d = (x - 960.0).powi(2) + (y - 540.0).powi(2);
+                found.push((d, x + 2.0, y + 2.0));
+            }
+            x += 3.0;
+        }
+        y += 3.0;
+    }
+    found.sort_by(|a, b| a.0.total_cmp(&b.0));
+    let mut out: Vec<(f64, f64)> = Vec::new();
+    for (_, x, y) in found {
+        if out.iter().all(|(a, b)| (a - x).hypot(b - y) > 40.0) {
+            out.push((x, y));
+            if out.len() == count {
+                break;
+            }
+        }
+    }
+    out
+}
 /// Give `army` a front line against the owner of state `state`: the army
 /// card selects the army, Z enters front-line drawing, the Find view centres
 /// the state and one click inside it places the front along that country's
@@ -382,24 +423,40 @@ pub(super) fn front(
     find_state(process, keys, state)?;
     std::thread::sleep(std::time::Duration::from_millis(300));
     // Only a click on a highlighted front places the order; elsewhere the
-    // game just shows a tooltip. Probe from the state's centre toward the
-    // nearest own province, where the shared border lies.
-    for step in [0.0, 40.0, 80.0, 120.0, 170.0, 230.0, 300.0, 380.0, 470.0] {
+    // game just shows a tooltip. First the highlighted dash nearest the
+    // centre in a capture, then a fine probe from the state's centre toward
+    // the nearest own province, where the shared border lies.
+    let placed = |process: &dyn Process| -> Result<bool> {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_millis(500);
+        while std::time::Instant::now() < deadline {
+            if read(process, |r, i| orders(r, i, army))? > before {
+                return Ok(true);
+            }
+            std::thread::sleep(std::time::Duration::from_millis(40));
+        }
+        Ok(false)
+    };
+    if let Ok(capture) = keys.capture(GAME) {
+        for (x, y) in nearest_dashes(&capture, 3) {
+            keys.click(GAME, x, y)?;
+            if placed(process)? {
+                return Ok(());
+            }
+        }
+    }
+    let mut step = 0.0;
+    while step <= 640.0 {
+        step += 20.0;
         let (x, y) = (960.0 + dx * step, 540.0 + dy * step);
         if !(320.0..=1880.0).contains(&x) || !(120.0..=880.0).contains(&y) {
             break;
         }
-        if x < 440.0 && y < 420.0 {
-            // Under the selected army's panel.
+        if covered(x, y) {
             continue;
         }
         keys.click(GAME, x, y)?;
-        let deadline = std::time::Instant::now() + std::time::Duration::from_millis(500);
-        while std::time::Instant::now() < deadline {
-            if read(process, |r, i| orders(r, i, army))? > before {
-                return Ok(());
-            }
-            std::thread::sleep(std::time::Duration::from_millis(40));
+        if placed(process)? {
+            return Ok(());
         }
     }
     let _ = keys.press(Key::Escape);

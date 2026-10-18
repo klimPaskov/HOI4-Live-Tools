@@ -126,6 +126,28 @@ fn selection_row(r: &Reader<'_>, image: u64, key: &str) -> Result<Option<Rect>> 
     }
     Ok(None)
 }
+/// Equipment keys of the designs the open selection offers.
+fn offered(r: &Reader<'_>, image: u64) -> Result<Vec<String>> {
+    let u = ui(r)?;
+    let (window, _) = selection(r, image)?;
+    let (_, data, count) = r.array_header(window + u.selection_rows)?;
+    let mut out = Vec::new();
+    for index in 0..count.min(256) as u64 {
+        let row = r.u64(data + index * 8)?;
+        let variant = r.u64(row + u.selection_row_variant)?;
+        if variant == 0 {
+            continue;
+        }
+        let kind = r.u64(variant + u.variant_type)?;
+        if kind != 0 {
+            let key = r.string_bounded(kind + u.type_key, 128)?;
+            if !out.contains(&key) {
+                out.push(key);
+            }
+        }
+    }
+    Ok(out)
+}
 /// Row window of the own line with this handle, if materialized.
 fn row(r: &Reader<'_>, image: u64, handle: u64) -> Result<Option<u64>> {
     let u = ui(r)?;
@@ -239,6 +261,7 @@ pub(super) fn add(process: &dyn Process, keys: &MacKeys, key: &str, factories: i
     ensure_open(process, keys)?;
     let before: Vec<u64> = lines(process)?.iter().map(|l| l.handle).collect();
     let mut chosen = None;
+    let mut seen: Vec<String> = Vec::new();
     for category in CATEGORIES {
         if read(process, selection_open)? {
             keys.press(Key::Escape)?;
@@ -255,6 +278,11 @@ pub(super) fn add(process: &dyn Process, keys: &MacKeys, key: &str, factories: i
             chosen = Some(rect);
             break;
         }
+        for key in read(process, offered).unwrap_or_default() {
+            if !seen.contains(&key) {
+                seen.push(key);
+            }
+        }
     }
     let Some(rect) = chosen else {
         if read(process, selection_open)? {
@@ -262,7 +290,10 @@ pub(super) fn add(process: &dyn Process, keys: &MacKeys, key: &str, factories: i
         }
         return Err(Error::new(
             "invalid_target",
-            "No producible design of this equipment is offered",
+            format!(
+                "No producible design of this equipment is offered; offered: {}",
+                seen.join(", ")
+            ),
         ));
     };
     click(process, keys, rect)?;
