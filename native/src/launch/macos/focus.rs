@@ -279,6 +279,16 @@ pub(super) fn start(process: &dyn Process, keys: &MacKeys, key: &str) -> Result<
             "Focus view shows another country",
         ));
     }
+    // The tree's node widgets are laid out shortly after the view opens.
+    wait(process, "focus tree laid out", |r, i| {
+        Ok(symbols(r, i, key)?.0.is_some())
+    })
+    .map_err(|_| {
+        Error::new(
+            "gui_target_unavailable",
+            "Focus has no node in the own tree",
+        )
+    })?;
     let mut symbol = None;
     for _ in 0..12 {
         let (target, all) = read(process, |r, i| symbols(r, i, key))?;
