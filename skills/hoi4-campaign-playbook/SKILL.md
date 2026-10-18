@@ -25,10 +25,13 @@ two-day pause loop and skip-on-failure examples are not showcase procedure.
 2. Read [operating loop](references/operating-loop.md) to declare the standing
    plan and control the daily governor. Keep it available during play.
 3. Read [strategy](references/strategy.md) for economic and military decisions.
-4. Load one country card: [Germany FAIR](references/germany-fair.md),
+4. Read the [country-agnostic playbook](references/generic-playbook.md) for army
+   organisation, templates, build-up, war execution, the peace conference and
+   common mistakes.
+5. Load one country card: [Germany FAIR](references/germany-fair.md),
    [Nationalist China FAIR](references/china-fair.md), or
    [Poland META](references/poland-meta.md).
-5. Consult [sources and version checks](references/sources.md) when verifying
+6. Consult [sources and version checks](references/sources.md) when verifying
    patch-dependent mechanics, a rule's origin or a proposed META exploit.
 
 ## Non-negotiable campaign boundary
