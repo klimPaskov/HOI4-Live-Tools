@@ -76,6 +76,8 @@ pub enum Key {
     Slower,
     /// Escape closes the current panel.
     Escape,
+    /// Return confirms (e.g. the Find view).
+    Return,
     /// An ordinary letter hotkey, `a`..=`z`.
     Letter(char),
 }
@@ -91,6 +93,7 @@ impl Key {
             Self::Faster => 69,
             Self::Slower => 78,
             Self::Escape => 53,
+            Self::Return => 36,
             Self::Letter(c) => LETTERS[(c as u8 - b'a') as usize],
         }
     }
@@ -311,13 +314,20 @@ impl MacKeys {
         std::thread::sleep(std::time::Duration::from_millis(120));
         Ok(())
     }
+    /// One key press by ANSI virtual code (digits for the Find view).
+    pub fn press_code(&self, code: u16) -> Result<()> {
+        self.press_raw(code)
+    }
     /// One key press (down, then up) after a fresh front-most check.
     pub fn press(&self, key: Key) -> Result<()> {
+        self.press_raw(key.code())
+    }
+    fn press_raw(&self, code: u16) -> Result<()> {
         self.preflight()?;
         for down in [true, false] {
             // SAFETY: a null source is allowed; the event is released after posting.
             unsafe {
-                let event = CGEventCreateKeyboardEvent(std::ptr::null(), key.code(), down);
+                let event = CGEventCreateKeyboardEvent(std::ptr::null(), code, down);
                 if event.is_null() {
                     return Err(Error::new("input_unavailable", "Key event unavailable"));
                 }
