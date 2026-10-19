@@ -48,3 +48,9 @@ earlier or France falls late still has a legal next step.
 5. Naval production, fleets, invasions; special projects; espionage.
 6. Live encirclement search and pincer lines.
 7. Peace conference.
+
+## Current goal (set 19 October 2026)
+
+Play m009 (FAIR Germany from 14 August 1939, recorded) to the conquest of Poland and France while closing the matrix rows in
+build order: all divisions assigned, division designer, air per front, factions/war-goal timing, naval production, live
+encirclement search. A row counts as closed only after a live-verified action; the game keeps running while tools are built.

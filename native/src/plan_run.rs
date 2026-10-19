@@ -21,6 +21,10 @@
 //!   production             [{"equipment","factories"}] lines added once
 //!   construction           [{"building","states":[..]}] spent while civilian factories are idle
 //!   construction_min_idle  idle civilian factories needed first (default 4)
+//!   armies                 {"max":24,"min_for_general":8,"generals":["Name",..]} keep every division in an
+//!                          army of at most `max`: create armies where divisions stand unassigned (folding in
+//!                          standing armies when the game refuses), split oversized ones, and give the next
+//!                          listed general to an army of at least `min_for_general` divisions
 use crate::error::{Error, Result};
 use serde_json::{json, Map, Value};
 use std::{
@@ -402,6 +406,92 @@ pub fn tick(
             }
         }
     }
+    // 9. every division in an army of sensible size, generals only for real armies
+    if plan["armies"].is_object() {
+        let cfg = &plan["armies"];
+        let max = cfg["max"].as_u64().unwrap_or(24);
+        let min_general = cfg["min_for_general"].as_u64().unwrap_or(8);
+        let roster = tools.call("hoi4_armies", &json!({}))?;
+        for entry in list(&roster, "unassigned_by_state") {
+            let Some(id) = entry["state_id"].as_i64() else {
+                continue;
+            };
+            let key = id.to_string();
+            if state.skipped(now, "armycreate", &key) {
+                continue;
+            }
+            let (ok, why) = state.act(
+                tools,
+                lease,
+                "hoi4_army_create",
+                json!({"state_id": id}),
+                "ac",
+            );
+            let (ok, why) = if !ok && why.contains("existing army")
+                || why.contains("Divisions of an existing")
+            {
+                state.act(
+                    tools,
+                    lease,
+                    "hoi4_army_create",
+                    json!({"state_id": id, "absorb_existing": true}),
+                    "ab",
+                )
+            } else {
+                (ok, why)
+            };
+            if !ok {
+                state.skip(now, "armycreate", &key, 300);
+            }
+            return Ok(Tick::Acted(format!("army_create state {id}: {ok} {why}")));
+        }
+        for army in list(&roster, "armies") {
+            let name = text(&army["army"]);
+            let count = army["division_count"].as_u64().unwrap_or(0);
+            if count > max && !state.skipped(now, "armysplit", name) {
+                let chunk = (count - max).clamp(1, 19);
+                let (ok, why) = state.act(
+                    tools,
+                    lease,
+                    "hoi4_army_split",
+                    json!({"army": name, "count": chunk}),
+                    "sp",
+                );
+                if !ok {
+                    state.skip(now, "armysplit", name, 300);
+                }
+                return Ok(Tick::Acted(format!(
+                    "army_split {name} {chunk}: {ok} {why}"
+                )));
+            }
+        }
+        let generals = strings(cfg, "generals");
+        let used: HashSet<String> = list(&roster, "armies")
+            .iter()
+            .filter_map(|a| a["commander"].as_str().map(String::from))
+            .collect();
+        let mut spare = generals.iter().filter(|g| !used.contains(*g));
+        for army in list(&roster, "armies") {
+            let name = text(&army["army"]);
+            if army["commander"].is_null()
+                && army["division_count"].as_u64().unwrap_or(0) >= min_general
+                && !state.skipped(now, "armygeneral", name)
+            {
+                let Some(general) = spare.next() else { break };
+                let (ok, why) = state.act(
+                    tools,
+                    lease,
+                    "hoi4_army_commander",
+                    json!({"army": name, "general": general}),
+                    "gn",
+                );
+                state.skip(now, "armygeneral", name, if ok { 3600 } else { 300 });
+                return Ok(Tick::Acted(format!(
+                    "general {general} -> {name}: {ok} {why}"
+                )));
+            }
+        }
+    }
     Ok(Tick::Nothing)
 }
 
@@ -643,6 +733,76 @@ mod tests {
             tick(&mut state, &Failing, &plan, "l", now).unwrap(),
             Tick::Nothing
         );
+    }
+
+    #[test]
+    fn unassigned_divisions_get_an_army_and_big_armies_are_split() {
+        struct Roster;
+        impl Tools for Roster {
+            fn call(&self, name: &str, args: &Value) -> Result<Value> {
+                match name {
+                    "hoi4_research" => Ok(json!({"slots": [{"researching": "a"}]})),
+                    "hoi4_focus_completed" => Ok(json!({"active_key": "f"})),
+                    "hoi4_economy" => Ok(json!({"factory_trigger_count": {"military": 0},
+                        "civilian_factories_available_for_projects": 0})),
+                    "hoi4_armies" => Ok(json!({
+                        "unassigned_by_state": [{"state_id": 66, "divisions": 3}],
+                        "armies": [{"army": "Army 1", "division_count": 40, "commander": null}]})),
+                    "hoi4_army_create" => {
+                        if args.get("absorb_existing").is_some() {
+                            Ok(json!({"receipt": {"status": "Verified"}}))
+                        } else {
+                            Err(Error::new(
+                                "invalid_target",
+                                "Divisions of an existing army stand here",
+                            ))
+                        }
+                    }
+                    "hoi4_army_split" => {
+                        assert_eq!(args["count"], json!(16));
+                        Ok(json!({"receipt": {"status": "Verified"}}))
+                    }
+                    _ => Ok(json!({})),
+                }
+            }
+        }
+        let plan = json!({"armies": {"max": 24}});
+        let mut state = State::default();
+        let now = Instant::now();
+        let first = tick(&mut state, &Roster, &plan, "l", now).unwrap();
+        assert!(matches!(&first, Tick::Acted(s) if s.starts_with("army_create state 66: true")));
+        // the state is retried later; the oversized army is split next
+        state.skip(now, "armycreate", "66", 300);
+        let second = tick(&mut state, &Roster, &plan, "l", now).unwrap();
+        assert!(matches!(&second, Tick::Acted(s) if s.starts_with("army_split Army 1 16: true")));
+    }
+
+    #[test]
+    fn only_real_armies_get_a_general() {
+        struct Roster;
+        impl Tools for Roster {
+            fn call(&self, name: &str, args: &Value) -> Result<Value> {
+                match name {
+                    "hoi4_research" => Ok(json!({"slots": [{"researching": "a"}]})),
+                    "hoi4_focus_completed" => Ok(json!({"active_key": "f"})),
+                    "hoi4_economy" => Ok(json!({"factory_trigger_count": {"military": 0},
+                        "civilian_factories_available_for_projects": 0})),
+                    "hoi4_armies" => Ok(json!({"unassigned_by_state": [], "armies": [
+                        {"army": "Army 2", "division_count": 3, "commander": null},
+                        {"army": "Army 3", "division_count": 12, "commander": null}]})),
+                    "hoi4_army_commander" => {
+                        assert_eq!(args["army"], json!("Army 3"));
+                        assert_eq!(args["general"], json!("B"));
+                        Ok(json!({"receipt": {"status": "Verified"}}))
+                    }
+                    _ => Ok(json!({})),
+                }
+            }
+        }
+        let plan = json!({"armies": {"generals": ["B", "C"]}});
+        let mut state = State::default();
+        let step = tick(&mut state, &Roster, &plan, "l", Instant::now()).unwrap();
+        assert!(matches!(&step, Tick::Acted(s) if s.starts_with("general B -> Army 3: true")));
     }
 
     #[test]
