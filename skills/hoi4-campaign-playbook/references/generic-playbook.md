@@ -137,3 +137,19 @@ smerss/Clausewitz-MCP for the encirclement search.
 Not covered by verified research and left as game-file or live observations:
 focus order, laws/advisors, research order by year, civilian-to-military timing,
 naval invasion and air-superiority values.
+
+## 8. Live findings that change the rules (macOS runs, October 2026)
+
+- **Front lines need a foothold.** A front toward a country is only drawn from armies that already stand on the
+  border or inside the enemy state; from two states back the game highlights nothing. Move the army into the enemy
+  state first (`hoi4_army_move`), then draw front, offensive line and execute.
+- **A war goal completes and then expires** (about two months). Watch it every few game days and declare at once;
+  do not leave the game running unattended at speed 2–3 across that moment.
+- **Armies:** keep every division in an army (organise after every deployment), at most 24 each; do not fold standing
+  armies into a new one unless that is intended, it dissolves their orders.
+- **Generals:** only armies of about ten divisions or more get one; small armies are reserves.
+- **Pop-ups cover the panels:** doctrine-milestone and capitulation windows must be acknowledged or army actions
+  silently fail.
+- **Maginot Line:** the Lorraine front grinds; push through Belgium/the Ardennes or the south, with air superiority first.
+- **Air wings need missions:** assign fighters to air superiority and bombers to CAS over the active front in range
+  of their bases; rebasing is not automated yet.
