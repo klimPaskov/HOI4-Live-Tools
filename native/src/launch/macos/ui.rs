@@ -112,6 +112,7 @@ pub(super) fn clear_notices(
     keys: &crate::platform::macos_input::MacKeys,
 ) -> Result<usize> {
     close_menu(process, keys)?;
+    close_state_view(process, keys)?;
     // A confirmation left open by an interrupted action blocks every click.
     decline_stale(process, keys)?;
     // An event window is drawn over notices and panels; clicks would land on
@@ -231,6 +232,39 @@ pub(super) fn open_politics(
     };
     keys.click((1920, 1080), x, y)?;
     wait(process, "open politics", &open)
+}
+/// The state view (manager +0xc8, root +0x430) that a stray map click can
+/// leave open over the army panels: its close button when it is shown.
+fn state_view_close(r: &Reader<'_>, image: u64) -> Result<Option<gui_tree::Rect>> {
+    if r.string_abi() != StringAbi::LibCxx {
+        return Ok(None);
+    }
+    let idler = r.u64(image + game::layout(r).idler_global)?;
+    let view = r.u64(r.u64(idler + MANAGER)? + 0xc8)?;
+    let Some(root) = gui_tree::container(r, r.u64(view + 0x430)?, image)? else {
+        return Ok(None);
+    };
+    if !gui_tree::visible(r, root)? {
+        return Ok(None);
+    }
+    match gui_tree::child(r, image, root, "close_button")? {
+        Some(button) => Ok(gui_tree::rect(r, image, button, (1920, 1080)).ok()),
+        None => Ok(None),
+    }
+}
+/// Close the state view if one is open.
+pub(super) fn close_state_view(
+    process: &dyn Process,
+    keys: &crate::platform::macos_input::MacKeys,
+) -> Result<()> {
+    if let Some(rect) = read(process, state_view_close)? {
+        let (x, y) = rect.center();
+        keys.click((1920, 1080), x, y)?;
+        wait(process, "state view closed", |r, i| {
+            Ok(state_view_close(r, i)?.is_none())
+        })?;
+    }
+    Ok(())
 }
 /// The game's accept/decline dialog for a command (e.g. replacing a law).
 const ACCEPT_DIALOG_VTABLE: u64 = 0x342f1d0;
