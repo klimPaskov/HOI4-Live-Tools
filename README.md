@@ -23,10 +23,11 @@ builds and previews mod content.
 | You want to… | Use | Platform | Maturity |
 | --- | --- | --- | --- |
 | Test mods and try agent play today | **[1.1.0 release](https://github.com/klimPaskov/HOI4-Live-Tools/releases/latest)** (Python) | Windows 10/11 | Stable release |
-| Help build the fast native runtime | **Rust preview** (build from source, [`native/`](native/README.md)) | Linux x86_64 | Developer preview |
+| Help build the fast native runtime | **Rust preview** (build from source, [`native/`](native/README.md)) | Linux x86_64, macOS (Steam 1.19.3 x86_64 under Rosetta) | Developer preview |
 
-Windows and macOS native adapters are planned but not yet live-tested. No full
-campaign has been accepted on either runtime yet. Status details are below.
+The Windows native adapter is planned (see [the Windows handoff](docs/WINDOWS_HANDOFF.md)).
+No full campaign has been accepted on any runtime yet; the macOS runs so far ended
+in recorded defeats that are kept in the record. Status details are below.
 
 ## Quick start: Windows release
 
@@ -94,11 +95,27 @@ game it did not start.
   Brandenburg on 18 October 2026, and Run092 placed a dockyard in West Prussia,
   a coastal state, the same day.
 
+### macOS preview (live-tested on one build)
+
+The macOS adapter attaches to one owned game process through its task port and
+sends only ordinary mouse and keyboard events to the front-most owned window.
+Every click target is read from the live GUI tree and every action is checked
+from memory afterwards, with a journal that never replays an unresolved input.
+Tested on the Steam 1.19.3 x86_64 build under Rosetta at 1920x1080:
+time, research, Focus, production, construction (with free-slot reads), laws,
+advisors and designers, decisions, division training with deployment locations,
+armies (create, split, generals, army groups and field marshals), front and
+offensive lines, move orders, plan execution, events, diplomacy (war goals,
+declaring war), air wings and missions, and a standing-plan runner
+(`hoi4_plan`, `hoi4_plan_run`). The peace conference and naval invasions are not
+supported yet. It needs a Developer Tools grant and an ad-hoc signed binary
+(`native/macos/debugger.entitlements`).
+
 ### Not done yet
 
 - Provincial buildings (naval bases, forts, coastal forts), production changes, army, air and naval control.
 - Economy and warfare automation (standing plans, shortage repair, invasions).
-- Native Windows and macOS adapters.
+- A native Windows adapter.
 - The clean two-year run and the recorded FAIR Germany and China campaigns.
 
 Measurements, failed runs and open limits are recorded in
@@ -127,7 +144,8 @@ and cannot be reached by campaign automation.
 | Python / Windows (1.1.0) | Mod-testing tools and recorded play attempts | Clean campaign acceptance |
 | Python / macOS | Platform work and limited diagnostic play | Reliable live acceptance |
 | Rust / Linux | Owned launch, fast state reads, time, research, Focus, daily plans, construction panel, map search and state-building placement | Provincial placement, economy, army and naval control; campaign acceptance |
-| Rust / Windows and macOS | Portable protocol and fixture tests in CI | Native adapters and live tests |
+| Rust / macOS | Owned runs on one build: reads, economy, armies, diplomacy, air, standing plans | Peace conference, naval invasions, campaign acceptance |
+| Rust / Windows | Portable protocol and fixture tests in CI | Native adapter and live tests |
 
 Passing tests or listing a tool does not mean live play works. Only recorded live
 runs count, and failures are kept in the record. See the [changelog](CHANGELOG.md)
