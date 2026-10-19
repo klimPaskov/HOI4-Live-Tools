@@ -18,6 +18,18 @@
   Army groups, field marshals and army splitting (Shift range selection in the
   division list needs a real modifier event). Not yet supported: the peace
   conference itself and naval and invasion actions.
+- Standing plans on macOS: `hoi4_plan` reads or merges the run directory's
+  `plan.json` and `hoi4_plan_run` carries it out for a bounded time through the
+  server's own verified tools under the caller's lease (events, research,
+  focus, politics, decisions, training, production balancing, construction),
+  returning early when a choice event needs the model.
+- Army groups need field marshals: `hoi4_army_commander` now promotes a plain
+  general (command-power cost, confirmation dialog) before leading a group.
+  The construction panel and the strategic air region window are closed before
+  every action, and training finds a template row by its drawn name when the
+  game hides decommissioned templates.
+- `docs/WINDOWS_HANDOFF.md`: what the Windows port needs and what the macOS runs
+  taught.
 - A country-agnostic campaign playbook (`skills/hoi4-campaign-playbook/
   references/generic-playbook.md`): army caps, army groups and field marshals,
   templates, build-up, planning and encirclement, the peace conference and
