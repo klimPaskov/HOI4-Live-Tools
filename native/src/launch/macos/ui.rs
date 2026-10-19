@@ -248,6 +248,10 @@ pub(super) fn open_politics(
 fn state_view_close(r: &Reader<'_>, image: u64) -> Result<Option<gui_tree::Rect>> {
     view_close(r, image, 0xc8)
 }
+/// The diplomacy view (manager +0x110) covers the army panel and cards.
+fn diplomacy_close(r: &Reader<'_>, image: u64) -> Result<Option<gui_tree::Rect>> {
+    view_close(r, image, 0x110)
+}
 /// The strategic air region window (manager +0x198) that a right click on a
 /// region leaves open over the middle of the map.
 fn air_region_close(r: &Reader<'_>, image: u64) -> Result<Option<gui_tree::Rect>> {
@@ -278,6 +282,7 @@ pub(super) fn close_state_view(
     for (what, probe) in [
         ("state view closed", state_view_close as ViewClose),
         ("air region window closed", air_region_close as ViewClose),
+        ("diplomacy view closed", diplomacy_close as ViewClose),
     ] {
         if let Some(rect) = read(process, probe)? {
             let (x, y) = rect.center();
