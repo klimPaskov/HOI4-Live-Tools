@@ -668,6 +668,12 @@ impl Commands for MacClock {
             authority.authorize(token, &epoch)?;
             let retry = actions.receipt_exists(id);
             if !retry {
+                if !events::is_open(process, event)? {
+                    return Err(Error::new(
+                        "invalid_target",
+                        format!("Event {event} is not open"),
+                    ));
+                }
                 self.keys.preflight()?;
             }
             let action = json!({"kind":"event_choose","event":event,"option":option});
