@@ -149,7 +149,7 @@ pub(super) fn queued(process: &dyn Process, key: &str, state: i32) -> Result<i64
         .map(|l| l["amount_raw_signed"].as_i64().unwrap_or(0))
         .sum())
 }
-fn leave(process: &dyn Process, keys: &MacKeys) {
+pub(super) fn leave(process: &dyn Process, keys: &MacKeys) {
     // Switch placement mode off: Escape closes the selection, then the
     // panel; each Escape is given time to act so none reaches the game menu.
     super::ui::dismiss(process, keys, |r, i| {

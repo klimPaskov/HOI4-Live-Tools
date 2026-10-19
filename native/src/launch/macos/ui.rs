@@ -113,6 +113,8 @@ pub(super) fn clear_notices(
 ) -> Result<usize> {
     close_menu(process, keys)?;
     close_state_view(process, keys)?;
+    // A construction panel left open turns later map clicks into placements.
+    super::construction::leave(process, keys);
     // A confirmation left open by an interrupted action blocks every click.
     decline_stale(process, keys)?;
     // An event window is drawn over notices and panels; clicks would land on
@@ -236,11 +238,19 @@ pub(super) fn open_politics(
 /// The state view (manager +0xc8, root +0x430) that a stray map click can
 /// leave open over the army panels: its close button when it is shown.
 fn state_view_close(r: &Reader<'_>, image: u64) -> Result<Option<gui_tree::Rect>> {
+    view_close(r, image, 0xc8)
+}
+/// The strategic air region window (manager +0x198) that a right click on a
+/// region leaves open over the middle of the map.
+fn air_region_close(r: &Reader<'_>, image: u64) -> Result<Option<gui_tree::Rect>> {
+    view_close(r, image, 0x198)
+}
+fn view_close(r: &Reader<'_>, image: u64, slot: u64) -> Result<Option<gui_tree::Rect>> {
     if r.string_abi() != StringAbi::LibCxx {
         return Ok(None);
     }
     let idler = r.u64(image + game::layout(r).idler_global)?;
-    let view = r.u64(r.u64(idler + MANAGER)? + 0xc8)?;
+    let view = r.u64(r.u64(idler + MANAGER)? + slot)?;
     let Some(root) = gui_tree::container(r, r.u64(view + 0x430)?, image)? else {
         return Ok(None);
     };
@@ -252,20 +262,24 @@ fn state_view_close(r: &Reader<'_>, image: u64) -> Result<Option<gui_tree::Rect>
         None => Ok(None),
     }
 }
-/// Close the state view if one is open.
+/// Close the state view and the air region window if they are open.
 pub(super) fn close_state_view(
     process: &dyn Process,
     keys: &crate::platform::macos_input::MacKeys,
 ) -> Result<()> {
-    if let Some(rect) = read(process, state_view_close)? {
-        let (x, y) = rect.center();
-        keys.click((1920, 1080), x, y)?;
-        wait(process, "state view closed", |r, i| {
-            Ok(state_view_close(r, i)?.is_none())
-        })?;
+    for (what, probe) in [
+        ("state view closed", state_view_close as ViewClose),
+        ("air region window closed", air_region_close as ViewClose),
+    ] {
+        if let Some(rect) = read(process, probe)? {
+            let (x, y) = rect.center();
+            keys.click((1920, 1080), x, y)?;
+            wait(process, what, |r, i| Ok(probe(r, i)?.is_none()))?;
+        }
     }
     Ok(())
 }
+type ViewClose = fn(&Reader<'_>, u64) -> Result<Option<gui_tree::Rect>>;
 /// The game's accept/decline dialog for a command (e.g. replacing a law).
 const ACCEPT_DIALOG_VTABLE: u64 = 0x342f1d0;
 /// The game's reassign-commander confirmation (CChangeGroupLeaderDialog); it
