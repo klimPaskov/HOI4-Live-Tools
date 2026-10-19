@@ -75,7 +75,7 @@ fn parse_state_provinces(text: &str) -> Vec<i32> {
         .collect()
 }
 
-fn state_provinces(dir: &Path, state: i32) -> Result<Vec<i32>> {
+pub(super) fn state_provinces(dir: &Path, state: i32) -> Result<Vec<i32>> {
     let prefix = format!("{state}-");
     let entries = std::fs::read_dir(dir.join("history/states"))
         .map_err(|_| Error::new("map_data_unavailable", "State history unreadable"))?;

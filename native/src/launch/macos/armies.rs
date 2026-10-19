@@ -664,6 +664,47 @@ pub(super) fn offensive(
         Ok(plan_nodes(r, i, army)? > before)
     })
 }
+/// Divisions of `army` whose movement target (province id at +0x2ac of the
+/// division, mapped live on 24 July 1941 by diffing a right-click move order)
+/// lies in the provinces `wanted`, and the army's division count.
+pub(super) fn heading_for(
+    r: &Reader<'_>,
+    image: u64,
+    army: &str,
+    wanted: &[i32],
+) -> Result<(usize, usize)> {
+    let u = ui(r)?;
+    let group = group_named(r, image, army)?;
+    let country = own_country(r, image)?;
+    let (_, data, count) = r.array_header(country + u.country_divisions)?;
+    let (mut heading, mut total) = (0, 0);
+    for index in 0..count.min(4096) as u64 {
+        let division = r.u64(data + index * 8)?;
+        if r.u64(division + u.division_group)? != group {
+            continue;
+        }
+        total += 1;
+        if wanted.contains(&r.i32(division + 0x2ac)?) {
+            heading += 1;
+        }
+    }
+    Ok((heading, total))
+}
+/// Order `army` to move to the centre of state `state` (select the army by
+/// its card, Find view centres the state, one right click). A plain move order
+/// attacks whatever stands in the target province; battle plans are replaced
+/// by manual control for these divisions.
+pub(super) fn move_to(process: &dyn Process, keys: &MacKeys, army: &str, state: i32) -> Result<()> {
+    clear_notices(process, keys)?;
+    let card = read(process, |r, i| card_rect(r, i, army, "portrait_btn"))?;
+    let (x, y) = card.center();
+    keys.click(GAME, x, y)?;
+    wait(process, "select army", |r, i| Ok(selection_size(r, i)? > 0))?;
+    find_state(process, keys, state)?;
+    keys.right_click(GAME, 960.0, 540.0)?;
+    std::thread::sleep(std::time::Duration::from_millis(400));
+    Ok(())
+}
 /// Name of the commander of `army`, if any.
 pub(super) fn commander(r: &Reader<'_>, image: u64, army: &str) -> Result<Option<String>> {
     let u = ui(r)?;
