@@ -12,6 +12,7 @@
 //!                          other events after `wait_events` seconds (default 90) with
 //!                          `event_options[event]` (default 0)
 //!   research_priority      technology keys; the first not-yet-researched key the game accepts
+//!                          (then the catalog in order, unless research_fallback is false)
 //!   focus_path             focus keys; the first not completed key the game accepts
 //!   politics               [{"category","slot","idea"}] one-shot picks
 //!   decisions              decision keys taken whenever enabled
@@ -59,6 +60,7 @@ pub struct State {
     done: HashSet<String>,
     seen: HashMap<String, Instant>,
     seq: u64,
+    sent: HashMap<String, (String, Value)>,
 }
 impl Default for State {
     /// Request ids carry the start time so a restarted server never reuses
@@ -72,6 +74,7 @@ impl Default for State {
             done: HashSet::new(),
             seen: HashMap::new(),
             seq: 0,
+            sent: HashMap::new(),
         }
     }
 }
@@ -108,8 +111,26 @@ impl State {
             );
             object.insert("lease_token".into(), json!(lease));
         }
+        let id = args["request_id"].as_str().unwrap_or("").to_string();
+        self.sent.insert(id, (name.to_string(), args.clone()));
         let mut result = tools.call(name, &args);
         if matches!(&result, Err(e) if e.code == "action_uncertain") {
+            // Another dispatch of this run is unresolved and blocks input: settle
+            // it by retrying its own request id, then send this one again.
+            let blocker = match &result {
+                Err(e) => e
+                    .message
+                    .split("Unresolved dispatch ")
+                    .nth(1)
+                    .and_then(|rest| rest.split_whitespace().next())
+                    .map(String::from),
+                _ => None,
+            };
+            if let Some((blocked_name, blocked_args)) =
+                blocker.and_then(|b| self.sent.get(&b).cloned())
+            {
+                let _ = tools.call(&blocked_name, &blocked_args);
+            }
             result = tools.call(name, &args);
         }
         match result {
@@ -206,7 +227,7 @@ pub fn tick(
             .take(3)
             .collect();
         for tech in candidates {
-            let (ok, why) = state.act(
+            let (ok, _) = state.act(
                 tools,
                 lease,
                 "hoi4_research_start",
@@ -217,7 +238,48 @@ pub fn tick(
                 return Ok(Tick::Acted(format!("research {tech} slot {empty}")));
             }
             state.skip(now, "tech", &tech, 900);
-            let _ = why;
+        }
+        // Nothing from the priority list is startable: never leave a slot idle.
+        // Walk the technology catalog; the game refuses ineligible ones before
+        // any input, so a few attempts per tick are cheap.
+        if plan["research_fallback"] != json!(false) {
+            let mut tried = 0;
+            let mut offset = 0;
+            'catalog: loop {
+                let page = tools.call(
+                    "hoi4_technology_list",
+                    &json!({"offset": offset, "limit": 100}),
+                )?;
+                for tech in strings(&page, "technologies") {
+                    if done.contains(&tech)
+                        || busy.contains(&tech)
+                        || state.skipped(now, "tech", &tech)
+                    {
+                        continue;
+                    }
+                    let (ok, _) = state.act(
+                        tools,
+                        lease,
+                        "hoi4_research_start",
+                        json!({"technology": tech, "slot": empty}),
+                        "rf",
+                    );
+                    if ok {
+                        return Ok(Tick::Acted(format!(
+                            "research {tech} slot {empty} (fallback)"
+                        )));
+                    }
+                    state.skip(now, "tech", &tech, 1800);
+                    tried += 1;
+                    if tried >= 6 {
+                        break 'catalog;
+                    }
+                }
+                match page["next_offset"].as_u64() {
+                    Some(next) if next > offset => offset = next,
+                    _ => break,
+                }
+            }
         }
     }
     // 3. focus
