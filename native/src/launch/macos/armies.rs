@@ -285,7 +285,12 @@ fn new_card(r: &Reader<'_>, image: u64, leftmost: bool) -> Result<Rect> {
 }
 
 /// Create an army from own divisions around state `state`.
-pub(super) fn create(process: &dyn Process, keys: &MacKeys, state: i32) -> Result<()> {
+pub(super) fn create(
+    process: &dyn Process,
+    keys: &MacKeys,
+    state: i32,
+    absorb: bool,
+) -> Result<()> {
     clear_notices(process, keys)?;
     // The selection box stays clear of the left-hand panels; Escape is not used
     // because on a free map it opens the game menu.
@@ -306,6 +311,15 @@ pub(super) fn create(process: &dyn Process, keys: &MacKeys, state: i32) -> Resul
     // armies of 24 and 19 divisions into one of 52).
     std::thread::sleep(std::time::Duration::from_millis(500));
     if read(process, super::ui::reassign_open)? {
+        if absorb {
+            // The caller asked for the armies standing here to be folded in.
+            super::ui::accept_command(process, keys)?;
+            return wait(process, "army created", |r, i| {
+                Ok(membership(r, i)?
+                    .values()
+                    .any(|g| *g != 0 && !groups_before.contains(g)))
+            });
+        }
         super::ui::decline_stale(process, keys)?;
         return Err(Error::new(
             "invalid_target",
