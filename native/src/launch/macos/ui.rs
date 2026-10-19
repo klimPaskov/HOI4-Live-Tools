@@ -66,7 +66,11 @@ pub(super) fn wait(
 /// No-decision notices the server may acknowledge (only an OK button): research
 /// finished, focus finished, peace summary and world tension pop-ups (macOS
 /// 089EA519). Decisions such as events are never answered here.
-const NOTICE_VTABLES: [u64; 4] = [0x3472580, 0x3472af8, 0x3472c10, 0x3493e80];
+/// 0x34729e0 CConfirmationPopUpWindow (doctrine milestones), 0x34871b8 CSurrenderedPopupWindow
+/// (seized equipment after a capitulation).
+const NOTICE_VTABLES: [u64; 6] = [
+    0x3472580, 0x3472af8, 0x3472c10, 0x3493e80, 0x34729e0, 0x34871b8,
+];
 const GUI_FROM_IDLER: u64 = 0x4c0;
 const POPUP_LIST: u64 = 0x9e0;
 const POPUP_ROOT: u64 = 0x430;
