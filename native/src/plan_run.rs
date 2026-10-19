@@ -475,8 +475,9 @@ pub fn tick(
                 json!({"state_id": id}),
                 "ac",
             );
-            let (ok, why) = if !ok && why.contains("existing army")
-                || why.contains("Divisions of an existing")
+            let (ok, why) = if !ok
+                && why.contains("Divisions of an existing")
+                && cfg["absorb"] == json!(true)
             {
                 state.act(
                     tools,
@@ -843,7 +844,7 @@ mod tests {
                 }
             }
         }
-        let plan = json!({"armies": {"max": 24}});
+        let plan = json!({"armies": {"max": 24, "absorb": true}});
         let mut state = State::default();
         let now = Instant::now();
         let first = tick(&mut state, &Roster, &plan, "l", now).unwrap();
