@@ -211,7 +211,17 @@ fn option_centres(
 }
 /// Dark option bars (rows mostly darker than the newspaper) in a column of
 /// the capture: (top, bottom) of each band 20..60 px tall, top to bottom.
+#[cfg(test)]
 fn dark_bands(capture: &Capture, centre: f64, half: f64, from: f64) -> Vec<(f64, f64)> {
+    dark_bands_with(capture, centre, half, from, 270)
+}
+fn dark_bands_with(
+    capture: &Capture,
+    centre: f64,
+    half: f64,
+    from: f64,
+    threshold: u32,
+) -> Vec<(f64, f64)> {
     let dark = |y: f64| {
         let mut n = 0;
         let mut hits = 0;
@@ -219,7 +229,7 @@ fn dark_bands(capture: &Capture, centre: f64, half: f64, from: f64) -> Vec<(f64,
         while x <= centre + half {
             if let Some((r, g, b)) = capture.rgb(x, y) {
                 n += 1;
-                if (u32::from(r) + u32::from(g) + u32::from(b)) < 270 {
+                if (u32::from(r) + u32::from(g) + u32::from(b)) < threshold {
                     hits += 1;
                 }
             }
@@ -303,9 +313,16 @@ pub(super) fn choose(process: &dyn Process, keys: &MacKeys, id: &str, option: us
         (None, Some((centre, half, from))) => {
             // The window fades in; capture again until its bars are drawn.
             let mut bands = Vec::new();
-            for _ in 0..6 {
-                bands = dark_bands(&keys.capture(GAME)?, centre, half, from);
+            let mut centre = centre;
+            for attempt in 0..9 {
+                // A hovered or lit button is brighter and a window drawn beside
+                // other panels may sit a little off the expected centre.
+                let threshold = if attempt < 3 { 270 } else { 360 };
+                let shift = [0.0, 25.0, -25.0][attempt % 3];
+                bands =
+                    dark_bands_with(&keys.capture(GAME)?, centre + shift, half, from, threshold);
                 if bands.len() >= top.options.len() {
+                    centre += shift;
                     break;
                 }
                 std::thread::sleep(std::time::Duration::from_millis(250));
