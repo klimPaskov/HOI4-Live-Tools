@@ -91,7 +91,7 @@ const MACOS: Ui = Ui {
 /// selected, and the commander list's visible row band; portraits are drawn
 /// 90 px tall from the bottom of their texture rectangle.
 const COMMANDER_SLOT: (f64, f64) = (33.0, 160.0);
-const LEADER_ROWS: (i32, i32) = (320, 810);
+const LEADER_ROWS: (i32, i32) = (140, 625);
 const PORTRAIT_DRAWN: i32 = 90;
 const GAME: (u32, u32) = (1920, 1080);
 
@@ -690,6 +690,14 @@ fn leader_list_open(r: &Reader<'_>, image: u64) -> Result<bool> {
 }
 /// (general name, portrait rectangle) for each row of the commander list.
 fn leader_rows(r: &Reader<'_>, image: u64) -> Result<Vec<(String, Rect)>> {
+    Ok(leader_entries(r, image)?
+        .into_iter()
+        .map(|(n, rect, _)| (n, rect))
+        .collect())
+}
+/// Like `leader_rows`, plus the row's Promote button while it is shown (a
+/// general who is not yet a field marshal).
+fn leader_entries(r: &Reader<'_>, image: u64) -> Result<Vec<(String, Rect, Option<Rect>)>> {
     let u = ui(r)?;
     let root = leader_root(r, image)?;
     let mut grid = None;
@@ -722,8 +730,20 @@ fn leader_rows(r: &Reader<'_>, image: u64) -> Result<Vec<(String, Rect)>> {
             continue;
         };
         let name = r.string_bounded(name + u.text, 128)?;
+        // The button's own sprite rectangle is scaled oddly; it sits at a fixed
+        // offset from the portrait in unitleaderwindow.gui (414,56 against 56,5).
+        let promote_shown = match gui_tree::child(r, image, frame, "promote_btn")? {
+            Some(b) => gui_tree::shown(r, b)?,
+            None => false,
+        };
         if let Ok(rect) = gui_tree::rect_unclipped(r, image, button, GAME) {
-            out.push((name, rect));
+            let promote = promote_shown.then_some(Rect {
+                x: rect.x + 358,
+                y: rect.y + 51,
+                w: 98,
+                h: 28,
+            });
+            out.push((name, rect, promote));
         }
     }
     Ok(out)
@@ -779,7 +799,20 @@ pub(super) fn assign_commander(
         if top >= LEADER_ROWS.0 && bottom <= LEADER_ROWS.1 {
             break;
         }
-        if !read(process, leader_list_open)? {
+        // The list can flicker shut while the game rebuilds it; give it a moment,
+        // then open it again from the commander slot.
+        let mut open = false;
+        for attempt in 0..8 {
+            if read(process, |r, i| Ok(leader_list_open(r, i).unwrap_or(false)))? {
+                open = true;
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(250));
+            if attempt == 4 {
+                keys.click(GAME, COMMANDER_SLOT.0, COMMANDER_SLOT.1)?;
+            }
+        }
+        if !open {
             return Err(Error::new("input_readback_failed", "Commander list closed"));
         }
         let pixels = if top < LEADER_ROWS.0 { 240 } else { -240 };
@@ -794,9 +827,36 @@ pub(super) fn assign_commander(
     if bottom - PORTRAIT_DRAWN < LEADER_ROWS.0 || bottom > LEADER_ROWS.1 {
         return Err(Error::new(
             "gui_target_unavailable",
-            "General row not in view",
+            format!("General row not in view: {rect:?}"),
         ));
     }
+    // Only field marshals can lead an army group: promote a plain general first.
+    let is_group = read(process, |r, i| {
+        Ok(army_groups(r, i)?.contains(&group_named(r, i, army)?))
+    })?;
+    let promote_of = |r: &Reader<'_>, i: u64| -> Result<Option<Rect>> {
+        Ok(leader_entries(r, i)?
+            .into_iter()
+            .find(|(n, _, _)| n.to_lowercase() == wanted)
+            .and_then(|(_, _, p)| p))
+    };
+    if is_group {
+        if let Some(button) = read(process, promote_of)? {
+            let (x, y) = button.center();
+            keys.click(GAME, x, y)?;
+            super::ui::accept_command(process, keys)?;
+            wait(process, "general promoted", |r, i| {
+                Ok(promote_of(r, i)?.is_none())
+            })?;
+            std::thread::sleep(std::time::Duration::from_millis(400));
+            // The game closes the list on promotion: open it again.
+            return assign_commander(process, keys, army, general);
+        }
+    }
+    let rect = settled(process, "general row", |r, i| {
+        find(r, i)?.ok_or_else(|| Error::new("gui_target_unavailable", "General left the list"))
+    })?;
+    let bottom = rect.y + rect.h;
     keys.click(
         GAME,
         f64::from(rect.x) + 34.0,
