@@ -53,12 +53,27 @@ pub enum Tick {
     Nothing,
 }
 
-#[derive(Default)]
 pub struct State {
+    boot: u64,
     bad: HashMap<String, Instant>,
     done: HashSet<String>,
     seen: HashMap<String, Instant>,
     seq: u64,
+}
+impl Default for State {
+    /// Request ids carry the start time so a restarted server never reuses
+    /// an id that an earlier run already bound to a different action.
+    fn default() -> Self {
+        Self {
+            boot: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |d| d.as_secs()),
+            bad: HashMap::new(),
+            done: HashSet::new(),
+            seen: HashMap::new(),
+            seq: 0,
+        }
+    }
 }
 
 fn skip_key(kind: &str, key: &str) -> String {
@@ -89,7 +104,7 @@ impl State {
         if let Some(object) = args.as_object_mut() {
             object.insert(
                 "request_id".into(),
-                json!(format!("plan-{tag}-{}", self.seq)),
+                json!(format!("plan-{tag}-{}-{}", self.boot, self.seq)),
             );
             object.insert("lease_token".into(), json!(lease));
         }
@@ -254,7 +269,7 @@ pub fn tick(
     // 5. decisions
     let wanted = strings(plan, "decisions");
     if !wanted.is_empty() {
-        let offered = tools.call("hoi4_decisions_list", &json!({}))?;
+        let offered = tools.call("hoi4_decisions_list", &json!({"lease_token": lease}))?;
         for d in list(&offered, "decisions") {
             let key = text(&d["decision"]);
             if wanted.iter().any(|w| w == key)
@@ -377,35 +392,6 @@ pub fn tick(
         }
         return Ok(Tick::Acted(format!("production {equipment}: {ok} {why}")));
     }
-    // 8. construction with idle civilian factories
-    let idle_civilian = economy["civilian_factories_available_for_projects"]
-        .as_i64()
-        .unwrap_or(0);
-    if idle_civilian >= plan["construction_min_idle"].as_i64().unwrap_or(4) {
-        for job in list(plan, "construction") {
-            let building = text(&job["building"]);
-            for state_id in list(job, "states").iter().filter_map(Value::as_i64) {
-                let key = format!("{building}:{state_id}");
-                if state.skipped(now, "con", &key) {
-                    continue;
-                }
-                let (ok, why) = state.act(
-                    tools,
-                    lease,
-                    "hoi4_construction_add",
-                    json!({"building": building, "state_id": state_id, "count": 1}),
-                    "co",
-                );
-                if !ok {
-                    // state full or not allowed: retry much later
-                    state.skip(now, "con", &key, 2400);
-                }
-                return Ok(Tick::Acted(format!(
-                    "construct {building} {state_id}: {ok} {why}"
-                )));
-            }
-        }
-    }
     // 9. every division in an army of sensible size, generals only for real armies
     if plan["armies"].is_object() {
         let cfg = &plan["armies"];
@@ -440,9 +426,9 @@ pub fn tick(
             } else {
                 (ok, why)
             };
-            if !ok {
-                state.skip(now, "armycreate", &key, 300);
-            }
+            // Whether or not it worked, give the game time before trying the
+            // same state again (a box selection can miss stacked divisions).
+            state.skip(now, "armycreate", &key, if ok { 120 } else { 300 });
             return Ok(Tick::Acted(format!("army_create state {id}: {ok} {why}")));
         }
         for army in list(&roster, "armies") {
@@ -488,6 +474,35 @@ pub fn tick(
                 state.skip(now, "armygeneral", name, if ok { 3600 } else { 300 });
                 return Ok(Tick::Acted(format!(
                     "general {general} -> {name}: {ok} {why}"
+                )));
+            }
+        }
+    }
+    // 8. construction with idle civilian factories
+    let idle_civilian = economy["civilian_factories_available_for_projects"]
+        .as_i64()
+        .unwrap_or(0);
+    if idle_civilian >= plan["construction_min_idle"].as_i64().unwrap_or(4) {
+        for job in list(plan, "construction") {
+            let building = text(&job["building"]);
+            for state_id in list(job, "states").iter().filter_map(Value::as_i64) {
+                let key = format!("{building}:{state_id}");
+                if state.skipped(now, "con", &key) {
+                    continue;
+                }
+                let (ok, why) = state.act(
+                    tools,
+                    lease,
+                    "hoi4_construction_add",
+                    json!({"building": building, "state_id": state_id, "count": 1}),
+                    "co",
+                );
+                if !ok {
+                    // state full or not allowed: retry much later
+                    state.skip(now, "con", &key, 2400);
+                }
+                return Ok(Tick::Acted(format!(
+                    "construct {building} {state_id}: {ok} {why}"
                 )));
             }
         }
