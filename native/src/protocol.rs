@@ -19,7 +19,24 @@ pub trait Commands: Send + Sync {
     fn supports(&self, name: &str) -> bool;
     fn call(&self, process: &dyn Process, name: &str, args: &Value) -> Result<Value>;
     fn capabilities(&self) -> Value;
+    /// Where the standing plan lives (`hoi4_plan`, `hoi4_plan_run`), if this
+    /// adapter has a run directory.
+    fn plan_path(&self) -> Option<std::path::PathBuf> {
+        None
+    }
 }
+
+/// The server's own tools as the plan runner's tool set.
+struct Internal<'a> {
+    server: &'a Server,
+    commands: &'a dyn Commands,
+}
+impl crate::plan_run::Tools for Internal<'_> {
+    fn call(&self, name: &str, args: &Value) -> Result<Value> {
+        self.server.call(name, args, Some(self.commands))
+    }
+}
+static PLAN_STATE: std::sync::Mutex<Option<crate::plan_run::State>> = std::sync::Mutex::new(None);
 fn tools(commands: Option<&dyn Commands>) -> Value {
     let mut value = json!({"tools":[
         {"name":"hoi4_capabilities","description":"Verified runtime capabilities and explicit platform/build limitations.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}},
@@ -927,6 +944,52 @@ impl Server {
                     current = observed;
                     current_received = Instant::now();
                 }
+            }
+            "hoi4_plan" | "hoi4_plan_run" if commands.and_then(|c| c.plan_path()).is_some() => {
+                let commands = commands.unwrap();
+                let path = commands.plan_path().unwrap();
+                if name == "hoi4_plan" {
+                    return match object.get("op").and_then(Value::as_str) {
+                        Some("get") if object.len() == 1 => crate::plan_run::read_plan(&path),
+                        Some("set") if object.len() == 2 => {
+                            let changes = object
+                                .get("plan")
+                                .and_then(Value::as_object)
+                                .ok_or_else(|| {
+                                    Error::new("invalid_arguments", "plan must be an object")
+                                })?;
+                            crate::plan_run::merge_plan(&path, changes)
+                        }
+                        _ => Err(Error::new(
+                            "invalid_arguments",
+                            "Use {op:get} or {op:set, plan:{...}}",
+                        )),
+                    };
+                }
+                if object
+                    .keys()
+                    .any(|k| !["seconds", "lease_token"].contains(&k.as_str()))
+                {
+                    return Err(Error::new(
+                        "invalid_arguments",
+                        "Only seconds and lease_token accepted",
+                    ));
+                }
+                let lease = object
+                    .get("lease_token")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| Error::new("invalid_arguments", "lease_token required"))?;
+                let seconds = object.get("seconds").and_then(Value::as_u64).unwrap_or(60);
+                if !(1..=300).contains(&seconds) {
+                    return Err(Error::new("invalid_arguments", "seconds must be 1..300"));
+                }
+                let tools = Internal {
+                    server: self,
+                    commands,
+                };
+                let mut guard = PLAN_STATE.lock().unwrap_or_else(|p| p.into_inner());
+                let state = guard.get_or_insert_with(Default::default);
+                crate::plan_run::run(state, &tools, &path, lease, seconds)
             }
             _ if commands.is_some_and(|c| c.supports(name)) => {
                 let process = self.process.as_ref().ok_or_else(|| {
