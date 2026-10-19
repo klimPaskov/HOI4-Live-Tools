@@ -8,6 +8,7 @@
 //!
 //! Plan keys (all optional; the file is re-read every tick):
 //!   active                 false pauses the runner
+//!   event_prefix_options   {"DOD_":"last"}: option for every event whose id starts with the prefix
 //!   auto_events            answer news and single-option events with option 0 (default true);
 //!                          other events after `wait_events` seconds (default 90) with
 //!                          `event_options[event]` (default 0)
@@ -197,9 +198,23 @@ pub fn tick(
         let patience = plan["wait_events"].as_u64().unwrap_or(90);
         // A choice event is the model's decision unless the plan names an option for it
         // or explicitly allows answering every event ("auto_events": "all").
-        let chosen = plan["event_options"][&key].as_u64();
+        let chosen = plan["event_options"][&key].as_u64().or_else(|| {
+            // {"event_prefix_options": {"DOD_": "last"}}: a rule for a whole family of events
+            plan["event_prefix_options"]
+                .as_object()?
+                .iter()
+                .find_map(|(prefix, v)| {
+                    key.starts_with(prefix.as_str()).then(|| {
+                        if v == "last" {
+                            list(top, "options").len().saturating_sub(1) as u64
+                        } else {
+                            v.as_u64().unwrap_or(0)
+                        }
+                    })
+                })
+        });
         let all = plan["auto_events"] == json!("all");
-        if auto && (news || (waited > patience && (chosen.is_some() || all))) {
+        if auto && (news || chosen.is_some() || (waited > patience && all)) {
             let option = chosen.unwrap_or(0);
             let (ok, why) = state.act(
                 tools,
@@ -894,21 +909,23 @@ mod tests {
     }
 
     #[test]
-    fn a_choice_event_waits_for_the_model_then_takes_the_planned_option() {
+    fn a_choice_event_waits_for_the_model_but_a_planned_option_is_taken_at_once() {
         let events = json!({"events": [{"event": "x.1", "options": ["a", "b"]}]});
         let tools = fake(vec![("hoi4_events", events)]);
         let mut state = State::default();
-        let plan = json!({"wait_events": 90, "event_options": {"x.1": 1}});
         let t0 = Instant::now();
         assert_eq!(
-            tick(&mut state, &tools, &plan, "l", t0).unwrap(),
+            tick(&mut state, &tools, &json!({}), "l", t0).unwrap(),
             Tick::Waiting {
                 event: "x.1".into(),
                 new: true
             }
         );
-        let later = t0 + Duration::from_secs(120);
-        let step = tick(&mut state, &tools, &plan, "l", later).unwrap();
+        let planned = json!({"event_options": {"x.1": 1}});
+        let step = tick(&mut state, &tools, &planned, "l", t0).unwrap();
+        assert!(matches!(&step, Tick::Acted(s) if s.starts_with("event x.1 option 1")));
+        let family = json!({"event_prefix_options": {"x.": "last"}});
+        let step = tick(&mut State::default(), &tools, &family, "l", t0).unwrap();
         assert!(matches!(&step, Tick::Acted(s) if s.starts_with("event x.1 option 1")));
     }
 
