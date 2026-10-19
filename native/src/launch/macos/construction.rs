@@ -179,7 +179,7 @@ pub(super) fn add(
             )
         })
     })?;
-    clear_notices(process, keys)?;
+    super::ui::dismiss_notices(process, keys)?;
     let (x, y) = rect.center();
     keys.click(GAME, x, y)?;
     wait(process, "select building", |r, i| {
@@ -195,7 +195,7 @@ pub(super) fn add(
                 ));
             }
             let before = queued(process, key, state)?;
-            clear_notices(process, keys)?;
+            super::ui::dismiss_notices(process, keys)?;
             keys.click(GAME, 960.0, 540.0)?;
             let deadline = std::time::Instant::now() + Duration::from_secs(3);
             loop {
