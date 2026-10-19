@@ -729,6 +729,22 @@ fn leader_root(r: &Reader<'_>, image: u64) -> Result<u64> {
 fn leader_list_open(r: &Reader<'_>, image: u64) -> Result<bool> {
     gui_tree::visible(r, leader_root(r, image)?)
 }
+/// Visible band (top, bottom) of the commander list's rows in game pixels:
+/// from the bottom of the sort header to the top of the Unassign button. The
+/// window sits at different heights depending on the panels open beside it.
+fn leader_band(r: &Reader<'_>, image: u64) -> (i32, i32) {
+    let found = (|| -> Result<(i32, i32)> {
+        let root = leader_root(r, image)?;
+        let header = gui_tree::child(r, image, root, "sort_name")?
+            .ok_or_else(|| Error::new("gui_target_unavailable", "Sort header not found"))?;
+        let footer = gui_tree::child(r, image, root, "no_leader_button")?
+            .ok_or_else(|| Error::new("gui_target_unavailable", "Unassign button not found"))?;
+        let header = gui_tree::rect_unclipped(r, image, header, GAME)?;
+        let footer = gui_tree::rect_unclipped(r, image, footer, GAME)?;
+        Ok((header.y + header.h, footer.y))
+    })();
+    found.unwrap_or(LEADER_ROWS)
+}
 /// (general name, portrait rectangle) for each row of the commander list.
 fn leader_rows(r: &Reader<'_>, image: u64) -> Result<Vec<(String, Rect)>> {
     Ok(leader_entries(r, image)?
@@ -798,6 +814,30 @@ pub(super) fn assign_commander(
     army: &str,
     general: &str,
 ) -> Result<()> {
+    // The list sometimes closes under the pointer while rows scroll; each retry
+    // starts again from the army's card.
+    let mut last = None;
+    for _ in 0..3 {
+        match assign_commander_once(process, keys, army, general, true) {
+            Ok(()) => return Ok(()),
+            Err(e) if matches!(e.code, "input_readback_failed" | "gui_target_unavailable") => {
+                last = Some(e);
+                super::ui::dismiss(process, keys, |r, i| {
+                    Ok(!leader_list_open(r, i).unwrap_or(false))
+                });
+            }
+            Err(e) => return Err(e),
+        }
+    }
+    Err(last.unwrap_or_else(|| Error::new("input_readback_failed", "Commander not assigned")))
+}
+fn assign_commander_once(
+    process: &dyn Process,
+    keys: &MacKeys,
+    army: &str,
+    general: &str,
+    allow_promote: bool,
+) -> Result<()> {
     clear_notices(process, keys)?;
     if read(process, |r, i| commander(r, i, army))?.is_some_and(|c| c.eq_ignore_ascii_case(general))
     {
@@ -834,10 +874,11 @@ pub(super) fn assign_commander(
             format!("No such general in the list: {}", names.join(", ")),
         ));
     };
+    let band = read(process, |r, i| Ok(leader_band(r, i)))?;
     for _ in 0..40 {
         let bottom = rect.y + rect.h;
         let top = bottom - PORTRAIT_DRAWN;
-        if top >= LEADER_ROWS.0 && bottom <= LEADER_ROWS.1 {
+        if top >= band.0 && bottom <= band.1 {
             break;
         }
         // The list can flicker shut while the game rebuilds it; give it a moment,
@@ -856,7 +897,7 @@ pub(super) fn assign_commander(
         if !open {
             return Err(Error::new("input_readback_failed", "Commander list closed"));
         }
-        let pixels = if top < LEADER_ROWS.0 { 240 } else { -240 };
+        let pixels = if top < band.0 { 240 } else { -240 };
         keys.scroll(GAME, (960.0, 560.0), pixels)?;
         rect = read(process, find)?
             .ok_or_else(|| Error::new("gui_target_unavailable", "General left the list"))?;
@@ -865,7 +906,7 @@ pub(super) fn assign_commander(
         find(r, i)?.ok_or_else(|| Error::new("gui_target_unavailable", "General left the list"))
     })?;
     let bottom = rect.y + rect.h;
-    if bottom - PORTRAIT_DRAWN < LEADER_ROWS.0 || bottom > LEADER_ROWS.1 {
+    if bottom - PORTRAIT_DRAWN < band.0 || bottom > band.1 {
         return Err(Error::new(
             "gui_target_unavailable",
             format!("General row not in view: {rect:?}"),
@@ -881,7 +922,7 @@ pub(super) fn assign_commander(
             .find(|(n, _, _)| n.to_lowercase() == wanted)
             .and_then(|(_, _, p)| p))
     };
-    if is_group {
+    if is_group && allow_promote {
         if let Some(button) = read(process, promote_of)? {
             let (x, y) = button.center();
             keys.click(GAME, x, y)?;
@@ -891,13 +932,16 @@ pub(super) fn assign_commander(
             })?;
             std::thread::sleep(std::time::Duration::from_millis(400));
             // The game closes the list on promotion: open it again.
-            return assign_commander(process, keys, army, general);
+            return assign_commander_once(process, keys, army, general, false);
         }
     }
     let rect = settled(process, "general row", |r, i| {
         find(r, i)?.ok_or_else(|| Error::new("gui_target_unavailable", "General left the list"))
     })?;
     let bottom = rect.y + rect.h;
+    if !read(process, |r, i| Ok(leader_list_open(r, i).unwrap_or(false)))? {
+        return Err(Error::new("input_readback_failed", "Commander list closed"));
+    }
     keys.click(
         GAME,
         f64::from(rect.x) + 34.0,
