@@ -136,17 +136,39 @@ fn train_button(r: &Reader<'_>, image: u64, name: &str) -> Result<Rect> {
     let names = templates(r, image)?;
     let window = r.u64(view(r, image)? + u.template_window)?;
     let rows = pointers(r, window + u.window_rows, 256)?;
-    if rows.len() != names.len() {
+    if !names.iter().any(|n| n == name) {
         return Err(Error::new(
-            "gui_target_unavailable",
-            "Template rows differ from the own template list (obsolete templates shown or hidden)",
+            "invalid_target",
+            "No own division template with this name",
         ));
     }
-    let index = names
-        .iter()
-        .position(|n| n == name)
-        .ok_or_else(|| Error::new("invalid_target", "No own division template with this name"))?;
-    let frame = gui_tree::container(r, r.u64(rows[index] + u.row_container)?, image)?
+    // Rows follow the template list one to one unless the game hides
+    // decommissioned templates; then each row is found by its drawn name.
+    let row = if rows.len() == names.len() {
+        rows[names.iter().position(|n| n == name).unwrap()]
+    } else {
+        let mut found = None;
+        for &candidate in &rows {
+            let Some(frame) = gui_tree::container(r, r.u64(candidate + u.row_container)?, image)?
+            else {
+                continue;
+            };
+            let Some(label) = gui_tree::child(r, image, frame, "name")? else {
+                continue;
+            };
+            if r.string_bounded(label + 0x100, 128)?.trim() == name {
+                found = Some(candidate);
+                break;
+            }
+        }
+        found.ok_or_else(|| {
+            Error::new(
+                "gui_target_unavailable",
+                "Template row not shown (decommissioned templates are hidden)",
+            )
+        })?
+    };
+    let frame = gui_tree::container(r, r.u64(row + u.row_container)?, image)?
         .ok_or_else(|| Error::new("invalid_gui", "Template row window required"))?;
     let button = gui_tree::child(r, image, frame, "add_template_button")?
         .ok_or_else(|| Error::new("gui_target_unavailable", "Train button not found"))?;
