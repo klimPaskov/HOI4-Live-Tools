@@ -117,8 +117,9 @@ pub(super) fn clear_notices(
     super::construction::leave(process, keys);
     // A confirmation left open by an interrupted action blocks every click.
     decline_stale(process, keys)?;
-    // An event window is drawn over notices and panels; clicks would land on
-    // it, so the player answers events before anything else.
+    let cleared = dismiss_notices(process, keys)?;
+    // An event window is drawn over panels; clicks would land on it, so the
+    // player answers events before anything else.
     let open = read(process, super::events::open_ids)?;
     if !open.is_empty() {
         return Err(Error::new(
@@ -126,6 +127,13 @@ pub(super) fn clear_notices(
             format!("Answer the open event(s) first: {}", open.join(", ")),
         ));
     }
+    Ok(cleared)
+}
+/// Click away every notice pop-up (they can sit on top of an event window).
+pub(super) fn dismiss_notices(
+    process: &dyn Process,
+    keys: &crate::platform::macos_input::MacKeys,
+) -> Result<usize> {
     let mut cleared = 0;
     let mut misses = 0;
     loop {

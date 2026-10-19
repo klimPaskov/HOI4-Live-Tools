@@ -286,6 +286,8 @@ pub(super) fn is_open(process: &dyn Process, id: &str) -> Result<bool> {
 /// Choose option `option` (0-based) of the open event `id`.
 pub(super) fn choose(process: &dyn Process, keys: &MacKeys, id: &str, option: usize) -> Result<()> {
     close_menu(process, keys)?;
+    // A notice (a finished focus) can be drawn over the event window.
+    super::ui::dismiss_notices(process, keys)?;
     let open = settled(process, "event window", open_events)?;
     let Some(top) = open.last() else {
         return Err(Error::new("invalid_target", "No event window is open"));
