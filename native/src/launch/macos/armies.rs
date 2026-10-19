@@ -193,9 +193,21 @@ pub(super) fn armies(process: &dyn Process) -> Result<Value> {
                 groups.entry(group).or_default().push(id);
             }
         }
+        let places = division_states(r, image)?;
         let armies = groups
             .into_iter()
             .map(|(group, ids)| {
+                let mut standing: BTreeMap<i32, usize> = BTreeMap::new();
+                for id in &ids {
+                    if let Some(Some(state)) = places.get(id) {
+                        *standing.entry(*state).or_default() += 1;
+                    }
+                }
+                let main_state = standing.iter().max_by_key(|(_, n)| **n).map(|(s, _)| *s);
+                let standing: serde_json::Map<String, Value> = standing
+                    .into_iter()
+                    .map(|(s, n)| (s.to_string(), json!(n)))
+                    .collect();
                 let name = army_name(r, group)?;
                 let leader = r.u64(group + ui(r)?.group_leader)?;
                 let commander = if leader == 0 {
@@ -213,11 +225,11 @@ pub(super) fn armies(process: &dyn Process) -> Result<Value> {
                 };
                 Ok(
                     json!({"army":name,"army_group":army_group,"commander":commander,"battle_plan_orders":orders,
-                    "plan_executing":executing,"division_count":ids.len(),"divisions":ids}),
+                    "plan_executing":executing,"division_count":ids.len(),"divisions":ids,
+                    "states":standing,"main_state":main_state}),
                 )
             })
             .collect::<Result<Vec<_>>>()?;
-        let places = division_states(r, image)?;
         let mut by_state: BTreeMap<i32, usize> = BTreeMap::new();
         for id in &unassigned {
             if let Some(Some(state)) = places.get(id) {

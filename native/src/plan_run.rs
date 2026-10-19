@@ -22,6 +22,9 @@
 //!   production             [{"equipment","factories"}] lines added once
 //!   construction           [{"building","states":[..]}] spent while civilian factories are idle
 //!   construction_min_idle  idle civilian factories needed first (default 4)
+//!   war                    {"enemies":["FRA"],"min_army":6,"per_target":2,"reserve":["Army 9"],"cooldown":40}
+//!                          send armies at the nearest enemy-held states (own states held by an enemy first):
+//!                          step into the state, draw front and offensive lines, execute the plan
 //!   armies                 {"max":24,"min_for_general":8,"generals":["Name",..]} keep every division in an
 //!                          army of at most `max`: create armies where divisions stand unassigned (folding in
 //!                          standing armies when the game refuses and "absorb" is true), split oversized ones, and give the next
@@ -61,6 +64,10 @@ pub struct State {
     seen: HashMap<String, Instant>,
     seq: u64,
     sent: HashMap<String, (String, Value)>,
+    war_assign: HashMap<String, i32>,
+    war_stage: HashMap<String, u8>,
+    war_cool: HashMap<String, Instant>,
+    centers: HashMap<i32, (f64, f64)>,
 }
 impl Default for State {
     /// Request ids carry the start time so a restarted server never reuses
@@ -75,6 +82,10 @@ impl Default for State {
             seen: HashMap::new(),
             seq: 0,
             sent: HashMap::new(),
+            war_assign: HashMap::new(),
+            war_stage: HashMap::new(),
+            war_cool: HashMap::new(),
+            centers: HashMap::new(),
         }
     }
 }
@@ -541,6 +552,12 @@ pub fn tick(
             }
         }
     }
+    // 8b. war executive
+    if plan["war"].is_object() && plan["war"]["enabled"] != json!(false) {
+        if let Some(step) = war_step(state, tools, plan, lease, now)? {
+            return Ok(Tick::Acted(step));
+        }
+    }
     // 8. construction with idle civilian factories
     let idle_civilian = economy["civilian_factories_available_for_projects"]
         .as_i64()
@@ -571,6 +588,179 @@ pub fn tick(
         }
     }
     Ok(Tick::Nothing)
+}
+
+/// One war decision: at most one action, or None when nothing needs doing.
+fn war_step(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: Instant,
+) -> Result<Option<String>> {
+    let cfg = &plan["war"];
+    let me = match cfg["me"].as_str() {
+        Some(t) => t.to_string(),
+        None => text(&tools.call("hoi4_overview", &json!({}))?["player"]).to_string(),
+    };
+    if me.is_empty() {
+        return Ok(None);
+    }
+    let min_army = cfg["min_army"].as_u64().unwrap_or(6);
+    let per_target = cfg["per_target"].as_u64().unwrap_or(2) as usize;
+    let cooldown = Duration::from_secs(cfg["cooldown"].as_u64().unwrap_or(40));
+    let reserve = strings(cfg, "reserve");
+    // Targets: own states an enemy holds (priority), then enemy-owned states an enemy holds.
+    let mine = tools.call("hoi4_states", &json!({"query": me}))?;
+    let mut enemies: HashSet<String> = strings(cfg, "enemies").into_iter().collect();
+    let mut targets: Vec<(i32, bool)> = Vec::new();
+    for row in list(&mine, "states") {
+        if let (Some(id), Some(x), Some(z)) = (
+            row["state_id"].as_i64(),
+            row["x"].as_f64(),
+            row["z"].as_f64(),
+        ) {
+            state.centers.insert(id as i32, (x, z));
+            if text(&row["owner"]) == me && text(&row["controller"]) != me {
+                enemies.insert(text(&row["controller"]).to_string());
+                targets.push((id as i32, true));
+            }
+        }
+    }
+    for tag in &enemies {
+        let theirs = tools.call("hoi4_states", &json!({"query": tag}))?;
+        for row in list(&theirs, "states") {
+            let (Some(id), Some(x), Some(z)) = (
+                row["state_id"].as_i64(),
+                row["x"].as_f64(),
+                row["z"].as_f64(),
+            ) else {
+                continue;
+            };
+            state.centers.insert(id as i32, (x, z));
+            let owner = text(&row["owner"]);
+            let controller = text(&row["controller"]);
+            if owner == tag && controller == tag && !targets.iter().any(|t| t.0 == id as i32) {
+                targets.push((id as i32, false));
+            }
+        }
+    }
+    if targets.is_empty() {
+        return Ok(None);
+    }
+    let roster = tools.call("hoi4_armies", &json!({}))?;
+    let mut load: HashMap<i32, usize> = HashMap::new();
+    for target in state.war_assign.values() {
+        *load.entry(*target).or_default() += 1;
+    }
+    for army in list(&roster, "armies") {
+        let name = text(&army["army"]).to_string();
+        if army["division_count"].as_u64().unwrap_or(0) < min_army
+            || reserve.contains(&name)
+            || state.war_cool.get(&name).is_some_and(|until| *until > now)
+        {
+            continue;
+        }
+        let here = army["main_state"].as_i64().map(|s| s as i32);
+        let position = here.and_then(|s| state.centers.get(&s).copied());
+        // Keep the current target while it is still held by an enemy.
+        let mut target = state
+            .war_assign
+            .get(&name)
+            .copied()
+            .filter(|t| targets.iter().any(|x| x.0 == *t));
+        if target.is_none() {
+            if let Some(old) = state.war_assign.remove(&name) {
+                if let Some(n) = load.get_mut(&old) {
+                    *n = n.saturating_sub(1);
+                }
+            }
+            state.war_stage.remove(&name);
+            let best = targets
+                .iter()
+                .filter(|(id, _)| load.get(id).copied().unwrap_or(0) < per_target)
+                .filter_map(|(id, liberate)| {
+                    let (x, z) = state.centers.get(id).copied()?;
+                    let d = position
+                        .map_or(0.0, |(px, pz)| ((x - px).powi(2) + (z - pz).powi(2)).sqrt());
+                    Some((*id, if *liberate { d * 0.5 } else { d }))
+                })
+                .min_by(|a, b| a.1.total_cmp(&b.1));
+            if let Some((id, _)) = best {
+                state.war_assign.insert(name.clone(), id);
+                *load.entry(id).or_default() += 1;
+                target = Some(id);
+            }
+        }
+        let Some(target) = target else { continue };
+        let liberate = targets.iter().any(|t| t.0 == target && t.1);
+        let stage = state.war_stage.get(&name).copied().unwrap_or(0);
+        let executing = army["plan_executing"] == json!(true);
+        let standing_in_target = here == Some(target);
+        let (tool, args, label, next_stage) = if liberate {
+            if standing_in_target {
+                state.war_cool.insert(name.clone(), now + cooldown * 3);
+                continue;
+            }
+            (
+                "hoi4_army_move",
+                json!({"army": name, "state_id": target}),
+                "move",
+                0,
+            )
+        } else if stage == 0 && !executing {
+            (
+                "hoi4_army_front",
+                json!({"army": name, "state_id": target}),
+                "front",
+                1,
+            )
+        } else if stage == 1 {
+            (
+                "hoi4_army_offensive",
+                json!({"army": name, "state_id": target}),
+                "offensive",
+                2,
+            )
+        } else if stage == 2 {
+            (
+                "hoi4_army_plan",
+                json!({"army": name, "execute": true}),
+                "execute",
+                3,
+            )
+        } else {
+            state.war_cool.insert(name.clone(), now + cooldown * 3);
+            continue;
+        };
+        let (ok, why) = state.act(tools, lease, tool, args, "wr");
+        if ok {
+            state.war_stage.insert(name.clone(), next_stage);
+            state
+                .war_cool
+                .insert(name.clone(), now + Duration::from_secs(5));
+            return Ok(Some(format!("war {label} {name} -> state {target}: ok")));
+        }
+        // No foothold for a front line yet: step into the state first.
+        if label == "front" {
+            let (ok, why2) = state.act(
+                tools,
+                lease,
+                "hoi4_army_move",
+                json!({"army": name, "state_id": target}),
+                "wm",
+            );
+            state.war_cool.insert(name.clone(), now + cooldown);
+            return Ok(Some(format!(
+                "war move {name} -> state {target}: {ok} {why2} (front: {why})"
+            )));
+        }
+        state.war_cool.insert(name.clone(), now + cooldown);
+        return Ok(Some(format!(
+            "war {label} {name} -> state {target}: false {why}"
+        )));
+    }
+    Ok(None)
 }
 
 /// Read `plan.json` (missing means an empty plan).
@@ -881,6 +1071,116 @@ mod tests {
         let mut state = State::default();
         let step = tick(&mut state, &Roster, &plan, "l", Instant::now()).unwrap();
         assert!(matches!(&step, Tick::Acted(s) if s.starts_with("general B -> Army 3: true")));
+    }
+
+    struct War {
+        liberate: bool,
+        front_ok: bool,
+        calls: RefCell<Vec<(String, Value)>>,
+    }
+    impl Tools for War {
+        fn call(&self, name: &str, args: &Value) -> Result<Value> {
+            self.calls
+                .borrow_mut()
+                .push((name.to_string(), args.clone()));
+            match name {
+                "hoi4_research" => Ok(json!({"slots": [{"researching": "a"}]})),
+                "hoi4_focus_completed" => Ok(json!({"active_key": "f"})),
+                "hoi4_economy" => Ok(json!({"factory_trigger_count": {"military": 0},
+                    "civilian_factories_available_for_projects": 0})),
+                "hoi4_overview" => Ok(json!({"player": "GER"})),
+                "hoi4_states" => match args["query"].as_str().unwrap() {
+                    "GER" => Ok(json!({"states": [
+                        {"state_id": 42, "owner": "GER", "controller": "GER", "x": 0.0, "z": 0.0},
+                        {"state_id": 5, "owner": "GER", "controller": if self.liberate { "POL" } else { "GER" },
+                         "x": 100.0, "z": 0.0}]})),
+                    "FRA" => Ok(json!({"states": [
+                        {"state_id": 28, "owner": "FRA", "controller": "FRA", "x": if self.liberate { 300.0 } else { 10.0 }, "z": 10.0},
+                        {"state_id": 18, "owner": "FRA", "controller": "FRA", "x": 50.0, "z": 50.0}]})),
+                    "POL" => Ok(json!({"states": []})),
+                    other => panic!("unexpected query {other}"),
+                },
+                "hoi4_armies" => Ok(json!({"unassigned_by_state": [], "armies": [
+                    {"army": "Army 1", "division_count": 10, "main_state": 42,
+                     "battle_plan_orders": 0, "plan_executing": false, "commander": "X"}]})),
+                "hoi4_army_front" if !self.front_ok => Err(Error::new(
+                    "input_readback_failed",
+                    "No front line was placed",
+                )),
+                _ if args.get("request_id").is_some() => {
+                    Ok(json!({"receipt": {"status": "Verified"}}))
+                }
+                _ => Ok(json!({})),
+            }
+        }
+    }
+    fn war_plan() -> Value {
+        json!({"war": {"enemies": ["FRA"], "cooldown": 40}})
+    }
+    fn last_action(w: &War) -> (String, Value) {
+        w.calls
+            .borrow()
+            .iter()
+            .rev()
+            .find(|(n, _)| n.starts_with("hoi4_army_"))
+            .cloned()
+            .unwrap()
+    }
+
+    #[test]
+    fn an_army_fronts_the_nearest_enemy_state_then_draws_the_offensive_and_executes() {
+        let w = War {
+            liberate: false,
+            front_ok: true,
+            calls: RefCell::new(vec![]),
+        };
+        let mut state = State::default();
+        let now = Instant::now();
+        let first = tick(&mut state, &w, &war_plan(), "l", now).unwrap();
+        assert!(matches!(&first, Tick::Acted(s) if s.starts_with("war front Army 1 -> state 28")));
+        let (name, args) = last_action(&w);
+        assert_eq!(
+            (name.as_str(), &args["state_id"]),
+            ("hoi4_army_front", &json!(28))
+        );
+        let later = now + Duration::from_secs(10);
+        let second = tick(&mut state, &w, &war_plan(), "l", later).unwrap();
+        assert!(matches!(&second, Tick::Acted(s) if s.starts_with("war offensive")));
+        let third = tick(
+            &mut state,
+            &w,
+            &war_plan(),
+            "l",
+            later + Duration::from_secs(10),
+        )
+        .unwrap();
+        assert!(matches!(&third, Tick::Acted(s) if s.starts_with("war execute")));
+    }
+
+    #[test]
+    fn without_a_foothold_the_army_steps_into_the_state() {
+        let w = War {
+            liberate: false,
+            front_ok: false,
+            calls: RefCell::new(vec![]),
+        };
+        let mut state = State::default();
+        let step = tick(&mut state, &w, &war_plan(), "l", Instant::now()).unwrap();
+        assert!(
+            matches!(&step, Tick::Acted(s) if s.starts_with("war move Army 1 -> state 28: true"))
+        );
+    }
+
+    #[test]
+    fn own_states_held_by_an_enemy_come_first_and_are_attacked_by_moving_in() {
+        let w = War {
+            liberate: true,
+            front_ok: true,
+            calls: RefCell::new(vec![]),
+        };
+        let mut state = State::default();
+        let step = tick(&mut state, &w, &war_plan(), "l", Instant::now()).unwrap();
+        assert!(matches!(&step, Tick::Acted(s) if s.starts_with("war move Army 1 -> state 5")));
     }
 
     #[test]

@@ -93,6 +93,36 @@ pub(super) fn state_provinces(dir: &Path, state: i32) -> Result<Vec<i32>> {
     Err(Error::new("invalid_target", "Unknown state"))
 }
 
+/// Mean map position of every state's provinces, read once per install.
+pub(super) fn state_centers(dir: &Path) -> Result<std::sync::Arc<HashMap<i32, (f64, f64)>>> {
+    type Centers = HashMap<i32, (f64, f64)>;
+    static CACHE: OnceLock<Mutex<HashMap<PathBuf, std::sync::Arc<Centers>>>> = OnceLock::new();
+    let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    if let Some(found) = cache.lock().unwrap().get(dir) {
+        return Ok(found.clone());
+    }
+    let pos = positions(dir)?;
+    let entries = std::fs::read_dir(dir.join("history/states"))
+        .map_err(|_| Error::new("map_data_unavailable", "State history unreadable"))?;
+    let mut out = HashMap::new();
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        let Some(id) = name.split('-').next().and_then(|v| v.parse::<i32>().ok()) else {
+            continue;
+        };
+        let Ok(text) = std::fs::read_to_string(entry.path()) else {
+            continue;
+        };
+        let provinces = parse_state_provinces(&text);
+        if let Some(center) = mean(provinces.iter().filter_map(|p| pos.get(p).copied())) {
+            out.insert(id, center);
+        }
+    }
+    let out = std::sync::Arc::new(out);
+    cache.lock().unwrap().insert(dir.to_path_buf(), out.clone());
+    Ok(out)
+}
+
 fn mean(points: impl Iterator<Item = (f64, f64)>) -> Option<(f64, f64)> {
     let (mut sx, mut sz, mut n) = (0.0, 0.0, 0.0);
     for (x, z) in points {

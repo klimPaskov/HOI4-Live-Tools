@@ -113,13 +113,18 @@ pub(super) fn lookup(process: &dyn Process, dir: &Path, query: &str) -> Result<V
     // A country tag (e.g. GER, POL) lists the states that country owns.
     if query.len() == 3 && query.bytes().all(|b| b.is_ascii_uppercase()) {
         let all = names(dir)?;
+        let centers = super::mapdata::state_centers(dir).ok();
         let mut rows = Vec::new();
         for (id, name) in all {
             if let Ok((owner, controller)) = read(process, |r, i| holders(r, i, id)) {
                 if owner == query || controller == query {
-                    rows.push(
-                        json!({"state_id":id,"name":name,"owner":owner,"controller":controller}),
-                    );
+                    let mut row =
+                        json!({"state_id":id,"name":name,"owner":owner,"controller":controller});
+                    if let Some((x, z)) = centers.as_ref().and_then(|c| c.get(&id)) {
+                        row["x"] = json!(x.round());
+                        row["z"] = json!(z.round());
+                    }
+                    rows.push(row);
                 }
             }
         }
@@ -130,16 +135,22 @@ pub(super) fn lookup(process: &dyn Process, dir: &Path, query: &str) -> Result<V
         .filter(|(id, name)| fold(name).contains(&wanted) || id.to_string() == wanted)
         .take(25)
         .collect();
+    let centers = super::mapdata::state_centers(dir).ok();
     let rows = found
         .into_iter()
         .map(|(id, name)| {
             let holders = read(process, |r, i| holders(r, i, id));
-            Ok(match holders {
+            let mut row = match holders {
                 Ok((owner, controller)) => {
                     json!({"state_id":id,"name":name,"owner":owner,"controller":controller})
                 }
                 Err(_) => json!({"state_id":id,"name":name}),
-            })
+            };
+            if let Some((x, z)) = centers.as_ref().and_then(|c| c.get(&id)) {
+                row["x"] = json!(x.round());
+                row["z"] = json!(z.round());
+            }
+            Ok(row)
         })
         .collect::<Result<Vec<_>>>()?;
     Ok(json!({"states":rows}))
