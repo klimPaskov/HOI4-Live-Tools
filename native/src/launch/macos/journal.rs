@@ -184,7 +184,10 @@ impl GameJournal {
                 Err(error)
                     if matches!(
                         error.code,
-                        "invalid_target" | "invalid_arguments" | "capability_unavailable"
+                        "invalid_target"
+                            | "invalid_arguments"
+                            | "capability_unavailable"
+                            | "gui_target_unavailable"
                     ) =>
                 {
                     self.append(Receipt {
@@ -229,7 +232,10 @@ impl GameJournal {
                         // applied keeps one bad call from quarantining input.
                         if matches!(
                             error.code,
-                            "invalid_target" | "invalid_arguments" | "capability_unavailable"
+                            "invalid_target"
+                                | "invalid_arguments"
+                                | "capability_unavailable"
+                                | "gui_target_unavailable"
                         ) {
                             let _ = self.append(Receipt {
                                 status: Status::NotApplied,
