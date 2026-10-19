@@ -24,7 +24,7 @@
 //!   construction_min_idle  idle civilian factories needed first (default 4)
 //!   armies                 {"max":24,"min_for_general":8,"generals":["Name",..]} keep every division in an
 //!                          army of at most `max`: create armies where divisions stand unassigned (folding in
-//!                          standing armies when the game refuses), split oversized ones, and give the next
+//!                          standing armies when the game refuses and "absorb" is true), split oversized ones, and give the next
 //!                          listed general to an army of at least `min_for_general` divisions
 use crate::error::{Error, Result};
 use serde_json::{json, Map, Value};
