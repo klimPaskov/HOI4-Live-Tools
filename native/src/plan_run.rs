@@ -195,8 +195,12 @@ pub fn tick(
         let news = key.contains("news") || list(top, "options").len() == 1;
         let waited = now.saturating_duration_since(first).as_secs();
         let patience = plan["wait_events"].as_u64().unwrap_or(90);
-        if auto && (news || waited > patience) {
-            let option = plan["event_options"][&key].as_u64().unwrap_or(0);
+        // A choice event is the model's decision unless the plan names an option for it
+        // or explicitly allows answering every event ("auto_events": "all").
+        let chosen = plan["event_options"][&key].as_u64();
+        let all = plan["auto_events"] == json!("all");
+        if auto && (news || (waited > patience && (chosen.is_some() || all))) {
+            let option = chosen.unwrap_or(0);
             let (ok, why) = state.act(
                 tools,
                 lease,
@@ -300,7 +304,7 @@ pub fn tick(
         let candidates: Vec<String> = strings(plan, "focus_path")
             .into_iter()
             .filter(|f| !completed.contains(f) && !state.skipped(now, "focus", f))
-            .take(2)
+            .take(8)
             .collect();
         for key in candidates {
             let (ok, _) = state.act(
@@ -313,7 +317,7 @@ pub fn tick(
             if ok {
                 return Ok(Tick::Acted(format!("focus {key}")));
             }
-            state.skip(now, "focus", &key, 1200);
+            state.skip(now, "focus", &key, 240);
         }
     }
     // 4. politics (one-shot picks)
@@ -329,10 +333,11 @@ pub fn tick(
             json!({"category": pick["category"], "slot": pick["slot"], "idea": pick["idea"]}),
             "po",
         );
-        if ok || why.contains("invalid_target") {
+        if ok || why.contains("already holds") {
             state.done.insert(key);
         } else {
-            state.skip(now, "pol", &index.to_string(), 1200);
+            // Often just short of political power: try again later.
+            state.skip(now, "pol", &index.to_string(), 180);
         }
         return Ok(Tick::Acted(format!(
             "politics {} : {ok} {why}",
