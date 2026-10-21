@@ -24,9 +24,20 @@ not manager mode. The prior fixture and readiness predicate copied the wrong
 interpretation; both are corrected before live production acceptance.
 
 Both opening and factory dispatch require manager transition bytes `+0x3e1/2`
-clear, game-state `+0xa59` nonzero, idler `+0x8f0` zero and the conservative
-`CanUpdateGui` byte `+0x5b2` nonzero. The latter is a debug-assert-derived guard,
-not a claim that every release path checks it. Settings at idler `+0x7b0` have
+clear, game-state `+0xa59` nonzero and idler `+0x8f0` zero. The earlier
+`CanUpdateGui` byte `+0x5b2` prerequisite was incorrect for external ordinary
+input. Production002 observed zero between callbacks and refused before input.
+Focused static evidence shows setter `0x1fb8c00` writes one and clearer
+`0x1fb8c30` writes zero. Engine wrappers `0x2096250` and `0x2096280` bracket
+manager calls with that pair; `0x207d1a0`, `0x2084d50` and `0x2093d70` likewise
+set and clear it around their work. `0x1fc17a0` also sets one and occupies the
+in-game idler's virtual slot `+0x68`. In `0x1709c20`, the byte occurs in the
+conditional debug-assert path, before the actual transition/blocker checks.
+This establishes an internal update-phase flag, not persistent click readiness.
+It remains a witnessed diagnostic only. X11 input enters the engine's ordinary
+event path; the adapter neither sets this flag nor calls an engine function.
+The literal-displacement/call search is not exhaustive dataflow or live routing
+proof. Settings at idler `+0x7b0` have
 primary `0x431a2f0`, owner `+0x30` and root `+0x550`. Menu at manager `+0x218`
 has primary `0x425bf80`, idler `+0x19a0`, manager `+0x19a8`, root `+0x19b0` and
 overview `+0x19c8`. The overview has primary `0x4300540`, idler `+0x1078` and

@@ -241,6 +241,39 @@ fn engine_materialized_settings_and_overview_have_typed_owner_gates() {
     assert!(v["settings"].get("locally_hidden_settled").is_none());
 }
 #[test]
+fn gui_update_phase_is_diagnostic_and_never_bypasses_actual_blockers() {
+    for phase in [0, 1] {
+        for blocker in 0..5 {
+            let mut f = Fake::engine();
+            f.put(IDLER + 0x5b2, &[phase]);
+            match blocker {
+                1 => f.put(MANAGER + 0x3e1, &[1]),
+                2 => f.put(GS + 0xa59, &[0]),
+                3 => f.put(IDLER + 0x8f0, &[1]),
+                4 => f.word(MANAGER + 0x248, 0xeeee00),
+                _ => (),
+            }
+            let v = engine(
+                &Reader::new(&f),
+                BASE,
+                GS,
+                IDLER,
+                MANAGER,
+                REG,
+                &mut Vec::new(),
+            )
+            .unwrap();
+            assert_eq!(v["idler_can_update_raw"], phase);
+            assert_eq!(
+                v["idler_can_update_role"],
+                "internal_gui_update_phase_observation_only"
+            );
+            assert_eq!(v["conservative_engine_clear"], blocker == 0);
+            assert_eq!(v["complete_engine_eligibility_verified"], false);
+        }
+    }
+}
+#[test]
 fn engine_foreign_settings_stops_before_root_payload() {
     let mut f = Fake::engine();
     f.word(SETTINGS + 0x30, IDLER + 8);

@@ -2,6 +2,10 @@
 
 ## Unreleased native preview
 
+- Correct production input eligibility: the engine’s transient GUI-update phase
+  is diagnostic-only for ordinary X11 input. A recorded Luna refusal exposed
+  the incorrect prerequisite; static setter/caller evidence established its
+  phase lifetime. Actual blockers and ownership checks remain enforced.
 - Report specific observed production-opening gates on refusal without extra
   reads or input. Unknown fields remain explicit; authorization is unchanged.
   The first recorded Luna gate refused before input in 78 ms, so production

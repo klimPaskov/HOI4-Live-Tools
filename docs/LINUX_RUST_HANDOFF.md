@@ -7,6 +7,32 @@ Do not resume Mac campaigns or control the shared Windows game.
 
 ## Current checkpoint
 
+Production002, 21 October 2026: all nine CI jobs passed on `28afe8f`, including
+19 Linux parent-reader and five Xvfb fixtures. Its rebuilt release binary was
+byte-identical to `2ad13d0`, already launched before the test-only correction;
+both source identities and binary hashes were retained in private evidence.
+The fresh recorded vanilla FAIR Germany start was Normal/historical. An early
+loading read reported speed zero and the initial date with `paused=false`; a
+later read confirmed the settled paused start without any clock input.
+
+Luna medium held exclusive input and stopped at the first production-open
+refusal in 82 ms. The diagnostic isolated `idler_can_update_raw=0`; the other
+reported blockers and named opener were clear. Geometry was not collected
+because this prerequisite failed. Both action journals were empty. Luna released
+the lease, the 304.666-second recording finalized, and ordinary window close
+produced game exit 0; exact game/supervisor/recorder absence was verified.
+No factory change, final count/date read or campaign acceptance occurred.
+
+Static setter/caller evidence now classifies `CanUpdateGui` as the engine's
+internal update phase. It is diagnostic-only for ordinary X11 actions; the
+actual transition, ownership, own-dialog and callback guards remain enforced.
+See `native/PROVENANCE.md`. No flag write, engine call or pause was added.
+Local validation passed 1,067 Rust tests, 953 Python tests (37 platform skips),
+formatting and warning-free host/Linux Clippy. This correction still requires
+exact-commit CI and a fresh recorded Luna gate.
+
+### Earlier diagnostic and fixture checkpoints
+
 The diagnostic checkpoint `2ad13d0` then failed ten Windows CI fixtures: nine
 production cases used a 50 ms budget and one construction terminal-tear case
 used 300 ms, including durable journal writes. They expired before dispatch,

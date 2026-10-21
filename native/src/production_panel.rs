@@ -261,6 +261,10 @@ pub(crate) fn engine(
     let manager_flags = [r.byte(manager + 0x3e1)?, r.byte(manager + 0x3e2)?];
     let gs_gate = r.byte(gs + 0xa59)?;
     let owner_gate = r.byte(idler + 0x8f0)?;
+    // Internal GUI-update phase, set/cleared by engine-owned wrappers. A
+    // sampled zero is normal between callbacks, not an external click veto.
+    // Ordinary X11 delivery lets the engine enter its own callback phase;
+    // this observer must never set the byte or invoke the callback directly.
     let can_update = r.byte(idler + 0x5b2)?;
     let settings = r.u64(idler + 0x7b0)?;
     let settings_state = if settings == 0 {
@@ -306,7 +310,6 @@ pub(crate) fn engine(
     let known = manager_flags == [0, 0]
         && gs_gate != 0
         && owner_gate == 0
-        && can_update != 0
         && settings_state["predicate_clear"] == true
         && menu_state["predicate_clear"] == true
         && overview_state["predicate_clear"] == true;
@@ -314,6 +317,7 @@ pub(crate) fn engine(
         json!({"known_gates_clear":known,"conservative_engine_clear":known&&auxiliary==0,
         "complete_engine_eligibility_verified":false,"manager_transition_bytes":manager_flags,
         "gs_a59_raw":gs_gate,"idler_8f0_raw":owner_gate,"idler_can_update_raw":can_update,
+        "idler_can_update_role":"internal_gui_update_phase_observation_only",
         "settings":settings_state,"menu":menu_state,"overview":overview_state,
         "auxiliary_present":auxiliary!=0,"auxiliary_predicate_clear":if auxiliary==0{Some(true)}else{None}}),
     )
