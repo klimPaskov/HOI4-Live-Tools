@@ -1,5 +1,50 @@
 # Clausewitz-MCP Linux validation
 
+## Production006 daily worker passed — 22 October 2026
+
+Production006 passed all 16 granted steps on `c7d1b1c` with one Luna medium
+player. The recorded vanilla FAIR Germany start used Normal difficulty and
+historical AI. The worker opened production and changed the exact infantry
+line from 10→11 while paused, then reached 12→13→14 across advancing days.
+The separate daily production budget was 2/2/1 steps across three days; the
+opening and intermediate changes did not complete the allocation prematurely.
+
+After completing the goal, STOP and restart of the same plan through 5 January
+produced no additional production steps. Final fresh reads confirmed 14 requested
+and active factories on the original line and an unpaused speed-3 game at
+1936.01.05.13. The three worker lifetimes reported 0/1/1 rejected clock probes;
+both torn reads were explicitly read-only and recovered. Historical `input_busy`
+contention remained visible and did not imply delivery. No pause action was sent.
+
+Independent stopped audit verified 20 player RPCs with zero RPC/broker errors,
+five production Intent/Verified pairs, one completed governor goal, two verified
+clock actions and no unresolved input. All 184 native inputs/18 helpers remained
+unchanged. Canonical STOP/release/status, the 280-second recording, normal game
+exit 0 in 2.346 seconds and exact game/owner/recorder/bridge absence passed.
+Recorder exit 255 is retained separately. All nine exact-commit CI jobs passed.
+
+The initial recording preflight refused before launching a recorder because its
+clock-timing bound failed; the original bound was not retained. A fresh absence
+and timing check preceded the successful retry. The first-packet SSH observation
+timed out, but the guest's canonical packet proof and verifier absence were
+reconciled without replay. That packet preceded campaign Start. These setup
+rough edges and Production005's incomplete gate remain preserved privately.
+
+Worker starts took 125–146 ms, digests 60–80 ms, STOP 8–17 ms, final lines 44 ms
+and overview 16 ms over the persistent MCP/SSH bridge. The unpause response to
+final overview covered 97 game hours in 73.639 wall seconds in the emulated VM.
+This short interval is not an annual throughput or matched upstream benchmark.
+Menu setup and the recording are separate from the structured gameplay calls.
+This passes the bounded production-worker gate, not a two-year/full campaign,
+universal panel routing, platform-wide live compatibility or release acceptance.
+
+Next: enable verified ordinary panel handoffs between production, Research and
+Focus so mixed standing plans can progress without incompatible-panel refusals.
+Preserve budgets, original target identities, durable receipts and uncertainty
+exclusion. Then expand construction/economy and army/air/naval automation and
+run the required clean two-year and full campaign gates. Do not repeat the
+already-passed production-only gate as a substitute for this wider work.
+
 ## Production005 worker gate — 22 October 2026
 
 Production005 on `b15f189` reached the requested 14 factories through the daily

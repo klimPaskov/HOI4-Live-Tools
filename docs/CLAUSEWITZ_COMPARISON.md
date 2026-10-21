@@ -1,6 +1,17 @@
 # Clausewitz-MCP comparison checkpoint
 
-Latest checkpoint, 21 October 2026: Production004 passed ordinary Linux production
+Latest checkpoint, 22 October 2026: Production006 passed the bounded daily
+production worker with budgeted 10→14 allocation across three days and completed-
+plan restart without repeated input. Worker starts took 125–146 ms, digests
+60–80 ms and STOP 8–17 ms; final lines took 44 ms and overview 16 ms. The game
+advanced 97 hours over 73.639 seconds between the unpause response and final
+overview at speed 3 under x86 CPU emulation. No pause action was sent. Two
+read-only clock tears recovered in separate worker lifetimes; 20 player RPCs
+had no errors. These are short-run samples, not an annual throughput benchmark,
+a matched upstream comparison or proof of general superiority.
+See [the Production006 evidence](CLAUSEWITZ_VALIDATION.md#production006-daily-worker-passed--22-october-2026).
+
+Previous checkpoint, 21 October 2026: Production004 passed ordinary Linux production
 opening and one-factory changes with one Luna medium player. The persistent
 MCP/SSH bridge measured 2,080 ms for opening, 765/773 ms for increase/decrease,
 76 ms for the exact control observation, 43 ms for final lines and 16 ms for an

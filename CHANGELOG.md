@@ -2,6 +2,13 @@
 
 ## Unreleased native preview
 
+- Pass Production006 with one Luna medium player: daily production allocation
+  reached 14 factories across three days, respected the 2-step daily limit, and
+  survived completed-plan restart without repeated input. Fresh final reads,
+  stopped journals, recording, release and exact-process cleanup passed. Two
+  read-only clock tears recovered in separate worker lifetimes. This is bounded
+  Linux worker evidence, not campaign, universal routing or release acceptance.
+
 - Preserve the incomplete Production005 gate: five verified production steps
   reached 14 factories across three days, then a historical `torn_read` ended
   the gate before completed-plan restart/no-replay checks. Stopped journals,

@@ -432,12 +432,13 @@ Preparation errors stop this preview. The `production` digest/details and STOP
 fields retain historical progress, failures and a dated step budget. They do not
 claim fresh factory state. Manual production tools keep their existing API.
 
-Production005 reached 14 factories across three days with five verified worker
-steps, but stopped on a historical `torn_read` in its second digest. Completed-
-plan restart, no replay and final fresh reads were not reached; worker acceptance
-remains pending. Production004 establishes the bounded manual route. Larger-scale
-production management, universal panel routing and campaign acceptance remain
-unfinished.
+Production006 passed the bounded advancing-time worker gate on `c7d1b1c`:
+five verified steps reached 14 requested and active factories across three days,
+with 2/2/1 daily step usage and one completed goal. STOP/restart of the completed
+plan added no input through 5 January. Recording, exact-process cleanup and all
+nine CI jobs passed. Production005 remains incomplete; later success does not
+repair its missing final checks. Mixed-panel planning, larger-scale production
+management and full campaign acceptance remain unfinished.
 
 `clock_probe_historical` separates rejected read-only scheduling clock probes
 from action failures. It retains first/latest causes, total/consecutive rejected
@@ -448,7 +449,9 @@ without retained uncertainty, uses this channel. Action errors, other reader
 errors and quarantine remain in `last_error`; a successful probe cannot clear
 them. Probe history is neither fresh state nor input authority. Compact overflow
 may omit the optional section-name list; documented detail sections remain
-available under the exact snapshot ID. This correction awaits a fresh live gate.
+available under the exact snapshot ID. Production006 observed recovery from two
+read-only clock tears in separate worker lifetimes. These diagnostics do not
+weaken action failure or quarantine handling.
 
 The current game uses a 365-day calendar, including February 28 in 1936. Its raw
 clock includes a 5000-year epoch and displays hours as 1–24. Raw research counters

@@ -84,10 +84,10 @@ game it did not start.
 - **Time:** pause, resume, speed and day advancement with verified readback.
 - **Production:** opening the panel and changing one factory on an exact own line,
   with verified counts, historical replays and no-op checks. Production004 passed
-  10→11→10 on 21 October 2026; changes took about 0.77 seconds each. The newer
-  daily worker reached 14 factories across three days in Production005, but its
-  gate stopped on a reported read failure before final restart/no-replay checks;
-  worker acceptance remains pending.
+  10→11→10 on 21 October 2026; changes took about 0.77 seconds each. Production006
+  passed the daily worker gate on 22 October: 14 factories across three days,
+  daily budgets and completed-plan restart without repeating input. Mixed-panel
+  planning and full campaign acceptance remain pending.
 - **Research and Focus:** exact-ID assignments in all four research slots,
   automatic refill when research completes, Focus search and start, and durable
   daily plans that survive restarts without repeating input.
