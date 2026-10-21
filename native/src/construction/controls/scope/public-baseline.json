@@ -50,8 +50,8 @@
     "effective_routing_verified": false,
     "eligibility_available": false,
     "freshness": {
-      "read_bytes": 7888,
-      "read_calls": 587,
+      "read_bytes": 7968,
+      "read_calls": 592,
       "read_calls_kind": "logical_read_requests"
     },
     "geometry_requested": false,
@@ -272,8 +272,8 @@
     "effective_routing_verified": false,
     "eligibility_available": false,
     "freshness": {
-      "read_bytes": 8224,
-      "read_calls": 623,
+      "read_bytes": 8304,
+      "read_calls": 628,
       "read_calls_kind": "logical_read_requests"
     },
     "geometry_requested": true,

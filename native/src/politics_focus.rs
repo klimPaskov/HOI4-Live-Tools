@@ -80,22 +80,7 @@ fn named(
     key: &str,
 ) -> Result<Option<u64>> {
     let values = array(r, at(container, pointers)?, NAME_CAP)?;
-    let (header, strings, count) = r.array_header(at(container, names)?)?;
-    let capacity = i32::from_le_bytes(header[8..12].try_into().unwrap());
-    if capacity > NAME_CAP as i32 || count != values.len() || (count != 0 && strings % 8 != 0) {
-        return Err(fail(
-            "invalid_gui_registry",
-            "Bounded paired names and pointers required",
-        ));
-    }
-    let mut matched = None;
-    for (index, value) in values.into_iter().enumerate() {
-        let name = r.string_bounded(at(strings, (index as u64) * 32)?, NAME_BYTES)?;
-        if name == key && matched.replace(value).is_some() {
-            return Err(fail("invalid_gui_registry", "Ambiguous own named control"));
-        }
-    }
-    Ok(matched)
+    crate::gui_registry::lookup(r, at(container, names)?, &values, key, NAME_BYTES)
 }
 fn callback(r: &Reader<'_>, base: u64, view: u64, button: u64) -> Result<bool> {
     if r.u64(at(button, 0x80)?)? != at(base, 0x4347488)? {

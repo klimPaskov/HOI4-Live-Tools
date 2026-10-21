@@ -2,6 +2,13 @@
 
 ## Unreleased native preview
 
+- Batch Linux GUI registry name reads shared by research, politics and
+  construction. A fixture with 256 inline names now needs four name-lookup
+  reads, plus the caller's pointer collection and final snapshot checks.
+  External strings remain bounded and witnessed; ambiguous requested names,
+  malformed collections and changed metadata refuse. The separate button,
+  child-container and text registries retain their existing ownership checks.
+  This is an offline-tested read optimization, not new live input acceptance.
 - Apply the same recovery rule to the shared clock journal: seeing a different
   pause/speed state on retry does not prove the original key never applied.
   Keep the intent unresolved across restart until the target is observed, and

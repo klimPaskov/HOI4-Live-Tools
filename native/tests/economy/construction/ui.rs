@@ -321,11 +321,12 @@ fn later_unrelated_text_name_still_validates_and_participates_in_final_witnesses
     production_not_read(&f, &[TEXT]);
     let baseline = repeated_unrelated_names(0);
     observe(&baseline).unwrap();
-    let address = NAMES + 128;
-    let mut bytes = (0..32)
+    // The final unrelated name is now inside one coalesced header witness.
+    let address = NAMES;
+    let mut bytes = (0..160)
         .map(|i| baseline.data[&(address + i)])
         .collect::<Vec<_>>();
-    bytes[0] ^= 1;
+    bytes[128] ^= 1;
     let mut f = repeated_unrelated_names(0);
     f.fault = Some((
         address,

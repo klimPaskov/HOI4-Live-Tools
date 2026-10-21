@@ -76,6 +76,18 @@ own-tree/status/catalog membership and a positively named ordinary research
 control from the exact container registry. Raw disabled/alias/visibility fields
 do not establish eligibility or input authorization.
 
+`gui_registry.rs` consolidates the existing Linux paired name lookups for
+research, politics and construction. Its GNU string semantics follow the
+derived `memory.rs` reader (the smerss MIT notice remains in the file); the
+batching and registry join are new project code. It batches the GNU string
+headers and inline bytes, reads bounded external payloads through the same
+witnessed reader, and rechecks the name metadata. Pointer-array ownership,
+membership and final snapshot validation remain with the original callers.
+The independently recovered button, child-container and instant-text registries
+remain distinct; the instant-text registry is not an all-widget traversal.
+This optimization adds no Linux sprite geometry or input capability. Read-count
+fixtures establish fewer logical reads, not a measured live speedup.
+
 Current technology-node and own-focus catalog/detail diagnostics use the same
 derived canonical own-country semantics. Their node vectors, focus database/tree
 membership, UI ownership and named control layouts were independently recovered

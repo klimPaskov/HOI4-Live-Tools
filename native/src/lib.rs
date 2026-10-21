@@ -6,6 +6,7 @@ mod focus_ui_observation;
 pub mod framing;
 pub mod game;
 pub mod gui;
+mod gui_registry;
 #[cfg(target_os = "macos")]
 pub(crate) mod gui_tree;
 pub mod input_lease;

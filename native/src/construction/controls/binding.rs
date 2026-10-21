@@ -28,30 +28,17 @@ pub(super) fn named(r: &Reader<'_>, window: u64, children: bool, key: &str) -> R
         (0x9a0, 0x9b8)
     };
     let values = members(r, window + values_offset, 256)?;
-    let (header, names, count) = r.array_header(window + names_offset)?;
-    let capacity = i32::from_le_bytes(header[8..12].try_into().unwrap());
-    if capacity > 256 || count != values.len() || (count > 0 && names % 8 != 0) {
-        return Err(invalid(
-            "Paired bounded construction control registries required",
-        ));
-    }
-    let mut selected = None;
-    for (index, value) in values.into_iter().enumerate() {
-        let name = r.string_bounded(names + index as u64 * 32, 128)?;
-        if name == key {
-            // Engine lookup compares only the requested name. Other controls
-            // may share names, including empty names. Still scan every entry
-            // and refuse an ambiguous requested key before following payload.
-            if selected.is_some() {
-                return Err(invalid(&format!(
-                    "Ambiguous requested construction {} name: {key}",
-                    if children { "container" } else { "button" }
-                )));
-            }
-            selected = Some(value);
+    crate::gui_registry::lookup(r, window + names_offset, &values, key, 128).map_err(|error| {
+        if error.code == "invalid_gui_registry" {
+            invalid(&format!(
+                "Construction {} name {key}: {}",
+                if children { "container" } else { "button" },
+                error.message
+            ))
+        } else {
+            error
         }
-    }
-    Ok(selected)
+    })
 }
 
 #[derive(Clone, Copy)]

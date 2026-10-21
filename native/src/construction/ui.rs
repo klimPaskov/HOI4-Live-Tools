@@ -27,19 +27,14 @@ fn window(r: &Reader<'_>, base: u64, window: u64, registry: u64) -> Result<Value
 fn location_text(r: &Reader<'_>, base: u64, window: u64, registry: u64) -> Result<Option<String>> {
     // Exact CContainerWindow's instant-text lookup, not button or child lookup.
     let values = members(r, window + 0xa60, 256)?;
-    let (header, names, count) = r.array_header(window + 0xa78)?;
-    let capacity = i32::from_le_bytes(header[8..12].try_into().unwrap());
-    if capacity > 256 || count != values.len() || (count != 0 && names % 8 != 0) {
-        return Err(invalid("Paired construction text names/pointers required"));
-    }
-    let mut selected = None;
-    for (index, value) in values.into_iter().enumerate() {
-        let name = r.string_bounded(names + index as u64 * 32, 128)?;
-        // Unrelated names may repeat; only this requested key must be unique.
-        if name == "location" && selected.replace(value).is_some() {
-            return Err(invalid("Unique named construction location required"));
-        }
-    }
+    let selected = crate::gui_registry::lookup(r, window + 0xa78, &values, "location", 128)
+        .map_err(|error| {
+            if error.code == "invalid_gui_registry" {
+                invalid(&error.message)
+            } else {
+                error
+            }
+        })?;
     let Some(textbox) = selected else {
         return Ok(None);
     };

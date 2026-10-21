@@ -539,7 +539,9 @@ fn sprite_fixture() -> Fixture {
 }
 
 #[test]
-fn unchanged_public_json_and_read_counts_match_original_observer_golden() {
+fn public_json_and_read_counts_match_batched_registry_golden() {
+    // Five one-entry name registries each add a 16-byte array-header recheck.
+    // Batching saves reads for larger registries; all other output is unchanged.
     let golden: Vec<serde_json::Value> =
         serde_json::from_str(include_str!("public-baseline.json")).unwrap();
     for (index, geometry) in [false, true].into_iter().enumerate() {

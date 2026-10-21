@@ -254,28 +254,7 @@ pub(crate) fn render_details(r: &Reader<'_>, base: u64, object: u64) -> Result<V
 /// named registry at +a60/+a78 is a different operation and is not consulted.
 pub(crate) fn named_research_button(r: &Reader<'_>, container: u64) -> Result<u64> {
     let buttons = array(r, container + 0x9a0, 256)?;
-    let (header, names, count) = r.array_header(container + 0x9b8)?;
-    let capacity = i32::from_le_bytes(header[8..12].try_into().unwrap()) as usize;
-    if capacity > 256 || count != buttons.len() || (count > 0 && names % 8 != 0) {
-        return Err(Error::new(
-            "invalid_gui_registry",
-            "Bounded paired research button/name arrays required",
-        ));
-    }
-    if count > 0 {
-        r.read(names, count * 32)?;
-    }
-    let mut found = None;
-    for (index, button) in buttons.iter().enumerate() {
-        if r.string_bounded(names + index as u64 * 32, 256)? == "research"
-            && found.replace(*button).is_some()
-        {
-            return Err(Error::new(
-                "invalid_gui_registry",
-                "Unique ordinary research button name required",
-            ));
-        }
-    }
+    let found = crate::gui_registry::lookup(r, container + 0x9b8, &buttons, "research", 256)?;
     found.ok_or_else(|| {
         Error::new(
             "gui_unavailable",

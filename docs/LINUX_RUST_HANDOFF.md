@@ -7,6 +7,25 @@ Do not resume Mac campaigns or control the shared Windows game.
 
 ## Current checkpoint
 
+Linux reader follow-up, 21 October 2026: research, politics and construction
+now share a batched GNU name-registry lookup. It reads inline names together,
+retains bounded external strings and final snapshot witnesses, and checks the
+whole requested registry before returning a unique match. The 256-inline-name
+fixture uses four logical lookup reads; pointer membership and final validation
+are additional. No live latency improvement is claimed yet. The existing
+button, child-container and instant-text arrays remain distinct. In particular,
+the instant-text array must not be reused as a generic child-widget list.
+Local validation passed 1,007 Rust tests, formatting and warning-free Clippy;
+953 Python tests ran with 37 platform skips, and stdio protocol smoke passed.
+The fault fixtures still reject changed unrelated names at final validation,
+now within a batched header block. Construction retains its error category.
+
+Static Linux GUI mapping remains in progress. Icon/Standard name getters and
+renderers have independent ELF evidence, but generic child traversal and sprite
+geometry still need complete evidence before a Linux GUI-tree input port.
+No new game or campaign was launched for this reader follow-up. The prior
+1080p QEMU performance limitation and failed campaign acceptance remain open.
+
 Continuation checkpoint, 21 October 2026: the latest recorded native macOS
 campaign, m010 (FAIR Germany from 1936), failed in April–June 1940. Germany
 became the democratic German Republic under Adenauer, divisions disappeared,
