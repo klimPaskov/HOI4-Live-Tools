@@ -2,6 +2,11 @@
 
 ## Unreleased native preview
 
+- Apply the same recovery rule to the shared clock journal: seeing a different
+  pause/speed state on retry does not prove the original key never applied.
+  Keep the intent unresolved across restart until the target is observed, and
+  retain readback/ownership failures as `action_uncertain`. Linux CI exposed
+  this defect in the delayed-key regression; retries remain read-only.
 - Preserve uncertain macOS action intents when dispatch or readback fails,
   including missing targets and unavailable UI. Restarted retries cannot clear
   an intent from a newly captured before-state: only an observed reached target

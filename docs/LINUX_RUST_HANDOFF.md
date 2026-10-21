@@ -27,8 +27,17 @@ one same-ID settlement attempt and returns remaining uncertainty to its caller;
 it does not fall through to a different research choice or army-move command.
 Missing or nonterminal receipts also stop the runner. No game pause is added.
 
+The first pushed checkpoint (`635f19d`) passed macOS/Windows Rust and all six
+Python CI jobs, but Linux Rust failed its delayed-clock restart regression.
+That exposed the same unsafe nonapplication inference in the shared clock
+journal. Its retry path now also preserves uncertainty until the target is
+observed; readback and ownership failures retain their original causes without
+becoming retryable refusals. The Linux fixture still asserts exactly one key
+delivery and now permits one read-only settlement of the original request.
+
 These changes are offline-tested recovery work, not new live acceptance.
-Local validation passed: all 995 Rust tests, formatting and warning-free Clippy;
+Local validation including the shared clock fix passed: all 996 Rust tests,
+formatting and warning-free Clippy;
 the Python suite ran 953 tests with 37 platform-dependent skips and no failures.
 Durable original baselines are still needed for automatic recovery of additive
 actions such as training, construction and front-line creation. Do not clear a

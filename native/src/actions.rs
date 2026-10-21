@@ -283,16 +283,30 @@ impl Journal {
                 Status::Dispatching => {
                     // Settle from fresh state without sending anything again.
                     let mut settled = previous.clone();
-                    let current = backend.observe()?;
-                    check_state(epoch, &current)?;
-                    settled.status = if settled.action.reached(&current) {
-                        Status::Verified
-                    } else {
-                        Status::NotApplied
-                    };
+                    let current = backend.observe().map_err(|error| {
+                        Error::after_possible_input("Clock settlement readback failed", error)
+                    })?;
+                    check_state(epoch, &current).map_err(|error| {
+                        Error::after_possible_input("Clock settlement ownership changed", error)
+                    })?;
+                    // The game (or player) may have changed the clock again
+                    // since delivery. A missing target does not prove that the
+                    // original key was never applied.
+                    if !settled.action.reached(&current) {
+                        return Err(Error::new(
+                            "action_uncertain",
+                            "Clock target is not observed; original dispatch remains unresolved",
+                        ));
+                    }
+                    settled.status = Status::Verified;
                     settled.observed = current;
                     settled.epoch = epoch.clone();
-                    self.append(settled)
+                    self.append(settled).map_err(|error| {
+                        Error::after_possible_input(
+                            "Clock settlement could not be committed",
+                            error,
+                        )
+                    })
                 }
             };
         }
