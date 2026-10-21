@@ -1,5 +1,21 @@
 # Clausewitz-MCP Linux validation
 
+## Direct Research closing preview — 22 October 2026
+
+The new Research-only close route uses ordinary W on the exact research tab.
+It retains original panel/facilities identities, own slots and assignments,
+selected folder and tab through canonical readback. Same-ID verified replay is
+historical; uncertain Intent remains quarantined without input replay or late
+settlement. Public Execution receipts omit the private binding. Known window
+animations may settle after the single input within its original deadline.
+
+Validation passed 1,113 host Rust tests, 953 Python tests (37 skips), 71 targeted
+Linux test executions, formatting, host/Linux Clippy and Windows all-target
+cross-compilation. The first Clippy pass rejected a test closure type; a local
+alias corrected it, with the original log preserved. Direct closing has not yet
+passed its recorded Luna gate. Mixed-worker navigation and full campaigns remain
+incomplete. All nine CI jobs for the prior `b2ae720` checkpoint passed.
+
 ## Production008 manual panel handoff passed — 22 October 2026
 
 Production008 passed all 18 granted steps on `c2d07c6` with one Luna medium

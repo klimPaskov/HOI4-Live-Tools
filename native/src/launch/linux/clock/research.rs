@@ -42,6 +42,19 @@ pub(super) fn tool() -> Value {
     json!({"name":"hoi4_research_attempt","description":"Preview: one ordinary OpenPanel shortcut or ID-derived SelectSlot, SelectCategory, View or Research stage for an own empty slot. OpenPanel requires known closed views in the no-managed-view sentinel; SelectSlot requires an open own panel; SelectCategory requires an explicit public folder ID and its selected empty own tree with no Info; it makes no technology-to-folder claim. View/Research require its selected tree. Requires explicit owner profile, exclusive lease and stable stage request ID. Canonical readback verifies state; uncertain attempts are never replayed. No coordinates or engine calls.",
     "inputSchema":{"type":"object","properties":{"stage":{"enum":["open_panel","select_slot","select_category","view","research"]},"folder_id":{"type":"string","minLength":1,"maxLength":256},"technology_id":{"type":"string","minLength":1,"maxLength":256},"slot":{"type":"integer","minimum":0,"maximum":31},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["stage","slot","request_id","lease_token"],"oneOf":[{"properties":{"stage":{"const":"select_category"}},"required":["folder_id"],"not":{"required":["technology_id"]}},{"properties":{"stage":{"enum":["open_panel","select_slot","view","research"]}},"required":["technology_id"],"not":{"required":["folder_id"]}}],"additionalProperties":false}})
 }
+pub(super) fn close_tool() -> Value {
+    json!({"name":"hoi4_research_close","description":"Preview: close the ordinary own Research panel with one stationary W shortcut, preserving original panel roots, own slot identities, assignments and selected folder. Requires settled research tab, hidden tree/facilities/Info and clear input gates. A fresh already-closed request verifies without input; successful same-ID replay returns only its historical receipt. Uncertain attempts remain quarantined and are never replayed. Uses Research permission only; no Focus assignment or permission. Linux live validation pending.",
+    "inputSchema":{"type":"object","properties":{"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["request_id","lease_token"],"additionalProperties":false}})
+}
+pub(super) fn close_call(
+    owner: &ClockService,
+    process: &dyn Process,
+    args: &serde_json::Map<String, Value>,
+) -> Result<Value> {
+    owner.daily.input_check()?;
+    allowed(args, &["request_id", "lease_token"])?;
+    run_call(owner, process, args, stage::Stage::ClosePanel, "", None, 0)
+}
 pub(super) fn call(
     owner: &ClockService,
     process: &dyn Process,
@@ -96,6 +109,17 @@ pub(super) fn call(
         .filter(|v| *v <= 31)
         .ok_or_else(|| Error::new("invalid_arguments", "Own slot index 0..31 required"))?
         as u32;
+    run_call(owner, process, args, selected_stage, key, folder_id, slot)
+}
+fn run_call(
+    owner: &ClockService,
+    process: &dyn Process,
+    args: &serde_json::Map<String, Value>,
+    selected_stage: stage::Stage,
+    key: &str,
+    folder_id: Option<String>,
+    slot: u32,
+) -> Result<Value> {
     let id = string(args, "request_id")?;
     let token = string(args, "lease_token")?;
     drop(input_permit(&owner.input_gate)?);
@@ -177,6 +201,7 @@ pub(super) fn execute_internal(
         last_transport: None,
         target: Some(target.clone()),
         scope: None,
+        close_original: None,
     };
     let timeout = until
         .saturating_duration_since(Instant::now())
@@ -234,6 +259,7 @@ struct ResearchBackend<'a> {
     last_transport: Option<Value>,
     target: Option<stage::Target>,
     scope: Option<([u64; 2], Vec<u64>)>,
+    close_original: Option<stage::OwnState>,
 }
 
 fn visible(window: &Value) -> Result<bool> {
@@ -325,6 +351,7 @@ fn own_state(epoch: Epoch, research: &Value, ui: &Value) -> Result<stage::OwnSta
         active_mode: Some(i32::try_from(active).map_err(|_| bad())?),
         researching,
         visible_info,
+        panel_binding: None,
     })
 }
 impl stage::Backend for ResearchBackend<'_> {
@@ -359,22 +386,33 @@ impl stage::Backend for ResearchBackend<'_> {
         let (state, context) =
             observed_target_state(self.process, self.guard, self.target.as_ref())?;
         pin_scope(&mut self.scope, &context)?;
+        pin_close(&mut self.close_original, &state, self.target.as_ref())?;
         Ok(state)
     }
     fn candidate(&mut self, target: &stage::Target) -> Result<stage::Candidate> {
         self.target = Some(target.clone());
         self.guard.observe(self.process)?;
-        if target.stage == stage::Stage::OpenPanel {
-            let (fresh, context) = observed_state(self.process, self.guard)?;
+        if matches!(
+            target.stage,
+            stage::Stage::OpenPanel | stage::Stage::ClosePanel
+        ) {
+            let (fresh, context) = observed_target_state(self.process, self.guard, Some(target))?;
             pin_scope(&mut self.scope, &context)?;
+            pin_close(&mut self.close_original, &fresh, Some(target))?;
             fresh.validate(target)?;
             fresh.preflight(target)?;
             self.controls
                 .preflight(self.process, &ControlKey::ResearchPanel)?;
-            return Ok(stage::Candidate::OpenPanel);
+            return Ok(if target.stage == stage::Stage::ClosePanel {
+                stage::Candidate::ClosePanel
+            } else {
+                stage::Candidate::OpenPanel
+            });
         }
         let (point, context) = match target.stage {
-            stage::Stage::OpenPanel => unreachable!("Fixed shortcut handled above"),
+            stage::Stage::OpenPanel | stage::Stage::ClosePanel => {
+                unreachable!("Fixed shortcut handled above")
+            }
             stage::Stage::SelectSlot => {
                 candidate::observe_slot_owned(self.process, target.slot, self.profile)?
             }
@@ -426,8 +464,13 @@ impl stage::Backend for ResearchBackend<'_> {
         let guard = &mut *self.guard;
         let process = self.process;
         let mut scope = self.scope.clone();
+        let mut close_original = self.close_original.clone();
         let stage::Candidate::Point(point) = candidate else {
-            if target.stage != stage::Stage::OpenPanel {
+            if !matches!(
+                (target.stage, candidate),
+                (stage::Stage::OpenPanel, stage::Candidate::OpenPanel)
+                    | (stage::Stage::ClosePanel, stage::Candidate::ClosePanel)
+            ) {
                 return stage::Delivery::NotQueued;
             }
             if let Err(error) = self.controls.preflight(process, &ControlKey::ResearchPanel) {
@@ -442,6 +485,7 @@ impl stage::Backend for ResearchBackend<'_> {
                 || {
                     let (fresh, context) = observed_target_state(process, guard, Some(&target))?;
                     pin_scope(&mut scope, &context)?;
+                    pin_close(&mut close_original, &fresh, Some(&target))?;
                     fresh.validate(&target)?;
                     fresh.preflight(&target)?;
                     input_may_queue = true;
@@ -500,6 +544,25 @@ impl stage::Backend for ResearchBackend<'_> {
     }
 }
 
+/// The first complete close observation remains the original throughout all
+/// candidate and final pre-queue reads. Never silently rebind a same-shaped UI.
+fn pin_close(
+    original: &mut Option<stage::OwnState>,
+    current: &stage::OwnState,
+    target: Option<&stage::Target>,
+) -> Result<()> {
+    let Some(target) = target.filter(|t| t.stage == stage::Stage::ClosePanel) else {
+        return Ok(());
+    };
+    current.validate(target)?;
+    if let Some(before) = original {
+        current.preserves_close(before)?;
+    } else {
+        *original = Some(current.clone());
+    }
+    Ok(())
+}
+
 fn pin_scope(
     pin: &mut Option<([u64; 2], Vec<u64>)>,
     context: &research_ui::UiContext,
@@ -544,6 +607,18 @@ pub(super) fn observed_target_state(
     guard: &mut Guard,
     target: Option<&stage::Target>,
 ) -> Result<(stage::OwnState, research_ui::UiContext)> {
+    if target.is_some_and(|t| t.stage == stage::Stage::ClosePanel) {
+        let observation = research_ui::closing::observe(process)?;
+        guard.accept_context(process, &observation.context.campaign)?;
+        let mut state = own_state(
+            guard.epoch.clone(),
+            &observation.body["canonical_research"],
+            &observation.body,
+        )?;
+        state.selected_folder = observation.selected_folder;
+        state.panel_binding = Some(observation.binding);
+        return Ok((state, observation.context));
+    }
     if let Some(t) = target.filter(|t| t.stage == stage::Stage::SelectCategory) {
         let (body, context) = research_ui::category_command_owned(
             process,

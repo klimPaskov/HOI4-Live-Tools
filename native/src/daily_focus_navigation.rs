@@ -1179,6 +1179,7 @@ mod tests {
                 tree_visible: false,
                 panel_visible: Some(false),
                 active_mode: Some(12),
+                panel_binding: None,
                 researching: vec![None; 4],
                 visible_info: vec![],
             },

@@ -994,6 +994,7 @@ fn existing_research_receipt_converter_never_consumes_view_or_historical_receipt
                 tree_visible: true,
                 panel_visible: Some(false),
                 active_mode: Some(6),
+                panel_binding: None,
                 researching: vec![Some("support_weapons".into())],
                 visible_info: vec![],
             },

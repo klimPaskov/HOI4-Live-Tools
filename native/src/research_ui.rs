@@ -16,6 +16,9 @@ use std::{
     time::{Instant, SystemTime, UNIX_EPOCH},
 };
 
+#[doc(hidden)]
+pub mod closing;
+
 /// Witness reads always reach the process. Request-local shared metadata/proofs
 /// may avoid duplicate reads, but their original bytes must pass finish below.
 pub(crate) struct Witnesses<'a> {

@@ -7,29 +7,39 @@ Do not resume Mac campaigns or control the shared Windows game.
 
 ## Current checkpoint
 
-Production008 passed the bounded manual production → Research → Focus →
-production navigation gate on `c2d07c6`. The current follow-up changes only
-public validation metadata and documentation; it does not enable mixed-worker
-routing. `hoi4_production_close` keeps its separate `ensure_closed` target,
-original panel identity, shared uncertainty exclusion and durable replay rules.
-Closing cannot count as production allocation preparation or completion.
-Legacy factory/opening journal shapes remain unchanged.
+The current source adds a direct `hoi4_research_close` Linux preview. It uses
+Research permission only and one ordinary stationary W shortcut. The original
+panel/facilities roots, full own slot identities and assignments, selected slot,
+folder and tab are retained privately before input and verified afterward.
+The normal W route closes only research tab0; facilities tab1, tree mode6 and
+Info dialogs refuse. Unknown/foreign objects and input blockers refuse.
 
-Next, implement direct Research closing with its own original-state binding,
-then integrate mixed standing plans with durable navigation budgets and exact
-destination bindings. The static review found a required condition: the normal
-W top-bar route closes a shown Research panel only when its research tab is
-selected (current-build view+0x300 == 0). From the facilities tab it changes tabs
-instead. The existing Research observer does not yet expose this field. Observe
-and validate it; never assume a default tab or relax the OpenPanel predicate.
+A fresh already-closed request verifies without input. Successful same-ID
+replay returns its historical receipt and never closes a later-opened panel.
+Uncertain Intent stays quarantined across restart; this Research journal does
+not perform production-style late settlement. Known closing animations may be
+observed again only after the single dispatch and within its original deadline.
+Private pointer bindings are omitted from public Execution receipts. Legacy
+Research journal records keep their existing serialized shape and semantics.
 
-The existing Research journal refuses unresolved Intent replay and does not
-persist original panel roots. Do not claim production-style late settlement for
-it. New closing must bind the original roots, complete own slot identities and
-assignments, selected slot/folder and tab, with before/after invariants. Generic
-tree/Info exits remain unverified. Do not require Focus permission or a forced
-Focus assignment to route a production/research plan. Keep exact typed receipts,
-shared quarantine, original failures and day budgets across restart.
+Production008 remains the latest completed live gate: the bounded manual
+production → Research → Focus → production route on `c2d07c6`. All nine CI jobs
+for the metadata/documentation follow-up `b2ae720` subsequently passed. Direct
+Research closing has no live acceptance yet; mixed-worker routing remains off.
+
+Local validation passed 1,113 host Rust tests, 953 Python tests (37 skips),
+71 targeted test executions inside Linux, formatting, host/Linux Clippy and
+Windows all-target cross-compilation. The first Clippy check rejected a test
+closure type; its corrected alias and full successful check are retained.
+Offline fixtures do not establish live closing or campaign acceptance.
+
+Next, require exact-source checks and a fresh recorded Luna medium direct-close
+gate with Research/production permissions and no Focus permission or assignment.
+Then integrate mixed standing plans with durable navigation budgets and exact
+destination bindings. Production closing cannot count as allocation preparation
+or completion. Preserve exact typed receipts, shared quarantine, original
+failures and consumed day budgets across restart. Generic tree/Info exits remain
+unverified; do not broaden this route to Escape or unreviewed view modes.
 
 Source `c2d07c6` passed 1,096 host Rust tests, 953 Python tests (37 skips),
 formatting, host/Linux Clippy, Windows cross-compilation and 82 targeted Linux

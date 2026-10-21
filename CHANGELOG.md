@@ -2,6 +2,14 @@
 
 ## Unreleased native preview
 
+- Add `hoi4_research_close`, a Linux ordinary-W preview requiring only Research
+  permission. Preserve original own roots, slots, assignments, selected folder
+  and tab across dispatch and readback; redact private bindings from public
+  receipts. Already-closed requests are no-ops and verified replays stay
+  historical. Uncertain attempts remain quarantined across restart. Known
+  animations may settle within the original deadline without another input.
+  Direct closing live validation and mixed-worker routing remain pending.
+
 - Pass Production008 with one Luna medium player: manual production closing,
   historical replays and no-ops, then a Research/Focus round trip with all 21
   production lines unchanged. All 18 steps, stopped journals, recording and

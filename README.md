@@ -103,6 +103,10 @@ game it did not start.
   Brandenburg on 18 October 2026, and Run092 placed a dockyard in West Prussia,
   a coastal state, the same day.
 
+Direct Research-panel closing is a separate Linux preview awaiting its recorded
+live gate. It uses Research permission alone, without assigning a Focus to
+switch panels. Mixed production/research worker routing is still being built.
+
 ### macOS preview (live-tested on one build)
 
 The macOS adapter attaches to one owned game process through its task port and

@@ -307,6 +307,7 @@ anchors do not establish a load-generation token.
 | --- | --- |
 | `hoi4_capabilities` | Platform, owned-session binding and explicit missing features |
 | `hoi4_overview` | Own focus/research IDs and clock, freshness and unavailable fields |
+| `hoi4_research_close` | Opt-in Linux preview: close settled own Research tab with one stationary W; preserves original slots, assignments and panel identities, requires no Focus permission; live validation pending |
 | `hoi4_research` | Own completed technologies and active signed counters; normalized progress remains unavailable |
 | `hoi4_army` | Own divisions with full snapshot-scoped handles, selected province joins and lossless raw status; recorded structural reads, units unverified |
 | `hoi4_economy` | Own named factory trigger counts, civilian project capacity and exact signed political-power units; live comparison pending |
@@ -594,6 +595,16 @@ Research stages have bounded Luna live evidence, including four-slot assignment
 and counter advancement. The preparer verifies renderer, callback, hierarchy and
 SDL/X11 associations before deriving an ordinary point. The owner supplies the
 reviewed origin profile; player arguments cannot supply coordinates.
+
+The separate `hoi4_research_close` preview accepts only `request_id` and
+`lease_token`, using the same owned Research profile. It requires the research
+tab, hidden tree/facilities/Info and clear input gates. Original physical panel
+and slot identities, canonical assignments and selected folder remain bound
+through readback. These private addresses are excluded from public receipts.
+Already-closed requests verify without input; a successful historical replay
+never toggles a later-opened panel. Uncertain closing remains quarantined and
+cannot be settled or replayed automatically. Generic tree/Info exits and mixed
+worker routing are unavailable. This new close route has no live acceptance yet.
 
 Clock and pointer operations share one controller lock, lease and shutdown gate.
 Intent persists before input. Canonical readback and clear input are required for
