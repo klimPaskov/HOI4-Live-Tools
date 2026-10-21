@@ -2,6 +2,13 @@
 
 ## Offline production opening preview — 21 October 2026
 
+The first published opening checkpoint (`69d77ce`) exposed a test deadline
+problem on macOS CI: the transition-recovery fixture combined durable fsyncs
+and a real 20 ms backoff within a 50 ms test budget. It correctly returned
+`action_uncertain` when that budget expired. The recovery fixture now allows
+two seconds of scheduling headroom; runtime deadlines and uncertainty behavior
+are unchanged. Preserve this failed run; verify the correction on fresh CI.
+
 Linux production panel opening preview, 21 October 2026: `hoi4_production_open`
 now uses the exact own named topbar button, with the same opt-in 512×288 profile
 and exclusive lease as factory allocation. It opens only from idle manager mode

@@ -693,10 +693,21 @@ fn panel_transition_readback_recovers_without_replaying_input() {
         uncertain: false,
         transitions: 1,
     };
-    assert_eq!(
-        open(&mut j, &mut f, "open").unwrap().status,
-        Status::Verified
-    );
+    // This recovery test includes durable fsyncs and a real 20ms backoff.
+    // Allow CI scheduling headroom; this is not a deadline-expiration test.
+    let result = j
+        .execute(
+            "open",
+            Target::Panel(PanelTarget::new(epoch())),
+            TOKEN,
+            &authority(),
+            &RwLock::new(true),
+            &Domains(false),
+            &mut f,
+            Duration::from_secs(2),
+        )
+        .unwrap();
+    assert_eq!(result.status, Status::Verified);
     assert_eq!(f.dispatches, 1);
     assert_eq!(f.transitions, 0);
     assert!(!j.blocks_game(&epoch().game));
