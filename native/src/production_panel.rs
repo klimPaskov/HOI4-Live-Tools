@@ -15,6 +15,117 @@ use std::collections::BTreeSet;
 #[cfg(test)]
 #[path = "production_panel/tests.rs"]
 mod tests;
+/// Diagnose only the already witnessed candidate. No additional reads, input,
+/// or arbitrary observation strings/addresses enter the error message.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+pub(crate) fn require_open_candidate(value: &Value, geometry_present: bool) -> Result<()> {
+    let gates = [
+        ("build", value["build_id"] == game::BUILD_ID),
+        (
+            "preconditions",
+            value["new_click_preconditions_clear"] == true,
+        ),
+        ("opener", value["opener"]["local_dispatch_ready"] == true),
+        ("geometry", geometry_present),
+    ];
+    let failed: Vec<_> = gates
+        .iter()
+        .filter(|(_, clear)| !clear)
+        .map(|(name, _)| *name)
+        .collect();
+    if failed.is_empty() {
+        return Ok(());
+    }
+    // Typed projections distinguish absent/unknown from a literal false. Keep
+    // this bounded even if a future producer supplies malformed diagnostics.
+    let mut details = serde_json::Map::new();
+    for (name, pointer) in [
+        ("panel_hidden", "/root/locally_hidden_settled"),
+        ("engine", "/engine_gates/conservative_engine_clear"),
+        ("engine_known", "/engine_gates/known_gates_clear"),
+        ("settings", "/engine_gates/settings/predicate_clear"),
+        ("menu", "/engine_gates/menu/predicate_clear"),
+        ("overview", "/engine_gates/overview/predicate_clear"),
+        ("auxiliary_present", "/engine_gates/auxiliary_present"),
+        (
+            "selections_hidden",
+            "/production_selections/production_equipment_selections_hidden_settled",
+        ),
+        ("common", "/common_blockers/conservative_scoped_clear"),
+        (
+            "politics_visible",
+            "/common_blockers/politics_root/settled_visible",
+        ),
+        ("focus_hidden", "/common_blockers/focus_root_settled_hidden"),
+        (
+            "research_visible",
+            "/common_blockers/research_panel_settled_visible",
+        ),
+        (
+            "research_tree_visible",
+            "/common_blockers/research_tree_settled_visible",
+        ),
+        ("gui", "/common_gui_gates_clear"),
+        ("opener_available", "/opener/available"),
+        ("named_path", "/opener/named_path_verified"),
+        (
+            "containers_shown",
+            "/opener/all_named_containers_settled_shown",
+        ),
+        ("callback", "/opener/callback/available"),
+        ("optional_gate", "/opener/local/optional_gate/clear"),
+        ("delegate_null", "/opener/local/delegate_d0_null"),
+        ("renderer_available", "/opener/render_diagnostic/available"),
+    ] {
+        details.insert(
+            name.into(),
+            json!(value.pointer(pointer).and_then(Value::as_bool)),
+        );
+    }
+    for (name, pointer) in [
+        ("mode", "/mode_raw"),
+        ("game_ready_raw", "/engine_gates/gs_a59_raw"),
+        ("owner_gate_raw", "/engine_gates/idler_8f0_raw"),
+        ("can_update_raw", "/engine_gates/idler_can_update_raw"),
+        ("opener_flags", "/opener/local/flags74_raw"),
+        ("opener_state", "/opener/local/state_ac_raw"),
+        ("opener_block", "/opener/local/block201_raw"),
+    ] {
+        details.insert(
+            name.into(),
+            json!(value.pointer(pointer).and_then(Value::as_i64)),
+        );
+    }
+    for (name, pointer) in [
+        (
+            "manager_transition",
+            "/engine_gates/manager_transition_bytes",
+        ),
+        (
+            "focus_details",
+            "/common_blockers/focus_detail_visible_animating_counts",
+        ),
+        (
+            "research_info",
+            "/common_blockers/own_research_info_visible_animating_counts",
+        ),
+    ] {
+        let pair = value
+            .pointer(pointer)
+            .and_then(Value::as_array)
+            .filter(|v| v.len() == 2)
+            .and_then(|v| Some([v[0].as_i64()?, v[1].as_i64()?]));
+        details.insert(name.into(), json!(pair));
+    }
+    Err(Error::new(
+        "production_precondition",
+        format!(
+            "Production opening refused before input; failed={}; observed={}",
+            failed.join(","),
+            Value::Object(details)
+        ),
+    ))
+}
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 pub(crate) struct Observation {
     pub(crate) value: Value,

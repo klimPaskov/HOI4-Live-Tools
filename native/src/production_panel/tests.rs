@@ -14,6 +14,80 @@ const TOPBAR: u64 = 0x900000;
 const BUTTON: u64 = 0xa00000;
 const LINK: u64 = 0xb00000;
 const CAPTURE: u64 = 0xc00000;
+#[test]
+fn opening_diagnostics_preserve_each_existing_gate() {
+    let ready = json!({"build_id":game::BUILD_ID,"new_click_preconditions_clear":true,
+        "opener":{"local_dispatch_ready":true}});
+    assert!(require_open_candidate(&ready, true).is_ok());
+    for (pointer, replacement, expected) in [
+        ("/build_id", json!("unknown"), "build"),
+        (
+            "/new_click_preconditions_clear",
+            json!(false),
+            "preconditions",
+        ),
+        ("/opener/local_dispatch_ready", Value::Null, "opener"),
+    ] {
+        let mut value = ready.clone();
+        *value.pointer_mut(pointer).unwrap() = replacement;
+        let error = require_open_candidate(&value, true).unwrap_err();
+        assert_eq!(error.code, "production_precondition");
+        assert!(error.message.contains(&format!("failed={expected};")));
+    }
+    assert!(require_open_candidate(&ready, false)
+        .unwrap_err()
+        .message
+        .contains("failed=geometry;"));
+    let error = require_open_candidate(&Value::Null, false).unwrap_err();
+    assert!(error
+        .message
+        .contains("failed=build,preconditions,opener,geometry;"));
+}
+
+#[test]
+fn opening_refusal_distinguishes_known_blockers_from_unknown_without_extra_reads() {
+    let value = json!({"mode_raw":23,"root":{"locally_hidden_settled":true},
+        "engine_gates":{"known_gates_clear":true,"conservative_engine_clear":false,
+            "auxiliary_present":true,"manager_transition_bytes":[0,0]},
+        "common_blockers":{"focus_detail_visible_animating_counts":[1,0]},
+        "opener":{"local":{"optional_gate":{"clear":false}}}});
+    let error = require_open_candidate(&value, false).unwrap_err();
+    let details: Value =
+        serde_json::from_str(error.message.split_once("; observed=").unwrap().1).unwrap();
+    assert_eq!(details["mode"], 23);
+    assert_eq!(details["auxiliary_present"], true);
+    assert_eq!(details["engine_known"], true);
+    assert_eq!(details["engine"], false);
+    assert_eq!(details["manager_transition"], json!([0, 0]));
+    assert_eq!(details["focus_details"], json!([1, 0]));
+    assert_eq!(details["optional_gate"], false);
+    assert!(details["callback"].is_null());
+}
+
+#[test]
+fn opening_refusal_never_copies_unbounded_text_objects_or_addresses() {
+    let marker = "sensitive-arbitrary-data".repeat(10000);
+    let value = json!({"mode_raw":marker,"root":{"locally_hidden_settled":{"address":marker}},
+        "engine_gates":{"manager_transition_bytes":[marker,0],"settings":{"predicate_clear":marker}},
+        "opener":{"reason":marker,"local":{"flags74_raw":marker},"render_diagnostic":{"address":marker}},
+        "common_blockers":{"focus_detail_visible_animating_counts":[0,0,0]}});
+    let error = require_open_candidate(&value, false).unwrap_err();
+    assert!(error.message.len() < 2000);
+    assert!(!error.message.contains("sensitive-arbitrary-data"));
+    assert!(!error.message.contains("address"));
+    let details: Value =
+        serde_json::from_str(error.message.split_once("; observed=").unwrap().1).unwrap();
+    for name in [
+        "mode",
+        "panel_hidden",
+        "settings",
+        "opener_flags",
+        "manager_transition",
+        "focus_details",
+    ] {
+        assert!(details[name].is_null(), "{name}");
+    }
+}
 #[derive(Default)]
 struct Fake {
     bytes: BTreeMap<u64, u8>,

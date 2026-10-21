@@ -305,16 +305,7 @@ fn panel_candidate(
             "Original production panel changed before candidate",
         ));
     }
-    if o.value["build_id"] != game::BUILD_ID
-        || o.value["new_click_preconditions_clear"] != true
-        || o.value["opener"]["local_dispatch_ready"] != true
-        || o.geometry.is_empty()
-    {
-        return Err(Error::new(
-            "production_precondition",
-            "Exact ready production opener, clear own blockers and geometry required",
-        ));
-    }
+    crate::production_panel::require_open_candidate(&o.value, !o.geometry.is_empty())?;
     let surface = geometry::control_surface(&o.value["opener"]["render_diagnostic"])?;
     let codec = geometry::codec(&o.value["input_geometry"], profile)?;
     let point = research_attempt::point_candidate(&surface, &codec)?;

@@ -1,5 +1,33 @@
 # Clausewitz-MCP Linux validation
 
+## Recorded production refusal — 21 October 2026
+
+Recorded Linux production gate, 21 October 2026 (`87fc595`, all nine exact-commit
+CI jobs passed): one Luna player at medium reasoning held exclusive input in a
+vanilla FAIR Germany start, Normal difficulty with historical AI. The first
+`hoi4_production_open` refused with `production_precondition` in 78 ms. Its
+message combined several checks, so the specific failing predicate is unknown.
+Luna stopped immediately; both production and clock action journals were empty.
+No factory allocation, replay, final count or date check was attempted.
+
+Luna released the lease and status confirmed zero remaining seconds. The private
+recording finalized as two valid 512×288 segments (740 seconds total); recorder
+exit 255 was retained separately from the game's normal exit 0. Exact game,
+supervisor and recorder absence was verified, and evidence was archived privately.
+The game started paused; no clock action was issued. This is a failed bounded
+input gate, not continuous-play performance or campaign acceptance.
+
+Opening refusals now report bounded, typed checks from the same captured
+observation: manager mode, engine blockers, own panels/dialogs, opener callback
+and local state, and geometry presence. Unknown values remain null. This adds
+no memory reads or input and preserves every existing authorization predicate.
+The first run cannot retroactively establish those missing diagnostics. Next:
+run a fresh bounded recorded Luna gate after exact-commit CI. Local validation
+passed 1,066 Rust tests, 953 Python tests (37 platform skips), formatting and
+warning-free host/Linux Clippy. The initial Python command used the system
+interpreter and failed imports due to missing dependencies; the repository
+virtual environment passed the complete suite.
+
 ## Offline production opening preview — 21 October 2026
 
 The first published opening checkpoint (`69d77ce`) exposed a test deadline

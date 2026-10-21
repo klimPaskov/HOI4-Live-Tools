@@ -2,6 +2,10 @@
 
 ## Unreleased native preview
 
+- Report specific observed production-opening gates on refusal without extra
+  reads or input. Unknown fields remain explicit; authorization is unchanged.
+  The first recorded Luna gate refused before input in 78 ms, so production
+  live acceptance remains pending.
 - Add opt-in Linux `hoi4_production_open`: an ordinary named topbar click with
   durable original panel identity and canonical readback. Already-open panels
   are no-ops. Opening and factory allocation share uncertainty exclusion, and
