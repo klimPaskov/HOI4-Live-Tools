@@ -754,6 +754,32 @@ impl Governor {
             ));
         }
         let previous_revision = self.state.plan.revision;
+        let lines: std::collections::BTreeSet<_> = self
+            .state
+            .plan
+            .entries
+            .iter()
+            .filter_map(|e| match &e.intent {
+                Intent::Economy {
+                    target: EconomyTarget::Production { line_id, .. },
+                } => Some(line_id),
+                _ => None,
+            })
+            .collect();
+        for line in lines {
+            let belongs = |entry: &&Entry| {
+                matches!(&entry.intent,
+                Intent::Economy { target: EconomyTarget::Production { line_id, .. } } if line_id == line)
+            };
+            let old: Vec<_> = self.state.plan.entries.iter().filter(belongs).collect();
+            let updated: Vec<_> = next.entries.iter().filter(belongs).collect();
+            if !updated.starts_with(&old) {
+                return Err(Error::new(
+                    "plan_conflict",
+                    "Existing production line queue order must remain an unchanged prefix",
+                ));
+            }
+        }
         for record in &mut self.state.journal {
             record.plan_revision.get_or_insert(previous_revision);
         }

@@ -406,9 +406,36 @@ and campaign binding, canonical readback and a later daily sequence. Public JSON
 receipts expose no private proof and cannot be reused as completion authority.
 Targets are ordered per full line ID; a refused head blocks later targets on
 that line. Generated durable-journal tests cover completion, daily budget and
-restart without replay. The background worker does not yet enable production:
-its permission, multi-step preparation, progress budgets and live advancing-time
-gate remain to be implemented. Manual production tools keep their existing API.
+restart without replay. The Linux background worker now has a default-off
+production allocation preview. Enable `daily_production: true` in the owned
+binding alongside the existing `production_profile`; the plan must separately
+set `production_permission: true` and `max_production_steps_per_day` (1–16).
+These settings are fixed until STOP/restart. A target entry uses:
+
+```json
+{"id":"infantry-allocation","intent":{"kind":"Economy","target":{"kind":"Production","line_id":"<exact full handle from hoi4_production_lines>","equipment_id":"infantry_equipment_1","total_factories":14}}}
+```
+
+The handle must identify the current own line; the example placeholder is not
+an accepted handle. A private progress file binds its full original identity.
+Opening and one-factory intermediate steps spend the production step budget;
+only the verified final allocation spends/completes a governor goal attempt.
+Known no-input attempts also consume their reserved budget. Larger allocations
+can span days; restart cannot reset that day's usage. Uncertain delivery blocks
+shared input, and changes to the original line or allocation refuse rebasing.
+
+At most one production step runs per worker batch, before Research/Focus, while
+both the production step and shared goal budgets permit work. Existing same-line
+goals retain their order through plan updates. Opening requires the idle view
+or already-open production panel; cross-panel handoffs remain unavailable.
+Preparation errors stop this preview. The `production` digest/details and STOP
+fields retain historical progress, failures and a dated step budget. They do not
+claim fresh factory state. Manual production tools keep their existing API.
+
+This worker is offline-tested; its recorded advancing-time Luna gate remains
+pending. Production004 establishes the bounded manual route only. Larger-scale
+production management, universal panel routing and campaign acceptance remain
+unfinished.
 
 The current game uses a 365-day calendar, including February 28 in 1936. Its raw
 clock includes a 5000-year epoch and displays hours as 1–24. Raw research counters

@@ -28,7 +28,7 @@ pub struct Scope {
     pub own_status: u64,
 }
 impl Scope {
-    pub(super) fn validate(&self) -> Result<()> {
+    pub(crate) fn validate(&self) -> Result<()> {
         let e = &self.epoch;
         if e.game.pid <= 0
             || e.game.start_ticks.is_empty()

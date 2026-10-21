@@ -182,6 +182,10 @@ impl Execution {
     pub(crate) fn verified_factory(
         &self,
     ) -> Result<(&str, &FactoryTarget, &FactoryState, &FactoryState)> {
+        let (id, target, before, last) = self.verified_step()?;
+        Ok((id, target.factory()?, before.factory()?, last.factory()?))
+    }
+    pub(crate) fn verified_step(&self) -> Result<(&str, &Target, &State, &State)> {
         let r = &self.proof;
         r.validate()?;
         if self.proof_historical || r.status != Status::Verified {
@@ -190,12 +194,7 @@ impl Execution {
                 "Fresh verified production journal proof required",
             ));
         }
-        Ok((
-            &r.id,
-            r.target.factory()?,
-            r.before.factory()?,
-            r.last.factory()?,
-        ))
+        Ok((&r.id, &r.target, &r.before, &r.last))
     }
 }
 pub struct Journal {
@@ -409,6 +408,33 @@ impl Journal {
                 r.target.epoch().game == *game
                     && matches!(r.status, Status::Intent | Status::Uncertain)
             })
+    }
+    /// Classify only an immediate execute error. Never infer no input merely
+    /// from an error code or absence of a successful public receipt.
+    pub fn failure_evidence(
+        &self,
+        id: &str,
+        target: &Target,
+        cause: &Error,
+    ) -> crate::construction_stage::FailureEvidence {
+        use crate::construction_stage::FailureEvidence as F;
+        if self.poisoned
+            || self.blocks_game(&target.epoch().game)
+            || cause.code == "action_uncertain"
+        {
+            return F::Unknown;
+        }
+        match self.records.get(id) {
+            None => F::BeforeIntent,
+            Some(r)
+                if r.target == *target
+                    && r.status == Status::NotQueued
+                    && r.delivery == Some(Delivery::NotQueued) =>
+            {
+                F::ConfirmedNotQueued
+            }
+            _ => F::Unknown,
+        }
     }
     fn uncertain(
         &mut self,

@@ -9,6 +9,8 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
     Weak,
 };
+mod production_plan;
+use production_plan::{ProductionAttempt, ProductionPlan};
 
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -21,6 +23,10 @@ struct Spec {
     review_day: Option<i64>,
     #[serde(default, skip_serializing_if = "is_false")]
     focus_permission: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    production_permission: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    max_production_steps_per_day: Option<u8>,
 }
 fn is_false(value: &bool) -> bool {
     !*value
@@ -44,12 +50,15 @@ struct Active {
     report: Arc<Mutex<Value>>,
     governor: Arc<Mutex<core::Governor>>,
     focus_permission: bool,
+    production_permission: bool,
+    max_production_steps_per_day: Option<u8>,
     details: Mutex<crate::daily_digest::Details>,
 }
 pub(super) struct Controller {
     enabled: bool,
     research_enabled: bool,
     focus_enabled: bool,
+    production_enabled: bool,
     owner: Weak<Shared>,
     directory: PathBuf,
     active: Mutex<Option<Active>>,
@@ -59,13 +68,15 @@ impl Controller {
     pub(super) fn new(
         research_enabled: bool,
         focus_enabled: bool,
+        production_enabled: bool,
         owner: Weak<Shared>,
         directory: &Path,
     ) -> Self {
         Self {
-            enabled: research_enabled || focus_enabled,
+            enabled: research_enabled || focus_enabled || production_enabled,
             research_enabled,
             focus_enabled,
+            production_enabled,
             owner,
             directory: directory.to_owned(),
             active: Mutex::new(None),
@@ -91,8 +102,11 @@ impl Controller {
     pub(super) fn research_enabled(&self) -> bool {
         self.research_enabled
     }
+    pub(super) fn production_enabled(&self) -> bool {
+        self.production_enabled
+    }
     pub(super) fn tool() -> Value {
-        json!({"name":"hoi4_daily_governor","description":"Optional owned daily automatic research refill worker and fresh compact digest. Start requires the existing exclusive lease and explicit typed plan. Navigation uses separately journaled verified stages; only fresh Research or separately opted-in Focus Start completes an assignment. Focus requires default-off owner daily_focus plus plan.focus_permission and existing profile. With both domain permissions, one journaled ClosePolitics stage can bridge a completed Focus to an empty research slot; a separately typed research-to-Politics shortcut requires both permissions and positive own panel/tree facts. Both routes passed bounded run049; later runs verified research completion/refill and actual Rhineland completion. An optional Focus entry focus_search string uses the verified manual search stages with one durable bounded match chain; existing entries retain direct node navigation. Query replacement and worker search live validation are pending. Successive Focus automation and full campaigns remain unverified. Economy, army and naval domains remain unavailable. Unknown/uncertain input is never replayed. Stop does not pause the game. Compacted history includes a snapshot_id; details retrieves an exact historical section without game reads or input. The Focus section reports latest-per-kind history, not the full navigation ledger.","inputSchema":{"type":"object","oneOf":[{"properties":{"op":{"enum":["start","update"]},"lease_token":{"type":"string"},"plan":{"type":"object"}},"required":["op","lease_token","plan"],"additionalProperties":false},{"properties":{"op":{"enum":["digest","stop"]}},"required":["op"],"additionalProperties":false},{"properties":{"op":{"enum":["details"]},"snapshot_id":{"type":"string","minLength":64,"maxLength":64},"section":{"enum":crate::daily_digest::SECTIONS}},"required":["op","snapshot_id","section"],"additionalProperties":false}]}})
+        json!({"name":"hoi4_daily_governor","description":"Optional owned daily automatic research refill worker and fresh compact digest. Start requires the existing exclusive lease and explicit typed plan. Navigation uses separately journaled verified stages; only fresh Research or separately opted-in Focus Start completes an assignment. Focus requires default-off owner daily_focus plus plan.focus_permission and existing profile. With both domain permissions, one journaled ClosePolitics stage can bridge a completed Focus to an empty research slot; a separately typed research-to-Politics shortcut requires both permissions and positive own panel/tree facts. Both routes passed bounded run049; later runs verified research completion/refill and actual Rhineland completion. An optional Focus entry focus_search string uses the verified manual search stages with one durable bounded match chain; existing entries retain direct node navigation. Query replacement and worker search live validation are pending. Successive Focus automation and full campaigns remain unverified. Production allocation has a default-off preview requiring owner daily_production, plan production_permission and max_production_steps_per_day (1..16); durable one-factory steps precede exact goal completion. Production worker live validation and cross-panel handoffs are pending. Other economy, army and naval domains remain unavailable. Unknown/uncertain input is never replayed. Stop does not pause the game. Compacted history includes a snapshot_id; details retrieves an exact historical section without game reads or input. The Focus section reports latest-per-kind history, not the full navigation ledger.","inputSchema":{"type":"object","oneOf":[{"properties":{"op":{"enum":["start","update"]},"lease_token":{"type":"string"},"plan":{"type":"object"}},"required":["op","lease_token","plan"],"additionalProperties":false},{"properties":{"op":{"enum":["digest","stop"]}},"required":["op"],"additionalProperties":false},{"properties":{"op":{"enum":["details"]},"snapshot_id":{"type":"string","minLength":64,"maxLength":64},"section":{"enum":crate::daily_digest::SECTIONS}},"required":["op","snapshot_id","section"],"additionalProperties":false}]}})
     }
     pub(super) fn call(
         &self,
@@ -132,6 +146,12 @@ impl Controller {
                     self.focus_enabled,
                     spec.focus_permission,
                     state.focus.is_some(),
+                )?;
+                production_plan::permission(
+                    self.production_enabled,
+                    spec.production_permission,
+                    state.production.is_some(),
+                    spec.max_production_steps_per_day,
                 )?;
                 let epoch = state.guard.epoch.clone();
                 let lease_end = state.authority.authorize(&token, &epoch)?;
@@ -194,6 +214,25 @@ impl Controller {
                     ));
                 }
                 let focus_initial = focus_navigation.latest();
+                // Always load durable uncertainty, even when opt-in is absent.
+                let production_plan = ProductionPlan {
+                    progress: crate::production_progress::Progress::open(
+                        &self.directory.join("daily-production.json"),
+                        governor.plan().scope.clone(),
+                        &governor.plan().entries,
+                    )
+                    .inspect_err(|_| self.blocked.store(true, Ordering::Release))?,
+                    limit: spec.max_production_steps_per_day,
+                };
+                if production_plan.progress.blocked() {
+                    self.blocked.store(true, Ordering::Release);
+                    return Err(Error::new(
+                        "action_uncertain",
+                        "Unresolved production preparation cannot restart",
+                    ));
+                }
+                let production_initial = production_plan
+                    .summary((i64::from(first.observation.date_raw) - 43_800_000).div_euclid(24));
                 let focus_permission = spec.focus_permission;
                 let research_permission = self.research_enabled;
                 let governor = Arc::new(Mutex::new(governor));
@@ -201,7 +240,7 @@ impl Controller {
                 let stop = Arc::new(AtomicBool::new(false));
                 let wake = Arc::new(core::Wakeup::default());
                 let report = Arc::new(Mutex::new(
-                    json!({"running":true,"last_batch":null,"last_error":navigation.latest_refusal(),"last_preparation_refusal":navigation.latest_refusal(),"last_stage_failure":navigation.latest_stage_failure(),"focus":focus_initial,"focus_wait":focus_initial["wait"],"focus_permission":focus_permission}),
+                    json!({"running":true,"last_batch":null,"last_error":navigation.latest_refusal(),"last_preparation_refusal":navigation.latest_refusal(),"last_stage_failure":navigation.latest_stage_failure(),"focus":focus_initial,"focus_wait":focus_initial["wait"],"focus_permission":focus_permission,"production":production_initial}),
                 ));
                 let control = owner.state.clone();
                 let gate = owner.input_gate.clone();
@@ -213,7 +252,7 @@ impl Controller {
                 let r = report.clone();
                 let g = governor.clone();
                 let handle=thread::Builder::new().name("owned-daily-governor".into()).spawn(move||{
- let outcome=std::panic::catch_unwind(std::panic::AssertUnwindSafe(||worker(&g,navigation,focus_navigation,focus_permission,research_permission,&p,&control,&gate,&weak,&token,&s,&w,&r,&blocked)));
+ let outcome=std::panic::catch_unwind(std::panic::AssertUnwindSafe(||worker(&g,navigation,focus_navigation,production_plan,focus_permission,research_permission,&p,&control,&gate,&weak,&token,&s,&w,&r,&blocked)));
  if outcome.is_err(){blocked.store(true,Ordering::Release);if let Ok(mut report)=r.lock(){report["last_error"]=json!({"code":"daily_quarantined","reason":"Worker panic; durable intent requires review"});}}
  if crate::daily_worker::retained_quarantine(&g,|gov|gov.blocks_work()){blocked.store(true,Ordering::Release);}s.store(true,Ordering::Release);if let Ok(mut report)=r.lock(){report["running"]=json!(false);}
  })?;
@@ -223,10 +262,12 @@ impl Controller {
                     report,
                     governor,
                     focus_permission,
+                    production_permission: spec.production_permission,
+                    max_production_steps_per_day: spec.max_production_steps_per_day,
                     details: Mutex::new(crate::daily_digest::Details::default()),
                 });
                 Ok(
-                    json!({"started":true,"scope":"owned assignments within durable shared daily budget","focus_implemented":focus_permission,"navigation_implemented":true,"other_action_domains_implemented":false,"full_campaign_acceptance":false}),
+                    json!({"started":true,"scope":"owned assignments within durable shared daily budget","focus_implemented":focus_permission,"navigation_implemented":true,"production_implemented":spec.production_permission,"production_worker_live_validation":false,"other_action_domains_implemented":false,"full_campaign_acceptance":false}),
                 )
             }
             "update" => {
@@ -244,6 +285,14 @@ impl Controller {
                     .ok_or_else(|| Error::new("capability_unavailable", "No started plan"))?;
                 if spec.focus_permission != active.focus_permission {
                     return Err(Error::new("plan_conflict","Focus permission is fixed for this worker; stop/restart requires explicit reviewed capability"));
+                }
+                if spec.production_permission != active.production_permission
+                    || spec.max_production_steps_per_day != active.max_production_steps_per_day
+                {
+                    return Err(Error::new(
+                        "plan_conflict",
+                        "Production permission and step limit are fixed for this worker",
+                    ));
                 }
                 let mut state = try_state(&owner.state)?;
                 self.input_check()?;
@@ -295,6 +344,10 @@ impl Controller {
                     .as_ref()
                     .and_then(|a| a.report.try_lock().ok().map(|r| r["focus"].clone()))
                     .unwrap_or(Value::Null);
+                let production = active
+                    .as_ref()
+                    .and_then(|a| a.report.try_lock().ok().map(|r| r["production"].clone()))
+                    .unwrap_or(Value::Null);
                 let focus_readiness = active
                     .as_ref()
                     .and_then(|a| {
@@ -339,7 +392,7 @@ impl Controller {
                     .transpose()?
                     .unwrap_or((Value::Null, Value::Null));
                 Ok(
-                    json!({"assignments":assignments,"daily_budget":budget,"core_pending_historical":core_state,"focus":focus,"latest_focus_wait_historical":focus_wait,"focus_readiness_historical":focus_readiness,"worker_stopped":true,"game_time_changed":false,"uncertainty_retained":self.blocked.load(Ordering::Acquire),"last_error":last_error,"last_preparation_refusal":last_preparation_refusal,"last_stage_failure":last_stage_failure}),
+                    json!({"assignments":assignments,"daily_budget":budget,"production":production,"core_pending_historical":core_state,"focus":focus,"latest_focus_wait_historical":focus_wait,"focus_readiness_historical":focus_readiness,"worker_stopped":true,"game_time_changed":false,"uncertainty_retained":self.blocked.load(Ordering::Acquire),"last_error":last_error,"last_preparation_refusal":last_preparation_refusal,"last_stage_failure":last_stage_failure}),
                 )
             }
             "details" => {
@@ -470,6 +523,7 @@ fn worker(
     governor: &Mutex<core::Governor>,
     mut navigation: crate::daily_navigation::Navigator,
     mut focus_navigation: crate::daily_focus_navigation::Navigator,
+    mut production_plan: ProductionPlan,
     focus_permission: bool,
     research_permission: bool,
     producer: &Producer,
@@ -492,6 +546,7 @@ fn worker(
             break;
         }
         let mut refusal_entry = None;
+        let mut production_failed = false;
         let run = (|| -> Result<Option<core::DailyResult>> {
             let _read = shared
                 .reads
@@ -514,6 +569,7 @@ fn worker(
                     || unresolved(&state)
                     || navigation.blocked()
                     || focus_navigation.blocked()
+                    || production_plan.progress.blocked()
                 {
                     blocked.store(true, Ordering::Release);
                     return Err(Error::new(
@@ -542,7 +598,12 @@ fn worker(
             } else {
                 None
             };
-            if heads.is_empty() && focus_entry.is_none() {
+            let production_heads: Vec<_> = governor
+                .pending_production(day)
+                .into_iter()
+                .filter(|entry| production_plan.eligible(entry, day))
+                .collect();
+            if heads.is_empty() && focus_entry.is_none() && production_heads.is_empty() {
                 return Ok(None);
             }
             let mut state = try_state(state)?;
@@ -552,7 +613,11 @@ fn worker(
             let batch_started = Instant::now();
             let until = (batch_started + Duration::from_secs(5)).min(lease_end);
             let focus_until = (batch_started + Duration::from_secs(10)).min(lease_end);
-            if unresolved(&state) || navigation.blocked() || focus_navigation.blocked() {
+            if unresolved(&state)
+                || navigation.blocked()
+                || focus_navigation.blocked()
+                || production_plan.progress.blocked()
+            {
                 blocked.store(true, Ordering::Release);
                 return Err(Error::new(
                     "action_uncertain",
@@ -610,6 +675,41 @@ fn worker(
                 return Ok(None);
             }
             let mut focus_waited = false;
+            // At most one production step per batch, bounded across all entries
+            // and restarts by the separate durable daily step budget. Existing
+            // Research/Focus ordering is unchanged when production is disabled.
+            for entry in &production_heads {
+                let result = production_plan::run(
+                    &mut production_plan,
+                    &mut governor,
+                    producer,
+                    &mut state,
+                    process,
+                    gate,
+                    token,
+                    focus_until,
+                    stop,
+                    day,
+                    entry,
+                );
+                if production_plan.progress.blocked() || governor.blocks_work() {
+                    blocked.store(true, Ordering::Release);
+                }
+                if let Err(e) = &result {
+                    production_failed = true;
+                    refusal_entry = Some(entry.id.clone());
+                    if e.code == "action_uncertain" {
+                        blocked.store(true, Ordering::Release);
+                    }
+                }
+                if let Ok(mut r) = report.lock() {
+                    r["production"] = production_plan.summary(day);
+                }
+                match result? {
+                    production_plan::Run::Advanced(value) => return Ok(value),
+                    production_plan::Run::Deferred => {}
+                }
+            }
             if focus_precedes(
                 &governor.plan().entries,
                 focus_entry.as_ref(),
@@ -861,6 +961,7 @@ fn worker(
                 until,
                 last: None,
                 focus: None,
+                production: None,
             };
             let result = governor.continue_entry(
                 &mut backend,
@@ -878,12 +979,18 @@ fn worker(
         })();
         if let Ok(mut r) = report.lock() {
             r["focus"] = focus_navigation.latest();
+            // History only; digest dates do not turn this into a fresh factory read.
+            r["production"]["progress"] = production_plan.progress.summary();
         }
         let possible_input = blocked.load(Ordering::Acquire)
             || navigation.blocked()
             || focus_navigation.blocked()
+            || production_plan.progress.blocked()
             || crate::daily_worker::retained_quarantine(governor, |g| g.blocks_work());
-        let disposition = crate::daily_worker::disposition(run.as_ref().err(), possible_input);
+        let mut disposition = crate::daily_worker::disposition(run.as_ref().err(), possible_input);
+        if production_failed && disposition == crate::daily_worker::Disposition::Continue {
+            disposition = crate::daily_worker::Disposition::Stop;
+        }
         if let Ok(mut report) = report.lock() {
             if disposition != crate::daily_worker::Disposition::Continue {
                 report["stop_reason"] = json!(run
@@ -931,6 +1038,7 @@ struct DailyBackend<'a> {
     until: Instant,
     last: Option<Produced>,
     focus: Option<FocusAttempt<'a>>,
+    production: Option<ProductionAttempt<'a>>,
 }
 struct FocusAttempt<'a> {
     navigation: &'a mut crate::daily_focus_navigation::Navigator,
@@ -938,7 +1046,11 @@ struct FocusAttempt<'a> {
 }
 impl core::Backend for DailyBackend<'_> {
     fn unresolved_input(&mut self) -> Result<bool> {
-        Ok(unresolved(self.state))
+        Ok(unresolved(self.state)
+            || self
+                .production
+                .as_ref()
+                .is_some_and(|p| p.plan.progress.blocked()))
     }
     fn observe(&mut self) -> Result<core::Observation> {
         let p = self.producer.observe(self.process, self.until)?;
@@ -949,7 +1061,19 @@ impl core::Backend for DailyBackend<'_> {
         self.last = Some(p);
         Ok(observation)
     }
-    fn readiness(&mut self, entry: &core::Entry, _: &core::Observation) -> Result<core::Readiness> {
+    fn readiness(
+        &mut self,
+        entry: &core::Entry,
+        observed: &core::Observation,
+    ) -> Result<core::Readiness> {
+        if matches!(
+            entry.intent,
+            core::Intent::Economy {
+                target: core::EconomyTarget::Production { .. }
+            }
+        ) {
+            return self.production_ready(entry, observed);
+        }
         if let core::Intent::Focus { focus_id } = &entry.intent {
             if self.focus.is_none() {
                 return Ok(core::Readiness::Unavailable(
@@ -1024,9 +1148,17 @@ impl core::Backend for DailyBackend<'_> {
     fn attempt(
         &mut self,
         attempt: &core::Attempt,
-        _: &core::Observation,
+        before: &core::Observation,
         until: Instant,
     ) -> Result<core::Outcome> {
+        if matches!(
+            attempt.entry.intent,
+            core::Intent::Economy {
+                target: core::EconomyTarget::Production { .. }
+            }
+        ) {
+            return self.attempt_production(attempt, before, until.min(self.until));
+        }
         if matches!(attempt.entry.intent, core::Intent::Focus { .. }) {
             return self.attempt_focus(attempt, until.min(self.until));
         }
@@ -1428,6 +1560,7 @@ fn run_focus(
                     navigation,
                     revision,
                 }),
+                production: None,
             };
             governor
                 .continue_entry(
@@ -1720,6 +1853,7 @@ fn compact_observation_with_details(
     digest["last_stage_failure"] = report["last_stage_failure"].clone();
     digest["focus"] = report["focus"].clone();
     digest["focus_permission"] = report["focus_permission"].clone();
+    digest["production"] = report["production"].clone();
     digest["latest_focus_wait_historical"] = report["focus_wait"].clone();
     digest["focus_readiness_historical"] = report["focus_readiness_historical"].clone();
     digest["quarantined"] = json!(blocked);
@@ -2211,9 +2345,61 @@ mod tests {
         };
         assert!(focus_precedes(&[f.clone(), r.clone()], Some(&f), Some(&r)));
         assert!(!focus_precedes(&[r.clone(), f.clone()], Some(&f), Some(&r)));
-        let controller = Controller::new(false, true, Weak::new(), Path::new("/generated"));
+        let controller = Controller::new(false, true, false, Weak::new(), Path::new("/generated"));
         assert!(controller.enabled());
         assert!(!controller.research_enabled);
         assert!(controller.focus_enabled());
+    }
+    #[test]
+    fn production_spec_defaults_off_and_requires_an_explicit_bounded_budget() {
+        let mut value = json!({"version":1,"revision":1,"entries":[],"max_actions_per_day":1,"max_observation_age_ms":5000,"review_day":null});
+        let spec: Spec = serde_json::from_value(value.clone()).unwrap();
+        assert!(!spec.production_permission);
+        assert_eq!(spec.max_production_steps_per_day, None);
+        assert_eq!(serde_json::to_value(&spec).unwrap(), value);
+        value["production_permission"] = json!(true);
+        let spec: Spec = serde_json::from_value(value.clone()).unwrap();
+        assert!(production_plan::permission(
+            true,
+            spec.production_permission,
+            true,
+            spec.max_production_steps_per_day
+        )
+        .is_err());
+        value["max_production_steps_per_day"] = json!(2);
+        let spec: Spec = serde_json::from_value(value.clone()).unwrap();
+        assert!(production_plan::permission(
+            true,
+            spec.production_permission,
+            true,
+            spec.max_production_steps_per_day
+        )
+        .is_ok());
+        assert_eq!(serde_json::to_value(&spec).unwrap(), value);
+        let controller = Controller::new(false, false, true, Weak::new(), Path::new("/generated"));
+        assert!(controller.enabled() && controller.production_enabled());
+        assert!(!controller.focus_enabled() && !controller.research_enabled());
+    }
+    #[test]
+    fn production_progress_is_historical_in_digest_and_exact_details() {
+        let production = json!({"permission":true,"budget":{"day":706640,"used_steps":2,"limit":2,"historical":true},"progress":{"blocked":true,"latest":{"entry_id":"allocation","failure":{"cause":{"code":"action_uncertain","message":"original failure"}}}}});
+        let mut details = crate::daily_digest::Details::default();
+        let out = compact_observation_with_details(
+            &mut details,
+            digest_sample(),
+            &json!({"production":production,"running":false}),
+            true,
+            1,
+        )
+        .unwrap();
+        assert_eq!(out["production"], production);
+        assert_eq!(out["input_authorized"], false);
+        assert_eq!(out["quarantined"], true);
+        let full = json!({"production":production});
+        let id = details.retain(&full).unwrap();
+        let overflow = crate::daily_digest::overflow(&full, &id).unwrap();
+        assert_eq!(overflow["production"]["budget"]["used_steps"], 2);
+        assert_eq!(overflow["production"]["blocked"], true);
+        assert_eq!(details.get(&id, "production").unwrap()["value"], production);
     }
 }

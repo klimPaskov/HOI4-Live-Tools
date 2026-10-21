@@ -2,12 +2,20 @@
 
 ## Unreleased native preview
 
+- Add an explicit default-off Linux daily production worker preview with durable
+  original-line preparation, bounded one-factory steps across days, separate
+  daily step/goal budgets, exact final allocation proof and shared uncertainty
+  exclusion. Preserve progress, original failures and chronology through reopen;
+  prohibit target reordering within an existing line queue. STOP and compact
+  digests retain dated production history. Offline validation passed; recorded
+  advancing-time worker acceptance and cross-panel handoffs remain pending.
+
 - Add the standing-production completion foundation: private typed journal proof,
   exact original line/count binding, fresh canonical evidence and per-line target
   ordering. Historical replay and panel opening cannot complete an allocation.
   Durable fixtures preserve completion and budget through restart without input
-  replay. The runtime worker remains unavailable for production until its
-  preparation, opt-in and advancing-time live gate are implemented.
+  replay. This foundation preceded the worker preview above; neither replaces
+  the pending advancing-time worker gate.
 
 - Pass the recorded Linux Production004 gate with Luna medium: one ordinary
   panel opening, 10→11→10 factory counts, historical replays and no-input no-ops.

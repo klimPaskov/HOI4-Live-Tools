@@ -42,6 +42,7 @@ pub mod economy;
 pub mod production_lines;
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 pub(crate) mod production_panel;
+pub mod production_progress;
 pub mod production_step;
 
 // Ordinary research candidate building block; no protocol input registration.

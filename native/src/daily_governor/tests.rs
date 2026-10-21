@@ -81,6 +81,50 @@ fn plan() -> Plan {
 
 #[test]
 #[cfg(unix)]
+fn production_plan_updates_preserve_each_existing_line_queue_prefix() {
+    let temp = Temp::new();
+    let make = |id: &str, line: &str, count| Entry {
+        id: id.into(),
+        navigation: None,
+        focus_search: None,
+        intent: Intent::Economy {
+            target: EconomyTarget::Production {
+                line_id: line.into(),
+                equipment_id: "infantry_equipment_1".into(),
+                total_factories: count,
+            },
+        },
+    };
+    let a = make("first", "0x0000000100000038", 14);
+    let b = make("second", "0x0000000100000038", 12);
+    let c = make("other", "0x0000000200000038", 6);
+    let mut initial = plan();
+    initial.entries = vec![a.clone(), b.clone(), c.clone()];
+    let mut governor = Governor::open(&temp.path(), initial.clone()).unwrap();
+    let mut updated = initial.clone();
+    updated.revision += 1;
+    updated.entries.swap(0, 1);
+    assert_eq!(
+        governor.update_plan(updated.clone()).unwrap_err().code,
+        "plan_conflict"
+    );
+    updated.entries = vec![
+        make("inserted", "0x0000000100000038", 18),
+        a.clone(),
+        b.clone(),
+        c.clone(),
+    ];
+    assert_eq!(
+        governor.update_plan(updated.clone()).unwrap_err().code,
+        "plan_conflict"
+    );
+    updated.entries = vec![c, a, b, make("appended", "0x0000000100000038", 10)];
+    assert!(governor.update_plan(updated.clone()).unwrap());
+    assert!(!governor.update_plan(updated).unwrap());
+}
+
+#[test]
+#[cfg(unix)]
 fn production_heads_preserve_line_order_and_refusals_across_restart() {
     let t = Temp::new();
     let mut p = plan();

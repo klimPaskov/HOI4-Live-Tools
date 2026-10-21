@@ -7,6 +7,7 @@ use sha2::{Digest, Sha256};
 pub(crate) const SECTIONS: &[&str] = &[
     "assignments",
     "focus",
+    "production",
     "core_pending_historical",
     "latest_preparation_historical",
     "latest_focus_wait_historical",
@@ -124,12 +125,22 @@ pub(crate) fn overflow(full: &Value, snapshot_id: &str) -> Result<Value> {
         ("focus.refusal", &full["focus"]["refusal"]),
         ("focus.uncertainty", &full["focus"]["uncertainty"]),
         ("focus.start_failure", &full["focus"]["start_failure"]),
+        (
+            "production.failure",
+            &full["production"]["progress"]["latest"]["failure"]["cause"],
+        ),
     ] {
         if value.is_object() {
             failures.insert(name.into(), value["code"].clone());
         }
     }
     out["historical_failure_codes"] = Value::Object(failures);
+    if full["production"].is_object() {
+        out["production"] = json!({"budget":full["production"]["budget"],
+            "permission":full["production"]["permission"],
+            "blocked":full["production"]["progress"]["blocked"],
+            "historical":true,"details_section":"production"});
+    }
     if full["focus"]["start_failure"].is_object() {
         let f = &full["focus"]["start_failure"];
         out["start_failure"] = json!({"original_code":f["original_code"],"evidence":f["evidence"],

@@ -206,7 +206,7 @@ struct ProductionBackend<'a> {
     display: u16,
     xauthority: &'a Path,
 }
-fn observed(
+pub(super) fn observed(
     process: &dyn Process,
     guard: &mut Guard,
     target: &step::Target,
@@ -249,7 +249,7 @@ fn observed(
     }
     Ok((o, state))
 }
-fn panel_observed(
+pub(super) fn panel_observed(
     process: &dyn Process,
     guard: &mut Guard,
     target: &step::Target,

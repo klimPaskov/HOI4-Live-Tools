@@ -7,6 +7,51 @@ Do not resume Mac campaigns or control the shared Windows game.
 
 ## Current checkpoint
 
+The Linux daily worker now has an explicit production allocation preview.
+It requires the existing owned production profile, owner `daily_production: true`,
+plan `production_permission: true` and `max_production_steps_per_day` from 1 to 16.
+Defaults preserve the previous Research/Focus worker. The production permission
+and step limit cannot change during a worker lifetime.
+
+A private durable progress file binds the original full own line/variant,
+equipment, campaign, roots and starting count. Opening and intermediate one-click
+steps consume the separate production step budget, never goal completion.
+The final step or matching-count no-op uses the governor's request and completion
+budget, with typed ordinary-journal proof, canonical readback and a later daily
+observation. Larger changes can span days. Reopen preserves counts, budgets,
+original failures and the date of late read-only settlement. Changed identities,
+external allocation changes and uncertain delivery cannot establish a new baseline.
+Plan updates preserve the existing target order for each full line ID.
+
+The worker executes at most one production step per batch under the existing
+shared controller, lease, input gate and absolute deadline. Production runs before
+Research/Focus when opted in, bounded by its separate daily step limit and the
+remaining shared goal budget. Cross-panel handoffs are not implemented: an
+incompatible active panel refuses safely. A preparation error stops this preview;
+a known no-input final refusal retains the goal for a later day. Unresolved
+progress blocks all shared input, including restart with production permission off.
+STOP and compact digests retain production history and its dated budget; historical
+progress is not a fresh factory observation or input authority.
+
+Local validation passed 1,089 Rust tests, 953 Python tests (37 skips), formatting,
+host/Linux Clippy and Windows cross-compilation. All 34 targeted offline tests
+also passed inside the owned Linux VM, including the Linux-only worker permission
+and digest tests. No game input was used. Tests cover multi-day increases,
+decreases, no-ops, retained budgets, invalid jumps, changed identities, no-input
+refusals, uncertainty, stale receipts, chronology and failed durable writes.
+These are offline results. Production004 remains the latest live production gate;
+no new game was launched. The previous foundation commit passed Linux/Windows
+native CI and all six Python jobs; its macOS native job was still queued at the
+last check, so a complete CI pass is not claimed.
+
+Next: require exact-commit CI and run a bounded recorded advancing-time production
+worker gate with one Luna medium player, including multiple daily steps, final
+allocation, restart/STOP and no-replay evidence. Do not repeat manual Production004
+alone. Worker live acceptance, broader panel routing, two-year/full campaigns,
+and Windows/macOS native live adapters remain incomplete.
+
+### Previous standing-production foundation
+
 Standing-production foundation, 22 October 2026: factory executions now retain
 an internal typed journal proof, excluded from public JSON. The plan converter
 requires the exact original own line/variant, request, campaign, equipment and

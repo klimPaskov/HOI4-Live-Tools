@@ -120,7 +120,8 @@ pub(crate) fn layout(r: &Reader<'_>) -> &'static Layout {
 pub const SHA256: &str = "56fc2945cdbf2475a316db3285eb3458ae5d577db149db6dfdba6f004de3a88a";
 /// Additional own-campaign context for ordinary clock input. The persisted
 /// playthrough ID distinguishes campaigns, but is not a load-generation token.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ClockContext {
     pub playthrough_id: String,
     pub player: String,
