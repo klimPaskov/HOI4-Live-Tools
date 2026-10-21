@@ -82,6 +82,9 @@ game it did not start.
 - **Observation:** country overview, research, Focus, production lines and
   construction, returned as compact digests (under 2 KB) in about 15–80 ms.
 - **Time:** pause, resume, speed and day advancement with verified readback.
+- **Production:** opening the panel and changing one factory on an exact own line,
+  with verified counts, historical replays and no-op checks. Production004 passed
+  10→11→10 on 21 October 2026; changes took about 0.77 seconds each.
 - **Research and Focus:** exact-ID assignments in all four research slots,
   automatic refill when research completes, Focus search and start, and durable
   daily plans that survive restarts without repeating input.
@@ -113,8 +116,7 @@ supported yet. It needs a Developer Tools grant and an ad-hoc signed binary
 
 ### Not done yet
 
-- Linux production opening and one-factory changes have opt-in previews with
-  durable recovery; live validation, scrolling and line creation remain.
+- Linux production scrolling, new lines, bulk allocation and standing economy plans.
 - Linux provincial buildings (naval bases, forts, coastal forts), army, air and naval control.
 - Economy and warfare automation (standing plans, shortage repair, invasions).
 - A native Windows adapter.
@@ -145,7 +147,7 @@ and cannot be reached by campaign automation.
 | --- | --- | --- |
 | Python / Windows (1.1.0) | Mod-testing tools and recorded play attempts | Clean campaign acceptance |
 | Python / macOS | Platform work and limited diagnostic play | Reliable live acceptance |
-| Rust / Linux | Owned launch, fast state reads, time, research, Focus, daily plans, construction panel, map search and state-building placement | Provincial placement, economy, army and naval control; campaign acceptance |
+| Rust / Linux | Owned launch, fast state reads, time, research, Focus, daily plans, one-factory production changes, construction panel, map search and state-building placement | Provincial placement, economy, army and naval control; campaign acceptance |
 | Rust / macOS | Owned runs on one build: reads, economy, armies, diplomacy, air, standing plans | Peace conference, naval invasions, campaign acceptance |
 | Rust / Windows | Portable protocol and fixture tests in CI | Native adapter and live tests |
 

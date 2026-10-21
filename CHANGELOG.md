@@ -2,6 +2,12 @@
 
 ## Unreleased native preview
 
+- Pass the recorded Linux Production004 gate with Luna medium: one ordinary
+  panel opening, 10→11→10 factory counts, historical replays and no-input no-ops.
+  Factory changes took 765/773 ms including readback. Recording, journal audit,
+  lease release and normal close passed. This paused diagnostic is not campaign
+  or release acceptance; macOS CI was queued when the Linux gate started.
+
 - Verify Linux production opening with one recorded Luna medium ordinary click,
   historical replay and an already-open no-op. The factory increment refused
   before input; reuse the exact owned parent-position gate already supported by

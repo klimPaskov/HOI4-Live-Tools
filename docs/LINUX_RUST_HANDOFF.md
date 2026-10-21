@@ -7,6 +7,36 @@ Do not resume Mac campaigns or control the shared Windows game.
 
 ## Current checkpoint
 
+Production004, 21 October 2026 (`df474ca`), passed all ten bounded production
+steps with one Luna player at medium reasoning. The recorded fresh start was
+vanilla FAIR Germany, Normal difficulty, historical AI, paused at 1 January 1936.
+One ordinary topbar click opened production in 2.080 seconds. The exact infantry
+equipment line then changed 10→11 and 11→10 requested factories in 765/773 ms,
+with canonical readback after each ordinary click. Final state had 10 requested
+and 10 active factories. Same-ID opening/increase replays were historical and
+sent no new input; new-ID already-open and matching-count requests were no-ops.
+The control observation took 76 ms, line read 43 ms and overview 16 ms over the
+persistent MCP/SSH bridge. These few samples are not a matched upstream benchmark.
+
+The stopped journal contains exactly three intents, five verified terminal
+requests, no unresolved action and no clock entries. Luna released its lease and
+status confirmed zero remaining time. The 259.333-second recording passed
+integrity checks; recorder exit 255 remains separate from normal game exit 0.
+Exact game, supervisor, recorder and bridge absence was verified. Private evidence
+and prior failed gates are retained. No screenshots drove the campaign tool steps;
+menu setup and the recording are separate. This paused diagnostic does not
+establish continuous-play throughput, universal routing or event causality.
+
+Local checks passed 1,070 Rust tests, 953 Python tests (37 skips), formatting and
+warning-free host/Linux Clippy. Linux/Windows CI passed on the tested commit;
+three macOS jobs were queued at the grant, with local macOS checks passed. This
+is not release acceptance. Next: extend standing economy plans and the remaining
+ordinary Linux adapters. Scrolling, new production lines, provincial placement,
+army/air/naval control and clean two-year/full campaigns remain open. Do not
+repeat the passed bounded production gate alone.
+
+### Previous production parent-gate checkpoint
+
 Production003, 21 October 2026 (`855d5fb`): one Luna medium player opened
 production through one ordinary topbar click in 2.18 seconds. Canonical state
 verified the shown panel. Same-ID historical replay took 6 ms; a new-ID
@@ -823,7 +853,7 @@ an ordinary yield is neither a missing MCP response nor permission for a new cal
 1. The manual Run068 and worker Run070 search gates passed. Move to ordinary
    economy/construction/production controls and wider standing plans. Validate
    exact own target identity, eligibility and state changes against the installed
-   build before admitting actions. Keep one Haiku 5.5 medium player, fixed
+   build before admitting actions. Keep one Luna medium player, fixed
    bounds, recorded campaign Start and independent stopped-journal audit.
    Any post-failure diagnostic exception must be fixed before the input grant.
    Earlier missing evidence remains unknown; later success does not repair it.
@@ -857,8 +887,9 @@ an ordinary yield is neither a missing MCP response nor permission for a new cal
   must not determine routine agent latency. Measure latency and success rates;
   Rust alone does not prove speed or correctness.
 - Validate Linux first, then Windows and macOS. Recover each supported build's
-  ABI/layout independently. Native Windows/macOS live adapters are currently
-  unavailable; portable CI does not establish live compatibility.
+  ABI/layout independently. The native Windows adapter remains unavailable;
+  the separate macOS preview is recorded in the preserved Mac history. Portable
+  CI does not establish live compatibility or campaign acceptance.
 - Run one Luna medium player with exclusive input. First pass the clean two-year
   gate, then the recorded FAIR Germany and Nationalist China campaigns and META
   Poland showcase. Preserve the original campaign specifications in the

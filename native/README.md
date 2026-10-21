@@ -24,11 +24,12 @@ return a capability error. Logs and setup errors go to stderr.
 
 | Platform | Current native support |
 | --- | --- |
-| Linux x86_64 | Owned launch/reconnects, exact-build reads, waits, clock keys, research, and opt-in focus/daily previews |
-| Windows / macOS | Portable protocol and fixtures; native live adapters return explicit unavailable errors |
+| Linux x86_64 | Owned launch/reconnects, exact-build reads, waits, clock keys, research, Focus/daily plans, construction and one-factory production previews |
+| macOS | Separate owned task-port and ordinary-input preview on one Steam 1.19.3 Rosetta build; see the [platform status](../README.md#macos-preview-live-tested-on-one-build) |
+| Windows | Portable protocol and fixtures; native live adapter remains unavailable |
 
-Three-OS CI validates shared code. It does not establish Windows/macOS live
-compatibility. Layouts must be recovered and verified separately for each build.
+Three-OS CI validates shared code. It does not establish live compatibility.
+Layouts must be recovered and verified separately for each platform and build.
 
 ## Standing plans and observations
 
@@ -156,7 +157,7 @@ produces a durable no-op. Identical successful requests return historical
 receipts without further input. Uncertain delivery blocks construction, clock,
 research, Focus and background plans; terminal refusals retain their bounded
 cause. Selection verifies the requested building type, not placement or a queue
-change. Railway selection and map placement are unavailable.
+change. Railway selection and true provincial placement remain unavailable.
 
 An owned session can enable prepared research, Focus and durable daily plans.
 Recorded run030 verified four-slot worker assignment, idempotent updates,
@@ -302,10 +303,10 @@ anchors do not establish a load-generation token.
 | `hoi4_research` | Own completed technologies and active signed counters; normalized progress remains unavailable |
 | `hoi4_army` | Own divisions with full snapshot-scoped handles, selected province joins and lossless raw status; recorded structural reads, units unverified |
 | `hoi4_economy` | Own named factory trigger counts, civilian project capacity and exact signed political-power units; live comparison pending |
-| `hoi4_production_lines` | Paged own line handles, separate signed factory counters and optional base equipment keys; key joins have fixture evidence, live comparison and allocation remain pending |
-| `hoi4_production_controls` | Linux preview: exact own line's named factory +/- controls, callback bindings, local blockers and optional renderer geometry; read-only, live validation pending |
-| `hoi4_production_open` | Opt-in Linux preview: ensure the production panel is open through its named topbar control; an already-open panel is a no-op; live validation pending |
-| `hoi4_production_attempt` | Opt-in Linux preview: one ordinary factory step in an already-open panel, durable original identity/count and canonical readback; live validation pending |
+| `hoi4_production_lines` | Paged own line handles, separate signed factory counters and optional base equipment keys; selected infantry allocation passed Production004; wider comparison and management remain pending |
+| `hoi4_production_controls` | Linux preview: exact own line's named factory +/- controls, callback bindings, local blockers and optional renderer geometry; read-only; selected infantry line passed Production004 |
+| `hoi4_production_open` | Opt-in Linux preview: ensure the production panel is open through its named topbar control; an already-open panel is a no-op; bounded Production004 gate passed |
+| `hoi4_production_attempt` | Opt-in Linux preview: one ordinary factory step in an already-open panel, durable original identity/count and canonical readback; selected 10→11→10 gate passed |
 | `hoi4_construction_queue` | Own building/railway lines, canonical keys and signed cost/work counters; one dockyard observed in run071. Run072 observed one state/label with a late-lease deviation; selection and province/railway coverage remain unverified |
 | `hoi4_technology_list` | Canonical loaded technology IDs with filtering/pagination; no eligibility inference |
 | `hoi4_input_geometry` | GUI dimensions, scale, pointer and conditional source-window diagnostics; no click authority |
@@ -344,8 +345,10 @@ An unresolved supported line has a null key and `equipment_unavailable_reason`;
 unknown line subtypes stay metadata-only. `equipment_ids_available` describes
 all scoped lines, not just the returned page; `equipment_id_unavailable_count`
 includes unsupported lines. Other equipment databases remain unreviewed. These
-joins have generated host/Linux fixture evidence only; a live UI comparison is
-pending. Custom variant design details and general production management remain
+joins have generated host/Linux fixture coverage and recorded own-line reads;
+Production004 additionally verified the selected infantry line through its exact
+GUI control and canonical allocation changes. Wider UI comparison remains pending.
+Custom variant design details and general production management remain
 unavailable. No production action is authorized by this read-only tool.
 
 `hoi4_production_controls` accepts the exact `line_handle` and `equipment_id`
@@ -387,8 +390,15 @@ The same request ID can only settle by observing its original target on its
 original line or panel; it never sends another click or adopts a new baseline. Historical
 success is marked historical, not fresh state. The journal preserves uncertainty
 when reopened, but supervisor restart/adoption of a surviving game is unsupported.
-No live production gate has passed. Scoped UI checks and a reached count do not
-prove universal event routing or that this particular click caused the change.
+Production004 passed the bounded ordinary production gate on `df474ca`: one panel
+opening, 10→11→10 requested infantry-equipment factories, historical replays and
+new-ID no-ops. Final state had 10 requested and active factories. Opening took
+2.080 seconds; each count change took about 0.77 seconds. Recording and normal
+close passed. The game remained paused and the clock journal was empty, so this
+is not continuous-play or campaign acceptance. The immutable runtime still
+reports `live_validation: pending`; this result covers only the recorded exact
+build, profile and line. Scoped UI checks and a reached count do not prove
+universal event routing or that this particular click caused the change.
 
 The current game uses a 365-day calendar, including February 28 in 1936. Its raw
 clock includes a 5000-year epoch and displays hours as 1–24. Raw research counters

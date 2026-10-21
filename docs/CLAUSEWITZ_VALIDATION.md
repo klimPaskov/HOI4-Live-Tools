@@ -1,5 +1,35 @@
 # Clausewitz-MCP Linux validation
 
+## Production004 ordinary factory changes passed — 21 October 2026
+
+Production004, 21 October 2026 (`df474ca`), passed all ten bounded production
+steps with one Luna player at medium reasoning. The recorded fresh start was
+vanilla FAIR Germany, Normal difficulty, historical AI, paused at 1 January 1936.
+One ordinary topbar click opened production in 2.080 seconds. The exact infantry
+equipment line then changed 10→11 and 11→10 requested factories in 765/773 ms,
+with canonical readback after each ordinary click. Final state had 10 requested
+and 10 active factories. Same-ID opening/increase replays were historical and
+sent no new input; new-ID already-open and matching-count requests were no-ops.
+The control observation took 76 ms, line read 43 ms and overview 16 ms over the
+persistent MCP/SSH bridge. These few samples are not a matched upstream benchmark.
+
+The stopped journal contains exactly three intents, five verified terminal
+requests, no unresolved action and no clock entries. Luna released its lease and
+status confirmed zero remaining time. The 259.333-second recording passed
+integrity checks; recorder exit 255 remains separate from normal game exit 0.
+Exact game, supervisor, recorder and bridge absence was verified. Private evidence
+and prior failed gates are retained. No screenshots drove the campaign tool steps;
+menu setup and the recording are separate. This paused diagnostic does not
+establish continuous-play throughput, universal routing or event causality.
+
+Local checks passed 1,070 Rust tests, 953 Python tests (37 skips), formatting and
+warning-free host/Linux Clippy. Linux/Windows CI passed on the tested commit;
+three macOS jobs were queued at the grant, with local macOS checks passed. This
+is not release acceptance. Next: extend standing economy plans and the remaining
+ordinary Linux adapters. Scrolling, new production lines, provincial placement,
+army/air/naval control and clean two-year/full campaigns remain open. Do not
+repeat the passed bounded production gate alone.
+
 ## Production003 opening and factory refusal — 21 October 2026
 
 Production003, 21 October 2026 (`855d5fb`): one Luna medium player opened
