@@ -57,6 +57,12 @@ pub(super) fn open_tool() -> Value {
             "lease_token":{"type":"string"}},
             "required":["request_id","lease_token"],"additionalProperties":false}})
 }
+pub(super) fn close_tool() -> Value {
+    let mut tool = open_tool();
+    tool["name"] = json!("hoi4_production_close");
+    tool["description"] = json!("Linux preview: ensure the owned production panel is closed through at most one verified ordinary topbar click. Only settled shown production mode2 may click; settled hidden production in idle mode23 is a no-op. Other active panels refuse. Exact original panel identity, exclusive lease, shared durable production journal and all unresolved-input blocks remain required. Same-ID uncertain retries only observe; never replay input. No raw coordinates, hotkeys or engine calls. Closing live validation pending; daily mixed-panel routing not enabled.");
+    tool
+}
 fn parse_open(args: &serde_json::Map<String, Value>, epoch: Epoch) -> Result<step::Target> {
     allowed(args, &["request_id", "lease_token"])?;
     string(args, "request_id")?;
@@ -93,14 +99,18 @@ pub(super) fn call(
     owner: &ClockService,
     process: &dyn Process,
     args: &serde_json::Map<String, Value>,
-    opening: bool,
+    panel_stage: Option<step::PanelStage>,
 ) -> Result<Value> {
     let until = Instant::now() + Duration::from_secs(10);
     owner.daily.input_check()?;
     drop(input_permit(&owner.input_gate)?);
     let mut state = owner.input_state()?;
-    let target = if opening {
-        parse_open(args, state.guard.epoch.clone())?
+    let target = if let Some(stage) = panel_stage {
+        let mut target = parse_open(args, state.guard.epoch.clone())?;
+        if let step::Target::Panel(panel) = &mut target {
+            panel.stage = stage;
+        }
+        target
     } else {
         parse(args, state.guard.epoch.clone())?
     };
@@ -327,7 +337,15 @@ fn panel_candidate(
             "Original production panel changed before candidate",
         ));
     }
-    crate::production_panel::require_open_candidate(&o.value, !o.geometry.is_empty())?;
+    match target {
+        step::Target::Panel(t) if t.stage == step::PanelStage::EnsureClosed => {
+            crate::production_panel::require_close_candidate(&o.value, !o.geometry.is_empty())?
+        }
+        step::Target::Panel(_) => {
+            crate::production_panel::require_open_candidate(&o.value, !o.geometry.is_empty())?
+        }
+        _ => return Err(Error::new("invalid_arguments", "Panel target required")),
+    }
     let surface = geometry::control_surface(&o.value["opener"]["render_diagnostic"])?;
     let codec = geometry::codec(&o.value["input_geometry"], profile)?;
     let point = research_attempt::point_candidate(&surface, &codec)?;
@@ -530,6 +548,8 @@ mod tests {
             assert!(parse_open(args.as_object().unwrap(), epoch()).is_err());
         }
         assert_eq!(open_tool()["inputSchema"]["additionalProperties"], false);
+        assert_eq!(close_tool()["inputSchema"], open_tool()["inputSchema"]);
+        assert_eq!(close_tool()["name"], "hoi4_production_close");
     }
     #[test]
     fn panel_state_requires_positive_settled_visibility_and_manager_mode() {

@@ -473,3 +473,25 @@ fn reviewed_named_parent_position_gate_is_supported_and_pinned() {
     )
     .is_err());
 }
+
+#[test]
+fn close_authority_cannot_be_borrowed_from_opening_or_missing_gates() {
+    let closing = json!({"build_id":game::BUILD_ID,"close_click_preconditions_clear":true,
+        "new_click_preconditions_clear":false,"opener":{"local_dispatch_ready":true}});
+    assert!(require_close_candidate(&closing, true).is_ok());
+    assert!(require_open_candidate(&closing, true).is_err());
+    for pointer in [
+        "/build_id",
+        "/close_click_preconditions_clear",
+        "/opener/local_dispatch_ready",
+    ] {
+        let mut v = closing.clone();
+        *v.pointer_mut(pointer).unwrap() = Value::Null;
+        assert!(require_close_candidate(&v, true).is_err());
+    }
+    assert!(require_close_candidate(&closing, false).is_err());
+    let opening = json!({"build_id":game::BUILD_ID,"new_click_preconditions_clear":true,
+        "opener":{"local_dispatch_ready":true}});
+    assert!(require_open_candidate(&opening, true).is_ok());
+    assert!(require_close_candidate(&opening, true).is_err());
+}

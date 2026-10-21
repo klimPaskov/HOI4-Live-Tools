@@ -7,6 +7,34 @@ Do not resume Mac campaigns or control the shared Windows game.
 
 ## Current checkpoint
 
+The next source adds a manual `hoi4_production_close` preview as the first
+production-to-Research/Focus handoff primitive. Its distinct `ensure_closed`
+target accepts only shown settled production mode 2 for one ordinary named
+button click; mode 23 with the same settled hidden root is a no-op. Other modes
+refuse. The exact callback, engine/modal gates, geometry, seven original panel
+identities, shared lease/controller and durable uncertainty rules remain intact.
+Opening receipts cannot be retargeted to closing. Closing receipts cannot count
+as allocation preparation or completion. Existing factory/opening journals retain
+their shape. The adapter is not yet used by the daily worker.
+
+Offline validation passed 1,096 host Rust tests, 953 Python tests (37 skips),
+formatting, host/Linux Clippy and Windows cross-compilation. The targeted Linux
+VM run passed 82 test executions (81 distinct tests). The first full host run
+caught an incorrectly expanded fixture loop; the corrected complete run passed
+and the original failure is retained privately. The Linux release binary builds.
+These results establish neither live closing nor cross-platform live support.
+
+This is based on the retained pinned-ELF selector/toggle disassembly, not a new
+REA analysis or live closing result. Next, verify a recorded bounded production
+open/close/reopen and Research/Focus handoff with one Luna medium player, including
+same-ID replay/no-op behavior and unchanged factory allocation. Then integrate
+mixed standing-plan routing with durable navigation budgets and original domain
+bindings. Do not relax incompatible-panel predicates or repeat production-only
+allocation acceptance as a substitute. Production006 below remains the latest
+live result; closing and mixed worker acceptance are pending.
+
+### Latest live result
+
 Production006 passed all 16 granted steps on `c7d1b1c` with one Luna medium
 player. The recorded vanilla FAIR Germany start used Normal difficulty and
 historical AI. The worker opened production and changed the exact infantry

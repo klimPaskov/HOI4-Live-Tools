@@ -509,11 +509,18 @@ impl Backend for PanelFake {
         assert_eq!(before, &State::Panel(self.state.clone()));
         Ok(())
     }
-    fn dispatch_once(&mut self, _: &Target, before: &State, _: &(), _: Instant) -> DispatchOutcome {
+    fn dispatch_once(
+        &mut self,
+        target: &Target,
+        before: &State,
+        _: &(),
+        _: Instant,
+    ) -> DispatchOutcome {
         assert_eq!(before, &State::Panel(self.state.clone()));
         self.dispatches += 1;
-        self.state.managed_mode = 2;
-        self.state.panel_shown = true;
+        let closing = matches!(target, Target::Panel(t) if t.stage == PanelStage::EnsureClosed);
+        self.state.managed_mode = if closing { 23 } else { 2 };
+        self.state.panel_shown = !closing;
         if self.uncertain {
             DispatchOutcome::Unknown(Some(error("fixture_lost_reply", "Lost reply")))
         } else {
@@ -717,4 +724,126 @@ fn panel_transition_readback_recovers_without_replaying_input() {
     assert_eq!(f.dispatches, 1);
     assert_eq!(f.transitions, 0);
     assert!(!j.blocks_game(&epoch().game));
+}
+
+fn close(j: &mut Journal, f: &mut PanelFake, id: &str) -> Result<Execution> {
+    j.execute(
+        id,
+        Target::Panel(PanelTarget::closed(epoch())),
+        TOKEN,
+        &authority(),
+        &RwLock::new(true),
+        &Domains(false),
+        f,
+        TIME,
+    )
+}
+fn closing_fake(mode: i32, shown: bool) -> PanelFake {
+    PanelFake {
+        state: panel_state(mode, shown),
+        dispatches: 0,
+        reads: 0,
+        fail: false,
+        uncertain: false,
+        transitions: 0,
+    }
+}
+#[test]
+fn close_panel_is_idempotent_and_receipts_cannot_be_retargeted_to_open() {
+    for (mode, shown, clicks) in [(2, true, 1), (23, false, 0)] {
+        let d = Scratch::new();
+        let mut j = Journal::open(&d.path()).unwrap();
+        let mut f = closing_fake(mode, shown);
+        let result = close(&mut j, &mut f, "close").unwrap();
+        assert_eq!(result.stage, Some("ensure_closed"));
+        assert_eq!(result.status, Status::Verified);
+        assert_eq!(f.dispatches, clicks);
+        assert_eq!(f.state, panel_state(23, false));
+        assert_eq!(
+            open(&mut j, &mut f, "close").unwrap_err().code,
+            "request_id_conflict"
+        );
+        close(&mut j, &mut f, "already-closed").unwrap();
+        assert_eq!(f.dispatches, clicks);
+        drop(j);
+        let mut j = Journal::open(&d.path()).unwrap();
+        f.state = panel_state(2, true);
+        f.fail = true;
+        let reads = f.reads;
+        let replay = close(&mut j, &mut f, "close").unwrap();
+        assert!(replay.historical);
+        assert!(!replay.current_state_verified);
+        assert_eq!(f.reads, reads);
+        assert_eq!(f.dispatches, clicks);
+        assert!(replay.verified_step().is_err());
+    }
+}
+#[test]
+fn closing_never_hides_foreign_modes_or_accepts_inconsistent_visibility() {
+    for mode in 0..=24 {
+        for shown in [false, true] {
+            if (mode == 2 && shown) || (mode == 23 && !shown) {
+                continue;
+            }
+            let d = Scratch::new();
+            let mut j = Journal::open(&d.path()).unwrap();
+            let mut f = closing_fake(mode, shown);
+            assert!(close(&mut j, &mut f, "close").is_err());
+            assert_eq!(f.dispatches, 0);
+            assert!(j.records.is_empty());
+        }
+    }
+}
+#[test]
+fn uncertain_close_survives_restart_blocks_open_and_only_settles_original_identity() {
+    let d = Scratch::new();
+    let mut j = Journal::open(&d.path()).unwrap();
+    let mut f = closing_fake(2, true);
+    f.uncertain = true;
+    assert_eq!(
+        close(&mut j, &mut f, "close").unwrap_err().code,
+        "action_uncertain"
+    );
+    drop(j);
+    let mut j = Journal::open(&d.path()).unwrap();
+    let reads = f.reads;
+    assert_eq!(
+        open(&mut j, &mut f, "new-open").unwrap_err().code,
+        "action_uncertain"
+    );
+    assert_eq!(f.reads, reads);
+    for (mode, shown) in [(2, true), (2, false), (12, false), (23, true)] {
+        f.state = panel_state(mode, shown);
+        assert_eq!(
+            close(&mut j, &mut f, "close").unwrap_err().code,
+            "action_uncertain"
+        );
+        assert!(j.blocks_game(&epoch().game));
+    }
+    f.state = panel_state(23, false);
+    f.state.panel_identity[6] += 8;
+    assert_eq!(
+        close(&mut j, &mut f, "close").unwrap_err().code,
+        "action_uncertain"
+    );
+    f.state = panel_state(23, false);
+    assert_eq!(
+        close(&mut j, &mut f, "close").unwrap().status,
+        Status::Verified
+    );
+    assert_eq!(f.dispatches, 1);
+    assert!(!j.blocks_game(&epoch().game));
+}
+#[test]
+fn closing_transition_recovery_never_issues_another_click() {
+    let d = Scratch::new();
+    let mut j = Journal::open(&d.path()).unwrap();
+    let mut f = closing_fake(2, true);
+    f.transitions = 2;
+    assert_eq!(
+        close(&mut j, &mut f, "close").unwrap().status,
+        Status::Verified
+    );
+    assert_eq!(f.dispatches, 1);
+    assert_eq!(f.transitions, 0);
 }

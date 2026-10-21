@@ -2,6 +2,12 @@
 
 ## Unreleased native preview
 
+- Add `hoi4_production_close`, an ordinary Linux panel-closing preview with an
+  explicit `ensure_closed` target. Require settled shown production or an idle
+  already-closed no-op; retain exact original identity, shared uncertainty
+  exclusion and restart-safe receipts. Closing cannot count as allocation
+  preparation or completion. Live closing and mixed-worker routing are pending.
+
 - Pass Production006 with one Luna medium player: daily production allocation
   reached 14 factories across three days, respected the 2-step daily limit, and
   survived completed-plan restart without repeated input. Fresh final reads,

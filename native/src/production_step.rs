@@ -27,7 +27,7 @@ fn error(code: &'static str, message: &str) -> Error {
 
 mod model;
 pub use model::{
-    FactoryState, FactoryTarget, LineIdentity, PanelState, PanelTarget, State, Target,
+    FactoryState, FactoryTarget, LineIdentity, PanelStage, PanelState, PanelTarget, State, Target,
 };
 
 pub trait Backend {
@@ -170,7 +170,10 @@ impl Execution {
             equipment_id: r.target.factory().ok().map(|t| t.equipment_id.clone()),
             original_requested: r.before.factory().ok().map(|s| s.requested),
             requested_factories: r.target.factory().ok().map(|t| t.factories),
-            stage: matches!(r.target, Target::Panel(_)).then_some("ensure_open"),
+            stage: match &r.target {
+                Target::Panel(t) => Some(t.stage.name()),
+                _ => None,
+            },
             status: r.status,
             delivery: r.delivery,
             historical,

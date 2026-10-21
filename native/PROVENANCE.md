@@ -17,13 +17,23 @@ zero adjustment and the own topbar receiver. Alternate function bundles refuse.
 
 Member `0x186d0d0` supplies selector 2 to `0x1709c20`. That function selects
 manager `+0xd8` and writes mode 2 at `+0x3d8`; already-active mode 2 toggles to
-23. The adapter therefore clicks only from mode 23 with a positively hidden,
-settled production root. Mode 2 with the same shown root is a no-op. Constructor
+23. The opening adapter therefore clicks only from mode 23 with a positively
+hidden, settled production root. Mode 2 with the same shown root is a no-op.
+The separate closing preview uses this same exact named callback only from
+settled shown mode 2, and verifies mode 23 with the original root settled hidden.
+In the retained static listing, `0x1709cc0` selects the active view for its virtual
+`+0x40` call; `0x1709d76` compares the current selector and `0x1709d7f` writes 23
+on equality. This supports the close route but does not establish live success.
+An already-hidden idle panel is a no-op; any other active mode refuses. Closing
+retains the same engine/modal/geometry gates and original seven identities.
+Its distinct `ensure_closed` journal target cannot reuse an opening request ID,
+replay uncertain delivery or qualify as allocation preparation/completion.
+Constructor
 argument 5 goes through `0x1693450` / `0x18e7850` into update-interface flags,
 not manager mode. The prior fixture and readiness predicate copied the wrong
 interpretation; both are corrected before live production acceptance.
 
-Both opening and factory dispatch require manager transition bytes `+0x3e1/2`
+Opening, closing and factory dispatch require manager transition bytes `+0x3e1/2`
 clear, game-state `+0xa59` nonzero and idler `+0x8f0` zero. The earlier
 `CanUpdateGui` byte `+0x5b2` prerequisite was incorrect for external ordinary
 input. Production002 observed zero between callbacks and refused before input.

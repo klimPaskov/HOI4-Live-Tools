@@ -11,6 +11,8 @@ pub enum Target {
 pub enum PanelStage {
     #[serde(rename = "ensure_open")]
     EnsureOpen,
+    #[serde(rename = "ensure_closed")]
+    EnsureClosed,
 }
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -18,7 +20,21 @@ pub struct PanelTarget {
     pub epoch: Epoch,
     pub stage: PanelStage,
 }
+impl PanelStage {
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::EnsureOpen => "ensure_open",
+            Self::EnsureClosed => "ensure_closed",
+        }
+    }
+}
 impl PanelTarget {
+    pub fn closed(epoch: Epoch) -> Self {
+        Self {
+            epoch,
+            stage: PanelStage::EnsureClosed,
+        }
+    }
     pub fn new(epoch: Epoch) -> Self {
         Self {
             epoch,
@@ -111,19 +127,23 @@ impl State {
         self.validate(target)?;
         match (self, target) {
             (Self::Factories(s), Target::Factories(t)) => s.step(t),
-            (Self::Panel(s), Target::Panel(_)) if s.managed_mode == 23 && !s.panel_shown => Ok(()),
+            (Self::Panel(s), Target::Panel(t)) if match t.stage {
+                PanelStage::EnsureOpen => s.managed_mode == 23 && !s.panel_shown,
+                PanelStage::EnsureClosed => s.managed_mode == 2 && s.panel_shown,
+            } => Ok(()),
             _ => Err(error(
                 "production_precondition",
-                "Opening requires settled hidden production and idle manager mode23",
+                "Panel step requires settled idle mode23 for opening or shown production mode2 for closing",
             )),
         }
     }
     pub(super) fn reached(&self, target: &Target) -> bool {
         match (self, target) {
             (Self::Factories(s), Target::Factories(t)) => s.requested == t.factories,
-            (Self::Panel(s), Target::Panel(_)) => {
-                s.managed_mode == crate::production_lines::controls::MANAGED_MODE && s.panel_shown
-            }
+            (Self::Panel(s), Target::Panel(t)) => match t.stage {
+                PanelStage::EnsureOpen => s.managed_mode == 2 && s.panel_shown,
+                PanelStage::EnsureClosed => s.managed_mode == 23 && !s.panel_shown,
+            },
             _ => false,
         }
     }

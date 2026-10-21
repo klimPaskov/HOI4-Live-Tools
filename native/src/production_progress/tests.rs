@@ -592,7 +592,7 @@ fn budget_is_shared_across_entries_and_cannot_be_reset_by_reopening() {
 
 #[test]
 fn invalid_steps_and_foreign_completion_attempts_never_persist_input_authority() {
-    for case in 0..7 {
+    for case in 0..8 {
         let temp = Temp::new();
         let e = entry(if case == 1 || case >= 3 { 11 } else { 14 });
         let mut p = Progress::open(&temp.progress(), scope(), std::slice::from_ref(&e)).unwrap();
@@ -606,6 +606,13 @@ fn invalid_steps_and_foreign_completion_attempts_never_persist_input_authority()
             before_sequence: 5,
         };
         let result = match case {
+            7 => p.begin_preparation(
+                &e,
+                Target::Panel(PanelTarget::closed(scope().epoch)),
+                &factory(10),
+                &context(1),
+                2,
+            ), // Closing cannot masquerade as allocation preparation.
             0 | 1 => {
                 let mut desired = target(&scope(), &e).unwrap();
                 desired.factories = if case == 0 { 12 } else { 11 };

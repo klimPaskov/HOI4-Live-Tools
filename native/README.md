@@ -8,6 +8,13 @@ The primary path uses fresh process state and compact stdio MCP JSON. Reads and
 server waits never pause the game. No screenshots, save parsing, raw memory
 addresses, arbitrary process writes or injected engine calls are exposed as tools.
 
+The Linux production profile also exposes `hoi4_production_close` as a manual
+preview. It uses the ordinary production button only from settled shown production;
+already-hidden idle state is a no-op and other active panels refuse. The request
+uses the shared lease/journal, preserves the original panel identity and never
+replays uncertain input. Closing has offline tests only. Automatic mixed-domain
+panel routing remains disabled pending live verification and durable worker integration.
+
 ## Build
 
 Use Rust 1.86 or newer:

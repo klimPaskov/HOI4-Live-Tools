@@ -146,7 +146,10 @@ impl Data {
             latest_date = Some(s.date_raw);
             let final_stage = s.completion.is_some();
             match &s.target {
-                Target::Panel(_) if !final_stage && s.before != goal.factories => {}
+                Target::Panel(t)
+                    if t.stage == crate::production_step::PanelStage::EnsureOpen
+                        && !final_stage
+                        && s.before != goal.factories => {}
                 Target::Factories(t) => {
                     t.validate()?;
                     let wanted = if final_stage {

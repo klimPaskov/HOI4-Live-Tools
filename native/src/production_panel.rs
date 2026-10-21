@@ -19,12 +19,21 @@ mod tests;
 /// or arbitrary observation strings/addresses enter the error message.
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 pub(crate) fn require_open_candidate(value: &Value, geometry_present: bool) -> Result<()> {
+    require_candidate(value, geometry_present, false)
+}
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+pub(crate) fn require_close_candidate(value: &Value, geometry_present: bool) -> Result<()> {
+    require_candidate(value, geometry_present, true)
+}
+fn require_candidate(value: &Value, geometry_present: bool, closing: bool) -> Result<()> {
+    let preconditions = if closing {
+        "close_click_preconditions_clear"
+    } else {
+        "new_click_preconditions_clear"
+    };
     let gates = [
         ("build", value["build_id"] == game::BUILD_ID),
-        (
-            "preconditions",
-            value["new_click_preconditions_clear"] == true,
-        ),
+        ("preconditions", value[preconditions] == true),
         ("opener", value["opener"]["local_dispatch_ready"] == true),
         ("geometry", geometry_present),
     ];
@@ -41,6 +50,7 @@ pub(crate) fn require_open_candidate(value: &Value, geometry_present: bool) -> R
     let mut details = serde_json::Map::new();
     for (name, pointer) in [
         ("panel_hidden", "/root/locally_hidden_settled"),
+        ("panel_shown", "/root/locally_shown_settled"),
         ("engine", "/engine_gates/conservative_engine_clear"),
         ("engine_known", "/engine_gates/known_gates_clear"),
         ("settings", "/engine_gates/settings/predicate_clear"),
@@ -120,7 +130,8 @@ pub(crate) fn require_open_candidate(value: &Value, geometry_present: bool) -> R
     Err(Error::new(
         "production_precondition",
         format!(
-            "Production opening refused before input; failed={}; observed={}",
+            "Production {} refused before input; failed={}; observed={}",
+            if closing { "closing" } else { "opening" },
             failed.join(","),
             Value::Object(details)
         ),
@@ -602,12 +613,13 @@ pub(crate) fn observe(
                     && r.byte(registry + 0x12)? == 0
                     && r.u64(registry + 0x158)? == 0
                     && r.u64(registry + 0x230)? == 0;
-                let ready = mode == 23
-                    && value["root"]["locally_hidden_settled"] == true
-                    && engine["conservative_engine_clear"] == true
+                let clear = engine["conservative_engine_clear"] == true
                     && selections["production_equipment_selections_hidden_settled"] == true
                     && common["conservative_scoped_clear"] == true
                     && gui_clear;
+                let ready = clear && mode == 23 && value["root"]["locally_hidden_settled"] == true;
+                let close_ready =
+                    clear && mode == 2 && value["root"]["locally_shown_settled"] == true;
                 value["engine_gates"] = engine;
                 value["production_selections"] = selections;
                 value["common_blockers"] = common;
@@ -618,12 +630,14 @@ pub(crate) fn observe(
                     idler,
                     manager,
                     registry,
-                    include_geometry && ready,
+                    include_geometry && (ready || close_ready),
                     &mut scope,
                     &mut geometry,
                 )?;
                 value["new_click_preconditions_clear"] =
                     json!(ready && value["opener"]["local_dispatch_ready"] == true);
+                value["close_click_preconditions_clear"] =
+                    json!(close_ready && value["opener"]["local_dispatch_ready"] == true);
                 if include_geometry {
                     value["input_geometry"] = crate::gui::input_geometry_from_reader(&r, base)?;
                 }
