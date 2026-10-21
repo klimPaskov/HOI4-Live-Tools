@@ -149,16 +149,18 @@ fn control(
     out["disabled_state3"] = json!(state == 3);
     out["raw_flags"] = json!(flags);
     out["literal_shown"] = json!(flags & 0x800 != 0);
-    let optional_null = r.u64(button + 0x1a8)? == 0;
+    // Both paths bind an exact Standard within its named own-registry
+    // Container. Reuse the same witnessed parent-position gate as the opener.
+    let optional = crate::production_panel::optional_gate(r, base, container, button, scope)?;
     let blocked = r.byte(button + 0x201)?;
     let delegate_null = r.u64(button + 0xd0)? == 0;
     let dispatch_ready = matches!(state, 0 | 2)
         && flags & 0xc00 == 0x800
-        && optional_null
+        && optional["clear"] == true
         && blocked == 0
         && delegate_null;
     out["local_dispatch_ready"] = json!(dispatch_ready);
-    out["local"] = json!({"optional_gate_1a8_null":optional_null,
+    out["local"] = json!({"optional_gate_1a8_null":optional["absent"],"optional_gate":optional,
         "block201_raw":blocked,"delegate_d0_null":delegate_null});
     if r.u64(button + 0x80)? != base + 0x4347488 || r.u64(button + 0xa0)? != 0 {
         out["reason"] = json!("factory_observer_override_or_layout_unavailable");

@@ -50,6 +50,7 @@ impl Fake {
         f.word(BUTTON, BASE + 0x43470c8);
         f.word(BUTTON + 0x68, REG);
         f.word(BUTTON + 0x1a8, 0);
+        f.word(WINDOW + 0xe78, 0);
         f.put(BUTTON + 0x201, &[0]);
         f.word(BUTTON + 0xd0, 0);
         f.number(BUTTON + 0xac, 0);
@@ -208,6 +209,87 @@ fn local_dispatch_gates_do_not_erase_binding_or_read_geometry() {
     let mut f = Fake::fixture();
     f.number(BUTTON + 0xac, 2);
     assert_eq!(f.control(false).unwrap()["local_dispatch_ready"], true);
+}
+
+#[test]
+fn factory_parent_gate_requires_exact_owned_position_and_literal_true() {
+    let gate = 0xb0000;
+    for flag in [0, 1, 2] {
+        let mut f = Fake::fixture();
+        f.word(BUTTON + 0x1a8, gate);
+        f.word(WINDOW + 0xe78, gate);
+        f.word(gate, BASE + 0x43484f0);
+        f.put(gate + 0x128, &[flag]);
+        let mut scope = Vec::new();
+        let result = super::control(
+            &Reader::new(&f),
+            BASE,
+            ROW,
+            WINDOW,
+            REG,
+            "factories_add_1x",
+            0x1018,
+            false,
+            &mut scope,
+            &mut Vec::new(),
+        );
+        if flag == 2 {
+            assert!(result.is_err());
+        } else {
+            let v = result.unwrap();
+            assert_eq!(v["binding_available"], true);
+            assert_eq!(v["local_dispatch_ready"], flag == 1);
+            assert_eq!(
+                v["local"]["optional_gate"]["own_position_join_verified"],
+                true
+            );
+            assert_eq!(v["input_authorized"], false);
+            assert!(scope.contains(&gate));
+        }
+        assert!(!f.reads.borrow().iter().any(|(p, _)| *p == BUTTON + 0xe8));
+    }
+}
+
+#[test]
+fn unbound_factory_gate_never_reads_payload_or_renderer() {
+    let gate = 0xb0000;
+    for own in [false, true] {
+        let mut f = Fake::fixture();
+        f.word(BUTTON + 0x1a8, gate);
+        if own {
+            f.word(WINDOW + 0xe78, gate);
+            f.word(gate, BASE + 0x43484f8); // Unknown owned position type.
+        }
+        let v = f.control(true).unwrap();
+        assert_eq!(v["binding_available"], true);
+        assert_eq!(v["local_dispatch_ready"], false);
+        assert!(v["local"]["optional_gate"]["clear"].is_null());
+        assert!(!f
+            .reads
+            .borrow()
+            .iter()
+            .any(|(p, _)| *p == gate + 0x128 || *p == BUTTON + 0xe8 || (!own && *p == gate)));
+    }
+}
+
+#[test]
+fn owned_factory_gate_never_bypasses_other_local_blockers() {
+    for (field, value, width) in [
+        (BUTTON + 0x201, 1u64, 1),
+        (BUTTON + 0xd0, 0xc0000, 8),
+        (BUTTON + 0xac, 3, 4),
+        (BUTTON + 0x74, 0xc00, 4),
+    ] {
+        let mut f = Fake::fixture();
+        let gate = 0xb0000;
+        f.word(BUTTON + 0x1a8, gate);
+        f.word(WINDOW + 0xe78, gate);
+        f.word(gate, BASE + 0x43484f0);
+        f.put(gate + 0x128, &[1]);
+        f.put(field, &value.to_le_bytes()[..width]);
+        assert_eq!(f.control(true).unwrap()["local_dispatch_ready"], false);
+        assert!(!f.reads.borrow().iter().any(|(p, _)| *p == BUTTON + 0xe8));
+    }
 }
 #[test]
 fn unused_callback_selectors_and_kind9_cancel_are_refused() {

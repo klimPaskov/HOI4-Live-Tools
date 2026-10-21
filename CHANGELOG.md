@@ -2,6 +2,12 @@
 
 ## Unreleased native preview
 
+- Verify Linux production opening with one recorded Luna medium ordinary click,
+  historical replay and an already-open no-op. The factory increment refused
+  before input; reuse the exact owned parent-position gate already supported by
+  the opener instead of requiring null. Factory input and campaigns remain
+  unverified; unknown gates and all existing blockers still refuse.
+
 - Correct production input eligibility: the engine’s transient GUI-update phase
   is diagnostic-only for ordinary X11 input. A recorded Luna refusal exposed
   the incorrect prerequisite; static setter/caller evidence established its

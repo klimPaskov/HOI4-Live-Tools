@@ -1,5 +1,36 @@
 # Clausewitz-MCP Linux validation
 
+## Production003 opening and factory refusal — 21 October 2026
+
+Production003, 21 October 2026 (`855d5fb`): one Luna medium player opened
+production through one ordinary topbar click in 2.18 seconds. Canonical state
+verified the shown panel. Same-ID historical replay took 6 ms; a new-ID
+already-open no-op took 35 ms and delivered no input. The recorded fresh start
+was vanilla FAIR Germany, Normal difficulty and historical AI. No clock action
+was issued; this paused diagnostic does not measure continuous-play performance.
+
+The first factory increment refused before intent or input in 85 ms. Captured
+controls showed both named buttons enabled, but their nonnull optional parent
+gates failed the reader's null-only predicate. Those gate identities and payloads
+were not captured, so the failed run cannot establish their type or clearance.
+The corrected observer now reuses the opener's independently mapped exact
+own-container position join, with the same snapshot witnesses and dispatch
+identity scope. Foreign pointers, unknown types, false/nonboolean flags and
+other blockers still refuse. Factory dispatch remains unverified live.
+
+Luna stopped immediately, released its lease and confirmed zero remaining time.
+The journal contains a verified opening and no-op, no factory intent and no
+unresolved action. The 482.333-second recording passed integrity checks; recorder
+exit 255 was retained separately from game exit 0 after ordinary window close.
+Exact game, supervisor, recorder and bridge absence was verified; evidence stays
+private. Linux and Windows native CI and all six Python jobs passed on `855d5fb`;
+the macOS native job was cancelled, so this was not a complete CI pass. Local
+macOS checks passed before the gate. Two-year and full-campaign acceptance remain
+open. Next: validate the parent-gate correction and run a fresh bounded recorded
+Luna medium factory gate.
+Local correction checks passed 1,070 Rust tests, 953 Python tests (37 skips),
+formatting and warning-free host/Linux Clippy. These are offline results.
+
 ## Production002 diagnostic and phase correction — 21 October 2026
 
 Production002, 21 October 2026: all nine CI jobs passed on `28afe8f`, including

@@ -377,7 +377,10 @@ fn callback(
     out["reason"] = json!("exact_production_first_void_callback");
     Ok(out)
 }
-fn optional_gate(
+/// Caller must bind the exact Standard in its validated own-registry Container.
+/// All reads use the caller's snapshot witnesses; the joined position also
+/// enters its pre-dispatch identity scope.
+pub(crate) fn optional_gate(
     r: &Reader<'_>,
     base: u64,
     window: u64,

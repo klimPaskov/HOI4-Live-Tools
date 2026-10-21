@@ -57,6 +57,17 @@ routing, command causality or campaign acceptance. No native function is called.
 
 ## Linux production control observation
 
+The factory observer now reuses the production opener's optional Standard gate.
+The exact own-registry row Container and its named Standard are validated before
+joining button `+0x1a8` to that Container's `+0xe78`. The independent constructor,
+virtual setter and event-handler evidence is recorded under “Own optional parent
+gate and durable construction foundation” below. Only primary `0x43484f0` and a
+literal true byte `+0x128` permit this local check; unknown pointers/types are not
+traversed. The joined position enters the pre-dispatch identity scope and every
+read remains in the final snapshot witnesses. No memory write or engine call is
+introduced. Production003 exposed the null-only refusal but did not read these
+optional payloads; this correction's factory input branch still needs live proof.
+
 `production_lines/control_snapshot.rs` and `production_lines/controls.rs` are
 new project code for ELF build `a4971c9e8ac9a6f2487dea109e01f9839ee59db7`.
 The existing full own-line validator supplies the same-reader typed handle,
