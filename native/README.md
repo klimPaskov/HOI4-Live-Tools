@@ -432,10 +432,23 @@ Preparation errors stop this preview. The `production` digest/details and STOP
 fields retain historical progress, failures and a dated step budget. They do not
 claim fresh factory state. Manual production tools keep their existing API.
 
-This worker is offline-tested; its recorded advancing-time Luna gate remains
-pending. Production004 establishes the bounded manual route only. Larger-scale
+Production005 reached 14 factories across three days with five verified worker
+steps, but stopped on a historical `torn_read` in its second digest. Completed-
+plan restart, no replay and final fresh reads were not reached; worker acceptance
+remains pending. Production004 establishes the bounded manual route. Larger-scale
 production management, universal panel routing and campaign acceptance remain
 unfinished.
+
+`clock_probe_historical` separates rejected read-only scheduling clock probes
+from action failures. It retains first/latest causes, total/consecutive rejected
+reads and recovery after a later successful probe for the current worker lifetime
+in digest/details and STOP. A rejected probe schedules no work; the next probe
+uses the ordinary 250 ms worker wake interval. Only `torn_read` before scheduling,
+without retained uncertainty, uses this channel. Action errors, other reader
+errors and quarantine remain in `last_error`; a successful probe cannot clear
+them. Probe history is neither fresh state nor input authority. Compact overflow
+may omit the optional section-name list; documented detail sections remain
+available under the exact snapshot ID. This correction awaits a fresh live gate.
 
 The current game uses a 365-day calendar, including February 28 in 1936. Its raw
 clock includes a 5000-year epoch and displays hours as 1–24. Raw research counters

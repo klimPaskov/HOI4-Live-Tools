@@ -1,8 +1,12 @@
 //! Join/stop ownership only; no game input, reader or strategy.
+#[cfg(any(target_os = "linux", all(test, unix)))]
+mod clock_probe;
 use crate::{
     daily_governor::{WakeReason, Wakeup},
     error::{Error, Result},
 };
+#[cfg(target_os = "linux")]
+pub(crate) use clock_probe::ClockProbeHistory;
 use std::{
     sync::{
         atomic::{AtomicBool, Ordering},

@@ -2,6 +2,17 @@
 
 ## Unreleased native preview
 
+- Preserve the incomplete Production005 gate: five verified production steps
+  reached 14 factories across three days, then a historical `torn_read` ended
+  the gate before completed-plan restart/no-replay checks. Stopped journals,
+  recording, release and normal close passed independent audit.
+- Separate known read-only scheduling clock tears from action failures in daily
+  digest/details and STOP. Retain first/latest causes and recovery history for
+  the worker lifetime; use the existing wake interval without retrying input.
+  Other errors and uncertainty retain their behavior. Keep combined domain
+  histories within the 2 KB summary limit with exact detail retrieval. Fresh
+  live validation remains pending.
+
 - Add an explicit default-off Linux daily production worker preview with durable
   original-line preparation, bounded one-factory steps across days, separate
   daily step/goal budgets, exact final allocation proof and shared uncertainty

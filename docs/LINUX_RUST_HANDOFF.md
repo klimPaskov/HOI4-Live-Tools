@@ -7,6 +7,55 @@ Do not resume Mac campaigns or control the shared Windows game.
 
 ## Current checkpoint
 
+Production005 on `b15f189` reached the requested 14 factories through the daily
+worker while game time advanced, but the gate remains incomplete. One Luna
+medium player used a recorded vanilla FAIR Germany start on Normal/historical.
+The paused phase spent two production steps (panel opening, 10→11). After
+setting speed 3, unpausing and restarting the worker, it reached 12, 13 and 14.
+Durable step usage was 2/2/1 across three days. The final goal completed with
+canonical readback and a later daily witness on 3 January 1936; the wait reached
+4 January 01:00. No pause action was issued.
+
+The second digest caused the predeclared broker to stop because `last_error`
+contained a historical `torn_read` ("Snapshot witness changed"). The original
+report did not identify its phase; the stopped evidence cannot prove where it
+occurred. Luna issued only STOP, lease release/status after that refusal.
+The completed-plan restart, no-replay check and final fresh production/overview
+reads were not reached. Do not relabel this gate as passed.
+
+Independent stopped audit found five production Intent/Verified pairs, one
+completed governor goal and two verified clock actions, with no unresolved
+input. Recording integrity passed (233.666 seconds; recorder exit 255 retained
+separately). Ordinary close returned game exit 0 in 2.454 seconds. Exact game,
+owner, recorder and bridge absence, canonical lease release and unchanged 183
+native inputs/19 helpers were verified. All nine exact-commit CI jobs passed.
+Private recordings, calls and journals remain outside Git.
+
+The next source separates rejected scheduling clock probes from action failures.
+Only `torn_read` from the initial read-only clock probe, with no retained
+uncertainty and a Continue disposition, enters `clock_probe_historical`.
+The batch ends without scheduling work and the existing 250 ms wake interval
+applies. First/latest causes, total/consecutive rejections and recovery after a
+successful probe remain visible for that worker lifetime through digest/details
+and STOP. This history never grants input or freshness. Other read errors,
+action-phase errors, ownership loss and quarantine keep their existing behavior;
+probe recovery cannot clear an action failure. This prospective change does not
+identify or repair Production005's missing phase evidence.
+
+Validation passed 1,091 host Rust tests, 953 Python tests (37 skips), formatting,
+host/Linux Clippy and Windows cross-compilation. All 34 targeted tests passed
+inside the Linux VM. The first Linux fixture run exposed an empty-field digest
+size regression; its failed log is retained and the corrected run passed. These
+are offline checks, not fresh live acceptance.
+
+Next: require exact-commit CI, then run a fresh bounded
+recorded Luna medium production-worker gate through final allocation, completed-
+plan restart, STOP and no replay. Require explicit clock-probe history in the new
+grant; preserve all action failures. Broader panel routing, two-year/full
+campaigns and Windows/macOS native live adapters remain incomplete.
+
+### Previous production-worker preview
+
 The Linux daily worker now has an explicit production allocation preview.
 It requires the existing owned production profile, owner `daily_production: true`,
 plan `production_permission: true` and `max_production_steps_per_day` from 1 to 16.

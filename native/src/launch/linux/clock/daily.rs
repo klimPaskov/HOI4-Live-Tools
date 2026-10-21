@@ -324,18 +324,20 @@ impl Controller {
                 if let Some(a) = active.as_mut() {
                     a.life.stop()?;
                 }
-                let (last_error, last_preparation_refusal, last_stage_failure) = active
-                    .as_ref()
-                    .and_then(|a| {
-                        a.report.try_lock().ok().map(|r| {
-                            (
-                                r["last_error"].clone(),
-                                r["last_preparation_refusal"].clone(),
-                                r["last_stage_failure"].clone(),
-                            )
+                let (last_error, last_preparation_refusal, last_stage_failure, clock_probe) =
+                    active
+                        .as_ref()
+                        .and_then(|a| {
+                            a.report.try_lock().ok().map(|r| {
+                                (
+                                    r["last_error"].clone(),
+                                    r["last_preparation_refusal"].clone(),
+                                    r["last_stage_failure"].clone(),
+                                    r["clock_probe_historical"].clone(),
+                                )
+                            })
                         })
-                    })
-                    .unwrap_or((Value::Null, Value::Null, Value::Null));
+                        .unwrap_or((Value::Null, Value::Null, Value::Null, Value::Null));
                 let focus_wait = active
                     .as_ref()
                     .and_then(|a| a.report.try_lock().ok().map(|r| r["focus_wait"].clone()))
@@ -392,7 +394,7 @@ impl Controller {
                     .transpose()?
                     .unwrap_or((Value::Null, Value::Null));
                 Ok(
-                    json!({"assignments":assignments,"daily_budget":budget,"production":production,"core_pending_historical":core_state,"focus":focus,"latest_focus_wait_historical":focus_wait,"focus_readiness_historical":focus_readiness,"worker_stopped":true,"game_time_changed":false,"uncertainty_retained":self.blocked.load(Ordering::Acquire),"last_error":last_error,"last_preparation_refusal":last_preparation_refusal,"last_stage_failure":last_stage_failure}),
+                    json!({"assignments":assignments,"daily_budget":budget,"production":production,"core_pending_historical":core_state,"focus":focus,"latest_focus_wait_historical":focus_wait,"focus_readiness_historical":focus_readiness,"worker_stopped":true,"game_time_changed":false,"uncertainty_retained":self.blocked.load(Ordering::Acquire),"last_error":last_error,"last_preparation_refusal":last_preparation_refusal,"last_stage_failure":last_stage_failure,"clock_probe_historical":clock_probe}),
                 )
             }
             "details" => {
@@ -537,6 +539,7 @@ fn worker(
     blocked: &AtomicBool,
 ) {
     let mut generation = 0;
+    let mut clock_probe = crate::daily_worker::ClockProbeHistory::default();
     while !stop.load(Ordering::Acquire) {
         let Some(shared) = owner.upgrade() else { break };
         if !shared.alive.load(Ordering::Acquire)
@@ -547,6 +550,7 @@ fn worker(
         }
         let mut refusal_entry = None;
         let mut production_failed = false;
+        let mut at_clock_probe = false;
         let run = (|| -> Result<Option<core::DailyResult>> {
             let _read = shared
                 .reads
@@ -579,7 +583,10 @@ fn worker(
                 }
                 state.authority.authorize(token, &state.guard.epoch)?;
             }
+            at_clock_probe = true;
             let raw = producer.probe_clock(process, Instant::now() + Duration::from_secs(1))?;
+            at_clock_probe = false;
+            clock_probe.verified(raw);
             let mut governor = try_state(governor)?;
             let day = (i64::from(raw) - 43_800_000).div_euclid(24);
             let heads: Vec<_> = if research_permission {
@@ -1007,9 +1014,13 @@ fn worker(
                 }
                 Ok(None) => {}
                 Err(e) => {
-                    report["last_error"] = json!({"code":e.code,"entry_id":refusal_entry,"reason":crate::daily_navigation::bounded_reason(&e.message),"historical":true});
+                    if !clock_probe.rejected(&e, at_clock_probe, disposition) {
+                        report["last_error"] = json!({"code":e.code,"entry_id":refusal_entry,"reason":crate::daily_navigation::bounded_reason(&e.message),"historical":true,
+                            "phase":if at_clock_probe {"clock_probe"} else {"worker_batch"}});
+                    }
                 }
             }
+            report["clock_probe_historical"] = clock_probe.summary();
         }
         match disposition {
             crate::daily_worker::Disposition::Quarantine => {
@@ -1849,6 +1860,9 @@ fn compact_observation_with_details(
     digest["running_is_input_authority"] = json!(false);
     digest["stop_reason"] = report["stop_reason"].clone();
     digest["last_error"] = report["last_error"].clone();
+    if report["clock_probe_historical"].is_object() {
+        digest["clock_probe_historical"] = report["clock_probe_historical"].clone();
+    }
     digest["last_preparation_refusal"] = report["last_preparation_refusal"].clone();
     digest["last_stage_failure"] = report["last_stage_failure"].clone();
     digest["focus"] = report["focus"].clone();
@@ -2401,5 +2415,29 @@ mod tests {
         assert_eq!(overflow["production"]["budget"]["used_steps"], 2);
         assert_eq!(overflow["production"]["blocked"], true);
         assert_eq!(details.get(&id, "production").unwrap()["value"], production);
+    }
+    #[test]
+    fn clock_probe_recovery_is_separate_from_action_failures_in_digest() {
+        let mut history = crate::daily_worker::ClockProbeHistory::default();
+        assert!(history.rejected(
+            &Error::new("torn_read", "rejected scheduling witness"),
+            true,
+            crate::daily_worker::Disposition::Continue,
+        ));
+        history.verified(60759371);
+        let original = json!({"code":"production_precondition","reason":"original action failure","historical":true});
+        let mut details = crate::daily_digest::Details::default();
+        let out = compact_observation_with_details(
+            &mut details, digest_sample(),
+            &json!({"clock_probe_historical":history.summary(),"last_error":original,"running":true}),
+            false, 1,
+        ).unwrap();
+        assert_eq!(out["last_error"], original);
+        assert_eq!(out["clock_probe_historical"]["recovered"], true);
+        assert_eq!(
+            out["clock_probe_historical"]["last_failure"]["reason"],
+            "rejected scheduling witness"
+        );
+        assert_eq!(out["clock_probe_historical"]["input_authorized"], false);
     }
 }

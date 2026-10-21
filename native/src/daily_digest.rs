@@ -13,6 +13,7 @@ pub(crate) const SECTIONS: &[&str] = &[
     "latest_focus_wait_historical",
     "focus_readiness_historical",
     "last_error",
+    "clock_probe_historical",
     "last_preparation_refusal",
     "last_stage_failure",
     "retained",
@@ -135,6 +136,12 @@ pub(crate) fn overflow(full: &Value, snapshot_id: &str) -> Result<Value> {
         }
     }
     out["historical_failure_codes"] = Value::Object(failures);
+    if full["clock_probe_historical"].is_object() {
+        let probe = &full["clock_probe_historical"];
+        out["clock_probe_historical"] = json!({"rejected_reads":probe["rejected_reads"],
+            "consecutive_rejections":probe["consecutive_rejections"],"recovered":probe["recovered"],
+            "last_failure_code":probe["last_failure"]["code"]});
+    }
     if full["production"].is_object() {
         out["production"] = json!({"budget":full["production"]["budget"],
             "permission":full["production"]["permission"],
@@ -151,6 +158,16 @@ pub(crate) fn overflow(full: &Value, snapshot_id: &str) -> Result<Value> {
         .filter(|key| full.get(**key).is_some_and(|v| !v.is_null()))
         .copied()
         .collect::<Vec<_>>());
+    // The optional discovery list duplicates documented section names. Drop it
+    // before any essential failure/budget when all domain histories coexist;
+    // the exact snapshot and every supported detail section remain available.
+    if serde_json::to_vec(&out)
+        .map_err(|e| Error::new("digest_error", e.to_string()))?
+        .len()
+        > 2048
+    {
+        out["history"].as_object_mut().unwrap().remove("sections");
+    }
     // The fixed schema is bounded for production field limits. Refuse malformed
     // caller-generated oversized essentials rather than silently falsifying them.
     if serde_json::to_vec(&out)
@@ -183,6 +200,10 @@ mod tests {
                 "not_queued_attempts":2048,"latest_not_queued":failure,
                 "latest_completion":{"entry_id":"q".repeat(128),"request_id":"b".repeat(64),"state":"Complete","observed_sequence":5}},
             "last_error":failure,"last_preparation_refusal":failure,"last_stage_failure":failure,
+            "clock_probe_historical":{"rejected_reads":u64::MAX,"consecutive_rejections":0,"recovered":true,
+                "first_failure":{"code":"torn_read","reason":"first probe"},"last_failure":{"code":"torn_read","reason":"last probe"}},
+            "production":{"permission":true,"budget":{"day":706640,"used_steps":16,"limit":16,"historical":true},
+                "progress":{"blocked":true,"latest":{"failure":{"cause":failure}}}},
             "focus":{"failure":failure,"refusal":failure,"uncertainty":failure,"start_failure":failure,
                 "preparation":{"verified":true,"goal_completed":false,"request_id":"c".repeat(64)}},
             "latest_preparation_historical":{"request_id":"d".repeat(64)},
@@ -213,9 +234,14 @@ mod tests {
                 .as_object()
                 .unwrap()
                 .len(),
-            7
+            8
         );
         assert_eq!(compact["verified"], json!([]));
+        assert_eq!(
+            compact["clock_probe_historical"]["rejected_reads"],
+            u64::MAX
+        );
+        assert_eq!(compact["clock_probe_historical"]["recovered"], true);
         for section in SECTIONS {
             let saved = details.get(&id, section).unwrap();
             assert_eq!(saved["value"], full[section]);
