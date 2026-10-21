@@ -8,12 +8,15 @@ use crate::{
     research_ui::exact as exact_primary,
 };
 use serde_json::{json, Value};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
+#[path = "controls_geometry.rs"]
+mod geometry_trace;
 
 /// Pointer identities remain internal to the request/controller context.
 pub(crate) struct Observation {
     pub(crate) value: Value,
     pub(crate) scope: Vec<u64>,
+    pub(crate) geometry: BTreeMap<String, Vec<(u64, Vec<u8>)>>,
 }
 fn invalid(message: &str) -> Error {
     Error::new("invalid_production_controls", message)
@@ -105,6 +108,7 @@ fn control(
     alias: u64,
     geometry: bool,
     scope: &mut Vec<u64>,
+    transcript: &mut Vec<(u64, Vec<u8>)>,
 ) -> Result<Value> {
     let controls = members(r, container + 0x9a0, 256)?;
     let named = crate::gui_registry::lookup(r, container + 0x9b8, &controls, name, 128)?;
@@ -221,14 +225,27 @@ fn control(
                     json!({"available":false,"reason":"renderer_layout_unavailable"});
                 return Ok(out);
             }
-            if r.u64(render + 0x138)? != button {
+            let render_owner = r.u64(render + 0x138)?;
+            if render_owner != button {
                 return Err(invalid("Factory renderer must belong to bound Standard"));
             }
             scope.push(render);
+            let trace = geometry_trace::Transcript::new(r);
+            trace.seed(button + 0xe8, render.to_le_bytes().to_vec())?;
+            trace.seed(render, primary.to_le_bytes().to_vec())?;
+            trace.seed(render + 0x138, render_owner.to_le_bytes().to_vec())?;
+            let geometry_reader = Reader::new(&trace);
             let mut reuse = Reuse::new(base, 0);
             out["sprite_diagnostic"] = crate::focus_geometry::observe(
-                r, &mut reuse, container, button, registry, primary, render,
+                &geometry_reader,
+                &mut reuse,
+                container,
+                button,
+                registry,
+                primary,
+                render,
             )?;
+            *transcript = trace.finish();
         }
     }
     Ok(out)
@@ -274,6 +291,7 @@ pub(crate) fn observe(
     }
     let mode = r.i32(manager + 0x3d8)?;
     let mut scope = vec![line.address, production, idler, registry, manager];
+    let mut geometry_reads = BTreeMap::new();
     let mut out = json!({"available":false,"reason":"production_view_unmaterialized",
         "equipment_id":line.equipment_id,"requested_factories":line.requested,
         "mode_raw":mode,"locally_ready":false,"controls":{},
@@ -281,7 +299,11 @@ pub(crate) fn observe(
         "input_authorized":false,"live_validation":"pending"});
     let view = r.u64(manager + 0xd8)?;
     if view == 0 {
-        return Ok(Observation { value: out, scope });
+        return Ok(Observation {
+            value: out,
+            scope,
+            geometry: geometry_reads,
+        });
     }
     exact(r, view, base + 0x4314180)?;
     if r.u64(view + 0x2f0)? != idler {
@@ -291,7 +313,11 @@ pub(crate) fn observe(
     let root = r.u64(view + 0x2f8)?;
     if root == 0 {
         out["reason"] = json!("production_root_unmaterialized");
-        return Ok(Observation { value: out, scope });
+        return Ok(Observation {
+            value: out,
+            scope,
+            geometry: geometry_reads,
+        });
     }
     scope.push(root);
     out["root"] = window(r, base, root, registry)?;
@@ -322,7 +348,11 @@ pub(crate) fn observe(
     }
     let Some(row) = found else {
         out["reason"] = json!("own_production_row_unmaterialized");
-        return Ok(Observation { value: out, scope });
+        return Ok(Observation {
+            value: out,
+            scope,
+            geometry: geometry_reads,
+        });
     };
     scope.push(row);
     let container = r.u64(row + 0x10)?;
@@ -333,6 +363,8 @@ pub(crate) fn observe(
         && out["root"]["locally_shown_settled"] == true
         && out["row"]["locally_shown_settled"] == true;
     out["locally_ready"] = json!(ready);
+    let mut add_geometry = Vec::new();
+    let mut subtract_geometry = Vec::new();
     let add = control(
         r,
         base,
@@ -343,6 +375,7 @@ pub(crate) fn observe(
         0x1018,
         geometry && ready,
         &mut scope,
+        &mut add_geometry,
     )?;
     let subtract = control(
         r,
@@ -354,11 +387,22 @@ pub(crate) fn observe(
         0x1000,
         geometry && ready,
         &mut scope,
+        &mut subtract_geometry,
     )?;
+    if !add_geometry.is_empty() {
+        geometry_reads.insert("add".into(), add_geometry);
+    }
+    if !subtract_geometry.is_empty() {
+        geometry_reads.insert("subtract".into(), subtract_geometry);
+    }
     out["available"] = json!(true);
     out["reason"] = json!("exact_own_materialized_production_row");
     out["controls"] = json!({"add":add,"subtract":subtract});
-    Ok(Observation { value: out, scope })
+    Ok(Observation {
+        value: out,
+        scope,
+        geometry: geometry_reads,
+    })
 }
 
 #[cfg(test)]

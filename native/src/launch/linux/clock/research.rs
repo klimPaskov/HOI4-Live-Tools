@@ -137,7 +137,11 @@ pub(super) fn execute_internal(
     target: stage::Target,
     until: Instant,
 ) -> Result<(stage::Execution, Option<Value>)> {
-    if state.journal.blocks_game(&target.epoch.game)
+    if state
+        .production
+        .as_ref()
+        .is_some_and(|p| p.journal.blocks_game(&target.epoch.game))
+        || state.journal.blocks_game(&target.epoch.game)
         || state
             .construction
             .as_ref()
@@ -198,6 +202,10 @@ pub(super) fn failure_evidence(
     error: &Error,
 ) -> stage::FailureEvidence {
     if error.code == "action_uncertain"
+        || state
+            .production
+            .as_ref()
+            .is_some_and(|p| p.journal.blocks_game(&target.epoch.game))
         || state.journal.blocks_game(&target.epoch.game)
         || state
             .construction

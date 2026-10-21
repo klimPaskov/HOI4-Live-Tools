@@ -447,7 +447,11 @@ fn validate_navigation_keys(
     Ok(())
 }
 fn unresolved(state: &ControlState) -> bool {
-    state.journal.blocks_game(&state.guard.epoch.game)
+    state
+        .production
+        .as_ref()
+        .is_some_and(|p| p.journal.blocks_game(&state.guard.epoch.game))
+        || state.journal.blocks_game(&state.guard.epoch.game)
         || state
             .construction
             .as_ref()

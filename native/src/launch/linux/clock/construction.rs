@@ -195,6 +195,7 @@ pub(super) fn call(
         research,
         focus,
         construction,
+        production,
     } = &mut *controller;
     let service = construction
         .as_mut()
@@ -203,6 +204,7 @@ pub(super) fn call(
         clock: journal,
         research: research.as_ref(),
         focus: focus.as_ref(),
+        production: production.as_ref(),
     };
     let mut backend = ConstructionBackend {
         process,
@@ -243,6 +245,7 @@ struct Domains<'a> {
     clock: &'a Journal,
     research: Option<&'a research::Service>,
     focus: Option<&'a focus::Service>,
+    production: Option<&'a production::Service>,
 }
 impl stage::UnresolvedInputs for Domains<'_> {
     fn observe(&self, game: &Identity) -> Result<stage::DomainBlocks> {
@@ -250,6 +253,7 @@ impl stage::UnresolvedInputs for Domains<'_> {
             clock: self.clock.blocks_game(game),
             research: self.research.is_some_and(|v| v.journal.blocks_game(game)),
             focus: self.focus.is_some_and(|v| v.journal.blocks_game(game)),
+            production: self.production.is_some_and(|v| v.journal.blocks_game(game)),
             construction: false, // This service has the sole construction journal, checked by execute.
         })
     }

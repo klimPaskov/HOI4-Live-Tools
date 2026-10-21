@@ -113,7 +113,9 @@ supported yet. It needs a Developer Tools grant and an ad-hoc signed binary
 
 ### Not done yet
 
-- Provincial buildings (naval bases, forts, coastal forts), production changes, army, air and naval control.
+- Linux production changes have an opt-in, one-factory action preview with
+  durable recovery; live validation, panel navigation and line creation remain.
+- Linux provincial buildings (naval bases, forts, coastal forts), army, air and naval control.
 - Economy and warfare automation (standing plans, shortage repair, invasions).
 - A native Windows adapter.
 - The clean two-year run and the recorded FAIR Germany and China campaigns.

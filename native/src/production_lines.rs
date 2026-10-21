@@ -224,6 +224,7 @@ struct KnownLine {
     handle: u64,
     naval: bool,
     equipment_id: Option<String>,
+    equipment_identity: Option<[u64; 2]>,
     requested: i32,
     counters_valid: bool,
 }
@@ -319,6 +320,7 @@ fn collection(reader: &Reader<'_>, base: u64, production: u64) -> Result<Collect
             handle,
             naval: kind == "naval",
             equipment_id: equipment.key.clone(),
+            equipment_identity: equipment.identity,
             requested,
             counters_valid: within_policy,
         });

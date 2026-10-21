@@ -2,13 +2,23 @@
 
 ## Unreleased native preview
 
+- Add opt-in Linux `hoi4_production_attempt` for one factory increment/decrement
+  on an exact current own line in an already-open panel. Persist original
+  identity/count before input, recheck the same callback/geometry and verify
+  canonical own-line state. Uncertain results block every shared input domain;
+  retries only observe the original target, including after journal reopen.
+  Targets below one, bulk allocation and line creation are unavailable. This
+  preview is fixture-tested; live production acceptance is still pending.
+- Recheck X11 input state and window geometry after the final domain callback,
+  before transmitting any buffered pointer input. A modifier or window change
+  during a slow refresh now refuses without moving the cursor.
 - Add `hoi4_production_controls`, a Linux read-only observation of an exact own
   equipment line's factory +/- buttons. Full handles and canonical equipment
   keys join the production row in one witnessed snapshot; named aliases,
   callback captures, local gates and equipment-selection dialogs are checked.
   Optional geometry reuses the existing typed renderer reader. It never opens
-  the panel, moves the cursor or enables input. Factory adjustment, line
-  creation and live validation remain pending.
+  the panel, moves the cursor or enables input. Line creation and live
+  validation remain pending; the separate action preview is opt-in.
 - Batch Linux GUI registry name reads shared by research, politics and
   construction. A fixture with 256 inline names now needs four name-lookup
   reads, plus the caller's pointer collection and final snapshot checks.

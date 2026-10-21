@@ -244,3 +244,14 @@ fn final_witness_rejects_changed_ui_chain_and_local_state() {
         );
     }
 }
+
+#[test]
+fn replaced_variant_is_rejected_without_following_the_unvalidated_pointer() {
+    let mut f = unavailable_view();
+    f.fault = Some((0x80088, 1, 0xdead0000u64.to_le_bytes().to_vec()));
+    assert_eq!(
+        controls(&f, HANDLE, KEY, false).unwrap_err().code,
+        "torn_read"
+    );
+    production_not_read(&f, &[0xdead0000, 0xdead03f0]);
+}

@@ -1044,7 +1044,7 @@ fn positive_not_queued_refusal_is_terminal_and_same_id_never_dispatches_again() 
 }
 #[test]
 fn all_unresolved_domains_and_unknown_domain_state_block_before_observation() {
-    for i in 0..5 {
+    for i in 0..6 {
         let s = Scratch::new();
         let mut j = Journal::open(&s.path()).unwrap();
         let mut f = Fake::success(Stage::EnsureOpen);
@@ -1054,6 +1054,7 @@ fn all_unresolved_domains_and_unknown_domain_state_block_before_observation() {
             1 => d.value.research = true,
             2 => d.value.focus = true,
             3 => d.value.construction = true,
+            4 => d.value.production = true,
             _ => d.unavailable = true,
         }
         assert!(execute(

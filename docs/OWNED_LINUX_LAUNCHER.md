@@ -142,6 +142,7 @@ Normal difficulty, historical AI and the selected own-player tag.
 | `window_class` | Exact complete `WM_CLASS` property as a byte array |
 | `menu_evidence_ids` | IDs in the private recording/journal proving ordinary singleplayer setup |
 | `research_profile` | Optional owner-reviewed `linux_builtin_absolute_512x288_v1`; omission keeps clock-only input |
+| `production_profile` | Optional `linux_builtin_absolute_512x288_v1`; enables the one-factory production preview in an already-open panel, live validation pending |
 
 ```sh
 native/target/release/hoi4-live-native --bind-input /absolute/private/run /absolute/private/input.json
@@ -150,6 +151,13 @@ native/target/release/hoi4-live-native --bind-input /absolute/private/run /absol
 The binding is immutable for that owner. Stop all builder input before binding.
 Menu evidence is an operator responsibility; the reader does not prove every
 multiplayer flag. The private binding records this limitation.
+
+The production preview requires a 512×288 owned client and 2560×1440 logical
+graphics. Its `production-actions.jsonl` keeps the original line identity and
+count before a click. An unresolved intent blocks all shared input domains;
+do not delete it, change request IDs or create a fresh binding to bypass it.
+See [the tool contract](../native/README.md#tools) for arguments and recovery
+limits. This preview neither opens production nor creates equipment lines.
 
 The MCP then advertises `hoi4_input_lease` and `hoi4_time`. Acquire with
 `{"op":"acquire","holder":"luna-linux-player","seconds":300}`. Only the

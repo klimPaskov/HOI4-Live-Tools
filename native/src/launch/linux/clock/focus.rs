@@ -204,7 +204,11 @@ pub(super) fn execute_internal(
             "Focus target epoch differs from controller",
         ));
     }
-    if state.journal.blocks_game(&target.epoch.game)
+    if state
+        .production
+        .as_ref()
+        .is_some_and(|p| p.journal.blocks_game(&target.epoch.game))
+        || state.journal.blocks_game(&target.epoch.game)
         || state
             .construction
             .as_ref()
@@ -398,7 +402,11 @@ pub(super) fn failure_evidence(
     target: &stage::Target,
     error: &Error,
 ) -> stage::FailureEvidence {
-    if state.journal.blocks_game(&target.epoch.game)
+    if state
+        .production
+        .as_ref()
+        .is_some_and(|p| p.journal.blocks_game(&target.epoch.game))
+        || state.journal.blocks_game(&target.epoch.game)
         || state
             .construction
             .as_ref()

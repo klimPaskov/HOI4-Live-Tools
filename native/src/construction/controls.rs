@@ -246,7 +246,7 @@ fn choice(
     Ok(out)
 }
 
-fn blockers(
+pub(crate) fn blockers(
     r: &Reader<'_>,
     base: u64,
     country: u64,

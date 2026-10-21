@@ -16,6 +16,7 @@ use std::sync::{Arc, Mutex, MutexGuard, RwLock, RwLockReadGuard, TryLockError};
 mod construction;
 mod daily;
 mod focus;
+mod production;
 mod readback;
 mod research;
 
@@ -39,6 +40,8 @@ pub(super) struct Binding {
     /// Independent owner opt-in for canonical ordinary construction stages.
     #[serde(default)]
     construction_profile: Option<construction::Profile>,
+    #[serde(default)]
+    production_profile: Option<production::Profile>,
     #[serde(default)]
     daily_prepared_research: bool,
     #[serde(default)]
@@ -143,6 +146,7 @@ struct ControlState {
     research: Option<research::Service>,
     focus: Option<focus::Service>,
     construction: Option<construction::Service>,
+    production: Option<production::Service>,
 }
 pub(super) struct ClockService {
     state: Arc<Mutex<ControlState>>,
@@ -150,6 +154,7 @@ pub(super) struct ClockService {
     research_enabled: bool,
     focus_enabled: bool,
     construction_enabled: bool,
+    production_enabled: bool,
     daily: daily::Controller,
 }
 impl ClockService {
@@ -219,9 +224,13 @@ impl ClockService {
             .construction_profile
             .map(|profile| construction::Service::bind(profile, binding.window, display, directory))
             .transpose()?;
+        let production = binding
+            .production_profile
+            .map(|profile| production::Service::bind(profile, binding.window, display, directory))
+            .transpose()?;
         json_new(
             &directory.join("input-binding.json"),
-            json!({"version":1,"game":binding.game,"controller":binding.controller,"player":binding.player,"window":binding.window,"menu_evidence_ids":binding.menu_evidence_ids,"epoch":epoch,"scope":"ordinary clock keys; optional ID research/focus/construction previews","research_profile":binding.research_profile,"focus_profile":binding.focus_profile,"construction_profile":binding.construction_profile,"daily_prepared_research":binding.daily_prepared_research,"daily_focus":binding.daily_focus,"load_generation":"unverified: persisted identity, anchor and timeline checks only"}),
+            json!({"version":1,"game":binding.game,"controller":binding.controller,"player":binding.player,"window":binding.window,"menu_evidence_ids":binding.menu_evidence_ids,"epoch":epoch,"scope":"ordinary clock keys; optional ID research/focus/construction/production previews","research_profile":binding.research_profile,"focus_profile":binding.focus_profile,"construction_profile":binding.construction_profile,"production_profile":binding.production_profile,"daily_prepared_research":binding.daily_prepared_research,"daily_focus":binding.daily_focus,"load_generation":"unverified: persisted identity, anchor and timeline checks only"}),
         )?;
         Ok(Self {
             daily: daily::Controller::new(
@@ -234,6 +243,7 @@ impl ClockService {
             research_enabled: research.is_some(),
             focus_enabled: focus.is_some(),
             construction_enabled: construction.is_some(),
+            production_enabled: production.is_some(),
             state: Arc::new(Mutex::new(ControlState {
                 controls,
                 guard: Guard {
@@ -248,6 +258,7 @@ impl ClockService {
                 research,
                 focus,
                 construction,
+                production,
             })),
         })
     }
@@ -323,6 +334,9 @@ impl Commands for ClockService {
         if self.construction_enabled {
             tools.push(construction::tool());
         }
+        if self.production_enabled {
+            tools.push(production::tool());
+        }
         if self.daily.enabled() {
             tools.push(daily::Controller::tool());
         }
@@ -333,10 +347,11 @@ impl Commands for ClockService {
             || (name == "hoi4_research_attempt" && self.research_enabled)
             || (matches!(name, "hoi4_focus_attempt" | "hoi4_focus_ui") && self.focus_enabled)
             || (name == "hoi4_construction_attempt" && self.construction_enabled)
+            || (name == "hoi4_production_attempt" && self.production_enabled)
             || (name == "hoi4_daily_governor" && self.daily.enabled())
     }
     fn capabilities(&self) -> Value {
-        json!({"transport":"ordinary authenticated X11 input","actions":["set_paused","set_speed"],"research_preview":{"enabled":self.research_enabled,"scope":"one OpenPanel, SelectSlot, SelectCategory, View or Research stage for own empty slot","installed_game_validation":"Clock cycles, four assignments and advancement to 5 January passed bounded run025; run024 uncertainty unexplained; full campaign acceptance pending"},"focus_preview":{"enabled":self.focus_enabled,"scope":"one own OpenPolitics/OpenPoliticsFromResearch/ClosePolitics/OpenFocus/SearchField/SearchQuery/SearchText/SearchNext/View/Start ordinary stage; exact Sprite/zero-angle Text/InstantText/unmasked Frame branches; run068 verified SearchText, three ordinary Tab steps, identical historical replays and View; strict SearchQuery remains unaccepted","installed_game_validation":"Run049 verified research-Focus-research and target waits; run052 verified actual Rhineland completion; run068 verified bounded manual search-to-View; successive worker Focus assignment and full campaigns pending"},"focus_ui":{"enabled":self.focus_enabled,"read_only":true,"lease_required":false,"installed_game_validation":"Run042 verified pre-lease and post-Start observations; complete own local flags only"},"daily_focus":{"owner_enabled":self.daily.focus_enabled(),"plan_opt_in_required":true,"search_navigation":{"implemented":true,"entry_hint":"focus_search: explicit bounded localized lowercase query","manual_stages_validated_run":"068","worker_live_validation":false,"query_replacement_available":false},"research_handoff":{"implemented":true,"direction":"Focus to research only","requires":"Focus and research owner permissions, plan Focus opt-in, remaining assignment budget, fresh own UI and completed Focus key hint","live_validation":true,"validated_run":"047: paused vanilla Normal/historical Germany; two assignments and adjacent restart/STOP"},"research_to_focus":{"implemented":true,"requires":"Both worker domain permissions, both owned profiles, settled own research panel, hidden tree and clear local blockers","live_validation":true,"validated_run":"049: paused vanilla Normal/historical Germany; research-Focus-research and target waits; same-plan restart/STOP in a separate supplement"},"full_campaign_acceptance":false},"daily_prepared_research":{"enabled":self.daily.research_enabled(),"navigation_implemented":true,"scope":"Run030 verified four-slot assignment and restart; run050 verified actual research completion and same-slot refill; full campaigns pending"},"lease":"exclusive configured controller","native_posting":false,"construction_preview":{"enabled":self.construction_enabled,"stages":["ensure_open","select_building"],"map_placement_available":false,"live_action_validation":false},"cursor_movement":self.research_enabled||self.focus_enabled||self.construction_enabled,"load_generation":"unverified; campaign identity, anchors and observed timeline checked","full_campaign_acceptance":false})
+        json!({"transport":"ordinary authenticated X11 input","actions":["set_paused","set_speed"],"research_preview":{"enabled":self.research_enabled,"scope":"one OpenPanel, SelectSlot, SelectCategory, View or Research stage for own empty slot","installed_game_validation":"Clock cycles, four assignments and advancement to 5 January passed bounded run025; run024 uncertainty unexplained; full campaign acceptance pending"},"focus_preview":{"enabled":self.focus_enabled,"scope":"one own OpenPolitics/OpenPoliticsFromResearch/ClosePolitics/OpenFocus/SearchField/SearchQuery/SearchText/SearchNext/View/Start ordinary stage; exact Sprite/zero-angle Text/InstantText/unmasked Frame branches; run068 verified SearchText, three ordinary Tab steps, identical historical replays and View; strict SearchQuery remains unaccepted","installed_game_validation":"Run049 verified research-Focus-research and target waits; run052 verified actual Rhineland completion; run068 verified bounded manual search-to-View; successive worker Focus assignment and full campaigns pending"},"focus_ui":{"enabled":self.focus_enabled,"read_only":true,"lease_required":false,"installed_game_validation":"Run042 verified pre-lease and post-Start observations; complete own local flags only"},"daily_focus":{"owner_enabled":self.daily.focus_enabled(),"plan_opt_in_required":true,"search_navigation":{"implemented":true,"entry_hint":"focus_search: explicit bounded localized lowercase query","manual_stages_validated_run":"068","worker_live_validation":false,"query_replacement_available":false},"research_handoff":{"implemented":true,"direction":"Focus to research only","requires":"Focus and research owner permissions, plan Focus opt-in, remaining assignment budget, fresh own UI and completed Focus key hint","live_validation":true,"validated_run":"047: paused vanilla Normal/historical Germany; two assignments and adjacent restart/STOP"},"research_to_focus":{"implemented":true,"requires":"Both worker domain permissions, both owned profiles, settled own research panel, hidden tree and clear local blockers","live_validation":true,"validated_run":"049: paused vanilla Normal/historical Germany; research-Focus-research and target waits; same-plan restart/STOP in a separate supplement"},"full_campaign_acceptance":false},"daily_prepared_research":{"enabled":self.daily.research_enabled(),"navigation_implemented":true,"scope":"Run030 verified four-slot assignment and restart; run050 verified actual research completion and same-slot refill; full campaigns pending"},"lease":"exclusive configured controller","native_posting":false,"construction_preview":{"enabled":self.construction_enabled,"stages":["ensure_open","select_building"],"map_placement_available":false,"live_action_validation":false},"production_preview":{"enabled":self.production_enabled,"scope":"one factory step for an own current line in already-open production panel","live_validation":false,"minimum_target":1,"unresolved_retries":"read-only original-target settlement"},"cursor_movement":self.research_enabled||self.focus_enabled||self.construction_enabled||self.production_enabled,"load_generation":"unverified; campaign identity, anchors and observed timeline checked","full_campaign_acceptance":false})
     }
     fn call(&self, process: &dyn Process, name: &str, arguments: &Value) -> Result<Value> {
         let call_started = Instant::now();
@@ -351,6 +366,9 @@ impl Commands for ClockService {
         }
         if name == "hoi4_focus_attempt" {
             return focus::call(self, process, args);
+        }
+        if name == "hoi4_production_attempt" {
+            return production::call(self, process, args);
         }
         if name == "hoi4_construction_attempt" {
             return construction::call(self, process, args);
@@ -457,9 +475,13 @@ impl Commands for ClockService {
         drop(input_permit(&self.input_gate)?);
         let mut state = self.input_state()?;
         if state
-            .construction
+            .production
             .as_ref()
-            .is_some_and(|c| c.journal.blocks_game(&state.guard.epoch.game))
+            .is_some_and(|p| p.journal.blocks_game(&state.guard.epoch.game))
+            || state
+                .construction
+                .as_ref()
+                .is_some_and(|c| c.journal.blocks_game(&state.guard.epoch.game))
             || state
                 .focus
                 .as_ref()
@@ -471,7 +493,7 @@ impl Commands for ClockService {
         {
             return Err(Error::new(
                 "action_uncertain",
-                "Unresolved research/focus/construction attempt blocks clock input",
+                "Unresolved research/focus/construction/production attempt blocks clock input",
             ));
         }
         let epoch = state.guard.epoch.clone();

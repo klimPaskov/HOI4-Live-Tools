@@ -45,6 +45,24 @@ pub fn tool() -> Value {
 }
 
 pub fn snapshot(process: &dyn Process, handle: &str, key: &str, geometry: bool) -> Result<Value> {
+    Ok(observe(process, handle, key, Some(geometry))?.value)
+}
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+pub(crate) struct Observation {
+    pub(crate) value: Value,
+    pub(crate) campaign: game::ClockContext,
+    pub(crate) line: crate::production_step::LineIdentity,
+    pub(crate) requested: i32,
+    pub(crate) scope: Vec<u64>,
+    pub(crate) geometry: std::collections::BTreeMap<String, Vec<(u64, Vec<u8>)>>,
+}
+/// None requests canonical own-line readback without accessing any GUI object.
+pub(crate) fn observe(
+    process: &dyn Process,
+    handle: &str,
+    key: &str,
+    ui: Option<bool>,
+) -> Result<Observation> {
     let handle = validate_target(handle, key)?;
     let start = Instant::now();
     process.begin_snapshot()?;
@@ -57,7 +75,7 @@ pub fn snapshot(process: &dyn Process, handle: &str, key: &str, geometry: bool) 
         ));
     }
     let base = process.image_base();
-    let (_, production) = economy::own_production(&reader, base)?;
+    let (country, production) = economy::own_production(&reader, base)?;
     let campaign = game::context_from_reader(&reader, base)?;
     let collection = collection(&reader, base, production)?;
     let selected = collection
@@ -83,11 +101,50 @@ pub fn snapshot(process: &dyn Process, handle: &str, key: &str, geometry: bool) 
         equipment_id: key.to_owned(),
         requested: selected.requested,
     };
-    let observation = controls::observe(&reader, base, &target, geometry)?;
-    let mut value = observation.value;
-    // Internal scope is intentionally never serialized as process addresses.
-    let _scope = observation.scope;
-    if geometry {
+    // Reuse the positively validated equipment join. Re-reading line+88 and
+    // following a newly changed pointer here would traverse an unproved object
+    // before the final witness could reject the replacement.
+    let [variant, base_type] = selected.equipment_identity.ok_or_else(|| {
+        Error::new(
+            "production_target_unavailable",
+            "Exact own equipment identity unavailable",
+        )
+    })?;
+    let line = crate::production_step::LineIdentity {
+        country,
+        production,
+        line: selected.address,
+        variant,
+        base_type,
+        handle,
+        equipment_id: key.into(),
+    };
+    let (mut value, scope, geometry) = match ui {
+        Some(include) => {
+            let o = controls::observe(&reader, base, &target, include)?;
+            (o.value, o.scope, o.geometry)
+        }
+        None => (json!({}), Vec::new(), std::collections::BTreeMap::new()),
+    };
+    if ui == Some(true) {
+        let idler = campaign.anchors[1];
+        let registry = reader.u64(idler + 0x4f8)?;
+        let manager = reader.u64(idler + 0x6b8)?;
+        if reader.u64(base + 0x45778e0)? != registry {
+            return Err(Error::new(
+                "invalid_production_controls",
+                "Input GUI must equal own production registry",
+            ));
+        }
+        value["common_blockers"] = crate::construction::controls::blockers(
+            &reader, base, country, idler, manager, registry,
+        )?;
+        value["common_gui_gates_clear"] = json!(
+            reader.byte(registry + 0x150)? == 0
+                && reader.byte(registry + 0x12)? == 0
+                && reader.u64(registry + 0x158)? == 0
+                && reader.u64(registry + 0x230)? == 0
+        );
         value["input_geometry"] = crate::gui::input_geometry_from_reader(&reader, base)?;
     }
     let (end_calls, end_bytes) = witnesses.finish()?;
@@ -108,5 +165,12 @@ pub fn snapshot(process: &dyn Process, handle: &str, key: &str, geometry: bool) 
     value["freshness"] = json!({"elapsed_ms":start.elapsed().as_secs_f64()*1000.0,
         "read_calls_kind":"logical_read_requests", "read_calls":reader.calls.get()+end_calls as u64,
         "read_bytes":reader.bytes.get()+end_bytes});
-    Ok(value)
+    Ok(Observation {
+        value,
+        campaign,
+        line,
+        requested: selected.requested,
+        scope,
+        geometry,
+    })
 }

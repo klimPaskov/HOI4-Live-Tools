@@ -1,5 +1,34 @@
 # Clausewitz-MCP Linux validation
 
+## Offline production action preview — 21 October 2026
+
+The opt-in Linux adapter now attempts one ordinary factory +/- click for an
+exact own line in an already-open production panel. A separate durable journal
+stores original campaign, full line/variant identity and requested count before
+input. Reopening the journal preserves uncertainty; recovery only checks the
+original reached target. Unchanged or divergent counts, replaced identities,
+lost replies and failed reads never justify replay or clearing an intent.
+Unresolved production blocks the shared clock/research/Focus/construction
+controller and daily workers. Supervisor adoption after restart is unsupported.
+
+Before dispatch, the adapter compares canonical state and the selected
+renderer/geometry transcript with the original candidate. Review identified
+a modifier-state race during that final memory refresh. The X11 transport now
+rechecks idle input and the original owned window after the callback, before
+sending any buffered pointer bytes. The isolated Xvfb regression changes Ctrl
+lock and window position inside that callback and requires no motion/clicks.
+
+Local validation passed 1,047 Rust tests (including stdio smoke), formatting,
+host/Linux warning-free Clippy, and 953 Python tests with 37 platform skips.
+Linux Xvfb execution and all platform CI are checked separately on the published
+commit. No installed game was launched for this checkpoint. Production opening,
+new-line creation, a live one-factory gate and campaign acceptance remain pending.
+Scoped UI predicates and canonical reached-state verification do not prove
+universal event routing or event causality. The native posting path is unchanged
+and disabled.
+
+## Earlier live evidence
+
 Updated 16 October 2026. This records preflight and partial licensed-game evidence for
 the [Linux-first migration](LINUX_RUST_HANDOFF.md). One **gpt-6-luna player at
 medium reasoning** used the guarded upstream MCP in an actual Linux Germany

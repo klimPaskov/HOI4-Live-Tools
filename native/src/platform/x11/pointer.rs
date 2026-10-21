@@ -494,6 +494,11 @@ impl LeftClick<'_> {
             connection.flush().map_err(xerror)?;
             // Nothing above this point delivered pointer input.
             before_queue()?;
+            // A domain's final memory observation may take time. Recheck held
+            // keys/modifiers and the owned window AFTER it, before arming the
+            // queued bytes. In particular Ctrl/Shift changes factory increments.
+            self.controls
+                .pointer_check(self.process, self.until, Some(&self.witness), false)?;
             connection.stream().armed.set(true);
             let delivery = (|| -> Result<()> {
                 connection.stream().send_queue()?;

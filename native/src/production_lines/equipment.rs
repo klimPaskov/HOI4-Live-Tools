@@ -17,12 +17,14 @@ pub(super) struct Catalog {
 pub(super) struct Equipment {
     pub key: Option<String>,
     pub unavailable: Option<&'static str>,
+    pub identity: Option<[u64; 2]>,
 }
 impl Equipment {
     fn unavailable(reason: &'static str) -> Self {
         Self {
             key: None,
             unavailable: Some(reason),
+            identity: None,
         }
     }
 }
@@ -134,5 +136,6 @@ pub(super) fn observe(
     Ok(Equipment {
         key: Some(key),
         unavailable: None,
+        identity: Some([variant, equipment_type]),
     })
 }

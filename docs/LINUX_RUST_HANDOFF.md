@@ -7,6 +7,36 @@ Do not resume Mac campaigns or control the shared Windows game.
 
 ## Current checkpoint
 
+Linux production action preview, 21 October 2026: the owned controller can now
+opt into `hoi4_production_attempt` through the 512×288 production profile.
+It changes one requested factory on an exact current own line, or records a
+matching-count no-op. The panel must already be open and the row materialized;
+panel navigation, new lines, bulk allocation and live acceptance remain open.
+The minimum target is one, matching the recovered +/- callback behavior.
+
+The private journal persists original campaign, line/variant identity and count
+before input. It retains uncertainty across reopen; same-ID recovery only
+observes the original target, never clicks again or takes a new baseline.
+Unresolved production input blocks clock, research, Focus, construction and
+daily workers. The controller still does not support restarting a supervisor
+around a surviving game. Do not confuse journal recovery with that capability.
+
+Before dispatch, fresh canonical state, callback identities and the selected
+renderer read transcript must match. X11 rechecks idle keys/modifiers and the
+owned window after the final memory callback, before sending buffered input;
+review found that the earlier pre-callback check left a modifier-change gap.
+Generated Xvfb coverage exercises modifier and window changes during the
+callback. Target readback confirms observed state, not event causality or
+universal UI routing. Direct native posting remains disabled.
+
+Local checks passed 1,047 Rust tests, formatting, host/Linux warning-free Clippy,
+and 953 Python tests with 37 platform skips. The Rust suite includes stdio
+protocol smoke. Cross-platform and Xvfb CI must pass on the published commit.
+No game or VM was launched for this step. Next: finish the ordinary production
+panel-opening route, then a bounded recorded gate with one Luna medium player
+and exclusive input. The 1080p host limitation and two-year/full campaigns
+remain unresolved; these offline tests are not live acceptance.
+
 Linux production port, 21 October 2026: `hoi4_production_controls` now provides
 a read-only same-snapshot join from an exact current own equipment-line handle
 and canonical equipment key to its materialized production row and named
@@ -21,9 +51,10 @@ aliases, alternate callbacks and changing witnesses. Local control gates and
 the two equipment-selection dialogs remain explicit; unknown/null dialog roots
 do not establish clearance. These observations grant no input. Static callback
 analysis shows a minimum allocation of one factory and modifier-dependent step
-sizes. The actual Linux action adapter still needs a durable original baseline,
+sizes. At that checkpoint, the Linux action adapter still needed a durable original baseline,
 same-scope/point rechecks, ordinary-modifier checks, global journal exclusion
-and own-line readback after each click. Do not expose the macOS journal or
+and own-line readback after each click (now implemented in the preview above).
+Do not expose the macOS journal or
 direct native command queue as a shortcut. New-line creation is separate.
 
 No game or VM was launched for this port step. The existing REA initial

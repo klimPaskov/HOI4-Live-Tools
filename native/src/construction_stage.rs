@@ -524,6 +524,7 @@ pub struct DomainBlocks {
     pub focus: bool,
     /// Other construction journals; this Journal checks its own unresolved IDs.
     pub construction: bool,
+    pub production: bool,
 }
 pub trait UnresolvedInputs {
     /// Caller must borrow ALL shared domain journals under the existing single
@@ -533,7 +534,7 @@ pub trait UnresolvedInputs {
 }
 fn domains_clear(domains: &dyn UnresolvedInputs, game: &Identity) -> Result<()> {
     let d = domains.observe(game)?;
-    if d.clock || d.research || d.focus || d.construction {
+    if d.clock || d.research || d.focus || d.construction || d.production {
         return Err(error(
             "action_uncertain",
             "Unresolved shared input domain blocks construction",
@@ -625,7 +626,7 @@ fn safe_message(value: &str, token: &str) -> String {
     bounded(&out, 512)
 }
 impl Diagnostic {
-    fn from_error(cause: &Error, token: &str) -> Self {
+    pub(crate) fn from_error(cause: &Error, token: &str) -> Self {
         let code = if cause.code.len() <= 128
             && !cause.code.is_empty()
             && cause
@@ -643,7 +644,7 @@ impl Diagnostic {
             message: safe_message(&cause.message, token),
         }
     }
-    fn validate(&self) -> bool {
+    pub(crate) fn validate(&self) -> bool {
         !self.code.is_empty()
             && self.code.len() <= 128
             && self
@@ -654,7 +655,7 @@ impl Diagnostic {
             && self.message.len() <= 512
             && safe_message(&self.message, "") == self.message
     }
-    fn as_error(&self, code: &'static str, context: &str) -> Error {
+    pub(crate) fn as_error(&self, code: &'static str, context: &str) -> Error {
         Error::new(
             code,
             bounded(

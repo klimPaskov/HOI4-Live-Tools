@@ -40,6 +40,7 @@ pub mod construction;
 pub mod construction_stage;
 pub mod economy;
 pub mod production_lines;
+pub mod production_step;
 
 // Ordinary research candidate building block; no protocol input registration.
 pub mod research_attempt;

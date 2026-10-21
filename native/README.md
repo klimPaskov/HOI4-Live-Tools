@@ -304,6 +304,7 @@ anchors do not establish a load-generation token.
 | `hoi4_economy` | Own named factory trigger counts, civilian project capacity and exact signed political-power units; live comparison pending |
 | `hoi4_production_lines` | Paged own line handles, separate signed factory counters and optional base equipment keys; key joins have fixture evidence, live comparison and allocation remain pending |
 | `hoi4_production_controls` | Linux preview: exact own line's named factory +/- controls, callback bindings, local blockers and optional renderer geometry; read-only, live validation pending |
+| `hoi4_production_attempt` | Opt-in Linux preview: one ordinary factory step in an already-open panel, durable original identity/count and canonical readback; live validation pending |
 | `hoi4_construction_queue` | Own building/railway lines, canonical keys and signed cost/work counters; one dockyard observed in run071. Run072 observed one state/label with a late-lease deviation; selection and province/railway coverage remain unverified |
 | `hoi4_technology_list` | Canonical loaded technology IDs with filtering/pagination; no eligibility inference |
 | `hoi4_input_geometry` | GUI dimensions, scale, pointer and conditional source-window diagnostics; no click authority |
@@ -343,8 +344,8 @@ unknown line subtypes stay metadata-only. `equipment_ids_available` describes
 all scoped lines, not just the returned page; `equipment_id_unavailable_count`
 includes unsupported lines. Other equipment databases remain unreviewed. These
 joins have generated host/Linux fixture evidence only; a live UI comparison is
-pending. Custom variant identity, general production and allocation controls
-remain unavailable. No production action is authorized by this read-only tool.
+pending. Custom variant design details and general production management remain
+unavailable. No production action is authorized by this read-only tool.
 
 `hoi4_production_controls` accepts the exact `line_handle` and `equipment_id`
 from that collection, plus optional `include_geometry` (default false).
@@ -356,11 +357,28 @@ the two equipment-selection dialogs. An absent dialog root is unknown; it
 cannot establish clearance. Geometry uses the existing exact Sprite/Text/Frame
 readers and remains diagnostic. Reads do not open panels or move the pointer.
 
-This is a read-only port step. It does not yet provide Linux factory adjustment
-or line creation. Static callback analysis shows that +/- clamps to at least
-one factory and Ctrl/Shift can change the increment. A future action adapter
-must enforce ordinary modifiers, journal the original target before input and
-verify each step from the same own line. No live production gate has passed.
+The separate `hoi4_production_attempt` preview requires an explicit
+`production_profile: "linux_builtin_absolute_512x288_v1"` in the owned input
+binding and an exclusive lease. It accepts `line_handle`, `equipment_id`,
+`factories`, `request_id` and `lease_token`. The target must match the current
+requested count (a no-op) or differ by exactly one; the minimum target is one.
+The production panel must already be open with the exact row materialized.
+Panel opening, scrolling, line creation and bulk allocation are not implemented.
+
+Before a click, the private journal durably records the original campaign,
+line/variant identity and requested count. The adapter rechecks canonical state,
+callback bindings, local blockers, renderer identity/geometry and the owned
+window. Held keys/modifiers and window state are checked again after that refresh,
+before any pointer bytes are sent. One ordinary click is followed by canonical
+own-line readback and an idle-input check; the game is never paused by the action.
+
+An uncertain result blocks clock, research, Focus, construction and daily input.
+The same request ID can only settle by observing its original target on its
+original line; it never sends another click or adopts a new baseline. Historical
+success is marked historical, not fresh state. The journal preserves uncertainty
+when reopened, but supervisor restart/adoption of a surviving game is unsupported.
+No live production gate has passed. Scoped UI checks and a reached count do not
+prove universal event routing or that this particular click caused the change.
 
 The current game uses a 365-day calendar, including February 28 in 1936. Its raw
 clock includes a 5000-year epoch and displays hours as 1–24. Raw research counters
