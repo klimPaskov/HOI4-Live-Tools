@@ -38,15 +38,18 @@ fn epoch() -> Epoch {
     }
 }
 fn target(factories: i32) -> Target {
-    Target {
+    Target::Factories(FactoryTarget {
         epoch: epoch(),
         line_handle: "0xffff000100000038".into(),
         equipment_id: "infantry_equipment_1".into(),
         factories,
-    }
+    })
 }
 fn state(requested: i32) -> State {
-    State {
+    State::Factories(factory_state(requested))
+}
+fn factory_state(requested: i32) -> FactoryState {
+    FactoryState {
         epoch: epoch(),
         line: LineIdentity {
             country: 0x20000,
@@ -76,7 +79,7 @@ impl UnresolvedInputs for Domains {
     }
 }
 struct Fake {
-    current: State,
+    current: FactoryState,
     reads: usize,
     candidates: usize,
     dispatches: usize,
@@ -90,7 +93,7 @@ struct Fake {
 impl Fake {
     fn new(path: std::path::PathBuf, n: i32) -> Self {
         Self {
-            current: state(n),
+            current: factory_state(n),
             reads: 0,
             candidates: 0,
             dispatches: 0,
@@ -111,13 +114,13 @@ impl Backend for Fake {
             return Err(error("fixture_read_failure", TOKEN));
         }
         if let Some(s) = self.changes.get(&self.reads) {
-            self.current = s.clone();
+            self.current = s.factory().unwrap().clone();
         }
-        Ok(self.current.clone())
+        Ok(State::Factories(self.current.clone()))
     }
     fn candidate(&mut self, _: &Target, before: &State, _: Instant) -> Result<()> {
         self.candidates += 1;
-        assert_eq!(before, &self.current);
+        assert_eq!(before.factory().unwrap(), &self.current);
         Ok(())
     }
     fn dispatch_once(&mut self, t: &Target, before: &State, _: &(), _: Instant) -> DispatchOutcome {
@@ -125,10 +128,10 @@ impl Backend for Fake {
             fs::metadata(&self.path).unwrap().len() > 0,
             "intent must precede possible input"
         );
-        assert_eq!(before, &self.current);
+        assert_eq!(before.factory().unwrap(), &self.current);
         self.dispatches += 1;
         if self.apply {
-            self.current.requested = t.factories;
+            self.current.requested = t.factory().unwrap().factories;
         }
         match self.outcome {
             1 => DispatchOutcome::NotQueued(error("fixture_not_queued", "No delivery")),
@@ -162,7 +165,7 @@ fn increment_decrement_noop_and_historical_receipt_send_at_most_one_click() {
         let mut j = Journal::open(&d.path()).unwrap();
         let mut f = Fake::new(d.path(), before);
         let e = execute(&mut j, &mut f, "one", after).unwrap();
-        assert_eq!(e.original_requested, before);
+        assert_eq!(e.original_requested, Some(before));
         assert_eq!(e.status, Status::Verified);
         assert!(!j.blocks_game(&epoch().game));
         assert_eq!(f.dispatches, usize::from(before != after));
@@ -207,7 +210,7 @@ fn lost_delivery_survives_restart_and_settles_only_original_target_without_repla
     assert_eq!(f.dispatches, 1);
     f.current.requested = 5;
     let settled = execute(&mut j, &mut f, "one", 5).unwrap();
-    assert_eq!(settled.original_requested, 4);
+    assert_eq!(settled.original_requested, Some(4));
     assert_eq!(settled.delivery, Some(Delivery::Unknown));
     assert!(!settled.event_causality_verified);
     assert_eq!(f.dispatches, 1);
@@ -267,7 +270,7 @@ fn intent_only_crash_recovery_uses_original_baseline() {
         execute(&mut j, &mut f, "one", 5)
             .unwrap()
             .original_requested,
-        4
+        Some(4)
     );
     assert_eq!(f.dispatches, 0);
     assert_eq!(f.candidates, 0);
@@ -412,7 +415,10 @@ fn changed_target_id_and_forged_baseline_are_rejected() {
     );
     let original = j.records["one"].clone();
     let mut forged = original.clone();
-    forged.before.requested = 6;
+    let State::Factories(before) = &mut forged.before else {
+        panic!("factory baseline")
+    };
+    before.requested = 6;
     forged.last = state(5);
     forged.status = Status::Verified;
     forged.cause = None;
@@ -462,4 +468,236 @@ fn poisoned_writer_refuses_even_a_known_target_without_observation() {
     );
     assert_eq!(f.reads, 0);
     assert!(j.blocks_game(&epoch().game));
+}
+
+fn panel_state(mode: i32, shown: bool) -> PanelState {
+    PanelState {
+        epoch: epoch(),
+        panel_identity: (2..9).map(|n| n * 0x10000).collect(),
+        managed_mode: mode,
+        panel_shown: shown,
+    }
+}
+struct PanelFake {
+    state: PanelState,
+    dispatches: usize,
+    reads: usize,
+    fail: bool,
+    uncertain: bool,
+    transitions: usize,
+}
+impl Backend for PanelFake {
+    type Candidate = ();
+    fn observe(&mut self, _: &Target, _: Instant) -> Result<State> {
+        self.reads += 1;
+        if self.dispatches > 0 && self.transitions > 0 {
+            self.transitions -= 1;
+            return Err(error("production_panel_transition", "Panel animating"));
+        }
+        if self.fail {
+            return Err(error("fixture_panel_read", "Unavailable panel"));
+        }
+        Ok(State::Panel(self.state.clone()))
+    }
+    fn candidate(&mut self, _: &Target, before: &State, _: Instant) -> Result<()> {
+        assert_eq!(before, &State::Panel(self.state.clone()));
+        Ok(())
+    }
+    fn dispatch_once(&mut self, _: &Target, before: &State, _: &(), _: Instant) -> DispatchOutcome {
+        assert_eq!(before, &State::Panel(self.state.clone()));
+        self.dispatches += 1;
+        self.state.managed_mode = 2;
+        self.state.panel_shown = true;
+        if self.uncertain {
+            DispatchOutcome::Unknown(Some(error("fixture_lost_reply", "Lost reply")))
+        } else {
+            DispatchOutcome::ServerConfirmed
+        }
+    }
+    fn confirm_input_idle(&mut self, _: Instant) -> Result<()> {
+        Ok(())
+    }
+}
+fn open(j: &mut Journal, f: &mut PanelFake, id: &str) -> Result<Execution> {
+    j.execute(
+        id,
+        Target::Panel(PanelTarget::new(epoch())),
+        TOKEN,
+        &authority(),
+        &RwLock::new(true),
+        &Domains(false),
+        f,
+        Duration::from_millis(50),
+    )
+}
+#[test]
+fn panel_opens_once_and_already_open_never_toggles() {
+    for (mode, shown, clicks) in [(23, false, 1), (2, true, 0)] {
+        let d = Scratch::new();
+        let mut j = Journal::open(&d.path()).unwrap();
+        let mut f = PanelFake {
+            state: panel_state(mode, shown),
+            dispatches: 0,
+            reads: 0,
+            fail: false,
+            uncertain: false,
+            transitions: 0,
+        };
+        let e = open(&mut j, &mut f, "open").unwrap();
+        assert_eq!(e.stage, Some("ensure_open"));
+        assert_eq!(e.status, Status::Verified);
+        assert_eq!(f.dispatches, clicks);
+        let public = serde_json::to_value(&e).unwrap();
+        for absent in [
+            "line_handle",
+            "equipment_id",
+            "requested_factories",
+            "original_requested",
+            "panel_identity",
+        ] {
+            assert!(public.get(absent).is_none());
+        }
+        drop(j);
+        let mut j = Journal::open(&d.path()).unwrap();
+        f.fail = true;
+        assert!(open(&mut j, &mut f, "open").unwrap().historical);
+        assert_eq!(f.dispatches, clicks);
+    }
+}
+#[test]
+fn panel_uncertainty_blocks_allocations_and_only_original_panel_can_settle() {
+    let d = Scratch::new();
+    let mut j = Journal::open(&d.path()).unwrap();
+    let mut f = PanelFake {
+        state: panel_state(23, false),
+        dispatches: 0,
+        reads: 0,
+        fail: false,
+        uncertain: true,
+        transitions: 0,
+    };
+    assert_eq!(
+        open(&mut j, &mut f, "open").unwrap_err().code,
+        "action_uncertain"
+    );
+    drop(j);
+    let mut j = Journal::open(&d.path()).unwrap();
+    let mut allocation = Fake::new(d.path(), 4);
+    assert_eq!(
+        execute(&mut j, &mut allocation, "factory", 5)
+            .unwrap_err()
+            .code,
+        "action_uncertain"
+    );
+    assert_eq!(allocation.reads, 0);
+    assert_eq!(
+        execute(&mut j, &mut allocation, "open", 5)
+            .unwrap_err()
+            .code,
+        "request_id_conflict"
+    );
+    f.state = panel_state(5, true); // Constructor argument is not active production mode.
+    assert_eq!(
+        open(&mut j, &mut f, "open").unwrap_err().code,
+        "action_uncertain"
+    );
+    f.state = panel_state(23, false); // Unchanged does not mean input never applied.
+    assert_eq!(
+        open(&mut j, &mut f, "open").unwrap_err().code,
+        "action_uncertain"
+    );
+    f.state = panel_state(2, true);
+    f.state.panel_identity[6] += 8;
+    assert_eq!(
+        open(&mut j, &mut f, "open").unwrap_err().code,
+        "action_uncertain"
+    );
+    f.state = panel_state(2, true);
+    f.fail = true;
+    assert_eq!(
+        open(&mut j, &mut f, "open").unwrap_err().code,
+        "action_uncertain"
+    );
+    f.fail = false;
+    assert_eq!(
+        open(&mut j, &mut f, "open").unwrap().status,
+        Status::Verified
+    );
+    assert_eq!(f.dispatches, 1);
+    assert!(!j.blocks_game(&epoch().game));
+}
+#[test]
+fn allocation_uncertainty_blocks_panel_and_invalid_panel_states_never_dispatch() {
+    let d = Scratch::new();
+    let mut j = Journal::open(&d.path()).unwrap();
+    let mut allocation = Fake::new(d.path(), 4);
+    allocation.outcome = 2;
+    execute(&mut j, &mut allocation, "factory", 5).unwrap_err();
+    let mut f = PanelFake {
+        state: panel_state(23, false),
+        dispatches: 0,
+        reads: 0,
+        fail: false,
+        uncertain: false,
+        transitions: 0,
+    };
+    assert_eq!(
+        open(&mut j, &mut f, "open").unwrap_err().code,
+        "action_uncertain"
+    );
+    assert_eq!(f.reads, 0);
+    for (mode, shown) in [(5, true), (23, true), (2, false), (17, false), (24, false)] {
+        let d = Scratch::new();
+        let mut j = Journal::open(&d.path()).unwrap();
+        f.state = panel_state(mode, shown);
+        assert!(open(&mut j, &mut f, "open").is_err());
+        assert_eq!(f.dispatches, 0);
+    }
+}
+#[test]
+fn original_v1_factory_records_still_reopen_with_the_same_public_receipt_shape() {
+    let d = Scratch::new();
+    let mut j = Journal::open(&d.path()).unwrap();
+    // Literal pre-navigation v1 target/state shapes, without enum tags.
+    let t = serde_json::json!({"epoch":epoch(),"line_handle":"0xffff000100000038","equipment_id":"infantry_equipment_1","factories":4});
+    let s = serde_json::json!({"epoch":epoch(),"line":factory_state(4).line,"requested":4});
+    let r = serde_json::json!({"version":1,"id":"old","target":t,"before":s,"last":s,"status":"Verified","delivery":null,"cause":null});
+    let mut bytes = serde_json::to_vec(&r).unwrap();
+    bytes.push(b'\n');
+    j.file.write_all(&bytes).unwrap();
+    j.file.sync_all().unwrap();
+    drop(j);
+    let mut j = Journal::open(&d.path()).unwrap();
+    let mut f = Fake::new(d.path(), 4);
+    let v = serde_json::to_value(execute(&mut j, &mut f, "old", 4).unwrap()).unwrap();
+    assert_eq!(v["original_requested"], 4);
+    assert_eq!(v["requested_factories"], 4);
+    assert!(v.get("stage").is_none());
+    assert_eq!(f.reads, 0);
+    assert_eq!(serde_json::to_value(target(4)).unwrap(), r["target"]);
+    assert_eq!(serde_json::to_value(state(4)).unwrap(), r["before"]);
+    let mut mixed = r["target"].clone();
+    mixed["stage"] = serde_json::json!("ensure_open");
+    assert!(serde_json::from_value::<Target>(mixed).is_err());
+}
+
+#[test]
+fn panel_transition_readback_recovers_without_replaying_input() {
+    let d = Scratch::new();
+    let mut j = Journal::open(&d.path()).unwrap();
+    let mut f = PanelFake {
+        state: panel_state(23, false),
+        dispatches: 0,
+        reads: 0,
+        fail: false,
+        uncertain: false,
+        transitions: 1,
+    };
+    assert_eq!(
+        open(&mut j, &mut f, "open").unwrap().status,
+        Status::Verified
+    );
+    assert_eq!(f.dispatches, 1);
+    assert_eq!(f.transitions, 0);
+    assert!(!j.blocks_game(&epoch().game));
 }

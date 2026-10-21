@@ -19,7 +19,7 @@ fn window(f: &mut Fixture, address: u64, shown: bool) {
 
 fn materialized_view() -> Fixture {
     let mut f = unavailable_view();
-    f.number(MANAGER + 0x3d8, 5);
+    f.number(MANAGER + 0x3d8, 2);
     f.word(MANAGER + 0xd8, VIEW);
     f.region(VIEW, 0x1600);
     f.word(VIEW, BASE + 0x4314180);
@@ -177,6 +177,17 @@ fn typed_row_association_and_scoped_dialogs_do_not_invent_controls_or_input() {
     assert_eq!(value["input_authorized"], false);
     assert!(value.get("scope").is_none());
     assert!(value.get("input_geometry").is_none());
+}
+
+#[test]
+fn production_uses_manager_mode_two_not_view_constructor_argument_five() {
+    for mode in [2, 5, 17, 23] {
+        let mut f = materialized_view();
+        f.number(MANAGER + 0x3d8, mode);
+        let value = controls(&f, HANDLE, KEY, false).unwrap();
+        assert_eq!(value["mode_raw"], mode);
+        assert_eq!(value["locally_ready"], mode == 2);
+    }
 }
 
 #[test]

@@ -50,6 +50,19 @@ pub(super) fn tool() -> Value {
             "request_id":{"type":"string","minLength":1,"maxLength":128},"lease_token":{"type":"string"}},
             "required":["line_handle","equipment_id","factories","request_id","lease_token"],"additionalProperties":false}})
 }
+pub(super) fn open_tool() -> Value {
+    json!({"name":"hoi4_production_open","description":"Linux preview: ensure the owned production panel is open through one verified ordinary topbar click. Already-open is a no-op, never a toggle. Requires idle managed view or the already-open production view, exact owned profile and exclusive lease. Shares the production journal and all unresolved-input blocks. Same-ID uncertain retries only observe the original panel target. No raw coordinates, hotkeys or engine calls. Live validation pending.",
+        "inputSchema":{"type":"object","properties":{
+            "request_id":{"type":"string","minLength":1,"maxLength":128},
+            "lease_token":{"type":"string"}},
+            "required":["request_id","lease_token"],"additionalProperties":false}})
+}
+fn parse_open(args: &serde_json::Map<String, Value>, epoch: Epoch) -> Result<step::Target> {
+    allowed(args, &["request_id", "lease_token"])?;
+    string(args, "request_id")?;
+    string(args, "lease_token")?;
+    Ok(step::Target::Panel(step::PanelTarget::new(epoch)))
+}
 fn parse(args: &serde_json::Map<String, Value>, epoch: Epoch) -> Result<step::Target> {
     allowed(
         args,
@@ -61,7 +74,7 @@ fn parse(args: &serde_json::Map<String, Value>, epoch: Epoch) -> Result<step::Ta
             "lease_token",
         ],
     )?;
-    let target = step::Target {
+    let target = step::Target::Factories(step::FactoryTarget {
         epoch,
         line_handle: string(args, "line_handle")?.into(),
         equipment_id: string(args, "equipment_id")?.into(),
@@ -72,7 +85,7 @@ fn parse(args: &serde_json::Map<String, Value>, epoch: Epoch) -> Result<step::Ta
             .ok_or_else(|| {
                 Error::new("invalid_arguments", "Integer factory allocation required")
             })?,
-    };
+    });
     target.validate()?;
     Ok(target)
 }
@@ -80,15 +93,20 @@ pub(super) fn call(
     owner: &ClockService,
     process: &dyn Process,
     args: &serde_json::Map<String, Value>,
+    opening: bool,
 ) -> Result<Value> {
     let until = Instant::now() + Duration::from_secs(10);
     owner.daily.input_check()?;
     drop(input_permit(&owner.input_gate)?);
     let mut state = owner.input_state()?;
-    let target = parse(args, state.guard.epoch.clone())?;
+    let target = if opening {
+        parse_open(args, state.guard.epoch.clone())?
+    } else {
+        parse(args, state.guard.epoch.clone())?
+    };
     let token = string(args, "lease_token")?;
     let id = string(args, "request_id")?;
-    state.authority.authorize(token, &target.epoch)?;
+    state.authority.authorize(token, target.epoch())?;
     let ControlState {
         controls,
         guard,
@@ -173,12 +191,13 @@ fn observed(
     ui: bool,
     deadline: Instant,
 ) -> Result<(observation::Observation, step::State)> {
-    if target.epoch != guard.epoch {
+    if *target.epoch() != guard.epoch {
         return Err(Error::new(
             "ownership_changed",
             "Production target epoch differs",
         ));
     }
+    let factory = target.factory()?;
     let mut report = read_recovery::Report::default();
     let o = read_recovery::observe(
         read_recovery::Phase::Candidate,
@@ -186,19 +205,19 @@ fn observed(
         || {
             observation::observe(
                 process,
-                &target.line_handle,
-                &target.equipment_id,
+                &factory.line_handle,
+                &factory.equipment_id,
                 ui.then_some(true),
             )
         },
         &mut report,
     )?;
     guard.accept_context(process, &o.campaign)?;
-    let state = step::State {
+    let state = step::State::Factories(step::FactoryState {
         epoch: guard.epoch.clone(),
         line: o.line.clone(),
         requested: o.requested,
-    };
+    });
     state.validate(target)?;
     if Instant::now() >= deadline {
         return Err(Error::new(
@@ -208,6 +227,103 @@ fn observed(
     }
     Ok((o, state))
 }
+fn panel_observed(
+    process: &dyn Process,
+    guard: &mut Guard,
+    target: &step::Target,
+    ui: bool,
+    deadline: Instant,
+) -> Result<(crate::production_panel::Observation, step::State)> {
+    if !matches!(target, step::Target::Panel(_)) || target.epoch() != &guard.epoch {
+        return Err(Error::new(
+            "ownership_changed",
+            "Original production panel target required",
+        ));
+    }
+    let mut report = read_recovery::Report::default();
+    let o = read_recovery::observe(
+        read_recovery::Phase::Candidate,
+        deadline,
+        || crate::production_panel::observe(process, ui, ui),
+        &mut report,
+    )?;
+    guard.accept_context(process, &o.campaign)?;
+    let state = panel_state(&o.value, o.identity.clone(), guard.epoch.clone())?;
+    state.validate(target)?;
+    if Instant::now() >= deadline {
+        return Err(Error::new(
+            "production_deadline",
+            "Production panel observation deadline ended",
+        ));
+    }
+    Ok((o, state))
+}
+fn panel_state(value: &Value, identity: Vec<u64>, epoch: Epoch) -> Result<step::State> {
+    if value["available"] != true || value["root"]["materialized"] != true {
+        return Err(Error::new(
+            "production_panel_unavailable",
+            "Exact materialized own production panel required",
+        ));
+    }
+    let shown = match (
+        value["root"]["settled"] == true,
+        value["root"]["locally_shown_settled"].as_bool(),
+        value["root"]["locally_hidden_settled"].as_bool(),
+    ) {
+        (true, Some(true), Some(false)) => true,
+        (true, Some(false), Some(true)) => false,
+        _ => {
+            return Err(Error::new(
+                "production_panel_transition",
+                "Own panel is not positively settled",
+            ))
+        }
+    };
+    let mode = value["mode_raw"]
+        .as_i64()
+        .and_then(|v| i32::try_from(v).ok())
+        .ok_or_else(|| Error::new("invalid_production_panel", "Literal manager mode required"))?;
+    Ok(step::State::Panel(step::PanelState {
+        epoch,
+        panel_identity: identity,
+        managed_mode: mode,
+        panel_shown: shown,
+    }))
+}
+fn panel_candidate(
+    process: &dyn Process,
+    guard: &mut Guard,
+    target: &step::Target,
+    before: &step::State,
+    profile: &OwnedClientProfile,
+    deadline: Instant,
+) -> Result<Candidate> {
+    let (o, state) = panel_observed(process, guard, target, true, deadline)?;
+    if state != *before {
+        return Err(Error::new(
+            "production_state_changed",
+            "Original production panel changed before candidate",
+        ));
+    }
+    if o.value["build_id"] != game::BUILD_ID
+        || o.value["new_click_preconditions_clear"] != true
+        || o.value["opener"]["local_dispatch_ready"] != true
+        || o.geometry.is_empty()
+    {
+        return Err(Error::new(
+            "production_precondition",
+            "Exact ready production opener, clear own blockers and geometry required",
+        ));
+    }
+    let surface = geometry::control_surface(&o.value["opener"]["render_diagnostic"])?;
+    let codec = geometry::codec(&o.value["input_geometry"], profile)?;
+    let point = research_attempt::point_candidate(&surface, &codec)?;
+    Ok(Candidate {
+        point,
+        scope: o.scope,
+        geometry: o.geometry,
+    })
+}
 fn candidate(
     process: &dyn Process,
     guard: &mut Guard,
@@ -216,6 +332,9 @@ fn candidate(
     profile: &OwnedClientProfile,
     deadline: Instant,
 ) -> Result<Candidate> {
+    if matches!(target, step::Target::Panel(_)) {
+        return panel_candidate(process, guard, target, before, profile, deadline);
+    }
     let (o, state) = observed(process, guard, target, true, deadline)?;
     if state != *before {
         return Err(Error::new(
@@ -223,13 +342,14 @@ fn candidate(
             "Original line changed before candidate",
         ));
     }
-    let direction = if target.factories > before.requested {
+    let direction = if target.factory()?.factories > before.factory()?.requested {
         "add"
     } else {
         "subtract"
     };
     let control = &o.value["controls"][direction];
     if o.value["build_id"] != game::BUILD_ID
+        || o.value["engine_gates"]["conservative_engine_clear"] != true
         || o.value["locally_ready"] != true
         || o.value["common_gui_gates_clear"] != true
         || o.value["common_blockers"]["conservative_scoped_clear"] != true
@@ -263,6 +383,9 @@ fn candidate(
 impl step::Backend for ProductionBackend<'_> {
     type Candidate = Candidate;
     fn observe(&mut self, t: &step::Target, deadline: Instant) -> Result<step::State> {
+        if matches!(t, step::Target::Panel(_)) {
+            return panel_observed(self.process, self.guard, t, false, deadline).map(|(_, s)| s);
+        }
         observed(self.process, self.guard, t, false, deadline).map(|(_, s)| s)
     }
     fn candidate(
@@ -369,5 +492,63 @@ mod tests {
             args[key] = value;
             assert!(parse(args.as_object().unwrap(), epoch()).is_err());
         }
+    }
+    #[test]
+    fn opening_has_no_raw_input_or_allocation_arguments() {
+        let valid = json!({"request_id":"open","lease_token":"fixture"});
+        assert!(matches!(
+            parse_open(valid.as_object().unwrap(), epoch()).unwrap(),
+            step::Target::Panel(_)
+        ));
+        for (key, value) in [
+            ("factories", json!(1)),
+            ("x", json!(10)),
+            ("line_handle", json!("0xffff000100000038")),
+            ("stage", json!("close")),
+            ("key", json!("Y")),
+        ] {
+            let mut args = valid.clone();
+            args[key] = value;
+            assert!(parse_open(args.as_object().unwrap(), epoch()).is_err());
+        }
+        for key in ["request_id", "lease_token"] {
+            let mut args = valid.clone();
+            args.as_object_mut().unwrap().remove(key);
+            assert!(parse_open(args.as_object().unwrap(), epoch()).is_err());
+        }
+        assert_eq!(open_tool()["inputSchema"]["additionalProperties"], false);
+    }
+    #[test]
+    fn panel_state_requires_positive_settled_visibility_and_manager_mode() {
+        let identity: Vec<u64> = (2..9).map(|n| n * 0x10000).collect();
+        let valid = json!({"available":true,"mode_raw":2,"root":{"materialized":true,"settled":true,"locally_shown_settled":true,"locally_hidden_settled":false}});
+        let state = panel_state(&valid, identity.clone(), epoch()).unwrap();
+        state
+            .validate(&step::Target::Panel(step::PanelTarget::new(epoch())))
+            .unwrap();
+        for field in ["settled", "locally_shown_settled", "locally_hidden_settled"] {
+            let mut value = valid.clone();
+            value["root"][field] = Value::Null;
+            assert_eq!(
+                panel_state(&value, identity.clone(), epoch())
+                    .unwrap_err()
+                    .code,
+                "production_panel_transition"
+            );
+        }
+        let mut value = valid.clone();
+        value["root"]["locally_hidden_settled"] = json!(true);
+        assert!(panel_state(&value, identity.clone(), epoch()).is_err());
+        value = valid.clone();
+        value["root"]["materialized"] = json!(false);
+        assert_eq!(
+            panel_state(&value, identity.clone(), epoch())
+                .unwrap_err()
+                .code,
+            "production_panel_unavailable"
+        );
+        value = valid;
+        value["mode_raw"] = Value::Null;
+        assert!(panel_state(&value, identity, epoch()).is_err());
     }
 }

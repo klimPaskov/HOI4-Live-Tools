@@ -1,5 +1,49 @@
 # Rust foundation provenance
 
+## Linux production opening and common engine blockers
+
+`production_panel.rs` is an independent, bounded Linux observer for the pinned
+ELF. Focused static ELF disassembly supplies this mapping; it is not a successful
+REA analysis or live input result. No game assets or disassembly are distributed.
+
+The own manager's `+0x188` topbar has primary `0x426c3d0`, idler `+0x68`, manager
+`+0x70` and root `+0x78`. Its named child chain is `country_menu_window` /
+`after_faction_button` / `after_intel_agency_button`; the first child must match
+alias `+0x98`. The final `production_button` must match alias `+0x4dc0`, distinct
+from the glow alias `+0x4dc8`. It is an exact Standard button with own registry.
+The sole active listener is topbar `+0xdb0`, primary `0x426c518`. Its FIRST VOID
+capture uses manager `0x1886560`, invoker `0x1886530` and member `0x186d0d0`,
+zero adjustment and the own topbar receiver. Alternate function bundles refuse.
+
+Member `0x186d0d0` supplies selector 2 to `0x1709c20`. That function selects
+manager `+0xd8` and writes mode 2 at `+0x3d8`; already-active mode 2 toggles to
+23. The adapter therefore clicks only from mode 23 with a positively hidden,
+settled production root. Mode 2 with the same shown root is a no-op. Constructor
+argument 5 goes through `0x1693450` / `0x18e7850` into update-interface flags,
+not manager mode. The prior fixture and readiness predicate copied the wrong
+interpretation; both are corrected before live production acceptance.
+
+Both opening and factory dispatch require manager transition bytes `+0x3e1/2`
+clear, game-state `+0xa59` nonzero, idler `+0x8f0` zero and the conservative
+`CanUpdateGui` byte `+0x5b2` nonzero. The latter is a debug-assert-derived guard,
+not a claim that every release path checks it. Settings at idler `+0x7b0` have
+primary `0x431a2f0`, owner `+0x30` and root `+0x550`. Menu at manager `+0x218`
+has primary `0x425bf80`, idler `+0x19a0`, manager `+0x19a8`, root `+0x19b0` and
+overview `+0x19c8`. The overview has primary `0x4300540`, idler `+0x1078` and
+root `+0x1080`. The exact engine predicates return false for null roots; these
+are explicitly reported as `engine_false_by_null`, never a materialized hidden
+window. Nonnull roots require exact own registry and settled hidden state.
+Manager `+0x248` still lacks a proved auxiliary type/owner mapping; a nonnull
+value refuses without traversing its payload. Common focus/research/politics
+blockers and both positively hidden production selection dialogs also apply.
+
+The opener reuses exact renderer transcripts and the reviewed optional Standard
+position gate. Ordinary X11 input uses the existing owned-window/idle-input
+checks. The shared production journal persists the original seven panel
+identities before input; read-only recovery never toggles or rebases. Factory v1
+JSON records retain their shape. None of this establishes live production
+routing, command causality or campaign acceptance. No native function is called.
+
 ## Linux production control observation
 
 `production_lines/control_snapshot.rs` and `production_lines/controls.rs` are
@@ -9,7 +53,13 @@ reciprocal production owner, counters and canonical base-equipment key. No
 macOS field offset was reused for the Linux GUI layout.
 
 Static constructor `0x17037b0` installs the production view at manager `+0xd8`;
-`0x29dc040` supplies mode 5 and primary `0x4314180`. Shared base `0x1693450`
+`0x29dc040` supplies base-constructor argument 5 and primary `0x4314180`.
+That argument is **not** the manager's active mode. The production topbar
+member `0x186d0d0` passes 2 to `0x1709c20`; that routine selects the view at
+manager `+0xc8 + 2*8` (`+0xd8`) and writes 2 to active mode `+0x3d8` at
+`0x1709df9`. The earlier mode-5 readiness assumption was wrong and corrected
+from this independent callback evidence before live production acceptance.
+Shared base `0x1693450`
 retains the idler at `+0x2f0`, and `0x1693850` creates root `+0x2f8` through
 that idler's registry. `0x29e56c0` rebuilds current rows in `+0x14f0` from own
 production status. Military/naval constructors `0x17e5e20`/`0x17ea910` use

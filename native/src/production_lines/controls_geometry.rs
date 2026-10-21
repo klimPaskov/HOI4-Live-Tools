@@ -12,19 +12,19 @@ struct State {
     reads: BTreeMap<(u64, usize), Vec<u8>>,
     bytes: usize,
 }
-pub(super) struct Transcript<'a, 'm> {
+pub(crate) struct Transcript<'a, 'm> {
     inner: &'a Reader<'m>,
     state: RefCell<State>,
 }
 impl<'a, 'm> Transcript<'a, 'm> {
-    pub(super) fn new(inner: &'a Reader<'m>) -> Self {
+    pub(crate) fn new(inner: &'a Reader<'m>) -> Self {
         Self {
             inner,
             state: RefCell::new(State::default()),
         }
     }
     /// Include bytes already obtained by the control's authorized exact-type gate.
-    pub(super) fn seed(&self, address: u64, bytes: Vec<u8>) -> Result<()> {
+    pub(crate) fn seed(&self, address: u64, bytes: Vec<u8>) -> Result<()> {
         self.record(address, bytes)
     }
     fn record(&self, address: u64, bytes: Vec<u8>) -> Result<()> {
@@ -70,7 +70,7 @@ impl<'a, 'm> Transcript<'a, 'm> {
         state.reads.insert(key, bytes);
         Ok(())
     }
-    pub(super) fn finish(&self) -> Vec<(u64, Vec<u8>)> {
+    pub(crate) fn finish(&self) -> Vec<(u64, Vec<u8>)> {
         self.state
             .borrow()
             .reads

@@ -119,7 +119,7 @@ pub(crate) fn observe(
         handle,
         equipment_id: key.into(),
     };
-    let (mut value, scope, geometry) = match ui {
+    let (mut value, mut scope, geometry) = match ui {
         Some(include) => {
             let o = controls::observe(&reader, base, &target, include)?;
             (o.value, o.scope, o.geometry)
@@ -138,6 +138,15 @@ pub(crate) fn observe(
         }
         value["common_blockers"] = crate::construction::controls::blockers(
             &reader, base, country, idler, manager, registry,
+        )?;
+        value["engine_gates"] = crate::production_panel::engine(
+            &reader,
+            base,
+            campaign.anchors[0],
+            idler,
+            manager,
+            registry,
+            &mut scope,
         )?;
         value["common_gui_gates_clear"] = json!(
             reader.byte(registry + 0x150)? == 0

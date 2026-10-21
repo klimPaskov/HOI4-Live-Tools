@@ -113,8 +113,8 @@ supported yet. It needs a Developer Tools grant and an ad-hoc signed binary
 
 ### Not done yet
 
-- Linux production changes have an opt-in, one-factory action preview with
-  durable recovery; live validation, panel navigation and line creation remain.
+- Linux production opening and one-factory changes have opt-in previews with
+  durable recovery; live validation, scrolling and line creation remain.
 - Linux provincial buildings (naval bases, forts, coastal forts), army, air and naval control.
 - Economy and warfare automation (standing plans, shortage repair, invasions).
 - A native Windows adapter.

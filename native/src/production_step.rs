@@ -25,85 +25,10 @@ fn error(code: &'static str, message: &str) -> Error {
     Error::new(code, message)
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(deny_unknown_fields)]
-pub struct Target {
-    pub epoch: Epoch,
-    pub line_handle: String,
-    pub equipment_id: String,
-    pub factories: i32,
-}
-impl Target {
-    pub fn validate(&self) -> Result<u64> {
-        if !(1..=1_000_000).contains(&self.factories) {
-            return Err(error(
-                "invalid_arguments",
-                "One-factory controls require target allocation 1..1000000",
-            ));
-        }
-        crate::production_lines::control_snapshot::validate_target(
-            &self.line_handle,
-            &self.equipment_id,
-        )
-    }
-}
-/// Private persisted own-line identity. Public receipts omit these addresses.
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(deny_unknown_fields)]
-pub struct LineIdentity {
-    pub country: u64,
-    pub production: u64,
-    pub line: u64,
-    pub variant: u64,
-    pub base_type: u64,
-    pub handle: u64,
-    pub equipment_id: String,
-}
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(deny_unknown_fields)]
-pub struct State {
-    pub epoch: Epoch,
-    pub line: LineIdentity,
-    pub requested: i32,
-}
-impl State {
-    pub fn validate(&self, target: &Target) -> Result<()> {
-        let handle = target.validate()?;
-        if self.epoch != target.epoch
-            || self.line.handle != handle
-            || self.line.equipment_id != target.equipment_id
-            || [
-                self.line.country,
-                self.line.production,
-                self.line.line,
-                self.line.variant,
-                self.line.base_type,
-            ]
-            .iter()
-            .any(|p| !(0x10000..=0x7fff_ffff_0000).contains(p) || p % 8 != 0)
-            || !(0..=1_000_000).contains(&self.requested)
-        {
-            return Err(error(
-                "ownership_changed",
-                "Exact bounded own production identity required",
-            ));
-        }
-        Ok(())
-    }
-    fn step(&self, target: &Target) -> Result<()> {
-        self.validate(target)?;
-        if (i64::from(self.requested) - i64::from(target.factories)).abs() != 1 {
-            return Err(error(
-                "production_step_required",
-                "Request exactly one factory step from the fresh allocation",
-            ));
-        }
-        Ok(())
-    }
-    fn same_line(&self, other: &Self) -> bool {
-        self.epoch == other.epoch && self.line == other.line
-    }
-}
+mod model;
+pub use model::{
+    FactoryState, FactoryTarget, LineIdentity, PanelState, PanelTarget, State, Target,
+};
 
 pub trait Backend {
     type Candidate;
@@ -176,7 +101,7 @@ impl Record {
             Some(Delivery::Unknown | Delivery::ServerConfirmed)
         );
         let valid = self.version == 1
-            && self.before.same_line(&self.last)
+            && self.before.same_identity(&self.last)
             && self.cause.as_ref().is_none_or(Diagnostic::validate)
             && match self.status {
                 Status::Intent => {
@@ -195,7 +120,7 @@ impl Record {
                     self.before.step(&self.target).is_ok() && possible && self.cause.is_some()
                 }
                 Status::Verified => {
-                    self.last.requested == self.target.factories
+                    self.last.reached(&self.target)
                         && self.cause.is_none()
                         && if self.delivery.is_none() {
                             self.last == self.before
@@ -213,10 +138,16 @@ impl Record {
 #[derive(Debug, Serialize)]
 pub struct Execution {
     pub request_id: String,
-    pub line_handle: String,
-    pub equipment_id: String,
-    pub original_requested: i32,
-    pub requested_factories: i32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub line_handle: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub equipment_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub original_requested: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub requested_factories: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stage: Option<&'static str>,
     pub status: Status,
     pub delivery: Option<Delivery>,
     pub historical: bool,
@@ -227,10 +158,11 @@ impl Execution {
     fn new(r: &Record, historical: bool) -> Self {
         Self {
             request_id: r.id.clone(),
-            line_handle: r.target.line_handle.clone(),
-            equipment_id: r.target.equipment_id.clone(),
-            original_requested: r.before.requested,
-            requested_factories: r.target.factories,
+            line_handle: r.target.factory().ok().map(|t| t.line_handle.clone()),
+            equipment_id: r.target.factory().ok().map(|t| t.equipment_id.clone()),
+            original_requested: r.before.factory().ok().map(|s| s.requested),
+            requested_factories: r.target.factory().ok().map(|t| t.factories),
+            stage: matches!(r.target, Target::Panel(_)).then_some("ensure_open"),
             status: r.status,
             delivery: r.delivery,
             historical,
@@ -261,7 +193,7 @@ fn live(
     deadline: Instant,
     gate: &RwLock<bool>,
 ) -> Result<()> {
-    authority.authorize(token, &target.epoch)?;
+    authority.authorize(token, target.epoch())?;
     drop(permit(gate)?);
     if Instant::now() >= deadline {
         return Err(error(
@@ -447,7 +379,7 @@ impl Journal {
     pub fn blocks_game(&self, game: &Identity) -> bool {
         self.poisoned
             || self.records.values().any(|r| {
-                r.target.epoch.game == *game
+                r.target.epoch().game == *game
                     && matches!(r.status, Status::Intent | Status::Uncertain)
             })
     }
@@ -496,7 +428,7 @@ impl Journal {
                 "Production timeout must be positive and at most ten seconds",
             ));
         }
-        let deadline = (Instant::now() + timeout).min(authority.authorize(token, &target.epoch)?);
+        let deadline = (Instant::now() + timeout).min(authority.authorize(token, target.epoch())?);
         live(authority, token, &target, deadline, gate)?;
         if self.poisoned {
             return Err(error(
@@ -523,12 +455,10 @@ impl Journal {
                 Status::Intent | Status::Uncertain => {
                     // One settlement attempt, no new baseline, candidate or input.
                     let settled = (|| -> Result<State> {
-                        domains.clear(&target.epoch.game)?;
+                        domains.clear(&target.epoch().game)?;
                         let observed = backend.observe(&target, deadline)?;
                         observed.validate(&target)?;
-                        if !observed.same_line(&original.before)
-                            || observed.requested != target.factories
-                        {
+                        if !observed.same_identity(&original.before) || !observed.reached(&target) {
                             return Err(error(
                                 "production_target_unreached",
                                 "Original production target not observed reached",
@@ -568,13 +498,13 @@ impl Journal {
                 }
             }
         }
-        if self.blocks_game(&target.epoch.game) {
+        if self.blocks_game(&target.epoch().game) {
             return Err(error(
                 "action_uncertain",
                 "Unresolved production step blocks new IDs",
             ));
         }
-        domains.clear(&target.epoch.game)?;
+        domains.clear(&target.epoch().game)?;
         let before = backend.observe(&target, deadline)?;
         before.validate(&target)?;
         live(authority, token, &target, deadline, gate)?;
@@ -588,7 +518,7 @@ impl Journal {
             delivery: None,
             cause: None,
         };
-        if before.requested == target.factories {
+        if before.reached(&target) {
             return self.append(initial).map(|r| Execution::new(&r, false));
         }
         before.step(&target)?;
@@ -602,7 +532,7 @@ impl Journal {
             ));
         }
         live(authority, token, &target, deadline, gate)?;
-        domains.clear(&target.epoch.game)?;
+        domains.clear(&target.epoch().game)?;
         if self
             .file
             .metadata()?
@@ -621,7 +551,7 @@ impl Journal {
         })?;
         let final_check = (|| -> Result<()> {
             live(authority, token, &target, deadline, gate)?;
-            domains.clear(&target.epoch.game)?;
+            domains.clear(&target.epoch().game)?;
             let fresh = backend.observe(&target, deadline)?;
             fresh.validate(&target)?;
             if fresh != before {
@@ -670,10 +600,10 @@ impl Journal {
         loop {
             let checked = (|| -> Result<Option<State>> {
                 live(authority, token, &target, deadline, gate)?;
-                domains.clear(&target.epoch.game)?;
+                domains.clear(&target.epoch().game)?;
                 let observed = backend.observe(&target, deadline)?;
                 observed.validate(&target)?;
-                if !observed.same_line(&intent.before) {
+                if !observed.same_identity(&intent.before) {
                     return Err(error(
                         "ownership_changed",
                         "Original production identity changed after input",
@@ -681,7 +611,7 @@ impl Journal {
                 }
                 live(authority, token, &target, deadline, gate)?;
                 last = observed.clone();
-                if observed.requested != target.factories {
+                if !observed.reached(&target) {
                     return Ok(None);
                 }
                 backend.confirm_input_idle(deadline)?;
@@ -714,7 +644,11 @@ impl Journal {
                     return Ok(Execution::new(&saved, false));
                 }
                 Ok(None) => {}
-                Err(e) if e.code == "torn_read" && Instant::now() < deadline => {}
+                Err(e)
+                    if Instant::now() < deadline
+                        && (e.code == "torn_read"
+                            || (matches!(target, Target::Panel(_))
+                                && e.code == "production_panel_transition")) => {}
                 Err(e) => return Err(self.uncertain(&intent, delivery, last, e, token)),
             }
             thread::sleep(

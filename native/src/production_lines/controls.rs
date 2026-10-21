@@ -10,7 +10,12 @@ use crate::{
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
 #[path = "controls_geometry.rs"]
-mod geometry_trace;
+pub(crate) mod geometry_trace;
+
+// The topbar callback 0x186d0d0 passes 2 to manager 0x1709c20, which
+// selects manager+0xc8+2*8 and writes active mode+0x3d8. Constructor argument
+// 5 to the view base is a different field, not this manager's active mode.
+pub(crate) const MANAGED_MODE: i32 = 2;
 
 /// Pointer identities remain internal to the request/controller context.
 pub(crate) struct Observation {
@@ -358,7 +363,7 @@ pub(crate) fn observe(
     let container = r.u64(row + 0x10)?;
     scope.push(container);
     out["row"] = window(r, base, container, registry)?;
-    let ready = mode == 5
+    let ready = mode == MANAGED_MODE
         && scoped_clear
         && out["root"]["locally_shown_settled"] == true
         && out["row"]["locally_shown_settled"] == true;

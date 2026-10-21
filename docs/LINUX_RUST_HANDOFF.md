@@ -7,6 +7,34 @@ Do not resume Mac campaigns or control the shared Windows game.
 
 ## Current checkpoint
 
+Linux production panel opening preview, 21 October 2026: `hoi4_production_open`
+now uses the exact own named topbar button, with the same opt-in 512×288 profile
+and exclusive lease as factory allocation. It opens only from idle manager mode
+23 with a positively hidden, settled root. Mode 2 with the original shown root
+is a no-op. Original panel identity is durable; uncertain opening and factory
+changes block each other and all shared input domains. Same-ID recovery is
+read-only, and old factory v1 journal records retain their format.
+
+Focused static evidence exposed a readiness error: production uses manager
+mode 2, while the previously assumed 5 is an unrelated constructor update flag.
+The predicate and fixture are corrected before live production acceptance.
+Both opening and factory clicks now check typed settings/menu/overview blockers.
+A nonnull unmapped auxiliary manager object refuses input. No native function
+calls or additional game pauses were introduced.
+
+Local validation passed 1,063 Rust tests, 953 Python tests with 37 platform skips,
+formatting and warning-free host/Linux Clippy. The first Clippy run caught a
+range-style issue; the corrected runs passed. Rust stdio smoke passed in the
+suite. The previous published checkpoint passed all three native and five Python
+CI jobs; macOS Python 3.9 was cancelled without a runner or test steps. Fresh
+exact-commit CI is required for this checkpoint.
+
+No game or VM was launched. These are static/fixture results, not a successful
+production gate or campaign. Next: a bounded recorded opening and one-factory
+gate with one Luna medium player and exclusive input. The 1080p QEMU performance
+limit, two-year acceptance and full campaigns remain unresolved. Scrolling,
+line creation and wider economy/warfare adapters remain unfinished.
+
 Linux production action preview, 21 October 2026: the owned controller can now
 opt into `hoi4_production_attempt` through the 512×288 production profile.
 It changes one requested factory on an exact current own line, or records a

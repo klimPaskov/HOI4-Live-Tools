@@ -2,6 +2,16 @@
 
 ## Unreleased native preview
 
+- Add opt-in Linux `hoi4_production_open`: an ordinary named topbar click with
+  durable original panel identity and canonical readback. Already-open panels
+  are no-ops. Opening and factory allocation share uncertainty exclusion, and
+  existing factory journal records keep their format. Live validation is pending.
+- Correct Linux production readiness to manager mode 2. The earlier value 5
+  came from unrelated constructor update flags; static callback evidence exposed
+  this error before live production acceptance. Require typed settings, menu and
+  overview blocker checks for both opening and factory clicks; an unknown
+  auxiliary manager object refuses input.
+
 - Add opt-in Linux `hoi4_production_attempt` for one factory increment/decrement
   on an exact current own line in an already-open panel. Persist original
   identity/count before input, recheck the same callback/geometry and verify

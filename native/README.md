@@ -304,6 +304,7 @@ anchors do not establish a load-generation token.
 | `hoi4_economy` | Own named factory trigger counts, civilian project capacity and exact signed political-power units; live comparison pending |
 | `hoi4_production_lines` | Paged own line handles, separate signed factory counters and optional base equipment keys; key joins have fixture evidence, live comparison and allocation remain pending |
 | `hoi4_production_controls` | Linux preview: exact own line's named factory +/- controls, callback bindings, local blockers and optional renderer geometry; read-only, live validation pending |
+| `hoi4_production_open` | Opt-in Linux preview: ensure the production panel is open through its named topbar control; an already-open panel is a no-op; live validation pending |
 | `hoi4_production_attempt` | Opt-in Linux preview: one ordinary factory step in an already-open panel, durable original identity/count and canonical readback; live validation pending |
 | `hoi4_construction_queue` | Own building/railway lines, canonical keys and signed cost/work counters; one dockyard observed in run071. Run072 observed one state/label with a late-lease deviation; selection and province/railway coverage remain unverified |
 | `hoi4_technology_list` | Canonical loaded technology IDs with filtering/pagination; no eligibility inference |
@@ -363,18 +364,27 @@ binding and an exclusive lease. It accepts `line_handle`, `equipment_id`,
 `factories`, `request_id` and `lease_token`. The target must match the current
 requested count (a no-op) or differ by exactly one; the minimum target is one.
 The production panel must already be open with the exact row materialized.
-Panel opening, scrolling, line creation and bulk allocation are not implemented.
+Scrolling, line creation and bulk allocation are not implemented.
+
+With the same profile and lease, `hoi4_production_open` accepts only `request_id`
+and `lease_token`. It opens a positively hidden production panel from idle
+manager mode 23 through the named topbar button, then verifies the original
+own panel is shown in production mode 2. An already-open panel is a no-op,
+so repeating an opening request cannot toggle it closed. Other active panels
+are refused. Opening and allocation share one journal and uncertainty lock;
+the original factory journal format remains readable.
 
 Before a click, the private journal durably records the original campaign,
 line/variant identity and requested count. The adapter rechecks canonical state,
 callback bindings, local blockers, renderer identity/geometry and the owned
-window. Held keys/modifiers and window state are checked again after that refresh,
+window. Both production routes also check the settings, menu and overview
+blockers. An unmapped auxiliary manager object refuses input. Held keys/modifiers and window state are checked again after that refresh,
 before any pointer bytes are sent. One ordinary click is followed by canonical
 own-line readback and an idle-input check; the game is never paused by the action.
 
 An uncertain result blocks clock, research, Focus, construction and daily input.
 The same request ID can only settle by observing its original target on its
-original line; it never sends another click or adopts a new baseline. Historical
+original line or panel; it never sends another click or adopts a new baseline. Historical
 success is marked historical, not fresh state. The journal preserves uncertainty
 when reopened, but supervisor restart/adoption of a surviving game is unsupported.
 No live production gate has passed. Scoped UI checks and a reached count do not
