@@ -7,6 +7,15 @@ Do not resume Mac campaigns or control the shared Windows game.
 
 ## Current checkpoint
 
+The diagnostic checkpoint `2ad13d0` then failed ten Windows CI fixtures: nine
+production cases used a 50 ms budget and one construction terminal-tear case
+used 300 ms, including durable journal writes. They expired before dispatch,
+returning `input_not_queued` instead of reaching the intended post-input checks.
+Both production fixture helpers and the construction case now use the existing
+two-second test allowance. Runtime deadlines, durable writes and assertions
+about dispatch counts, uncertainty and no replay are unchanged. Preserve the
+failed run and require fresh exact-commit CI before the next input gate.
+
 Recorded Linux production gate, 21 October 2026 (`87fc595`, all nine exact-commit
 CI jobs passed): one Luna player at medium reasoning held exclusive input in a
 vanilla FAIR Germany start, Normal difficulty with historical AI. The first

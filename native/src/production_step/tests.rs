@@ -4,6 +4,10 @@ use std::{
     sync::atomic::{AtomicUsize, Ordering},
 };
 const TOKEN: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+// Real durable journal writes can exceed 50ms on loaded Windows runners.
+// These fixtures exercise delivery/recovery, not fsync latency. Runtime
+// deadlines are unchanged; uncertain cases must still expire and never replay.
+const TIME: Duration = Duration::from_secs(2);
 static NEXT: AtomicUsize = AtomicUsize::new(0);
 struct Scratch(std::path::PathBuf);
 impl Scratch {
@@ -154,7 +158,7 @@ fn execute(j: &mut Journal, f: &mut Fake, id: &str, n: i32) -> Result<Execution>
         &RwLock::new(true),
         &Domains(false),
         f,
-        Duration::from_millis(50),
+        TIME,
     )
 }
 
@@ -527,7 +531,7 @@ fn open(j: &mut Journal, f: &mut PanelFake, id: &str) -> Result<Execution> {
         &RwLock::new(true),
         &Domains(false),
         f,
-        Duration::from_millis(50),
+        TIME,
     )
 }
 #[test]
@@ -704,7 +708,7 @@ fn panel_transition_readback_recovers_without_replaying_input() {
             &RwLock::new(true),
             &Domains(false),
             &mut f,
-            Duration::from_secs(2),
+            TIME,
         )
         .unwrap();
     assert_eq!(result.status, Status::Verified);

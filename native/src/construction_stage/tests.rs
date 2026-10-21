@@ -1224,7 +1224,9 @@ fn persistently_torn_terminal_witness_never_verifies() {
             &RwLock::new(true),
             &Domains::default(),
             &mut f,
-            Duration::from_millis(300)
+            // Allow the durable intent to reach dispatch on loaded runners;
+            // the persistent terminal tear must still exhaust this deadline.
+            TIME
         )
         .unwrap_err()
         .code,
