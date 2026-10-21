@@ -42,7 +42,7 @@ impl Service {
     }
 }
 pub(super) fn tool() -> Value {
-    json!({"name":"hoi4_production_attempt","description":"Linux preview: request exactly one factory increase or decrease for an exact own current line_handle and equipment_id in an already-open production panel. A matching count is a no-op. One ordinary unmodified click maximum, original count/identity persisted before input, canonical own-line readback. Requires owned profile and exclusive lease. An unresolved retry only checks the original target and never replays input; uncertainty blocks all domains. Minimum target one. No new line, panel opening, scrolling, raw coordinates or engine posting. Live validation pending.",
+    json!({"name":"hoi4_production_attempt","description":"Linux preview: request exactly one factory increase or decrease for an exact own current line_handle and equipment_id in an already-open production panel. A matching count is a no-op. One ordinary unmodified click maximum, original count/identity persisted before input, canonical own-line readback. Requires owned profile and exclusive lease. An unresolved retry only checks the original target and never replays input; uncertainty blocks all domains. Minimum target one. No new line, panel opening, scrolling, raw coordinates or engine posting. Bounded exact-line Production004 gate passed; broader management and campaigns remain unverified.",
         "inputSchema":{"type":"object","properties":{
             "line_handle":{"type":"string","pattern":"^0x[0-9a-f]{16}$"},
             "equipment_id":{"type":"string","minLength":1,"maxLength":128},
@@ -51,7 +51,7 @@ pub(super) fn tool() -> Value {
             "required":["line_handle","equipment_id","factories","request_id","lease_token"],"additionalProperties":false}})
 }
 pub(super) fn open_tool() -> Value {
-    json!({"name":"hoi4_production_open","description":"Linux preview: ensure the owned production panel is open through one verified ordinary topbar click. Already-open is a no-op, never a toggle. Requires idle managed view or the already-open production view, exact owned profile and exclusive lease. Shares the production journal and all unresolved-input blocks. Same-ID uncertain retries only observe the original panel target. No raw coordinates, hotkeys or engine calls. Live validation pending.",
+    json!({"name":"hoi4_production_open","description":"Linux preview: ensure the owned production panel is open through one verified ordinary topbar click. Already-open is a no-op, never a toggle. Requires idle managed view or the already-open production view, exact owned profile and exclusive lease. Shares the production journal and all unresolved-input blocks. Same-ID uncertain retries only observe the original panel target. No raw coordinates, hotkeys or engine calls. Bounded opening, no-op and replay gates passed in Production004/008.",
         "inputSchema":{"type":"object","properties":{
             "request_id":{"type":"string","minLength":1,"maxLength":128},
             "lease_token":{"type":"string"}},
@@ -60,7 +60,7 @@ pub(super) fn open_tool() -> Value {
 pub(super) fn close_tool() -> Value {
     let mut tool = open_tool();
     tool["name"] = json!("hoi4_production_close");
-    tool["description"] = json!("Linux preview: ensure the owned production panel is closed through at most one verified ordinary topbar click. Only settled shown production mode2 may click; settled hidden production in idle mode23 is a no-op. Other active panels refuse. Exact original panel identity, exclusive lease, shared durable production journal and all unresolved-input blocks remain required. Same-ID uncertain retries only observe; never replay input. No raw coordinates, hotkeys or engine calls. Closing live validation pending; daily mixed-panel routing not enabled.");
+    tool["description"] = json!("Linux preview: ensure the owned production panel is closed through at most one verified ordinary topbar click. Only settled shown production mode2 may click; settled hidden production in idle mode23 is a no-op. Other active panels refuse. Exact original panel identity, exclusive lease, shared durable production journal and all unresolved-input blocks remain required. Same-ID uncertain retries only observe; never replay input. No raw coordinates, hotkeys or engine calls. Bounded closing, replay/no-op and manual Research/Focus handoff passed Production008; daily mixed-panel routing not enabled.");
     tool
 }
 fn parse_open(args: &serde_json::Map<String, Value>, epoch: Epoch) -> Result<step::Target> {
@@ -125,7 +125,9 @@ pub(super) fn call(
         target,
         until,
     )?;
-    Ok(json!({"execution":execution,"live_validation":"pending","full_campaign_acceptance":false}))
+    Ok(
+        json!({"execution":execution,"live_validation":"bounded_linux_gate_passed","validation_runs":["Production004","Production008"],"full_campaign_acceptance":false}),
+    )
 }
 /// Shared ordinary route for the manual tool and future owner-held plan stages.
 /// The caller holds the controller mutex; this retains all journal, lease,

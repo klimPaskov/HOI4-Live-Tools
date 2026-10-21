@@ -313,6 +313,7 @@ anchors do not establish a load-generation token.
 | `hoi4_production_lines` | Paged own line handles, separate signed factory counters and optional base equipment keys; selected infantry allocation passed Production004; wider comparison and management remain pending |
 | `hoi4_production_controls` | Linux preview: exact own line's named factory +/- controls, callback bindings, local blockers and optional renderer geometry; read-only; selected infantry line passed Production004 |
 | `hoi4_production_open` | Opt-in Linux preview: ensure the production panel is open through its named topbar control; an already-open panel is a no-op; bounded Production004 gate passed |
+| `hoi4_production_close` | Opt-in Linux preview: close settled production or no-op when already closed in the idle view; Production008 passed manual closing, replay/no-op and Research/Focus handoff; mixed-worker routing unavailable |
 | `hoi4_production_attempt` | Opt-in Linux preview: one ordinary factory step in an already-open panel, durable original identity/count and canonical readback; selected 10→11→10 gate passed |
 | `hoi4_construction_queue` | Own building/railway lines, canonical keys and signed cost/work counters; one dockyard observed in run071. Run072 observed one state/label with a late-lease deviation; selection and province/railway coverage remain unverified |
 | `hoi4_technology_list` | Canonical loaded technology IDs with filtering/pagination; no eligibility inference |
@@ -402,10 +403,19 @@ opening, 10→11→10 requested infantry-equipment factories, historical replays
 new-ID no-ops. Final state had 10 requested and active factories. Opening took
 2.080 seconds; each count change took about 0.77 seconds. Recording and normal
 close passed. The game remained paused and the clock journal was empty, so this
-is not continuous-play or campaign acceptance. The immutable runtime still
-reports `live_validation: pending`; this result covers only the recorded exact
+is not continuous-play or campaign acceptance. The current runtime reports
+bounded live validation with its run IDs; this covers only the recorded exact
 build, profile and line. Scoped UI checks and a reached count do not prove
 universal event routing or that this particular click caused the change.
+
+Production008 on `c2d07c6` verified manual opening/closing, two historical close
+replays and two fresh no-ops, then a production → Research → Focus → production
+round trip. Final reads preserved all 21 production lines and four empty
+research slots. The grant included one ordinary canonical Rhineland assignment;
+this is not a generic route for production/research plans. Closing took
+1.255–1.394 seconds; replays took 6–8 ms. All 18 steps, stopped journals,
+recording and normal exit passed. Production007's wrong builder-supplied Focus
+ID remains a separate incomplete gate. See [the validation record](../docs/CLAUSEWITZ_VALIDATION.md).
 
 The standing-plan core can now convert a fresh typed production journal proof
 into completion of the exact requested allocation, with original line/variant

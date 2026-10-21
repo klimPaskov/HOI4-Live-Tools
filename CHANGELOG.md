@@ -2,11 +2,20 @@
 
 ## Unreleased native preview
 
+- Pass Production008 with one Luna medium player: manual production closing,
+  historical replays and no-ops, then a Research/Focus round trip with all 21
+  production lines unchanged. All 18 steps, stopped journals, recording and
+  normal exit passed. Report bounded validation in production capabilities and
+  tool results; mixed-worker routing and full campaigns remain unavailable.
+- Preserve Production007's incomplete gate: the builder supplied an obsolete
+  Focus ID. Verify grant IDs against the live own canonical catalog before play.
+
 - Add `hoi4_production_close`, an ordinary Linux panel-closing preview with an
   explicit `ensure_closed` target. Require settled shown production or an idle
   already-closed no-op; retain exact original identity, shared uncertainty
   exclusion and restart-safe receipts. Closing cannot count as allocation
-  preparation or completion. Live closing and mixed-worker routing are pending.
+  preparation or completion. Production008 verified bounded manual closing;
+  mixed-worker routing remains pending.
 
 - Pass Production006 with one Luna medium player: daily production allocation
   reached 14 factories across three days, respected the 2-step daily limit, and

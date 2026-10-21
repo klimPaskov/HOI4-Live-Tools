@@ -1,5 +1,64 @@
 # Clausewitz-MCP Linux validation
 
+## Production008 manual panel handoff passed — 22 October 2026
+
+Production008 passed all 18 granted steps on `c2d07c6` with one Luna medium
+player in recorded vanilla FAIR Germany, Normal difficulty and historical AI.
+Production open/close/reopen, two historical close replays (including while
+reopened) and two fresh no-ops verified. The route then opened Research,
+switched to Politics, opened and started the exact canonical Rhineland Focus,
+closed Politics and reopened/closed production. Final fresh reads confirmed all
+21 production lines unchanged, four empty research slots, Rhineland active and
+Germany still paused at 1936.01.01.12, speed 0. No clock or worker action ran.
+
+Independent stopped audit verified 23 player RPCs without errors, six production
+Intent/Verified pairs, two production no-ops, one Research pair and five Focus
+pairs. All seven original production-panel identities stayed unchanged; no
+unresolved input remained. The 202-second recording passed integrity, ordinary
+close returned game exit 0 in 2.253 seconds and every exact owned game, server,
+recorder and bridge instance was absent. Recorder exit 255 is retained separately.
+All 184 native inputs and 18 helpers stayed unchanged; all nine exact-commit CI
+jobs had passed before launch.
+
+Production closing took 1.255–1.394 seconds, historical replays 5.699/7.853 ms,
+no-ops 37–44 ms, final lines 44 ms and overview 18 ms. These include the
+persistent MCP/SSH bridge. Research opening took 457 ms; Focus stages took
+1.132–4.431 seconds. This initially paused test issued zero pause commands;
+it provides no annual throughput or matched upstream performance comparison.
+The emulated VM's separate front-end startup took 358 seconds.
+
+The first recording timing preflight rejected its 0.163–2.823-second offset
+bound before launching a recorder. Launch-artifact absence was verified; a fresh
+0.163–0.875-second bound passed. Both readings are retained. First-packet proof
+preceded campaign Start. Setup used menu captures; all player calls used
+structured MCP results. No source or helper changed during the run.
+
+This passes bounded manual panel navigation. It does not establish mixed-plan
+worker routing, generic Research/Focus closing, research or Focus completion,
+a two-year campaign, full campaigns or cross-platform live acceptance. The
+ordinary Rhineland assignment was explicitly part of this grant; production
+and research must not depend on assigning a Focus merely to switch panels.
+
+## Production007: invalid test Focus ID — 22 October 2026
+
+Production007 stopped at step 10 because the builder supplied the obsolete
+`GER_rhineland` key. The native adapter refused it before Intent with
+`focus_unavailable`; the current canonical ID is
+`GER_remilitarize_the_rhineland`. This was a test specification error, not a
+Luna failure or evidence that the native Focus route was broken.
+
+The preceding nine steps verified production open/close/reopen, two historical
+close replays (including while reopened), two fresh no-ops and Research opening.
+The stopped audit found four production Intent/Verified pairs, two production
+no-op records, one Research pair and no Focus or clock entries. No unresolved
+input remained. Final allocation and the full panel route were not reached.
+
+All 184 native inputs and 18 helpers stayed unchanged. The 255.666-second
+recording passed integrity; recorder exit 255 is preserved separately. One
+ordinary close exited the game with code 0 in 2.227 seconds, and all exact owned
+game/server/recorder/bridge instances were absent. The failed gate remains
+incomplete. Future grants must verify current canonical IDs before player input.
+
 ## Production006 daily worker passed — 22 October 2026
 
 Production006 passed all 16 granted steps on `c7d1b1c` with one Luna medium

@@ -7,33 +7,100 @@ Do not resume Mac campaigns or control the shared Windows game.
 
 ## Current checkpoint
 
-The next source adds a manual `hoi4_production_close` preview as the first
-production-to-Research/Focus handoff primitive. Its distinct `ensure_closed`
-target accepts only shown settled production mode 2 for one ordinary named
-button click; mode 23 with the same settled hidden root is a no-op. Other modes
-refuse. The exact callback, engine/modal gates, geometry, seven original panel
-identities, shared lease/controller and durable uncertainty rules remain intact.
-Opening receipts cannot be retargeted to closing. Closing receipts cannot count
-as allocation preparation or completion. Existing factory/opening journals retain
-their shape. The adapter is not yet used by the daily worker.
+Production008 passed the bounded manual production → Research → Focus →
+production navigation gate on `c2d07c6`. The current follow-up changes only
+public validation metadata and documentation; it does not enable mixed-worker
+routing. `hoi4_production_close` keeps its separate `ensure_closed` target,
+original panel identity, shared uncertainty exclusion and durable replay rules.
+Closing cannot count as production allocation preparation or completion.
+Legacy factory/opening journal shapes remain unchanged.
 
-Offline validation passed 1,096 host Rust tests, 953 Python tests (37 skips),
-formatting, host/Linux Clippy and Windows cross-compilation. The targeted Linux
-VM run passed 82 test executions (81 distinct tests). The first full host run
-caught an incorrectly expanded fixture loop; the corrected complete run passed
-and the original failure is retained privately. The Linux release binary builds.
-These results establish neither live closing nor cross-platform live support.
+Next, implement direct Research closing with its own original-state binding,
+then integrate mixed standing plans with durable navigation budgets and exact
+destination bindings. The static review found a required condition: the normal
+W top-bar route closes a shown Research panel only when its research tab is
+selected (current-build view+0x300 == 0). From the facilities tab it changes tabs
+instead. The existing Research observer does not yet expose this field. Observe
+and validate it; never assume a default tab or relax the OpenPanel predicate.
 
-This is based on the retained pinned-ELF selector/toggle disassembly, not a new
-REA analysis or live closing result. Next, verify a recorded bounded production
-open/close/reopen and Research/Focus handoff with one Luna medium player, including
-same-ID replay/no-op behavior and unchanged factory allocation. Then integrate
-mixed standing-plan routing with durable navigation budgets and original domain
-bindings. Do not relax incompatible-panel predicates or repeat production-only
-allocation acceptance as a substitute. Production006 below remains the latest
-live result; closing and mixed worker acceptance are pending.
+The existing Research journal refuses unresolved Intent replay and does not
+persist original panel roots. Do not claim production-style late settlement for
+it. New closing must bind the original roots, complete own slot identities and
+assignments, selected slot/folder and tab, with before/after invariants. Generic
+tree/Info exits remain unverified. Do not require Focus permission or a forced
+Focus assignment to route a production/research plan. Keep exact typed receipts,
+shared quarantine, original failures and day budgets across restart.
 
-### Latest live result
+Source `c2d07c6` passed 1,096 host Rust tests, 953 Python tests (37 skips),
+formatting, host/Linux Clippy, Windows cross-compilation and 82 targeted Linux
+test executions (81 distinct). Its first host test failure was a fixture-loop
+mistake; the corrected complete run passed and both logs remain preserved.
+All nine exact-commit CI jobs passed before the live test. Offline checks do not
+establish live platform or campaign compatibility.
+The validation-metadata follow-up also passed 1,096 host Rust tests, 953 Python
+tests (37 skips), formatting, Linux all-target Clippy and Windows all-target
+cross-compilation. It changes no input behavior.
+
+### Latest live result: Production008
+
+Production008 passed all 18 granted steps on `c2d07c6` with one Luna medium
+player in recorded vanilla FAIR Germany, Normal difficulty and historical AI.
+Production open/close/reopen, two historical close replays (including while
+reopened) and two fresh no-ops verified. The route then opened Research,
+switched to Politics, opened and started the exact canonical Rhineland Focus,
+closed Politics and reopened/closed production. Final fresh reads confirmed all
+21 production lines unchanged, four empty research slots, Rhineland active and
+Germany still paused at 1936.01.01.12, speed 0. No clock or worker action ran.
+
+Independent stopped audit verified 23 player RPCs without errors, six production
+Intent/Verified pairs, two production no-ops, one Research pair and five Focus
+pairs. All seven original production-panel identities stayed unchanged; no
+unresolved input remained. The 202-second recording passed integrity, ordinary
+close returned game exit 0 in 2.253 seconds and every exact owned game, server,
+recorder and bridge instance was absent. Recorder exit 255 is retained separately.
+All 184 native inputs and 18 helpers stayed unchanged; all nine exact-commit CI
+jobs had passed before launch.
+
+Production closing took 1.255–1.394 seconds, historical replays 5.699/7.853 ms,
+no-ops 37–44 ms, final lines 44 ms and overview 18 ms. These include the
+persistent MCP/SSH bridge. Research opening took 457 ms; Focus stages took
+1.132–4.431 seconds. This initially paused test issued zero pause commands;
+it provides no annual throughput or matched upstream performance comparison.
+The emulated VM's separate front-end startup took 358 seconds.
+
+The first recording timing preflight rejected its 0.163–2.823-second offset
+bound before launching a recorder. Launch-artifact absence was verified; a fresh
+0.163–0.875-second bound passed. Both readings are retained. First-packet proof
+preceded campaign Start. Setup used menu captures; all player calls used
+structured MCP results. No source or helper changed during the run.
+
+This passes bounded manual panel navigation. It does not establish mixed-plan
+worker routing, generic Research/Focus closing, research or Focus completion,
+a two-year campaign, full campaigns or cross-platform live acceptance. The
+ordinary Rhineland assignment was explicitly part of this grant; production
+and research must not depend on assigning a Focus merely to switch panels.
+
+### Preserved Production007 failure
+
+Production007 stopped at step 10 because the builder supplied the obsolete
+`GER_rhineland` key. The native adapter refused it before Intent with
+`focus_unavailable`; the current canonical ID is
+`GER_remilitarize_the_rhineland`. This was a test specification error, not a
+Luna failure or evidence that the native Focus route was broken.
+
+The preceding nine steps verified production open/close/reopen, two historical
+close replays (including while reopened), two fresh no-ops and Research opening.
+The stopped audit found four production Intent/Verified pairs, two production
+no-op records, one Research pair and no Focus or clock entries. No unresolved
+input remained. Final allocation and the full panel route were not reached.
+
+All 184 native inputs and 18 helpers stayed unchanged. The 255.666-second
+recording passed integrity; recorder exit 255 is preserved separately. One
+ordinary close exited the game with code 0 in 2.227 seconds, and all exact owned
+game/server/recorder/bridge instances were absent. The failed gate remains
+incomplete. Future grants must verify current canonical IDs before player input.
+
+### Previous Production006 worker result
 
 Production006 passed all 16 granted steps on `c7d1b1c` with one Luna medium
 player. The recorded vanilla FAIR Germany start used Normal difficulty and
