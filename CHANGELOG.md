@@ -2,6 +2,16 @@
 
 ## Unreleased native preview
 
+- Preserve uncertain macOS action intents when dispatch or readback fails,
+  including missing targets and unavailable UI. Restarted retries cannot clear
+  an intent from a newly captured before-state: only an observed reached target
+  can settle it. Diplomacy, air assignment, army splits and group creation no
+  longer treat a missing dispatch verification as proof of unchanged state.
+  The standing-plan runner returns unresolved actions to its caller after one
+  same-ID settlement attempt, without trying another research choice or army
+  move. Missing/nonterminal receipts also stop the runner; refusal diagnostics
+  truncate safely at UTF-8 boundaries. These recovery changes have offline
+  regression coverage and still need a recorded live recovery gate.
 - Campaign actions on macOS (native MCP, Steam 1.19.3 x86_64 under Rosetta,
   Mach-O 089EA519), each driven by ordinary CGEvent input to the owned,
   front-most window, targeted from the live GUI tree and verified by fresh

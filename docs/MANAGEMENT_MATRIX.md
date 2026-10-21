@@ -49,8 +49,17 @@ earlier or France falls late still has a legal next step.
 6. Live encirclement search and pincer lines.
 7. Peace conference.
 
-## Current goal (set 19 October 2026)
+## Continuation checkpoint (21 October 2026)
 
-Play m009 (FAIR Germany from 14 August 1939, recorded) to the conquest of Poland and France while closing the matrix rows in
-build order: all divisions assigned, division designer, air per front, factions/war-goal timing, naval production, live
-encirclement search. A row counts as closed only after a live-verified action; the game keeps running while tools are built.
+m009 is no longer active. The later m010 FAIR Germany run from 1936 also failed:
+the government changed, divisions disappeared and Poland remained unconquered.
+The cause is unresolved, and no full campaign or clean two-year acceptance is
+claimed. Preserve the recorded failures.
+
+Before another campaign gate, finish recovery that preserves uncertain input
+and returns unresolved decisions to the player. The journal and plan-runner
+regressions now have offline coverage; automatic recovery of additive actions
+still needs durable original baselines and live verification. Continue the
+Linux-first work and the domain gaps above under the
+[current handoff](LINUX_RUST_HANDOFF.md). A matrix row closes only after a
+live-verified action; portable tests alone do not establish live support.

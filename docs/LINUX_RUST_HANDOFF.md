@@ -7,6 +7,38 @@ Do not resume Mac campaigns or control the shared Windows game.
 
 ## Current checkpoint
 
+Continuation checkpoint, 21 October 2026: the latest recorded native macOS
+campaign, m010 (FAIR Germany from 1936), failed in April–June 1940. Germany
+became the democratic German Republic under Adenauer, divisions disappeared,
+and two `country_capitulated.0` events were observed. The cause is unresolved;
+Poland was not conquered. This is neither a successful campaign nor two-year
+acceptance. No game was running when this continuation inspected the state.
+The current user instructions select one Luna player at medium reasoning for
+future gates; the older Haiku entries below describe historical runs.
+
+Recovery review found that the macOS journal could clear an unresolved intent
+when a read failed with a lookup/capability error. The journal now retains that
+intent across restart, categorizes failed post-input readback as
+`action_uncertain`, and refuses to infer nonapplication from a retry's newly
+captured baseline. A retry may settle an unresolved intent only when its target
+is observed reached. Actions whose verification exists only in the dispatch
+call retain uncertainty if that verification is lost. The plan runner makes
+one same-ID settlement attempt and returns remaining uncertainty to its caller;
+it does not fall through to a different research choice or army-move command.
+Missing or nonterminal receipts also stop the runner. No game pause is added.
+
+These changes are offline-tested recovery work, not new live acceptance.
+Local validation passed: all 995 Rust tests, formatting and warning-free Clippy;
+the Python suite ran 953 tests with 37 platform-dependent skips and no failures.
+Durable original baselines are still needed for automatic recovery of additive
+actions such as training, construction and front-line creation. Do not clear a
+journal, change request IDs or infer failure merely to bypass a blocked intent.
+Next: validate the recovery changes, continue Linux adapters and the management
+matrix, then resume the recorded gates with exclusive input ownership. Linux
+1080p remains blocked by the QEMU TCG performance described below; Windows native
+actions and full campaign acceptance remain incomplete. Do not resume the old
+Mac campaign objective.
+
 macOS checkpoint, 18 October 2026 (native Steam 1.19.3 x86_64 under Rosetta,
 windowed 1920x1080, owned test runs only): the native server reads the
 overview, research, technology catalog, economy, equipment lines,

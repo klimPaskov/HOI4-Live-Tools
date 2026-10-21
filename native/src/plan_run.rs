@@ -105,7 +105,8 @@ impl State {
             .is_some_and(|until| *until > now)
     }
     /// One action with a fresh id; an uncertain dispatch is settled by
-    /// retrying its own id once. (verified, status or error text)
+    /// retrying its own id once. If readback remains uncertain, stop the
+    /// runner before it can try a fallback under a new id.
     fn act(
         &mut self,
         tools: &dyn Tools,
@@ -113,7 +114,7 @@ impl State {
         name: &str,
         args: Value,
         tag: &str,
-    ) -> (bool, String) {
+    ) -> Result<(bool, String)> {
         self.seq += 1;
         let mut args = args;
         if let Some(object) = args.as_object_mut() {
@@ -146,14 +147,26 @@ impl State {
             result = tools.call(name, &args);
         }
         match result {
+            Err(e) if e.code == "action_uncertain" => Err(e),
             Err(e) => {
                 let mut text = format!("{}: {}", e.code, e.message);
-                text.truncate(160);
-                (false, text)
+                let mut end = text.len().min(160);
+                while !text.is_char_boundary(end) {
+                    end -= 1;
+                }
+                text.truncate(end);
+                Ok((false, text))
             }
             Ok(body) => {
                 let status = body["receipt"]["status"].as_str().unwrap_or("").to_string();
-                (status == "Verified", status)
+                match status.as_str() {
+                    "Verified" => Ok((true, status)),
+                    "NotApplied" | "Diverged" => Ok((false, status)),
+                    _ => Err(Error::new(
+                        "action_uncertain",
+                        format!("{name} returned no terminal receipt; settle request {} before new input", args["request_id"]),
+                    )),
+                }
             }
         }
     }
@@ -222,7 +235,7 @@ pub fn tick(
                 "hoi4_event_choose",
                 json!({"event": key, "option": option}),
                 "ev",
-            );
+            )?;
             return Ok(Tick::Acted(format!(
                 "event {key} option {option}: {ok} {why}"
             )));
@@ -263,7 +276,7 @@ pub fn tick(
                 "hoi4_research_start",
                 json!({"technology": tech, "slot": empty}),
                 "rs",
-            );
+            )?;
             if ok {
                 return Ok(Tick::Acted(format!("research {tech} slot {empty}")));
             }
@@ -293,7 +306,7 @@ pub fn tick(
                         "hoi4_research_start",
                         json!({"technology": tech, "slot": empty}),
                         "rf",
-                    );
+                    )?;
                     if ok {
                         return Ok(Tick::Acted(format!(
                             "research {tech} slot {empty} (fallback)"
@@ -328,7 +341,7 @@ pub fn tick(
                 "hoi4_focus_start",
                 json!({"focus": key}),
                 "fo",
-            );
+            )?;
             if ok {
                 return Ok(Tick::Acted(format!("focus {key}")));
             }
@@ -347,7 +360,7 @@ pub fn tick(
             "hoi4_politics_choose",
             json!({"category": pick["category"], "slot": pick["slot"], "idea": pick["idea"]}),
             "po",
-        );
+        )?;
         if ok || why.contains("already holds") {
             state.done.insert(key);
         } else {
@@ -376,7 +389,7 @@ pub fn tick(
                     "hoi4_decision_take",
                     json!({"decision": key}),
                     "de",
-                );
+                )?;
                 state.skip(now, "dec", key, if ok { 3600 } else { 900 });
                 return Ok(Tick::Acted(format!("decision {key}: {ok} {why}")));
             }
@@ -401,7 +414,7 @@ pub fn tick(
                     "hoi4_train",
                     json!({"template": template, "count": count, "deploy_state_id": tr["deploy_state"]}),
                     "tr",
-                );
+                )?;
                 if !ok {
                     state.skip(now, "train", &template, 600);
                 }
@@ -453,7 +466,7 @@ pub fn tick(
                     "hoi4_production_set",
                     json!({"line": index, "equipment": equipment, "factories": factories + idle}),
                     "ps",
-                );
+                )?;
                 if !ok {
                     state.skip(now, "prodset", "x", 600);
                 }
@@ -477,7 +490,7 @@ pub fn tick(
             "hoi4_production_add",
             json!({"equipment": equipment, "factories": line["factories"].as_u64().unwrap_or(5)}),
             "pr",
-        );
+        )?;
         if ok {
             state.done.insert(format!("prod:{equipment}"));
         } else {
@@ -505,7 +518,7 @@ pub fn tick(
                 "hoi4_army_create",
                 json!({"state_id": id}),
                 "ac",
-            );
+            )?;
             let (ok, why) = if !ok
                 && why.contains("Divisions of an existing")
                 && cfg["absorb"] == json!(true)
@@ -516,7 +529,7 @@ pub fn tick(
                     "hoi4_army_create",
                     json!({"state_id": id, "absorb_existing": true}),
                     "ab",
-                )
+                )?
             } else {
                 (ok, why)
             };
@@ -536,7 +549,7 @@ pub fn tick(
                     "hoi4_army_split",
                     json!({"army": name, "count": chunk}),
                     "sp",
-                );
+                )?;
                 if !ok {
                     state.skip(now, "armysplit", name, 300);
                 }
@@ -564,7 +577,7 @@ pub fn tick(
                     "hoi4_army_commander",
                     json!({"army": name, "general": general}),
                     "gn",
-                );
+                )?;
                 state.skip(now, "armygeneral", name, if ok { 3600 } else { 300 });
                 return Ok(Tick::Acted(format!(
                     "general {general} -> {name}: {ok} {why}"
@@ -596,7 +609,7 @@ pub fn tick(
                     "hoi4_construction_add",
                     json!({"building": building, "state_id": state_id, "count": 1}),
                     "co",
-                );
+                )?;
                 if !ok {
                     // state full or not allowed: retry much later
                     state.skip(now, "con", &key, 2400);
@@ -753,7 +766,7 @@ fn war_step(
             state.war_cool.insert(name.clone(), now + cooldown * 3);
             continue;
         };
-        let (ok, why) = state.act(tools, lease, tool, args, "wr");
+        let (ok, why) = state.act(tools, lease, tool, args, "wr")?;
         if ok {
             state.war_stage.insert(name.clone(), next_stage);
             state
@@ -769,7 +782,7 @@ fn war_step(
                 "hoi4_army_move",
                 json!({"army": name, "state_id": target}),
                 "wm",
-            );
+            )?;
             state.war_cool.insert(name.clone(), now + cooldown);
             return Ok(Some(format!(
                 "war move {name} -> state {target}: {ok} {why2} (front: {why})"
@@ -887,6 +900,131 @@ mod tests {
     }
     fn names(f: &Fake) -> Vec<String> {
         f.calls.borrow().iter().map(|(n, _)| n.clone()).collect()
+    }
+
+    struct ActionReplies<'a> {
+        reads: &'a dyn Tools,
+        actions: RefCell<Vec<(String, Value)>>,
+        replies: RefCell<std::collections::VecDeque<Result<Value>>>,
+    }
+    impl Tools for ActionReplies<'_> {
+        fn call(&self, name: &str, args: &Value) -> Result<Value> {
+            if args.get("request_id").is_some() {
+                self.actions.borrow_mut().push((name.into(), args.clone()));
+                self.replies
+                    .borrow_mut()
+                    .pop_front()
+                    .expect("unexpected extra action")
+            } else {
+                self.reads.call(name, args)
+            }
+        }
+    }
+    fn uncertain() -> Result<Value> {
+        Err(Error::new(
+            "action_uncertain",
+            "Own readback unavailable after input",
+        ))
+    }
+
+    #[test]
+    fn uncertain_research_stops_before_another_priority_or_catalog_fallback() {
+        let reads = fake(vec![(
+            "hoi4_research",
+            json!({"slots": [{"researching": null}]}),
+        )]);
+        let tools = ActionReplies {
+            reads: &reads,
+            actions: RefCell::new(vec![]),
+            replies: RefCell::new([uncertain(), uncertain()].into()),
+        };
+        let mut state = State::default();
+        let error = tick(
+            &mut state,
+            &tools,
+            &json!({"research_priority": ["radio", "construction1"]}),
+            "l",
+            Instant::now(),
+        )
+        .unwrap_err();
+        assert_eq!(error.code, "action_uncertain");
+        let calls = tools.actions.borrow();
+        assert_eq!(calls.len(), 2);
+        assert_eq!(calls[0], calls[1], "Only the same request may be settled");
+        assert_eq!(calls[0].1["technology"], "radio");
+        assert!(!names(&reads).contains(&"hoi4_technology_list".into()));
+        assert!(
+            state.bad.is_empty(),
+            "Unfinished research must not be skipped"
+        );
+    }
+
+    #[test]
+    fn same_request_settled_as_verified_completes_normally() {
+        let reads = fake(vec![]);
+        let tools = ActionReplies {
+            reads: &reads,
+            actions: RefCell::new(vec![]),
+            replies: RefCell::new(
+                [uncertain(), Ok(json!({"receipt":{"status":"Verified"}}))].into(),
+            ),
+        };
+        let result = State::default()
+            .act(
+                &tools,
+                "l",
+                "hoi4_research_start",
+                json!({"technology":"radio", "slot":0}),
+                "rs",
+            )
+            .unwrap();
+        assert_eq!(result, (true, "Verified".into()));
+        let calls = tools.actions.borrow();
+        assert_eq!(calls.len(), 2);
+        assert_eq!(calls[0], calls[1]);
+    }
+
+    #[test]
+    fn nonterminal_or_missing_receipts_stop_instead_of_triggering_fallbacks() {
+        let reads = fake(vec![]);
+        for body in [
+            json!({}),
+            json!({"receipt":{"status":"Dispatching"}}),
+            json!({"receipt":{"status":"Unknown"}}),
+        ] {
+            let tools = ActionReplies {
+                reads: &reads,
+                actions: RefCell::new(vec![]),
+                replies: RefCell::new([Ok(body)].into()),
+            };
+            let error = State::default()
+                .act(
+                    &tools,
+                    "l",
+                    "hoi4_research_start",
+                    json!({"technology":"radio", "slot":0}),
+                    "rs",
+                )
+                .unwrap_err();
+            assert_eq!(error.code, "action_uncertain");
+            assert_eq!(tools.actions.borrow().len(), 1);
+        }
+    }
+
+    #[test]
+    fn refused_action_diagnostics_truncate_unicode_without_panicking() {
+        let reads = fake(vec![]);
+        let tools = ActionReplies {
+            reads: &reads,
+            actions: RefCell::new(vec![]),
+            replies: RefCell::new([Err(Error::new("invalid_target", "界".repeat(100)))].into()),
+        };
+        let (ok, reason) = State::default()
+            .act(&tools, "l", "hoi4_army_front", json!({}), "wr")
+            .unwrap();
+        assert!(!ok);
+        assert!(reason.starts_with("invalid_target: 界"));
+        assert!(reason.len() <= 160);
     }
 
     #[test]
@@ -1191,6 +1329,29 @@ mod tests {
         assert!(
             matches!(&step, Tick::Acted(s) if s.starts_with("war move Army 1 -> state 28: true"))
         );
+    }
+
+    #[test]
+    fn uncertain_front_stops_before_move_fallback_and_preserves_the_war_stage() {
+        let reads = War {
+            liberate: false,
+            front_ok: true,
+            calls: RefCell::new(vec![]),
+        };
+        let tools = ActionReplies {
+            reads: &reads,
+            actions: RefCell::new(vec![]),
+            replies: RefCell::new([uncertain(), uncertain()].into()),
+        };
+        let mut state = State::default();
+        let error = tick(&mut state, &tools, &war_plan(), "l", Instant::now()).unwrap_err();
+        assert_eq!(error.code, "action_uncertain");
+        let calls = tools.actions.borrow();
+        assert_eq!(calls.len(), 2);
+        assert_eq!(calls[0], calls[1]);
+        assert_eq!(calls[0].0, "hoi4_army_front");
+        assert!(state.war_stage.is_empty());
+        assert!(state.war_cool.is_empty());
     }
 
     #[test]

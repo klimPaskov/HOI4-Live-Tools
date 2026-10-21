@@ -178,27 +178,23 @@ impl GameJournal {
             if previous.status != Status::Dispatching {
                 return Ok(previous);
             }
-            return match self.settle(previous.clone(), settle) {
-                // Its state cannot even be read (the target never existed):
-                // nothing was sent, so settle it as not applied.
-                Err(error)
-                    if matches!(
-                        error.code,
-                        "invalid_target"
-                            | "invalid_arguments"
-                            | "capability_unavailable"
-                            | "gui_target_unavailable"
-                    ) =>
-                {
-                    self.append(Receipt {
-                        status: Status::NotApplied,
-                        detail: serde_json::json!({"refused": error.message}),
-                        unix_ms: now(),
-                        ..previous
-                    })
-                }
-                other => other,
+            // A missing target/UI during readback says nothing about whether
+            // the earlier dispatch sent input. Only a successful observation
+            // may settle it; read errors must leave the intent unresolved.
+            // These adapters reconstruct their before-state on each call.
+            // A later Unchanged/Diverged observation therefore cannot prove
+            // the original dispatch failed. Only a reached target can settle
+            // an unresolved retry until original baselines are durable.
+            let mut retry_settle = || match settle()? {
+                reached @ Outcome::Reached(_) => Ok(reached),
+                _ => Ok(Outcome::Unknown),
             };
+            return self.settle(previous, &mut retry_settle).map_err(|error| {
+                Error::after_possible_input(
+                    "Previous dispatch remains unresolved; readback failed",
+                    error,
+                )
+            });
         }
         if let Some(open) = self.unresolved() {
             return Err(Error::new(
@@ -219,33 +215,28 @@ impl GameJournal {
             unix_ms: now(),
         })?;
         match dispatch() {
-            Ok(()) => self.settle(intent, settle),
+            Ok(()) => self.settle(intent, settle).map_err(|error| {
+                Error::after_possible_input(
+                    "Input completed but readback remains unresolved",
+                    error,
+                )
+            }),
             Err(error) => {
                 // Settle from fresh state; an unprovable outcome stays quarantined.
                 let settled = self.settle(intent.clone(), settle);
                 match settled {
                     Ok(receipt) if receipt.status == Status::Verified => Ok(receipt),
                     Ok(_) => Err(error),
-                    Err(_) => {
-                        // A refusal raised before any input (unknown army, bad
-                        // argument) proves nothing was sent; settling it as not
-                        // applied keeps one bad call from quarantining input.
-                        if matches!(
+                    Err(readback) => Err(Error::after_possible_input(
+                        "Dispatch outcome unresolved; preserve intent",
+                        Error::new(
                             error.code,
-                            "invalid_target"
-                                | "invalid_arguments"
-                                | "capability_unavailable"
-                                | "gui_target_unavailable"
-                        ) {
-                            let _ = self.append(Receipt {
-                                status: Status::NotApplied,
-                                detail: serde_json::json!({"refused": error.message.clone()}),
-                                unix_ms: now(),
-                                ..intent
-                            });
-                        }
-                        Err(error)
-                    }
+                            format!(
+                                "{}; readback_cause={}: {}",
+                                error.message, readback.code, readback.message,
+                            ),
+                        ),
+                    )),
                 }
             }
         }
@@ -305,7 +296,7 @@ mod tests {
     }
 
     #[test]
-    fn refusal_before_input_does_not_quarantine() {
+    fn positively_observed_unchanged_state_settles_a_refusal() {
         let dir = dir("refusal");
         let mut j = journal(&dir);
         let e = epoch();
@@ -314,7 +305,7 @@ mod tests {
                 "bad-target",
                 &e,
                 json!({"kind":"x"}),
-                &mut || Err(Error::new("invalid_target", "no such army")),
+                &mut || Ok(Outcome::Unchanged(json!({"verified_unchanged":true}))),
                 &mut || Err(Error::new("invalid_target", "no such army")),
             )
             .unwrap_err();
@@ -377,7 +368,8 @@ mod tests {
                 &mut || Err(Error::new("input_readback_failed", "x")),
             )
             .unwrap_err();
-        assert_eq!(err.code, "input_readback_failed");
+        assert_eq!(err.code, "action_uncertain");
+        assert!(err.message.contains("input_readback_failed"));
         let blocked = j
             .execute(
                 "a3",
@@ -395,11 +387,11 @@ mod tests {
                 "a2",
                 &epoch(),
                 action,
-                &mut || Ok(Outcome::Unchanged(json!(0))),
+                &mut || Ok(Outcome::Reached(json!({"research":"radio","slot":1}))),
                 &mut || unreachable!(),
             )
             .unwrap();
-        assert_eq!(settled.status, Status::NotApplied);
+        assert_eq!(settled.status, Status::Verified);
         assert!(j
             .execute(
                 "a3",
@@ -469,5 +461,134 @@ mod tests {
             )
             .unwrap_err();
         assert_eq!(err.code, "idempotency_conflict");
+    }
+
+    #[test]
+    fn lookup_errors_after_possible_input_never_clear_the_intent_even_after_restart() {
+        for code in [
+            "invalid_target",
+            "invalid_arguments",
+            "capability_unavailable",
+            "gui_target_unavailable",
+        ] {
+            let dir = dir(code);
+            let mut j = journal(&dir);
+            let action = json!({"army":"Army 1","target":42});
+            let mut sent = 0;
+            let error = j
+                .execute(
+                    "partial",
+                    &epoch(),
+                    action.clone(),
+                    &mut || Err(Error::new(code, "readback unavailable")),
+                    &mut || {
+                        sent += 1;
+                        Err(Error::new(code, "lookup failed after click"))
+                    },
+                )
+                .unwrap_err();
+            assert_eq!(sent, 1);
+            assert_eq!(error.code, "action_uncertain");
+            assert!(error.message.contains(code));
+            assert_eq!(j.receipts["partial"].status, Status::Dispatching);
+            drop(j);
+            let mut j = journal(&dir);
+            let error = j
+                .execute(
+                    "partial",
+                    &epoch(),
+                    action.clone(),
+                    &mut || Err(Error::new(code, "target no longer observable")),
+                    &mut || panic!("Retry must never dispatch"),
+                )
+                .unwrap_err();
+            assert_eq!(error.code, "action_uncertain");
+            assert_eq!(j.receipts["partial"].status, Status::Dispatching);
+            let blocked = j
+                .execute(
+                    "new-id",
+                    &epoch(),
+                    json!({}),
+                    &mut || panic!("Unresolved input blocks new observations"),
+                    &mut || panic!("Unresolved input blocks new input"),
+                )
+                .unwrap_err();
+            assert_eq!(blocked.code, "action_uncertain");
+            let settled = j
+                .execute(
+                    "partial",
+                    &epoch(),
+                    action,
+                    &mut || Ok(Outcome::Reached(json!({"target":42}))),
+                    &mut || panic!("Settlement is read-only"),
+                )
+                .unwrap();
+            assert_eq!(settled.status, Status::Verified);
+            assert_eq!(sent, 1);
+        }
+    }
+
+    #[test]
+    fn successful_dispatch_with_unavailable_readback_is_still_uncertain() {
+        let dir = dir("readback-failed");
+        let mut j = journal(&dir);
+        let error = j
+            .execute(
+                "sent",
+                &epoch(),
+                json!({"army":"A"}),
+                &mut || Err(Error::new("invalid_target", "army not observable")),
+                &mut || Ok(()),
+            )
+            .unwrap_err();
+        assert_eq!(error.code, "action_uncertain");
+        assert!(error.message.contains("invalid_target"));
+        assert_eq!(j.receipts["sent"].status, Status::Dispatching);
+    }
+
+    #[test]
+    fn a_retry_without_the_original_baseline_cannot_prove_nonapplication() {
+        let dir = dir("retry-baseline");
+        let mut j = journal(&dir);
+        let action = json!({"kind":"construct","state":64});
+        j.execute(
+            "lost",
+            &epoch(),
+            action.clone(),
+            &mut || Ok(Outcome::Unknown),
+            &mut || Ok(()),
+        )
+        .unwrap_err();
+        drop(j);
+        let mut j = journal(&dir);
+        for diverged in [false, true] {
+            let error = j
+                .execute(
+                    "lost",
+                    &epoch(),
+                    action.clone(),
+                    &mut || {
+                        Ok(if diverged {
+                            Outcome::Diverged(json!({"queued":1}))
+                        } else {
+                            Outcome::Unchanged(json!({"queued":1}))
+                        })
+                    },
+                    &mut || panic!("Retry must never dispatch"),
+                )
+                .unwrap_err();
+            assert_eq!(error.code, "action_uncertain");
+            assert_eq!(j.receipts["lost"].status, Status::Dispatching);
+        }
+        let error = j
+            .execute(
+                "replacement",
+                &epoch(),
+                action,
+                &mut || panic!("Must not attempt a replacement"),
+                &mut || panic!("Must not dispatch a replacement"),
+            )
+            .unwrap_err();
+        assert_eq!(error.code, "action_uncertain");
     }
 }

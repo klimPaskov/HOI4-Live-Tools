@@ -626,7 +626,6 @@ impl Commands for MacClock {
                     .collect::<Result<Vec<_>>>()?,
             };
             let id = string(args, "request_id")?;
-            let retry = actions.receipt_exists(id);
             let action = json!({"kind":"diplomacy_act","state_id":state,"action":action_name,"war_goal":kind,"states":states});
             let keys = &self.keys;
             // The dispatch verifies the change itself; its result decides.
@@ -635,10 +634,8 @@ impl Commands for MacClock {
                 let now = diplomacy::current(process)?;
                 Ok(if verified.get() {
                     journal::Outcome::Reached(json!({"actions":now}))
-                } else if retry {
-                    journal::Outcome::Diverged(json!({"actions":now}))
                 } else {
-                    journal::Outcome::Unchanged(json!({"actions":now}))
+                    journal::Outcome::Unknown
                 })
             };
             let mut dispatch = || {
@@ -739,10 +736,8 @@ impl Commands for MacClock {
                 let now = air::wing_state(process, wing)?;
                 Ok(if verified.get() {
                     journal::Outcome::Reached(json!({"wing":now}))
-                } else if retry {
-                    journal::Outcome::Diverged(json!({"wing":now}))
                 } else {
-                    journal::Outcome::Unchanged(json!({"wing":now}))
+                    journal::Outcome::Unknown
                 })
             };
             let mut dispatch = || {
@@ -802,10 +797,8 @@ impl Commands for MacClock {
                 let now = armies::armies(process)?;
                 Ok(if verified.get() {
                     journal::Outcome::Reached(now)
-                } else if retry {
-                    journal::Outcome::Diverged(now)
                 } else {
-                    journal::Outcome::Unchanged(now)
+                    journal::Outcome::Unknown
                 })
             };
             let mut dispatch = || {
@@ -849,10 +842,8 @@ impl Commands for MacClock {
                 let now = armies::armies(process)?;
                 Ok(if verified.get() {
                     journal::Outcome::Reached(now)
-                } else if retry {
-                    journal::Outcome::Diverged(now)
                 } else {
-                    journal::Outcome::Unchanged(now)
+                    journal::Outcome::Unknown
                 })
             };
             let mut dispatch = || {
