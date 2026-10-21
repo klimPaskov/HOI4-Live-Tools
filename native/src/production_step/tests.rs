@@ -1,4 +1,6 @@
 use super::*;
+#[path = "standing_tests.rs"]
+mod standing;
 use std::{
     fs,
     sync::atomic::{AtomicUsize, Ordering},

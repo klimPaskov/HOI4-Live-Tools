@@ -106,6 +106,29 @@ pub(super) fn call(
     };
     let token = string(args, "lease_token")?;
     let id = string(args, "request_id")?;
+    let execution = execute_internal(
+        &mut state,
+        process,
+        &owner.input_gate,
+        token,
+        id,
+        target,
+        until,
+    )?;
+    Ok(json!({"execution":execution,"live_validation":"pending","full_campaign_acceptance":false}))
+}
+/// Shared ordinary route for the manual tool and future owner-held plan stages.
+/// The caller holds the controller mutex; this retains all journal, lease,
+/// unresolved-domain and final transport checks and the original deadline.
+pub(super) fn execute_internal(
+    state: &mut ControlState,
+    process: &dyn Process,
+    gate: &RwLock<bool>,
+    token: &str,
+    id: &str,
+    target: step::Target,
+    until: Instant,
+) -> Result<step::Execution> {
     state.authority.authorize(token, target.epoch())?;
     let ControlState {
         controls,
@@ -116,7 +139,7 @@ pub(super) fn call(
         focus,
         construction,
         production,
-    } = &mut *state;
+    } = state;
     let service = production
         .as_mut()
         .ok_or_else(|| Error::new("capability_unavailable", "Production profile unavailable"))?;
@@ -135,17 +158,16 @@ pub(super) fn call(
         xauthority: &service.xauthority,
     };
     let timeout = until.saturating_duration_since(Instant::now());
-    let execution = service.journal.execute(
+    service.journal.execute(
         id,
         target,
         token,
         authority,
-        &owner.input_gate,
+        gate,
         &domains,
         &mut backend,
         timeout,
-    )?;
-    Ok(json!({"execution":execution,"live_validation":"pending","full_campaign_acceptance":false}))
+    )
 }
 struct Domains<'a> {
     clock: &'a Journal,

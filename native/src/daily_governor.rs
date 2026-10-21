@@ -1,5 +1,6 @@
 //! Private prerequisite for durable daily routine. No process reader, pause,
 //! engine callback, input transport, MCP command or strategic chooser lives here.
+mod production;
 #[cfg(unix)]
 pub(crate) mod store;
 #[cfg(not(unix))]
@@ -502,7 +503,48 @@ impl Governor {
             _ => None,
         }
     }
-    fn research_queue_head(&self, entry: &Entry) -> bool {
+    /// Pending production heads are ordered independently for each exact line.
+    /// A refused head still blocks later targets for that line; unrelated lines
+    /// may proceed. This is scheduling only, never input/completion authority.
+    pub fn pending_production(&self, day: i64) -> Vec<Entry> {
+        self.state
+            .plan
+            .entries
+            .iter()
+            .filter(|entry| {
+                matches!(
+                    entry.intent,
+                    Intent::Economy {
+                        target: EconomyTarget::Production { .. }
+                    }
+                ) && self.queue_head(entry)
+                    && matches!(self.state.entries.get(&entry.id),
+                    Some(EntryState::Pending { reason_day, .. }) if *reason_day != Some(day))
+            })
+            .cloned()
+            .collect()
+    }
+    fn queue_head(&self, entry: &Entry) -> bool {
+        if let Intent::Economy {
+            target: EconomyTarget::Production { line_id, .. },
+        } = &entry.intent
+        {
+            return self
+                .state
+                .plan
+                .entries
+                .iter()
+                .find(|candidate| {
+                    matches!(&candidate.intent,
+                    Intent::Economy { target: EconomyTarget::Production { line_id: other, .. } }
+                        if other == line_id)
+                        && !matches!(
+                            self.state.entries.get(&candidate.id),
+                            Some(EntryState::Complete { .. })
+                        )
+                })
+                .is_some_and(|head| head.id == entry.id);
+        }
         let Intent::Research { slot, .. } = &entry.intent else {
             if matches!(entry.intent, Intent::Focus { .. }) {
                 return self
@@ -801,7 +843,7 @@ impl Governor {
                 self.used_actions(day)
             };
             for entry in entries {
-                if !self.research_queue_head(&entry) {
+                if !self.queue_head(&entry) {
                     retained.push(entry.id.clone());
                     continue;
                 }

@@ -400,6 +400,16 @@ reports `live_validation: pending`; this result covers only the recorded exact
 build, profile and line. Scoped UI checks and a reached count do not prove
 universal event routing or that this particular click caused the change.
 
+The standing-plan core can now convert a fresh typed production journal proof
+into completion of the exact requested allocation, with original line/variant
+and campaign binding, canonical readback and a later daily sequence. Public JSON
+receipts expose no private proof and cannot be reused as completion authority.
+Targets are ordered per full line ID; a refused head blocks later targets on
+that line. Generated durable-journal tests cover completion, daily budget and
+restart without replay. The background worker does not yet enable production:
+its permission, multi-step preparation, progress budgets and live advancing-time
+gate remain to be implemented. Manual production tools keep their existing API.
+
 The current game uses a 365-day calendar, including February 28 in 1936. Its raw
 clock includes a 5000-year epoch and displays hours as 1–24. Raw research counters
 are verified observations; normalized progress, time remaining and eligibility

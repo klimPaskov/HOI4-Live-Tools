@@ -78,6 +78,106 @@ fn plan() -> Plan {
         review_day: Some(1936 * 365 + 30),
     }
 }
+
+#[test]
+#[cfg(unix)]
+fn production_heads_preserve_line_order_and_refusals_across_restart() {
+    let t = Temp::new();
+    let mut p = plan();
+    p.entries = [
+        ("a-first", "0x0000000100000038", 11),
+        ("a-next", "0x0000000100000038", 10),
+        ("b-first", "0x0000000200000038", 3),
+    ]
+    .into_iter()
+    .map(|(id, line, count)| Entry {
+        id: id.into(),
+        intent: Intent::Economy {
+            target: EconomyTarget::Production {
+                line_id: line.into(),
+                equipment_id: "infantry_equipment_1".into(),
+                total_factories: count,
+            },
+        },
+        navigation: None,
+        focus_search: None,
+    })
+    .collect();
+    let mut b = Fake::new(&p);
+    let mut g = Governor::open(&t.path(), p.clone()).unwrap();
+    let day = 1936 * 365;
+    let ids = |g: &Governor, d| {
+        g.pending_production(d)
+            .into_iter()
+            .map(|e| e.id)
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(ids(&g, day), vec!["a-first", "b-first"]);
+    assert!(g
+        .continue_entry(
+            &mut b,
+            "a-next",
+            10000,
+            Instant::now() + Duration::from_secs(2)
+        )
+        .unwrap()
+        .verified
+        .is_empty());
+    assert_eq!(b.sends, 0);
+    b.mode = Mode::NotQueued;
+    g.continue_entry(
+        &mut b,
+        "a-first",
+        10000,
+        Instant::now() + Duration::from_secs(2),
+    )
+    .unwrap();
+    assert_eq!(ids(&g, day), vec!["b-first"]);
+    b.mode = Mode::Verified;
+    assert_eq!(
+        g.continue_entry(
+            &mut b,
+            "b-first",
+            10000,
+            Instant::now() + Duration::from_secs(2)
+        )
+        .unwrap()
+        .verified,
+        vec!["b-first"]
+    );
+    assert!(ids(&g, day).is_empty());
+    assert_eq!(g.used_actions(day), 2);
+    drop(g);
+    let mut g = Governor::open(&t.path(), p).unwrap();
+    assert!(ids(&g, day).is_empty());
+    assert_eq!(ids(&g, day + 1), vec!["a-first"]);
+    b.day(2);
+    assert_eq!(
+        g.continue_entry(
+            &mut b,
+            "a-first",
+            10000,
+            Instant::now() + Duration::from_secs(2)
+        )
+        .unwrap()
+        .verified,
+        vec!["a-first"]
+    );
+    assert_eq!(ids(&g, day + 1), vec!["a-next"]);
+    assert_eq!(
+        g.continue_entry(
+            &mut b,
+            "a-next",
+            10000,
+            Instant::now() + Duration::from_secs(2)
+        )
+        .unwrap()
+        .verified,
+        vec!["a-next"]
+    );
+    assert_eq!(g.used_actions(day + 1), 2);
+    assert!(ids(&g, day + 1).is_empty());
+}
 #[cfg(unix)]
 #[derive(Clone, Copy)]
 enum Mode {

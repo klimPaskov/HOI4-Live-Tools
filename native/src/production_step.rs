@@ -137,6 +137,12 @@ impl Record {
 }
 #[derive(Debug, Serialize)]
 pub struct Execution {
+    // Retain the typed journal proof for trusted owner-side plan completion.
+    // Never publish process pointers or accept a public JSON summary as proof.
+    #[serde(skip)]
+    proof: Record,
+    #[serde(skip)]
+    proof_historical: bool,
     pub request_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub line_handle: Option<String>,
@@ -157,6 +163,8 @@ pub struct Execution {
 impl Execution {
     fn new(r: &Record, historical: bool) -> Self {
         Self {
+            proof: r.clone(),
+            proof_historical: historical,
             request_id: r.id.clone(),
             line_handle: r.target.factory().ok().map(|t| t.line_handle.clone()),
             equipment_id: r.target.factory().ok().map(|t| t.equipment_id.clone()),
@@ -169,6 +177,25 @@ impl Execution {
             current_state_verified: !historical,
             event_causality_verified: false,
         }
+    }
+
+    pub(crate) fn verified_factory(
+        &self,
+    ) -> Result<(&str, &FactoryTarget, &FactoryState, &FactoryState)> {
+        let r = &self.proof;
+        r.validate()?;
+        if self.proof_historical || r.status != Status::Verified {
+            return Err(error(
+                "receipt_mismatch",
+                "Fresh verified production journal proof required",
+            ));
+        }
+        Ok((
+            &r.id,
+            r.target.factory()?,
+            r.before.factory()?,
+            r.last.factory()?,
+        ))
     }
 }
 pub struct Journal {

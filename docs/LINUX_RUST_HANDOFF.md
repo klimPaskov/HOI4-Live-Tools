@@ -7,6 +7,39 @@ Do not resume Mac campaigns or control the shared Windows game.
 
 ## Current checkpoint
 
+Standing-production foundation, 22 October 2026: factory executions now retain
+an internal typed journal proof, excluded from public JSON. The plan converter
+requires the exact original own line/variant, request, campaign, equipment and
+final count, a fresh canonical line read and a later daily observation sequence.
+Panel opening, intermediate targets and historical replays cannot complete the
+allocation. Mutating a public summary cannot retarget its private proof or turn
+a historical receipt into fresh evidence. Public receipt and journal formats
+remain unchanged.
+
+Production targets are ordered per full line ID. A refused head blocks later
+targets on that line while unrelated lines can proceed. Tests use the real
+durable production journal and governor with a generated backend: completion
+consumes budget once and survives reopen without replay. The existing manual
+Linux route was factored into a shared owner-held executor with the same lease,
+input gate, deadline, journal and scoped checks. No new MCP action or worker
+permission is enabled by this foundation.
+
+Local validation passed 1,077 Rust tests, 953 Python tests (37 skips), formatting
+and warning-free host/Linux Clippy. This is offline evidence, not a new live
+run. Production004 remains the latest successful bounded live production test.
+Its three previously queued macOS CI jobs were later cancelled with no test
+steps; Linux/Windows jobs passed. It does not have a complete CI pass.
+
+Next: wire an explicit default-off production permission into the daily worker,
+with durable original-line preparation, bounded one-click progress toward the
+full requested count, daily budgets, shared uncertainty exclusion and compact
+fresh digests. Opening and intermediate steps must not complete the goal; errors
+must retain unfinished work and its original identity. Then use one Luna medium
+player for a recorded advancing-time worker gate, including restart/STOP and
+no-replay evidence. Do not repeat the passed manual production gate alone.
+
+### Latest recorded production gate
+
 Production004, 21 October 2026 (`df474ca`), passed all ten bounded production
 steps with one Luna player at medium reasoning. The recorded fresh start was
 vanilla FAIR Germany, Normal difficulty, historical AI, paused at 1 January 1936.

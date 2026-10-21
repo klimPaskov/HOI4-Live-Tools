@@ -2,6 +2,13 @@
 
 ## Unreleased native preview
 
+- Add the standing-production completion foundation: private typed journal proof,
+  exact original line/count binding, fresh canonical evidence and per-line target
+  ordering. Historical replay and panel opening cannot complete an allocation.
+  Durable fixtures preserve completion and budget through restart without input
+  replay. The runtime worker remains unavailable for production until its
+  preparation, opt-in and advancing-time live gate are implemented.
+
 - Pass the recorded Linux Production004 gate with Luna medium: one ordinary
   panel opening, 10→11→10 factory counts, historical replays and no-input no-ops.
   Factory changes took 765/773 ms including readback. Recording, journal audit,
