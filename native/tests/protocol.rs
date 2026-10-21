@@ -8,6 +8,59 @@ fn server_binary() -> std::path::PathBuf {
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|| env!("CARGO_BIN_EXE_hoi4-live-native").into())
 }
+
+#[test]
+fn production_controls_requires_exact_read_only_target_before_process_access() {
+    let server = hoi4_live_native::protocol::Server {
+        process: None,
+        unavailable: None,
+    };
+    let valid = json!({"line_handle":"0xffff000100000038","equipment_id":"infantry_eq_1"});
+    let mut invalid = vec![
+        json!({}),
+        json!([]),
+        json!({"line_handle":0,"equipment_id":"infantry_eq_1"}),
+    ];
+    for (name, value) in [
+        ("line_handle", json!("0x38")),
+        ("line_handle", json!("0xffff00010000003a")),
+        ("equipment_id", json!("bad/key")),
+        ("equipment_id", Value::Null),
+        ("include_geometry", json!(1)),
+        ("include_geometry", Value::Null),
+        ("click", json!(true)),
+        ("country", json!("OTHER")),
+        ("factories", json!(1)),
+    ] {
+        let mut args = valid.clone();
+        args[name] = value;
+        invalid.push(args);
+    }
+    for arguments in invalid {
+        let reply = server
+            .handle(json!({"jsonrpc":"2.0","id":1,"method":"tools/call",
+            "params":{"name":"hoi4_production_controls","arguments":arguments}}))
+            .unwrap();
+        let body: Value =
+            serde_json::from_str(reply["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+        assert_eq!(body["error"]["code"], "invalid_arguments", "{body}");
+    }
+    let reply = server
+        .handle(json!({"jsonrpc":"2.0","id":2,"method":"tools/list"}))
+        .unwrap();
+    let tool = reply["result"]["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|tool| tool["name"] == "hoi4_production_controls")
+        .unwrap();
+    assert_eq!(tool["annotations"]["readOnlyHint"], true);
+    assert_eq!(tool["inputSchema"]["additionalProperties"], false);
+    assert_eq!(
+        tool["inputSchema"]["required"],
+        json!(["line_handle", "equipment_id"])
+    );
+}
 #[test]
 fn completed_focus_query_is_read_only_and_reports_bounded_linux_evidence() {
     use hoi4_live_native::protocol::Server;
@@ -121,7 +174,8 @@ fn stdio_is_json_and_notifications_have_no_reply() {
             "hoi4_technology_list",
             "hoi4_wait_for",
             "hoi4_construction_controls",
-            "hoi4_construction_find_view"
+            "hoi4_construction_find_view",
+            "hoi4_production_controls"
         ]
     );
     assert_eq!(replies[3]["result"]["isError"], true);

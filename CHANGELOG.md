@@ -2,6 +2,13 @@
 
 ## Unreleased native preview
 
+- Add `hoi4_production_controls`, a Linux read-only observation of an exact own
+  equipment line's factory +/- buttons. Full handles and canonical equipment
+  keys join the production row in one witnessed snapshot; named aliases,
+  callback captures, local gates and equipment-selection dialogs are checked.
+  Optional geometry reuses the existing typed renderer reader. It never opens
+  the panel, moves the cursor or enables input. Factory adjustment, line
+  creation and live validation remain pending.
 - Batch Linux GUI registry name reads shared by research, politics and
   construction. A fixture with 256 inline names now needs four name-lookup
   reads, plus the caller's pointer collection and final snapshot checks.

@@ -1,5 +1,43 @@
 # Rust foundation provenance
 
+## Linux production control observation
+
+`production_lines/control_snapshot.rs` and `production_lines/controls.rs` are
+new project code for ELF build `a4971c9e8ac9a6f2487dea109e01f9839ee59db7`.
+The existing full own-line validator supplies the same-reader typed handle,
+reciprocal production owner, counters and canonical base-equipment key. No
+macOS field offset was reused for the Linux GUI layout.
+
+Static constructor `0x17037b0` installs the production view at manager `+0xd8`;
+`0x29dc040` supplies mode 5 and primary `0x4314180`. Shared base `0x1693450`
+retains the idler at `+0x2f0`, and `0x1693850` creates root `+0x2f8` through
+that idler's registry. `0x29e56c0` rebuilds current rows in `+0x14f0` from own
+production status. Military/naval constructors `0x17e5e20`/`0x17ea910` use
+shared constructor `0x17dfcb0`, which retains the view at row `+0x590`, registry
+at `+0x538` (base `0x17df520`) and full line handle at `+0xfd0`.
+
+The shared constructor resolves `factories_add_1x` and `factories_sub_1x` in
+the row's container and retains aliases `+0x1018`/`+0x1000`. Both register the
+ordinary listener at row `+0xaa8`, exact primary `0x4266748`. Constructor
+`0x180ba40` binds member `0x17e0c60`, zero adjustment and the exact row through
+the normal GUI-control capture (`+0x28`, manager `0x18157d0`, invoker
+`0x18157a0`). Unused callback bundles, including the kind-9 cancellation
+manager at `+0x278`, must be zero. The selected one-factory alias cannot equal
+any of the other five factory aliases. The member derives step and direction
+from control identity and modifiers, clamps requested factories to at least
+one and queues an ordinary production command. These functions are never
+called by this observer.
+
+Selection dialogs at view `+0x1530/+0x1538` are exact primary `0x4321298`;
+constructor `0x2ae9850` retains idler/view at `+0x7f0/+0x7f8`. Creation
+`0x2aec130` uses the same registry for root `+0x800`. Only materialized exact
+owned roots with a clear shown bit and both transition channels zero establish
+local hidden state. These checks do not prove global modal clearance or hit
+routing. Optional geometry reuses this project's typed renderer/hierarchy
+readers. Static analysis and generated fixtures are not live action evidence.
+
+## Upstream foundation
+
 This port derives typed process reads, the own-country tag-index chain, focus and
 research object semantics, and the 365-day calendar from smerss/Clausewitz-MCP
 commit `97c85437081904d5ad07bae1623ec58d1c0a5b9e`, specifically

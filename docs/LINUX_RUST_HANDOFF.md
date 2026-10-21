@@ -7,6 +7,38 @@ Do not resume Mac campaigns or control the shared Windows game.
 
 ## Current checkpoint
 
+Linux production port, 21 October 2026: `hoi4_production_controls` now provides
+a read-only same-snapshot join from an exact current own equipment-line handle
+and canonical equipment key to its materialized production row and named
+one-factory +/- controls. It reuses the existing full collection validator and
+batched GNU name lookup. Independently recovered Linux view, row, alias,
+callback and selection-dialog layouts are recorded in `native/PROVENANCE.md`.
+Optional geometry reuses the existing exact Sprite/Text/Frame diagnostics; no
+generic GUI-tree traversal is needed for this narrow route.
+
+The observer rejects foreign owners, duplicate/mismatched full handles and
+aliases, alternate callbacks and changing witnesses. Local control gates and
+the two equipment-selection dialogs remain explicit; unknown/null dialog roots
+do not establish clearance. These observations grant no input. Static callback
+analysis shows a minimum allocation of one factory and modifier-dependent step
+sizes. The actual Linux action adapter still needs a durable original baseline,
+same-scope/point rechecks, ordinary-modifier checks, global journal exclusion
+and own-line readback after each click. Do not expose the macOS journal or
+direct native command queue as a shortcut. New-line creation is separate.
+
+No game or VM was launched for this port step. The existing REA initial
+analysis timed out at 30 minutes; its empty analysis snapshot and actual failure
+were preserved privately, and the owned provider was closed. Focused static
+ELF evidence supplies the mappings, not successful REA decompilation or live
+execution. The 1080p Linux-host limitation and two-year/full campaign gates
+remain open. The next input gate still uses one Luna at medium reasoning.
+Local validation passed all 1,030 Rust tests, formatting and warning-free
+Clippy; the Python suite ran 953 tests with 37 platform skips, and stdio smoke
+passed. New coverage includes full-collection-before-UI ownership, unrelated
+line and UI witness changes, typed row joins, ambiguous aliases, callback
+selectors and positive hidden-dialog requirements. Cross-platform CI must be
+checked on the published commit; this checkpoint is not live acceptance.
+
 Linux reader follow-up, 21 October 2026: research, politics and construction
 now share a batched GNU name-registry lookup. It reads inline names together,
 retains bounded external strings and final snapshot witnesses, and checks the

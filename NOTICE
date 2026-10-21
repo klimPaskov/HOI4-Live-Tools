@@ -58,6 +58,10 @@ Upstream foundation and attribution:
   nested topbar path, canonical choice items, exact ordinary callback captures
   and scoped local gates. Existing typed geometry is reused within one witnessed
   read; these associations execute no callback and authorize no construction input.
+  production_lines/control_snapshot.rs and production_lines/controls.rs add
+  independently recovered Linux production-row and ordinary factory-button
+  observations, reusing the attributed own-line semantics and GNU name reader.
+  These modules execute no engine callback and enable no production input.
   native/src/graph_kernel.rs independently implements bounded components and
   multi-source breadth-first search, consulting calling/doctrine.py and
   calling/ragemicro.py. It operates on caller-supplied public/generated topology;

@@ -69,6 +69,10 @@ fn tools(commands: Option<&dyn Commands>) -> Value {
         .as_array_mut()
         .unwrap()
         .push(construction::find_view::tool());
+    value["tools"]
+        .as_array_mut()
+        .unwrap()
+        .push(production_lines::control_snapshot::tool());
     if let Some(commands) = commands {
         value["tools"]
             .as_array_mut()
@@ -423,7 +427,7 @@ impl Server {
             .ok_or_else(|| Error::new("invalid_arguments", "Tool arguments must be an object"))?;
         match name {
             "hoi4_capabilities" if object.is_empty() => Ok(
-                json!({"runtime":"rust","platform":std::env::consts::OS,"owned_session_bound":self.process.is_some(),"unavailable":self.unavailable,"observations":["own_construction_controls","own_construction_queue","own_equipment_production_lines","public_research_folder_catalog","own_research_category_associations","own_research_slot_callback_diagnostics","own_division_snapshot_identifiers","own_economy_trigger_counts","own_focus","own_research","clock","bounded_wait","technology_definitions","gui_input_diagnostics","own_research_ui_diagnostics","own_current_research_nodes","own_research_node_detail_diagnostics","own_focus_catalog_ui","own_focus_selected_detail","own_focus_completion_membership","own_focus_search_selection"],"commands":commands.map(|c| c.capabilities()).unwrap_or_else(|| json!("unavailable: no verified input binding")),"unverified_observations":["own_construction_controls","own_construction_queue","own_equipment_production_lines","own_research_category_associations"],"bounded_observation_validation":{"own_construction_queue":"run071: one dockyard identity and produced-work advancement; run072: state56 and stored UI label, late-lease deviation. Selection, province, railway and precise numeric UI comparison unverified","own_focus_completion_membership":"run052: actual Rhineland completion on the supported Linux build","own_focus_search_selection":"run068: exact query, six canonical matches, three ordinary Tab steps and View"},"native_transactions":"unavailable: failed posting path quarantined","default_mode":"FAIR","mod_qa":"separate; unavailable in this runtime","windows_macos":"unverified native adapters"}),
+                json!({"runtime":"rust","platform":std::env::consts::OS,"owned_session_bound":self.process.is_some(),"unavailable":self.unavailable,"observations":["own_production_controls","own_construction_controls","own_construction_queue","own_equipment_production_lines","public_research_folder_catalog","own_research_category_associations","own_research_slot_callback_diagnostics","own_division_snapshot_identifiers","own_economy_trigger_counts","own_focus","own_research","clock","bounded_wait","technology_definitions","gui_input_diagnostics","own_research_ui_diagnostics","own_current_research_nodes","own_research_node_detail_diagnostics","own_focus_catalog_ui","own_focus_selected_detail","own_focus_completion_membership","own_focus_search_selection"],"commands":commands.map(|c| c.capabilities()).unwrap_or_else(|| json!("unavailable: no verified input binding")),"unverified_observations":["own_production_controls","own_construction_controls","own_construction_queue","own_equipment_production_lines","own_research_category_associations"],"bounded_observation_validation":{"own_construction_queue":"run071: one dockyard identity and produced-work advancement; run072: state56 and stored UI label, late-lease deviation. Selection, province, railway and precise numeric UI comparison unverified","own_focus_completion_membership":"run052: actual Rhineland completion on the supported Linux build","own_focus_search_selection":"run068: exact query, six canonical matches, three ordinary Tab steps and View"},"native_transactions":"unavailable: failed posting path quarantined","default_mode":"FAIR","mod_qa":"separate; unavailable in this runtime","windows_macos":"unverified native adapters"}),
             ),
             "hoi4_overview" if object.is_empty() => self.overview(),
             "hoi4_research" => {
@@ -546,6 +550,39 @@ impl Server {
                     ));
                 }
                 economy::snapshot(self.process()?)
+            }
+            "hoi4_production_controls" => {
+                if object.keys().any(|k| {
+                    !matches!(
+                        k.as_str(),
+                        "line_handle" | "equipment_id" | "include_geometry"
+                    )
+                }) {
+                    return Err(Error::new(
+                        "invalid_arguments",
+                        "Only line_handle, equipment_id and include_geometry accepted",
+                    ));
+                }
+                let handle = object
+                    .get("line_handle")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| Error::new("invalid_arguments", "line_handle required"))?;
+                let key = object
+                    .get("equipment_id")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| Error::new("invalid_arguments", "equipment_id required"))?;
+                production_lines::control_snapshot::validate_target(handle, key)?;
+                let geometry = object
+                    .get("include_geometry")
+                    .map(Value::as_bool)
+                    .unwrap_or(Some(false))
+                    .ok_or_else(|| {
+                        Error::new("invalid_arguments", "include_geometry must be boolean")
+                    })?;
+                let process = self.process()?;
+                read_only_recovered(|| {
+                    production_lines::control_snapshot::snapshot(process, handle, key, geometry)
+                })
             }
             "hoi4_construction_controls" => {
                 if object

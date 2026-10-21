@@ -2,6 +2,8 @@
 //! Independently recovered constructors/save/handle/keyword witnesses:
 //! production-lines-v1, ELF a4971c9e8ac9a6f2487dea109e01f9839ee59db7.
 //! Base equipment type joins only; no design payload, allocation or input authority.
+pub mod control_snapshot;
+pub(crate) mod controls;
 mod equipment;
 use crate::{
     economy,
@@ -150,91 +152,15 @@ fn observe(
     let base = process.image_base();
     let (country, production) = economy::own_production(&reader, base)?;
     let campaign = game::context_from_reader(&reader, base)?;
-    let l = layout(&reader);
-    let (header, data, count) = reader.array_header(production + 0x58)?;
-    let capacity = i32::from_le_bytes(header[8..12].try_into().unwrap()) as usize;
-    if capacity > LINE_LIMIT || (count > 0 && data % 8 != 0) {
-        return Err(Error::new(
-            "invalid_production_array",
-            "Bounded aligned equipment-line array required",
-        ));
-    }
-    let payload = if count == 0 {
-        Vec::new()
-    } else {
-        reader.read(data, count * 8)?
-    };
-    let entries: Vec<u64> = payload
-        .chunks_exact(8)
-        .map(|bytes| u64::from_le_bytes(bytes.try_into().unwrap()))
-        .collect();
-    let mut pointers = BTreeSet::new();
-    for &line in &entries {
-        if !(0x10000..=0x7fff_ffff_0000).contains(&line) || line % 8 != 0 || !pointers.insert(line)
-        {
-            return Err(Error::new(
-                "invalid_production_array",
-                "Unique bounded aligned equipment-line pointers required",
-            ));
-        }
-    }
-    let mut lines = Vec::new();
-    let mut unsupported = Vec::new();
-    let mut handles = BTreeSet::new();
-    let mut anomalous = 0;
-    let mut equipment_catalog = None;
-    let mut equipment_unavailable = 0;
-    for (index, &line) in entries.iter().enumerate() {
-        let primary = reader.u64(line)?;
-        let (kind, expected_word) = if primary == base + l.military_line_vtable {
-            ("military", 0x38u32)
-        } else if primary == base + l.naval_line_vtable {
-            ("naval", 0x39u32)
-        } else {
-            let metadata = match primary_type_encoding(&reader, base, primary) {
-                Ok(name) => Some(name),
-                Err(error) if error.code == "invalid_gui_type" => None,
-                Err(error) => return Err(error),
-            };
-            unsupported.push(json!({"entry_index":index,"type_encoding":metadata,"ownership_verified":false,
-                    "field_layout_available":false,"owner_layout_available":false,"input_authorized":false}));
-            continue;
-        };
-        // The constructor/loader and reciprocal serializer prove status20.
-        // Never read handle, counters or equipment before this owner guard.
-        if reader.u64(line + 0x20)? != production {
-            return Err(Error::new(
-                "invalid_production_owner",
-                "Equipment line must belong to own production status",
-            ));
-        }
-        let handle = reader.u64(line + 8)?;
-        if handle == 0 || handle as u32 != expected_word || !handles.insert(handle) {
-            return Err(Error::new(
-                "invalid_production_handle",
-                "Unique full typed equipment-line handle required",
-            ));
-        }
-        let active = reader.i32(line + 0x14)?;
-        let damaged = reader.i32(line + 0x18)?;
-        let requested = reader.i32(line + 0xe8)?;
-        let within_policy = [active, damaged, requested]
-            .iter()
-            .all(|n| (0..=COUNTER_LIMIT).contains(n));
-        if !within_policy {
-            anomalous += 1;
-        }
-        let equipment = equipment::observe(&reader, base, line, &mut equipment_catalog)?;
-        equipment_unavailable += usize::from(equipment.key.is_none());
-        lines.push(json!({"entry_index":index,"line_kind":kind,
-            "line_handle":format!("0x{handle:016x}"),
-            "handle_scope":"own_current_snapshot_collection",
-            "equipment_id":equipment.key,"equipment_unavailable_reason":equipment.unavailable,
-            "factory_counters":{"active_factories_raw_signed":active,"damaged_factories_raw_signed":damaged,
-                "requested_factories_raw_signed":requested,"available_under_reviewed_policy":within_policy,
-                "unavailable_reason":if within_policy {Value::Null} else {json!("anomalous_counter_policy")}},
-            "input_authorized":false}));
-    }
+    let Collection {
+        entries,
+        mut lines,
+        mut unsupported,
+        anomalous,
+        equipment_unavailable,
+        ..
+    } = collection(&reader, base, production)?;
+    let count = entries.len();
     let (end_calls, end_bytes) = witnesses.finish()?;
     process.check()?;
     let supported_count = lines.len();
@@ -282,4 +208,135 @@ fn observe(
     value["equipment_catalog_scope"] = json!("reviewed_base_equipment_types_only");
     value["custom_variant_identity_available"] = json!(false);
     Ok((value, context))
+}
+
+/// Same-witness own line identity for the Linux UI adapter. Never a caller address.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct TargetLine {
+    pub(super) address: u64,
+    pub(super) handle: u64,
+    pub(super) naval: bool,
+    pub(super) equipment_id: String,
+    pub(super) requested: i32,
+}
+struct KnownLine {
+    address: u64,
+    handle: u64,
+    naval: bool,
+    equipment_id: Option<String>,
+    requested: i32,
+    counters_valid: bool,
+}
+struct Collection {
+    entries: Vec<u64>,
+    lines: Vec<Value>,
+    unsupported: Vec<Value>,
+    anomalous: usize,
+    equipment_unavailable: usize,
+    known: Vec<KnownLine>,
+}
+/// Shared complete collection validation; callers own the encompassing witnesses.
+fn collection(reader: &Reader<'_>, base: u64, production: u64) -> Result<Collection> {
+    let l = layout(reader);
+    let (header, data, count) = reader.array_header(production + 0x58)?;
+    let capacity = i32::from_le_bytes(header[8..12].try_into().unwrap()) as usize;
+    if capacity > LINE_LIMIT || (count > 0 && data % 8 != 0) {
+        return Err(Error::new(
+            "invalid_production_array",
+            "Bounded aligned equipment-line array required",
+        ));
+    }
+    let payload = if count == 0 {
+        Vec::new()
+    } else {
+        reader.read(data, count * 8)?
+    };
+    let entries: Vec<u64> = payload
+        .chunks_exact(8)
+        .map(|bytes| u64::from_le_bytes(bytes.try_into().unwrap()))
+        .collect();
+    let mut pointers = BTreeSet::new();
+    for &line in &entries {
+        if !(0x10000..=0x7fff_ffff_0000).contains(&line) || line % 8 != 0 || !pointers.insert(line)
+        {
+            return Err(Error::new(
+                "invalid_production_array",
+                "Unique bounded aligned equipment-line pointers required",
+            ));
+        }
+    }
+    let mut lines = Vec::new();
+    let mut known = Vec::new();
+    let mut unsupported = Vec::new();
+    let mut handles = BTreeSet::new();
+    let mut anomalous = 0;
+    let mut equipment_catalog = None;
+    let mut equipment_unavailable = 0;
+    for (index, &line) in entries.iter().enumerate() {
+        let primary = reader.u64(line)?;
+        let (kind, expected_word) = if primary == base + l.military_line_vtable {
+            ("military", 0x38u32)
+        } else if primary == base + l.naval_line_vtable {
+            ("naval", 0x39u32)
+        } else {
+            let metadata = match primary_type_encoding(reader, base, primary) {
+                Ok(name) => Some(name),
+                Err(error) if error.code == "invalid_gui_type" => None,
+                Err(error) => return Err(error),
+            };
+            unsupported.push(json!({"entry_index":index,"type_encoding":metadata,"ownership_verified":false,
+                    "field_layout_available":false,"owner_layout_available":false,"input_authorized":false}));
+            continue;
+        };
+        // The constructor/loader and reciprocal serializer prove status20.
+        // Never read handle, counters or equipment before this owner guard.
+        if reader.u64(line + 0x20)? != production {
+            return Err(Error::new(
+                "invalid_production_owner",
+                "Equipment line must belong to own production status",
+            ));
+        }
+        let handle = reader.u64(line + 8)?;
+        if handle == 0 || handle as u32 != expected_word || !handles.insert(handle) {
+            return Err(Error::new(
+                "invalid_production_handle",
+                "Unique full typed equipment-line handle required",
+            ));
+        }
+        let active = reader.i32(line + 0x14)?;
+        let damaged = reader.i32(line + 0x18)?;
+        let requested = reader.i32(line + 0xe8)?;
+        let within_policy = [active, damaged, requested]
+            .iter()
+            .all(|n| (0..=COUNTER_LIMIT).contains(n));
+        if !within_policy {
+            anomalous += 1;
+        }
+        let equipment = equipment::observe(reader, base, line, &mut equipment_catalog)?;
+        equipment_unavailable += usize::from(equipment.key.is_none());
+        known.push(KnownLine {
+            address: line,
+            handle,
+            naval: kind == "naval",
+            equipment_id: equipment.key.clone(),
+            requested,
+            counters_valid: within_policy,
+        });
+        lines.push(json!({"entry_index":index,"line_kind":kind,
+            "line_handle":format!("0x{handle:016x}"),
+            "handle_scope":"own_current_snapshot_collection",
+            "equipment_id":equipment.key,"equipment_unavailable_reason":equipment.unavailable,
+            "factory_counters":{"active_factories_raw_signed":active,"damaged_factories_raw_signed":damaged,
+                "requested_factories_raw_signed":requested,"available_under_reviewed_policy":within_policy,
+                "unavailable_reason":if within_policy {Value::Null} else {json!("anomalous_counter_policy")}},
+            "input_authorized":false}));
+    }
+    Ok(Collection {
+        entries,
+        lines,
+        unsupported,
+        anomalous,
+        equipment_unavailable,
+        known,
+    })
 }

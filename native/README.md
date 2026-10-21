@@ -303,6 +303,7 @@ anchors do not establish a load-generation token.
 | `hoi4_army` | Own divisions with full snapshot-scoped handles, selected province joins and lossless raw status; recorded structural reads, units unverified |
 | `hoi4_economy` | Own named factory trigger counts, civilian project capacity and exact signed political-power units; live comparison pending |
 | `hoi4_production_lines` | Paged own line handles, separate signed factory counters and optional base equipment keys; key joins have fixture evidence, live comparison and allocation remain pending |
+| `hoi4_production_controls` | Linux preview: exact own line's named factory +/- controls, callback bindings, local blockers and optional renderer geometry; read-only, live validation pending |
 | `hoi4_construction_queue` | Own building/railway lines, canonical keys and signed cost/work counters; one dockyard observed in run071. Run072 observed one state/label with a late-lease deviation; selection and province/railway coverage remain unverified |
 | `hoi4_technology_list` | Canonical loaded technology IDs with filtering/pagination; no eligibility inference |
 | `hoi4_input_geometry` | GUI dimensions, scale, pointer and conditional source-window diagnostics; no click authority |
@@ -344,6 +345,22 @@ includes unsupported lines. Other equipment databases remain unreviewed. These
 joins have generated host/Linux fixture evidence only; a live UI comparison is
 pending. Custom variant identity, general production and allocation controls
 remain unavailable. No production action is authorized by this read-only tool.
+
+`hoi4_production_controls` accepts the exact `line_handle` and `equipment_id`
+from that collection, plus optional `include_geometry` (default false).
+It validates the full current collection, then joins the selected line to the
+current Linux production row. Names and constructor aliases must agree, and
+each one-factory button must differ from the other factory-button aliases.
+The result reports the ordinary callback, local enabled/visibility gates and
+the two equipment-selection dialogs. An absent dialog root is unknown; it
+cannot establish clearance. Geometry uses the existing exact Sprite/Text/Frame
+readers and remains diagnostic. Reads do not open panels or move the pointer.
+
+This is a read-only port step. It does not yet provide Linux factory adjustment
+or line creation. Static callback analysis shows that +/- clamps to at least
+one factory and Ctrl/Shift can change the increment. A future action adapter
+must enforce ordinary modifiers, journal the original target before input and
+verify each step from the same own line. No live production gate has passed.
 
 The current game uses a 365-day calendar, including February 28 in 1936. Its raw
 clock includes a 5000-year epoch and displays hours as 1–24. Raw research counters
