@@ -117,6 +117,12 @@ stop notification cannot conceal retained uncertainty.
 
 ## Qualification limits
 
+Mac Focus progress now comes from one complete typed observation; it no longer
+merges separately witnessed public JSON pages. The public completion tool keeps
+its existing pagination. This model is not an input receipt or a durable Focus
+adapter. Own node/button binding, final target checks and original action bounds
+must be completed before Focus can join this worker.
+
 Generated tests cover persistence, ownership, chronology, slot waits, typed
 proofs, unchanged allocations, original deadlines, cancellation and shutdown.
 Live results belong in [CLAUSEWITZ_VALIDATION.md](CLAUSEWITZ_VALIDATION.md).

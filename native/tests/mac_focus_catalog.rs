@@ -224,3 +224,56 @@ fn unported_mac_ui_diagnostics_refuse_before_reading() {
     );
     assert!(f.reads.borrow().is_empty());
 }
+
+fn progress_fixture() -> Fake {
+    let mut f = Fake::new();
+    let progress = 0x170000;
+    // Mac RTTI for the existing own CCountry primary object.
+    f.word(0x337bc38 - 8, 0x180000);
+    f.word(0x180000 + 8, 0x190000);
+    f.put(0x190000, b"8CCountry\0");
+    f.int(GS + 0x428, 60_759_371);
+    f.word(CO + 0x1108, progress);
+    f.word(progress, 0x33865d0);
+    f.word(progress + 8, CO);
+    f.word(progress + 0x10, Z);
+    f.array(progress + 0x40, 0x240000, &[A, A]);
+    f
+}
+
+#[test]
+fn mac_progress_is_one_complete_typed_own_observation() {
+    let f = progress_fixture();
+    let value = own_focus::progress_snapshot(&f).unwrap();
+    assert_eq!(value.active_key(), Some("GER_autarky"));
+    assert_eq!(
+        value.completed().iter().cloned().collect::<Vec<_>>(),
+        ["GER_rhineland"]
+    );
+    let page = own_focus::completion_snapshot(&f, 0, 1).unwrap();
+    assert_eq!(page["active_key"], "GER_autarky");
+    assert_eq!(page["membership_entries"], 2);
+    assert_eq!(page["completed_count"], 1);
+    assert_eq!(page["date"]["text"], "1936.01.01.12");
+    // The fixture maps neither Linux roots nor a Mac focus-view manager.
+    assert!(!f.reads.borrow().iter().any(|(a, _)| *a == ID + 0x670));
+}
+
+#[test]
+fn mac_progress_rejects_torn_or_foreign_membership_before_returning_a_model() {
+    for address in [GS + 0x428, CO + 0x1108, 0x170010, 0x240000, Z + 0x130] {
+        let mut f = progress_fixture();
+        f.torn = Some(address);
+        assert_eq!(
+            own_focus::progress_snapshot(&f).unwrap_err().code,
+            "torn_read"
+        );
+    }
+    let mut f = progress_fixture();
+    f.word(0x170008, CO + 8);
+    assert_eq!(
+        own_focus::progress_snapshot(&f).unwrap_err().code,
+        "invalid_focus_owner"
+    );
+    assert!(!f.reads.borrow().iter().any(|(a, _)| *a == 0x240000));
+}

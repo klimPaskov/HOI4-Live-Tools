@@ -31,9 +31,14 @@ There is no active worker, lease or recorder. See the [detailed component eviden
 
 Next, make the qualification harness tolerate bounded read-only torn snapshots
 and distinguish scoped military invariants from separately reported naval queue
-changes; never retry uncertain actions. Before adding durable Focus, replace its
-paginated JSON progress merge with a typed coherent own-state snapshot and harden
-its node/button ownership, final click witness and original action deadline.
+changes; never retry uncertain actions. Focus progress now uses one complete
+coherent typed snapshot instead of a paginated JSON merge. It passed 1,303 Rust
+tests, 956 Python tests (37 skipped), cross-target Clippy and a stationary Mac
+read-only check: 20 samples at a 0.276 ms reader median, unchanged paused date
+and retained input files, no lease or input configuration. The 104-completion
+fixture verifies one observation beyond the public page size. Before adding
+durable Focus, harden node/button ownership, final click witnesses and original
+action deadlines; the typed progress model is not an assignment receipt.
 The clean two-year run and full recorded campaigns remain required.
 
 The preceding published controller foundation follows for historical context.

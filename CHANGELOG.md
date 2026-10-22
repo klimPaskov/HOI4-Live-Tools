@@ -2,6 +2,11 @@
 
 ## Unreleased native preview
 
+- Read Mac Focus progress as one complete typed, witnessed snapshot rather than
+  merging independently paginated JSON results. Keep public completion pagination
+  unchanged and preserve ownership, canonical membership and torn-read refusal.
+  This is a read prerequisite; durable Mac Focus input remains unavailable.
+
 - Record Mac component qualification for the corrected factory step, retained
   mixed-plan restart, idle-file stability and natural Research refill. Preserve
   the transient-read interruption and final naval-collection assertion failure;

@@ -12,7 +12,6 @@ use crate::{
     own_focus,
     platform::{macos_input::MacKeys, Process},
 };
-use serde_json::Value;
 use std::{
     collections::BTreeSet,
     thread,
@@ -199,37 +198,19 @@ fn detail(r: &Reader<'_>, image: u64, key: &str) -> Result<Option<(Rect, bool)>>
     Ok(None)
 }
 
-pub(super) struct Progress {
-    pub active: Option<String>,
-    pub completed: BTreeSet<String>,
-}
+pub(super) type Progress = own_focus::ProgressSnapshot;
 pub(super) fn progress(process: &dyn Process) -> Result<Progress> {
-    let mut completed = BTreeSet::new();
-    let mut offset = 0;
-    loop {
-        let page: Value = own_focus::completion_snapshot(process, offset, 100)?;
-        for key in page["completed"].as_array().into_iter().flatten() {
-            if let Some(key) = key.as_str() {
-                completed.insert(key.to_string());
-            }
-        }
-        match page["next_offset"].as_u64() {
-            Some(next) if next as usize > offset => offset = next as usize,
-            _ => {
-                return Ok(Progress {
-                    active: page["active_key"].as_str().map(String::from),
-                    completed,
-                })
-            }
-        }
-    }
+    own_focus::progress_snapshot(process)
 }
 /// Refusals that need no input.
 pub(super) fn check(before: &Progress, key: &str) -> Result<()> {
-    if before.completed.contains(key) {
+    check_state(before.active_key(), before.completed(), key)
+}
+fn check_state(active: Option<&str>, completed: &BTreeSet<String>, key: &str) -> Result<()> {
+    if completed.contains(key) {
         return Err(Error::new("invalid_target", "Focus already completed"));
     }
-    match &before.active {
+    match active {
         Some(active) if active == key => Err(Error::new("invalid_target", "Focus already active")),
         Some(_) => Err(Error::new(
             "invalid_target",
@@ -376,18 +357,22 @@ mod tests {
     use super::*;
     #[test]
     fn refusals_need_no_input() {
-        let p = |active: Option<&str>| Progress {
-            active: active.map(String::from),
-            completed: ["GER_a".to_string()].into(),
-        };
-        assert!(check(&p(None), "GER_b").is_ok());
-        assert_eq!(check(&p(None), "GER_a").unwrap_err().code, "invalid_target");
+        let completed = ["GER_a".to_string()].into();
+        assert!(check_state(None, &completed, "GER_b").is_ok());
         assert_eq!(
-            check(&p(Some("GER_b")), "GER_b").unwrap_err().code,
+            check_state(None, &completed, "GER_a").unwrap_err().code,
             "invalid_target"
         );
         assert_eq!(
-            check(&p(Some("GER_c")), "GER_b").unwrap_err().code,
+            check_state(Some("GER_b"), &completed, "GER_b")
+                .unwrap_err()
+                .code,
+            "invalid_target"
+        );
+        assert_eq!(
+            check_state(Some("GER_c"), &completed, "GER_b")
+                .unwrap_err()
+                .code,
             "invalid_target"
         );
     }

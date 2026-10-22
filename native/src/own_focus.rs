@@ -18,6 +18,8 @@ mod catalog;
 mod completion;
 mod search;
 pub use completion::snapshot as completion_snapshot;
+#[doc(hidden)]
+pub use completion::{observe as progress_snapshot, ProgressSnapshot};
 
 /// Focus tree/progress/catalog layout of one inspected build.
 #[derive(Debug)]

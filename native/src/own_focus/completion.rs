@@ -13,6 +13,44 @@ pub fn snapshot(process: &dyn Process, offset: usize, limit: usize) -> Result<Va
             "Completed focus pagination exceeds bounds",
         ));
     }
+    let observed = observe(process)?;
+    let count = observed.completed.len();
+    let page: Vec<_> = observed
+        .completed
+        .into_iter()
+        .skip(offset)
+        .take(limit)
+        .collect();
+    let next = (offset.saturating_add(page.len()) < count).then_some(offset + page.len());
+    let mut output = observed.metadata;
+    output["active_key"] = json!(observed.active);
+    output["completed"] = json!(page);
+    output["completed_count"] = json!(count);
+    output["offset"] = json!(offset);
+    output["limit"] = json!(limit);
+    output["next_offset"] = json!(next);
+    Ok(output)
+}
+
+/// One coherent own observation, never an assignment receipt or input authority.
+/// All completed members and the active focus share the same bounded witnesses;
+/// callers must not assemble this state from independent public JSON pages.
+#[derive(Debug)]
+pub struct ProgressSnapshot {
+    pub(crate) active: Option<String>,
+    pub(crate) completed: BTreeSet<String>,
+    metadata: Value,
+}
+impl ProgressSnapshot {
+    pub fn active_key(&self) -> Option<&str> {
+        self.active.as_deref()
+    }
+    pub fn completed(&self) -> &BTreeSet<String> {
+        &self.completed
+    }
+}
+
+pub fn observe(process: &dyn Process) -> Result<ProgressSnapshot> {
     let started = Instant::now();
     process.begin_snapshot()?;
     let w = Witnesses {
@@ -123,26 +161,24 @@ pub fn snapshot(process: &dyn Process, offset: usize, limit: usize) -> Result<Va
         }
         keys.insert(pointer, key);
     }
-    let mut finished: Vec<_> = completed.iter().map(|p| keys[p].clone()).collect();
-    finished.sort();
-    let count = finished.len();
-    let page: Vec<_> = finished.into_iter().skip(offset).take(limit).collect();
-    let next = (offset.saturating_add(page.len()) < count).then_some(offset + page.len());
+    let finished = completed.iter().map(|p| keys[p].clone()).collect();
     let (end_calls, end_bytes) = w.finish()?;
     process.check()?;
-    Ok(json!({
-        "source":"native own focus completion membership",
-        "build_id":g.build_id,"owned":true,"date":date,
-        "active_key":keys.get(&active),"completed":page,
-        "completed_count":count,"membership_entries":members.len(),
-        "offset":offset,"limit":limit,"next_offset":next,
-        "completion_meaning":"engine has-completed-focus membership; cause and repeat count unavailable",
-        "eligibility_available":false,"input_authorized":false,
-        "observation_paused_game":false,
-        "freshness":{
-            "observed_unix_ms":SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),
-            "elapsed_ms":started.elapsed().as_secs_f64()*1000.0,
-            "read_calls":r.calls.get()+end_calls as u64,"read_bytes":r.bytes.get()+end_bytes
-        }
-    }))
+    Ok(ProgressSnapshot {
+        active: keys.get(&active).cloned(),
+        completed: finished,
+        metadata: json!({
+            "source":"native own focus completion membership",
+            "build_id":g.build_id,"owned":true,"date":date,
+            "membership_entries":members.len(),
+            "completion_meaning":"engine has-completed-focus membership; cause and repeat count unavailable",
+            "eligibility_available":false,"input_authorized":false,
+            "observation_paused_game":false,
+            "freshness":{
+                "observed_unix_ms":SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),
+                "elapsed_ms":started.elapsed().as_secs_f64()*1000.0,
+                "read_calls":r.calls.get()+end_calls as u64,"read_bytes":r.bytes.get()+end_bytes
+            }
+        }),
+    })
 }

@@ -6238,3 +6238,32 @@ owned game remains paused with no worker, broker, lease or recorder active.
 These results establish the listed component behaviors across a resumed test.
 They do not establish a clean end-to-end qualification, the two-year Luna run,
 full campaigns, durable Focus support or long campaign recording reliability.
+
+
+## Coherent Mac Focus progress prerequisite — 23 October 2026
+
+The Mac Focus action's progress reader no longer merges separately witnessed
+JSON pages or takes its active focus from the final page. The canonical completion
+reader now returns an opaque typed active/completed model from one complete
+observation. The public completion tool renders its existing bounded sorted pages
+from that model; pagination shape, membership deduplication, type/backlink checks,
+own canonical membership, final process ownership and torn-read refusal remain.
+This is observation evidence, not an assignment receipt or durable Focus support.
+
+A generated Linux fixture returns 104 completed focuses plus a distinct active
+focus in one begin/final ownership bracket, exceeding the public 100-entry page.
+Linux and sparse Mac fixtures cover torn active/member state, foreign progress,
+final ownership loss and Mac ABI/RTTI without Linux or GUI payload. Review caught
+an obsolete Mac test constructing the new opaque type; the refusal test now uses
+a private borrowed-state predicate without opening the snapshot constructor.
+
+Validation passed 1,303 host Rust tests, 956 workspace Python tests (37 skipped),
+formatting, host/Windows/Linux/ARM64 Linux all-target Clippy and the release build.
+A separate read-only native Mac check used the same paused 19 April campaign,
+with no input configuration, lease, worker, screenshot or cursor action. Twenty
+completion reads agreed on no active/completed national Focus at a 0.276 ms
+median inside the reader. The own date and retained input files were unchanged,
+all 225 source hashes matched, and the stdio server exposed its expected 24
+observation tools. The game continued to retain the previously verified Research
+and production plan. No new Focus gameplay action is claimed; final target
+binding and bounded ordinary input remain the next prerequisites.
