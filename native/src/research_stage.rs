@@ -891,14 +891,37 @@ impl Journal {
                 "Ordinary attempt was refused before possible input; plan remains unfinished",
             ));
         }
+        // Timeout diagnostics only: successful recovered-read counts are not
+        // part of the existing Execution/Receipt schema. Success still needs
+        // the complete final own-state proof and input-idle confirmation.
+        let mut identity_rejections: usize = 0;
+        let mut last_identity_transition = String::new();
         loop {
             live(authority, token, &target, deadline, gate).map_err(|cause| {
-                Error::after_possible_input(
+                let mut failure = Error::after_possible_input(
                     "Readback deadline/authority ended; never replay",
                     cause,
-                )
+                );
+                if identity_rejections != 0 {
+                    failure.message.push_str(&format!("; rejected_identity_reads={identity_rejections}; last_identity_transition={last_identity_transition}"));
+                    let mut end = failure.message.len().min(512);
+                    while !failure.message.is_char_boundary(end) { end -= 1; }
+                    failure.message.truncate(end);
+                }
+                failure
             })?;
             match backend.observe() {
+                Err(cause) if cause.code == "research_identity_transition" => {
+                    // Complete rejected reads only. The original authority and
+                    // absolute deadline above remain in force; no input repeats.
+                    identity_rejections = identity_rejections.saturating_add(1);
+                    last_identity_transition = cause
+                        .message
+                        .chars()
+                        .filter(|c| !c.is_control())
+                        .take(160)
+                        .collect();
+                }
                 Err(e)
                     if e.code == "torn_read"
                         || (target.stage == Stage::ClosePanel

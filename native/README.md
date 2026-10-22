@@ -13,6 +13,10 @@ preview. It uses the ordinary production button only from settled shown producti
 already-hidden idle state is a no-op and other active panels refuse. The request
 uses the shared lease/journal, preserves the original panel identity and never
 replays uncertain input. Production008 passed manual production closing and
+Mixed001 verified production progress and one panel departure, then retained an
+uncertain Research opening during a known animation. The continuation readback
+correction awaits fresh live validation; do not reuse that uncertain attempt.
+
 ResearchClose002 passed direct Research closing, including historical replays and
 no-ops. Mixed Research/production worker routing has an explicit opt-in preview;
 its recorded live gate remains pending.

@@ -7,6 +7,48 @@ Do not resume Mac campaigns or control the shared Windows game.
 
 ## Current checkpoint
 
+Mixed001 on `8859719` stopped at the paused assignment wait. The worker verified
+production opening, allocation from 10 to 11 factories and one separate departure
+to Research. It then retained an unresolved Research OpenPanel Intent: the selected
+identity reader reported a known root animation, which that stage's readback
+loop treated as fatal. No Research assignment or governor goal completed. The
+single 50-second wait returned a historical timeout snapshot with empty slots;
+its broker error must not be described as a fresh assignment result.
+
+Independent stopped audit verified eight player RPCs, three production
+Intent/Verified pairs, two warmup Research pairs and one unresolved OpenPanel.
+The departure preserved its original source and destination identities and its
+separate consumed budget. Both goals remain pending; no action was retried.
+STOP retained uncertainty, lease release/status passed, the 430.333-second
+recording passed integrity and one normal close exited 0 in 2.301 seconds.
+All exact game/server/recorder/bridge instances were absent, and all 195 native
+inputs and 18 helpers matched their frozen hashes. Recorder exit 255 remains
+separate. All nine exact-source CI jobs passed before launch. Setup used two
+screenshots and eight menu clicks; Luna used no screenshots. No clock or pause
+commands ran. This failed gate provides no advancing-time or campaign acceptance.
+
+The builder's pregrant catalog RPC was rejected by its fixed allowlist before
+dispatch. That refusal is retained. Canonical IDs were independently verified
+in installed vanilla definitions; no live helper was changed. Public definition
+membership does not establish Research eligibility.
+
+The correction gives known continuation-root animation a distinct read error.
+After possible input, the journal may wait for a complete original-identity
+readback under the existing absolute deadline and lease, without another input.
+Pre-input checks, unknown animations and ownership errors remain strict; direct
+closing keeps its previous semantics. Timeout diagnostics retain the count and
+last original continuation-animation cause. Successful receipts still require
+complete final proof but do not retain recovered-read counts. Fresh mixed live
+validation remains pending; Mixed001's uncertainty is not repaired by this fix.
+
+The correction passed 1,154 host Rust tests, 117 targeted Linux test executions,
+953 Python tests (37 skips), formatting, host/Linux Clippy and Windows all-target
+cross-compilation. The first Python invocation used the system interpreter and
+failed on missing dependencies; the project environment passed. Offline checks
+do not establish live recovery or mixed-plan acceptance.
+
+### Previous direct-close acceptance
+
 ResearchClose002 passed all 14 granted steps on `8d12301` with one Luna medium
 player in recorded vanilla FAIR Germany, Normal difficulty and historical AI.
 Both Research closes, historical replay while closed and reopened, fresh no-ops,

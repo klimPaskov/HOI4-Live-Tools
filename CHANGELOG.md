@@ -2,6 +2,12 @@
 
 ## Unreleased native preview
 
+- Preserve Mixed001: production reached 11 and its departure to Research verified,
+  then Research opening retained uncertainty during a known animation. Add a
+  distinct continuation-animation readback wait under the original deadline;
+  retain strict pre-input/identity checks and never retry input. Timeout errors
+  retain rejected-read diagnostics. Mixed live acceptance remains pending.
+
 - Pass ResearchClose002 with one Luna medium player: all 14 steps, 19 RPCs with
   zero errors, unchanged production/research, exact replay/no-op behavior and
   independent stopped recording/ownership audit. Two discarded producer tears

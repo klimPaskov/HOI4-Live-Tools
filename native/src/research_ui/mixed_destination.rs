@@ -99,8 +99,8 @@ fn continuation_identity(r: &Reader<'_>, base: u64, own: ResearchContext) -> Res
     // joins are still mandatory. No Info/control or event-routing traversal.
     let root = r.u64(view + 0x2f8)?;
     let tree_root = r.u64(tree + 0x2f8)?;
-    closing::settled(r, base, root, registry)?;
-    closing::settled(r, base, tree_root, registry)?;
+    identity_settled(r, base, root, registry)?;
+    identity_settled(r, base, tree_root, registry)?;
     let named = |parent: u64, key: &str| -> Result<u64> {
         crate::gui_registry::lookup(
             r,
@@ -115,7 +115,7 @@ fn continuation_identity(r: &Reader<'_>, base: u64, own: ResearchContext) -> Res
     if named(root, "facilities")? != facilities_parent {
         return Err(refuse("Continuation facilities parent named join changed"));
     }
-    closing::settled(r, base, facilities_parent, registry)?;
+    identity_settled(r, base, facilities_parent, registry)?;
     let facilities = r.u64(view + 0x900)?;
     pointer(facilities)?;
     exact(r, facilities, base + 0x42f2708)?;
@@ -126,7 +126,7 @@ fn continuation_identity(r: &Reader<'_>, base: u64, own: ResearchContext) -> Res
     if named(facilities_parent, "facilities_view_Instance")? != facilities_root {
         return Err(refuse("Continuation facilities root named join changed"));
     }
-    closing::settled(r, base, facilities_root, registry)?;
+    identity_settled(r, base, facilities_root, registry)?;
     let identity = Identity {
         context: UiContext {
             campaign: own.campaign,
@@ -159,6 +159,20 @@ fn continuation_identity(r: &Reader<'_>, base: u64, own: ResearchContext) -> Res
         return Err(refuse("Complete distinct continuation identities required"));
     }
     Ok(identity)
+}
+
+/// A known animation prevents a complete identity observation. Its distinct
+/// category permits only the ordinary journal's post-input readback wait; the
+/// pre-input path still refuses it. Unknown transitions/types/owners retain
+/// their strict original error and the direct close producer is unchanged.
+fn identity_settled(r: &Reader<'_>, base: u64, root: u64, registry: u64) -> Result<bool> {
+    closing::settled(r, base, root, registry).map_err(|cause| {
+        if cause.code == "research_panel_transition" {
+            Error::new("research_identity_transition", cause.message)
+        } else {
+            cause
+        }
+    })
 }
 
 /// Target slot is exact and empty. The mode2 source must be literally shown;
@@ -735,6 +749,44 @@ mod tests {
             let mut f = Fixture::ready(6);
             f.word(address, value);
             assert!(identity_sample(&f).is_err(), "{address:x}");
+        }
+    }
+    #[test]
+    fn continuation_known_animation_has_distinct_code_without_weakening_close_or_ownership() {
+        for root in [ROOT, TROOT, PARENT, FROOT] {
+            for field in [0xeb0, 0xef8] {
+                for state in [1, 2] {
+                    let mut f = Fixture::ready(5);
+                    f.number(root + field, state);
+                    assert_eq!(
+                        identity_sample(&f).err().unwrap().code,
+                        "research_identity_transition"
+                    );
+                    assert_eq!(
+                        closing::settled(&Reader::new(&f), BASE, root, REG)
+                            .unwrap_err()
+                            .code,
+                        "research_panel_transition"
+                    );
+                    f.number(root + field, 0);
+                    assert!(identity_sample(&f).is_ok());
+                }
+                for state in [-1, 3, i32::MAX] {
+                    let mut f = Fixture::ready(5);
+                    f.number(root + field, state);
+                    assert_eq!(
+                        identity_sample(&f).err().unwrap().code,
+                        "research_precondition"
+                    );
+                }
+            }
+            let mut f = Fixture::ready(5);
+            f.number(root + 0xeb0, 1);
+            f.word(root + 0x98, REG + 8);
+            assert_eq!(
+                identity_sample(&f).err().unwrap().code,
+                "research_precondition"
+            );
         }
     }
     #[test]

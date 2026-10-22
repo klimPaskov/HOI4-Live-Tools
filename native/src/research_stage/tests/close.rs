@@ -520,3 +520,229 @@ fn legacy_state_and_execution_json_remain_byte_identical_without_private_binding
     drop(journal);
     assert_eq!(fs::read(scratch.journal()).unwrap(), bytes);
 }
+
+fn identity_transition() -> Error {
+    error(
+        "research_identity_transition",
+        "Known retained Research root animation",
+    )
+}
+fn unopened() -> OwnState {
+    OwnState {
+        active_mode: Some(23),
+        panel_visible: Some(false),
+        ..panel_state()
+    }
+}
+
+#[test]
+fn identity_animation_recovers_each_research_stage_with_one_input_and_exact_terminal_proof() {
+    for stage in [
+        Stage::OpenPanel,
+        Stage::SelectSlot,
+        Stage::SelectCategory,
+        Stage::View,
+        Stage::Research,
+    ] {
+        let scratch = Scratch::new();
+        let a = authority();
+        let gate = RwLock::new(true);
+        let mut t = target(stage);
+        let (before, after) = match stage {
+            Stage::OpenPanel => (unopened(), panel_state()),
+            Stage::SelectSlot => (panel_state(), selected_empty_state()),
+            Stage::SelectCategory => {
+                t.technology.clear();
+                t.folder_id = Some("industry_folder".into());
+                let mut before = selected_empty_state();
+                before.selected_folder = Some("infantry_folder".into());
+                let mut after = before.clone();
+                after.selected_folder = t.folder_id.clone();
+                (before, after)
+            }
+            Stage::View => (selected_empty_state(), state()),
+            Stage::Research => (state(), reached()),
+            Stage::ClosePanel => unreachable!(),
+        };
+        let mut f = Fake::new();
+        f.candidate = if stage == Stage::OpenPanel {
+            Candidate::OpenPanel
+        } else {
+            Candidate::Point(point())
+        };
+        f.delivery = Delivery::ServerConfirmed;
+        f.observations = VecDeque::from([
+            Ok(before.clone()),
+            Ok(before),
+            Err(identity_transition()),
+            Err(identity_transition()),
+            Ok(after.clone()),
+        ]);
+        let mut journal = Journal::open(&scratch.journal()).unwrap();
+        let result = execute(
+            &mut journal,
+            "animation",
+            t.clone(),
+            &a,
+            &gate,
+            &mut f,
+            Duration::from_secs(2),
+        )
+        .unwrap();
+        assert_eq!(result.receipt.observed, after, "{stage:?}");
+        assert!(result.current_state_verified && !result.historical);
+        assert_eq!(f.dispatches, 1);
+        assert_eq!(f.calls, 5);
+        assert!(!journal.blocks_game(&epoch().game));
+        drop(journal);
+        let bytes = fs::read(scratch.journal()).unwrap();
+        let mut journal = Journal::open(&scratch.journal()).unwrap();
+        let result = execute(
+            &mut journal,
+            "animation",
+            t,
+            &a,
+            &gate,
+            &mut f,
+            Duration::from_secs(2),
+        )
+        .unwrap();
+        assert!(result.historical && !result.current_state_verified);
+        assert_eq!(f.dispatches, 1);
+        assert_eq!(f.calls, 5);
+        drop(journal);
+        assert_eq!(fs::read(scratch.journal()).unwrap(), bytes);
+    }
+}
+
+#[test]
+fn identity_animation_before_intent_is_not_retried_and_never_dispatches() {
+    for final_read in [false, true] {
+        let scratch = Scratch::new();
+        let mut journal = Journal::open(&scratch.journal()).unwrap();
+        let mut f = Fake::new();
+        f.candidate = Candidate::OpenPanel;
+        if final_read {
+            f.observations.push_back(Ok(unopened()));
+        }
+        f.observations.push_back(Err(identity_transition()));
+        f.observations.push_back(Ok(panel_state()));
+        let t = target(Stage::OpenPanel);
+        let failure = execute(
+            &mut journal,
+            "before",
+            t.clone(),
+            &authority(),
+            &RwLock::new(true),
+            &mut f,
+            Duration::from_secs(2),
+        )
+        .unwrap_err();
+        assert_eq!(failure.code, "research_identity_transition");
+        assert_eq!(
+            journal.failure_evidence("before", &t, &failure),
+            FailureEvidence::BeforeIntent
+        );
+        assert_eq!(f.dispatches, 0);
+        assert_eq!(f.calls, if final_read { 2 } else { 1 });
+        assert_eq!(journal.file.metadata().unwrap().len(), 0);
+        assert!(!journal.blocks_game(&epoch().game));
+    }
+}
+
+#[test]
+fn identity_animation_timeout_retains_cause_and_quarantine_across_reopen_without_replay() {
+    let scratch = Scratch::new();
+    let a = authority();
+    let gate = RwLock::new(true);
+    let mut journal = Journal::open(&scratch.journal()).unwrap();
+    let mut f = Fake::new();
+    f.candidate = Candidate::OpenPanel;
+    f.delivery = Delivery::ServerConfirmed;
+    f.observations = VecDeque::from([Ok(unopened()), Ok(unopened())]);
+    for _ in 0..100 {
+        f.observations.push_back(Err(identity_transition()));
+    }
+    let t = target(Stage::OpenPanel);
+    let failure = execute(
+        &mut journal,
+        "timeout",
+        t.clone(),
+        &a,
+        &gate,
+        &mut f,
+        Duration::from_millis(200),
+    )
+    .unwrap_err();
+    assert_eq!(failure.code, "action_uncertain");
+    assert!(failure.message.contains("cause=research_deadline"));
+    assert!(failure.message.contains("rejected_identity_reads="));
+    assert!(failure
+        .message
+        .contains("last_identity_transition=Known retained Research root animation"));
+    assert!(failure.message.len() <= 512);
+    assert!(f.calls > 2);
+    assert_eq!(f.dispatches, 1);
+    assert!(journal.blocks_game(&epoch().game));
+    drop(journal);
+    let bytes = fs::read(scratch.journal()).unwrap();
+    let mut journal = Journal::open(&scratch.journal()).unwrap();
+    let calls = f.calls;
+    for id in ["timeout", "new-id"] {
+        let failure = execute(
+            &mut journal,
+            id,
+            t.clone(),
+            &a,
+            &gate,
+            &mut f,
+            Duration::from_secs(1),
+        )
+        .unwrap_err();
+        assert_eq!(failure.code, "action_uncertain");
+    }
+    assert_eq!(f.calls, calls);
+    assert_eq!(f.dispatches, 1);
+    drop(journal);
+    assert_eq!(fs::read(scratch.journal()).unwrap(), bytes);
+}
+
+#[test]
+fn identity_animation_never_converts_unknown_or_changed_identity_into_recovery() {
+    for code in [
+        "research_precondition",
+        "invalid_gui_type",
+        "ownership_changed",
+    ] {
+        let scratch = Scratch::new();
+        let mut journal = Journal::open(&scratch.journal()).unwrap();
+        let mut f = Fake::new();
+        f.candidate = Candidate::OpenPanel;
+        f.delivery = Delivery::ServerConfirmed;
+        f.observations = VecDeque::from([
+            Ok(unopened()),
+            Ok(unopened()),
+            Err(identity_transition()),
+            Err(error(
+                code,
+                "Unknown transition or original root/owner changed",
+            )),
+            Ok(panel_state()),
+        ]);
+        let failure = execute(
+            &mut journal,
+            "strict",
+            target(Stage::OpenPanel),
+            &authority(),
+            &RwLock::new(true),
+            &mut f,
+            Duration::from_secs(2),
+        )
+        .unwrap_err();
+        assert_eq!(failure.code, "action_uncertain");
+        assert!(failure.message.contains(&format!("cause={code}")));
+        assert_eq!(f.calls, 4);
+        assert_eq!(f.dispatches, 1);
+        assert!(journal.blocks_game(&epoch().game));
+    }
+}
