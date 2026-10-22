@@ -137,6 +137,13 @@ impl X11Controls {
                 "Owned window lost focus; no activation",
             ));
         }
+        if let Some(expected) = self.expected_client {
+            require_client_dimensions(
+                expected,
+                [geometry.width, geometry.height],
+                geometry.root == self.root,
+            )?;
+        }
         let translated = self
             .connection
             .translate_coordinates(self.window, self.root, 0, 0)

@@ -116,6 +116,10 @@ Mixed production/research standing plans now have an explicit opt-in developer
 preview with persistent selections and separate panel-navigation budgets. Their
 recorded advancing-time live gate is still pending.
 
+Future campaign tests and recordings will use native **1920×1080 or higher**
+with readable UI. The new Linux 1080p input profile still needs live qualification;
+earlier low-resolution runs are diagnostic tests, not filmable campaign evidence.
+
 ### macOS preview (live-tested on one build)
 
 The macOS adapter attaches to one owned game process through its task port and

@@ -36,6 +36,15 @@ ResearchClose002 passed direct Research closing, including historical replays an
 no-ops. Mixed Research/production worker routing has an explicit opt-in preview;
 its recorded live gate remains pending.
 
+Future campaign tests and recordings require native 1920×1080 or higher with
+readable UI. Research, Focus, construction and production now accept the explicit
+`linux_builtin_absolute_1920x1080_v1` profile: both physical and logical dimensions
+must be exactly 1920×1080. All enabled domains must use the same profile. Fresh
+renderer geometry supplies coordinates; old client points are never scaled.
+The owner pins the X11 client size and refuses resized windows before input,
+including stationary keys. This profile awaits installed-game and recording
+qualification. Previous 512×288 runs remain diagnostic evidence.
+
 ## Build
 
 Use Rust 1.86 or newer:
@@ -156,12 +165,12 @@ diagnostic locations within the snapshot, not addresses or memory contents;
 checks still fail without retry.
 This tool cannot open the panel, select a building or place construction.
 
-An owned Linux session can opt into `construction_profile` using
-`linux_builtin_absolute_512x288_v1`. This exposes `hoi4_construction_attempt`
+An owned Linux session can opt into `construction_profile` using the reviewed
+client profile described above. This exposes `hoi4_construction_attempt`
 with `ensure_open` and `select_building` stages; selection requires a canonical
 `building_id`. Both require an exclusive `lease_token` and stable `request_id`.
-The profile supports only the owned 512×288 client and exact Standard/Sprite
-controls. Run075 and Run076 refused changing snapshots before durable intent or
+The adapter supports exact Standard/Sprite controls. Historical 512×288 runs
+Run075 and Run076 refused changing snapshots before durable intent or
 input. Run076's initial controls read passed in 72 ms; its opening request refused
 in 114 ms with `section=opener; read=171; size=4; changed_byte=1`. The semantic
 field remains unproved. Run077 on the recovery commit then passed the bounded
@@ -419,8 +428,8 @@ the two equipment-selection dialogs. An absent dialog root is unknown; it
 cannot establish clearance. Geometry uses the existing exact Sprite/Text/Frame
 readers and remains diagnostic. Reads do not open panels or move the pointer.
 
-The separate `hoi4_production_attempt` preview requires an explicit
-`production_profile: "linux_builtin_absolute_512x288_v1"` in the owned input
+The separate `hoi4_production_attempt` preview requires an explicit reviewed
+`production_profile` in the owned input
 binding and an exclusive lease. It accepts `line_handle`, `equipment_id`,
 `factories`, `request_id` and `lease_token`. The target must match the current
 requested count (a no-op) or differ by exactly one; the minimum target is one.
@@ -739,7 +748,9 @@ Owned installed-game closes returned actual exit code 0; earlier exit-code-6
 incidents remain unresolved.
 
 On Linux, the separate opt-in transport fixture owns its Xvfb/authentication and
-never uses the normal desktop or HOI4 display:
+never uses the normal desktop or HOI4 display. Its keyboard fixture uses a native
+1920×1080 window on a 2560×1440 display and checks resize refusals before and
+after final state verification, with no input sent on those refusals:
 
 ```sh
 python3 native/tests/run_x11_fixture.py

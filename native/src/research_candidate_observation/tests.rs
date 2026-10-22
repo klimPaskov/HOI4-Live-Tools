@@ -355,3 +355,168 @@ fn standard_category_point_requires_exact_nondisabled_enum_and_profile() {
     p.os_binding_verified = false;
     assert!(research_attempt::point_candidate(&s, &codec(&geometry(), &p).unwrap()).is_err());
 }
+
+fn geometry_for(physical: [u16; 2], logical: [u16; 2]) -> Value {
+    let mut g = geometry();
+    let ratio = |a: u16, b: u16| f64::from(f32::from(a) / f32::from(b));
+    g["physical_dimensions"] = json!(physical);
+    g["logical_dimensions"] = json!(logical);
+    g["logical_per_physical"] = json!([
+        ratio(logical[0], physical[0]),
+        ratio(logical[1], physical[1])
+    ]);
+    g["physical_per_logical"] = json!([
+        ratio(physical[0], logical[0]),
+        ratio(physical[1], logical[1])
+    ]);
+    g["input_source"]["point_diagnostic"]["window_association"]["window_dimensions"] =
+        json!(physical);
+    g
+}
+fn detail_1080(research: bool) -> Value {
+    let mut d = detail(research);
+    d["detail"]["render_diagnostic"]["raw"]["physical_scaled_clip"] = json!([0, 0, 1920, 1080]);
+    d
+}
+#[test]
+fn builtin_profiles_pin_exact_reviewed_client_and_logical_pairs() {
+    let p = BuiltinClient::Absolute512x288.owned(42);
+    let q = profile();
+    assert_eq!(
+        (p.window, p.client, p.logical),
+        (q.window, q.client, q.logical)
+    );
+    assert!(p.os_binding_verified && p.reviewed_builtin_client_origin);
+    let p = BuiltinClient::Absolute1920x1080.owned(42);
+    assert_eq!((p.client, p.logical), ([1920, 1080], [1920, 1080]));
+    assert!(p.os_binding_verified && p.reviewed_builtin_client_origin);
+}
+#[test]
+fn each_builtin_profile_accepts_only_its_own_fresh_geometry() {
+    let s = surface(&detail_1080(false), "support_weapons", 0, Stage::View).unwrap();
+    let small = BuiltinClient::Absolute512x288;
+    let full = BuiltinClient::Absolute1920x1080;
+    for (client, physical, logical, accepted) in [
+        (small, [512, 288], [2560, 1440], true),
+        (full, [1920, 1080], [1920, 1080], true),
+        // Another reviewed profile's geometry is never borrowed.
+        (small, [1920, 1080], [1920, 1080], false),
+        (full, [512, 288], [2560, 1440], false),
+        // Same client with an unreviewed GUI scale.
+        (full, [1920, 1080], [3840, 2160], false),
+        (full, [1920, 1080], [2560, 1440], false),
+        (small, [512, 288], [1280, 720], false),
+        // Unknown sizes keep refusing.
+        (full, [1280, 720], [1280, 720], false),
+        (full, [1920, 1200], [1920, 1200], false),
+        (small, [1024, 576], [2560, 1440], false),
+    ] {
+        let result = codec(&geometry_for(physical, logical), &client.owned(42))
+            .and_then(|c| research_attempt::point_candidate(&s, &c));
+        match result {
+            Ok(_) => assert!(accepted, "{client:?} {physical:?} {logical:?}"),
+            Err(e) => {
+                assert!(!accepted, "{client:?} {physical:?} {logical:?}");
+                assert_eq!(e.code, "research_geometry_unavailable");
+            }
+        }
+    }
+}
+#[test]
+fn full_hd_points_come_from_renderer_geometry_not_rescaled_small_points() {
+    let full = codec(
+        &geometry_for([1920, 1080], [1920, 1080]),
+        &BuiltinClient::Absolute1920x1080.owned(42),
+    )
+    .unwrap();
+    let small = codec(&geometry(), &profile()).unwrap();
+    let view = |c: &ClientCodec, d: &Value| {
+        research_attempt::point_candidate(
+            &surface(d, "support_weapons", 0, Stage::View).unwrap(),
+            c,
+        )
+        .unwrap()
+    };
+    let (a, b) = (
+        view(&small, &detail(false)),
+        view(&full, &detail_1080(false)),
+    );
+    assert_eq!(a.client_pixel, [37, 70]);
+    // The same named renderer center at logical (186, 349) maps 1:1.
+    assert_eq!(b.ideal_logical, a.ideal_logical);
+    assert_eq!(
+        (b.client_pixel, b.quantized_logical),
+        ([186, 349], [186, 349])
+    );
+    assert_eq!(b.expected_client, [1920, 1080]);
+    // A blind 3.75x resize of the small pixel would land elsewhere.
+    assert_ne!(
+        b.client_pixel,
+        a.client_pixel.map(|n| (n as f32 * 3.75).round() as i32)
+    );
+    let research = research_attempt::point_candidate(
+        &surface(&detail_1080(true), "support_weapons", 0, Stage::Research).unwrap(),
+        &full,
+    )
+    .unwrap();
+    assert_eq!(research.client_pixel, [951, 173]);
+    assert!(
+        !research.input_authorized
+            && !research.current_frame_verified
+            && !research.effective_routing_verified
+    );
+}
+#[test]
+fn full_hd_profile_refuses_points_outside_its_client_or_clip() {
+    let full = codec(
+        &geometry_for([1920, 1080], [1920, 1080]),
+        &BuiltinClient::Absolute1920x1080.owned(42),
+    )
+    .unwrap();
+    let mut d = detail_1080(false);
+    d["detail"]["render_diagnostic"]["raw"]["cached_world_translation"] = json!([1800, -241]);
+    let e = research_attempt::point_candidate(
+        &surface(&d, "support_weapons", 0, Stage::View).unwrap(),
+        &full,
+    )
+    .unwrap_err();
+    assert_eq!(
+        e.message,
+        "Point outside client: axis=0 ideal=2092 pixel=2092 client=1920x1080"
+    );
+    // The small fixture's clip is not widened by the larger profile.
+    let e = research_attempt::point_candidate(
+        &surface(&detail(false), "support_weapons", 0, Stage::View).unwrap(),
+        &full,
+    )
+    .unwrap_err();
+    assert_eq!(e.message, "observed physical clip excludes candidate");
+}
+
+#[test]
+fn full_hd_slot_and_category_keep_named_renderer_identity_and_unit_mapping() {
+    let full = codec(
+        &geometry_for([1920, 1080], [1920, 1080]),
+        &BuiltinClient::Absolute1920x1080.owned(42),
+    )
+    .unwrap();
+    let base = detail_1080(false);
+    let slot = json!({"owned":true,"build_id":game::BUILD_ID,"slot":2,"active_mode_raw":5,
+        "panel":{"materialized":true,"visible_predicate":true},"ordinary_tree":{"materialized":false,"visible_predicate":null},
+        "descriptor":{"slot":2,"ordinary_selection_binding":{"binding_verified":true,"render_diagnostic":base["detail"]["render_diagnostic"]}}});
+    let mut category = category_detail();
+    category["category"]["sprite_diagnostic"]["raw"]["physical_scaled_clip"] =
+        json!([0, 0, 1920, 1080]);
+    for surface in [
+        slot_surface(&slot, 2).unwrap(),
+        category_surface(&category, "industry_folder", 0).unwrap(),
+    ] {
+        let point = research_attempt::point_candidate(&surface, &full).unwrap();
+        assert_eq!(point.client_pixel, [186, 349]);
+        assert_eq!(point.quantized_logical, point.client_pixel);
+        assert!(!point.input_authorized && !point.current_frame_verified);
+    }
+    let mut replaced = slot;
+    replaced["descriptor"]["ordinary_selection_binding"]["binding_verified"] = json!(false);
+    assert!(slot_surface(&replaced, 2).is_err());
+}

@@ -65,6 +65,27 @@ impl Binding {
         }
         Ok(())
     }
+    /// Optional domains share one immutable owned window and coordinate profile.
+    fn validate_client_profiles(
+        &self,
+    ) -> Result<Option<crate::research_candidate_observation::BuiltinClient>> {
+        let mut clients = [
+            self.research_profile.map(research::Profile::client),
+            self.focus_profile.map(focus::Profile::client),
+            self.construction_profile.map(construction::Profile::client),
+            self.production_profile.map(production::Profile::client),
+        ]
+        .into_iter()
+        .flatten();
+        let first = clients.next();
+        if clients.any(|client| Some(client) != first) {
+            return Err(Error::new(
+                "invalid_input_binding",
+                "All owned input profiles must name one client size",
+            ));
+        }
+        Ok(first)
+    }
 }
 struct Guard {
     epoch: Epoch,
@@ -196,6 +217,7 @@ impl ClockService {
             ));
         }
         binding.validate_daily_focus()?;
+        let client_profile = binding.validate_client_profiles()?;
         let observed: ClockContext = game::clock_context(process)?;
         if observed.player != binding.player
             || observed.difficulty != 2
@@ -207,7 +229,7 @@ impl ClockService {
             ));
         }
         daily::Controller::check_panel_journal(directory)?;
-        let controls = X11Controls::open(
+        let mut controls = X11Controls::open(
             process,
             display.number,
             &display.server,
@@ -215,6 +237,9 @@ impl ClockService {
             binding.window,
             &binding.window_class,
         )?;
+        if let Some(client) = client_profile {
+            controls.bind_client_dimensions(process, client.client())?;
+        }
         let epoch = Epoch {
             game: binding.game.clone(),
             campaign: format!("{}:{}", nonce()?, observed.playthrough_id),
@@ -1000,5 +1025,81 @@ mod tests {
         assert!(!b.daily_focus && !b.daily_prepared_research);
         value["daily_production"] = json!(1);
         assert!(serde_json::from_value::<Binding>(value).is_err());
+    }
+    #[test]
+    fn all_four_domain_profiles_require_one_exact_reviewed_client() {
+        let base = json!({"game":{"pid":123,"start_ticks":"456","exe":"/fixture/game","uid":1000},"controller":"fixture","player":"GER","window":42,"window_class":[],"menu_evidence_ids":["setup"]});
+        let profiles = [
+            None,
+            Some("linux_builtin_absolute_512x288_v1"),
+            Some("linux_builtin_absolute_1920x1080_v1"),
+        ];
+        for research in profiles {
+            for focus in profiles {
+                for construction in profiles {
+                    for production in profiles {
+                        let chosen = [research, focus, construction, production];
+                        let mut value = base.clone();
+                        for (field, profile) in [
+                            "research_profile",
+                            "focus_profile",
+                            "construction_profile",
+                            "production_profile",
+                        ]
+                        .into_iter()
+                        .zip(chosen)
+                        {
+                            if let Some(profile) = profile {
+                                value[field] = json!(profile);
+                            }
+                        }
+                        let binding: Binding = serde_json::from_value(value).unwrap();
+                        let first = chosen.into_iter().flatten().next();
+                        let result = binding.validate_client_profiles();
+                        if chosen.into_iter().flatten().all(|p| Some(p) == first) {
+                            let client = result.unwrap();
+                            assert_eq!(
+                                client.map(|c| c.client()),
+                                first.map(|p| if p.ends_with("1920x1080_v1") {
+                                    [1920, 1080]
+                                } else {
+                                    [512, 288]
+                                })
+                            );
+                            assert_eq!(
+                                client.map(|c| c.logical()),
+                                first.map(|p| if p.ends_with("1920x1080_v1") {
+                                    [1920, 1080]
+                                } else {
+                                    [2560, 1440]
+                                })
+                            );
+                        } else {
+                            assert_eq!(result.unwrap_err().code, "invalid_input_binding");
+                        }
+                    }
+                }
+            }
+        }
+        for field in [
+            "research_profile",
+            "focus_profile",
+            "construction_profile",
+            "production_profile",
+        ] {
+            for unsupported in [
+                "generic",
+                "linux_builtin_absolute_1280x720_v1",
+                "linux_builtin_absolute_3840x2160_v1",
+                "linux_builtin_scaled_1920x1080_v1",
+            ] {
+                let mut value = base.clone();
+                value[field] = json!(unsupported);
+                assert!(
+                    serde_json::from_value::<Binding>(value).is_err(),
+                    "{field}/{unsupported}"
+                );
+            }
+        }
     }
 }

@@ -141,8 +141,8 @@ Normal difficulty, historical AI and the selected own-player tag.
 | `window` | Verified owned X11 window ID |
 | `window_class` | Exact complete `WM_CLASS` property as a byte array |
 | `menu_evidence_ids` | IDs in the private recording/journal proving ordinary singleplayer setup |
-| `research_profile` | Optional owner-reviewed `linux_builtin_absolute_512x288_v1`; omission keeps clock-only input |
-| `production_profile` | Optional `linux_builtin_absolute_512x288_v1`; enables the one-factory production preview in an already-open panel, live validation pending |
+| `research_profile` | Optional reviewed client profile below; enables ordinary Research controls |
+| `production_profile` | Optional matching client profile; enables ordinary production controls |
 
 ```sh
 native/target/release/hoi4-live-native --bind-input /absolute/private/run /absolute/private/input.json
@@ -152,12 +152,32 @@ The binding is immutable for that owner. Stop all builder input before binding.
 Menu evidence is an operator responsibility; the reader does not prove every
 multiplayer flag. The private binding records this limitation.
 
-The production preview requires a 512×288 owned client and 2560×1440 logical
+Research, Focus, construction and production accept two exact builtin profiles:
+
+| Profile | Physical client | Logical graphics | Status |
+| --- | --- | --- | --- |
+| `linux_builtin_absolute_1920x1080_v1` | 1920×1080 | 1920×1080 | New profile; live and recording qualification pending |
+| `linux_builtin_absolute_512x288_v1` | 512×288 | 2560×1440 | Preserved diagnostic profile; not for future campaign tests |
+
+All enabled domain profiles must agree. The owner pins the actual X11 client
+dimensions; resizing refuses subsequent keys and pointer actions before dispatch.
+Fresh engine graphics and SDL/X11 association must match the chosen profile.
+Coordinates come from named renderer geometry, never from scaled old pixels.
+Unknown sizes, logical scaling and mixed profiles refuse explicitly. Omitting all
+domain profiles preserves the legacy clock-only binding.
+
+Future campaigns and recordings require native 1920×1080 or higher and readable
+UI. The current profile does not yet support arbitrary larger sizes. Validate
+actual game geometry, UI and recording performance before campaign Start;
+selecting a profile alone is not live qualification.
+
+The production preview requires the chosen owned client and matching logical
 graphics. Its `production-actions.jsonl` keeps the original line identity and
 count before a click. An unresolved intent blocks all shared input domains;
 do not delete it, change request IDs or create a fresh binding to bypass it.
 See [the tool contract](../native/README.md#tools) for arguments and recovery
-limits. This preview neither opens production nor creates equipment lines.
+limits. The separate opening tool can open production; equipment-line creation
+remains unavailable.
 
 The MCP then advertises `hoi4_input_lease` and `hoi4_time`. Acquire with
 `{"op":"acquire","holder":"luna-linux-player","seconds":300}`. Only the
@@ -191,11 +211,11 @@ it does not verify strategic actions or a complete campaign. See the
 
 ## Ordinary research preview
 
-The owner may add `"research_profile": "linux_builtin_absolute_512x288_v1"`
-to the private binding after corroborating its owned client. This narrow profile
-requires a 512×288 client, 2560×1440 logical graphics and the verified builtin
-absolute SDL/X11 association. Other profiles are unavailable. Omission preserves
-clock-only input. Recorded run 019 passed the assembled owner adapter with
+The owner may add `"research_profile": "linux_builtin_absolute_1920x1080_v1"`
+to the private binding after corroborating its owned client. This requires the
+exact physical/logical dimensions and builtin absolute SDL/X11 association listed
+above. Installed-game qualification of this resolution remains pending. Recorded
+run 019 used the older diagnostic profile and passed the assembled owner adapter with
 exclusive Luna medium input: exact-ID selection/assignment, independent canonical
 slot readback and counter advancement. Later runs verified panel opening and
 empty-slot navigation. Full campaign acceptance remains unfinished. See
@@ -240,11 +260,11 @@ or campaign acceptance.
 ## Focus and daily previews
 
 The private owned input binding can separately enable
-`"focus_profile": "linux_builtin_absolute_512x288_v1"` and
+`"focus_profile": "linux_builtin_absolute_1920x1080_v1"` and
 `"daily_prepared_research": true`. Both default off. The daily preview also
 requires the research profile. These are owner settings, not player-supplied
-geometry; they require the same reviewed 512×288 client and 2560×1440 logical
-profile used by research. Their installed-game acceptance is pending.
+geometry; they require the same reviewed client profile used by research.
+Installed-game acceptance at 1080p is pending.
 
 `hoi4_focus_attempt` accepts `stage`, `focus_id`, `request_id` and `lease_token`.
 Stages are `open_politics`, `close_politics`, `open_focus`, `view` and `start`. Each attempts at

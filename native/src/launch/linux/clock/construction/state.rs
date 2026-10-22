@@ -423,6 +423,43 @@ mod tests {
         }
     }
     #[test]
+    fn full_hd_profile_maps_the_same_named_control_one_to_one_and_refuses_small_geometry() {
+        let full = candidate::BuiltinClient::Absolute1920x1080.owned(42);
+        for stage in [Stage::EnsureOpen, Stage::SelectBuilding] {
+            let t = target(stage);
+            let small = data(stage);
+            // Only the 512x288 owned profile may read the 512x288 snapshot.
+            assert!(point(&small, &t, &full).is_err());
+            let mut d = small.clone();
+            for name in ["opener", "choice"] {
+                d[name]["render_diagnostic"]["raw"]["physical_scaled_clip"] =
+                    json!([0, 0, 1920, 1080]);
+            }
+            d["input_geometry"] = json!({"build_id":crate::game::BUILD_ID,"physical_dimensions":[1920,1080],
+                "logical_dimensions":[1920,1080],"logical_per_physical":[1.0,1.0],"physical_per_logical":[1.0,1.0],
+                "input_mapping_verified":false,"input_source":{"point_diagnostic":{"getter_source_layout_verified":true,
+                    "window_association":{"association_available":true,"normal_absolute_mode":true,
+                        "graphics_dimensions_match":true,"native_window_id":42,"window_dimensions":[1920,1080],
+                        "relative_mode_raw":[0,0]}}}});
+            let p = point(&d, &t, &full).unwrap();
+            assert_eq!(
+                (p.client_pixel, p.expected_client),
+                ([186, 349], [1920, 1080])
+            );
+            assert_eq!(
+                p.ideal_logical,
+                point(&small, &t, &profile()).unwrap().ideal_logical
+            );
+            assert!(!p.input_authorized && !p.effective_routing_verified);
+            assert!(point(&d, &t, &profile()).is_err());
+            let mut scaled = d.clone();
+            scaled["input_geometry"]["logical_dimensions"] = json!([3840, 2160]);
+            scaled["input_geometry"]["logical_per_physical"] = json!([2.0, 2.0]);
+            scaled["input_geometry"]["physical_per_logical"] = json!([0.5, 0.5]);
+            assert!(point(&scaled, &t, &full).is_err());
+        }
+    }
+    #[test]
     fn ordinary_stages_require_their_own_binding_and_same_snapshot_mapping() {
         for stage in [Stage::EnsureOpen, Stage::SelectBuilding] {
             let d = data(stage);

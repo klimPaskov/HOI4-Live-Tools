@@ -4,7 +4,7 @@ use crate::{
     focus_candidate_observation as candidate, focus_stage as stage,
     platform::x11::{PointerDelivery, PointerDisplay},
     research_attempt::{self, PointCandidate},
-    research_candidate_observation::{codec, control_surface, OwnedClientProfile},
+    research_candidate_observation::{codec, control_surface, BuiltinClient, OwnedClientProfile},
 };
 mod state;
 
@@ -13,6 +13,16 @@ mod state;
 pub(super) enum Profile {
     #[serde(rename = "linux_builtin_absolute_512x288_v1")]
     LinuxBuiltinAbsolute512x288V1,
+    #[serde(rename = "linux_builtin_absolute_1920x1080_v1")]
+    LinuxBuiltinAbsolute1920x1080V1,
+}
+impl Profile {
+    pub(super) const fn client(self) -> BuiltinClient {
+        match self {
+            Self::LinuxBuiltinAbsolute512x288V1 => BuiltinClient::Absolute512x288,
+            Self::LinuxBuiltinAbsolute1920x1080V1 => BuiltinClient::Absolute1920x1080,
+        }
+    }
 }
 pub(super) struct Service {
     pub(super) journal: stage::Journal,
@@ -22,20 +32,14 @@ pub(super) struct Service {
 }
 impl Service {
     pub(super) fn bind(
-        _profile: Profile,
+        profile: Profile,
         window: u32,
         display: &Display,
         directory: &Path,
     ) -> Result<Self> {
         Ok(Self {
             journal: stage::Journal::open(&directory.join("focus-actions.jsonl"))?,
-            profile: OwnedClientProfile {
-                window,
-                client: [512, 288],
-                logical: [2560, 1440],
-                os_binding_verified: true,
-                reviewed_builtin_client_origin: true,
-            },
+            profile: profile.client().owned(window),
             display: display.number,
             authority: display.xauthority.clone(),
         })

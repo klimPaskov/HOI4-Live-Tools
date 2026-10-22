@@ -6,13 +6,23 @@ use crate::{
     production_lines::control_snapshot as observation,
     production_step as step,
     research_attempt::{self, PointCandidate},
-    research_candidate_observation::{self as geometry, OwnedClientProfile},
+    research_candidate_observation::{self as geometry, BuiltinClient, OwnedClientProfile},
 };
 
 #[derive(Clone, Copy, Deserialize, Serialize)]
 pub(super) enum Profile {
     #[serde(rename = "linux_builtin_absolute_512x288_v1")]
     LinuxBuiltinAbsolute512x288V1,
+    #[serde(rename = "linux_builtin_absolute_1920x1080_v1")]
+    LinuxBuiltinAbsolute1920x1080V1,
+}
+impl Profile {
+    pub(super) const fn client(self) -> BuiltinClient {
+        match self {
+            Self::LinuxBuiltinAbsolute512x288V1 => BuiltinClient::Absolute512x288,
+            Self::LinuxBuiltinAbsolute1920x1080V1 => BuiltinClient::Absolute1920x1080,
+        }
+    }
 }
 pub(super) struct Service {
     pub(super) journal: step::Journal,
@@ -22,20 +32,14 @@ pub(super) struct Service {
 }
 impl Service {
     pub(super) fn bind(
-        _profile: Profile,
+        profile: Profile,
         window: u32,
         display: &Display,
         directory: &Path,
     ) -> Result<Self> {
         Ok(Self {
             journal: step::Journal::open(&directory.join("production-actions.jsonl"))?,
-            profile: OwnedClientProfile {
-                window,
-                client: [512, 288],
-                logical: [2560, 1440],
-                os_binding_verified: true,
-                reviewed_builtin_client_origin: true,
-            },
+            profile: profile.client().owned(window),
             display: display.number,
             xauthority: display.xauthority.clone(),
         })

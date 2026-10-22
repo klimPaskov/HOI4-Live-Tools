@@ -14,11 +14,28 @@ diagnostic evidence. Do not launch another campaign using that diagnostic profil
 finish offline readiness validation, then establish the 1080p path before the next
 mixed-plan or campaign run.
 
+The current source adds `linux_builtin_absolute_1920x1080_v1` to all four Linux
+domain adapters. It requires exact 1920×1080 physical/logical graphics and fresh
+renderer coordinates. Enabled profiles must agree, and immutable X11 dimensions
+are rechecked before input, including keys after final state verification.
+Validation passed 1,176 host Rust tests, 189 targeted Linux executions (including
+five isolated X11 fixtures with an actual 1920×1080 keyboard window), 953 Python
+tests with 37 skips, formatting, host/Linux Clippy and Windows all-target checks.
+These are offline/transport checks, not installed-game 1080p acceptance.
+
+The OpenPanel settlement correction is implemented and passed its prior full
+validation. Next: audit/publish the 1080p source, verify its exact-source CI, then
+run one bounded 1080p startup/render/recording benchmark on the owned Linux VM.
+An earlier 1080p startup already used GPU offloading and was extremely slow;
+offloading alone is not a new solution to that limitation. No game is running at
+this source checkpoint. The recorded mixed-plan gate, two-year Luna run and full
+campaigns remain unfinished. Do not fall back to another 512×288 campaign.
+
 Mixed005 on the same `81a3e41` source stopped at step 2: the fast driver exposed
 an immediate Research close refusal while the just-verified opening still animated.
 Only one Research input pair occurred; no worker started or close input was sent.
 Cleanup, release/status, recording, normal exit and frozen-input audits passed.
-The next correction makes Linux OpenPanel verification require the same shown
+The subsequent correction makes Linux OpenPanel verification require the same shown
 root to settle under the original deadline, without a fixed client delay or
 repeated input. Preserve the strict close predicate and rerun the frozen driver.
 See [the full result](CLAUSEWITZ_VALIDATION.md#mixed005-immediate-close-readiness-failure--22-october-2026).

@@ -5354,3 +5354,30 @@ were absent. The first host closure receipt used shortened socket names; an
 amendment checked the actual protocol socket paths absent. Yama remained 1.
 The cleanup deviations do not erase the successful read or establish action or
 campaign acceptance.
+
+
+## Native 1080p profile and transport checks — 22 October 2026
+
+All future campaign runs and recordings require native 1920×1080 or higher with
+readable UI. Earlier 512×288 runs remain diagnostic evidence. The new explicit
+`linux_builtin_absolute_1920x1080_v1` profile is available for Research, Focus,
+construction and production, with matching physical and logical dimensions.
+Enabled domains must agree on one profile. Points derive from fresh named
+renderer geometry, not resized historical coordinates. Unknown dimensions or
+scaling refuse explicitly.
+
+The owner pins the X11 client dimensions. Ordinary keys recheck size both before
+and after the typed final reader; query/Tab and pointer paths enforce that same
+pin. Isolated Linux X11 execution used a 1920×1080 generated client on its own
+2560×1440 display. Resize-before-input and resize-during-final-reader cases
+refused without sending key events; accepted ordinary keys, query and Tab kept
+the pointer still. All five generated transport fixtures passed. No HOI4 process
+was opened by this fixture suite.
+
+Full validation passed 1,176 host Rust tests, 189 targeted Linux executions,
+953 Python tests (37 skips), formatting, host/Linux Clippy and Windows all-target
+cross-compilation. The 189 executions include the five X11 fixtures. These checks
+do not establish installed-game readiness, filmable recording performance,
+mixed-plan acceptance or a completed campaign. A bounded 1080p startup/render
+benchmark remains necessary: the earlier slow full-HD calibration already used
+virpipe GPU offloading.
