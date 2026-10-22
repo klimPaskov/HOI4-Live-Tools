@@ -409,6 +409,45 @@ impl Producer {
         counter.probe_latest_date = context.campaign.date_raw;
         Ok(ResearchProbe { context, slots })
     }
+    /// Current own Focus evidence without publication, sequence allocation or
+    /// fsync. The coherent observer checks scope before following own payload.
+    #[cfg(any(target_os = "macos", all(test, unix)))]
+    pub(crate) fn probe_focus(
+        &self,
+        process: &dyn Process,
+        key: &str,
+        until: Instant,
+    ) -> Result<crate::own_focus::AssignmentSnapshot> {
+        deadline(until)?;
+        let mut counter = crate::daily_digest_lock::acquire(&self.counter, None)?;
+        if counter.poisoned {
+            return Err(Error::new(
+                "daily_quarantined",
+                "Daily sequence uncertainty",
+            ));
+        }
+        let scope = &counter.record.scope;
+        let timed = Timed {
+            inner: process,
+            until,
+        };
+        let snapshot = crate::own_focus::assignment_snapshot(
+            &timed,
+            key,
+            &scope.epoch.game,
+            &self.expected,
+            [scope.own_country, scope.own_status],
+        )?;
+        if snapshot.context().date_raw < counter.record.last_date.max(counter.probe_latest_date) {
+            return Err(Error::new(
+                "ownership_changed",
+                "Daily Focus chronology regressed",
+            ));
+        }
+        deadline(until)?;
+        counter.probe_latest_date = snapshot.context().date_raw;
+        Ok(snapshot)
+    }
     pub fn observe(&self, process: &dyn Process, until: Instant) -> Result<Produced> {
         deadline(until)?;
         self.observe_locked(process, until, false)
@@ -506,3 +545,6 @@ impl Producer {
         })
     }
 }
+
+#[cfg(all(test, unix))]
+mod focus_tests;

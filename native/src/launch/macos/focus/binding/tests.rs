@@ -2,10 +2,63 @@ use super::*;
 use crate::memory::ReadMemory;
 use std::cell::{Cell, RefCell};
 
+#[test]
+fn typed_assignment_binding_refuses_replacement_before_preparation() {
+    use crate::memory::StringAbi;
+    use crate::own_focus::assignment_fixture::{Fixture, COUNTRY, FIRST, FOREIGN, SECOND};
+    let f = Fixture::new(StringAbi::LibCxx);
+    let before = f.observe(FIRST).unwrap();
+    assignment_owner(&f, FIRST, &before).unwrap();
+    for variant in 0..4 {
+        let mut f = Fixture::new(StringAbi::LibCxx);
+        let before = f.observe(FIRST).unwrap();
+        let replacement = match variant {
+            0 => f.replace_focus(FIRST),
+            1 => f.replace_focus(SECOND),
+            2 => {
+                f.word(COUNTRY + f.game_layout().country_focus_tree, FOREIGN);
+                FOREIGN
+            }
+            _ => {
+                f.word(COUNTRY + f.game_layout().country_technology_status, FOREIGN);
+                FOREIGN
+            }
+        };
+        let prepared = Cell::new(false);
+        let result = assignment_owner(&f, FIRST, &before).map(|_| prepared.set(true));
+        assert_eq!(result.unwrap_err().code, "ownership_changed");
+        assert!(!prepared.get());
+        assert!(
+            f.untouched(replacement, 8),
+            "replacement payload read before binding refusal"
+        );
+    }
+}
+
+#[test]
+fn typed_status_replacement_after_initial_binding_refuses_before_payload_or_gui() {
+    use crate::memory::StringAbi;
+    use crate::own_focus::assignment_fixture::{Fixture, COUNTRY, FIRST, FOREIGN};
+    let mut f = Fixture::new(StringAbi::LibCxx);
+    let prior = f.observe(FIRST).unwrap();
+    let owner = assignment_owner(&f, FIRST, &prior).unwrap();
+    f.word(COUNTRY + f.game_layout().country_technology_status, FOREIGN);
+    let entered_gui = Cell::new(false);
+    let result = observe(&f, FIRST, Some(&owner), |_, _, _| {
+        entered_gui.set(true);
+        Ok(())
+    });
+    assert_eq!(result.unwrap_err().code, "ownership_changed");
+    assert!(!entered_gui.get());
+    assert!(f.untouched(FOREIGN, 8));
+}
+
 const KEY: &str = "GER_rhineland";
 const GS: u64 = 0x100000;
 const IDLER: u64 = 0x110000;
 const COUNTRY: u64 = 0x120000;
+const STATUS: u64 = 0x1a0000;
+const TECHNOLOGY_DATABASE: u64 = 0x1b0000;
 const OWN_TREE: u64 = 0x130000;
 const DATABASE: u64 = 0x140000;
 const PROGRESS: u64 = 0x150000;
@@ -183,6 +236,14 @@ impl Fake {
     }
     fn new() -> Self {
         let mut f = Self::empty();
+        let g = game::layout(&Reader::new(&f));
+        let technology = crate::research::layout(&Reader::new(&f));
+        f.word(g.technology_db_global, TECHNOLOGY_DATABASE);
+        f.word(TECHNOLOGY_DATABASE, technology.database_vtable);
+        f.word(COUNTRY + g.country_technology_status, STATUS);
+        f.word(STATUS, technology.status_vtable);
+        f.word(STATUS + 0x130, COUNTRY);
+        f.int(STATUS + 0x138, 1);
         for (address, value) in [
             (0x3519740, GS),
             (0x35196c0, IDLER),

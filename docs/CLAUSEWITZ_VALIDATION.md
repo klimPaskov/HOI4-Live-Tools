@@ -6420,3 +6420,23 @@ This verifies one bounded paused Focus assignment. It does not prove completed
 Focus membership, durable worker execution, successive assignments or a campaign.
 Both earlier uncertain controllers remain preserved and blocked. The next work
 is coherent typed assignment evidence and mixed standing-plan qualification.
+
+## Mac durable Focus preview — implementation checkpoint
+
+The default-off worker preview now uses one witnessed own-target observation
+covering the campaign, country/status, Focus database/tree/progress, all canonical
+member keys and the exact target. Status and target links remain bound through
+ordinary UI preparation. A current idle-to-active transition with unchanged
+binding, monotonic membership and a newer durable observation supplies the Start
+receipt. The next idle Focus head requires fresh completed membership for the
+previous assignment. Missing completion is a decision, not permission to restart.
+Historical keys after reconnect do not prove historical pointer continuity.
+
+Busy same-day Focus probes allocate no sequence and rewrite no plan file.
+Generated tests cover both supported string ABIs, full membership beyond one
+public page, torn reads and early ownership refusals, replacement before UI
+preparation, stale transition evidence, natural-completion queue progression and
+reopen. Validation passed 1,373 Rust tests, 956 Python tests (37 skipped), formatting,
+strict host/Windows/Linux-musl/ARM64-Linux-musl Clippy and a release build. These
+checks do not establish durable live Focus acceptance; the next recorded gate
+combines Focus, Research and one existing-line production allocation.

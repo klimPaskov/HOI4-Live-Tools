@@ -81,10 +81,12 @@ and was independently confirmed active. The game stayed paused on 1 January
 finalized 109.781667 seconds at 1920×1108; all 229 native sources stayed frozen.
 The previous two unresolved controllers remain preserved and blocked.
 
-Next, bind coherent typed Focus assignment evidence to the durable worker and
-qualify successive natural completion with mixed standing plans. Focus
-progress already uses a complete coherent typed snapshot instead of a paginated
-JSON merge, but it is not an assignment receipt. Keep bounded read-only torn-read
+The default-off `daily_focus` adapter now binds coherent typed evidence to ordinary
+UI input, verifies current activation and requires fresh completed membership
+before the next queued Focus. Validation passed 1,373 Rust tests, 956 Python tests
+(37 skipped), formatting, strict cross-platform Clippy and a release build.
+Next, qualify successive natural completion with mixed standing plans. Public
+progress remains an observation rather than an assignment receipt. Keep bounded read-only torn-read
 recovery and scope military allocation checks separately from naval queue changes.
 The clean two-year run and full recorded campaigns remain required.
 

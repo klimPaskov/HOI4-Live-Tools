@@ -509,7 +509,7 @@ impl Governor {
     /// Historical key hint only. A completed assignment proves a past Start,
     /// not the current active focus or panel state; the owner must join both
     /// from fresh scoped observations before any navigation.
-    #[cfg(any(target_os = "linux", all(test, unix)))]
+    #[cfg(any(target_os = "linux", target_os = "macos", all(test, unix)))]
     pub(crate) fn completed_focus_hint(&mut self) -> Result<Option<Entry>> {
         self.check()?;
         Ok(self
@@ -550,8 +550,8 @@ impl Governor {
             .cloned()
             .collect()
     }
-    #[cfg(any(target_os = "linux", all(test, unix)))]
-    #[allow(dead_code)] // Prospective daily Focus remains unavailable.
+    #[cfg(any(target_os = "linux", target_os = "macos", all(test, unix)))]
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     pub(crate) fn pending_focus(&self, day: i64) -> Option<Entry> {
         let head = self.state.plan.entries.iter().find(|e| {
             matches!(e.intent, Intent::Focus { .. })

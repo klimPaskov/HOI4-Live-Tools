@@ -1,5 +1,6 @@
 //! Thin Mac owner of the portable durable plan. The game clock is never changed
 //! here. Pending work and possible input survive worker/client lifetimes.
+mod focus;
 mod production;
 mod research;
 use super::{action_fence::Fence, allowed, string, Config, Control, MacClock};
@@ -36,7 +37,13 @@ struct Spec {
     production_permission: bool,
 }
 impl Spec {
-    fn plan(self, scope: core::Scope, research: bool, production: bool) -> Result<core::Plan> {
+    fn plan(
+        self,
+        scope: core::Scope,
+        research: bool,
+        production: bool,
+        focus: bool,
+    ) -> Result<core::Plan> {
         for e in &self.entries {
             if e.navigation.is_some() || e.focus_search.is_some() {
                 return Err(Error::new(
@@ -46,12 +53,13 @@ impl Spec {
             }
             match e.intent {
                 core::Intent::Research { slot, .. } if research && slot <= 15 => (),
+                core::Intent::Focus { ref focus_id } if focus => crate::own_focus::validate_key(focus_id)?,
                 core::Intent::Economy {
                     target: core::EconomyTarget::Production { .. },
                 } if production && self.production_permission => (),
                 _ => return Err(Error::new(
                     "capability_unavailable",
-                    "Only explicitly enabled Mac Research and single factory steps are supported",
+                    "Only explicitly enabled Mac Research, Focus and single factory steps are supported",
                 )),
             }
         }
@@ -99,6 +107,7 @@ pub(super) struct Controller {
     directory: PathBuf,
     research: bool,
     production: bool,
+    focus: bool,
     retained: Arc<Mutex<Retained>>,
     active: Mutex<Option<Active>>,
     blocked: Arc<AtomicBool>,
@@ -177,6 +186,7 @@ impl Controller {
             directory: directory.into(),
             research: config.daily_research,
             production: config.daily_production,
+            focus: config.daily_focus,
             retained: Arc::new(Mutex::new(retained)),
             active: Mutex::new(None),
             blocked: Arc::new(AtomicBool::new(false)),
@@ -206,12 +216,12 @@ impl Controller {
         self.events.clone()
     }
     pub(super) fn capabilities(&self) -> Value {
-        json!({"research_enabled":self.research,"production_enabled":self.production,
+        json!({"research_enabled":self.research,"production_enabled":self.production,"focus_enabled":self.focus,
             "durable":true,"observation_pauses":0,"production_steps_per_day":1,
             "full_campaign_acceptance":false})
     }
     pub(super) fn tool() -> Value {
-        json!({"name":"hoi4_daily_governor","description":"Owned Mac background plan preview. Research queues refill the same slot after natural completion; production supports one exact existing-line factory step per entry. Default-off owner daily_research/daily_production; production also needs plan.production_permission. Start/update require an existing lease and explicit plan. Update requires a stopped worker. Digest reads fresh own state; stop joins without pausing the game. Uncertain input survives reconnect and never replays. Long campaigns remain unverified.","inputSchema":{"type":"object","oneOf":[{"properties":{"op":{"enum":["start","update"]},"lease_token":{"type":"string"},"plan":{"type":"object"}},"required":["op","lease_token","plan"],"additionalProperties":false},{"properties":{"op":{"enum":["digest","stop"]}},"required":["op"],"additionalProperties":false}]}})
+        json!({"name":"hoi4_daily_governor","description":"Owned Mac background plan preview. Research queues refill the same slot after natural completion; production supports one exact existing-line factory step per entry. Focus queues wait for fresh completed membership before the next Start. Default-off owner daily_research/daily_production/daily_focus; production also needs plan.production_permission. Start/update require an existing lease and explicit plan. Update requires a stopped worker. Digest reads fresh own state; stop joins without pausing the game. Uncertain input survives reconnect and never replays. Long campaigns remain unverified.","inputSchema":{"type":"object","oneOf":[{"properties":{"op":{"enum":["start","update"]},"lease_token":{"type":"string"},"plan":{"type":"object"}},"required":["op","lease_token","plan"],"additionalProperties":false},{"properties":{"op":{"enum":["digest","stop"]}},"required":["op"],"additionalProperties":false}]}})
     }
     pub(super) fn call(
         &self,
@@ -270,7 +280,12 @@ impl Controller {
         }
         let mut retained = lock(&self.retained)?;
         retained.check()?;
-        let plan = spec.plan(retained.scope.clone(), self.research, self.production)?;
+        let plan = spec.plan(
+            retained.scope.clone(),
+            self.research,
+            self.production,
+            self.focus,
+        )?;
         let mut state = lock(&owner.state)?;
         if foreign(&state) {
             return Err(Error::new(
@@ -577,6 +592,12 @@ impl Worker {
                 "All explicit assignments verified",
             )));
         }
+        let previous_focus = g
+            .completed_focus_hint()?
+            .and_then(|entry| match entry.intent {
+                core::Intent::Focus { focus_id } => Some(focus_id),
+                _ => None,
+            });
         let mut continuation = None;
         if *last_day == Some(day) {
             if !g.budget_available(day) {
@@ -594,6 +615,28 @@ impl Worker {
             }
             if continuation.is_none() {
                 continuation = g.pending_production(day).first().map(|e| e.id.clone());
+            }
+            if continuation.is_none() {
+                if let Some(entry) = g.pending_focus(day) {
+                    let core::Intent::Focus { focus_id } = &entry.intent else {
+                        unreachable!()
+                    };
+                    let probe =
+                        self.producer
+                            .probe_focus(self.process.as_ref(), focus_id, until)?;
+                    if !matches!(
+                        focus::readiness_at(
+                            &probe,
+                            &entry,
+                            &g.plan().scope,
+                            date,
+                            previous_focus.as_deref()
+                        )?,
+                        core::Readiness::WaitingForFocus
+                    ) {
+                        continuation = Some(entry.id);
+                    }
+                }
             }
             if continuation.is_none() {
                 return Ok(None);
@@ -615,6 +658,7 @@ impl Worker {
             stop: &self.stop,
             until,
             last_context: None,
+            previous_focus,
         };
         let result = match continuation {
             Some(id) => {
@@ -650,6 +694,7 @@ struct DailyBackend<'a> {
     stop: &'a AtomicBool,
     until: Instant,
     last_context: Option<(u64, crate::game::ClockContext)>,
+    previous_focus: Option<String>,
 }
 impl core::Backend for DailyBackend<'_> {
     fn unresolved_input(&mut self) -> Result<bool> {
@@ -678,6 +723,15 @@ impl core::Backend for DailyBackend<'_> {
     ) -> Result<core::Readiness> {
         if matches!(entry.intent, core::Intent::Research { .. }) {
             research::readiness(&research::observe(self.process)?, entry, observed)
+        } else if let core::Intent::Focus { focus_id } = &entry.intent {
+            focus::readiness(
+                &self
+                    .producer
+                    .probe_focus(self.process, focus_id, self.until)?,
+                entry,
+                observed,
+                self.previous_focus.as_deref(),
+            )
         } else {
             production::readiness(self.process, entry, observed)
         }
@@ -736,6 +790,31 @@ impl core::Backend for DailyBackend<'_> {
             Ok(core::Outcome::Verified(Box::new(research::complete(
                 attempt, prior, after, observed,
             )?)))
+        } else if let core::Intent::Focus { focus_id } = &attempt.entry.intent {
+            let prior = self.producer.probe_focus(&fence, focus_id, until)?;
+            if !matches!(
+                focus::readiness(
+                    &prior,
+                    &attempt.entry,
+                    before,
+                    self.previous_focus.as_deref()
+                )?,
+                core::Readiness::Ready
+            ) {
+                return Ok(core::Outcome::NotQueued(
+                    "Focus precondition changed before preparation".into(),
+                ));
+            }
+            keys.confirm_input_idle()?;
+            // The ordinary path must retain this exact typed pre-input target.
+            // Every failure after preparation preserves the core Intent.
+            super::focus::start_bound(&fence, &keys, focus_id, until, &prior)?;
+            let after = self.producer.probe_focus(&fence, focus_id, until)?;
+            let observed = self.producer.observe(&fence, until)?.observation;
+            check()?;
+            Ok(core::Outcome::Verified(Box::new(focus::complete(
+                attempt, before, prior, after, observed,
+            )?)))
         } else {
             self.production.attempt(
                 &fence,
@@ -750,6 +829,11 @@ impl core::Backend for DailyBackend<'_> {
         if matches!(outcome, core::Outcome::Verified(_)) {
             self.control.guard.observe_context(&fence)?;
             check()?;
+            if let core::Intent::Focus { focus_id } = &attempt.entry.intent {
+                // Later entries in this same batch must see the new assignment,
+                // not the historical key captured before run_day began.
+                self.previous_focus = Some(focus_id.clone());
+            }
         }
         Ok(outcome)
     }
@@ -780,7 +864,7 @@ mod tests {
     fn spec() -> Spec {
         serde_json::from_value(json!({"version":1,"revision":1,"entries":[{"id":"one","intent":{"kind":"Research","technology_id":"tech","slot":0}}],"max_actions_per_day":2,"max_observation_age_ms":5000,"review_day":null})).unwrap()
     }
-    fn dir() -> PathBuf {
+    pub(super) fn dir() -> PathBuf {
         use std::os::unix::fs::PermissionsExt;
         static N: AtomicUsize = AtomicUsize::new(0);
         let p = std::env::temp_dir().join(format!(
@@ -799,27 +883,41 @@ mod tests {
             player: "GER".into(),
             daily_research: false,
             daily_production: false,
+            daily_focus: false,
         }
     }
     #[test]
     fn supported_domains_require_explicit_permissions_and_hints_never_silently_drop() {
         assert_eq!(
-            spec().plan(scope(), false, false).unwrap_err().code,
+            spec().plan(scope(), false, false, false).unwrap_err().code,
             "capability_unavailable"
         );
-        spec().plan(scope(), true, false).unwrap();
+        spec().plan(scope(), true, false, false).unwrap();
         let mut s = spec();
         s.entries[0].navigation = Some(core::ResearchNavigation {
             folder_id: "industry".into(),
         });
-        assert!(s.plan(scope(), true, false).is_err());
+        assert!(s.plan(scope(), true, false, false).is_err());
         for granted in [false, true] {
             let mut s = spec();
             s.entries[0].intent = core::Intent::Focus {
                 focus_id: "focus".into(),
             };
-            assert!(s.plan(scope(), true, granted).is_err());
+            assert!(s.plan(scope(), true, granted, false).is_err());
         }
+        let mut s = spec();
+        s.entries[0].intent = core::Intent::Focus {
+            focus_id: "focus".into(),
+        };
+        s.plan(scope(), false, false, true).unwrap();
+        let mut s = spec();
+        s.entries[0].intent = core::Intent::Focus {
+            focus_id: "GER-bad".into(),
+        };
+        assert!(s.plan(scope(), false, false, true).is_err());
+        let c: Config =
+            serde_json::from_value(json!({"controller":"fixture","player":"GER"})).unwrap();
+        assert!(!c.daily_focus && !c.daily_research && !c.daily_production);
     }
     #[test]
     fn missing_plan_never_bootstraps_over_any_nonempty_daily_artifact() {
@@ -834,6 +932,18 @@ mod tests {
             assert!(Controller::bind(&p, &config(), scope(), 60759624).is_err());
             assert_eq!(std::fs::read(p.join(name)).unwrap(), b"retained evidence");
             assert!(!p.join("daily-plan.json").exists());
+            std::fs::remove_dir_all(p).unwrap();
+        }
+    }
+    #[test]
+    fn focus_capability_reports_explicit_permission() {
+        for enabled in [false, true] {
+            let p = dir();
+            let mut config = config();
+            config.daily_focus = enabled;
+            let controller = Controller::bind(&p, &config, scope(), 60759624).unwrap();
+            assert_eq!(controller.capabilities()["focus_enabled"], enabled);
+            drop(controller);
             std::fs::remove_dir_all(p).unwrap();
         }
     }
@@ -876,7 +986,7 @@ mod tests {
     #[test]
     fn persisted_uncertainty_blocks_binding_even_with_every_permission_disabled() {
         let p = dir();
-        let plan = spec().plan(scope(), true, false).unwrap();
+        let plan = spec().plan(scope(), true, false, false).unwrap();
         let mut g = core::Governor::open(&p.join("daily-plan.json"), plan).unwrap();
         g.run_day(
             &mut Uncertain {
@@ -903,7 +1013,7 @@ mod tests {
     #[test]
     fn healthy_reopen_keeps_single_writer_and_replacement_blocks_manual_gate() {
         let p = dir();
-        let plan = spec().plan(scope(), true, false).unwrap();
+        let plan = spec().plan(scope(), true, false, false).unwrap();
         drop(core::Governor::open(&p.join("daily-plan.json"), plan).unwrap());
         let controller = Controller::bind(&p, &config(), scope(), 60759624).unwrap();
         controller.input_check().unwrap();
@@ -926,7 +1036,7 @@ mod tests {
         drop(
             core::Governor::open(
                 &p.join("daily-plan.json"),
-                spec().plan(scope(), true, false).unwrap(),
+                spec().plan(scope(), true, false, false).unwrap(),
             )
             .unwrap(),
         );
@@ -963,7 +1073,7 @@ mod tests {
         let p = dir();
         let mut governor = core::Governor::open(
             &p.join("daily-plan.json"),
-            spec().plan(scope(), true, false).unwrap(),
+            spec().plan(scope(), true, false, false).unwrap(),
         )
         .unwrap();
         governor

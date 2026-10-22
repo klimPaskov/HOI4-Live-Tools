@@ -275,7 +275,18 @@ pub(super) fn start(
     until: Instant,
 ) -> Result<()> {
     let mut trace = Trace::new();
-    start_inner(process, keys, key, until, &mut trace).map_err(|error| trace.failure(error))
+    start_inner(process, keys, key, until, &mut trace, None).map_err(|error| trace.failure(error))
+}
+pub(super) fn start_bound(
+    process: &(dyn Process + Send + Sync),
+    keys: &MacKeys,
+    key: &str,
+    until: Instant,
+    expected: &own_focus::AssignmentSnapshot,
+) -> Result<()> {
+    let mut trace = Trace::new();
+    start_inner(process, keys, key, until, &mut trace, Some(expected))
+        .map_err(|error| trace.failure(error))
 }
 fn start_inner(
     process: &(dyn Process + Send + Sync),
@@ -283,10 +294,14 @@ fn start_inner(
     key: &str,
     until: Instant,
     trace: &mut Trace,
+    expected: Option<&own_focus::AssignmentSnapshot>,
 ) -> Result<()> {
     trace.stage("bind_own_target");
     deadline(until)?;
-    let (owner, ()) = binding::observe(process, key, None, |_, _, _| Ok(()))?;
+    let owner = match expected {
+        Some(before) => binding::assignment_owner(process, key, before)?,
+        None => binding::observe(process, key, None, |_, _, _| Ok(()))?.0,
+    };
     trace.stage("clear_notices");
     clear_notices(process, keys)?;
     trace.stage("inspect_open_views");

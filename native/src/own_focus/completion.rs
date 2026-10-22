@@ -3,6 +3,16 @@
 //! used: the current engine predicate scans progress+0x40, count+0x4c.
 use super::*;
 
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+mod assignment;
+#[cfg(test)]
+#[allow(unused_imports)]
+pub(crate) use assignment::fixture as assignment_fixture;
+#[allow(unused_imports)]
+pub(crate) use assignment::{
+    snapshot as assignment_snapshot, AssignmentBinding, AssignmentSnapshot,
+};
+
 /// Pure observed membership, not an assertion about completion cause or time.
 /// Repeat counts, bypass causes, changed/shared trees and eligibility are not
 /// inferred. All members are validated before returning a bounded sorted page.

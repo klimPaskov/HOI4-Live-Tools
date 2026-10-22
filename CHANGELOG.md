@@ -2,6 +2,13 @@
 
 ## Unreleased native preview
 
+- Add a default-off Mac daily Focus preview with coherent typed own-target
+  evidence, retained target/status guards, and a fresh activation receipt.
+  Queued Focus entries require natural completed membership before advancing.
+  Busy same-day probes do not allocate sequences or rewrite plan files.
+  Manual navigation passed a recorded 3.65-second gate; durable mixed-plan live
+  qualification remains pending.
+
 - Plan Mac Focus pans across a bounded grid of clear origins, using only the
   displacement needed to reveal the target. Preserve full-tree checks before
   mouse-down and the original five-second deadline. Optional read-only probes

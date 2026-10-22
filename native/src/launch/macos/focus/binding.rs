@@ -12,11 +12,14 @@ pub(super) struct Owner {
     gs: u64,
     idler: u64,
     country: u64,
+    status: u64,
+    technology_database: u64,
     tree: u64,
     database: u64,
     progress: u64,
     target: u64,
     members: Vec<u64>,
+    keys: BTreeMap<String, u64>,
 }
 fn exact(r: &Reader<'_>, p: u64, table: u64) -> Result<()> {
     if p < 0x10000 || p % 8 != 0 || r.u64(p)? != table {
@@ -42,7 +45,7 @@ fn pointers(r: &Reader<'_>, address: u64, bound: usize) -> Result<Vec<u64>> {
         .map(|b| u64::from_le_bytes(b.try_into().unwrap()))
         .collect())
 }
-fn owner(r: &Reader<'_>, image: u64, key: &str) -> Result<Owner> {
+fn owner(r: &Reader<'_>, image: u64, key: &str, expected_status: Option<u64>) -> Result<Owner> {
     ui(r)?;
     let g = game::layout(r);
     let l = own_focus::layout(r);
@@ -75,6 +78,23 @@ fn owner(r: &Reader<'_>, image: u64, key: &str) -> Result<Owner> {
         return Err(Error::new(
             "invalid_focus_owner",
             "Own tag backlink differs",
+        ));
+    }
+    let status = r.u64(country + g.country_technology_status)?;
+    if expected_status.is_some_and(|expected| status != expected) {
+        return Err(Error::new(
+            "ownership_changed",
+            "Original Focus own status changed",
+        ));
+    }
+    let technology = crate::research::layout(r);
+    let technology_database = r.u64(image + g.technology_db_global)?;
+    exact(r, status, image + technology.status_vtable)?;
+    exact(r, technology_database, image + technology.database_vtable)?;
+    if r.u64(status + 0x130)? != country || r.i32(status + 0x138)? != tag {
+        return Err(Error::new(
+            "invalid_focus_owner",
+            "Focus own status backlink differs",
         ));
     }
     let tree = r.u64(country + g.country_focus_tree)?;
@@ -141,12 +161,114 @@ fn owner(r: &Reader<'_>, image: u64, key: &str) -> Result<Owner> {
         gs,
         idler,
         country,
+        status,
+        technology_database,
         tree,
         database,
         progress,
         target,
         members,
+        keys,
     })
+}
+
+/// Bind durable before-evidence before any UI preparation. Never independently
+/// adopt a replacement object merely because it has the same Focus key.
+pub(super) fn assignment_owner(
+    process: &dyn Process,
+    key: &str,
+    expected: &own_focus::AssignmentSnapshot,
+) -> Result<Owner> {
+    let binding = expected.binding();
+    if process.identity() != Some(binding.game()) {
+        return Err(Error::new(
+            "ownership_changed",
+            "Focus assignment process changed",
+        ));
+    }
+    process.begin_snapshot()?;
+    let witnesses = Witnesses::new(process);
+    witnesses.section("mac_focus_assignment_owner");
+    let r = Reader::new(&witnesses);
+    let image = process.image_base();
+    let g = game::layout(&r);
+    let l = own_focus::layout(&r);
+    let changed = || {
+        Error::new(
+            "ownership_changed",
+            "Typed Focus assignment binding changed",
+        )
+    };
+    // Compare links before the broader owner reader may follow replacement
+    // country, status, tree, progress or member payloads.
+    if r.u64(image + g.gs_global)? != binding.gs()
+        || r.u64(image + g.idler_global)? != binding.idler()
+        || r.u64(image + g.technology_db_global)? != expected.context().anchors[2]
+    {
+        return Err(changed());
+    }
+    exact(&r, binding.gs(), image + g.gs_vtable)?;
+    exact(&r, binding.idler(), image + g.idler_vtable)?;
+    let tag = r.i32(binding.gs() + g.player_tag)?;
+    if !(1..4096).contains(&tag) {
+        return Err(changed());
+    }
+    let index = i32::from_le_bytes(
+        r.array_entry(binding.gs() + g.tag_country_index, tag as usize, 4)?
+            .try_into()
+            .unwrap(),
+    );
+    if index < 0
+        || u64::from_le_bytes(
+            r.array_entry(binding.gs() + g.countries, index as usize, 8)?
+                .try_into()
+                .unwrap(),
+        ) != binding.country()
+    {
+        return Err(changed());
+    }
+    r.object_type(binding.country(), "CCountry")?;
+    if r.i32(binding.country() + 8)? != tag
+        || r.u64(binding.country() + g.country_technology_status)? != binding.status()
+        || r.u64(binding.country() + g.country_focus_tree)? != binding.tree()
+        || r.u64(binding.country() + g.country_focus_progress)? != binding.progress()
+        || r.u64(image + l.database_global)? != binding.database()
+    {
+        return Err(changed());
+    }
+    exact(
+        &r,
+        binding.status(),
+        image + crate::research::layout(&r).status_vtable,
+    )?;
+    exact(&r, binding.tree(), image + l.tree_vtable)?;
+    if r.u64(binding.status() + 0x130)? != binding.country()
+        || r.i32(binding.status() + 0x138)? != tag
+        || pointers(&r, binding.tree() + l.tree_focuses, 4096)? != binding.members()
+    {
+        return Err(changed());
+    }
+    let own = owner(&r, image, key, Some(binding.status()))?;
+    if own.gs != binding.gs()
+        || own.idler != binding.idler()
+        || own.country != binding.country()
+        || own.status != binding.status()
+        || own.technology_database != expected.context().anchors[2]
+        || own.tree != binding.tree()
+        || own.database != binding.database()
+        || own.progress != binding.progress()
+        || own.target != binding.target()
+        || own.members != binding.members()
+        || &own.keys != binding.keys()
+    {
+        return Err(changed());
+    }
+    witnesses.finish()?;
+    process.check()?;
+    if process.identity() != Some(binding.game()) {
+        return Err(changed());
+    }
+    Ok(own)
 }
 
 /// All payloads and their final witnesses use the same reader/ownership bracket.
@@ -161,7 +283,7 @@ pub(super) fn observe<T>(
     w.section("mac_focus_owner");
     let r = Reader::new(&w);
     let image = process.image_base();
-    let own = owner(&r, image, key)?;
+    let own = owner(&r, image, key, expected.map(|owner| owner.status))?;
     if expected.is_some_and(|old| *old != own) {
         return Err(Error::new(
             "ownership_changed",

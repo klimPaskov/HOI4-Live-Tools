@@ -54,6 +54,8 @@ struct Config {
     daily_research: bool,
     #[serde(default)]
     daily_production: bool,
+    #[serde(default)]
+    daily_focus: bool,
 }
 
 fn nonce() -> Result<String> {

@@ -17,7 +17,12 @@ use std::{
 mod catalog;
 mod completion;
 mod search;
+#[cfg(test)]
+#[allow(unused_imports)]
+pub(crate) use completion::assignment_fixture;
 pub use completion::snapshot as completion_snapshot;
+#[allow(unused_imports)]
+pub(crate) use completion::{assignment_snapshot, AssignmentBinding, AssignmentSnapshot};
 #[doc(hidden)]
 pub use completion::{observe as progress_snapshot, ProgressSnapshot};
 

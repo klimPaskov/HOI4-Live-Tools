@@ -18,7 +18,8 @@ the configured controller and own country. Worker permissions default to false:
   "controller": "player",
   "player": "GER",
   "daily_research": true,
-  "daily_production": true
+  "daily_production": true,
+  "daily_focus": false
 }
 ```
 
@@ -64,6 +65,17 @@ The worker preserves ordered queue heads and waits for natural completion before
 refilling a slot. An entry becomes Complete when its assignment is verified;
 that does not mean the technology itself has finished.
 
+The default-off `daily_focus` preview admits explicit `Focus` entries with a
+canonical `focus_id`; capabilities report `focus_enabled`. One typed observation
+binds the own campaign, country/status, complete Focus membership and exact target.
+The ordinary UI path must retain that binding before preparation and through
+its final target checks. Completion of an entry means a verified idle-to-active
+Start. A later idle queue head requires fresh completed membership for the
+previous assignment; an unexplained idle Focus stops for a decision. Reconnect
+uses the historical key only as a hint and independently binds current membership;
+it does not claim that historical object pointers survived. Successive live
+worker qualification remains pending.
+
 Production additionally requires `plan.production_permission: true`. An entry
 uses `kind: Economy`, with a `Production` target containing the exact observed
 `line_id` (the full `line_handle`), `equipment_id` and `total_factories`.
@@ -74,7 +86,7 @@ and requested allocations around the single click. It cannot add lines, operate
 naval lines, or borrow Linux panel layouts. Other plan domains and navigation
 hints explicitly refuse.
 
-The worker checks the own clock once per second. Same-day idle slot checks do
+The worker checks the own clock once per second. Same-day busy Focus and slot checks do
 not allocate observation sequences or sync plan files. A new game day or an
 available queue head triggers a fresh durable observation and bounded action.
 Review deadlines, completed assignments, blocking decisions and lease/ownership
@@ -93,7 +105,7 @@ input gate; it is not the durable worker described here.
 
 ## Action limits and recovery
 
-Research and production use one original five-second action deadline, narrowed
+Research, Focus and production use one original five-second action deadline, narrowed
 by the existing lease and cancellation flag. Nested reads, panel preparation,
 geometry checks and completion proof cannot renew that deadline. Production
 settles the complete row/button/rectangle witness across two reads 60 ms apart,
@@ -105,6 +117,9 @@ possible dispatch. Reads never move the cursor.
 
 The worker persists its intent before any UI preparation. Research completion
 requires a fresh, typed empty-to-assigned transition in the exact own slot.
+Focus requires a fresh exact idle-to-active transition with unchanged canonical
+binding and monotonic completed membership, followed by a newer durable own
+observation. A receipt from a previous invocation cannot satisfy this proof.
 Production uses its typed ordinary-action journal and original-line progress
 record. Historical JSON receipts cannot complete a new attempt.
 
@@ -153,8 +168,8 @@ deadline and have distinct timeout codes. Native ownership refusals retain their
 cause even if the read finishes late. These diagnostics cannot explain an earlier
 binary's failure. The revised bounded planner passed a fresh recorded manual
 Economic Growth assignment in 3.65 seconds, with independent active-Focus
-readback. Fresh typed durable receipts and successive natural completion still
-need qualification before Focus enters daily plans.
+readback. The new typed durable adapter remains a default-off preview; successive
+natural completion and mixed-plan live qualification are still required.
 
 Generated tests cover persistence, ownership, chronology, slot waits, typed
 proofs, unchanged allocations, original deadlines, cancellation and shutdown.
