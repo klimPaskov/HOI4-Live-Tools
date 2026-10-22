@@ -849,6 +849,19 @@ struct Shared {
     display: Option<Display>,
     directory: PathBuf,
 }
+impl Shared {
+    fn retire_reads(&self) {
+        self.accepting_reads.store(false, Ordering::Release);
+        // Notify without taking controller/producer locks, before draining reads.
+        if let Ok(commands) = self.commands.read() {
+            if let Some(events) = commands.as_ref().and_then(|c| c.wait_events()) {
+                if let Err(error) = events.retire() {
+                    eprintln!("Owned wait retirement: {error}");
+                }
+            }
+        }
+    }
+}
 fn service_client(stream: UnixStream, shared: Arc<Shared>) {
     let response = (|| -> Result<Value> {
         let client = peer(&stream)?;
@@ -1065,7 +1078,7 @@ fn run_owner(
                     }
                     Some(attempt) => attempt.pending.push(request.reply),
                     None => {
-                        shared.accepting_reads.store(false, Ordering::Release);
+                        shared.retire_reads();
                         window_attempt = Some(WindowCloseAttempt {
                             target,
                             until: request.until,
@@ -1087,7 +1100,7 @@ fn run_owner(
         if (!pending.is_empty() || SIGNAL_CLOSE.swap(false, Ordering::Relaxed))
             && deadline.is_none()
         {
-            shared.accepting_reads.store(false, Ordering::Release);
+            shared.retire_reads();
             // Drain an already queued bounded key pair before signalling the
             // child; every later pair sees the disabled input gate.
             *shared
@@ -1106,7 +1119,7 @@ fn run_owner(
         if !child.exited {
             match child.exited_without_reaping() {
                 Ok(true) => {
-                    shared.accepting_reads.store(false, Ordering::Release);
+                    shared.retire_reads();
                     *shared.input_gate.write().map_err(|_| {
                         Error::new("input_unavailable", "Input exit gate poisoned")
                     })? = false;

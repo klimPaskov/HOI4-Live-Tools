@@ -40,8 +40,45 @@ enabling it is not a new fix. Preserve the failed benchmark and its separate
 cleanup outcome. The owned display remains 2560×1440 for future 1080p work. No game
 is running. The mixed-plan gate, two-year Luna run, filmable recording qualification
 and full campaigns remain unfinished. Do not fall back to a 512×288 campaign.
-Offline worker-event waits can progress independently; they must not be described
-as live acceptance. See [the benchmark result](CLAUSEWITZ_VALIDATION.md#fullhd001-startup-deadline--22-october-2026).
+The worker terminal-notification change below progresses independently of this
+graphics limitation; it is not live acceptance. See [the benchmark result](CLAUSEWITZ_VALIDATION.md#fullhd001-startup-deadline--22-october-2026).
+
+Subsequent generated-window measurements isolated part of the graphics cost:
+the existing SSH graphics route delivered approximately 2.9–3.2 FPS at native
+1080p. A temporary direct loopback TCP bridge improved that to 5.0–5.1 FPS,
+still inadequate for filming. Checksum-verified full-frame transfers took
+258–305 ms through SSH, 634–921 ms with SSH compression, and 67–101 ms directly.
+Larger receive chunks did not materially improve the SSH result. The direct GL
+probe recorded broken-pipe/reset errors during intentional client termination
+and failed its strict cleanup assertion; preserve that failure. Both relays
+finished and a fresh process check found no game, recorder or generated GL client.
+The original graphics connection was not changed. These are short synthetic
+measurements, not HOI4 frame rates or campaign acceptance. Investigate the remaining
+readback/emulation cost before another game launch; do not enable SSH compression
+as an assumed fix. See [the diagnostics](CLAUSEWITZ_VALIDATION.md#full-hd-graphics-transport-diagnostics--22-october-2026).
+
+A further private native guest relay using Linux `splice` reached 7.9 FPS in
+the generated 1080p client, with 127 ms mean presentation time (56 ms inside
+intercepted reads). TCP packet-buffer changes did not help. The native relay
+still retained a broken-pipe shutdown failure after intentional client termination;
+it is not a production transport or live-game acceptance. All generated clients
+and relays are absent. Preserve the private timing evidence, improve clean relay
+shutdown before reusing it, and qualify actual game startup/recording separately.
+
+The current source adds owner-scoped terminal notifications to date, assignment
+and general-change waits. An already stopped/quarantined worker returns before
+any game read; an active wait wakes when its pinned worker terminates. Retained
+snapshots remain explicitly historical, explicit STOP has a separate non-error
+reason, and neither deadlines nor input authority expand. Owner retirement wakes
+waiters before read-gate drainage. Quarantine and report flags precede terminal
+publication, including the original scheduling failure cause. UI-only waits
+retain their separate path. Recorded mixed-plan validation is still required.
+Validation passed 1,192 host Rust tests, 228 targeted Linux executions (including
+two synthetic owner endpoint tests and five actual X11 fixtures), 953 Python
+tests with 37 skips, formatting, host/Linux Clippy and Windows all-target checks.
+The test-only lint correction was followed by all seven affected lifecycle tests
+and final target validation. All 205 native inputs remained unchanged afterward.
+See [the notification evidence](CLAUSEWITZ_VALIDATION.md#owned-worker-terminal-event-waits--22-october-2026).
 
 Mixed005 on the same `81a3e41` source stopped at step 2: the fast driver exposed
 an immediate Research close refusal while the just-verified opening still animated.
@@ -88,9 +125,9 @@ Bounded first/latest causes and recovery counts survive the worker report, STOP
 and compact-digest details. Clean reads add no delay or history field. Rerun the
 recorded mixed gate with this recovery, the fixed detail batch, daily budgets
 and completed-plan restart; offline checks are not live recovery evidence.
-Worker waits also still need prompt terminal-failure wakeups; the current wait
-can consume its full 50-second allowance after a worker stops. No live game is
-left running at this checkpoint. The broad objective remains incomplete.
+That recorded wait consumed its full 50-second allowance after a worker stopped.
+The current source adds prompt terminal notifications, pending recorded mixed-plan
+validation. No live game is left running. The broad objective remains incomplete.
 
 Validation passed 1,162 host Rust tests, 131 targeted Linux test executions,
 953 Python tests (37 skips), formatting, host/Linux Clippy and Windows all-target

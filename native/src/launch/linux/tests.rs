@@ -2,6 +2,7 @@ use super::*;
 use std::io::BufRead;
 use std::sync::atomic::AtomicI32;
 use std::sync::Mutex;
+mod worker_wait;
 
 struct Fixture {
     directory: PathBuf,

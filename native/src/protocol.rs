@@ -8,6 +8,8 @@ use crate::{
 use serde_json::{json, Value};
 use std::time::{Duration, Instant};
 mod assignment_wait;
+pub mod worker_events;
+mod worker_wait;
 pub struct Server {
     pub process: Option<Box<dyn Process + Send + Sync>>,
     pub unavailable: Option<Error>,
@@ -22,6 +24,11 @@ pub trait Commands: Send + Sync {
     /// Where the standing plan lives (`hoi4_plan`, `hoi4_plan_run`), if this
     /// adapter has a run directory.
     fn plan_path(&self) -> Option<std::path::PathBuf> {
+        None
+    }
+    /// Read-only lifecycle notification scoped to this exact owned controller.
+    /// Default readers have no worker and retain ordinary bounded polling.
+    fn wait_events(&self) -> Option<std::sync::Arc<worker_events::Events>> {
         None
     }
 }
@@ -59,7 +66,7 @@ fn tools(commands: Option<&dyn Commands>) -> Value {
         {"name":"hoi4_focus_node_detail","description":"Exact own focus key joined to complete current-item ownership and only the requested control/callback metadata. Optional raw Sprite/Text/Frame diagnostics; no input or eligibility authority.","inputSchema":{"type":"object","properties":{"focus_id":{"type":"string","minLength":1,"maxLength":128},"include_geometry":{"type":"boolean","default":false}},"required":["focus_id"],"additionalProperties":false}},
         {"name":"hoi4_focus_selected_detail","description":"Compact fresh exact own selected focus detail window. Start binding is window.start.ordinary_binding; the node symbol is a separate control. Refuses missing, different or multiple selected details. Optional existing raw renderer diagnostics; no client point, input or eligibility authority.","inputSchema":{"type":"object","properties":{"focus_id":{"type":"string","minLength":1,"maxLength":128},"include_geometry":{"type":"boolean","default":false}},"required":["focus_id"],"additionalProperties":false},"annotations":{"readOnlyHint":true}},
         {"name":"hoi4_technology_list","description":"Canonical loaded public technology IDs with bounded filtering/pagination. Catalog membership does not imply player research eligibility. Pure reads; never pauses.","inputSchema":{"type":"object","properties":{"filter":{"type":"string","maxLength":128},"offset":{"type":"integer","minimum":0,"maximum":8192},"limit":{"type":"integer","minimum":1,"maximum":100}},"additionalProperties":false}},
-        {"name":"hoi4_wait_for","description":"Bounded server wait for own focus/research change, game date, research UI, or all explicit until_assignments targets. Assignment targets check the first sample too and mean active focus/current slot assignment, not completion over game time or a durable plan receipt. Choose one target family. UI/assignment matches do not authorize input. Wall timeout returns only an explicitly historical earlier accepted sample; no late target is accepted. Never pauses.","inputSchema":{"type":"object","properties":{"timeout_seconds":{"type":"integer","minimum":1,"maximum":50},"until_date":{"type":"array","items":{"type":"integer"},"minItems":3,"maxItems":3},"until_assignments":{"type":"object","properties":{"focus_id":{"type":"string","minLength":1,"maxLength":128,"pattern":"^[A-Za-z0-9_]+$"},"research":{"type":"array","maxItems":32,"items":{"type":"object","properties":{"slot":{"type":"integer","minimum":0,"maximum":31},"technology_id":{"type":"string","minLength":1,"maxLength":256,"pattern":"^[A-Za-z0-9_]+$"}},"required":["slot","technology_id"],"additionalProperties":false}}},"anyOf":[{"required":["focus_id"]},{"required":["research"],"properties":{"research":{"minItems":1}}}],"additionalProperties":false},"until_research_ui":{"type":"object","properties":{"view":{"type":"string","enum":["panel","tree"]},"selected_slot":{"type":"integer","minimum":0,"maximum":31}},"required":["view"],"additionalProperties":false}},"additionalProperties":false}}
+        {"name":"hoi4_wait_for","description":"Bounded server wait for own focus/research change, game date, research UI, or all explicit until_assignments targets. Assignment targets check the first sample too and mean active focus/current slot assignment, not completion over game time or a durable plan receipt. Choose one target family. Date/assignment waits pin the current owned worker and wake on its terminal disposition or owner retirement; lifecycle evidence is historical and proves no completion. A wait begun without a worker does not attach to a later plan. UI/assignment matches do not authorize input. Wall timeout returns only an explicitly historical earlier accepted sample; no late target is accepted. Never pauses.","inputSchema":{"type":"object","properties":{"timeout_seconds":{"type":"integer","minimum":1,"maximum":50},"until_date":{"type":"array","items":{"type":"integer"},"minItems":3,"maxItems":3},"until_assignments":{"type":"object","properties":{"focus_id":{"type":"string","minLength":1,"maxLength":128,"pattern":"^[A-Za-z0-9_]+$"},"research":{"type":"array","maxItems":32,"items":{"type":"object","properties":{"slot":{"type":"integer","minimum":0,"maximum":31},"technology_id":{"type":"string","minLength":1,"maxLength":256,"pattern":"^[A-Za-z0-9_]+$"}},"required":["slot","technology_id"],"additionalProperties":false}}},"anyOf":[{"required":["focus_id"]},{"required":["research"],"properties":{"research":{"minItems":1}}}],"additionalProperties":false},"until_research_ui":{"type":"object","properties":{"view":{"type":"string","enum":["panel","tree"]},"selected_slot":{"type":"integer","minimum":0,"maximum":31}},"required":["view"],"additionalProperties":false}},"additionalProperties":false}}
     ]});
     value["tools"]
         .as_array_mut()
@@ -909,78 +916,13 @@ impl Server {
                 } else {
                     None
                 };
-                let start = Instant::now();
-                let timeout = Duration::from_secs(timeout);
-                let mut rejected = 0;
-                let (before, baseline) = fresh_wait_read(start, timeout, &mut rejected, || {
-                    game::wait_snapshot(self.process()?)
-                })?;
-                let mut current = before.clone();
-                let mut last_date = baseline.date_raw;
-                let mut current_received = Instant::now();
-                loop {
-                    if start.elapsed() >= timeout {
-                        return Ok(historical_wait_timeout(
-                            current,
-                            start,
-                            current_received,
-                            rejected,
-                            None,
-                        ));
-                    }
-                    let mut reasons = Vec::new();
-                    if let Some(assignments) = &assignments {
-                        // Includes the first accepted sample: completion before
-                        // this RPC is not a missed edge requiring another event.
-                        if assignments.reached(&current) {
-                            reasons.push("assignments_reached".into());
-                        }
-                    } else {
-                        for field in ["focus", "research"] {
-                            if current[field] != before[field] {
-                                reasons.push(format!("{field}_changed"));
-                            }
-                        }
-                    }
-                    if target.is_some_and(|v| {
-                        current["date"]["raw"]
-                            .as_i64()
-                            .is_some_and(|n| n >= i64::from(v))
-                    }) {
-                        reasons.push("date_reached".into());
-                    }
-                    if !reasons.is_empty() && start.elapsed() < timeout {
-                        return Ok(
-                            json!({"reasons":reasons,"state":current,"elapsed_seconds":start.elapsed().as_secs_f64(),"rejected_torn_reads":rejected,"state_age_ms":current_received.elapsed().as_millis()}),
-                        );
-                    }
-                    std::thread::sleep(
-                        Duration::from_millis(250).min(timeout.saturating_sub(start.elapsed())),
-                    );
-                    if start.elapsed() >= timeout {
-                        continue;
-                    }
-                    let outcome = bounded_wait_read(start, timeout, &mut rejected, || {
-                        let sample = game::wait_snapshot(self.process()?)?;
-                        same_wait_context(&baseline, &sample.1, last_date)?;
-                        Ok(sample)
-                    })?;
-                    let (observed, context) = match outcome {
-                        WaitRead::Fresh(sample) => sample,
-                        WaitRead::Deadline(refusal) => {
-                            return Ok(historical_wait_timeout(
-                                current,
-                                start,
-                                current_received,
-                                rejected,
-                                Some(refusal),
-                            ))
-                        }
-                    };
-                    last_date = context.date_raw;
-                    current = observed;
-                    current_received = Instant::now();
-                }
+                worker_wait::wait(
+                    commands,
+                    Duration::from_secs(timeout),
+                    target,
+                    assignments,
+                    || game::wait_snapshot(self.process()?),
+                )
             }
             "hoi4_plan" | "hoi4_plan_run" if commands.and_then(|c| c.plan_path()).is_some() => {
                 let commands = commands.unwrap();

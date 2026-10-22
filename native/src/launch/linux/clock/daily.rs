@@ -11,6 +11,7 @@ use std::sync::{
 };
 mod panel_plan;
 mod production_plan;
+use crate::protocol::worker_events::{Disposition as TerminalDisposition, Terminal};
 use panel_plan::PanelPlan;
 use production_plan::{ProductionAttempt, ProductionPlan};
 
@@ -68,6 +69,7 @@ pub(super) struct Controller {
     directory: PathBuf,
     active: Mutex<Option<Active>>,
     blocked: Arc<AtomicBool>,
+    events: Arc<crate::protocol::worker_events::Events>,
 }
 fn stopped_panel_read_history(report: &Value) -> Option<Value> {
     report
@@ -92,7 +94,11 @@ impl Controller {
             directory: directory.to_owned(),
             active: Mutex::new(None),
             blocked: Arc::new(AtomicBool::new(false)),
+            events: Arc::new(Default::default()),
         }
+    }
+    pub(super) fn wait_events(&self) -> Arc<crate::protocol::worker_events::Events> {
+        self.events.clone()
     }
     /// Load before any lease or manual input, regardless of worker permissions.
     pub(super) fn check_panel_journal(directory: &Path) -> Result<()> {
@@ -313,11 +319,81 @@ impl Controller {
                 let w = wake.clone();
                 let r = report.clone();
                 let g = governor.clone();
-                let handle=thread::Builder::new().name("owned-daily-governor".into()).spawn(move||{
- let outcome=std::panic::catch_unwind(std::panic::AssertUnwindSafe(||worker(&g,navigation,focus_navigation,production_plan,panel_plan,focus_permission,research_permission,&p,&control,&gate,&weak,&token,&s,&w,&r,&blocked)));
- if outcome.is_err(){blocked.store(true,Ordering::Release);if let Ok(mut report)=r.lock(){report["last_error"]=json!({"code":"daily_quarantined","reason":"Worker panic; durable intent requires review"});}}
- if crate::daily_worker::retained_quarantine(&g,|gov|gov.blocks_work()){blocked.store(true,Ordering::Release);}s.store(true,Ordering::Release);if let Ok(mut report)=r.lock(){report["running"]=json!(false);}
- })?;
+                let events = self.events.clone();
+                let revision = spec.revision;
+                let instance = events.start(revision)?;
+                let spawned = thread::Builder::new()
+                    .name("owned-daily-governor".into())
+                    .spawn(move || {
+                        let outcome =
+                            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                                worker(
+                                    &g,
+                                    navigation,
+                                    focus_navigation,
+                                    production_plan,
+                                    panel_plan,
+                                    focus_permission,
+                                    research_permission,
+                                    &p,
+                                    &control,
+                                    &gate,
+                                    &weak,
+                                    &token,
+                                    &s,
+                                    &w,
+                                    &r,
+                                    &blocked,
+                                )
+                            }));
+                        let publication =
+                            crate::daily_worker::publish_terminal(&events, instance, || {
+                                let mut terminal = outcome.unwrap_or_else(|_| {
+                                    blocked.store(true, Ordering::Release);
+                                    let terminal = Terminal::new(
+                                        TerminalDisposition::Quarantined,
+                                        "daily_quarantined",
+                                        "Worker panic; durable intent requires review",
+                                    );
+                                    if let Ok(mut report) = r.lock() {
+                                        report["last_error"] =
+                                            json!({"code":terminal.code,"reason":terminal.reason});
+                                    }
+                                    terminal
+                                });
+                                if crate::daily_worker::retained_quarantine(&g, |gov| {
+                                    gov.blocks_work()
+                                }) {
+                                    blocked.store(true, Ordering::Release);
+                                    terminal.disposition = TerminalDisposition::Quarantined;
+                                }
+                                s.store(true, Ordering::Release);
+                                if let Ok(mut report) = r.lock() {
+                                    report["running"] = json!(false);
+                                }
+                                let revision =
+                                    g.lock().map(|gov| gov.plan().revision).unwrap_or(revision);
+                                (revision, terminal)
+                            });
+                        if publication.is_err() {
+                            blocked.store(true, Ordering::Release);
+                        }
+                    });
+                let handle = match spawned {
+                    Ok(handle) => handle,
+                    Err(error) => {
+                        self.events.finish(
+                            instance,
+                            revision,
+                            Terminal::new(
+                                TerminalDisposition::Stopped,
+                                "daily_worker_start_failed",
+                                "Owned worker thread could not start",
+                            ),
+                        )?;
+                        return Err(error.into());
+                    }
+                };
                 *active = Some(Active {
                     life: crate::daily_worker::Lifecycle::new(stop, wake, handle),
                     producer,
@@ -616,7 +692,7 @@ fn worker(
     wake: &core::Wakeup,
     report: &Mutex<Value>,
     blocked: &AtomicBool,
-) {
+) -> Terminal {
     // Every new journal error publishes quarantine before dropping the shared
     // controller lock, including storage failures after adapter success.
     macro_rules! panel_call {
@@ -631,12 +707,28 @@ fn worker(
     let mut panel_day = None;
     let mut generation = 0;
     let mut clock_probe = crate::daily_worker::ClockProbeHistory::default();
+    let mut terminal = Terminal::new(
+        TerminalDisposition::RequestedStop,
+        "daily_worker_requested_stop",
+        "Worker stop requested; no completion proved",
+    );
     while !stop.load(Ordering::Acquire) {
-        let Some(shared) = owner.upgrade() else { break };
+        let Some(shared) = owner.upgrade() else {
+            return Terminal::new(
+                TerminalDisposition::Stopped,
+                "session_closed",
+                "Owned worker owner retired",
+            );
+        };
         if !shared.alive.load(Ordering::Acquire)
             || !shared.accepting_reads.load(Ordering::Acquire)
             || gate.try_read().map_or(true, |g| !*g)
         {
+            terminal = Terminal::new(
+                TerminalDisposition::Stopped,
+                "session_closed",
+                "Owned worker read/input gate retired",
+            );
             break;
         }
         let mut refusal_entry = None;
@@ -1207,6 +1299,17 @@ fn worker(
         {
             disposition = crate::daily_worker::Disposition::Stop;
         }
+        if let Some(event) = crate::daily_worker::terminal_event(disposition, run.as_ref().err()) {
+            terminal = event;
+            terminal.entry_id = refusal_entry
+                .as_ref()
+                .map(|id: &String| id.chars().take(128).collect());
+            terminal.phase = Some(if at_clock_probe {
+                "clock_probe"
+            } else {
+                "worker_batch"
+            });
+        }
         if let Ok(mut report) = report.lock() {
             if disposition != crate::daily_worker::Disposition::Continue {
                 report["stop_reason"] = json!(run
@@ -1242,12 +1345,13 @@ fn worker(
         drop(shared);
         match wake.wait_after(generation, Duration::from_millis(250)) {
             Ok(n) => generation = n.generation,
-            Err(_) => {
-                blocked.store(true, Ordering::Release);
+            Err(error) => {
+                terminal = crate::daily_worker::scheduling_failure(&error, blocked, report);
                 break;
             }
         }
     }
+    terminal
 }
 struct DailyBackend<'a> {
     process: &'a dyn Process,

@@ -344,6 +344,9 @@ fn allowed(args: &serde_json::Map<String, Value>, keys: &[&str]) -> Result<()> {
     Ok(())
 }
 impl Commands for ClockService {
+    fn wait_events(&self) -> Option<Arc<crate::protocol::worker_events::Events>> {
+        Some(self.daily.wait_events())
+    }
     fn tools(&self) -> Vec<Value> {
         let mut tools = vec![
             json!({

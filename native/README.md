@@ -316,6 +316,16 @@ Timeouts return only the last timely accepted sample, marked
 discarded; ownership/scope errors propagate. A wait with no timely stable sample
 refuses. Reads and waits never pause or confer input authority.
 
+Date, assignment and general-change waits also subscribe to the currently owned
+background worker. A stop or quarantine wakes the wait promptly with its original
+bounded cause; an already terminal worker requires no game read. Any retained
+snapshot is explicitly historical and does not prove completion. Explicit STOP
+has its own non-error reason. The wait pins one worker instance, never follows a
+replacement or starts work, and keeps its original deadline. Owner retirement
+wakes it before read-gate drainage. Research UI-only waits keep their separate
+predicate path. This notification path has offline fixture coverage; recorded
+mixed-plan acceptance remains pending.
+
 The independent `graph_kernel` library provides bounded components and
 multi-source breadth-first search over public/generated topology. It has no
 live army integration and supplies no movement or supply authority.

@@ -5415,3 +5415,112 @@ emulated environment remains unresolved. The earlier slow full-HD calibration
 already used GPU offloading; no improvement from merely enabling offload is
 claimed. The mixed-plan gate, two-year Luna acceptance, filmable recordings and
 full campaigns remain pending; the 1080p requirement is unchanged.
+
+
+## Full-HD graphics transport diagnostics — 22 October 2026
+
+No HOI4 process ran during these private diagnostics. Two 12-second generated
+GL windows used the existing virpipe renderer and SSH transport: the 512×288
+fixture measured 43.2–45.1 FPS, while native 1920×1080 measured 2.9–3.2 FPS.
+The small window was solely a synthetic comparison, not a campaign or recording.
+Both exact owned clients received intentional SIGTERM after measurement.
+
+A separate checksum-verified transport probe transferred one 8,294,400-byte
+RGBA frame per sample. Its payload came from FullHD001's loading-screen diagnostic,
+not gameplay. Two samples each used receive chunks of 7,680, 65,536 and 1,048,576
+bytes. All 18 samples matched the original payload hash.
+
+| Transport | Per-frame receive time across six samples |
+| --- | --- |
+| Separate SSH forwarding connection, compression disabled | 258–305 ms |
+| Separate SSH forwarding connection, compression enabled | 634–921 ms |
+| Direct TCP through the local QEMU network, host bound to loopback | 67–101 ms |
+
+Increasing receive chunks reduced read calls but did not materially improve SSH
+wall time. Compression was slower on this environment and payload. These short
+sequential samples do not establish general network throughput or game performance.
+
+A temporary direct TCP bridge then connected one generated native 1080p GL client
+to the existing renderer, without changing the original GPU tunnel. It measured
+5.0–5.1 FPS over two five-second reporting intervals. Intentional client SIGTERM
+ended it with return code -15; the guest bridge recorded a broken pipe and the
+host bridge a connection reset. Both relay threads finished, but their strict
+no-error assertions failed. Preserve those failures rather than calling this
+a clean transport acceptance. A fresh check found no game, recorder or generated
+GL process and confirmed the temporary guest socket absent. An earlier host helper
+failed before launching its guest because a function shadowed a source-string
+variable; its error is retained separately.
+
+The direct route is a promising performance experiment, not a production change.
+The remaining graphics readback/emulation cost is unresolved; approximately 5 FPS
+is still insufficient for filmable gameplay. No native MCP source, installed game
+file, gameplay state or original graphics connection changed. Campaigns remain
+at a native 1080p minimum, and the mixed-plan/Luna/campaign gates remain pending.
+
+### Presentation timing and native relay follow-up
+
+Generated-client-only GLX/syscall instrumentation measured 55 completed swaps
+through the temporary direct bridge: mean presentation time was 207 ms, including
+138 ms in intercepted reads and exactly 8,294,424 received bytes per swap.
+These counters include frame data and protocol replies; they do not independently
+measure GPU execution. Disabling TCP packet buffering produced approximately the
+same result (210 ms presentation, 142 ms reads, 4.7–4.9 FPS). Instrumentation and
+short sequential samples can affect timing; no campaign preload was introduced.
+
+Replacing the guest Python relay with a private native C relay reduced measured
+presentation time to 176 ms, including 94 ms in reads, with 5.4–6.5 FPS reports.
+Using Linux `splice` through a pipe in that relay reduced it further to 127 ms,
+including 56 ms in reads; both five-second reports measured 7.9 FPS. The latter
+probe recorded 92 completed swaps. These experiments changed no installed Mesa
+library or original graphics connection and establish neither HOI4 startup nor
+filmable gameplay. A substantial presentation cost remains outside intercepted
+reads; its cause is not yet isolated.
+
+The original instrumented direct probe retained reset/broken-pipe shutdown
+failures. The TCP-buffering variant exited its relay checks cleanly. Both native
+relay variants retained a relay write failure (exit 10) and host broken pipe after
+intentional generated-client SIGTERM; the outer no-host-error assertion failed.
+Do not treat their performance measurements as clean transport acceptance.
+All relay threads finished, and a subsequent guest process inspection found no
+game, recorder, generated GL client or native test relay remaining. Full-HD
+startup and campaign acceptance remain unfinished.
+
+
+## Owned worker terminal-event waits — 22 October 2026
+
+Date, assignment and general-change waits now subscribe to an owner-scoped
+worker lifecycle cell. They pin the initial worker instance before the first
+game read. An already terminal worker returns without a game read; a terminal
+notification wakes a pending wait instead of consuming its remaining 50-second
+allowance. Explicit STOP has a separate non-error disposition. A replacement
+cannot silently become the waited worker, and a wait started without a worker
+never attaches to one later.
+
+Worker completion publishes only after the worker body returns and quarantine
+and report flags are retained. Actual stop/quarantine causes remain bounded and
+explicit, including scheduling-lock failures. Review found and corrected a path
+that discarded that scheduling cause and left the report stale. Owner retirement
+notifies waiters before read-gate drainage; an in-flight bounded read can finish,
+but the wait does not begin another. Counter exhaustion and poisoned event state
+refuse explicitly. UI-only waits retain their separate predicate path.
+
+Interrupted waits return null state or an explicitly historical prior snapshot,
+never fresh assignment success or input authority. The original deadline remains
+absolute. Late notifications may accompany a historical timeout only as late
+diagnostics. Actual identity/context failures remain strict. No worker, plan,
+lease or game input starts as a side effect of waiting.
+
+Validation passed 1,192 host Rust tests, 228 targeted Linux executions, 953 Python
+tests (37 skips), formatting, host/Linux Clippy and Windows all-target checks.
+The Linux executions include two real `service_client`/MCP tests with synthetic
+owned readers, terminal-before-first-read and retirement-before-read-drain,
+plus five isolated X11 transport fixtures at native 1920×1080. No Linux fixtures
+reported skips. Tests also exercise a 50-second wait interrupted promptly after
+one accepted sample, original failure retention, deadline races and no lost wakeup.
+No game was used for these tests.
+
+The final full host suite passed before a test-only Clippy cleanup removed an
+unnecessary literal unwrap; all seven affected lifecycle tests passed again
+after that cleanup, followed by final lint, target checks and Linux executions.
+All 205 native input files matched their frozen hashes after validation. Recorded
+mixed-plan, two-year Luna and full campaign acceptance remain pending.
