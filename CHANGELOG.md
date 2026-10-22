@@ -2,6 +2,15 @@
 
 ## Unreleased native preview
 
+- Add an explicit ARM64 Linux/FEX startup and reader preview. Pin the translator
+  separately from the exact x86 game, retain original kernel ownership/witness
+  checks, and validate complete guest load mappings at observation boundaries.
+  Missing initial load coverage may wait within one deadline; conflicting or
+  changed mappings refuse. Preserve fast scalar reads and unchanged native mode.
+  Generated-child exec/restart and duplicate checks passed; translated gameplay
+  input remains blocked pending actual HOI4 and native 1080p qualification.
+  Retain the observed FEX FD-exec argument limitation and original test failures.
+
 - Require the owned Research root to settle before Linux OpenPanel verification.
   Known post-input opening animations wait inside the original deadline and
   lease; changed identity, unknown states and pre-input errors stay strict.

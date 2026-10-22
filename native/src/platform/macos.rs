@@ -152,6 +152,12 @@ impl MacProcess {
         Self::attach(super::load_session(path)?)
     }
     pub fn attach(session: Session) -> Result<Self> {
+        if session.translated.is_some() {
+            return Err(Error::new(
+                "platform_unavailable",
+                "Linux FEX sessions cannot use the macOS adapter",
+            ));
+        }
         if session.build_id != BUILD_UUID || session.sha256 != SHA256 {
             return Err(Error::new(
                 "unsupported_build",

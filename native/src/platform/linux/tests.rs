@@ -300,6 +300,7 @@ mod generated {
                 supervisor: capture_identity(std::process::id() as i32).unwrap(),
                 build_id,
                 sha256,
+                translated: None,
             }
         }
 
@@ -485,7 +486,8 @@ mod generated {
                     );
                 }
                 "change-random" => {
-                    let address = random_address(std::process::id() as i32).unwrap();
+                    let address =
+                        random_address(std::process::id() as i32, KernelArch::X86_64).unwrap();
                     // SAFETY: the exact kernel-provided AT_RANDOM pointer lies
                     // in this generated child's own live, writable initial
                     // stack. TLS guards have already been initialized. This

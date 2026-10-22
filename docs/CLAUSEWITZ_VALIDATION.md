@@ -5574,3 +5574,56 @@ distro selection succeeded.
 
 The forwarding approach follows the [FEX project's documentation](https://github.com/FEX-Emu/FEX)
 and [library-forwarding guide](https://wiki.fex-emu.com/index.php/Development:Setting_up_Thunks).
+
+## Rust FEX reader and launch qualification — 22 October 2026
+
+The native Rust reader now distinguishes its exact owned kernel FEX process from
+the separate mapped x86 guest ELF. The reviewed translator hash and existing game
+hash/build are both required. Guest file identity, load coverage, offsets, mapped
+headers and original permission ceiling remain bound across observations. Normal
+loader splitting and permission tightening preserve that binding. Only missing
+initial load coverage can wait within the original launch deadline; conflicts,
+wrong hashes, identity changes and later lost coverage refuse without rebinding.
+Scalar reads keep the native cached-bound fast path; complete observations and
+vector reads retain their ownership/witness brackets.
+
+Actual generated-child tests ran with a native ARM parent, the installed pinned
+FEX binary, an x86 fixture and unchanged Yama scope 1. Scalar/vector nonce reads
+passed. Both guest `execve` and FD-based `execveat` preserved PID creation and
+kernel executable identity while the old reader rejected its stale observation.
+Explicit new fixture binding read the new nonce. Owned launcher readiness,
+duplicate detection and coexistence with a different unmapped file also passed.
+The generated children exited normally. No game, graphics or gameplay input was
+used for these tests.
+
+The first restart test failed because FD-based `execveat` restarted the fixture
+with `argc=0`, contrary to its original strict `argc=1` assertion. Bounded stderr
+confirmed valid random bytes and the missing argument vector. The original
+failure is retained. A revised generated fixture marks its own FD-exec generation,
+reports `argc=0` explicitly and permits that generation only to report a nonce and
+quit. This verifies stale-reader rejection, not correct FEX guest argument
+semantics. Ordinary `execve` retained `argc=1`. No game workaround was applied.
+
+Validation passed 1,193 host Rust tests, 774 ARM Linux library tests after the
+missing-CLI harness correction, two explicitly selected real FEX fixtures,
+35 x86 Linux reader checks and 953 Python tests with 37 skips. The six default
+ARM ignored entries include the two separately executed FEX fixtures; the four
+X11 close fixtures were not rerun in this scope. Final missing-gap conflict
+correction was followed by the eight translated reader cases on both Linux
+architectures and both real FEX fixtures again. Formatting, host/ARM/x86 Linux
+Clippy and Windows all-target checks passed. ARM compilation is now checked in CI;
+CI alone does not execute the installed FEX qualification fixtures.
+
+The initial ARM library batch passed 773 tests and failed one reconnect test
+because the private harness had not installed its required CLI. Installing the
+built ARM CLI and rerunning that test passed; the final rebuilt CLI passed again.
+An initial x86 regression batch exceeded its 180-second SSH observation allowance.
+The original process was confirmed absent before a new run. Removing debug
+sections from the generated test copy, retaining its GNU build ID, and granting
+a sufficient observation allowance completed all 19 selected parent-reader
+checks. Original timeout and harness failures remain preserved.
+
+Translated gameplay input binding is explicitly unavailable. Actual licensed
+HOI4 startup, own-state snapshots, ordinary UI actions and native 1080p recording
+on this environment are the next gates. Mixed plans, the two-year Luna run and
+full campaigns remain incomplete. No release or downstream pin changed.

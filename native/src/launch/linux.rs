@@ -34,6 +34,7 @@ use std::{
     time::{Duration, Instant},
 };
 mod clock;
+mod translated;
 
 #[derive(Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -60,6 +61,8 @@ struct Config {
     #[serde(default)]
     renderer: Renderer,
     gpu_transport: Option<PathBuf>,
+    #[serde(default)]
+    fex: Option<translated::FexLaunch>,
 }
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -320,6 +323,7 @@ pub fn close_window(directory: &Path, config: &Path) -> Result<()> {
 }
 fn duplicate_game(executable: &Path) -> Result<()> {
     let expected = fs::metadata(executable)?;
+    let mut translators = std::collections::HashMap::new();
     for entry in fs::read_dir("/proc")? {
         let entry = entry?;
         if entry.file_name().to_string_lossy().parse::<i32>().is_err() {
@@ -331,6 +335,37 @@ fn duplicate_game(executable: &Path) -> Result<()> {
                     "game_already_running",
                     "An installed game instance already exists; never take it over",
                 ));
+            }
+            // Inspect maps only for a verified FEX executable. Unrelated
+            // non-dumpable processes must not block ordinary native launches.
+            let key = (meta.dev(), meta.ino());
+            let recognized = if let Some(known) = translators.get(&key) {
+                *known
+            } else {
+                let exe = entry.path().join("exe");
+                let Ok(known) = platform::is_reviewed_translator(&exe) else {
+                    // Never cache an inaccessible PID as a negative result for
+                    // every other process using the same executable image.
+                    continue;
+                };
+                if !fs::metadata(&exe).is_ok_and(|after| (after.dev(), after.ino()) == key) {
+                    continue;
+                }
+                translators.insert(key, known);
+                known
+            };
+            if recognized && fs::metadata(entry.path()).is_ok_and(|m| m.uid() == uid()) {
+                let pid = entry.file_name().to_string_lossy().parse::<i32>().unwrap();
+                match platform::guest_mapping_present(pid, executable) {
+                    Ok(true) => {
+                        return Err(Error::new(
+                            "game_already_running",
+                            "An installed game is already mapped; never take it over",
+                        ))
+                    }
+                    Ok(false) => {}
+                    Err(error) => return Err(error),
+                }
             }
         }
     }
@@ -895,6 +930,7 @@ fn service_client(stream: UnixStream, shared: Arc<Shared>) {
                 )
             }
             Some("bind_input") => {
+                translated::require_input_qualification(&shared.endpoint.session)?;
                 let _read = shared
                     .reads
                     .read()
@@ -1242,8 +1278,9 @@ pub fn serve(path: &Path) -> Result<()> {
     let socket = config.run_directory.join("control.sock");
     platform::validate_socket_path(&socket)?;
     let executable = config.executable.canonicalize()?;
-    let executable_meta = fs::metadata(&executable)?;
     platform::verify_executable(&executable)?;
+    let launch_image = translated::launch_image(&executable, config.fex.as_ref())?;
+    let executable_meta = fs::metadata(&launch_image)?;
     let _launch_lock = launch_lock()?;
     duplicate_game(&executable)?;
     verify_identity(&config.display.server)?;
@@ -1332,7 +1369,10 @@ pub fn serve(path: &Path) -> Result<()> {
         .mode(0o600)
         .open(directory.join("game.log"))?;
     let game_dir = executable.parent().unwrap();
-    let mut command = Command::new(&executable);
+    let mut command = Command::new(&launch_image);
+    if config.fex.is_some() {
+        command.arg(&executable);
+    }
     command
         .arg(format!("-userdir={}", userdata.display()))
         .current_dir(game_dir)
@@ -1389,7 +1429,7 @@ pub fn serve(path: &Path) -> Result<()> {
     let (_, actual_parent, _) =
         platform::parse_stat(&fs::read_to_string(format!("/proc/{}/stat", game.pid))?)?;
     let actual_exe = fs::metadata(format!("/proc/{}/exe", game.pid))?;
-    if game.exe != executable.to_string_lossy()
+    if game.exe != launch_image.to_string_lossy()
         || game.uid != uid()
         || actual_parent != std::process::id() as i32
         || actual_exe.dev() != executable_meta.dev()
@@ -1401,14 +1441,29 @@ pub fn serve(path: &Path) -> Result<()> {
         ));
     }
     let supervisor = capture_identity(std::process::id() as i32)?;
+    let reader_deadline = if config.fex.is_some() {
+        Some(translated::await_guest(&mut child, &executable)?)
+    } else {
+        None
+    };
     let session = Session {
         game,
         supervisor: supervisor.clone(),
         build_id: BUILD_ID.into(),
         sha256: SHA256.into(),
+        translated: config.fex.map(|fex| platform::TranslatedImage {
+            executable: executable.to_string_lossy().into_owned(),
+            translator_sha256: fex.sha256,
+        }),
     };
     json_new(&directory.join("session.json"), &session)?;
-    let (process, unavailable) = match platform::open(&directory.join("session.json")) {
+    let opened = match reader_deadline {
+        Some(deadline) => {
+            translated::open_reader(&mut child, &directory.join("session.json"), deadline)
+        }
+        None => platform::open(&directory.join("session.json")),
+    };
+    let (process, unavailable) = match opened {
         Ok(process) => (Some(process), None),
         Err(error) => (None, Some(error)),
     };

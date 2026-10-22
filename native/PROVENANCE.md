@@ -1,5 +1,20 @@
 # Rust foundation provenance
 
+## Explicit FEX translated process identity
+
+`platform/linux/translated.rs` and `launch/linux/translated.rs` are independent
+project code. The [FEX-2610 exec handler](https://github.com/FEX-Emu/FEX/blob/FEX-2610/Source/Tools/LinuxEmulation/LinuxSyscalls/Syscalls.cpp)
+and [x64 syscall registrations](https://github.com/FEX-Emu/FEX/blob/FEX-2610/Source/Tools/LinuxEmulation/LinuxSyscalls/x64/Thread.cpp)
+were consulted to establish that successful guest exec paths use host `execveat`.
+[ELFCodeLoader](https://github.com/FEX-Emu/FEX/blob/FEX-2610/Source/Tools/FEXInterpreter/ELFCodeLoader.h)
+was consulted for auxiliary-vector and FD-exec argument handling. No FEX source
+was copied. Generated owned-child tests check the deployed binary's execution
+witness; they explicitly retain its FD-exec `argc=0` limitation.
+
+The game hash and x86 layout remain the existing pinned Linux ELF. This is not
+an ARM game-layout recovery or proof of actual HOI4 compatibility. Kernel ARM64
+address bounds apply only to the independently verified translator's witness.
+
 ## Linux production opening and common engine blockers
 
 `production_panel.rs` is an independent, bounded Linux observer for the pinned

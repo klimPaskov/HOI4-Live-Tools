@@ -23,7 +23,15 @@ impl Fixture {
     fn with_server(child: OwnedChild, server: Server) -> Self {
         Self::with_display(child, server, None)
     }
-    fn with_display(mut child: OwnedChild, server: Server, display: Option<Display>) -> Self {
+    fn with_display(child: OwnedChild, server: Server, display: Option<Display>) -> Self {
+        Self::with_session(child, server, display, None)
+    }
+    fn with_session(
+        mut child: OwnedChild,
+        server: Server,
+        display: Option<Display>,
+        translated: Option<platform::TranslatedImage>,
+    ) -> Self {
         assert_ne!(uid(), 0, "Launcher fixtures require an ordinary user");
         child.identity = Some(capture_identity(child.child.id() as i32).unwrap());
         let directory =
@@ -50,6 +58,7 @@ impl Fixture {
                 supervisor: server_identity,
                 build_id: "generated-fixture".into(),
                 sha256: "generated-fixture".into(),
+                translated,
             },
         };
         json_new(&directory.join("endpoint.json"), &endpoint).unwrap();
@@ -109,6 +118,39 @@ impl Fixture {
 }
 
 mod window_close;
+
+#[test]
+fn translated_session_refuses_input_binding_before_reading_binding_or_game() {
+    if !ordinary() {
+        return;
+    }
+    let mut command = Command::new("/bin/sleep");
+    command
+        .arg("30")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    let fixture = Fixture::with_session(
+        OwnedChild::spawn(&mut command).unwrap(),
+        Server {
+            process: None,
+            unavailable: None,
+        },
+        None,
+        Some(platform::TranslatedImage {
+            executable: "/generated/guest".into(),
+            translator_sha256: "fixture".into(),
+        }),
+    );
+    let reply = request(
+        &fixture.directory,
+        json!({"op":"bind_input", "binding":null}),
+    )
+    .unwrap();
+    assert_eq!(reply["error"]["code"], "input_unavailable");
+    assert!(fixture.shared.commands.read().unwrap().is_none());
+    assert_eq!(fixture.ping()["reply"]["result"], json!({}));
+}
 
 struct LaunchPathFixture {
     directory: PathBuf,

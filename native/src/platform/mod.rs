@@ -12,11 +12,19 @@ pub struct Identity {
     pub uid: u32,
 }
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct TranslatedImage {
+    pub executable: String,
+    pub translator_sha256: String,
+}
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Session {
     pub game: Identity,
     pub supervisor: Identity,
     pub build_id: String,
     pub sha256: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub translated: Option<TranslatedImage>,
 }
 pub trait Process: ReadMemory {
     fn check(&self) -> Result<()>;
@@ -67,7 +75,9 @@ pub fn open(path: &Path) -> Result<Box<dyn Process + Send + Sync>> {
     }
 }
 #[cfg(target_os = "linux")]
-pub use linux::{capture_identity, elf_build_id, parse_stat, verify_executable};
+pub use linux::{capture_identity, elf_build_id, parse_stat, verify_executable, verify_translator};
+#[cfg(target_os = "linux")]
+pub(crate) use linux::{guest_mapping_present, is_reviewed_translator};
 pub fn load_session(path: &Path) -> Result<Session> {
     let bytes = std::fs::read(path)?;
     if bytes.len() > 65536 {
@@ -77,4 +87,28 @@ pub fn load_session(path: &Path) -> Result<Session> {
         ));
     }
     serde_json::from_slice(&bytes).map_err(|e| Error::new("invalid_session", e.to_string()))
+}
+
+#[cfg(test)]
+mod session_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn native_session_json_remains_unchanged_and_translation_is_explicit() {
+        let native = json!({
+            "game":{"pid":2,"start_ticks":"20","exe":"/game","uid":1000},
+            "supervisor":{"pid":1,"start_ticks":"10","exe":"/owner","uid":1000},
+            "build_id":"known", "sha256":"known"
+        });
+        let session: Session = serde_json::from_value(native.clone()).unwrap();
+        assert!(session.translated.is_none());
+        assert_eq!(serde_json::to_value(session).unwrap(), native);
+        let mut translated = native;
+        translated["translated"] = json!({"executable":"/game", "translator_sha256":"pinned"});
+        let session: Session = serde_json::from_value(translated.clone()).unwrap();
+        assert_eq!(session.translated.unwrap().executable, "/game");
+        translated["translated"]["build_override"] = json!("unreviewed");
+        assert!(serde_json::from_value::<Session>(translated).is_err());
+    }
 }

@@ -19,6 +19,11 @@ jobs:
           components: rustfmt, clippy
       - run: cargo fmt --manifest-path native/Cargo.toml --check
       - run: cargo clippy --manifest-path native/Cargo.toml --all-targets --locked -- -D warnings
+      - if: runner.os == 'Linux'
+        name: Check ARM64 Linux compilation
+        run: |
+          rustup target add aarch64-unknown-linux-musl
+          cargo clippy --manifest-path native/Cargo.toml --target aarch64-unknown-linux-musl --all-targets --locked -- -D warnings
       - run: cargo test --manifest-path native/Cargo.toml --locked
       - if: runner.os == 'Linux'
         run: |

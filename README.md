@@ -124,6 +124,9 @@ benchmark; [that environment limitation remains open](docs/CLAUSEWITZ_VALIDATION
 A separate hardware-accelerated ARM Linux/FEX experiment reached about 36 FPS
 in a verified 1080p x86 graphics fixture. This is a promising test environment;
 [HOI4 compatibility and campaign acceptance remain unverified](docs/CLAUSEWITZ_VALIDATION.md#arm-linux-and-fex-feasibility--22-october-2026).
+An explicit Rust FEX reader now checks the translator and mapped game separately.
+Generated-child read and restart checks passed; translated gameplay input remains
+blocked until [game-level qualification](docs/OWNED_LINUX_LAUNCHER.md#arm64-linux-with-fex).
 
 ### macOS preview (live-tested on one build)
 

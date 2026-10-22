@@ -9,10 +9,15 @@ use std::{
     os::unix::fs::MetadataExt,
     sync::RwLock,
 };
+mod translated;
+pub use translated::verify_translator;
+pub(crate) use translated::{guest_mapping_present, is_reviewed_translator};
+#[derive(Clone, Debug, PartialEq, Eq)]
 struct Region {
     start: u64,
     end: u64,
     readable: bool,
+    permissions: [u8; 4],
     offset: u64,
     device: (u64, u64),
     inode: u64,
@@ -31,6 +36,35 @@ enum ExpectedBuild {
 const BOOT_ID_BOUND: usize = 64;
 const AUXV_BOUND: usize = 4096;
 const RANDOM_BYTES: usize = 16;
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum KernelArch {
+    X86_64,
+    Aarch64,
+}
+impl KernelArch {
+    fn from_elf(bytes: &[u8]) -> Result<Self> {
+        if bytes.get(..7) != Some(&[0x7f, b'E', b'L', b'F', 2, 1, 1]) {
+            return Err(Error::new(
+                "unsupported_build",
+                "Expected little-endian ELF64 kernel executable",
+            ));
+        }
+        match u16::from_le_bytes(field(bytes, 18)?) {
+            62 => Ok(Self::X86_64),
+            183 => Ok(Self::Aarch64),
+            _ => Err(Error::new(
+                "unsupported_build",
+                "Unreviewed kernel executable architecture",
+            )),
+        }
+    }
+    fn user_end(self) -> u64 {
+        match self {
+            Self::X86_64 => 1u64 << 47,
+            Self::Aarch64 => 1u64 << 52,
+        }
+    }
+}
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct ExecWitness {
     boot: [u8; 16],
@@ -61,6 +95,8 @@ pub struct LinuxProcess {
     inode: u64,
     // Captured from the owned process, never supplied by a session manifest.
     witness: ExecWitness,
+    kernel_arch: KernelArch,
+    translated: Option<translated::GuestImage>,
 }
 pub fn parse_stat(text: &str) -> Result<(char, i32, String)> {
     let close = text
@@ -169,9 +205,13 @@ fn boot_id() -> Result<[u8; 16]> {
         BOOT_ID_BOUND,
     )?)
 }
+#[cfg(test)]
 fn parse_random_address(bytes: &[u8]) -> Result<u64> {
-    // The production executable is independently verified ELF64 x86_64. Its
-    // procfs auxiliary vector uses pairs of little-endian 64-bit words.
+    parse_random_address_arch(bytes, KernelArch::X86_64)
+}
+fn parse_random_address_arch(bytes: &[u8], arch: KernelArch) -> Result<u64> {
+    // Both reviewed kernel architectures use little-endian 64-bit auxv words.
+    // Only the independently verified AArch64 translator gets its wider bound.
     if bytes.is_empty() || bytes.len() > AUXV_BOUND || bytes.len() % 16 != 0 {
         return Err(Error::new(
             "invalid_exec_witness",
@@ -202,7 +242,7 @@ fn parse_random_address(bytes: &[u8]) -> Result<u64> {
     }
     let address = address.ok_or_else(|| Error::new("invalid_exec_witness", "AT_RANDOM absent"))?;
     let end = address.checked_add(RANDOM_BYTES as u64);
-    if !terminated || address < 0x10000 || !matches!(end, Some(end) if end <= 1u64 << 47) {
+    if !terminated || address < 0x10000 || !matches!(end, Some(end) if end <= arch.user_end()) {
         return Err(Error::new(
             "invalid_exec_witness",
             "AT_RANDOM outside bounded user address space",
@@ -210,11 +250,11 @@ fn parse_random_address(bytes: &[u8]) -> Result<u64> {
     }
     Ok(address)
 }
-fn random_address(pid: i32) -> Result<u64> {
-    parse_random_address(&bounded_proc_bytes(
-        Path::new(&format!("/proc/{pid}/auxv")),
-        AUXV_BOUND,
-    )?)
+fn random_address(pid: i32, arch: KernelArch) -> Result<u64> {
+    parse_random_address_arch(
+        &bounded_proc_bytes(Path::new(&format!("/proc/{pid}/auxv")), AUXV_BOUND)?,
+        arch,
+    )
 }
 fn read_exact_remote(pid: i32, address: u64, data: &mut [u8]) -> Result<()> {
     if pid <= 0 || data.len() > 1 << 20 || address.checked_add(data.len() as u64).is_none() {
@@ -301,14 +341,18 @@ fn read_many_remote(pid: i32, requests: &[(u64, usize)]) -> Result<Vec<Vec<u8>>>
     }
     Ok(output)
 }
+#[cfg(all(test, target_arch = "x86_64"))]
 fn exec_witness(pid: i32) -> Result<ExecWitness> {
+    exec_witness_arch(pid, KernelArch::X86_64)
+}
+fn exec_witness_arch(pid: i32, arch: KernelArch) -> Result<ExecWitness> {
     let boot = boot_id()?;
-    let address = random_address(pid)?;
+    let address = random_address(pid, arch)?;
     let mut random = [0u8; RANDOM_BYTES];
     // Exactly 16 bytes at the kernel-provided, bounded AT_RANDOM pointer. This
     // independent primitive must not call ReadMemory::read or Process::check.
     read_exact_remote(pid, address, &mut random)?;
-    if random_address(pid)? != address || boot_id()? != boot {
+    if random_address(pid, arch)? != address || boot_id()? != boot {
         return Err(Error::new(
             "ownership_changed",
             "Exec or boot changed while sampling witness",
@@ -394,6 +438,7 @@ fn parse_mappings(text: &str) -> Result<Vec<Region>> {
             start,
             end,
             readable: permissions[0] == b'r',
+            permissions: permissions.try_into().unwrap(),
             offset: parse(f[2])?,
             device: (parse(major)?, parse(minor)?),
             inode,
@@ -483,9 +528,24 @@ impl LinuxProcess {
         let meta = fs::metadata(format!("/proc/{}/exe", session.game.pid))?;
         check_ownership(&session, meta.dev(), meta.ino())?;
         let exe_path = format!("/proc/{}/exe", session.game.pid);
-        let bytes = executable_bytes(Path::new(&exe_path), &expected)?;
+        let (bytes, kernel_arch) = match &session.translated {
+            Some(image) => (
+                translated::translator_bytes(Path::new(&exe_path), &image.translator_sha256)?,
+                KernelArch::Aarch64,
+            ),
+            None => (
+                executable_bytes(Path::new(&exe_path), &expected)?,
+                KernelArch::X86_64,
+            ),
+        };
+        if KernelArch::from_elf(&bytes)? != kernel_arch {
+            return Err(Error::new(
+                "unsupported_build",
+                "Kernel executable architecture differs from explicit session mode",
+            ));
+        }
         check_ownership(&session, meta.dev(), meta.ino())?;
-        let witness = exec_witness(session.game.pid)?;
+        let witness = exec_witness_arch(session.game.pid, kernel_arch)?;
         check_ownership(&session, meta.dev(), meta.ino())?;
         let mut process = Self {
             session,
@@ -494,9 +554,27 @@ impl LinuxProcess {
             device: meta.dev(),
             inode: meta.ino(),
             witness,
+            kernel_arch,
+            translated: None,
         };
         process.check()?;
         let regions = mappings(process.session.game.pid)?;
+        if let Some(image) = &process.session.translated {
+            let guest = translated::GuestImage::capture(
+                process.session.game.pid,
+                image,
+                &expected,
+                &regions,
+            )?;
+            process.base = guest.base();
+            process.translated = Some(guest);
+            *process
+                .regions
+                .get_mut()
+                .map_err(|_| Error::new("invalid_maps", "Mapping cache poisoned"))? = regions;
+            process.check()?;
+            return Ok(process);
+        }
         let expected_device = (
             u64::from(libc::major(process.device)),
             u64::from(libc::minor(process.device)),
@@ -575,11 +653,14 @@ impl Process for LinuxProcess {
     }
     fn check(&self) -> Result<()> {
         check_ownership(&self.session, self.device, self.inode)?;
-        if exec_witness(self.session.game.pid)? != self.witness {
+        if exec_witness_arch(self.session.game.pid, self.kernel_arch)? != self.witness {
             return Err(Error::new(
                 "ownership_changed",
                 "Boot or owned executable address-space witness changed",
             ));
+        }
+        if let Some(guest) = &self.translated {
+            guest.check(self.session.game.pid, &mappings(self.session.game.pid)?)?;
         }
         // A successful witness read alone does not validate PID ownership.
         check_ownership(&self.session, self.device, self.inode)
@@ -658,6 +739,10 @@ impl ReadMemory for LinuxProcess {
                 .write()
                 .map_err(|_| Error::new("invalid_maps", "Mapping cache poisoned"))? = regions;
         }
+        // Scalar fields use cached bounds in both modes. The caller must bracket
+        // the complete observation with begin_snapshot/check and discard every
+        // field if the final identity/guest witness fails. Only read_many owns
+        // an independent final bracket; scalar reads are not freshness proofs.
         let mut data = vec![0; size];
         read_exact_remote(self.session.game.pid, address, &mut data)?;
         Ok(data)

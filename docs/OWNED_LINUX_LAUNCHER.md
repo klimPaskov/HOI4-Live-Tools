@@ -49,10 +49,51 @@ Save a private JSON configuration with these fields:
 | `settings_seed` | Optional absolute regular settings file, bounded to 1 MiB |
 | `renderer` | Optional `default`, `llvm_pipe` or `virpipe` |
 | `gpu_transport` | Optional private owned Unix socket; required for `virpipe` |
+| `fex` | Optional explicit ARM64 translator configuration described below; omitted for native launch |
 
 The settings seed is copied into new isolated userdata. The only game launch
 argument is `-userdir=...`; the fresh playset enables no mods. Default user
 settings and playsets are never modified. Game output goes to a private file.
+
+### ARM64 Linux with FEX
+
+The experimental ARM64 runtime can launch the same verified x86 game through
+one reviewed FEX binary. Install and configure FEX and its x86 root filesystem
+separately; neither is bundled. Add this field to the private launch configuration:
+
+```json
+"fex": {
+  "executable": "/usr/bin/FEX",
+  "sha256": "bb7d1d4147e224ab83eef02c3fae59e86a297fa829c847a4afcc273f106f6057"
+}
+```
+
+This pin identifies the tested ARMv8.4 Ubuntu package `2610-1~n`. A caller-supplied
+hash cannot approve another translator. `executable` at the top level still
+identifies the licensed x86 game; its existing build ID and SHA-256 remain required.
+The kernel child identity names FEX, while the session's optional `translated`
+descriptor identifies the separate guest image. Omitting `fex` preserves native
+launching and the previous session format.
+
+Readiness waits only for missing initial guest load coverage, within one ten-second
+deadline. Wrong hashes, ownership, offsets and permission errors do not retry.
+Snapshot checks pin guest file identity, load coverage and immutable headers;
+normal loader permission tightening is allowed. A changed bound image or kernel
+execution witness refuses without automatic rebinding. Duplicate detection covers
+native instances and mapped games under the reviewed FEX binary, including renamed
+copies, without inspecting every unrelated process's memory.
+
+Generated ARM-parent/x86-child tests verified scalar and batched reads, stale
+observation refusal after guest `execve` and FD-based `execveat`, duplicate
+detection, ordinary fixture exit and native CLI reconnects. The FD-based test
+also confirmed a FEX limitation: its restarted guest receives `argc=0`. The fixture
+records this explicitly and allows that marked generation only to report its
+nonce and quit; this is not evidence of correct guest argument handling.
+
+**Actual HOI4 startup, observations, recording and gameplay remain unverified on
+FEX.** Input binding is explicitly unavailable for translated sessions. Owned
+lifecycle/window-close operations remain available for startup qualification.
+Future campaigns must use native 1920×1080 or higher after independent validation.
 
 Build and start the supervisor in its own persistent terminal/service:
 

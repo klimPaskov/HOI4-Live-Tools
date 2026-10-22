@@ -89,10 +89,19 @@ with independently verified 1920×1080 geometry and native OpenGL forwarding.
 A native ARM parent read its own generated x86 child's exact marker under
 unchanged Yama scope 1; normal fixture exit passed. Both VMs are preserved and
 neither runs HOI4. This is feasibility evidence, not campaign acceptance.
-The kernel executable is FEX and the guest ELF is a separate mapped file:
-implement/verify explicit translated-launch ownership and exact game identity,
-without weakening ordinary native guards, before testing actual game reads and
-startup. Then qualify recording and resume the single-Luna mixed-plan gate.
+The kernel executable is FEX and the guest ELF is a separate mapped file.
+Explicit Rust translated-launch/reader support is now implemented: both binaries
+are pinned, native ownership guards remain intact, and the guest image is checked
+at observation boundaries. Generated ARM-parent/x86-child tests passed full-reader
+reads, stale-observation rejection after both guest exec forms, owned launch and
+duplicate detection. Initial missing load coverage uses one bounded deadline;
+changed bound mappings never rebind. Translated gameplay input is explicitly blocked.
+The FD-based `execveat` test confirmed that this FEX build supplies `argc=0`;
+its original fixture failure and a marked quit-only probe are preserved. This is
+an external argument-handling limitation, not general guest exec compatibility.
+Next provision the licensed game in the ARM VM and qualify actual 1080p startup,
+own-state reads and recording. Validate ordinary translated input separately before
+removing the binding block and resuming the single-Luna mixed-plan gate.
 See [the ARM/FEX evidence](CLAUSEWITZ_VALIDATION.md#arm-linux-and-fex-feasibility--22-october-2026).
 
 Mixed005 on the same `81a3e41` source stopped at step 2: the fast driver exposed
