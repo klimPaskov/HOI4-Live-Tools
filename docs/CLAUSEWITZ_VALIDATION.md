@@ -1,5 +1,28 @@
 # Clausewitz-MCP Linux validation
 
+## FEX context isolation and deadline fixture — 22 October 2026
+
+Fresh isolated X11 displays compared the same OpenGL utility natively on ARM and
+as an x86 process through the pinned FEX build. Native ARM succeeded with both
+virpipe and llvmpipe. FEX with GL forwarding enabled failed with `GLXBadFBConfig`
+and signal 11 on both renderers. This reproduces a forwarding compatibility
+failure independently of the host GPU transport; its exact cause is unproven.
+Disabling GL forwarding let the x86 utility finish successfully under FEX using
+guest llvmpipe, reporting OpenGL 4.6 in 2.16 seconds. This is context creation
+evidence, not game performance or campaign acceptance. Each generated client and
+temporary display exited; per-client forwarding settings were removed. No game
+input, screenshot or recording was used in these comparisons.
+
+CI for `88f6f5d` passed native Linux/macOS and all six Python jobs but failed one
+Windows construction deadline fixture. Its 200 ms budget expired during durable
+journal setup, before the intended simulated input phase. The fixture now uses
+the existing two-second test budget. The fake backend still consumes the original
+remaining deadline during dispatch or idle verification, and assertions require
+exactly one possible input, the expected idle phase and deadline expiry. No
+production timeout or action behavior changed. All 43 construction-stage tests,
+953 Python tests (37 skipped), formatting, Clippy and Windows all-target
+compilation passed locally. Windows execution requires the next exact-source CI.
+
 ## Indexed Linux read bounds — 22 October 2026
 
 Scalar reads and both bounds checks around vectored reads now search the ordered

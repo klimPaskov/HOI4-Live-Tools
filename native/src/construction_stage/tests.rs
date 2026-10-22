@@ -1140,13 +1140,19 @@ fn original_deadline_is_not_extended_after_dispatch_or_input_idle() {
                 &RwLock::new(true),
                 &Domains::default(),
                 &mut f,
-                Duration::from_millis(200)
+                // Durable journal writes precede dispatch. Give those the
+                // normal fixture budget; the backend deliberately consumes the
+                // ORIGINAL remaining deadline in the selected input phase.
+                TIME
             )
             .unwrap_err()
             .code,
             "action_uncertain"
         );
+        assert_eq!(f.dispatches, 1);
         assert_eq!(f.possible_inputs, 1);
+        assert_eq!(f.idle_checks, usize::from(idle));
+        assert!(Instant::now() >= f.deadline.unwrap());
         assert_eq!(
             j.receipts["late"].uncertainty,
             Some(Uncertainty::DeadlineOrAuthority)

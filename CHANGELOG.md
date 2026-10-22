@@ -2,6 +2,11 @@
 
 ## Unreleased native preview
 
+- Give the construction deadline fixture time for durable journal setup on
+  Windows CI while preserving its original-deadline and one-input assertions.
+  Record isolated FEX GL-forwarding failures and successful guest software GL
+  context creation; neither is campaign acceptance.
+
 - Use indexed Linux memory-map bounds checks for scalar and vectored reads.
   Reject unordered or overlapping mappings before indexing; retain guard-page,
   single-region, ownership, exec and final snapshot verification. A 4,096-region
