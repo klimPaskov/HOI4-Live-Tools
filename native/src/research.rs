@@ -24,7 +24,7 @@ pub(crate) struct Layout {
     pub(crate) template_index: u64,
     template_threshold: u64,
     technology_vtable: u64,
-    status_vtable: u64,
+    pub(crate) status_vtable: u64,
     slot_vtable: u64,
 }
 /// Linux ELF a4971c9e (libstdc++).

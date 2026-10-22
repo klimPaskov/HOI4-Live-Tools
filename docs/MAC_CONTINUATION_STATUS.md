@@ -12,6 +12,12 @@ guard later stopped capture after player handback; the precise failed witness wa
 not retained. Reliable recorder lifecycle, durable mixed plans, the clean two-year
 run and full campaigns remain unfinished. Historical notes below describe the earlier implementation.
 
+The latest refinement adds exact supervisor/parent ownership, a Rust-managed
+window recorder with detailed guard failures and clean stopping, and the Mac
+durable observation producer. Live observation sequences resumed correctly after
+reopen at a 13 ms median. This does not yet enable durable Mac worker actions;
+follow the current runtime checkpoint for the recorder lifecycle evidence.
+
 **Superseded by the [Linux-first objective](LINUX_RUST_HANDOFF.md) and
 [Linux validation checkpoint](CLAUSEWITZ_VALIDATION.md).** The licensed Linux
 game has since launched and process reads passed; ordinary commands, Luna play

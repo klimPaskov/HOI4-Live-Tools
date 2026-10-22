@@ -143,16 +143,22 @@ fn same(a: &ClockContext, b: &ClockContext) -> bool {
         && a.historical_raw == b.historical_raw
 }
 fn own_scope(r: &Reader<'_>, base: u64, scope: &Scope) -> Result<()> {
+    // Both ABI layouts come from the independently reviewed canonical readers.
+    // The enclosing Witnesses retains every guard through the final readback;
+    // changed links must fail before a broader reader can follow a new owner.
+    let game = crate::game::layout(r);
+    let research = research::layout(r);
     let [gs, idler, db] = scope.anchors;
-    if r.u64(base + 0x44086a8)? != gs
-        || r.u64(base + 0x44085f8)? != idler
-        || r.u64(base + 0x439f450)? != db
-        || r.u64(gs)? != base + 0x42c7598
-        || r.u64(idler)? != base + 0x42c9a88
+    if r.u64(base + game.gs_global)? != gs
+        || r.u64(base + game.idler_global)? != idler
+        || r.u64(base + game.technology_db_global)? != db
+        || r.u64(gs)? != base + game.gs_vtable
+        || r.u64(idler)? != base + game.idler_vtable
+        || r.u64(db)? != base + research.database_vtable
     {
         return Err(Error::new("ownership_changed", "Daily clock roots changed"));
     }
-    let tag = r.i32(gs + 0x518)?;
+    let tag = r.i32(gs + game.player_tag)?;
     if !(1..4096).contains(&tag) {
         return Err(Error::new(
             "player_unavailable",
@@ -160,13 +166,13 @@ fn own_scope(r: &Reader<'_>, base: u64, scope: &Scope) -> Result<()> {
         ));
     }
     let index = i32::from_le_bytes(
-        r.array_entry(gs + 0x340, tag as usize, 4)?
+        r.array_entry(gs + game.tag_country_index, tag as usize, 4)?
             .try_into()
             .unwrap(),
     );
     if index < 0
         || u64::from_le_bytes(
-            r.array_entry(gs + 0x310, index as usize, 8)?
+            r.array_entry(gs + game.countries, index as usize, 8)?
                 .try_into()
                 .unwrap(),
         ) != scope.own_country
@@ -177,8 +183,8 @@ fn own_scope(r: &Reader<'_>, base: u64, scope: &Scope) -> Result<()> {
         ));
     }
     r.object_type(scope.own_country, "CCountry")?;
-    if r.u64(scope.own_country + 0xf38)? != scope.own_status
-        || r.u64(scope.own_status)? != base + 0x42108f8
+    if r.u64(scope.own_country + game.country_technology_status)? != scope.own_status
+        || r.u64(scope.own_status)? != base + research.status_vtable
         || r.u64(scope.own_status + 0x130)? != scope.own_country
         || r.i32(scope.own_status + 0x138)? != tag
     {
@@ -250,6 +256,7 @@ impl Producer {
             own_country: context.own[0],
             own_status: context.own[1],
         };
+        scope.validate()?;
         let (mut store, bytes) = crate::daily_governor::store::Store::open(path)?;
         deadline(until)?;
         let record = if let Some(bytes) = bytes {

@@ -1,5 +1,51 @@
 # Clausewitz-MCP Linux validation
 
+## Mac recorder lifecycle and durable observations — 22 October 2026
+
+The new Rust `--record` command passed a bounded native Mac window qualification:
+the 120-second request produced a finalized 119.36-second MP4 at 1920×1108,
+3,485 encoded frames and approximately 29.2 FPS. The window includes decoration
+around the previously verified native 1920×1080 client. Capture ran while the
+game stayed paused; this was a recorder qualification, not gameplay. No input,
+cursor movement, observation pause or game-date advance occurred.
+
+An explicit stop finalized in 0.31 seconds. Terminating only the test's Rust
+recorder owner caused its child to detect ownership loss and finalize a failed
+partial video in 0.32 seconds, retaining `recorder_owner_lost`, the missing
+process-info witness and reparenting to PID 1. The game and its supervisor were
+untouched. A one-point geometry mismatch refused with zero frames and a detailed
+`window_changed` witness. Reusing an existing output refused without replacing
+the video. Frozen native sources and video hashes were audited privately.
+
+Preserve the first integration failure: a function-local callback observer was
+released after setup. Video was created, but callbacks stopped and the startup
+then finalization deadline expired. A retained observer corrected that separate
+lifetime defect. Review also corrected blank/suspended/unknown active frame
+statuses being counted as ordinary idle; the bridge now fails those statuses,
+with a pure native status-policy regression. None of these results establishes
+the cause of gate007's older aggregate guard failure. Long recording reliability
+and successful campaign filming remain open.
+
+The Mac process reader now checks both exact recorded process identities and the
+game's supervisor relationship. Ownership checks do not need a task port. The
+daily observation producer uses the independently verified Mac game and Research
+layouts, retains final witnesses and persists canonical creation timestamps
+without changing scope equality. Eleven generated Mac fixtures passed, including
+foreign/torn ownership, malformed timestamps and chronology/restart refusals.
+
+A live read-only probe produced 20 complete observations with median 12.97 ms
+(11.15–15.95 ms), resumed at sequence 21 after reopen and rejected a different
+campaign epoch without changing persisted state. The paused Germany game stayed
+at 12 January 1936 with its existing Research assignments. A first probe correctly
+refused a non-private output parent; the corrected private directory passed.
+These timings include durable sequence persistence and are limited paused-game
+samples. The Mac durable action worker, typed completion proofs, original action
+deadlines and worker lifetime/restart integration are still unfinished.
+
+See [the recording command](MAC_RECORDING.md). No release or downstream pin moved.
+Local checks passed 1,224 Rust tests, 956 workspace Python tests (37 skipped),
+Clippy, formatting, stdio protocol smoke and Windows all-target compilation.
+
 ## Mac native geometry and catalog qualification — 22 October 2026
 
 The fresh owned Mac game now has an independent geometry path for Mach-O

@@ -46,6 +46,14 @@ const LC_UUID: u32 = 0x1b;
 
 /// Current identity of `pid` from the kernel: start time, executable, uid.
 pub fn capture_identity(pid: i32) -> Result<Identity> {
+    Ok(capture_process(pid)?.0)
+}
+
+/// Identity and parent from the same kernel process-info sample.
+fn capture_process(pid: i32) -> Result<(Identity, i32)> {
+    if pid <= 0 {
+        return Err(Error::new("process_absent", "Positive process ID required"));
+    }
     // SAFETY: proc_bsdinfo is plain data; the kernel fills at most its size.
     let mut info: libc::proc_bsdinfo = unsafe { std::mem::zeroed() };
     let size = std::mem::size_of::<libc::proc_bsdinfo>() as i32;
@@ -78,12 +86,15 @@ pub fn capture_identity(pid: i32) -> Result<Identity> {
         .map_err(|_| Error::new("process_absent", "Invalid executable path"))?
         .to_string_lossy()
         .into_owned();
-    Ok(Identity {
-        pid,
-        start_ticks: format!("{}.{:06}", info.pbi_start_tvsec, info.pbi_start_tvusec),
-        exe,
-        uid: info.pbi_uid,
-    })
+    Ok((
+        Identity {
+            pid,
+            start_ticks: format!("{}.{:06}", info.pbi_start_tvsec, info.pbi_start_tvusec),
+            exe,
+            uid: info.pbi_uid,
+        },
+        info.pbi_ppid as i32,
+    ))
 }
 
 /// Verify the executable file is the inspected Mach-O build.
@@ -234,19 +245,40 @@ impl MacProcess {
         ))
     }
 }
-fn check_ownership(session: &Session) -> Result<()> {
+/// Validate a recorded game/owner pair without acquiring a task port. Capture
+/// and other denied-task-access fallbacks must enforce this same ownership.
+pub(crate) fn check_ownership(session: &Session) -> Result<()> {
     // SAFETY: getuid has no arguments and no memory effects.
     let uid = unsafe { libc::getuid() };
-    if uid == 0 || session.game.uid != uid {
+    if uid == 0
+        || session.game.uid != uid
+        || session.supervisor.uid != uid
+        || session.game.pid <= 0
+        || session.supervisor.pid <= 0
+        || session.game.pid == session.supervisor.pid
+    {
         return Err(Error::new(
             "ownership_changed",
-            "Owned non-root game process required",
+            "Distinct owned non-root game and supervisor processes required",
         ));
     }
-    if capture_identity(session.game.pid)? != session.game {
+    let (game, parent) = capture_process(session.game.pid)?;
+    if game != session.game {
         return Err(Error::new(
             "ownership_changed",
             "Game process identity changed",
+        ));
+    }
+    if capture_identity(session.supervisor.pid)? != session.supervisor {
+        return Err(Error::new(
+            "ownership_changed",
+            "Game supervisor identity changed",
+        ));
+    }
+    if parent != session.supervisor.pid {
+        return Err(Error::new(
+            "ownership_changed",
+            "Game parent is not the recorded supervisor",
         ));
     }
     Ok(())
@@ -297,6 +329,87 @@ impl ReadMemory for MacProcess {
 #[cfg(test)]
 mod tests {
     use super::*;
+    struct OwnedChild(std::process::Child);
+    impl Drop for OwnedChild {
+        fn drop(&mut self) {
+            let _ = self.0.kill();
+            let _ = self.0.wait();
+        }
+    }
+    fn child_session() -> (OwnedChild, Session) {
+        let child = OwnedChild(
+            std::process::Command::new("/bin/sleep")
+                .arg("30")
+                .spawn()
+                .unwrap(),
+        );
+        let pid = child.0.id() as i32;
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        let game = loop {
+            let identity = capture_identity(pid).unwrap();
+            if identity.exe == "/bin/sleep" {
+                break identity;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "fixture exec deadline"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        };
+        let supervisor = capture_identity(std::process::id() as i32).unwrap();
+        (
+            child,
+            Session {
+                game,
+                supervisor,
+                build_id: String::new(),
+                sha256: String::new(),
+                translated: None,
+            },
+        )
+    }
+    #[test]
+    fn exact_child_owner_pair_is_required_without_task_port_access() {
+        let (_child, session) = child_session();
+        if session.game.uid == 0 {
+            assert!(check_ownership(&session).is_err());
+            return;
+        }
+        check_ownership(&session).unwrap();
+        for field in 0..7 {
+            let mut changed = session.clone();
+            match field {
+                0 => changed.game.start_ticks.push('0'),
+                1 => changed.supervisor.start_ticks.push('0'),
+                2 => changed.supervisor.exe.push_str(".different"),
+                3 => changed.supervisor.uid = 0,
+                4 => changed.game.uid = 0,
+                5 => changed.supervisor = changed.game.clone(),
+                _ => changed.game.pid = 0,
+            }
+            assert_eq!(
+                check_ownership(&changed).unwrap_err().code,
+                "ownership_changed"
+            );
+        }
+        // Both processes are real and owned, but the second child is not the
+        // first child's parent. A plausible identity pair is insufficient.
+        let (_other, other) = child_session();
+        let mut unrelated = session;
+        unrelated.supervisor = other.game;
+        let error = check_ownership(&unrelated).unwrap_err();
+        assert_eq!(error.code, "ownership_changed");
+        assert!(error.message.contains("parent"));
+    }
+
+    #[test]
+    fn exited_owned_child_is_not_adopted_by_its_old_pid() {
+        let (mut child, session) = child_session();
+        child.0.kill().unwrap();
+        child.0.wait().unwrap();
+        assert!(check_ownership(&session).is_err());
+    }
+
     fn image(uuid: [u8; 16], cputype: u32) -> Vec<u8> {
         let mut d = vec![0u8; 256];
         for (o, v) in [

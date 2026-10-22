@@ -16,6 +16,7 @@ pub mod own_focus;
 pub mod plan_run;
 pub mod platform;
 pub mod protocol;
+pub mod recording;
 pub mod research;
 pub mod research_folders;
 pub mod research_ui;

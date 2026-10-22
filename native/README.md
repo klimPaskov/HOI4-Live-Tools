@@ -69,6 +69,16 @@ return a capability error. Logs and setup errors go to stderr.
 Three-OS CI validates shared code. It does not establish live compatibility.
 Layouts must be recovered and verified separately for each platform and build.
 
+The [Mac window recorder](../docs/MAC_RECORDING.md) is a separate `--record`
+command for macOS 15+. Rust supervises a bundled ScreenCaptureKit bridge, with
+owned-window capture, detailed failure witnesses and explicit clean stopping.
+It sends no game input. Client geometry and gameplay acceptance remain separate.
+
+The durable observation producer now uses the independently reviewed Mac game
+and Research layouts. Canonical Mac process timestamps retain byte-exact scope
+and restart equality. This prepares the daily-worker port; the Mac legacy
+standing-plan runner is still synchronous and does not yet run durable plans.
+
 The optional [FEX launch configuration](../docs/OWNED_LINUX_LAUNCHER.md#arm64-linux-with-fex)
 keeps kernel process identity separate from the mapped x86 game. Both binaries
 are hash-pinned. Complete observations check the guest mappings and original

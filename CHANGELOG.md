@@ -2,6 +2,17 @@
 
 ## Unreleased native preview
 
+- Add a Rust-managed native Mac window recorder with private output, bounded
+  startup/finalization, explicit stopping, owner-loss handling and exact failure
+  witnesses. Distinguish unchanged-display idle frames from capture loss. Preserve
+  the first integration's observer-lifetime failure and its corrected live checks.
+- Enforce the Mac game's exact recorded supervisor and parent relationship on
+  reads and recording, without requiring a task port for ownership validation.
+- Port the durable observation producer's own-country guards to the independently
+  verified Mac layouts and canonical process timestamp. Generated Mac fixtures
+  and a live read-only sequence/reopen check pass; Mac daily-worker input and
+  full campaign acceptance remain unfinished.
+
 - Refuse the Linux-only input-geometry diagnostic on macOS before reading any
   layout offsets. Verify the explicit refusal and own-country read on native Mac.
 - Query the visible macOS window stack for focus checks during window sharing,

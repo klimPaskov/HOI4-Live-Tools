@@ -152,6 +152,12 @@ assignments and other production lines stayed unchanged. The recording captured
 the full test, but its guard stopped capture after player handback, so recorder
 lifecycle acceptance remains open.
 
+The new [Rust-managed Mac recorder](docs/MAC_RECORDING.md) adds precise guard
+diagnostics, explicit stopping and owner-loss finalization. Its two-minute capture
+and stop/failure checks passed; long campaign filming remains unverified. The durable observation producer
+also passed live sequence/reopen checks at a 13 ms median across 20 paused-game
+samples. Durable Mac worker input remains unfinished.
+
 The earlier preview also contains construction, politics, training, army, air
 and diplomacy adapters. The Mac plan runner is synchronous with scheduling state
 in memory, separate from Linux's durable daily worker. Broader plans, restart

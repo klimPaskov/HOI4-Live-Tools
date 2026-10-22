@@ -27,13 +27,32 @@ pub struct Scope {
     pub own_country: u64,
     pub own_status: u64,
 }
+fn valid_start_identity(value: &str) -> bool {
+    if value.is_empty() || value.len() > 32 {
+        return false;
+    }
+    // Preserve the existing Linux tick representation verbatim. The macOS
+    // identity is the canonical unsigned seconds plus six microsecond digits
+    // emitted by capture_identity; neither form is parsed back or normalized
+    // for process, scope, journal or restart equality.
+    if value.bytes().all(|b| b.is_ascii_digit()) {
+        return true;
+    }
+    let Some((seconds, micros)) = value.split_once('.') else {
+        return false;
+    };
+    !seconds.is_empty()
+        && seconds.bytes().all(|b| b.is_ascii_digit())
+        && (seconds.len() == 1 || !seconds.starts_with('0'))
+        && seconds.parse::<u64>().is_ok()
+        && micros.len() == 6
+        && micros.bytes().all(|b| b.is_ascii_digit())
+}
 impl Scope {
     pub(crate) fn validate(&self) -> Result<()> {
         let e = &self.epoch;
         if e.game.pid <= 0
-            || e.game.start_ticks.is_empty()
-            || e.game.start_ticks.len() > 32
-            || !e.game.start_ticks.bytes().all(|b| b.is_ascii_digit())
+            || !valid_start_identity(&e.game.start_ticks)
             || e.game.exe.is_empty()
             || e.game.exe.len() > 4096
             || e.campaign.is_empty()

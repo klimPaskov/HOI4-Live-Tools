@@ -9,6 +9,34 @@ failed campaigns. Do not control the shared Windows game.
 
 ## Current checkpoint
 
+The latest refinement enforces exact Mac game/supervisor identities and their
+parent relationship, including in task-port-free recording checks. The durable
+observation producer now uses the independently verified Mac layouts and accepts
+canonical Mac creation timestamps without normalizing identity equality. Eleven
+generated Mac fixtures pass. A live read-only check produced sequences 1–20,
+reopened at 21, rejected a different campaign epoch and preserved the paused
+12 January state. Its 20 durable observations had a 12.97 ms median; there was
+no input, observation pause or date advance. This is observation/restart evidence,
+not a Mac daily-worker action gate.
+
+The [Rust-managed recorder](MAC_RECORDING.md) replaces the private prototype for
+new capture qualifications. It adds detailed process/window/session failures,
+explicit stop, Rust-owner-loss finalization, storage/time bounds and separate
+capture-loss frame handling. Preserve its first integration failure: a function-local
+observer was released, so callbacks stopped and startup/finalization timed out
+despite video creation. A retained observer fixes that lifecycle defect. It does
+not explain the older gate007 aggregate guard failure. Long campaign recording
+and the durable Mac worker remain required.
+
+The final recorder qualification completed a 119.36-second 1920×1108 video at
+about 29.2 FPS. Explicit stop and owner-loss finalization took about 0.31/0.32
+seconds. Wrong geometry refused before frames, and existing outputs stayed intact.
+All checks were read-only with the same paused game; see the
+[detailed evidence](CLAUSEWITZ_VALIDATION.md#mac-recorder-lifecycle-and-durable-observations--22-october-2026).
+
+This refinement passed 1,224 host Rust tests, 956 workspace Python tests (37
+skipped), Clippy, formatting, stdio protocol smoke and Windows all-target checks.
+
 The Mac switch is active. The latest source independently validates the owned
 Mac GUI/SDL Cocoa geometry against the OS window at 1920×1080, UI scale 1.
 Memory reads remain nonpausing and stationary. Mac Focus catalog listing now uses
@@ -54,7 +82,7 @@ explain it. Add detailed guard diagnostics and qualify clean recorder terminatio
 before long campaign videos. Short mixed gameplay passed; durable mixed-plan
 restart, two-year play and full campaigns remain unfinished.
 
-Current checks passed 1,208 host Rust tests, 956 workspace Python tests with 37
+The preceding checkpoint passed 1,208 host Rust tests, 956 workspace Python tests with 37
 skips, 809 staged-baseline Python tests with 29 skips, Clippy, formatting and
 Windows all-target checks. The private continuous recorder still needs product
 integration and longer-running validation. Wider mixed plans, the clean two-year

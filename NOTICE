@@ -82,6 +82,11 @@ Upstream foundation and attribution:
   and the independently verified Mac layouts without Linux UI traversal.
   Neither path executes a game callback or writes game memory.
 
+  The durable observation producer extends that own-state model to the separately
+  verified Mac layouts with exact process/scope persistence. The Mac recording
+  bridge is an independent ScreenCaptureKit integration; it has no game-input
+  or engine-call path.
+
   Private Linux validation proved selected ordinary actions, but a running-game
   pause timed out. External engine posting remains quarantined. Source
   inclusion alone does not enable upstream commands in campaign dispatch.
