@@ -5534,3 +5534,43 @@ publication is synchronized and historical-timeout composition is checked
 directly; separate coverage still checks delayed-read classification. Production
 deadlines and behavior are unchanged. All 30 protocol tests, formatting and
 host Clippy passed after the correction. Preserve the failed initial CI run.
+
+All nine exact-source CI jobs passed on the test correction `b1ab89c`: three
+Rust platform jobs and six Python jobs. This does not establish live acceptance.
+
+
+## ARM Linux and FEX feasibility — 22 October 2026
+
+A separate owned ARM64 Ubuntu 24.04 VM now uses hardware virtualization, two
+vCPUs, 4 GiB RAM and a 4 KiB kernel page size. The original x86 VM, licensed game
+installation and renderer infrastructure remain preserved. No game or campaign
+was launched in the new VM.
+
+The native ARM generated graphics client measured 36.7 FPS at a requested
+1920×1080 through the existing virgl renderer and a separate SSH connection.
+FEX 2610 then ran ordinary x86 programs successfully. The exact x86 graphics
+binary used in the earlier VM measured 36.2–36.7 FPS with native OpenGL forwarding.
+A follow-up measured 36.5–36.7 FPS and independently verified one actual
+1920×1080 X11 client, the mapped FEX host/guest OpenGL bridge libraries and native
+ARM Mesa 25.2.8. All generated graphics clients and their Xvfb instances exited.
+These are short synthetic tests, not HOI4 frame rates or recording acceptance.
+
+A native ARM parent also read the exact 24-byte marker from its own generated
+x86 child under FEX using `process_vm_readv`, ordinary UID 1000 and unchanged
+Yama scope 1. The read took approximately 6.5 microseconds; this tiny fixture
+does not establish game snapshot throughput. PID creation, user, parent,
+executable identity and the mapped fixture range were checked. The fixture exited
+normally with code 0. The first helper used an incorrect expected marker length;
+that assertion failure is retained separately from the corrected result.
+
+The kernel identifies the translated process executable as FEX, while the x86
+fixture appears separately in its memory maps. Existing native game ownership
+checks must not be bypassed to admit this environment. Before a campaign, verify
+an explicit translated-launch identity, exact game ELF/layout and own-state reads,
+then actual HOI4 startup, ordinary commands and filmable recording. No campaign
+adapter is accepted by these experiments. FEX rootfs setup also retained a silent
+headless selection failure and a selection abort before the corrected lowercase
+distro selection succeeded.
+
+The forwarding approach follows the [FEX project's documentation](https://github.com/FEX-Emu/FEX)
+and [library-forwarding guide](https://wiki.fex-emu.com/index.php/Development:Setting_up_Thunks).

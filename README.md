@@ -121,6 +121,9 @@ with readable UI. The new Linux 1080p input profile still needs live qualificati
 earlier low-resolution runs are diagnostic tests, not filmable campaign evidence.
 The current emulated Linux test VM did not finish a ten-minute 1080p startup
 benchmark; [that environment limitation remains open](docs/CLAUSEWITZ_VALIDATION.md#fullhd001-startup-deadline--22-october-2026).
+A separate hardware-accelerated ARM Linux/FEX experiment reached about 36 FPS
+in a verified 1080p x86 graphics fixture. This is a promising test environment;
+[HOI4 compatibility and campaign acceptance remain unverified](docs/CLAUSEWITZ_VALIDATION.md#arm-linux-and-fex-feasibility--22-october-2026).
 
 ### macOS preview (live-tested on one build)
 

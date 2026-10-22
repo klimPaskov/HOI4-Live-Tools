@@ -80,6 +80,21 @@ The test-only lint correction was followed by all seven affected lifecycle tests
 and final target validation. All 205 native inputs remained unchanged afterward.
 See [the notification evidence](CLAUSEWITZ_VALIDATION.md#owned-worker-terminal-event-waits--22-october-2026).
 
+All nine CI jobs passed on `b1ab89c`, the test-only correction for the macOS
+deadline fixture's scheduler assumption. The original CI failure remains recorded.
+
+The next graphics path is a separate hardware-accelerated ARM64 Linux VM with
+FEX 2610. The same x86 generated graphics binary now measures 36.5–36.7 FPS,
+with independently verified 1920×1080 geometry and native OpenGL forwarding.
+A native ARM parent read its own generated x86 child's exact marker under
+unchanged Yama scope 1; normal fixture exit passed. Both VMs are preserved and
+neither runs HOI4. This is feasibility evidence, not campaign acceptance.
+The kernel executable is FEX and the guest ELF is a separate mapped file:
+implement/verify explicit translated-launch ownership and exact game identity,
+without weakening ordinary native guards, before testing actual game reads and
+startup. Then qualify recording and resume the single-Luna mixed-plan gate.
+See [the ARM/FEX evidence](CLAUSEWITZ_VALIDATION.md#arm-linux-and-fex-feasibility--22-october-2026).
+
 Mixed005 on the same `81a3e41` source stopped at step 2: the fast driver exposed
 an immediate Research close refusal while the just-verified opening still animated.
 Only one Research input pair occurred; no worker started or close input was sent.
