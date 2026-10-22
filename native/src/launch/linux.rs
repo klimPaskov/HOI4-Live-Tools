@@ -930,7 +930,10 @@ fn service_client(stream: UnixStream, shared: Arc<Shared>) {
                 )
             }
             Some("bind_input") => {
-                translated::require_input_qualification(&shared.endpoint.session)?;
+                translated::require_input_qualification(
+                    &shared.endpoint.session,
+                    &request["binding"],
+                )?;
                 let _read = shared
                     .reads
                     .read()

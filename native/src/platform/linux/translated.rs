@@ -3,7 +3,8 @@
 use super::*;
 use std::path::PathBuf;
 
-const FEX_SHA256: &str = "bb7d1d4147e224ab83eef02c3fae59e86a297fa829c847a4afcc273f106f6057";
+pub(crate) const FEX_SHA256: &str =
+    "bb7d1d4147e224ab83eef02c3fae59e86a297fa829c847a4afcc273f106f6057";
 enum TranslatorBuild {
     Supported,
     #[cfg(test)]

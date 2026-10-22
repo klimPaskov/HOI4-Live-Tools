@@ -20,23 +20,21 @@ unchanged. It started no campaign. Recheck the Mac build, process ownership, tas
 access and capture geometry when the user switches back. No successful campaign
 is claimed.
 
-The latest Linux refinement replaces linear read-bound scans with an indexed
-lookup over validated ordered mappings. Its ARM Linux microbenchmark is about
-43x faster for that lookup alone; full MCP latency remains unmeasured. The first
-actual ARM/FEX game startup reached an owned endpoint but failed before the menu:
-OpenGL initialization reported a missing version, then HOI4 recorded SIGSEGV.
-The stuck crash handler required separately documented forced cleanup after the
-normal owned signal deadline. Disabling GL forwarding later allowed graphics
-initialization; after an explicitly recorded OOM kill, temporary guest swap
-enabled native 1920x1080 frontend startup in 43–51 seconds and clean ordinary
-window close across two runs. Structured menu-state checks correctly refused
-campaign-only reads in 1.3–2.6 ms; these are not successful in-game snapshots.
-The direct guest GPU-offload comparison was stopped after 286 seconds without
-data-loading progress; window close timed out and a separate SIGTERM request
-ended it with exit code 6. Continue with software rendering, qualify ordinary
-menu input and own-country reads, then resume Luna's mixed-plan gate. No campaign
-or menu input began in these startup tests. Preserve the distinct outcomes. See
-[the new validation evidence](CLAUSEWITZ_VALIDATION.md#indexed-linux-read-bounds--22-october-2026).
+The latest Linux test entered fresh historical Normal Germany at native 1080p
+with one Luna medium player. Own-country Rust reads and a separate stationary
+XTest Research open/close qualification passed; date, assignments and cursor
+remained unchanged. A persistent local MCP client measured medians of 4.18 ms
+for overview, 2.86 ms for research and 6.06 ms for production (five paused-game
+samples each with recording active). The private diagnostic recording is verified;
+the game closed normally with exit code 0 and all test clients/display were cleaned.
+No advancing campaign or Rust campaign-adapter acceptance is claimed.
+
+Source now provides an explicit pinned-FEX 1080p input validation opt-in. Offline
+checks passed (1,193 host Rust, 778 ARM library, two real FEX fixtures, 953 Python
+with 37 skips, protocol smoke and target checks). Qualify the actual Rust adapter before resuming Luna's
+mixed-plan gate. Default translated input still refuses. Use guest llvmpipe with
+GL forwarding disabled and the retained temporary swap; preserve earlier GL,
+OOM and GPU-offload failures. See [the live evidence](CLAUSEWITZ_VALIDATION.md#fex-own-state-and-stationary-input-qualification--22-october-2026).
 
 **Latest requirement (22 October): all future campaigns and recordings must use
 native 1920×1080 or higher, with readable UI.** Validate the matching input profile

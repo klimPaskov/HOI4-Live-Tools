@@ -62,7 +62,7 @@ return a capability error. Logs and setup errors go to stderr.
 | Platform | Current native support |
 | --- | --- |
 | Linux x86_64 | Owned launch/reconnects, exact-build reads, waits, clock keys, research, Focus/daily plans, construction and one-factory production previews |
-| Linux ARM64 with FEX | Pinned translator and x86 guest reader preview; generated-child restart checks and actual 1080p frontend startup/clean close passed; in-game validation pending, gameplay input blocked |
+| Linux ARM64 with FEX | Pinned translator and x86 guest reader; own-state and stationary XTest key qualification passed at 1080p; explicit Rust input validation opt-in, live adapter acceptance pending |
 | macOS | Separate owned task-port and ordinary-input preview on one Steam 1.19.3 Rosetta build; see the [platform status](../README.md#macos-preview-live-tested-on-one-build) |
 | Windows | Portable protocol and fixtures; native live adapter remains unavailable |
 
@@ -74,8 +74,9 @@ keeps kernel process identity separate from the mapped x86 game. Both binaries
 are hash-pinned. Complete observations check the guest mappings and original
 kernel execution witness; individual field reads retain the fast native path.
 Only incomplete initial load coverage can wait under the original launch deadline.
-Changing a bound image refuses without rebinding. This is a startup/read preview,
-not translated-game or campaign acceptance.
+Changing a bound image refuses without rebinding. Translated input is off by default;
+the explicit 1080p validation profile retains the ordinary-input guards. This is
+a development preview, not mixed-plan or campaign acceptance.
 
 ## Standing plans and observations
 

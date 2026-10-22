@@ -77,7 +77,7 @@ pub fn open(path: &Path) -> Result<Box<dyn Process + Send + Sync>> {
 #[cfg(target_os = "linux")]
 pub use linux::{capture_identity, elf_build_id, parse_stat, verify_executable, verify_translator};
 #[cfg(target_os = "linux")]
-pub(crate) use linux::{guest_mapping_present, is_reviewed_translator};
+pub(crate) use linux::{guest_mapping_present, is_reviewed_translator, FEX_SHA256};
 pub fn load_session(path: &Path) -> Result<Session> {
     let bytes = std::fs::read(path)?;
     if bytes.len() > 65536 {

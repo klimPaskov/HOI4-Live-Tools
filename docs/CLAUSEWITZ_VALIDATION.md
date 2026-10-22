@@ -1,5 +1,66 @@
 # Clausewitz-MCP Linux validation
 
+## FEX own-state and stationary input qualification — 22 October 2026
+
+One existing Luna player at medium reasoning entered a fresh vanilla, historical,
+Normal Germany game through seven ordinary menu clicks at native 1920×1080.
+The frozen Rust runtime was `b924ec4`; the reviewed FEX/game hashes, ordinary
+UID 1000 and Yama scope 1 remained unchanged. Software rendering used guest
+llvmpipe with GL forwarding disabled and temporary swap.
+
+The Rust MCP read the own-country overview, four empty research slots with 47
+researched technologies, and all 21 own production lines. The visible German
+map/date and initial setup corroborated the player and campaign. Geometry reads
+confirmed physical/logical 1920×1080, scale 1 and the reciprocal SDL/X11 window
+association. This does not qualify every pointer target or hit-routing branch.
+
+A separate bounded ordinary-key qualification then sent one W to open Research
+and one W to close it. Fresh canonical panel reads verified both transitions;
+the date, four assignments, focus and cursor position remained unchanged. This
+used an owned XTest helper, not the Rust campaign input adapter. There was no
+clock input, map movement, engine command, game injection or observation pause.
+The game remained at its initial paused 1 January 1936 12:00 state; no advancing
+campaign, mixed-plan or two-year acceptance is claimed.
+
+A persistent local MCP client made 20 successful observations, five per tool,
+after one capabilities warm-up. Round trips include stdio and owner transport,
+exclude SSH/model latency, and were measured with the 1080p recorder active:
+
+| Tool | Median round trip | Observed range | Median server time |
+| --- | ---: | ---: | ---: |
+| Own overview | 4.18 ms | 2.21–7.22 ms | 2.22 ms |
+| Research | 2.86 ms | 2.70–10.51 ms | 2.63 ms |
+| Production | 6.06 ms | 5.84–30.09 ms | 5.75 ms |
+| Input geometry | 12.14 ms | 5.30–23.18 ms | 10.38 ms |
+
+These small paused-game samples establish complete local MCP latency in this
+fixture, not campaign throughput or a comparison against upstream performance.
+The 15 FPS H.264 diagnostic recording began before Start. Three completed
+1920×1080 segments were probed and their downloaded hashes verified. They remain
+private and do not satisfy the native macOS campaign-video requirement.
+
+The player retained three setup handbacks: a provisional dispatch receipt was
+mistaken for failure; one malformed request ID was rejected before intent/input;
+and a screenshot caught a menu transition before it settled. Read-only checks
+resolved them without replaying input. The first cleanup configuration had
+incorrect file permissions and was rejected before window close; after correcting
+its mode, ordinary window close completed with exit code 0. Recorder, game, owner
+and temporary display exited; the created FEX app configuration was removed.
+
+The subsequent Rust source adds an explicit owner-only
+`fex_2610_x11_1920x1080_validation_v1` input opt-in. It requires the reviewed
+translator and game builds and pins 1080p even for clock-only binding. Every
+enabled domain must use the matching 1080p profile. Default translated binding
+still refuses; existing window, campaign, lease, journal and fresh readback checks
+remain in force. Actual Rust-adapter and mixed-plan acceptance are the next gates.
+
+Validation of this opt-in passed 1,193 host Rust tests, 778 ARM Linux library
+tests and both separately selected real FEX fixtures, plus 953 Python tests with
+37 skips and the stdio protocol smoke. Six ARM tests remain ignored by default;
+the two FEX fixtures were run explicitly. Formatting, host/ARM/x86 Linux Clippy
+and Windows all-target compilation passed. These checks do not replace live
+Rust-adapter acceptance.
+
 ## FullHD-FEX003 frontend qualification — 22 October 2026
 
 With GL forwarding disabled, guest llvmpipe created HOI4's graphics device. The

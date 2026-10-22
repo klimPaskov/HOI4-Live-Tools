@@ -31,6 +31,9 @@ pub(super) struct Binding {
     /// IDs of the owned recording/journal's ordinary singleplayer setup evidence.
     /// This is operator evidence, not a native proof of multiplayer flags.
     menu_evidence_ids: Vec<String>,
+    /// Explicit translated-runtime validation opt-in; never inferred from a launch.
+    #[serde(default)]
+    translated_input_profile: Option<translated::InputProfile>,
     /// Owner-only opt-in for the narrow recorded client/origin profile.
     #[serde(default)]
     research_profile: Option<research::Profile>,
@@ -83,6 +86,17 @@ impl Binding {
                 "invalid_input_binding",
                 "All owned input profiles must name one client size",
             ));
+        }
+        if self.translated_input_profile.is_some() {
+            let required = crate::research_candidate_observation::BuiltinClient::Absolute1920x1080;
+            if first.is_some_and(|client| client != required) {
+                return Err(Error::new(
+                    "invalid_input_binding",
+                    "Translated validation requires every enabled domain at 1920x1080",
+                ));
+            }
+            // Clock-only binding must also pin the qualified window dimensions.
+            return Ok(Some(required));
         }
         Ok(first)
     }
@@ -265,7 +279,7 @@ impl ClockService {
             .transpose()?;
         json_new(
             &directory.join("input-binding.json"),
-            json!({"version":1,"game":binding.game,"controller":binding.controller,"player":binding.player,"window":binding.window,"menu_evidence_ids":binding.menu_evidence_ids,"epoch":epoch,"scope":"ordinary clock keys; optional ID research/focus/construction/production previews","research_profile":binding.research_profile,"focus_profile":binding.focus_profile,"construction_profile":binding.construction_profile,"production_profile":binding.production_profile,"daily_prepared_research":binding.daily_prepared_research,"daily_focus":binding.daily_focus,"daily_production":binding.daily_production,"load_generation":"unverified: persisted identity, anchor and timeline checks only"}),
+            json!({"version":1,"game":binding.game,"controller":binding.controller,"player":binding.player,"window":binding.window,"menu_evidence_ids":binding.menu_evidence_ids,"translated_input_profile":binding.translated_input_profile,"epoch":epoch,"scope":"ordinary clock keys; optional ID research/focus/construction/production previews","research_profile":binding.research_profile,"focus_profile":binding.focus_profile,"construction_profile":binding.construction_profile,"production_profile":binding.production_profile,"daily_prepared_research":binding.daily_prepared_research,"daily_focus":binding.daily_focus,"daily_production":binding.daily_production,"load_generation":"unverified: persisted identity, anchor and timeline checks only"}),
         )?;
         Ok(Self {
             daily: daily::Controller::new(
@@ -1029,6 +1043,44 @@ mod tests {
         value["daily_production"] = json!(1);
         assert!(serde_json::from_value::<Binding>(value).is_err());
     }
+    #[test]
+    fn translated_validation_pins_fullhd_even_without_optional_domains() {
+        let base = json!({"game":{"pid":123,"start_ticks":"456","exe":"/fixture/FEX","uid":1000},"controller":"fixture","player":"GER","window":42,"window_class":[],"menu_evidence_ids":["setup"],"translated_input_profile":"fex_2610_x11_1920x1080_validation_v1"});
+        let binding: Binding = serde_json::from_value(base.clone()).unwrap();
+        assert_eq!(
+            binding
+                .validate_client_profiles()
+                .unwrap()
+                .unwrap()
+                .client(),
+            [1920, 1080]
+        );
+        for field in [
+            "research_profile",
+            "focus_profile",
+            "construction_profile",
+            "production_profile",
+        ] {
+            let mut value = base.clone();
+            value[field] = json!("linux_builtin_absolute_1920x1080_v1");
+            let binding: Binding = serde_json::from_value(value.clone()).unwrap();
+            assert_eq!(
+                binding
+                    .validate_client_profiles()
+                    .unwrap()
+                    .unwrap()
+                    .logical(),
+                [1920, 1080]
+            );
+            value[field] = json!("linux_builtin_absolute_512x288_v1");
+            let binding: Binding = serde_json::from_value(value).unwrap();
+            assert_eq!(
+                binding.validate_client_profiles().unwrap_err().code,
+                "invalid_input_binding"
+            );
+        }
+    }
+
     #[test]
     fn all_four_domain_profiles_require_one_exact_reviewed_client() {
         let base = json!({"game":{"pid":123,"start_ticks":"456","exe":"/fixture/game","uid":1000},"controller":"fixture","player":"GER","window":42,"window_class":[],"menu_evidence_ids":["setup"]});

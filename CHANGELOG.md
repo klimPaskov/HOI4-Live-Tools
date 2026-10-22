@@ -2,6 +2,15 @@
 
 ## Unreleased native preview
 
+- Add an explicit pinned-build FEX 1080p input-validation profile, disabled by
+  default. Require matching domain dimensions and retain existing ownership,
+  lease, journal and readback guards. Rust-adapter live acceptance is pending.
+- Record Luna medium entering vanilla historical Normal Germany at 1080p,
+  successful own-state reads and stationary Research open/close qualification.
+  Local MCP medians were 2.9–6.1 ms for overview/research/production in small
+  paused-game samples. Retain private diagnostic video and setup failures;
+  mixed-plan, two-year and full campaign acceptance remain incomplete.
+
 - Record two actual ARM Linux/FEX 1080p frontend startups in 43–51 seconds,
   clean ordinary window closes and explicit MCP menu-state refusals. Guest
   software rendering with temporary swap passed; preserve the prior graphics

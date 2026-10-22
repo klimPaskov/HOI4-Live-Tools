@@ -9,11 +9,36 @@ pub(super) struct FexLaunch {
     pub sha256: String,
 }
 
-pub(super) fn require_input_qualification(session: &Session) -> Result<()> {
-    if session.translated.is_some() {
+/// Explicit owner-only validation route, not a claim of campaign acceptance.
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+pub(super) enum InputProfile {
+    #[serde(rename = "fex_2610_x11_1920x1080_validation_v1")]
+    Fex2610X11FullHdValidationV1,
+}
+
+pub(super) fn require_input_qualification(session: &Session, binding: &Value) -> Result<()> {
+    let profile = binding
+        .get("translated_input_profile")
+        .filter(|v| !v.is_null());
+    let Some(image) = &session.translated else {
+        if profile.is_some() {
+            return Err(Error::new(
+                "invalid_input_binding",
+                "Translated input profile requires an owned translated session",
+            ));
+        }
+        return Ok(());
+    };
+    if image.translator_sha256 != platform::FEX_SHA256
+        || session.sha256 != crate::game::SHA256
+        || session.build_id != crate::game::BUILD_ID
+        || profile
+            .and_then(|v| serde_json::from_value::<InputProfile>(v.clone()).ok())
+            .is_none()
+    {
         return Err(Error::new(
             "input_unavailable",
-            "FEX startup and read validation only; translated gameplay input is not yet qualified",
+            "Translated input requires the pinned FEX/game builds and explicit 1080p validation profile; campaign acceptance remains unverified",
         ));
     }
     Ok(())
@@ -108,6 +133,59 @@ fn await_guest_observed(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn input_validation_is_explicit_and_bound_to_both_reviewed_builds() {
+        let identity = Identity {
+            pid: 123,
+            start_ticks: "456".into(),
+            exe: "/fixture/FEX".into(),
+            uid: 1000,
+        };
+        let mut session = Session {
+            game: identity.clone(),
+            supervisor: identity,
+            build_id: crate::game::BUILD_ID.into(),
+            sha256: crate::game::SHA256.into(),
+            translated: Some(platform::TranslatedImage {
+                executable: "/fixture/hoi4".into(),
+                translator_sha256: platform::FEX_SHA256.into(),
+            }),
+        };
+        let opt_in = json!({"translated_input_profile":"fex_2610_x11_1920x1080_validation_v1"});
+        assert!(require_input_qualification(&session, &opt_in).is_ok());
+        for invalid in [
+            Value::Null,
+            json!({}),
+            json!({"translated_input_profile":null}),
+            json!({"translated_input_profile":true}),
+            json!({"translated_input_profile":"unknown"}),
+        ] {
+            assert_eq!(
+                require_input_qualification(&session, &invalid)
+                    .unwrap_err()
+                    .code,
+                "input_unavailable"
+            );
+        }
+        let qualified = session.clone();
+        session.sha256 = "unknown".into();
+        assert!(require_input_qualification(&session, &opt_in).is_err());
+        session = qualified.clone();
+        session.build_id = "unknown".into();
+        assert!(require_input_qualification(&session, &opt_in).is_err());
+        session = qualified;
+        session.translated.as_mut().unwrap().translator_sha256 = "unknown".into();
+        assert!(require_input_qualification(&session, &opt_in).is_err());
+        session.translated = None;
+        assert_eq!(
+            require_input_qualification(&session, &opt_in)
+                .unwrap_err()
+                .code,
+            "invalid_input_binding"
+        );
+        assert!(require_input_qualification(&session, &json!({})).is_ok());
+    }
 
     #[test]
     fn absent_translation_preserves_native_launch_selection() {

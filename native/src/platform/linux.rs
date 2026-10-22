@@ -11,7 +11,7 @@ use std::{
 };
 mod translated;
 pub use translated::verify_translator;
-pub(crate) use translated::{guest_mapping_present, is_reviewed_translator};
+pub(crate) use translated::{guest_mapping_present, is_reviewed_translator, FEX_SHA256};
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Region {
     start: u64,

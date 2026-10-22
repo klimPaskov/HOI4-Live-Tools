@@ -116,18 +116,18 @@ Mixed production/research standing plans now have an explicit opt-in developer
 preview with persistent selections and separate panel-navigation budgets. Their
 recorded advancing-time live gate is still pending.
 
-Future campaign tests and recordings will use native **1920×1080 or higher**
-with readable UI. The new Linux 1080p input profile still needs live qualification;
-earlier low-resolution runs are diagnostic tests, not filmable campaign evidence.
-The original emulated Linux VM missed its ten-minute 1080p startup deadline.
-The separate ARM Linux/FEX environment has now reached HOI4's native 1080p frontend
-in **43–51 seconds across two runs** and closed normally, using guest software rendering and
-temporary swap. Earlier graphics and memory failures remain in the
-[validation record](docs/CLAUSEWITZ_VALIDATION.md#fullhd-fex003-frontend-qualification--22-october-2026).
-This is startup evidence, not campaign performance. The Rust FEX reader checks
-the translator and mapped game separately; generated-child reads and restart
-checks passed. Translated gameplay input remains blocked until
-[game-level qualification](docs/OWNED_LINUX_LAUNCHER.md#arm64-linux-with-fex).
+Future campaign tests and recordings use native **1920×1080 or higher** with
+readable UI. ARM Linux/FEX now starts HOI4 at 1080p using guest software rendering.
+Luna entered historical Normal Germany and verified own-state reads and stationary
+Research open/close keys. Median local MCP reads were **2.9–6.1 ms** for research,
+overview and production in five paused-game samples each, with recording active.
+These are diagnostics, not campaign throughput or a successful campaign.
+
+The Rust FEX adapter has an explicit pinned-build 1080p validation opt-in; it is
+disabled by default and still needs live adapter and mixed-plan acceptance.
+See [the evidence and retained failures](docs/CLAUSEWITZ_VALIDATION.md#fex-own-state-and-stationary-input-qualification--22-october-2026)
+and [setup requirements](docs/OWNED_LINUX_LAUNCHER.md#arm64-linux-with-fex).
+Final campaign videos will be filmed on native macOS after the user's switch.
 
 ### macOS preview (live-tested on one build)
 

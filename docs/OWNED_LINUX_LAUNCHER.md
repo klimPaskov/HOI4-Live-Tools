@@ -95,10 +95,20 @@ OpenGL version and SIGSEGV. Its stuck crash handler required separately recorded
 forced cleanup after the owner's SIGTERM timeout. A later run with GL forwarding
 disabled and guest llvmpipe reached the native 1920x1080 frontend in 50.7 seconds
 and exited normally through ordinary window close. A prior attempt exhausted the
-four-GiB VM; temporary guest swap was present in the successful run. These checks
-do not qualify game observations, recording or gameplay. Input binding is
-explicitly unavailable for translated sessions. Owned
-lifecycle/window-close operations remain available for startup qualification.
+four-GiB VM; temporary guest swap was present in the successful run. These startup checks
+were followed by own-country reads, ordinary menu navigation and stationary
+Research open/close qualification at 1080p with a diagnostic recording. See
+[the measured results](CLAUSEWITZ_VALIDATION.md#fex-own-state-and-stationary-input-qualification--22-october-2026).
+
+Translated input remains disabled by default. For controlled Rust-adapter validation,
+add `"translated_input_profile": "fex_2610_x11_1920x1080_validation_v1"` to the
+private **input binding**, not the launch configuration. It accepts only the
+reviewed translator/game builds and pins an actual 1920×1080 window even without
+optional domain profiles. Enabled domains must all use
+`linux_builtin_absolute_1920x1080_v1`. Native sessions reject this translated
+profile. This opt-in retains the existing exclusive lease, ordinary X11 controls,
+ID-derived previews, journaling and fresh readback; it does not approve a campaign
+or weaken ownership/guest-image checks. Live Rust-adapter acceptance is pending.
 Future campaigns must use native 1920×1080 or higher after independent validation.
 
 Build and start the supervisor in its own persistent terminal/service:
@@ -188,6 +198,7 @@ Normal difficulty, historical AI and the selected own-player tag.
 | `window` | Verified owned X11 window ID |
 | `window_class` | Exact complete `WM_CLASS` property as a byte array |
 | `menu_evidence_ids` | IDs in the private recording/journal proving ordinary singleplayer setup |
+| `translated_input_profile` | FEX only: explicit 1080p validation opt-in described above; otherwise omit |
 | `research_profile` | Optional reviewed client profile below; enables ordinary Research controls |
 | `production_profile` | Optional matching client profile; enables ordinary production controls |
 
@@ -203,7 +214,7 @@ Research, Focus, construction and production accept two exact builtin profiles:
 
 | Profile | Physical client | Logical graphics | Status |
 | --- | --- | --- | --- |
-| `linux_builtin_absolute_1920x1080_v1` | 1920×1080 | 1920×1080 | New profile; live and recording qualification pending |
+| `linux_builtin_absolute_1920x1080_v1` | 1920×1080 | 1920×1080 | Own-state/XTest key/diagnostic recording verified on FEX; Rust adapter acceptance pending |
 | `linux_builtin_absolute_512x288_v1` | 512×288 | 2560×1440 | Preserved diagnostic profile; not for future campaign tests |
 
 All enabled domain profiles must agree. The owner pins the actual X11 client
