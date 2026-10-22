@@ -356,7 +356,7 @@ impl Governor {
     /// Load the original private plan before any owner input is enabled.
     /// Existing bytes, quarantine and unresolved intents are never rewritten.
     /// A present result retains the same exclusive Store lock as `open`.
-    #[cfg(any(target_os = "linux", target_os = "macos", all(test, unix)))]
+    #[cfg(any(target_os = "macos", all(test, unix)))]
     pub(crate) fn load_existing(path: &Path) -> Result<Option<Self>> {
         let (store, bytes) = store::Store::open(path)?;
         let Some(bytes) = bytes else {

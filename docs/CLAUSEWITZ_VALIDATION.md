@@ -6162,3 +6162,10 @@ native source files match the clean staged archive; its Python source is unchang
 from the preceding 809-test staged check (29 skipped). The production correction
 has not been requalified through a fresh live mixed-plan run. Same-plan worker
 restart, natural Research refill, the two-year gate and full campaigns remain open.
+
+Preserve the first publication's Linux CI failure: Clippy rejected the Mac-only
+`load_existing` helper as unused in the Linux library. Its configuration now
+includes Mac production and Unix tests, rather than Linux production. This
+changes compilation scope, not Mac worker behavior; no live result is implied.
+The follow-up passed all-target Clippy for x86_64 and ARM64 Linux and all 67
+governor tests on Mac, with formatting unchanged.
