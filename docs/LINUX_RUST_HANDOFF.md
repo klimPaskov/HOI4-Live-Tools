@@ -19,8 +19,22 @@ verified Electronic Mechanical Engineering in slot 2, then quarantined a
 production-button change before the factory click. Fresh readback retained all
 21 allocations and the paused 12 January date. The complete recording and
 unresolved controller remain preserved; do not reset or replay that controller.
-The corrected settlement logic needs a fresh live qualification. Worker restart,
-natural refill, two-year play and full campaign acceptance remain open.
+The corrected settlement subsequently verified the 10→11 factory step on a
+fresh campaign. Same-plan restart, idle-file stability and natural EM Engineering
+→ Radio refill also verified. The advancing run stopped on a transient digest
+read; a same-controller continuation reached all three typed completions, then
+failed its final full-production-list assertion because one naval line had
+disappeared. All military requested allocations and surviving line allocations
+were independently unchanged. Preserve both harness failures and recordings;
+do not label this a clean full gate. The game is paused at 19 April 1936 20:00.
+There is no active worker, lease or recorder. See the [detailed component evidence](CLAUSEWITZ_VALIDATION.md#mac-mixed-worker-restart-and-refill--23-october-2026).
+
+Next, make the qualification harness tolerate bounded read-only torn snapshots
+and distinguish scoped military invariants from separately reported naval queue
+changes; never retry uncertain actions. Before adding durable Focus, replace its
+paginated JSON progress merge with a typed coherent own-state snapshot and harden
+its node/button ownership, final click witness and original action deadline.
+The clean two-year run and full recorded campaigns remain required.
 
 The preceding published controller foundation follows for historical context.
 

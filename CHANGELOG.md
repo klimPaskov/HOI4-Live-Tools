@@ -2,6 +2,11 @@
 
 ## Unreleased native preview
 
+- Record Mac component qualification for the corrected factory step, retained
+  mixed-plan restart, idle-file stability and natural Research refill. Preserve
+  the transient-read interruption and final naval-collection assertion failure;
+  all three assignments verified, but a clean long campaign remains pending.
+
 - Add the default-off Mac daily worker: durable ordered Research queues, an
   existing military line's single factory step, fresh digests, terminal events,
   explicit stop/join and retained-plan reconnect. Persist intent before panel

@@ -6169,3 +6169,72 @@ includes Mac production and Unix tests, rather than Linux production. This
 changes compilation scope, not Mac worker behavior; no live result is implied.
 The follow-up passed all-target Clippy for x86_64 and ARM64 Linux and all 67
 governor tests on Mac, with formatting unchanged.
+
+
+## Mac mixed worker restart and refill — 23 October 2026
+
+The corrected source (`f328b39`) passed all nine exact-head CI jobs on Linux,
+Windows and macOS. Luna medium used a fresh owned native Mac instance with
+vanilla FAIR Germany, Normal difficulty, historical AI and a 1920×1080 client.
+The preceding quarantined controller and campaign were preserved separately;
+this was a new technical qualification, not a reload to reverse an outcome.
+Startup readiness took 20.36 seconds. No system power setting or game binary
+was changed.
+
+Preserve the first private-driver failure: menu setup completed, then a missing
+MCP helper method stopped read-only preflight before a lease or worker action.
+Its setup video finalized cleanly at 100 seconds. Resumption reused that exact
+campaign and retained controller identity, with empty action journals.
+
+The mixed worker then verified Electronic Mechanical Engineering in slot 2 and
+infantry allocation 10→11. Immediate readback preserved all 21 line identities
+and every other requested allocation. Stop/join, lease release, MCP reconnect
+and restart of the identical retained plan passed without duplicate input.
+The controller epoch and plan payload stayed unchanged. Five seconds of same-day
+idle observation rewrote no durable plan, sequence or journal file.
+
+At speed 3 the game advanced to 27 March 1936 01:00 in 230.772 unpaused seconds.
+A fresh digest returned `torn_read: Snapshot witness changed`; the private driver
+stopped instead of retrying this read. It joined the worker, issued one verified
+end-test pause, released the lease and cleanly finalized the recording. There
+were two completed entries, Radio pending and no quarantine. Preserve this
+failed run. Its 126 calls included eight transient `input_busy` digest refusals
+and the final torn read. Overview, Research, production and digest medians were
+0.323, 1.737, 1.307 and 10.587 ms respectively; ten-second event waits are excluded
+from these read figures.
+
+A bounded continuation reused the same game, controller and exact plan. The
+private driver now retries only bounded, read-only `torn_read`/`input_busy`
+responses; fixtures rejected retries for mutations and ownership loss. It made
+one worker start and two clock calls. EM Engineering finished naturally and the
+worker assigned Radio, completing all three durable entries. After 65.343 more
+unpaused seconds the game stopped at 19 April 1936 20:00. All 38 RPCs succeeded.
+
+The continuation nevertheless retains its `failed-preserved` driver result:
+the final assertion required an unchanged full production collection, but one
+naval panzerschiff line had disappeared (21 rows became 20). Independent fresh
+read-only verification confirmed all military requested allocations unchanged,
+all surviving requested allocations unchanged, EM completed, Radio active in
+slot 2, all three typed plan completions and no quarantine. No naval input was
+authorized or logged. The missing line's cause was not independently proven;
+do not silently classify it as a completed ship or erase the assertion failure.
+
+Both advancing segments used zero observation pauses and one explicit end-test
+pause each. Together they advanced 108⅓ game days in 296.115 unpaused seconds,
+about 16.6 minutes per game year when normalized. This is a short peaceful test
+at speed 3, excluding setup, harness-repair time and paused intervals; it is not
+a full-year, wartime or campaign throughput benchmark.
+
+The two recordings finalized by explicit stop at 1920×1108, including the
+28-point titlebar around the native 1080p client: 254.37 seconds/7,493 frames and
+78.81 seconds/2,322 frames, both about 29.5 FPS. Post-run frame checks confirmed
+readable UI and the factory allocation of 11. The continuation's final frame is
+within a Research-panel animation; the settled final assignment proof comes
+from independent structured reads, not that transitional frame. Keep the setup
+and advancing segments separate; they are not one continuous showcase video.
+All 225 native input hashes and each frozen driver/binary hash matched. The
+owned game remains paused with no worker, broker, lease or recorder active.
+
+These results establish the listed component behaviors across a resumed test.
+They do not establish a clean end-to-end qualification, the two-year Luna run,
+full campaigns, durable Focus support or long campaign recording reliability.

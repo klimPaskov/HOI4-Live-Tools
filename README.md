@@ -160,11 +160,16 @@ samples. The [Mac controller](docs/MAC_CONTROLLER.md) now retains its identity
 across reconnects and shares input quarantine between clock and gameplay actions.
 The default-off [Mac background worker](docs/MAC_CONTROLLER.md) now adds durable
 Research queues and one-step production allocation, shared input quarantine,
-stop/join and reconnect checks. Its first recorded test verified a Research
-assignment, then quarantined an unstable production control before the factory
-click. The settlement correction needs a fresh live gate; worker restart and
-natural refill are not yet accepted. The public research-folder diagnostic
-remains Linux-only and explicitly refuses on Mac.
+stop/join and reconnect checks. The corrected worker verified a factory step,
+same-plan restart, unchanged idle files and natural Research refill on Mac.
+The advancing test needed continuation after a transient-read harness failure;
+its final whole-collection assertion also failed when a naval line disappeared.
+All three assignments were independently verified, with no quarantine or repeated
+factory input. These component results do not establish a clean campaign gate.
+Overview/Research/digest medians were about 0.3/1.7/10.6 ms, with zero observation
+pauses. See [the results and retained failures](docs/CLAUSEWITZ_VALIDATION.md#mac-mixed-worker-restart-and-refill--23-october-2026).
+The public research-folder diagnostic remains Linux-only and explicitly refuses
+on Mac.
 
 The earlier preview also contains construction, politics, training, army, air
 and diplomacy adapters. The older Mac plan runner remains synchronous with scheduling state
