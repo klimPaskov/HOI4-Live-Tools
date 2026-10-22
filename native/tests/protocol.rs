@@ -173,6 +173,7 @@ fn stdio_is_json_and_notifications_have_no_reply() {
             "hoi4_focus_selected_detail",
             "hoi4_technology_list",
             "hoi4_wait_for",
+            "hoi4_focus_input_probe",
             "hoi4_construction_controls",
             "hoi4_construction_find_view",
             "hoi4_production_controls"

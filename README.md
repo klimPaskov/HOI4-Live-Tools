@@ -176,6 +176,12 @@ paused with no Focus active; no retry or reset occurred. See [the failed gate an
 remaining work](docs/CLAUSEWITZ_VALIDATION.md#mac-focus-input-binding-and-deadline-refusal--23-october-2026).
 Durable Mac Focus and full campaigns remain unaccepted.
 
+The subsequent target-only Focus probe measured **8.66 ms**, versus **63.99 ms**
+for complete obstacle geometry, over ten alternating samples each on the paused
+Mac game. Node checks now avoid unrelated renderer reads; actual panning retains
+complete obstacle checks. This is read-path timing, not action latency or campaign
+acceptance. [Probe contract and limits](docs/MAC_CONTROLLER.md#qualification-limits).
+
 The public research-folder diagnostic remains Linux-only and explicitly refuses
 on Mac.
 

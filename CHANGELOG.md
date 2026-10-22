@@ -2,6 +2,11 @@
 
 ## Unreleased native preview
 
+- Avoid unrelated Focus renderer reads when checking or clicking one Mac node.
+  Retain full item ownership/ambiguity checks and complete obstacle witnesses for
+  actual panning. Add a stationary read-only `hoi4_focus_input_probe` with optional
+  complete-pan diagnostics and explicitly scoped read counts.
+
 - Include the current stage, elapsed time and requested pan count in Mac Focus
   failures. Distinguish a stage observation timeout from the original action
   deadline, retain native ownership refusals, and bound polling to both limits.

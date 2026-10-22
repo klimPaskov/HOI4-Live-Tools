@@ -55,8 +55,18 @@ failed gate binary and do not identify that gate's unknown stage.
 The diagnostics checkpoint passed 1,326 Rust tests, 956 Python tests (37 skipped),
 formatting, strict host Clippy and the release build; it adds no live input result.
 
-Next, measure and reduce repeated canonical/UI work without weakening original
-ownership or final witnesses. Qualify visible or short
+The target-only node path now avoids unrelated renderer geometry while retaining
+full item ownership/ambiguity checks and final target witnesses. Actual panning
+still requires a fresh complete settled obstacle snapshot. A new read-only
+`hoi4_focus_input_probe` measured 8.66 ms for target-only reads versus 63.99 ms for
+complete obstacles (ten alternating samples each) on the paused Mac game. Both
+returned identical target geometry. No lease, input, cursor movement or observation
+pause occurred, and the blocked controller's files remained unchanged. This is
+read-path performance, not action acceptance. All 228 native sources stayed frozen.
+Validation passed 1,336 Rust tests, 956 Python tests (37 skipped), formatting,
+strict host/Windows/Linux-musl/ARM64-Linux-musl Clippy and the release build.
+
+Next, qualify visible or short
 navigation before adding durable Focus. Preserve the failed controller and video;
 use a separately owned technical session for later input qualification. Focus
 progress already uses a complete coherent typed snapshot instead of a paginated

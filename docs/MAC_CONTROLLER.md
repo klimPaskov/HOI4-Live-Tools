@@ -117,6 +117,19 @@ stop notification cannot conceal retained uncertainty.
 
 ## Qualification limits
 
+`hoi4_focus_input_probe` inspects an exact unfinished own Focus in an already-open
+idle tree without an input controller. Its default path checks every item for
+ownership and ambiguity, then reads only the requested node's geometry. Optional
+`include_pan: true` also validates complete obstacle geometry. It reports payload
+logical reads separately from whole-observation time, which includes final
+witnesses. It never opens a panel, moves the cursor, pauses or authorizes input.
+Other platforms explicitly refuse this Mac-only diagnostic.
+
+Manual node readiness and click checks use the same target-only path. An actual
+pan still requires a fresh settled complete Tree and revalidates that entire
+candidate after pointer movement, before mouse-down. The lighter node result
+cannot authorize a background drag.
+
 Mac Focus progress now comes from one complete typed observation; it no longer
 merges separately witnessed public JSON pages. The public completion tool keeps
 its existing pagination. This model is not an input receipt or a durable Focus

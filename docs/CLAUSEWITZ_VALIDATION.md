@@ -6320,3 +6320,40 @@ failure and blocked controller; add stage diagnostics and bounded navigation
 qualification before another separately owned technical input test. This does
 not establish a successful Focus action, durable Focus, the clean two-year run
 or a completed campaign.
+
+## Mac target-only Focus read cost — 23 October 2026
+
+Subsequent code adds bounded stage/time diagnostics and separates node checks
+from full drag-obstacle geometry. Both paths validate the entire item collection
+for exact types, own membership and duplicate targets before reading target
+payload. The node path reads the requested control's geometry only. A drag still
+requires a complete settled Tree and its unchanged before-down witness; a node
+result cannot authorize a drag origin.
+
+The new read-only `hoi4_focus_input_probe` was exercised without `--mac-input`
+against the same paused owned Mac game and unresolved controller. Ten alternating
+samples per mode returned identical economic-growth node geometry. Target-only
+observations measured 8.656 ms median (8.404–8.959 ms), versus 63.986 ms
+(62.973–64.369 ms) for complete obstacle observations: about 7.4× faster for this
+read path. Logical payload requests fell from 28,039 to 2,675 and payload bytes
+from 515,220 to 135,792. Those counts exclude final witness rereads and process
+identity checks; elapsed time includes them. They are not kernel-call counts or
+end-to-end action latency. The complete path validated 524 symbol/background
+obstacles.
+
+The read-only process finished normally. Own date remained paused at 19 April
+1936 20:00 with no active/completed Focus. Exact controller file hashes, sizes and
+modification times stayed unchanged. There were no input calls, leases, screenshots,
+cursor movements or observation pauses. All 228 native source hashes matched the
+tested build throughout. This does not resolve the earlier Intent or identify
+the earlier gate's unknown timed-out stage.
+
+Validation passed 1,336 host Rust tests, 956 Python tests (37 skipped), formatting,
+strict host/Windows/Linux-musl/ARM64-Linux-musl Clippy and the release build.
+Twenty-four binding fixtures include complete-vs-target equality, omitted unrelated
+geometry, foreign/duplicate items after the target, torn target fields and public
+probe projection. The initial full run caught the protocol inventory's old
+24-tool expectation; updating it to include the new 25th observation tool passed.
+An initial cross-check selected an uninstalled GNU target; the installed musl
+targets passed. Native platform CI remains separate from cross-compilation.
+Fresh recorded input qualification and durable Focus are still required.

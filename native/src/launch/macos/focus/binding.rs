@@ -291,7 +291,14 @@ pub(super) struct Tree {
 pub(super) fn same_view(r: &Reader<'_>, image: u64, own: &Owner, tree: &Tree) -> Result<()> {
     unchanged(&tree.view, &own_view(r, image, own)?)
 }
-pub(super) fn symbols(r: &Reader<'_>, image: u64, own: &Owner) -> Result<Tree> {
+struct Items {
+    view: View,
+    zoom: f32,
+    values: Vec<(u64, bool)>,
+}
+/// Validate the complete item collection before any container or renderer
+/// payload, including items following the target and off-screen own members.
+fn tree_items(r: &Reader<'_>, image: u64, own: &Owner) -> Result<Items> {
     let v = own_view(r, image, own)?;
     let zoom = f32::from_le_bytes(r.read(v.object + MACOS.zoom, 4)?.try_into().unwrap());
     if !zoom.is_finite() || !(0.1..=4.0).contains(&zoom) {
@@ -302,8 +309,7 @@ pub(super) fn symbols(r: &Reader<'_>, image: u64, own: &Owner) -> Result<Tree> {
     }
     let items = pointers(r, v.object + MACOS.items, 4096)?;
     let mut seen = BTreeSet::new();
-    let mut target = None;
-    let mut obstacles = vec![];
+    let mut values = Vec::with_capacity(items.len());
     let mut matches = 0;
     for item in items {
         if !seen.insert(item) {
@@ -322,10 +328,65 @@ pub(super) fn symbols(r: &Reader<'_>, image: u64, own: &Owner) -> Result<Tree> {
         if matches > 1 {
             return Err(Error::new("invalid_gui", "Duplicate own Focus node"));
         }
-        let frame = window(r, image, r.u64(item + MACOS.item_container)?)?;
-        if !gui_tree::visible(r, frame)? {
+        values.push((item, selected));
+    }
+    Ok(Items {
+        view: v,
+        zoom,
+        values,
+    })
+}
+fn item_frame(r: &Reader<'_>, image: u64, item: u64) -> Result<Option<u64>> {
+    let frame = window(r, image, r.u64(item + MACOS.item_container)?)?;
+    Ok(gui_tree::visible(r, frame)?.then_some(frame))
+}
+fn node_control(view: &View, item: u64, frame: u64, symbol: (u64, Rect), zoom: f32) -> Control {
+    Control {
+        view: view.clone(),
+        item,
+        frame,
+        widget: symbol.0,
+        zoom: zoom.to_bits(),
+        rect: symbol.1,
+        disabled: false,
+    }
+}
+/// A complete target control witness, without a background-drag proof. The
+/// full item scan remains mandatory; only unrelated container/renderer payloads
+/// and the target's background geometry are omitted.
+pub(super) fn node(r: &Reader<'_>, image: u64, own: &Owner) -> Result<Option<Control>> {
+    let items = tree_items(r, image, own)?;
+    let Some(&(item, _)) = items.values.iter().find(|(_, selected)| *selected) else {
+        return Ok(None);
+    };
+    let Some(frame) = item_frame(r, image, item)? else {
+        return Ok(None);
+    };
+    let widget = named(r, image, frame, "symbol")?
+        .ok_or_else(|| Error::new("gui_target_unavailable", "Visible target symbol missing"))?;
+    if !gui_tree::shown(r, widget)? {
+        return Err(Error::new(
+            "gui_target_unavailable",
+            "Visible target symbol missing",
+        ));
+    }
+    let rect = gui_tree::rect_zoomed(r, image, widget, GAME, items.zoom)?;
+    Ok(Some(node_control(
+        &items.view,
+        item,
+        frame,
+        (widget, rect),
+        items.zoom,
+    )))
+}
+pub(super) fn symbols(r: &Reader<'_>, image: u64, own: &Owner) -> Result<Tree> {
+    let items = tree_items(r, image, own)?;
+    let mut target = None;
+    let mut obstacles = vec![];
+    for (item, selected) in items.values {
+        let Some(frame) = item_frame(r, image, item)? else {
             continue;
-        }
+        };
         let mut symbol = None;
         for name in ["symbol", "bg"] {
             if let Some(widget) = named(r, image, frame, name)? {
@@ -334,7 +395,7 @@ pub(super) fn symbols(r: &Reader<'_>, image: u64, own: &Owner) -> Result<Tree> {
                 }
                 // No dropped geometry: an unmeasurable obstacle cannot prove a
                 // safe background origin for an ordinary drag.
-                let rect = gui_tree::rect_zoomed(r, image, widget, GAME, zoom)?;
+                let rect = gui_tree::rect_zoomed(r, image, widget, GAME, items.zoom)?;
                 obstacles.push((widget, rect));
                 if name == "symbol" {
                     symbol = Some((widget, rect));
@@ -342,23 +403,15 @@ pub(super) fn symbols(r: &Reader<'_>, image: u64, own: &Owner) -> Result<Tree> {
             }
         }
         if selected {
-            let (widget, rect) = symbol.ok_or_else(|| {
+            let symbol = symbol.ok_or_else(|| {
                 Error::new("gui_target_unavailable", "Visible target symbol missing")
             })?;
-            target = Some(Control {
-                view: v.clone(),
-                item,
-                frame,
-                widget,
-                zoom: zoom.to_bits(),
-                rect,
-                disabled: false,
-            });
+            target = Some(node_control(&items.view, item, frame, symbol, items.zoom));
         }
     }
     Ok(Tree {
-        view: v,
-        zoom: zoom.to_bits(),
+        view: items.view,
+        zoom: items.zoom.to_bits(),
         target,
         obstacles,
     })

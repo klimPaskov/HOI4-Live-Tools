@@ -13,6 +13,7 @@ mod deployment;
 mod diplomacy;
 mod events;
 mod focus;
+pub(crate) use focus::input_probe as focus_input_probe;
 mod input_gate;
 mod journal;
 mod mapdata;

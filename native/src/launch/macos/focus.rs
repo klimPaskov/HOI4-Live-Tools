@@ -61,7 +61,9 @@ const MACOS: Ui = Ui {
 };
 const GAME: (u32, u32) = (1920, 1080);
 mod binding;
+mod probe;
 use binding::{Control, Owner};
+pub(crate) use probe::snapshot as input_probe;
 /// Tree area clear of the title bar, filter buttons and the bottom scrollbar.
 const SAFE: (f64, f64, f64, f64) = (260.0, 200.0, 1860.0, 1000.0);
 
@@ -342,26 +344,37 @@ fn start_inner(
     }
     trace.stage("tree_layout");
     wait_for(until, || {
-        Ok(sample(process, &owner, key, binding::symbols)?
-            .target
-            .map(|_| ()))
+        Ok(sample(process, &owner, key, binding::node)?.map(|_| ()))
     })?;
     let mut previous: Option<Rect> = None;
     let mut revealed = false;
     for _ in 0..12 {
         trace.stage("pan_candidate");
         deadline(until)?;
+        let ready = |rect: &Rect| {
+            let stuck = previous.is_some_and(|p| {
+                let (a, b) = (p.center(), rect.center());
+                (a.0 - b.0).abs() < 5.0 && (a.1 - b.1).abs() < 5.0
+            });
+            inside(rect) || (stuck && on_tree(rect))
+        };
+        // Deciding that no drag is needed requires only the exact target.
+        // Node settlement and the final click still re-observe it below.
+        let node = sample(process, &owner, key, binding::node)?
+            .ok_or_else(|| Error::new("gui_target_unavailable", "Own Focus node disappeared"))?;
+        if ready(&node.rect) {
+            revealed = true;
+            break;
+        }
+        // A drag always uses a newly settled complete obstacle snapshot. Never
+        // use the lighter node result to select or authorize a drag origin.
         let tree = settle(until, || sample(process, &owner, key, binding::symbols))?;
         let rect = tree
             .target
             .as_ref()
             .ok_or_else(|| Error::new("gui_target_unavailable", "Own Focus node disappeared"))?
             .rect;
-        let stuck = previous.is_some_and(|p| {
-            let (a, b) = (p.center(), rect.center());
-            (a.0 - b.0).abs() < 5.0 && (a.1 - b.1).abs() < 5.0
-        });
-        if inside(&rect) || (stuck && on_tree(&rect)) {
+        if ready(&rect) {
             revealed = true;
             break;
         }
@@ -406,8 +419,7 @@ fn start_inner(
     }
     trace.stage("node_candidate_and_click");
     let node = || {
-        sample(process, &owner, key, binding::symbols)?
-            .target
+        sample(process, &owner, key, binding::node)?
             .ok_or_else(|| Error::new("gui_target_unavailable", "Own Focus node disappeared"))
     };
     let candidate = settle(until, node)?;

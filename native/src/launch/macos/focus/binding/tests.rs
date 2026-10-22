@@ -25,6 +25,9 @@ const NODE: u64 = 0x320000;
 const SYMBOL: u64 = 0x340000;
 const BACKGROUND: u64 = 0x350000;
 const SECOND_SYMBOL: u64 = 0x360000;
+const OTHER_NODE: u64 = 0x370000;
+const OTHER_SYMBOL: u64 = 0x380000;
+const OTHER_BACKGROUND: u64 = 0x390000;
 const PANEL: u64 = 0x400000;
 const SECOND_PANEL: u64 = 0x410000;
 const DETAIL_FRAME: u64 = 0x420000;
@@ -142,6 +145,41 @@ impl Fake {
             .borrow()
             .iter()
             .all(|(a, n)| *a + *n as u64 <= address || *a >= address + size)
+    }
+    fn unmap(&mut self, address: u64, size: u64) {
+        self.data
+            .retain(|a, _| !(address..address + size).contains(a));
+    }
+    fn with_other_node() -> Self {
+        let mut f = Self::new();
+        f.word(SECOND_ITEM, 0x3405b78);
+        f.word(SECOND_ITEM + 0x20, OTHER);
+        f.word(SECOND_ITEM + 0x10, OTHER_NODE);
+        f.array(FOCUS_VIEW + 0x18f0, &[ITEM, SECOND_ITEM]);
+        f.container(OTHER_NODE, &[OTHER_SYMBOL, OTHER_BACKGROUND]);
+        f.widget(
+            OTHER_SYMBOL,
+            "symbol",
+            false,
+            Rect {
+                x: 1100,
+                y: 400,
+                w: 40,
+                h: 40,
+            },
+        );
+        f.widget(
+            OTHER_BACKGROUND,
+            "bg",
+            false,
+            Rect {
+                x: 1090,
+                y: 390,
+                w: 60,
+                h: 60,
+            },
+        );
+        f
     }
     fn new() -> Self {
         let mut f = Self::empty();
@@ -604,5 +642,244 @@ fn final_control_equality_detects_movement_and_disabled_state_changes() {
             unchanged(&original, &current).unwrap_err().code,
             "focus_state_changed"
         );
+    }
+}
+
+#[test]
+fn target_probe_matches_full_control_with_fewer_read_requests_and_bytes() {
+    let full = Fake::with_other_node();
+    let (full_owner, tree) = observe(&full, KEY, None, symbols).unwrap();
+    assert_eq!(tree.obstacles.len(), 4);
+    let target = Fake::with_other_node();
+    let (target_owner, control) = observe(&target, KEY, None, node).unwrap();
+    assert_eq!(full_owner, target_owner);
+    assert_eq!(tree.target, control);
+    assert_eq!(target.checks.get(), 2);
+    let full_reads = full.reads.borrow();
+    let target_reads = target.reads.borrow();
+    let full_bytes: usize = full_reads.iter().map(|(_, n)| *n).sum();
+    let target_bytes: usize = target_reads.iter().map(|(_, n)| *n).sum();
+    assert!(target_reads.len() < full_reads.len());
+    assert!(target_bytes < full_bytes);
+    println!(
+        "FOCUS_NODE_READ_REQUESTS={} FULL_TREE_READ_REQUESTS={} FOCUS_NODE_BYTES={} FULL_TREE_BYTES={}",
+        target_reads.len(), full_reads.len(), target_bytes, full_bytes
+    );
+}
+
+#[test]
+fn target_probe_skips_unrelated_container_and_target_background_geometry() {
+    let mut f = Fake::with_other_node();
+    f.unmap(SECOND_ITEM + 0x10, 8);
+    f.unmap(OTHER_NODE, 0x1000);
+    f.unmap(BACKGROUND + 0xd0, 8);
+    assert!(observe(&f, KEY, None, node).unwrap().1.is_some());
+    assert!(f.untouched(SECOND_ITEM + 0x10, 8));
+    assert!(f.untouched(OTHER_NODE, 0x1000));
+    assert!(f.untouched(OTHER_SYMBOL, 0x1000));
+    assert!(f.untouched(BACKGROUND + 0x65, 1));
+    assert!(f.untouched(BACKGROUND + 0xd0, 8));
+}
+
+#[test]
+fn target_geometry_success_cannot_authorize_an_unproved_drag_background() {
+    for missing_background in [false, true] {
+        let mut target = Fake::with_other_node();
+        let mut full = Fake::with_other_node();
+        for f in [&mut target, &mut full] {
+            let widget = if missing_background {
+                BACKGROUND
+            } else {
+                OTHER_SYMBOL
+            };
+            let sprite = f.get_word(widget + 0xd0);
+            f.unmap(sprite, 0x1000);
+        }
+        assert!(observe(&target, KEY, None, node).unwrap().1.is_some());
+        assert_eq!(
+            observe(&full, KEY, None, symbols).unwrap_err().code,
+            "fixture_unmapped"
+        );
+    }
+}
+
+#[test]
+fn both_probes_validate_all_items_before_any_target_container_payload() {
+    for mode in 0..4 {
+        for full in [false, true] {
+            let mut f = Fake::new();
+            f.unmap(NODE, 0x1000);
+            f.word(SECOND_ITEM, if mode == 3 { 0x3405b80 } else { 0x3405b78 });
+            f.word(SECOND_ITEM + 0x20, if mode == 2 { FOREIGN } else { TARGET });
+            f.array(
+                FOCUS_VIEW + 0x18f0,
+                &[ITEM, if mode == 0 { ITEM } else { SECOND_ITEM }],
+            );
+            let error = if full {
+                observe(&f, KEY, None, symbols).unwrap_err()
+            } else {
+                observe(&f, KEY, None, node).unwrap_err()
+            };
+            assert_eq!(
+                error.code,
+                match mode {
+                    2 => "foreign_focus_scope",
+                    3 => "invalid_focus_type",
+                    _ => "invalid_gui",
+                }
+            );
+            assert!(f.untouched(ITEM + 0x10, 8));
+            assert!(f.untouched(NODE, 0x1000));
+            assert!(f.untouched(FOREIGN, 0x1000));
+        }
+    }
+}
+
+#[test]
+fn target_probe_witnesses_non_target_item_membership_and_full_target_geometry() {
+    let reference = Fake::with_other_node();
+    let sprite = reference.get_word(SYMBOL + 0xd0);
+    let kind = reference.get_word(sprite + 8);
+    for address in [
+        0x3519740,
+        COUNTRY + 0x10f8,
+        TARGET + 0x130,
+        FOCUS_VIEW + 0x18f0,
+        SECOND_ITEM,
+        SECOND_ITEM + 0x20,
+        FOCUS_VIEW + 0x1990,
+        FOCUS_VIEW + 0x19b0,
+        ITEM + 0x10,
+        NODE + 0x95,
+        SYMBOL + 0x65,
+        SYMBOL + 0xd0,
+        sprite,
+        sprite + 0xb0,
+        kind + 0x8c,
+    ] {
+        let mut f = Fake::with_other_node();
+        f.torn = Some(address);
+        assert_eq!(
+            observe(&f, KEY, None, node).unwrap_err().code,
+            "torn_read",
+            "{address:x}"
+        );
+    }
+}
+
+#[test]
+fn target_probe_preserves_absent_hidden_and_ambiguous_symbol_behavior() {
+    let mut f = Fake::with_other_node();
+    f.array(FOCUS_VIEW + 0x18f0, &[SECOND_ITEM]);
+    assert!(observe(&f, KEY, None, node).unwrap().1.is_none());
+    assert!(f.untouched(OTHER_NODE, 0x1000));
+    let mut f = Fake::new();
+    f.put(NODE + 0x95, &[0]);
+    assert!(observe(&f, KEY, None, node).unwrap().1.is_none());
+    assert!(f.untouched(SYMBOL, 0x100));
+    let mut f = Fake::new();
+    f.put(SYMBOL + 0x65, &[0]);
+    assert_eq!(
+        observe(&f, KEY, None, node).unwrap_err().code,
+        "gui_target_unavailable"
+    );
+    let mut f = Fake::new();
+    f.name(SECOND_SYMBOL, "symbol");
+    f.array(NODE + 0xd30, &[SYMBOL, SECOND_SYMBOL, BACKGROUND]);
+    assert_eq!(
+        observe(&f, KEY, None, node).unwrap_err().code,
+        "invalid_gui"
+    );
+}
+
+#[test]
+fn target_probe_keeps_original_owner_and_final_control_equality() {
+    let original = Fake::new();
+    let (owner, control) = observe(&original, KEY, None, node).unwrap();
+    let control = control.unwrap();
+    for zoom_changed in [false, true] {
+        let mut f = Fake::new();
+        if zoom_changed {
+            f.float(FOCUS_VIEW + 0x19b0, 0.5);
+        } else {
+            let sprite = f.get_word(SYMBOL + 0xd0);
+            f.float(sprite + 0xb0, -59.0);
+        }
+        let changed = observe(&f, KEY, Some(&owner), node).unwrap().1.unwrap();
+        assert_eq!(
+            unchanged(&control, &changed).unwrap_err().code,
+            "focus_state_changed"
+        );
+    }
+    let mut replacement = Fake::new();
+    replacement.focus(REPLACEMENT, KEY);
+    replacement.array(OWN_TREE + 0x28, &[REPLACEMENT, OTHER]);
+    replacement.array(DATABASE + 0x58, &[REPLACEMENT, OTHER]);
+    replacement.word(ITEM + 0x20, REPLACEMENT);
+    assert_eq!(
+        observe(&replacement, KEY, Some(&owner), node)
+            .unwrap_err()
+            .code,
+        "ownership_changed"
+    );
+    assert!(replacement.untouched(IDLER + 0x670, 8));
+}
+
+#[test]
+fn read_only_probe_projects_identical_target_and_measures_only_requested_geometry() {
+    let target = Fake::with_other_node();
+    let target_value = super::super::probe::snapshot(&target, KEY, false).unwrap();
+    let full = Fake::with_other_node();
+    let full_value = super::super::probe::snapshot(&full, KEY, true).unwrap();
+    assert_eq!(target_value["target"], full_value["target"]);
+    assert_eq!(target_value["target"]["on_tree"], true);
+    assert!(target_value["pan"].is_null());
+    assert_eq!(full_value["pan"]["obstacle_count"], 4);
+    assert!(
+        target_value["payload_read_calls"].as_u64().unwrap()
+            < full_value["payload_read_calls"].as_u64().unwrap()
+    );
+    assert!(
+        target_value["payload_read_bytes"].as_u64().unwrap()
+            < full_value["payload_read_bytes"].as_u64().unwrap()
+    );
+    println!(
+        "FOCUS_PROBE_NODE_PAYLOAD_CALLS={} FULL_PAYLOAD_CALLS={} FOCUS_PROBE_NODE_PAYLOAD_BYTES={} FULL_PAYLOAD_BYTES={}",
+        target_value["payload_read_calls"], full_value["payload_read_calls"],
+        target_value["payload_read_bytes"], full_value["payload_read_bytes"]
+    );
+    for (process, value) in [(&target, target_value), (&full, full_value)] {
+        assert_eq!(value["input_authorized"], false);
+        assert_eq!(value["eligibility_available"], false);
+        assert_eq!(value["observation_paused_game"], false);
+        assert!(value["read_count_scope"]
+            .as_str()
+            .unwrap()
+            .contains("excludes final witness"));
+        assert!(value["elapsed_ms"].as_f64().unwrap() >= 0.0);
+        assert_eq!(process.checks.get(), 2);
+    }
+}
+
+#[test]
+fn read_only_probe_never_projects_torn_geometry_or_invalid_own_scope() {
+    for include_pan in [false, true] {
+        let mut f = Fake::new();
+        f.torn = Some(f.get_word(SYMBOL + 0xd0) + 0xb0);
+        assert_eq!(
+            super::super::probe::snapshot(&f, KEY, include_pan)
+                .unwrap_err()
+                .code,
+            "torn_read"
+        );
+        let mut f = Fake::new();
+        f.int(COUNTRY + 8, 2);
+        assert_eq!(
+            super::super::probe::snapshot(&f, KEY, include_pan)
+                .unwrap_err()
+                .code,
+            "invalid_focus_owner"
+        );
+        assert!(f.untouched(IDLER + 0x670, 8));
     }
 }

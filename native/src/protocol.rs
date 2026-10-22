@@ -68,6 +68,7 @@ fn tools(commands: Option<&dyn Commands>) -> Value {
         {"name":"hoi4_technology_list","description":"Canonical loaded public technology IDs with bounded filtering/pagination. Catalog membership does not imply player research eligibility. Pure reads; never pauses.","inputSchema":{"type":"object","properties":{"filter":{"type":"string","maxLength":128},"offset":{"type":"integer","minimum":0,"maximum":8192},"limit":{"type":"integer","minimum":1,"maximum":100}},"additionalProperties":false}},
         {"name":"hoi4_wait_for","description":"Bounded server wait for own focus/research change, game date, research UI, or all explicit until_assignments targets. Assignment targets check the first sample too and mean active focus/current slot assignment, not completion over game time or a durable plan receipt. Choose one target family. Date/assignment waits pin the current owned worker and wake on its terminal disposition or owner retirement; lifecycle evidence is historical and proves no completion. A wait begun without a worker does not attach to a later plan. UI/assignment matches do not authorize input. Wall timeout returns only an explicitly historical earlier accepted sample; no late target is accepted. Never pauses.","inputSchema":{"type":"object","properties":{"timeout_seconds":{"type":"integer","minimum":1,"maximum":50},"until_date":{"type":"array","items":{"type":"integer"},"minItems":3,"maxItems":3},"until_assignments":{"type":"object","properties":{"focus_id":{"type":"string","minLength":1,"maxLength":128,"pattern":"^[A-Za-z0-9_]+$"},"research":{"type":"array","maxItems":32,"items":{"type":"object","properties":{"slot":{"type":"integer","minimum":0,"maximum":31},"technology_id":{"type":"string","minLength":1,"maxLength":256,"pattern":"^[A-Za-z0-9_]+$"}},"required":["slot","technology_id"],"additionalProperties":false}}},"anyOf":[{"required":["focus_id"]},{"required":["research"],"properties":{"research":{"minItems":1}}}],"additionalProperties":false},"until_research_ui":{"type":"object","properties":{"view":{"type":"string","enum":["panel","tree"]},"selected_slot":{"type":"integer","minimum":0,"maximum":31}},"required":["view"],"additionalProperties":false}},"additionalProperties":false}}
     ]});
+    value["tools"].as_array_mut().unwrap().push(json!({"name":"hoi4_focus_input_probe","description":"Read-only Mac preview: witness the exact unfinished own Focus node in an already-open idle tree using the input binding. Optional include_pan also verifies complete obstacle geometry. Reports bounded logical payload-read counts and whole-observation time, with no controller, navigation, cursor movement, pause, eligibility or input authority. Other platforms explicitly refuse.","inputSchema":{"type":"object","properties":{"focus_id":{"type":"string","minLength":1,"maxLength":128,"pattern":"^[A-Za-z0-9_]+$"},"include_pan":{"type":"boolean","default":false}},"required":["focus_id"],"additionalProperties":false},"annotations":{"readOnlyHint":true}}));
     value["tools"]
         .as_array_mut()
         .unwrap()
@@ -474,6 +475,45 @@ impl Server {
                     ));
                 }
                 own_focus::completion_snapshot(self.process()?, offset, limit)
+            }
+            "hoi4_focus_input_probe" => {
+                if !object.contains_key("focus_id")
+                    || object
+                        .keys()
+                        .any(|key| key != "focus_id" && key != "include_pan")
+                {
+                    return Err(Error::new(
+                        "invalid_arguments",
+                        "Canonical focus_id and optional include_pan required",
+                    ));
+                }
+                let key = object["focus_id"]
+                    .as_str()
+                    .ok_or_else(|| Error::new("invalid_arguments", "focus_id must be a string"))?;
+                own_focus::validate_key(key)
+                    .map_err(|e| Error::new("invalid_arguments", e.message))?;
+                let include_pan = match object.get("include_pan") {
+                    None => false,
+                    Some(Value::Bool(value)) => *value,
+                    _ => {
+                        return Err(Error::new(
+                            "invalid_arguments",
+                            "include_pan must be boolean",
+                        ))
+                    }
+                };
+                #[cfg(target_os = "macos")]
+                {
+                    crate::launch::macos::focus_input_probe(self.process()?, key, include_pan)
+                }
+                #[cfg(not(target_os = "macos"))]
+                {
+                    let _ = (key, include_pan);
+                    Err(Error::new(
+                        "unsupported_platform",
+                        "Focus input-binding probe is reviewed only for macOS",
+                    ))
+                }
             }
             "hoi4_input_geometry" if object.is_empty() => gui::input_geometry(self.process()?),
             "hoi4_research_slot_control" => {
@@ -1036,6 +1076,48 @@ impl Server {
 mod tests {
     use super::*;
     use std::cell::Cell;
+
+    #[test]
+    fn focus_input_probe_is_read_only_and_validates_before_process_access() {
+        let server = Server {
+            process: None,
+            unavailable: None,
+        };
+        let listing = tools(None);
+        let tool = listing["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|tool| tool["name"] == "hoi4_focus_input_probe")
+            .unwrap();
+        assert_eq!(tool["annotations"]["readOnlyHint"], true);
+        for args in [
+            json!({}),
+            json!({"focus_id":0}),
+            json!({"focus_id":"GER space"}),
+            json!({"focus_id":"GER_rhineland","include_pan":1}),
+            json!({"focus_id":"GER_rhineland","lease_token":"not allowed"}),
+        ] {
+            assert_eq!(
+                server
+                    .call("hoi4_focus_input_probe", &args, None)
+                    .unwrap_err()
+                    .code,
+                "invalid_arguments"
+            );
+        }
+        let error = server
+            .call(
+                "hoi4_focus_input_probe",
+                &json!({"focus_id":"GER_rhineland"}),
+                None,
+            )
+            .unwrap_err();
+        #[cfg(not(target_os = "macos"))]
+        assert_eq!(error.code, "unsupported_platform");
+        #[cfg(target_os = "macos")]
+        assert_eq!(error.code, "capability_unavailable");
+    }
 
     #[test]
     fn late_followup_discards_target_and_reports_only_earlier_historical_state() {
