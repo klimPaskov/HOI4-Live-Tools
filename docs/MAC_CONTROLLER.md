@@ -125,8 +125,13 @@ candidates after cursor settlement under one original five-second deadline.
 Panning requires complete obstacle geometry and a fresh origin check before
 mouse-down; later motion retains ownership checks and release cleanup. The first
 recorded gate expired with an unresolved intent while the tree was open. That
-controller remains blocked. Stage diagnostics, bounded navigation and fresh typed
-assignment receipts still need qualification before Focus enters daily plans.
+controller remains blocked. Subsequent errors include a static stage label,
+stage/total elapsed time and requested pan count; a requested pan does not prove
+mouse-down was delivered. Stage observation windows are bounded by the original
+deadline and have distinct timeout codes. Native ownership refusals retain their
+cause even if the read finishes late. These diagnostics cannot explain an earlier
+binary's failure. Bounded navigation and fresh typed assignment receipts still
+need qualification before Focus enters daily plans.
 
 Generated tests cover persistence, ownership, chronology, slot waits, typed
 proofs, unchanged allocations, original deadlines, cancellation and shutdown.

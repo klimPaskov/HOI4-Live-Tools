@@ -149,39 +149,111 @@ fn sample<T>(
 }
 /// Only complete discarded torn snapshots may be retried, inside the original
 /// deadline. Scope, input and ownership failures retain their exact cause.
-fn wait_for<T>(until: Instant, mut probe: impl FnMut() -> Result<Option<T>>) -> Result<T> {
-    let end = until.min(Instant::now() + Duration::from_secs(3));
+fn wait_for<T>(until: Instant, probe: impl FnMut() -> Result<Option<T>>) -> Result<T> {
+    wait_window(
+        until,
+        Duration::from_secs(3),
+        "input_readback_failed",
+        Duration::from_millis(30),
+        probe,
+    )
+}
+fn wait_window<T>(
+    until: Instant,
+    window: Duration,
+    timeout_code: &'static str,
+    interval: Duration,
+    mut probe: impl FnMut() -> Result<Option<T>>,
+) -> Result<T> {
+    let end = until.min(Instant::now() + window);
+    let check = || {
+        deadline(until)?;
+        if Instant::now() >= end {
+            return Err(Error::new(
+                timeout_code,
+                "Focus stage observation window expired",
+            ));
+        }
+        Ok(())
+    };
     loop {
-        deadline(end)?;
-        let result = probe();
-        deadline(end)?;
+        check()?;
+        // A known ownership/lease/cancellation refusal remains the cause even
+        // if its native read also consumed the remaining time. Only discarded
+        // torn reads and successful payloads reach the elapsed-time check.
+        let result = match probe() {
+            Err(error) if error.code != "torn_read" => return Err(error),
+            result => result,
+        };
+        check()?;
         match result {
             Ok(Some(value)) => return Ok(value),
             Ok(None) => {}
             Err(error) if error.code == "torn_read" => {}
             Err(error) => return Err(error),
         }
-        thread::sleep(Duration::from_millis(30).min(end.saturating_duration_since(Instant::now())));
+        thread::sleep(interval.min(end.saturating_duration_since(Instant::now())));
     }
 }
 fn settle<T: PartialEq>(until: Instant, mut probe: impl FnMut() -> Result<T>) -> Result<T> {
-    let end = until.min(Instant::now() + Duration::from_secs(2));
     let mut previous = None;
-    wait_for(end, || {
-        let current = match probe() {
-            Ok(current) => current,
-            Err(error) => {
-                previous = None;
-                return Err(error);
+    wait_window(
+        until,
+        Duration::from_secs(2),
+        "gui_target_unsettled",
+        Duration::from_millis(60),
+        || {
+            let current = match probe() {
+                Ok(current) => current,
+                Err(error) => {
+                    previous = None;
+                    return Err(error);
+                }
+            };
+            if previous.as_ref() == Some(&current) {
+                return Ok(Some(current));
             }
-        };
-        if previous.as_ref() == Some(&current) {
-            return Ok(Some(current));
+            previous = Some(current);
+            Ok(None)
+        },
+    )
+}
+/// Diagnostics describe this invocation only. Stage labels are static and no
+/// address, journal token or game payload is included. A requested drag is not
+/// evidence that mouse-down was delivered.
+struct Trace {
+    stage: &'static str,
+    started: Instant,
+    stage_started: Instant,
+    pan_requests: u32,
+}
+impl Trace {
+    fn new() -> Self {
+        let started = Instant::now();
+        Self {
+            stage: "initial",
+            started,
+            stage_started: started,
+            pan_requests: 0,
         }
-        previous = Some(current);
-        thread::sleep(Duration::from_millis(30).min(end.saturating_duration_since(Instant::now())));
-        Ok(None)
-    })
+    }
+    fn stage(&mut self, stage: &'static str) {
+        self.stage = stage;
+        self.stage_started = Instant::now();
+    }
+    fn failure(&self, error: Error) -> Error {
+        Error::new(
+            error.code,
+            format!(
+                "stage={}; stage_elapsed_ms={:.3}; total_elapsed_ms={:.3}; pan_requests={}; {}",
+                self.stage,
+                self.stage_started.elapsed().as_secs_f64() * 1000.0,
+                self.started.elapsed().as_secs_f64() * 1000.0,
+                self.pan_requests,
+                error.message
+            ),
+        )
+    }
 }
 fn unchanged<T: PartialEq>(expected: &T, current: &T) -> Result<()> {
     if expected != current {
@@ -224,9 +296,22 @@ pub(super) fn start(
     key: &str,
     until: Instant,
 ) -> Result<()> {
+    let mut trace = Trace::new();
+    start_inner(process, keys, key, until, &mut trace).map_err(|error| trace.failure(error))
+}
+fn start_inner(
+    process: &(dyn Process + Send + Sync),
+    keys: &MacKeys,
+    key: &str,
+    until: Instant,
+    trace: &mut Trace,
+) -> Result<()> {
+    trace.stage("bind_own_target");
     deadline(until)?;
     let (owner, ()) = binding::observe(process, key, None, |_, _, _| Ok(()))?;
+    trace.stage("clear_notices");
     clear_notices(process, keys)?;
+    trace.stage("inspect_open_views");
     if !sample(process, &owner, key, |r, i, o| {
         binding::open(r, i, o, MACOS.focus_view)
     })? {
@@ -234,6 +319,7 @@ pub(super) fn start(
             binding::open(r, i, o, MACOS.politics_view)
         })? {
             // No fixed-coordinate fallback after a failed key or read.
+            trace.stage("open_politics");
             keys.press(Key::letter('q')?)?;
             wait_for(until, || {
                 Ok(sample(process, &owner, key, |r, i, o| {
@@ -242,9 +328,11 @@ pub(super) fn start(
                 .then_some(()))
             })?;
         }
+        trace.stage("focus_opener");
         let probe = || sample(process, &owner, key, binding::focus_button);
         let candidate = settle(until, probe)?;
         click(process, keys, &candidate, until, probe)?;
+        trace.stage("open_tree_readback");
         wait_for(until, || {
             Ok(sample(process, &owner, key, |r, i, o| {
                 binding::open(r, i, o, MACOS.focus_view)
@@ -252,6 +340,7 @@ pub(super) fn start(
             .then_some(()))
         })?;
     }
+    trace.stage("tree_layout");
     wait_for(until, || {
         Ok(sample(process, &owner, key, binding::symbols)?
             .target
@@ -260,6 +349,7 @@ pub(super) fn start(
     let mut previous: Option<Rect> = None;
     let mut revealed = false;
     for _ in 0..12 {
+        trace.stage("pan_candidate");
         deadline(until)?;
         let tree = settle(until, || sample(process, &owner, key, binding::symbols))?;
         let rect = tree
@@ -300,6 +390,8 @@ pub(super) fn start(
             deadline(until)
         };
         let guarded = keys.guarded(process, &scope)?;
+        trace.stage("pan_transport");
+        trace.pan_requests += 1;
         guarded.drag_checked(GAME, from, to, &before_down)?;
         deadline(until)?;
         thread::sleep(
@@ -312,6 +404,7 @@ pub(super) fn start(
             "Focus could not be panned into view",
         ));
     }
+    trace.stage("node_candidate_and_click");
     let node = || {
         sample(process, &owner, key, binding::symbols)?
             .target
@@ -325,13 +418,16 @@ pub(super) fn start(
         ));
     }
     click(process, keys, &candidate, until, node)?;
+    trace.stage("detail_open_readback");
     wait_for(until, || sample(process, &owner, key, binding::detail))?;
+    trace.stage("start_candidate_and_click");
     let detail = || {
         sample(process, &owner, key, binding::detail)?
             .ok_or_else(|| Error::new("input_readback_failed", "Own Focus detail closed"))
     };
     let candidate = settle(until, detail)?;
     click(process, keys, &candidate, until, detail)?;
+    trace.stage("activation_readback");
     wait_for(until, || {
         Ok((progress(process)?.active_key() == Some(key)).then_some(()))
     })
@@ -340,6 +436,57 @@ pub(super) fn start(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn stage_window_expiry_is_distinct_from_the_original_action_deadline() {
+        let future = Instant::now() + Duration::from_secs(10);
+        for code in ["input_readback_failed", "gui_target_unsettled"] {
+            let result: Result<()> = wait_window(
+                future,
+                Duration::ZERO,
+                code,
+                Duration::from_millis(30),
+                || panic!("expired stage must not probe"),
+            );
+            assert_eq!(result.unwrap_err().code, code);
+        }
+        let result: Result<()> = wait_window(
+            Instant::now(),
+            Duration::from_secs(10),
+            "input_readback_failed",
+            Duration::from_millis(30),
+            || panic!("expired action must not probe"),
+        );
+        assert_eq!(result.unwrap_err().code, "action_deadline");
+    }
+    #[test]
+    fn diagnostic_trace_retains_failure_code_and_labels_requests_without_claiming_input() {
+        let mut trace = Trace::new();
+        trace.stage("pan_transport");
+        trace.pan_requests = 2;
+        let error = trace.failure(Error::new("input_lease_required", "original cause"));
+        assert_eq!(error.code, "input_lease_required");
+        assert!(error
+            .message
+            .starts_with("stage=pan_transport; stage_elapsed_ms="));
+        assert!(error.message.contains("total_elapsed_ms="));
+        assert!(error.message.ends_with("pan_requests=2; original cause"));
+        trace.stage("activation_readback");
+        assert!(trace
+            .failure(Error::new("action_deadline", "late"))
+            .message
+            .starts_with("stage=activation_readback;"));
+    }
+    #[test]
+    fn late_native_refusal_retains_its_ownership_cause() {
+        let until = Instant::now() + Duration::from_secs(1);
+        let result: Result<()> = wait_for(until, || {
+            thread::sleep(until.saturating_duration_since(Instant::now()));
+            Err(Error::new("ownership_changed", "original native refusal"))
+        });
+        let error = result.unwrap_err();
+        assert_eq!(error.code, "ownership_changed");
+        assert_eq!(error.message, "original native refusal");
+    }
     #[test]
     fn original_deadline_refuses_without_probe_and_scope_errors_keep_their_cause() {
         let mut called = false;

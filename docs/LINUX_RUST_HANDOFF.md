@@ -47,8 +47,16 @@ cancellation and release after a failed down. All 227 native source files stayed
 unchanged through the gate. This is a failed input qualification, not durable
 Focus or campaign acceptance.
 
-Next, add bounded stage/cost diagnostics and reduce repeated canonical/UI work
-without weakening original ownership or final witnesses. Qualify visible or short
+Subsequent code adds static stage labels, stage/total elapsed time and requested
+pan count to Focus failures. Local observation-window expiry is distinct from
+the original action deadline; late ownership refusals retain their cause, and
+polling sleeps are bounded by both limits. These diagnostics were not in the
+failed gate binary and do not identify that gate's unknown stage.
+The diagnostics checkpoint passed 1,326 Rust tests, 956 Python tests (37 skipped),
+formatting, strict host Clippy and the release build; it adds no live input result.
+
+Next, measure and reduce repeated canonical/UI work without weakening original
+ownership or final witnesses. Qualify visible or short
 navigation before adding durable Focus. Preserve the failed controller and video;
 use a separately owned technical session for later input qualification. Focus
 progress already uses a complete coherent typed snapshot instead of a paginated

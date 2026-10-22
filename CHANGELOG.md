@@ -2,6 +2,12 @@
 
 ## Unreleased native preview
 
+- Include the current stage, elapsed time and requested pan count in Mac Focus
+  failures. Distinguish a stage observation timeout from the original action
+  deadline, retain native ownership refusals, and bound polling to both limits.
+  This adds diagnostics for future attempts; the recorded timeout's stage
+  remains unknown and its controller remains blocked.
+
 - Bind Mac Focus clicks to the original own canonical objects and complete GUI
   witnesses, with a final check after cursor settlement and one original action
   deadline. Require complete drag-origin geometry and preserve mouse release on
