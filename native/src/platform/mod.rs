@@ -36,6 +36,120 @@ pub trait Process: ReadMemory {
         None
     }
 }
+// Share one opened native handle between the stdio reader and its owned worker.
+// Delegation preserves batching, ABI and freshness checks; Arc grants no access.
+impl<T: Process + ?Sized> ReadMemory for std::sync::Arc<T> {
+    fn read(&self, address: u64, size: usize) -> Result<Vec<u8>> {
+        (**self).read(address, size)
+    }
+    fn read_many(&self, requests: &[(u64, usize)]) -> Result<Vec<Vec<u8>>> {
+        (**self).read_many(requests)
+    }
+    fn string_abi(&self) -> crate::memory::StringAbi {
+        (**self).string_abi()
+    }
+}
+impl<T: Process + ?Sized> Process for std::sync::Arc<T> {
+    fn check(&self) -> Result<()> {
+        (**self).check()
+    }
+    fn begin_snapshot(&self) -> Result<()> {
+        (**self).begin_snapshot()
+    }
+    fn image_base(&self) -> u64 {
+        (**self).image_base()
+    }
+    fn identity(&self) -> Option<&Identity> {
+        (**self).identity()
+    }
+}
+
+#[cfg(test)]
+mod shared_process_tests {
+    use super::*;
+    use crate::memory::StringAbi;
+    use std::sync::{mpsc, Arc, Mutex};
+    struct Fixture {
+        trace: Arc<Mutex<Vec<&'static str>>>,
+        identity: Identity,
+    }
+    impl Drop for Fixture {
+        fn drop(&mut self) {
+            self.trace.lock().unwrap().push("drop");
+        }
+    }
+    impl ReadMemory for Fixture {
+        fn read(&self, _: u64, size: usize) -> Result<Vec<u8>> {
+            self.trace.lock().unwrap().push("read");
+            Ok(vec![1; size])
+        }
+        fn read_many(&self, requests: &[(u64, usize)]) -> Result<Vec<Vec<u8>>> {
+            self.trace.lock().unwrap().push("batch");
+            Ok(requests.iter().map(|(_, n)| vec![2; *n]).collect())
+        }
+        fn string_abi(&self) -> StringAbi {
+            StringAbi::LibCxx
+        }
+    }
+    impl Process for Fixture {
+        fn check(&self) -> Result<()> {
+            self.trace.lock().unwrap().push("check");
+            Ok(())
+        }
+        fn begin_snapshot(&self) -> Result<()> {
+            self.trace.lock().unwrap().push("snapshot");
+            Ok(())
+        }
+        fn image_base(&self) -> u64 {
+            0x100000000
+        }
+        fn identity(&self) -> Option<&Identity> {
+            Some(&self.identity)
+        }
+    }
+    #[test]
+    fn shared_reader_preserves_native_batch_abi_checks_and_last_owner_lifetime() {
+        let trace = Arc::new(Mutex::new(Vec::new()));
+        let identity = Identity {
+            pid: 7,
+            start_ticks: "1.000001".into(),
+            exe: "/fixture".into(),
+            uid: 501,
+        };
+        let process: Arc<dyn Process + Send + Sync> = Arc::new(Fixture {
+            trace: trace.clone(),
+            identity: identity.clone(),
+        });
+        let reader: &dyn Process = &process;
+        assert_eq!(reader.identity(), Some(&identity));
+        assert_eq!(reader.image_base(), 0x100000000);
+        assert_eq!(reader.string_abi(), StringAbi::LibCxx);
+        assert_eq!(
+            reader.read_many(&[(0x10000, 1), (0x20000, 2)]).unwrap(),
+            vec![vec![2], vec![2, 2]]
+        );
+        assert_eq!(reader.read(0x10000, 1).unwrap(), vec![1]);
+        reader.begin_snapshot().unwrap();
+        reader.check().unwrap();
+        let owned = process.clone();
+        let (send, recv) = mpsc::channel();
+        let worker = std::thread::spawn(move || {
+            recv.recv().unwrap();
+            owned.check().unwrap();
+        });
+        drop(process);
+        assert_eq!(
+            *trace.lock().unwrap(),
+            vec!["batch", "read", "snapshot", "check"]
+        );
+        send.send(()).unwrap();
+        worker.join().unwrap();
+        assert_eq!(
+            *trace.lock().unwrap(),
+            vec!["batch", "read", "snapshot", "check", "check", "drop"]
+        );
+    }
+}
 #[cfg(target_os = "linux")]
 mod linux;
 #[cfg(target_os = "macos")]

@@ -2,6 +2,15 @@
 
 ## Unreleased native preview
 
+- Retain the Mac controller epoch across reconnects with exact campaign and
+  chronology checks, a pinned private state file and single-writer exclusion.
+  Reopening creates no lease; older nonempty journals require explicit migration.
+- Share clock/gameplay input quarantine and retain failed journal writes. Bound
+  research/production reads and input to the original action deadline; preserve
+  nested guards and attempt drag release after cancellation or motion failure.
+  Shared process-handle lifetime prepares the controller for a future worker;
+  durable Mac background execution remains unfinished.
+
 - Add a Rust-managed native Mac window recorder with private output, bounded
   startup/finalization, explicit stopping, owner-loss handling and exact failure
   witnesses. Distinguish unchanged-display idle frames from capture loss. Preserve

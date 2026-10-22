@@ -84,20 +84,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
         None => (None, None),
     };
-    let server = Server {
-        process,
-        unavailable,
-    };
     #[cfg(target_os = "macos")]
-    let commands = match (&mac_input, &server.process) {
+    let process = process.map(std::sync::Arc::<dyn platform::Process + Send + Sync>::from);
+    #[cfg(target_os = "macos")]
+    let commands = match (&mac_input, &process) {
         (Some(directory), Some(process)) => {
-            Some(launch::macos::MacClock::bind(process.as_ref(), directory)?)
+            Some(launch::macos::MacClock::bind(process.clone(), directory)?)
         }
         (Some(_), None) => return Err("--mac-input requires an open owned session".into()),
         _ => None,
     };
     #[cfg(not(target_os = "macos"))]
     let _ = &mac_input;
+    #[cfg(target_os = "macos")]
+    let process = process.map(|p| Box::new(p) as Box<dyn platform::Process + Send + Sync>);
+    let server = Server {
+        process,
+        unavailable,
+    };
     let stdin = io::stdin();
     let stdout = io::stdout();
     hoi4_live_native::framing::serve(stdin.lock(), stdout.lock(), |message| {

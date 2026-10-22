@@ -9,6 +9,26 @@ failed campaigns. Do not control the shared Windows game.
 
 ## Current checkpoint
 
+The next Mac foundation retains the controller epoch across reconnects, with
+private-file identity, single-writer and chronology checks. Reopening retains no
+lease. Clock and gameplay journals now share input quarantine; failed writes and
+truncated records refuse. Research/production calls carry one original deadline
+through their reads and geometry checks, nested guards are preserved, and drag
+cancellation still attempts release. The opened process handle is shared with the
+controller in preparation for worker ownership. See [the controller contract](MAC_CONTROLLER.md).
+This does not yet implement the durable Mac action worker. Typed completion proofs,
+worker stop/join, mixed-plan restart and the long Luna campaign gates remain next.
+
+Luna medium's read-only controller qualification passed: 20 status calls at a
+0.257 ms median, unchanged same-date state file, competing-writer refusal and
+same-epoch reconnect. The campaign remained paused at 12 January with zero
+input calls or lease acquisitions. Preserve the preceding ambiguous-path/focus
+refusal and the private harness's incorrect configured-holder assertion. See the
+[detailed qualification](CLAUSEWITZ_VALIDATION.md#mac-controller-restart-and-action-bounds--22-october-2026).
+
+The source passed 1,253 host Rust tests, 956 workspace Python tests (37 skipped),
+formatting, Clippy, Windows all-target compilation and the 24-tool stdio smoke.
+
 The latest refinement enforces exact Mac game/supervisor identities and their
 parent relationship, including in task-port-free recording checks. The durable
 observation producer now uses the independently verified Mac layouts and accepts

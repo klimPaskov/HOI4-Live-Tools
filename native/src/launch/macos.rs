@@ -2,14 +2,17 @@
 //! journals, CGEvent keys and clicks only while the owned window is front-most,
 //! and fresh memory readback for every step. The clock keeps the Linux tool
 //! contract; research starts are driven by live GUI geometry.
+mod action_fence;
 mod air;
 mod armies;
 mod construction;
+mod controller_epoch;
 mod decisions;
 mod deployment;
 mod diplomacy;
 mod events;
 mod focus;
+mod input_gate;
 mod journal;
 mod mapdata;
 mod politics;
@@ -35,7 +38,7 @@ use std::{
     fs::File,
     io::Read,
     path::Path,
-    sync::Mutex,
+    sync::{Arc, Mutex},
     thread,
     time::{Duration, Instant},
 };
@@ -58,11 +61,28 @@ struct Guard {
     anchors: [u64; 3],
     playthrough: String,
     latest_date: i32,
+    persisted: controller_epoch::ControllerEpoch,
+    poisoned: bool,
 }
 impl Guard {
     /// Fresh own clock state; refuses another game, campaign or a rewound date.
     fn observe(&mut self, process: &dyn Process) -> Result<State> {
+        let context = self.observe_context(process)?;
+        Ok(State {
+            epoch: self.epoch.clone(),
+            paused: context.paused,
+            speed: context.speed,
+        })
+    }
+    fn observe_context(&mut self, process: &dyn Process) -> Result<game::ClockContext> {
+        if self.poisoned || self.persisted.blocked() {
+            return Err(Error::new(
+                "action_uncertain",
+                "Controller identity is quarantined",
+            ));
+        }
         if process.identity() != Some(&self.epoch.game) {
+            self.poisoned = true;
             return Err(Error::new("ownership_changed", "Clock process differs"));
         }
         let mut retries = 0;
@@ -75,22 +95,21 @@ impl Guard {
                 result => break result?,
             }
         };
+        // Persisted validation is sticky, including a later restored context.
+        self.persisted.observe(&self.epoch, &context)?;
         if context.anchors != self.anchors
             || context.playthrough_id != self.playthrough
             || context.player != self.epoch.player
             || context.date_raw < self.latest_date
         {
+            self.poisoned = true;
             return Err(Error::new(
                 "ownership_changed",
                 "Campaign context changed; a fresh owned run is required",
             ));
         }
         self.latest_date = context.date_raw;
-        Ok(State {
-            epoch: self.epoch.clone(),
-            paused: context.paused,
-            speed: context.speed,
-        })
+        Ok(context)
     }
 }
 
@@ -101,46 +120,60 @@ struct Control {
     actions: journal::GameJournal,
 }
 
-pub struct MacClock<'p> {
+pub struct MacClock {
     directory: std::path::PathBuf,
-    keys: MacKeys<'p>,
-    state: Mutex<Control>,
+    keys: Arc<MacKeys<'static>>,
+    state: Arc<Mutex<Control>>,
+    process: Arc<dyn Process + Send + Sync>,
 }
-impl<'p> MacClock<'p> {
+impl MacClock {
     /// Bind to the owned process already opened from the session manifest.
-    pub fn bind(process: &'p (dyn Process + Send + Sync), directory: &Path) -> Result<Self> {
+    pub fn bind(process: Arc<dyn Process + Send + Sync>, directory: &Path) -> Result<Self> {
         let config: Config = serde_json::from_slice(&std::fs::read(directory.join("input.json"))?)
             .map_err(|e| Error::new("invalid_input_binding", e.to_string()))?;
         let game_identity = process
             .identity()
             .cloned()
             .ok_or_else(|| Error::new("input_unavailable", "Owned process identity required"))?;
-        let context = game::clock_context(process)?;
+        let context = game::clock_context(process.as_ref())?;
         if context.player != config.player {
             return Err(Error::new(
                 "invalid_input_binding",
                 "Configured player differs from the owned campaign",
             ));
         }
-        let epoch = Epoch {
+        let proposed = Epoch {
             game: game_identity.clone(),
             campaign: format!("{}:{}", nonce()?, context.playthrough_id),
             player: config.player,
         };
+        let keys = Arc::new(MacKeys::bind_owned(process.clone())?);
+        let mut persisted = controller_epoch::ControllerEpoch::open(
+            &directory.join("controller-epoch.json"),
+            proposed,
+            &context,
+            true,
+        )?;
+        let epoch = persisted.epoch()?;
+        let journal = Journal::open(&directory.join("clock-actions.jsonl"))?;
+        let actions = journal::GameJournal::open(&directory.join("game-actions.jsonl"))?;
         Ok(Self {
             directory: directory.to_path_buf(),
-            keys: MacKeys::bind(process)?,
-            state: Mutex::new(Control {
+            keys,
+            process,
+            state: Arc::new(Mutex::new(Control {
                 authority: InputAuthority::new(config.controller, epoch.clone())?,
-                journal: Journal::open(&directory.join("clock-actions.jsonl"))?,
-                actions: journal::GameJournal::open(&directory.join("game-actions.jsonl"))?,
+                journal,
+                actions,
                 guard: Guard {
                     epoch,
                     anchors: context.anchors,
                     playthrough: context.playthrough_id,
                     latest_date: context.date_raw,
+                    persisted,
+                    poisoned: false,
                 },
-            }),
+            })),
         })
     }
 }
@@ -223,7 +256,7 @@ fn allowed(args: &serde_json::Map<String, Value>, keys: &[&str]) -> Result<()> {
     Ok(())
 }
 
-impl Commands for MacClock<'_> {
+impl Commands for MacClock {
     fn tools(&self) -> Vec<Value> {
         vec![
             json!({"name":"hoi4_plan","description":"Read or change the standing plan (plan.json in the run directory): research priorities, focus path, construction, training, production, politics, decisions. {op:get} returns it; {op:set, plan:{...}} merges the given keys (null removes a key). hoi4_plan_run carries it out.","inputSchema":{"type":"object","oneOf":[{"properties":{"op":{"const":"get"}},"required":["op"],"additionalProperties":false},{"properties":{"op":{"const":"set"},"plan":{"type":"object"}},"required":["op","plan"],"additionalProperties":false}]}}),
@@ -308,6 +341,13 @@ impl Commands for MacClock<'_> {
         json!({"transport":"ordinary macOS CGEvent keys to the front-most owned window","actions":["set_paused","set_speed","research_start","focus_start","production_add","production_set","construction_add","politics_options","politics_choose","decisions_list","decision_take","train","deploy_locations","army_create","army_front","army_plan","army_offensive","event_choose","diplomacy","diplomacy_act","army_commander","army_group_create","army_split","state_slots","air_wings","air_mission","plan_run"],"lease":"exclusive configured controller","input_profile":{"name":"macos_cocoa_absolute_1920x1080_v1","checked_at_bind":true,"rechecked_before_each_input":true,"diagnostic_alone_authorizes_input":false},"native_posting":false,"full_campaign_acceptance":false})
     }
     fn call(&self, process: &dyn Process, name: &str, arguments: &Value) -> Result<Value> {
+        if process.identity() != self.process.identity() {
+            return Err(Error::new(
+                "ownership_changed",
+                "Mac controller reader changed",
+            ));
+        }
+        let process = self.process.as_ref();
         let args = arguments
             .as_object()
             .ok_or_else(|| Error::new("invalid_arguments", "Input arguments must be an object"))?;
@@ -344,10 +384,23 @@ impl Commands for MacClock<'_> {
             process.check()?;
             return Ok(json!({"templates":rows}));
         }
-        let mut state = self
-            .state
-            .try_lock()
-            .map_err(|_| Error::new("input_busy", "Another input operation is in progress"))?;
+        let mut state = self.state.try_lock().map_err(|e| match e {
+            std::sync::TryLockError::WouldBlock => {
+                Error::new("input_busy", "Another input operation is in progress")
+            }
+            std::sync::TryLockError::Poisoned(_) => {
+                Error::new("action_uncertain", "Mac controller is poisoned")
+            }
+        })?;
+        if name != "hoi4_input_lease" {
+            input_gate::check(
+                &state.journal,
+                &state.actions,
+                &state.guard.epoch.game,
+                name == "hoi4_time",
+                args.get("request_id").and_then(Value::as_str),
+            )?;
+        }
         let Control {
             guard,
             authority,
@@ -408,17 +461,30 @@ impl Commands for MacClock<'_> {
                 as usize;
             let id = string(args, "request_id")?;
             let token = string(args, "lease_token")?;
-            let epoch = guard.observe(process)?.epoch;
-            authority.authorize(token, &epoch)?;
+            let expected = guard.observe_context(process)?;
+            let epoch = guard.epoch.clone();
+            let lease_end = authority.authorize(token, &epoch)?;
+            let fence = action_fence::Fence {
+                process,
+                epoch: &epoch,
+                expected: &expected,
+                authority,
+                token,
+                until: (Instant::now() + Duration::from_secs(5)).min(lease_end),
+                stop: None,
+            };
+            let check_input = || fence.input_check();
+            let bounded_keys = self.keys.guarded(&fence, &check_input)?;
+            let process: &dyn Process = &fence;
             let action = json!({"kind":"research_start","technology":key,"slot":slot});
             let before = research::assignments(process)?;
             if actions.receipt_exists(id) {
                 // A retry only settles or replays its receipt; it never refuses on new state.
             } else {
                 research::check(&before, key, slot)?;
-                self.keys.preflight()?;
+                bounded_keys.preflight()?;
             }
-            let keys = &self.keys;
+            let keys = &bounded_keys;
             let mut settle = || {
                 let now = research::assignments(process)?;
                 let target = now.slots.get(slot).cloned().flatten();
@@ -488,8 +554,21 @@ impl Commands for MacClock<'_> {
             };
             let id = string(args, "request_id")?;
             let token = string(args, "lease_token")?;
-            let epoch = guard.observe(process)?.epoch;
-            authority.authorize(token, &epoch)?;
+            let expected = guard.observe_context(process)?;
+            let epoch = guard.epoch.clone();
+            let lease_end = authority.authorize(token, &epoch)?;
+            let fence = action_fence::Fence {
+                process,
+                epoch: &epoch,
+                expected: &expected,
+                authority,
+                token,
+                until: (Instant::now() + Duration::from_secs(5)).min(lease_end),
+                stop: None,
+            };
+            let check_input = || fence.input_check();
+            let bounded_keys = self.keys.guarded(&fence, &check_input)?;
+            let process: &dyn Process = &fence;
             let action = json!({"kind":name.trim_start_matches("hoi4_"),"equipment":key,"factories":factories,"line":index});
             let before = production::lines(process)?;
             let retry = actions.receipt_exists(id);
@@ -502,9 +581,9 @@ impl Commands for MacClock<'_> {
                         ));
                     }
                 }
-                self.keys.preflight()?;
+                bounded_keys.preflight()?;
             }
-            let keys = &self.keys;
+            let keys = &bounded_keys;
             let mut settle = || {
                 let now = production::lines(process)?;
                 let detail = json!({"lines":now.iter().map(|l| json!({"equipment":l.key,"factories":l.requested})).collect::<Vec<_>>()});

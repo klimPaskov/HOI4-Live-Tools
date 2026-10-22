@@ -1,5 +1,50 @@
 # Clausewitz-MCP Linux validation
 
+## Mac controller restart and action bounds — 22 October 2026
+
+The controller now retains its exact epoch in a private, locked and pinned state
+file. Reopening validates process creation, own player, playthrough, roots, game
+setup and date chronology without generating a replacement campaign identity.
+Same-date reads do not rewrite the file. Old nonempty action/daily histories
+without this record refuse automatic migration. The controller and server share
+one opened process handle; no background worker is introduced by this change.
+
+Clock and gameplay journals now share input quarantine. A different domain, new
+request ID or input-producing query cannot proceed around an unresolved action;
+only its journal's recorded request can take read-only settlement. Failed writes
+remain blocked, and partial or oversized journal records refuse on reopen.
+Research/production calls carry one original five-second deadline through reads,
+geometry checks and ordinary input. Nested guards preserve the original deadline.
+Every drag step rechecks, and cancellation/failure attempts release at the last
+posted position. Generated fixtures cover these failures without live input.
+
+One Luna medium player qualified read-only controller startup and reconnect on
+the existing owned native 1080p game. Twenty status calls had a 0.257 ms median
+(0.249–0.312 ms), including retained-state validation and MCP round trip. The state
+file's inode, timestamp and content stayed unchanged; a competing writer refused,
+and closing/reopening preserved the epoch. These are small paused-game status
+samples, not full observation or action timings. There were zero input calls,
+lease acquisitions and observation pauses. Germany stayed paused at 12 January
+1936 01:00, speed 1, Normal/historical, with existing Research and Focus unchanged.
+All 218 frozen native source/config inputs matched the tested staged source.
+
+Preserve two earlier private harness failures. Ambiguous activation-path wording
+caused the first check to stay out of focus; binding correctly refused before its
+first RPC. The second initialized but its test incorrectly expected an absent
+holder. Lease status reports the configured controller even when no lease exists;
+zero remaining time was the correct result. The corrected harness required no
+activation and passed. Neither failure sent gameplay input or acquired a lease.
+
+Validation passed 1,253 host Rust tests, 956 workspace Python tests (37 skipped),
+809 clean-staged Python tests (29 skipped), formatting, Clippy, Windows all-target
+compilation and a 24-tool stdio smoke. The first staged-archive helper used a
+Python-version-incompatible extraction option; that private harness failure was
+preserved before the corrected clean extraction/test run. Durable Mac worker
+execution, typed action proofs, mixed-plan restart, the two-year Luna run and full
+recorded campaigns remain unfinished. No release or downstream pin moved.
+
+See [the Mac controller contract](MAC_CONTROLLER.md).
+
 ## Mac recorder lifecycle and durable observations — 22 October 2026
 
 The new Rust `--record` command passed a bounded native Mac window qualification:

@@ -13,7 +13,7 @@ use serde_json::Value;
 use std::{
     collections::BTreeMap,
     fs::{File, OpenOptions},
-    io::{BufRead, BufReader, Write},
+    io::{BufRead, BufReader, Read, Write},
     path::Path,
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -52,6 +52,7 @@ pub enum Outcome {
 pub struct GameJournal {
     file: File,
     receipts: BTreeMap<String, Receipt>,
+    poisoned: bool,
 }
 fn now() -> u64 {
     SystemTime::now()
@@ -101,8 +102,27 @@ impl GameJournal {
             return Err(Error::new("invalid_journal", "Journal exceeds bound"));
         }
         let mut receipts: BTreeMap<String, Receipt> = BTreeMap::new();
-        for line in BufReader::new(file.try_clone()?).split(b'\n') {
-            let line = line?;
+        let mut reader = BufReader::new(file.try_clone()?);
+        loop {
+            let mut line = Vec::new();
+            if reader
+                .by_ref()
+                .take((LINE_LIMIT + 1) as u64)
+                .read_until(b'\n', &mut line)?
+                == 0
+            {
+                break;
+            }
+            if line.len() > LINE_LIMIT {
+                return Err(Error::new(
+                    "invalid_journal",
+                    "Journal record exceeds bound",
+                ));
+            }
+            if line.last() != Some(&b'\n') {
+                return Err(Error::new("invalid_journal", "Truncated journal record"));
+            }
+            line.pop();
             if line.is_empty() {
                 continue;
             }
@@ -128,7 +148,11 @@ impl GameJournal {
             }
             receipts.insert(record.id.clone(), record);
         }
-        Ok(Self { file, receipts })
+        Ok(Self {
+            file,
+            receipts,
+            poisoned: false,
+        })
     }
     fn append(&mut self, record: Receipt) -> Result<Receipt> {
         let mut line = serde_json::to_vec(&record)
@@ -144,18 +168,28 @@ impl GameJournal {
         {
             return Err(Error::new("journal_full", "No durable receipt capacity"));
         }
+        self.poisoned = true;
         self.file.write_all(&line)?;
         self.file.sync_all()?;
         self.receipts.insert(record.id.clone(), record.clone());
+        self.poisoned = false;
         Ok(record)
     }
     pub fn receipt_exists(&self, id: &str) -> bool {
         self.receipts.contains_key(id)
     }
-    fn unresolved(&self) -> Option<&Receipt> {
+    pub(super) fn unresolved(&self) -> Option<&Receipt> {
         self.receipts
             .values()
             .find(|r| r.status == Status::Dispatching)
+    }
+    pub(super) fn blocked(&self) -> bool {
+        self.poisoned || self.unresolved().is_some()
+    }
+    /// Only an existing request may take the read-only replay/settlement path.
+    /// Persistence failure cannot be cleared by a new lease or request ID.
+    pub(super) fn permits_recovery(&self, id: Option<&str>) -> bool {
+        !self.poisoned && id.is_some_and(|id| self.receipt_exists(id))
     }
     /// Run `dispatch` once under a durable intent record. `settle` reads fresh
     /// state and reports what the game shows about this action.
@@ -167,6 +201,12 @@ impl GameJournal {
         settle: &mut dyn FnMut() -> Result<Outcome>,
         dispatch: &mut dyn FnMut() -> Result<()>,
     ) -> Result<Receipt> {
+        if self.poisoned {
+            return Err(Error::new(
+                "action_uncertain",
+                "Game journal persistence is uncertain",
+            ));
+        }
         valid_id(id)?;
         if let Some(previous) = self.receipts.get(id).cloned() {
             if !same_campaign(&previous.epoch, epoch) || previous.action != action {
@@ -293,6 +333,68 @@ mod tests {
     }
     fn journal(dir: &std::path::Path) -> GameJournal {
         GameJournal::open(&dir.join("game-actions.jsonl")).unwrap()
+    }
+
+    #[test]
+    fn write_failure_poison_cannot_be_cleared_by_restore_or_new_request() {
+        let dir = dir("sticky-write-failure");
+        let mut j = journal(&dir);
+        let good = std::mem::replace(
+            &mut j.file,
+            File::open(dir.join("game-actions.jsonl")).unwrap(),
+        );
+        let result = j.execute(
+            "failed",
+            &epoch(),
+            json!({"kind":"fixture"}),
+            &mut || panic!("Failed durable intent must not observe"),
+            &mut || panic!("Failed durable intent must not dispatch"),
+        );
+        assert!(result.is_err());
+        assert!(j.blocked());
+        assert!(!j.permits_recovery(Some("failed")));
+        j.file = good;
+        for id in ["failed", "new"] {
+            assert_eq!(
+                j.execute(
+                    id,
+                    &epoch(),
+                    json!({}),
+                    &mut || panic!("Poisoned"),
+                    &mut || panic!("Poisoned")
+                )
+                .unwrap_err()
+                .code,
+                "action_uncertain"
+            );
+        }
+        drop(j);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+    #[test]
+    fn truncated_or_oversized_record_is_never_accepted_as_durable() {
+        let dir = dir("incomplete-record");
+        let path = dir.join("game-actions.jsonl");
+        let record = Receipt {
+            version: 1,
+            id: "partial".into(),
+            epoch: epoch(),
+            action: json!({}),
+            status: Status::Dispatching,
+            detail: Value::Null,
+            unix_ms: 1,
+        };
+        std::fs::write(&path, serde_json::to_vec(&record).unwrap()).unwrap();
+        assert_eq!(
+            GameJournal::open(&path).err().unwrap().code,
+            "invalid_journal"
+        );
+        std::fs::write(&path, vec![b' '; LINE_LIMIT + 1]).unwrap();
+        assert_eq!(
+            GameJournal::open(&path).err().unwrap().code,
+            "invalid_journal"
+        );
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]

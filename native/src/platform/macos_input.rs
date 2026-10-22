@@ -333,11 +333,65 @@ pub fn frontmost_window_owner() -> Result<Option<i32>> {
     }
 }
 
+/// The release is cleanup, not new authorization. Preserve the first failure
+/// while still attempting mouse-up at the last successfully posted position.
+#[allow(clippy::too_many_arguments)]
+fn drag_sequence(
+    a: Point,
+    b: Point,
+    kinds: (u32, u32, u32),
+    steps: u32,
+    step_ms: u64,
+    mut check: impl FnMut() -> Result<()>,
+    mut post: impl FnMut(u32, Point) -> Result<()>,
+    mut pause: impl FnMut(std::time::Duration),
+) -> Result<()> {
+    let (down, dragged, up) = kinds;
+    let settle = std::time::Duration::from_millis(64);
+    check()?;
+    post(MOUSE_MOVED, a)?;
+    pause(settle);
+    check()?;
+    post(down, a)?;
+    let mut last = a;
+    let result = (|| {
+        pause(settle);
+        for step in 1..=steps {
+            check()?;
+            let t = f64::from(step) / f64::from(steps);
+            let point = Point {
+                x: a.x + (b.x - a.x) * t,
+                y: a.y + (b.y - a.y) * t,
+            };
+            post(dragged, point)?;
+            last = point;
+            pause(std::time::Duration::from_millis(step_ms));
+        }
+        pause(settle);
+        Ok(())
+    })();
+    let release = post(up, last);
+    result.and(release)
+}
+
+enum ProcessBinding<'p> {
+    Borrowed(&'p (dyn Process + Send + Sync)),
+    Owned(std::sync::Arc<dyn Process + Send + Sync>),
+}
+impl ProcessBinding<'_> {
+    fn get(&self) -> &(dyn Process + Send + Sync) {
+        match self {
+            Self::Borrowed(process) => *process,
+            Self::Owned(process) => process.as_ref(),
+        }
+    }
+}
 pub struct MacKeys<'p> {
     pid: i32,
-    process: &'p (dyn Process + Send + Sync),
+    process: ProcessBinding<'p>,
     geometry: Geometry,
     window: Window,
+    input_guards: Vec<&'p (dyn Fn() -> Result<()> + Send + Sync)>,
 }
 impl<'p> MacKeys<'p> {
     pub fn bind(process: &'p (dyn Process + Send + Sync)) -> Result<Self> {
@@ -350,12 +404,39 @@ impl<'p> MacKeys<'p> {
         let window = select_window(pid, content(&geometry), &windows()?)?;
         let bound = Self {
             pid,
-            process,
+            process: ProcessBinding::Borrowed(process),
             geometry,
             window,
+            input_guards: Vec::new(),
         };
         bound.preflight()?;
         Ok(bound)
+    }
+    /// Borrow the original binding with an additional per-action deadline/lease
+    /// fence. A guarded view cannot outlive either its owner or the fence.
+    pub(crate) fn guarded<'a>(
+        &'a self,
+        process: &'a (dyn Process + Send + Sync),
+        check: &'a (dyn Fn() -> Result<()> + Send + Sync),
+    ) -> Result<MacKeys<'a>> {
+        if process.identity() != self.process.get().identity()
+            || process.image_base() != self.process.get().image_base()
+            || process.string_abi() != self.process.get().string_abi()
+        {
+            return Err(Error::new(
+                "ownership_changed",
+                "Guarded input reader differs from its binding",
+            ));
+        }
+        let mut input_guards = self.input_guards.clone();
+        input_guards.push(check);
+        Ok(MacKeys {
+            pid: self.pid,
+            process: ProcessBinding::Borrowed(process),
+            geometry: self.geometry.clone(),
+            window: self.window,
+            input_guards,
+        })
     }
     pub fn capture(&self, game: (u32, u32)) -> Result<Capture> {
         let content = self.verified_content(game)?;
@@ -375,13 +456,16 @@ impl<'p> MacKeys<'p> {
     }
     /// Fresh process, SDL/graphics witnesses and exact OS window before input.
     pub fn preflight(&self) -> Result<()> {
+        for check in &self.input_guards {
+            check()?;
+        }
         if !unsafe { AXIsProcessTrusted() } {
             return Err(Error::new(
                 "input_permission_denied",
                 "Accessibility permission is required for ordinary input",
             ));
         }
-        let current = macos::observe(self.process)?;
+        let current = macos::observe(self.process.get())?;
         current.require_profile()?;
         if !current.same_binding(&self.geometry) {
             return Err(Error::new(
@@ -395,7 +479,10 @@ impl<'p> MacKeys<'p> {
                 "Owned OS window changed; rebind required",
             ));
         }
-        self.process.check()?;
+        self.process.get().check()?;
+        for check in &self.input_guards {
+            check()?;
+        }
         Ok(())
     }
     /// One left click at a game-logical point after a fresh front-most check:
@@ -543,9 +630,6 @@ impl<'p> MacKeys<'p> {
         let a = client_point(content, from.0, from.1)?;
         let b = client_point(content, to.0, to.1)?;
         let post = |kind: u32, point: Point| -> Result<()> {
-            if kind == LEFT_MOUSE_DOWN || kind == RIGHT_MOUSE_DOWN {
-                self.preflight()?;
-            }
             // SAFETY: a null source is allowed; the event is released after posting.
             unsafe {
                 let event = CGEventCreateMouseEvent(std::ptr::null(), kind, point, button);
@@ -557,23 +641,16 @@ impl<'p> MacKeys<'p> {
             }
             Ok(())
         };
-        let pause = std::time::Duration::from_millis(16);
-        post(MOUSE_MOVED, a)?;
-        std::thread::sleep(pause * 4);
-        self.preflight()?;
-        post(down, a)?;
-        std::thread::sleep(pause * 4);
-        for step in 1..=steps {
-            let t = f64::from(step) / f64::from(steps);
-            let p = Point {
-                x: a.x + (b.x - a.x) * t,
-                y: a.y + (b.y - a.y) * t,
-            };
-            post(dragged, p)?;
-            std::thread::sleep(std::time::Duration::from_millis(step_ms));
-        }
-        std::thread::sleep(pause * 4);
-        post(up, b)
+        drag_sequence(
+            a,
+            b,
+            (down, dragged, up),
+            steps,
+            step_ms,
+            || self.preflight(),
+            post,
+            std::thread::sleep,
+        )
     }
     /// One vertical scroll-wheel step (pixel units, positive scrolls up) with the
     /// cursor at a game-logical point, after a fresh front-most check.
@@ -653,9 +730,154 @@ impl<'p> MacKeys<'p> {
     }
 }
 
+impl MacKeys<'static> {
+    /// Retain the exact opened process for the controller/worker lifetime.
+    pub fn bind_owned(process: std::sync::Arc<dyn Process + Send + Sync>) -> Result<Self> {
+        let (pid, geometry, window) = {
+            let bound = MacKeys::bind(process.as_ref())?;
+            (bound.pid, bound.geometry, bound.window)
+        };
+        Ok(Self {
+            pid,
+            process: ProcessBinding::Owned(process),
+            geometry,
+            window,
+            input_guards: Vec::new(),
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn drag_cancellation_releases_at_last_point_and_sends_no_further_motion() {
+        use std::cell::RefCell;
+        let a = Point { x: 10.0, y: 20.0 };
+        let b = Point { x: 50.0, y: 60.0 };
+        for failing_check in 1..=6 {
+            let sent = RefCell::new(Vec::new());
+            let mut checks = 0;
+            let result = drag_sequence(
+                a,
+                b,
+                (LEFT_MOUSE_DOWN, LEFT_MOUSE_DRAGGED, LEFT_MOUSE_UP),
+                4,
+                0,
+                || {
+                    checks += 1;
+                    if checks == failing_check {
+                        Err(Error::new("action_deadline", "fixture"))
+                    } else {
+                        Ok(())
+                    }
+                },
+                |kind, p| {
+                    sent.borrow_mut().push((kind, p));
+                    Ok(())
+                },
+                |_| {},
+            );
+            assert_eq!(result.unwrap_err().code, "action_deadline");
+            let sent = sent.into_inner();
+            if failing_check <= 2 {
+                assert!(!sent.iter().any(|(k, _)| *k == LEFT_MOUSE_DOWN));
+            } else {
+                let release = sent.last().unwrap();
+                assert_eq!(release.0, LEFT_MOUSE_UP);
+                assert_eq!(release.1, sent[sent.len() - 2].1);
+            }
+            assert_eq!(checks, failing_check);
+        }
+    }
+    #[test]
+    fn drag_transport_failure_attempts_release_and_preserves_original_cause() {
+        let a = Point { x: 1.0, y: 2.0 };
+        let b = Point { x: 5.0, y: 6.0 };
+        let mut sent = Vec::new();
+        let result = drag_sequence(
+            a,
+            b,
+            (RIGHT_MOUSE_DOWN, RIGHT_MOUSE_DRAGGED, RIGHT_MOUSE_UP),
+            4,
+            0,
+            || Ok(()),
+            |kind, p| {
+                sent.push((kind, p));
+                if kind == RIGHT_MOUSE_DRAGGED {
+                    Err(Error::new("fixture_motion", "failed"))
+                } else if kind == RIGHT_MOUSE_UP {
+                    Err(Error::new("fixture_release", "failed"))
+                } else {
+                    Ok(())
+                }
+            },
+            |_| {},
+        );
+        assert_eq!(result.unwrap_err().code, "fixture_motion");
+        assert_eq!(sent.last(), Some(&(RIGHT_MOUSE_UP, a)));
+    }
+    struct NoReads {
+        id: crate::platform::Identity,
+    }
+    impl crate::memory::ReadMemory for NoReads {
+        fn read(&self, _: u64, _: usize) -> Result<Vec<u8>> {
+            panic!("Guard must run before native geometry read")
+        }
+    }
+    impl Process for NoReads {
+        fn check(&self) -> Result<()> {
+            panic!("Guard must run before native process check")
+        }
+        fn image_base(&self) -> u64 {
+            0x100000000
+        }
+        fn identity(&self) -> Option<&crate::platform::Identity> {
+            Some(&self.id)
+        }
+    }
+    #[test]
+    fn nested_input_guards_preserve_original_fence_before_any_platform_work() {
+        let process = NoReads {
+            id: crate::platform::Identity {
+                pid: 123,
+                start_ticks: "1.000001".into(),
+                exe: "/fixture".into(),
+                uid: 501,
+            },
+        };
+        let keys = MacKeys {
+            pid: 123,
+            process: ProcessBinding::Borrowed(&process),
+            geometry: Geometry {
+                objects: [0; 10],
+                physical: [1920, 1080],
+                logical: [1920, 1080],
+                scale: 1.0,
+                client: [0, 81, 1920, 1080],
+                flags: 0x606,
+            },
+            window: Window {
+                id: 7,
+                owner: 123,
+                bounds: Rect::default(),
+            },
+            input_guards: Vec::new(),
+        };
+        let expired = || Err(Error::new("action_deadline", "Original deadline"));
+        let later = || panic!("Nested guard must not replace the original deadline");
+        let first = keys.guarded(&process, &expired).unwrap();
+        let nested = first.guarded(&process, &later).unwrap();
+        assert_eq!(nested.preflight().unwrap_err().code, "action_deadline");
+        let mut different = NoReads {
+            id: process.id.clone(),
+        };
+        different.id.start_ticks = "2.000001".into();
+        assert_eq!(
+            keys.guarded(&different, &expired).err().unwrap().code,
+            "ownership_changed"
+        );
+    }
     #[test]
     fn keys_map_to_stationary_virtual_codes() {
         assert_eq!(

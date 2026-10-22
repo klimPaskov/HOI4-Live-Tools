@@ -18,6 +18,12 @@ durable observation producer. Live observation sequences resumed correctly after
 reopen at a 13 ms median. This does not yet enable durable Mac worker actions;
 follow the current runtime checkpoint for the recorder lifecycle evidence.
 
+The controller now also retains its exact epoch across reconnects, shares clock
+and gameplay quarantine, and checks research/production action deadlines through
+nested reads and input. These worker prerequisites passed 1,253 Rust tests and
+956 workspace Python tests. [Controller details](MAC_CONTROLLER.md) distinguish
+this from the still-unfinished durable Mac worker and mixed-plan restart gate.
+
 **Superseded by the [Linux-first objective](LINUX_RUST_HANDOFF.md) and
 [Linux validation checkpoint](CLAUSEWITZ_VALIDATION.md).** The licensed Linux
 game has since launched and process reads passed; ordinary commands, Luna play
