@@ -1,23 +1,52 @@
 # Linux-first native MCP continuation
 
-The latest user steering on 22 October is to continue Linux tooling refinement
-and tests now, and wait for an explicit instruction before switching back to
-macOS. The final campaign videos must be filmed from native macOS HOI4 at
-1920x1080 or higher. Preserve the Mac qualification evidence for that later phase.
-Linux, Windows and macOS remain required targets for the Clausewitz-based Rust
-runtime. Preserve the legacy Python package and earlier failed campaigns. Do not
-control the shared Windows game.
+The latest user steering on 22 October explicitly authorizes switching back to
+macOS. Preserve the Linux qualification and unfinished mixed-plan gate; continue
+native Mac testing now. Final campaign videos must be filmed from native macOS
+HOI4 at 1920x1080 or higher. Linux, Windows and macOS remain required targets for
+the Clausewitz-based Rust runtime. Preserve the legacy Python package and earlier
+failed campaigns. Do not control the shared Windows game.
 
 ## Current checkpoint
+
+The Mac switch is active. Local administrator authorization has completed;
+the noninteractive Rust reader bound the fresh owned game in a 0.543-second
+three-tool frontend probe. Campaign-only reads correctly remain unavailable at
+the frontend. An earlier 25-second authorization timeout and its owned-game
+cleanup are preserved separately. The new preflight returns missing task-port
+authorization without opening an OS dialog.
+
+Continuous ScreenCaptureKit window recording passed a 20-second diagnostic at
+1920×1108, approximately 29.4 FPS, with clean finalization. This captures the whole
+owned window, including its decoration, and does not establish client-coordinate
+input authority. The screenshot-based recorder's earlier six-frame failure and
+the first streaming prototype's watchdog lifetime failure remain preserved.
+Luna medium then completed six ordinary menu actions and entered fresh historical
+Regular Germany, paused by the game at 1 January 1936 12:00. Its own-country
+overview returned in 1.404 ms over the persistent MCP connection. No input lease,
+research/focus/clock action or observation pause occurred. The 264.52-second
+recording finalized at 1920×1108 and about 29.5 FPS; hashes and frozen-source
+checks passed. Luna handed back and its broker closed. The owned game remains
+at that initial setup, with no active player.
+
+The next task is to validate Mac client geometry and the fixed input profile
+before gameplay. The shared geometry diagnostic was incorrectly using Linux
+offsets; it now refuses on Mac before any layout read, verified against the live
+game. Do not call it expecting Mac dimensions or bypass the refusal. Preserve the
+recorded initial setup and all three separate gate outcomes. The private continuous
+recorder still needs product integration and longer-running validation. No clean
+two-year or full campaign acceptance is claimed.
+
+FEX002 is cleanly closed with its recording preserved. Its 1080p binding passed
+negative/positive checks, but interruption preceded any Rust gameplay action.
+The Linux VMs and unfinished mixed-plan gate remain preserved.
 
 **Latest platform requirement (22 October): film the requested campaign videos
 from the macOS game, at native 1920x1080 or higher with readable UI.** Linux VM
 graphics benchmarks remain compatibility diagnostics and do not satisfy the video
-deliverable. **Current work stays on Linux; wait for the user's explicit switch
-before another Mac test.** The brief intervening Mac probe launched with isolated
+deliverable. **The user has now authorized the Mac switch.** The brief intervening Mac probe launched with isolated
 userdata, reached the frontend and exited with code 0; default settings remained
-unchanged. It started no campaign. Recheck the Mac build, process ownership, task
-access and capture geometry when the user switches back. No successful campaign
+unchanged. It started no campaign. The fresh Mac checks and recording results above supersede that probe. No successful campaign
 is claimed.
 
 The latest Linux test entered fresh historical Normal Germany at native 1080p

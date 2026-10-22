@@ -10,6 +10,7 @@ use crate::{
 };
 use sha2::{Digest, Sha256};
 use std::ffi::CStr;
+mod authorization;
 
 /// The only Mach-O build whose layout has been inspected (1.19.3.0 c01a).
 pub const BUILD_UUID: &str = "089EA519-6780-353B-8E39-4E9309B444D4";
@@ -166,6 +167,9 @@ impl MacProcess {
         }
         check_ownership(&session)?;
         verify_executable(&session.game.exe)?;
+        // MCP startup must never wait for an administrator password dialog.
+        // Check the existing policy without UI or changing shared rights first.
+        authorization::require_noninteractive_task_access()?;
         let mut task: MachPort = 0;
         // SAFETY: task_for_pid writes one port name into `task`.
         let kr = unsafe { libc::task_for_pid(mach_task_self_, session.game.pid, &mut task) };

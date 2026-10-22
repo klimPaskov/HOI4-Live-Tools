@@ -1,5 +1,99 @@
 # Clausewitz-MCP Linux validation
 
+## Mac switch and Linux FEX002 checkpoint — 22 October 2026
+
+The user explicitly authorized switching back to macOS. FEX002 had reached a
+fresh 1080p historical Normal Germany game through Luna's ordinary menu actions.
+The new Rust binding correctly refused missing opt-in and 512×288 profiles,
+then accepted the pinned FEX 1080p profile. The interruption occurred before
+any adapter action intent or lease acquisition. Fresh pre-close reads confirmed
+the initial paused date and no active input lease. Rust gameplay validation and the
+mixed-plan gate remain incomplete; accepting a binding is not action acceptance.
+
+The owned Linux game then closed with exit code 0. Its completed 1080p diagnostic
+recording was probed, archived privately and hash-verified. Owner, recorder,
+temporary display and created FEX app configuration were cleaned up. The Linux
+VMs, installations and unfinished gate remain preserved.
+
+The fresh Mac probe used the unchanged supported executable and isolated vanilla
+userdata at requested 1920×1080. It reached the frontend in 22.27 seconds, but the
+read-only MCP process exceeded its 25-second allowance while system authorization
+was pending. This is distinct from the preceding explicit task-access denial.
+The exact owned game subsequently exited with code 0 after the supervisor's
+SIGTERM; default settings were unchanged and no campaign began. Developer mode
+was disabled at that checkpoint; local administrator authorization subsequently
+completed.
+
+A noninteractive Security.framework task-port policy check returned
+`errAuthorizationInteractionNotAllowed` in 10.74 ms. The Rust adapter now performs
+that check after ownership/build verification and before requesting the task port.
+It disallows authorization UI and preauthorization, returns no authorization
+handle and preserves no newly obtained shared rights. Missing approval returns
+`task_access_denied` so MCP initialization and capability discovery can continue.
+It does not change system security policy, sign the game, or replace live-memory
+acceptance. A client can select its separate telemetry/UI fallback from that error.
+
+Local authorization subsequently enabled Developer Tools. The next fresh Mac
+frontend reached readiness in about 22 seconds. Its capabilities, geometry and
+technology-list probe completed in 0.543 seconds with `owned_session_bound=true`.
+The campaign-only reads remained unavailable at the frontend; that is not an
+in-game geometry or gameplay pass. The game binary was unchanged, the agent
+remained unprivileged and no SIP or game-signature change occurred.
+
+The existing decorated-window diagnostic recorder wrote six frames, then stopped
+with a changed-frame witness. That diagnostic path omitted the structured
+`capture_frame_changed` code used by the recorder's bounded recovery. The code
+now matches normal capture; an identity-change regression confirms ownership
+loss remains a separate, nonretryable error. The full Python suite passed 954
+tests with 37 skips. The task authorization change separately passed 1,195 host
+Rust tests, Clippy, formatting, Windows target checks and protocol smoke.
+
+A private native ScreenCaptureKit prototype records only the exact owned window
+through `SCRecordingOutput`, avoiding per-frame Python screenshot calls. Its first
+run reached an outer deadline because an ARC timer was not retained; preserve
+that failure. With the timer retained, the next 20-second run finalized cleanly:
+589 complete frames, 1920×1108 H.264, approximately 29.4 FPS and 45.4 ms maximum
+complete-frame interval. It validates game and supervisor identity, parentage,
+window bounds and the unlocked desktop, without focus or input changes. The
+full-window frame includes decoration; it grants no client-coordinate authority.
+This is a short frontend capture diagnostic, not an integrated public recorder
+or campaign recording acceptance. A bounded single-Luna Mac gate follows.
+
+The first Luna setup gate sent one Single Player click, but the next image still
+showed the main menu. It stopped without retry or campaign Start. The private
+menu helper lacked the target move event used by the existing Rust click
+sequence; that setup helper was corrected separately. The second gate refused
+before input because its focus check used the all-windows snapshot's ordering.
+Read-only comparison found the visible window-server stack, Process Manager
+and AX focus agreed on the owned game, while the all-windows ordering differed
+during sharing. Focus now requests the on-screen stack directly, retaining the
+same owner and exact focused-window checks. The full suite passed 956 tests with
+37 skips; the two failed setup gates and their recordings remain separate.
+
+The third gate passed menu setup through six ordinary clicks. One Luna medium
+player entered fresh historical Regular Germany on 1 January 1936 at 12:00;
+the own-country overview returned in 1.404 ms through a persistent local MCP
+connection, including 0.297 ms producer time. No input lease was acquired, no
+gameplay command was attempted and no observation paused the game. Luna released
+the broker and handed back. The recording finalized cleanly at 264.522 seconds,
+1920×1108 H.264, 7,798 frames and about 29.5 FPS; an extracted game frame was
+visually checked and all frozen inputs matched. The video includes its titlebar.
+The initial game remains owned and paused by the game's startup behavior.
+
+Source inspection found that the generic `hoi4_input_geometry` tool dispatched
+Linux-only offsets on Mac. The player was stopped before calling it or acquiring
+an input lease. The diagnostic now rejects the Mac ABI before any layout read;
+an offline test panics on any attempted memory read. The rebuilt signed private
+CLI returned `input_geometry_unavailable` on the actual game, followed by a valid
+unchanged GER overview. This proves refusal and own-state access, not Mac geometry.
+Independent client/input-profile validation remains the next live gate.
+
+Final checks passed 1,196 host Rust tests, host Clippy, formatting and Windows
+all-target compilation. The workspace Python suite passed 956 tests with 37
+skips; a clean staged-tree archive, excluding unrelated Python WIP, passed 809
+tests with 29 skips. Recordings, helpers and artifacts remain private. No two-year
+or full campaign acceptance, public recorder integration or release is claimed.
+
 ## FEX own-state and stationary input qualification — 22 October 2026
 
 One existing Luna player at medium reasoning entered a fresh vanilla, historical,

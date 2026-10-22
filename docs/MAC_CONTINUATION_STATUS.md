@@ -1,5 +1,14 @@
 # Mac continuation checkpoint — 11 October 2026
 
+**22 October update:** the user has authorized returning to macOS. The historical
+implementation notes below remain preserved; use the current checkpoint in
+[the runtime handoff](LINUX_RUST_HANDOFF.md). The latest frontend and live-memory binding probes passed after local
+administrator authorization. Continuous owned-window recording also passed a
+1920×1108 diagnostic. Luna reached fresh historical Regular Germany and verified
+its own-country overview; no gameplay actions were taken. Mac input geometry
+needs independent validation before advancing gameplay. No clean
+two-year run or full campaign has passed.
+
 **Superseded by the [Linux-first objective](LINUX_RUST_HANDOFF.md) and
 [Linux validation checkpoint](CLAUSEWITZ_VALIDATION.md).** The licensed Linux
 game has since launched and process reads passed; ordinary commands, Luna play

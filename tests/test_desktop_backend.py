@@ -249,8 +249,18 @@ assert 'hoi4_live.platform.windows_capture' not in sys.modules
 
     def test_diagnostic_frame_rejects_window_changed_during_capture(self):
         self.native.after_capture = lambda: self.native.info.update(bounds=(-900, 20, 400, 300))
-        with self.assertRaisesRegex(ToolError, "changed during diagnostic"):
+        with self.assertRaisesRegex(ToolError, "changed during diagnostic") as caught:
             Capturer(self.window).capture_frame()
+        self.assertEqual(caught.exception.details["error"], "capture_frame_changed")
+        self.assertEqual(self.native.events, [])
+
+    def test_diagnostic_frame_identity_loss_is_not_retryable_capture_change(self):
+        self.native.after_capture = lambda: setattr(
+            self.processes, "identity", ProcessIdentity(41, 999, IDENTITY.executable_path))
+        with self.assertRaisesRegex(ToolError, "identity changed") as caught:
+            Capturer(self.window).capture_frame()
+        self.assertEqual(caught.exception.details["error"], "process_identity_changed")
+        self.assertEqual(self.native.events, [])
 
     def test_capture_rejects_torn_geometry(self):
         self.native.after_capture = lambda: setattr(self.native, "g", Geometry(-500, 20, 400, 300, 2))
@@ -438,7 +448,8 @@ class NativeFocusSafetyTests(unittest.TestCase):
                                   AXIsProcessTrusted=lambda: True)
         self.native = Native()
         self.native._load = lambda: (self.q, self.appkit, self.ax)
-        self.native.windows = lambda: self.window_list
+        self.native.windows = lambda on_screen_only=False: [
+            row for row in self.window_list if not on_screen_only or row.get("onscreen", True)]
         self.native._frontmost_pid = lambda: self.front_pid
         self.native._attr = lambda element, name: object()
         self.native._ax_rect = lambda element: self.ax_rect
@@ -462,6 +473,27 @@ class NativeFocusSafetyTests(unittest.TestCase):
     def test_focus_ignores_windows_on_another_space(self):
         self.window_list = [dict(self.info, pid=42, id=501, onscreen=False), self.info]
         self.assertTrue(self.native.focused(self.info))
+
+    def test_focus_queries_visible_stack_instead_of_filtering_all_window_order(self):
+        scopes = []
+        def windows(on_screen_only=False):
+            scopes.append(on_screen_only)
+            return [self.info] if on_screen_only else [dict(self.info, pid=42), self.info]
+        self.native.windows = windows
+        self.assertTrue(self.native.focused(self.info))
+        self.assertEqual(scopes, [True])
+        self.assertEqual(self.activations, [])
+
+    def test_native_visible_stack_uses_onscreen_query_flag(self):
+        scopes = []
+        self.q.kCGWindowListOptionAll = 0
+        self.q.kCGWindowListOptionOnScreenOnly = 1
+        self.q.kCGWindowListExcludeDesktopElements = 16
+        self.q.kCGNullWindowID = 0
+        self.q.CGWindowListCopyWindowInfo = lambda scope, window: scopes.append(scope) or []
+        self.assertEqual(Native.windows(self.native, on_screen_only=True), [])
+        self.assertEqual(Native.windows(self.native), [])
+        self.assertEqual(scopes, [17, 16])
 
     def test_sck_full_window_pixels_are_cropped_to_verified_client(self):
         frame = np.arange(8 * 8 * 3, dtype=np.uint8).reshape((8, 8, 3))

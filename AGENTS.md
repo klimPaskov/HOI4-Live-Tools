@@ -1,8 +1,8 @@
 # Codex instructions
 
 The latest user direction is [docs/LINUX_RUST_HANDOFF.md](docs/LINUX_RUST_HANDOFF.md).
-Latest steering (22 October): continue Linux tooling refinement and testing now.
-Do not resume macOS testing until the user explicitly switches back. The final
+Latest steering (22 October): the user has explicitly authorized switching back
+to macOS. Preserve the Linux validation and continue native Mac testing. Final
 campaign videos must be filmed from native macOS HOI4 at 1920x1080 or higher.
 Use one Luna player at medium reasoning for live gates. Expand the Clausewitz-based
 Rust runtime across Linux, Windows and macOS, preserving the legacy Python

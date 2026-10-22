@@ -97,9 +97,10 @@ class Native:
             raise unavailable("desktop session", "the macOS desktop is locked or not the active console session",
                               "Unlock the logged-in desktop before resuming game control or capture")
 
-    def windows(self):
+    def windows(self, on_screen_only=False):
         q, _, _ = self._load()
-        items = q.CGWindowListCopyWindowInfo(q.kCGWindowListOptionAll |
+        scope = q.kCGWindowListOptionOnScreenOnly if on_screen_only else q.kCGWindowListOptionAll
+        items = q.CGWindowListCopyWindowInfo(scope |
                                            q.kCGWindowListExcludeDesktopElements, q.kCGNullWindowID)
         result = []
         for item in items or []:
@@ -264,7 +265,9 @@ class Native:
         # without any AX window geometry. Quartz still supplies the window-server
         # ordering and owning PID. Requiring the exact global front window ID
         # prevents another dialog/window of the same process receiving input.
-        windows = [item for item in self.windows() if item.get("onscreen", True)]
+        # Query the visible window stack directly. Filtering the all-windows
+        # snapshot can retain a different ordering during window sharing.
+        windows = self.windows(on_screen_only=True)
         if not windows or windows[0]["pid"] != info["pid"]:
             return False
         application = ax.AXUIElementCreateApplication(info["pid"])
@@ -635,7 +638,8 @@ class Capturer:
         rgb, used = self.native.capture(before, frame, self.timeout, method)
         self.window.require()
         if self.window._info != before or self.native.frame_geometry(self.window._info) != frame:
-            raise ToolError("window changed during diagnostic capture; discard this frame and retry")
+            raise ToolError("window changed during diagnostic capture; discard this frame and retry",
+                            {"error": "capture_frame_changed"})
         width, height = frame.pixels
         if rgb.dtype != np.uint8 or rgb.shape != (height, width, 3):
             raise unavailable("capture", "diagnostic frame dimensions do not match verified window geometry")

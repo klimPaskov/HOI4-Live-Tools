@@ -127,7 +127,7 @@ The Rust FEX adapter has an explicit pinned-build 1080p validation opt-in; it is
 disabled by default and still needs live adapter and mixed-plan acceptance.
 See [the evidence and retained failures](docs/CLAUSEWITZ_VALIDATION.md#fex-own-state-and-stationary-input-qualification--22-october-2026)
 and [setup requirements](docs/OWNED_LINUX_LAUNCHER.md#arm64-linux-with-fex).
-Final campaign videos will be filmed on native macOS after the user's switch.
+The user has now authorized switching back to macOS for testing and final videos.
 
 ### macOS preview (live-tested on one build)
 
@@ -143,7 +143,13 @@ offensive lines, move orders, plan execution, events, diplomacy (war goals,
 declaring war), air wings and missions, and a standing-plan runner
 (`hoi4_plan`, `hoi4_plan_run`). The peace conference and naval invasions are not
 supported yet. It needs a Developer Tools grant and an ad-hoc signed binary
-(`native/macos/debugger.entitlements`).
+(`native/macos/debugger.entitlements`). Startup checks task-port authorization
+without opening a password dialog; missing approval returns a capability error
+so the client can choose telemetry/UI fallback. Local authorization is now verified and the fresh Mac reader binds successfully.
+Luna has entered historical Regular Germany and verified the own-country overview
+without pausing it. A 1920×1108 window recording finalized at about 29.5 FPS.
+The generic input-geometry diagnostic remains Linux-only and explicitly refuses
+on macOS; Mac input-profile validation and advancing gameplay are unfinished.
 
 ### Not done yet
 

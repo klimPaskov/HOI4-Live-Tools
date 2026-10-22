@@ -2,6 +2,19 @@
 
 ## Unreleased native preview
 
+- Refuse the Linux-only input-geometry diagnostic on macOS before reading any
+  layout offsets. Verify the explicit refusal and own-country read on native Mac.
+- Query the visible macOS window stack for focus checks during window sharing,
+  preserving exact process and focused-window checks.
+- Give discarded decorated-window diagnostic frames the recorder's structured
+  transient error code. Process identity loss remains nonretryable. Record the
+  successful Mac task-port binding and short continuous-window capture diagnostic;
+  campaign acceptance remains unfinished.
+- Preflight macOS task-port authorization without OS dialogs before requesting
+  the owned task port. Missing approval returns a capability error instead of
+  blocking MCP startup; no system policy or game binary changes. Record the
+  user-authorized Mac switch and preserve the interrupted Linux qualification.
+
 - Add an explicit pinned-build FEX 1080p input-validation profile, disabled by
   default. Require matching domain dimensions and retain existing ownership,
   lease, journal and readback guards. Rust-adapter live acceptance is pending.
