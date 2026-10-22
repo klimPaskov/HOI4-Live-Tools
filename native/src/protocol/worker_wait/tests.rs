@@ -282,36 +282,59 @@ fn late_event_or_snapshot_never_becomes_timely_target_and_retirement_prevents_ne
 fn timeout_keeps_original_deadline_and_only_historical_terminal_cause_and_earlier_state() {
     let events = Arc::new(Events::default());
     let instance = events.start(1).unwrap();
+    let start = Instant::now();
+    let mut watch = Watch::new(Some(events.clone())).unwrap();
+    let mut rejected = 0;
     let mut calls = 0;
-    let out = run(
-        Some(events.clone()),
-        Duration::from_millis(280),
-        Some(200),
-        None,
+    let earlier = match read(
+        &mut watch,
+        start + Duration::from_secs(50),
+        &mut rejected,
         || {
             calls += 1;
-            if calls == 1 {
-                return Ok(sample());
-            }
-            thread::sleep(Duration::from_millis(60));
-            events
-                .finish(instance, 1, terminal(Disposition::Quarantined))
-                .unwrap();
-            let mut late = sample();
-            late.0["date"]["raw"] = json!(200);
-            late.1.date_raw = 200;
-            Ok(late)
+            Ok(sample())
         },
     )
+    .unwrap()
+    {
+        Read::Fresh((state, _)) => state,
+        _ => panic!("Earlier own snapshot must be accepted before terminal publication"),
+    };
+    let received = Instant::now();
+    let (publish_tx, publish_rx) = mpsc::channel();
+    let publisher = thread::spawn(move || {
+        publish_rx.recv().unwrap();
+        events
+            .finish(instance, 1, terminal(Disposition::Quarantined))
+            .unwrap();
+    });
+    assert!(watch.check().unwrap().is_none());
+    publish_tx.send(()).unwrap();
+    publisher.join().unwrap();
+
+    // The separate delayed-read test covers LateCompletion classification.
+    // Compose that original refusal directly: a second 250ms poll must not
+    // depend on the CI scheduler fitting inside a 30ms remainder.
+    let out = timed_out(
+        &mut watch,
+        earlier.clone(),
+        start,
+        received,
+        rejected,
+        Some(WaitDeadline::LateCompletion),
+    )
     .unwrap();
-    assert_eq!(calls, 2);
+    assert_eq!(calls, 1);
     assert_eq!(out["reasons"], json!(["wall_timeout"]));
-    assert_eq!(out["state"]["date"]["raw"], 100);
+    assert_eq!(out["state"], earlier);
+    assert_eq!(out["state_historical"], true);
     assert_eq!(out["current_state_verified"], false);
     assert_eq!(
         out["deadline_refusal"]["reason"],
         "snapshot_completed_after_deadline"
     );
+    assert_eq!(out["deadline_refusal"]["late_target_accepted"], false);
+    assert_eq!(out["input_authorized"], false);
     assert_eq!(
         out["worker_event_historical"]["original_error"]["code"],
         "research_precondition"

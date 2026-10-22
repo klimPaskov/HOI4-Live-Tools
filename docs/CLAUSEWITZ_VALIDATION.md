@@ -5524,3 +5524,13 @@ unnecessary literal unwrap; all seven affected lifecycle tests passed again
 after that cleanup, followed by final lint, target checks and Linux executions.
 All 205 native input files matched their frozen hashes after validation. Recorded
 mixed-plan, two-year Luna and full campaign acceptance remain pending.
+
+The first exact-source CI on `914b5f3` passed all Python jobs and the Linux/Windows
+Rust jobs, but macOS exposed a test scheduling assumption: a 280 ms deadline
+allowed only 30 ms after the normal 250 ms polling interval for a second read.
+The scheduler legitimately expired the wait after one read, contradicting the
+fixture's two-read assertion. The correction changes only the test: terminal
+publication is synchronized and historical-timeout composition is checked
+directly; separate coverage still checks delayed-read classification. Production
+deadlines and behavior are unchanged. All 30 protocol tests, formatting and
+host Clippy passed after the correction. Preserve the failed initial CI run.
