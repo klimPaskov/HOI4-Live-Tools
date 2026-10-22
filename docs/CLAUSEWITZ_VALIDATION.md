@@ -1,5 +1,31 @@
 # Clausewitz-MCP Linux validation
 
+## ResearchClose002 direct closing passed — 22 October 2026
+
+ResearchClose002 passed all 14 granted steps on `8d12301` with one Luna medium
+player in recorded vanilla FAIR Germany, Normal difficulty and historical AI.
+Both Research closes, historical replay while closed and reopened, fresh no-ops,
+and production round trips verified. All 21 production lines and four empty
+research slots stayed unchanged; no Focus assignment or clock action occurred.
+
+Independent stopped audit verified 19 player RPCs with zero errors, four Research
+Intent/Verified pairs plus two no-ops, four production pairs and no unresolved
+input. Both closes retained their original private identities and assignments.
+One discarded pre-queue producer read and one discarded candidate read recovered
+inside the original bounds, each `torn_read` in `close_engine`, byte 0 of read
+668. Neither retried input; the precise engine field remains unidentified.
+
+Research closing took 0.947–1.017 seconds, historical replay 5–7 ms, production
+reads 58 ms and overview 18 ms over the persistent bridge. The 212.333-second
+recording passed integrity; normal game exit was 0 in 2.093 seconds. All exact
+owned game/server/recorder/bridge instances were absent. All 189 native inputs
+and 18 installed helpers matched their frozen hashes. All nine exact-commit CI
+jobs had passed. Recorder exit 255 is retained separately. Setup used two menu
+captures and 11 clicks; Luna used only structured calls, with no screenshots or
+cursor movement. The initially paused gate issued no pause commands and proves
+no annual throughput or full campaign acceptance.
+
+
 ## ResearchClose001 and bounded read recovery — 22 October 2026
 
 ResearchClose001 on `083b835f` stopped at step 4: production open/close and
@@ -36,8 +62,8 @@ host/Linux Clippy and Windows all-target cross-compilation. Python passed all
 953 tests (37 skips) on an unchanged rerun; the first run's generated clipboard
 fixture timed out at three seconds and its failure is retained.
 
-Direct Research closing still needs a fresh recorded Luna gate. Mixed-worker
-routing and full campaign acceptance remain incomplete.
+ResearchClose002 subsequently passed the bounded closing gate above. Mixed-worker
+live validation and full campaign acceptance remain incomplete.
 
 ## Direct Research closing preview — 22 October 2026
 

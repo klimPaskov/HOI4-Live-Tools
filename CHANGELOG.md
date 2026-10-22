@@ -2,12 +2,21 @@
 
 ## Unreleased native preview
 
+- Pass ResearchClose002 with one Luna medium player: all 14 steps, 19 RPCs with
+  zero errors, unchanged production/research, exact replay/no-op behavior and
+  independent stopped recording/ownership audit. Two discarded producer tears
+  recovered without repeating input. Retain ResearchClose001's earlier failure.
+- Add default-off mixed Research/production worker routing with durable task
+  selection, original destination/source pins, separate daily navigation budgets
+  and shared restart quarantine. Both domain permissions are required; Focus
+  combinations remain unavailable. Mixed-worker live validation is pending.
+
 - Preserve ResearchClose001's pre-Intent torn-read failure and stopped audit.
   Recover only wholly rejected Research-close snapshots within bounded initial,
   candidate, final and pre-queue phases. Keep original state, lease/deadline,
   private journal proofs and input quarantine; never retry commands. Retain
   rejected read phases/causes and distinguish engine/window/GUI witness sections.
-  Fresh live closing validation and mixed standing plans remain pending.
+  ResearchClose002 subsequently passed closing; mixed live validation is pending.
 
 - Add `hoi4_research_close`, a Linux ordinary-W preview requiring only Research
   permission. Preserve original own roots, slots, assignments, selected folder
@@ -15,7 +24,7 @@
   receipts. Already-closed requests are no-ops and verified replays stay
   historical. Uncertain attempts remain quarantined across restart. Known
   animations may settle within the original deadline without another input.
-  Direct closing live validation and mixed-worker routing remain pending.
+  ResearchClose002 subsequently passed direct closing; mixed live validation is pending.
 
 - Pass Production008 with one Luna medium player: manual production closing,
   historical replays and no-ops, then a Research/Focus round trip with all 21

@@ -19,6 +19,9 @@ use std::{
 #[doc(hidden)]
 pub mod closing;
 
+#[doc(hidden)]
+pub mod mixed_destination;
+
 /// Witness reads always reach the process. Request-local shared metadata/proofs
 /// may avoid duplicate reads, but their original bytes must pass finish below.
 pub(crate) struct Witnesses<'a> {

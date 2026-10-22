@@ -7,6 +7,56 @@ Do not resume Mac campaigns or control the shared Windows game.
 
 ## Current checkpoint
 
+ResearchClose002 passed all 14 granted steps on `8d12301` with one Luna medium
+player in recorded vanilla FAIR Germany, Normal difficulty and historical AI.
+Both Research closes, historical replay while closed and reopened, fresh no-ops,
+and production round trips verified. All 21 production lines and four empty
+research slots stayed unchanged; no Focus assignment or clock action occurred.
+
+Independent stopped audit verified 19 player RPCs with zero errors, four Research
+Intent/Verified pairs plus two no-ops, four production pairs and no unresolved
+input. Both closes retained their original private identities and assignments.
+One discarded pre-queue producer read and one discarded candidate read recovered
+inside the original bounds, each `torn_read` in `close_engine`, byte 0 of read
+668. Neither retried input; the precise engine field remains unidentified.
+
+Research closing took 0.947–1.017 seconds, historical replay 5–7 ms, production
+reads 58 ms and overview 18 ms over the persistent bridge. The 212.333-second
+recording passed integrity; normal game exit was 0 in 2.093 seconds. All exact
+owned game/server/recorder/bridge instances were absent. All 189 native inputs
+and 18 installed helpers matched their frozen hashes. All nine exact-commit CI
+jobs had passed. Recorder exit 255 is retained separately. Setup used two menu
+captures and 11 clicks; Luna used only structured calls, with no screenshots or
+cursor movement. The initially paused gate issued no pause commands and proves
+no annual throughput or full campaign acceptance.
+
+The next source checkpoint introduces an explicitly opted-in mixed
+Research/production worker. `max_panel_navigation_steps_per_day` (1..16) requires
+both domain permissions/profiles, production permission and no Focus opt-in.
+The selected destination, original identities, plan and consumed daily navigation
+budget persist separately from assignment and production budgets. One verified
+ordinary close leaves the opposite panel; subsequent work retains that selected
+goal through completion. Uncertain departures block all controller input across
+restart, including when opt-in is removed. Historical close receipts never advance
+navigation. Current static target identities are checked inside the adapters.
+
+Mixed plans remain a developer preview awaiting a recorded advancing-time Luna
+gate. Selection currently stays with production through its goal even when that
+day's production budget is exhausted; yielding a partly completed selected goal
+for another domain is not implemented. Mixed Focus plans, generic tree/Info exits,
+two-year acceptance and full campaigns remain incomplete. Preserve the previous
+failed gate below; it is not superseded into a success.
+
+Local validation of this mixed preview passed 1,149 host Rust tests, 112 targeted
+Linux test executions in the VM, 953 Python tests (37 skips), host/Linux Clippy,
+formatting and Windows all-target cross-compilation. The first Linux run exposed
+an unnecessary null mixed-history field pushing a legacy digest over its inline
+limit; absent history is now omitted and the targeted run passes. Early fixture,
+Clippy, digest-overflow and formatting failures remain in private evidence.
+These checks are not mixed live acceptance.
+
+### Preserved ResearchClose001 failure and correction
+
 ResearchClose001 on `083b835f` stopped at step 4: production open/close and
 Research opening verified, then the first Research close refused before Intent
 with `torn_read` in `close_gates` (one byte, read 668). The precise field and
@@ -41,8 +91,8 @@ host/Linux Clippy and Windows all-target cross-compilation. Python passed all
 953 tests (37 skips) on an unchanged rerun; the first run's generated clipboard
 fixture timed out at three seconds and its failure is retained.
 
-Direct Research closing still needs a fresh recorded Luna gate. Mixed-worker
-routing and full campaign acceptance remain incomplete.
+ResearchClose002 subsequently passed the bounded direct-close gate above.
+The mixed worker still requires its own live gate and campaign acceptance.
 
 ### Previous direct-close source checkpoint
 
@@ -61,7 +111,7 @@ observed again only after the single dispatch and within its original deadline.
 Private pointer bindings are omitted from public Execution receipts. Legacy
 Research journal records keep their existing serialized shape and semantics.
 
-Production008 remains the latest completed live gate: the bounded manual
+At this earlier source checkpoint, Production008 was the latest completed live gate: the bounded manual
 production → Research → Focus → production route on `c2d07c6`. All nine CI jobs
 for the metadata/documentation follow-up `b2ae720` subsequently passed. Direct
 Research closing has no live acceptance yet; mixed-worker routing remains off.
@@ -72,9 +122,9 @@ Windows all-target cross-compilation. The first Clippy check rejected a test
 closure type; its corrected alias and full successful check are retained.
 Offline fixtures do not establish live closing or campaign acceptance.
 
-Next, require exact-source checks and a fresh recorded Luna medium direct-close
-gate with Research/production permissions and no Focus permission or assignment.
-Then integrate mixed standing plans with durable navigation budgets and exact
+That checkpoint required the subsequently passed ResearchClose002 gate with
+Research/production permissions and no Focus permission or assignment. The next
+work integrates mixed standing plans with durable navigation budgets and exact
 destination bindings. Production closing cannot count as allocation preparation
 or completion. Preserve exact typed receipts, shared quarantine, original
 failures and consumed day budgets across restart. Generic tree/Info exits remain

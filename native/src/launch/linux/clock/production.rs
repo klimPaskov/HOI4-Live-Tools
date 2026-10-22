@@ -141,7 +141,24 @@ pub(super) fn execute_internal(
     target: step::Target,
     until: Instant,
 ) -> Result<step::Execution> {
+    execute_bound(state, process, gate, token, id, target, until, None)
+}
+
+/// Bind the first ordinary journal observation to the mixed controller's exact
+/// source. Subsequent candidates and queue checks retain that same baseline.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn execute_bound(
+    state: &mut ControlState,
+    process: &dyn Process,
+    gate: &RwLock<bool>,
+    token: &str,
+    id: &str,
+    target: step::Target,
+    until: Instant,
+    expected: Option<&step::State>,
+) -> Result<step::Execution> {
     state.authority.authorize(token, target.epoch())?;
+    validate_expected_source(expected, &target)?;
     let ControlState {
         controls,
         guard,
@@ -168,6 +185,8 @@ pub(super) fn execute_internal(
         profile: &service.profile,
         display: service.display,
         xauthority: &service.xauthority,
+        expected_source: expected.cloned(),
+        first_observation: true,
     };
     let timeout = until.saturating_duration_since(Instant::now());
     service.journal.execute(
@@ -217,6 +236,34 @@ struct ProductionBackend<'a> {
     profile: &'a OwnedClientProfile,
     display: u16,
     xauthority: &'a Path,
+    expected_source: Option<step::State>,
+    first_observation: bool,
+}
+
+fn validate_expected_source(expected: Option<&step::State>, target: &step::Target) -> Result<()> {
+    let Some(expected) = expected else {
+        return Ok(());
+    };
+    expected.validate(target)?;
+    if matches!(target, step::Target::Panel(t) if t.stage == step::PanelStage::EnsureClosed)
+        && !matches!(expected, step::State::Panel(s) if s.managed_mode == 2 && s.panel_shown)
+    {
+        return Err(Error::new(
+            "production_precondition",
+            "Mixed departure requires its original shown production source",
+        ));
+    }
+    Ok(())
+}
+
+fn require_expected_source(expected: Option<&step::State>, current: &step::State) -> Result<()> {
+    if expected.is_some_and(|original| original != current) {
+        return Err(Error::new(
+            "production_state_changed",
+            "Original mixed departure production source changed before Intent",
+        ));
+    }
+    Ok(())
 }
 pub(super) fn observed(
     process: &dyn Process,
@@ -253,6 +300,8 @@ pub(super) fn observed(
         requested: o.requested,
     });
     state.validate(target)?;
+    check_selected_production(process, guard, Some(&o.line), None, deadline)?;
+    research::check_selected_research(process, guard)?;
     if Instant::now() >= deadline {
         return Err(Error::new(
             "production_deadline",
@@ -284,6 +333,8 @@ pub(super) fn panel_observed(
     guard.accept_context(process, &o.campaign)?;
     let state = panel_state(&o.value, o.identity.clone(), guard.epoch.clone())?;
     state.validate(target)?;
+    check_selected_production(process, guard, None, Some(&state), deadline)?;
+    research::check_selected_research(process, guard)?;
     if Instant::now() >= deadline {
         return Err(Error::new(
             "production_deadline",
@@ -291,6 +342,85 @@ pub(super) fn panel_observed(
         ));
     }
     Ok((o, state))
+}
+
+pub(super) fn check_selected_production(
+    process: &dyn Process,
+    guard: &mut Guard,
+    line: Option<&step::LineIdentity>,
+    panel: Option<&step::State>,
+    deadline: Instant,
+) -> Result<()> {
+    let Some(original @ crate::daily_panel_navigation::Destination::Production { .. }) =
+        guard.selected_target.clone()
+    else {
+        return Ok(());
+    };
+    if Instant::now() >= deadline {
+        return Err(Error::new(
+            "production_deadline",
+            "Selected production identity deadline ended",
+        ));
+    }
+    let observed_line = if line.is_none() {
+        let crate::daily_panel_navigation::Destination::Production { state, .. } = &original else {
+            unreachable!("Production destination matched above")
+        };
+        // Canonical-only raw reader; never recurse through observed() or any
+        // Research adapter while checking the opposite domain's departure.
+        let handle = format!("0x{:016x}", state.line.handle);
+        let o = observation::observe(process, &handle, &state.line.equipment_id, None)?;
+        guard.accept_context(process, &o.campaign)?;
+        Some(o.line)
+    } else {
+        None
+    };
+    let line = line.or(observed_line.as_ref());
+    let current_panel = match panel {
+        Some(panel) => panel.clone(),
+        None => {
+            // This does not recurse through panel_observed. It obtains only
+            // the retained original panel identity, with no geometry or input.
+            let o = crate::production_panel::observe(process, false, false)?;
+            guard.accept_context(process, &o.campaign)?;
+            panel_state(&o.value, o.identity, guard.epoch.clone())?
+        }
+    };
+    require_selected_production(&original, line, &current_panel)?;
+    if Instant::now() >= deadline {
+        return Err(Error::new(
+            "production_deadline",
+            "Selected production identity deadline ended",
+        ));
+    }
+    Ok(())
+}
+
+fn require_selected_production(
+    original: &crate::daily_panel_navigation::Destination,
+    line: Option<&step::LineIdentity>,
+    current_panel: &step::State,
+) -> Result<()> {
+    let crate::daily_panel_navigation::Destination::Production { state, panel } = original else {
+        return Ok(());
+    };
+    let step::State::Panel(current) = current_panel else {
+        return Err(Error::new(
+            "ownership_changed",
+            "Selected production panel identity required",
+        ));
+    };
+    if state.epoch != current.epoch
+        || panel.epoch != current.epoch
+        || panel.panel_identity != current.panel_identity
+        || line.is_some_and(|line| line != &state.line)
+    {
+        return Err(Error::new(
+            "ownership_changed",
+            "Original selected production identity changed before action",
+        ));
+    }
+    Ok(())
 }
 fn panel_state(value: &Value, identity: Vec<u64>, epoch: Epoch) -> Result<step::State> {
     if value["available"] != true || value["root"]["materialized"] != true {
@@ -416,10 +546,16 @@ fn candidate(
 impl step::Backend for ProductionBackend<'_> {
     type Candidate = Candidate;
     fn observe(&mut self, t: &step::Target, deadline: Instant) -> Result<step::State> {
-        if matches!(t, step::Target::Panel(_)) {
-            return panel_observed(self.process, self.guard, t, false, deadline).map(|(_, s)| s);
+        let state = if matches!(t, step::Target::Panel(_)) {
+            panel_observed(self.process, self.guard, t, false, deadline)?.1
+        } else {
+            observed(self.process, self.guard, t, false, deadline)?.1
+        };
+        if self.first_observation {
+            require_expected_source(self.expected_source.as_ref(), &state)?;
+            self.first_observation = false;
         }
-        observed(self.process, self.guard, t, false, deadline).map(|(_, s)| s)
+        Ok(state)
     }
     fn candidate(
         &mut self,
@@ -505,6 +641,118 @@ mod tests {
             },
             campaign: "fixture".into(),
             player: "GER".into(),
+        }
+    }
+    fn shown_source() -> step::State {
+        step::State::Panel(step::PanelState {
+            epoch: epoch(),
+            panel_identity: (2..9).map(|n| n * 0x10000).collect(),
+            managed_mode: 2,
+            panel_shown: true,
+        })
+    }
+    #[test]
+    fn mixed_production_source_requires_original_shown_state_before_intent() {
+        let target = step::Target::Panel(step::PanelTarget::closed(epoch()));
+        let shown = shown_source();
+        validate_expected_source(Some(&shown), &target).unwrap();
+        require_expected_source(Some(&shown), &shown).unwrap();
+        let mut closed = shown.clone();
+        if let step::State::Panel(s) = &mut closed {
+            s.managed_mode = 23;
+            s.panel_shown = false;
+        }
+        assert!(validate_expected_source(Some(&closed), &target).is_err());
+        assert!(require_expected_source(Some(&shown), &closed).is_err());
+        validate_expected_source(None, &target).unwrap();
+        require_expected_source(None, &closed).unwrap();
+        let mut changed = shown.clone();
+        if let step::State::Panel(s) = &mut changed {
+            s.panel_identity[0] += 8;
+        }
+        assert!(require_expected_source(Some(&shown), &changed).is_err());
+        if let step::State::Panel(s) = &mut changed {
+            s.epoch.campaign = "changed".into();
+        }
+        assert!(validate_expected_source(Some(&changed), &target).is_err());
+    }
+    #[test]
+    fn selected_production_pin_rejects_changed_panel_or_line_without_pinning_counts() {
+        let step::State::Panel(panel) = shown_source() else {
+            unreachable!()
+        };
+        let line = step::LineIdentity {
+            country: panel.panel_identity[0],
+            production: panel.panel_identity[1],
+            line: 0x90000,
+            variant: 0xa0000,
+            base_type: 0xb0000,
+            handle: 0xffff000100000038,
+            equipment_id: "infantry_equipment_1".into(),
+        };
+        let original = crate::daily_panel_navigation::Destination::Production {
+            state: step::FactoryState {
+                epoch: epoch(),
+                line: line.clone(),
+                requested: 10,
+            },
+            panel: panel.clone(),
+        };
+        let mut current_panel = step::State::Panel(panel);
+        require_selected_production(&original, Some(&line), &current_panel).unwrap();
+        if let step::State::Panel(s) = &mut current_panel {
+            s.managed_mode = 23;
+            s.panel_shown = false;
+        }
+        require_selected_production(&original, Some(&line), &current_panel).unwrap();
+        for changed_line in [
+            {
+                let mut l = line.clone();
+                l.country += 8;
+                l
+            },
+            {
+                let mut l = line.clone();
+                l.production += 8;
+                l
+            },
+            {
+                let mut l = line.clone();
+                l.line += 8;
+                l
+            },
+            {
+                let mut l = line.clone();
+                l.variant += 8;
+                l
+            },
+            {
+                let mut l = line.clone();
+                l.base_type += 8;
+                l
+            },
+            {
+                let mut l = line.clone();
+                l.handle += 1;
+                l
+            },
+            {
+                let mut l = line.clone();
+                l.equipment_id = "infantry_equipment_2".into();
+                l
+            },
+        ] {
+            assert!(
+                require_selected_production(&original, Some(&changed_line), &current_panel)
+                    .is_err()
+            );
+        }
+        for index in 0..7 {
+            let mut changed = current_panel.clone();
+            if let step::State::Panel(s) = &mut changed {
+                s.panel_identity[index] += 8;
+            }
+            assert!(require_selected_production(&original, None, &changed).is_err());
         }
     }
     #[test]

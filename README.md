@@ -103,9 +103,13 @@ game it did not start.
   Brandenburg on 18 October 2026, and Run092 placed a dockyard in West Prussia,
   a coastal state, the same day.
 
-Direct Research-panel closing is a separate Linux preview awaiting its recorded
-live gate. It uses Research permission alone, without assigning a Focus to
-switch panels. Mixed production/research worker routing is still being built.
+ResearchClose002 passed direct Research-panel closing with Luna medium: 14 steps,
+19 calls without errors, preserved assignments and historical replay/no-op checks.
+Closing took about one second; reads and replays took milliseconds. It uses
+Research permission alone, without assigning a Focus to switch panels.
+Mixed production/research standing plans now have an explicit opt-in developer
+preview with persistent selections and separate panel-navigation budgets. Their
+recorded advancing-time live gate is still pending.
 
 ### macOS preview (live-tested on one build)
 

@@ -43,7 +43,7 @@ pub(super) fn tool() -> Value {
     "inputSchema":{"type":"object","properties":{"stage":{"enum":["open_panel","select_slot","select_category","view","research"]},"folder_id":{"type":"string","minLength":1,"maxLength":256},"technology_id":{"type":"string","minLength":1,"maxLength":256},"slot":{"type":"integer","minimum":0,"maximum":31},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["stage","slot","request_id","lease_token"],"oneOf":[{"properties":{"stage":{"const":"select_category"}},"required":["folder_id"],"not":{"required":["technology_id"]}},{"properties":{"stage":{"enum":["open_panel","select_slot","view","research"]}},"required":["technology_id"],"not":{"required":["folder_id"]}}],"additionalProperties":false}})
 }
 pub(super) fn close_tool() -> Value {
-    json!({"name":"hoi4_research_close","description":"Preview: close the ordinary own Research panel with one stationary W shortcut, preserving original panel roots, own slot identities, assignments and selected folder. Requires settled research tab, hidden tree/facilities/Info and clear input gates. A fresh already-closed request verifies without input; successful same-ID replay returns only its historical receipt. Uncertain attempts remain quarantined and are never replayed. Uses Research permission only; no Focus assignment or permission. Linux live validation pending.",
+    json!({"name":"hoi4_research_close","description":"Preview: close the ordinary own Research panel with one stationary W shortcut, preserving original panel roots, own slot identities, assignments and selected folder. Requires settled research tab, hidden tree/facilities/Info and clear input gates. A fresh already-closed request verifies without input; successful same-ID replay returns only its historical receipt. Uncertain attempts remain quarantined and are never replayed. Uses Research permission only; no Focus assignment or permission. ResearchClose002 verified bounded closing, no-ops and historical replay on the exact Linux build/profile; mixed-worker routing and full campaigns remain unverified.",
     "inputSchema":{"type":"object","properties":{"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["request_id","lease_token"],"additionalProperties":false}})
 }
 pub(super) fn close_call(
@@ -161,6 +161,22 @@ pub(super) fn execute_internal(
     target: stage::Target,
     until: Instant,
 ) -> Result<(stage::Execution, Option<Value>)> {
+    execute_bound(state, process, gate, token, id, target, until, None)
+}
+
+/// Mixed departures retain the controller's complete original shown state.
+/// The ordinary journal and transport remain the sole input path.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn execute_bound(
+    state: &mut ControlState,
+    process: &dyn Process,
+    gate: &RwLock<bool>,
+    token: &str,
+    id: &str,
+    target: stage::Target,
+    until: Instant,
+    expected: Option<&stage::OwnState>,
+) -> Result<(stage::Execution, Option<Value>)> {
     if state
         .production
         .as_ref()
@@ -180,6 +196,7 @@ pub(super) fn execute_internal(
             "Unresolved clock/focus input blocks research",
         ));
     }
+    validate_expected_close(expected, &target)?;
     let until = until.min(state.authority.authorize(token, &target.epoch)?);
     let ControlState {
         controls,
@@ -201,7 +218,8 @@ pub(super) fn execute_internal(
         last_transport: None,
         target: Some(target.clone()),
         scope: None,
-        close_original: None,
+        close_original: expected.cloned(),
+        expected_source: expected.cloned(),
         read_deadline: until,
         before_observations: 0,
         dispatch_started: false,
@@ -278,6 +296,7 @@ struct ResearchBackend<'a> {
     target: Option<stage::Target>,
     scope: Option<([u64; 2], Vec<u64>)>,
     close_original: Option<stage::OwnState>,
+    expected_source: Option<stage::OwnState>,
     read_deadline: Instant,
     before_observations: usize,
     dispatch_started: bool,
@@ -423,6 +442,9 @@ impl stage::Backend for ResearchBackend<'_> {
         } else {
             observed_target_state(self.process, self.guard, self.target.as_ref())?
         };
+        if !self.dispatch_started {
+            require_expected_close(self.expected_source.as_ref(), &state)?;
+        }
         pin_scope(&mut self.scope, &context)?;
         pin_close(&mut self.close_original, &state, self.target.as_ref())?;
         Ok(state)
@@ -486,6 +508,7 @@ impl stage::Backend for ResearchBackend<'_> {
             }
         };
         self.guard.accept_context(self.process, &context.campaign)?;
+        check_selected_destination(self.process, self.guard, self.read_deadline)?;
         if self.scope.as_ref() != Some(&([context.anchors[0], context.anchors[1]], context.slots)) {
             return Err(Error::new(
                 "torn_read",
@@ -581,7 +604,9 @@ impl stage::Backend for ResearchBackend<'_> {
             }
             Ok(mut click) => {
                 let result = click.dispatch_once_checked(|| {
-                    let (fresh, context) = observed_target_state(process, guard, Some(&target))?;
+                    let (fresh, context) =
+                        observed_target_state_unpinned(process, guard, Some(&target))?;
+                    check_selected_destination(process, guard, deadline)?;
                     pin_scope(&mut scope, &context)?;
                     fresh.validate(&target)?;
                     fresh.preflight(&target)
@@ -596,6 +621,38 @@ impl stage::Backend for ResearchBackend<'_> {
             }
         }
     }
+}
+
+fn validate_expected_close(
+    expected: Option<&stage::OwnState>,
+    target: &stage::Target,
+) -> Result<()> {
+    let Some(expected) = expected else {
+        return Ok(());
+    };
+    if target.stage != stage::Stage::ClosePanel {
+        return Err(Error::new(
+            "invalid_arguments",
+            "Expected Research source belongs only to ClosePanel",
+        ));
+    }
+    expected.validate(target)?;
+    // An already-closed state is valid ordinary close no-op evidence, but may
+    // never replace the mixed controller's originally shown departure source.
+    expected.preflight(target)
+}
+
+fn require_expected_close(
+    expected: Option<&stage::OwnState>,
+    current: &stage::OwnState,
+) -> Result<()> {
+    if expected.is_some_and(|original| original != current) {
+        return Err(Error::new(
+            "research_precondition",
+            "Original mixed departure Research source changed before Intent",
+        ));
+    }
+    Ok(())
 }
 
 /// The first complete close observation remains the original throughout all
@@ -656,7 +713,7 @@ pub(super) fn observed_state(
     Ok((state, ui_context))
 }
 
-fn close_state(
+pub(super) fn close_state(
     process: &dyn Process,
     guard: &mut Guard,
     observation: research_ui::closing::Observation,
@@ -679,7 +736,7 @@ fn preinput_state(
     phase: &'static str,
     history: &mut Vec<Value>,
 ) -> Result<(stage::OwnState, research_ui::UiContext)> {
-    if target.is_some_and(|t| t.stage == stage::Stage::ClosePanel) {
+    let observed = if target.is_some_and(|t| t.stage == stage::Stage::ClosePanel) {
         // Only the complete raw producer is retried. Ownership acceptance,
         // original-state pinning and all predicates remain outside recovery.
         let observation = stage::close_read_recovery::observe(
@@ -688,12 +745,87 @@ fn preinput_state(
             || research_ui::closing::observe(process),
             history,
         )?;
-        return close_state(process, guard, observation);
-    }
-    observed_target_state(process, guard, target)
+        close_state(process, guard, observation)?
+    } else {
+        observed_target_state_unpinned(process, guard, target)?
+    };
+    check_selected_destination(process, guard, until)?;
+    Ok(observed)
 }
 
 pub(super) fn observed_target_state(
+    process: &dyn Process,
+    guard: &mut Guard,
+    target: Option<&stage::Target>,
+) -> Result<(stage::OwnState, research_ui::UiContext)> {
+    let observed = observed_target_state_unpinned(process, guard, target)?;
+    check_selected_research(process, guard)?;
+    Ok(observed)
+}
+
+fn check_selected_destination(
+    process: &dyn Process,
+    guard: &mut Guard,
+    until: Instant,
+) -> Result<()> {
+    if Instant::now() >= until {
+        return Err(Error::new(
+            "research_deadline",
+            "Selected destination identity deadline ended",
+        ));
+    }
+    check_selected_research(process, guard)?;
+    production::check_selected_production(process, guard, None, None, until)?;
+    if Instant::now() >= until {
+        return Err(Error::new(
+            "research_deadline",
+            "Selected destination identity deadline ended",
+        ));
+    }
+    Ok(())
+}
+
+pub(super) fn check_selected_research(process: &dyn Process, guard: &mut Guard) -> Result<()> {
+    let Some(crate::daily_panel_navigation::Destination::Research { state }) =
+        &guard.selected_target
+    else {
+        return Ok(());
+    };
+    if state.epoch != guard.epoch {
+        return Err(Error::new(
+            "ownership_changed",
+            "Selected Research epoch changed",
+        ));
+    }
+    let original = state.panel_binding.clone().ok_or_else(|| {
+        Error::new(
+            "research_precondition",
+            "Original selected Research binding required",
+        )
+    })?;
+    let identity = research_ui::mixed_destination::observe_identity(process)?;
+    guard.accept_context(process, &identity.context.campaign)?;
+    require_selected_research(&original, &identity)
+}
+
+fn require_selected_research(
+    original: &stage::PanelBinding,
+    current: &research_ui::mixed_destination::Identity,
+) -> Result<()> {
+    if original.anchors != current.context.anchors
+        || original.slots != current.context.slots
+        || original.roots != current.roots
+        || original.facilities_parent != current.facilities_parent
+    {
+        return Err(Error::new(
+            "ownership_changed",
+            "Original selected Research identity changed before action",
+        ));
+    }
+    Ok(())
+}
+
+fn observed_target_state_unpinned(
     process: &dyn Process,
     guard: &mut Guard,
     target: Option<&stage::Target>,
@@ -748,6 +880,133 @@ mod tests {
             campaign: "test".into(),
             player: "GER".into(),
         }
+    }
+    fn shown_source() -> stage::OwnState {
+        stage::OwnState {
+            epoch: epoch(),
+            selected_slot: Some(0),
+            selected_folder: None,
+            tree_visible: false,
+            panel_visible: Some(true),
+            active_mode: Some(5),
+            researching: vec![None, Some("support_weapons".into())],
+            visible_info: vec![],
+            panel_binding: Some(stage::PanelBinding {
+                anchors: [0x10000, 0x20000, 0x30000, 0x40000, 0x50000, 0x60000],
+                slots: vec![0x70000, 0x80000],
+                roots: [0x90000, 0xa0000, 0xb0000, 0xc0000],
+                facilities_parent: 0xd0000,
+                selected_slot_pointer: 0x70000,
+                folder_index: 0,
+                folder_windows: vec![],
+                tab: 0,
+            }),
+        }
+    }
+    fn departure_target() -> stage::Target {
+        stage::Target {
+            epoch: epoch(),
+            stage: stage::Stage::ClosePanel,
+            technology: String::new(),
+            folder_id: None,
+            slot: 0,
+        }
+    }
+    #[test]
+    fn mixed_close_expected_source_requires_shown_original_before_noop_or_intent() {
+        let shown = shown_source();
+        let target = departure_target();
+        validate_expected_close(Some(&shown), &target).unwrap();
+        require_expected_close(Some(&shown), &shown).unwrap();
+        let mut closed = shown.clone();
+        closed.active_mode = Some(23);
+        closed.panel_visible = Some(false);
+        assert!(closed.reached(&target));
+        assert!(validate_expected_close(Some(&closed), &target).is_err());
+        assert!(require_expected_close(Some(&shown), &closed).is_err());
+        // Readback may reach closed only after dispatch. The immutable pin
+        // still accepts that documented transition without rebinding roots.
+        let mut pin = Some(shown.clone());
+        pin_close(&mut pin, &closed, Some(&target)).unwrap();
+        assert_eq!(pin.as_ref(), Some(&shown));
+        validate_expected_close(None, &target).unwrap();
+        require_expected_close(None, &closed).unwrap();
+        let mut wrong = target.clone();
+        wrong.stage = stage::Stage::OpenPanel;
+        wrong.technology = "support_weapons".into();
+        assert_eq!(
+            validate_expected_close(Some(&shown), &wrong)
+                .unwrap_err()
+                .code,
+            "invalid_arguments"
+        );
+        let mut missing = shown.clone();
+        missing.panel_binding = None;
+        assert!(validate_expected_close(Some(&missing), &target).is_err());
+        for changed in [
+            {
+                let mut s = shown.clone();
+                s.researching[1] = None;
+                s
+            },
+            {
+                let mut s = shown.clone();
+                s.selected_slot = None;
+                s
+            },
+            {
+                let mut s = shown.clone();
+                s.panel_binding.as_mut().unwrap().roots[0] += 8;
+                s
+            },
+            {
+                let mut s = shown.clone();
+                s.epoch.campaign = "changed".into();
+                s
+            },
+        ] {
+            assert!(require_expected_close(Some(&shown), &changed).is_err());
+        }
+    }
+    #[test]
+    fn selected_research_static_pin_preserves_all_anchors_slots_and_roots() {
+        let shown = shown_source();
+        let binding = shown.panel_binding.as_ref().unwrap();
+        let current = research_ui::mixed_destination::Identity {
+            context: research_ui::UiContext {
+                campaign: ClockContext {
+                    playthrough_id: "fixture".into(),
+                    player: "GER".into(),
+                    anchors: [0xe0000, 0xf0000, 0x100000],
+                    date_raw: 1,
+                    difficulty: 2,
+                    historical_raw: 1,
+                    paused: false,
+                    speed: 3,
+                },
+                anchors: binding.anchors,
+                slots: binding.slots.clone(),
+            },
+            roots: binding.roots,
+            facilities_parent: binding.facilities_parent,
+        };
+        require_selected_research(binding, &current).unwrap();
+        for index in 0..6 {
+            let mut changed = current.clone();
+            changed.context.anchors[index] += 8;
+            assert!(require_selected_research(binding, &changed).is_err());
+        }
+        for index in 0..4 {
+            let mut changed = current.clone();
+            changed.roots[index] += 8;
+            assert!(require_selected_research(binding, &changed).is_err());
+        }
+        let mut changed = current.clone();
+        changed.context.slots[1] += 8;
+        assert!(require_selected_research(binding, &changed).is_err());
+        changed = current;
+        changed.facilities_parent += 8;
+        assert!(require_selected_research(binding, &changed).is_err());
     }
     #[test]
     fn attempt_pin_never_rebinds_to_a_same_count_slot_or_status() {

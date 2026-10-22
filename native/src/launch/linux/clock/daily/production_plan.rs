@@ -27,7 +27,7 @@ pub(super) fn permission(owner: bool, plan: bool, profile: bool, limit: Option<u
     }
     Ok(())
 }
-fn goal(entry: &core::Entry, scope: &core::Scope) -> Result<Target> {
+pub(super) fn goal(entry: &core::Entry, scope: &core::Scope) -> Result<Target> {
     let core::Intent::Economy {
         target:
             core::EconomyTarget::Production {
@@ -48,7 +48,7 @@ fn goal(entry: &core::Entry, scope: &core::Scope) -> Result<Target> {
     target.validate()?;
     Ok(target)
 }
-fn observed(
+pub(super) fn observed(
     process: &dyn Process,
     state: &mut ControlState,
     entry: &core::Entry,
@@ -111,7 +111,12 @@ fn next(
     let step = plan.progress.next(entry, &own, &context, shown, limit)?;
     Ok((step, own, context))
 }
-fn failure(state: &ControlState, id: &str, target: &Target, error: &Error) -> FailureEvidence {
+pub(super) fn failure(
+    state: &ControlState,
+    id: &str,
+    target: &Target,
+    error: &Error,
+) -> FailureEvidence {
     if unresolved(state) {
         return FailureEvidence::Unknown;
     }

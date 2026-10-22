@@ -12,8 +12,10 @@ The Linux production profile also exposes `hoi4_production_close` as a manual
 preview. It uses the ordinary production button only from settled shown production;
 already-hidden idle state is a no-op and other active panels refuse. The request
 uses the shared lease/journal, preserves the original panel identity and never
-replays uncertain input. Closing has offline tests only. Automatic mixed-domain
-panel routing remains disabled pending live verification and durable worker integration.
+replays uncertain input. Production008 passed manual production closing and
+ResearchClose002 passed direct Research closing, including historical replays and
+no-ops. Mixed Research/production worker routing has an explicit opt-in preview;
+its recorded live gate remains pending.
 
 ## Build
 
@@ -39,6 +41,24 @@ Three-OS CI validates shared code. It does not establish live compatibility.
 Layouts must be recovered and verified separately for each platform and build.
 
 ## Standing plans and observations
+
+Mixed Research/production plans may set `max_panel_navigation_steps_per_day` to
+1–16 in addition to `production_permission` and `max_production_steps_per_day`.
+Both owner daily domains and their existing profiles must be enabled; Focus
+permission must be off. Omitting the new option preserves the previous routes.
+A separate private journal retains the chosen destination, original object
+identities and consumed close attempts across restarts. Opening or closing a
+panel never completes an assignment or allocation goal. The selected task keeps
+priority until its governor goal completes; a selected production goal waits for
+its next daily budget before another domain can take over. Plan changes require
+stopping and restarting a settled plan. Uncertain input blocks controller binding
+even if worker permissions are later removed. Known departure refusals are kept
+and are not automatically retried. `panel_navigation` in the daily digest/details
+is historical accounting, never fresh input authority.
+
+This routing is not live accepted yet. It uses bounded native observations and
+ordinary verified controls, with no screenshots, cursor scans or pause commands.
+
 
 `hoi4_construction_queue` is a read-only preview (`offset` 0–2048, `limit` 1–128,
 default 32). It validates the entire own collection before paging, recognizes
@@ -307,14 +327,14 @@ anchors do not establish a load-generation token.
 | --- | --- |
 | `hoi4_capabilities` | Platform, owned-session binding and explicit missing features |
 | `hoi4_overview` | Own focus/research IDs and clock, freshness and unavailable fields |
-| `hoi4_research_close` | Opt-in Linux preview: close settled own Research tab with one stationary W; preserves original slots, assignments and panel identities, requires no Focus permission; live validation pending |
+| `hoi4_research_close` | Opt-in Linux preview: close settled own Research tab with one stationary W; preserves original slots, assignments and panel identities, requires no Focus permission; ResearchClose002 passed bounded closing/replay/no-op validation |
 | `hoi4_research` | Own completed technologies and active signed counters; normalized progress remains unavailable |
 | `hoi4_army` | Own divisions with full snapshot-scoped handles, selected province joins and lossless raw status; recorded structural reads, units unverified |
 | `hoi4_economy` | Own named factory trigger counts, civilian project capacity and exact signed political-power units; live comparison pending |
 | `hoi4_production_lines` | Paged own line handles, separate signed factory counters and optional base equipment keys; selected infantry allocation passed Production004; wider comparison and management remain pending |
 | `hoi4_production_controls` | Linux preview: exact own line's named factory +/- controls, callback bindings, local blockers and optional renderer geometry; read-only; selected infantry line passed Production004 |
 | `hoi4_production_open` | Opt-in Linux preview: ensure the production panel is open through its named topbar control; an already-open panel is a no-op; bounded Production004 gate passed |
-| `hoi4_production_close` | Opt-in Linux preview: close settled production or no-op when already closed in the idle view; Production008 passed manual closing, replay/no-op and Research/Focus handoff; mixed-worker routing unavailable |
+| `hoi4_production_close` | Opt-in Linux preview: close settled production or no-op when already closed in the idle view; Production008 passed manual closing, replay/no-op and Research/Focus handoff; mixed-worker live validation pending |
 | `hoi4_production_attempt` | Opt-in Linux preview: one ordinary factory step in an already-open panel, durable original identity/count and canonical readback; selected 10→11→10 gate passed |
 | `hoi4_construction_queue` | Own building/railway lines, canonical keys and signed cost/work counters; one dockyard observed in run071. Run072 observed one state/label with a late-lease deviation; selection and province/railway coverage remain unverified |
 | `hoi4_technology_list` | Canonical loaded technology IDs with filtering/pagination; no eligibility inference |

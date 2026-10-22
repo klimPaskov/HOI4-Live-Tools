@@ -420,7 +420,7 @@ impl Governor {
         }
         Ok(day)
     }
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", all(test, unix)))]
     pub(crate) fn blocks_work(&self) -> bool {
         self.poisoned
             || self.state.quarantine.is_some()
@@ -430,11 +430,11 @@ impl Governor {
                 .values()
                 .any(|e| matches!(e, EntryState::Intent { .. }))
     }
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", all(test, unix)))]
     pub(crate) fn last_sequence(&self) -> u64 {
         self.state.last_sequence.unwrap_or(0)
     }
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", all(test, unix)))]
     pub(crate) fn plan(&self) -> Plan {
         self.state.plan.clone()
     }

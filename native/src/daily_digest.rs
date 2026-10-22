@@ -8,6 +8,7 @@ pub(crate) const SECTIONS: &[&str] = &[
     "assignments",
     "focus",
     "production",
+    "panel_navigation",
     "core_pending_historical",
     "latest_preparation_historical",
     "latest_focus_wait_historical",
@@ -148,6 +149,12 @@ pub(crate) fn overflow(full: &Value, snapshot_id: &str) -> Result<Value> {
             "blocked":full["production"]["progress"]["blocked"],
             "historical":true,"details_section":"production"});
     }
+    if full["panel_navigation"].is_object() {
+        let panel = &full["panel_navigation"];
+        out["panel_navigation"] = json!({"blocked":panel["blocked"],"active":panel["latest"]["active"],
+            "budget":panel["budget"],
+            "failure_code":panel["departures"]["latest"]["cause"]["code"],"historical":true});
+    }
     if full["focus"]["start_failure"].is_object() {
         let f = &full["focus"]["start_failure"];
         out["start_failure"] = json!({"original_code":f["original_code"],"evidence":f["evidence"],
@@ -168,6 +175,32 @@ pub(crate) fn overflow(full: &Value, snapshot_id: &str) -> Result<Value> {
     {
         out["history"].as_object_mut().unwrap().remove("sections");
     }
+    // Mixed histories can coexist with legacy Focus history. The enclosing
+    // history envelope already declares these flags; remove only duplicate
+    // metadata, retaining every failure code, uncertainty and day budget.
+    if serde_json::to_vec(&out)
+        .map_err(|e| Error::new("digest_error", e.to_string()))?
+        .len()
+        > 2048
+    {
+        for section in [
+            "assignments",
+            "production",
+            "panel_navigation",
+            "start_failure",
+        ] {
+            if let Some(value) = out.get_mut(section).and_then(Value::as_object_mut) {
+                for key in [
+                    "historical",
+                    "current_state_verified",
+                    "input_authorized",
+                    "details_section",
+                ] {
+                    value.remove(key);
+                }
+            }
+        }
+    }
     // The fixed schema is bounded for production field limits. Refuse malformed
     // caller-generated oversized essentials rather than silently falsifying them.
     if serde_json::to_vec(&out)
@@ -186,6 +219,21 @@ pub(crate) fn overflow(full: &Value, snapshot_id: &str) -> Result<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn mixed_history_preserves_quarantine_and_budget_with_exact_details() {
+        let mut full = crowded();
+        full["panel_navigation"] = json!({"budget":{"day":706640,"used_steps":16,"limit":16,"historical":true},"blocked":true,"latest":{"entry_id":"x".repeat(128),"active":true},"departures":{"latest":{"used_steps":16,"limit":16,"cause":{"code":"action_uncertain","message":"retained original failure"}}}});
+        let mut details = Details::default();
+        let id = details.retain(&full).unwrap();
+        let compact = overflow(&full, &id).unwrap();
+        assert_eq!(compact["panel_navigation"]["blocked"], true);
+        assert_eq!(compact["panel_navigation"]["budget"]["used_steps"], 16);
+        assert_eq!(
+            details.get(&id, "panel_navigation").unwrap()["value"],
+            full["panel_navigation"]
+        );
+        assert!(serde_json::to_vec(&compact).unwrap().len() <= 2048);
+    }
     fn crowded() -> Value {
         let failure = json!({"entry_id":"x".repeat(128),"request_id":"a".repeat(64),
             "code":"input_not_queued","reason":"é".repeat(80),"original_code":"torn_read",

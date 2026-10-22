@@ -242,7 +242,7 @@ pub struct Plan {
     pub review_day: Option<i64>,
 }
 impl Plan {
-    pub(super) fn validate(&self) -> Result<()> {
+    pub(crate) fn validate(&self) -> Result<()> {
         self.scope.validate()?;
         if self.version != 1
             || self.revision == 0

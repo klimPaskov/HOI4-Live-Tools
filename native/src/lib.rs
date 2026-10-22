@@ -94,3 +94,7 @@ mod daily_focus_navigation;
 
 // Pure generated/public topology only; no campaign integration.
 pub mod graph_kernel;
+
+// Durable mixed-domain selection and ordinary panel departure accounting.
+#[cfg_attr(not(all(test, unix)), allow(dead_code))]
+pub(crate) mod daily_panel_navigation;

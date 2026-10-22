@@ -22,7 +22,7 @@ fn refuse(message: &str) -> Error {
     Error::new("research_precondition", message)
 }
 /// A missing/animating window is never evidence of a closed panel.
-fn settled(r: &Reader<'_>, base: u64, root: u64, registry: u64) -> Result<bool> {
+pub(super) fn settled(r: &Reader<'_>, base: u64, root: u64, registry: u64) -> Result<bool> {
     if !(0x10000..=0x7fff_ffff_0000).contains(&root) {
         return Err(refuse("Materialized closing root required"));
     }
@@ -49,7 +49,7 @@ fn named_child(r: &Reader<'_>, root: u64, key: &str) -> Result<u64> {
 }
 /// Returns exact panel/facilities roots after checking ownership before child
 /// traversal. Facilities is CFacilitiesTabView, not a CContainerWindow.
-fn roots(
+pub(super) fn roots(
     r: &Reader<'_>,
     base: u64,
     view: u64,
