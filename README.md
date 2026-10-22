@@ -107,10 +107,10 @@ ResearchClose002 passed direct Research-panel closing with Luna medium: 14 steps
 19 calls without errors, preserved assignments and historical replay/no-op checks.
 Closing took about one second; reads and replays took milliseconds. It uses
 Research permission alone, without assigning a Focus to switch panels.
-Mixed002 verified the paused production-to-Research route and assignment after
-an animation-readback fix. Its test harness then rejected a history read;
-Mixed003 stopped on a torn destination snapshot before switching panels.
-Multi-day mixed-plan acceptance remains pending.
+Mixed004 completed research-assignment and production goals across three days.
+A player path error prevented its final checks; a faster follow-up exposed an
+opening-readiness gap. The correction and completed-plan restart still need a
+full recorded mixed-plan test.
 
 Mixed production/research standing plans now have an explicit opt-in developer
 preview with persistent selections and separate panel-navigation budgets. Their

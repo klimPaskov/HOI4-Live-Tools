@@ -7,6 +7,36 @@ Do not resume Mac campaigns or control the shared Windows game.
 
 ## Current checkpoint
 
+**Latest requirement (22 October): all future campaigns and recordings must use
+native 1920×1080 or higher, with readable UI.** Validate the matching input profile
+and recording geometry before campaign Start. Previous 512×288 recordings remain
+diagnostic evidence. Do not launch another campaign using that diagnostic profile;
+finish offline readiness validation, then establish the 1080p path before the next
+mixed-plan or campaign run.
+
+Mixed005 on the same `81a3e41` source stopped at step 2: the fast driver exposed
+an immediate Research close refusal while the just-verified opening still animated.
+Only one Research input pair occurred; no worker started or close input was sent.
+Cleanup, release/status, recording, normal exit and frozen-input audits passed.
+The next correction makes Linux OpenPanel verification require the same shown
+root to settle under the original deadline, without a fixed client delay or
+repeated input. Preserve the strict close predicate and rerun the frozen driver.
+See [the full result](CLAUSEWITZ_VALIDATION.md#mixed005-immediate-close-readiness-failure--22-october-2026).
+
+Mixed004 on `81a3e41` completed both background goals over January 1–3, with
+six verified production steps and two panel departures. Its paused assignment
+and all eleven historical detail reads passed. Luna then typed a nonexistent
+local helper path before step 10's wait RPC; only nine of twenty steps completed.
+Canonical cleanup STOP/release/status and the independent stopped audit passed.
+The final catalog and completed-plan restart remain unverified. All owned live
+processes are closed; 197 source inputs and 20 helpers stayed unchanged.
+See [the recorded result](CLAUSEWITZ_VALIDATION.md#mixed004-completed-background-goals-incomplete-test--22-october-2026).
+
+Rerun the same source with a self-relative step driver and cleanup STOP support
+for local client failures. Keep exact native predicates, plan, budgets and
+completed restart checks. Preserve Mixed004's failure rather than relabeling
+its later background completion as full acceptance.
+
 Mixed002 on `fa2fab8` passed the paused mixed production/Research assignment in
 10.995 seconds, then its private broker rejected an advertised history section
 because it expected an additional nullable proof first. The stopped audit found

@@ -53,3 +53,33 @@ fn closing_window_requires_literal_settled_owned_container() {
     assert!(settled(&Reader::new(&m), base, root, registry).is_err());
     assert!(settled(&Reader::new(&m), base, 0, registry).is_err());
 }
+
+#[test]
+fn closing_root_diagnostic_names_and_states_never_authorize_transition_retry() {
+    let base = 0x10000;
+    let root = 0x20000;
+    let registry = 0x30000;
+    let mut m = Bytes::default();
+    m.word(root, base + 0x4347d58);
+    m.word(root + 0x98, registry);
+    m.put(root + 0xa5, &[8]);
+    m.put(root + 0xeb0, &1i32.to_le_bytes());
+    m.put(root + 0xef8, &0i32.to_le_bytes());
+    for name in [
+        "research_panel",
+        "research_tree",
+        "facilities_parent",
+        "facilities_view",
+    ] {
+        let e = settled_named(&Reader::new(&m), base, root, registry, name).unwrap_err();
+        assert_eq!(e.code, "research_panel_transition");
+        assert!(e.message.contains(&format!("root={name}")));
+        assert!(e.message.contains("transitions=[1, 0]"));
+        assert!(!e.message.contains(&root.to_string()));
+        assert!(e.message.len() < 192);
+    }
+    m.put(root + 0xeb0, &3i32.to_le_bytes());
+    let e = settled_named(&Reader::new(&m), base, root, registry, "research_panel").unwrap_err();
+    assert_eq!(e.code, "research_precondition");
+    assert!(e.message.contains("transitions=[3, 0]"));
+}

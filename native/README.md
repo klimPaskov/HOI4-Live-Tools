@@ -18,6 +18,19 @@ on the corrected continuation readback. Its private harness then refused a
 historical detail read because its required list differed from native discovery.
 Mixed003 stopped before selection/departure on a torn retained destination
 snapshot. The earlier Mixed001 uncertain opening remains preserved.
+Mixed004 completed both background goals over three days, but a player path error
+prevented its final restart checks. Mixed005's faster driver exposed a direct-close
+refusal while the just-verified opening still animated. These runs do not complete
+the mixed-plan acceptance gate.
+
+Linux OpenPanel verification now requires its own literal Research root to be
+settled and shown. Known pending animations after the single dispatch use the
+existing bounded readback loop and original deadline/lease. The first complete
+root binding is retained across pending reads; changed ownership, unknown states
+and pre-input failures remain strict. Stable reads add no wait. Timeout diagnostics
+retain the rejected count and named root/state cause. This does not broaden close
+permissions or require unrelated facilities roots for opening. Fresh live validation
+of this opening-readiness correction remains pending.
 
 ResearchClose002 passed direct Research closing, including historical replays and
 no-ops. Mixed Research/production worker routing has an explicit opt-in preview;

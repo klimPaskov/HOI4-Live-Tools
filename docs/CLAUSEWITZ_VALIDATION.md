@@ -1,5 +1,77 @@
 # Clausewitz-MCP Linux validation
 
+## Mixed005 immediate-close readiness failure — 22 October 2026
+
+Mixed005 used the same `81a3e41` source with a frozen self-relative step driver.
+Its 53 offline checks cover exact ordered steps, original-snapshot detail batches,
+bounded date waits, local failures, cleanup and final release. Native predicates,
+permissions and daily budgets stayed unchanged; all nine exact-source CI jobs
+had passed.
+
+The faster sequence exposed a readiness gap. Research OpenPanel verified in
+450.812 ms, then the immediate ClosePanel refused in 26.908 ms with
+`research_panel_transition`: the root still had a known animation transition.
+No close Intent or close input occurred. Opening's visibility predicate could
+accept a shown root in animation state 1; closing correctly required state 0.
+The specific closing root and numeric transition values were not retained in
+this failure, so the correction does not claim to recover those missing facts.
+The player stopped without a retry. The worker had never started, so cleanup
+released the lease and verified zero remaining seconds without an extra STOP.
+
+Independent audit retained one completed step, six player RPCs, one native
+refusal and one verified Research input pair. There was no production, clock,
+worker, uncertain input or pause command. All 197 native inputs and 22 helpers
+matched their frozen hashes. The 202.333-second recording passed integrity;
+normal exit was 0 in 2.256 seconds, and all exact owned game/server/recorder/bridge
+instances were absent. Recorder exit 255 remains separate. Startup took 349.619
+seconds; setup used two screenshots and eight clicks, Luna no screenshots.
+
+The correction targets OpenPanel readiness: verify that the same own shown root
+has settled before confirming the action, inside its original deadline and lease.
+Known opening transitions may be observed again after the single dispatch;
+pre-input refusals, unknown transitions and ownership mismatches remain strict.
+No fixed client delay, input retry or broader closing permission is introduced.
+Fresh live validation remains required; this run provides no mixed-gate acceptance.
+
+The readiness correction passed 1,171 host Rust tests, 142 targeted Linux test
+executions, 953 Python tests (37 skips), formatting, host/Linux Clippy and Windows
+all-target cross-compilation. These checks do not establish live readiness recovery.
+The next live run must first satisfy the new native 1080p campaign requirement.
+
+## Mixed004 completed background goals, incomplete test — 22 October 2026
+
+Mixed004 used `81a3e41`, one Luna medium player, vanilla FAIR Germany, Normal
+and historical AI, with all nine exact-source CI jobs passing. The paused
+assignment completed in 12.276 seconds (12.284 seconds including transport).
+Its corrected detail batch accepted all 11 required sections once, taking
+5.302–6.796 ms per native call and 64.423 ms total. Speed 3, unpause and restart
+of the unchanged plan then passed.
+
+The player used a nonexistent local helper path for step 10, before any wait RPC
+was sent. It stopped instead of retrying. The first cleanup STOP was rejected
+before native dispatch because the broker was still expecting the ordered wait;
+that rejection entered cleanup state. A separate cleanup-only continuation sent
+the one permitted canonical STOP, then released the lease and verified zero
+remaining seconds. The original failure and continuation remain separate.
+
+Independent stopped journals show both goals complete: production used two steps
+each on January 1, 2 and 3, reaching 14 factories, and Basic Machine Tools was
+assigned. Two panel departures preserved their original typed identities.
+Seven production pairs, eight Research pairs and two clock pairs verified with
+no unresolved input. One historical clock-probe torn read recovered; the newly
+added mixed-read recovery had no rejected reads and was not exercised.
+
+The run completed nine of twenty granted steps. It retained 26 player RPCs,
+one broker rejection and zero native errors. The final catalog comparison and
+completed-plan restart were not reached, so the full mixed gate remains pending.
+There were zero pause commands, two setup screenshots, eight menu clicks and no
+Luna screenshots. Startup took 352 seconds in the emulated VM. The 297.666-second
+recording passed integrity; one ordinary close exited 0 in 2.632 seconds.
+Recorder exit 255 is retained separately. All exact owned game, server, recorder
+and bridge instances were absent; all 197 native inputs and 20 helpers matched
+frozen hashes. This is background mixed-plan evidence, not complete gate,
+two-year or full-campaign acceptance.
+
 ## Mixed002 and Mixed003 incomplete mixed gates — 22 October 2026
 
 Both runs used source `fa2fab8`, one Luna medium player, vanilla FAIR Germany,

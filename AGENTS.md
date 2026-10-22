@@ -40,6 +40,9 @@ For campaign strategy and FAIR/META rules, read
   Cheating is forbidden in both. Showcases run in FAIR mode.
 - Reference: https://github.com/smerss/Clausewitz-MCP (MIT): memory reads,
   command-queue posting, wait_for, micro engine, encirclement search.
+- All future campaigns and campaign recordings must use native 1920x1080 or
+  higher resolution with readable UI. Verify input profiles at that geometry;
+  old 512x288 diagnostic profiles are not campaign acceptance.
 - Campaigns use Normal difficulty, vanilla rules, historical AI and observational
   telemetry only. No console/debug/eval/fire_event, save editing, hidden enemy
   intelligence or reload-to-undo. Test-mode features are for separate mod QA and

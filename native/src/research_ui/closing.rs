@@ -35,13 +35,29 @@ pub(super) fn settled(r: &Reader<'_>, base: u64, root: u64, registry: u64) -> Re
         return Err(if transitions.iter().all(|v| matches!(v, 0..=2)) {
             Error::new(
                 "research_panel_transition",
-                "Closing root is in a known animation transition",
+                format!(
+                    "Closing root is in a known animation transition; transitions={transitions:?}"
+                ),
             )
         } else {
-            refuse("Closing root has an unknown transition state")
+            refuse(&format!(
+                "Closing root has an unknown transition state; transitions={transitions:?}"
+            ))
         });
     }
     Ok(r.byte(root + 0xa5)? & 8 != 0)
+}
+fn settled_named(
+    r: &Reader<'_>,
+    base: u64,
+    root: u64,
+    registry: u64,
+    name: &'static str,
+) -> Result<bool> {
+    settled(r, base, root, registry).map_err(|mut cause| {
+        cause.message.push_str(&format!("; root={name}"));
+        cause
+    })
 }
 fn named_child(r: &Reader<'_>, root: u64, key: &str) -> Result<u64> {
     crate::gui_registry::lookup(r, root + 0xbc8, &array(r, root + 0xbb0, 128)?, key, 128)?
@@ -59,8 +75,8 @@ pub(super) fn roots(
 ) -> Result<([u64; 4], u64, bool)> {
     let root = r.u64(view + 0x2f8)?;
     let tree_root = r.u64(tree + 0x2f8)?;
-    let panel_visible = settled(r, base, root, registry)?;
-    if settled(r, base, tree_root, registry)? {
+    let panel_visible = settled_named(r, base, root, registry, "research_panel")?;
+    if settled_named(r, base, tree_root, registry, "research_tree")? {
         return Err(refuse("Research tree must be closed before panel closing"));
     }
     //1596c50 joins named facilities parent;2651f50/16f5980 bind its
@@ -70,7 +86,7 @@ pub(super) fn roots(
     if named_child(r, root, "facilities")? != parent {
         return Err(refuse("Facilities parent named join changed"));
     }
-    settled(r, base, parent, registry)?;
+    settled_named(r, base, parent, registry, "facilities_parent")?;
     let facilities = r.u64(view + 0x900)?;
     exact(r, facilities, base + 0x42f2708)?;
     if r.u64(facilities + 0x68)? != idler || r.u64(facilities + 0x60)? != parent {
@@ -80,7 +96,7 @@ pub(super) fn roots(
     if named_child(r, parent, "facilities_view_Instance")? != facilities_root {
         return Err(refuse("Facilities embedded root named join changed"));
     }
-    if settled(r, base, facilities_root, registry)? {
+    if settled_named(r, base, facilities_root, registry, "facilities_view")? {
         return Err(refuse("Facilities view must be closed on the research tab"));
     }
     Ok((

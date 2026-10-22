@@ -2,6 +2,17 @@
 
 ## Unreleased native preview
 
+- Require the owned Research root to settle before Linux OpenPanel verification.
+  Known post-input opening animations wait inside the original deadline and
+  lease; changed identity, unknown states and pre-input errors stay strict.
+  Keep the initial root binding and bounded timeout diagnostics without repeating
+  input or broadening closing permissions. Fresh live validation is pending.
+
+- Preserve Mixed004's background completion across three days and its separate
+  local player-path failure. Mixed005's immediate close exposed the opening
+  readiness gap before any close input; both runs were cleaned up and audited.
+  The full mixed gate, completed restart and campaign acceptance remain pending.
+
 - Bound replacement of torn mixed-destination/selected-identity snapshots to
   four whole reads, 25 ms intervals and one second within the original deadline.
   Keep guards, journal reservations and input outside recovery. Preserve bounded

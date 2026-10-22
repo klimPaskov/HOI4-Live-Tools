@@ -22,6 +22,10 @@ pub mod closing;
 #[doc(hidden)]
 pub mod mixed_destination;
 
+#[doc(hidden)]
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+pub mod opening;
+
 /// Witness reads always reach the process. Request-local shared metadata/proofs
 /// may avoid duplicate reads, but their original bytes must pass finish below.
 pub(crate) struct Witnesses<'a> {

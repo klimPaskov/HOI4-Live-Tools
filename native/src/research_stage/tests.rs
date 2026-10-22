@@ -66,6 +66,7 @@ fn state() -> OwnState {
 }
 
 mod close;
+mod open_settlement;
 fn reached() -> OwnState {
     let mut s = state();
     s.researching[0] = Some("support_weapons".into());

@@ -219,6 +219,7 @@ pub(super) fn execute_bound(
         target: Some(target.clone()),
         scope: None,
         close_original: expected.cloned(),
+        open_original: None,
         expected_source: expected.cloned(),
         read_deadline: until,
         before_observations: 0,
@@ -296,6 +297,7 @@ struct ResearchBackend<'a> {
     target: Option<stage::Target>,
     scope: Option<([u64; 2], Vec<u64>)>,
     close_original: Option<stage::OwnState>,
+    open_original: Option<research_ui::opening::Binding>,
     expected_source: Option<stage::OwnState>,
     read_deadline: Instant,
     before_observations: usize,
@@ -442,6 +444,21 @@ impl stage::Backend for ResearchBackend<'_> {
         } else {
             observed_target_state(self.process, self.guard, self.target.as_ref())?
         };
+        if self
+            .target
+            .as_ref()
+            .is_some_and(|target| target.stage == stage::Stage::OpenPanel)
+            && state.active_mode == Some(5)
+        {
+            // Generic visibility permits transition1. A fresh ordinary Open
+            // result must instead prove its own literal root settled shown.
+            // Pin even a known-pending whole snapshot before classifying it.
+            let opening = research_ui::opening::observe(self.process, &context)?;
+            self.guard
+                .accept_context(self.process, &opening.context.campaign)?;
+            pin_open(&mut self.open_original, &opening.binding)?;
+            opening.require_settled_shown()?;
+        }
         if !self.dispatch_started {
             require_expected_close(self.expected_source.as_ref(), &state)?;
         }
@@ -621,6 +638,22 @@ impl stage::Backend for ResearchBackend<'_> {
             }
         }
     }
+}
+
+fn pin_open(
+    original: &mut Option<research_ui::opening::Binding>,
+    current: &research_ui::opening::Binding,
+) -> Result<()> {
+    if original.as_ref().is_some_and(|before| before != current) {
+        return Err(Error::new(
+            "ownership_changed",
+            "Original own Research opening root identity changed; never rebind",
+        ));
+    }
+    if original.is_none() {
+        *original = Some(current.clone());
+    }
+    Ok(())
 }
 
 fn validate_expected_close(
@@ -902,6 +935,40 @@ mod tests {
                 tab: 0,
             }),
         }
+    }
+    #[test]
+    fn opening_pending_root_binding_is_never_replaced_before_settlement() {
+        let binding = research_ui::opening::Binding {
+            anchors: [0x10000, 0x20000, 0x30000, 0x40000, 0x50000, 0x60000],
+            slots: vec![0x70000, 0x80000],
+            root: 0x90000,
+        };
+        let mut pin = None;
+        pin_open(&mut pin, &binding).unwrap();
+        for changed in [
+            {
+                let mut b = binding.clone();
+                b.root += 8;
+                b
+            },
+            {
+                let mut b = binding.clone();
+                b.anchors[4] += 8;
+                b
+            },
+            {
+                let mut b = binding.clone();
+                b.slots[1] += 8;
+                b
+            },
+        ] {
+            assert_eq!(
+                pin_open(&mut pin, &changed).unwrap_err().code,
+                "ownership_changed"
+            );
+            assert_eq!(pin.as_ref(), Some(&binding));
+        }
+        pin_open(&mut pin, &binding).unwrap();
     }
     fn departure_target() -> stage::Target {
         stage::Target {

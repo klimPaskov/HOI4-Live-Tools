@@ -896,6 +896,8 @@ impl Journal {
         // the complete final own-state proof and input-idle confirmation.
         let mut identity_rejections: usize = 0;
         let mut last_identity_transition = String::new();
+        let mut open_rejections: usize = 0;
+        let mut last_open_transition = String::new();
         loop {
             live(authority, token, &target, deadline, gate).map_err(|cause| {
                 let mut failure = Error::after_possible_input(
@@ -904,6 +906,11 @@ impl Journal {
                 );
                 if identity_rejections != 0 {
                     failure.message.push_str(&format!("; rejected_identity_reads={identity_rejections}; last_identity_transition={last_identity_transition}"));
+                }
+                if open_rejections != 0 {
+                    failure.message.push_str(&format!("; rejected_open_reads={open_rejections}; last_open_transition={last_open_transition}"));
+                }
+                if identity_rejections != 0 || open_rejections != 0 {
                     let mut end = failure.message.len().min(512);
                     while !failure.message.is_char_boundary(end) { end -= 1; }
                     failure.message.truncate(end);
@@ -911,6 +918,18 @@ impl Journal {
                 failure
             })?;
             match backend.observe() {
+                Err(cause)
+                    if target.stage == Stage::OpenPanel
+                        && cause.code == "research_open_transition" =>
+                {
+                    open_rejections = open_rejections.saturating_add(1);
+                    last_open_transition = cause
+                        .message
+                        .chars()
+                        .filter(|c| !c.is_control())
+                        .take(160)
+                        .collect();
+                }
                 Err(cause) if cause.code == "research_identity_transition" => {
                     // Complete rejected reads only. The original authority and
                     // absolute deadline above remain in force; no input repeats.
