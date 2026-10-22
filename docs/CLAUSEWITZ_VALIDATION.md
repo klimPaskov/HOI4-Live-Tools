@@ -5381,3 +5381,37 @@ do not establish installed-game readiness, filmable recording performance,
 mixed-plan acceptance or a completed campaign. A bounded 1080p startup/render
 benchmark remains necessary: the earlier slow full-HD calibration already used
 virpipe GPU offloading.
+
+
+## FullHD001 startup deadline — 22 October 2026
+
+The first fresh full-HD benchmark on `89160d7` used the owned Linux x86_64
+QEMU TCG guest, existing virpipe GPU offload, a 2560×1440 isolated display and
+1920×1080 game settings with GUI scale 1.0. All nine exact-source CI jobs passed
+before launch. Setup-log events supplied readiness; bounded ten-second process
+metrics required no game-memory reads, cursor movement or screenshots.
+
+The frontend did not become ready within the original 600-second deadline.
+One final diagnostic image and X11 geometry confirmed an actual 1920×1080 client
+still showing “Loading GUI.” No campaign Start, menu input, player lease, input
+binding, gameplay command or pause command occurred. The optional 60-second
+1080p30 menu recording was never reached, so no recording cadence, readable
+campaign UI or annual gameplay throughput is established.
+
+The helper sent one ordinary WM close. Delivery was `server_confirmed`, but its
+20-second exit deadline expired with `shutdown_pending`; the exact game and
+owner remained. The failed benchmark and pending close were retained unchanged.
+The builder subsequently made one separate explicit owned shutdown request using
+the owner's pidfd SIGTERM path. The reaper recorded **exit code 6**, `signal: null`
+and no core dump. This is a failed normal-close test followed by separate cleanup,
+not an exit-code-0 success or signal-6 termination. No WM request was replayed
+and no force-kill occurred.
+
+Independent stopped audit verified both exact game/owner instances absent,
+200 native source inputs and seven installed files unchanged, and no input
+binding. The private archive retains metrics, the final image, original failure,
+close receipt and separate shutdown result. Full-HD startup performance on this
+emulated environment remains unresolved. The earlier slow full-HD calibration
+already used GPU offloading; no improvement from merely enabling offload is
+claimed. The mixed-plan gate, two-year Luna acceptance, filmable recordings and
+full campaigns remain pending; the 1080p requirement is unchanged.

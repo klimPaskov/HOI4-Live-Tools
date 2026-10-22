@@ -119,6 +119,8 @@ recorded advancing-time live gate is still pending.
 Future campaign tests and recordings will use native **1920×1080 or higher**
 with readable UI. The new Linux 1080p input profile still needs live qualification;
 earlier low-resolution runs are diagnostic tests, not filmable campaign evidence.
+The current emulated Linux test VM did not finish a ten-minute 1080p startup
+benchmark; [that environment limitation remains open](docs/CLAUSEWITZ_VALIDATION.md#fullhd001-startup-deadline--22-october-2026).
 
 ### macOS preview (live-tested on one build)
 

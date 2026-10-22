@@ -24,12 +24,24 @@ tests with 37 skips, formatting, host/Linux Clippy and Windows all-target checks
 These are offline/transport checks, not installed-game 1080p acceptance.
 
 The OpenPanel settlement correction is implemented and passed its prior full
-validation. Next: audit/publish the 1080p source, verify its exact-source CI, then
-run one bounded 1080p startup/render/recording benchmark on the owned Linux VM.
-An earlier 1080p startup already used GPU offloading and was extremely slow;
-offloading alone is not a new solution to that limitation. No game is running at
-this source checkpoint. The recorded mixed-plan gate, two-year Luna run and full
-campaigns remain unfinished. Do not fall back to another 512×288 campaign.
+validation. The 1080p checkpoint `89160d7` is published and all nine exact-source
+CI jobs passed. FullHD001 then failed its 600-second startup benchmark on the
+owned Linux VM: its actual 1920×1080 window remained on “Loading GUI.” No menu,
+campaign, player lease, input binding or video recording started. One final
+diagnostic image was captured. The normal window-close request was server-confirmed
+but reached its exit deadline. After preserving that failure, a separate explicit
+owned SIGTERM request ended the child with exit code 6, no signal and no core dump.
+This was not a successful normal close. Both exact game/owner instances are absent;
+all 200 native source inputs and seven installed files matched their frozen hashes.
+
+Resolve the current emulated Linux startup/renderer limitation before another
+campaign attempt; an earlier slow 1080p test already used GPU offloading, so merely
+enabling it is not a new fix. Preserve the failed benchmark and its separate
+cleanup outcome. The owned display remains 2560×1440 for future 1080p work. No game
+is running. The mixed-plan gate, two-year Luna run, filmable recording qualification
+and full campaigns remain unfinished. Do not fall back to a 512×288 campaign.
+Offline worker-event waits can progress independently; they must not be described
+as live acceptance. See [the benchmark result](CLAUSEWITZ_VALIDATION.md#fullhd001-startup-deadline--22-october-2026).
 
 Mixed005 on the same `81a3e41` source stopped at step 2: the fast driver exposed
 an immediate Research close refusal while the just-verified opening still animated.
