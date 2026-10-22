@@ -1,13 +1,16 @@
 # Mac continuation checkpoint — 11 October 2026
 
-**22 October update:** the user has authorized returning to macOS. The historical
-implementation notes below remain preserved; use the current checkpoint in
-[the runtime handoff](LINUX_RUST_HANDOFF.md). The latest frontend and live-memory binding probes passed after local
-administrator authorization. Continuous owned-window recording also passed a
-1920×1108 diagnostic. Luna reached fresh historical Regular Germany and verified
-its own-country overview; no gameplay actions were taken. Mac input geometry
-needs independent validation before advancing gameplay. No clean
-two-year run or full campaign has passed.
+**22 October update:** the user has authorized returning to macOS. Use the
+[current runtime checkpoint](LINUX_RUST_HANDOFF.md) and
+[live qualification record](CLAUSEWITZ_VALIDATION.md). Independent Mac geometry
+and ordinary research/Focus/time actions now pass at native 1920×1080. Continuous
+window recording finalized at about 29.4 FPS. The first advancing gate overshot
+its date bound during a model delay before the test-ending pause; the failure is
+preserved. A subsequent fixed mixed plan passed research/production and stopped
+on 12 January without that delay. Its video captured all actions, but the recorder
+guard later stopped capture after player handback; the precise failed witness was
+not retained. Reliable recorder lifecycle, durable mixed plans, the clean two-year
+run and full campaigns remain unfinished. Historical notes below describe the earlier implementation.
 
 **Superseded by the [Linux-first objective](LINUX_RUST_HANDOFF.md) and
 [Linux validation checkpoint](CLAUSEWITZ_VALIDATION.md).** The licensed Linux

@@ -276,7 +276,7 @@ fn peace_conference_open(r: &Reader<'_>, image: u64) -> Result<bool> {
 /// Open events in list order; the last one is drawn on top.
 pub(super) fn list(process: &dyn Process) -> Result<Value> {
     let open = read(process, open_events)?;
-    let peace = read(process, peace_conference_open).unwrap_or(false);
+    let peace = read(process, peace_conference_open)?;
     let last = open.len().saturating_sub(1);
     Ok(
         json!({"peace_conference_open":peace,"events":open.iter().enumerate().map(|(i, e)| json!({
@@ -363,6 +363,40 @@ pub(super) fn choose(process: &dyn Process, keys: &MacKeys, id: &str, option: us
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn missing_peace_window_read_does_not_authorize_plan_progress() {
+        struct MissingPeace;
+        impl crate::memory::ReadMemory for MissingPeace {
+            fn string_abi(&self) -> StringAbi {
+                StringAbi::LibCxx
+            }
+            fn read(&self, address: u64, len: usize) -> Result<Vec<u8>> {
+                match (address, len) {
+                    (0x35196c0, 8) => Ok(0x100000u64.to_le_bytes().to_vec()),
+                    (0x1004c0, 8) => Ok(0x110000u64.to_le_bytes().to_vec()),
+                    (0x1109e0, 16) => Ok(vec![0; 16]),
+                    _ => Err(Error::new(
+                        "fixture_missing_peace",
+                        "Peace view unavailable",
+                    )),
+                }
+            }
+        }
+        impl Process for MissingPeace {
+            fn check(&self) -> Result<()> {
+                Ok(())
+            }
+            fn image_base(&self) -> u64 {
+                0
+            }
+        }
+        assert!(read(&MissingPeace, open_events).unwrap().is_empty());
+        assert_eq!(
+            list(&MissingPeace).unwrap_err().code,
+            "fixture_missing_peace"
+        );
+    }
+
     #[test]
     fn news_option_bars_are_found_below_the_text() {
         let (width, height) = (1920usize, 1080usize);

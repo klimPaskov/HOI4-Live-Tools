@@ -9,33 +9,57 @@ failed campaigns. Do not control the shared Windows game.
 
 ## Current checkpoint
 
-The Mac switch is active. Local administrator authorization has completed;
-the noninteractive Rust reader bound the fresh owned game in a 0.543-second
-three-tool frontend probe. Campaign-only reads correctly remain unavailable at
-the frontend. An earlier 25-second authorization timeout and its owned-game
-cleanup are preserved separately. The new preflight returns missing task-port
-authorization without opening an OS dialog.
+The Mac switch is active. The latest source independently validates the owned
+Mac GUI/SDL Cocoa geometry against the OS window at 1920×1080, UI scale 1.
+Memory reads remain nonpausing and stationary. Mac Focus catalog listing now uses
+Mac layouts; unported node/search detail reads explicitly refuse. Preserve the
+separate recorder-indicator binding failure (gate004) and Linux-layout catalog
+failure (gate005), both of which stopped before gameplay input.
 
-Continuous ScreenCaptureKit window recording passed a 20-second diagnostic at
-1920×1108, approximately 29.4 FPS, with clean finalization. This captures the whole
-owned window, including its decoration, and does not establish client-coordinate
-input authority. The screenshot-based recorder's earlier six-frame failure and
-the first streaming prototype's watchdog lifetime failure remain preserved.
-Luna medium then completed six ordinary menu actions and entered fresh historical
-Regular Germany, paused by the game at 1 January 1936 12:00. Its own-country
-overview returned in 1.404 ms over the persistent MCP connection. No input lease,
-research/focus/clock action or observation pause occurred. The 264.52-second
-recording finalized at 1920×1108 and about 29.5 FPS; hashes and frozen-source
-checks passed. Luna handed back and its broker closed. The owned game remains
-at that initial setup, with no active player.
+Luna medium then verified Basic Machine Tools in slot 0 and
+`GER_prioritize_economic_growth` through ordinary inputs, followed by clock
+advancement (gate006). Research took about 2 seconds, Focus about 4 seconds;
+all 18 RPCs passed and all five journal pairs ended Verified. The 284.76-second
+recording finalized at 1920×1108, about 29.4 FPS. It includes the titlebar around
+the native 1080p game client. Frozen native inputs, helper files and video hashes
+were audited. No observation pause occurred.
 
-The next task is to validate Mac client geometry and the fixed input profile
-before gameplay. The shared geometry diagnostic was incorrectly using Linux
-offsets; it now refuses on Mac before any layout read, verified against the live
-game. Do not call it expecting Mac dimensions or bypass the refusal. Preserve the
-recorded initial setup and all three separate gate outcomes. The private continuous
-recorder still needs product integration and longer-running validation. No clean
-two-year or full campaign acceptance is claimed.
+The bounded date gate failed: after the wait reached 8 January, the model's delay
+before the explicit end-test pause advanced to 11 January 1936 01:00. The game
+was left paused there with its verified assignments; no rewind occurred. Keep that
+failure separate from successful input verification. The corrected test driver
+chains plan/wait/end-pause locally without a model gap.
+
+Read-only mixed-plan dependencies passed. The Mac events reader now propagates
+peace-window failures, and `stop_on_failure: true` stops the legacy runner before
+fallback or another domain after a refused/diverged action. The legacy runner is
+synchronous, holds scheduling state in memory and checks its time limit between
+complete actions; it is not the Linux durable daily worker. Its implicit production
+rebalance must be explicitly accounted for in any fixed test grant.
+
+The following gate007 passed its gameplay checks: manual infantry allocation
+10→11, then Construction I in slot 1 and infantry allocation 11→18 through a
+fixed standing plan. All 20 RPCs passed, with six verified journal pairs and no
+unresolved input. The combined local driver stopped exactly at 12 January 1936
+01:00 after one game day; no observation pause or model gap occurred. The owned
+game is paused at speed 1, retaining Basic Machine Tools and the economic-growth
+Focus; no player lease or broker remains active.
+
+Its video finalized at 101.36 seconds, 1920×1108 and about 29.4 FPS, with the
+complete action sequence and final state visibly checked. However, the recorder
+exited on its aggregate process/window/session guard approximately 41 seconds
+after the driver finished. The exact failed witness was not retained. Preserve
+that recording lifecycle failure; later matching identities/geometry do not
+explain it. Add detailed guard diagnostics and qualify clean recorder termination
+before long campaign videos. Short mixed gameplay passed; durable mixed-plan
+restart, two-year play and full campaigns remain unfinished.
+
+Current checks passed 1,208 host Rust tests, 956 workspace Python tests with 37
+skips, 809 staged-baseline Python tests with 29 skips, Clippy, formatting and
+Windows all-target checks. The private continuous recorder still needs product
+integration and longer-running validation. Wider mixed plans, the clean two-year
+run and full campaigns remain incomplete. See [the current live record](CLAUSEWITZ_VALIDATION.md#mac-native-geometry-and-catalog-qualification--22-october-2026)
+and [Mac geometry](MAC_INPUT_GEOMETRY.md).
 
 FEX002 is cleanly closed with its recording preserved. Its 1080p binding passed
 negative/positive checks, but interruption preceded any Rust gameplay action.

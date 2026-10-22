@@ -1,5 +1,106 @@
 # Clausewitz-MCP Linux validation
 
+## Mac native geometry and catalog qualification — 22 October 2026
+
+The fresh owned Mac game now has an independent geometry path for Mach-O
+089EA519. Live reads found matching render/logical 1920×1080, GUI scale 1,
+SDL Cocoa content `(0,81,1920,1080)` and owned CG frame `(0,53,1920,1108)`.
+The reader checks native types, constructor-proved Cocoa callbacks, bounded
+window membership and reciprocal driver/view/listener links. ObjC ivar offsets
+are resolved at runtime; on-disk offsets differ on this host. Every dependency
+has a final read witness. See [the geometry contract](MAC_INPUT_GEOMETRY.md).
+
+A signed rebuilt adapter bound successfully with continuous window recording
+active. Its geometry observation used 464 bytes across 56 logical requests and
+took 0.13 ms in one producer sample; own overview took 0.16 ms. These are narrow
+paused-game samples, not campaign throughput. The command binding separately
+checks OS ownership/geometry and rechecks before input. The public geometry
+read remains a non-authorizing memory diagnostic by design.
+
+The first recorder-on binding attempt (gate004) refused before a player, lease
+or action because macOS added a same-owner title-region sharing indicator ahead
+of the main window. The correction permits only same-owner rectangles entirely
+inside the title decoration. Foreign windows, client overlap, displaced frames,
+ambiguous matches and lost SDL focus still refuse. Its 89-second recording and
+zero-input failure are preserved. A review also found and fixed the Shift-click
+check-to-press delay, keeping modifier release on refusal.
+
+Gate005 then bound correctly, but Luna stopped before acquiring a lease when
+`hoi4_focus_list` used hardcoded Linux roots and returned `read_bound`. Its
+175-second recording and handback are preserved. Mac catalog reads now use the
+existing independent Mac country/focus layouts and validate all own canonical
+members and keys before pagination. The live catalog contained 438 own entries;
+one filtered producer read took 18.56 ms. Completion membership also passed.
+Mac node/search/selected-detail diagnostics that remain unported explicitly
+refuse before memory reads. Their absence is distinct from the ordinary Mac
+focus action adapter and does not authorize a Linux-layout fallback.
+
+Gate006 verified Basic Machine Tools in slot 0 and the economic-growth Focus
+through ordinary inputs, then advanced time. The research RPC took 1,965 ms and
+the Focus RPC 3,974 ms. All 18 player RPCs succeeded, with five verified journal
+pairs and no unresolved input. There were zero observation pauses and one
+explicit end-of-test pause. The recording finalized at 284.76 seconds,
+1920×1108, 8,381 frames (about 29.4 FPS); all 214 native inputs and six frozen
+private files matched their hashes.
+
+The date limit failed: the wait returned at 8 January 1936 01:00, but an
+approximately 8.2-second model gap before the pause advanced the game to
+11 January 01:00. Actual advancement was 229 game hours. The interval between
+verified unpause and pause responses was approximately 27 seconds; it is not
+an end-to-end campaign-year timing. No rewind occurred. Preserve this as verified
+actions with a failed bounded-date test, not a clean campaign gate.
+
+Read-only preparation for the next mixed test passed events, economy, all 21
+own production lines, the empty construction collection, research and Focus
+completion. Review then found that the Mac event list suppressed a failed peace
+window read; it now propagates the error. A fault fixture checks that missing
+peace state cannot appear safely closed. The legacy plan runner also accepts
+`stop_on_failure: true`: a refused, NotApplied or Diverged action stops before
+another candidate/domain. Uncertain dispatches retain their same-ID settlement
+and never gain a new action ID. The legacy default remains unchanged.
+
+This Mac runner is synchronous and keeps scheduling state in memory. Its
+`seconds` deadline is checked between complete actions. It is not the Linux
+durable daily worker. The following fixed-plan test used a single local sequence for
+unpause, plan execution, bounded wait and explicit test-ending pause, with no
+model gap and no observation pause. Empty production entries alone do not disable
+its default rebalance; the test explicitly declares the permitted infantry-line
+target. Broader durable mixed plans and a clean two-year run remain unfinished.
+
+Gate007's gameplay portion passed with one Luna medium player: 20 RPCs, zero
+errors, six verified journal pairs and no unresolved input. The manual infantry
+line change from 10 to 11 factories took 823 ms. A fixed standing plan then
+started Construction I in slot 1 and assigned the remaining seven idle military
+factories to that line, reaching 18. The synchronous plan call returned after
+11.59 seconds. Final reads preserved Basic Machine Tools in slot 0, the active
+economic-growth Focus and every other production line. All 214 native inputs
+and eight private frozen files matched their hashes.
+
+The test advanced from 11 January 1936 01:00 to 12 January 01:00. Its wait and
+explicit final pause ran consecutively in one local driver, eliminating the
+model gap; the final paused date matched the target. There were zero observation
+pauses and one explicit end-test pause. The verified unpause-to-pause response
+interval was 12.22 seconds for that one game day at internal speed 1. This short
+qualification is not a campaign-year throughput measurement or durable restart
+acceptance.
+
+The recorder did not have a clean lifecycle: approximately 41 seconds after the
+driver completed, and after player handback, its process/window/session guard
+stopped capture. The aggregate failure did not retain which witness failed;
+subsequent process identities and window geometry matched, which does not explain
+or erase the original failure. The finalized 101.36-second video contains the
+whole gameplay sequence at 1920×1108, 2,985 frames and about 29.4 FPS. One extracted
+post-test frame visibly confirms the paused date, 18 factories and readable UI.
+The failure remains recorded separately from the passed gameplay checks. Recorder
+integration must retain exact failure witnesses and qualify reliable termination
+before campaign-video acceptance.
+
+Validation after these changes passed 1,208 host Rust tests, 956 Python tests
+with 37 skips, Clippy, formatting and Windows all-target checks. The staged Python
+baseline separately passed 809 tests with 29 skips. These counts distinguish the
+preserved local Python WIP from the published tree. Offline checks do not replace
+live acceptance.
+
 ## Mac switch and Linux FEX002 checkpoint — 22 October 2026
 
 The user explicitly authorized switching back to macOS. FEX002 had reached a

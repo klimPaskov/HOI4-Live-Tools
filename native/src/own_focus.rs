@@ -14,6 +14,7 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     time::{Instant, SystemTime, UNIX_EPOCH},
 };
+mod catalog;
 mod completion;
 mod search;
 pub use completion::snapshot as completion_snapshot;
@@ -273,6 +274,12 @@ fn snapshot_model(
             "invalid_query",
             "Bounded focus pagination/filter required",
         ));
+    }
+    if process.string_abi() == crate::memory::StringAbi::LibCxx {
+        if query.is_some() || include_geometry || command_context {
+            return Err(Error::new("capability_unavailable", "Focus UI diagnostics require the reviewed Linux layout; Mac canonical catalog and completion reads are available"));
+        }
+        return Ok((catalog::snapshot(process, offset, limit, prefix)?, None));
     }
     let start = Instant::now();
     process.begin_snapshot()?;

@@ -3,7 +3,11 @@
 //! process; anything else refuses before sending. Needs the Accessibility
 //! permission of the responsible app. Clicks target game-logical points inside
 //! the owned window's content rectangle. No text, activation or engine call.
-use crate::error::{Error, Result};
+use crate::{
+    error::{Error, Result},
+    gui::macos::{self, Geometry},
+    platform::Process,
+};
 use std::ffi::c_void;
 
 type CFTypeRef = *const c_void;
@@ -145,47 +149,104 @@ impl Capture {
         Some((self.data[o + 2], self.data[o + 1], self.data[o]))
     }
 }
-/// Window number and bounds of the owned process's largest normal on-screen window.
-fn owned_window(pid: i32) -> Result<(u32, Rect)> {
-    // SAFETY: the returned array is released below; entries are borrowed.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct Window {
+    id: u32,
+    owner: i32,
+    bounds: Rect,
+}
+/// Normal on-screen windows in current front-to-back order.
+fn windows() -> Result<Vec<Window>> {
     unsafe {
         let list = CGWindowListCopyWindowInfo(ON_SCREEN_ONLY | EXCLUDE_DESKTOP, 0);
         if list.is_null() {
             return Err(Error::new("input_unavailable", "Window list unavailable"));
         }
-        let mut best: Option<(u32, Rect)> = None;
+        let mut found = Vec::new();
         for index in 0..CFArrayGetCount(list) {
             let window = CFArrayGetValueAtIndex(list, index);
-            if number(window, kCGWindowLayer) != Some(0)
-                || number(window, kCGWindowOwnerPID) != Some(pid)
-            {
+            if number(window, kCGWindowLayer) != Some(0) {
                 continue;
             }
             let mut rect = Rect::default();
             let dict = CFDictionaryGetValue(window, kCGWindowBounds);
-            let Some(id) = number(window, kCGWindowNumber) else {
-                continue;
-            };
-            if !dict.is_null()
-                && CGRectMakeWithDictionaryRepresentation(dict, &mut rect)
-                && best.is_none_or(|(_, b)| rect.size.x * rect.size.y > b.size.x * b.size.y)
-            {
-                best = Some((id as u32, rect));
+            if let (Some(id), Some(owner)) = (
+                number(window, kCGWindowNumber),
+                number(window, kCGWindowOwnerPID),
+            ) {
+                if id > 0
+                    && !dict.is_null()
+                    && CGRectMakeWithDictionaryRepresentation(dict, &mut rect)
+                {
+                    found.push(Window {
+                        id: id as u32,
+                        owner,
+                        bounds: rect,
+                    });
+                }
             }
         }
         CFRelease(list);
-        best.ok_or_else(|| {
-            Error::new(
-                "input_target_unavailable",
-                "Owned game window is not on screen",
-            )
-        })
+        Ok(found)
     }
 }
+fn content(geometry: &Geometry) -> Rect {
+    let [x, y, w, h] = geometry.client.map(f64::from);
+    Rect {
+        origin: Point { x, y },
+        size: Point { x: w, y: h },
+    }
+}
+/// Corroborate a memory-derived content rectangle, without deriving it from a
+/// title-bar constant or selecting the largest window. Refuse ambiguous matches.
+fn select_window(pid: i32, client: Rect, windows: &[Window]) -> Result<Window> {
+    let matches: Vec<_> = windows
+        .iter()
+        .filter(|w| {
+            let frame = w.bounds;
+            let decoration = client.origin.y - frame.origin.y;
+            w.owner == pid
+                && frame.origin.x == client.origin.x
+                && frame.size.x == client.size.x
+                && (0.0..=40.0).contains(&decoration)
+                && frame.origin.y + frame.size.y == client.origin.y + client.size.y
+        })
+        .copied()
+        .collect();
+    if matches.len() != 1 {
+        return Err(Error::new(
+            "input_geometry_unverified",
+            "One owned OS window must match the fresh native content rectangle",
+        ));
+    }
+    let selected = matches[0];
+    // ScreenCaptureKit can add a same-owner normal window entirely within the
+    // game's title decoration (the sharing indicator). It cannot cover a game
+    // control. Permit only that narrow region; a foreign window, overlapping
+    // child, modal elsewhere or invalid rectangle still refuses. SDL input
+    // focus is independently required by the witnessed native profile.
+    if windows.iter().take_while(|w| **w != selected).any(|w| {
+        let b = w.bounds;
+        w.owner != pid
+            || ![b.origin.x, b.origin.y, b.size.x, b.size.y]
+                .iter()
+                .all(|v| v.is_finite())
+            || b.size.x <= 0.0
+            || b.size.y <= 0.0
+            || b.origin.x < selected.bounds.origin.x
+            || b.origin.y < selected.bounds.origin.y
+            || b.origin.x + b.size.x > selected.bounds.origin.x + selected.bounds.size.x
+            || b.origin.y + b.size.y > client.origin.y
+    }) {
+        return Err(Error::new(
+            "input_target_not_frontmost",
+            "The exact owned game client is not frontmost; no input was sent",
+        ));
+    }
+    Ok(selected)
+}
 /// Capture the owned window's client area (needs Screen Recording permission).
-pub fn capture_client(pid: i32, game: (u32, u32)) -> Result<Capture> {
-    let (id, bounds) = owned_window(pid)?;
-    let content = content_from_bounds(bounds, game)?;
+fn capture_client(id: u32, content: Rect, game: (u32, u32)) -> Result<Capture> {
     // SAFETY: CoreGraphics objects are released below; the copied bytes are owned.
     unsafe {
         // kCGWindowListOptionIncludingWindow, kCGWindowImageBoundsIgnoreFraming.
@@ -227,61 +288,6 @@ pub fn capture_client(pid: i32, game: (u32, u32)) -> Result<Capture> {
     }
 }
 
-/// Content rectangle (global points) of the owned process's largest normal
-/// on-screen window, assuming its client area is `game` logical pixels with a
-/// title bar above it. Refuses unexpected scales or decorations.
-pub fn owned_content(pid: i32, game: (u32, u32)) -> Result<Rect> {
-    // SAFETY: the returned array is released below; entries are borrowed.
-    let bounds = unsafe {
-        let list = CGWindowListCopyWindowInfo(ON_SCREEN_ONLY | EXCLUDE_DESKTOP, 0);
-        if list.is_null() {
-            return Err(Error::new("input_unavailable", "Window list unavailable"));
-        }
-        let mut best: Option<Rect> = None;
-        for index in 0..CFArrayGetCount(list) {
-            let window = CFArrayGetValueAtIndex(list, index);
-            if number(window, kCGWindowLayer) != Some(0)
-                || number(window, kCGWindowOwnerPID) != Some(pid)
-            {
-                continue;
-            }
-            let mut rect = Rect::default();
-            let dict = CFDictionaryGetValue(window, kCGWindowBounds);
-            if !dict.is_null()
-                && CGRectMakeWithDictionaryRepresentation(dict, &mut rect)
-                && best.is_none_or(|b| rect.size.x * rect.size.y > b.size.x * b.size.y)
-            {
-                best = Some(rect);
-            }
-        }
-        CFRelease(list);
-        best
-    };
-    let bounds = bounds.ok_or_else(|| {
-        Error::new(
-            "input_target_unavailable",
-            "Owned game window is not on screen",
-        )
-    })?;
-    content_from_bounds(bounds, game)
-}
-fn content_from_bounds(bounds: Rect, game: (u32, u32)) -> Result<Rect> {
-    let (w, h) = (f64::from(game.0), f64::from(game.1));
-    let title = bounds.size.y - h;
-    if bounds.size.x != w || !(0.0..=40.0).contains(&title) {
-        return Err(Error::new(
-            "input_geometry_unverified",
-            "Owned window is not an unscaled windowed game of the expected size",
-        ));
-    }
-    Ok(Rect {
-        origin: Point {
-            x: bounds.origin.x,
-            y: bounds.origin.y + title,
-        },
-        size: Point { x: w, y: h },
-    })
-}
 /// Global point for a game-logical pixel; refuses points outside the client.
 pub fn client_point(content: Rect, x: f64, y: f64) -> Result<Point> {
     if !(0.0..content.size.x).contains(&x) || !(0.0..content.size.y).contains(&y) {
@@ -327,45 +333,83 @@ pub fn frontmost_window_owner() -> Result<Option<i32>> {
     }
 }
 
-pub struct MacKeys {
+pub struct MacKeys<'p> {
     pid: i32,
+    process: &'p (dyn Process + Send + Sync),
+    geometry: Geometry,
+    window: Window,
 }
-impl MacKeys {
+impl<'p> MacKeys<'p> {
+    pub fn bind(process: &'p (dyn Process + Send + Sync)) -> Result<Self> {
+        let pid = process
+            .identity()
+            .ok_or_else(|| Error::new("input_unavailable", "Owned process identity required"))?
+            .pid;
+        let geometry = macos::observe(process)?;
+        geometry.require_profile()?;
+        let window = select_window(pid, content(&geometry), &windows()?)?;
+        let bound = Self {
+            pid,
+            process,
+            geometry,
+            window,
+        };
+        bound.preflight()?;
+        Ok(bound)
+    }
     pub fn capture(&self, game: (u32, u32)) -> Result<Capture> {
-        capture_client(self.pid, game)
+        let content = self.verified_content(game)?;
+        let result = capture_client(self.window.id, content, game)?;
+        self.preflight()?;
+        Ok(result)
     }
-}
-impl MacKeys {
-    pub fn new(pid: i32) -> Self {
-        Self { pid }
+    fn verified_content(&self, game: (u32, u32)) -> Result<Rect> {
+        if game != (1920, 1080) {
+            return Err(Error::new(
+                "input_geometry_unverified",
+                "Mac input profile differs from requested game dimensions",
+            ));
+        }
+        self.preflight()?;
+        Ok(content(&self.geometry))
     }
-    /// Refuse unless input permission exists and the owned game is in front.
+    /// Fresh process, SDL/graphics witnesses and exact OS window before input.
     pub fn preflight(&self) -> Result<()> {
-        // SAFETY: no arguments; reads this process's accessibility trust.
         if !unsafe { AXIsProcessTrusted() } {
             return Err(Error::new(
                 "input_permission_denied",
-                "Accessibility permission is required for ordinary key input",
+                "Accessibility permission is required for ordinary input",
             ));
         }
-        if frontmost_window_owner()? != Some(self.pid) {
+        let current = macos::observe(self.process)?;
+        current.require_profile()?;
+        if !current.same_binding(&self.geometry) {
             return Err(Error::new(
-                "input_target_not_frontmost",
-                "The owned game window is not the front-most window; no key was sent",
+                "input_geometry_changed",
+                "Native game geometry or window binding changed; rebind required",
             ));
         }
+        if select_window(self.pid, content(&current), &windows()?)? != self.window {
+            return Err(Error::new(
+                "input_geometry_changed",
+                "Owned OS window changed; rebind required",
+            ));
+        }
+        self.process.check()?;
         Ok(())
     }
     /// One left click at a game-logical point after a fresh front-most check:
     /// move, settle, press, release. The cursor stays where it clicked.
     pub fn click(&self, game: (u32, u32), x: f64, y: f64) -> Result<Point> {
-        self.preflight()?;
-        let point = client_point(owned_content(self.pid, game)?, x, y)?;
+        let point = client_point(self.verified_content(game)?, x, y)?;
         for (kind, pause) in [
             (MOUSE_MOVED, 60),
             (LEFT_MOUSE_DOWN, 50),
             (LEFT_MOUSE_UP, 40),
         ] {
+            if kind == LEFT_MOUSE_DOWN || kind == RIGHT_MOUSE_DOWN {
+                self.preflight()?;
+            }
             // SAFETY: a null source is allowed; the event is released after posting.
             unsafe {
                 let event = CGEventCreateMouseEvent(std::ptr::null(), kind, point, LEFT_BUTTON);
@@ -392,8 +436,7 @@ impl MacKeys {
         const SHIFT_KEY: u16 = 56;
         const SHIFT_FLAGS: u64 = 0x2_0002;
         const FLAGS_CHANGED: u32 = 12;
-        self.preflight()?;
-        let point = client_point(owned_content(self.pid, game)?, x, y)?;
+        let point = client_point(self.verified_content(game)?, x, y)?;
         let pause = |ms: u64| std::thread::sleep(std::time::Duration::from_millis(ms));
         // SAFETY: a null source is allowed; every event is released after posting.
         unsafe {
@@ -418,9 +461,11 @@ impl MacKeys {
                 0,
             )?;
             pause(100);
+            self.preflight()?;
             modifier(true)?;
             pause(250);
             let result = (|| {
+                self.preflight()?;
                 post(
                     CGEventCreateMouseEvent(std::ptr::null(), LEFT_MOUSE_DOWN, point, LEFT_BUTTON),
                     SHIFT_FLAGS,
@@ -440,13 +485,15 @@ impl MacKeys {
     }
     /// One right click at a game-logical point after a fresh front-most check.
     pub fn right_click(&self, game: (u32, u32), x: f64, y: f64) -> Result<Point> {
-        self.preflight()?;
-        let point = client_point(owned_content(self.pid, game)?, x, y)?;
+        let point = client_point(self.verified_content(game)?, x, y)?;
         for (kind, button, pause) in [
             (MOUSE_MOVED, LEFT_BUTTON, 60),
             (RIGHT_MOUSE_DOWN, RIGHT_BUTTON, 50),
             (RIGHT_MOUSE_UP, RIGHT_BUTTON, 40),
         ] {
+            if kind == LEFT_MOUSE_DOWN || kind == RIGHT_MOUSE_DOWN {
+                self.preflight()?;
+            }
             // SAFETY: a null source is allowed; the event is released after posting.
             unsafe {
                 let event = CGEventCreateMouseEvent(std::ptr::null(), kind, point, button);
@@ -492,10 +539,13 @@ impl MacKeys {
                 16,
             )
         };
-        let content = owned_content(self.pid, game)?;
+        let content = self.verified_content(game)?;
         let a = client_point(content, from.0, from.1)?;
         let b = client_point(content, to.0, to.1)?;
         let post = |kind: u32, point: Point| -> Result<()> {
+            if kind == LEFT_MOUSE_DOWN || kind == RIGHT_MOUSE_DOWN {
+                self.preflight()?;
+            }
             // SAFETY: a null source is allowed; the event is released after posting.
             unsafe {
                 let event = CGEventCreateMouseEvent(std::ptr::null(), kind, point, button);
@@ -510,6 +560,7 @@ impl MacKeys {
         let pause = std::time::Duration::from_millis(16);
         post(MOUSE_MOVED, a)?;
         std::thread::sleep(pause * 4);
+        self.preflight()?;
         post(down, a)?;
         std::thread::sleep(pause * 4);
         for step in 1..=steps {
@@ -527,8 +578,7 @@ impl MacKeys {
     /// One vertical scroll-wheel step (pixel units, positive scrolls up) with the
     /// cursor at a game-logical point, after a fresh front-most check.
     pub fn scroll(&self, game: (u32, u32), at: (f64, f64), pixels: i32) -> Result<()> {
-        self.preflight()?;
-        let point = client_point(owned_content(self.pid, game)?, at.0, at.1)?;
+        let point = client_point(self.verified_content(game)?, at.0, at.1)?;
         // SAFETY: a null source is allowed; events are released after posting.
         unsafe {
             let moved = CGEventCreateMouseEvent(std::ptr::null(), MOUSE_MOVED, point, LEFT_BUTTON);
@@ -538,6 +588,7 @@ impl MacKeys {
             CGEventPost(HID_EVENT_TAP, moved);
             CFRelease(moved);
             std::thread::sleep(std::time::Duration::from_millis(60));
+            self.preflight()?;
             let wheel = CGEventCreateScrollWheelEvent(std::ptr::null(), 0, 1, pixels);
             if wheel.is_null() {
                 return Err(Error::new("input_unavailable", "Scroll event unavailable"));
@@ -584,6 +635,9 @@ impl MacKeys {
             }
         }
         for down in [true, false] {
+            if down {
+                self.preflight()?;
+            }
             // SAFETY: a null source is allowed; the event is released after posting.
             unsafe {
                 let event = CGEventCreateKeyboardEvent(std::ptr::null(), code, down);
@@ -617,26 +671,103 @@ mod tests {
         assert!(Key::letter('A').is_err());
     }
     #[test]
-    fn content_sits_below_the_title_bar_and_refuses_scaling() {
-        let bounds = Rect {
-            origin: Point { x: 0.0, y: 53.0 },
+    fn exact_native_content_requires_one_matching_frontmost_os_window() {
+        let client = Rect {
+            origin: Point { x: 0.0, y: 81.0 },
             size: Point {
                 x: 1920.0,
-                y: 1108.0,
+                y: 1080.0,
             },
         };
-        let content = content_from_bounds(bounds, (1920, 1080)).unwrap();
-        assert_eq!(content.origin, Point { x: 0.0, y: 81.0 });
+        let w = Window {
+            id: 7,
+            owner: 123,
+            bounds: Rect {
+                origin: Point { x: 0.0, y: 53.0 },
+                size: Point {
+                    x: 1920.0,
+                    y: 1108.0,
+                },
+            },
+        };
+        assert_eq!(select_window(123, client, &[w]).unwrap(), w);
         assert_eq!(
-            client_point(content, 10.0, 20.0).unwrap(),
+            client_point(client, 10.0, 20.0).unwrap(),
             Point { x: 10.0, y: 101.0 }
         );
-        assert!(client_point(content, 1920.0, 0.0).is_err());
-        let scaled = Rect {
-            size: Point { x: 960.0, y: 568.0 },
-            ..bounds
+        assert!(client_point(client, 1920.0, 0.0).is_err());
+        assert!(select_window(124, client, &[w]).is_err());
+        assert!(select_window(123, client, &[w, Window { id: 8, ..w }]).is_err());
+        assert!(select_window(123, client, &[Window { owner: 9, ..w }, w]).is_err());
+        assert!(select_window(
+            123,
+            client,
+            &[Window {
+                bounds: Rect {
+                    origin: Point { x: 1.0, y: 53.0 },
+                    ..w.bounds
+                },
+                ..w
+            }]
+        )
+        .is_err());
+        assert!(select_window(
+            123,
+            client,
+            &[Window {
+                bounds: Rect {
+                    size: Point { x: 960.0, y: 568.0 },
+                    ..w.bounds
+                },
+                ..w
+            }]
+        )
+        .is_err());
+        let indicator = Window {
+            id: 8,
+            owner: 123,
+            bounds: Rect {
+                origin: Point { x: 10.0, y: 57.0 },
+                size: Point { x: 66.0, y: 20.0 },
+            },
         };
-        assert!(content_from_bounds(scaled, (1920, 1080)).is_err());
+        assert_eq!(select_window(123, client, &[indicator, w]).unwrap(), w);
+        assert!(select_window(
+            123,
+            client,
+            &[
+                Window {
+                    owner: 9,
+                    ..indicator
+                },
+                w
+            ]
+        )
+        .is_err());
+        for (x, y, width, height) in [
+            (10.0, 61.1, 66.0, 20.0),
+            (10.0, 500.0, 66.0, 20.0),
+            (-1.0, 57.0, 66.0, 20.0),
+            (10.0, 57.0, 0.0, 20.0),
+            (f64::NAN, 57.0, 66.0, 20.0),
+        ] {
+            let cover = Window {
+                bounds: Rect {
+                    origin: Point { x, y },
+                    size: Point {
+                        x: width,
+                        y: height,
+                    },
+                },
+                ..indicator
+            };
+            assert!(select_window(123, client, &[cover, w]).is_err());
+        }
+        let stale_client = Rect {
+            origin: Point { x: 0.0, y: 82.0 },
+            ..client
+        };
+        assert!(select_window(123, stale_client, &[w]).is_err());
     }
     #[test]
     fn window_list_query_is_safe_without_permissions() {

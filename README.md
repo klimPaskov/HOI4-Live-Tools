@@ -26,8 +26,9 @@ builds and previews mod content.
 | Help build the fast native runtime | **Rust preview** (build from source, [`native/`](native/README.md)) | Linux x86_64, macOS (Steam 1.19.3 x86_64 under Rosetta) | Developer preview |
 
 The Windows native adapter is planned (see [the Windows handoff](docs/WINDOWS_HANDOFF.md)).
-No full campaign has been accepted on any runtime yet; the macOS runs so far ended
-in recorded defeats that are kept in the record. Status details are below.
+No full campaign has been accepted on any runtime yet. Earlier Mac campaign
+defeats remain preserved alongside the later qualification tests. Status details
+are below.
 
 ## Quick start: Windows release
 
@@ -131,25 +132,36 @@ The user has now authorized switching back to macOS for testing and final videos
 
 ### macOS preview (live-tested on one build)
 
-The macOS adapter attaches to one owned game process through its task port and
-sends only ordinary mouse and keyboard events to the front-most owned window.
-Every click target is read from the live GUI tree and every action is checked
-from memory afterwards, with a journal that never replays an unresolved input.
-Tested on the Steam 1.19.3 x86_64 build under Rosetta at 1920x1080:
-time, research, Focus, production, construction (with free-slot reads), laws,
-advisors and designers, decisions, division training with deployment locations,
-armies (create, split, generals, army groups and field marshals), front and
-offensive lines, move orders, plan execution, events, diplomacy (war goals,
-declaring war), air wings and missions, and a standing-plan runner
-(`hoi4_plan`, `hoi4_plan_run`). The peace conference and naval invasions are not
-supported yet. It needs a Developer Tools grant and an ad-hoc signed binary
-(`native/macos/debugger.entitlements`). Startup checks task-port authorization
-without opening a password dialog; missing approval returns a capability error
-so the client can choose telemetry/UI fallback. Local authorization is now verified and the fresh Mac reader binds successfully.
-Luna has entered historical Regular Germany and verified the own-country overview
-without pausing it. A 1920×1108 window recording finalized at about 29.5 FPS.
-The generic input-geometry diagnostic remains Linux-only and explicitly refuses
-on macOS; Mac input-profile validation and advancing gameplay are unfinished.
+The macOS adapter reads one owned game's memory and sends ordinary mouse and
+keyboard input to its verified frontmost window. The current build is Steam
+1.19.3 x86_64 under Rosetta, with a fixed **1920×1080, UI scale 1** input profile.
+Mac GUI/SDL geometry is recovered independently, corroborated against the owned
+OS window and rechecked before each input. Reads never pause or move the cursor.
+See [the input geometry contract](docs/MAC_INPUT_GEOMETRY.md).
+
+The latest Luna medium test verified research, Focus and clock actions. Research
+took about 2 seconds and Focus about 4 seconds. The date-limited test failed when
+a model delay before its final pause advanced the game three extra days; that
+failure is retained. Recorded window capture passed at 1920×1108 and about 29.4
+FPS, including the titlebar around the 1080p game client. This is qualification
+evidence, not a successful campaign.
+
+A follow-up mixed test passed research and production planning across one game
+day, stopping at the intended date. Its 20 RPCs had no errors; the existing
+assignments and other production lines stayed unchanged. The recording captured
+the full test, but its guard stopped capture after player handback, so recorder
+lifecycle acceptance remains open.
+
+The earlier preview also contains construction, politics, training, army, air
+and diplomacy adapters. The Mac plan runner is synchronous with scheduling state
+in memory, separate from Linux's durable daily worker. Broader plans, restart
+recovery and full-campaign acceptance remain unfinished. Peace conferences and
+naval invasions are not supported yet.
+
+Mac memory access needs a Developer Tools grant and an ad-hoc signed tool binary
+(`native/macos/debugger.entitlements`). Startup checks authorization without
+opening a password dialog. Missing access returns a capability error so clients
+can select telemetry/UI fallback. The game itself is never re-signed.
 
 ### Not done yet
 

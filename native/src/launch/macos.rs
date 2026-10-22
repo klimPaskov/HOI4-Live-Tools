@@ -101,14 +101,14 @@ struct Control {
     actions: journal::GameJournal,
 }
 
-pub struct MacClock {
+pub struct MacClock<'p> {
     directory: std::path::PathBuf,
-    keys: MacKeys,
+    keys: MacKeys<'p>,
     state: Mutex<Control>,
 }
-impl MacClock {
+impl<'p> MacClock<'p> {
     /// Bind to the owned process already opened from the session manifest.
-    pub fn bind(process: &dyn Process, directory: &Path) -> Result<Self> {
+    pub fn bind(process: &'p (dyn Process + Send + Sync), directory: &Path) -> Result<Self> {
         let config: Config = serde_json::from_slice(&std::fs::read(directory.join("input.json"))?)
             .map_err(|e| Error::new("invalid_input_binding", e.to_string()))?;
         let game_identity = process
@@ -129,7 +129,7 @@ impl MacClock {
         };
         Ok(Self {
             directory: directory.to_path_buf(),
-            keys: MacKeys::new(game_identity.pid),
+            keys: MacKeys::bind(process)?,
             state: Mutex::new(Control {
                 authority: InputAuthority::new(config.controller, epoch.clone())?,
                 journal: Journal::open(&directory.join("clock-actions.jsonl"))?,
@@ -147,7 +147,7 @@ impl MacClock {
 
 struct ClockBackend<'a> {
     process: &'a dyn Process,
-    keys: &'a MacKeys,
+    keys: &'a MacKeys<'a>,
     guard: &'a mut Guard,
     authority: &'a InputAuthority,
     token: &'a str,
@@ -223,7 +223,7 @@ fn allowed(args: &serde_json::Map<String, Value>, keys: &[&str]) -> Result<()> {
     Ok(())
 }
 
-impl Commands for MacClock {
+impl Commands for MacClock<'_> {
     fn tools(&self) -> Vec<Value> {
         vec![
             json!({"name":"hoi4_plan","description":"Read or change the standing plan (plan.json in the run directory): research priorities, focus path, construction, training, production, politics, decisions. {op:get} returns it; {op:set, plan:{...}} merges the given keys (null removes a key). hoi4_plan_run carries it out.","inputSchema":{"type":"object","oneOf":[{"properties":{"op":{"const":"get"}},"required":["op"],"additionalProperties":false},{"properties":{"op":{"const":"set"},"plan":{"type":"object"}},"required":["op","plan"],"additionalProperties":false}]}}),
@@ -305,7 +305,7 @@ impl Commands for MacClock {
         Some(self.directory.join("plan.json"))
     }
     fn capabilities(&self) -> Value {
-        json!({"transport":"ordinary macOS CGEvent keys to the front-most owned window","actions":["set_paused","set_speed","research_start","focus_start","production_add","production_set","construction_add","politics_options","politics_choose","decisions_list","decision_take","train","deploy_locations","army_create","army_front","army_plan","army_offensive","event_choose","diplomacy","diplomacy_act","army_commander","army_group_create","army_split","state_slots","air_wings","air_mission","plan_run"],"lease":"exclusive configured controller","native_posting":false,"full_campaign_acceptance":false})
+        json!({"transport":"ordinary macOS CGEvent keys to the front-most owned window","actions":["set_paused","set_speed","research_start","focus_start","production_add","production_set","construction_add","politics_options","politics_choose","decisions_list","decision_take","train","deploy_locations","army_create","army_front","army_plan","army_offensive","event_choose","diplomacy","diplomacy_act","army_commander","army_group_create","army_split","state_slots","air_wings","air_mission","plan_run"],"lease":"exclusive configured controller","input_profile":{"name":"macos_cocoa_absolute_1920x1080_v1","checked_at_bind":true,"rechecked_before_each_input":true,"diagnostic_alone_authorizes_input":false},"native_posting":false,"full_campaign_acceptance":false})
     }
     fn call(&self, process: &dyn Process, name: &str, arguments: &Value) -> Result<Value> {
         let args = arguments

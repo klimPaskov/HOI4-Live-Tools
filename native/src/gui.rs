@@ -1,5 +1,7 @@
 //! Current-build, read-only input-coordinate diagnostics. These observations do
 //! not authorize clicks or establish an X11 client-origin/HiDPI mapping.
+pub(crate) mod macos;
+
 use crate::{
     error::{Error, Result},
     game,
@@ -147,11 +149,8 @@ pub fn input_geometry(process: &dyn Process) -> Result<Value> {
 /// Caller supplies the encompassing process and final-witness bracket.
 /// Shared with combined own control diagnostics; never an input authorization.
 pub(crate) fn input_geometry_from_reader(r: &Reader<'_>, base: u64) -> Result<Value> {
-    if r.string_abi() != StringAbi::LibStdCxx {
-        return Err(Error::new(
-            "input_geometry_unavailable",
-            "This diagnostic requires the reviewed Linux layout; macOS geometry has not been ported. No game memory was read",
-        ));
+    if r.string_abi() == StringAbi::LibCxx {
+        return Ok(macos::from_reader(r, base)?.diagnostic());
     }
     let gs = r.u64(base + 0x44086a8)?;
     let idler = r.u64(base + 0x44085f8)?;
@@ -277,28 +276,4 @@ pub(crate) fn input_geometry_from_reader(r: &Reader<'_>, base: u64) -> Result<Va
         "unverified":["X11 client origin","HiDPI conversion","per-control scalar/pivot","effective hit routing"],
         "observation_paused_game":false
     }))
-}
-
-#[cfg(test)]
-mod platform_tests {
-    use super::*;
-    use crate::memory::ReadMemory;
-
-    struct MacMemory;
-    impl ReadMemory for MacMemory {
-        fn string_abi(&self) -> StringAbi {
-            StringAbi::LibCxx
-        }
-        fn read(&self, _: u64, _: usize) -> Result<Vec<u8>> {
-            panic!("Linux geometry offsets must never be applied to Mac memory")
-        }
-    }
-
-    #[test]
-    fn mac_geometry_refuses_before_any_layout_read() {
-        let reader = Reader::new(&MacMemory);
-        let error = input_geometry_from_reader(&reader, 0x1_0000_0000).unwrap_err();
-        assert_eq!(error.code, "input_geometry_unavailable");
-        assert_eq!(reader.calls.get(), 0);
-    }
 }

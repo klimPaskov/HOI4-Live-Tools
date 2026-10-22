@@ -8,6 +8,7 @@
 //!
 //! Plan keys (all optional; the file is re-read every tick):
 //!   active                 false pauses the runner
+//!   stop_on_failure        true returns the first refused/diverged action instead of trying other work
 //!   event_prefix_options   {"DOD_":"last"}: option for every event whose id starts with the prefix
 //!   auto_events            answer news and single-option events with option 0 (default true);
 //!                          other events after `wait_events` seconds (default 90) with
@@ -59,6 +60,7 @@ pub enum Tick {
 }
 
 pub struct State {
+    stop_on_failure: bool,
     boot: u64,
     bad: HashMap<String, Instant>,
     done: HashSet<String>,
@@ -75,6 +77,7 @@ impl Default for State {
     /// an id that an earlier run already bound to a different action.
     fn default() -> Self {
         Self {
+            stop_on_failure: false,
             boot: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map_or(0, |d| d.as_secs()),
@@ -148,6 +151,7 @@ impl State {
         }
         match result {
             Err(e) if e.code == "action_uncertain" => Err(e),
+            Err(e) if self.stop_on_failure => Err(e),
             Err(e) => {
                 let mut text = format!("{}: {}", e.code, e.message);
                 let mut end = text.len().min(160);
@@ -161,6 +165,10 @@ impl State {
                 let status = body["receipt"]["status"].as_str().unwrap_or("").to_string();
                 match status.as_str() {
                     "Verified" => Ok((true, status)),
+                    "NotApplied" | "Diverged" if self.stop_on_failure => Err(Error::new(
+                        "plan_action_failed",
+                        format!("{name} returned {status}; standing plan stopped"),
+                    )),
                     "NotApplied" | "Diverged" => Ok((false, status)),
                     _ => Err(Error::new(
                         "action_uncertain",
@@ -196,6 +204,16 @@ pub fn tick(
     if plan["active"] == json!(false) {
         return Ok(Tick::Idle);
     }
+    state.stop_on_failure = match plan.get("stop_on_failure") {
+        None => false,
+        Some(Value::Bool(value)) => *value,
+        _ => {
+            return Err(Error::new(
+                "invalid_plan",
+                "stop_on_failure must be boolean",
+            ))
+        }
+    };
     // 1. events (they block every other input)
     let events = tools.call("hoi4_events", &json!({}))?;
     if events["peace_conference_open"] == json!(true) {
@@ -1044,6 +1062,58 @@ mod tests {
         assert_eq!(args["slot"], json!(1));
         assert_eq!(args["lease_token"], json!("lease"));
         assert!(args["request_id"].as_str().unwrap().starts_with("plan-rs-"));
+    }
+
+    #[test]
+    fn strict_plan_stops_before_other_candidates_or_domains_after_failure() {
+        for reply in [
+            Err(Error::new(
+                "invalid_target",
+                "Technology no longer eligible",
+            )),
+            Ok(json!({"receipt":{"status":"NotApplied"}})),
+            Ok(json!({"receipt":{"status":"Diverged"}})),
+        ] {
+            let reads = fake(vec![(
+                "hoi4_research",
+                json!({"slots":[{"researching":null}]}),
+            )]);
+            let tools = ActionReplies {
+                reads: &reads,
+                actions: RefCell::new(vec![]),
+                replies: RefCell::new([reply].into()),
+            };
+            let result = tick(
+                &mut State::default(),
+                &tools,
+                &json!({"stop_on_failure":true,"research_priority":["construction1","radio"],"focus_path":["f"]}),
+                "lease",
+                Instant::now(),
+            );
+            assert!(result.is_err());
+            assert_eq!(tools.actions.borrow().len(), 1);
+            assert!(!names(&reads)
+                .iter()
+                .any(|n| n == "hoi4_focus_completed" || n == "hoi4_economy"));
+        }
+    }
+
+    #[test]
+    fn invalid_stop_policy_refuses_before_any_observation_or_action() {
+        let tools = fake(vec![]);
+        assert_eq!(
+            tick(
+                &mut State::default(),
+                &tools,
+                &json!({"stop_on_failure":"true"}),
+                "lease",
+                Instant::now()
+            )
+            .unwrap_err()
+            .code,
+            "invalid_plan"
+        );
+        assert!(names(&tools).is_empty());
     }
 
     #[test]
