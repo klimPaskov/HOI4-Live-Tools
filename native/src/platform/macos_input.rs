@@ -39,6 +39,8 @@ extern "C" {
     fn CGEventCreateKeyboardEvent(source: CFTypeRef, key: u16, down: bool) -> CFTypeRef;
     fn CGEventSetFlags(event: CFTypeRef, flags: u64);
     fn CGEventSourceFlagsState(state: i32) -> u64;
+    fn CGEventSourceButtonState(state: i32, button: u32) -> bool;
+    fn CGEventSourceKeyState(state: i32, key: u16) -> bool;
     fn CGEventSetType(event: CFTypeRef, kind: u32);
     fn CGEventCreateMouseEvent(
         source: CFTypeRef,
@@ -374,6 +376,32 @@ fn drag_sequence(
     result.and(release)
 }
 
+/// A click can be cancelled after its pointer settle. Once down was attempted,
+/// release is unconditional and a failed release gets one cleanup retry.
+fn click_sequence(
+    point: Point,
+    down: u32,
+    up: u32,
+    mut check: impl FnMut() -> Result<()>,
+    mut post: impl FnMut(u32, Point) -> Result<()>,
+    mut pause: impl FnMut(std::time::Duration),
+) -> Result<()> {
+    check()?;
+    post(MOUSE_MOVED, point)?;
+    pause(std::time::Duration::from_millis(60));
+    check()?;
+    let dispatched = post(down, point);
+    if dispatched.is_ok() {
+        pause(std::time::Duration::from_millis(50));
+    }
+    let released = post(up, point);
+    if released.is_err() {
+        let _ = post(up, point);
+    }
+    pause(std::time::Duration::from_millis(40));
+    dispatched.and(released)
+}
+
 enum ProcessBinding<'p> {
     Borrowed(&'p (dyn Process + Send + Sync)),
     Owned(std::sync::Arc<dyn Process + Send + Sync>),
@@ -485,29 +513,47 @@ impl<'p> MacKeys<'p> {
         }
         Ok(())
     }
+    /// Read-only combined-session state. Never release user-held input to make
+    /// a production receipt pass. Recheck the owned geometry on both sides.
+    pub(crate) fn confirm_input_idle(&self) -> Result<()> {
+        self.preflight()?;
+        // CoreGraphics combined session state (1), not just this source's events.
+        let busy = unsafe {
+            CGEventSourceFlagsState(1) & 0x00df_0000 != 0
+                || (0..32).any(|button| CGEventSourceButtonState(1, button))
+                || (0..128).any(|key| CGEventSourceKeyState(1, key))
+        };
+        if busy {
+            return Err(Error::new(
+                "input_busy",
+                "A session key, button or modifier is held",
+            ));
+        }
+        self.preflight()
+    }
     /// One left click at a game-logical point after a fresh front-most check:
     /// move, settle, press, release. The cursor stays where it clicked.
     pub fn click(&self, game: (u32, u32), x: f64, y: f64) -> Result<Point> {
         let point = client_point(self.verified_content(game)?, x, y)?;
-        for (kind, pause) in [
-            (MOUSE_MOVED, 60),
-            (LEFT_MOUSE_DOWN, 50),
-            (LEFT_MOUSE_UP, 40),
-        ] {
-            if kind == LEFT_MOUSE_DOWN || kind == RIGHT_MOUSE_DOWN {
-                self.preflight()?;
-            }
-            // SAFETY: a null source is allowed; the event is released after posting.
-            unsafe {
-                let event = CGEventCreateMouseEvent(std::ptr::null(), kind, point, LEFT_BUTTON);
-                if event.is_null() {
-                    return Err(Error::new("input_unavailable", "Mouse event unavailable"));
+        click_sequence(
+            point,
+            LEFT_MOUSE_DOWN,
+            LEFT_MOUSE_UP,
+            || self.preflight(),
+            |kind, point| {
+                // A null source is permitted. Release every allocated event.
+                unsafe {
+                    let event = CGEventCreateMouseEvent(std::ptr::null(), kind, point, LEFT_BUTTON);
+                    if event.is_null() {
+                        return Err(Error::new("input_unavailable", "Mouse event unavailable"));
+                    }
+                    CGEventPost(HID_EVENT_TAP, event);
+                    CFRelease(event);
                 }
-                CGEventPost(HID_EVENT_TAP, event);
-                CFRelease(event);
-            }
-            std::thread::sleep(std::time::Duration::from_millis(pause));
-        }
+                Ok(())
+            },
+            std::thread::sleep,
+        )?;
         Ok(point)
     }
     /// One left-button drag between game-logical points in small steps, after a
@@ -995,5 +1041,72 @@ mod tests {
     fn window_list_query_is_safe_without_permissions() {
         // The owner may be any app (or none); the query itself must not fail.
         let _ = frontmost_window_owner().unwrap();
+    }
+}
+
+#[cfg(test)]
+mod click_cleanup_tests {
+    use super::*;
+    #[test]
+    fn stop_after_settle_prevents_down_and_all_later_motion() {
+        let mut checks = 0;
+        let mut sent = vec![];
+        let result = click_sequence(
+            Point { x: 10., y: 20. },
+            LEFT_MOUSE_DOWN,
+            LEFT_MOUSE_UP,
+            || {
+                checks += 1;
+                if checks == 2 {
+                    Err(Error::new("session_closed", "Generated stop"))
+                } else {
+                    Ok(())
+                }
+            },
+            |kind, _| {
+                sent.push(kind);
+                Ok(())
+            },
+            |_| {},
+        );
+        assert_eq!(result.unwrap_err().code, "session_closed");
+        assert_eq!(sent, vec![MOUSE_MOVED]);
+    }
+    #[test]
+    fn possible_down_failure_and_release_failure_still_attempt_cleanup() {
+        for fail_down in [true, false] {
+            let mut sent = vec![];
+            let mut first_release = true;
+            let result = click_sequence(
+                Point { x: 10., y: 20. },
+                LEFT_MOUSE_DOWN,
+                LEFT_MOUSE_UP,
+                || Ok(()),
+                |kind, _| {
+                    sent.push(kind);
+                    if fail_down && kind == LEFT_MOUSE_DOWN {
+                        return Err(Error::new("down_failed", "Generated possible input"));
+                    }
+                    if kind == LEFT_MOUSE_UP && first_release {
+                        first_release = false;
+                        return Err(Error::new("release_failed", "Generated allocation failure"));
+                    }
+                    Ok(())
+                },
+                |_| {},
+            );
+            assert_eq!(
+                result.unwrap_err().code,
+                if fail_down {
+                    "down_failed"
+                } else {
+                    "release_failed"
+                }
+            );
+            assert_eq!(
+                sent,
+                vec![MOUSE_MOVED, LEFT_MOUSE_DOWN, LEFT_MOUSE_UP, LEFT_MOUSE_UP]
+            );
+        }
     }
 }

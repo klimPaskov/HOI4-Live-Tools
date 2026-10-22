@@ -15,7 +15,7 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::{
     collections::{BTreeMap, BTreeSet},
-    path::Path,
+    path::{Path, PathBuf},
 };
 
 mod model;
@@ -33,6 +33,7 @@ pub enum Next {
     /// Historical progress only; never substitute for a governor completion.
     Finished,
 }
+
 #[derive(Clone, Debug)]
 pub struct Request {
     pub id: String,
@@ -40,8 +41,46 @@ pub struct Request {
 }
 pub struct Progress {
     store: crate::daily_governor::store::Store,
+    path: PathBuf,
+    stamp: Option<ProgressStamp>,
     data: Data,
     poisoned: bool,
+}
+#[derive(PartialEq, Eq)]
+struct ProgressStamp {
+    len: u64,
+    modified: std::time::SystemTime,
+    #[cfg(unix)]
+    unix: (u64, u64, u64, u32, u32, i64, i64),
+}
+fn progress_stamp(path: &Path) -> Result<Option<ProgressStamp>> {
+    let metadata = match path.symlink_metadata() {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error.into()),
+    };
+    if !metadata.is_file() {
+        return Err(invalid("Production progress must retain a regular file"));
+    }
+    #[cfg(unix)]
+    let unix = {
+        use std::os::unix::fs::MetadataExt;
+        (
+            metadata.dev(),
+            metadata.ino(),
+            metadata.nlink(),
+            metadata.mode(),
+            metadata.uid(),
+            metadata.ctime(),
+            metadata.ctime_nsec(),
+        )
+    };
+    Ok(Some(ProgressStamp {
+        len: metadata.len(),
+        modified: metadata.modified()?,
+        #[cfg(unix)]
+        unix,
+    }))
 }
 fn invalid(message: &str) -> Error {
     Error::new("invalid_production_progress", message)
@@ -82,8 +121,8 @@ impl Progress {
     pub fn open(path: &Path, scope: Scope, entries: &[Entry]) -> Result<Self> {
         scope.validate()?;
         let (store, bytes) = crate::daily_governor::store::Store::open(path)?;
-        let data = match bytes {
-            Some(bytes) => serde_json::from_slice::<Data>(&bytes)
+        let data = match bytes.as_ref() {
+            Some(bytes) => serde_json::from_slice::<Data>(bytes)
                 .map_err(|_| invalid("Malformed durable production progress"))?,
             None => Data {
                 version: 1,
@@ -98,14 +137,45 @@ impl Progress {
                 "Original production scope/entries cannot be replaced on restart",
             ));
         }
+        store.check()?;
+        let stamp = progress_stamp(path)?;
+        if stamp.is_some() != bytes.is_some() {
+            return Err(invalid("Production progress changed while opening"));
+        }
         Ok(Self {
             store,
+            path: path.to_owned(),
+            stamp,
             data,
             poisoned: false,
         })
     }
     pub fn blocked(&self) -> bool {
         self.poisoned || self.data.steps.iter().any(|s| s.status == Status::Intent)
+    }
+    /// Retained storage must be checked even when no production permission is
+    /// enabled. A restored file never clears uncertainty in this owner.
+    pub(crate) fn check_storage(&mut self) -> Result<()> {
+        if self.poisoned {
+            return Err(Error::new(
+                "production_progress_blocked",
+                "Production progress persistence is uncertain",
+            ));
+        }
+        let result = (|| {
+            if progress_stamp(&self.path)? != self.stamp {
+                return Err(Error::new(
+                    "plan_changed",
+                    "Retained production progress identity changed",
+                ));
+            }
+            self.store.check()
+        })();
+        if let Err(error) = result {
+            self.poisoned = true;
+            return Err(error);
+        }
+        Ok(())
     }
     fn check(&self) -> Result<()> {
         if self.blocked() {
@@ -118,11 +188,17 @@ impl Progress {
     }
     fn save(&mut self) -> Result<()> {
         let result = (|| {
+            self.check_storage()?;
             self.data.validate()?;
             self.store.replace(
                 &serde_json::to_vec(&self.data)
                     .map_err(|_| invalid("Cannot encode production progress"))?,
-            )
+            )?;
+            self.stamp = Some(
+                progress_stamp(&self.path)?
+                    .ok_or_else(|| invalid("Saved production progress disappeared"))?,
+            );
+            Ok(())
         })();
         if result.is_err() {
             self.poisoned = true;
@@ -163,6 +239,29 @@ impl Progress {
         }
         Ok(())
     }
+    /// Persist the exact original own line without assuming a panel mode or
+    /// planning an input stage. Rebinding an existing entry is never allowed.
+    pub fn bind_original(
+        &mut self,
+        entry: &Entry,
+        fresh: &FactoryState,
+        context: &ClockContext,
+    ) -> Result<()> {
+        self.check()?;
+        self.check_storage()?;
+        target(&self.data.scope, entry)?;
+        if !self.data.bindings.iter().any(|b| b.entry.id == entry.id) {
+            let binding = Binding {
+                entry: entry.clone(),
+                initial: fresh.clone(),
+                context: context.clone(),
+            };
+            binding.check(&self.data.scope, fresh, context)?;
+            self.data.bindings.push(binding);
+            self.save()?;
+        }
+        self.state(entry, fresh, context)
+    }
     /// Persist the original own line before planning any step. Reads supplied by
     /// the caller must be fresh, witnessed and accepted by its owned guard.
     pub fn next(
@@ -176,17 +275,7 @@ impl Progress {
         self.check()?;
         budget(limit)?;
         let goal = target(&self.data.scope, entry)?;
-        if !self.data.bindings.iter().any(|b| b.entry.id == entry.id) {
-            let b = Binding {
-                entry: entry.clone(),
-                initial: fresh.clone(),
-                context: context.clone(),
-            };
-            b.check(&self.data.scope, fresh, context)?;
-            self.data.bindings.push(b);
-            self.save()?;
-        }
-        self.state(entry, fresh, context)?;
+        self.bind_original(entry, fresh, context)?;
         let day = day(context.date_raw)?;
         if self.data.steps.iter().any(|s| {
             s.entry_id == entry.id && s.completion.is_some() && s.status == Status::Verified
@@ -420,5 +509,198 @@ impl Progress {
             "bound_entries":self.data.bindings.len(),"latest":latest.map(|s| json!({
                 "entry_id":s.entry_id,"request_id":s.id,"day":s.day,"before":s.before,"after":s.after,"after_date_raw":s.after_date,
                 "status":s.status,"completion_stage":s.completion.is_some(),"failure":s.failure}))})
+    }
+}
+
+#[cfg(all(test, unix))]
+mod original_binding_tests {
+    use super::*;
+    use crate::{actions::Epoch, platform::Identity};
+    use std::{
+        fs,
+        os::unix::fs::{MetadataExt, PermissionsExt},
+        sync::atomic::{AtomicU64, Ordering},
+    };
+    struct Temp(PathBuf);
+    impl Temp {
+        fn new() -> Self {
+            static NEXT: AtomicU64 = AtomicU64::new(0);
+            let path = std::env::temp_dir().join(format!(
+                "private-production-binding-{}-{}",
+                std::process::id(),
+                NEXT.fetch_add(1, Ordering::Relaxed)
+            ));
+            fs::create_dir(&path).unwrap();
+            fs::set_permissions(&path, fs::Permissions::from_mode(0o700)).unwrap();
+            Self(path)
+        }
+        fn path(&self) -> PathBuf {
+            self.0.join("daily-production.json")
+        }
+    }
+    impl Drop for Temp {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+    fn scope() -> Scope {
+        Scope {
+            epoch: Epoch {
+                game: Identity {
+                    pid: 71,
+                    start_ticks: "123.000456".into(),
+                    exe: "/generated/hoi4".into(),
+                    uid: 501,
+                },
+                campaign: "original:fixture".into(),
+                player: "GER".into(),
+            },
+            anchors: [0x10000, 0x20000, 0x30000],
+            own_country: 0x40000,
+            own_status: 0x50000,
+        }
+    }
+    fn entry() -> Entry {
+        Entry {
+            id: "one-factory".into(),
+            intent: Intent::Economy {
+                target: EconomyTarget::Production {
+                    line_id: "0x0000000100000038".into(),
+                    equipment_id: "infantry_equipment_1".into(),
+                    total_factories: 11,
+                },
+            },
+            navigation: None,
+            focus_search: None,
+        }
+    }
+    fn current() -> FactoryState {
+        FactoryState {
+            epoch: scope().epoch,
+            line: LineIdentity {
+                country: scope().own_country,
+                production: 0x60000,
+                line: 0x70000,
+                variant: 0x80000,
+                base_type: 0x90000,
+                handle: 0x0000000100000038,
+                equipment_id: "infantry_equipment_1".into(),
+            },
+            requested: 10,
+        }
+    }
+    fn context() -> ClockContext {
+        ClockContext {
+            playthrough_id: "fixture".into(),
+            player: "GER".into(),
+            anchors: scope().anchors,
+            date_raw: crate::calendar::encode(1936, 1, 2).unwrap(),
+            difficulty: 2,
+            historical_raw: 1,
+            paused: false,
+            speed: 1,
+        }
+    }
+    #[test]
+    fn bind_only_is_durable_before_preparation_and_same_binding_never_rewrites() {
+        let temp = Temp::new();
+        let e = entry();
+        let before = current();
+        let context = context();
+        let mut progress = Progress::open(&temp.path(), scope(), std::slice::from_ref(&e)).unwrap();
+        progress.bind_original(&e, &before, &context).unwrap();
+        assert!(progress.data.steps.is_empty());
+        let bytes = fs::read(temp.path()).unwrap();
+        let metadata = fs::metadata(temp.path()).unwrap();
+        progress.bind_original(&e, &before, &context).unwrap();
+        assert_eq!(fs::read(temp.path()).unwrap(), bytes);
+        assert_eq!(fs::metadata(temp.path()).unwrap().ino(), metadata.ino());
+        drop(progress);
+        let mut reopened = Progress::open(&temp.path(), scope(), std::slice::from_ref(&e)).unwrap();
+        assert_eq!(reopened.original(&e).unwrap(), (&before.line, &context));
+        let attempt = Attempt {
+            request_id: "a".repeat(64),
+            entry: e,
+            scope: scope(),
+            day: day(context.date_raw).unwrap(),
+            before_sequence: 4,
+        };
+        let request = reopened
+            .begin_completion(&attempt, &before, &context, 1)
+            .unwrap();
+        assert!(matches!(request.target, Target::Factories(_)));
+        assert!(reopened.blocked());
+        drop(reopened);
+        assert!(
+            Progress::open(&temp.path(), scope(), std::slice::from_ref(&attempt.entry))
+                .unwrap()
+                .blocked()
+        );
+    }
+    #[test]
+    fn restart_cannot_rebase_line_identity_count_or_chronology() {
+        let temp = Temp::new();
+        let e = entry();
+        let before = current();
+        let context = context();
+        let mut progress = Progress::open(&temp.path(), scope(), std::slice::from_ref(&e)).unwrap();
+        progress.bind_original(&e, &before, &context).unwrap();
+        drop(progress);
+        let bytes = fs::read(temp.path()).unwrap();
+        let mut progress = Progress::open(&temp.path(), scope(), std::slice::from_ref(&e)).unwrap();
+        for alter in [
+            |s: &mut FactoryState| s.line.line += 8,
+            |s: &mut FactoryState| s.line.variant += 8,
+            |s: &mut FactoryState| s.line.base_type += 8,
+            |s: &mut FactoryState| s.line.country += 8,
+            |s: &mut FactoryState| s.line.production += 8,
+            |s: &mut FactoryState| s.requested += 1,
+        ] {
+            let mut changed = before.clone();
+            alter(&mut changed);
+            assert!(progress.bind_original(&e, &changed, &context).is_err());
+        }
+        let mut earlier = context.clone();
+        earlier.date_raw -= 24;
+        assert!(progress.bind_original(&e, &before, &earlier).is_err());
+        assert_eq!(fs::read(temp.path()).unwrap(), bytes);
+        progress.bind_original(&e, &before, &context).unwrap();
+    }
+    #[test]
+    fn identical_progress_replacement_is_refused_and_uncertainty_survives_restoration() {
+        let temp = Temp::new();
+        let e = entry();
+        let mut progress = Progress::open(&temp.path(), scope(), std::slice::from_ref(&e)).unwrap();
+        progress.bind_original(&e, &current(), &context()).unwrap();
+        let bytes = fs::read(temp.path()).unwrap();
+        let original = temp.0.join("original");
+        fs::rename(temp.path(), &original).unwrap();
+        fs::write(temp.path(), bytes).unwrap();
+        fs::set_permissions(temp.path(), fs::Permissions::from_mode(0o600)).unwrap();
+        assert_eq!(progress.check_storage().unwrap_err().code, "plan_changed");
+        fs::remove_file(temp.path()).unwrap();
+        fs::rename(original, temp.path()).unwrap();
+        assert!(progress.blocked());
+        assert_eq!(
+            progress.check_storage().unwrap_err().code,
+            "production_progress_blocked"
+        );
+    }
+    #[test]
+    fn an_external_initial_file_cannot_become_a_new_binding() {
+        let temp = Temp::new();
+        let e = entry();
+        let mut progress = Progress::open(&temp.path(), scope(), std::slice::from_ref(&e)).unwrap();
+        fs::write(temp.path(), b"{}").unwrap();
+        fs::set_permissions(temp.path(), fs::Permissions::from_mode(0o600)).unwrap();
+        assert_eq!(
+            progress
+                .bind_original(&e, &current(), &context())
+                .unwrap_err()
+                .code,
+            "plan_changed"
+        );
+        assert!(progress.blocked());
+        assert_eq!(fs::read(temp.path()).unwrap(), b"{}");
     }
 }

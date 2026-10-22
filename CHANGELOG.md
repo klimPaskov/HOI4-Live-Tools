@@ -2,14 +2,29 @@
 
 ## Unreleased native preview
 
+- Add the default-off Mac daily worker: durable ordered Research queues, an
+  existing military line's single factory step, fresh digests, terminal events,
+  explicit stop/join and retained-plan reconnect. Persist intent before panel
+  preparation and require current typed assignment/allocation evidence.
+- Load daily quarantine even with worker permissions disabled. Reject replaced
+  production journals/progress and foreign owner history. Retain slot-wait state
+  across reopen; join even when shutdown notification fails. Idle probes do not
+  allocate sequences or sync the plan. The first live gate verified Research,
+  then quarantined a production control change; mixed-plan qualification remains
+  open. Settle the complete factory-button witness before dispatch and retain
+  exact final guards, original deadlines and separate mismatch diagnostics.
+- Refuse the unported public research-folder catalog on Mac before process
+  access instead of reading Linux offsets and reporting a misleading GUI error.
+- Recheck click cancellation after cursor settling and always attempt release
+  after possible dispatch, preserving the original failure.
+
 - Retain the Mac controller epoch across reconnects with exact campaign and
   chronology checks, a pinned private state file and single-writer exclusion.
   Reopening creates no lease; older nonempty journals require explicit migration.
 - Share clock/gameplay input quarantine and retain failed journal writes. Bound
   research/production reads and input to the original action deadline; preserve
   nested guards and attempt drag release after cancellation or motion failure.
-  Shared process-handle lifetime prepares the controller for a future worker;
-  durable Mac background execution remains unfinished.
+  Share the opened process handle across the server and controller.
 
 - Add a Rust-managed native Mac window recorder with private output, bounded
   startup/finalization, explicit stopping, owner-loss handling and exact failure

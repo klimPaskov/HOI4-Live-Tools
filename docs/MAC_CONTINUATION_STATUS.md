@@ -1,5 +1,14 @@
 # Mac continuation checkpoint — 11 October 2026
 
+The current implementation adds a default-off durable Mac worker for ordered
+Research and one-step production, with shared quarantine and stop/join. The
+first worker gate verified Research, then quarantined a changing production
+control before its factory click. All allocations and the paused date remained
+unchanged. The settlement correction and mixed-plan restart/refill still need
+a fresh live gate. Follow [the latest handoff](LINUX_RUST_HANDOFF.md)
+and [controller contract](MAC_CONTROLLER.md); older checkpoint text below is
+preserved history.
+
 **22 October update:** the user has authorized returning to macOS. Use the
 [current runtime checkpoint](LINUX_RUST_HANDOFF.md) and
 [live qualification record](CLAUSEWITZ_VALIDATION.md). Independent Mac geometry

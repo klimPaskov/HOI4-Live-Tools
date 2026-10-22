@@ -9,6 +9,21 @@ failed campaigns. Do not control the shared Windows game.
 
 ## Current checkpoint
 
+The Mac daily-worker implementation is now present behind default-off owner
+permissions. It retains ordered Research and one-factory production plans,
+uses fresh typed completion evidence, joins on stop/EOF, and checks persisted
+quarantine before manual input even when worker permissions are removed.
+Same-day idle probes allocate no sequence and sync no plan files. See
+[the Mac worker contract](MAC_CONTROLLER.md). Its first recorded live gate
+verified Electronic Mechanical Engineering in slot 2, then quarantined a
+production-button change before the factory click. Fresh readback retained all
+21 allocations and the paused 12 January date. The complete recording and
+unresolved controller remain preserved; do not reset or replay that controller.
+The corrected settlement logic needs a fresh live qualification. Worker restart,
+natural refill, two-year play and full campaign acceptance remain open.
+
+The preceding published controller foundation follows for historical context.
+
 The next Mac foundation retains the controller epoch across reconnects, with
 private-file identity, single-writer and chronology checks. Reopening retains no
 lease. Clock and gameplay journals now share input quarantine; failed writes and

@@ -74,7 +74,7 @@ fn root(r: &Reader<'_>, image: u64) -> Result<u64> {
     gui_tree::container(r, r.u64(view(r, image)? + ui(r)?.view_root)?, image)?
         .ok_or_else(|| Error::new("invalid_gui", "Production view root unavailable"))
 }
-fn open(r: &Reader<'_>, image: u64) -> Result<bool> {
+pub(super) fn open(r: &Reader<'_>, image: u64) -> Result<bool> {
     gui_tree::visible(r, root(r, image)?)
 }
 fn window(r: &Reader<'_>, image: u64, object: u64, name: &str) -> Result<u64> {
@@ -99,7 +99,7 @@ fn selection(r: &Reader<'_>, image: u64) -> Result<(u64, u64)> {
         .ok_or_else(|| Error::new("invalid_gui", "Selection window root unavailable"))?;
     Ok((window, root))
 }
-fn selection_open(r: &Reader<'_>, image: u64) -> Result<bool> {
+pub(super) fn selection_open(r: &Reader<'_>, image: u64) -> Result<bool> {
     gui_tree::visible(r, selection(r, image)?.1)
 }
 /// The selection row for `key`: its equipment button rectangle, if listed.
@@ -149,7 +149,7 @@ fn offered(r: &Reader<'_>, image: u64) -> Result<Vec<String>> {
     Ok(out)
 }
 /// Row window of the own line with this handle, if materialized.
-fn row(r: &Reader<'_>, image: u64, handle: u64) -> Result<Option<u64>> {
+pub(super) fn row(r: &Reader<'_>, image: u64, handle: u64) -> Result<Option<u64>> {
     let u = ui(r)?;
     let lines = window(r, image, military_tab(r, image)?, "production_lines")?;
     let grid = gui_tree::child(r, image, lines, "item_grid")?
@@ -181,7 +181,7 @@ pub(super) fn lines(process: &dyn Process) -> Result<Vec<OwnLine>> {
     read(process, production_lines::own_lines)
 }
 
-fn ensure_open(process: &dyn Process, keys: &MacKeys) -> Result<()> {
+pub(super) fn ensure_open(process: &dyn Process, keys: &MacKeys) -> Result<()> {
     if !read(process, open)? {
         keys.press(Key::letter('y')?)?;
         wait(process, "open production", open)?;
@@ -195,7 +195,7 @@ fn click(process: &dyn Process, keys: &MacKeys, rect: Rect) -> Result<()> {
 }
 
 /// Bring the row's +/- buttons inside the list area by scrolling the list.
-fn reveal(process: &dyn Process, keys: &MacKeys, handle: u64) -> Result<()> {
+pub(super) fn reveal(process: &dyn Process, keys: &MacKeys, handle: u64) -> Result<()> {
     for _ in 0..40 {
         // Never scroll unless the list is on screen; the wheel zooms the map.
         if !read(process, open)? {

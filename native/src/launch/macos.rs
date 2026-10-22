@@ -7,6 +7,7 @@ mod air;
 mod armies;
 mod construction;
 mod controller_epoch;
+mod daily;
 mod decisions;
 mod deployment;
 mod diplomacy;
@@ -48,6 +49,10 @@ use std::{
 struct Config {
     controller: String,
     player: String,
+    #[serde(default)]
+    daily_research: bool,
+    #[serde(default)]
+    daily_production: bool,
 }
 
 fn nonce() -> Result<String> {
@@ -122,6 +127,7 @@ struct Control {
 
 pub struct MacClock {
     directory: std::path::PathBuf,
+    daily: daily::Controller,
     keys: Arc<MacKeys<'static>>,
     state: Arc<Mutex<Control>>,
     process: Arc<dyn Process + Send + Sync>,
@@ -145,7 +151,7 @@ impl MacClock {
         let proposed = Epoch {
             game: game_identity.clone(),
             campaign: format!("{}:{}", nonce()?, context.playthrough_id),
-            player: config.player,
+            player: config.player.clone(),
         };
         let keys = Arc::new(MacKeys::bind_owned(process.clone())?);
         let mut persisted = controller_epoch::ControllerEpoch::open(
@@ -157,7 +163,17 @@ impl MacClock {
         let epoch = persisted.epoch()?;
         let journal = Journal::open(&directory.join("clock-actions.jsonl"))?;
         let actions = journal::GameJournal::open(&directory.join("game-actions.jsonl"))?;
+        let (_, own) = crate::research::owned_snapshot(process.as_ref())?;
+        persisted.observe(&epoch, &own.campaign)?;
+        let scope = crate::daily_governor::Scope {
+            epoch: epoch.clone(),
+            anchors: own.campaign.anchors,
+            own_country: own.own[0],
+            own_status: own.own[1],
+        };
+        let daily = daily::Controller::bind(directory, &config, scope, own.campaign.date_raw)?;
         Ok(Self {
+            daily,
             directory: directory.to_path_buf(),
             keys,
             process,
@@ -259,6 +275,7 @@ fn allowed(args: &serde_json::Map<String, Value>, keys: &[&str]) -> Result<()> {
 impl Commands for MacClock {
     fn tools(&self) -> Vec<Value> {
         vec![
+            daily::Controller::tool(),
             json!({"name":"hoi4_plan","description":"Read or change the standing plan (plan.json in the run directory): research priorities, focus path, construction, training, production, politics, decisions. {op:get} returns it; {op:set, plan:{...}} merges the given keys (null removes a key). hoi4_plan_run carries it out.","inputSchema":{"type":"object","oneOf":[{"properties":{"op":{"const":"get"}},"required":["op"],"additionalProperties":false},{"properties":{"op":{"const":"set"},"plan":{"type":"object"}},"required":["op","plan"],"additionalProperties":false}]}}),
             json!({"name":"hoi4_plan_run","description":"Carry out the standing plan for up to `seconds` (default 60): answer news and single-option events, fill empty research slots and the focus slot from the plan's lists, make planned politics picks and decisions, keep the training queue, put idle military factories on the priority lines and spend idle civilian factories on planned construction. Every step is an ordinary verified action under the given lease; the game is never paused. Returns early when a choice event needs the model or a peace conference opens. Use it instead of hoi4_wait_for while nothing else needs attention.","inputSchema":{"type":"object","properties":{"seconds":{"type":"integer","minimum":1,"maximum":300},"lease_token":{"type":"string"}},"required":["lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_input_lease","description":"Exclusive configured-controller lease for ordinary macOS input. Acquire uses holder; renew/release use only lease_token. Status takes only op. Observations do not need a lease.","inputSchema":{"type":"object","oneOf":[
@@ -301,7 +318,8 @@ impl Commands for MacClock {
     fn supports(&self, name: &str) -> bool {
         matches!(
             name,
-            "hoi4_input_lease"
+            "hoi4_daily_governor"
+                | "hoi4_input_lease"
                 | "hoi4_time"
                 | "hoi4_research_start"
                 | "hoi4_focus_start"
@@ -334,11 +352,14 @@ impl Commands for MacClock {
                 | "hoi4_air_mission"
         )
     }
+    fn wait_events(&self) -> Option<Arc<crate::protocol::worker_events::Events>> {
+        Some(self.daily.events())
+    }
     fn plan_path(&self) -> Option<std::path::PathBuf> {
         Some(self.directory.join("plan.json"))
     }
     fn capabilities(&self) -> Value {
-        json!({"transport":"ordinary macOS CGEvent keys to the front-most owned window","actions":["set_paused","set_speed","research_start","focus_start","production_add","production_set","construction_add","politics_options","politics_choose","decisions_list","decision_take","train","deploy_locations","army_create","army_front","army_plan","army_offensive","event_choose","diplomacy","diplomacy_act","army_commander","army_group_create","army_split","state_slots","air_wings","air_mission","plan_run"],"lease":"exclusive configured controller","input_profile":{"name":"macos_cocoa_absolute_1920x1080_v1","checked_at_bind":true,"rechecked_before_each_input":true,"diagnostic_alone_authorizes_input":false},"native_posting":false,"full_campaign_acceptance":false})
+        json!({"transport":"ordinary macOS CGEvent keys to the front-most owned window","actions":["set_paused","set_speed","research_start","focus_start","production_add","production_set","construction_add","politics_options","politics_choose","decisions_list","decision_take","train","deploy_locations","army_create","army_front","army_plan","army_offensive","event_choose","diplomacy","diplomacy_act","army_commander","army_group_create","army_split","state_slots","air_wings","air_mission","plan_run"],"lease":"exclusive configured controller","input_profile":{"name":"macos_cocoa_absolute_1920x1080_v1","checked_at_bind":true,"rechecked_before_each_input":true,"diagnostic_alone_authorizes_input":false},"daily_governor":self.daily.capabilities(),"native_posting":false,"full_campaign_acceptance":false})
     }
     fn call(&self, process: &dyn Process, name: &str, arguments: &Value) -> Result<Value> {
         if process.identity() != self.process.identity() {
@@ -351,6 +372,9 @@ impl Commands for MacClock {
         let args = arguments
             .as_object()
             .ok_or_else(|| Error::new("invalid_arguments", "Input arguments must be an object"))?;
+        if name == "hoi4_daily_governor" {
+            return self.daily.call(self, args);
+        }
         if name == "hoi4_armies" {
             allowed(args, &[])?;
             return armies::armies(process);
@@ -384,14 +408,7 @@ impl Commands for MacClock {
             process.check()?;
             return Ok(json!({"templates":rows}));
         }
-        let mut state = self.state.try_lock().map_err(|e| match e {
-            std::sync::TryLockError::WouldBlock => {
-                Error::new("input_busy", "Another input operation is in progress")
-            }
-            std::sync::TryLockError::Poisoned(_) => {
-                Error::new("action_uncertain", "Mac controller is poisoned")
-            }
-        })?;
+        let mut state = crate::daily_worker::input_state(&self.state, || self.daily.input_check())?;
         if name != "hoi4_input_lease" {
             input_gate::check(
                 &state.journal,

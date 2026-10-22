@@ -104,6 +104,8 @@ pub struct DailyResult {
 fn reason(s: &str) -> String {
     s.chars().filter(|c| !c.is_control()).take(160).collect()
 }
+const RESEARCH_SLOT_WAIT: &str = "Own research slot occupied; awaiting fresh empty-slot evidence";
+const FOCUS_WAIT: &str = "Own different active focus; awaiting fresh idle state";
 fn request_id_day(
     plan: &Plan,
     entry: &Entry,
@@ -127,205 +129,252 @@ fn request_id_revision(plan: &Plan, entry: &Entry, number: u64, revision: u64) -
         .map_err(|e| types::invalid(&e.to_string()))?;
     Ok(format!("{:x}", Sha256::digest(encoded)))
 }
+impl State {
+    fn decode(bytes: &[u8], expected: Option<&Plan>) -> Result<Self> {
+        let state: State = serde_json::from_slice(bytes)
+            .map_err(|e| Error::new("invalid_plan_state", e.to_string()))?;
+        let plan = &state.plan;
+        plan.validate()?;
+        if state.version != 1
+            || expected.is_some_and(|expected| &state.plan != expected)
+            || state.entries.len() != plan.entries.len()
+        {
+            return Err(Error::new(
+                "plan_conflict",
+                "Persisted plan/version/scope differs; no reset or new-token rescue",
+            ));
+        }
+        if state.journal.len() > 4096 || state.quarantine.as_ref().is_some_and(|s| s.len() > 640) {
+            return Err(types::invalid("Journal/quarantine exceeds bound"));
+        }
+        let mut intents = BTreeMap::new();
+        let mut latest = BTreeMap::new();
+        let mut counts: BTreeMap<&String, u64> = BTreeMap::new();
+        let mut seen = std::collections::BTreeSet::new();
+        let mut previous_day = None;
+        let mut previous_sequence = 0;
+        for record in &state.journal {
+            let revision = record.plan_revision.unwrap_or(plan.revision);
+            if record.request_id.len() != 64
+                || !record.request_id.bytes().all(|b| b.is_ascii_hexdigit())
+                || !state.entries.contains_key(&record.entry_id)
+                || record.before_sequence == 0
+                || !(1936 * 365..2001 * 365).contains(&record.day)
+                || revision == 0
+                || revision > plan.revision
+                || record.not_queued_reason.as_ref().is_some_and(|s| {
+                    record.terminal != Some(false)
+                        || s.len() > 640
+                        || s.chars().count() > 160
+                        || s.chars().any(char::is_control)
+                })
+            {
+                return Err(types::invalid("Invalid journal record binding"));
+            }
+            if record.terminal.is_none() {
+                if previous_day.is_some_and(|d| record.day < d)
+                    || record.before_sequence <= previous_sequence
+                {
+                    return Err(types::invalid("Journal chronology regressed"));
+                }
+                previous_day = Some(record.day);
+                previous_sequence = record.before_sequence;
+                if !intents.is_empty()
+                    || latest
+                        .get(&record.entry_id)
+                        .is_some_and(|r: &&JournalRecord| r.terminal == Some(true))
+                {
+                    return Err(types::invalid(
+                        "Input intent overlaps unresolved or completed work",
+                    ));
+                }
+                let number = counts.entry(&record.entry_id).or_default();
+                *number += 1;
+                let entry = plan
+                    .entries
+                    .iter()
+                    .find(|e| e.id == record.entry_id)
+                    .ok_or_else(|| types::invalid("Journal entry absent from plan"))?;
+                if !seen.insert(&record.request_id)
+                    || record.request_id
+                        != if record.day_bound {
+                            request_id_day(plan, entry, *number, revision, record.day)?
+                        } else {
+                            request_id_revision(plan, entry, *number, revision)?
+                        }
+                {
+                    return Err(types::invalid("Reused or nonmatching request identity"));
+                }
+                if record.after_sequence.is_some()
+                    || intents.insert(&record.request_id, record).is_some()
+                {
+                    return Err(types::invalid("Duplicate or malformed intent journal"));
+                }
+            } else {
+                if let Some(after) = record.after_sequence {
+                    previous_sequence = after;
+                }
+                let previous = intents
+                    .remove(&record.request_id)
+                    .ok_or_else(|| types::invalid("Terminal journal lacks unique intent"))?;
+                if previous.entry_id != record.entry_id
+                    || previous.day != record.day
+                    || previous.before_sequence != record.before_sequence
+                    || previous.day_bound != record.day_bound
+                    || previous.plan_revision.unwrap_or(plan.revision) != revision
+                    || (record.terminal == Some(true)
+                        && !record
+                            .after_sequence
+                            .is_some_and(|n| n > record.before_sequence))
+                    || (record.terminal == Some(false) && record.after_sequence.is_some())
+                {
+                    return Err(types::invalid("Journal transition differs"));
+                }
+            }
+            latest.insert(&record.entry_id, record);
+        }
+        for e in &plan.entries {
+            match state
+                .entries
+                .get(&e.id)
+                .ok_or_else(|| types::invalid("Missing durable entry"))?
+            {
+                EntryState::Pending {
+                    reason, reason_day, ..
+                } => {
+                    if reason.as_ref().is_some_and(|s| {
+                        s.len() > 640 || s.chars().count() > 160 || s.chars().any(char::is_control)
+                    }) {
+                        return Err(types::invalid("Invalid bounded pending reason"));
+                    }
+                    match (reason.as_deref(), reason_day) {
+                        (None, None) => {}
+                        (Some(_), Some(day))
+                            if (1936 * 365..2001 * 365).contains(day)
+                                && state.last_day.is_some_and(|last| *day <= last) => {}
+                        (Some(message), None)
+                            if state.last_day.is_some()
+                                && matches!(
+                                    (&e.intent, message),
+                                    (Intent::Research { .. }, RESEARCH_SLOT_WAIT)
+                                        | (Intent::Focus { .. }, FOCUS_WAIT)
+                                ) => {}
+                        _ => {
+                            return Err(types::invalid(
+                                "Pending refusal/wait lacks matching saved chronology",
+                            ))
+                        }
+                    }
+                }
+                EntryState::Intent { attempt } | EntryState::Complete { attempt, .. } => {
+                    if attempt.entry != *e
+                        || attempt.scope != plan.scope
+                        || attempt.request_id.len() != 64
+                        || !attempt.request_id.bytes().all(|b| b.is_ascii_hexdigit())
+                        || attempt.before_sequence == 0
+                    {
+                        return Err(types::invalid("Durable attempt binding differs"));
+                    }
+                }
+            }
+            let saved = state.entries.get(&e.id).unwrap();
+            match (saved, latest.get(&e.id)) {
+                (EntryState::Pending { attempts, .. }, None) if *attempts == 0 => {}
+                (EntryState::Pending { attempts, .. }, Some(r))
+                    if r.terminal == Some(false) && counts.get(&e.id) == Some(attempts) => {}
+                (EntryState::Intent { attempt }, Some(r))
+                    if r.request_id == attempt.request_id
+                        && r.day == attempt.day
+                        && r.before_sequence == attempt.before_sequence
+                        && r.terminal.is_none() => {}
+                (EntryState::Complete { attempt, observed }, Some(r))
+                    if r.request_id == attempt.request_id
+                        && r.day == attempt.day
+                        && r.before_sequence == attempt.before_sequence
+                        && r.terminal == Some(true)
+                        && r.after_sequence == Some(observed.sequence) => {}
+                _ => return Err(types::invalid("Journal and durable entry differ")),
+            }
+            if let Some(EntryState::Complete { attempt, observed }) = state.entries.get(&e.id) {
+                observed.validate(plan, observed.observed_unix_ms)?;
+                if observed.sequence <= attempt.before_sequence
+                    || (i64::from(observed.date_raw) - 43_800_000).div_euclid(24) < attempt.day
+                {
+                    return Err(types::invalid("Completed receipt chronology invalid"));
+                }
+            }
+        }
+        if !state.journal.is_empty() && state.last_date.is_none() {
+            return Err(types::invalid("Journal lacks saved chronology"));
+        }
+        if previous_day.is_some_and(|day| state.last_day.is_none_or(|last| day > last))
+            || state
+                .last_sequence
+                .is_some_and(|last| previous_sequence > last)
+        {
+            return Err(types::invalid("Journal exceeds saved chronology"));
+        }
+        for saved in state.entries.values() {
+            match saved {
+                EntryState::Complete { attempt, observed }
+                    if state.last_sequence.is_none_or(|n| n < observed.sequence)
+                        || state.last_date.is_none_or(|d| d < observed.date_raw)
+                        || state.last_day.is_none_or(|d| d < attempt.day) =>
+                {
+                    return Err(types::invalid(
+                        "Completed evidence exceeds saved chronology",
+                    ))
+                }
+                EntryState::Intent { attempt }
+                    if state
+                        .last_sequence
+                        .is_none_or(|n| n < attempt.before_sequence)
+                        || state.last_day.is_none_or(|d| d < attempt.day) =>
+                {
+                    return Err(types::invalid("Intent exceeds saved chronology"))
+                }
+                _ => {}
+            }
+        }
+        if state.last_date.is_some() != state.last_day.is_some()
+            || state.last_sequence.is_some() != state.last_day.is_some()
+        {
+            return Err(types::invalid("Incomplete chronology state"));
+        }
+        if let Some(raw) = state.last_date {
+            let day = (i64::from(raw) - 43_800_000).div_euclid(24);
+            crate::calendar::decode(raw)?;
+            if state.last_day != Some(day) || state.last_sequence == Some(0) {
+                return Err(types::invalid("Invalid saved chronology"));
+            }
+        }
+        Ok(state)
+    }
+}
+
 impl Governor {
+    /// Load the original private plan before any owner input is enabled.
+    /// Existing bytes, quarantine and unresolved intents are never rewritten.
+    /// A present result retains the same exclusive Store lock as `open`.
+    #[cfg(any(target_os = "linux", target_os = "macos", all(test, unix)))]
+    pub(crate) fn load_existing(path: &Path) -> Result<Option<Self>> {
+        let (store, bytes) = store::Store::open(path)?;
+        let Some(bytes) = bytes else {
+            return Ok(None);
+        };
+        let state = State::decode(&bytes, None)?;
+        store.check()?;
+        Ok(Some(Self {
+            store,
+            state,
+            poisoned: false,
+        }))
+    }
     pub fn open(path: &Path, plan: Plan) -> Result<Self> {
         plan.validate()?;
         let (store, bytes) = store::Store::open(path)?;
         let state = if let Some(bytes) = bytes {
-            let state: State = serde_json::from_slice(&bytes)
-                .map_err(|e| Error::new("invalid_plan_state", e.to_string()))?;
-            state.plan.validate()?;
-            if state.version != 1 || state.plan != plan || state.entries.len() != plan.entries.len()
-            {
-                return Err(Error::new(
-                    "plan_conflict",
-                    "Persisted plan/version/scope differs; no reset or new-token rescue",
-                ));
-            }
-            if state.journal.len() > 4096
-                || state.quarantine.as_ref().is_some_and(|s| s.len() > 640)
-            {
-                return Err(types::invalid("Journal/quarantine exceeds bound"));
-            }
-            let mut intents = BTreeMap::new();
-            let mut latest = BTreeMap::new();
-            let mut counts: BTreeMap<&String, u64> = BTreeMap::new();
-            let mut seen = std::collections::BTreeSet::new();
-            let mut previous_day = None;
-            let mut previous_sequence = 0;
-            for record in &state.journal {
-                let revision = record.plan_revision.unwrap_or(plan.revision);
-                if record.request_id.len() != 64
-                    || !record.request_id.bytes().all(|b| b.is_ascii_hexdigit())
-                    || !state.entries.contains_key(&record.entry_id)
-                    || record.before_sequence == 0
-                    || !(1936 * 365..2001 * 365).contains(&record.day)
-                    || revision == 0
-                    || revision > plan.revision
-                    || record.not_queued_reason.as_ref().is_some_and(|s| {
-                        record.terminal != Some(false)
-                            || s.len() > 640
-                            || s.chars().count() > 160
-                            || s.chars().any(char::is_control)
-                    })
-                {
-                    return Err(types::invalid("Invalid journal record binding"));
-                }
-                if record.terminal.is_none() {
-                    if previous_day.is_some_and(|d| record.day < d)
-                        || record.before_sequence <= previous_sequence
-                    {
-                        return Err(types::invalid("Journal chronology regressed"));
-                    }
-                    previous_day = Some(record.day);
-                    previous_sequence = record.before_sequence;
-                    if !intents.is_empty()
-                        || latest
-                            .get(&record.entry_id)
-                            .is_some_and(|r: &&JournalRecord| r.terminal == Some(true))
-                    {
-                        return Err(types::invalid(
-                            "Input intent overlaps unresolved or completed work",
-                        ));
-                    }
-                    let number = counts.entry(&record.entry_id).or_default();
-                    *number += 1;
-                    let entry = plan
-                        .entries
-                        .iter()
-                        .find(|e| e.id == record.entry_id)
-                        .unwrap();
-                    if !seen.insert(&record.request_id)
-                        || record.request_id
-                            != if record.day_bound {
-                                request_id_day(&plan, entry, *number, revision, record.day)?
-                            } else {
-                                request_id_revision(&plan, entry, *number, revision)?
-                            }
-                    {
-                        return Err(types::invalid("Reused or nonmatching request identity"));
-                    }
-                    if record.after_sequence.is_some()
-                        || intents.insert(&record.request_id, record).is_some()
-                    {
-                        return Err(types::invalid("Duplicate or malformed intent journal"));
-                    }
-                } else {
-                    if let Some(after) = record.after_sequence {
-                        previous_sequence = after;
-                    }
-                    let previous = intents
-                        .remove(&record.request_id)
-                        .ok_or_else(|| types::invalid("Terminal journal lacks unique intent"))?;
-                    if previous.entry_id != record.entry_id
-                        || previous.day != record.day
-                        || previous.before_sequence != record.before_sequence
-                        || previous.day_bound != record.day_bound
-                        || previous.plan_revision.unwrap_or(plan.revision) != revision
-                        || (record.terminal == Some(true)
-                            && !record
-                                .after_sequence
-                                .is_some_and(|n| n > record.before_sequence))
-                        || (record.terminal == Some(false) && record.after_sequence.is_some())
-                    {
-                        return Err(types::invalid("Journal transition differs"));
-                    }
-                }
-                latest.insert(&record.entry_id, record);
-            }
-            for e in &plan.entries {
-                match state
-                    .entries
-                    .get(&e.id)
-                    .ok_or_else(|| types::invalid("Missing durable entry"))?
-                {
-                    EntryState::Pending {
-                        reason, reason_day, ..
-                    } => {
-                        if reason.as_ref().is_some_and(|s| s.len() > 640)
-                            || reason.is_some() != reason_day.is_some()
-                            || reason_day
-                                .is_some_and(|d| state.last_day.is_none_or(|last| d > last))
-                        {
-                            return Err(types::invalid("Reason exceeds bound"));
-                        }
-                    }
-                    EntryState::Intent { attempt } | EntryState::Complete { attempt, .. } => {
-                        if attempt.entry != *e
-                            || attempt.scope != plan.scope
-                            || attempt.request_id.len() != 64
-                            || !attempt.request_id.bytes().all(|b| b.is_ascii_hexdigit())
-                            || attempt.before_sequence == 0
-                        {
-                            return Err(types::invalid("Durable attempt binding differs"));
-                        }
-                    }
-                }
-                let saved = state.entries.get(&e.id).unwrap();
-                match (saved, latest.get(&e.id)) {
-                    (EntryState::Pending { attempts, .. }, None) if *attempts == 0 => {}
-                    (EntryState::Pending { attempts, .. }, Some(r))
-                        if r.terminal == Some(false) && counts.get(&e.id) == Some(attempts) => {}
-                    (EntryState::Intent { attempt }, Some(r))
-                        if r.request_id == attempt.request_id
-                            && r.day == attempt.day
-                            && r.before_sequence == attempt.before_sequence
-                            && r.terminal.is_none() => {}
-                    (EntryState::Complete { attempt, observed }, Some(r))
-                        if r.request_id == attempt.request_id
-                            && r.day == attempt.day
-                            && r.before_sequence == attempt.before_sequence
-                            && r.terminal == Some(true)
-                            && r.after_sequence == Some(observed.sequence) => {}
-                    _ => return Err(types::invalid("Journal and durable entry differ")),
-                }
-                if let Some(EntryState::Complete { attempt, observed }) = state.entries.get(&e.id) {
-                    observed.validate(&plan, observed.observed_unix_ms)?;
-                    if observed.sequence <= attempt.before_sequence
-                        || (i64::from(observed.date_raw) - 43_800_000).div_euclid(24) < attempt.day
-                    {
-                        return Err(types::invalid("Completed receipt chronology invalid"));
-                    }
-                }
-            }
-            if !state.journal.is_empty() && state.last_date.is_none() {
-                return Err(types::invalid("Journal lacks saved chronology"));
-            }
-            for saved in state.entries.values() {
-                match saved {
-                    EntryState::Complete { attempt, observed }
-                        if state.last_sequence.is_none_or(|n| n < observed.sequence)
-                            || state.last_date.is_none_or(|d| d < observed.date_raw)
-                            || state.last_day.is_none_or(|d| d < attempt.day) =>
-                    {
-                        return Err(types::invalid(
-                            "Completed evidence exceeds saved chronology",
-                        ))
-                    }
-                    EntryState::Intent { attempt }
-                        if state
-                            .last_sequence
-                            .is_none_or(|n| n < attempt.before_sequence)
-                            || state.last_day.is_none_or(|d| d < attempt.day) =>
-                    {
-                        return Err(types::invalid("Intent exceeds saved chronology"))
-                    }
-                    _ => {}
-                }
-            }
-            if state.last_date.is_some() != state.last_day.is_some()
-                || state.last_sequence.is_some() != state.last_day.is_some()
-            {
-                return Err(types::invalid("Incomplete chronology state"));
-            }
-            if let Some(raw) = state.last_date {
-                let day = (i64::from(raw) - 43_800_000).div_euclid(24);
-                crate::calendar::decode(raw)?;
-                if state.last_day != Some(day) || state.last_sequence == Some(0) {
-                    return Err(types::invalid("Invalid saved chronology"));
-                }
-            }
-            state
+            State::decode(&bytes, Some(&plan))?
         } else {
             State {
                 version: 1,
@@ -420,7 +469,7 @@ impl Governor {
         }
         Ok(day)
     }
-    #[cfg(any(target_os = "linux", all(test, unix)))]
+    #[cfg(any(target_os = "linux", target_os = "macos", all(test, unix)))]
     pub(crate) fn blocks_work(&self) -> bool {
         self.poisoned
             || self.state.quarantine.is_some()
@@ -430,17 +479,32 @@ impl Governor {
                 .values()
                 .any(|e| matches!(e, EntryState::Intent { .. }))
     }
-    #[cfg(any(target_os = "linux", all(test, unix)))]
+    #[cfg(any(target_os = "linux", target_os = "macos", all(test, unix)))]
     pub(crate) fn last_sequence(&self) -> u64 {
         self.state.last_sequence.unwrap_or(0)
     }
-    #[cfg(any(target_os = "linux", all(test, unix)))]
+    #[cfg(any(target_os = "linux", target_os = "macos", all(test, unix)))]
     pub(crate) fn plan(&self) -> Plan {
         self.state.plan.clone()
     }
-    #[cfg(any(target_os = "linux", all(test, unix)))]
+    #[cfg(any(target_os = "linux", target_os = "macos", all(test, unix)))]
     pub(crate) fn preparation_check(&mut self) -> Result<()> {
         self.check()
+    }
+    #[cfg(target_os = "macos")]
+    pub(crate) fn verify_live_scope(&mut self, scope: &Scope, date_raw: i32) -> Result<()> {
+        self.check()?;
+        crate::calendar::decode(date_raw)?;
+        if self.state.plan.scope != *scope
+            || self.state.last_date.is_some_and(|date| date_raw < date)
+        {
+            self.poisoned = true;
+            return Err(Error::new(
+                "ownership_changed",
+                "Retained plan scope or chronology differs from the live campaign",
+            ));
+        }
+        Ok(())
     }
     /// Historical key hint only. A completed assignment proves a past Start,
     /// not the current active focus or panel state; the owner must join both
@@ -464,7 +528,7 @@ impl Governor {
             .max_by_key(|(sequence, _)| *sequence)
             .map(|(_, entry)| entry.clone()))
     }
-    #[cfg(any(target_os = "linux", all(test, unix)))]
+    #[cfg(any(target_os = "linux", target_os = "macos", all(test, unix)))]
     pub(crate) fn pending_research(&self, day: i64) -> Vec<Entry> {
         let mut slots = std::collections::BTreeSet::new();
         self.state
@@ -576,7 +640,7 @@ impl Governor {
             .filter(|r| r.terminal.is_none() && r.day == day)
             .count()
     }
-    #[cfg(any(target_os = "linux", all(test, unix)))]
+    #[cfg(any(target_os = "linux", target_os = "macos", all(test, unix)))]
     pub(crate) fn budget_available(&self, day: i64) -> bool {
         !self
             .state
@@ -590,14 +654,14 @@ impl Governor {
     }
     /// Durable assignment history, independent of the latest batch and current
     /// game state. Caller holds the governor lock; this never authorizes input.
-    #[cfg(any(target_os = "linux", all(test, unix)))]
+    #[cfg(any(target_os = "linux", target_os = "macos", all(test, unix)))]
     pub(crate) fn assignment_summary(&mut self) -> Result<Value> {
         self.check_history()?;
         self.assignment_history()
     }
     /// STOP has no fresh game observation. Derive its budget from the same
     /// checked durable state as assignments, never from a worker report cache.
-    #[cfg(any(target_os = "linux", all(test, unix)))]
+    #[cfg(any(target_os = "linux", target_os = "macos", all(test, unix)))]
     pub(crate) fn stopped_history(&mut self) -> Result<(Value, Value)> {
         self.check_history()?;
         let day = self.state.last_day;
@@ -618,7 +682,7 @@ impl Governor {
             "remaining":remaining,"navigation_spends_assignment_budget":false});
         Ok((self.assignment_history()?, budget))
     }
-    #[cfg(any(target_os = "linux", all(test, unix)))]
+    #[cfg(any(target_os = "linux", target_os = "macos", all(test, unix)))]
     fn check_history(&mut self) -> Result<()> {
         if self.poisoned {
             return Err(Error::new(
@@ -632,7 +696,7 @@ impl Governor {
         }
         Ok(())
     }
-    #[cfg(any(target_os = "linux", all(test, unix)))]
+    #[cfg(any(target_os = "linux", target_os = "macos", all(test, unix)))]
     fn assignment_history(&self) -> Result<Value> {
         let mut complete = Vec::new();
         let mut pending = 0;
@@ -808,7 +872,7 @@ impl Governor {
     ) -> Result<DailyResult> {
         self.run_batch(backend, now_unix_ms, deadline, false, None)
     }
-    #[cfg(any(target_os = "linux", all(test, unix)))]
+    #[cfg(any(target_os = "linux", target_os = "macos", all(test, unix)))]
     pub(crate) fn continue_entry(
         &mut self,
         backend: &mut dyn Backend,
@@ -915,11 +979,14 @@ impl Governor {
                                 "Research slot wait belongs only to Research",
                             ));
                         }
-                        self.state.entries.insert(entry.id.clone(), EntryState::Pending {
-                            attempts: count,
-                            reason: Some("Own research slot occupied; awaiting fresh empty-slot evidence".into()),
-                            reason_day: None,
-                        });
+                        self.state.entries.insert(
+                            entry.id.clone(),
+                            EntryState::Pending {
+                                attempts: count,
+                                reason: Some(RESEARCH_SLOT_WAIT.into()),
+                                reason_day: None,
+                            },
+                        );
                         retained.push(entry.id);
                         self.persist()?;
                         continue;
@@ -932,9 +999,7 @@ impl Governor {
                             entry.id.clone(),
                             EntryState::Pending {
                                 attempts: count,
-                                reason: Some(
-                                    "Own different active focus; awaiting fresh idle state".into(),
-                                ),
+                                reason: Some(FOCUS_WAIT.into()),
                                 reason_day: None,
                             },
                         );
@@ -1220,6 +1285,14 @@ pub struct Wakeup {
     changed: Condvar,
 }
 impl Wakeup {
+    #[cfg(test)]
+    pub(crate) fn poison_for_test(&self) {
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _guard = self.notification.lock().unwrap();
+            panic!("Generated notification poison");
+        }));
+        self.changed.notify_all();
+    }
     pub fn notify(&self, reason: WakeReason) -> Result<Notification> {
         let mut n = self
             .notification
@@ -1250,3 +1323,476 @@ impl Wakeup {
 }
 #[cfg(test)]
 mod tests;
+
+#[cfg(all(test, unix))]
+mod owner_reopen_tests {
+    use super::*;
+    use crate::{actions::Epoch, platform::Identity};
+    use std::{
+        fs,
+        os::unix::fs::{MetadataExt, PermissionsExt},
+        sync::atomic::{AtomicU64, Ordering},
+    };
+
+    struct Temp(std::path::PathBuf);
+    impl Temp {
+        fn new() -> Self {
+            static NEXT: AtomicU64 = AtomicU64::new(0);
+            let directory = std::env::temp_dir().join(format!(
+                "private-daily-owner-reopen-{}-{}",
+                std::process::id(),
+                NEXT.fetch_add(1, Ordering::Relaxed)
+            ));
+            fs::create_dir(&directory).unwrap();
+            fs::set_permissions(&directory, fs::Permissions::from_mode(0o700)).unwrap();
+            Self(directory)
+        }
+        fn path(&self) -> std::path::PathBuf {
+            self.0.join("daily-plan.json")
+        }
+    }
+    impl Drop for Temp {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn plan() -> Plan {
+        Plan {
+            version: 1,
+            revision: 1,
+            scope: Scope {
+                epoch: Epoch {
+                    game: Identity {
+                        pid: 321,
+                        start_ticks: "123.000456".into(),
+                        exe: "/generated/hoi4".into(),
+                        uid: 501,
+                    },
+                    campaign: "original-controller:generated-playthrough".into(),
+                    player: "GER".into(),
+                },
+                anchors: [0x10000, 0x20000, 0x30000],
+                own_country: 0x40000,
+                own_status: 0x50000,
+            },
+            entries: [
+                ("first", "basic_machine_tools"),
+                ("refill", "construction1"),
+            ]
+            .into_iter()
+            .map(|(id, technology)| Entry {
+                id: id.into(),
+                intent: Intent::Research {
+                    technology_id: technology.into(),
+                    slot: 0,
+                },
+                navigation: None,
+                focus_search: None,
+            })
+            .collect(),
+            max_actions_per_day: 2,
+            max_observation_age_ms: 5000,
+            review_day: None,
+        }
+    }
+
+    enum AttemptResult {
+        Verified,
+        NotQueued,
+        Uncertain,
+        Crash,
+    }
+    struct Generated {
+        observation: Observation,
+        waiting: Option<String>,
+        result: AttemptResult,
+        sends: usize,
+    }
+    impl Generated {
+        fn new(plan: &Plan) -> Self {
+            Self {
+                observation: Observation {
+                    scope: plan.scope.clone(),
+                    date_raw: crate::calendar::encode(1936, 1, 1).unwrap(),
+                    sequence: 1,
+                    observed_unix_ms: 10_000,
+                    source: "generated owned daily observation".into(),
+                    counts: OwnCounts::default(),
+                },
+                waiting: None,
+                result: AttemptResult::Verified,
+                sends: 0,
+            }
+        }
+    }
+    impl Backend for Generated {
+        fn unresolved_input(&mut self) -> Result<bool> {
+            Ok(false)
+        }
+        fn observe(&mut self) -> Result<Observation> {
+            self.observation.sequence += 1;
+            Ok(self.observation.clone())
+        }
+        fn readiness(&mut self, entry: &Entry, _: &Observation) -> Result<Readiness> {
+            if self.waiting.as_deref() == Some(&entry.id) {
+                return Ok(match entry.intent {
+                    Intent::Research { .. } => Readiness::WaitingForResearchSlot,
+                    Intent::Focus { .. } => Readiness::WaitingForFocus,
+                    _ => panic!("Generated waiting entry must be Research or Focus"),
+                });
+            }
+            Ok(Readiness::Ready)
+        }
+        fn attempt(&mut self, attempt: &Attempt, _: &Observation, _: Instant) -> Result<Outcome> {
+            self.sends += 1;
+            match self.result {
+                AttemptResult::NotQueued => {
+                    Ok(Outcome::NotQueued("generated zero-input refusal".into()))
+                }
+                AttemptResult::Uncertain => {
+                    Ok(Outcome::Uncertain("generated unresolved input".into()))
+                }
+                AttemptResult::Crash => panic!("Generated crash after persisted governor intent"),
+                AttemptResult::Verified => Ok(Outcome::Verified(Box::new(VerifiedReceipt {
+                    attempt: attempt.clone(),
+                    current: true,
+                    canonical_intent: attempt.entry.intent.clone(),
+                    observed: self.observe()?,
+                }))),
+            }
+        }
+    }
+
+    fn run(governor: &mut Governor, generated: &mut Generated) -> Result<DailyResult> {
+        governor.run_day(generated, 10_000, Instant::now() + Duration::from_secs(2))
+    }
+    fn stamp(path: &Path) -> (u64, u64, u64, i64, i64) {
+        let metadata = fs::metadata(path).unwrap();
+        (
+            metadata.dev(),
+            metadata.ino(),
+            metadata.len(),
+            metadata.mtime(),
+            metadata.mtime_nsec(),
+        )
+    }
+
+    #[test]
+    fn absent_owner_load_never_bootstraps_state_or_retains_a_lock() {
+        let temp = Temp::new();
+        assert!(Governor::load_existing(&temp.path()).unwrap().is_none());
+        assert!(!temp.path().exists());
+        let governor = Governor::open(&temp.path(), plan()).unwrap();
+        assert!(!governor.blocks_work());
+    }
+
+    #[test]
+    fn owner_load_preserves_bytes_plan_and_lock_and_open_still_requires_exact_plan() {
+        let temp = Temp::new();
+        let expected = plan();
+        let governor = Governor::open(&temp.path(), expected.clone()).unwrap();
+        let pretty = serde_json::to_vec_pretty(&governor.state).unwrap();
+        drop(governor);
+        fs::write(temp.path(), &pretty).unwrap();
+        let before = stamp(&temp.path());
+        let mut loaded = Governor::load_existing(&temp.path()).unwrap().unwrap();
+        assert_eq!(loaded.plan(), expected);
+        assert_eq!(loaded.last_sequence(), 0);
+        loaded.preparation_check().unwrap();
+        assert_eq!(fs::read(temp.path()).unwrap(), pretty);
+        assert_eq!(stamp(&temp.path()), before);
+        assert_eq!(
+            Governor::load_existing(&temp.path()).err().unwrap().code,
+            "plan_busy"
+        );
+        drop(loaded);
+        let mut changed = expected.clone();
+        changed.scope.epoch.campaign = "replacement-controller:generated-playthrough".into();
+        assert_eq!(
+            Governor::open(&temp.path(), changed).err().unwrap().code,
+            "plan_conflict"
+        );
+        assert_eq!(fs::read(temp.path()).unwrap(), pretty);
+        assert_eq!(stamp(&temp.path()), before);
+        Governor::open(&temp.path(), expected).unwrap();
+    }
+
+    #[test]
+    fn same_slot_wait_reopens_and_refills_without_resetting_completed_work_or_day_budget() {
+        let temp = Temp::new();
+        let expected = plan();
+        let mut generated = Generated::new(&expected);
+        generated.waiting = Some("refill".into());
+        let mut governor = Governor::open(&temp.path(), expected.clone()).unwrap();
+        assert_eq!(
+            run(&mut governor, &mut generated).unwrap().verified,
+            ["first"]
+        );
+        assert!(matches!(
+            governor.entry_state("refill"),
+            Some(EntryState::Pending { reason: Some(reason), reason_day: None, attempts: 0 })
+                if reason == RESEARCH_SLOT_WAIT
+        ));
+        let original_sequence = governor.last_sequence();
+        drop(governor);
+        let bytes = fs::read(temp.path()).unwrap();
+        let before = stamp(&temp.path());
+        let mut loaded = Governor::load_existing(&temp.path()).unwrap().unwrap();
+        let day = 1936 * 365;
+        assert_eq!(loaded.last_sequence(), original_sequence);
+        assert_eq!(loaded.used_actions(day), 1);
+        assert!(loaded.budget_available(day));
+        assert_eq!(
+            loaded
+                .pending_research(day)
+                .iter()
+                .map(|e| e.id.as_str())
+                .collect::<Vec<_>>(),
+            ["refill"]
+        );
+        assert_eq!(loaded.assignment_summary().unwrap()["completed"], 1);
+        assert_eq!(loaded.stopped_history().unwrap().1["remaining"], 1);
+        assert_eq!(fs::read(temp.path()).unwrap(), bytes);
+        assert_eq!(stamp(&temp.path()), before);
+        drop(loaded);
+        // The exact-plan opener uses the identical validation, including waits.
+        let mut loaded = Governor::open(&temp.path(), expected).unwrap();
+        generated.waiting = None;
+        generated.observation.sequence = loaded.last_sequence() + 10;
+        assert_eq!(
+            loaded
+                .continue_entry(
+                    &mut generated,
+                    "refill",
+                    10_000,
+                    Instant::now() + Duration::from_secs(2)
+                )
+                .unwrap()
+                .verified,
+            ["refill"]
+        );
+        assert_eq!(generated.sends, 2);
+        assert_eq!(loaded.used_actions(day), 2);
+        assert!(!loaded.budget_available(day));
+        assert!(loaded.pending_research(day).is_empty());
+        drop(loaded);
+        let mut loaded = Governor::load_existing(&temp.path()).unwrap().unwrap();
+        assert_eq!(loaded.assignment_summary().unwrap()["completed"], 2);
+        assert!(!loaded.budget_available(day));
+    }
+
+    #[test]
+    fn focus_wait_is_also_valid_undated_history_on_owner_load() {
+        let temp = Temp::new();
+        let mut expected = plan();
+        expected.entries.truncate(1);
+        expected.entries[0].intent = Intent::Focus {
+            focus_id: "GER_rhineland".into(),
+        };
+        let mut generated = Generated::new(&expected);
+        generated.waiting = Some("first".into());
+        let mut governor = Governor::open(&temp.path(), expected).unwrap();
+        assert!(run(&mut governor, &mut generated)
+            .unwrap()
+            .verified
+            .is_empty());
+        drop(governor);
+        let loaded = Governor::load_existing(&temp.path()).unwrap().unwrap();
+        assert!(!loaded.blocks_work());
+        assert!(matches!(loaded.entry_state("first"),
+            Some(EntryState::Pending { reason: Some(reason), reason_day: None, .. }) if reason == FOCUS_WAIT));
+    }
+
+    #[test]
+    fn owner_load_keeps_unfinished_intent_and_quarantine_without_rewriting_either() {
+        for crash in [false, true] {
+            let temp = Temp::new();
+            let expected = plan();
+            let mut generated = Generated::new(&expected);
+            generated.result = if crash {
+                AttemptResult::Crash
+            } else {
+                AttemptResult::Uncertain
+            };
+            let mut governor = Governor::open(&temp.path(), expected).unwrap();
+            if crash {
+                assert!(
+                    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| run(
+                        &mut governor,
+                        &mut generated
+                    )))
+                    .is_err()
+                );
+                assert!(governor.state.quarantine.is_none());
+            } else {
+                assert!(run(&mut governor, &mut generated).is_err());
+                assert!(governor.state.quarantine.is_some());
+            }
+            drop(governor);
+            let bytes = fs::read(temp.path()).unwrap();
+            let before = stamp(&temp.path());
+            let mut loaded = Governor::load_existing(&temp.path()).unwrap().unwrap();
+            assert!(loaded.blocks_work());
+            assert!(matches!(
+                loaded.entry_state("first"),
+                Some(EntryState::Intent { .. })
+            ));
+            assert_eq!(
+                loaded.preparation_check().unwrap_err().code,
+                "governor_quarantined"
+            );
+            assert_eq!(loaded.state.quarantine.is_none(), crash);
+            assert_eq!(loaded.assignment_summary().unwrap()["in_flight"], 1);
+            assert_eq!(fs::read(temp.path()).unwrap(), bytes);
+            assert_eq!(stamp(&temp.path()), before);
+        }
+    }
+
+    fn rejected_by_both_without_rewrite(state: State, expected: &Plan) {
+        let temp = Temp::new();
+        let bytes = serde_json::to_vec(&state).unwrap();
+        fs::write(temp.path(), &bytes).unwrap();
+        fs::set_permissions(temp.path(), fs::Permissions::from_mode(0o600)).unwrap();
+        let before = stamp(&temp.path());
+        assert!(Governor::load_existing(&temp.path()).is_err());
+        assert!(Governor::open(&temp.path(), expected.clone()).is_err());
+        assert_eq!(fs::read(temp.path()).unwrap(), bytes);
+        assert_eq!(stamp(&temp.path()), before);
+    }
+
+    #[test]
+    fn malformed_wait_reasons_and_saved_chronology_refuse_both_openers() {
+        let temp = Temp::new();
+        let expected = plan();
+        let mut generated = Generated::new(&expected);
+        generated.waiting = Some("refill".into());
+        let mut governor = Governor::open(&temp.path(), expected.clone()).unwrap();
+        run(&mut governor, &mut generated).unwrap();
+        let valid = governor.state.clone();
+        drop(governor);
+        for alter in [
+            |s: &mut State| s.version = 2,
+            |s: &mut State| s.last_date = None,
+            |s: &mut State| s.last_sequence = Some(0),
+            |s: &mut State| {
+                if let EntryState::Pending { reason, .. } = s.entries.get_mut("refill").unwrap() {
+                    *reason = Some("arbitrary undated refusal".into());
+                }
+            },
+            |s: &mut State| {
+                if let EntryState::Pending { reason_day, .. } = s.entries.get_mut("refill").unwrap()
+                {
+                    *reason_day = s.last_day.map(|day| day + 1);
+                }
+            },
+            |s: &mut State| {
+                if let EntryState::Pending { reason_day, .. } = s.entries.get_mut("refill").unwrap()
+                {
+                    *reason_day = Some(1935 * 365);
+                }
+            },
+            |s: &mut State| {
+                if let EntryState::Pending {
+                    reason, reason_day, ..
+                } = s.entries.get_mut("refill").unwrap()
+                {
+                    *reason = None;
+                    *reason_day = s.last_day;
+                }
+            },
+            |s: &mut State| {
+                if let EntryState::Pending {
+                    reason, reason_day, ..
+                } = s.entries.get_mut("refill").unwrap()
+                {
+                    *reason = Some("invalid\nreason".into());
+                    *reason_day = s.last_day;
+                }
+            },
+            |s: &mut State| {
+                let entry = s.entries.remove("first").unwrap();
+                s.entries.insert("foreign".into(), entry);
+                for record in &mut s.journal {
+                    if record.entry_id == "first" {
+                        record.entry_id = "foreign".into();
+                    }
+                }
+            },
+        ] {
+            let mut malformed = valid.clone();
+            alter(&mut malformed);
+            rejected_by_both_without_rewrite(malformed, &expected);
+        }
+        let mut wrong_domain = valid;
+        wrong_domain.plan.entries[1].intent = Intent::Focus {
+            focus_id: "GER_rhineland".into(),
+        };
+        let changed_plan = wrong_domain.plan.clone();
+        rejected_by_both_without_rewrite(wrong_domain, &changed_plan);
+    }
+
+    #[test]
+    fn undated_wait_without_observed_chronology_is_not_an_initial_state() {
+        let temp = Temp::new();
+        let expected = plan();
+        let governor = Governor::open(&temp.path(), expected.clone()).unwrap();
+        let mut state = governor.state.clone();
+        drop(governor);
+        if let EntryState::Pending { reason, .. } = state.entries.get_mut("first").unwrap() {
+            *reason = Some(RESEARCH_SLOT_WAIT.into());
+        }
+        rejected_by_both_without_rewrite(state, &expected);
+    }
+
+    #[test]
+    fn terminal_notqueued_history_cannot_exceed_saved_day_or_sequence() {
+        let temp = Temp::new();
+        let mut expected = plan();
+        expected.entries.truncate(1);
+        let mut generated = Generated::new(&expected);
+        generated.result = AttemptResult::NotQueued;
+        let mut governor = Governor::open(&temp.path(), expected.clone()).unwrap();
+        run(&mut governor, &mut generated).unwrap();
+        let valid = governor.state.clone();
+        drop(governor);
+        let mut earlier_day = valid.clone();
+        earlier_day.journal.iter_mut().for_each(|r| r.day += 1);
+        let entry = &expected.entries[0];
+        let id = request_id_day(&expected, entry, 1, expected.revision, 1936 * 365 + 1).unwrap();
+        earlier_day
+            .journal
+            .iter_mut()
+            .for_each(|r| r.request_id = id.clone());
+        rejected_by_both_without_rewrite(earlier_day, &expected);
+        let mut earlier_sequence = valid;
+        earlier_sequence.last_sequence = Some(earlier_sequence.journal[0].before_sequence - 1);
+        rejected_by_both_without_rewrite(earlier_sequence, &expected);
+    }
+
+    #[test]
+    fn malformed_nonprivate_and_symlinked_existing_state_never_becomes_absence() {
+        let temp = Temp::new();
+        fs::write(temp.path(), b"{truncated").unwrap();
+        fs::set_permissions(temp.path(), fs::Permissions::from_mode(0o600)).unwrap();
+        assert_eq!(
+            Governor::load_existing(&temp.path()).err().unwrap().code,
+            "invalid_plan_state"
+        );
+        assert_eq!(fs::read(temp.path()).unwrap(), b"{truncated");
+        fs::set_permissions(temp.path(), fs::Permissions::from_mode(0o644)).unwrap();
+        assert_eq!(
+            Governor::load_existing(&temp.path()).err().unwrap().code,
+            "unsafe_plan_path"
+        );
+        fs::remove_file(temp.path()).unwrap();
+        let real = temp.0.join("real.json");
+        fs::write(&real, b"preserve").unwrap();
+        std::os::unix::fs::symlink(&real, temp.path()).unwrap();
+        assert_eq!(
+            Governor::load_existing(&temp.path()).err().unwrap().code,
+            "unsafe_plan_path"
+        );
+        assert_eq!(fs::read(real).unwrap(), b"preserve");
+    }
+}

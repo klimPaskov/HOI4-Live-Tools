@@ -158,11 +158,17 @@ and stop/failure checks passed; long campaign filming remains unverified. The du
 also passed live sequence/reopen checks at a 13 ms median across 20 paused-game
 samples. The [Mac controller](docs/MAC_CONTROLLER.md) now retains its identity
 across reconnects and shares input quarantine between clock and gameplay actions.
-Durable Mac worker input remains unfinished.
+The default-off [Mac background worker](docs/MAC_CONTROLLER.md) now adds durable
+Research queues and one-step production allocation, shared input quarantine,
+stop/join and reconnect checks. Its first recorded test verified a Research
+assignment, then quarantined an unstable production control before the factory
+click. The settlement correction needs a fresh live gate; worker restart and
+natural refill are not yet accepted. The public research-folder diagnostic
+remains Linux-only and explicitly refuses on Mac.
 
 The earlier preview also contains construction, politics, training, army, air
-and diplomacy adapters. The Mac plan runner is synchronous with scheduling state
-in memory, separate from Linux's durable daily worker. Broader plans, restart
+and diplomacy adapters. The older Mac plan runner remains synchronous with scheduling state
+in memory, separate from the optional durable worker. Broader plans, restart
 recovery and full-campaign acceptance remain unfinished. Peace conferences and
 naval invasions are not supported yet.
 

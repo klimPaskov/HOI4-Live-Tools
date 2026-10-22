@@ -6093,3 +6093,72 @@ Translated gameplay input binding is explicitly unavailable. Actual licensed
 HOI4 startup, own-state snapshots, ordinary UI actions and native 1080p recording
 on this environment are the next gates. Mixed plans, the two-year Luna run and
 full campaigns remain incomplete. No release or downstream pin changed.
+
+## Mac durable worker — 23 October 2026
+
+The default-off Mac worker now binds the portable durable governor to the
+independently validated Mac input/reader layouts. It implements ordered Research
+refill and an existing military line's single factory step, with intent persisted
+before panel preparation. Retained core, progress and typed journals gate manual
+input even after reconnect or removal of worker permissions. Stop/EOF cancels,
+wakes and joins; terminal events retain uncertainty before notifying waiters.
+
+The implementation passed 1,294 host Rust tests, 956 workspace Python tests
+(37 skipped), 809 clean staged Python tests (29 skipped), formatting, host and
+Windows all-target Clippy, and a 24-tool stdio smoke without a game connection.
+A frozen 224-file native source manifest matches the staged archive. Tests cover
+undated slot-wait reopen, current Research transitions, complete own allocation
+scope, replaced journals, original-line binding before preparation, cancellation
+and notification failure during shutdown. Offline results are not live acceptance.
+
+Preserve the first live harness failure: owned process/supervisor identities and
+the 1920×1108 OS window matched, but the private recorder config had a literal
+backslash-n after its JSON value. Strict parsing refused it. No MCP client,
+lease, gameplay input or pause occurred. The invalid config and handback remain
+in private evidence. This was a harness formatting failure, not a recorder or
+worker gameplay result.
+
+The corrected driver then stopped during read-only preflight: the public
+research-folder catalog used its Linux-only layout and returned
+`invalid_gui_type` on Mac. Six tool calls completed before handback, with no
+lease, recorder or gameplay input. Binding created a retained controller epoch
+and empty journals; preserve them rather than describing the directory as
+untouched. The Mac action adapter uses its own independently validated GUI
+lookup, so the next bounded test omitted this unsupported optional diagnostic
+while retaining exact technology IDs and all native action checks.
+
+That recorded Luna medium gate used FAIR Germany, Normal difficulty, historical
+AI and the native 1920×1080 client. It verified Electronic Mechanical Engineering
+in slot 2. The following infantry allocation attempt (18→19) stopped with
+`production_state_changed`: the complete factory-control witness changed before
+mouse-down. Canonical allocation checks had passed; the original diagnostic
+does not distinguish rectangle movement from row/widget reconstruction. Preserve
+the production Intent/Uncertain journal and shared quarantine. No retry, clock
+action, observation pause or date advancement followed. The worker stopped and
+joined; lease release correctly refused the quarantine, and stdio closure ended
+the remaining in-memory lease. No worker, MCP client or recorder remained.
+
+Independent read-only follow-up confirmed the Research assignment, all 21 line
+identities and factory counters unchanged, and 12 January 1936 01:00 still paused
+at speed 1. This readback does not resolve the uncertain production journal.
+The explicit-stop video finalized cleanly: 1920×1108, 30.75 seconds and about
+29.5 FPS, including the titlebar around the native 1080p client. A post-run frame
+check confirmed readable UI and the unchanged allocation. The 11 tool calls
+included the expected refused lease release. Preflight overview, Research and
+production reads took 0.274, 1.595 and 1.329 ms respectively; these single paused
+samples are not advancing-campaign throughput. Real time per game year is not
+applicable to a test with no date advancement.
+
+The correction now settles the complete factory-control witness before dispatch,
+retains its exact identity and geometry through the final guard, and distinguishes
+allocation from row/widget/rectangle mismatches. Generated checks cover movement,
+widget replacement, torn-read stability resets and late/expired samples. The
+unported Mac folder catalog now refuses before process access. A read-only live
+check confirmed its explicit `unsupported_platform` result and unchanged paused
+date, without input configuration or a lease. The corrected source passed 1,299
+host Rust tests, 956 workspace Python tests (37 skipped), formatting, host and
+Windows all-target Clippy, release build and the 24-tool stdio smoke. All 225
+native source files match the clean staged archive; its Python source is unchanged
+from the preceding 809-test staged check (29 skipped). The production correction
+has not been requalified through a fresh live mixed-plan run. Same-plan worker
+restart, natural Research refill, the two-year gate and full campaigns remain open.

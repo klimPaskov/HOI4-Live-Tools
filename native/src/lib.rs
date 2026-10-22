@@ -79,7 +79,7 @@ pub mod daily_governor;
 #[doc(hidden)]
 pub mod daily_observation;
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 mod daily_worker;
 
 #[cfg(any(target_os = "linux", all(test, unix)))]

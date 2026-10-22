@@ -50,7 +50,7 @@ impl Lifecycle {
     }
     pub(crate) fn stop(&mut self) -> Result<()> {
         self.stop.store(true, Ordering::Release);
-        self.wake.notify(WakeReason::Shutdown)?;
+        let notification = self.wake.notify(WakeReason::Shutdown);
         if let Some(h) = self.handle.take() {
             if h.thread().id() != thread::current().id() {
                 h.join().map_err(|_| {
@@ -61,7 +61,7 @@ impl Lifecycle {
                 })?;
             }
         }
-        Ok(())
+        notification.map(|_| ())
     }
 }
 impl Drop for Lifecycle {
@@ -172,9 +172,47 @@ mod tests {
         assert_eq!(life.stop().unwrap_err().code, "daily_quarantined");
         assert!(!life.running());
     }
+    #[test]
+    fn notification_poison_still_joins_the_worker_and_releases_its_owners() {
+        struct Ended(Arc<AtomicBool>);
+        impl Drop for Ended {
+            fn drop(&mut self) {
+                self.0.store(true, Ordering::Release);
+            }
+        }
+        let stop = Arc::new(AtomicBool::new(false));
+        let wake = Arc::new(Wakeup::default());
+        wake.poison_for_test();
+        let ended = Arc::new(AtomicBool::new(false));
+        let owned = Ended(ended.clone());
+        let worker_stop = stop.clone();
+        let handle = thread::spawn(move || {
+            let _owned = owned;
+            while !worker_stop.load(Ordering::Acquire) {
+                thread::park_timeout(Duration::from_millis(1));
+            }
+        });
+        let mut life = Lifecycle::new(stop.clone(), wake, handle);
+        assert_eq!(life.stop().unwrap_err().code, "worker_poisoned");
+        assert!(stop.load(Ordering::Acquire));
+        assert!(life.handle.is_none());
+        assert!(ended.load(Ordering::Acquire));
+        assert!(!life.running());
+    }
+    #[test]
+    fn notification_failure_does_not_hide_a_joined_worker_panic() {
+        let wake = Arc::new(Wakeup::default());
+        wake.poison_for_test();
+        let handle = thread::spawn(|| panic!("Generated worker panic after notification failure"));
+        let mut life = Lifecycle::new(Arc::new(AtomicBool::new(false)), wake, handle);
+        assert_eq!(life.stop().unwrap_err().code, "daily_quarantined");
+        assert!(life.handle.is_none());
+        assert!(!life.running());
+    }
 }
 
 /// Contention is a local busy state, not unresolved input. Poison is uncertain.
+#[cfg(any(target_os = "linux", test))]
 pub(crate) fn retained_quarantine<T>(
     state: &std::sync::Mutex<T>,
     check: impl FnOnce(&T) -> bool,
