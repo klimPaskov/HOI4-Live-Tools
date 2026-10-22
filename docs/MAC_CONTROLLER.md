@@ -120,8 +120,13 @@ stop notification cannot conceal retained uncertainty.
 Mac Focus progress now comes from one complete typed observation; it no longer
 merges separately witnessed public JSON pages. The public completion tool keeps
 its existing pagination. This model is not an input receipt or a durable Focus
-adapter. Own node/button binding, final target checks and original action bounds
-must be completed before Focus can join this worker.
+adapter. Manual Focus now pins own node/button identities and rechecks complete
+candidates after cursor settlement under one original five-second deadline.
+Panning requires complete obstacle geometry and a fresh origin check before
+mouse-down; later motion retains ownership checks and release cleanup. The first
+recorded gate expired with an unresolved intent while the tree was open. That
+controller remains blocked. Stage diagnostics, bounded navigation and fresh typed
+assignment receipts still need qualification before Focus enters daily plans.
 
 Generated tests cover persistence, ownership, chronology, slot waits, typed
 proofs, unchanged allocations, original deadlines, cancellation and shutdown.

@@ -229,7 +229,13 @@ pub(crate) fn rect_unclipped(
     let raw = r.read(sprite + l.sprite_translation, 8)?;
     let tx = f32::from_le_bytes(raw[..4].try_into().unwrap());
     let ty = f32::from_le_bytes(raw[4..].try_into().unwrap());
-    if !tx.is_finite() || !ty.is_finite() || !(1..=4096).contains(&w) || !(1..=4096).contains(&h) {
+    if !tx.is_finite()
+        || !ty.is_finite()
+        || tx.abs() > 1_000_000.0
+        || ty.abs() > 1_000_000.0
+        || !(1..=4096).contains(&w)
+        || !(1..=4096).contains(&h)
+    {
         return Err(Error::new(
             "invalid_gui_geometry",
             "Bounded sprite geometry required",
@@ -258,6 +264,12 @@ pub(crate) fn rect_zoomed(
     let plain = rect_unclipped(r, image, base, screen)?;
     let w = (f64::from(plain.w) * f64::from(zoom)).round() as i32;
     let h = (f64::from(plain.h) * f64::from(zoom)).round() as i32;
+    if w < 1 || h < 1 {
+        return Err(Error::new(
+            "invalid_gui_geometry",
+            "Zoomed widget must have positive pixel dimensions",
+        ));
+    }
     Ok(Rect {
         x: plain.x,
         y: plain.y + plain.h - h,
@@ -355,6 +367,25 @@ mod tests {
             }
         );
         assert_eq!(rect.center(), (131.0, 17.0));
+    }
+    #[test]
+    fn extreme_finite_translation_and_zero_size_zoom_refuse_before_rect_arithmetic() {
+        let mut m = topbar();
+        m.put(0x22_0000 + 0xb0, &f32::MAX.to_le_bytes());
+        assert_eq!(
+            rect(&Reader::new(&m), IMAGE, 0x21_0000, (1920, 1080))
+                .unwrap_err()
+                .code,
+            "invalid_gui_geometry"
+        );
+        let mut m = topbar();
+        m.put(0x23_0000 + 0x8c, &1i32.to_le_bytes());
+        assert_eq!(
+            rect_zoomed(&Reader::new(&m), IMAGE, 0x21_0000, (1920, 1080), 0.1)
+                .unwrap_err()
+                .code,
+            "invalid_gui_geometry"
+        );
     }
     #[test]
     fn frames_split_the_texture_and_text_sprites_carry_their_own_size() {

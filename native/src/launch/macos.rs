@@ -1502,14 +1502,27 @@ impl Commands for MacClock {
             }
             let id = string(args, "request_id")?;
             let token = string(args, "lease_token")?;
-            let epoch = guard.observe(process)?.epoch;
-            authority.authorize(token, &epoch)?;
+            let expected = guard.observe_context(process)?;
+            let epoch = guard.epoch.clone();
+            let lease_end = authority.authorize(token, &epoch)?;
+            let fence = action_fence::Fence {
+                process,
+                epoch: &epoch,
+                expected: &expected,
+                authority,
+                token,
+                until: (Instant::now() + Duration::from_secs(5)).min(lease_end),
+                stop: None,
+            };
+            let check_input = || fence.input_check();
+            let bounded_keys = self.keys.guarded(&fence, &check_input)?;
+            let process: &(dyn Process + Send + Sync) = &fence;
             let action = json!({"kind":"focus_start","focus":key});
             if !actions.receipt_exists(id) {
                 focus::check(&focus::progress(process)?, key)?;
-                self.keys.preflight()?;
+                bounded_keys.preflight()?;
             }
-            let keys = &self.keys;
+            let keys = &bounded_keys;
             let mut settle = || {
                 let now = focus::progress(process)?;
                 let detail = json!({"active":now.active});
@@ -1521,7 +1534,7 @@ impl Commands for MacClock {
             };
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
-                focus::start(process, keys, key)
+                focus::start(process, keys, key, fence.until)
             };
             let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
             return Ok(json!({"receipt":receipt}));

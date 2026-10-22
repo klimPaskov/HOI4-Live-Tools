@@ -1,0 +1,409 @@
+//! Private own-target and GUI witnesses. Uses only independently reviewed Mac
+//! joins; a key or rectangle alone never binds an input target.
+use super::*;
+use crate::research_ui::Witnesses;
+use std::collections::BTreeMap;
+
+#[cfg(test)]
+mod tests;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct Owner {
+    gs: u64,
+    idler: u64,
+    country: u64,
+    tree: u64,
+    database: u64,
+    progress: u64,
+    target: u64,
+    members: Vec<u64>,
+}
+fn exact(r: &Reader<'_>, p: u64, table: u64) -> Result<()> {
+    if p < 0x10000 || p % 8 != 0 || r.u64(p)? != table {
+        return Err(Error::new(
+            "invalid_focus_type",
+            "Exact Focus object required",
+        ));
+    }
+    Ok(())
+}
+fn pointers(r: &Reader<'_>, address: u64, bound: usize) -> Result<Vec<u64>> {
+    let (h, data, n) = r.array_header(address)?;
+    let capacity = i32::from_le_bytes(h[8..12].try_into().unwrap());
+    if capacity < 0 || capacity as usize > bound || (n > 0 && data % 8 != 0) {
+        return Err(Error::new(
+            "invalid_array",
+            "Focus collection exceeds its bound",
+        ));
+    }
+    let bytes = if n == 0 { vec![] } else { r.read(data, n * 8)? };
+    Ok(bytes
+        .chunks_exact(8)
+        .map(|b| u64::from_le_bytes(b.try_into().unwrap()))
+        .collect())
+}
+fn owner(r: &Reader<'_>, image: u64, key: &str) -> Result<Owner> {
+    ui(r)?;
+    let g = game::layout(r);
+    let l = own_focus::layout(r);
+    let gs = r.u64(image + g.gs_global)?;
+    let idler = r.u64(image + g.idler_global)?;
+    exact(r, gs, image + g.gs_vtable)?;
+    exact(r, idler, image + g.idler_vtable)?;
+    let tag = r.i32(gs + g.player_tag)?;
+    if !(1..4096).contains(&tag) {
+        return Err(Error::new(
+            "player_unavailable",
+            "Positive own tag required",
+        ));
+    }
+    let index = i32::from_le_bytes(
+        r.array_entry(gs + g.tag_country_index, tag as usize, 4)?
+            .try_into()
+            .unwrap(),
+    );
+    if index < 0 {
+        return Err(Error::new("player_unavailable", "Own country index absent"));
+    }
+    let country = u64::from_le_bytes(
+        r.array_entry(gs + g.countries, index as usize, 8)?
+            .try_into()
+            .unwrap(),
+    );
+    exact(r, country, image + g.country_vtable)?;
+    if r.i32(country + 8)? != tag {
+        return Err(Error::new(
+            "invalid_focus_owner",
+            "Own tag backlink differs",
+        ));
+    }
+    let tree = r.u64(country + g.country_focus_tree)?;
+    let database = r.u64(image + l.database_global)?;
+    let progress = r.u64(country + g.country_focus_progress)?;
+    exact(r, tree, image + l.tree_vtable)?;
+    exact(r, database, image + l.database_vtable)?;
+    exact(r, progress, image + l.progress_vtable)?;
+    if r.u64(progress + 8)? != country {
+        return Err(Error::new(
+            "invalid_focus_owner",
+            "Own progress backlink differs",
+        ));
+    }
+    let members = pointers(r, tree + l.tree_focuses, 4096)?;
+    let unique: BTreeSet<_> = members.iter().copied().collect();
+    let canonical: BTreeSet<_> = pointers(r, database + 0x58, 20000)?
+        .into_iter()
+        .filter(|p| *p != 0)
+        .collect();
+    if unique.len() != members.len() || unique.contains(&0) || !unique.is_subset(&canonical) {
+        return Err(Error::new(
+            "invalid_focus_owner",
+            "Unique canonical own membership required",
+        ));
+    }
+    let mut keys = BTreeMap::new();
+    for &focus in &members {
+        exact(r, focus, image + l.focus_vtable)?;
+        if r.u64(focus + l.focus_tree)? != tree {
+            return Err(Error::new(
+                "invalid_focus_owner",
+                "Own Focus tree backlink differs",
+            ));
+        }
+        let name = r.string_bounded(focus + 0x18, 256)?;
+        if name.is_empty()
+            || !name.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'_')
+            || keys.insert(name, focus).is_some()
+        {
+            return Err(Error::new(
+                "invalid_focus_catalog",
+                "Unique canonical Focus keys required",
+            ));
+        }
+    }
+    let target = *keys
+        .get(key)
+        .ok_or_else(|| Error::new("invalid_target", "Focus absent from own canonical tree"))?;
+    let completed = pointers(r, progress + 0x40, 4096)?;
+    if !completed.iter().all(|p| unique.contains(p)) {
+        return Err(Error::new(
+            "invalid_focus_owner",
+            "Foreign completed membership",
+        ));
+    }
+    if r.u64(progress + 0x10)? != 0 || completed.contains(&target) {
+        return Err(Error::new(
+            "invalid_target",
+            "Idle Focus and unfinished target required",
+        ));
+    }
+    Ok(Owner {
+        gs,
+        idler,
+        country,
+        tree,
+        database,
+        progress,
+        target,
+        members,
+    })
+}
+
+/// All payloads and their final witnesses use the same reader/ownership bracket.
+pub(super) fn observe<T>(
+    process: &dyn Process,
+    key: &str,
+    expected: Option<&Owner>,
+    f: impl FnOnce(&Reader<'_>, u64, &Owner) -> Result<T>,
+) -> Result<(Owner, T)> {
+    process.begin_snapshot()?;
+    let w = Witnesses::new(process);
+    w.section("mac_focus_owner");
+    let r = Reader::new(&w);
+    let image = process.image_base();
+    let own = owner(&r, image, key)?;
+    if expected.is_some_and(|old| *old != own) {
+        return Err(Error::new(
+            "ownership_changed",
+            "Original own Focus binding changed",
+        ));
+    }
+    w.section("mac_focus_ui");
+    let value = f(&r, image, &own)?;
+    w.finish()?;
+    process.check()?;
+    Ok((own, value))
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct View {
+    manager: u64,
+    object: u64,
+    root: u64,
+}
+fn view(r: &Reader<'_>, image: u64, own: &Owner, slot: u64) -> Result<View> {
+    let manager = r.u64(own.idler + MACOS.manager)?;
+    let object = r.u64(manager + slot)?;
+    let root = gui_tree::container(r, r.u64(object + MACOS.view_root)?, image)?
+        .ok_or_else(|| Error::new("invalid_gui", "Exact Focus view root required"))?;
+    Ok(View {
+        manager,
+        object,
+        root,
+    })
+}
+pub(super) fn open(r: &Reader<'_>, image: u64, own: &Owner, slot: u64) -> Result<bool> {
+    gui_tree::visible(r, view(r, image, own, slot)?.root)
+}
+fn own_view(r: &Reader<'_>, image: u64, own: &Owner) -> Result<View> {
+    let v = view(r, image, own, MACOS.focus_view)?;
+    if r.u64(v.object + MACOS.displayed_country)? != own.country {
+        return Err(Error::new(
+            "foreign_focus_scope",
+            "Positive displayed own country required",
+        ));
+    }
+    if !gui_tree::visible(r, v.root)? {
+        return Err(Error::new(
+            "focus_state_changed",
+            "Own Focus tree is not visible",
+        ));
+    }
+    Ok(v)
+}
+fn named(r: &Reader<'_>, image: u64, root: u64, name: &str) -> Result<Option<u64>> {
+    let mut found = None;
+    for child in gui_tree::children(r, root)? {
+        if gui_tree::name(r, child, image)?.as_deref() == Some(name)
+            && found.replace(child).is_some()
+        {
+            return Err(Error::new("invalid_gui", "Duplicate named Focus control"));
+        }
+    }
+    Ok(found)
+}
+fn window(r: &Reader<'_>, image: u64, p: u64) -> Result<u64> {
+    gui_tree::container(r, p, image)?
+        .ok_or_else(|| Error::new("invalid_gui", "Exact Focus container required"))
+}
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct Control {
+    view: View,
+    item: u64,
+    frame: u64,
+    widget: u64,
+    zoom: u32,
+    pub rect: Rect,
+    pub disabled: bool,
+}
+fn button(r: &Reader<'_>, image: u64, widget: u64) -> Result<(Rect, bool)> {
+    exact(r, widget, image + 0x34aafa0)?; // already reviewed CButtonStandard
+    if !gui_tree::shown(r, widget)? {
+        return Err(Error::new(
+            "gui_target_unavailable",
+            "Focus button is hidden",
+        ));
+    }
+    let state = gui_tree::button_state(r, widget)?;
+    if !(0..=3).contains(&state) {
+        return Err(Error::new("invalid_gui", "Unknown Focus button state"));
+    }
+    let rect = gui_tree::rect(r, image, widget, GAME)?;
+    if rect.x < 0 || rect.y < 0 || rect.x + rect.w > 1920 || rect.y + rect.h > 1080 {
+        return Err(Error::new(
+            "gui_target_unavailable",
+            "Focus button is clipped",
+        ));
+    }
+    Ok((rect, state == 3))
+}
+pub(super) fn focus_button(r: &Reader<'_>, image: u64, own: &Owner) -> Result<Control> {
+    let v = view(r, image, own, MACOS.politics_view)?;
+    let goal = named(r, image, v.root, "active_goal")?
+        .ok_or_else(|| Error::new("gui_target_unavailable", "Focus area missing"))?;
+    let frame = window(r, image, goal)?;
+    if !gui_tree::visible(r, v.root)? || !gui_tree::visible(r, frame)? {
+        return Err(Error::new(
+            "gui_target_unavailable",
+            "Politics Focus area is hidden",
+        ));
+    }
+    let widget = named(r, image, frame, "add_national_goal_button")?
+        .ok_or_else(|| Error::new("gui_target_unavailable", "Focus button missing"))?;
+    let (rect, disabled) = button(r, image, widget)?;
+    Ok(Control {
+        view: v,
+        item: goal,
+        frame,
+        widget,
+        zoom: 1f32.to_bits(),
+        rect,
+        disabled,
+    })
+}
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct Tree {
+    view: View,
+    zoom: u32,
+    pub target: Option<Control>,
+    pub obstacles: Vec<(u64, Rect)>,
+}
+pub(super) fn same_view(r: &Reader<'_>, image: u64, own: &Owner, tree: &Tree) -> Result<()> {
+    unchanged(&tree.view, &own_view(r, image, own)?)
+}
+pub(super) fn symbols(r: &Reader<'_>, image: u64, own: &Owner) -> Result<Tree> {
+    let v = own_view(r, image, own)?;
+    let zoom = f32::from_le_bytes(r.read(v.object + MACOS.zoom, 4)?.try_into().unwrap());
+    if !zoom.is_finite() || !(0.1..=4.0).contains(&zoom) {
+        return Err(Error::new(
+            "invalid_gui_geometry",
+            "Bounded Focus zoom required",
+        ));
+    }
+    let items = pointers(r, v.object + MACOS.items, 4096)?;
+    let mut seen = BTreeSet::new();
+    let mut target = None;
+    let mut obstacles = vec![];
+    let mut matches = 0;
+    for item in items {
+        if !seen.insert(item) {
+            return Err(Error::new("invalid_gui", "Duplicate Focus item"));
+        }
+        exact(r, item, image + MACOS.item_vtable)?;
+        let focus = r.u64(item + MACOS.item_focus)?;
+        if focus != 0 && !own.members.contains(&focus) {
+            return Err(Error::new(
+                "foreign_focus_scope",
+                "Foreign Focus item refused before payload",
+            ));
+        }
+        let selected = focus == own.target;
+        matches += usize::from(selected);
+        if matches > 1 {
+            return Err(Error::new("invalid_gui", "Duplicate own Focus node"));
+        }
+        let frame = window(r, image, r.u64(item + MACOS.item_container)?)?;
+        if !gui_tree::visible(r, frame)? {
+            continue;
+        }
+        let mut symbol = None;
+        for name in ["symbol", "bg"] {
+            if let Some(widget) = named(r, image, frame, name)? {
+                if !gui_tree::shown(r, widget)? {
+                    continue;
+                }
+                // No dropped geometry: an unmeasurable obstacle cannot prove a
+                // safe background origin for an ordinary drag.
+                let rect = gui_tree::rect_zoomed(r, image, widget, GAME, zoom)?;
+                obstacles.push((widget, rect));
+                if name == "symbol" {
+                    symbol = Some((widget, rect));
+                }
+            }
+        }
+        if selected {
+            let (widget, rect) = symbol.ok_or_else(|| {
+                Error::new("gui_target_unavailable", "Visible target symbol missing")
+            })?;
+            target = Some(Control {
+                view: v.clone(),
+                item,
+                frame,
+                widget,
+                zoom: zoom.to_bits(),
+                rect,
+                disabled: false,
+            });
+        }
+    }
+    Ok(Tree {
+        view: v,
+        zoom: zoom.to_bits(),
+        target,
+        obstacles,
+    })
+}
+pub(super) fn detail(r: &Reader<'_>, image: u64, own: &Owner) -> Result<Option<Control>> {
+    let v = own_view(r, image, own)?;
+    let panels = pointers(r, v.object + MACOS.panels, 8)?;
+    let mut found = None;
+    let mut seen = BTreeSet::new();
+    for panel in panels {
+        if !seen.insert(panel) {
+            return Err(Error::new("invalid_gui", "Duplicate Focus panel"));
+        }
+        exact(r, panel, image + MACOS.panel_vtable)?;
+        let selected = r.u64(panel + MACOS.panel_selected)?;
+        if selected != 0 && !own.members.contains(&selected) {
+            return Err(Error::new(
+                "foreign_focus_scope",
+                "Foreign Focus detail refused before payload",
+            ));
+        }
+        if selected != own.target {
+            continue;
+        }
+        let frame = window(r, image, r.u64(panel + MACOS.panel_window)?)?;
+        if !gui_tree::visible(r, frame)? {
+            continue;
+        }
+        let widget = named(r, image, frame, "start")?
+            .ok_or_else(|| Error::new("gui_target_unavailable", "Focus Start missing"))?;
+        let (rect, disabled) = button(r, image, widget)?;
+        if found
+            .replace(Control {
+                view: v.clone(),
+                item: panel,
+                frame,
+                widget,
+                zoom: 1f32.to_bits(),
+                rect,
+                disabled,
+            })
+            .is_some()
+        {
+            return Err(Error::new("invalid_gui", "Duplicate visible Focus detail"));
+        }
+    }
+    Ok(found)
+}

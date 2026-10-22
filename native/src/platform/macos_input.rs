@@ -345,6 +345,7 @@ fn drag_sequence(
     steps: u32,
     step_ms: u64,
     mut check: impl FnMut() -> Result<()>,
+    mut before_down: impl FnMut() -> Result<()>,
     mut post: impl FnMut(u32, Point) -> Result<()>,
     mut pause: impl FnMut(std::time::Duration),
 ) -> Result<()> {
@@ -354,7 +355,15 @@ fn drag_sequence(
     post(MOUSE_MOVED, a)?;
     pause(settle);
     check()?;
-    post(down, a)?;
+    before_down()?;
+    check()?;
+    if let Err(error) = post(down, a) {
+        // An attempted down can have been delivered despite a transport error.
+        if post(up, a).is_err() {
+            let _ = post(up, a);
+        }
+        return Err(error);
+    }
     let mut last = a;
     let result = (|| {
         pause(settle);
@@ -559,7 +568,19 @@ impl<'p> MacKeys<'p> {
     /// One left-button drag between game-logical points in small steps, after a
     /// fresh front-most check. Used to pan views; never to move game objects.
     pub fn drag(&self, game: (u32, u32), from: (f64, f64), to: (f64, f64)) -> Result<()> {
-        self.drag_with(game, from, to, false)
+        self.drag_with(game, from, to, false, &|| Ok(()))
+    }
+    /// Revalidate the original drag origin after cursor settling and before
+    /// mouse-down. Later motion retains the ordinary guards, while allowing the
+    /// intended geometry change. No callback can suppress release cleanup.
+    pub(crate) fn drag_checked(
+        &self,
+        game: (u32, u32),
+        from: (f64, f64),
+        to: (f64, f64),
+        before_down: &dyn Fn() -> Result<()>,
+    ) -> Result<()> {
+        self.drag_with(game, from, to, false, before_down)
     }
     /// One left click with Shift held, after a fresh front-most check. The
     /// game reads Shift through a modifier (flags-changed) event carrying the
@@ -643,7 +664,7 @@ impl<'p> MacKeys<'p> {
     /// One right-button drag between game-logical points (battle-plan lines),
     /// after a fresh front-most check.
     pub fn right_drag(&self, game: (u32, u32), from: (f64, f64), to: (f64, f64)) -> Result<()> {
-        self.drag_with(game, from, to, true)
+        self.drag_with(game, from, to, true, &|| Ok(()))
     }
     fn drag_with(
         &self,
@@ -651,6 +672,7 @@ impl<'p> MacKeys<'p> {
         from: (f64, f64),
         to: (f64, f64),
         right: bool,
+        before_down: &dyn Fn() -> Result<()>,
     ) -> Result<()> {
         self.preflight()?;
         let (down, dragged, up, button, steps, step_ms) = if right {
@@ -694,6 +716,7 @@ impl<'p> MacKeys<'p> {
             steps,
             step_ms,
             || self.preflight(),
+            before_down,
             post,
             std::thread::sleep,
         )
@@ -801,7 +824,7 @@ mod tests {
         use std::cell::RefCell;
         let a = Point { x: 10.0, y: 20.0 };
         let b = Point { x: 50.0, y: 60.0 };
-        for failing_check in 1..=6 {
+        for failing_check in 1..=7 {
             let sent = RefCell::new(Vec::new());
             let mut checks = 0;
             let result = drag_sequence(
@@ -818,6 +841,7 @@ mod tests {
                         Ok(())
                     }
                 },
+                || Ok(()),
                 |kind, p| {
                     sent.borrow_mut().push((kind, p));
                     Ok(())
@@ -826,7 +850,7 @@ mod tests {
             );
             assert_eq!(result.unwrap_err().code, "action_deadline");
             let sent = sent.into_inner();
-            if failing_check <= 2 {
+            if failing_check <= 3 {
                 assert!(!sent.iter().any(|(k, _)| *k == LEFT_MOUSE_DOWN));
             } else {
                 let release = sent.last().unwrap();
@@ -848,6 +872,7 @@ mod tests {
             4,
             0,
             || Ok(()),
+            || Ok(()),
             |kind, p| {
                 sent.push((kind, p));
                 if kind == RIGHT_MOUSE_DRAGGED {
@@ -862,6 +887,76 @@ mod tests {
         );
         assert_eq!(result.unwrap_err().code, "fixture_motion");
         assert_eq!(sent.last(), Some(&(RIGHT_MOUSE_UP, a)));
+    }
+    #[test]
+    fn drag_origin_check_runs_after_settle_and_refuses_down_on_change() {
+        use std::cell::RefCell;
+        let trace = RefCell::new(Vec::new());
+        let p = Point { x: 1.0, y: 2.0 };
+        let result = drag_sequence(
+            p,
+            p,
+            (LEFT_MOUSE_DOWN, LEFT_MOUSE_DRAGGED, LEFT_MOUSE_UP),
+            2,
+            0,
+            || {
+                trace.borrow_mut().push("scope");
+                Ok(())
+            },
+            || {
+                trace.borrow_mut().push("origin");
+                Err(Error::new("focus_state_changed", "fixture"))
+            },
+            |kind, _| {
+                assert_eq!(kind, MOUSE_MOVED);
+                trace.borrow_mut().push("move");
+                Ok(())
+            },
+            |_| trace.borrow_mut().push("settle"),
+        );
+        assert_eq!(result.unwrap_err().code, "focus_state_changed");
+        assert_eq!(
+            trace.into_inner(),
+            ["scope", "move", "settle", "scope", "origin"]
+        );
+    }
+    #[test]
+    fn drag_origin_is_not_rechecked_during_intended_motion_and_failed_down_releases() {
+        let p = Point { x: 1.0, y: 2.0 };
+        for fail in [false, true] {
+            let mut origins = 0;
+            let mut sent = vec![];
+            let result = drag_sequence(
+                p,
+                p,
+                (LEFT_MOUSE_DOWN, LEFT_MOUSE_DRAGGED, LEFT_MOUSE_UP),
+                2,
+                0,
+                || Ok(()),
+                || {
+                    origins += 1;
+                    Ok(())
+                },
+                |kind, _| {
+                    sent.push(kind);
+                    if fail && kind == LEFT_MOUSE_DOWN {
+                        Err(Error::new("fixture_down", "unknown delivery"))
+                    } else {
+                        Ok(())
+                    }
+                },
+                |_| {},
+            );
+            assert_eq!(origins, 1);
+            assert_eq!(sent.last(), Some(&LEFT_MOUSE_UP));
+            if fail {
+                assert_eq!(result.unwrap_err().code, "fixture_down");
+                assert!(!sent.contains(&LEFT_MOUSE_DRAGGED));
+            } else {
+                result.unwrap();
+                assert_eq!(sent.iter().filter(|k| **k == LEFT_MOUSE_DRAGGED).count(), 2);
+            }
+        }
     }
     struct NoReads {
         id: crate::platform::Identity,

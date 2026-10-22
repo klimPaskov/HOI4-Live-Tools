@@ -1,5 +1,13 @@
 # Mac continuation checkpoint — 11 October 2026
 
+The latest paused Focus qualification added canonical own-target and final GUI
+checks under one original deadline. Its single economic-growth attempt timed out
+at 5.084 seconds and retained an unresolved intent; the controller now blocks
+further input. Independent reads retained the paused 19 April date and idle Focus.
+The 1920×1108 recording finalized cleanly. No retry or reset occurred. See the
+[latest failed gate and next work](LINUX_RUST_HANDOFF.md); the earlier component
+successes below remain valid but do not establish clean campaign acceptance.
+
 The current implementation adds a default-off durable Mac worker for ordered
 Research and one-step production, with shared quarantine and stop/join. The
 first worker gate verified Research, then quarantined a changing production

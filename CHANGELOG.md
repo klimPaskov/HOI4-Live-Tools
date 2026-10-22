@@ -2,6 +2,12 @@
 
 ## Unreleased native preview
 
+- Bind Mac Focus clicks to the original own canonical objects and complete GUI
+  witnesses, with a final check after cursor settlement and one original action
+  deadline. Require complete drag-origin geometry and preserve mouse release on
+  failures. The recorded single-attempt gate timed out with an unresolved intent;
+  durable Focus and long campaign acceptance remain unavailable.
+
 - Read Mac Focus progress as one complete typed, witnessed snapshot rather than
   merging independently paginated JSON results. Keep public completion pagination
   unchanged and preserve ownership, canonical membership and torn-read refusal.

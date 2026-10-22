@@ -29,16 +29,31 @@ were independently unchanged. Preserve both harness failures and recordings;
 do not label this a clean full gate. The game is paused at 19 April 1936 20:00.
 There is no active worker, lease or recorder. See the [detailed component evidence](CLAUSEWITZ_VALIDATION.md#mac-mixed-worker-restart-and-refill--23-october-2026).
 
-Next, make the qualification harness tolerate bounded read-only torn snapshots
-and distinguish scoped military invariants from separately reported naval queue
-changes; never retry uncertain actions. Focus progress now uses one complete
-coherent typed snapshot instead of a paginated JSON merge. It passed 1,303 Rust
-tests, 956 Python tests (37 skipped), cross-target Clippy and a stationary Mac
-read-only check: 20 samples at a 0.276 ms reader median, unchanged paused date
-and retained input files, no lease or input configuration. The 104-completion
-fixture verifies one observation beyond the public page size. Before adding
-durable Focus, harden node/button ownership, final click witnesses and original
-action deadlines; the typed progress model is not an assignment receipt.
+The next recorded paused Focus gate tested the new canonical own-target and GUI
+witness checks under one original five-second deadline. Its sole economic-growth
+request returned `action_uncertain` at 5.084 seconds: dispatch and readback both
+exceeded their bounds. The recording finalized cleanly at 1920×1108, 376 frames
+and 12.74 seconds. Fresh independent read-only checks retained the paused
+19 April 20:00 date, no active/completed Focus and all three completed plan entries.
+The original Focus intent is still unresolved and blocks this controller. Do not
+retry, settle, erase or reset it. The recorded tree was open; the exact timed-out
+stage was not retained, so it remains unknown.
+
+The source passed 1,323 Rust tests, 956 Python tests (37 skipped), host/Windows/
+Linux/ARM64 Linux Clippy, formatting and the release build. Sparse fixtures cover
+own membership, foreign/replaced targets, duplicate controls, torn state, missing
+obstacle geometry and final click changes. Drag tests cover origin revalidation,
+cancellation and release after a failed down. All 227 native source files stayed
+unchanged through the gate. This is a failed input qualification, not durable
+Focus or campaign acceptance.
+
+Next, add bounded stage/cost diagnostics and reduce repeated canonical/UI work
+without weakening original ownership or final witnesses. Qualify visible or short
+navigation before adding durable Focus. Preserve the failed controller and video;
+use a separately owned technical session for later input qualification. Focus
+progress already uses a complete coherent typed snapshot instead of a paginated
+JSON merge, but it is not an assignment receipt. Keep bounded read-only torn-read
+recovery and scope military allocation checks separately from naval queue changes.
 The clean two-year run and full recorded campaigns remain required.
 
 The preceding published controller foundation follows for historical context.

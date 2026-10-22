@@ -139,7 +139,7 @@ Mac GUI/SDL geometry is recovered independently, corroborated against the owned
 OS window and rechecked before each input. Reads never pause or move the cursor.
 See [the input geometry contract](docs/MAC_INPUT_GEOMETRY.md).
 
-The latest Luna medium test verified research, Focus and clock actions. Research
+An earlier Luna medium test verified research, Focus and clock actions. Research
 took about 2 seconds and Focus about 4 seconds. The date-limited test failed when
 a model delay before its final pause advanced the game three extra days; that
 failure is retained. Recorded window capture passed at 1920×1108 and about 29.4
@@ -168,6 +168,14 @@ All three assignments were independently verified, with no quarantine or repeate
 factory input. These component results do not establish a clean campaign gate.
 Overview/Research/digest medians were about 0.3/1.7/10.6 ms, with zero observation
 pauses. See [the results and retained failures](docs/CLAUSEWITZ_VALIDATION.md#mac-mixed-worker-restart-and-refill--23-october-2026).
+
+The newer Focus path adds canonical target and final GUI checks under an original
+five-second deadline. Its first recorded attempt timed out and retained an
+unresolved intent, blocking further input on that controller. The game stayed
+paused with no Focus active; no retry or reset occurred. See [the failed gate and
+remaining work](docs/CLAUSEWITZ_VALIDATION.md#mac-focus-input-binding-and-deadline-refusal--23-october-2026).
+Durable Mac Focus and full campaigns remain unaccepted.
+
 The public research-folder diagnostic remains Linux-only and explicitly refuses
 on Mac.
 

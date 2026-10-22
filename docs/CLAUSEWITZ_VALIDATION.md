@@ -6267,3 +6267,56 @@ all 225 source hashes matched, and the stdio server exposed its expected 24
 observation tools. The game continued to retain the previously verified Research
 and production plan. No new Focus gameplay action is claimed; final target
 binding and bounded ordinary input remain the next prerequisites.
+
+
+## Mac Focus input binding and deadline refusal — 23 October 2026
+
+The manual Mac Focus path now pins the original own country, progress, tree,
+canonical database and exact Focus pointer. Node and detail selection must match
+that pointer; a same-name foreign or replacement object cannot substitute. Each
+candidate uses one final-witness observation and keeps its manager/view/container/
+widget identities, visibility, enabled state, zoom and rectangle. Named controls
+must be unique, displayed-country binding must be positively own, and oversized
+panel lists refuse instead of truncating.
+
+A click rechecks the original candidate after cursor settling. Panning requires
+complete visible symbol/background geometry and rechecks the whole drag origin
+before mouse-down; subsequent motion retains own-view, lease and deadline checks
+while allowing the intended rectangle movement. Failed/cancelled drags attempt
+release. Unknown sprite geometry, zero-size zoom results and extreme finite
+translations refuse. Politics opening uses its ordinary Q shortcut with no fixed
+coordinate fallback. One original five-second fence covers all reads and input;
+new stages cannot renew it. Durable daily Focus is still unavailable.
+
+Validation passed 1,323 host Rust tests, 956 workspace Python tests (37 skipped),
+formatting, strict host/Windows/Linux/ARM64 Linux Clippy and the release build.
+Fifteen sparse Mac fixtures exercise real canonical and GUI readers, including
+foreign payload avoidance, replacement pointers, duplicates, torn witnesses,
+oversized collections, hidden/disabled Start and changed final controls. Transport
+fixtures cover final drag-origin refusal, cancellation and cleanup after failed
+down. Independent review also found a private qualification-driver cleanup gap:
+preflight was outside its failure handler. It was moved under cleanup and a fault
+injection verified saved failure, recorder shutdown, zero input and no repeated
+execution claim. A read-only stdio smoke exposed 24 observation tools and retained
+the paused campaign before the player grant.
+
+One Luna medium player then ran one recorded `GER_prioritize_economic_growth`
+attempt on the retained Normal historical vanilla FAIR Germany campaign. There
+were nine RPCs and one error; no clock change, worker start or screenshot-driven
+control. The Focus call returned `action_uncertain` after 5,083.801 ms, retaining
+an original-deadline dispatch failure and an expired readback fence. Its durable
+Intent remains unresolved. No retry, settlement or recovery input followed.
+The lease released and broker closed normally. The recorder finalized explicitly:
+1920×1108 around the native 1080p client, 376 frames, 12.736667 seconds, about
+29.5 FPS. All 227 native source files and the reviewed helpers remained unchanged.
+
+After handback, independent read-only checks retained the paused 19 April 1936
+20:00 date, no active/completed Focus, Radio in slot 2 and the three completed
+Research/production plan entries. Controller files and the unresolved Intent
+were unchanged. A post-run video frame shows the Focus tree open, but the runtime
+did not retain the exact stage that timed out. Do not infer a particular pan,
+control click or performance cause from the aggregate deadline. Preserve this
+failure and blocked controller; add stage diagnostics and bounded navigation
+qualification before another separately owned technical input test. This does
+not establish a successful Focus action, durable Focus, the clean two-year run
+or a completed campaign.

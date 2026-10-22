@@ -3,14 +3,17 @@
 //! focus symbol, then the detail window's Start button. Targets come from the
 //! live GUI tree (zoom-aware), each stage waits for its memory change, and
 //! success is the own focus progress naming the focus as active.
-use super::ui::{clear_notices, dismiss, read, settled, wait};
+use super::ui::clear_notices;
 use crate::{
     error::{Error, Result},
     game,
     gui_tree::{self, Rect},
     memory::{Reader, StringAbi},
     own_focus,
-    platform::{macos_input::MacKeys, Process},
+    platform::{
+        macos_input::{Key, MacKeys},
+        Process,
+    },
 };
 use std::{
     collections::BTreeSet,
@@ -29,7 +32,6 @@ struct Ui {
     item_vtable: u64,
     item_focus: u64,
     item_container: u64,
-    focus_key: u64,
     zoom: u64,
     panels: u64,
     panel_vtable: u64,
@@ -51,7 +53,6 @@ const MACOS: Ui = Ui {
     item_vtable: 0x3405b78,
     item_focus: 0x20,
     item_container: 0x10,
-    focus_key: 0x18,
     zoom: 0x19b0,
     panels: 0x1938,
     panel_vtable: 0x3405158,
@@ -59,7 +60,8 @@ const MACOS: Ui = Ui {
     panel_selected: 0xba8,
 };
 const GAME: (u32, u32) = (1920, 1080);
-const START_WAIT: Duration = Duration::from_secs(3);
+mod binding;
+use binding::{Control, Owner};
 /// Tree area clear of the title bar, filter buttons and the bottom scrollbar.
 const SAFE: (f64, f64, f64, f64) = (260.0, 200.0, 1860.0, 1000.0);
 
@@ -71,65 +73,6 @@ fn ui(r: &Reader<'_>) -> Result<&'static Ui> {
             "Focus input is not reviewed for this build",
         )),
     }
-}
-fn view(r: &Reader<'_>, image: u64, slot: u64) -> Result<u64> {
-    let idler = r.u64(image + game::layout(r).idler_global)?;
-    r.u64(r.u64(idler + ui(r)?.manager)? + slot)
-}
-fn root(r: &Reader<'_>, image: u64, slot: u64) -> Result<u64> {
-    gui_tree::container(r, r.u64(view(r, image, slot)? + ui(r)?.view_root)?, image)?
-        .ok_or_else(|| Error::new("invalid_gui", "View root unavailable"))
-}
-fn open(r: &Reader<'_>, image: u64, slot: u64) -> Result<bool> {
-    gui_tree::visible(r, root(r, image, slot)?)
-}
-fn focus_button(r: &Reader<'_>, image: u64) -> Result<Rect> {
-    let politics = root(r, image, ui(r)?.politics_view)?;
-    let goal = gui_tree::child(r, image, politics, "active_goal")?
-        .and_then(|c| gui_tree::container(r, c, image).transpose())
-        .transpose()?
-        .ok_or_else(|| Error::new("gui_target_unavailable", "Politics focus area not found"))?;
-    let button = gui_tree::child(r, image, goal, "add_national_goal_button")?
-        .ok_or_else(|| Error::new("gui_target_unavailable", "Focus button not found"))?;
-    gui_tree::rect(r, image, button, GAME)
-}
-/// The focus view's symbol rectangle for `key` (unclipped, zoom-aware), and
-/// every symbol/background rectangle (to find empty background for panning).
-fn symbols(r: &Reader<'_>, image: u64, key: &str) -> Result<(Option<Rect>, Vec<Rect>)> {
-    let u = ui(r)?;
-    let focus = view(r, image, u.focus_view)?;
-    let zoom = f32::from_le_bytes(r.read(focus + u.zoom, 4)?.try_into().unwrap());
-    let (_, data, count) = r.array_header(focus + u.items)?;
-    if count > 4096 {
-        return Err(Error::new("invalid_gui", "Focus item list exceeds bound"));
-    }
-    let mut target = None;
-    let mut all = Vec::new();
-    for index in 0..count as u64 {
-        let item = r.u64(data + index * 8)?;
-        if r.u64(item)? != image + u.item_vtable {
-            return Err(Error::new("invalid_gui", "Exact focus tree item required"));
-        }
-        let Some(node) = gui_tree::container(r, r.u64(item + u.item_container)?, image)? else {
-            continue;
-        };
-        let mut symbol = None;
-        for name in ["symbol", "bg"] {
-            if let Some(widget) = gui_tree::child(r, image, node, name)? {
-                if let Ok(rect) = gui_tree::rect_zoomed(r, image, widget, GAME, zoom) {
-                    all.push(rect);
-                    if name == "symbol" {
-                        symbol = Some(rect);
-                    }
-                }
-            }
-        }
-        let focus_object = r.u64(item + u.item_focus)?;
-        if focus_object != 0 && r.string_bounded(focus_object + u.focus_key, 256)? == key {
-            target = symbol;
-        }
-    }
-    Ok((target, all))
 }
 fn inside(rect: &Rect) -> bool {
     let (x, y) = rect.center();
@@ -165,39 +108,6 @@ fn background(all: &[Rect]) -> Option<(f64, f64)> {
     }
     None
 }
-/// Visible detail window for `key` and its Start button rectangle.
-fn detail(r: &Reader<'_>, image: u64, key: &str) -> Result<Option<(Rect, bool)>> {
-    let u = ui(r)?;
-    let focus = view(r, image, u.focus_view)?;
-    let (_, data, count) = r.array_header(focus + u.panels)?;
-    for index in 0..count.min(8) as u64 {
-        let panel = r.u64(data + index * 8)?;
-        if r.u64(panel)? != image + u.panel_vtable {
-            return Err(Error::new(
-                "invalid_gui",
-                "Exact focus detail panel required",
-            ));
-        }
-        let selected = r.u64(panel + u.panel_selected)?;
-        if selected == 0 || r.string_bounded(selected + u.focus_key, 256)? != key {
-            continue;
-        }
-        let Some(window) = gui_tree::container(r, r.u64(panel + u.panel_window)?, image)? else {
-            continue;
-        };
-        if !gui_tree::visible(r, window)? {
-            continue;
-        }
-        if let Some(start) = gui_tree::child(r, image, window, "start")? {
-            return Ok(Some((
-                gui_tree::rect(r, image, start, GAME)?,
-                gui_tree::disabled(r, start)?,
-            )));
-        }
-    }
-    Ok(None)
-}
-
 pub(super) type Progress = own_focus::ProgressSnapshot;
 pub(super) fn progress(process: &dyn Process) -> Result<Progress> {
     own_focus::progress_snapshot(process)
@@ -220,141 +130,261 @@ fn check_state(active: Option<&str>, completed: &BTreeSet<String>, key: &str) ->
     }
 }
 
-/// Ordinary input sequence. The caller has journaled intent and holds the lease.
-pub(super) fn start(process: &dyn Process, keys: &MacKeys, key: &str) -> Result<()> {
-    let u = &MACOS;
-    let click = |rect: Rect| {
-        clear_notices(process, keys)?;
-        let (x, y) = rect.center();
-        keys.click(GAME, x, y).map(|_| ())
-    };
-    clear_notices(process, keys)?;
-    if !read(process, |r, i| open(r, i, u.focus_view))? {
-        if !read(process, |r, i| open(r, i, u.politics_view))? {
-            super::ui::open_politics(process, keys, |r, i| open(r, i, u.politics_view))?;
-        }
-        click(settled(process, "focus button", focus_button)?)?;
-        wait(process, "open focus tree", |r, i| open(r, i, u.focus_view))?;
-    }
-    // The tree must show the own country before any node is trusted.
-    let own = read(process, |r, i| {
-        let focus = view(r, i, u.focus_view)?;
-        let shown = r.u64(focus + u.displayed_country)?;
-        let g = game::layout(r);
-        let gs = r.u64(i + g.gs_global)?;
-        let tag = r.i32(gs + g.player_tag)?;
-        let index = i32::from_le_bytes(
-            r.array_entry(gs + g.tag_country_index, tag as usize, 4)?
-                .try_into()
-                .unwrap(),
-        );
-        let country = u64::from_le_bytes(
-            r.array_entry(gs + g.countries, index as usize, 8)?
-                .try_into()
-                .unwrap(),
-        );
-        Ok(shown == 0 || shown == country)
-    })?;
-    if !own {
+fn deadline(until: Instant) -> Result<()> {
+    if Instant::now() >= until {
         return Err(Error::new(
-            "foreign_focus_scope",
-            "Focus view shows another country",
+            "action_deadline",
+            "Original Focus deadline expired",
         ));
     }
-    // The tree's node widgets are laid out shortly after the view opens.
-    wait(process, "focus tree laid out", |r, i| {
-        Ok(symbols(r, i, key)?.0.is_some())
+    Ok(())
+}
+fn sample<T>(
+    process: &dyn Process,
+    owner: &Owner,
+    key: &str,
+    f: impl FnOnce(&Reader<'_>, u64, &Owner) -> Result<T>,
+) -> Result<T> {
+    binding::observe(process, key, Some(owner), f).map(|(_, value)| value)
+}
+/// Only complete discarded torn snapshots may be retried, inside the original
+/// deadline. Scope, input and ownership failures retain their exact cause.
+fn wait_for<T>(until: Instant, mut probe: impl FnMut() -> Result<Option<T>>) -> Result<T> {
+    let end = until.min(Instant::now() + Duration::from_secs(3));
+    loop {
+        deadline(end)?;
+        let result = probe();
+        deadline(end)?;
+        match result {
+            Ok(Some(value)) => return Ok(value),
+            Ok(None) => {}
+            Err(error) if error.code == "torn_read" => {}
+            Err(error) => return Err(error),
+        }
+        thread::sleep(Duration::from_millis(30).min(end.saturating_duration_since(Instant::now())));
+    }
+}
+fn settle<T: PartialEq>(until: Instant, mut probe: impl FnMut() -> Result<T>) -> Result<T> {
+    let end = until.min(Instant::now() + Duration::from_secs(2));
+    let mut previous = None;
+    wait_for(end, || {
+        let current = match probe() {
+            Ok(current) => current,
+            Err(error) => {
+                previous = None;
+                return Err(error);
+            }
+        };
+        if previous.as_ref() == Some(&current) {
+            return Ok(Some(current));
+        }
+        previous = Some(current);
+        thread::sleep(Duration::from_millis(30).min(end.saturating_duration_since(Instant::now())));
+        Ok(None)
     })
-    .map_err(|_| {
-        Error::new(
-            "gui_target_unavailable",
-            "Focus has no node in the own tree",
-        )
-    })?;
-    let mut symbol = None;
-    let mut previous: Option<Rect> = None;
-    for _ in 0..12 {
-        let (target, all) = read(process, |r, i| symbols(r, i, key))?;
-        let rect = target.ok_or_else(|| {
-            Error::new(
-                "gui_target_unavailable",
-                "Focus has no node in the own tree",
-            )
+}
+fn unchanged<T: PartialEq>(expected: &T, current: &T) -> Result<()> {
+    if expected != current {
+        return Err(Error::new(
+            "focus_state_changed",
+            "Original Focus control changed before mouse-down",
+        ));
+    }
+    Ok(())
+}
+fn click(
+    process: &(dyn Process + Send + Sync),
+    keys: &MacKeys,
+    candidate: &Control,
+    until: Instant,
+    probe: impl Fn() -> Result<Control> + Send + Sync,
+) -> Result<()> {
+    if candidate.disabled {
+        return Err(Error::new(
+            "invalid_target",
+            "The game disables this Focus control",
+        ));
+    }
+    let check = || {
+        deadline(until)?;
+        unchanged(candidate, &probe()?)?;
+        deadline(until)
+    };
+    let guarded = keys.guarded(process, &check)?;
+    let (x, y) = candidate.rect.center();
+    guarded.click(GAME, x, y)?;
+    Ok(())
+}
+
+/// Ordinary input sequence under the caller's retained intent, lease and one
+/// original Fence. New stages cannot extend that deadline.
+pub(super) fn start(
+    process: &(dyn Process + Send + Sync),
+    keys: &MacKeys,
+    key: &str,
+    until: Instant,
+) -> Result<()> {
+    deadline(until)?;
+    let (owner, ()) = binding::observe(process, key, None, |_, _, _| Ok(()))?;
+    clear_notices(process, keys)?;
+    if !sample(process, &owner, key, |r, i, o| {
+        binding::open(r, i, o, MACOS.focus_view)
+    })? {
+        if !sample(process, &owner, key, |r, i, o| {
+            binding::open(r, i, o, MACOS.politics_view)
+        })? {
+            // No fixed-coordinate fallback after a failed key or read.
+            keys.press(Key::letter('q')?)?;
+            wait_for(until, || {
+                Ok(sample(process, &owner, key, |r, i, o| {
+                    binding::open(r, i, o, MACOS.politics_view)
+                })?
+                .then_some(()))
+            })?;
+        }
+        let probe = || sample(process, &owner, key, binding::focus_button);
+        let candidate = settle(until, probe)?;
+        click(process, keys, &candidate, until, probe)?;
+        wait_for(until, || {
+            Ok(sample(process, &owner, key, |r, i, o| {
+                binding::open(r, i, o, MACOS.focus_view)
+            })?
+            .then_some(()))
         })?;
+    }
+    wait_for(until, || {
+        Ok(sample(process, &owner, key, binding::symbols)?
+            .target
+            .map(|_| ()))
+    })?;
+    let mut previous: Option<Rect> = None;
+    let mut revealed = false;
+    for _ in 0..12 {
+        deadline(until)?;
+        let tree = settle(until, || sample(process, &owner, key, binding::symbols))?;
+        let rect = tree
+            .target
+            .as_ref()
+            .ok_or_else(|| Error::new("gui_target_unavailable", "Own Focus node disappeared"))?
+            .rect;
         let stuck = previous.is_some_and(|p| {
             let (a, b) = (p.center(), rect.center());
             (a.0 - b.0).abs() < 5.0 && (a.1 - b.1).abs() < 5.0
         });
         if inside(&rect) || (stuck && on_tree(&rect)) {
-            symbol = Some(rect);
+            revealed = true;
             break;
         }
         previous = Some(rect);
+        let all: Vec<_> = tree.obstacles.iter().map(|(_, r)| *r).collect();
+        let from = background(&all).ok_or_else(|| {
+            Error::new(
+                "gui_target_unavailable",
+                "No verified empty tree area to pan",
+            )
+        })?;
         let (cx, cy) = rect.center();
-        let from = background(&all)
-            .ok_or_else(|| Error::new("gui_target_unavailable", "No empty tree area to pan"))?;
-        // Move the node towards the tree centre, at most 700 px per drag.
-        let dx = (960.0 - cx).clamp(-700.0, 700.0);
-        let dy = (600.0 - cy).clamp(-350.0, 350.0);
         let to = (
-            (from.0 + dx).clamp(SAFE.0, SAFE.2),
-            (from.1 + dy).clamp(SAFE.1, SAFE.3),
+            (from.0 + (960.0 - cx).clamp(-700.0, 700.0)).clamp(SAFE.0, SAFE.2),
+            (from.1 + (600.0 - cy).clamp(-350.0, 350.0)).clamp(SAFE.1, SAFE.3),
         );
-        keys.drag(GAME, from, to)?;
-        thread::sleep(Duration::from_millis(150));
+        let scope = || {
+            deadline(until)?;
+            sample(process, &owner, key, |r, i, o| {
+                binding::same_view(r, i, o, &tree)
+            })?;
+            deadline(until)
+        };
+        let before_down = || {
+            unchanged(&tree, &sample(process, &owner, key, binding::symbols)?)?;
+            deadline(until)
+        };
+        let guarded = keys.guarded(process, &scope)?;
+        guarded.drag_checked(GAME, from, to, &before_down)?;
+        deadline(until)?;
+        thread::sleep(
+            Duration::from_millis(150).min(until.saturating_duration_since(Instant::now())),
+        );
     }
-    let symbol = symbol.ok_or_else(|| {
-        Error::new(
+    if !revealed {
+        return Err(Error::new(
             "gui_target_unavailable",
             "Focus could not be panned into view",
-        )
-    })?;
-    let _ = symbol;
-    // Panning can coast; click only a node that has stopped inside the tree area.
-    let symbol = settled(process, "focus node", |r, i| {
-        symbols(r, i, key)?
-            .0
-            .ok_or_else(|| Error::new("gui_target_unavailable", "Focus node disappeared"))
-    })?;
-    if !on_tree(&symbol) {
+        ));
+    }
+    let node = || {
+        sample(process, &owner, key, binding::symbols)?
+            .target
+            .ok_or_else(|| Error::new("gui_target_unavailable", "Own Focus node disappeared"))
+    };
+    let candidate = settle(until, node)?;
+    if !on_tree(&candidate.rect) {
         return Err(Error::new(
             "gui_target_unavailable",
-            "Focus node drifted out of the tree area",
+            "Focus node drifted outside the tree",
         ));
     }
-    click(symbol)?;
-    wait(process, "open focus detail", |r, i| {
-        Ok(detail(r, i, key)?.is_some())
-    })?;
-    let (button, disabled) = settled(process, "start button", |r, i| {
-        detail(r, i, key)?.ok_or_else(|| Error::new("input_readback_failed", "Focus detail closed"))
-    })?;
-    if disabled {
-        dismiss(process, keys, |r, i| Ok(detail(r, i, key)?.is_none()));
-        return Err(Error::new(
-            "invalid_target",
-            "The game disables Start for this focus (requirements unmet or exclusive)",
-        ));
-    }
-    click(button)?;
-    let deadline = Instant::now() + START_WAIT;
-    loop {
-        if progress(process)?.active.as_deref() == Some(key) {
-            return Ok(());
-        }
-        if Instant::now() >= deadline {
-            return Err(Error::new(
-                "input_readback_failed",
-                "start focus: the focus did not become active",
-            ));
-        }
-        thread::sleep(Duration::from_millis(30));
-    }
+    click(process, keys, &candidate, until, node)?;
+    wait_for(until, || sample(process, &owner, key, binding::detail))?;
+    let detail = || {
+        sample(process, &owner, key, binding::detail)?
+            .ok_or_else(|| Error::new("input_readback_failed", "Own Focus detail closed"))
+    };
+    let candidate = settle(until, detail)?;
+    click(process, keys, &candidate, until, detail)?;
+    wait_for(until, || {
+        Ok((progress(process)?.active_key() == Some(key)).then_some(()))
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn original_deadline_refuses_without_probe_and_scope_errors_keep_their_cause() {
+        let mut called = false;
+        let result: Result<()> = wait_for(Instant::now(), || {
+            called = true;
+            Ok(Some(()))
+        });
+        assert_eq!(result.unwrap_err().code, "action_deadline");
+        assert!(!called);
+        for code in [
+            "input_lease_required",
+            "session_closed",
+            "ownership_changed",
+            "foreign_focus_scope",
+            "invalid_gui_geometry",
+        ] {
+            let mut probes = 0;
+            let result: Result<()> = wait_for(Instant::now() + Duration::from_secs(1), || {
+                probes += 1;
+                Err(Error::new(code, "fixture"))
+            });
+            assert_eq!(result.unwrap_err().code, code);
+            assert_eq!(probes, 1);
+        }
+    }
+    #[test]
+    fn only_discarded_torn_snapshots_recover_and_late_success_is_rejected() {
+        let mut probes = 0;
+        let value = wait_for(Instant::now() + Duration::from_secs(1), || {
+            probes += 1;
+            if probes == 1 {
+                Err(Error::new("torn_read", "fixture"))
+            } else {
+                Ok(Some(7))
+            }
+        })
+        .unwrap();
+        assert_eq!((value, probes), (7, 2));
+        let until = Instant::now() + Duration::from_millis(10);
+        let result = wait_for(until, || {
+            thread::sleep(until.saturating_duration_since(Instant::now()));
+            Ok(Some(7))
+        });
+        assert_eq!(result.unwrap_err().code, "action_deadline");
+    }
     #[test]
     fn refusals_need_no_input() {
         let completed = ["GER_a".to_string()].into();
