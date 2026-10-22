@@ -151,7 +151,9 @@ stage/total elapsed time and requested pan count; a requested pan does not prove
 mouse-down was delivered. Stage observation windows are bounded by the original
 deadline and have distinct timeout codes. Native ownership refusals retain their
 cause even if the read finishes late. These diagnostics cannot explain an earlier
-binary's failure. Bounded navigation and fresh typed assignment receipts still
+binary's failure. The revised bounded planner passed a fresh recorded manual
+Economic Growth assignment in 3.65 seconds, with independent active-Focus
+readback. Fresh typed durable receipts and successive natural completion still
 need qualification before Focus enters daily plans.
 
 Generated tests cover persistence, ownership, chronology, slot waits, typed

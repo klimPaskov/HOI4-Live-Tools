@@ -182,7 +182,10 @@ Mac game. Node checks now avoid unrelated renderer reads; actual panning retains
 complete obstacle checks. This is read-path timing, not action latency or campaign
 acceptance. [Probe contract and limits](docs/MAC_CONTROLLER.md#qualification-limits).
 The next fresh recorded attempt still exhausted its action budget during repeated
-short pans. That unresolved attempt is preserved; bounded navigation remains open.
+short pans. That unresolved attempt remains preserved.
+The revised bounded pan planner subsequently passed one fresh recorded Mac
+Economic Growth assignment in 3.65 seconds. Independent memory checks confirmed
+activation. Durable Focus and full campaign acceptance remain pending.
 
 The public research-folder diagnostic remains Linux-only and explicitly refuses
 on Mac.

@@ -6395,3 +6395,28 @@ Validation passed 1,350 Rust tests, 956 Python tests (37 skipped), formatting,
 strict host/Windows/Linux-musl/ARM64-Linux-musl Clippy and a release build. The 14
 new tests cover directional travel, blocked origins, boundaries, overflow,
 determinism and read-only prediction. Fresh recorded input remains pending.
+
+## Mac bounded Focus navigation passed — 23 October 2026
+
+On immutable `d11c3c3`, a fresh owned Mac session passed one Luna medium Focus
+attempt. The native 1920×1080 Germany campaign used vanilla Normal difficulty,
+historical AI and FAIR rules. The recording began before menu setup. Economic
+Growth started through ordinary UI input in 3,650.525 ms, within the unchanged
+five-second deadline. The journal retained one Dispatching/Verified pair and
+no unresolved input. All 13 player RPCs succeeded; no retry, clock change, worker
+start or gameplay screenshot occurred.
+
+After explicit player handback, four independent read-only calls confirmed the
+active target, unchanged paused 1 January 1936 12:00 and empty research slots.
+The player's after-read also retained all production allocations. Controller
+file hashes, sizes and modification times stayed unchanged through the audit;
+all 229 native source hashes matched the frozen manifest. The lease released,
+broker closed and recording finalized explicitly. The video is 109.781667 seconds
+at 1920×1108 including the window title bar: 3,235 encoded frames, while the
+recorder's final progress count reports 3,234. Final-frame inspection confirms
+readable active Economic Growth and the paused date; no live capture was added.
+
+This verifies one bounded paused Focus assignment. It does not prove completed
+Focus membership, durable worker execution, successive assignments or a campaign.
+Both earlier uncertain controllers remain preserved and blocked. The next work
+is coherent typed assignment evidence and mixed standing-plan qualification.

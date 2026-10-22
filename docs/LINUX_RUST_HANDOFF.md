@@ -74,9 +74,15 @@ intent and stopped without retrying. Read-only checks retained paused
 jobs passed. The new controller also remains blocked; see the
 [pan-budget refusal](CLAUSEWITZ_VALIDATION.md#mac-focus-pan-budget-refusal--23-october-2026).
 
-Next, reduce unnecessary centering and short drags, then qualify bounded
-navigation before adding durable Focus. Preserve both failed controllers and videos;
-use a separately owned technical session for later input qualification. Focus
+The revised bounded pan planner passed the next fresh recorded Luna gate on
+`d11c3c3`: one Economic Growth assignment took 3,650.525 ms, returned Verified,
+and was independently confirmed active. The game stayed paused on 1 January
+1936 12:00; Research and production allocations stayed unchanged. The recorder
+finalized 109.781667 seconds at 1920×1108; all 229 native sources stayed frozen.
+The previous two unresolved controllers remain preserved and blocked.
+
+Next, bind coherent typed Focus assignment evidence to the durable worker and
+qualify successive natural completion with mixed standing plans. Focus
 progress already uses a complete coherent typed snapshot instead of a paginated
 JSON merge, but it is not an assignment receipt. Keep bounded read-only torn-read
 recovery and scope military allocation checks separately from naval queue changes.
