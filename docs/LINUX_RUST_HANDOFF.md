@@ -7,6 +7,45 @@ Do not resume Mac campaigns or control the shared Windows game.
 
 ## Current checkpoint
 
+ResearchClose001 on `083b835f` stopped at step 4: production open/close and
+Research opening verified, then the first Research close refused before Intent
+with `torn_read` in `close_gates` (one byte, read 668). The precise field and
+initial/candidate/final phase were not retained. No close input, retry, later
+readback or remaining test step occurred. Luna released control immediately.
+
+Independent stopped audit found nine player RPCs, one error, two production
+Intent/Verified pairs, one Research pair, no clock action and no unresolved
+input. The 181.333-second recording passed integrity; normal game exit was 0 in
+2.163 seconds. All exact owned game/server/recorder/bridge instances were absent.
+All 188 native inputs and 18 final helpers matched their frozen hashes. All nine
+exact-commit CI jobs passed before launch. Recorder exit 255 is retained separately.
+
+Before menu input, two harness helpers were corrected to expect idle Focus as
+literal null; originals and final installed hashes are retained. Setup required
+11 ordinary menu clicks, including clicks that left the current menu unchanged.
+The first recording clock bound failed before recorder launch; verified absence
+preceded a successful fresh timing check. First-packet proof preceded Start.
+No gameplay screenshot or cursor movement was used by Luna.
+
+The correction permits at most four wholly discarded producer snapshots per
+initial, candidate, final and pre-queue close-read phase. Only `torn_read` retries,
+with 25 ms between rejected reads, a one-second recovery ceiling and the original
+lease/action deadline. Ownership acceptance, original identity pinning, predicates,
+journal execution and input remain outside recovery. Successful first reads add
+no delay. Rejections retain phase and cause in response diagnostics; exhausted
+reads still refuse. Post-input quarantine/replay behavior is unchanged. More
+specific gate sections improve future diagnostics without identifying the old tear.
+
+Validation passed 1,118 host Rust tests, 26 targeted Linux checks, formatting,
+host/Linux Clippy and Windows all-target cross-compilation. Python passed all
+953 tests (37 skips) on an unchanged rerun; the first run's generated clipboard
+fixture timed out at three seconds and its failure is retained.
+
+Direct Research closing still needs a fresh recorded Luna gate. Mixed-worker
+routing and full campaign acceptance remain incomplete.
+
+### Previous direct-close source checkpoint
+
 The current source adds a direct `hoi4_research_close` Linux preview. It uses
 Research permission only and one ordinary stationary W shortcut. The original
 panel/facilities roots, full own slot identities and assignments, selected slot,

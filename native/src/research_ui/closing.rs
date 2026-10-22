@@ -156,11 +156,13 @@ pub fn observe(process: &dyn Process) -> Result<Observation> {
     }
     let (folder_index, folder_windows, selected_folder) =
         crate::category_ui::closing_selection(&r, base, tree, roots[1], registry)?;
-    witnesses.section("close_gates");
+    witnesses.section("close_engine");
     let engine =
         crate::production_panel::engine(&r, base, gs, idler, manager, registry, &mut Vec::new())?;
+    witnesses.section("close_windows");
     let common =
         crate::construction::controls::blockers(&r, base, country, idler, manager, registry)?;
+    witnesses.section("close_gui_flags");
     let gui_clear = r.byte(registry + 0x150)? == 0
         && r.byte(registry + 0x12)? == 0
         && r.u64(registry + 0x158)? == 0

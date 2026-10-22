@@ -2,6 +2,13 @@
 
 ## Unreleased native preview
 
+- Preserve ResearchClose001's pre-Intent torn-read failure and stopped audit.
+  Recover only wholly rejected Research-close snapshots within bounded initial,
+  candidate, final and pre-queue phases. Keep original state, lease/deadline,
+  private journal proofs and input quarantine; never retry commands. Retain
+  rejected read phases/causes and distinguish engine/window/GUI witness sections.
+  Fresh live closing validation and mixed standing plans remain pending.
+
 - Add `hoi4_research_close`, a Linux ordinary-W preview requiring only Research
   permission. Preserve original own roots, slots, assignments, selected folder
   and tab across dispatch and readback; redact private bindings from public

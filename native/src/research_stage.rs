@@ -20,6 +20,9 @@ use std::{
     time::{Duration, Instant},
 };
 
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+pub(crate) mod close_read_recovery;
+
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub enum Stage {
     OpenPanel,

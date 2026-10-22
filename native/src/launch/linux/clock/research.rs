@@ -180,7 +180,7 @@ pub(super) fn execute_internal(
             "Unresolved clock/focus input blocks research",
         ));
     }
-    state.authority.authorize(token, &target.epoch)?;
+    let until = until.min(state.authority.authorize(token, &target.epoch)?);
     let ControlState {
         controls,
         guard,
@@ -202,6 +202,10 @@ pub(super) fn execute_internal(
         target: Some(target.clone()),
         scope: None,
         close_original: None,
+        read_deadline: until,
+        before_observations: 0,
+        dispatch_started: false,
+        rejected_close_reads: Vec::new(),
     };
     let timeout = until
         .saturating_duration_since(Instant::now())
@@ -212,10 +216,24 @@ pub(super) fn execute_internal(
             "Research budget ended before journal execution",
         ));
     }
-    let execution =
-        service
-            .journal
-            .execute(id, target, token, authority, gate, &mut backend, timeout)?;
+    let result = service
+        .journal
+        .execute(id, target, token, authority, gate, &mut backend, timeout);
+    if !backend.rejected_close_reads.is_empty() {
+        let transport = backend
+            .last_transport
+            .get_or_insert_with(|| json!({"delivery":"not_attempted"}));
+        transport["discarded_close_reads"] = json!(backend.rejected_close_reads);
+    }
+    let execution = result.map_err(|mut error| {
+        if !backend.rejected_close_reads.is_empty() {
+            error.message.push_str(&format!(
+                "; discarded_close_reads={}",
+                json!(backend.rejected_close_reads)
+            ));
+        }
+        error
+    })?;
     Ok((execution, backend.last_transport))
 }
 
@@ -260,6 +278,10 @@ struct ResearchBackend<'a> {
     target: Option<stage::Target>,
     scope: Option<([u64; 2], Vec<u64>)>,
     close_original: Option<stage::OwnState>,
+    read_deadline: Instant,
+    before_observations: usize,
+    dispatch_started: bool,
+    rejected_close_reads: Vec<Value>,
 }
 
 fn visible(window: &Value) -> Result<bool> {
@@ -383,8 +405,24 @@ impl stage::Backend for ResearchBackend<'_> {
         Ok(())
     }
     fn observe(&mut self) -> Result<stage::OwnState> {
-        let (state, context) =
-            observed_target_state(self.process, self.guard, self.target.as_ref())?;
+        let (state, context) = if !self.dispatch_started {
+            let phase = if self.before_observations == 0 {
+                "initial"
+            } else {
+                "final"
+            };
+            self.before_observations += 1;
+            preinput_state(
+                self.process,
+                self.guard,
+                self.target.as_ref(),
+                self.read_deadline,
+                phase,
+                &mut self.rejected_close_reads,
+            )?
+        } else {
+            observed_target_state(self.process, self.guard, self.target.as_ref())?
+        };
         pin_scope(&mut self.scope, &context)?;
         pin_close(&mut self.close_original, &state, self.target.as_ref())?;
         Ok(state)
@@ -396,7 +434,14 @@ impl stage::Backend for ResearchBackend<'_> {
             target.stage,
             stage::Stage::OpenPanel | stage::Stage::ClosePanel
         ) {
-            let (fresh, context) = observed_target_state(self.process, self.guard, Some(target))?;
+            let (fresh, context) = preinput_state(
+                self.process,
+                self.guard,
+                Some(target),
+                self.read_deadline,
+                "candidate",
+                &mut self.rejected_close_reads,
+            )?;
             pin_scope(&mut self.scope, &context)?;
             pin_close(&mut self.close_original, &fresh, Some(target))?;
             fresh.validate(target)?;
@@ -454,6 +499,7 @@ impl stage::Backend for ResearchBackend<'_> {
         candidate: &stage::Candidate,
         deadline: Instant,
     ) -> stage::Delivery {
+        self.dispatch_started = true;
         if let Err(error) = self.guard.observe(self.process) {
             self.last_transport = Some(json!({"delivery":"not_queued","error":error}));
             return stage::Delivery::NotQueued;
@@ -465,6 +511,7 @@ impl stage::Backend for ResearchBackend<'_> {
         let process = self.process;
         let mut scope = self.scope.clone();
         let mut close_original = self.close_original.clone();
+        let rejected_close_reads = &mut self.rejected_close_reads;
         let stage::Candidate::Point(point) = candidate else {
             if !matches!(
                 (target.stage, candidate),
@@ -483,7 +530,14 @@ impl stage::Backend for ResearchBackend<'_> {
                 ControlKey::ResearchPanel,
                 deadline,
                 || {
-                    let (fresh, context) = observed_target_state(process, guard, Some(&target))?;
+                    let (fresh, context) = preinput_state(
+                        process,
+                        guard,
+                        Some(&target),
+                        deadline,
+                        "pre_queue",
+                        rejected_close_reads,
+                    )?;
                     pin_scope(&mut scope, &context)?;
                     pin_close(&mut close_original, &fresh, Some(&target))?;
                     fresh.validate(&target)?;
@@ -602,22 +656,50 @@ pub(super) fn observed_state(
     Ok((state, ui_context))
 }
 
+fn close_state(
+    process: &dyn Process,
+    guard: &mut Guard,
+    observation: research_ui::closing::Observation,
+) -> Result<(stage::OwnState, research_ui::UiContext)> {
+    guard.accept_context(process, &observation.context.campaign)?;
+    let mut state = own_state(
+        guard.epoch.clone(),
+        &observation.body["canonical_research"],
+        &observation.body,
+    )?;
+    state.selected_folder = observation.selected_folder;
+    state.panel_binding = Some(observation.binding);
+    Ok((state, observation.context))
+}
+fn preinput_state(
+    process: &dyn Process,
+    guard: &mut Guard,
+    target: Option<&stage::Target>,
+    until: Instant,
+    phase: &'static str,
+    history: &mut Vec<Value>,
+) -> Result<(stage::OwnState, research_ui::UiContext)> {
+    if target.is_some_and(|t| t.stage == stage::Stage::ClosePanel) {
+        // Only the complete raw producer is retried. Ownership acceptance,
+        // original-state pinning and all predicates remain outside recovery.
+        let observation = stage::close_read_recovery::observe(
+            phase,
+            until,
+            || research_ui::closing::observe(process),
+            history,
+        )?;
+        return close_state(process, guard, observation);
+    }
+    observed_target_state(process, guard, target)
+}
+
 pub(super) fn observed_target_state(
     process: &dyn Process,
     guard: &mut Guard,
     target: Option<&stage::Target>,
 ) -> Result<(stage::OwnState, research_ui::UiContext)> {
     if target.is_some_and(|t| t.stage == stage::Stage::ClosePanel) {
-        let observation = research_ui::closing::observe(process)?;
-        guard.accept_context(process, &observation.context.campaign)?;
-        let mut state = own_state(
-            guard.epoch.clone(),
-            &observation.body["canonical_research"],
-            &observation.body,
-        )?;
-        state.selected_folder = observation.selected_folder;
-        state.panel_binding = Some(observation.binding);
-        return Ok((state, observation.context));
+        return close_state(process, guard, research_ui::closing::observe(process)?);
     }
     if let Some(t) = target.filter(|t| t.stage == stage::Stage::SelectCategory) {
         let (body, context) = research_ui::category_command_owned(
