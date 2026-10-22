@@ -835,6 +835,9 @@ fn read_only_probe_projects_identical_target_and_measures_only_requested_geometr
     assert_eq!(target_value["target"]["on_tree"], true);
     assert!(target_value["pan"].is_null());
     assert_eq!(full_value["pan"]["obstacle_count"], 4);
+    assert_eq!(full_value["pan"]["required"], false);
+    assert!(full_value["pan"]["plan"].is_null());
+    assert_eq!(full_value["pan"]["prediction_only"], true);
     assert!(
         target_value["payload_read_calls"].as_u64().unwrap()
             < full_value["payload_read_calls"].as_u64().unwrap()
@@ -859,6 +862,23 @@ fn read_only_probe_projects_identical_target_and_measures_only_requested_geometr
         assert!(value["elapsed_ms"].as_f64().unwrap() >= 0.0);
         assert_eq!(process.checks.get(), 2);
     }
+}
+
+#[test]
+fn read_only_probe_predicts_pan_without_authorizing_input() {
+    let mut f = Fake::with_other_node();
+    let sprite = f.get_word(SYMBOL + 0xd0);
+    f.float(sprite + 0xb0, -2000.0);
+    let value = super::super::probe::snapshot(&f, KEY, true).unwrap();
+    assert_eq!(value["pan"]["required"], true);
+    assert_eq!(value["pan"]["prediction_only"], true);
+    let from = value["pan"]["plan"]["from"].as_array().unwrap();
+    let to = value["pan"]["plan"]["to"].as_array().unwrap();
+    assert!(to[0].as_f64().unwrap() > from[0].as_f64().unwrap());
+    assert_eq!(to[1], from[1]);
+    assert_eq!(value["input_authorized"], false);
+    assert_eq!(value["observation_paused_game"], false);
+    assert_eq!(f.checks.get(), 2);
 }
 
 #[test]

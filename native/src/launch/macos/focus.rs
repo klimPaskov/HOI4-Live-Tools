@@ -61,6 +61,7 @@ const MACOS: Ui = Ui {
 };
 const GAME: (u32, u32) = (1920, 1080);
 mod binding;
+mod pan;
 mod probe;
 use binding::{Control, Owner};
 pub(crate) use probe::snapshot as input_probe;
@@ -84,31 +85,6 @@ fn inside(rect: &Rect) -> bool {
 fn on_tree(rect: &Rect) -> bool {
     let (x, y) = rect.center();
     (240.0..1900.0).contains(&x) && (180.0..1040.0).contains(&y)
-}
-/// A tree-area point at least 24 px from every focus widget.
-fn background(all: &[Rect]) -> Option<(f64, f64)> {
-    let clear = |x: f64, y: f64| {
-        all.iter().all(|r| {
-            x < f64::from(r.x) - 24.0
-                || x > f64::from(r.x + r.w) + 24.0
-                || y < f64::from(r.y) - 24.0
-                || y > f64::from(r.y + r.h) + 24.0
-        })
-    };
-    let mut y = 600.0;
-    while y < 960.0 {
-        let mut x = 960.0;
-        while x < 1700.0 {
-            for px in [x, 1920.0 - x] {
-                if clear(px, y) {
-                    return Some((px, y));
-                }
-            }
-            x += 37.0;
-        }
-        y += 29.0;
-    }
-    None
 }
 pub(super) type Progress = own_focus::ProgressSnapshot;
 pub(super) fn progress(process: &dyn Process) -> Result<Progress> {
@@ -380,17 +356,10 @@ fn start_inner(
         }
         previous = Some(rect);
         let all: Vec<_> = tree.obstacles.iter().map(|(_, r)| *r).collect();
-        let from = background(&all).ok_or_else(|| {
-            Error::new(
-                "gui_target_unavailable",
-                "No verified empty tree area to pan",
-            )
-        })?;
-        let (cx, cy) = rect.center();
-        let to = (
-            (from.0 + (960.0 - cx).clamp(-700.0, 700.0)).clamp(SAFE.0, SAFE.2),
-            (from.1 + (600.0 - cy).clamp(-350.0, 350.0)).clamp(SAFE.1, SAFE.3),
-        );
+        let Some(pan) = pan::plan(&rect, &all)? else {
+            revealed = true;
+            break;
+        };
         let scope = || {
             deadline(until)?;
             sample(process, &owner, key, |r, i, o| {
@@ -405,7 +374,7 @@ fn start_inner(
         let guarded = keys.guarded(process, &scope)?;
         trace.stage("pan_transport");
         trace.pan_requests += 1;
-        guarded.drag_checked(GAME, from, to, &before_down)?;
+        guarded.drag_checked(GAME, pan.from, pan.to, &before_down)?;
         deadline(until)?;
         thread::sleep(
             Duration::from_millis(150).min(until.saturating_duration_since(Instant::now())),
@@ -566,15 +535,7 @@ mod tests {
         );
     }
     #[test]
-    fn background_avoids_every_widget() {
-        let busy = vec![Rect {
-            x: 900,
-            y: 560,
-            w: 200,
-            h: 100,
-        }];
-        let (x, y) = background(&busy).unwrap();
-        assert!(!(876.0..=1124.0).contains(&x) || !(536.0..=684.0).contains(&y));
+    fn node_visibility_uses_safe_center_bounds() {
         assert!(inside(&Rect {
             x: 950,
             y: 590,

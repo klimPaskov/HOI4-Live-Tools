@@ -2,6 +2,12 @@
 
 ## Unreleased native preview
 
+- Plan Mac Focus pans across a bounded grid of clear origins, using only the
+  displacement needed to reveal the target. Preserve full-tree checks before
+  mouse-down and the original five-second deadline. Optional read-only probes
+  expose the predicted pan without granting input authority. Live qualification
+  remains required; earlier uncertain attempts stay blocked.
+
 - Avoid unrelated Focus renderer reads when checking or clicking one Mac node.
   Retain full item ownership/ambiguity checks and complete obstacle witnesses for
   actual panning. Add a stationary read-only `hoi4_focus_input_probe` with optional

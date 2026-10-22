@@ -181,6 +181,8 @@ for complete obstacle geometry, over ten alternating samples each on the paused
 Mac game. Node checks now avoid unrelated renderer reads; actual panning retains
 complete obstacle checks. This is read-path timing, not action latency or campaign
 acceptance. [Probe contract and limits](docs/MAC_CONTROLLER.md#qualification-limits).
+The next fresh recorded attempt still exhausted its action budget during repeated
+short pans. That unresolved attempt is preserved; bounded navigation remains open.
 
 The public research-folder diagnostic remains Linux-only and explicitly refuses
 on Mac.

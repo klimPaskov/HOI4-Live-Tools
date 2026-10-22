@@ -10,9 +10,17 @@ pub(crate) fn snapshot(process: &dyn Process, key: &str, include_pan: bool) -> R
         let (target, pan) = if include_pan {
             let tree = binding::symbols(r, image, own)?;
             let rectangles: Vec<_> = tree.obstacles.iter().map(|(_, rect)| *rect).collect();
+            let planned = tree
+                .target
+                .as_ref()
+                .map(|target| pan::plan(&target.rect, &rectangles))
+                .transpose()?
+                .flatten();
             let pan = json!({
                 "obstacle_count": rectangles.len(),
-                "origin_available": background(&rectangles).is_some()
+                "required": tree.target.as_ref().map(|target| !inside(&target.rect)),
+                "plan": planned.map(|plan| json!({"from": plan.from, "to": plan.to})),
+                "prediction_only": true
             });
             (tree.target, pan)
         } else {

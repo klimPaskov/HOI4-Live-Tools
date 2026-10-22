@@ -124,11 +124,19 @@ ownership and ambiguity, then reads only the requested node's geometry. Optional
 logical reads separately from whole-observation time, which includes final
 witnesses. It never opens a panel, moves the cursor, pauses or authorizes input.
 Other platforms explicitly refuse this Mac-only diagnostic.
+The optional pan result includes `required`, a predicted `plan` (`from`/`to`, or
+null when unnecessary), and `prediction_only: true`. This is geometry, not proof
+that a drag occurred or the node became visible.
 
 Manual node readiness and click checks use the same target-only path. An actual
 pan still requires a fresh settled complete Tree and revalidates that entire
 candidate after pointer movement, before mouse-down. The lighter node result
 cannot authorize a background drag.
+The pure planner examines at most 1,232 origins, retaining 24-pixel widget
+clearance and inset endpoints. It moves only axes outside the safe area and
+chooses the available travel closest to the needed displacement. An already
+visible center needs no pan; a blocked grid refuses. Full-tree settlement and
+the original deadline still govern the actual input.
 
 Mac Focus progress now comes from one complete typed observation; it no longer
 merges separately witnessed public JSON pages. The public completion tool keeps

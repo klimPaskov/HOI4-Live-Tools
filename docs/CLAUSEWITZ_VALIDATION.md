@@ -6357,3 +6357,41 @@ probe projection. The initial full run caught the protocol inventory's old
 An initial cross-check selected an uninstalled GNU target; the installed musl
 targets passed. Native platform CI remains separate from cross-compilation.
 Fresh recorded input qualification and durable Focus are still required.
+
+## Mac Focus pan-budget refusal — 23 October 2026
+
+After closing the preceding failed technical session through its owned supervisor,
+one Luna medium player started a separate fresh vanilla Normal historical FAIR
+Germany game at native 1920×1080. The original controller and userdata remained
+preserved. The new recorder covered menu setup and the single economic-growth
+Focus attempt. The baseline was paused on 1 January 1936 12:00, speed 0, with idle
+Focus and four empty research slots.
+
+The request again returned `action_uncertain`: the original five-second deadline
+expired at `pan_transport`, 743.166 ms into that stage and 5,070.396 ms into the
+Focus sequence, after four requested pan segments. The count records requested
+transports, not proof that each mouse-down or complete drag was delivered. There
+was no clock action, worker start, gameplay screenshot, retry or settlement.
+The lease released, broker closed and recording finalized explicitly: 2,173
+frames, 73.718333 seconds, 1920×1108 around the native 1080p client.
+
+Independent read-only checks retained the paused date, idle Focus and unchanged
+controller files. The target node was then inside the safe area at rectangle
+(447,164,100,88); complete geometry covered 524 obstacles. All 228 native source
+hashes remained unchanged through the run. This controller's original intent is
+unresolved and blocks further input. The recorded build passed all nine exact-head
+Windows/macOS/Linux CI jobs. Faster node reads are verified; successful bounded
+navigation, durable Focus and campaign acceptance are not. Next, reduce unnecessary
+centering and short drags while retaining complete drag-origin witnesses.
+
+The next implementation replaces fixed 700/350-pixel pan caps and centering
+with a pure bounded planner. It considers 1,232 clear origins, keeps the original
+24-pixel obstacle margin, and moves only axes that need displacement into the
+safe area. Full-tree settlement and final mouse-down witnesses remain required;
+the original five-second action deadline is unchanged. Optional read-only probes
+report the predicted endpoints and explicitly grant no input authority. Geometry
+fixtures and review are not proof that the new route works in the game.
+Validation passed 1,350 Rust tests, 956 Python tests (37 skipped), formatting,
+strict host/Windows/Linux-musl/ARM64-Linux-musl Clippy and a release build. The 14
+new tests cover directional travel, blocked origins, boundaries, overflow,
+determinism and read-only prediction. Fresh recorded input remains pending.

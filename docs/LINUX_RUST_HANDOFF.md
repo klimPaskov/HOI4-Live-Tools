@@ -66,8 +66,16 @@ read-path performance, not action acceptance. All 228 native sources stayed froz
 Validation passed 1,336 Rust tests, 956 Python tests (37 skipped), formatting,
 strict host/Windows/Linux-musl/ARM64-Linux-musl Clippy and the release build.
 
-Next, qualify visible or short
-navigation before adding durable Focus. Preserve the failed controller and video;
+The next fresh recorded Luna test still exhausted five seconds during pan
+transport, after four requested short drag segments. It preserved an unresolved
+intent and stopped without retrying. Read-only checks retained paused
+1 January 1936 12:00 and idle Focus; the node was then inside the safe area. Its
+73.72-second, 2,173-frame recording finalized at 1920×1108. All nine exact-head CI
+jobs passed. The new controller also remains blocked; see the
+[pan-budget refusal](CLAUSEWITZ_VALIDATION.md#mac-focus-pan-budget-refusal--23-october-2026).
+
+Next, reduce unnecessary centering and short drags, then qualify bounded
+navigation before adding durable Focus. Preserve both failed controllers and videos;
 use a separately owned technical session for later input qualification. Focus
 progress already uses a complete coherent typed snapshot instead of a paginated
 JSON merge, but it is not an assignment receipt. Keep bounded read-only torn-read
