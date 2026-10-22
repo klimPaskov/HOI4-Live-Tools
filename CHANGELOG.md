@@ -2,6 +2,20 @@
 
 ## Unreleased native preview
 
+- Bound replacement of torn mixed-destination/selected-identity snapshots to
+  four whole reads, 25 ms intervals and one second within the original deadline.
+  Keep guards, journal reservations and input outside recovery. Preserve bounded
+  first/latest/recovered diagnostics in worker history, STOP and compact digest
+  details without changing clean legacy shapes or retrying an action. Live
+  validation remains pending.
+
+- Preserve Mixed002's successful paused mixed assignment and subsequent private
+  detail-contract failure. Mixed003 stopped before panel selection on a torn
+  destination snapshot; neither run passed the full advancing-time gate. Both
+  stopped audits found no unresolved input, no clock/pause actions and clean
+  owned-process exit. The corrected private detail batch has offline coverage;
+  it was not reached in Mixed003.
+
 - Preserve Mixed001: production reached 11 and its departure to Research verified,
   then Research opening retained uncertainty during a known animation. Add a
   distinct continuation-animation readback wait under the original deadline;

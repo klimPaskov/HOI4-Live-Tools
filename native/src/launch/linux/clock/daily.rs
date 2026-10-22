@@ -69,6 +69,12 @@ pub(super) struct Controller {
     active: Mutex<Option<Active>>,
     blocked: Arc<AtomicBool>,
 }
+fn stopped_panel_read_history(report: &Value) -> Option<Value> {
+    report
+        .get("panel_navigation")
+        .filter(|panel| panel["read_history"].is_object())
+        .cloned()
+}
 impl Controller {
     pub(super) fn new(
         research_enabled: bool,
@@ -278,6 +284,7 @@ impl Controller {
                 let panel_plan = PanelPlan {
                     navigation: panel_navigation,
                     limit: spec.max_panel_navigation_steps_per_day,
+                    read_history: Default::default(),
                 };
                 let panel_initial = if panel_plan.limit.is_some() {
                     panel_plan.summary(
@@ -413,6 +420,12 @@ impl Controller {
                     .as_ref()
                     .and_then(|a| a.report.try_lock().ok().map(|r| r["production"].clone()))
                     .unwrap_or(Value::Null);
+                let panel_read_history = active.as_ref().and_then(|a| {
+                    a.report
+                        .try_lock()
+                        .ok()
+                        .and_then(|r| stopped_panel_read_history(&r))
+                });
                 let focus_readiness = active
                     .as_ref()
                     .and_then(|a| {
@@ -456,9 +469,11 @@ impl Controller {
                     })
                     .transpose()?
                     .unwrap_or((Value::Null, Value::Null));
-                Ok(
-                    json!({"assignments":assignments,"daily_budget":budget,"production":production,"core_pending_historical":core_state,"focus":focus,"latest_focus_wait_historical":focus_wait,"focus_readiness_historical":focus_readiness,"worker_stopped":true,"game_time_changed":false,"uncertainty_retained":self.blocked.load(Ordering::Acquire),"last_error":last_error,"last_preparation_refusal":last_preparation_refusal,"last_stage_failure":last_stage_failure,"clock_probe_historical":clock_probe}),
-                )
+                let mut result = json!({"assignments":assignments,"daily_budget":budget,"production":production,"core_pending_historical":core_state,"focus":focus,"latest_focus_wait_historical":focus_wait,"focus_readiness_historical":focus_readiness,"worker_stopped":true,"game_time_changed":false,"uncertainty_retained":self.blocked.load(Ordering::Acquire),"last_error":last_error,"last_preparation_refusal":last_preparation_refusal,"last_stage_failure":last_stage_failure,"clock_probe_historical":clock_probe});
+                if let Some(panel) = panel_read_history {
+                    result["panel_navigation"] = panel;
+                }
+                Ok(result)
             }
             "details" => {
                 allowed(args, &["op", "snapshot_id", "section"])?;
@@ -1176,14 +1191,7 @@ fn worker(
         })();
         if let Ok(mut r) = report.lock() {
             r["focus"] = focus_navigation.latest();
-            r["panel_navigation"] = if panel_plan.limit.is_some() {
-                panel_day.map_or_else(
-                    || panel_plan.navigation.summary(),
-                    |day| panel_plan.summary(day),
-                )
-            } else {
-                Value::Null
-            };
+            panel_plan.refresh_report(&mut r, panel_day);
             // History only; digest dates do not turn this into a fresh factory read.
             r["production"]["progress"] = production_plan.progress.summary();
         }

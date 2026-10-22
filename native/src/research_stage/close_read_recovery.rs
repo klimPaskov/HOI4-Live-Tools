@@ -1,4 +1,4 @@
-//! Whole read-only Research-close snapshots only. Never wrap transport, scope
+//! Whole read-only Research snapshots only. Never wrap transport, scope
 //! acceptance, predicates, journal execution or the original-state binding.
 use crate::error::{Error, Result};
 use serde_json::{json, Value};
@@ -8,6 +8,8 @@ const MAX_READS: usize = 4;
 const WINDOW: Duration = Duration::from_secs(1);
 const INTERVAL: Duration = Duration::from_millis(25);
 
+pub(crate) mod history;
+
 pub(crate) fn observe<T>(
     phase: &'static str,
     until: Instant,
@@ -15,17 +17,24 @@ pub(crate) fn observe<T>(
     history: &mut Vec<Value>,
 ) -> Result<T> {
     let mut rejected = Vec::new();
-    let result = recover(until, read, Instant::now, std::thread::sleep, &mut rejected);
+    let result = recover(until, read, Instant::now, std::thread::sleep, &mut rejected)
+        .map_err(|cause| at_phase(cause, phase));
     if !rejected.is_empty() {
         history.push(json!({"phase":phase,"rejected_reads":rejected,
             "historical":true,"input_authorized":false}));
     }
     result
 }
+fn at_phase(mut cause: Error, phase: &'static str) -> Error {
+    if cause.code == "research_deadline" {
+        cause.message.push_str(&format!("; phase={phase}"));
+    }
+    cause
+}
 fn deadline() -> Error {
     Error::new(
         "research_deadline",
-        "Close snapshot recovery exceeded its original deadline",
+        "Research snapshot recovery exceeded its original deadline",
     )
 }
 fn recover<T>(

@@ -7,6 +7,40 @@ Do not resume Mac campaigns or control the shared Windows game.
 
 ## Current checkpoint
 
+Mixed002 on `fa2fab8` passed the paused mixed production/Research assignment in
+10.995 seconds, then its private broker rejected an advertised history section
+because it expected an additional nullable proof first. The stopped audit found
+one complete and one pending goal, no unresolved input, clean recording/exit and
+unchanged source/helpers. The revised private batch has 29 offline checks.
+
+Mixed003 on the same source failed before selection/departure: `torn_read` in
+`mixed_destination_engine`, read 681, size 1, changed byte 0. Its single assignment
+wait reached 50.002 seconds with only a historical timeout sample. Production
+reached 11 in two steps; both governor goals stayed pending. No assignment,
+clock action, pause action or uncertain input occurred. STOP/release/status,
+252.333-second recording, normal exit 0 and exact-process absence passed; all
+195 native inputs and 20 helpers were unchanged. The detail batch was not reached.
+See [the full evidence](CLAUSEWITZ_VALIDATION.md#mixed002-and-mixed003-incomplete-mixed-gates--22-october-2026).
+
+The next source bounds discarded mixed-destination/selected-identity reads to
+four whole snapshots, 25 ms intervals and one second within the original deadline.
+Scope acceptance, original binding, persistence and input remain outside recovery.
+Bounded first/latest causes and recovery counts survive the worker report, STOP
+and compact-digest details. Clean reads add no delay or history field. Rerun the
+recorded mixed gate with this recovery, the fixed detail batch, daily budgets
+and completed-plan restart; offline checks are not live recovery evidence.
+Worker waits also still need prompt terminal-failure wakeups; the current wait
+can consume its full 50-second allowance after a worker stops. No live game is
+left running at this checkpoint. The broad objective remains incomplete.
+
+Validation passed 1,162 host Rust tests, 131 targeted Linux test executions,
+953 Python tests (37 skips), formatting, host/Linux Clippy and Windows all-target
+cross-compilation. The new Linux worker-report test confirms recovered-read
+history survives report refresh and STOP without becoming a terminal error.
+These are offline checks; the recorded mixed gate still needs to pass.
+
+### Preserved Mixed001 failure and correction
+
 Mixed001 on `8859719` stopped at the paused assignment wait. The worker verified
 production opening, allocation from 10 to 11 factories and one separate departure
 to Research. It then retained an unresolved Research OpenPanel Intent: the selected

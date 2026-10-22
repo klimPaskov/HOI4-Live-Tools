@@ -8,13 +8,17 @@ use crate::{
     production_step::{
         PanelState, PanelTarget, State as ProductionState, Target as ProductionTarget,
     },
-    research_stage::{OwnState, Stage, Target as ResearchTarget},
+    research_stage::{
+        close_read_recovery::history::{History, Phase},
+        OwnState, Stage, Target as ResearchTarget,
+    },
     research_ui::{self, UiContext},
 };
 
 pub(super) struct PanelPlan {
     pub navigation: Navigator,
     pub limit: Option<u8>,
+    pub read_history: History,
 }
 #[derive(Debug, PartialEq, Eq)]
 pub(super) enum Run {
@@ -154,7 +158,23 @@ impl PanelPlan {
         let mut summary = self.navigation.summary();
         summary["permission"] = json!(self.limit.is_some());
         summary["budget"] = json!({"day":day,"used_steps":self.navigation.used_steps(day),"limit":self.limit,"historical":true});
+        self.with_read_history(summary)
+    }
+    fn with_read_history(&self, mut summary: Value) -> Value {
+        if let Some(history) = self.read_history.summary() {
+            summary["read_history"] = history;
+        }
         summary
+    }
+    pub(super) fn refresh_report(&self, report: &mut Value, day: Option<i64>) {
+        report["panel_navigation"] = if self.limit.is_some() {
+            day.map_or_else(
+                || self.with_read_history(self.navigation.summary()),
+                |day| self.summary(day),
+            )
+        } else {
+            Value::Null
+        };
     }
     #[allow(clippy::too_many_arguments)]
     fn preflight(
@@ -319,7 +339,11 @@ impl PanelPlan {
             }
             return Ok(Run::Unchanged);
         }
-        let observation = research_ui::mixed_destination::observe(process, *slot)?;
+        let observation = self
+            .read_history
+            .observe(Phase::DestinationInitial, until, || {
+                research_ui::mixed_destination::observe(process, *slot)
+            })?;
         let source_identity = observation.production_identity;
         let (own, context) =
             research::close_state(process, &mut state.guard, observation.research)?;
@@ -374,7 +398,11 @@ impl PanelPlan {
             }
         };
         let verified = (|| {
-            let after = research_ui::mixed_destination::observe(process, *slot)?;
+            let after =
+                self.read_history
+                    .observe(Phase::DestinationAfterDeparture, until, || {
+                        research_ui::mixed_destination::observe(process, *slot)
+                    })?;
             if after.production_identity != source_identity {
                 return Err(Error::new(
                     "ownership_changed",
@@ -535,7 +563,11 @@ impl PanelPlan {
         let scope = governor.plan().scope;
         match entry.intent {
             core::Intent::Research { .. } => {
-                let identity = research_ui::mixed_destination::observe_identity(process)?;
+                let identity = self
+                    .read_history
+                    .observe(Phase::SelectedIdentity, until, || {
+                        research_ui::mixed_destination::observe_identity(process)
+                    })?;
                 state
                     .guard
                     .accept_context(process, &identity.context.campaign)?;
@@ -627,6 +659,51 @@ impl PanelPlan {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn recovered_read_history_survives_worker_refresh_without_becoming_last_error() {
+        use std::{fs, os::unix::fs::DirBuilderExt, sync::atomic::AtomicUsize};
+        static NEXT: AtomicUsize = AtomicUsize::new(0);
+        let path = std::env::temp_dir().join(format!(
+            "hoi4-panel-read-history-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, Ordering::SeqCst)
+        ));
+        fs::DirBuilder::new().mode(0o700).create(&path).unwrap();
+        let mut plan = PanelPlan {
+            navigation: Navigator::open(&path.join("panel.json")).unwrap(),
+            limit: Some(2),
+            read_history: History::default(),
+        };
+        let mut report = json!({"last_error":null,"running":true});
+        plan.refresh_report(&mut report, Some(706640));
+        assert!(report["panel_navigation"].get("read_history").is_none());
+        assert!(super::super::stopped_panel_read_history(&report).is_none());
+        let mut reads = 0;
+        plan.read_history.observe(Phase::DestinationInitial, Instant::now()+Duration::from_secs(2), || {
+            reads+=1;
+            if reads==1 { Err(Error::new("torn_read", "Snapshot witness changed; section=mixed_destination_engine; read=681; size=1; changed_byte=0")) }
+            else { Ok(()) }
+        }).unwrap();
+        let history = plan.read_history.summary().unwrap();
+        for day in [None, Some(706640), Some(706641)] {
+            // The actual worker refresh used to rebuild navigation.summary()
+            // directly and could erase successful read-only diagnostics.
+            plan.refresh_report(&mut report, day);
+            assert_eq!(report["panel_navigation"]["read_history"], history);
+            assert!(report["last_error"].is_null());
+            assert_eq!(
+                super::super::stopped_panel_read_history(&report).unwrap()["read_history"],
+                history
+            );
+        }
+        assert_eq!(history["recovered_observations"], 1);
+        assert_eq!(history["latest_rejection_recovered"], true);
+        assert_eq!(plan.navigation.used_steps(706640), 0);
+        assert!(!plan.navigation.blocked());
+        drop(plan);
+        fs::remove_dir_all(path).unwrap();
+    }
 
     #[test]
     fn research_selection_retains_open_or_idle_goals_and_refuses_unbound_tree() {

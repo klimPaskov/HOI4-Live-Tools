@@ -1,5 +1,70 @@
 # Clausewitz-MCP Linux validation
 
+## Mixed002 and Mixed003 incomplete mixed gates — 22 October 2026
+
+Both runs used source `fa2fab8`, one Luna medium player, vanilla FAIR Germany,
+Normal difficulty and historical AI. All nine exact-source CI jobs had passed.
+
+Mixed002 verified production opening, allocation from 10 to 11, the separate
+Production-to-Research departure and Basic Machine Tools assignment. The paused
+assignment wait reached its target in 10.995 seconds. The durable plan contains
+one complete and one pending goal; the destination selection completed with its
+original identities. Three production and seven Research Intent/Verified pairs
+have no unresolved input.
+
+The private broker then rejected `clock_probe_historical` before native dispatch.
+Luna followed the native digest's eight advertised non-null sections; the broker
+had silently added nullable failure proofs and expected `last_error` first.
+Five steps and the sixth digest's native call passed, but that digest's required
+history was incomplete. The player's initial six-step count is not full step-six
+acceptance. This was a test-contract mismatch, not a native action failure.
+The five accepted detail reads took 5.631–9.040 ms each, 34.302 ms total.
+
+Mixed002 retained 15 player RPCs and one broker error. STOP/release/status,
+258.333-second recording integrity, normal exit 0 in 2.196 seconds, exact-process
+absence and all 195 native inputs/18 helper hashes passed independent audit.
+
+Mixed003 used the same Rust build and a revised private contract: explicit
+pending detail sections, each accepted once in any order for its original
+snapshot, plus one bounded host batch reader. Twenty-nine offline broker/client
+checks include the real sparse discovery order and nullable evidence. The first
+installer invocation expected the older test-receipt schema and stopped before
+installation; the schema check was corrected and the failure retained.
+
+Mixed003 stopped earlier, at the single paused assignment wait after 50.002
+seconds. Its original worker error was `torn_read` in `mixed_destination_engine`,
+read 681, size 1, changed byte 0. The exact engine field remains unidentified.
+Independent journals prove zero selections, zero departures and no governor
+assignment attempt. Production reached 11 in two steps; two production and two
+warmup Research pairs verified. Both goals stayed pending, with no uncertainty.
+The timeout sample is explicitly historical and does not prove current state.
+
+Mixed003 retained eight player RPCs and one deadline rejection. STOP/release/status,
+252.333-second recording integrity, normal exit 0 in 2.206 seconds, exact-process
+absence and all 195 native inputs/20 helper hashes passed independent audit.
+The revised detail batch was not reached and has no live acceptance yet.
+
+Each run used two setup screenshots and eight ordinary menu clicks. Luna used no
+screenshots; no clock or pause command ran. Recorder exit 255 is retained separately
+from each game's exit 0. These results do not establish multi-day mixed-plan,
+annual-throughput, two-year or full-campaign acceptance. Mixed001 remains failed.
+
+The follow-up source applies bounded whole-snapshot recovery only to the initial
+combined destination, its post-departure readback and selected Research identity.
+It reuses the existing four-read/one-second/25-ms primitive under the unchanged
+deadline. Original bindings, guards, scope comparisons, persistence and input are
+outside the retry closure. Other error categories remain strict. Worker-lifetime
+history stores exact counts and bounded first/latest rejected causes, including
+failed recovery, and survives report refresh and STOP. Compact digests preserve
+counts/outcome and expose full causes through the original snapshot's details.
+This source change does not repair the failed runs or establish live recovery.
+
+Validation passed 1,162 host Rust tests, 131 targeted Linux test executions,
+953 Python tests (37 skips), formatting, host/Linux Clippy and Windows all-target
+cross-compilation. The new Linux worker-report test confirms recovered-read
+history survives report refresh and STOP without becoming a terminal error.
+These are offline checks; the recorded mixed gate still needs to pass.
+
 ## Mixed001 retained animation failure — 22 October 2026
 
 Mixed001 on `8859719` stopped at the paused assignment wait. The worker verified

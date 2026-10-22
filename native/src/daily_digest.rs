@@ -154,6 +154,17 @@ pub(crate) fn overflow(full: &Value, snapshot_id: &str) -> Result<Value> {
         out["panel_navigation"] = json!({"blocked":panel["blocked"],"active":panel["latest"]["active"],
             "budget":panel["budget"],
             "failure_code":panel["departures"]["latest"]["cause"]["code"],"historical":true});
+        if let Some(reads) = panel.get("read_history").filter(|v| v.is_object()) {
+            out["panel_navigation"]["read_history"] = json!({
+                "rejected_reads":reads["rejected_reads"],
+                "recovered_observations":reads["recovered_observations"],
+                "failed_observations":reads["failed_observations"],
+                "latest_rejection_recovered":reads["latest_rejection_recovered"],
+                "unavailable":reads["unavailable"],
+                "first_failure_code":reads["first_failure"]["code"],
+                "latest_failure_code":reads["latest_failure"]["code"],
+                "details_section":"panel_navigation"});
+        }
     }
     if full["focus"]["start_failure"].is_object() {
         let f = &full["focus"]["start_failure"];
@@ -201,6 +212,46 @@ pub(crate) fn overflow(full: &Value, snapshot_id: &str) -> Result<Value> {
             }
         }
     }
+    // Read recovery can coexist with every legacy domain history. Its exact
+    // counts, outcome and unavailable flag remain inline. Drop only duplicated
+    // route/scope metadata when necessary; snapshot ID and section identity
+    // still provide the documented details lookup and preserve every cause.
+    if out["panel_navigation"]["read_history"].is_object()
+        && serde_json::to_vec(&out)
+            .map_err(|e| Error::new("digest_error", e.to_string()))?
+            .len()
+            > 2048
+    {
+        out["panel_navigation"]["read_history"]
+            .as_object_mut()
+            .unwrap()
+            .remove("details_section");
+        let reads = &mut out["panel_navigation"]["read_history"];
+        if reads["first_failure_code"].is_string()
+            && reads["first_failure_code"] == reads["latest_failure_code"]
+        {
+            // These are both the same discarded-torn-read category. Preserve
+            // it once; exact first/latest records remain in panel details.
+            reads["failure_code"] = reads["first_failure_code"].clone();
+            let object = reads.as_object_mut().unwrap();
+            object.remove("first_failure_code");
+            object.remove("latest_failure_code");
+        }
+        for key in ["tool", "op"] {
+            out["history"].as_object_mut().unwrap().remove(key);
+        }
+        for section in ["production", "panel_navigation"] {
+            if let Some(budget) = out[section]["budget"].as_object_mut() {
+                budget.remove("historical");
+            }
+        }
+        if out["assignments"]["plan_revision"] == out["plan_revision"] {
+            out["assignments"]
+                .as_object_mut()
+                .unwrap()
+                .remove("plan_revision");
+        }
+    }
     // The fixed schema is bounded for production field limits. Refuse malformed
     // caller-generated oversized essentials rather than silently falsifying them.
     if serde_json::to_vec(&out)
@@ -233,6 +284,42 @@ mod tests {
             full["panel_navigation"]
         );
         assert!(serde_json::to_vec(&compact).unwrap().len() <= 2048);
+    }
+    #[test]
+    fn mixed_read_recovery_stays_discoverable_when_all_histories_are_compacted() {
+        let mut full = crowded();
+        let history = json!({"rejected_reads":u64::MAX,"recovered_observations":u64::MAX,
+            "failed_observations":u64::MAX,"latest_rejection_recovered":false,
+            "unavailable":true,
+            "first_failure":{"producer":"mixed_destination","phase":"mixed_destination_initial",
+                "code":"torn_read","reason":"exact first bounded original cause"},
+            "latest_failure":{"producer":"research_identity","phase":"selected_research_identity",
+                "code":"torn_read","reason":"exact latest bounded original cause"},
+            "historical":true,"current_state_verified":false,"input_authorized":false});
+        full["panel_navigation"] = json!({"budget":{"day":706640,"used_steps":16,"limit":16,"historical":true},
+            "blocked":true,"latest":{"active":true},"read_history":history,
+            "departures":{"latest":{"cause":{"code":"research_panel_transition"}}}});
+        let mut details = Details::default();
+        let id = details.retain(&full).unwrap();
+        let compact = overflow(&full, &id).unwrap();
+        let reads = &compact["panel_navigation"]["read_history"];
+        assert_eq!(reads["rejected_reads"], u64::MAX);
+        assert_eq!(reads["recovered_observations"], u64::MAX);
+        assert_eq!(reads["failed_observations"], u64::MAX);
+        assert_eq!(reads["latest_rejection_recovered"], false);
+        assert_eq!(reads["unavailable"], true);
+        assert_eq!(reads["failure_code"], "torn_read");
+        assert_eq!(
+            details.get(&id, "panel_navigation").unwrap()["value"]["read_history"],
+            history
+        );
+        assert!(serde_json::to_vec(&compact).unwrap().len() <= 2048);
+        full["panel_navigation"]
+            .as_object_mut()
+            .unwrap()
+            .remove("read_history");
+        let legacy = overflow(&full, &id).unwrap();
+        assert!(legacy["panel_navigation"].get("read_history").is_none());
     }
     fn crowded() -> Value {
         let failure = json!({"entry_id":"x".repeat(128),"request_id":"a".repeat(64),

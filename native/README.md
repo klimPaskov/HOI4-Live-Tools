@@ -13,9 +13,11 @@ preview. It uses the ordinary production button only from settled shown producti
 already-hidden idle state is a no-op and other active panels refuse. The request
 uses the shared lease/journal, preserves the original panel identity and never
 replays uncertain input. Production008 passed manual production closing and
-Mixed001 verified production progress and one panel departure, then retained an
-uncertain Research opening during a known animation. The continuation readback
-correction awaits fresh live validation; do not reuse that uncertain attempt.
+Mixed002 verified production progress, one departure and a Research assignment
+on the corrected continuation readback. Its private harness then refused a
+historical detail read because its required list differed from native discovery.
+Mixed003 stopped before selection/departure on a torn retained destination
+snapshot. The earlier Mixed001 uncertain opening remains preserved.
 
 ResearchClose002 passed direct Research closing, including historical replays and
 no-ops. Mixed Research/production worker routing has an explicit opt-in preview;
@@ -62,6 +64,16 @@ is historical accounting, never fresh input authority.
 
 This routing is not live accepted yet. It uses bounded native observations and
 ordinary verified controls, with no screenshots, cursor scans or pause commands.
+Initial retained-destination, post-departure destination and selected-identity
+reads may discard at most four torn snapshots, with 25 ms intervals and a
+one-second recovery window inside the original deadline. Stable reads add no
+wait. Ownership checks, original bindings, persistence and input are outside
+recovery; other errors still refuse. `panel_navigation.read_history` retains
+bounded first/latest causes and counts for this worker lifetime. The compact
+digest keeps counts/outcome; exact causes use its historical details lookup.
+Failed-observation counts refer to observations with rejected torn reads that
+did not recover, not every permanent refusal. Existing action uncertainty and
+budgets are unchanged. Fresh live validation of this recovery remains pending.
 
 
 `hoi4_construction_queue` is a read-only preview (`offset` 0–2048, `limit` 1–128,
