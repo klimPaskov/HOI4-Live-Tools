@@ -2,6 +2,12 @@
 
 ## Unreleased native preview
 
+- Record two actual ARM Linux/FEX 1080p frontend startups in 43–51 seconds,
+  clean ordinary window closes and explicit MCP menu-state refusals. Guest
+  software rendering with temporary swap passed; preserve the prior graphics
+  crash, OOM kill and slower GPU-offload comparison. In-game reads and translated
+  gameplay input remain unqualified.
+
 - Give the construction deadline fixture time for durable journal setup on
   Windows CI while preserving its original-deadline and one-input assertions.
   Record isolated FEX GL-forwarding failures and successful guest software GL

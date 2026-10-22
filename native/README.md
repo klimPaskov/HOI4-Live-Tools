@@ -62,7 +62,7 @@ return a capability error. Logs and setup errors go to stderr.
 | Platform | Current native support |
 | --- | --- |
 | Linux x86_64 | Owned launch/reconnects, exact-build reads, waits, clock keys, research, Focus/daily plans, construction and one-factory production previews |
-| Linux ARM64 with FEX | Explicit pinned translator and x86 guest reader preview; generated-child restart checks passed, actual HOI4 validation pending, gameplay input blocked |
+| Linux ARM64 with FEX | Pinned translator and x86 guest reader preview; generated-child restart checks and actual 1080p frontend startup/clean close passed; in-game validation pending, gameplay input blocked |
 | macOS | Separate owned task-port and ordinary-input preview on one Steam 1.19.3 Rosetta build; see the [platform status](../README.md#macos-preview-live-tested-on-one-build) |
 | Windows | Portable protocol and fixtures; native live adapter remains unavailable |
 

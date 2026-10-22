@@ -26,8 +26,16 @@ lookup over validated ordered mappings. Its ARM Linux microbenchmark is about
 actual ARM/FEX game startup reached an owned endpoint but failed before the menu:
 OpenGL initialization reported a missing version, then HOI4 recorded SIGSEGV.
 The stuck crash handler required separately documented forced cleanup after the
-normal owned signal deadline. No campaign or input began. Preserve this failure
-and isolate graphics-context compatibility before retrying. See
+normal owned signal deadline. Disabling GL forwarding later allowed graphics
+initialization; after an explicitly recorded OOM kill, temporary guest swap
+enabled native 1920x1080 frontend startup in 43–51 seconds and clean ordinary
+window close across two runs. Structured menu-state checks correctly refused
+campaign-only reads in 1.3–2.6 ms; these are not successful in-game snapshots.
+The direct guest GPU-offload comparison was stopped after 286 seconds without
+data-loading progress; window close timed out and a separate SIGTERM request
+ended it with exit code 6. Continue with software rendering, qualify ordinary
+menu input and own-country reads, then resume Luna's mixed-plan gate. No campaign
+or menu input began in these startup tests. Preserve the distinct outcomes. See
 [the new validation evidence](CLAUSEWITZ_VALIDATION.md#indexed-linux-read-bounds--22-october-2026).
 
 **Latest requirement (22 October): all future campaigns and recordings must use
@@ -57,11 +65,10 @@ owned SIGTERM request ended the child with exit code 6, no signal and no core du
 This was not a successful normal close. Both exact game/owner instances are absent;
 all 200 native source inputs and seven installed files matched their frozen hashes.
 
-Resolve the current emulated Linux startup/renderer limitation before another
-campaign attempt; an earlier slow 1080p test already used GPU offloading, so merely
-enabling it is not a new fix. Preserve the failed benchmark and its separate
-cleanup outcome. The owned display remains 2560×1440 for future 1080p work. No game
-is running. The mixed-plan gate, two-year Luna run, filmable recording qualification
+The later ARM/FEX software-rendering startups above supersede this startup
+blocker; GPU offloading alone did not resolve it. Preserve the failed benchmark
+and its separate cleanup outcome. The original owned display remains 2560×1440
+for future 1080p work. No game is running. The mixed-plan gate, two-year Luna run, filmable recording qualification
 and full campaigns remain unfinished. Do not fall back to a 512×288 campaign.
 The worker terminal-notification change below progresses independently of this
 graphics limitation; it is not live acceptance. See [the benchmark result](CLAUSEWITZ_VALIDATION.md#fullhd001-startup-deadline--22-october-2026).
@@ -106,7 +113,7 @@ See [the notification evidence](CLAUSEWITZ_VALIDATION.md#owned-worker-terminal-e
 All nine CI jobs passed on `b1ab89c`, the test-only correction for the macOS
 deadline fixture's scheduler assumption. The original CI failure remains recorded.
 
-The next graphics path is a separate hardware-accelerated ARM64 Linux VM with
+The subsequent graphics experiment used a separate hardware-accelerated ARM64 Linux VM with
 FEX 2610. The same x86 generated graphics binary now measures 36.5–36.7 FPS,
 with independently verified 1920×1080 geometry and native OpenGL forwarding.
 A native ARM parent read its own generated x86 child's exact marker under
@@ -122,8 +129,8 @@ changed bound mappings never rebind. Translated gameplay input is explicitly blo
 The FD-based `execveat` test confirmed that this FEX build supplies `argc=0`;
 its original fixture failure and a marked quit-only probe are preserved. This is
 an external argument-handling limitation, not general guest exec compatibility.
-Next provision the licensed game in the ARM VM and qualify actual 1080p startup,
-own-state reads and recording. Validate ordinary translated input separately before
+The licensed game is now provisioned and actual 1080p frontend startup passed as
+recorded above. Own-state reads and recording remain unqualified. Validate ordinary translated input separately before
 removing the binding block and resuming the single-Luna mixed-plan gate.
 See [the ARM/FEX evidence](CLAUSEWITZ_VALIDATION.md#arm-linux-and-fex-feasibility--22-october-2026).
 

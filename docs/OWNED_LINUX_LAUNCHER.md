@@ -92,7 +92,10 @@ nonce and quit; this is not evidence of correct guest argument handling.
 
 **The first actual HOI4/FEX launch failed before the menu**, reporting a missing
 OpenGL version and SIGSEGV. Its stuck crash handler required separately recorded
-forced cleanup after the owner's SIGTERM timeout. Generated graphics/reader tests
+forced cleanup after the owner's SIGTERM timeout. A later run with GL forwarding
+disabled and guest llvmpipe reached the native 1920x1080 frontend in 50.7 seconds
+and exited normally through ordinary window close. A prior attempt exhausted the
+four-GiB VM; temporary guest swap was present in the successful run. These checks
 do not qualify game observations, recording or gameplay. Input binding is
 explicitly unavailable for translated sessions. Owned
 lifecycle/window-close operations remain available for startup qualification.

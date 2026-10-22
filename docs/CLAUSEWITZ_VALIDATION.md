@@ -1,5 +1,50 @@
 # Clausewitz-MCP Linux validation
 
+## FullHD-FEX003 frontend qualification — 22 October 2026
+
+With GL forwarding disabled, guest llvmpipe created HOI4's graphics device. The
+first such run (FullHD-FEX002) then exceeded the four-GiB VM's memory capacity:
+the kernel explicitly recorded an OOM kill of the exact owned FEX child. It was
+not a successful shutdown or a repeat of the previous GL initialization crash.
+The retained owner was closed separately after the child had exited.
+
+Adding four GiB of temporary guest swap allowed FullHD-FEX003 to reach the
+frontend: HOI4 reported 50,733 ms startup; the external harness observed it at
+51.15 seconds. X11 verified an actual 1920x1080 game client within the owned
+2560x1440 display, at UI scale 1. One ordinary window-close request completed
+with exit code 0, no signal and no core dump. Owner, game and temporary display
+instances exited; the created per-app FEX setting was removed. The unchanged
+settings seed and isolated vanilla userdata were retained as evidence.
+
+This used the previously CI-qualified `d07d2cb` owner. It proves this environment's
+frontend startup and clean lifecycle, not in-game memory observations, input,
+campaign performance or recording. No campaign, menu input, screenshot or video
+was started. Temporary swap is test infrastructure, not a new runtime requirement.
+
+FullHD-FEX004 compared guest virpipe GPU offloading without GL forwarding, using
+the CI-qualified `b924ec4` source. A separate GL utility passed, but HOI4 remained
+in graphics setup for over four minutes without beginning data loading. The test
+was explicitly stopped early; it did not reach its original 600-second deadline.
+The ordinary window-close delivery was server-confirmed but timed out after
+20 seconds. A separate owned SIGTERM request ended the game with exit code 6,
+no signal and no core dump. This was not a clean window-close result. The owner,
+temporary display, dedicated renderer/tunnel and per-app setting were cleaned up;
+the original VM's renderer/tunnel were preserved. An MCP client connected during
+loading and confirmed a bound reader; the GUI tool returned `read_bound`, not
+valid geometry. Software rendering remains the demonstrated startup path.
+
+FullHD-FEX005 repeated software startup with the `b924ec4` runtime: HOI4 reported
+43,163 ms; the harness observed the frontend at 43.56 seconds. X11 again verified
+1920x1080 and ordinary window close exited with code 0. Nine structured requests
+used one persistent MCP client. Capabilities confirmed the bound process; five
+GUI checks, folder/catalog checks and overview all correctly returned
+`campaign_unavailable` in the menu. Those eight refusal round trips took
+1.31–2.61 ms, including local client/owner transport. These are explicit negative
+state checks, not successful in-game reads or a full-observation latency benchmark.
+The game remained unpaused by observations, with no menu input, screenshots,
+cursor movement or campaign. Own-country reads and translated ordinary input
+still require a separate qualification before Luna gameplay.
+
 ## FEX context isolation and deadline fixture — 22 October 2026
 
 Fresh isolated X11 displays compared the same OpenGL utility natively on ARM and
@@ -21,7 +66,8 @@ remaining deadline during dispatch or idle verification, and assertions require
 exactly one possible input, the expected idle phase and deadline expiry. No
 production timeout or action behavior changed. All 43 construction-stage tests,
 953 Python tests (37 skipped), formatting, Clippy and Windows all-target
-compilation passed locally. Windows execution requires the next exact-source CI.
+compilation passed locally. All nine exact-source CI jobs subsequently passed for
+`b924ec4`, including the Windows execution that previously failed.
 
 ## Indexed Linux read bounds — 22 October 2026
 

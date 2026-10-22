@@ -119,14 +119,15 @@ recorded advancing-time live gate is still pending.
 Future campaign tests and recordings will use native **1920×1080 or higher**
 with readable UI. The new Linux 1080p input profile still needs live qualification;
 earlier low-resolution runs are diagnostic tests, not filmable campaign evidence.
-The current emulated Linux test VM did not finish a ten-minute 1080p startup
-benchmark; [that environment limitation remains open](docs/CLAUSEWITZ_VALIDATION.md#fullhd001-startup-deadline--22-october-2026).
-A separate hardware-accelerated ARM Linux/FEX experiment reached about 36 FPS
-in a verified 1080p x86 graphics fixture. This is a promising test environment;
-[HOI4 compatibility and campaign acceptance remain unverified](docs/CLAUSEWITZ_VALIDATION.md#arm-linux-and-fex-feasibility--22-october-2026).
-An explicit Rust FEX reader now checks the translator and mapped game separately.
-Generated-child read and restart checks passed; translated gameplay input remains
-blocked until [game-level qualification](docs/OWNED_LINUX_LAUNCHER.md#arm64-linux-with-fex).
+The original emulated Linux VM missed its ten-minute 1080p startup deadline.
+The separate ARM Linux/FEX environment has now reached HOI4's native 1080p frontend
+in **43–51 seconds across two runs** and closed normally, using guest software rendering and
+temporary swap. Earlier graphics and memory failures remain in the
+[validation record](docs/CLAUSEWITZ_VALIDATION.md#fullhd-fex003-frontend-qualification--22-october-2026).
+This is startup evidence, not campaign performance. The Rust FEX reader checks
+the translator and mapped game separately; generated-child reads and restart
+checks passed. Translated gameplay input remains blocked until
+[game-level qualification](docs/OWNED_LINUX_LAUNCHER.md#arm64-linux-with-fex).
 
 ### macOS preview (live-tested on one build)
 
