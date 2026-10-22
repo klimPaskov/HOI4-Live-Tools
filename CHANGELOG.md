@@ -2,6 +2,13 @@
 
 ## Unreleased native preview
 
+- Use indexed Linux memory-map bounds checks for scalar and vectored reads.
+  Reject unordered or overlapping mappings before indexing; retain guard-page,
+  single-region, ownership, exec and final snapshot verification. A 4,096-region
+  ARM Linux microbenchmark measured about 43x faster bounds lookup, not full MCP
+  latency. Preserve the first actual FEX game's OpenGL initialization failure
+  and pre-menu crash; translated campaign input remains unavailable.
+
 - Add an explicit ARM64 Linux/FEX startup and reader preview. Pin the translator
   separately from the exact x86 game, retain original kernel ownership/witness
   checks, and validate complete guest load mappings at observation boundaries.

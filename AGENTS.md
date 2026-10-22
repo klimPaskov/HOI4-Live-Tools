@@ -1,10 +1,12 @@
 # Codex instructions
 
 The latest user direction is [docs/LINUX_RUST_HANDOFF.md](docs/LINUX_RUST_HANDOFF.md).
-It supersedes the Mac live-testing order: stop those tests, verify Clausewitz-MCP
-on Linux with one Luna player at medium reasoning, then build the native Rust
-runtime and expand it for Linux, Windows and macOS. Preserve the legacy Python
-package while migrating. Do not resume the old Mac campaign objective.
+Latest steering (22 October): continue Linux tooling refinement and testing now.
+Do not resume macOS testing until the user explicitly switches back. The final
+campaign videos must be filmed from native macOS HOI4 at 1920x1080 or higher.
+Use one Luna player at medium reasoning for live gates. Expand the Clausewitz-based
+Rust runtime across Linux, Windows and macOS, preserving the legacy Python
+package and earlier failed campaigns while migrating.
 
 For the preserved Mac history, read [docs/HANDOFF_MAC.md](docs/HANDOFF_MAC.md).
 It records setup, status, ordered work, acceptance and the first prompt for that
@@ -40,8 +42,9 @@ For campaign strategy and FAIR/META rules, read
   Cheating is forbidden in both. Showcases run in FAIR mode.
 - Reference: https://github.com/smerss/Clausewitz-MCP (MIT): memory reads,
   command-queue posting, wait_for, micro engine, encirclement search.
-- All future campaigns and campaign recordings must use native 1920x1080 or
-  higher resolution with readable UI. Verify input profiles at that geometry;
+- All showcase videos must be filmed from the macOS game. Future campaigns and
+  campaign recordings must use native 1920x1080 or higher resolution with readable
+  UI. Verify input profiles at that geometry;
   old 512x288 diagnostic profiles are not campaign acceptance.
 - Campaigns use Normal difficulty, vanilla rules, historical AI and observational
   telemetry only. No console/debug/eval/fire_event, save editing, hidden enemy

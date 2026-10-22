@@ -90,8 +90,11 @@ also confirmed a FEX limitation: its restarted guest receives `argc=0`. The fixt
 records this explicitly and allows that marked generation only to report its
 nonce and quit; this is not evidence of correct guest argument handling.
 
-**Actual HOI4 startup, observations, recording and gameplay remain unverified on
-FEX.** Input binding is explicitly unavailable for translated sessions. Owned
+**The first actual HOI4/FEX launch failed before the menu**, reporting a missing
+OpenGL version and SIGSEGV. Its stuck crash handler required separately recorded
+forced cleanup after the owner's SIGTERM timeout. Generated graphics/reader tests
+do not qualify game observations, recording or gameplay. Input binding is
+explicitly unavailable for translated sessions. Owned
 lifecycle/window-close operations remain available for startup qualification.
 Future campaigns must use native 1920×1080 or higher after independent validation.
 

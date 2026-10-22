@@ -23,6 +23,18 @@ struct Region {
     inode: u64,
     path: Option<String>,
 }
+/// `parse_mappings` admits only ordered, non-overlapping regions. A read must
+/// fit in one readable region, including at boundaries and across guard pages.
+fn readable_span(regions: &[Region], address: u64, end: u64) -> bool {
+    address < end
+        && regions
+            .partition_point(|region| region.start <= address)
+            .checked_sub(1)
+            .is_some_and(|index| {
+                let region = &regions[index];
+                region.readable && end <= region.end
+            })
+}
 enum ExpectedBuild {
     VerifiedGame,
     // Generated ELF expectations cannot be selected by a production manifest,
@@ -404,6 +416,7 @@ fn mappings(pid: i32) -> Result<Vec<Region>> {
 }
 fn parse_mappings(text: &str) -> Result<Vec<Region>> {
     let mut regions = Vec::new();
+    let mut previous_end = 0;
     for line in text.lines() {
         let f: Vec<_> = line.split_whitespace().collect();
         if f.len() < 5 {
@@ -428,6 +441,13 @@ fn parse_mappings(text: &str) -> Result<Vec<Region>> {
         if start >= end {
             return Err(Error::new("invalid_maps", "Invalid mapping range"));
         }
+        if start < previous_end {
+            return Err(Error::new(
+                "invalid_maps",
+                "Mapping ranges overlap or are out of order",
+            ));
+        }
+        previous_end = end;
         let (major, minor) = f[3]
             .split_once(':')
             .ok_or_else(|| Error::new("invalid_maps", "Malformed mapping device"))?;
@@ -679,10 +699,7 @@ impl ReadMemory for LinuxProcess {
         self.begin_snapshot()?;
         let mapped = |regions: &[Region]| {
             requests.iter().all(|&(address, size)| {
-                size == 0
-                    || regions
-                        .iter()
-                        .any(|m| m.readable && m.start <= address && address + size as u64 <= m.end)
+                size == 0 || readable_span(regions, address, address + size as u64)
             })
         };
         if !mapped(
@@ -710,11 +727,7 @@ impl ReadMemory for LinuxProcess {
         if size > 1 << 20 {
             return Err(Error::new("read_bound", "Read exceeds byte bound"));
         }
-        let contains = |regions: &[Region]| {
-            regions
-                .iter()
-                .any(|m| m.readable && m.start <= address && end <= m.end)
-        };
+        let contains = |regions: &[Region]| readable_span(regions, address, end);
         let available = contains(
             &self
                 .regions
@@ -759,10 +772,7 @@ impl LinuxProcess {
     ) -> Result<Vec<Vec<u8>>> {
         let mapped = |regions: &[Region]| {
             requests.iter().all(|&(address, size)| {
-                size == 0
-                    || regions
-                        .iter()
-                        .any(|m| m.readable && m.start <= address && address + size as u64 <= m.end)
+                size == 0 || readable_span(regions, address, address + size as u64)
             })
         };
         // Even a kernel failure gets the independent ownership/exec/maps bracket.

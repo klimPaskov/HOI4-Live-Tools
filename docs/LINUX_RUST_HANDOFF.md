@@ -1,11 +1,34 @@
 # Linux-first native MCP continuation
 
-The user replaced the Mac testing objective on 12 October 2026: build a fast
-Linux-first Rust MCP on Clausewitz-MCP, then support Windows and macOS with
-independently verified native adapters. Preserve the legacy Python package.
-Do not resume Mac campaigns or control the shared Windows game.
+The latest user steering on 22 October is to continue Linux tooling refinement
+and tests now, and wait for an explicit instruction before switching back to
+macOS. The final campaign videos must be filmed from native macOS HOI4 at
+1920x1080 or higher. Preserve the Mac qualification evidence for that later phase.
+Linux, Windows and macOS remain required targets for the Clausewitz-based Rust
+runtime. Preserve the legacy Python package and earlier failed campaigns. Do not
+control the shared Windows game.
 
 ## Current checkpoint
+
+**Latest platform requirement (22 October): film the requested campaign videos
+from the macOS game, at native 1920x1080 or higher with readable UI.** Linux VM
+graphics benchmarks remain compatibility diagnostics and do not satisfy the video
+deliverable. **Current work stays on Linux; wait for the user's explicit switch
+before another Mac test.** The brief intervening Mac probe launched with isolated
+userdata, reached the frontend and exited with code 0; default settings remained
+unchanged. It started no campaign. Recheck the Mac build, process ownership, task
+access and capture geometry when the user switches back. No successful campaign
+is claimed.
+
+The latest Linux refinement replaces linear read-bound scans with an indexed
+lookup over validated ordered mappings. Its ARM Linux microbenchmark is about
+43x faster for that lookup alone; full MCP latency remains unmeasured. The first
+actual ARM/FEX game startup reached an owned endpoint but failed before the menu:
+OpenGL initialization reported a missing version, then HOI4 recorded SIGSEGV.
+The stuck crash handler required separately documented forced cleanup after the
+normal owned signal deadline. No campaign or input began. Preserve this failure
+and isolate graphics-context compatibility before retrying. See
+[the new validation evidence](CLAUSEWITZ_VALIDATION.md#indexed-linux-read-bounds--22-october-2026).
 
 **Latest requirement (22 October): all future campaigns and recordings must use
 native 1920×1080 or higher, with readable UI.** Validate the matching input profile

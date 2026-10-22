@@ -1,5 +1,55 @@
 # Clausewitz-MCP Linux validation
 
+## Indexed Linux read bounds — 22 October 2026
+
+Scalar reads and both bounds checks around vectored reads now search the ordered
+mapping table instead of scanning every mapping. The parser rejects overlapping,
+duplicate or out-of-order ranges. Reads still fit wholly within one readable
+region; adjacent regions, guard pages and gaps do not grant extra access. Process
+ownership, execution witnesses, refreshed maps and final read brackets are unchanged.
+
+A generated benchmark extracted the exact production lookup and ran on the ARM64
+Linux VM. Across five runs of 200,000 queries over 4,096 sparse mappings, median
+lookup time fell from 346.31 ms to 8.07 ms, about 43x. Both methods returned identical
+acceptance counts. This measures bounds lookup only, not memory syscalls, full MCP
+latency, game speed or campaign performance.
+
+Validation passed 1,193 host Rust tests, all 776 non-ignored ARM Linux library tests,
+the two separately selected real FEX child-reader/launcher tests, 37 x86 Linux
+reader tests (including 19 real child-process tests), ARM/x86 Linux all-target
+Clippy and 953 Python tests with 37 skips. The Python suite used the
+project environment; an initial system-Python invocation failed on missing NumPy
+and remains in the private evidence. Boundary and sparse-address-space tests cover
+the indexed lookup. Live campaign acceptance remains outstanding.
+
+## FullHD-FEX001 startup failure — 22 October 2026
+
+The licensed Linux installation was transferred to the ARM VM with matching archive
+and executable hashes, excluding Workshop content. The Rust `d07d2cb` owner launched
+the pinned game through the reviewed FEX build with isolated vanilla userdata,
+1920x1080 settings and native OpenGL forwarding. The endpoint was created, but
+that alone does not prove usable game observations.
+
+HOI4 reported `glewInit failed: Missing GL version` and then recorded SIGSEGV before
+the frontend. Its graphics log reported zero adapter capabilities. No campaign,
+input binding, player lease, screenshot or recording started. Missing Steam-client
+messages also remain in the logs; their causal role is unproven. Earlier successful
+generated GL rendering did not establish this game's context compatibility.
+
+The crash handler stayed alive and ignored the owner's bounded SIGTERM request.
+After its 20-second timeout, a separate exact PID/start/executable/UID/parent check
+and pidfd were used to kill this failed pre-campaign test. The owner recorded signal
+9, not a normal game exit. A subsequent explicit close retired the already reaped
+owner. Temporary display processes, graphics forwarding and the created FEX app
+setting were cleaned up. A surviving FEX crash subprocess was separately tied to
+the original game process group, owner session, exact private userdata argument
+and inherited run log descriptors. Its pinned instance also required SIGKILL
+after a 20-second SIGTERM timeout. Final checks found no remaining game or test
+client on either VM. The original failure, shutdown timeouts and forced cleanup
+remain distinct evidence. A native GL diagnostic also encountered a rendering
+connection failure. Isolate context/forwarding compatibility before another game
+attempt; do not enable translated campaign input on this evidence.
+
 ## Mixed005 immediate-close readiness failure — 22 October 2026
 
 Mixed005 used the same `81a3e41` source with a frozen self-relative step driver.

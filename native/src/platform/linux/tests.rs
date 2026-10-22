@@ -44,8 +44,64 @@ fn malformed_mappings_are_explicitly_refused() {
         "1000-2000 r--p 0 no-device 0",
         "1000-2000 r--p 0 00:gg 0",
         "1000-2000 r--p 0 00:00 no-inode",
+        "2000-3000 r--p 0 00:00 0\n1000-2000 r--p 0 00:00 0",
+        "1000-3000 r--p 0 00:00 0\n2000-4000 r--p 0 00:00 0",
+        "1000-2000 r--p 0 00:00 0\n1000-2000 r--p 0 00:00 0",
     ] {
         assert_eq!(parse_mappings(text).err().unwrap().code, "invalid_maps");
+    }
+}
+
+#[test]
+fn indexed_mapping_bounds_preserve_guard_pages_and_single_region_reads() {
+    let regions = parse_mappings(
+        "10000-11000 r--p 0 00:00 0\n\
+         11000-12000 r--p 0 00:00 0\n\
+         12000-13000 ---p 0 00:00 0\n\
+         14000-15000 r--p 0 00:00 0\n",
+    )
+    .unwrap();
+    for (address, end, expected) in [
+        (0xffff, 0x10001, false),
+        (0x10000, 0x11000, true),
+        (0x10fff, 0x11000, true),
+        (0x10fff, 0x11001, false), // Even adjacent readable regions stay separate.
+        (0x11000, 0x11001, true),
+        (0x12000, 0x12001, false),
+        (0x13000, 0x13001, false),
+        (0x14000, 0x15000, true),
+        (0x15000, 0x15001, false),
+        (0x14001, 0x14000, false),
+        (0x14000, 0x14000, false),
+        (u64::MAX - 1, u64::MAX, false),
+    ] {
+        assert_eq!(readable_span(&regions, address, end), expected);
+    }
+    assert!(!readable_span(&[], 0x10000, 0x10001));
+}
+
+#[test]
+fn indexed_mapping_bounds_match_sparse_address_space_reference() {
+    let mut text = String::new();
+    for index in 0..2048u64 {
+        let start = 0x10000 + index * 0x3000;
+        let permissions = if index % 7 == 0 { "---p" } else { "r--p" };
+        text.push_str(&format!(
+            "{start:x}-{:x} {permissions} 0 00:00 0\n",
+            start + 0x2000
+        ));
+    }
+    let regions = parse_mappings(&text).unwrap();
+    for index in 0..2048u64 {
+        for offset in [0, 0x1000, 0x1fff, 0x2000, 0x2fff] {
+            let address = 0x10000 + index * 0x3000 + offset;
+            for size in [1, 2, 0x1000, 0x2001] {
+                let expected = regions.iter().any(|region| {
+                    region.readable && region.start <= address && address + size <= region.end
+                });
+                assert_eq!(readable_span(&regions, address, address + size), expected);
+            }
+        }
     }
 }
 
