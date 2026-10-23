@@ -113,14 +113,15 @@ Recorded component tests have verified Research, Focus, clock control and
 one-factory production changes. Research queues have survived reconnect and
 refilled after natural completion, with unchanged idle plan files. These tests
 also retained harness failures; they are not a clean campaign acceptance run.
-The latest manual Focus gate verified Economic Growth in 3.67 seconds after two
+The latest manual Focus gate verified Economic Growth in 3.75 seconds after two
 preserved timeout failures. A default-off durable Focus adapter now joins the
 Research and production worker. Its first combined live gate preserved those
 assignments across reconnect, then stopped during Focus-screen ownership checks
 after natural Economic Growth completion. A fresh run passed the manual gate and
 reconnect again, but stopped on an inconsistent memory read while dismissing the
-completion notice. Both unresolved intents remain blocked. Successive durable
-Focus assignment is not yet accepted.
+completion notice. The next run reached the open German Focus tree but timed out
+on its memory readiness check. All unresolved intents remain blocked. Successive
+durable Focus assignment is not yet accepted.
 
 Measured Mac overview/Research/digest medians were about 0.3/1.7/10.6 ms in the
 recorded component run, with zero observation pauses. A separate target-only
@@ -146,7 +147,7 @@ The public Research-folder diagnostic remains Linux-only.
   campaigns. Final showcase videos must come from macOS at 1080p or higher.
 - Validate long campaign recording and publish only after release acceptance.
 
-All nine CI jobs passed on the Focus-view readiness checkpoint (`6713553`) across
+All nine CI jobs passed on the pre-input read-recovery checkpoint (`538e2b8`) across
 Linux, Windows and macOS. Offline tests do not prove native game behavior.
 For measurements, retained failures and the next gate, use
 [the comparison](docs/CLAUSEWITZ_COMPARISON.md),

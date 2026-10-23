@@ -6549,3 +6549,56 @@ The pre-input recovery correction passed 1,390 Rust tests, 956 Python tests
 (37 skipped), formatting, strict host/Windows/Linux-musl/ARM64-Linux-musl
 Clippy and the release build. These checks are offline evidence; fresh live
 qualification remains required.
+
+## Mac visible Focus tree readiness timeout — 23 October 2026
+
+A fresh recorded Luna medium run used immutable `538e2b8`, with all nine
+exact-head CI jobs passing. Manual Economic Growth verified in 3,746.890 ms;
+independent reads retained the paused 1 January 12:00, empty Research and all
+allocations. The manual recording finalized at 1920×1108, 199.268333 seconds
+and 5,871 frames. All 236 native source files and pinned helpers stayed frozen.
+
+The next mixed plan again verified EM Engineering and infantry factories 10→11,
+same-plan reconnect and unchanged idle files. After natural Economic Growth
+completion it passed notice dismissal but quarantined at `open_tree_readback`:
+`input_readback_failed`, stage 3,005.760 ms, total 3,952.118 ms, zero requested
+pans. The original Autobahn intent remains unresolved; no retry, settlement or
+reset occurred. STOP joined; lease release refused quarantine; broker EOF ended
+ownership. There were two clock requests, zero observation pauses and no end pause.
+
+The mixed recording finalized explicitly at 1920×1108, 134.373333 seconds and
+3,960 frames. Its final frame shows the German Focus tree open, Economic Growth
+completed and Autobahn visible. This differs from the preceding runs' sampled
+final views. The 69 player RPCs included 15 bounded read-only busy retries and
+the refused release. The last actual driver overview was 5 February 14:00;
+the handback's earlier date was a persisted progress sample.
+
+Independent reads after handback observed 8 March 17:00, completed Economic
+Growth, idle Focus, EM Engineering still active and infantry allocation 11.
+Other military/surviving naval allocations and non-target Research were unchanged.
+A later bounded read-only GUI inspection found a visible root (flag 8) and zero
+at the field previously treated as displayed country. Exact own process/root
+witnesses and controller files stayed unchanged; no country pointer was followed.
+This later snapshot does not recover the exact values during the timed-out wait.
+The field's semantics need verification before relaxing ownership checks.
+
+Exact owned-supervisor cleanup closed the game with return code 0 and default
+settings unchanged. This is another preserved failed mixed gate, not campaign
+acceptance or proof of complete torn-read recovery. The clock-retry path was not
+instrumented, so passing notice dismissal does not prove a retry occurred.
+
+Offline inspection of the matching Mach-O identifies `CNationalFocusView`'s
+country getter at image-relative `0x1be2620`. It uses the nonzero `+0x1990` field
+as an override; otherwise it resolves the game state's positive player tag
+through the country map. Its fallback to an observer tag is outside campaign
+scope and must remain unavailable. This proves the field's nullable-override
+semantics; it does not prove exact values during earlier failed waits. The Mac
+reader already requires a positive player tag and exact own country/status/tree
+backlinks. The correction can therefore resolve zero through that same witnessed
+own binding, while rejecting a different nonzero override before payload reads.
+
+The nullable-override correction passed 1,394 Rust tests, 956 Python tests
+(37 skipped), formatting, strict host/Windows/Linux-musl/ARM64-Linux-musl
+Clippy and the release build. Exact view-primary and positive own-player checks
+precede payload reads; raw override changes invalidate captured controls.
+Fresh recorded input qualification remains required.

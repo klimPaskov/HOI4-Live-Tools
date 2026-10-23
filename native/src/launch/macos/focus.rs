@@ -26,8 +26,9 @@ struct Ui {
     manager: u64,
     politics_view: u64,
     focus_view: u64,
+    focus_view_vtable: u64,
     view_root: u64,
-    displayed_country: u64,
+    country_override: u64,
     items: u64,
     item_vtable: u64,
     item_focus: u64,
@@ -40,15 +41,19 @@ struct Ui {
 }
 /// macOS Mach-O 089EA519, mapped live on 18 October 2026 (Germany test run).
 /// Panel joins (+0xb90 idler, +0xba0 window, +0xba8 selected) and the view's
-/// panel list (+0x1938) and displayed country (+0x1990) are the Linux
+/// panel list (+0x1938) and country override (+0x1990) are the Linux
 /// reader's offsets translated by aligned methods and confirmed live; the zoom
 /// float matched a measured node-spacing ratio, and drag panning is 1:1.
+/// Exact Mac getter 0x1be2620 resolves a null override through the current tag;
+/// only its positive own-player path is admitted here. Constructor 0x1be0610
+/// and manager store 0x20e94f5 establish the exact primary in the focus slot.
 const MACOS: Ui = Ui {
     manager: 0x670,
     politics_view: 0x128,
     focus_view: 0x130,
+    focus_view_vtable: 0x3405d08,
     view_root: 0x430,
-    displayed_country: 0x1990,
+    country_override: 0x1990,
     items: 0x18f0,
     item_vtable: 0x3405b78,
     item_focus: 0x20,
@@ -136,9 +141,9 @@ fn wait_for<T>(until: Instant, probe: impl FnMut() -> Result<Option<T>>) -> Resu
         probe,
     )
 }
-/// Visibility can precede the game's displayed-country binding. Observe that
-/// transition inside the original deadline without clicking the opener again.
-/// A nonzero foreign country remains an immediate refusal from the probe.
+/// Wait for the exact own-bound view to become visible inside the original
+/// deadline without clicking the opener again. A foreign override remains an
+/// immediate refusal; a null override uses the witnessed positive own player.
 fn wait_for_tree(
     until: Instant,
     mut probe: impl FnMut() -> Result<binding::FocusViewState>,
@@ -438,8 +443,8 @@ mod tests {
     use super::*;
     #[test]
     fn tree_readiness_waits_for_positive_own_binding_without_preparation_or_input() {
-        use binding::FocusViewState::{Hidden, Opening, Ready};
-        let mut states = [Ok(Opening), Ok(Hidden), Ok(Ready)].into_iter();
+        use binding::FocusViewState::{Hidden, Ready};
+        let mut states = [Ok(Hidden), Ok(Hidden), Ok(Ready)].into_iter();
         let mut observations = 0;
         wait_for_tree(Instant::now() + Duration::from_secs(1), || {
             observations += 1;
@@ -463,7 +468,7 @@ mod tests {
         assert_eq!(error.code, "foreign_focus_scope");
         assert_eq!(observations, 1);
         let until = Instant::now() + Duration::from_millis(10);
-        let error = wait_for_tree(until, || Ok(binding::FocusViewState::Opening)).unwrap_err();
+        let error = wait_for_tree(until, || Ok(binding::FocusViewState::Hidden)).unwrap_err();
         assert_eq!(error.code, "action_deadline");
     }
     #[test]

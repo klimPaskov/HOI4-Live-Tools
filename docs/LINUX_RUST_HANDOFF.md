@@ -9,6 +9,27 @@ failed campaigns. Do not control the shared Windows game.
 
 ## Current checkpoint
 
+The third fresh mixed Mac gate on `538e2b8` passed setup/reconnect again, then
+timed out waiting for the Focus view to be ready after natural completion.
+The final recording shows the German tree open. A later bounded read-only
+inspection found visibility flag 8 with zero at the field treated as displayed
+country. Exact-build static code confirms a nullable country override: zero resolves
+the current player. The corrected reader uses its existing positive own-player
+binding for that case, with immediate foreign-override refusal and no observer
+fallback. No animation cause is established. The exact owned game is closed; default
+settings are unchanged. Autobahn remains unresolved and must never be replayed,
+settled or reset. See [the latest failure](CLAUSEWITZ_VALIDATION.md#mac-visible-focus-tree-readiness-timeout--23-october-2026).
+The binary passed all nine exact-head CI jobs, 1,390 Rust and 956 Python tests
+(37 skipped). Its fresh manual Focus gate passed in 3.75 seconds. Broader mixed
+qualification and all campaign acceptance remain incomplete.
+
+The correction passed 1,394 Rust tests, 956 Python tests (37 skipped),
+formatting, strict cross-platform Clippy and the release build. Run a fresh
+owned Mac manual gate, then the recorded mixed standing plan with Luna medium.
+Preserve every earlier unresolved controller.
+
+The preceding checkpoints remain preserved below.
+
 The second mixed Mac gate on `6713553` again passed manual Economic Growth
 (3.67 seconds), Research, the infantry factory step, reconnect and idle-file
 checks. It then quarantined a torn pre-input clock observation while dismissing

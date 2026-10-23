@@ -153,6 +153,15 @@ Manual node readiness and click checks use the same target-only path. An actual
 pan still requires a fresh settled complete Tree and revalidates that entire
 candidate after pointer movement, before mouse-down. The lighter node result
 cannot authorize a background drag.
+
+On the reviewed Mac build, the Focus view's country field is a nullable override.
+A nonzero value must equal the independently witnessed own country; zero resolves
+through the already validated positive player tag and country map. Observer
+fallback is unavailable. This does not make an unbound view ready: exact view,
+own country/status/tree, canonical item membership and final witnesses still
+apply. This corrects the preceding assumption that zero meant an opening view.
+The investigation followed a recorded readiness timeout with the German tree
+visible; the exact field value during that wait was not retained.
 The pure planner examines at most 1,232 origins, retaining 24-pixel widget
 clearance and inset endpoints. It moves only axes outside the safe area and
 chooses the available travel closest to the needed displacement. An already

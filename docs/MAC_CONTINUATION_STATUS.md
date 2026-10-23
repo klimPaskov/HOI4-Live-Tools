@@ -1,23 +1,27 @@
 # Mac continuation checkpoint — 23 October 2026
 
 The user has authorized macOS testing. The latest fresh Luna medium manual
-Focus gate verified Economic Growth in 3.67 seconds at native 1920×1080. The
+Focus gate verified Economic Growth in 3.75 seconds at native 1920×1080. The
 following mixed worker again verified Research, infantry factories 10→11,
-same-plan reconnect and unchanged idle files. It stopped on a torn memory read
-while dismissing the natural Focus-completion notice. This preceded the corrected
-Focus-view readiness check, which therefore remains unqualified at that transition.
+same-plan reconnect and unchanged idle files. It passed notice dismissal, then
+timed out waiting for the Focus view to report ready. The final video shows the
+German tree open; a later bounded memory read found a visible root with zero in
+the field treated as displayed country. Exact-build code confirms a nullable
+country override; zero resolves the current player. The correction retains
+positive own-player binding and foreign refusal, never observer fallback.
 
-The mixed recording finalized at 1920×1108, 123.11 seconds and 3,629 frames.
+The mixed recording finalized at 1920×1108, 134.37 seconds and 3,960 frames.
 Independent reads confirmed completed Economic Growth, idle Focus, EM Engineering
 still active, infantry allocation 11 and unchanged other allocations. The exact
-owned game is now closed with default settings unchanged. Autobahn's original
-intent remains unresolved; there was no reset, replay, recovery input or end pause.
+owned game is closed with default settings unchanged. Autobahn's original intent
+remains unresolved; no reset, replay, recovery input or end pause occurred.
 
-All nine CI jobs passed on the recorded `6713553` readiness checkpoint. The next
-correction bounds read-only recovery of inconsistent pre-input clock observations
-under the original deadline. Validate it and run a fresh gate with one Luna medium
-player. Neither of the two mixed failures is campaign acceptance. A clean two-year
-run and full recorded campaigns remain required.
+All nine CI jobs passed on the recorded `538e2b8` checkpoint, along with 1,390
+Rust and 956 Python tests (37 skipped). None of the three mixed failures is
+campaign acceptance. A clean two-year run and full recorded campaigns remain
+required. The correction passed 1,394 Rust tests, 956 Python tests (37 skipped),
+formatting, strict cross-platform Clippy and the release build. Fresh manual and
+mixed input qualification remain next.
 
 Use [the current handoff](LINUX_RUST_HANDOFF.md),
 [validation evidence](CLAUSEWITZ_VALIDATION.md) and

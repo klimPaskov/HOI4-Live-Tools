@@ -261,6 +261,7 @@ impl Fake {
             (IDLER + 0x670, MANAGER),
             (MANAGER + 0x130, FOCUS_VIEW),
             (MANAGER + 0x128, POLITICS_VIEW),
+            (FOCUS_VIEW, MACOS.focus_view_vtable),
             (FOCUS_VIEW + 0x430, FOCUS_ROOT),
             (POLITICS_VIEW + 0x430, POLITICS_ROOT),
             (FOCUS_VIEW + 0x1990, COUNTRY),
@@ -485,34 +486,80 @@ fn foreign_node_or_selected_detail_refuses_before_foreign_ui_payload() {
 }
 
 #[test]
-fn zero_or_foreign_displayed_country_refuses_before_item_and_panel_arrays() {
-    for country in [0, FOREIGN] {
-        for detail_probe in [false, true] {
-            let mut f = Fake::new();
-            f.word(FOCUS_VIEW + 0x1990, country);
-            let error = if detail_probe {
-                observe(&f, KEY, None, detail).unwrap_err()
-            } else {
-                observe(&f, KEY, None, symbols).unwrap_err()
-            };
-            assert_eq!(error.code, "foreign_focus_scope");
-            assert_eq!(
-                error.message,
-                if country == 0 {
-                    "Displayed Focus country is unset"
-                } else {
-                    "Displayed Focus country differs from own country"
-                }
-            );
-            assert!(f.untouched(FOCUS_VIEW + 0x18f0, 16));
-            assert!(f.untouched(FOCUS_VIEW + 0x1938, 16));
-        }
+fn foreign_country_override_refuses_every_probe_before_gui_or_foreign_payload() {
+    for mode in 0..4 {
+        let mut f = Fake::new();
+        f.word(FOCUS_VIEW + MACOS.country_override, FOREIGN);
+        f.unmap(FOCUS_VIEW + MACOS.view_root, 8);
+        let error = match mode {
+            0 => observe(&f, KEY, None, view_state).unwrap_err(),
+            1 => observe(&f, KEY, None, node).unwrap_err(),
+            2 => observe(&f, KEY, None, symbols).unwrap_err(),
+            _ => observe(&f, KEY, None, detail).unwrap_err(),
+        };
+        assert_eq!(error.code, "foreign_focus_scope");
+        assert_eq!(
+            error.message,
+            "Focus country override differs from own country"
+        );
+        assert!(f.untouched(FOCUS_VIEW + MACOS.view_root, 8));
+        assert!(f.untouched(FOCUS_VIEW + MACOS.items, 16));
+        assert!(f.untouched(FOCUS_VIEW + MACOS.panels, 16));
+        assert!(f.untouched(FOREIGN, 0x1000));
     }
 }
 
-fn sparse_readiness(displayed: u64, visible: bool) -> Fake {
+#[test]
+fn null_override_uses_the_same_positive_own_binding_for_node_tree_and_detail() {
+    let mut implicit = Fake::new();
+    implicit.word(FOCUS_VIEW + MACOS.country_override, 0);
+    let (owner, node) = observe(&implicit, KEY, None, node).unwrap();
+    let node = node.unwrap();
+    assert_eq!(node.view.country_override, Some(0));
+    assert_eq!(
+        (owner.country, owner.status, owner.tree),
+        (COUNTRY, STATUS, OWN_TREE)
+    );
+    let mut implicit = Fake::new();
+    implicit.word(FOCUS_VIEW + MACOS.country_override, 0);
+    let (tree_owner, tree) = observe(&implicit, KEY, None, symbols).unwrap();
+    assert_eq!(tree_owner, owner);
+    assert_eq!(tree.target, Some(node));
+    assert_eq!(tree.obstacles.len(), 2);
+    let mut implicit = Fake::new();
+    implicit.word(FOCUS_VIEW + MACOS.country_override, 0);
+    let (detail_owner, control) = observe(&implicit, KEY, None, detail).unwrap();
+    assert_eq!(detail_owner, owner);
+    let control = control.unwrap();
+    assert_eq!((control.item, control.widget), (PANEL, START));
+    assert_eq!(control.view.country_override, Some(0));
+    assert!(implicit.untouched(FOREIGN, 0x1000));
+}
+
+#[test]
+fn focus_primary_is_required_before_override_and_gui_payload_for_every_probe() {
+    for mode in 0..4 {
+        let mut f = Fake::new();
+        f.word(FOCUS_VIEW, MACOS.focus_view_vtable + 8);
+        f.unmap(FOCUS_VIEW + MACOS.country_override, 8);
+        f.unmap(FOCUS_VIEW + MACOS.view_root, 8);
+        let error = match mode {
+            0 => observe(&f, KEY, None, view_state).unwrap_err(),
+            1 => observe(&f, KEY, None, node).unwrap_err(),
+            2 => observe(&f, KEY, None, symbols).unwrap_err(),
+            _ => observe(&f, KEY, None, detail).unwrap_err(),
+        };
+        assert_eq!(error.code, "invalid_focus_type");
+        assert!(f.untouched(FOCUS_VIEW + MACOS.country_override, 8));
+        assert!(f.untouched(FOCUS_VIEW + MACOS.view_root, 8));
+        assert!(f.untouched(FOCUS_VIEW + MACOS.items, 16));
+        assert!(f.untouched(FOCUS_VIEW + MACOS.panels, 16));
+    }
+}
+
+fn sparse_readiness(country_override: u64, visible: bool) -> Fake {
     let mut f = Fake::new();
-    f.word(FOCUS_VIEW + MACOS.displayed_country, displayed);
+    f.word(FOCUS_VIEW + MACOS.country_override, country_override);
     f.put(FOCUS_ROOT + 0x95, &[if visible { 8 } else { 0 }]);
     // Readiness must work without materialized collections, their payloads,
     // zoom, or root children. A following country pointer is also unmapped.
@@ -536,18 +583,18 @@ fn assert_no_readiness_payload(f: &Fake) {
 }
 
 #[test]
-fn visible_unset_focus_view_is_opening_without_item_or_panel_arrays() {
+fn visible_implicit_own_focus_view_is_ready_without_item_or_panel_arrays() {
     let f = sparse_readiness(0, true);
     assert_eq!(
         observe(&f, KEY, None, view_state).unwrap().1,
-        FocusViewState::Opening
+        FocusViewState::Ready
     );
     assert_no_readiness_payload(&f);
     assert_eq!(f.checks.get(), 2);
 }
 
 #[test]
-fn hidden_unset_focus_view_is_hidden_without_item_or_panel_arrays() {
+fn hidden_implicit_own_focus_view_is_hidden_without_item_or_panel_arrays() {
     let f = sparse_readiness(0, false);
     assert_eq!(
         observe(&f, KEY, None, view_state).unwrap().1,
@@ -594,11 +641,12 @@ fn foreign_readiness_refuses_before_visibility_country_payload_or_arrays() {
         // A nonzero foreign scope must refuse without treating it as hidden
         // or pending, even when visibility itself has not materialized.
         f.unmap(FOCUS_ROOT + 0x95, 1);
+        f.unmap(FOCUS_VIEW + MACOS.view_root, 8);
         let error = observe(&f, KEY, None, view_state).unwrap_err();
         assert_eq!(error.code, "foreign_focus_scope");
         assert_eq!(
             error.message,
-            "Displayed Focus country differs from own country"
+            "Focus country override differs from own country"
         );
         assert!(f.untouched(FOCUS_ROOT + 0x95, 1));
         assert_no_readiness_payload(&f);
@@ -607,21 +655,28 @@ fn foreign_readiness_refuses_before_visibility_country_payload_or_arrays() {
 
 #[test]
 fn readiness_states_require_final_view_witness_and_process_check() {
-    for (displayed, visible, state) in [
-        (0, true, FocusViewState::Opening),
+    for (country_override, visible, state) in [
+        (0, true, FocusViewState::Ready),
         (0, false, FocusViewState::Hidden),
         (COUNTRY, false, FocusViewState::Hidden),
         (COUNTRY, true, FocusViewState::Ready),
     ] {
         for address in [
+            0x3519740,
+            0x35196c0,
+            game::layout(&Reader::new(&Fake::new())).technology_db_global,
+            GS + 0x4d8,
+            COUNTRY + 0xd08,
+            STATUS + 0x130,
             IDLER + MACOS.manager,
             MANAGER + MACOS.focus_view,
+            FOCUS_VIEW,
             FOCUS_VIEW + MACOS.view_root,
             FOCUS_ROOT,
             FOCUS_ROOT + 0x95,
-            FOCUS_VIEW + MACOS.displayed_country,
+            FOCUS_VIEW + MACOS.country_override,
         ] {
-            let mut f = sparse_readiness(displayed, visible);
+            let mut f = sparse_readiness(country_override, visible);
             f.torn = Some(address);
             let initially_observed = Cell::new(None);
             let result = observe(&f, KEY, None, |r, image, own| {
@@ -634,13 +689,77 @@ fn readiness_states_require_final_view_witness_and_process_check() {
             assert_eq!(f.checks.get(), 1);
             assert_no_readiness_payload(&f);
         }
-        let mut f = sparse_readiness(displayed, visible);
+        let mut f = sparse_readiness(country_override, visible);
         f.fail_final = true;
         assert_eq!(
             observe(&f, KEY, None, view_state).unwrap_err().code,
             "ownership_changed"
         );
         assert_no_readiness_payload(&f);
+    }
+}
+
+#[test]
+fn null_override_cannot_bypass_positive_player_map_or_status_ownership() {
+    for variant in 0..6 {
+        let mut f = sparse_readiness(0, true);
+        let expected_code = match variant {
+            0 | 1 => {
+                f.int(GS + 0x4d8, if variant == 0 { 0 } else { -1 });
+                "player_unavailable"
+            }
+            2 => {
+                let tags = f.get_word(GS + 0x308);
+                f.int(tags + 4, -1);
+                "player_unavailable"
+            }
+            3 => {
+                f.int(COUNTRY + 8, 2);
+                "invalid_focus_owner"
+            }
+            4 => {
+                f.word(STATUS + 0x130, FOREIGN);
+                "invalid_focus_owner"
+            }
+            _ => {
+                f.int(STATUS + 0x138, 2);
+                "invalid_focus_owner"
+            }
+        };
+        assert_eq!(
+            observe(&f, KEY, None, view_state).unwrap_err().code,
+            expected_code
+        );
+        assert!(f.untouched(IDLER + MACOS.manager, 8));
+        assert!(f.untouched(FOCUS_VIEW + MACOS.country_override, 8));
+        assert_no_readiness_payload(&f);
+    }
+}
+
+#[test]
+fn changed_own_override_branch_cannot_replace_a_captured_control() {
+    for detail_probe in [false, true] {
+        let mut implicit = Fake::new();
+        implicit.word(FOCUS_VIEW + MACOS.country_override, 0);
+        let (owner, candidate) = if detail_probe {
+            observe(&implicit, KEY, None, detail).unwrap()
+        } else {
+            observe(&implicit, KEY, None, node).unwrap()
+        };
+        let candidate = candidate.unwrap();
+        let explicit = Fake::new();
+        let current = if detail_probe {
+            observe(&explicit, KEY, Some(&owner), detail).unwrap().1
+        } else {
+            observe(&explicit, KEY, Some(&owner), node).unwrap().1
+        }
+        .unwrap();
+        assert_eq!(current.rect, candidate.rect);
+        assert_eq!(current.view.country_override, Some(COUNTRY));
+        assert_eq!(
+            unchanged(&candidate, &current).unwrap_err().code,
+            "focus_state_changed"
+        );
     }
 }
 

@@ -2,6 +2,12 @@
 
 ## Unreleased native preview
 
+- Correct the Mac Focus view's country field: exact-build code shows that zero
+  selects the current player, while nonzero overrides that choice. Resolve only
+  the positively verified own-player case and retain foreign-country refusal.
+  Preserve the third mixed gate's visible-tree readiness timeout and unresolved
+  intent; fresh input qualification remains required.
+
 - Preserve the second mixed Mac gate: manual Focus, Research, factory allocation,
   reconnect and idle-file checks passed, but an inconsistent pre-input clock read
   quarantined notice dismissal before Focus navigation. Retain the unresolved

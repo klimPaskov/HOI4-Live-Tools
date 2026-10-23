@@ -302,16 +302,24 @@ struct View {
     manager: u64,
     object: u64,
     root: u64,
+    country_override: Option<u64>,
 }
 fn view(r: &Reader<'_>, image: u64, own: &Owner, slot: u64) -> Result<View> {
     let manager = r.u64(own.idler + MACOS.manager)?;
     let object = r.u64(manager + slot)?;
+    let country_override = if slot == MACOS.focus_view {
+        exact(r, object, image + MACOS.focus_view_vtable)?;
+        Some(own_override(r, object, own)?)
+    } else {
+        None
+    };
     let root = gui_tree::container(r, r.u64(object + MACOS.view_root)?, image)?
         .ok_or_else(|| Error::new("invalid_gui", "Exact Focus view root required"))?;
     Ok(View {
         manager,
         object,
         root,
+        country_override,
     })
 }
 pub(super) fn open(r: &Reader<'_>, image: u64, own: &Owner, slot: u64) -> Result<bool> {
@@ -321,40 +329,39 @@ pub(super) fn open(r: &Reader<'_>, image: u64, own: &Owner, slot: u64) -> Result
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum FocusViewState {
     Hidden,
-    Opening,
     Ready,
 }
-fn displayed_country(r: &Reader<'_>, v: &View, own: &Owner) -> Result<u64> {
-    let displayed = r.u64(v.object + MACOS.displayed_country)?;
-    if displayed != 0 && displayed != own.country {
+/// Exact Mac getter 0x1be2620 treats +0x1990 as an optional override. Owner
+/// already proved the positive player tag, bounded map/country membership and
+/// own status/tree under this same witness bracket; the observer path is never
+/// admitted. Preserve the raw override in View for final control equality.
+fn own_override(r: &Reader<'_>, object: u64, own: &Owner) -> Result<u64> {
+    let country_override = r.u64(object + MACOS.country_override)?;
+    let resolved = if country_override == 0 {
+        own.country
+    } else {
+        country_override
+    };
+    if resolved != own.country {
         return Err(Error::new(
             "foreign_focus_scope",
-            "Displayed Focus country differs from own country",
+            "Focus country override differs from own country",
         ));
     }
-    Ok(displayed)
+    Ok(country_override)
 }
 /// Used only within the caller's complete ownership/witness bracket. Do not
-/// follow the displayed country or inspect item, panel, or renderer payloads.
+/// follow an override pointer or inspect item, panel, or renderer payloads.
 pub(super) fn view_state(r: &Reader<'_>, image: u64, own: &Owner) -> Result<FocusViewState> {
     let v = view(r, image, own, MACOS.focus_view)?;
-    let displayed = displayed_country(r, &v, own)?;
     if !gui_tree::visible(r, v.root)? {
         Ok(FocusViewState::Hidden)
-    } else if displayed == 0 {
-        Ok(FocusViewState::Opening)
     } else {
         Ok(FocusViewState::Ready)
     }
 }
 fn own_view(r: &Reader<'_>, image: u64, own: &Owner) -> Result<View> {
     let v = view(r, image, own, MACOS.focus_view)?;
-    if displayed_country(r, &v, own)? == 0 {
-        return Err(Error::new(
-            "foreign_focus_scope",
-            "Displayed Focus country is unset",
-        ));
-    }
     if !gui_tree::visible(r, v.root)? {
         return Err(Error::new(
             "focus_state_changed",
