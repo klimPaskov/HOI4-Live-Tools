@@ -870,7 +870,20 @@ impl Governor {
         now_unix_ms: u64,
         deadline: Instant,
     ) -> Result<DailyResult> {
-        self.run_batch(backend, now_unix_ms, deadline, false, None)
+        self.run_batch(backend, now_unix_ms, deadline, false, None, usize::MAX)
+    }
+    /// A new-day scan with at most one durable intent in this invocation.
+    /// Waiting/deferred heads do not consume this admission; after an actual
+    /// attempt, later entries retain their existing Pending state. Same-day
+    /// runnable work may use continue_entry with its own original deadline.
+    #[cfg(any(target_os = "macos", all(test, unix)))]
+    pub(crate) fn run_next(
+        &mut self,
+        backend: &mut dyn Backend,
+        now_unix_ms: u64,
+        deadline: Instant,
+    ) -> Result<DailyResult> {
+        self.run_batch(backend, now_unix_ms, deadline, false, None, 1)
     }
     #[cfg(any(target_os = "linux", target_os = "macos", all(test, unix)))]
     pub(crate) fn continue_entry(
@@ -883,7 +896,14 @@ impl Governor {
         if !self.state.plan.entries.iter().any(|e| e.id == entry_id) {
             return Err(types::invalid("Unknown continuation entry"));
         }
-        self.run_batch(backend, now_unix_ms, deadline, true, Some(entry_id))
+        self.run_batch(
+            backend,
+            now_unix_ms,
+            deadline,
+            true,
+            Some(entry_id),
+            usize::MAX,
+        )
     }
     fn run_batch(
         &mut self,
@@ -892,6 +912,7 @@ impl Governor {
         deadline: Instant,
         continuation: bool,
         only_entry: Option<&str>,
+        attempt_limit: usize,
     ) -> Result<DailyResult> {
         let started = Instant::now();
         let now = || {
@@ -932,6 +953,7 @@ impl Governor {
             } else {
                 self.used_actions(day)
             };
+            let mut admitted = 0;
             for entry in entries {
                 if !self.queue_head(&entry) {
                     retained.push(entry.id.clone());
@@ -949,7 +971,8 @@ impl Governor {
                     Some(EntryState::Pending { attempts, .. }) => *attempts,
                     _ => continue,
                 };
-                if attempts >= usize::from(self.state.plan.max_actions_per_day)
+                if admitted >= attempt_limit
+                    || attempts >= usize::from(self.state.plan.max_actions_per_day)
                     || Instant::now() >= deadline
                 {
                     retained.push(entry.id.clone());
@@ -1095,6 +1118,7 @@ impl Governor {
                 );
                 self.persist()?;
                 attempts += 1;
+                admitted += 1;
                 // From here, errors/panics leave a durable unresolved intent.
                 let action_deadline = deadline.min(Instant::now() + Duration::from_secs(5));
                 let outcome = match backend.attempt(&attempt, &observed, action_deadline) {
@@ -1323,6 +1347,9 @@ impl Wakeup {
 }
 #[cfg(test)]
 mod tests;
+
+#[cfg(all(test, unix))]
+mod admission_tests;
 
 #[cfg(all(test, unix))]
 mod owner_reopen_tests {

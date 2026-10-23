@@ -9,6 +9,25 @@ failed campaigns. Do not control the shared Windows game.
 
 ## Current checkpoint
 
+A same-controller Mac revision-2 continuation also passed on runtime `7cde19f`.
+It retained the original five completed receipts and added five Focus/Research
+assignments, with verified update, reconnect and daily-budget preservation. Fresh
+independent reads confirmed paused 20 May 1936 20:00, speed 3, all four Research
+slots occupied, southern Autobahn completed, eastern Autobahn active and unchanged
+allocations. All grants are closed; the healthy game remains available without a
+worker, lease or recorder. Its recording finalized at 1920×1108, 102.021667 seconds
+and 3,007 frames. The advancing interval covered 733 game hours in about 82 seconds
+with zero observation pauses and one explicit end-test pause. See
+[revision evidence](CLAUSEWITZ_VALIDATION.md#mac-higher-revision-standing-plan-passes--23-october-2026).
+This gate used one action per game day. Mac cycle admission now permits one
+input attempt per cycle, with same-day continuation and the daily budget retained.
+The correction passed 1,415 Rust tests, 956 Python tests (37 skipped), formatting,
+strict cross-platform Clippy, the release build and 25-tool stdio smoke. Next,
+qualify the normal daily action budget live. The two-year run and full campaigns
+remain incomplete.
+
+The preceding mixed-gate checkpoint is preserved below.
+
 The recorded Mac mixed standing-plan gate on `7cde19f` passed with Luna medium:
 Research assignment/refill, infantry factories 10→11, successive natural Focus
 handoffs, same-plan reconnect and two idle-file checks. All five entries completed.

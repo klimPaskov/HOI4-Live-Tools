@@ -115,8 +115,10 @@ idle plan files. One Luna medium player ran it at native 1920×1080. Germany
 advanced 108.8 game days in about 290 seconds with zero observation pauses and
 one explicit pause at the test's end. The recording finalized cleanly.
 
-The default-off durable worker verified all five planned assignments. Independent
-reads confirmed completed Focuses, Radio active and unchanged other allocations.
+The default-off durable worker verified all five planned assignments. A second
+recorded test retained them through a plan revision and reconnect, added five
+assignments, and filled all four Research slots. Independent reads confirmed
+Focus handoffs and unchanged production allocations.
 This is component qualification; the clean two-year run and full campaigns remain
 unfinished. Earlier failed controllers remain blocked and preserved in
 [the validation record](docs/CLAUSEWITZ_VALIDATION.md).
@@ -138,8 +140,8 @@ The public Research-folder diagnostic remains Linux-only.
 
 ### Remaining acceptance work
 
-- Extend mixed-plan qualification to revisions and broader economy, shortage
-  repair and warfare.
+- Qualify broader routine action batches and expand economy, shortage repair
+  and warfare.
 - Implement and live-test the native Windows adapter.
 - Complete a clean two-year Luna run, then the recorded FAIR Germany and China
   campaigns. Final showcase videos must come from macOS at 1080p or higher.

@@ -6700,3 +6700,78 @@ four preserved mixed failures, whose unresolved controllers remain blocked.
 The next test should exercise a higher plan revision on this healthy controller,
 retaining completed work while adding owned Focus/Research assignments. The
 broader campaign domains, two-year run and full showcases remain required.
+
+## Mac higher-revision standing plan passes — 23 October 2026
+
+The healthy controller from the preceding mixed gate continued on the same
+`7cde19f` runtime, with the documentation-only `8a2c968` checkpoint. All nine CI
+jobs passed on both heads. Luna medium ran the recorded continuation at native
+1920×1080. It used `update` to retain the original five entries and receipts while
+adding two ordered infrastructure Focuses and Research in the three empty slots.
+Revision 2 used a one-action-per-day limit to isolate update/reconnect behavior
+from the existing shared five-second cycle deadline.
+
+The update started the southern Autobahn Focus. STOP, release, broker EOF,
+reconnect and identical-plan start retained the revision, every completed receipt,
+the journal prefix and consumed daily budget. Two 3.2-second idle windows left
+controller bytes, sizes and modification times unchanged. The advancing worker
+assigned Basic Machine Tools in slot 0, Construction I in slot 1 and Support
+Weapons in slot 3, then started the eastern Autobahn Focus after the southern
+Focus completed naturally. All ten retained plan entries were Complete; that
+state denotes verified assignment, not natural completion of every technology.
+
+Germany advanced from 20 April 07:00 to 20 May 20:00: 733 game hours in
+81.826–82.077 seconds. There were zero observation pauses or paused seconds
+inside the advancing interval, and one explicit end-test pause. The test used
+one update and one restart, two clock requests, and no gameplay screenshots.
+No wall or date cap was exceeded. Its 76 RPCs included 23 bounded read-only
+input-busy retries; no other RPC error occurred. Median successful overview,
+Research and governor calls were 0.529, 2.484 and 11.738 ms respectively.
+
+The worker stopped and joined, the lease released and the broker closed. The
+recording finalized at 1920×1108, 102.021667 encoded seconds and 3,007 frames;
+its recorded UI was readable. Independent read-only checks confirmed the paused
+20 May 20:00 state, speed 3, the four expected active technologies, southern
+Autobahn completion and eastern Autobahn activation. All previous Focus and
+Research completions and original plan receipts remained intact. Military line
+membership and requested allocations were unchanged. One naval queue line
+disappeared during advancement; all surviving allocations were unchanged, and no
+new line appeared. All five new attempts had distinct IDs and different game days. Controller
+files and all 238 native sources/pinned helpers stayed unchanged during the audit.
+The game remains healthy and paused, with all grants closed and no worker, lease
+or recorder.
+
+This passes same-controller higher-revision component qualification. It does not
+qualify multi-action admission within a Mac worker cycle, the clean two-year run,
+or a full campaign. Earlier failed controllers remain preserved and blocked.
+
+## Mac worker admits one attempt per cycle — 23 October 2026
+
+Source review found an admission defect in the shared five-second worker cycle:
+a later ready entry could persist Intent with only the remainder of an earlier
+UI action's budget. Expiry then correctly quarantined possible input, but the
+scheduler had admitted work with an unnecessarily depleted bound.
+
+Mac new-day cycles now use a bounded one-attempt scan. Waiting/deferred entries
+still yield to ready work, and blocking or foreign/missing evidence still stops
+the scan. After one persisted Intent, including a zero-input refusal, later
+entries retain their Pending state. Existing same-day continuation uses remaining
+daily budget under a subsequent cycle's original bound. No action deadline is
+renewed, no intent is replayed, and persistence formats, lease/cancellation checks,
+idle probes and Linux's multi-action `run_day` path are unchanged. A single action
+can still exhaust its own original deadline; this removes budget consumption by
+an earlier action in the same cycle.
+
+Ten new tests exercise the real persisted governor at Intent admission, readiness
+starvation across advancing days, same-day continuation, NotQueued consumption,
+restart exhaustion, expired deadlines, foreign/late/uncertain quarantine and
+unchanged multi-action `run_day`. All 199 daily-related regressions and the full
+1,415 Rust tests passed, together with 956 Python tests (37 skipped), formatting,
+strict host/Windows/Linux-musl/ARM64-Linux-musl Clippy and the release build.
+An offline stdio smoke returned protocol JSON only and all 25 existing tools.
+The smoke's initial 24-tool assertion was a stale harness expectation that omitted
+the existing Focus-input probe; that failed assertion is retained separately.
+
+These are offline correction results. Qualify normal daily-budget live admission
+on the healthy retained Mac controller before claiming live acceptance of this
+scheduler change. The two-year run and full campaigns remain incomplete.

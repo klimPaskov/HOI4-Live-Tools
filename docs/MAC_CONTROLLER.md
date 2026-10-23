@@ -108,9 +108,14 @@ input gate; it is not the durable worker described here.
 
 ## Action limits and recovery
 
-Each worker cycle shares one original five-second deadline across its Research,
-Focus and production actions; it does not grant five seconds per entry. This is narrowed
-by the existing lease and cancellation flag. Nested reads, panel preparation,
+Each Mac worker cycle admits at most one durable input intent under its original
+five-second deadline, narrowed by the existing lease and cancellation flag. The
+new-day readiness scan still skips waiting or unavailable entries; an active
+Focus cannot starve ready Research or production. After an attempt, later entries
+retain their Pending state. Existing same-day continuation can handle them in a
+later cycle while the shared daily budget permits. A zero-input refusal still
+consumes its reservation and ends that cycle. Linux retains its existing batch
+behavior. Nested reads, panel preparation,
 geometry checks and completion proof cannot renew that deadline. Production
 settles the complete row/button/rectangle witness across two reads 60 ms apart,
 within the original deadline. The final guard retains that exact candidate
@@ -197,8 +202,10 @@ binary's failure. The revised bounded planner passed a fresh recorded manual
 Economic Growth assignment in 3.65 seconds, with independent active-Focus
 readback. The typed durable adapter remains a default-off preview. A subsequent recorded
 mixed gate verified successive natural Focus completion, Research refill, a
-factory increase and same-plan restart. Higher-revision continuation, the two-year
-run and full campaign qualification remain required.
+factory increase and same-plan restart. A same-controller higher-revision gate
+also passed, retaining old receipts and the consumed daily budget while filling
+three empty Research slots and adding successive Focuses. Broader routine action
+batches, the two-year run and full campaign qualification remain required.
 
 Generated tests cover persistence, ownership, chronology, slot waits, typed
 proofs, unchanged allocations, original deadlines, cancellation and shutdown.

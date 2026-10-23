@@ -2,6 +2,14 @@
 
 ## Unreleased native preview
 
+- Limit each Mac worker cycle to one input attempt so later actions cannot inherit
+  an earlier action's nearly exhausted deadline. Preserve same-day continuation,
+  daily budgets, readiness checks and Linux batch behavior.
+
+- Qualify a same-controller Mac plan revision with Luna medium: preserve five
+  completed receipts, add five assignments, fill all Research slots, and retain
+  daily budget across reconnect. The 733-hour advance had zero observation pauses.
+
 - Qualify the recorded Mac mixed standing plan with Luna medium at native 1080p:
   successive Focus handoffs, Research refill, a factory increase, reconnect and
   unchanged idle files. All five assignments verified with zero observation

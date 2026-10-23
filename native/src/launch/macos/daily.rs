@@ -664,7 +664,7 @@ impl Worker {
             Some(id) => {
                 governor.continue_entry(&mut backend, &id, daily_observation::unix_ms()?, until)
             }
-            None => governor.run_day(&mut backend, daily_observation::unix_ms()?, until),
+            None => governor.run_next(&mut backend, daily_observation::unix_ms()?, until),
         };
         if governor.blocks_work() {
             self.blocked.store(true, Ordering::Release);

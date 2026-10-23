@@ -1,24 +1,31 @@
 # Mac continuation checkpoint — 23 October 2026
 
-The first clean recorded Mac mixed Focus/Research/production component gate passed
-on `7cde19f`, with one Luna medium player at native 1920×1080. All five assignments
-verified: infantry factories 10→11, EM Engineering followed by Radio, and Autobahn
-then Kdf after successive natural Focus completions. Reconnect retained completed
-work; two idle windows left controller files unchanged.
+Two recorded Mac component gates now pass on runtime `7cde19f`, with one Luna
+medium player at native 1920×1080. The mixed gate verified Focus handoffs,
+Research refill, infantry factories 10→11 and reconnect. A same-controller
+revision-2 continuation then retained all five receipts and added five assignments:
+southern/eastern Autobahn Focuses and Research in slots 0, 1 and 3. Update,
+reconnect, consumed budget and unchanged idle files all verified.
 
-Independent reads confirmed Germany paused on 20 April 1936 at 07:00, speed 3,
-all three Focuses completed, Radio active in slot 2 and other allocations unchanged.
-The 108.79-day advance took 290.219–290.428 seconds, with zero observation pauses
-and one explicit end-test pause. The recording finalized cleanly at 1920×1108,
-312.488333 seconds and 9,214 frames. The owned game remains paused and healthy;
-all grants are closed, with no worker, lease or recorder.
+Independent reads confirmed Germany paused on 20 May 1936 at 20:00, speed 3,
+with all ten plan entries Complete, all four Research slots occupied, southern
+Autobahn completed and eastern Autobahn active. Production allocations and old
+receipts remained unchanged. The continuation advanced 733 game hours in
+81.826–82.077 seconds, with zero observation pauses and one explicit end-test
+pause. Its 1920×1108 recording finalized at 102.021667 seconds and 3,007 frames.
+All grants are closed; the healthy game remains paused without a worker, lease
+or recorder.
 
-All nine exact-head CI jobs, 1,405 Rust tests and 956 workspace Python tests
-(37 skipped) passed. All 238 native source files and pinned helpers stayed frozen
-through the live gate. This is component qualification; the clean two-year run
-and full recorded campaigns remain incomplete. Preserve all earlier failed
-controllers. Next, review a higher-revision standing plan on the healthy session
-that retains completed entries and adds owned Focus/Research assignments.
+The runtime passed 1,405 Rust tests and 956 workspace Python tests (37 skipped).
+All nine CI jobs passed on both runtime `7cde19f` and documentation checkpoint
+`8a2c968`. All 238 native sources/pinned helpers stayed unchanged through the
+continuation. This remains component qualification; the clean two-year run and
+full recorded campaigns are incomplete. Preserve all earlier failed controllers.
+The next correction now admits one input attempt per Mac cycle, preserving
+readiness scans and same-day continuation under the daily budget. It passed
+1,415 Rust tests, 956 Python tests (37 skipped), formatting, strict cross-platform
+Clippy, a release build and 25-tool stdio smoke. Live qualification at the normal
+daily action budget is next; revision 2 deliberately used one action per game day.
 
 Use [the current handoff](LINUX_RUST_HANDOFF.md),
 [validation evidence](CLAUSEWITZ_VALIDATION.md) and
