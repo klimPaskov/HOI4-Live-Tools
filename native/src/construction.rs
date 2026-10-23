@@ -13,7 +13,7 @@ use crate::{
     economy,
     error::{Error, Result},
     game,
-    memory::Reader,
+    memory::{Reader, StringAbi},
     platform::Process,
     research_ui::{primary_type_encoding, Witnesses},
 };
@@ -30,6 +30,17 @@ const COUNTER_LIMIT: i32 = 1_000_000;
 
 fn invalid(message: &str) -> Error {
     Error::new("invalid_construction", message)
+}
+/// UI layouts are independent of the portable queue/location readers. Refuse
+/// unported layouts before starting a snapshot or touching any process data.
+fn require_linux_ui(abi: StringAbi) -> Result<()> {
+    if abi != StringAbi::LibStdCxx {
+        return Err(Error::new(
+            "unsupported_platform",
+            "Construction UI observation requires the verified Linux layout; native macOS UI is unported",
+        ));
+    }
+    Ok(())
 }
 fn pointer(p: u64) -> Result<()> {
     if !(0x10000..=0x7fff_ffff_0000).contains(&p) || p % 8 != 0 {
@@ -381,6 +392,9 @@ pub fn page_with_options(
             "invalid_arguments",
             "Construction page exceeds bounds",
         ));
+    }
+    if include_ui {
+        require_linux_ui(process.string_abi())?;
     }
     let start = Instant::now();
     process.begin_snapshot()?;

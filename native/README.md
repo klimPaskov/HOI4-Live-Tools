@@ -156,7 +156,9 @@ geography; the default remains fast and avoids these additional reads.
 top-level `location_available` means at least one location was proved. Each row
 has its own availability and reason. Neither IDs nor availability authorize input.
 
-Optional `include_ui: true` also enables the location checks, then joins the
+Optional `include_ui: true` requires the verified Linux layout. Native macOS
+returns `unsupported_platform` before any process access; ordinary queue and
+location reads remain available there. On Linux it also enables the location checks, then joins the
 construction panel's exact building rows to those same full own-line handles.
 It returns stored `displayed_location_text` from the named text control only
 for own-owned-and-controlled locations. The text names the state even for a
@@ -178,8 +180,9 @@ relationship. Run074 observed an ordinary dockyard selection; railway mode remai
 neither placement eligibility nor effective map routing or delivered input.
 
 `hoi4_construction_controls({"building_id":"dockyard","include_geometry":true})`
-is a read-only preview for inspecting the topbar opener and one building choice
-together. It checks exact named controls, own registry links, callback captures,
+is a read-only Linux preview for inspecting the topbar opener and one building choice
+together. Native macOS returns `unsupported_platform` before any process access.
+It checks exact named controls, own registry links, callback captures,
 fresh catalog identity and scoped politics/Focus/research blockers in one witnessed
 snapshot. Geometry is optional and defaults off. Hidden construction panels omit
 choice enumeration; unknown concrete controls or renderers remain unavailable.
@@ -239,8 +242,9 @@ In this game data a dockyard is a coastal-only state building (shared slots,
 buildings (naval bases, bunkers, coastal bunkers) need a province target and
 are not yet live-tested.
 
-`hoi4_construction_find_view({"state_id":64})` is a read-only preview for future
-map placement. It reports the game's own Find view (visibility flags, query, the
+`hoi4_construction_find_view({"state_id":64})` is a read-only Linux preview for future
+map placement. Native macOS returns `unsupported_platform` before any process access.
+It reports the game's own Find view (visibility flags, query, the
 first result row joined to the state catalog), the camera look-at point and the
 requested own state's template map position, including whether the camera is
 centred on it. It types, clicks and moves nothing. Run082 confirmed the camera,

@@ -1,5 +1,29 @@
 # Clausewitz-MCP Linux validation
 
+## Construction UI platform boundary — 23 October 2026
+
+Review found three public construction routes still entering Linux-only UI
+layouts on Mac: controls, Find/camera and queue `include_ui`. Each now returns
+`unsupported_platform` before snapshot startup, process identity access or
+memory reads. Argument validation remains first. Linux UI observations and Mac
+queue, optional location and complete target observations remain available.
+
+A fresh read-only probe on the same owned Mac game passed all six valid UI
+refusals, three malformed-argument refusals, two ordinary queue reads and three
+canonical target reads. Median RPC times were 0.029 ms for the platform refusal
+and 1.410 ms for target reads; these are small paused-game samples. Germany
+remained paused at 22 May 1936 01:00. All 243 native source/config files and all
+controller files stayed unchanged through the probe. There were no input calls,
+leases, cursor movements or observation pauses. Stdio still exposes 26 tools.
+
+Six new portable fixtures cover direct and protocol entry points, optional
+geometry, empty-page requests, argument precedence and zero process access.
+Full validation passed 1,435 Rust tests, 956 Python tests (37 skipped), formatting,
+strict host/Windows/Linux-musl/ARM64-Linux-musl Clippy and the release build.
+The preceding `70062ce` passed all nine cross-platform CI jobs; CI for this
+correction is tracked separately. Independently bound Mac UI observation and
+durable construction placement remain unfinished.
+
 ## Mac next-day known-refusal retry — 23 October 2026
 
 Luna medium continued the same revision-3 plan on runtime `3b84ebc` after the
@@ -64,7 +88,8 @@ misjoined ordinals, exact null sentinels and torn owner/catalog/queue witnesses.
 No screenshot, save, debugger or game-memory write is part of this path.
 Final validation passed 1,429 Rust tests, 956 Python tests (37 skipped), formatting,
 strict host/Windows/Linux-musl/ARM64-Linux-musl Clippy, the release build and
-26-tool stdio smoke. Cross-platform CI for this new checkpoint is tracked separately.
+26-tool stdio smoke. All nine exact-head CI jobs passed on `70062ce` across
+Linux, macOS and Windows.
 The legacy Mac input adapter still returns an aggregate and discards the private
 typed scope. Its UI stages and before/after identity preservation must be bound
 before durable construction assignment receipts can be added.

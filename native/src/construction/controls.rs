@@ -317,6 +317,7 @@ pub(crate) fn observe(
     find: Option<FindRead>,
 ) -> Result<Observation> {
     validate_key(key)?;
+    super::require_linux_ui(process.string_abi())?;
     let start = Instant::now();
     process.begin_snapshot()?;
     let witnesses = Witnesses::new(process);
@@ -479,5 +480,5 @@ pub(crate) fn observe(
 }
 
 pub(crate) fn tool() -> Value {
-    json!({"name":"hoi4_construction_controls","description":"Combined read-only own construction opener and one canonical public building choice. Exact named paths, Standard callback bindings, managed/selected modes, local receiver gates and scoped own blockers; optional exact renderer/input geometry. No queue/map payload, input, eligibility or global modal/frame/routing authority. Unknown controls and predicates stay explicit. Never pauses or moves the cursor.","inputSchema":{"type":"object","properties":{"building_id":{"type":"string","minLength":1,"maxLength":128},"include_geometry":{"type":"boolean","default":false}},"required":["building_id"],"additionalProperties":false},"annotations":{"readOnlyHint":true}})
+    json!({"name":"hoi4_construction_controls","description":"Combined read-only own construction opener and one canonical public building choice for the verified Linux layout. Native macOS returns unsupported_platform before process reads. Exact named paths, Standard callback bindings, managed/selected modes, local receiver gates and scoped own blockers; optional exact renderer/input geometry. No queue/map payload, input, eligibility or global modal/frame/routing authority. Unknown controls and predicates stay explicit. Never pauses or moves the cursor.","inputSchema":{"type":"object","properties":{"building_id":{"type":"string","minLength":1,"maxLength":128},"include_geometry":{"type":"boolean","default":false}},"required":["building_id"],"additionalProperties":false},"annotations":{"readOnlyHint":true}})
 }

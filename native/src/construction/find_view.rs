@@ -243,6 +243,10 @@ pub(crate) fn observe_in(
     ))
 }
 pub fn snapshot(process: &dyn Process, state_id: Option<i32>) -> Result<Value> {
+    if let Some(id) = state_id {
+        validate_state_id(i64::from(id))?;
+    }
+    super::require_linux_ui(process.string_abi())?;
     let start = Instant::now();
     process.begin_snapshot()?;
     let witnesses = Witnesses::new(process);
@@ -280,5 +284,5 @@ pub fn snapshot(process: &dyn Process, state_id: Option<i32>) -> Result<Value> {
     )
 }
 pub(crate) fn tool() -> Value {
-    json!({"name":"hoi4_construction_find_view","description":"Read-only own map Find view (visibility flags, bounded query, first result row joined to the state catalog), camera eye/look-at, and an optional requested own state's template map position with camera-centred comparison. No input, search, camera movement, placement, eligibility or routing authority. Never pauses or moves the cursor.","inputSchema":{"type":"object","properties":{"state_id":{"type":"integer","minimum":1,"maximum":4095}},"additionalProperties":false},"annotations":{"readOnlyHint":true}})
+    json!({"name":"hoi4_construction_find_view","description":"Read-only own map Find view for the verified Linux layout. Native macOS returns unsupported_platform before process reads. Visibility flags, bounded query, first result row joined to the state catalog, camera eye/look-at, and an optional requested own state's template map position with camera-centred comparison. No input, search, camera movement, placement, eligibility or routing authority. Never pauses or moves the cursor.","inputSchema":{"type":"object","properties":{"state_id":{"type":"integer","minimum":1,"maximum":4095}},"additionalProperties":false},"annotations":{"readOnlyHint":true}})
 }

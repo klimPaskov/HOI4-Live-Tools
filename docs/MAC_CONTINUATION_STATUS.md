@@ -19,6 +19,9 @@ Construction readback now uses typed full-queue facts and a same-witness public
 catalog/own-state join. Unknown building identities no longer imply zero, and
 the legacy Mac counter no longer stops at the first 128 rows. The compact
 `hoi4_construction_target` reader reports unavailable amounts explicitly.
+Linux-only construction controls, Find/camera and queue UI-label options now
+refuse on Mac before process access. Ordinary queue/location/target reads remain
+available; Mac UI observation needs independently verified bindings.
 Durable construction UI stages and before/after receipts remain unfinished;
 the clean two-year run and full campaigns are still required.
 

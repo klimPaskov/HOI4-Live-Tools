@@ -24,6 +24,9 @@ compact `hoi4_construction_target` tool reports null amounts when evidence is
 incomplete. The legacy Mac readback uses this complete observation. This is not
 a durable placement receipt: independently bound Mac controls/Find view and
 before/after identity preservation must still precede worker integration.
+The public construction controls, Find/camera and queue `include_ui` readers
+are Linux-only and refuse Mac before process access. Do not reuse their offsets
+in the Mac observer; ordinary Mac queue/location/target reads remain available.
 Politics/army adapters also need typed proof. Preserve the healthy controller;
 never reset old uncertain controllers. Future input grants should permit one
 exact owned-app activation before recording if necessary. The clean two-year

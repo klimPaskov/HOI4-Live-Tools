@@ -2,6 +2,10 @@
 
 ## Unreleased native preview
 
+- Refuse unported Mac construction controls, Find/camera observations and queue
+  UI labels before any process access. Keep the verified Mac queue, location
+  and target readers available; preserve Linux UI behavior.
+
 - Complete the retained Mac support-production request on the next game day with
   a fresh verified attempt, preserving its prior zero-input refusal and all
   eleven earlier receipts. The recorded Luna gate leaves all twelve entries complete.
