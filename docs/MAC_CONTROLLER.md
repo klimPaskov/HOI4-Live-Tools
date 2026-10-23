@@ -158,6 +158,13 @@ panels only wait for visibility; they never receive a toggle. No mouse, Escape,
 popup dismissal, placement, pause or modifier-repair event is sent. Key-up is
 allocated before key-down and released without a new ownership check.
 
+Each opener proof may replace up to three wholly discarded `torn_read`
+observations, with 2 ms waits clipped to the original action deadline. The
+retained panel and shortcut binding must still match. Coherent changes, other
+read errors and boundary-check failures stop immediately. Input dispatch stays
+outside this recovery loop, so recovery cannot send another key. Errors retain
+the observation phase, attempt count and elapsed time.
+
 This adapter uses strict version-2 records in the shared game-action journal.
 Verified retries return a historical receipt and explicitly do not certify the
 current panel. An uncertain attempt permanently blocks this controller; later

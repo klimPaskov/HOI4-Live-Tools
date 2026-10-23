@@ -9,18 +9,21 @@ failed campaigns. Do not control the shared Windows game.
 
 ## Current checkpoint
 
-The Mac keyboard observer now supports the independently verified Icon, Drag,
-Track, InstantTextBox and Standard receiver paths, including exact graphical
-parent attachment and non-consuming disabled predecessors. Unknown handlers,
-foreign ownership and changed witnesses still refuse. All 45 focused fixtures,
-1,528 Rust / 956 Python tests (37 skipped), strict cross-platform checks, release
-build and offline protocol smoke pass. The retained owned game reached its
-original six-hour deadline and closed with default settings unchanged; its twelve
-completed receipts are preserved. No input accompanied the changes. Next start a
-fresh owned Mac qualification session, check the stationary shortcut, then run
-one bounded Luna-medium opener gate. Construction delivery, the clean two-year
-run and full recorded campaigns remain unfinished. See
-[receiver evidence and limits](CLAUSEWITZ_VALIDATION.md#mac-typed-keyboard-receiver-support--23-october-2026).
+A fresh owned Germany 1936 campaign is running at native 1920×1080. Stationary
+construction-shortcut qualification passed with no input, screenshots or cursor
+movement. The first recorded Luna-medium opener attempt stopped before key-down:
+the keyboard-cache active count changed during its complete witness read. Its
+strict journal retains `NotApplied` / `NotQueued`; independent reads confirmed
+the unchanged paused campaign and closed panel. The 1920×1108 recording finalized
+cleanly at 57.99 seconds. This is failure evidence, not campaign acceptance.
+
+The opener now replaces only wholly discarded torn observations under its
+original five-second deadline, retaining the original binding and once-only key
+transport. All 14 focused recovery tests, 1,542 Rust / 956 Python tests (37 skipped),
+strict cross-platform checks, release build and 28-tool offline protocol smoke
+pass. Next qualify a new request on this same controller, preserving the original
+refusal. Construction delivery, the clean two-year run and full recorded campaigns
+remain unfinished. See [the live failure and correction](CLAUSEWITZ_VALIDATION.md#mac-construction-opener-torn-read-recovery--23-october-2026).
 
 Earlier checkpoints follow.
 

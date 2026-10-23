@@ -21,6 +21,8 @@ use std::{thread, time::Duration};
 #[path = "construction_open/delivery_tests.rs"]
 mod delivery_tests;
 
+mod read_recovery;
+
 trait Attempt {
     /// True means already selected: wait without ever toggling it.
     fn prepare(&mut self) -> Result<bool>;
@@ -56,29 +58,32 @@ struct Live<'a, 'b> {
 }
 impl Live<'_, '_> {
     fn same_before(&self) -> Result<()> {
-        self.fence.input_check()?;
-        let now = mac_panel::observe_open(self.fence)?;
-        if !self.before.same_before_input(&now) {
-            return Err(Error::new(
-                "construction_opener_changed",
-                "Original panel/shortcut binding changed before input",
-            ));
-        }
-        now.require_shortcut()?;
-        self.fence.input_check()
+        read_recovery::observe(self.fence, "before_key", || {
+            let now = mac_panel::observe_open(self.fence)?;
+            if !self.before.same_before_input(&now) {
+                return Err(Error::new(
+                    "construction_opener_changed",
+                    "Original panel/shortcut binding changed before input",
+                ));
+            }
+            now.require_shortcut()
+        })
     }
 }
 impl Attempt for Live<'_, '_> {
     fn prepare(&mut self) -> Result<bool> {
         self.fence.input_check()?;
         if self.before.selected() {
-            let now = mac_panel::observe_open(self.fence)?;
-            if !self.before.same_panel(&now) || !now.selected() {
-                return Err(Error::new(
-                    "construction_opener_changed",
-                    "Already-selected panel binding changed",
-                ));
-            }
+            read_recovery::observe(self.fence, "already_selected", || {
+                let now = mac_panel::observe_open(self.fence)?;
+                if !self.before.same_panel(&now) || !now.selected() {
+                    return Err(Error::new(
+                        "construction_opener_changed",
+                        "Already-selected panel binding changed",
+                    ));
+                }
+                Ok(())
+            })?;
             return Ok(true);
         }
         self.same_before()?;
@@ -95,30 +100,33 @@ impl Attempt for Live<'_, '_> {
     }
     fn finish(&mut self, sent: bool) -> Result<Value> {
         loop {
-            self.fence.input_check()?;
-            let now = mac_panel::observe_open(self.fence)?;
-            if !self.before.same_panel(&now) {
-                return Err(Error::new(
-                    "construction_opener_changed",
-                    "Original panel ownership changed during readback",
-                ));
-            }
+            let now = read_recovery::observe(self.fence, "panel_readback", || {
+                let now = mac_panel::observe_open(self.fence)?;
+                if !self.before.same_panel(&now) {
+                    return Err(Error::new(
+                        "construction_opener_changed",
+                        "Original panel ownership changed during readback",
+                    ));
+                }
+                Ok(now)
+            })?;
             if now.opened() {
                 self.keys.confirm_input_idle()?;
                 // Geometry/idle checks may take time; certify a fresh final panel
                 // under the same original scope and deadline after those checks.
-                let final_state = mac_panel::observe_open(self.fence)?;
-                self.fence.input_check()?;
-                if self.before.same_panel(&final_state) && final_state.opened() {
-                    return Ok(
+                return read_recovery::observe(self.fence, "final_panel_readback", || {
+                    let final_state = mac_panel::observe_open(self.fence)?;
+                    if !self.before.same_panel(&final_state) || !final_state.opened() {
+                        return Err(Error::new(
+                            "construction_opener_changed",
+                            "Panel changed during final verification",
+                        ));
+                    }
+                    Ok(
                         json!({"panel_open":true,"ordinary_key_presses":usize::from(sent),
                         "same_attempt_readback":true,"cursor_moved":false,"game_paused_by_action":false}),
-                    );
-                }
-                return Err(Error::new(
-                    "construction_opener_changed",
-                    "Panel changed during final verification",
-                ));
+                    )
+                });
             }
             thread::sleep(
                 Duration::from_millis(10).min(
@@ -152,10 +160,13 @@ pub(super) fn run(
         ));
     }
     fence.input_check()?;
-    let before = mac_panel::observe_open(fence)?;
-    if !before.selected() {
-        before.require_shortcut()?;
-    }
+    let before = read_recovery::observe(fence, "initial_binding", || {
+        let before = mac_panel::observe_open(fence)?;
+        if !before.selected() {
+            before.require_shortcut()?;
+        }
+        Ok(before)
+    })?;
     let baseline = before.private_baseline()?;
     let check = || fence.input_check();
     let keys = keys.guarded(fence, &check)?;

@@ -63,7 +63,7 @@ return a capability error. Logs and setup errors go to stderr.
 | --- | --- |
 | Linux x86_64 | Owned launch/reconnects, exact-build reads, waits, clock keys, research, Focus/daily plans, construction and one-factory production previews |
 | Linux ARM64 with FEX | Pinned translator and x86 guest reader; own-state and stationary XTest key qualification passed at 1080p; explicit Rust input validation opt-in, live adapter acceptance pending |
-| macOS | Separate owned task-port and ordinary-input preview on one Steam 1.19.3 Rosetta build; see the [platform status](../README.md#macos-preview-live-tested-on-one-build) |
+| macOS | Separate owned task-port and ordinary-input preview on one Steam 1.19.3 Rosetta build; see the [platform status](../README.md#macos) |
 | Windows | Portable protocol and fixtures; native live adapter remains unavailable |
 
 Three-OS CI validates shared code. It does not establish live compatibility.
@@ -81,10 +81,11 @@ Already-selected panels receive no toggle; uncertain input cannot be replayed or
 settled from later UI. Physical delivery remains unqualified. See the
 [permission and receipt contract](../docs/MAC_CONTROLLER.md#construction-opener-qualification).
 
-The durable observation producer now uses the independently reviewed Mac game
-and Research layouts. Canonical Mac process timestamps retain byte-exact scope
-and restart equality. This prepares the daily-worker port; the Mac legacy
-standing-plan runner is still synchronous and does not yet run durable plans.
+The Mac durable worker has passed recorded Research, Focus and production
+component tests, including plan revisions and reconnects. Canonical Mac process
+timestamps retain byte-exact scope and restart equality. The separate legacy
+standing-plan runner remains synchronous. Wider durable domains, the clean
+two-year run and full campaign acceptance remain unfinished.
 
 The optional [FEX launch configuration](../docs/OWNED_LINUX_LAUNCHER.md#arm64-linux-with-fex)
 keeps kernel process identity separate from the mapped x86 game. Both binaries

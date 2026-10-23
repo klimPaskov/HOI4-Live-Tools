@@ -7259,3 +7259,45 @@ Next, continue this same plan/controller across another game day to qualify the
 known zero-input refusal's ordinary retry while retaining its history. Never
 reset the Pending entry or replay any older uncertain controller. The two-year
 run, wider durable domains and full recorded campaigns remain outstanding.
+
+## Mac construction opener torn-read recovery — 23 October 2026
+
+A fresh owned vanilla Germany campaign started at paused 1 January 1936 12:00,
+Normal difficulty, historical AI and a native 1920×1080 client. Six ordinary panel
+and six shortcut observations passed without input, screenshots, cursor movement
+or observation pauses. Median ordinary/shortcut reads were 1.605/36.668 ms.
+A read-only controller bind created fresh local storage and closed cleanly with
+empty action journals and no lease or worker.
+
+The first Luna-medium opener gate on `c4a0c9c` stopped before key-down. The native
+error identified a torn topbar-opener witness at read 431, size 16, byte 12. The
+strict journal contains Dispatching followed by NotApplied with positive delivery
+NotQueued. The harness retained its failed outcome, including a success-only
+terminal-audit record-count failure. There was no retry, clock request, worker,
+cursor movement or observation pause. Lease release and MCP EOF succeeded; the
+owned recording finalized at 1920×1108, 57.991667 seconds and 1,706 frames.
+
+Independent readback confirmed the original paused date/speed, full Research,
+Focus and production membership, empty construction queue, canonical own target
+and closed panel. Controller bytes and metadata stayed unchanged during that
+readback. A separate read-only tracing adapter mapped ordinal 431 to the own
+keyboard-cache array header. Two of twelve stationary samples reproduced the
+same active-count tear; these traced timings are not a performance benchmark.
+Neither observation was used to reclassify the original delivery receipt.
+
+The correction retries only a wholly discarded complete opener observation,
+up to four attempts with 2 ms waits clipped to the original action deadline.
+The original process, lease, campaign and cancellation checks surround reads and
+waits. Boundary failures cannot become retryable UI reads. A coherent binding
+change or other read error fails immediately, even if a later UI might restore.
+The original binding survives prepare, final key checks and same-attempt readback;
+key dispatch, journal writes and input-idle checks remain outside recovery.
+Errors retain phase, attempts and elapsed time. No deadline is renewed, uncertain
+input is never replayed, and a new request must preserve the known-refusal prefix.
+
+Fourteen focused recovery fixtures and all 1,542 Rust tests passed, together with
+956 Python tests (37 skipped), formatting, strict host/Windows-GNU/Linux-musl/
+ARM64-Linux-musl Clippy, release build and the 28-tool offline stdio smoke. These
+checks do not establish live delivery. A new recorded same-controller Luna gate
+remains required; construction placement, wider durable domains, the clean
+two-year run and full campaign recordings are unfinished.
