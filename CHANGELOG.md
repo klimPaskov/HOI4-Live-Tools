@@ -2,6 +2,12 @@
 
 ## Unreleased native preview
 
+- Bound discarded-read recovery in the typed Mac production path while retaining
+  its original target, deadline and single input attempt. Add phase/stage failure
+  diagnostics and preserve the fourth mixed gate's unresolved production intent.
+  That gate stopped before any clock request; natural Focus completion remains
+  unqualified.
+
 - Correct the Mac Focus view's country field: exact-build code shows that zero
   selects the current player, while nonzero overrides that choice. Resolve only
   the positively verified own-player case and retain foreign-country refusal.

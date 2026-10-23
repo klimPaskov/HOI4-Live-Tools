@@ -30,6 +30,8 @@ use std::{
 };
 
 const GAME: (u32, u32) = (1920, 1080);
+mod read_recovery;
+use read_recovery::stage;
 pub(super) struct Journals {
     scope: Scope,
     progress: Progress,
@@ -80,6 +82,17 @@ struct Canonical {
     allocations: Vec<(LineIdentity, i32)>,
 }
 fn canonical(
+    process: &dyn Process,
+    scope: &Scope,
+    target: &FactoryTarget,
+    until: Instant,
+    phase: &'static str,
+) -> Result<Canonical> {
+    read_recovery::observe(process, until, phase, || {
+        canonical_once(process, scope, target, until)
+    })
+}
+fn canonical_once(
     process: &dyn Process,
     scope: &Scope,
     target: &FactoryTarget,
@@ -142,6 +155,7 @@ pub(super) fn readiness(
         &observed.scope,
         &target,
         Instant::now() + Duration::from_secs(1),
+        "readiness_canonical",
     )?;
     if current.context.date_raw < observed.date_raw {
         return Err(Error::new(
@@ -214,7 +228,13 @@ impl Journals {
             ));
         }
         let target = goal(&attempt.entry, &attempt.scope)?;
-        let before = canonical(process, &self.scope, &target, until)?;
+        let before = canonical(
+            process,
+            &self.scope,
+            &target,
+            until,
+            "bind_original_canonical",
+        )?;
         if (i64::from(target.factories) - i64::from(before.state.requested)).abs() > 1 {
             return Ok(Outcome::NotQueued(
                 "Fresh allocation is not one original factory step from the target".into(),
@@ -230,45 +250,70 @@ impl Journals {
         let run = (|| -> Result<VerifiedReceipt> {
             deadline(until)?;
             if before.state.requested != target.factories {
-                common::clear_notices(process, keys)?;
-                ui::ensure_open(process, keys)?;
-                if common::read(process, ui::selection_open)? {
-                    keys.press(Key::Escape)?;
-                    common::wait(process, "close production selection", |r, image| {
-                        Ok(!ui::selection_open(r, image)?)
-                    })?;
-                    ui::ensure_open(process, keys)?;
+                stage(
+                    "prepare_clear_notices",
+                    common::clear_notices(process, keys),
+                )?;
+                stage("prepare_open_panel", ui::ensure_open(process, keys))?;
+                if stage(
+                    "prepare_selection_probe",
+                    common::read(process, ui::selection_open),
+                )? {
+                    stage("prepare_close_selection_input", keys.press(Key::Escape))?;
+                    stage(
+                        "prepare_close_selection_readback",
+                        common::wait(process, "close production selection", |r, image| {
+                            Ok(!ui::selection_open(r, image)?)
+                        }),
+                    )?;
+                    stage("prepare_reopen_panel", ui::ensure_open(process, keys))?;
                 }
-                ui::reveal(process, keys, before.state.line.handle)?;
+                stage(
+                    "prepare_reveal_row",
+                    ui::reveal(process, keys, before.state.line.handle),
+                )?;
             }
-            let prepared = canonical(process, &self.scope, &target, until)?;
-            same_before(&before, &prepared)?;
+            let prepared = canonical(process, &self.scope, &target, until, "prepared_canonical")?;
+            stage("prepared_revalidation", same_before(&before, &prepared))?;
             let mut backend = MacBackend {
                 process,
                 keys,
                 scope: &self.scope,
                 original: &before,
                 until,
+                dispatch_called: false,
             };
             let timeout = until
                 .saturating_duration_since(Instant::now())
                 .min(Duration::from_secs(10));
             deadline(until)?;
-            let execution = self.ordinary.execute(
-                &request.id,
-                request.target.clone(),
-                token,
-                authority,
-                &RwLock::new(true),
-                &Cleared(&self.scope.epoch.game),
-                &mut backend,
-                timeout,
+            let execution = stage(
+                "ordinary_step",
+                self.ordinary.execute(
+                    &request.id,
+                    request.target.clone(),
+                    token,
+                    authority,
+                    &RwLock::new(true),
+                    &Cleared(&self.scope.epoch.game),
+                    &mut backend,
+                    timeout,
+                ),
             )?;
-            let fresh = canonical(process, &self.scope, &target, until)?;
-            same_after(&before, &fresh, &target)?;
+            let fresh = canonical(
+                process,
+                &self.scope,
+                &target,
+                until,
+                "final_canonical_readback",
+            )?;
+            stage(
+                "final_allocation_readback",
+                same_after(&before, &fresh, &target),
+            )?;
             self.progress
                 .verified(&request.id, &execution, &fresh.state, &fresh.context)?;
-            let observed = producer.observe(process, until)?;
+            let observed = stage("receipt_producer", producer.observe(process, until))?;
             let (original, original_context) = self.progress.original(&attempt.entry)?;
             let receipt = VerifiedReceipt::from_production(
                 attempt.clone(),
@@ -410,6 +455,7 @@ fn button(process: &dyn Process, handle: u64, increasing: bool, until: Instant) 
     deadline(until)?;
     process.begin_snapshot()?;
     let witnesses = Witnesses::new(process);
+    witnesses.section("mac_production_view");
     let r = Reader::new(&witnesses);
     let image = process.image_base();
     if !ui::open(&r, image)? || ui::selection_open(&r, image)? {
@@ -418,6 +464,7 @@ fn button(process: &dyn Process, handle: u64, increasing: bool, until: Instant) 
             "Own production panel must be visible with no equipment selection",
         ));
     }
+    witnesses.section("mac_production_row");
     let frame = ui::row(&r, image, handle)?.ok_or_else(|| {
         Error::new(
             "production_target_unavailable",
@@ -429,6 +476,7 @@ fn button(process: &dyn Process, handle: u64, increasing: bool, until: Instant) 
     } else {
         "factories_sub_1x"
     };
+    witnesses.section("mac_production_control");
     let matches = gui_tree::children(&r, frame)?
         .into_iter()
         .filter_map(|widget| match gui_tree::name(&r, widget, image) {
@@ -453,6 +501,7 @@ fn button(process: &dyn Process, handle: u64, increasing: bool, until: Instant) 
             "Original-line factory control is hidden or disabled",
         ));
     }
+    witnesses.section("mac_production_geometry");
     let rect = gui_tree::rect_unclipped(&r, image, widget, GAME)?;
     if rect.x < 0 || rect.y < 360 || rect.x + rect.w > 1920 || rect.y + rect.h > 1040 {
         return Err(Error::new(
@@ -488,20 +537,28 @@ struct MacBackend<'a, 'p> {
     scope: &'a Scope,
     original: &'a Canonical,
     until: Instant,
+    /// Dispatch entry only, never evidence of mouse-down or server delivery.
+    dispatch_called: bool,
 }
 impl step::Backend for MacBackend<'_, '_> {
     type Candidate = Button;
     fn observe(&mut self, target: &Target, until: Instant) -> Result<State> {
+        let phase = if self.dispatch_called {
+            "ordinary_canonical_readback"
+        } else {
+            "ordinary_canonical_revalidation"
+        };
         let observed = canonical(
             self.process,
             self.scope,
             target.factory()?,
             until.min(self.until),
+            phase,
         )?;
         if observed.state.line != self.original.state.line {
             return Err(Error::new(
                 "ownership_changed",
-                "Original production line changed",
+                format!("phase={phase}; Original production line changed"),
             ));
         }
         Ok(State::Factories(observed.state))
@@ -509,27 +566,48 @@ impl step::Backend for MacBackend<'_, '_> {
     fn candidate(&mut self, target: &Target, before: &State, until: Instant) -> Result<Button> {
         let until = until.min(self.until);
         let target = target.factory()?;
-        settled_button(until, || {
-            let current = canonical(self.process, self.scope, target, until)?;
-            same_before(self.original, &current)?;
-            if &current.state != before.factory()? {
-                return Err(Error::new(
-                    "production_state_changed",
-                    "Factory candidate differs from typed before state",
-                ));
-            }
-            let candidate = button(
-                self.process,
-                current.state.line.handle,
-                target.factories > current.state.requested,
-                until,
-            )?;
-            same_before(
-                self.original,
-                &canonical(self.process, self.scope, target, until)?,
-            )?;
-            Ok(candidate)
-        })
+        stage(
+            "candidate_settlement",
+            settled_button(until, || {
+                let current = canonical(
+                    self.process,
+                    self.scope,
+                    target,
+                    until,
+                    "candidate_canonical",
+                )?;
+                stage("candidate_allocation", same_before(self.original, &current))?;
+                if &current.state != before.factory()? {
+                    return Err(Error::new(
+                        "production_state_changed",
+                        "Factory candidate differs from typed before state",
+                    ));
+                }
+                let candidate = stage(
+                    "candidate_button",
+                    button(
+                        self.process,
+                        current.state.line.handle,
+                        target.factories > current.state.requested,
+                        until,
+                    ),
+                )?;
+                stage(
+                    "candidate_revalidation",
+                    same_before(
+                        self.original,
+                        &canonical(
+                            self.process,
+                            self.scope,
+                            target,
+                            until,
+                            "candidate_post_button_canonical",
+                        )?,
+                    ),
+                )?;
+                Ok(candidate)
+            }),
+        )
     }
     fn dispatch_once(
         &mut self,
@@ -538,34 +616,48 @@ impl step::Backend for MacBackend<'_, '_> {
         candidate: &Button,
         until: Instant,
     ) -> DispatchOutcome {
+        self.dispatch_called = true;
         let run = (|| {
             let until = until.min(self.until);
             let target = target.factory()?;
             let check = || {
-                deadline(until)?;
-                self.keys.confirm_input_idle()?;
-                let current = canonical(self.process, self.scope, target, until)?;
-                same_before(self.original, &current)?;
-                if &current.state != before.factory()? {
-                    return Err(Error::new(
-                        "production_state_changed",
-                        "Factory allocation differs from typed before state before mouse-down",
-                    ));
-                }
-                unchanged_button(
-                    candidate,
-                    &button(
-                        self.process,
-                        current.state.line.handle,
-                        target.factories > current.state.requested,
-                        until,
-                    )?,
-                )?;
-                deadline(until)
+                read_recovery::observe(self.process, until, "dispatch_guard", || {
+                    stage("dispatch_input_idle", self.keys.confirm_input_idle())?;
+                    let current = stage(
+                        "dispatch_canonical",
+                        canonical_once(self.process, self.scope, target, until),
+                    )?;
+                    stage("dispatch_allocation", same_before(self.original, &current))?;
+                    if &current.state != before.factory()? {
+                        return Err(Error::new(
+                            "production_state_changed",
+                            "Factory allocation differs from typed before state before mouse-down",
+                        ));
+                    }
+                    stage(
+                        "dispatch_fixed_control",
+                        unchanged_button(
+                            candidate,
+                            &stage(
+                                "dispatch_button",
+                                button(
+                                    self.process,
+                                    current.state.line.handle,
+                                    target.factories > current.state.requested,
+                                    until,
+                                ),
+                            )?,
+                        ),
+                    )?;
+                    deadline(until)
+                })
             };
-            let guarded = self.keys.guarded(self.process, &check)?;
+            let guarded = stage(
+                "dispatch_bind_guard",
+                self.keys.guarded(self.process, &check),
+            )?;
             let (x, y) = candidate.rect.center();
-            guarded.click(GAME, x, y)?;
+            stage("dispatch_transport", guarded.click(GAME, x, y))?;
             Ok(())
         })();
         // CGEventPost has no server delivery receipt. Only canonical readback
@@ -577,7 +669,7 @@ impl step::Backend for MacBackend<'_, '_> {
     }
     fn confirm_input_idle(&mut self, until: Instant) -> Result<()> {
         deadline(until.min(self.until))?;
-        self.keys.confirm_input_idle()?;
+        stage("readback_input_idle", self.keys.confirm_input_idle())?;
         deadline(until.min(self.until))
     }
 }
@@ -588,7 +680,7 @@ mod proof_tests {
     use crate::actions::Epoch;
     use std::cell::Cell;
 
-    fn control() -> Button {
+    pub(super) fn control() -> Button {
         Button {
             frame: 0x1000,
             widget: 0x2000,
@@ -708,7 +800,7 @@ mod proof_tests {
         assert_eq!(clock.get(), until);
         assert_eq!(calls.get(), 2);
     }
-    fn snapshot() -> Canonical {
+    pub(super) fn snapshot() -> Canonical {
         let epoch = Epoch {
             game: Identity {
                 pid: 71,
@@ -751,7 +843,7 @@ mod proof_tests {
             allocations: vec![(line, 10), (other, 5)],
         }
     }
-    fn target(original: &Canonical) -> FactoryTarget {
+    pub(super) fn target(original: &Canonical) -> FactoryTarget {
         FactoryTarget {
             epoch: original.state.epoch.clone(),
             line_handle: format!("0x{:016x}", original.state.line.handle),

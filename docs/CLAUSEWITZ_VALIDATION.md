@@ -6602,3 +6602,53 @@ The nullable-override correction passed 1,394 Rust tests, 956 Python tests
 Clippy and the release build. Exact view-primary and positive own-player checks
 precede payload reads; raw override changes invalidate captured controls.
 Fresh recorded input qualification remains required.
+
+## Mac mixed production torn-read quarantine — 23 October 2026
+
+Fresh immutable `039c00d` passed all nine exact-head CI jobs, 1,394 Rust tests
+and 956 workspace Python tests (37 skipped). Luna medium's manual Economic
+Growth assignment verified in 3,733.412 ms. Independent read-only checks retained
+paused 1 January 1936 12:00, speed 0, active Growth, empty Research and all original
+production allocations. Its recording finalized at 1920×1108, 249.021667 seconds
+and 7,336 frames. The client was native 1920×1080. All 236 native source files and
+pinned helpers stayed unchanged.
+
+The fourth fresh mixed gate stopped during paused setup. EM Engineering verified
+in slot 2; the infantry factory attempt retained an unresolved Intent followed
+by Uncertain/Unknown, with `torn_read: Snapshot witness changed`. The outer worker
+reported shared uncertainty. The exact failing observation stage was not retained;
+neither pre-click refusal nor post-click readback failure can be established from
+this cause alone. There was one worker start, no reconnect, zero clock requests,
+zero observation pauses and no end pause. Autobahn, Kdf and Radio remained pending.
+The natural-completion Focus path was not reached, so the nullable-override fix
+still lacks that live acceptance.
+
+STOP joined, lease release refused quarantine, and broker EOF ended ownership.
+The 24 player RPCs included 12 bounded read-only input-busy retries and the refused
+release. The recording finalized explicitly at 1920×1108, 35.133333 seconds and
+1,034 frames. Its final frame shows Production open, infantry allocation 10 and
+the pointer over the plus-button tooltip; it does not establish input delivery.
+
+Independent reads after explicit handback confirmed unchanged paused 1 January
+12:00, active Economic Growth, EM Engineering active in slot 2, other Research
+slots empty and all 21 production allocations unchanged. Infantry remained at 10.
+Controller bytes, size and modification time stayed unchanged, as did all pinned
+sources/helpers. Exact owned-supervisor cleanup closed the game with return code
+0 and default settings unchanged. The failed controller remains blocked; never
+retry, settle or reset its production intent.
+
+The next correction belongs in the typed Mac daily-production adapter: complete
+canonical and GUI observations need bounded read-only recovery and stage-aware
+failure diagnostics under the original action deadline. It must never repeat
+movement/clicks or accept a coherent changed owner, line, control or allocation.
+No clean two-year run or full campaign acceptance has been achieved.
+
+The typed adapter now retries only complete discarded canonical/dispatch-guard
+observations, at most four attempts with 2 ms gaps within the original deadline.
+It retains fixed target equality, immediate coherent refusal and one transport
+call. Static phase/stage labels distinguish canonical reads, fixed-control checks
+and transport failures. The separate Mac window-geometry observer is unchanged;
+these diagnostics cannot retroactively identify or prove a fix for the earlier
+unknown-stage failure. Validation passed 1,405 Rust tests, 956 Python tests
+(37 skipped), formatting, strict host/Windows/Linux-musl/ARM64-Linux-musl Clippy
+and the release build. Fresh live qualification remains required.

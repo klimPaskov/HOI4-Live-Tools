@@ -9,6 +9,26 @@ failed campaigns. Do not control the shared Windows game.
 
 ## Current checkpoint
 
+The fourth fresh mixed Mac gate on `039c00d` stopped during paused production
+setup after EM Engineering verified. Its infantry intent retained an unknown
+`torn_read` failure; the exact stage was not recorded. Root's independent reads
+confirmed factories still at 10, all 21 allocations unchanged, active Growth and
+EM Engineering, and paused 1 January 12:00. The owned game is closed with settings
+unchanged. All grants are closed. Never replay, settle or reset this intent.
+See [the failure evidence](CLAUSEWITZ_VALIDATION.md#mac-mixed-production-torn-read-quarantine--23-october-2026).
+
+The manual Focus gate passed in 3.73 seconds; all nine exact-head CI jobs and
+1,394 Rust/956 Python tests (37 skipped) passed. The natural-completion Focus
+path was not reached. Bounded complete-read recovery and stage diagnostics
+are now implemented in the typed daily-production adapter. The correction passed
+1,405 Rust tests, 956 Python tests (37 skipped), formatting, strict cross-platform
+Clippy and the release build. Qualify a fresh owned Mac session with one Luna
+medium player. The separate window-geometry read path is unchanged; the earlier
+unknown-stage cause is not proven fixed. Mixed standing-plan and campaign acceptance remain
+incomplete. Preserve all earlier failed controllers.
+
+The preceding checkpoints remain preserved below.
+
 The third fresh mixed Mac gate on `538e2b8` passed setup/reconnect again, then
 timed out waiting for the Focus view to be ready after natural completion.
 The final recording shows the German tree open. A later bounded read-only

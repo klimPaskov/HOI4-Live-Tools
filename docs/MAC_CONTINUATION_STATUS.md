@@ -1,27 +1,25 @@
 # Mac continuation checkpoint — 23 October 2026
 
-The user has authorized macOS testing. The latest fresh Luna medium manual
-Focus gate verified Economic Growth in 3.75 seconds at native 1920×1080. The
-following mixed worker again verified Research, infantry factories 10→11,
-same-plan reconnect and unchanged idle files. It passed notice dismissal, then
-timed out waiting for the Focus view to report ready. The final video shows the
-German tree open; a later bounded memory read found a visible root with zero in
-the field treated as displayed country. Exact-build code confirms a nullable
-country override; zero resolves the current player. The correction retains
-positive own-player binding and foreign refusal, never observer fallback.
+The user has authorized macOS testing. On `039c00d`, Luna medium's fresh manual
+Focus gate passed in 3.73 seconds at native 1920×1080. All nine exact-head CI jobs,
+1,394 Rust tests and 956 workspace Python tests (37 skipped) passed.
 
-The mixed recording finalized at 1920×1108, 134.37 seconds and 3,960 frames.
-Independent reads confirmed completed Economic Growth, idle Focus, EM Engineering
-still active, infantry allocation 11 and unchanged other allocations. The exact
-owned game is closed with default settings unchanged. Autobahn's original intent
-remains unresolved; no reset, replay, recovery input or end pause occurred.
+The following mixed gate stopped during paused setup: EM Engineering verified,
+but the infantry factory attempt retained an unresolved torn-read failure with
+unknown delivery. Independent reads confirmed infantry still at 10, all 21
+allocations unchanged, Growth and EM Engineering active, and paused 1 January
+1936 12:00. There were zero clock requests and zero observation pauses. Its
+35.13-second recording finalized cleanly at 1920×1108. The owned game is closed
+with default settings unchanged, and all input grants are closed.
 
-All nine CI jobs passed on the recorded `538e2b8` checkpoint, along with 1,390
-Rust and 956 Python tests (37 skipped). None of the three mixed failures is
-campaign acceptance. A clean two-year run and full recorded campaigns remain
-required. The correction passed 1,394 Rust tests, 956 Python tests (37 skipped),
-formatting, strict cross-platform Clippy and the release build. Fresh manual and
-mixed input qualification remain next.
+The failure did not reach natural Focus completion. Bounded complete-read
+recovery and stage diagnostics are now implemented in the typed daily-production
+adapter, preserving coherent ownership/control refusal and the original deadline.
+The correction passed 1,405 Rust tests, 956 Python tests (37 skipped), formatting,
+strict cross-platform Clippy and the release build; fresh live qualification remains
+next. The earlier unknown-stage cause is not proven fixed. Never replay,
+settle or reset the failed intent. Mixed qualification, the clean two-year run
+and full recorded campaigns remain incomplete.
 
 Use [the current handoff](LINUX_RUST_HANDOFF.md),
 [validation evidence](CLAUSEWITZ_VALIDATION.md) and

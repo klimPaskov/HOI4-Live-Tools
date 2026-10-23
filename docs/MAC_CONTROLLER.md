@@ -121,6 +121,14 @@ process identity are checked around each observation and wait. Coherent scope
 changes and other errors refuse immediately; late results cannot authorize input.
 This recovery repeats only reads, never a UI action or an uncertain intent.
 
+The typed production adapter applies the same bounded discarded-read recovery
+to complete canonical observations and final target checks. The final check
+retains the original line, allocation and captured button; a coherent difference
+refuses immediately even after a discarded sample. Movement and click dispatch
+stay outside the recovery loop. Failure diagnostics identify the phase and read
+stage, attempts and elapsed time while preserving the underlying error. They do
+not establish delivery or resolve any earlier uncertain attempt.
+
 The worker persists its intent before any UI preparation. Research completion
 requires a fresh, typed empty-to-assigned transition in the exact own slot.
 Focus requires a fresh exact idle-to-active transition with unchanged canonical

@@ -109,19 +109,17 @@ against the owned OS window before input. The
 [Rust-managed recorder](docs/MAC_RECORDING.md) captures a 1920×1108 window,
 including the titlebar around the 1080p game client.
 
-Recorded component tests have verified Research, Focus, clock control and
+Recorded Mac component tests have verified Research, Focus, clock control and
 one-factory production changes. Research queues have survived reconnect and
-refilled after natural completion, with unchanged idle plan files. These tests
-also retained harness failures; they are not a clean campaign acceptance run.
-The latest manual Focus gate verified Economic Growth in 3.75 seconds after two
-preserved timeout failures. A default-off durable Focus adapter now joins the
-Research and production worker. Its first combined live gate preserved those
-assignments across reconnect, then stopped during Focus-screen ownership checks
-after natural Economic Growth completion. A fresh run passed the manual gate and
-reconnect again, but stopped on an inconsistent memory read while dismissing the
-completion notice. The next run reached the open German Focus tree but timed out
-on its memory readiness check. All unresolved intents remain blocked. Successive
-durable Focus assignment is not yet accepted.
+refilled after natural completion, with unchanged idle plan files. The latest
+manual Focus assignment verified in 3.73 seconds at native 1920×1080.
+
+A default-off durable worker combines Research, Focus and production plans.
+Its latest mixed test stopped on an inconsistent production read during paused
+setup; all allocations stayed unchanged and the unresolved intent remains blocked.
+Successive durable Focus assignment and a clean combined run remain unaccepted.
+[The validation record](docs/CLAUSEWITZ_VALIDATION.md) preserves each failed run
+and distinguishes component results from campaign acceptance.
 
 Measured Mac overview/Research/digest medians were about 0.3/1.7/10.6 ms in the
 recorded component run, with zero observation pauses. A separate target-only
@@ -147,7 +145,7 @@ The public Research-folder diagnostic remains Linux-only.
   campaigns. Final showcase videos must come from macOS at 1080p or higher.
 - Validate long campaign recording and publish only after release acceptance.
 
-All nine CI jobs passed on the pre-input read-recovery checkpoint (`538e2b8`) across
+All nine CI jobs passed on the nullable Focus-country checkpoint (`039c00d`) across
 Linux, Windows and macOS. Offline tests do not prove native game behavior.
 For measurements, retained failures and the next gate, use
 [the comparison](docs/CLAUSEWITZ_COMPARISON.md),
