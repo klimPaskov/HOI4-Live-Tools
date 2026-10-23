@@ -118,7 +118,11 @@ one explicit pause at the test's end. The recording finalized cleanly.
 The default-off durable worker verified all five planned assignments. A second
 recorded test retained them through a plan revision and reconnect, added five
 assignments, and filled all four Research slots. Independent reads confirmed
-Focus handoffs and unchanged production allocations.
+Focus handoffs and unchanged production allocations. A subsequent daily-cap test
+and next-day retry brought the retained plan to twelve completed entries while
+preserving the original zero-input refusal. A compact construction-target reader
+now validates the whole queue; thirteen stationary Mac samples had a 1.38 ms
+median. Durable construction placement remains unfinished.
 This is component qualification; the clean two-year run and full campaigns remain
 unfinished. Earlier failed controllers remain blocked and preserved in
 [the validation record](docs/CLAUSEWITZ_VALIDATION.md).

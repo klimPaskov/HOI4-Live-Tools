@@ -80,6 +80,10 @@ fn tools(commands: Option<&dyn Commands>) -> Value {
     value["tools"]
         .as_array_mut()
         .unwrap()
+        .push(construction::target_snapshot::tool());
+    value["tools"]
+        .as_array_mut()
+        .unwrap()
         .push(production_lines::control_snapshot::tool());
     if let Some(commands) = commands {
         value["tools"]
@@ -630,6 +634,29 @@ impl Server {
                 read_only_recovered(|| {
                     production_lines::control_snapshot::snapshot(process, handle, key, geometry)
                 })
+            }
+            "hoi4_construction_target" => {
+                if object.keys().any(|k| k != "building_id" && k != "state_id") {
+                    return Err(Error::new(
+                        "invalid_arguments",
+                        "Only building_id and state_id accepted",
+                    ));
+                }
+                let key = object
+                    .get("building_id")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| Error::new("invalid_arguments", "building_id required"))?;
+                construction::controls::validate_key(key)?;
+                let state = construction::find_view::validate_state_id(
+                    object
+                        .get("state_id")
+                        .and_then(Value::as_i64)
+                        .ok_or_else(|| {
+                            Error::new("invalid_arguments", "state_id must be an integer")
+                        })?,
+                )?;
+                let process = self.process()?;
+                read_only_recovered(|| construction::target_snapshot::snapshot(process, key, state))
             }
             "hoi4_construction_controls" => {
                 if object

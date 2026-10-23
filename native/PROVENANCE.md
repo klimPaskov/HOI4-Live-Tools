@@ -1,5 +1,26 @@
 # Rust foundation provenance
 
+## Typed construction target observation
+
+`construction/target_snapshot.rs` and the typed queue/location facts are
+independent project code. They reuse the separately recovered Linux and macOS
+queue, building, catalog and territorial layouts already documented here and in
+`construction.rs`; no platform offsets were copied from the other build. The
+public catalog, own target state, complete queue and reciprocal locations share
+one witnessed observation. No new engine command or placement authority is
+introduced. The shared summary now treats an unavailable building identity as
+incomplete evidence, since it cannot exclude that line from the requested total.
+
+The retained RTTI primary inventory independently identifies
+`TNullObject<CBuildingTemplate>` at Linux RVA `0x41b40a8` and Mac RVA `0x332def8`;
+ordinary primaries remain `0x41b49c8` and `0x332e908`. The first new Mac target
+probe refused catalog slot zero because it required the ordinary primary.
+The corrected live read confirmed the exact null primary at that slot with its
+inherited validity byte `+0x18` unset. Only this inactive slot-zero sentinel is
+skipped without key/ordinal payload; no other derived type is accepted. Generated
+fixtures cover both layouts, but this change adds live sentinel evidence only on
+Mac. Earlier failed probes are retained separately from the successful one.
+
 ## Explicit FEX translated process identity
 
 `platform/linux/translated.rs` and `launch/linux/translated.rs` are independent

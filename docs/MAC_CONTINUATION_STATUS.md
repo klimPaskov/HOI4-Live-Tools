@@ -1,19 +1,26 @@
 # Mac continuation checkpoint — 23 October 2026
 
-The latest bounded gate on `3b84ebc` verified Mac cycle admission and the separate
-production cap. Germany is paused on 21 May 1936 at 01:00, speed 3: infantry has
-12 factories; support remains at 2 with a known `NotQueued` one-step-per-day
-refusal. Revision 3 retains eleven Complete entries and that one Pending entry.
-The core daily budget is two used, one remaining. Independent reads confirmed
-all prior receipts, other allocations and controller files unchanged. All grants
-are closed; no worker, lease or recorder remains.
+The next-day retry on `3b84ebc` passed with Luna medium. Germany is paused on
+22 May 1936 at 01:00, speed 3: infantry has 12 factories and support has 3.
+All twelve revision-3 entries are Complete. The original support `NotQueued`
+refusal, eleven earlier receipts and journal prefixes remain intact; the new day
+used one fresh request and one factory step. Independent reads confirmed the
+result and unchanged controller files. All grants are closed, with no worker,
+lease or recorder left active.
 
-All nine exact-head CI jobs passed. The successful 1080p-client gate recorded
-15.671667 seconds at 1920×1108. Its preceding foreground-check failure sent no
-input and remains preserved. Future grants should permit one activation of the
-exact owned game before recording. Next, resume the same plan across the next
-game day to finish the known zero-input refusal without resetting history.
-This does not yet qualify a two-year run or a full campaign.
+The native 1920×1080-client recording finalized at 1920×1108, 17.931667 seconds
+and 526 frames. The one-day advance took 2.800–3.043 seconds, with zero observation
+pauses and one planned test-ending pause. The worker action ran paused; this is
+component qualification, not continuous-play or two-year acceptance. The earlier
+foreground refusal and cap test remain preserved. Future grants permit one exact
+owned-app activation before recording when needed.
+
+Construction readback now uses typed full-queue facts and a same-witness public
+catalog/own-state join. Unknown building identities no longer imply zero, and
+the legacy Mac counter no longer stops at the first 128 rows. The compact
+`hoi4_construction_target` reader reports unavailable amounts explicitly.
+Durable construction UI stages and before/after receipts remain unfinished;
+the clean two-year run and full campaigns are still required.
 
 The preceding mixed and revision component evidence follows.
 

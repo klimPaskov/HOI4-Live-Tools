@@ -1,5 +1,75 @@
 # Clausewitz-MCP Linux validation
 
+## Mac next-day known-refusal retry — 23 October 2026
+
+Luna medium continued the same revision-3 plan on runtime `3b84ebc` after the
+previous support factory request had returned positively `NotQueued`. The next
+game day used a fresh request ID and increased Support Equipment from 2 to 3
+factories. All twelve plan entries are Complete. The original refusal, eleven
+completed receipts, production bindings and ordinary journal prefixes remain
+unchanged. Exactly one new Intent/Verified pair appears in each relevant journal;
+no input record was attached to the prior refused request. The fresh daily budget
+is one used, two remaining. There is no quarantine or uncertain delivery.
+
+Independent read-only audit confirmed paused 22 May 1936 01:00, speed 3,
+infantry factories 12, support 3, unchanged other allocations and exact line
+membership. Eastern Autobahn remains active; all four Research slots are occupied.
+The audit did not change controller file bytes, size or timestamps. STOP joined,
+lease release and broker EOF completed, and the input grant is closed.
+
+The native client remained 1920×1080. The recording finalized cleanly at
+1920×1108, 17.931667 seconds and 526 frames; the final recorded frame shows
+readable Production UI and the matching date/allocations. One bounded calendar
+advance took 2.800–3.043 seconds. There were two clock requests, zero observation
+pauses and one planned test-ending pause. The worker step ran while paused;
+this does not establish continuous-play or two-year campaign acceptance.
+
+Twenty-five RPCs included three read-only `input_busy` retries. Successful-call
+medians were 0.370 ms for overview, 1.798 ms for Research and 10.910 ms for the
+governor. All 239 frozen native files and pinned helpers remained unchanged.
+The healthy game stays open without a worker, lease or recorder. Earlier failed
+controllers and the preceding foreground-check failure remain preserved.
+
+## Complete construction target readback — 23 October 2026
+
+The new `hoi4_construction_target` observes one canonical public building and one
+own-owned-and-controlled state. Public catalog membership, own target identity,
+all bounded queue entries and reciprocal state/province locations share a single
+witness bracket. The summary uses typed facts created from those reads rather
+than parsed JSON rows. Unknown building identities, unsupported line types,
+anomalous counters or unproved locations for the requested key make the amount
+unavailable. The public result exposes null counts, never a partial zero. The Mac
+legacy adapter now requires this complete total instead of summing only 128 rows.
+
+The first read-only Mac probe refused a type check; a second diagnostic build
+localized it to public catalog slot zero. Both failures sent no input and left
+all controller files unchanged. The retained independent RTTI inventory identifies
+a distinct null-template primary on each platform. The correction recognizes
+only that exact inactive null type at slot zero, without reading its key or ordinal.
+Unknown primaries, active null objects and null objects in other slots still refuse.
+The final live observation confirmed that precise Mac sentinel path.
+
+The corrected probe passed thirteen target reads on paused 22 May 1936. Three
+public building keys in own state 64 returned complete empty-queue totals; the
+median RPC was 1.378 ms. A foreign state, unknown building, invalid state ID and
+railway request each returned its expected refusal. All 242 native files stayed
+unchanged during the probe, as did all controller files. There were zero leases,
+input calls, cursor movements or observation pauses. Stdio exposed 26 tools.
+This is empty-queue read-path evidence; a nonempty Mac construction queue and
+durable placement have not been qualified by this test.
+
+Generated Linux/Mac fixtures cover the full queue beyond row 128, unavailable
+building identities, absent/foreign state targets, duplicate public keys,
+misjoined ordinals, exact null sentinels and torn owner/catalog/queue witnesses.
+No screenshot, save, debugger or game-memory write is part of this path.
+Final validation passed 1,429 Rust tests, 956 Python tests (37 skipped), formatting,
+strict host/Windows/Linux-musl/ARM64-Linux-musl Clippy, the release build and
+26-tool stdio smoke. Cross-platform CI for this new checkpoint is tracked separately.
+The legacy Mac input adapter still returns an aggregate and discards the private
+typed scope. Its UI stages and before/after identity preservation must be bound
+before durable construction assignment receipts can be added.
+
+
 ## Mac controller restart and action bounds — 22 October 2026
 
 The controller now retains its exact epoch in a private, locked and pinned state

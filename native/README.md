@@ -118,6 +118,17 @@ did not recover, not every permanent refusal. Existing action uncertainty and
 budgets are unchanged. Fresh live validation of this recovery remains pending.
 
 
+`hoi4_construction_target({"building_id":"arms_factory","state_id":64})`
+returns compact queued amounts in one own-owned-and-controlled state and elsewhere.
+It uses the inspected Linux or Mac layout, validates the complete bounded queue
+and public template catalog, and checks all read bytes in one witness bracket.
+An empty queue returns zero only with a verified target; unknown building identities,
+unsupported lines, invalid counters or missing target locations make `queued` null.
+It reads no GUI and sends no input. These amounts do not prove capacity, eligibility,
+built levels or an assignment receipt. The legacy Mac construction adapter now uses
+this full-queue readback rather than summing the first page; durable Mac placement
+and its before/after identity proof remain unfinished.
+
 `hoi4_construction_queue` is a read-only preview (`offset` 0–2048, `limit` 1–128,
 default 32). It validates the entire own collection before paging, recognizes
 exact building and railway layouts, and retains unsupported-type coverage.

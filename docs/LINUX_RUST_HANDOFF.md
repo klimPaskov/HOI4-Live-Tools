@@ -9,25 +9,25 @@ failed campaigns. Do not control the shared Windows game.
 
 ## Current checkpoint
 
-The latest Mac cycle-admission gate passed on `3b84ebc`, with all nine CI jobs
-passing. Revision 3 now has eleven Complete entries and one Pending support
-production entry with a known `NotQueued` daily-cap refusal. Independent reads
-confirmed paused 21 May 1936 01:00, speed 3, infantry factories 12, support 2,
-unchanged other allocations and retained old receipts. All grants are closed;
-the healthy owned game remains open without a worker, lease or recorder. A prior
-foreground-check failure sent no input and remains preserved. See
-[the live admission/cap evidence](CLAUSEWITZ_VALIDATION.md#mac-cycle-admission-and-production-cap-pass--23-october-2026).
+The next-day Mac continuation passed on tested runtime `3b84ebc`: all twelve
+revision-3 entries are Complete, including the support production request that
+was positively refused before input on the prior day. A fresh request increased
+support factories 2→3, retaining the refusal and old eleven receipts. Independent
+reads confirmed paused 22 May 1936 01:00, speed 3, infantry 12/support 3 and all
+other allocations unchanged. The healthy owned game remains open with no worker,
+lease or recorder; all grants are closed. See
+[the retry evidence](CLAUSEWITZ_VALIDATION.md#mac-next-day-known-refusal-retry--23-october-2026).
 
-Next, use the same controller and identical plan across the next game day to
-finish the known zero-input refusal while retaining its history. Permit one
-exact owned-app activation before recording if needed. Do not reset any entries
-or reuse older uncertain controllers. Then extend durable construction: existing
-Mac queue/location layouts are reusable, but the legacy first-page JSON aggregate
-and centre-click adapter are not typed completion proof. A coherent complete
-queue/context/state/template/membership observation and independently bound Mac
-controls must precede conversion into a durable receipt. Politics/army adapters
-also need typed proof before integration. The clean two-year run and full campaigns
-remain incomplete.
+The typed construction reader now covers the full queue and shares one witness
+bracket with public catalog, target-state ownership and location joins. Its
+compact `hoi4_construction_target` tool reports null amounts when evidence is
+incomplete. The legacy Mac readback uses this complete observation. This is not
+a durable placement receipt: independently bound Mac controls/Find view and
+before/after identity preservation must still precede worker integration.
+Politics/army adapters also need typed proof. Preserve the healthy controller;
+never reset old uncertain controllers. Future input grants should permit one
+exact owned-app activation before recording if necessary. The clean two-year
+run and full campaigns remain incomplete.
 
 The preceding revision and mixed checkpoints are preserved below.
 

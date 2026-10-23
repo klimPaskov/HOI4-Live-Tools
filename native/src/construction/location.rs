@@ -1,12 +1,26 @@
-//! Optional selected-building location joins for the exact Linux build.
+//! Optional selected-building location joins for the inspected Linux/Mac builds.
 //! Only territorial statuses with own ownership AND control are supported.
 //! No foreign payload, national override, railway path or engine call.
 use super::{invalid, pointer};
 use crate::{error::Result, memory::Reader};
 use serde_json::{json, Value};
 
-pub(super) fn unavailable(reason: &str) -> Value {
-    json!({"available":false,"reason":reason,"input_authorized":false})
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct Identity {
+    pub state: u64,
+    pub state_id: i32,
+    pub province: Option<(u64, i32)>,
+    pub status: u64,
+}
+pub(super) struct Observation {
+    pub value: Value,
+    pub identity: Option<Identity>,
+}
+pub(super) fn unavailable(reason: &str) -> Observation {
+    Observation {
+        value: json!({"available":false,"reason":reason,"input_authorized":false}),
+        identity: None,
+    }
 }
 pub(super) fn exact(r: &Reader<'_>, address: u64, primary: u64) -> Result<()> {
     pointer(address)?;
@@ -47,7 +61,7 @@ pub(super) fn observe(
     building: u64,
     template: u64,
     ordinal: usize,
-) -> Result<Value> {
+) -> Result<Observation> {
     let l = super::layout(r);
     let status = r.u64(building + l.building_status)?;
     if status == 0 {
@@ -70,7 +84,7 @@ pub(super) fn observe(
     match joined(r, base, own_tag, building, template, ordinal, status, flags) {
         Err(error) if !constructor_flags && error.code == "invalid_construction" => {
             let mut value = unavailable("unproven_location_status_kind");
-            value["status_flags_raw"] = json!(flags);
+            value.value["status_flags_raw"] = json!(flags);
             Ok(value)
         }
         result => result,
@@ -86,7 +100,7 @@ fn joined(
     ordinal: usize,
     status: u64,
     flags: i32,
-) -> Result<Value> {
+) -> Result<Observation> {
     let l = super::layout(r);
     let g = crate::game::layout(r);
     let id = r.i32(status + 0x6c)?;
@@ -141,11 +155,17 @@ fn joined(
             "Construction location must reciprocally contain building",
         ));
     }
-    Ok(
-        json!({"available":true,"state_id":state_id,"province_id":province_id,
+    Ok(Observation {
+        identity: Some(Identity {
+            state,
+            state_id,
+            province: province.zip(province_id),
+            status,
+        }),
+        value: json!({"available":true,"state_id":state_id,"province_id":province_id,
         "kind":if province.is_some(){"province"}else{"state"},"status_flags_raw":flags,
         "scope":"own_owned_and_controlled_territory",
         "identity":"current_catalog_ids_and_embedded_building_status",
-        "input_authorized":false}),
-    )
+            "input_authorized":false}),
+    })
 }

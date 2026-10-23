@@ -2,6 +2,13 @@
 
 ## Unreleased native preview
 
+- Complete the retained Mac support-production request on the next game day with
+  a fresh verified attempt, preserving its prior zero-input refusal and all
+  eleven earlier receipts. The recorded Luna gate leaves all twelve entries complete.
+- Add compact witnessed construction-target reads for Linux and macOS. Count
+  the entire queue, bind the public template and own state, and expose incomplete
+  evidence instead of zero. Replace the Mac adapter's first-page aggregate.
+
 - Qualify Mac cycle admission with a verified factory step followed by a separate
   same-day production-cap refusal. Preserve the Pending entry, budget and full
   history; retain the preceding no-input foreground-check failure.

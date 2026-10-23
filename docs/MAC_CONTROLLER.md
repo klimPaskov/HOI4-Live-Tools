@@ -106,6 +106,20 @@ loss stop the worker. Terminal notifications integrate with server-side waits.
 The older `hoi4_plan_run` remains a separate synchronous runner. It shares the
 input gate; it is not the durable worker described here.
 
+## Construction observation foundation
+
+`hoi4_construction_target` is a compact read-only tool shared with the inspected
+Linux layout. It binds a canonical public building and own state to the complete
+queue in one witnessed snapshot. Typed location and amount facts precede public
+JSON and pagination. Unavailable building identity cannot prove a zero total;
+partial evidence returns null amounts. The legacy Mac counter uses this observer,
+removing its former first-128-row limit.
+
+The observed total is not a durable assignment receipt. The legacy adapter still
+discards private typed identity/context between calls, and its UI placement stages
+are not connected to the worker. A future adapter must retain and revalidate those
+identities across ordinary input. Readback success does not authorize placement.
+
 ## Action limits and recovery
 
 Each Mac worker cycle admits at most one durable input intent under its original

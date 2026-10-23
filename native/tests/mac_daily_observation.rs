@@ -1,5 +1,8 @@
 #![cfg(unix)]
 
+#[path = "support/mac_construction_target.rs"]
+mod construction_target;
+
 use hoi4_live_native::{
     actions::Epoch,
     daily_governor::{Entry, Governor, Intent, Plan, Scope},

@@ -129,8 +129,8 @@ fn button(r: &Reader<'_>, image: u64, key: &str) -> Result<Option<Rect>> {
 pub(super) fn queued(process: &dyn Process, key: &str, state: i32) -> Result<i64> {
     // The queue is rewritten on game days; retry a torn snapshot.
     let mut attempt = 0;
-    let value = loop {
-        match construction::page_with_location(process, 0, 128, true) {
+    let observed = loop {
+        match construction::target_snapshot::observe(process, key, state) {
             Err(e) if e.code == "torn_read" && attempt < 8 => {
                 attempt += 1;
                 thread::sleep(Duration::from_millis(10 * attempt));
@@ -138,16 +138,13 @@ pub(super) fn queued(process: &dyn Process, key: &str, state: i32) -> Result<i64
             result => break result?,
         }
     };
-    Ok(value["lines"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter(|l| {
-            l["building"]["building_id"].as_str() == Some(key)
-                && l["location"]["state_id"].as_i64() == Some(i64::from(state))
-        })
-        .map(|l| l["amount_raw_signed"].as_i64().unwrap_or(0))
-        .sum())
+    if !observed.summary.complete {
+        return Err(Error::new(
+            "construction_target_unavailable",
+            "Complete own construction queue evidence required",
+        ));
+    }
+    Ok(observed.summary.in_state)
 }
 pub(super) fn leave(process: &dyn Process, keys: &MacKeys) {
     // Switch placement mode off: Escape closes the selection, then the
