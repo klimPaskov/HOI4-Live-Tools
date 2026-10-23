@@ -1,25 +1,24 @@
 # Mac continuation checkpoint — 23 October 2026
 
-The user has authorized macOS testing. On `039c00d`, Luna medium's fresh manual
-Focus gate passed in 3.73 seconds at native 1920×1080. All nine exact-head CI jobs,
-1,394 Rust tests and 956 workspace Python tests (37 skipped) passed.
+The first clean recorded Mac mixed Focus/Research/production component gate passed
+on `7cde19f`, with one Luna medium player at native 1920×1080. All five assignments
+verified: infantry factories 10→11, EM Engineering followed by Radio, and Autobahn
+then Kdf after successive natural Focus completions. Reconnect retained completed
+work; two idle windows left controller files unchanged.
 
-The following mixed gate stopped during paused setup: EM Engineering verified,
-but the infantry factory attempt retained an unresolved torn-read failure with
-unknown delivery. Independent reads confirmed infantry still at 10, all 21
-allocations unchanged, Growth and EM Engineering active, and paused 1 January
-1936 12:00. There were zero clock requests and zero observation pauses. Its
-35.13-second recording finalized cleanly at 1920×1108. The owned game is closed
-with default settings unchanged, and all input grants are closed.
+Independent reads confirmed Germany paused on 20 April 1936 at 07:00, speed 3,
+all three Focuses completed, Radio active in slot 2 and other allocations unchanged.
+The 108.79-day advance took 290.219–290.428 seconds, with zero observation pauses
+and one explicit end-test pause. The recording finalized cleanly at 1920×1108,
+312.488333 seconds and 9,214 frames. The owned game remains paused and healthy;
+all grants are closed, with no worker, lease or recorder.
 
-The failure did not reach natural Focus completion. Bounded complete-read
-recovery and stage diagnostics are now implemented in the typed daily-production
-adapter, preserving coherent ownership/control refusal and the original deadline.
-The correction passed 1,405 Rust tests, 956 Python tests (37 skipped), formatting,
-strict cross-platform Clippy and the release build; fresh live qualification remains
-next. The earlier unknown-stage cause is not proven fixed. Never replay,
-settle or reset the failed intent. Mixed qualification, the clean two-year run
-and full recorded campaigns remain incomplete.
+All nine exact-head CI jobs, 1,405 Rust tests and 956 workspace Python tests
+(37 skipped) passed. All 238 native source files and pinned helpers stayed frozen
+through the live gate. This is component qualification; the clean two-year run
+and full recorded campaigns remain incomplete. Preserve all earlier failed
+controllers. Next, review a higher-revision standing plan on the healthy session
+that retains completed entries and adds owned Focus/Research assignments.
 
 Use [the current handoff](LINUX_RUST_HANDOFF.md),
 [validation evidence](CLAUSEWITZ_VALIDATION.md) and

@@ -109,28 +109,27 @@ against the owned OS window before input. The
 [Rust-managed recorder](docs/MAC_RECORDING.md) captures a 1920×1108 window,
 including the titlebar around the 1080p game client.
 
-Recorded Mac component tests have verified Research, Focus, clock control and
-one-factory production changes. Research queues have survived reconnect and
-refilled after natural completion, with unchanged idle plan files. The latest
-manual Focus assignment verified in 3.73 seconds at native 1920×1080.
+A recorded Mac mixed standing-plan test now passes Research assignment/refill,
+successive Focus handoffs, one-factory production changes, reconnect and unchanged
+idle plan files. One Luna medium player ran it at native 1920×1080. Germany
+advanced 108.8 game days in about 290 seconds with zero observation pauses and
+one explicit pause at the test's end. The recording finalized cleanly.
 
-A default-off durable worker combines Research, Focus and production plans.
-Its latest mixed test stopped on an inconsistent production read during paused
-setup; all allocations stayed unchanged and the unresolved intent remains blocked.
-Successive durable Focus assignment and a clean combined run remain unaccepted.
-[The validation record](docs/CLAUSEWITZ_VALIDATION.md) preserves each failed run
-and distinguishes component results from campaign acceptance.
+The default-off durable worker verified all five planned assignments. Independent
+reads confirmed completed Focuses, Radio active and unchanged other allocations.
+This is component qualification; the clean two-year run and full campaigns remain
+unfinished. Earlier failed controllers remain blocked and preserved in
+[the validation record](docs/CLAUSEWITZ_VALIDATION.md).
 
-Measured Mac overview/Research/digest medians were about 0.3/1.7/10.6 ms in the
-recorded component run, with zero observation pauses. A separate target-only
-Focus probe measured 8.66 ms versus 63.99 ms for complete obstacle geometry.
-These samples describe particular reads, not overall campaign throughput.
+In that run, median overview/Research/governor calls took approximately
+0.37/1.70/10.92 ms. The manual Focus action took 3.76 seconds. A separate
+target-only Focus read measured 8.66 ms versus 63.99 ms for complete obstacle
+geometry. These measurements describe specific tested paths, not every tool.
 
-See [the controller and worker contract](docs/MAC_CONTROLLER.md),
-[input geometry](docs/MAC_INPUT_GEOMETRY.md), and
-[recorded results and failures](docs/CLAUSEWITZ_VALIDATION.md).
-Broader legacy plan adapters remain separate from the durable worker; peace
-conferences and naval invasions are not implemented.
+See [the controller and worker contract](docs/MAC_CONTROLLER.md) and
+[input geometry](docs/MAC_INPUT_GEOMETRY.md). Broader legacy plan adapters remain
+separate from the durable worker; peace conferences and naval invasions are not
+implemented.
 
 Mac memory access requires Developer Tools permission and an ad-hoc signed tool
 binary (`native/macos/debugger.entitlements`). The game is never re-signed.
@@ -139,13 +138,14 @@ The public Research-folder diagnostic remains Linux-only.
 
 ### Remaining acceptance work
 
-- Qualify mixed standing plans and expand economy, shortage repair and warfare.
+- Extend mixed-plan qualification to revisions and broader economy, shortage
+  repair and warfare.
 - Implement and live-test the native Windows adapter.
 - Complete a clean two-year Luna run, then the recorded FAIR Germany and China
   campaigns. Final showcase videos must come from macOS at 1080p or higher.
 - Validate long campaign recording and publish only after release acceptance.
 
-All nine CI jobs passed on the nullable Focus-country checkpoint (`039c00d`) across
+All nine CI jobs passed on the mixed-plan checkpoint (`7cde19f`) across
 Linux, Windows and macOS. Offline tests do not prove native game behavior.
 For measurements, retained failures and the next gate, use
 [the comparison](docs/CLAUSEWITZ_COMPARISON.md),

@@ -2,6 +2,12 @@
 
 ## Unreleased native preview
 
+- Qualify the recorded Mac mixed standing plan with Luna medium at native 1080p:
+  successive Focus handoffs, Research refill, a factory increase, reconnect and
+  unchanged idle files. All five assignments verified with zero observation
+  pauses. Preserve four earlier failed controllers; the two-year run and full
+  campaigns remain outstanding.
+
 - Bound discarded-read recovery in the typed Mac production path while retaining
   its original target, deadline and single input attempt. Add phase/stage failure
   diagnostics and preserve the fourth mixed gate's unresolved production intent.

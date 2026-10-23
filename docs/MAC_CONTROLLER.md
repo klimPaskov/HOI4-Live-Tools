@@ -74,7 +74,8 @@ Start. A later idle queue head requires fresh completed membership for the
 previous assignment; an unexplained idle Focus stops for a decision. Reconnect
 uses the historical key only as a hint and independently binds current membership;
 it does not claim that historical object pointers survived. Successive live
-worker qualification remains pending.
+worker qualification passed a recorded Mac mixed component gate; broader
+campaign qualification remains pending.
 
 Production additionally requires `plan.production_permission: true`. An entry
 uses `kind: Economy`, with a `Production` target containing the exact observed
@@ -96,7 +97,9 @@ loss stop the worker. Terminal notifications integrate with server-side waits.
   assignment, budget and worker history.
 - `stop` cancels, wakes and joins the worker. It returns history and leaves the
   game clock unchanged.
-- `update` requires a stopped worker and a compatible higher plan revision.
+- `update` requires a stopped worker and a compatible higher plan revision; it
+  persists that revision and starts the worker immediately. Preserve completed
+  entries and queue ordering. Consumed daily action budget carries forward.
 - After reconnect, acquire a new lease and explicitly start the identical
   retained plan. Unfinished entries and action reservations remain intact.
 
@@ -105,7 +108,8 @@ input gate; it is not the durable worker described here.
 
 ## Action limits and recovery
 
-Research, Focus and production use one original five-second action deadline, narrowed
+Each worker cycle shares one original five-second deadline across its Research,
+Focus and production actions; it does not grant five seconds per entry. This is narrowed
 by the existing lease and cancellation flag. Nested reads, panel preparation,
 geometry checks and completion proof cannot renew that deadline. Production
 settles the complete row/button/rectangle witness across two reads 60 ms apart,
@@ -191,8 +195,10 @@ deadline and have distinct timeout codes. Native ownership refusals retain their
 cause even if the read finishes late. These diagnostics cannot explain an earlier
 binary's failure. The revised bounded planner passed a fresh recorded manual
 Economic Growth assignment in 3.65 seconds, with independent active-Focus
-readback. The new typed durable adapter remains a default-off preview; successive
-natural completion and mixed-plan live qualification are still required.
+readback. The typed durable adapter remains a default-off preview. A subsequent recorded
+mixed gate verified successive natural Focus completion, Research refill, a
+factory increase and same-plan restart. Higher-revision continuation, the two-year
+run and full campaign qualification remain required.
 
 Generated tests cover persistence, ownership, chronology, slot waits, typed
 proofs, unchanged allocations, original deadlines, cancellation and shutdown.

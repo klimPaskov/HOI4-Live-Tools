@@ -9,6 +9,24 @@ failed campaigns. Do not control the shared Windows game.
 
 ## Current checkpoint
 
+The recorded Mac mixed standing-plan gate on `7cde19f` passed with Luna medium:
+Research assignment/refill, infantry factories 10→11, successive natural Focus
+handoffs, same-plan reconnect and two idle-file checks. All five entries completed.
+Independent reads confirmed paused 20 April 1936 07:00, speed 3, all three Focuses
+completed, Radio active in slot 2 and unchanged other allocations. Both grants
+are closed; no worker, lease or recorder remains. Keep this healthy owned session
+for a reviewed higher-revision plan continuation. Earlier failed controllers
+remain blocked and must never be replayed, settled or reset.
+
+The native client was 1920×1080. The mixed recording finalized at 1920×1108,
+312.488333 seconds and 9,214 frames. The 108.79-day advance took about 290.3
+seconds with zero observation pauses and one explicit end-test pause. This is
+component acceptance, not a two-year run or complete campaign. All nine exact-head
+CI jobs passed, along with 1,405 Rust and 956 Python tests (37 skipped). See
+[the successful gate](CLAUSEWITZ_VALIDATION.md#mac-mixed-standing-plan-passes--23-october-2026).
+
+The preceding checkpoints remain preserved below.
+
 The fourth fresh mixed Mac gate on `039c00d` stopped during paused production
 setup after EM Engineering verified. Its infantry intent retained an unknown
 `torn_read` failure; the exact stage was not recorded. Root's independent reads

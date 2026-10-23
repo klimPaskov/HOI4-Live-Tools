@@ -6652,3 +6652,51 @@ these diagnostics cannot retroactively identify or prove a fix for the earlier
 unknown-stage failure. Validation passed 1,405 Rust tests, 956 Python tests
 (37 skipped), formatting, strict host/Windows/Linux-musl/ARM64-Linux-musl Clippy
 and the release build. Fresh live qualification remains required.
+
+## Mac mixed standing plan passes — 23 October 2026
+
+Fresh immutable `7cde19f` passed all nine exact-head CI jobs, 1,405 Rust tests
+and 956 workspace Python tests (37 skipped). Luna medium's manual Economic
+Growth assignment verified in 3,756.633 ms. Independent reads confirmed the
+fresh paused 1 January 12:00 baseline, unchanged Research and allocations, and
+active Growth. Its recording finalized at 1920×1108, 102.555 seconds and 3,021
+frames. Native client geometry was 1920×1080 throughout.
+
+The subsequent mixed gate passed all five assignments: EM Engineering in slot 2,
+infantry factories 10→11, Autobahn after natural Economic Growth completion,
+Kdf after natural Autobahn completion, and Radio after EM Engineering completed.
+The stopped/reopened controller retained the same plan and completed receipts.
+Two 3.2-second idle windows retained identical controller bytes, sizes and
+modification times. The test used two worker starts and three clock requests:
+speed 3, unpause and one explicit end-test pause. It used no gameplay screenshots.
+
+Germany advanced from 1 January 12:00 to 20 April 07:00: 2,611 game hours, or
+108.791667 game days, in 290.219–290.428 seconds. There were zero observation
+pauses and zero paused seconds inside that advancing interval. The single
+end-test pause remains for audit/continuation. This normalizes to
+973.70–974.40 seconds per 365 game days (about 16.2 minutes); it is a measured
+rate from a shorter test, not a completed game year. Neither soft wall nor date
+bounds were exceeded.
+
+The 131 player RPCs included 14 bounded read-only input-busy retries. Median
+successful overview, Research and governor-call latencies were 0.370, 1.704 and
+10.919 ms respectively; the governor sample includes start/stop calls. The 29
+server-side waits had a roughly ten-second median by design. No observer call
+paused the game. Passing production does not establish whether the bounded
+read-recovery branch was exercised; successful retries were not instrumented.
+
+The worker stopped and joined, the lease released, and the broker closed cleanly.
+The mixed recording finalized explicitly at 1920×1108, 312.488333 seconds and
+9,214 frames. Independent reads after explicit handback confirmed the exact
+paused date/speed, all three Focuses completed, EM Engineering researched,
+Radio active in slot 2, other Research slots empty and infantry factories at 11.
+All other allocations in the 21-line collection were unchanged; no line disappeared or
+appeared. Controller files and all 238 native sources/pinned helpers stayed
+unchanged. The game remains paused and healthy with no worker, lease or recorder.
+
+This is the first clean recorded mixed Focus/Research/production component gate
+on Mac, not the clean two-year acceptance run or a complete campaign. It follows
+four preserved mixed failures, whose unresolved controllers remain blocked.
+The next test should exercise a higher plan revision on this healthy controller,
+retaining completed work while adding owned Focus/Research assignments. The
+broader campaign domains, two-year run and full showcases remain required.
