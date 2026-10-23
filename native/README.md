@@ -111,6 +111,18 @@ Its stationary MCP test measured 0.257 ms median RPC; the cached point differed
 from the OS cursor. Current-event/frame, routing, delivery and input authority
 remain false. This is a diagnostic, not a click point.
 
+`hoi4_construction_target` accepts Mac-only `include_map_point: true`. Omission or
+false preserves the original read path. The option derives the fixed 1920×1080
+center terrain point and joins its canonical province to the requested owned and
+controlled state within the complete target/queue witness bracket. Reviewed map
+modes are 0/27 and camera wrap is 1; other cases refuse. Twenty samples per mode
+measured median RPC times of 2.360 ms with it and 1.996 ms without it. Complete
+own state, camera, cursor and 18 controller files stayed unchanged with zero input,
+screenshots or observation pauses. The output explicitly denies full-picker,
+model intersection, GUI routing, current-event, eligibility and input authority.
+See the
+[resident observer evidence](../docs/CLAUSEWITZ_VALIDATION.md#mac-resident-center-terrain-mcp--24-october-2026).
+
 Internal ray/terrain arithmetic reproduces a captured center-point calculation
 bit-for-bit. The private terrain/bitmap prototype joined it to own Brandenburg.
 The internal scene reader matched all 35 live candidates to own divisions/task
@@ -119,9 +131,9 @@ A separate recorded Luna-medium [ordinary point-placement test](../docs/CLAUSEWI
 then passed: one map move and down/up, with a retained Rust queue anchor proving
 exactly one military factory added in state 64. The 22-RPC private driver took
 8.438 seconds including startup and guards (1.161 ms median RPC). The prior
-mode-0 harness failure is preserved. Complete model intersection, the resident
-map observer, a public strict placement adapter and worker integration remain
-unfinished; this test adds no MCP action or permission.
+mode-0 harness failure is preserved. Complete model intersection, a public strict
+placement adapter and worker integration remain unfinished; the placement test
+adds no MCP action or permission.
 
 The Mac durable worker has passed recorded Research, Focus and production
 component tests, including plan revisions and reconnects. Canonical Mac process
@@ -515,7 +527,7 @@ anchors do not establish a load-generation token.
 | `hoi4_production_close` | Opt-in Linux preview: close settled production or no-op when already closed in the idle view; Production008 passed manual closing, replay/no-op and Research/Focus handoff; mixed-worker live validation pending |
 | `hoi4_production_attempt` | Opt-in Linux preview: one ordinary factory step in an already-open panel, durable original identity/count and canonical readback; selected 10→11→10 gate passed |
 | `hoi4_construction_queue` | Own building/railway lines, canonical keys and signed cost/work counters; one dockyard observed in run071. Run072 observed one state/label with a late-lease deviation; selection and province/railway coverage remain unverified |
-| `hoi4_construction_target` | Complete witnessed queued amounts for one public building and own state; incomplete evidence returns null amounts |
+| `hoi4_construction_target` | Complete witnessed queued amounts for one public building and own state; incomplete evidence returns null amounts. Mac-only `include_map_point` defaults false and adds a witnessed 1080p center-terrain candidate with no input authority |
 | `hoi4_construction_ui_probe` | Mac-only own panel/selection/full-choice observation; optional callback, requested-button geometry and complete mouse-route correlation; no input, settled-frame or placement authority |
 | `hoi4_construction_panel_probe` | Mac-only panel mode and named topbar opener/callback binding. Optional `include_geometry` verifies a 1920×1080 canvas; `include_routing` also requires geometry. Independent `include_shortcut` checks current T and preceding supported keyboard receivers. No input or atomic delivery authority |
 | `hoi4_technology_list` | Canonical loaded technology IDs with filtering/pagination; no eligibility inference |

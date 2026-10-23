@@ -117,6 +117,12 @@ below 1 ms. The native Find action then typed an owned state ID and Return in
 0.48 ms per RPC with zero input. These are measurements of specific tested paths. See [the validation record](docs/CLAUSEWITZ_VALIDATION.md) for scope and
 preserved failures.
 
+The read-only construction target tool now offers a Mac center-terrain candidate
+with `include_map_point: true`. Stationary native 1080p testing measured 2.36 ms
+median RPC, compared with 2.00 ms without the option. It leaves the game and
+cursor unchanged and supplies no placement permission; see the
+[resident observer evidence](docs/CLAUSEWITZ_VALIDATION.md#mac-resident-center-terrain-mcp--24-october-2026).
+
 A separate [ordinary placement component](docs/CLAUSEWITZ_VALIDATION.md#mac-ordinary-map-placement--24-october-2026)
 passed: one map move and one click queued exactly one military factory in
 own Brandenburg, verified by a retained native queue anchor. The private driver

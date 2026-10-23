@@ -144,8 +144,51 @@ fn construction_target_protocol_validates_before_process_access() {
         json!({"building_id":"bad key","state_id":1}),
         json!({"building_id":"arms_factory","state_id":1,"country":"ENG"}),
         json!({"building_id":"arms_factory","state_id":1,"click":true}),
+        json!({"building_id":"arms_factory","state_id":1,"include_map_point":null}),
+        json!({"building_id":"arms_factory","state_id":1,"include_map_point":1}),
+        json!({"building_id":"arms_factory","state_id":1,"include_map_point":"true"}),
     ] {
         let reply=server.handle(json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"hoi4_construction_target","arguments":args}})).unwrap();
         assert!(reply.to_string().contains("invalid_arguments"), "{reply}");
     }
+}
+
+#[test]
+fn construction_target_map_candidate_refuses_linux_abi_before_any_read() {
+    let f = complete();
+    assert_eq!(
+        hoi4_live_native::construction::target_snapshot::snapshot_with_map_point(
+            &f,
+            "infrastructure",
+            1,
+            true,
+        )
+        .unwrap_err()
+        .code,
+        "unsupported_platform"
+    );
+    assert!(f.tracked_reads.borrow().is_empty());
+    assert_eq!(f.checks.get(), 0);
+}
+
+#[test]
+fn construction_target_map_candidate_schema_defaults_to_false_without_new_tool() {
+    let server = hoi4_live_native::protocol::Server {
+        process: None,
+        unavailable: None,
+    };
+    let reply = server
+        .handle(json!({"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}))
+        .unwrap();
+    let tools = reply["result"]["tools"].as_array().unwrap();
+    let tool = tools
+        .iter()
+        .find(|tool| tool["name"] == "hoi4_construction_target")
+        .unwrap();
+    assert_eq!(
+        tool["inputSchema"]["properties"]["include_map_point"],
+        json!({"type":"boolean","default":false})
+    );
+    assert_eq!(tool["inputSchema"]["additionalProperties"], false);
+    assert_eq!(tool["annotations"]["readOnlyHint"], true);
 }

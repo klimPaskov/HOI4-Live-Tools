@@ -620,6 +620,24 @@ fn portable_target_rejects_every_ui_only_option_before_binding_even_when_false()
 }
 
 #[test]
+fn ui_probe_rejects_the_target_only_map_option_even_when_false() {
+    let server = Server {
+        process: None,
+        unavailable: None,
+    };
+    for enabled in [false, true] {
+        let reply = server
+            .handle(json!({"jsonrpc":"2.0","id":1,"method":"tools/call",
+                "params":{"name":"hoi4_construction_ui_probe","arguments":{
+                    "building_id":"arms_factory","state_id":1,"include_map_point":enabled}}}))
+            .unwrap();
+        let content: Value =
+            serde_json::from_str(reply["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+        assert_eq!(content["error"]["code"], "invalid_arguments");
+    }
+}
+
+#[test]
 fn missing_later_grid_keeps_partial_membership_and_never_reads_an_early_target_control() {
     let mut f = fixture(true, 1);
     // First grid already contains the target; the fourth section has no grid.

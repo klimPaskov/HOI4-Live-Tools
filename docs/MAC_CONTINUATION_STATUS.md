@@ -1,5 +1,41 @@
 # Mac continuation checkpoint — 24 October 2026
 
+The resident Rust Mac center-terrain observer passed stationary qualification
+through the public MCP. `hoi4_construction_target` now accepts
+`include_map_point: true`; omission or false preserves the existing read path.
+Twenty samples per mode measured median RPC times of 2.360 ms with the option
+and 1.996 ms without it. The option adds 155 logical read requests / 1,132 bytes
+to the complete target snapshot, with the same final witnesses.
+
+At native 1920×1080, the center joined own province 6521 to requested Brandenburg
+(state 64), reproducing the captured world point bit-for-bit in construction map
+mode 27. Only independently reviewed modes 0/27 and camera wrap 1 are supported;
+unknown cases refuse. Full scene-model intersection, GUI routing, current-event,
+eligibility and input authority remain explicitly false.
+
+The 52 observation calls left complete Research, Focus, production, queue,
+clock, setup, camera, OS cursor and all 18 files across three controllers unchanged.
+It used zero input, activation, screenshots, workers or observation pauses; MCP EOF
+exited 0. No grant, lease or recorder was opened. The game remained paused on
+1 January 1936, so this provides no advancing-time or real-time-per-year result.
+
+All 1,818 Rust tests and 956 Python tests (37 skips), formatting, strict host /
+Windows GNU / x86 Linux musl / ARM64 Linux musl checks, release build and 28-tool
+stdio smoke pass. The preceding `bfdcc34` checkpoint passed all nine CI jobs.
+The first source check's Windows unused-function failure is preserved; routing
+default calls through the existing function fixed it before this complete rerun.
+
+An internal typed clear-selection reader also retains the original scope and
+complete queue, distinguishing Pending from canonical inactive selection. Its
+eight memory fixtures pass; no Escape input or live cancellation is qualified.
+The recorded ordinary one-point placement component remains passed separately.
+A strict public placement adapter, construction worker integration, the clean
+two-year Luna run and full campaign recordings remain unfinished.
+
+Earlier checkpoints follow.
+
+## Ordinary map-placement component
+
 The recorded Luna-medium ordinary map-placement component passed on native Mac
 HOI4 at a 1920×1080 client size. From an already-selected military-factory
 template, one map move and one ordinary down/up produced exactly one new

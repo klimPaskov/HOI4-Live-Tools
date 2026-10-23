@@ -275,6 +275,154 @@ fn initially_selected_target_needs_no_surviving_gui_control() {
 }
 
 #[test]
+fn clearing_retains_nonempty_queue_and_ignores_stale_inactive_pointer() {
+    let mut f = fixture();
+    queue(&mut f);
+    selected(&mut f, TEMPLATE);
+    let a = bind_selection(&f, "arms_factory", 1)
+        .unwrap()
+        .clear_selection_anchor()
+        .unwrap();
+    assert!(!a.initially_inactive());
+    assert_eq!(a.private_baseline().unwrap()["queue_member_count"], 1);
+    assert_eq!(a.observe(&f).unwrap(), ClearSelectionReadback::Pending);
+    f.int(MANAGER + 0x3c0, 0);
+    f.word(MANAGER + 0x3b8, FOREIGN);
+    assert_eq!(a.observe(&f).unwrap(), ClearSelectionReadback::Cleared);
+    for field in [FOREIGN, MANAGER + 0x150, VIEW, BUTTON, GUI + 0x98] {
+        assert!(f.untouched(field, 8), "{field:x}");
+    }
+}
+
+#[test]
+fn clearing_inactive_original_is_no_input_evidence_and_rejects_later_selection() {
+    let mut f = fixture();
+    let a = bind_selection(&f, "arms_factory", 1)
+        .unwrap()
+        .clear_selection_anchor()
+        .unwrap();
+    assert!(a.initially_inactive());
+    assert_eq!(a.observe(&f).unwrap(), ClearSelectionReadback::Cleared);
+    selected(&mut f, TEMPLATE);
+    assert_eq!(
+        a.observe(&f).unwrap_err().code,
+        "construction_state_changed"
+    );
+}
+
+#[test]
+fn clearing_never_accepts_queue_delta_as_selection_success() {
+    for remove_line in [false, true] {
+        let mut f = fixture();
+        queue(&mut f);
+        selected(&mut f, TEMPLATE);
+        let a = bind_selection(&f, "arms_factory", 1)
+            .unwrap()
+            .clear_selection_anchor()
+            .unwrap();
+        f.int(MANAGER + 0x3c0, 0);
+        if remove_line {
+            f.array(PRODUCTION + 0x70, &[]);
+        } else {
+            f.int(LINE + 0x48, 3);
+        }
+        assert_eq!(
+            a.observe(&f).unwrap_err().code,
+            "construction_state_changed"
+        );
+    }
+}
+
+#[test]
+fn clearing_rejects_original_manager_replacement_before_its_payload() {
+    let mut f = fixture();
+    selected(&mut f, TEMPLATE);
+    let a = bind_selection(&f, "arms_factory", 1)
+        .unwrap()
+        .clear_selection_anchor()
+        .unwrap();
+    f.word(IDLER + 0x670, FOREIGN);
+    assert_eq!(
+        a.observe(&f).unwrap_err().code,
+        "construction_state_changed"
+    );
+    assert!(f.untouched(FOREIGN, 8));
+}
+
+#[test]
+fn clearing_rejects_other_canonical_template_at_bind_and_after_original_bind() {
+    for switch_after_bind in [false, true] {
+        let mut f = fixture();
+        template(&mut f, OTHER, 2, "industrial_complex");
+        f.array(DATABASE + 0x40, &[NULL, TEMPLATE, OTHER]);
+        selected(&mut f, if switch_after_bind { TEMPLATE } else { OTHER });
+        let original = bind_selection(&f, "arms_factory", 1).unwrap();
+        if switch_after_bind {
+            let a = original.clear_selection_anchor().unwrap();
+            selected(&mut f, OTHER);
+            assert_eq!(
+                a.observe(&f).unwrap_err().code,
+                "construction_state_changed"
+            );
+        } else {
+            assert_eq!(
+                original.clear_selection_anchor().unwrap_err().code,
+                "construction_state_changed"
+            );
+        }
+    }
+}
+
+#[test]
+fn clearing_keeps_original_campaign_and_monotonic_chronology() {
+    for rewind in [false, true] {
+        let mut f = fixture();
+        selected(&mut f, TEMPLATE);
+        let a = bind_selection(&f, "arms_factory", 1)
+            .unwrap()
+            .clear_selection_anchor()
+            .unwrap();
+        f.int(MANAGER + 0x3c0, 0);
+        if rewind {
+            f.set_date(DATE - 1);
+        } else {
+            f.int(GS + 0x4d8, 2);
+        }
+        assert!(a.observe(&f).is_err());
+    }
+}
+
+#[test]
+fn clearing_allows_forward_time_without_rebinding_the_original_queue() {
+    let mut f = fixture();
+    queue(&mut f);
+    selected(&mut f, TEMPLATE);
+    let a = bind_selection(&f, "arms_factory", 1)
+        .unwrap()
+        .clear_selection_anchor()
+        .unwrap();
+    let original = a.private_baseline().unwrap();
+    f.set_date(DATE + 1);
+    f.int(MANAGER + 0x3c0, 0);
+    assert_eq!(a.observe(&f).unwrap(), ClearSelectionReadback::Cleared);
+    assert_eq!(a.private_baseline().unwrap(), original);
+}
+
+#[test]
+fn clearing_unknown_mode_never_follows_its_selected_pointer() {
+    let mut f = fixture();
+    selected(&mut f, TEMPLATE);
+    let a = bind_selection(&f, "arms_factory", 1)
+        .unwrap()
+        .clear_selection_anchor()
+        .unwrap();
+    f.int(MANAGER + 0x3c0, 2);
+    f.word(MANAGER + 0x3b8, FOREIGN);
+    assert!(a.observe(&f).is_err());
+    assert!(f.untouched(FOREIGN, 8));
+}
+
+#[test]
 fn idle_to_exact_target_readback_ignores_obsolete_gui_callback_and_geometry() {
     let mut f = fixture();
     ui(&mut f);

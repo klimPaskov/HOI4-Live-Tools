@@ -86,6 +86,32 @@ fn mac_construction_target_uses_only_independent_mac_layout_and_libcxx() {
         .iter()
         .any(|(a, _)| *a == BASE + 0x439f400 || *a == IDLER + 0x670));
 }
+
+#[test]
+fn mac_target_false_map_option_preserves_default_fields_and_avoids_camera_reads() {
+    let f = construction(); // No map/camera bytes exist in this fixture.
+    let mut default = target(&f, "arms_factory", 1).unwrap();
+    let mut explicit = hoi4_live_native::construction::target_snapshot::snapshot_with_map_point(
+        &f,
+        "arms_factory",
+        1,
+        false,
+    )
+    .unwrap();
+    assert_eq!(default.get("map_point"), None);
+    assert_eq!(explicit.get("map_point"), None);
+    for field in ["read_calls", "read_bytes"] {
+        assert_eq!(default["freshness"][field], explicit["freshness"][field]);
+    }
+    default.as_object_mut().unwrap().remove("freshness");
+    explicit.as_object_mut().unwrap().remove("freshness");
+    assert_eq!(default, explicit);
+    assert!(!f
+        .reads
+        .borrow()
+        .iter()
+        .any(|(a, _)| { *a == BASE + 0x3519a00 || *a == BASE + 0x36330a0 || *a == IDLER + 0x708 }));
+}
 #[test]
 fn mac_construction_target_empty_queue_still_validates_target_and_does_not_read_ui() {
     let mut f = construction();

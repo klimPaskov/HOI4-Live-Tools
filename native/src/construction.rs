@@ -9,8 +9,11 @@ pub mod find_view;
 mod location;
 pub(crate) mod mac_find;
 mod mac_find_focus;
+// Passive center-terrain diagnostic; not an input or full-picker proof.
+#[allow(dead_code)]
+pub(crate) mod mac_map_point;
 pub mod mac_panel;
-// Passive foundation; retained until the typed Map-point reader connects.
+// Pure ray/terrain arithmetic for the typed center-terrain reader.
 #[allow(dead_code)]
 pub(crate) mod mac_projection;
 // Own scene membership only; model intersection and the map adapter are pending.

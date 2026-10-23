@@ -152,3 +152,14 @@ Upstream foundation and attribution:
   attributed own-map observation approach; no upstream scene code or foreign
   offsets were copied. Membership is distinct from model intersection, routing
   and ordinary input qualification.
+
+  construction/mac_map_point.rs independently joins current Mac map/camera/grid
+  roots and canonical own province/definition identities around the recovered
+  terrain fallback. It extends the attributed structured map-observation approach
+  without copying upstream projection/UI code or foreign offsets. The optional
+  resident observation adds no routing, full-picker or input authority.
+
+  construction/mac_ui/selection_state/clearing_state.rs extends original typed
+  selection and complete-queue readback to canonical inactive mode. It uses no
+  upstream command implementation, invokes no engine function and grants no
+  ordinary Escape or panel-navigation permission.

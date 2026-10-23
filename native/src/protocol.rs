@@ -709,10 +709,11 @@ impl Server {
                                 k.as_str(),
                                 "include_callback" | "include_geometry" | "include_routing"
                             ))
+                        && (ui_probe || k != "include_map_point")
                 }) {
                     return Err(Error::new(
                         "invalid_arguments",
-                        "Only building_id, state_id and the UI probe's optional include_callback, include_geometry and include_routing accepted",
+                        "Only building_id, state_id and this observation's documented optional flags accepted",
                     ));
                 }
                 let key = object
@@ -740,6 +741,7 @@ impl Server {
                 let callback = flag("include_callback")?;
                 let geometry = flag("include_geometry")?;
                 let routing = flag("include_routing")?;
+                let map_point = flag("include_map_point")?;
                 construction::mac_panel::validate_options(geometry, routing)?;
                 let process = self.process()?;
                 read_only_recovered(|| {
@@ -755,7 +757,9 @@ impl Server {
                             },
                         )
                     } else {
-                        construction::target_snapshot::snapshot(process, key, state)
+                        construction::target_snapshot::snapshot_with_map_point(
+                            process, key, state, map_point,
+                        )
                     }
                 })
             }

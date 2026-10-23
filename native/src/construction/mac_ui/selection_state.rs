@@ -21,6 +21,13 @@ mod placement_state;
 #[allow(unused_imports)]
 pub(crate) use placement_state::{PlacementAnchor, PlacementDelta, PlacementReadback};
 
+// Readback only. A future ordinary Escape attempt must retain this original
+// scope and complete queue; this adds no key transport or command permission.
+#[allow(dead_code)]
+mod clearing_state;
+#[allow(unused_imports)]
+pub(crate) use clearing_state::{ClearSelectionAnchor, ClearSelectionReadback};
+
 #[cfg(test)]
 #[path = "../../../tests/support/mac_construction_selection_state.rs"]
 mod tests;

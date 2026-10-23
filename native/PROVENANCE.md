@@ -1,5 +1,43 @@
 # Rust foundation provenance
 
+## Resident Mac center-terrain and selection clearing
+
+`construction/mac_map_point.rs` independently follows the Mach-O UUID/SHA below.
+It composes the recovered ray/terrain procedures with exact own GS/idler/country,
+GUI/graphics/resource, map/camera/data and grid joins. RVAs `0x192fc80`,
+`0x2762150`, `0x19302e0` and `0x1931270..0x19312f4` establish this fallback.
+The map-mode object at `0x36330a0` is nonpolymorphic: its enum is at zero and its
+own GS backlink is at +0x48. Decimal construction mode 27 (`0x1b`) is distinct
+from region mode `0x27` (39); only reviewed modes 0/27 are admitted here.
+
+The caller supplies exact process/build/campaign checks and encompassing final
+witnesses. The observer requires the qualified 1920×1080 physical/logical canvas,
+scale 1, captured camera wrap 1 and zero alternate projections. Bounded height
+samples use a request-local cache. The resulting province must have exact type,
+own control and reciprocal membership in the original requested own state.
+Its +0xb8 definition must match the original CMap +0x208 catalog slot and the
+same ID before +0xca fallback flags. Complete ordered scene/model intersection
+precedes this engine fallback and is not established by the terrain candidate.
+
+Retained roots, catalogs, grids, province and definition are checked before
+following replacements. Matrices may change within original camera identity;
+a different resulting province/definition refuses. Grid/catalog/traversal caps
+are observer policy, not engine maxima. Twenty-six synthetic fixtures cover
+captured arithmetic, other own state IDs, bounds, mode/wrap refusal and original
+edge rejection. The public optional target read shares the complete own queue's
+witness bracket; it grants no full-picker, routing, event, eligibility or input
+authority. Stationary exact-source MCP qualification is documented separately.
+No upstream projection or UI source, foreign offsets or game bytes were copied.
+
+`construction/mac_ui/selection_state/clearing_state.rs` independently extends
+retained canonical selection readback. An original inactive or exact requested
+ordinary template may become canonical inactive while retaining complete queue
+and scope. An unchanged requested selection is Pending; another target refuses.
+Eight synthetic memory fixtures exercise these transitions and replacement,
+queue, chronology and unsupported-mode failures. This reader sends no Escape,
+closes no panel and cannot settle historical uncertain input. Live ordinary
+cancellation and a command adapter remain unqualified.
+
 ## Passive Mac own scene scope
 
 `construction/mac_scene_scope.rs` independently follows the same UUID/SHA below.

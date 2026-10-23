@@ -20,7 +20,9 @@ mod geometry;
 #[cfg_attr(not(any(target_os = "macos", test)), allow(dead_code))]
 mod selection_state;
 #[allow(unused_imports)]
-pub(crate) use selection_state::{bind_selection, SelectionAnchor, SelectionState};
+pub(crate) use selection_state::{
+    bind_selection, ClearSelectionAnchor, ClearSelectionReadback, SelectionAnchor, SelectionState,
+};
 
 #[derive(Clone, Copy, Default)]
 pub struct Options {

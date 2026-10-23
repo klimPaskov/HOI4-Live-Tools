@@ -2,6 +2,14 @@
 
 ## Unreleased native preview
 
+- Add optional resident Mac center-terrain evidence to `hoi4_construction_target`.
+  Default reads stay unchanged; strict opt-in joins the fixed 1080p center to the
+  requested own state within the complete snapshot. Native stationary MCP tests
+  measured 2.360 ms median RPC versus 1.996 ms without the option, with no input,
+  cursor movement, screenshots or pauses. Full-picker and placement authority
+  remain false. Add retained clear-selection readback with eight offline fixtures;
+  no Escape input or cancellation adapter is enabled.
+
 - Record a native Mac Luna-medium ordinary placement component: one map move
   and one click, with a retained typed anchor proving exactly one military factory
   queued in own Brandenburg. Preserve the earlier mode-0 harness failure; the
