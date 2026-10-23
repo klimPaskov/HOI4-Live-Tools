@@ -86,6 +86,11 @@ Upstream foundation and attribution:
   recover the current Mac construction view, own GUI ownership, named topbar
   opener and callback data. construction/mac_panel/routing.rs independently
   maps the own renderer, complete mouse-route arrays and cursor conversions.
+  construction/mac_panel/shortcut.rs independently maps the current ordinary
+  T shortcut and preceding supported keyboard receivers. The default-off
+  launch/macos/construction_open.rs adapter uses ordinary macOS key events,
+  typed original bindings and strict durable receipts; it executes no engine
+  callback or memory write. Physical delivery remains subject to live qualification.
   They reuse the attributed construction semantics
   without copying upstream UI code or another platform's offsets. These readers
   execute no callback and grant no placement or input authority.

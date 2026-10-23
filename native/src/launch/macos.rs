@@ -6,6 +6,7 @@ mod action_fence;
 mod air;
 mod armies;
 mod construction;
+mod construction_open;
 mod controller_epoch;
 mod daily;
 mod decisions;
@@ -56,6 +57,9 @@ struct Config {
     daily_production: bool,
     #[serde(default)]
     daily_focus: bool,
+    /// Qualification only: the ordinary T opener is not campaign accepted.
+    #[serde(default)]
+    construction_panel: bool,
 }
 
 fn nonce() -> Result<String> {
@@ -129,6 +133,7 @@ struct Control {
 }
 
 pub struct MacClock {
+    construction_panel: bool,
     directory: std::path::PathBuf,
     daily: daily::Controller,
     keys: Arc<MacKeys<'static>>,
@@ -176,6 +181,7 @@ impl MacClock {
         };
         let daily = daily::Controller::bind(directory, &config, scope, own.campaign.date_raw)?;
         Ok(Self {
+            construction_panel: config.construction_panel,
             daily,
             directory: directory.to_path_buf(),
             keys,
@@ -278,6 +284,7 @@ fn allowed(args: &serde_json::Map<String, Value>, keys: &[&str]) -> Result<()> {
 impl Commands for MacClock {
     fn tools(&self) -> Vec<Value> {
         vec![
+            construction_open::tool(),
             daily::Controller::tool(),
             json!({"name":"hoi4_plan","description":"Read or change the standing plan (plan.json in the run directory): research priorities, focus path, construction, training, production, politics, decisions. {op:get} returns it; {op:set, plan:{...}} merges the given keys (null removes a key). hoi4_plan_run carries it out.","inputSchema":{"type":"object","oneOf":[{"properties":{"op":{"const":"get"}},"required":["op"],"additionalProperties":false},{"properties":{"op":{"const":"set"},"plan":{"type":"object"}},"required":["op","plan"],"additionalProperties":false}]}}),
             json!({"name":"hoi4_plan_run","description":"Carry out the standing plan for up to `seconds` (default 60): answer news and single-option events, fill empty research slots and the focus slot from the plan's lists, make planned politics picks and decisions, keep the training queue, put idle military factories on the priority lines and spend idle civilian factories on planned construction. Every step is an ordinary verified action under the given lease; the game is never paused. Returns early when a choice event needs the model or a peace conference opens. Use it instead of hoi4_wait_for while nothing else needs attention.","inputSchema":{"type":"object","properties":{"seconds":{"type":"integer","minimum":1,"maximum":300},"lease_token":{"type":"string"}},"required":["lease_token"],"additionalProperties":false}}),
@@ -329,6 +336,7 @@ impl Commands for MacClock {
                 | "hoi4_production_add"
                 | "hoi4_production_set"
                 | "hoi4_construction_add"
+                | "hoi4_construction_open"
                 | "hoi4_politics_options"
                 | "hoi4_politics_choose"
                 | "hoi4_decisions_list"
@@ -362,7 +370,7 @@ impl Commands for MacClock {
         Some(self.directory.join("plan.json"))
     }
     fn capabilities(&self) -> Value {
-        json!({"transport":"ordinary macOS CGEvent keys to the front-most owned window","actions":["set_paused","set_speed","research_start","focus_start","production_add","production_set","construction_add","politics_options","politics_choose","decisions_list","decision_take","train","deploy_locations","army_create","army_front","army_plan","army_offensive","event_choose","diplomacy","diplomacy_act","army_commander","army_group_create","army_split","state_slots","air_wings","air_mission","plan_run"],"lease":"exclusive configured controller","input_profile":{"name":"macos_cocoa_absolute_1920x1080_v1","checked_at_bind":true,"rechecked_before_each_input":true,"diagnostic_alone_authorizes_input":false},"daily_governor":self.daily.capabilities(),"native_posting":false,"full_campaign_acceptance":false})
+        json!({"transport":"ordinary macOS CGEvent keys to the front-most owned window","actions":["set_paused","set_speed","research_start","focus_start","production_add","production_set","construction_add","politics_options","politics_choose","decisions_list","decision_take","train","deploy_locations","army_create","army_front","army_plan","army_offensive","event_choose","diplomacy","diplomacy_act","army_commander","army_group_create","army_split","state_slots","air_wings","air_mission","plan_run"],"lease":"exclusive configured controller","input_profile":{"name":"macos_cocoa_absolute_1920x1080_v1","checked_at_bind":true,"rechecked_before_each_input":true,"diagnostic_alone_authorizes_input":false},"construction_panel":{"enabled":self.construction_panel,"qualification_only":true,"ordinary_key":"t","live_delivery_verified":false,"input_retry":false},"daily_governor":self.daily.capabilities(),"native_posting":false,"full_campaign_acceptance":false})
     }
     fn call(&self, process: &dyn Process, name: &str, arguments: &Value) -> Result<Value> {
         if process.identity() != self.process.identity() {
@@ -427,6 +435,31 @@ impl Commands for MacClock {
             journal,
             actions,
         } = &mut *state;
+        if name == "hoi4_construction_open" {
+            allowed(args, &["request_id", "lease_token"])?;
+            let id = string(args, "request_id")?;
+            let token = string(args, "lease_token")?;
+            let expected = guard.observe_context(process)?;
+            let epoch = guard.epoch.clone();
+            let lease_end = authority.authorize(token, &epoch)?;
+            let fence = action_fence::Fence {
+                process,
+                epoch: &epoch,
+                expected: &expected,
+                authority,
+                token,
+                until: (Instant::now() + Duration::from_secs(5)).min(lease_end),
+                stop: None,
+            };
+            return construction_open::run(
+                self.construction_panel,
+                id,
+                &epoch,
+                actions,
+                &fence,
+                &self.keys,
+            );
+        }
         if name == "hoi4_input_lease" {
             let op = string(args, "op")?;
             let seconds = args.get("seconds").and_then(Value::as_u64).unwrap_or(300);

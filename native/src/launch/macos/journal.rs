@@ -1,8 +1,9 @@
 //! Durable receipts for ordinary game actions (research, Focus, ...). Intent is
 //! written and synced before the first input; a dispatch without a durable
-//! outcome is never replayed. A retry of that request may only settle it from
-//! fresh game state: the target reached (Verified) or the game state provably
-//! unchanged (NotApplied). Any other unresolved dispatch quarantines input.
+//! outcome is never replayed. Legacy version-1 adapters retain their read-only
+//! settlement contract. Strict version-2 intents never settle after an uncertain
+//! attempt: only that original attempt may certify delivery or positive no-input.
+//! Every unresolved dispatch quarantines shared input.
 use crate::{
     actions::Epoch,
     error::{Error, Result},
@@ -20,6 +21,10 @@ use std::{
 
 const LINE_LIMIT: usize = 16 << 10;
 const JOURNAL_LIMIT: u64 = 64 << 20;
+
+#[cfg(test)]
+#[path = "journal/strict_tests.rs"]
+mod strict_tests;
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub enum Status {
@@ -47,6 +52,15 @@ pub enum Outcome {
     Unchanged(Value),
     Diverged(Value),
     Unknown,
+}
+
+/// A new strict adapter supplies a result from this attempt only. It must
+/// classify every failure after any possible input as Uncertain; unchanged
+/// game state is not proof that no event was queued.
+pub(super) enum StrictOutcome {
+    Verified(Value),
+    NotQueued(Error),
+    Uncertain(Error),
 }
 
 pub struct GameJournal {
@@ -134,12 +148,21 @@ impl GameJournal {
             }
             let record: Receipt = serde_json::from_slice(&line)
                 .map_err(|e| Error::new("invalid_journal", e.to_string()))?;
+            if !matches!(record.version, 1 | 2)
+                || (record.version == 2 && record.status == Status::Diverged)
+            {
+                return Err(Error::new(
+                    "invalid_journal",
+                    "Unsupported action receipt semantics",
+                ));
+            }
             valid_id(&record.id)?;
             if let Some(previous) = receipts.get(&record.id) {
                 if previous.status != Status::Dispatching
                     || record.status == Status::Dispatching
                     || previous.epoch != record.epoch
                     || previous.action != record.action
+                    || previous.version != record.version
                 {
                     return Err(Error::new("invalid_journal", "Invalid receipt transition"));
                 }
@@ -191,6 +214,96 @@ impl GameJournal {
     pub(super) fn permits_recovery(&self, id: Option<&str>) -> bool {
         !self.poisoned && id.is_some_and(|id| self.receipt_exists(id))
     }
+    /// Replay only a verified historical receipt. This path never observes the
+    /// current UI to settle an old intent, and never dispatches a second time.
+    pub(super) fn strict_receipt(
+        &self,
+        id: &str,
+        epoch: &Epoch,
+        action: &Value,
+    ) -> Result<Option<Receipt>> {
+        if self.poisoned {
+            return Err(Error::new(
+                "action_uncertain",
+                "Game journal persistence is uncertain",
+            ));
+        }
+        valid_id(id)?;
+        if let Some(previous) = self.receipts.get(id) {
+            if previous.version != 2
+                || !same_campaign(&previous.epoch, epoch)
+                || &previous.action != action
+            {
+                return Err(Error::new(
+                    "idempotency_conflict",
+                    "request_id belongs to another action or epoch",
+                ));
+            }
+            return match previous.status {
+                Status::Verified => Ok(Some(previous.clone())),
+                Status::NotApplied => Err(Error::new("input_not_queued", "Historical positive refusal; use a fresh request after repairing its cause")),
+                Status::Dispatching | Status::Diverged => Err(Error::new("action_uncertain", "Historical strict action remains unresolved; current UI cannot settle or replay it")),
+            };
+        }
+        if self.unresolved().is_some() {
+            return Err(Error::new(
+                "action_uncertain",
+                "Unresolved shared game input blocks a new strict action",
+            ));
+        }
+        Ok(None)
+    }
+    /// Persist the original typed adapter's private binding/baseline before
+    /// invoking it once. Only its same-attempt verified readback can complete
+    /// this intent. Existing legacy adapters retain their separate contract.
+    pub(super) fn execute_strict(
+        &mut self,
+        id: &str,
+        epoch: &Epoch,
+        action: Value,
+        before: Value,
+        dispatch: &mut dyn FnMut() -> StrictOutcome,
+    ) -> Result<Receipt> {
+        if let Some(receipt) = self.strict_receipt(id, epoch, &action)? {
+            return Ok(receipt);
+        }
+        let intent = self.append(Receipt {
+            version: 2,
+            id: id.into(),
+            epoch: epoch.clone(),
+            action,
+            status: Status::Dispatching,
+            detail: before,
+            unix_ms: now(),
+        })?;
+        match dispatch() {
+            StrictOutcome::Verified(detail) => self
+                .append(Receipt {
+                    status: Status::Verified,
+                    detail,
+                    unix_ms: now(),
+                    ..intent
+                })
+                .map_err(|error| {
+                    Error::after_possible_input("Strict action receipt was not durable", error)
+                }),
+            StrictOutcome::NotQueued(error) => {
+                // Retain the positive producer classification without copying
+                // arbitrary transport messages or lease tokens into a receipt.
+                self.append(Receipt {
+                    status: Status::NotApplied,
+                    detail: serde_json::json!({"delivery":"NotQueued","cause_code":error.code}),
+                    unix_ms: now(),
+                    ..intent
+                })?;
+                Err(error)
+            }
+            StrictOutcome::Uncertain(error) => Err(Error::after_possible_input(
+                "Strict action outcome is uncertain; preserve original intent without replay",
+                error,
+            )),
+        }
+    }
     /// Run `dispatch` once under a durable intent record. `settle` reads fresh
     /// state and reports what the game shows about this action.
     pub fn execute(
@@ -209,6 +322,12 @@ impl GameJournal {
         }
         valid_id(id)?;
         if let Some(previous) = self.receipts.get(id).cloned() {
+            if previous.version == 2 {
+                return Err(Error::new(
+                    "action_uncertain",
+                    "Strict action receipts cannot use legacy settlement",
+                ));
+            }
             if !same_campaign(&previous.epoch, epoch) || previous.action != action {
                 return Err(Error::new(
                     "idempotency_conflict",
@@ -312,7 +431,7 @@ mod tests {
     use crate::platform::Identity;
     use serde_json::json;
 
-    fn epoch() -> Epoch {
+    pub(super) fn epoch() -> Epoch {
         Epoch {
             game: Identity {
                 pid: 7,
@@ -324,14 +443,14 @@ mod tests {
             player: "GER".into(),
         }
     }
-    fn dir(name: &str) -> std::path::PathBuf {
+    pub(super) fn dir(name: &str) -> std::path::PathBuf {
         let d =
             std::env::temp_dir().join(format!("hoi4-game-journal-{}-{name}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
         d
     }
-    fn journal(dir: &std::path::Path) -> GameJournal {
+    pub(super) fn journal(dir: &std::path::Path) -> GameJournal {
         GameJournal::open(&dir.join("game-actions.jsonl")).unwrap()
     }
 

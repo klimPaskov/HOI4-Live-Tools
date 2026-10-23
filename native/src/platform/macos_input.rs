@@ -753,6 +753,66 @@ impl<'p> MacKeys<'p> {
     pub fn press(&self, key: Key) -> Result<()> {
         self.press_raw(key.code())
     }
+    /// A strict single shortcut. Allocate its release before sending down;
+    /// refuse held input and never try to repair modifiers with extra events.
+    pub(crate) fn press_once(&self, key: Key) -> Result<()> {
+        self.confirm_input_idle()?;
+        struct Pair {
+            down: CFTypeRef,
+            up: CFTypeRef,
+            pressed: bool,
+        }
+        impl Drop for Pair {
+            fn drop(&mut self) {
+                // SAFETY: each nonnull pointer is owned by this pair. Release
+                // the key even on an unwind after down, with no new preflight.
+                unsafe {
+                    if self.pressed {
+                        CGEventPost(HID_EVENT_TAP, self.up);
+                    }
+                    for event in [self.down, self.up] {
+                        if !event.is_null() {
+                            CFRelease(event);
+                        }
+                    }
+                }
+            }
+        }
+        // SAFETY: null event sources are permitted; Pair owns both results.
+        let mut events = unsafe {
+            Pair {
+                down: CGEventCreateKeyboardEvent(std::ptr::null(), key.code(), true),
+                up: CGEventCreateKeyboardEvent(std::ptr::null(), key.code(), false),
+                pressed: false,
+            }
+        };
+        if events.down.is_null() || events.up.is_null() {
+            return Err(Error::new(
+                "input_unavailable",
+                "Complete key event pair unavailable",
+            ));
+        }
+        // A null event source can inherit flags at allocation time. The final
+        // idle check must not admit an event carrying an earlier modifier.
+        unsafe {
+            CGEventSetFlags(events.down, 0);
+            CGEventSetFlags(events.up, 0);
+        }
+        self.confirm_input_idle()?;
+        // SAFETY: preallocated live events, checked ownership/idle input, one
+        // short down/up only. No fallible operation separates down from cleanup.
+        unsafe {
+            CGEventPost(HID_EVENT_TAP, events.down);
+        }
+        events.pressed = true;
+        std::thread::sleep(std::time::Duration::from_millis(40));
+        unsafe {
+            CGEventPost(HID_EVENT_TAP, events.up);
+        }
+        events.pressed = false;
+        std::thread::sleep(std::time::Duration::from_millis(40));
+        Ok(())
+    }
     fn press_raw(&self, code: u16) -> Result<()> {
         self.preflight()?;
         // A stuck Fn flag turns letter keys into system shortcuts (Fn+Q opens

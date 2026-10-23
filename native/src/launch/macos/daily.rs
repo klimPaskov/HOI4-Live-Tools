@@ -884,6 +884,7 @@ mod tests {
             daily_research: false,
             daily_production: false,
             daily_focus: false,
+            construction_panel: false,
         }
     }
     #[test]
@@ -917,7 +918,9 @@ mod tests {
         assert!(s.plan(scope(), false, false, true).is_err());
         let c: Config =
             serde_json::from_value(json!({"controller":"fixture","player":"GER"})).unwrap();
-        assert!(!c.daily_focus && !c.daily_research && !c.daily_production);
+        assert!(
+            !c.daily_focus && !c.daily_research && !c.daily_production && !c.construction_panel
+        );
     }
     #[test]
     fn missing_plan_never_bootstraps_over_any_nonempty_daily_artifact() {

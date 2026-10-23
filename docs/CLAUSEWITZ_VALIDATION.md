@@ -1,5 +1,49 @@
 # Clausewitz-MCP Linux validation
 
+## Mac ordinary T opener and strict receipts — 23 October 2026
+
+The independent `include_shortcut` option checks the named construction button's
+actual plain-T descriptor and complete reverse keyboard-source membership. It
+admits only supported own predecessors with proved no-match/non-consumption
+behavior. Focused text, competing matches, unknown receivers, foreign owners and
+changed final witnesses refuse. Later receiver payloads are not followed. The
+observer grants no physical-delivery or atomic cache-completion authority.
+
+A separate manual `hoi4_construction_open` qualification tool is default-off via
+private owner permission `construction_panel`. It retains the original typed
+binding and scope under one lease-bounded five-second deadline. Before input,
+it persists a version-2 intent with the original binding digest and checks fresh
+state against that original. It sends at most one ordinary T down/up, with a
+preallocated release, explicit unmodified flags and idle-input checks. Already-
+selected panels wait read-only for visibility and never receive a toggle. There
+is no screenshot, cursor movement, menu dismissal, placement or pause operation.
+
+Only the original attempt's fresh reached-panel readback may verify its receipt.
+Any uncertainty after entering the transport leaves the original intent unresolved
+and blocks shared input permanently. Reopen, new IDs and legacy settlement cannot
+clear it. Historical verified replays explicitly do not certify current state.
+Positive pre-input refusals remain recorded and allow only a fresh request after
+repair. The existing version-1 adapters and old failed controllers are preserved.
+
+Ten new observer fixtures, six strict-journal tests and an action failure matrix
+bring validation to 34 focused panel tests and 1,496 Rust tests. The full Python
+suite passes 956 tests with 37 skipped, alongside formatting, strict host/Windows/
+Linux-musl/ARM64-Linux-musl Clippy, release build and the offline stdio smoke.
+Independent static/source review found no actionable issue; it does not qualify
+physical delivery. The preceding `8cd42d1` passed all nine CI jobs.
+The offline smoke initially expected different English wording for the missing-
+session error; that harness failure is retained. The corrected assertion checks
+the structured `capability_unavailable` code and passes without runtime changes.
+
+No live probe or input was executed for this checkpoint. The single separate
+normal Security.framework task-port authorization request remains pending;
+routine MCP access remains noninteractive and no security policy was changed.
+The exact owned game and supervisor remained present and controller files were
+unchanged. First qualify the current shortcut route stationarily after OS access
+returns, then use one Luna-medium player for a bounded recorded opener gate.
+Construction placement, the two-year acceptance run and full campaigns remain
+incomplete.
+
 ## Mac opener mouse-route observation — 23 October 2026
 
 The panel probe now accepts `include_routing=true` together with

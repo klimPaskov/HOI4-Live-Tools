@@ -137,6 +137,11 @@ See [the controller and worker contract](docs/MAC_CONTROLLER.md) and
 separate from the durable worker; peace conferences and naval invasions are not
 implemented.
 
+Construction opening now has a separate default-off preview that uses one
+ordinary T keypress and durable receipts, without moving the cursor. Its current
+shortcut reader and failure handling pass offline checks; live qualification is
+pending normal macOS task-port authorization. It is not yet a campaign capability.
+
 Mac memory access requires Developer Tools permission and an ad-hoc signed tool
 binary (`native/macos/debugger.entitlements`). The game is never re-signed.
 Missing access returns a capability error for client telemetry/UI fallback.

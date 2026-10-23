@@ -5,6 +5,9 @@ use hoi4_live_native::{
 };
 use serde_json::json;
 
+#[path = "mac_construction_shortcut.rs"]
+mod shortcut;
+
 const GUI: u64 = 0x400000;
 const MANAGER: u64 = 0x410000;
 const VIEW: u64 = 0x420000;

@@ -9,6 +9,20 @@ failed campaigns. Do not control the shared Windows game.
 
 ## Current checkpoint
 
+The Mac construction opener now has a typed current-T observer and a default-off
+`hoi4_construction_open` qualification adapter. It retains the original binding,
+sends at most one short keypress and never toggles an already-selected panel.
+Strict durable receipts preserve uncertain input across reconnects; a later open
+panel cannot settle an old attempt. No cursor movement or modifier-repair input
+is added. All 34 panel fixtures and 1,496 Rust / 956 Python tests (37 skipped),
+strict cross-platform checks and the release build pass. Live qualification is
+still pending: the single normal macOS task-port authorization request has not
+completed. Do not duplicate that prompt or retry denied memory reads unchanged.
+After authorization, first run the prepared stationary shortcut observer; only
+then review a bounded one-Luna-medium opener/visible-grid grant. The two-year run
+and full recorded campaigns remain unfinished. See
+[the opener contract and evidence](CLAUSEWITZ_VALIDATION.md#mac-ordinary-t-opener-and-strict-receipts--23-october-2026).
+
 The panel probe now includes opt-in typed route/cursor correlation under the
 existing own-process witness. It checks complete bounded source/delivery arrays,
 the exact button/renderer association and independent cursor conversions;

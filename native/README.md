@@ -74,6 +74,13 @@ command for macOS 15+. Rust supervises a bundled ScreenCaptureKit bridge, with
 owned-window capture, detailed failure witnesses and explicit clean stopping.
 It sends no game input. Client geometry and gameplay acceptance remain separate.
 
+The Mac controller also exposes a default-off `hoi4_construction_open`
+qualification tool. It checks the current ordinary T shortcut, persists the
+original intent and sends at most one keypress without moving the cursor.
+Already-selected panels receive no toggle; uncertain input cannot be replayed or
+settled from later UI. Physical delivery remains unqualified. See the
+[permission and receipt contract](../docs/MAC_CONTROLLER.md#construction-opener-qualification).
+
 The durable observation producer now uses the independently reviewed Mac game
 and Research layouts. Canonical Mac process timestamps retain byte-exact scope
 and restart equality. This prepares the daily-worker port; the Mac legacy
@@ -439,7 +446,7 @@ anchors do not establish a load-generation token.
 | `hoi4_construction_queue` | Own building/railway lines, canonical keys and signed cost/work counters; one dockyard observed in run071. Run072 observed one state/label with a late-lease deviation; selection and province/railway coverage remain unverified |
 | `hoi4_construction_target` | Complete witnessed queued amounts for one public building and own state; incomplete evidence returns null amounts |
 | `hoi4_construction_ui_probe` | Mac-only own panel/selection/full-choice observation; no input, geometry, settled-frame or placement authority |
-| `hoi4_construction_panel_probe` | Mac-only panel mode and named topbar opener/callback binding. `include_geometry` requires a verified 1920×1080 canvas at scale 1. Optional `include_routing` also requires geometry and adds complete bounded mouse-route/cursor correlations; no atomic cache-completion or input authority |
+| `hoi4_construction_panel_probe` | Mac-only panel mode and named topbar opener/callback binding. Optional `include_geometry` verifies a 1920×1080 canvas; `include_routing` also requires geometry. Independent `include_shortcut` checks current T and preceding supported keyboard receivers. No input or atomic delivery authority |
 | `hoi4_technology_list` | Canonical loaded technology IDs with filtering/pagination; no eligibility inference |
 | `hoi4_input_geometry` | GUI dimensions, scale, pointer and conditional source-window diagnostics; no click authority |
 | `hoi4_research_folders` | Exact loaded public folder IDs, independent of open GUI; no technology mapping or eligibility authority |

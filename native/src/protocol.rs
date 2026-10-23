@@ -644,13 +644,13 @@ impl Server {
                 })
             }
             "hoi4_construction_panel_probe" => {
-                if object
-                    .keys()
-                    .any(|key| key != "include_geometry" && key != "include_routing")
-                {
+                if object.keys().any(|key| {
+                    !["include_geometry", "include_routing", "include_shortcut"]
+                        .contains(&key.as_str())
+                }) {
                     return Err(Error::new(
                         "invalid_arguments",
-                        "Only include_geometry and include_routing accepted",
+                        "Only include_geometry, include_routing and include_shortcut accepted",
                     ));
                 }
                 let geometry = object
@@ -668,9 +668,23 @@ impl Server {
                         Error::new("invalid_arguments", "include_routing must be boolean")
                     })?;
                 construction::mac_panel::validate_options(geometry, routing)?;
+                let shortcut = object
+                    .get("include_shortcut")
+                    .map(Value::as_bool)
+                    .unwrap_or(Some(false))
+                    .ok_or_else(|| {
+                        Error::new("invalid_arguments", "include_shortcut must be boolean")
+                    })?;
                 let process = self.process()?;
                 read_only_recovered(|| {
-                    construction::mac_panel::snapshot_with_routing(process, geometry, routing)
+                    construction::mac_panel::snapshot_with_options(
+                        process,
+                        construction::mac_panel::Options {
+                            geometry,
+                            routing,
+                            shortcut,
+                        },
+                    )
                 })
             }
             "hoi4_construction_target" | "hoi4_construction_ui_probe" => {

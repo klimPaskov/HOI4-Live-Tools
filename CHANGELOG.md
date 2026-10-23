@@ -2,6 +2,12 @@
 
 ## Unreleased native preview
 
+- Add opt-in current Mac construction-shortcut observation and a default-off
+  `hoi4_construction_open` qualification tool. It sends at most one ordinary T,
+  never toggles an already-selected panel, and keeps unknown delivery quarantined
+  across reconnects. Strict receipts cannot use legacy reached-target settlement.
+  No cursor movement or extra modifier-repair input; live qualification is pending.
+
 - Validate independently recovered Mac GUI-registry backlinks before construction
   widget payload. Expose local root transition states and engine visibility
   separately; neither grants settled geometry or input authority.

@@ -19,6 +19,24 @@ use std::{collections::BTreeSet, time::Instant};
 const GAME: (u32, u32) = (1920, 1080);
 const CONSTRUCTION: i32 = 0x11;
 mod routing;
+mod shortcut;
+
+#[derive(Clone, Copy, Default)]
+pub struct Options {
+    pub geometry: bool,
+    pub routing: bool,
+    pub shortcut: bool,
+}
+
+#[cfg(target_os = "macos")]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+struct Scope {
+    anchors: [u64; 3],
+    registry: u64,
+    manager: u64,
+    view: u64,
+    root: u64,
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Window {
@@ -51,8 +69,11 @@ struct Opener {
     callback: Callback,
     rect: Option<Rect>,
     routing: Option<routing::Observation>,
+    shortcut: Option<shortcut::Observation>,
 }
 pub(crate) struct Observation {
+    #[cfg(target_os = "macos")]
+    scope: Scope,
     context: game::ClockContext,
     managed_mode: i32,
     selection_mode: i32,
@@ -154,8 +175,7 @@ fn opener(
     idler: u64,
     registry: u64,
     manager: u64,
-    geometry: bool,
-    include_routing: bool,
+    options: Options,
 ) -> Result<Option<Opener>> {
     let topbar = r.u64(manager + 0x188)?;
     if topbar == 0 {
@@ -222,7 +242,7 @@ fn opener(
     }
     let callback = callback(r, base, button, topbar)?;
     let mut routing = None;
-    let rect = if geometry
+    let rect = if options.geometry
         && state != 3
         && flags & 8 != 0
         && windows.iter().all(|w| w.visible() && w.idle())
@@ -247,7 +267,7 @@ fn opener(
                 "Mac opener must lie fully inside the verified client",
             ));
         }
-        if include_routing {
+        if options.routing {
             routing = Some(routing::observe(
                 r,
                 base,
@@ -261,6 +281,15 @@ fn opener(
     } else {
         None
     };
+    let shortcut = if options.shortcut
+        && state != 3
+        && flags & 8 != 0
+        && windows.iter().all(|w| w.visible() && w.idle())
+    {
+        Some(shortcut::observe(r, base, registry, button)?)
+    } else {
+        None
+    };
     Ok(Some(Opener {
         topbar,
         windows,
@@ -271,10 +300,11 @@ fn opener(
         callback,
         rect,
         routing,
+        shortcut,
     }))
 }
 
-fn observe(process: &dyn Process, geometry: bool, routing: bool) -> Result<Observation> {
+fn observe(process: &dyn Process, options: Options) -> Result<Observation> {
     if process.string_abi() != StringAbi::LibCxx {
         return Err(Error::new(
             "unsupported_platform",
@@ -330,7 +360,7 @@ fn observe(process: &dyn Process, geometry: bool, routing: bool) -> Result<Obser
     } else if panel.as_ref().is_none_or(|p| p.flags & 8 != 0 || !p.idle()) {
         (None, "closed_panel_not_observed")
     } else {
-        let opener = opener(&r, base, idler, registry, manager, geometry, routing)?;
+        let opener = opener(&r, base, idler, registry, manager, options)?;
         let reason = if opener.is_some() {
             "opener_observed"
         } else {
@@ -347,6 +377,14 @@ fn observe(process: &dyn Process, geometry: bool, routing: bool) -> Result<Obser
         ));
     }
     Ok(Observation {
+        #[cfg(target_os = "macos")]
+        scope: Scope {
+            anchors: context.anchors,
+            registry,
+            manager,
+            view,
+            root,
+        },
         context,
         managed_mode,
         selection_mode,
@@ -368,8 +406,19 @@ pub fn snapshot_with_routing(
     geometry: bool,
     routing: bool,
 ) -> Result<Value> {
-    validate_options(geometry, routing)?;
-    let o = observe(process, geometry, routing)?;
+    snapshot_with_options(
+        process,
+        Options {
+            geometry,
+            routing,
+            shortcut: false,
+        },
+    )
+}
+
+pub fn snapshot_with_options(process: &dyn Process, options: Options) -> Result<Value> {
+    validate_options(options.geometry, options.routing)?;
+    let o = observe(process, options)?;
     let panel = o.panel.as_ref().map(|p| {
         json!({"engine_visible":p.visible(),"locally_visible":p.flags&8!=0,
         "transition_states_raw":p.states,"local_transitions_idle":p.idle()})
@@ -380,15 +429,88 @@ pub fn snapshot_with_routing(
         "ancestors_local_transitions_idle":p.windows.iter().all(Window::idle),
         "locally_shown":p.flags&8!=0,"button_state_raw":p.state,"disabled":p.state==3,
         "rect":p.rect.map(|r|json!({"x":r.x,"y":r.y,"w":r.w,"h":r.h})),
-        "routing":p.routing.as_ref().map(routing::Observation::diagnostic)}));
+        "routing":p.routing.as_ref().map(routing::Observation::diagnostic),
+        "shortcut":p.shortcut.as_ref().map(shortcut::Observation::diagnostic)}));
     Ok(
         json!({"source":"native witnessed Mac construction-panel opener probe","player":o.context.player,
         "date_raw":o.context.date_raw,"paused":o.context.paused,"managed_mode_raw":o.managed_mode,
         "placement_selection_mode_raw":o.selection_mode,"panel":panel,"opener":opener,"reason":o.reason,
-        "routing_requested":routing,"input_authorized":false,"settled_frame_verified":false,"global_modal_clear_verified":false,
+        "routing_requested":options.routing,"shortcut_requested":options.shortcut,
+        "input_authorized":false,"settled_frame_verified":false,"global_modal_clear_verified":false,
         "observation_paused_game":false,"freshness":{"read_calls":o.read_calls,"read_bytes":o.read_bytes,
         "elapsed_ms":o.elapsed_ms,"read_calls_kind":"logical_read_requests"}}),
     )
+}
+
+#[cfg(target_os = "macos")]
+pub(crate) fn observe_open(process: &dyn Process) -> Result<Observation> {
+    observe(
+        process,
+        Options {
+            shortcut: true,
+            ..Options::default()
+        },
+    )
+}
+
+#[cfg(target_os = "macos")]
+impl Observation {
+    pub(crate) fn selected(&self) -> bool {
+        self.managed_mode == CONSTRUCTION
+    }
+    pub(crate) fn opened(&self) -> bool {
+        self.selected()
+            && self.selection_mode == 0
+            && self.panel.as_ref().is_some_and(|p| p.visible() && p.idle())
+    }
+    pub(crate) fn same_panel(&self, other: &Self) -> bool {
+        self.scope == other.scope
+    }
+    pub(crate) fn same_before_input(&self, other: &Self) -> bool {
+        self.same_panel(other)
+            && self.managed_mode == other.managed_mode
+            && self.selection_mode == other.selection_mode
+            && self.panel == other.panel
+            && self.opener == other.opener
+    }
+    pub(crate) fn require_shortcut(&self) -> Result<()> {
+        if self.selected() {
+            return Err(invalid(
+                "An already-selected construction panel must never receive a toggle",
+            ));
+        }
+        let p = self
+            .opener
+            .as_ref()
+            .ok_or_else(|| invalid("Verified own construction opener required"))?;
+        let k = p
+            .shortcut
+            .as_ref()
+            .ok_or_else(|| invalid("Own live shortcut qualification required"))?;
+        k.require_ready()
+    }
+    /// Original typed fields serialized only into the private action intent.
+    /// Action decisions never deserialize this JSON as live facts.
+    pub(crate) fn private_baseline(&self) -> Result<Value> {
+        use sha2::{Digest, Sha256};
+        let binding = json!({"scope":self.scope,"managed_mode":self.managed_mode,"selection_mode":self.selection_mode,
+            "panel":self.panel.as_ref().map(|p|(p.object,p.flags,p.states)),
+            "context":{"player":self.context.player,"playthrough":self.context.playthrough_id,
+                "date_raw":self.context.date_raw,"difficulty":self.context.difficulty,
+                "historical_raw":self.context.historical_raw},
+            "opener":self.opener.as_ref().map(|p| json!({"topbar":p.topbar,"button":p.button,
+            "windows":p.windows.iter().map(|w|(w.object,w.flags,w.states)).collect::<Vec<_>>(),
+            "paths":p.paths,"flags":p.flags,"state":p.state,
+            "callback":{"nodes":p.callback.nodes,"glue":p.callback.glue,"function":p.callback.function},
+            "shortcut":p.shortcut}))});
+        let bytes = serde_json::to_vec(&binding).map_err(|e| invalid(&e.to_string()))?;
+        // Retain the complete original typed binding in memory for this attempt;
+        // its digest keeps the private durable intent bounded for a full route.
+        Ok(
+            json!({"scope":self.scope,"managed_mode":self.managed_mode,"selection_mode":self.selection_mode,
+            "binding_sha256":format!("{:x}", Sha256::digest(&bytes)),"binding_bytes":bytes.len()}),
+        )
+    }
 }
 
 pub(crate) fn validate_options(geometry: bool, routing: bool) -> Result<()> {
@@ -402,6 +524,6 @@ pub(crate) fn validate_options(geometry: bool, routing: bool) -> Result<()> {
 }
 
 pub(crate) fn tool() -> Value {
-    json!({"name":"hoi4_construction_panel_probe","description":"Read-only Mac construction panel/topbar opener binding. Verifies own manager/view, managed mode, named aliases, exact callback and optional renderer rectangle on the independently checked 1920x1080 canvas at GUI scale 1. Optional include_routing requires include_geometry and adds complete bounded mouse-route/cursor correlation, without inspecting unrelated target payloads. Already-selected mode skips the toggle control even while visibility is pending. No input, atomic cache completion, settled-frame, global routing or placement authority; never pauses or moves the cursor.",
-        "inputSchema":{"type":"object","properties":{"include_geometry":{"type":"boolean","default":false},"include_routing":{"type":"boolean","default":false}},"additionalProperties":false},"annotations":{"readOnlyHint":true}})
+    json!({"name":"hoi4_construction_panel_probe","description":"Read-only Mac construction panel/topbar opener binding. Verifies own manager/view, managed mode, named aliases, exact callback and optional renderer rectangle on the independently checked 1920x1080 canvas at GUI scale 1. Optional include_routing requires include_geometry and adds complete bounded mouse-route/cursor correlation. Independent include_shortcut checks the current plain T binding and preceding supported keyboard receivers. Already-selected mode skips the toggle control even while visibility is pending. No input, atomic cache completion, physical delivery or placement authority; never pauses or moves the cursor.",
+        "inputSchema":{"type":"object","properties":{"include_geometry":{"type":"boolean","default":false},"include_routing":{"type":"boolean","default":false},"include_shortcut":{"type":"boolean","default":false}},"additionalProperties":false},"annotations":{"readOnlyHint":true}})
 }

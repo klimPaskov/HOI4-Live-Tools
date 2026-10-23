@@ -131,6 +131,33 @@ discards private typed identity/context between calls, and its UI placement stag
 are not connected to the worker. A future adapter must retain and revalidate those
 identities across ordinary input. Readback success does not authorize placement.
 
+## Construction opener qualification
+
+`hoi4_construction_panel_probe` accepts independent `include_shortcut: true`.
+It checks the named button's current plain-T binding and the supported keyboard
+receivers before it, including nonmatching controls that could consume the key.
+Focused text, unknown predecessors and changed owners refuse. The complete
+source collection and inspected bindings share the final read witness. These
+observations do not prove atomic cache completion or physical input delivery.
+
+The manual `hoi4_construction_open` preview additionally requires
+`construction_panel: true` in the private `input.json`, plus `request_id` and
+`lease_token`. This permission defaults off. It retains the original typed panel,
+button and shortcut route under one five-second deadline bounded by the lease.
+The intent is synced before at most one ordinary T down/up. Already-selected
+panels only wait for visibility; they never receive a toggle. No mouse, Escape,
+popup dismissal, placement, pause or modifier-repair event is sent. Key-up is
+allocated before key-down and released without a new ownership check.
+
+This adapter uses strict version-2 records in the shared game-action journal.
+Verified retries return a historical receipt and explicitly do not certify the
+current panel. An uncertain attempt permanently blocks this controller; later
+reached UI cannot settle it, even through the legacy API. A positive pre-input
+refusal remains recorded and permits a new request after its cause is repaired.
+The complete original typed binding stays in memory for the attempt; its SHA-256
+and compact scope are retained in the private intent. Live qualification and
+worker construction integration remain pending. Legacy adapters are preserved.
+
 ## Action limits and recovery
 
 Each Mac worker cycle admits at most one durable input intent under its original
