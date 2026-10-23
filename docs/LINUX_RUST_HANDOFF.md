@@ -12,6 +12,41 @@ failed campaigns. Do not control the shared Windows game.
 
 ## Current checkpoint
 
+The recorded Luna-medium ordinary map-placement component passed on native Mac
+HOI4 at a 1920×1080 client size. From an already-selected military-factory
+template, one map move and one ordinary down/up produced exactly one new
+`arms_factory` queue line of amount 1 in own Brandenburg (state 64). A real Rust
+`PlacementAnchor` retained before input verified `new_line_added` on its first
+observation. Complete Research, Focus, production, clock and setup stayed unchanged.
+
+The private 22-RPC driver took 8.438 seconds including process startup, platform
+guards and separate terrain/scene probes; median RPC was 1.161 ms, maximum
+4.465 ms. It used no opener, reselection, activation, screenshot, worker or clock
+command, and zero observation pauses. The game started and remained paused;
+no game year advanced, so no real-time-per-year result is available. The native
+1920×1108 H.264 recording finalized at 69.591667 seconds with 2,051 encoded frames
+and 2,050 complete capture callbacks, clean explicit stop and recorder exit 0.
+
+The preceding attempt is preserved as failed: its one opener and one template
+selection verified, then its mode-0 harness condition rejected construction map
+mode 27 before any map movement or down. Static analysis distinguishes decimal
+27 (`0x1b`) from region mode `0x27` (39); the fresh own-province branch proof still
+returned the canonical province. The separate successful phase did not repeat
+those verified actions or retry a map input.
+
+This qualifies one ordinary point and its exact queue effect, through a private
+diagnostic harness. Complete model intersection, a resident Rust map observer,
+a public strict placement adapter and construction worker integration remain
+unfinished. Cached-coordinate diagnostics retain their explicit false event/frame/
+delivery authority flags. Both grants, leases, servers and recorders are closed;
+the clean two-year Luna run and full campaign recordings remain unfinished.
+The public runtime source is unchanged from `71e0075`, whose nine CI jobs passed
+across Windows, Linux and macOS. The private harness passed 13 Python fixtures
+and three Rust actor fixtures; these are separate from the 1,780 Rust / 956 Python
+workspace checks (37 skips) for that source checkpoint.
+
+Earlier checkpoints follow.
+
 The internal Mac scene-scope reader passed stationary live qualification: all
 35 picker entries joined fresh own-country sources (30 divisions and five task
 forces), with exact type/owner checks and retained original identities. Unknown

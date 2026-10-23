@@ -111,12 +111,17 @@ Its stationary MCP test measured 0.257 ms median RPC; the cached point differed
 from the OS cursor. Current-event/frame, routing, delivery and input authority
 remain false. This is a diagnostic, not a click point.
 
-Internal ray/terrain arithmetic now reproduces a captured center-point calculation
-bit-for-bit. The private terrain/bitmap prototype joined it to own Brandenburg;
-scene picking, ordinary map input and construction placement remain unqualified.
-The internal own-scene scope reader separately matched all 35 live candidates to
-own divisions/task forces with exact types and owners. Unknown candidates refuse;
-this supplies membership evidence, with model intersection still unfinished.
+Internal ray/terrain arithmetic reproduces a captured center-point calculation
+bit-for-bit. The private terrain/bitmap prototype joined it to own Brandenburg.
+The internal scene reader matched all 35 live candidates to own divisions/task
+forces with exact types and owners; unknown candidates refuse before payload.
+A separate recorded Luna-medium [ordinary point-placement test](../docs/CLAUSEWITZ_VALIDATION.md#mac-ordinary-map-placement--24-october-2026)
+then passed: one map move and down/up, with a retained Rust queue anchor proving
+exactly one military factory added in state 64. The 22-RPC private driver took
+8.438 seconds including startup and guards (1.161 ms median RPC). The prior
+mode-0 harness failure is preserved. Complete model intersection, the resident
+map observer, a public strict placement adapter and worker integration remain
+unfinished; this test adds no MCP action or permission.
 
 The Mac durable worker has passed recorded Research, Focus and production
 component tests, including plan revisions and reconnects. Canonical Mac process

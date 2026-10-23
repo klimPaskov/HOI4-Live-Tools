@@ -2,6 +2,13 @@
 
 ## Unreleased native preview
 
+- Record a native Mac Luna-medium ordinary placement component: one map move
+  and one click, with a retained typed anchor proving exactly one military factory
+  queued in own Brandenburg. Preserve the earlier mode-0 harness failure; the
+  successful phase sends no repeated opener or selection. This private gate adds
+  no public placement permission or worker action; full picker and campaigns
+  remain unfinished.
+
 - Add an internal Mac own-scene scope reader. Require complete ordered scene
   membership in fresh own division/fleet/task-force lists, exact types and owner
   tags; unknown entries refuse before candidate payload. Retained reads reject

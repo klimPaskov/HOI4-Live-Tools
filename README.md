@@ -117,11 +117,14 @@ below 1 ms. The native Find action then typed an owned state ID and Return in
 0.48 ms per RPC with zero input. These are measurements of specific tested paths. See [the validation record](docs/CLAUSEWITZ_VALIDATION.md) for scope and
 preserved failures.
 
-Construction placement and its worker integration remain unfinished. The Find
-action requires an already-open focused empty box and explicit qualification
-permission. Peace conferences, naval invasions, the clean two-year acceptance run
-and full campaigns remain open. Broader legacy adapters remain separate from the durable
-worker. The [controller contract](docs/MAC_CONTROLLER.md) describes current
+A separate [ordinary placement component](docs/CLAUSEWITZ_VALIDATION.md#mac-ordinary-map-placement--24-october-2026)
+passed: one map move and one click queued exactly one military factory in
+own Brandenburg, verified by a retained native queue anchor. The private driver
+took 8.438 seconds; its 22 RPCs had a 1.161 ms median. Public placement and
+construction worker integration remain unfinished. The Find action requires an
+already-open focused empty box and explicit qualification permission. Peace
+conferences, naval invasions, the clean two-year acceptance run and full campaigns
+remain open. Broader legacy adapters remain separate from the durable worker. The [controller contract](docs/MAC_CONTROLLER.md) describes current
 permissions, receipts and recovery.
 
 Mac memory access requires Developer Tools authorization and a signed tool with
@@ -139,7 +142,7 @@ remains Linux-only.
   campaigns. Final showcase videos must come from macOS at 1080p or higher.
 - Validate long campaign recording and publish only after release acceptance.
 
-All nine CI jobs passed on the Mac cycle-admission checkpoint (`3b84ebc`) across
+All nine CI jobs passed on the Mac own-scene source checkpoint (`71e0075`) across
 Linux, Windows and macOS. Offline tests do not prove native game behavior.
 For measurements, retained failures and the next gate, use
 [the comparison](docs/CLAUSEWITZ_COMPARISON.md),
