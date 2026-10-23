@@ -78,9 +78,12 @@ The Mac controller also exposes a default-off `hoi4_construction_open`
 qualification tool. It checks the current ordinary T shortcut, persists the
 original intent and sends at most one keypress without moving the cursor.
 Already-selected panels receive no toggle; uncertain input cannot be replayed or
-settled from later UI. One recorded ordinary T opener verified delivery; historical
-replay and the already-open path still need live qualification. See the
+settled from later UI. Recorded tests verified one ordinary T opener, historical
+receipt replay and an already-open check with zero new keys. See the
 [permission and receipt contract](../docs/MAC_CONTROLLER.md#construction-opener-qualification).
+Use `already_open_only: true` for an open-panel verification that cannot send a
+keypress if the panel changes. It requires an initially open panel and uses a
+separate durable action identity; historical ordinary-T requests omit the option.
 
 The Mac durable worker has passed recorded Research, Focus and production
 component tests, including plan revisions and reconnects. Canonical Mac process

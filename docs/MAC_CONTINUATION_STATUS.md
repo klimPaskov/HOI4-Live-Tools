@@ -1,25 +1,26 @@
 # Mac continuation checkpoint — 23 October 2026
 
-The second recorded Luna-medium construction opener verified one ordinary T
-keypress on the same owned Germany 1936 controller. The 1920×1080 game client
-remained paused; no cursor movement, screenshot, clock change or observation
-pause occurred. Its 1920×1108 recording finalized at 50.56 seconds. The overall
-gate then failed in the visible-choice reader, while the verified opener receipt
-and earlier positive refusal remained intact. No full campaign has been recorded.
+The recorded Luna-medium continuation passed on the retained native Mac
+1920×1080 Germany session. It replayed the exact earlier Verified opener receipt
+and verified the already-open panel with zero new keypresses. The two action RPCs
+took 0.560 ms and 19.925 ms; the complete 21-call driver run took 0.665 seconds.
+The 1920×1108 recording finalized at 44.468333 seconds and 1,305 frames.
 
-The reader incorrectly required every grid item to be an ordinary building.
-Independent exact-build mapping identified the separate conversion item; it is
-now accepted only as the own shared-grid singleton, without reading its callback
-as a building template. Three stationary live samples then verified all four
-grids, 22 ordinary choices, one conversion item and the requested building's
-callback at 2.290 ms median RPC time. Campaign state and controller files stayed
-unchanged. All 1,549 Rust / 956 Python tests (37 skipped), strict cross-platform
-checks, release build and 28-tool offline protocol smoke pass.
+The new `already_open_only: true` option requires an initially open panel and
+natively forbids key dispatch if preparation later finds it closed. Its durable
+action identity differs from the ordinary opener. All four original journal rows
+were preserved, and only the expected two zero-input records were appended.
+Independent readback confirmed the unchanged paused Germany campaign, complete
+own Research/Focus/production/queue state, visible choices and callback binding.
+There were no cursor movements, screenshots, clock calls or observation pauses;
+lease release, MCP EOF and recorder shutdown completed. All grants are closed.
 
-Next qualify historical receipt replay and the already-open path with zero
-keypresses on this retained controller. Selection, placement, worker integration,
-the clean two-year run and full Germany/China recordings remain unfinished. See
-[the opener and mixed-grid evidence](CLAUSEWITZ_VALIDATION.md#mac-opener-delivery-and-mixed-choice-grid--23-october-2026).
+All 1,556 Rust / 956 Python tests (37 skipped), strict cross-platform checks,
+release build, 28-tool offline protocol smoke and 26 mocked harness tests pass.
+Next implement typed requested-building geometry and ordinary selection readback,
+then placement and worker integration. The clean two-year run and full
+Germany/China campaign recordings remain unfinished. See
+[the zero-key continuation](CLAUSEWITZ_VALIDATION.md#mac-zero-key-opener-continuation--23-october-2026).
 
 Earlier checkpoints follow.
 

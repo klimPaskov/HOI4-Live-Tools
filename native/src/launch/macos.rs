@@ -436,7 +436,8 @@ impl Commands for MacClock {
             actions,
         } = &mut *state;
         if name == "hoi4_construction_open" {
-            allowed(args, &["request_id", "lease_token"])?;
+            allowed(args, &["request_id", "lease_token", "already_open_only"])?;
+            let mode = construction_open::Mode::parse(args.get("already_open_only"))?;
             let id = string(args, "request_id")?;
             let token = string(args, "lease_token")?;
             let expected = guard.observe_context(process)?;
@@ -453,6 +454,7 @@ impl Commands for MacClock {
             };
             return construction_open::run(
                 self.construction_panel,
+                mode,
                 id,
                 &epoch,
                 actions,

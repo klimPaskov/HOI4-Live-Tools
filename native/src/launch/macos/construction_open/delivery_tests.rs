@@ -116,6 +116,113 @@ fn epoch() -> Epoch {
 fn action() -> Value {
     json!({"kind":"construction_panel_open","transport":"ordinary_t"})
 }
+
+#[test]
+fn zero_input_mode_refusal_is_durable_when_the_prepared_panel_is_closed() {
+    let d = directory();
+    let path = d.join("actions");
+    let mut j = GameJournal::open(&path).unwrap();
+    let trace = Rc::new(RefCell::new(Vec::new()));
+    let mut p = Producer {
+        fail: Fail::None,
+        trace: trace.clone(),
+    };
+    assert_eq!(
+        j.execute_strict(
+            "open-only",
+            &epoch(),
+            Mode::AlreadyOpenOnly.action(),
+            json!({"initial_panel_open":true}),
+            &mut || dispatch(&mut p, Mode::AlreadyOpenOnly)
+        )
+        .unwrap_err()
+        .code,
+        "construction_panel_not_open"
+    );
+    assert!(trace.borrow().is_empty());
+    assert!(!j.blocked());
+    drop(j);
+    let prefix = std::fs::read(&path).unwrap();
+    let j = GameJournal::open(&path).unwrap();
+    assert_eq!(
+        j.strict_receipt("open-only", &epoch(), &Mode::AlreadyOpenOnly.action())
+            .unwrap_err()
+            .code,
+        "input_not_queued"
+    );
+    assert_eq!(
+        j.strict_receipt("open-only", &epoch(), &Mode::Ordinary.action())
+            .unwrap_err()
+            .code,
+        "idempotency_conflict"
+    );
+    let rows: Vec<Value> = String::from_utf8(prefix.clone())
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    assert_eq!(rows.len(), 2);
+    assert_eq!(rows[1]["status"], "NotApplied");
+    assert_eq!(
+        rows[1]["detail"],
+        json!({"delivery":"NotQueued","cause_code":"construction_panel_not_open"})
+    );
+    assert_eq!(std::fs::read(&path).unwrap(), prefix);
+    drop(j);
+    std::fs::remove_dir_all(d).unwrap();
+}
+
+#[test]
+fn zero_input_receipt_survives_reopen_without_becoming_an_ordinary_opener() {
+    struct Open;
+    impl Attempt for Open {
+        fn prepare(&mut self) -> Result<bool> {
+            Ok(true)
+        }
+        fn press_once(&mut self) -> KeyDispatch {
+            panic!("No key producer allowed")
+        }
+        fn finish(&mut self, sent: bool) -> Result<Value> {
+            assert!(!sent);
+            Ok(json!({"panel_open":true,"ordinary_key_presses":0,"same_attempt_readback":true}))
+        }
+    }
+    let d = directory();
+    let path = d.join("actions");
+    let mut j = GameJournal::open(&path).unwrap();
+    let receipt = j
+        .execute_strict(
+            "open-only",
+            &epoch(),
+            Mode::AlreadyOpenOnly.action(),
+            json!({"initial_panel_open":true}),
+            &mut || dispatch(&mut Open, Mode::AlreadyOpenOnly),
+        )
+        .unwrap();
+    drop(j);
+    let bytes = std::fs::read(&path).unwrap();
+    let mut j = GameJournal::open(&path).unwrap();
+    assert_eq!(
+        j.execute_strict(
+            "open-only",
+            &epoch(),
+            Mode::AlreadyOpenOnly.action(),
+            Value::Null,
+            &mut || panic!("Historical receipt cannot run a new attempt")
+        )
+        .unwrap(),
+        receipt
+    );
+    assert_eq!(
+        j.strict_receipt("open-only", &epoch(), &Mode::Ordinary.action())
+            .unwrap_err()
+            .code,
+        "idempotency_conflict"
+    );
+    assert_eq!(std::fs::read(&path).unwrap(), bytes);
+    drop(j);
+    std::fs::remove_dir_all(d).unwrap();
+}
 fn attempt(
     j: &mut GameJournal,
     file: &std::path::Path,
@@ -133,7 +240,7 @@ fn attempt(
                 serde_json::from_str(rows.lines().last().unwrap()).unwrap();
             assert_eq!(last.status, Status::Dispatching);
             assert_eq!(last.id, id);
-            dispatch(producer)
+            dispatch(producer, Mode::Ordinary)
         },
     )?;
     Ok(serde_json::to_value(receipt).unwrap())

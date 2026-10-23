@@ -161,6 +161,15 @@ panels only wait for visibility; they never receive a toggle. No mouse, Escape,
 popup dismissal, placement, pause or modifier-repair event is sent. Key-up is
 allocated before key-down and released without a new ownership check.
 
+Optional `already_open_only: true` requires the panel to be selected, visible and
+locally idle at the original observation. It also forbids key dispatch if later
+preparation reports a closed panel. This is enforced natively, so an earlier
+harness preflight is not relied on to suppress input. The mode records transport
+`none` and has a distinct action identity; reusing an ordinary-opener request ID
+with this option fails with an idempotency conflict. Omitted or false preserves
+the existing ordinary-T action and historical receipts. Other value types refuse.
+The same original deadline, lease, campaign checks and final readback still apply.
+
 Each opener proof may replace up to three wholly discarded `torn_read`
 observations, with 2 ms waits clipped to the original action deadline. The
 retained panel and shortcut binding must still match. Coherent changes, other
@@ -181,10 +190,11 @@ fresh panel readback. Error codes and unchanged UI never establish no delivery.
 An old uncertain receipt cannot be reclassified using this newer transport.
 The complete original typed binding stays in memory for the attempt; its SHA-256
 and compact scope are retained in the private intent. One recorded ordinary T
-attempt now has a same-attempt Verified receipt. Its broader gate still failed at
-the subsequently corrected choice reader; historical replay, already-open input
-suppression and worker construction integration remain pending live qualification.
-Legacy adapters are preserved.
+attempt now has a same-attempt Verified receipt. Its broader gate failed at the
+subsequently corrected choice reader. A later recorded continuation verified exact
+historical receipt replay and the guarded already-open path with zero new keys,
+retaining the original failure and successful opener. Selection, placement and
+worker construction integration remain pending. Legacy adapters are preserved.
 
 ## Action limits and recovery
 

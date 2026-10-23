@@ -7348,3 +7348,56 @@ and one original opener, not the entire failed gate or construction placement.
 Keep the controller and verified request ID for a reviewed zero-key historical
 replay/already-open continuation. Selection, placement, worker integration, the
 clean two-year run and full recorded campaigns remain unfinished.
+
+## Mac zero-key opener continuation — 23 October 2026
+
+The published mixed-grid reader correction `dc27a65` passed all nine exact-head
+CI jobs. Review of the next recorded gate identified a gap in its intended
+zero-input scope: a harness preflight could observe an open panel, but a later
+native initial observation could find it closed and correctly choose the normal
+T path. A post-hoc key-count assertion would not prevent that input.
+
+The optional strict boolean `already_open_only` closes this gap inside the native
+adapter. True requires an initially selected, visible and locally idle panel;
+the dispatcher independently refuses any preparation result that would request
+a key. Ordinary input is unreachable in that mode. Its durable action records
+transport `none` and the true option; the omitted/false ordinary-T identity is
+unchanged for old receipts. Reusing an ID across modes conflicts. Invalid option
+types refuse. The original deadline, lease, campaign and final-readback checks
+remain unchanged, and read-only recovery cannot enter the key producer.
+
+Seven new tests cover strict parsing, initial open-state admission, all prepared
+state/error paths with zero producer calls, schema compatibility, durable
+NotQueued refusal, reopen/replay and action conflicts. Independent source review
+found no actionable issue. All 1,556 Rust tests and 956 Python tests (37 skipped)
+passed, together with formatting, strict host/Windows-GNU/Linux-musl/ARM64-Linux-musl
+Clippy, release build and 28-tool offline protocol smoke. The private once-only
+Luna harness also passed 26 mocked tests, including changed ownership/deadlines,
+late receipts, closed panels, unexpected keys and post-EOF journal mutation.
+
+The live Luna-medium continuation then passed on the same owned Germany session.
+It first returned the exact original opener receipt as historical, explicitly
+without verifying current UI or adding any journal row. Its reported one keypress
+belongs only to that earlier attempt. A separate new already-open-only request
+verified the current panel with zero keypresses. All four original rows survived
+byte-for-byte; only the new Dispatching/Verified pair was appended. The two action
+RPCs took 0.560 and 19.925 ms, and the complete 21-call driver run took 0.665 seconds.
+There were no retries, activations, cursor movements, screenshots, clock calls,
+workers or observation pauses. Callback binding was observed; this does not prove
+placement eligibility.
+
+Lease release, successful MCP EOF, terminal controller audit and the same owned
+recorder shutdown completed. The H.264 recording finalized at 1920×1108,
+44.468333 seconds and 1,305 frames, with a native 1920×1080 game client. Runtime
+sources and helpers stayed frozen during the gate. Independent read-only checks
+then confirmed paused 1 January 1936 12:00, speed 0, unchanged complete own
+Research/Focus/production state and empty construction queue, the open inactive
+construction panel, complete visible grid and requested callback binding. All
+six controller files retained their post-gate bytes and metadata during readback.
+All grants are closed, and there is no lease, worker or active recording.
+
+This completes the bounded opener/replay/visible-reader component qualification.
+It does not retroactively change the earlier failed gates. Typed selection,
+placement, worker integration, the clean two-year run and full recorded campaigns
+remain unfinished; real time per campaign year is not established by this paused
+test.
