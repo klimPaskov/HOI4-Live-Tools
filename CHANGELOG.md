@@ -2,6 +2,10 @@
 
 ## Unreleased native preview
 
+- Validate independently recovered Mac GUI-registry backlinks before construction
+  widget payload. Expose local root transition states and engine visibility
+  separately; neither grants settled geometry or input authority.
+
 - Add a separate typed Mac construction UI probe with independent panel owner
   links, canonical ordinary selection and complete choice validation before
   requested-control reads. Share the complete building catalog with target

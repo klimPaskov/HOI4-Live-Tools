@@ -29,6 +29,7 @@ fn text(f: &mut MacFixture, address: u64, value: &str) {
 fn named(f: &mut MacFixture, widget: u64, name: &str) {
     let kind = widget + 0x1000000;
     f.word(widget + 0x50, kind);
+    f.word(widget + 0x58, REGISTRY);
     f.word(kind, BASE + 0x34b0e18);
     text(f, kind + 0x28, name);
 }
@@ -58,6 +59,9 @@ fn fixture(visible: bool, count: usize) -> MacFixture {
     f.word(VIEW + 0x430, ROOT);
     f.word(ROOT, BASE + 0x34ac0b0);
     f.put(ROOT + 0x95, &[if visible { 8 } else { 0 }]);
+    f.word(ROOT + 0x88, REGISTRY);
+    f.int(ROOT + 0x12b8, 0);
+    f.int(ROOT + 0x1270, 0);
     if !visible {
         return f;
     }
@@ -165,6 +169,7 @@ fn full_choice_membership_reaches_target_beyond_sixty_four_and_reads_only_its_bu
     assert_eq!(v["choices"]["complete_membership"], true);
     assert_eq!(v["choices"]["item_count"], 70);
     assert_eq!(v["choices"]["grid_count"], 4);
+    assert_eq!(v["grid_registry_backlink_verified"], true);
     assert_eq!(v["choices"]["target"]["building_id"], "arms_factory");
     assert_eq!(v["choices"]["target"]["disabled"], false);
     for i in 0..69 {
@@ -296,11 +301,17 @@ fn changed_ownership_catalog_membership_visibility_or_button_fails_final_witness
         VIEW + 0x428,
         VIEW + 0x430,
         ROOT + 0x95,
+        ROOT + 0x88,
+        ROOT + 0x12b8,
+        ROOT + 0x1270,
+        POSSIBLE + 0x88,
+        GRID + 0x58,
         BUILDING_DB + 0x40,
         TARGET_TEMPLATE + 0x228,
         GRID + 0x4000,
         ITEMS + 0x20,
         BUTTON + 0x65,
+        BUTTON + 0x58,
         BUTTON + 0x9c,
     ] {
         let f = fixture(true, 1);
@@ -310,6 +321,70 @@ fn changed_ownership_catalog_membership_visibility_or_button_fails_final_witness
             "torn_read",
             "{field:x}"
         );
+    }
+}
+
+#[test]
+fn every_requested_gui_owner_must_match_before_dependent_payload() {
+    for (field, unread) in [
+        (ROOT + 0x88, ROOT + 0x95),
+        (POSSIBLE + 0x88, POSSIBLE + 0xd30),
+        (0x450000 + 0x88, 0x450000 + 0xd30),
+        (GRID + 0x58, GRID + 0x190),
+        (GRID + 3 * 0x10000 + 0x58, ITEMS + 0x10),
+        (FRAME + 0x88, FRAME + 0x95),
+        (BUTTON + 0x58, BUTTON + 0x65),
+    ] {
+        let mut f = fixture(true, 1);
+        f.word(field, FOREIGN);
+        let error = observe(&f, "arms_factory", 1).unwrap_err();
+        assert_eq!(error.code, "invalid_construction", "{field:x}");
+        assert!(error.message.contains("own GUI registry"));
+        not_read(&f, &[unread, FOREIGN]);
+    }
+}
+
+#[test]
+fn root_transition_two_skips_choice_payload_even_when_local_flag_is_shown() {
+    for field in [ROOT + 0x12b8, ROOT + 0x1270] {
+        let mut f = fixture(false, 0);
+        f.put(ROOT + 0x95, &[8]);
+        f.int(field, 2);
+        let v = observe(&f, "arms_factory", 1).unwrap();
+        assert_eq!(v["panel"]["locally_visible"], true);
+        assert_eq!(v["panel"]["engine_visible"], false);
+        assert_eq!(v["panel"]["local_transitions_idle"], false);
+        assert_eq!(v["choices"]["reason"], "panel_transition_hiding");
+        assert_eq!(v["grid_registry_backlink_verified"], false);
+        not_read(&f, &[ROOT + 0xd30]);
+    }
+}
+
+#[test]
+fn root_transition_one_is_engine_visible_but_never_settled_or_input_ready() {
+    for field in [ROOT + 0x12b8, ROOT + 0x1270] {
+        let mut f = fixture(true, 1);
+        f.int(field, 1);
+        let v = observe(&f, "arms_factory", 1).unwrap();
+        assert_eq!(v["panel"]["engine_visible"], true);
+        assert_eq!(v["panel"]["local_transitions_idle"], false);
+        assert_eq!(v["choices"]["complete_membership"], true);
+        assert_eq!(v["settled_frame_verified"], false);
+        assert_eq!(v["input_authorized"], false);
+    }
+}
+
+#[test]
+fn unknown_root_transition_refuses_before_choice_payload() {
+    for field in [ROOT + 0x12b8, ROOT + 0x1270] {
+        for state in [-1, 3, i32::MAX] {
+            let mut f = fixture(false, 0);
+            f.int(field, state);
+            let error = observe(&f, "arms_factory", 1).unwrap_err();
+            assert_eq!(error.code, "invalid_construction");
+            assert!(error.message.contains("transition state"));
+            not_read(&f, &[ROOT + 0xd30]);
+        }
     }
 }
 

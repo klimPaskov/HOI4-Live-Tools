@@ -1,5 +1,37 @@
 # Clausewitz-MCP Linux validation
 
+## Mac construction GUI ownership and local transitions — 23 October 2026
+
+The typed probe now verifies the own GUI-registry backlink of its root, named
+containers, all admitted grids and requested button before dependent payload.
+These Mac fields came from independent constructor chains, including the
+standard button's common GUI-object base. The all-grid backlink flag is true
+only after every grid validates. Hidden or partial paths keep it false.
+
+The root's exact engine visibility predicate is now reported separately from its
+local visible flag and two transition states. State 2 suppresses choice reads;
+state 1 can still animate while engine visibility is true. Unknown states refuse,
+and all new fields participate in final read witnesses. Even two zero states do
+not establish settled renderer geometry. Input, geometry, callbacks, global modal
+clearance and placement remain unavailable.
+
+Thirteen new stationary Mac samples passed at 1.428 ms median. The hidden root
+retained the own GUI registry and both local transition states were zero. The
+25-call probe preserved paused 22 May 1936 01:00, all controller file bytes,
+sizes and timestamps, and all 246 native sources/config files. It acquired no
+lease and sent no input, cursor movement or pause. Actual visible grids and
+controls still require a live panel-opening gate.
+
+Four new transition/ownership fixtures and expanded torn-read checks pass.
+Full validation passed 1,455 Rust tests, 956 Python tests (37 skipped), formatting,
+strict host/Windows/Linux-musl/ARM64-Linux-musl Clippy and the release build.
+The preceding `f30e55d` passed all three native CI jobs and five Python jobs;
+Mac Python 3.13 failed an existing standing-order fixture that races a 20 ms
+feeder against the observer. That failure is preserved. The fixture now delivers
+the two completion observations separately, proving empty-queue stopping on the
+fourth simulated day without a scheduling assumption. All 23 standing-order tests
+and the full Python suite pass locally; corrected-head CI is tracked separately.
+
 ## Typed Mac construction UI observation — 23 October 2026
 
 `hoi4_construction_ui_probe` now binds the own campaign, production, target state,

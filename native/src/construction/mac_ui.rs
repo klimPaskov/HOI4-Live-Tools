@@ -33,10 +33,17 @@ struct Panel {
     object: u64,
     root: u64,
     flags: Option<u8>,
+    transition_states: Option<[i32; 2]>,
 }
 impl Panel {
     fn locally_visible(&self) -> bool {
         self.flags.is_some_and(|flags| flags & 8 != 0)
+    }
+    fn engine_visible(&self) -> bool {
+        self.locally_visible()
+            && self
+                .transition_states
+                .is_some_and(|states| states.iter().all(|state| *state != 2))
     }
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -112,10 +119,22 @@ fn exact(r: &Reader<'_>, base: u64, object: u64, primary: u64) -> Result<()> {
     }
     Ok(())
 }
-fn window(r: &Reader<'_>, base: u64, value: u64) -> Result<u64> {
+fn window(r: &Reader<'_>, base: u64, value: u64, registry: u64) -> Result<u64> {
     pointer(value)?;
-    gui_tree::container(r, value, base)?
-        .ok_or_else(|| invalid("Exact Mac construction container required"))
+    let object = gui_tree::container(r, value, base)?
+        .ok_or_else(|| invalid("Exact Mac construction container required"))?;
+    // Independent Mac constructor chain: TWindow's CGuiObject is this+0x30,
+    // whose own GUI argument lives at +0x58. This is not a parent pointer.
+    owner(r, object + 0x88, registry)?;
+    Ok(object)
+}
+fn owner(r: &Reader<'_>, field: u64, registry: u64) -> Result<()> {
+    if r.u64(field)? != registry {
+        return Err(invalid(
+            "Mac construction widget must retain the own GUI registry",
+        ));
+    }
+    Ok(())
 }
 /// Full unique child membership precedes lookup. Never use the first matching
 /// name or the engine's nonnull null-grid fallback as target evidence.
@@ -160,12 +179,13 @@ fn selection(r: &Reader<'_>, manager: u64, catalog: &catalog::Catalog) -> Result
         mode => Ok(Selection::Unsupported(mode)),
     }
 }
-fn panel(r: &Reader<'_>, base: u64, idler: u64, manager: u64) -> Result<Panel> {
+fn panel(r: &Reader<'_>, base: u64, idler: u64, manager: u64, registry: u64) -> Result<Panel> {
     let object = r.u64(manager + 0x150)?;
     let mut out = Panel {
         object,
         root: 0,
         flags: None,
+        transition_states: None,
     };
     if object == 0 {
         return Ok(out);
@@ -179,8 +199,15 @@ fn panel(r: &Reader<'_>, base: u64, idler: u64, manager: u64) -> Result<Panel> {
     }
     let root = r.u64(object + 0x430)?;
     if root != 0 {
-        out.root = window(r, base, root)?;
+        out.root = window(r, base, root, registry)?;
         out.flags = Some(r.byte(out.root + 0x95)?);
+        // Exact CContainerWindow virtual +0x308 returns true for either state
+        // equal to 2. State 1 may still animate: engine-visible is not settled.
+        let states = [r.i32(out.root + 0x12b8)?, r.i32(out.root + 0x1270)?];
+        if states.iter().any(|state| !(0..=2).contains(state)) {
+            return Err(invalid("Unknown Mac construction root transition state"));
+        }
+        out.transition_states = Some(states);
     }
     Ok(out)
 }
@@ -190,9 +217,13 @@ fn choices(
     panel: &Panel,
     catalog: &catalog::Catalog,
     target: &catalog::Template,
+    registry: u64,
 ) -> Result<Choices> {
     if !panel.locally_visible() {
         return Ok(Choices::unavailable("panel_not_locally_visible"));
+    }
+    if !panel.engine_visible() {
+        return Ok(Choices::unavailable("panel_transition_hiding"));
     }
     let mut out = Choices::unavailable("choice_path_unmaterialized");
     let Some(possible) = named(
@@ -205,7 +236,7 @@ fn choices(
     else {
         return Ok(out);
     };
-    let possible = window(r, base, possible)?;
+    let possible = window(r, base, possible, registry)?;
     let mut seen_grids = BTreeSet::new();
     let mut seen_items = BTreeSet::new();
     let mut seen_templates = BTreeSet::new();
@@ -214,13 +245,14 @@ fn choices(
         let Some(section) = named(r, base, possible, section_name, &mut out.paths)? else {
             return Ok(out);
         };
-        let section = window(r, base, section)?;
+        let section = window(r, base, section, registry)?;
         let Some(grid) = named(r, base, section, grid_name, &mut out.paths)? else {
             return Ok(out);
         };
         // The inspected factory installs CStandardGridBox. Null/base/other
         // derived grids do not authorize reading this list layout.
         exact(r, base, grid, 0x34be068)?;
+        owner(r, grid + 0x58, registry)?;
         if !seen_grids.insert(grid) {
             return Err(invalid("Distinct construction grids required"));
         }
@@ -259,7 +291,7 @@ fn choices(
         out.reason = "choice_window_unmaterialized";
         return Ok(out);
     }
-    let frame = window(r, base, frame)?;
+    let frame = window(r, base, frame, registry)?;
     let window_flags = r.byte(frame + 0x95)?;
     if window_flags & 8 == 0 {
         out.reason = "choice_window_hidden";
@@ -270,6 +302,7 @@ fn choices(
         return Ok(out);
     };
     exact(r, base, button, 0x34aafa0)?;
+    owner(r, button + 0x58, registry)?;
     let button_flags = r.byte(button + 0x65)?;
     let button_state = r.i32(button + 0x9c)?;
     if !(0..=3).contains(&button_state) {
@@ -345,9 +378,9 @@ pub(crate) fn observe(process: &dyn Process, key: &str, state_id: i32) -> Result
     w.section("mac_construction_selection");
     let selection = selection(&r, manager, &catalog)?;
     w.section("mac_construction_panel");
-    let panel = panel(&r, base, idler, manager)?;
+    let panel = panel(&r, base, idler, manager, registry)?;
     w.section("mac_construction_choices");
-    let choices = choices(&r, base, &panel, &catalog, &target)?;
+    let choices = choices(&r, base, &panel, &catalog, &target, registry)?;
     w.section("mac_construction_queue");
     let lines = super::lines_in(&r, base, production, own_tag, true)?;
     let queue = super::queue_summary(&lines, key, state_id);
@@ -400,7 +433,8 @@ pub fn snapshot(process: &dyn Process, key: &str, state_id: i32) -> Result<Value
     let target = o.choices.target.as_ref().map(|c| {
         json!({"building_id":c.template.key,
         "button_flags_raw":c.button_flags,"locally_shown":c.button_flags&8!=0,
-        "button_state_raw":c.button_state,"disabled":c.button_state==3})
+        "button_state_raw":c.button_state,"disabled":c.button_state==3,
+        "registry_backlink_verified":true})
     });
     Ok(
         json!({"source":"native witnessed Mac construction UI probe",
@@ -409,13 +443,17 @@ pub fn snapshot(process: &dyn Process, key: &str, state_id: i32) -> Result<Value
         "building_id":o.binding.target.key,"state_id":state_id,"target_identity_verified":true,
         "selection":selection,
         "panel":{"materialized":o.panel.object!=0,"root_materialized":o.panel.root!=0,
-            "flags_raw":o.panel.flags,"locally_visible":o.panel.locally_visible()},
+            "flags_raw":o.panel.flags,"locally_visible":o.panel.locally_visible(),
+            "registry_backlink_verified":o.panel.root!=0,
+            "transition_states_raw":o.panel.transition_states,
+            "engine_visible":o.panel.engine_visible(),
+            "local_transitions_idle":o.panel.transition_states==Some([0,0])},
         "choices":{"complete_membership":o.choices.complete,"grid_count":o.choices.grids.len(),
             "item_count":o.choices.items.len(),"reason":o.choices.reason,"target":target},
         "queue_complete":o.queue.complete,
         "queued":o.queue.complete.then(||json!({"in_state":o.queue.in_state,"elsewhere":o.queue.elsewhere})),
         "input_authorized":false,"geometry_available":false,"settled_frame_verified":false,
-        "grid_registry_backlink_verified":false,"callback_binding_verified":false,
+        "grid_registry_backlink_verified":o.choices.complete,"callback_binding_verified":false,
         "placement_eligibility_verified":false,"global_modal_clear_verified":false,
         "observation_paused_game":false,
         "freshness":{"read_calls":o.read_calls,"read_bytes":o.read_bytes,"elapsed_ms":o.elapsed_ms,

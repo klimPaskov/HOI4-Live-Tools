@@ -140,6 +140,11 @@ duplicates, ownership changes and torn reads refuse. Only mode 1 has a canonical
 selected key; modes 2/3 remain explicitly unverified. Local visibility and
 button state grant no input, geometry, callback, settled-frame or placement
 authority. Linux refuses this Mac-specific probe before process access.
+The root, named containers, grids and requested button must also retain the
+own GUI-registry link. Root transition states are exposed separately: engine
+visibility allows state 1 while it can animate, and state 2 skips choice reads.
+Even both local states being zero does not prove settled renderer geometry.
+The all-grid backlink flag stays false until all four grids validate.
 
 `hoi4_construction_queue` is a read-only preview (`offset` 0–2048, `limit` 1–128,
 default 32). It validates the entire own collection before paging, recognizes

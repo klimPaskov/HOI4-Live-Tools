@@ -14,8 +14,14 @@ Manager constructor `0x20e84a0` stores the primary construction allocation at
 `0x343aa90`. Base `0x1fc88e0` writes the idler at `+0x428`; its call through
 `0x2388650` stores the manager at `+0x30`. Getter `0x1fc8f30` returns root
 `+0x430`. These owner links precede root payload. Visibility consumer
-`0x1fc8e30` also invokes root virtual `+0x308`; the probe reports only root
-byte `+0x95` bit 8 and explicitly does not claim settled visibility or readiness.
+`0x1fc8e30` also invokes root virtual `+0x308`. For the exact container primary,
+that slot resolves to `0x2781d30`: true when either signed state at `+0x12b8`
+or `+0x1270` equals 2. The probe reports raw local flags and bounded states,
+and mirrors this engine visibility predicate before choice reads. State 1 is
+still allowed by the predicate while the corresponding updates can animate;
+neither engine visibility nor both states being zero grants settled geometry.
+Unknown states refuse. The exact constructors initialize both states to zero;
+updaters `0x2779fc0` and `0x277a210` retain the transition interpretation.
 
 Setter `0x20f4760` writes manager mode `+0x3c0` before selected pointer `+0x3b8`.
 Mode zero retains a default pointer, which this reader does not follow. Selection
@@ -33,8 +39,19 @@ Full named-path membership and item/template joins precede requested-control
 payload. Choice item `0x343a9b0`, template `+0x20`, container `+0x10`, and generic
 Mac GUI/button fields reuse the independently mapped 18 October reader.
 Actual visible grid instances still require live qualification. Named parent
-membership does not establish registry backlinks, callback delivery, geometry,
-global modal absence or placement eligibility; each remains unavailable.
+membership alone does not establish registry backlinks. The probe additionally
+compares each admitted container/grid and requested button's owner with the own
+exact `CGameGui` primary `0x34974d0`. Mac `CGuiObject` constructor `0x27cab10`
+stores its GUI-owner argument at `+0x58`. Standard-grid factory `0x27c5c80`
+passes the same GUI receiver through `0x27c4600`, `0x28522d0` and `0x27c2b50`.
+Container constructor `0x2766490` passes the owner to `TWindow` at `0x2867fb0`,
+which invokes the common constructor on `this+0x30`, giving container `+0x88`.
+Standard-button constructor `0x2757b80` passes the owner through `0x27500b0`
+to the common constructor without adjusting `this`, giving button `+0x58`.
+These independently recovered Mac links precede dependent payload and are
+final-witness checked. The public all-grid flag is true only after all four
+grids validate. Callback delivery, current geometry, global modal absence and
+placement eligibility remain unavailable.
 
 ## Typed construction target observation
 
