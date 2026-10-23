@@ -83,6 +83,17 @@ fn mac_ui_probe_refuses_linux_before_any_process_access() {
             .code,
         "unsupported_platform"
     );
+    assert_eq!(
+        construction::mac_ui::snapshot_with_options(
+            &process,
+            "arms_factory",
+            64,
+            construction::mac_ui::Options { callback: true },
+        )
+        .unwrap_err()
+        .code,
+        "unsupported_platform"
+    );
     process.assert_untouched();
 }
 

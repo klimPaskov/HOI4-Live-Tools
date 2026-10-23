@@ -15,6 +15,15 @@ use crate::{
 use serde_json::{json, Value};
 use std::{collections::BTreeSet, time::Instant};
 
+mod callback;
+
+#[derive(Clone, Copy, Default)]
+pub struct Options {
+    /// Inspect the requested item's exact ordinary button callback. This does
+    /// not establish current eligibility, routing, geometry or input authority.
+    pub callback: bool,
+}
+
 const GRIDS: [(&str, &str); 4] = [
     ("possible_state_constructions", "non_shared_item_grid"),
     ("possible_shared_constructions", "shared_item_grid"),
@@ -55,6 +64,7 @@ struct Choice {
     button: u64,
     button_flags: u8,
     button_state: i32,
+    callback: Option<callback::Binding>,
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Choices {
@@ -218,6 +228,7 @@ fn choices(
     catalog: &catalog::Catalog,
     target: &catalog::Template,
     registry: u64,
+    options: Options,
 ) -> Result<Choices> {
     if !panel.locally_visible() {
         return Ok(Choices::unavailable("panel_not_locally_visible"));
@@ -308,6 +319,10 @@ fn choices(
     if !(0..=3).contains(&button_state) {
         return Err(invalid("Unknown Mac construction button state"));
     }
+    let callback = options
+        .callback
+        .then(|| callback::observe(r, base, item, button))
+        .transpose()?;
     out.target = Some(Choice {
         item,
         template: target.clone(),
@@ -316,12 +331,18 @@ fn choices(
         button,
         button_flags,
         button_state,
+        callback,
     });
     out.reason = "requested_control_observed";
     Ok(out)
 }
 
-pub(crate) fn observe(process: &dyn Process, key: &str, state_id: i32) -> Result<Observation> {
+fn observe(
+    process: &dyn Process,
+    key: &str,
+    state_id: i32,
+    options: Options,
+) -> Result<Observation> {
     validate_key(key)?;
     super::find_view::validate_state_id(i64::from(state_id))?;
     if process.string_abi() != StringAbi::LibCxx {
@@ -380,7 +401,7 @@ pub(crate) fn observe(process: &dyn Process, key: &str, state_id: i32) -> Result
     w.section("mac_construction_panel");
     let panel = panel(&r, base, idler, manager, registry)?;
     w.section("mac_construction_choices");
-    let choices = choices(&r, base, &panel, &catalog, &target, registry)?;
+    let choices = choices(&r, base, &panel, &catalog, &target, registry, options)?;
     w.section("mac_construction_queue");
     let lines = super::lines_in(&r, base, production, own_tag, true)?;
     let queue = super::queue_summary(&lines, key, state_id);
@@ -418,7 +439,16 @@ pub(crate) fn observe(process: &dyn Process, key: &str, state_id: i32) -> Result
 }
 
 pub fn snapshot(process: &dyn Process, key: &str, state_id: i32) -> Result<Value> {
-    let o = observe(process, key, state_id)?;
+    snapshot_with_options(process, key, state_id, Options::default())
+}
+
+pub fn snapshot_with_options(
+    process: &dyn Process,
+    key: &str,
+    state_id: i32,
+    options: Options,
+) -> Result<Value> {
+    let o = observe(process, key, state_id, options)?;
     let selection = match &o.selection {
         Selection::Inactive => {
             json!({"mode_raw":0,"supported":true,"kind":"inactive","building_id":null})
@@ -434,8 +464,14 @@ pub fn snapshot(process: &dyn Process, key: &str, state_id: i32) -> Result<Value
         json!({"building_id":c.template.key,
         "button_flags_raw":c.button_flags,"locally_shown":c.button_flags&8!=0,
         "button_state_raw":c.button_state,"disabled":c.button_state==3,
+        "callback":c.callback.as_ref().map(callback::Binding::summary),
         "registry_backlink_verified":true})
     });
+    let callback_verified = o
+        .choices
+        .target
+        .as_ref()
+        .is_some_and(|c| c.callback.is_some());
     Ok(
         json!({"source":"native witnessed Mac construction UI probe",
         "build_id":"089EA519-6780-353B-8E39-4E9309B444D4",
@@ -453,7 +489,7 @@ pub fn snapshot(process: &dyn Process, key: &str, state_id: i32) -> Result<Value
         "queue_complete":o.queue.complete,
         "queued":o.queue.complete.then(||json!({"in_state":o.queue.in_state,"elsewhere":o.queue.elsewhere})),
         "input_authorized":false,"geometry_available":false,"settled_frame_verified":false,
-        "grid_registry_backlink_verified":o.choices.complete,"callback_binding_verified":false,
+        "grid_registry_backlink_verified":o.choices.complete,"callback_binding_verified":callback_verified,
         "placement_eligibility_verified":false,"global_modal_clear_verified":false,
         "observation_paused_game":false,
         "freshness":{"read_calls":o.read_calls,"read_bytes":o.read_bytes,"elapsed_ms":o.elapsed_ms,
@@ -462,6 +498,6 @@ pub fn snapshot(process: &dyn Process, key: &str, state_id: i32) -> Result<Value
 }
 
 pub(crate) fn tool() -> Value {
-    json!({"name":"hoi4_construction_ui_probe","description":"Read-only native Mac construction observation: own target/state/catalog/complete queue, independently bound panel owner links, local visibility, ordinary canonical selection and full bounded choice membership before the requested button state. Hidden panels skip choice payload. Unverified modes remain explicit. No geometry, input, navigation, placement, callback or settled-frame authority; never pauses or moves the cursor. Other platforms refuse before process access.",
-        "inputSchema":{"type":"object","properties":{"building_id":{"type":"string","minLength":1,"maxLength":128},"state_id":{"type":"integer","minimum":1,"maximum":4095}},"required":["building_id","state_id"],"additionalProperties":false},"annotations":{"readOnlyHint":true}})
+    json!({"name":"hoi4_construction_ui_probe","description":"Read-only native Mac construction observation: own target/state/catalog/complete queue, independently bound panel owner links, local visibility, ordinary canonical selection and full bounded choice membership before the requested button state. Optional include_callback verifies that button's exact observer and item capture in the same witness bracket; it never invokes a callback or proves eligibility. Hidden panels skip choice payload. Unverified modes remain explicit. No geometry, input, navigation, placement or settled-frame authority; never pauses or moves the cursor. Other platforms refuse before process access.",
+        "inputSchema":{"type":"object","properties":{"building_id":{"type":"string","minLength":1,"maxLength":128},"state_id":{"type":"integer","minimum":1,"maximum":4095},"include_callback":{"type":"boolean","default":false}},"required":["building_id","state_id"],"additionalProperties":false},"annotations":{"readOnlyHint":true}})
 }

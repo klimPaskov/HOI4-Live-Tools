@@ -688,10 +688,13 @@ impl Server {
                 })
             }
             "hoi4_construction_target" | "hoi4_construction_ui_probe" => {
-                if object.keys().any(|k| k != "building_id" && k != "state_id") {
+                let ui_probe = name == "hoi4_construction_ui_probe";
+                if object.keys().any(|k| {
+                    k != "building_id" && k != "state_id" && !(ui_probe && k == "include_callback")
+                }) {
                     return Err(Error::new(
                         "invalid_arguments",
-                        "Only building_id and state_id accepted",
+                        "Only building_id, state_id and the UI probe's optional include_callback accepted",
                     ));
                 }
                 let key = object
@@ -707,10 +710,22 @@ impl Server {
                             Error::new("invalid_arguments", "state_id must be an integer")
                         })?,
                 )?;
+                let callback = object
+                    .get("include_callback")
+                    .map(Value::as_bool)
+                    .unwrap_or(Some(false))
+                    .ok_or_else(|| {
+                        Error::new("invalid_arguments", "include_callback must be boolean")
+                    })?;
                 let process = self.process()?;
                 read_only_recovered(|| {
-                    if name == "hoi4_construction_ui_probe" {
-                        construction::mac_ui::snapshot(process, key, state)
+                    if ui_probe {
+                        construction::mac_ui::snapshot_with_options(
+                            process,
+                            key,
+                            state,
+                            construction::mac_ui::Options { callback },
+                        )
                     } else {
                         construction::target_snapshot::snapshot(process, key, state)
                     }

@@ -2,6 +2,9 @@ use super::*;
 use hoi4_live_native::{construction::mac_ui::snapshot as observe, protocol::Server};
 use serde_json::json;
 
+#[path = "mac_construction_choice_callback.rs"]
+mod callback;
+
 const PRODUCTION: u64 = 0x300000;
 const BUILDING_DB: u64 = 0x310000;
 const TARGET_TEMPLATE: u64 = 0x320000;
@@ -427,6 +430,10 @@ fn probe_protocol_rejects_extra_fields_and_invalid_target_before_binding() {
         json!({"building_id":"bad key","state_id":1}),
         json!({"building_id":"arms_factory","state_id":1,"click":true}),
         json!({"building_id":"arms_factory","state_id":1,"include_geometry":true}),
+        json!({"building_id":"arms_factory","state_id":1,"include_callback":null}),
+        json!({"building_id":"arms_factory","state_id":1,"include_callback":1}),
+        json!({"building_id":"arms_factory","state_id":1,"include_callback":"true"}),
+        json!({"building_id":"arms_factory","state_id":1,"include_callback":{}}),
     ] {
         let reply=server.handle(json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"hoi4_construction_ui_probe","arguments":args}})).unwrap();
         assert!(reply.to_string().contains("invalid_arguments"), "{reply}");

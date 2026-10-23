@@ -2,6 +2,10 @@
 
 ## Unreleased native preview
 
+- Add optional Mac construction-choice callback observation: exact requested-item
+  capture, complete single-observer membership and the separately observed
+  disable-request flag. Default reads stay unchanged; this grants no input.
+
 - Preserve positive Mac key-transport refusals before down without quarantining
   the controller. Keep ambiguous delivery blocked across reconnects; use the
   actual producer stage, never an error code or later UI, to distinguish them.

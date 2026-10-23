@@ -145,13 +145,23 @@ requested button state is exposed; there is no 64-item prefix limit. Missing
 paths return incomplete membership with no control, while malformed types,
 duplicates, ownership changes and torn reads refuse. Only mode 1 has a canonical
 selected key; modes 2/3 remain explicitly unverified. Local visibility and
-button state grant no input, geometry, callback, settled-frame or placement
+button state grant no input, geometry, settled-frame or placement
 authority. Linux refuses this Mac-specific probe before process access.
 The root, named containers, grids and requested button must also retain the
 own GUI-registry link. Root transition states are exposed separately: engine
 visibility allows state 1 while it can animate, and state 2 skips choice reads.
 Even both local states being zero does not prove settled renderer geometry.
 The all-grid backlink flag stays false until all four grids validate.
+
+Adding `"include_callback": true` verifies the requested choice's exact single
+observer and item capture inside that same snapshot. It rejects overrides,
+additional callbacks and a changed member/receiver; it never invokes them.
+The callback summary retains the byte-wide `disable_requested` flag separately
+from `disabled` (visual state 3). The flag can be set while that visual state
+differs. Neither is a fresh prerequisite evaluation: eligibility, routing,
+geometry, delivery and placement still need independent qualification.
+Omitting the option adds no callback reads. Visible choices remain unqualified
+live while the normal macOS task-access request is pending.
 
 `hoi4_construction_queue` is a read-only preview (`offset` 0–2048, `limit` 1–128,
 default 32). It validates the entire own collection before paging, recognizes
@@ -445,7 +455,7 @@ anchors do not establish a load-generation token.
 | `hoi4_production_attempt` | Opt-in Linux preview: one ordinary factory step in an already-open panel, durable original identity/count and canonical readback; selected 10→11→10 gate passed |
 | `hoi4_construction_queue` | Own building/railway lines, canonical keys and signed cost/work counters; one dockyard observed in run071. Run072 observed one state/label with a late-lease deviation; selection and province/railway coverage remain unverified |
 | `hoi4_construction_target` | Complete witnessed queued amounts for one public building and own state; incomplete evidence returns null amounts |
-| `hoi4_construction_ui_probe` | Mac-only own panel/selection/full-choice observation; no input, geometry, settled-frame or placement authority |
+| `hoi4_construction_ui_probe` | Mac-only own panel/selection/full-choice observation; optional `include_callback` binds the requested item's callback and reports its separate disable-request flag; no input, geometry, settled-frame or placement authority |
 | `hoi4_construction_panel_probe` | Mac-only panel mode and named topbar opener/callback binding. Optional `include_geometry` verifies a 1920×1080 canvas; `include_routing` also requires geometry. Independent `include_shortcut` checks current T and preceding supported keyboard receivers. No input or atomic delivery authority |
 | `hoi4_technology_list` | Canonical loaded technology IDs with filtering/pagination; no eligibility inference |
 | `hoi4_input_geometry` | GUI dimensions, scale, pointer and conditional source-window diagnostics; no click authority |

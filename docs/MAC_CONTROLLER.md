@@ -122,9 +122,18 @@ choice membership before reading the requested button. Hidden or missing paths
 do not expose a target control. Mac containers, grids and the requested button
 must retain the own GUI-registry link before dependent payload. Root local
 transition states remain separate from engine visibility; neither authorizes
-input or proves settled geometry. Unverified modes, callbacks, geometry, settled
+input or proves settled geometry. Unverified modes, geometry, settled
 readiness and placement authority remain explicit;
 this probe is not connected to worker input.
+
+Optional `include_callback` binds only the requested item's exact single
+observer, Legacy glue and member capture. All other callable slots must be empty,
+and override/notification/input-handler paths refuse. Its byte-wide
+`disable_requested` flag is separate from visual state 3; neither proves a fresh
+prerequisite evaluation. Callback binding stays inside the original witness
+bracket, without executing the callback or authorizing input. Default reads add
+no callback access. Actual visible choices and ordinary selection remain pending
+live qualification.
 
 The observed total is not a durable assignment receipt. The legacy adapter still
 discards private typed identity/context between calls, and its UI placement stages

@@ -1,5 +1,44 @@
 # Clausewitz-MCP Linux validation
 
+## Mac construction-choice callback observation — 23 October 2026
+
+The existing Mac construction UI probe now accepts optional `include_callback`.
+It keeps the full own-state/catalog/four-grid proof before the requested control,
+then validates one active observer, the exact embedded Legacy glue and callable,
+its member, zero adjustment and capture of that same canonical item. All nineteen
+other callable slots must be empty. The complete observation shares the original
+final witness checks. Default and explicit-false calls retain the same read
+sequence and never access callback fields.
+
+Independent exact-file analysis grounded the constructor, registration, invocation
+and current-byte contract without copying Linux offsets. Items can be reused with
+a different template, so retaining addresses alone cannot establish target
+identity. The member has conditional prerequisite and alternate-global branches;
+binding it is not proof that a click will select a building.
+
+The reader also reports `disable_requested` from the separate byte flag. The
+game's update wrapper can temporarily enter visual state 3 and restore its prior
+state, so visual state alone is not a complete disable-request observation.
+Neither the stored byte nor callback identity evaluates current prerequisites.
+Input, delivery, placement, geometry and settled-frame authority stay false.
+
+Ten new fixtures exercise the actual reader: unchanged default reads, seventy
+choices, exact receiver/type/member capture, complete single-node membership,
+every competing callback slot, byte/visual-state distinctions, final witness
+changes, hidden/incomplete paths, strict argument handling and platform refusal.
+All 29 focused Mac UI fixtures and the full 1,517 Rust / 956 Python tests
+(37 Python skips) pass. Formatting, strict host/Windows/Linux-musl/ARM64-Linux-musl
+Clippy, release build and 28-tool offline protocol smoke also pass. Independent
+source review found no actionable issue.
+The preceding `64e075b` checkpoint passed all nine CI jobs.
+
+The single normal macOS task-access request remains pending. No live-memory read
+was retried, no input or cursor movement occurred, and the controller is unchanged.
+The prepared stationary check precedes a separately granted Luna-medium opener
+and visible-choice observation. No visible choice, building selection or placement
+is live-qualified by these fixtures; the two-year run and full campaigns remain
+unfinished.
+
 ## Mac positive key refusals and unconditional release — 23 October 2026
 
 The strict ordinary-key transport now reports positive `NotQueued` from its own

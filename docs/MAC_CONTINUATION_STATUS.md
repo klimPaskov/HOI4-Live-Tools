@@ -1,5 +1,16 @@
 # Mac continuation checkpoint — 23 October 2026
 
+The Mac construction UI probe now has opt-in exact requested-item callback
+observation, preserving the default read path. It separately reports the cached
+disable-request byte, which is not equivalent to visual button state or current
+prerequisite eligibility. All 29 focused UI fixtures, 1,517 Rust / 956 Python tests
+(37 skipped), strict cross-platform checks, release build and protocol smoke pass.
+No live read/input
+was attempted while the single OS authorization request remains pending. After
+authorization, qualify the stationary observer first, then one bounded
+Luna-medium opener and visible-choice observation. Selection and placement remain
+unqualified. See [callback evidence](CLAUSEWITZ_VALIDATION.md#mac-construction-choice-callback-observation--23-october-2026).
+
 The Mac opener now distinguishes a proven refusal before key-down from uncertain
 input. Failed checks or allocation post no down/up and remain recorded as
 `NotQueued`; possible delivery still blocks the controller permanently. A newer

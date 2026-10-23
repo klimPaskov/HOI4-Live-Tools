@@ -93,6 +93,8 @@ Upstream foundation and attribution:
   callback or memory write. Physical delivery remains subject to live qualification.
   native/src/platform/key_once.rs independently implements ordinary key-pair
   sequencing, positive pre-down refusals and unconditional release cleanup.
+  construction/mac_ui/callback.rs independently maps the requested Mac building
+  choice's embedded observer, member capture and disable-request byte.
   They reuse the attributed construction semantics
   without copying upstream UI code or another platform's offsets. These readers
   execute no callback and grant no placement or input authority.

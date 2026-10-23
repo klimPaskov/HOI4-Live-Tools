@@ -108,6 +108,27 @@ compares each admitted container/grid and requested button's owner with the own
 exact `CGameGui` primary `0x34974d0`. Mac `CGuiObject` constructor `0x27cab10`
 stores its GUI-owner argument at `+0x58`. Standard-grid factory `0x27c5c80`
 passes the same GUI receiver through `0x27c4600`, `0x28522d0` and `0x27c2b50`.
+
+The optional `construction/mac_ui/callback.rs` path uses independent current-file
+choice constructor `0x1ed5310`: template `+0x20`, embedded Legacy observer `+0x30`,
+registered on the named Start button's observer at `+0x70`. It admits exactly one
+active, complete list node targeting that own item. The glue primary is
+`0x343ade8`; its first callable pointer at `+0x30` has primary `0x343ae78`, member
+`0x1ed5640`, zero this-adjustment and receiver equal to the requested item.
+Helper `0x1ee0030` and fields copy `0x22988a0` establish twenty callable slots
+`+0x30` through `+0x3c0`; this constructor supplies only the first. Every other
+current slot must be null. Item `+0x8` is not used as an inferred owner or alias.
+
+The callback has an alternate global branch and a prerequisite-dependent path
+to `0x1ed6730`; capture identity does not prove that selection will occur.
+Item refresh `0x1ed56f0` calls Standard virtual `+0x2a0`, exact setter
+`0x27511b0`, with the inverted prerequisite result. That setter replaces bit
+`0x40` in the single byte at button `+0xcc`. Wrapper `0x2750c90` can temporarily
+enter state 3 then restore the earlier state, so the reader reports this flag
+separately from `+0x9c`. No engine predicate or callback is executed. The flag is
+stored UI state, not a fresh eligibility result. All requested callback bytes
+share the parent's final witnesses; defaults do not read them. Static evidence
+and generated fixtures do not qualify visible controls or physical input.
 Container constructor `0x2766490` passes the owner to `TWindow` at `0x2867fb0`,
 which invokes the common constructor on `this+0x30`, giving container `+0x88`.
 Standard-button constructor `0x2757b80` passes the owner through `0x27500b0`
