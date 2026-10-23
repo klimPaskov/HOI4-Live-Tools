@@ -1,5 +1,33 @@
 # Rust foundation provenance
 
+## Retained Mac Find identity and optional edit focus
+
+`construction/mac_find/retained.rs` separates original process/campaign/country,
+production, registry, interface, Find, camera-object and optional own state/template
+identity from changing window, query, result and camera-coordinate facts. Original
+pointer joins are checked before following replacement payloads. A rebuilt window
+must independently be an exact own container; no old-window continuity is assumed.
+Complete witnesses and final process checks precede typed readback. Public JSON
+renders these facts and is never parsed back into action authority.
+
+`construction/mac_find_focus.rs` independently recovers the same Mac artifact's
+edit receiver from bounded file-backed decoding. Addresses are RVAs. Constructor
+`0x2792be0` writes CEditBox primary `0x34add98`, its `+0x70` base `0x34ae058`
+and embedded `+0x180` text receiver `0x34ae0c8`; RTTI confirms the secondary offsets.
+Find setup `0x207bc50` retains the named `to_find_text` box at `+0xc40`.
+GUI setter `0x27c86c0` stores keyboard focus at `+0x138` and invokes receiver
+virtual `+0xc0`. CEditBox's implementation `0x2794af0` passes `this+0x180`
+through `0x2863ee0` to `0x27c8f30`, which stores text focus at GUI `+0x210`.
+The Mac receiver offset must not be replaced with Linux's `+0x1a0`.
+
+Only opt-in observation reads the exact box, its own registry, complete unique
+named child membership, embedded receiver and both focus aliases within the same
+witness. Hidden/unmaterialized views skip retained edit payloads and aliases;
+an absent box stays unknown. Unrelated focused objects are never followed.
+The installed GUI's `f` and `RETURN` declarations are static interface evidence,
+not proof of current routing or delivery. These additions invoke no engine
+function, grant no input and create no action deadline or retry.
+
 ## Mac Find/camera and exact placement delta
 
 `construction/mac_find.rs` independently recovers Mach-O UUID

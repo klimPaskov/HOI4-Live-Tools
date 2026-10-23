@@ -5,8 +5,20 @@ use super::{find_view::validate_state_id, invalid, location, mac_ui, pointer};
 use crate::{
     economy, error::Result, game, memory::Reader, platform::Process, research_ui::Witnesses,
 };
-use serde_json::{json, Value};
+#[cfg(test)]
+use serde_json::json;
+use serde_json::Value;
 use std::time::Instant;
+
+// Prospective typed readback only; no adapter or construction export uses it.
+#[allow(dead_code)]
+mod retained;
+#[allow(unused_imports)]
+pub(crate) use retained::{
+    observe, CameraState, FindAnchor, FindBinding, FirstResult, Observation, OwnStateAnchor,
+    RootLifecycle,
+};
+use retained::{Query, RequestedState, Results, View};
 
 const FIND: u64 = 0x3457c38;
 const ROW: u64 = 0x34580d8;
@@ -17,7 +29,7 @@ fn refreshing() -> crate::error::Error {
     crate::error::Error::new("torn_read", "Mac Find first row and first entry disagree")
 }
 
-fn first_row(r: &Reader<'_>, base: u64, gs: u64, find: u64) -> Result<Value> {
+fn first_row(r: &Reader<'_>, base: u64, gs: u64, find: u64) -> Result<Results> {
     let (_, data, count) = r.array_header(find + 0xc90)?;
     if count > 20_000 || (count > 0 && data % 8 != 0) {
         return Err(invalid("Bounded aligned Mac Find results required"));
@@ -26,11 +38,14 @@ fn first_row(r: &Reader<'_>, base: u64, gs: u64, find: u64) -> Result<Value> {
     // result count is zero. It is not a current first result; skip its pointer
     // and payload rather than mistaking this stable empty state for a tear.
     if count == 0 {
-        return Ok(json!({"result_count":0,"first_row":null}));
+        return Ok(Results {
+            count: 0,
+            first: None,
+        });
     }
     let row = r.u64(find + 0xc88)?;
     if row == 0 {
-        return Ok(json!({"result_count":count,"first_row":null}));
+        return Ok(Results { count, first: None });
     }
     mac_ui::exact(r, base, row, ROW)?;
     let kind = r.i32(row + 0x408)?;
@@ -39,7 +54,11 @@ fn first_row(r: &Reader<'_>, base: u64, gs: u64, find: u64) -> Result<Value> {
     if kind != entry_kind {
         return Err(refreshing());
     }
-    let mut first = json!({"kind_raw":kind,"state_id":null,"supported":kind==2});
+    let mut first = FirstResult {
+        kind,
+        object: None,
+        state_id: None,
+    };
     let field = match kind {
         1 => Some(0x3f0),
         2 => Some(0x3f8),
@@ -52,6 +71,7 @@ fn first_row(r: &Reader<'_>, base: u64, gs: u64, find: u64) -> Result<Value> {
         if object == 0 || object != entry_object {
             return Err(refreshing());
         }
+        first.object = Some(object);
         // Other kinds are visible result metadata only. Never follow their
         // province/country payload to infer hidden information.
         if kind == 2 {
@@ -61,28 +81,24 @@ fn first_row(r: &Reader<'_>, base: u64, gs: u64, find: u64) -> Result<Value> {
             if location::catalog_pointer(r, gs + l.gs_states, id, 4096)? != object {
                 return Err(invalid("Mac Find state must join its current catalog"));
             }
-            first["state_id"] = json!(id);
+            first.state_id = Some(id);
         }
     }
-    Ok(json!({"result_count":count,"first_row":first}))
+    Ok(Results {
+        count,
+        first: Some(first),
+    })
 }
 
-fn view(
-    r: &Reader<'_>,
-    base: u64,
-    gs: u64,
-    idler: u64,
-    registry: u64,
-    manager: u64,
-) -> Result<Value> {
-    let find = r.u64(manager + 0x190)?;
-    mac_ui::exact(r, base, find, FIND)?;
-    if r.u64(find + 0xc30)? != idler {
-        return Err(invalid("Mac Find view must retain the own idler"));
-    }
+fn view(r: &Reader<'_>, base: u64, gs: u64, registry: u64, find: u64) -> Result<View> {
     let window = r.u64(find + 0xc38)?;
-    let mut out = json!({"materialized":window!=0,"window":null,"query":null,
-        "text_box_focused":null,"results":null});
+    let mut out = View {
+        root: RootLifecycle::Unmaterialized,
+        query: None,
+        results: None,
+        focus_requested: false,
+        focus: None,
+    };
     if window == 0 {
         return Ok(out);
     }
@@ -95,24 +111,27 @@ fn view(
         ));
     }
     let visible = flags & 8 != 0;
-    out["window"] = json!({"exact_container":true,"own_registry_verified":true,
-        "visible_flag":visible,"local_transitions_idle":states==[0,0],
-        "settled_visibility_verified":false});
+    out.root = RootLifecycle::Materialized {
+        pointer: window,
+        object: root,
+        flags,
+        transitions: states,
+    };
     // Hidden retained rows/queries cannot be current Find results. Avoid those
     // payloads entirely, including the stale first-row pointer.
     if visible {
         let text = r.string_bounded(find + 0xc48, 64)?;
-        out["query"] = if text.bytes().all(|b| (0x20..0x7f).contains(&b)) {
-            json!(text)
+        out.query = Some(if text.bytes().all(|b| (0x20..0x7f).contains(&b)) {
+            Query::Printable(text)
         } else {
-            json!({"unsupported":"non_printable_ascii","length":text.len()})
-        };
-        out["results"] = first_row(r, base, gs, find)?;
+            Query::Unsupported { length: text.len() }
+        });
+        out.results = Some(first_row(r, base, gs, find)?);
     }
     Ok(out)
 }
 
-fn camera(r: &Reader<'_>, idler: u64) -> Result<([f32; 3], [f32; 3])> {
+fn camera(r: &Reader<'_>, idler: u64) -> Result<CameraState> {
     // Exact idler virtual +148/+150 returns this+708. The ordinary state
     // centring path reads template+120 and calls 101929770, which writes the
     // eye at +698 and look-at at +6a4, setting look-at height from its constant.
@@ -129,13 +148,14 @@ fn camera(r: &Reader<'_>, idler: u64) -> Result<([f32; 3], [f32; 3])> {
     {
         return Err(invalid("Finite bounded Mac camera coordinates required"));
     }
-    Ok((
-        values[..3].try_into().unwrap(),
-        values[3..].try_into().unwrap(),
-    ))
+    Ok(CameraState {
+        object,
+        eye: values[..3].try_into().unwrap(),
+        look_at: values[3..].try_into().unwrap(),
+    })
 }
 
-fn target(r: &Reader<'_>, base: u64, gs: u64, own: i32, id: i32, look: [f32; 3]) -> Result<Value> {
+fn target(r: &Reader<'_>, base: u64, gs: u64, own: i32, id: i32) -> Result<RequestedState> {
     let l = super::layout(r);
     let state = location::catalog_pointer(r, gs + l.gs_states, id, 4096)?;
     mac_ui::exact(r, base, state, l.state_vtable)?;
@@ -143,8 +163,7 @@ fn target(r: &Reader<'_>, base: u64, gs: u64, own: i32, id: i32, look: [f32; 3])
         return Err(invalid("Mac Find target state ID/catalog differs"));
     }
     if !location::own_state(r, base, state, own)? {
-        return Ok(json!({"state_id":id,"own_owned_and_controlled":false,
-            "anchor":null,"camera_centered":false}));
+        return Ok(RequestedState::Foreign { id, state });
     }
     let template = r.u64(state + 0x20)?;
     mac_ui::exact(r, base, template, STATE_TEMPLATE)?;
@@ -153,67 +172,28 @@ fn target(r: &Reader<'_>, base: u64, gs: u64, own: i32, id: i32, look: [f32; 3])
     if x.abs_diff(0) > 1_000_000 || z.abs_diff(0) > 1_000_000 {
         return Err(invalid("Bounded Mac state map anchor required"));
     }
-    Ok(json!({"state_id":id,"own_owned_and_controlled":true,
-        "anchor":{"kind":"state_template_map_position","map_position":[x,z]},
-        "camera_centered":look[0]==x as f32 && look[2]==z as f32,
-        "comparison":"exact_template_position_without_wrap_adjustment"}))
+    Ok(RequestedState::Own(OwnStateAnchor {
+        id,
+        state,
+        template,
+        map_position: [x, z],
+    }))
 }
 
 pub(super) fn snapshot(process: &dyn Process, state_id: Option<i32>) -> Result<Value> {
-    let start = Instant::now();
-    process.begin_snapshot()?;
-    let identity = process
-        .identity()
-        .cloned()
-        .ok_or_else(|| invalid("Owned Mac Find process required"))?;
-    let base = process.image_base();
-    let w = Witnesses::new(process);
-    let r = Reader::new(&w);
-    w.section("mac_find_own_scope");
-    let (country, _) = economy::own_production(&r, base)?;
-    let own = r.i32(country + 8)?;
-    let campaign = game::context_from_reader(&r, base)?;
-    let [gs, idler, _] = campaign.anchors;
-    let registry = r.u64(idler + 0x4c0)?;
-    mac_ui::exact(&r, base, registry, 0x34974d0)?;
-    let manager = r.u64(idler + 0x670)?;
-    pointer(manager)?;
-    if r.u64(manager + 0x180)? != idler {
-        return Err(invalid("Mac Find manager must retain the own idler"));
+    observe(process, state_id)?.value()
+}
+
+pub(super) fn snapshot_with_focus(
+    process: &dyn Process,
+    state_id: Option<i32>,
+    include_focus: bool,
+) -> Result<Value> {
+    if include_focus {
+        retained::observe_with_focus(process, state_id)?.value()
+    } else {
+        snapshot(process, state_id)
     }
-    w.section("mac_find_view");
-    let observed = view(&r, base, gs, idler, registry, manager)?;
-    w.section("mac_find_camera");
-    let (eye, look_at) = camera(&r, idler)?;
-    let requested = match state_id {
-        Some(id) => target(
-            &r,
-            base,
-            gs,
-            own,
-            validate_state_id(i64::from(id))?,
-            look_at,
-        )?,
-        None => Value::Null,
-    };
-    let (calls, bytes) = w.finish()?;
-    process.check()?;
-    if process.identity() != Some(&identity) || process.image_base() != base {
-        return Err(invalid("Mac Find process identity changed"));
-    }
-    Ok(
-        json!({"source":"native own Mac construction find view","build_id":game::MACOS.build_id,
-        "scope":"own_find_view_camera_and_requested_own_state","player":campaign.player,
-        "date_raw":campaign.date_raw,"paused":campaign.paused,"find_view":observed,
-        "camera":{"eye":eye,"look_at":look_at},"target":requested,
-        "input_authorized":false,"placement_eligibility_verified":false,
-        "effective_routing_verified":false,"current_frame_verified":false,
-        "live_validation":"pending","observation_paused_game":false,
-        "freshness":{"observed_unix_ms":crate::daily_observation::unix_ms()?,
-            "elapsed_ms":start.elapsed().as_secs_f64()*1000.0,
-            "read_calls_kind":"logical_read_requests","read_calls":r.calls.get()+calls as u64,
-            "read_bytes":r.bytes.get()+bytes}}),
-    )
 }
 
 #[cfg(test)]

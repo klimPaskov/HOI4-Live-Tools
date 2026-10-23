@@ -239,6 +239,8 @@ fn public_mac_routes_preserve_explicit_platform_refusal_without_read_retries() {
         ),
         ("hoi4_construction_find_view", json!({"state_id":0})),
         ("hoi4_construction_find_view", json!({"state_id":1.5})),
+        ("hoi4_construction_find_view", json!({"include_focus":1})),
+        ("hoi4_construction_find_view", json!({"include_focus":null})),
         (
             "hoi4_construction_find_view",
             json!({"state_id":64,"country":"ENG"}),
@@ -252,4 +254,16 @@ fn public_mac_routes_preserve_explicit_platform_refusal_without_read_retries() {
         assert_eq!(error_code(&server, tool, args), "invalid_arguments");
     }
     assert_eq!(accesses.load(Ordering::SeqCst), 0);
+}
+
+#[test]
+fn opt_in_find_focus_rejects_linux_before_any_process_access() {
+    let process = UnavailableProcess::new(StringAbi::LibStdCxx);
+    assert_eq!(
+        find_view::snapshot_with_options(&process, Some(64), true)
+            .unwrap_err()
+            .code,
+        "capability_unavailable"
+    );
+    assert_eq!(process.accesses.load(Ordering::SeqCst), 0);
 }

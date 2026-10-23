@@ -243,11 +243,24 @@ pub(crate) fn observe_in(
     ))
 }
 pub fn snapshot(process: &dyn Process, state_id: Option<i32>) -> Result<Value> {
+    snapshot_with_options(process, state_id, false)
+}
+pub fn snapshot_with_options(
+    process: &dyn Process,
+    state_id: Option<i32>,
+    include_focus: bool,
+) -> Result<Value> {
     if let Some(id) = state_id {
         validate_state_id(i64::from(id))?;
     }
     if process.string_abi() == crate::memory::StringAbi::LibCxx {
-        return super::mac_find::snapshot(process, state_id);
+        return super::mac_find::snapshot_with_focus(process, state_id, include_focus);
+    }
+    if include_focus {
+        return Err(crate::error::Error::new(
+            "capability_unavailable",
+            "Optional exact Find focus observation is reviewed only for the native Mac layout",
+        ));
     }
     super::require_linux_ui(process.string_abi())?;
     let start = Instant::now();
@@ -287,5 +300,5 @@ pub fn snapshot(process: &dyn Process, state_id: Option<i32>) -> Result<Value> {
     )
 }
 pub(crate) fn tool() -> Value {
-    json!({"name":"hoi4_construction_find_view","description":"Read-only own map Find view using independently recovered Linux and native Mac layouts. Visibility flags, bounded query, first result row joined to its current state catalog, camera eye/look-at and an optional requested own state's template map position. Mac hidden views skip stale query/row payload; Mac focus and wrapped-camera equivalence remain unqualified. No input, search, camera movement, placement, eligibility, current-frame or routing authority. Never pauses or moves the cursor.","inputSchema":{"type":"object","properties":{"state_id":{"type":"integer","minimum":1,"maximum":4095}},"additionalProperties":false},"annotations":{"readOnlyHint":true}})
+    json!({"name":"hoi4_construction_find_view","description":"Read-only own map Find view using independently recovered Linux and native Mac layouts. Visibility flags, bounded query, first result row joined to its current state catalog, camera eye/look-at and an optional requested own state's template map position. Optional include_focus checks the visible Mac Find box's exact name, type, own registry and both focus aliases; default reads skip those fields. Hidden Mac views skip retained query, result and edit-box payloads. Wrapped-camera equivalence remains unqualified. No input, search, camera movement, placement, eligibility, current-frame or routing authority. Never pauses or moves the cursor.","inputSchema":{"type":"object","properties":{"state_id":{"type":"integer","minimum":1,"maximum":4095},"include_focus":{"type":"boolean","default":false}},"additionalProperties":false},"annotations":{"readOnlyHint":true}})
 }

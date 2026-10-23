@@ -7573,3 +7573,62 @@ own-anchor observations only. Visible results, text-focus, ordinary Find input,
 map targeting and placement, worker integration, the clean two-year run and full
 recorded campaigns remain unfinished. Real time per campaign year is not measured
 by this paused component test.
+
+
+## Mac retained Find and visible-focus qualification — 23 October 2026
+
+The existing Find observation now renders typed facts and supports optional Mac
+`include_focus` observation. Default reads remain unchanged and skip all new edit
+payloads. The optional path verifies a canonical visible own Find root, the own
+GUI singleton, exact CEditBox and embedded text receiver, own registry, complete
+unique named child membership and both keyboard/text focus aliases. Hidden or
+unmaterialized views skip retained edit pointers; an absent box stays unknown.
+Unrelated focused objects are not followed. All facts share the original witness
+and final process checks. A separate internal FindAnchor pins original campaign,
+ownership, object and requested own-state/template/map identities before
+replacement payload, while current window reconstruction is explicitly modeled.
+No public JSON is parsed back into that typed retained identity.
+
+All 1,668 Rust / 956 Python tests (37 skipped), strict Clippy on host Mac,
+Windows GNU and Linux x86_64/ARM64 musl, release build and 28-tool stdio smoke
+passed. The Find/focus group contains 34 fixtures, including 14 new retained
+identity/lifecycle tests, six focused-control tests and five integration tests.
+The opt-in Linux refusal occurs before process access. Independent review found
+no actionable typed-observer issues. The preceding `6082277` passed all nine
+GitHub CI jobs.
+
+Stationary qualification of the new candidate passed on the retained owned native
+Mac 1920×1080 Normal/historical vanilla Germany session. The complete 16-call
+driver took 0.313 seconds; opt-in hidden Find RPC median was 0.497 ms. The hidden
+view skipped query/result/edit/focus payload. Own Research, Focus, all 21 production
+lines and the empty queue stayed unchanged. There was no input, screenshot,
+cursor movement, observation pause or input-controller directory.
+
+A separate bounded qualification harness then gave one Luna-medium player
+exclusive input. Before input, review corrected acceptance of an unmaterialized
+Find baseline, final original deadline/grant/recorder checks, and reader startup
+using a renewed deadline or leaking its child on constructor failure. Offline
+lifecycle checks proved original deadline use, failed-initialize EOF/reaping and
+no child creation after expiry. These corrections happened before any live key.
+
+The player activated the exact owned game once and sent exactly one preallocated
+ordinary F down/up pair. Typed MCP readback found a visible idle Find window,
+empty query/count zero, exact named edit and both focused receivers. Visible Find
+RPCs were 0.692–0.889 ms; the complete 15-call driver took 2.091 seconds. There
+were zero cursor movements, screenshots, clock calls, observation pauses, workers
+or campaign commands. Full own baseline and the paused 1936.01.01.12, speed-zero
+clock stayed unchanged. MCP EOF returned zero; the input grant closed.
+
+Window recording completed with explicit stop: H.264, 1920×1108 around the native
+1920×1080 client, 105.206667 seconds, 3,091 frames. An initial stop-marker filename
+had no effect; the bridge's correct `stop.request` finalized the owned recorder.
+The earlier menu ScreenCaptureKit -3821 failure remains preserved. This short
+successful recording does not establish campaign-duration reliability.
+
+This qualifies visible empty-query Find/focus observation and one ordinary F UI
+primitive through a private harness with MCP readback. It does not introduce a
+released Find action adapter, prove current F/Return routing, exercise state-ID
+typing/results/activation or grant map placement/worker authority. The Find view
+is left open with an empty focused query for the next original-scope typing gate.
+The clean two-year Luna run and full recorded campaigns remain unfinished;
+real time per game year is not measured by this paused component test.

@@ -773,8 +773,14 @@ impl Server {
                 read_only_recovered(|| construction::controls::snapshot(process, key, geometry))
             }
             "hoi4_construction_find_view" => {
-                if object.keys().any(|k| k != "state_id") {
-                    return Err(Error::new("invalid_arguments", "Only state_id accepted"));
+                if object
+                    .keys()
+                    .any(|k| k != "state_id" && k != "include_focus")
+                {
+                    return Err(Error::new(
+                        "invalid_arguments",
+                        "Only state_id and include_focus accepted",
+                    ));
                 }
                 let state = match object.get("state_id") {
                     None => None,
@@ -784,8 +790,17 @@ impl Server {
                         })?,
                     )?),
                 };
+                let focus = object
+                    .get("include_focus")
+                    .unwrap_or(&Value::Bool(false))
+                    .as_bool()
+                    .ok_or_else(|| {
+                        Error::new("invalid_arguments", "include_focus must be boolean")
+                    })?;
                 let process = self.process()?;
-                read_only_recovered(|| construction::find_view::snapshot(process, state))
+                read_only_recovered(|| {
+                    construction::find_view::snapshot_with_options(process, state, focus)
+                })
             }
             "hoi4_production_lines" | "hoi4_construction_queue" => {
                 if object.keys().any(|k| {

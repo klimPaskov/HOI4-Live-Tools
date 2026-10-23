@@ -1,5 +1,30 @@
 # Mac continuation checkpoint — 23 October 2026
 
+The recorded Luna-medium Find-focus primitive passed on the native Mac
+1920×1080 client. One ordinary F key opened Find; the opt-in typed MCP observer
+confirmed the exact named edit box and both focused receiver joins. The complete
+15-call driver took 2.091 seconds; visible Find RPCs took 0.692–0.889 ms. There
+were zero cursor movements, screenshots, observation pauses or campaign commands.
+The complete own baseline stayed unchanged at paused Germany 1 January 1936 12:00.
+The 1920×1108 H.264 recording finalized at 105.206667 seconds and 3,091 frames.
+
+`include_focus` defaults to false and adds no reads to existing default Find
+observations. The internal retained Find foundation pins original ownership and
+requested own state while explicitly allowing validated window reconstruction.
+All 1,668 Rust / 956 Python tests (37 skipped), strict checks on four compilation
+targets, release build and 28-tool protocol smoke pass. The preceding `6082277`
+checkpoint passed all nine CI jobs. See [Find-focus qualification](CLAUSEWITZ_VALIDATION.md#mac-retained-find-and-visible-focus-qualification--23-october-2026).
+
+The F key was sent by a bounded qualification harness with MCP readback; there is
+no released Find action adapter or construction worker permission from this test.
+The game now has Find open with an empty focused query. Its grant and recorder
+are closed. State-ID typing/activation, map targeting/placement, worker integration,
+the clean two-year run and full recorded campaigns remain unfinished. The earlier
+menu recording failure remains preserved; this short success does not qualify
+long campaign recording reliability.
+
+Earlier checkpoints follow.
+
 The read-only Find/camera tool now supports the independently recovered native
 Mac layout as well as Linux. Stationary qualification passed in a fresh native
 1920×1080 Germany session: median reader/RPC time was 0.442/0.484 ms. It verified

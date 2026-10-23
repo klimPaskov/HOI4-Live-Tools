@@ -112,6 +112,10 @@ Upstream foundation and attribution:
   construction/mac_ui/placement_state.rs extends original-scope readback to one
   exact queue delta. Both reuse the attributed own-state observation approach;
   neither invokes game functions or grants placement input authority.
+  construction/mac_find/retained.rs separates original ownership from changing
+  window lifetime and observed results. construction/mac_find_focus.rs
+  independently maps the Mac edit box and its two focused-receiver joins;
+  optional witnessed observation never authorizes typing or engine calls.
   They reuse the attributed construction semantics
   without copying upstream UI code or another platform's offsets. These readers
   execute no callback and grant no placement or input authority.

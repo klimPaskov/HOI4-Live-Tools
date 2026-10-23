@@ -165,12 +165,16 @@ and rows. A visible first row must match the first result entry and current stat
 catalog; count zero returns no current first row even if an old cache is retained.
 Other result kinds expose metadata without following their objects.
 
-The Mac layout uses its own 0x40-byte result entries and camera owner link;
-it does not borrow the Linux reader's fields. Text-focus, settled/current-frame,
-wrapped-map equivalence, input routing and placement eligibility are unqualified.
-A stationary hidden-view/camera/own-anchor test passed at 0.484 ms median RPC,
-with no input, cursor movement, screenshot or pause. The visible result path has
-fixture coverage and still needs live qualification before ordinary Find input.
+The Mac layout uses its own 0x40-byte result entries, camera owner link and
+embedded edit receiver. Optional `include_focus: true` checks the exact named own
+box, complete child membership, embedded receiver and keyboard/text aliases within
+the same witness. Default reads skip these fields; hidden/unmaterialized views
+skip the retained box entirely. A recorded one-F qualification harness verified
+visible empty-query focus with unchanged campaign state and sub-millisecond MCP
+readback. It creates no released Find action permission. Typed retained evidence
+pins original ownership/state while allowing independently validated current
+window reconstruction. State typing/results/activation, settled/current-frame,
+wrapped-map equivalence, input routing and placement eligibility remain pending.
 
 The internal `SelectionAnchor::placement_anchor` additionally requires the exact
 requested ordinary template already selected. Its replacement queue observation

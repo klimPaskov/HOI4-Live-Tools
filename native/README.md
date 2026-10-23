@@ -91,11 +91,15 @@ at most one unmodified move/click and verifies the exact template from game stat
 A recorded Luna-medium test passed at native 1920×1080 in 240 ms. It does not
 select a state or place construction. See the [selection contract](../docs/MAC_CONTROLLER.md#construction-selection-qualification).
 
-`hoi4_construction_find_view` now uses separate Linux and Mac layouts. The Mac
-hidden-view/camera/own-anchor path passed stationary qualification at 0.48 ms
-median RPC time with zero input. Visible result/focus/navigation qualification
-remains pending. An internal typed queue-delta foundation checks one future
-placement; no new placement action or worker permission is enabled.
+`hoi4_construction_find_view` uses separate Linux and Mac layouts. Mac stationary
+reads passed at 0.48 ms median RPC. Optional `include_focus: true` verifies the
+visible Mac box's exact name/type, own registry and both focused receivers in the
+same witness. Default reads skip that payload; Linux refuses this optional flag.
+A recorded one-F Luna test verified visible Mac focus with sub-millisecond reads,
+without cursor movement, screenshots, pauses or campaign changes. State-ID
+search/activation and a released Find adapter remain unfinished. Internal typed
+Find retention and exact placement-delta foundations grant no input or worker
+permission.
 
 The Mac durable worker has passed recorded Research, Focus and production
 component tests, including plan revisions and reconnects. Canonical Mac process
@@ -309,14 +313,15 @@ In this game data a dockyard is a coastal-only state building (shared slots,
 buildings (naval bases, bunkers, coastal bunkers) need a province target and
 are not yet live-tested.
 
-`hoi4_construction_find_view({"state_id":64})` is a read-only Linux preview for future
-map placement. Native macOS returns `unsupported_platform` before any process access.
-It reports the game's own Find view (visibility flags, query, the
-first result row joined to the state catalog), the camera look-at point and the
-requested own state's template map position, including whether the camera is
-centred on it. It types, clicks and moves nothing. Run082 confirmed the camera,
-state-template position and unopened Find view live; opened-view results are
-not yet exercised.
+`hoi4_construction_find_view({"state_id":64})` is read-only on the reviewed Linux
+and Mac layouts. It reports own Find visibility/query, the first result joined
+to its current state catalog, camera coordinates and the requested own state's
+map anchor. Hidden Mac queries/results are skipped. Optional `include_focus: true`
+is Mac-only and also checks the exact focused edit control; the default keeps
+`text_box_focused: null` on Mac. The Mac empty visible query/focus and Linux
+state search have component evidence; broader Mac result navigation is pending.
+It types, clicks and moves nothing, and a centered camera does not prove a valid
+placement point.
 
 Each stage permits at most one ordinary click, with private identities and the
 original point checked again immediately before input. Already-matching state
