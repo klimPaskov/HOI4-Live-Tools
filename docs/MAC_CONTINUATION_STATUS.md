@@ -1,5 +1,15 @@
 # Mac continuation checkpoint — 23 October 2026
 
+The Mac opener now distinguishes a proven refusal before key-down from uncertain
+input. Failed checks or allocation post no down/up and remain recorded as
+`NotQueued`; possible delivery still blocks the controller permanently. A newer
+producer result cannot settle an older uncertain intent. Full validation passes
+1,507 Rust tests, 956 Python tests (37 skipped), strict cross-platform checks and
+the release build. The normal macOS task-port authorization request remains
+pending; no live read/input was retried. Keep the prepared stationary shortcut
+qualification as the next live step, followed by one bounded Luna-medium gate.
+See [key delivery evidence](CLAUSEWITZ_VALIDATION.md#mac-positive-key-refusals-and-unconditional-release--23-october-2026).
+
 The Mac construction opener now has a typed current-T observer and a default-off
 `hoi4_construction_open` qualification adapter. It retains the original binding,
 sends at most one short keypress and never toggles an already-selected panel.

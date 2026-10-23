@@ -2,6 +2,10 @@
 
 ## Unreleased native preview
 
+- Preserve positive Mac key-transport refusals before down without quarantining
+  the controller. Keep ambiguous delivery blocked across reconnects; use the
+  actual producer stage, never an error code or later UI, to distinguish them.
+
 - Add opt-in current Mac construction-shortcut observation and a default-off
   `hoi4_construction_open` qualification tool. It sends at most one ordinary T,
   never toggles an already-selected panel, and keeps unknown delivery quarantined

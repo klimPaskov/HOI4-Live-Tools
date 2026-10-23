@@ -3,6 +3,7 @@
 //! process; anything else refuses before sending. Needs the Accessibility
 //! permission of the responsible app. Clicks target game-logical points inside
 //! the owned window's content rectangle. No text, activation or engine call.
+use super::key_once;
 use crate::{
     error::{Error, Result},
     gui::macos::{self, Geometry},
@@ -753,23 +754,18 @@ impl<'p> MacKeys<'p> {
     pub fn press(&self, key: Key) -> Result<()> {
         self.press_raw(key.code())
     }
-    /// A strict single shortcut. Allocate its release before sending down;
-    /// refuse held input and never try to repair modifiers with extra events.
-    pub(crate) fn press_once(&self, key: Key) -> Result<()> {
-        self.confirm_input_idle()?;
-        struct Pair {
+    /// One short shortcut with a producer-owned delivery classification. Only
+    /// checks/allocation before entering down can positively report NotQueued.
+    pub(crate) fn press_once(&self, key: Key) -> key_once::Dispatch {
+        struct Events {
             down: CFTypeRef,
             up: CFTypeRef,
-            pressed: bool,
         }
-        impl Drop for Pair {
+        impl Drop for Events {
             fn drop(&mut self) {
-                // SAFETY: each nonnull pointer is owned by this pair. Release
-                // the key even on an unwind after down, with no new preflight.
+                // SAFETY: each nonnull pointer is independently owned. Freeing
+                // an unused pair never posts a release or any other input.
                 unsafe {
-                    if self.pressed {
-                        CGEventPost(HID_EVENT_TAP, self.up);
-                    }
                     for event in [self.down, self.up] {
                         if !event.is_null() {
                             CFRelease(event);
@@ -778,40 +774,51 @@ impl<'p> MacKeys<'p> {
                 }
             }
         }
-        // SAFETY: null event sources are permitted; Pair owns both results.
-        let mut events = unsafe {
-            Pair {
-                down: CGEventCreateKeyboardEvent(std::ptr::null(), key.code(), true),
-                up: CGEventCreateKeyboardEvent(std::ptr::null(), key.code(), false),
-                pressed: false,
+        impl key_once::Pair for Events {
+            fn down(&mut self) -> Result<()> {
+                // SAFETY: allocated/configured pair; the sequence has just
+                // rechecked ownership, the original binding and idle input.
+                unsafe {
+                    CGEventPost(HID_EVENT_TAP, self.down);
+                }
+                Ok(()) // CGEventPost returns no delivery acknowledgement.
             }
-        };
-        if events.down.is_null() || events.up.is_null() {
-            return Err(Error::new(
-                "input_unavailable",
-                "Complete key event pair unavailable",
-            ));
+            fn up(&mut self) -> Result<()> {
+                // SAFETY: release was allocated before down. Cleanup deliberately
+                // does not recheck a now-expired lease or foreground window.
+                unsafe {
+                    CGEventPost(HID_EVENT_TAP, self.up);
+                }
+                Ok(())
+            }
         }
-        // A null event source can inherit flags at allocation time. The final
-        // idle check must not admit an event carrying an earlier modifier.
-        unsafe {
-            CGEventSetFlags(events.down, 0);
-            CGEventSetFlags(events.up, 0);
-        }
-        self.confirm_input_idle()?;
-        // SAFETY: preallocated live events, checked ownership/idle input, one
-        // short down/up only. No fallible operation separates down from cleanup.
-        unsafe {
-            CGEventPost(HID_EVENT_TAP, events.down);
-        }
-        events.pressed = true;
-        std::thread::sleep(std::time::Duration::from_millis(40));
-        unsafe {
-            CGEventPost(HID_EVENT_TAP, events.up);
-        }
-        events.pressed = false;
-        std::thread::sleep(std::time::Duration::from_millis(40));
-        Ok(())
+        key_once::dispatch(
+            || self.confirm_input_idle(),
+            || {
+                // SAFETY: null event sources are permitted; Events owns both
+                // results, including any partial allocation on failure.
+                let events = unsafe {
+                    Events {
+                        down: CGEventCreateKeyboardEvent(std::ptr::null(), key.code(), true),
+                        up: CGEventCreateKeyboardEvent(std::ptr::null(), key.code(), false),
+                    }
+                };
+                if events.down.is_null() || events.up.is_null() {
+                    return Err(Error::new(
+                        "input_unavailable",
+                        "Complete key event pair unavailable",
+                    ));
+                }
+                // A null source can inherit allocation-time modifiers. Zero
+                // them before the sequence's final idle/original-binding check.
+                unsafe {
+                    CGEventSetFlags(events.down, 0);
+                    CGEventSetFlags(events.up, 0);
+                }
+                Ok(events)
+            },
+            std::thread::sleep,
+        )
     }
     fn press_raw(&self, code: u16) -> Result<()> {
         self.preflight()?;

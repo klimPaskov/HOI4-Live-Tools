@@ -4,6 +4,10 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 use std::path::Path;
+// Portable ordering/cleanup tests exercise the same strict key sequence used
+// by macOS. Other native input adapters keep their existing delivery contracts.
+#[cfg(any(target_os = "macos", test))]
+pub(crate) mod key_once;
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct Identity {
     pub pid: i32,

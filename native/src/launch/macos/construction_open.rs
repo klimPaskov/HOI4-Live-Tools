@@ -9,15 +9,22 @@ use crate::{
     actions::Epoch,
     construction::mac_panel::{self, Observation},
     error::{Error, Result},
-    platform::macos_input::{Key, MacKeys},
+    platform::{
+        key_once::Dispatch as KeyDispatch,
+        macos_input::{Key, MacKeys},
+    },
 };
 use serde_json::{json, Value};
 use std::{thread, time::Duration};
 
+#[cfg(test)]
+#[path = "construction_open/delivery_tests.rs"]
+mod delivery_tests;
+
 trait Attempt {
     /// True means already selected: wait without ever toggling it.
     fn prepare(&mut self) -> Result<bool>;
-    fn press_once(&mut self) -> Result<()>;
+    fn press_once(&mut self) -> KeyDispatch;
     fn finish(&mut self, sent: bool) -> Result<Value>;
 }
 fn dispatch(attempt: &mut impl Attempt) -> StrictOutcome {
@@ -27,10 +34,12 @@ fn dispatch(attempt: &mut impl Attempt) -> StrictOutcome {
     };
     let sent = !already_selected;
     if sent {
-        // The OS transport has no positive delivery classification. Once called,
-        // even an error whose code resembles preflight is conservatively unknown.
-        if let Err(e) = attempt.press_once() {
-            return StrictOutcome::Uncertain(e);
+        match attempt.press_once() {
+            KeyDispatch::NotQueued(e) => return StrictOutcome::NotQueued(e),
+            KeyDispatch::Unknown(Some(e)) => return StrictOutcome::Uncertain(e),
+            // Successful posting is unacknowledged. Only this original attempt's
+            // fresh panel readback can verify the durable action.
+            KeyDispatch::Unknown(None) => {}
         }
     }
     match attempt.finish(sent) {
@@ -76,9 +85,12 @@ impl Attempt for Live<'_, '_> {
         self.keys.confirm_input_idle()?;
         Ok(false)
     }
-    fn press_once(&mut self) -> Result<()> {
+    fn press_once(&mut self) -> KeyDispatch {
         let check = || self.same_before();
-        let keys = self.keys.guarded(self.fence, &check)?;
+        let keys = match self.keys.guarded(self.fence, &check) {
+            Ok(keys) => keys,
+            Err(e) => return KeyDispatch::NotQueued(e),
+        };
         keys.press_once(Key::Letter('t'))
     }
     fn finish(&mut self, sent: bool) -> Result<Value> {
@@ -181,12 +193,12 @@ mod tests {
                 Ok(self.selected)
             }
         }
-        fn press_once(&mut self) -> Result<()> {
+        fn press_once(&mut self) -> KeyDispatch {
             self.presses += 1;
-            if self.failure == 2 {
-                Err(fail())
-            } else {
-                Ok(())
+            match self.failure {
+                2 => KeyDispatch::Unknown(Some(fail())),
+                4 => KeyDispatch::NotQueued(fail()),
+                _ => KeyDispatch::Unknown(None),
             }
         }
         fn finish(&mut self, sent: bool) -> Result<Value> {
@@ -202,7 +214,7 @@ mod tests {
     #[test]
     fn fresh_attempt_sends_at_most_one_key_and_never_toggles_selected_panels() {
         for selected in [false, true] {
-            for failure in 0..=3 {
+            for failure in 0..=4 {
                 let mut f = Fake {
                     selected,
                     failure,
@@ -213,14 +225,14 @@ mod tests {
                 assert_eq!(f.presses, usize::from(!selected && failure != 1));
                 assert_eq!(
                     f.reads,
-                    usize::from(failure != 1 && (selected || failure != 2))
+                    usize::from(failure != 1 && (selected || ![2, 4].contains(&failure)))
                 );
                 match result {
                     StrictOutcome::Verified(_) => {
-                        assert!(failure == 0 || (selected && failure == 2))
+                        assert!(failure == 0 || (selected && [2, 4].contains(&failure)))
                     }
                     StrictOutcome::NotQueued(_) => {
-                        assert!(failure == 1 || (selected && failure == 3))
+                        assert!([1, 4].contains(&failure) || (selected && failure == 3))
                     }
                     StrictOutcome::Uncertain(_) => assert!(!selected && [2, 3].contains(&failure)),
                 }

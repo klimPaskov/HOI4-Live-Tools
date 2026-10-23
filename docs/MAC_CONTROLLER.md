@@ -154,6 +154,12 @@ Verified retries return a historical receipt and explicitly do not certify the
 current panel. An uncertain attempt permanently blocks this controller; later
 reached UI cannot settle it, even through the legacy API. A positive pre-input
 refusal remains recorded and permits a new request after its cause is repaired.
+The key transport itself now supplies positive `NotQueued` only for failed
+checks or event allocation before entering key-down. These failures post neither
+down nor a cleanup up. Once down is entered, transport errors remain unknown;
+successful posting is also unacknowledged and requires the original attempt's
+fresh panel readback. Error codes and unchanged UI never establish no delivery.
+An old uncertain receipt cannot be reclassified using this newer transport.
 The complete original typed binding stays in memory for the attempt; its SHA-256
 and compact scope are retained in the private intent. Live qualification and
 worker construction integration remain pending. Legacy adapters are preserved.

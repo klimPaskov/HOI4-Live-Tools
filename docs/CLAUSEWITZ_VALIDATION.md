@@ -1,5 +1,41 @@
 # Clausewitz-MCP Linux validation
 
+## Mac positive key refusals and unconditional release — 23 October 2026
+
+The strict ordinary-key transport now reports positive `NotQueued` from its own
+pre-down checks and event-allocation path. The original adapter conservatively
+quarantined every transport error, including these known zero-input failures.
+A refused attempt now retains its reason and can be followed by a fresh request
+after repair; it never automatically repeats input or erases the old receipt.
+
+The portable sequence arms release before entering down. Down/up errors remain
+unknown, and even successful CGEvent posting provides no delivery acknowledgement.
+Only same-attempt fresh panel readback can verify the action. Release requires no
+renewed lease/foreground check after a possible down and also runs during unwind.
+Unused and partially allocated event pairs are freed without posting an up.
+Neither error codes nor later game state can establish a positive refusal.
+Older uncertain records remain permanently blocked under the unchanged journal.
+
+Nine sequence tests cover prechecks, allocation, final pre-down refusal, possible
+down failure, release failure, first-error preservation, unacknowledged posting,
+expiry and unwind cleanup. Two tests pass the actual producer through the action
+classifier and durable journal, checking refusal retention/reopen/fresh requests
+and permanent uncertainty for identical error codes after possible delivery.
+The existing no-toggle matrix also covers the new typed refusal path.
+
+All 1,507 Rust tests and 956 Python tests (37 skipped) pass, alongside formatting,
+strict host/Windows/Linux-musl/ARM64-Linux-musl Clippy, release build and an offline
+stdio smoke. Independent source/test review found no actionable defect. These
+are generated-transport checks, not native OS or game delivery qualification.
+All nine CI jobs passed for the preceding `734b5d8` checkpoint.
+
+The exact owned game/supervisor remain present, with controller files unchanged.
+The existing single normal OS authorization request is still pending; no denied
+memory probe was retried and no game input, pause, cursor movement or screenshot
+occurred. The next live prerequisite remains stationary current-shortcut
+qualification after authorization. Construction placement, clean two-year
+acceptance and the full recorded campaigns remain unfinished.
+
 ## Mac ordinary T opener and strict receipts — 23 October 2026
 
 The independent `include_shortcut` option checks the named construction button's

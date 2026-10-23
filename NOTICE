@@ -91,6 +91,8 @@ Upstream foundation and attribution:
   launch/macos/construction_open.rs adapter uses ordinary macOS key events,
   typed original bindings and strict durable receipts; it executes no engine
   callback or memory write. Physical delivery remains subject to live qualification.
+  native/src/platform/key_once.rs independently implements ordinary key-pair
+  sequencing, positive pre-down refusals and unconditional release cleanup.
   They reuse the attributed construction semantics
   without copying upstream UI code or another platform's offsets. These readers
   execute no callback and grant no placement or input authority.
