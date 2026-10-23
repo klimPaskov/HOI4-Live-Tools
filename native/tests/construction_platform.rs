@@ -75,6 +75,18 @@ fn mac_controls_refuse_before_snapshot_identity_or_reads() {
 }
 
 #[test]
+fn mac_ui_probe_refuses_linux_before_any_process_access() {
+    let process = UnavailableProcess::new(StringAbi::LibStdCxx);
+    assert_eq!(
+        construction::mac_ui::snapshot(&process, "arms_factory", 64)
+            .unwrap_err()
+            .code,
+        "unsupported_platform"
+    );
+    process.assert_untouched();
+}
+
+#[test]
 fn mac_find_refuses_with_and_without_requested_state_before_any_process_access() {
     let process = UnavailableProcess::new(StringAbi::LibCxx);
     for state in [None, Some(1), Some(4095)] {

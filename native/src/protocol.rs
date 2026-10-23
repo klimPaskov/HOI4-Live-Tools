@@ -84,6 +84,10 @@ fn tools(commands: Option<&dyn Commands>) -> Value {
     value["tools"]
         .as_array_mut()
         .unwrap()
+        .push(construction::mac_ui::tool());
+    value["tools"]
+        .as_array_mut()
+        .unwrap()
         .push(production_lines::control_snapshot::tool());
     if let Some(commands) = commands {
         value["tools"]
@@ -635,7 +639,7 @@ impl Server {
                     production_lines::control_snapshot::snapshot(process, handle, key, geometry)
                 })
             }
-            "hoi4_construction_target" => {
+            "hoi4_construction_target" | "hoi4_construction_ui_probe" => {
                 if object.keys().any(|k| k != "building_id" && k != "state_id") {
                     return Err(Error::new(
                         "invalid_arguments",
@@ -656,7 +660,13 @@ impl Server {
                         })?,
                 )?;
                 let process = self.process()?;
-                read_only_recovered(|| construction::target_snapshot::snapshot(process, key, state))
+                read_only_recovered(|| {
+                    if name == "hoi4_construction_ui_probe" {
+                        construction::mac_ui::snapshot(process, key, state)
+                    } else {
+                        construction::target_snapshot::snapshot(process, key, state)
+                    }
+                })
             }
             "hoi4_construction_controls" => {
                 if object

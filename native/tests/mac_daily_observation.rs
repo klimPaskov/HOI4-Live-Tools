@@ -2,6 +2,8 @@
 
 #[path = "support/mac_construction_target.rs"]
 mod construction_target;
+#[path = "support/mac_construction_ui.rs"]
+mod construction_ui;
 
 use hoi4_live_native::{
     actions::Epoch,

@@ -1,5 +1,41 @@
 # Clausewitz-MCP Linux validation
 
+## Typed Mac construction UI observation — 23 October 2026
+
+`hoi4_construction_ui_probe` now binds the own campaign, production, target state,
+complete public building catalog and queue, Mac panel ownership, ordinary
+selection and bounded choice membership in one witnessed read. The exact Mac
+layout is independent of the Linux controls/Find readers. Every choice across all
+four grids must validate before the requested button payload is read. Hidden or
+missing paths return incomplete evidence; malformed types, duplicate identities,
+foreign owners and changed read witnesses refuse explicitly.
+
+Thirteen successful stationary RPC samples on the healthy owned Mac game had a
+median of 1.405 ms. The materialized construction panel was hidden, so these
+samples qualify its owner links and inactive selection, not visible grids or
+button geometry. The 25-call probe also checked five target/argument refusals,
+three retained Linux-UI platform refusals, ordinary queue/target reads and the
+unchanged clock. Germany remained paused at 22 May 1936 01:00, speed 3. All 246
+native source/config files and controller files retained their exact contents;
+controller size and timestamps also remained unchanged. There were no input
+calls, leases, cursor movements or observation pauses. Stdio exposes 27 tools.
+
+Fifteen new Mac observer fixtures cover hidden panels, a target after item 64,
+malformed later items, absent later grids, duplicate names, owner/process changes,
+unsupported selection modes and torn reads. A portable fixture also verifies
+zero process access on Linux refusal. Full validation passed 1,451 Rust tests,
+956 Python tests (37 skipped), formatting, strict host/Windows/Linux-musl/
+ARM64-Linux-musl Clippy and the release build. The initial full run found the
+stdio golden tool list still expected 26 tools; its corrected expectation passed.
+Earlier fixture setup failures and that failed run remain preserved privately.
+
+This observer grants no input. Actual visible grid instances, registry backlinks,
+callbacks, current geometry, modal clearance and placement eligibility still need
+qualification. Independent static analysis recovered common Mac GUI-owner fields
+and the root visibility predicate for the next stage; that predicate permits a
+transition state and does not prove settled geometry. The preceding `9d88d3d`
+passed all nine CI jobs. CI for this observer is tracked separately.
+
 ## Construction UI platform boundary — 23 October 2026
 
 Review found three public construction routes still entering Linux-only UI

@@ -21,7 +21,13 @@ the legacy Mac counter no longer stops at the first 128 rows. The compact
 `hoi4_construction_target` reader reports unavailable amounts explicitly.
 Linux-only construction controls, Find/camera and queue UI-label options now
 refuse on Mac before process access. Ordinary queue/location/target reads remain
-available; Mac UI observation needs independently verified bindings.
+available.
+The new separate `hoi4_construction_ui_probe` now qualifies the hidden panel's
+own links and inactive selection: 13 stationary samples, 1.405 ms median and
+zero input, cursor movement or observation pauses. It validates all four bounded
+choice grids before exposing the requested control. Visible instances, registry
+backlinks, callbacks and geometry remain unqualified. Its 1,451 Rust tests,
+956 Python tests (37 skipped), cross-platform checks and release build pass.
 Durable construction UI stages and before/after receipts remain unfinished;
 the clean two-year run and full campaigns are still required.
 

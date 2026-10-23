@@ -7,7 +7,7 @@ pub mod framing;
 pub mod game;
 pub mod gui;
 mod gui_registry;
-#[cfg(target_os = "macos")]
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 pub(crate) mod gui_tree;
 pub mod input_lease;
 pub mod launch;

@@ -9,7 +9,7 @@ const BUILDING: u64 = 0x340000;
 const LINE: u64 = 0x350000;
 const NULL_TEMPLATE: u64 = 0x31f000;
 
-fn construction() -> MacFixture {
+pub(super) fn construction() -> MacFixture {
     let mut f = MacFixture::new();
     f.int(COUNTRY + 8, 1);
     for (a, v) in [

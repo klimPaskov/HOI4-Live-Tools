@@ -115,6 +115,14 @@ JSON and pagination. Unavailable building identity cannot prove a zero total;
 partial evidence returns null amounts. The legacy Mac counter uses this observer,
 removing its former first-128-row limit.
 
+The separate read-only `hoi4_construction_ui_probe` now retains typed own
+panel/selection/choice facts alongside the same catalog, state and full queue.
+It checks independently mapped view/idler/manager links and complete bounded
+choice membership before reading the requested button. Hidden or missing paths
+do not expose a target control. Unverified modes, grid registry backlinks,
+callbacks, geometry, settled readiness and placement authority remain explicit;
+this probe is not connected to worker input.
+
 The observed total is not a durable assignment receipt. The legacy adapter still
 discards private typed identity/context between calls, and its UI placement stages
 are not connected to the worker. A future adapter must retain and revalidate those

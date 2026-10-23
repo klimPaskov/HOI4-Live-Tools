@@ -3,9 +3,11 @@
 //! Layout/field names independently recovered from constructors, serializers,
 //! keyword initializers and arithmetic; see PROVENANCE.md. No engine calls.
 mod buildings;
+mod catalog;
 pub mod controls;
 pub mod find_view;
 mod location;
+pub mod mac_ui;
 mod selection;
 pub mod target_snapshot;
 mod ui;

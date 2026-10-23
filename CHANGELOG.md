@@ -2,6 +2,11 @@
 
 ## Unreleased native preview
 
+- Add a separate typed Mac construction UI probe with independent panel owner
+  links, canonical ordinary selection and complete choice validation before
+  requested-control reads. Share the complete building catalog with target
+  observations; retain explicit limits on visibility, special modes and input.
+
 - Refuse unported Mac construction controls, Find/camera observations and queue
   UI labels before any process access. Keep the verified Mac queue, location
   and target readers available; preserve Linux UI behavior.

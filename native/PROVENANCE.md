@@ -1,5 +1,41 @@
 # Rust foundation provenance
 
+## Typed Mac construction UI observation
+
+`construction/mac_ui.rs` independently uses Mach-O UUID
+`089EA519-6780-353B-8E39-4E9309B444D4`, SHA256
+`09419b087f8b4656c00df337bf838ff34c9b1d816b76cef5383ae6a4ac15b1fb`.
+The 23 October static review retained exact-file metadata, function bytes,
+instruction excerpts, RTTI and installed GUI names outside Git. Addresses here
+are image-relative RVAs; no Linux offsets or upstream UI code were copied.
+
+Manager constructor `0x20e84a0` stores the primary construction allocation at
+`+0x150`. Constructor `0x1ed6880` installs `CCountryConstructionsView` primary
+`0x343aa90`. Base `0x1fc88e0` writes the idler at `+0x428`; its call through
+`0x2388650` stores the manager at `+0x30`. Getter `0x1fc8f30` returns root
+`+0x430`. These owner links precede root payload. Visibility consumer
+`0x1fc8e30` also invokes root virtual `+0x308`; the probe reports only root
+byte `+0x95` bit 8 and explicitly does not claim settled visibility or readiness.
+
+Setter `0x20f4760` writes manager mode `+0x3c0` before selected pointer `+0x3b8`.
+Mode zero retains a default pointer, which this reader does not follow. Selection
+routine `0x1ed6730` passes mode 1 only when the selected pointer differs from
+building database cache `+0x3a8`; equality passes mode 3. The probe joins mode 1
+to the fully validated public catalog; modes 2/3 and the special cache's key
+remain unverified. Both mode and active pointer are final-witness checked.
+
+Consumer `0x1edce50` resolves all four possible-construction sections/grids and
+uses their common pointer lists at `+0x190`, signed count `+0x19c`, stride 8.
+Factory `0x27c4600` calls `0x28522d0`, installing `CStandardGridBox` primary
+`0x34be068`. Only that exact type is admitted. Null grid `0x34b61f8`, base
+`0x34b0b70` and the separate template specialization `0x34be390` are not aliases.
+Full named-path membership and item/template joins precede requested-control
+payload. Choice item `0x343a9b0`, template `+0x20`, container `+0x10`, and generic
+Mac GUI/button fields reuse the independently mapped 18 October reader.
+Actual visible grid instances still require live qualification. Named parent
+membership does not establish registry backlinks, callback delivery, geometry,
+global modal absence or placement eligibility; each remains unavailable.
+
 ## Typed construction target observation
 
 `construction/target_snapshot.rs` and the typed queue/location facts are

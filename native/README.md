@@ -129,6 +129,18 @@ built levels or an assignment receipt. The legacy Mac construction adapter now u
 this full-queue readback rather than summing the first page; durable Mac placement
 and its before/after identity proof remain unfinished.
 
+`hoi4_construction_ui_probe({"building_id":"arms_factory","state_id":64})`
+adds a separate read-only Mac observation. Own campaign/production/state,
+the complete public catalog and queue, panel owner links, ordinary selection
+and building-choice membership share one witness bracket. Hidden panels omit
+choice reads. A visible panel must pass all four bounded grids before the
+requested button state is exposed; there is no 64-item prefix limit. Missing
+paths return incomplete membership with no control, while malformed types,
+duplicates, ownership changes and torn reads refuse. Only mode 1 has a canonical
+selected key; modes 2/3 remain explicitly unverified. Local visibility and
+button state grant no input, geometry, callback, settled-frame or placement
+authority. Linux refuses this Mac-specific probe before process access.
+
 `hoi4_construction_queue` is a read-only preview (`offset` 0–2048, `limit` 1–128,
 default 32). It validates the entire own collection before paging, recognizes
 exact building and railway layouts, and retains unsupported-type coverage.
@@ -420,6 +432,8 @@ anchors do not establish a load-generation token.
 | `hoi4_production_close` | Opt-in Linux preview: close settled production or no-op when already closed in the idle view; Production008 passed manual closing, replay/no-op and Research/Focus handoff; mixed-worker live validation pending |
 | `hoi4_production_attempt` | Opt-in Linux preview: one ordinary factory step in an already-open panel, durable original identity/count and canonical readback; selected 10→11→10 gate passed |
 | `hoi4_construction_queue` | Own building/railway lines, canonical keys and signed cost/work counters; one dockyard observed in run071. Run072 observed one state/label with a late-lease deviation; selection and province/railway coverage remain unverified |
+| `hoi4_construction_target` | Complete witnessed queued amounts for one public building and own state; incomplete evidence returns null amounts |
+| `hoi4_construction_ui_probe` | Mac-only own panel/selection/full-choice observation; no input, geometry, settled-frame or placement authority |
 | `hoi4_technology_list` | Canonical loaded technology IDs with filtering/pagination; no eligibility inference |
 | `hoi4_input_geometry` | GUI dimensions, scale, pointer and conditional source-window diagnostics; no click authority |
 | `hoi4_research_folders` | Exact loaded public folder IDs, independent of open GUI; no technology mapping or eligibility authority |
