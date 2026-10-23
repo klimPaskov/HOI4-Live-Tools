@@ -1,5 +1,15 @@
 # Mac continuation checkpoint — 23 October 2026
 
+The new construction topbar probe passes 1,467 Rust tests and the full Python
+suite, but its first live attempt was refused before reading game memory by
+macOS task-port authorization (`-60007`). The previously working runtime now
+reports the same refusal. Developer Tools is still enabled; local task-port
+reauthorization is required. No input or security-policy change occurred, and
+controller files are unchanged. The running game's exact identities and
+1920×1080 client were confirmed through OS metadata. Its last successfully read
+campaign state is the checkpoint below. Offline routing work continues;
+the new opener has no live qualification or enabled input stage yet.
+
 The next-day retry on `3b84ebc` passed with Luna medium. Germany is paused on
 22 May 1936 at 01:00, speed 3: infantry has 12 factories and support has 3.
 All twelve revision-3 entries are Complete. The original support `NotQueued`

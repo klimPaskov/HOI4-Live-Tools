@@ -88,6 +88,10 @@ fn tools(commands: Option<&dyn Commands>) -> Value {
     value["tools"]
         .as_array_mut()
         .unwrap()
+        .push(construction::mac_panel::tool());
+    value["tools"]
+        .as_array_mut()
+        .unwrap()
         .push(production_lines::control_snapshot::tool());
     if let Some(commands) = commands {
         value["tools"]
@@ -638,6 +642,23 @@ impl Server {
                 read_only_recovered(|| {
                     production_lines::control_snapshot::snapshot(process, handle, key, geometry)
                 })
+            }
+            "hoi4_construction_panel_probe" => {
+                if object.keys().any(|key| key != "include_geometry") {
+                    return Err(Error::new(
+                        "invalid_arguments",
+                        "Only include_geometry accepted",
+                    ));
+                }
+                let geometry = object
+                    .get("include_geometry")
+                    .map(Value::as_bool)
+                    .unwrap_or(Some(false))
+                    .ok_or_else(|| {
+                        Error::new("invalid_arguments", "include_geometry must be boolean")
+                    })?;
+                let process = self.process()?;
+                read_only_recovered(|| construction::mac_panel::snapshot(process, geometry))
             }
             "hoi4_construction_target" | "hoi4_construction_ui_probe" => {
                 if object.keys().any(|k| k != "building_id" && k != "state_id") {

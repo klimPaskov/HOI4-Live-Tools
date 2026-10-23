@@ -178,6 +178,7 @@ fn stdio_is_json_and_notifications_have_no_reply() {
             "hoi4_construction_find_view",
             "hoi4_construction_target",
             "hoi4_construction_ui_probe",
+            "hoi4_construction_panel_probe",
             "hoi4_production_controls"
         ]
     );

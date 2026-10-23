@@ -82,6 +82,12 @@ Upstream foundation and attribution:
   and the independently verified Mac layouts without Linux UI traversal.
   Neither path executes a game callback or writes game memory.
 
+  native/src/construction/mac_ui.rs and construction/mac_panel.rs independently
+  recover the current Mac construction view, own GUI ownership, named topbar
+  opener and callback data. They reuse the attributed construction semantics
+  without copying upstream UI code or another platform's offsets. These readers
+  execute no callback and grant no placement or input authority.
+
   The durable observation producer extends that own-state model to the separately
   verified Mac layouts with exact process/scope persistence. The Mac recording
   bridge is an independent ScreenCaptureKit integration; it has no game-input

@@ -1,5 +1,7 @@
 #![cfg(unix)]
 
+#[path = "support/mac_construction_panel.rs"]
+mod construction_panel;
 #[path = "support/mac_construction_target.rs"]
 mod construction_target;
 #[path = "support/mac_construction_ui.rs"]

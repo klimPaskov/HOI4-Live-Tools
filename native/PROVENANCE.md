@@ -1,5 +1,38 @@
 # Rust foundation provenance
 
+## Mac construction topbar opener observation
+
+`construction/mac_panel.rs` independently maps the same exact Mac build pinned
+below. Manager constructor `0x20e84a0` stores the topbar at `+0x188`; construction
+through `0x22f2c30` / `0x22f0840` installs primary `0x3489640`, own idler `+0x58`,
+manager `+0x60` and the common manager link `+0x30`. Root `+0x68` and the complete
+named path through `country_menu_window`, `after_faction_button` and
+`after_intel_agency_button` lead to `construction_button`. Setup `0x22f3410`
+caches the country-menu GUI-object pointer at `+0x88` and button at `+0x7428`.
+Both aliases must equal their complete named-membership result.
+
+The exact Standard button and its own GUI registry reuse independently recovered
+Mac types. Observer secondary primary `0x34ab360` at button `+0x70` owns head/tail
+`+0x78/+0x80`, signed count `+0x88` and one-byte notification state `+0x8c`.
+The complete reciprocal list must contain only topbar `+0x3290`, with zero node
+removal marks. Single-observer override `+0x90` and early handler `+0xc0` must be
+null. Exact glue primary `0x3489788` holds a function-storage pointer at `+0x30`:
+functor primary `0x3489818`, member `0x22f27d0`, zero adjustment and own topbar
+receiver. Ordinary down/release notifications can also invoke storage pointers
+`+0x150/+0x180/+0x2d0/+0x60/+0x1b0/+0x1e0`; precondition notification can invoke
+`+0x3c0`. The observer requires all seven absent, before dependent payload.
+These fields are final-witness checked; no function is executed.
+
+The member requests manager mode `0x11` through `0x20eef40`. Managed mode at
+`+0x3a8` is distinct from construction selection at `+0x3c0`. Selecting the
+already-selected managed mode toggles it closed, so mode `0x11` skips opener
+reads even while visibility is pending. The optional rectangle comes from the
+bound renderer only when local ancestors are visible with idle transitions.
+This does not establish a settled frame or click delivery. The common GUI route,
+capture state, optional global post-click hook and cursor notifications remain
+outside this reader's proof; input remains disabled. Private static evidence
+includes the independent menu/popup/routing investigation and its explicit gaps.
+
 ## Typed Mac construction UI observation
 
 `construction/mac_ui.rs` independently uses Mach-O UUID

@@ -1,5 +1,41 @@
 # Clausewitz-MCP Linux validation
 
+## Mac construction opener prerequisite and authorization refusal — 23 October 2026
+
+`hoi4_construction_panel_probe` adds a separate read-only Mac topbar observer.
+It binds the own campaign, registry, manager and construction view; distinguishes
+managed-panel mode from building selection; and validates complete named child
+membership, cached aliases, exact button ownership and the ordinary opener's
+callback capture. The full observer list, override, optional early handler and
+seven competing click-pair/precondition callback slots are checked. Every field
+participates in final read witnesses. An already-selected construction panel
+skips the toggle control even while its visibility is pending.
+
+Geometry is opt-in and comes from the same bound button renderer only when its
+local ancestors are visible with idle transitions. This is not settled-frame,
+global input-routing or placement proof. No input stage is enabled. Static
+analysis recovered additional menu, popup and GUI dispatch paths, but complete
+mouse routing/capture and other Standard-button gates remain under investigation.
+
+Twelve focused fixtures and the full 1,467 Rust tests pass, together with 956
+Python tests (37 skipped), formatting, strict host/Windows/Linux-musl/ARM64-
+Linux-musl Clippy and the release build. The stdio listing exposes 28 tools.
+The first live probe failed before any game-memory observation: noninteractive
+task-port authorization returned `-60007`. Its harness then raised `KeyError`
+because it expected an overview; both the original MCP refusal and harness
+failure are preserved. A separate capability call through the previously
+working `05c50fd` binary confirmed the same denial. Developer Tools remains
+enabled and the account retains developer-group membership; the cause of the
+required renewed authentication is not established. No security policy changed.
+
+This checkpoint therefore supplies no live opener latency or alias/callback
+qualification. The probe sent no input, obtained no lease and preserved all
+controller file bytes, sizes and timestamps plus all 248 native source/config
+files. Process identities and the 1920×1080 client remained unchanged. The last
+successful game-state observation remains the preceding paused 22 May checkpoint.
+Local task-port reauthorization is required before another memory-based gate;
+offline implementation continues. The preceding `05c50fd` passed all nine CI jobs.
+
 ## Mac construction GUI ownership and local transitions — 23 October 2026
 
 The typed probe now verifies the own GUI-registry backlink of its root, named

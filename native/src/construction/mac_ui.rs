@@ -105,7 +105,7 @@ pub(crate) struct Observation {
     elapsed_ms: f64,
 }
 
-fn exact(r: &Reader<'_>, base: u64, object: u64, primary: u64) -> Result<()> {
+pub(super) fn exact(r: &Reader<'_>, base: u64, object: u64, primary: u64) -> Result<()> {
     pointer(object)?;
     let observed = r.u64(object)?;
     if observed != base + primary {
@@ -119,7 +119,7 @@ fn exact(r: &Reader<'_>, base: u64, object: u64, primary: u64) -> Result<()> {
     }
     Ok(())
 }
-fn window(r: &Reader<'_>, base: u64, value: u64, registry: u64) -> Result<u64> {
+pub(super) fn window(r: &Reader<'_>, base: u64, value: u64, registry: u64) -> Result<u64> {
     pointer(value)?;
     let object = gui_tree::container(r, value, base)?
         .ok_or_else(|| invalid("Exact Mac construction container required"))?;
@@ -138,7 +138,7 @@ fn owner(r: &Reader<'_>, field: u64, registry: u64) -> Result<()> {
 }
 /// Full unique child membership precedes lookup. Never use the first matching
 /// name or the engine's nonnull null-grid fallback as target evidence.
-fn named(
+pub(super) fn named(
     r: &Reader<'_>,
     base: u64,
     parent: u64,

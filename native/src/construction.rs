@@ -7,6 +7,7 @@ mod catalog;
 pub mod controls;
 pub mod find_view;
 mod location;
+pub mod mac_panel;
 pub mod mac_ui;
 mod selection;
 pub mod target_snapshot;

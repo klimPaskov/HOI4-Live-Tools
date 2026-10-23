@@ -9,6 +9,20 @@ failed campaigns. Do not control the shared Windows game.
 
 ## Current checkpoint
 
+The new read-only `hoi4_construction_panel_probe` has 12 focused fixtures and
+passes the full 1,467 Rust / 956 Python tests (37 Python skips), strict
+cross-platform checks and release build. It validates the own named topbar
+opener/callback and optional renderer rectangle, with an already-selected
+no-toggle guard. It grants no input. Its first live attempt was refused before
+game-memory reads by macOS task-port authorization (`-60007`); the prior runtime
+now reports the same denial. Developer Tools remains enabled. Preserve this
+failure and obtain normal local task-port reauthorization before another
+memory-based live gate; do not change security policy or bypass the guard.
+Offline mouse-routing/capture recovery continues. The exact owned game and
+1920×1080 client remain present, controller files are unchanged, and the last
+successfully observed campaign state follows. See
+[opener evidence and limits](CLAUSEWITZ_VALIDATION.md#mac-construction-opener-prerequisite-and-authorization-refusal--23-october-2026).
+
 The next-day Mac continuation passed on tested runtime `3b84ebc`: all twelve
 revision-3 entries are Complete, including the support production request that
 was positively refused before input on the prior day. A fresh request increased
