@@ -290,7 +290,13 @@ fn opener(
         && flags & 8 != 0
         && windows.iter().all(|w| w.visible() && w.idle())
     {
-        Some(shortcut::observe(r, base, registry, button)?)
+        Some(shortcut::observe(
+            r,
+            base,
+            registry,
+            button,
+            windows.last().unwrap().object,
+        )?)
     } else {
         None
     };

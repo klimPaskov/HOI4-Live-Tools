@@ -2,6 +2,10 @@
 
 ## Unreleased native preview
 
+- Support independently verified Mac keyboard receiver families and Standard
+  parent/disabled gates. Keep exact ownership, complete ordered membership and
+  final read witnesses; unknown handlers still refuse. Live delivery is pending.
+
 - Fix Mac construction-opener canonical window comparison and distinguish active
   keyboard membership from reserved cache capacity. Preserve strict receiver
   checks; live shortcut delivery remains unqualified.

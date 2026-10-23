@@ -1,5 +1,20 @@
 # Mac continuation checkpoint — 23 October 2026
 
+The Mac keyboard observer now supports the independently verified Icon, Drag,
+Track, InstantTextBox and Standard receiver paths, including exact graphical
+parent attachment and non-consuming disabled predecessors. Unknown handlers,
+foreign ownership and changed witnesses still refuse. All 45 focused fixtures,
+1,528 Rust / 956 Python tests (37 skipped), strict cross-platform checks, release
+build and offline protocol smoke pass. The retained owned game reached its
+original six-hour deadline and closed with default settings unchanged; its twelve
+completed receipts are preserved. No input accompanied the changes. Next start a
+fresh owned Mac qualification session, check the stationary shortcut, then run
+one bounded Luna-medium opener gate. Construction delivery, the clean two-year
+run and full recorded campaigns remain unfinished. See
+[receiver evidence and limits](CLAUSEWITZ_VALIDATION.md#mac-typed-keyboard-receiver-support--23-october-2026).
+
+Earlier checkpoints follow.
+
 Normal macOS task-port authorization completed, and fresh own-country reads
 succeeded. Live testing then exposed two construction-observer defects: the
 country-menu alias stores the canonical window rather than its GUI subobject,

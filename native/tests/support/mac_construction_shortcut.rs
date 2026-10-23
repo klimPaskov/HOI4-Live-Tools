@@ -1,11 +1,16 @@
 use super::*;
 use hoi4_live_native::construction::mac_panel::{snapshot_with_options, Options};
 
+#[path = "mac_construction_receivers.rs"]
+mod receivers;
+
 const KEYS: u64 = 0x550000;
 const SOURCE: u64 = 0x560000;
 const PREVIOUS: u64 = 0x570000;
 const PREVIOUS_SPRITE: u64 = 0x580000;
 const PREVIOUS_KEYS: u64 = 0x590000;
+const POSITION: u64 = 0x5a0000;
+const PREVIOUS_POSITION: u64 = 0x5b0000;
 
 fn bindings(f: &mut MacFixture, button: u64, data: u64, keys: &[i32]) {
     f.word(button + 0xa0, data);
@@ -47,6 +52,8 @@ fn keyboard() -> MacFixture {
     f.put(GUI + 0x130, &[0]);
     target(&mut f, BUTTON, SPRITE);
     target(&mut f, PREVIOUS, PREVIOUS_SPRITE);
+    f.word(AGENCY + 0x1238, POSITION);
+    parent(&mut f, BUTTON, SPRITE, POSITION);
     bindings(&mut f, BUTTON, KEYS, &[116]);
     bindings(&mut f, PREVIOUS, PREVIOUS_KEYS, &[121]);
     // Reverse order: a known nonmatching predecessor, our named T button, then
@@ -68,6 +75,12 @@ fn reason(f: &MacFixture) -> String {
         .as_str()
         .unwrap()
         .into()
+}
+fn parent(f: &mut MacFixture, button: u64, sprite: u64, position: u64) {
+    f.word(button + 0x178, position);
+    f.word(sprite + 0x108, position);
+    f.word(position, BASE + 0x34b0428);
+    f.put(position + 0x128, &[1]);
 }
 
 #[test]
@@ -186,13 +199,11 @@ fn unsupported_earlier_types_and_foreign_owners_are_not_silently_skipped() {
 }
 #[test]
 fn handler_wrapper_parent_and_pressed_predecessors_refuse_before_shortcuts() {
-    for a in [PREVIOUS + 0xc0, PREVIOUS + 0x178] {
-        let mut f = keyboard();
-        f.word(a, FOREIGN);
-        assert_eq!(reason(&f), "unsupported_keyboard_button_gate");
-        not_read(&f, &[FOREIGN, PREVIOUS_KEYS, KEYS]);
-    }
-    for state in [1, 3, -1, 4] {
+    let mut f = keyboard();
+    f.word(PREVIOUS + 0xc0, FOREIGN);
+    assert_eq!(reason(&f), "unsupported_keyboard_button_gate");
+    not_read(&f, &[FOREIGN, PREVIOUS_KEYS, KEYS]);
+    for state in [1, -1, 4] {
         let mut f = keyboard();
         f.int(PREVIOUS + 0x9c, state);
         assert_eq!(reason(&f), "unsupported_keyboard_button_gate");

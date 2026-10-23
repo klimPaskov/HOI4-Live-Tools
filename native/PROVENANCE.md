@@ -1,5 +1,50 @@
 # Rust foundation provenance
 
+## Typed Mac keyboard receiver prefix
+
+`construction/mac_panel/shortcut.rs` uses independently retained static evidence
+for Mach-O UUID `089EA519-6780-353B-8E39-4E9309B444D4`, SHA256
+`09419b087f8b4656c00df337bf838ff34c9b1d816b76cef5383ae6a4ac15b1fb`.
+All addresses below are RVAs. No upstream implementation or Linux layout was
+copied. Exact constructors, primary RTTI, event handlers and registration setters
+were reviewed against a bounded, stable own-GUI live census.
+
+The reverse keyboard collector `0x27b6dc0` reads graphics `+0x68`, follows each
+source's `+0x138` target and admits flags `& 0xc04 == 0x804`. Exact renderer
+primaries are Sprite `0x34bdb10`, FrameAnimatedSprite `0x34afed0`, CorneredTile
+`0x34acdc0`, Progressbar `0x34ba6f0`, InstantTextObject `0x34b1b30`, Shield
+`0x33e2b28` and TextSprite `0x34c0380`. Their primary constructors preserve the
+common `0x27afad0` base and registration `0x27b6c00` backlink. TextSprite's
+secondary base is not normalized. This establishes no geometry or renderer GUI
+owner field.
+
+Each target requires its exact primary, own GUI `+0x58`, own graphics and
+reciprocal renderer. The class-specific graphics/renderer offsets are Standard
+`+0xd0/+0xd8`, Icon (`0x34a81a8`) `+0xe0/+0xd0`, Drag (`0x34aa400`)
+`+0xd0/+0x100`, Track (`0x34c0918`) `+0xd0/+0xe8`, and InstantTextBox
+(`0x34b1768`) `+0x88/+0xb0`. Icon and Track use the direct CButton handler
+`0x27501b0`: state 0/2, absent custom handler, then disabled shortcuts or complete
+current nonmatching shortcuts with consuming flag bit 2 clear. They never read
+Standard-only fields. Drag handler `0x2752210` is passive for ordinary key kind 1
+only under state 0 and flags `& 0x6000 == 0`. InstantTextBox handler `0x27d0640`
+returns without effects for that key kind on every optional-pointer branch; it
+has no CButton payload.
+
+Standard wrapper `0x275a210` reads parent `+0x178`, its enabled byte `+0x128`,
+and wrapper byte `+0x1d1`. Nonnull parents require exact C2dPositionObject primary
+`0x34b0428` and renderer `+0x108` equality before gate payload. Setter `0x2759b00`
+and common attachment `0x27b00a0` establish that relationship. The named button's
+parent must also equal its already-owned direct CContainerWindow `+0x1238`,
+independently proved by constructor `0x2766490`. Preceding Standard state 3 is
+passive only with absent custom handler, full u32 `+0xc8 == 0` and flags bit 2
+clear. Named state 3 never authorizes a shortcut. Unknown states, inactive
+wrappers, changed links and unrecognized types still refuse.
+
+All fields share the enclosing final witness. The live census found one plain T
+binding among 1,293 receivers through the named construction target, but it was a
+diagnostic observation, not execution of this adapter. Physical delivery and
+atomic cache completion remain unqualified; input permission stays default-off.
+
 ## Mac construction topbar opener observation
 
 `construction/mac_panel.rs` independently maps the same exact Mac build pinned

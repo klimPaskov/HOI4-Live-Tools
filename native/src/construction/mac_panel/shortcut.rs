@@ -4,22 +4,71 @@ use super::{exact, invalid, pointer, Reader, Result, Value};
 use serde::Serialize;
 use serde_json::json;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+enum Kind {
+    Standard,
+    Icon,
+    Drag,
+    Track,
+    InstantTextBox,
+}
+impl Kind {
+    fn observe(r: &Reader<'_>, base: u64, object: u64) -> Result<Self> {
+        pointer(object)?;
+        match r.u64(object)?.checked_sub(base) {
+            Some(0x34aafa0) => Ok(Self::Standard),
+            Some(0x34a81a8) => Ok(Self::Icon),
+            Some(0x34aa400) => Ok(Self::Drag),
+            Some(0x34c0918) => Ok(Self::Track),
+            Some(0x34b1768) => Ok(Self::InstantTextBox),
+            _ => Err(invalid("Unsupported keyboard-target primary type")),
+        }
+    }
+    fn links(&self) -> (u64, u64) {
+        // Independent Mac constructor/registration proofs. In particular,
+        // Icon's +d0 is its renderer; Drag/Track's +d8 is not a pointer.
+        match self {
+            Self::Standard => (0xd0, 0xd8),
+            Self::Icon => (0xe0, 0xd0),
+            Self::Drag => (0xd0, 0x100),
+            Self::Track => (0xd0, 0xe8),
+            Self::InstantTextBox => (0x88, 0xb0),
+        }
+    }
+}
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
-struct Button {
-    object: u64,
-    flags: u32,
+struct BaseGate {
     state: i32,
-    control: u8,
     handler: u64,
-    parent: u64,
-    wrapper: u8,
+    disabled: Option<u32>,
+    control: Option<u8>,
     shortcuts: Vec<Vec<u8>>,
+}
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+struct ParentGate {
+    parent: u64,
+    enabled: Option<u8>,
+    wrapper: u8,
+}
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+enum Gate {
+    Ineligible,
+    Standard(ParentGate, Option<BaseGate>),
+    Direct(BaseGate),
+    Drag { state: i32 },
+    InstantTextBox,
+}
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+struct Receiver {
+    kind: Kind,
+    flags: u32,
+    gate: Gate,
 }
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 struct Node {
     renderer: u64,
     target: u64,
-    button: Option<Button>,
+    receiver: Option<Receiver>,
 }
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub(super) struct Observation {
@@ -27,6 +76,7 @@ pub(super) struct Observation {
     graphics: u64,
     renderer: u64,
     button: u64,
+    named_parent: u64,
     sources: Vec<u64>,
     prefix: Vec<Node>,
     focused: [u64; 2],
@@ -87,13 +137,76 @@ fn plain_t(entries: &[Vec<u8>]) -> usize {
 }
 fn sprite(r: &Reader<'_>, base: u64, node: u64) -> Result<()> {
     pointer(node)?;
-    if ![base + 0x34bdb10, base + 0x34afed0].contains(&r.u64(node)?) {
+    // Exact primary C2dVisibleObject chains with the common +138 backlink.
+    // CTextSprite's secondary base is deliberately not normalized.
+    let primary = r.u64(node)?.checked_sub(base);
+    if ![
+        0x34bdb10, 0x34afed0, 0x34acdc0, 0x34ba6f0, 0x34b1b30, 0x33e2b28, 0x34c0380,
+    ]
+    .into_iter()
+    .any(|rva| Some(rva) == primary)
+    {
         return Err(invalid("Unsupported keyboard-source renderer type"));
     }
     Ok(())
 }
 
-pub(super) fn observe(r: &Reader<'_>, base: u64, gui: u64, button: u64) -> Result<Observation> {
+fn base_gate(
+    r: &Reader<'_>,
+    target: u64,
+    flags: u32,
+    named: bool,
+    disabled_standard: bool,
+) -> Result<(BaseGate, Option<&'static str>)> {
+    let mut gate = BaseGate {
+        state: r.i32(target + 0x9c)?,
+        handler: r.u64(target + 0xc0)?,
+        disabled: None,
+        control: None,
+        shortcuts: Vec::new(),
+    };
+    let mut reason = None;
+    if gate.handler != 0 {
+        reason = Some("unsupported_keyboard_button_gate");
+    } else if gate.state == 3 && disabled_standard && !named {
+        // The disabled base path bypasses shortcuts but can still consume.
+        // C8 is a u32, unlike CC and the Standard parent's enabled byte.
+        let disabled = u32::from_le_bytes(r.read(target + 0xc8, 4)?.try_into().unwrap());
+        gate.disabled = Some(disabled);
+        if disabled != 0 || flags & 2 != 0 {
+            reason = Some("preceding_keyboard_target_can_handle_or_consume_t");
+        }
+    } else if ![0, 2].contains(&gate.state) {
+        reason = Some("unsupported_keyboard_button_gate");
+    } else {
+        let control = r.byte(target + 0xcc)?;
+        gate.control = Some(control);
+        if control & 8 == 0 {
+            if named {
+                reason = Some("named_keyboard_shortcut_disabled");
+            }
+        } else {
+            gate.shortcuts = shortcuts(r, target)?;
+            let count = plain_t(&gate.shortcuts);
+            if named {
+                if count != 1 {
+                    reason = Some("named_button_requires_one_plain_t_binding");
+                }
+            } else if count != 0 || flags & 2 != 0 {
+                reason = Some("preceding_keyboard_target_can_handle_or_consume_t");
+            }
+        }
+    }
+    Ok((gate, reason))
+}
+
+pub(super) fn observe(
+    r: &Reader<'_>,
+    base: u64,
+    gui: u64,
+    button: u64,
+    container: u64,
+) -> Result<Observation> {
     if r.u64(base + 0x35dc058)? != gui {
         return Err(invalid(
             "Keyboard handler must use the same own GUI singleton",
@@ -109,11 +222,16 @@ pub(super) fn observe(r: &Reader<'_>, base: u64, gui: u64, button: u64) -> Resul
     if r.u64(renderer + 0x138)? != button {
         return Err(invalid("Keyboard renderer must retain the named button"));
     }
+    // Only the already-owned direct CContainerWindow supplies this field.
+    exact(r, base, container, 0x34ac0b0)?;
+    let named_parent = r.u64(container + 0x1238)?;
+    exact(r, base, named_parent, 0x34b0428)?;
     let mut out = Observation {
         gui,
         graphics,
         renderer,
         button,
+        named_parent,
         sources: Vec::new(),
         prefix: Vec::new(),
         focused: [r.u64(gui + 0x138)?, r.u64(gui + 0x210)?],
@@ -151,35 +269,35 @@ pub(super) fn observe(r: &Reader<'_>, base: u64, gui: u64, button: u64) -> Resul
             out.prefix.push(Node {
                 renderer: source,
                 target,
-                button: None,
+                receiver: None,
             });
             continue;
         }
-        exact(r, base, target, 0x34aafa0)?;
+        let kind = Kind::observe(r, base, target)?;
+        let (graphics_offset, renderer_offset) = kind.links();
         if r.u64(target + 0x58)? != gui
-            || r.u64(target + 0xd0)? != graphics
-            || r.u64(target + 0xd8)? != source
+            || r.u64(target + graphics_offset)? != graphics
+            || r.u64(target + renderer_offset)? != source
         {
             return Err(invalid(
                 "Keyboard predecessor must retain own GUI, graphics and renderer",
             ));
         }
         let flags = u32::from_le_bytes(r.read(target + 0x64, 4)?.try_into().unwrap());
-        let mut b = Button {
-            object: target,
+        let named = source == renderer;
+        if named && (target != button || kind != Kind::Standard) {
+            return Err(invalid("Named keyboard receiver changed"));
+        }
+        let mut receiver = Receiver {
+            kind,
             flags,
-            state: -1,
-            control: 0,
-            handler: 0,
-            parent: 0,
-            wrapper: 0,
-            shortcuts: Vec::new(),
+            gate: Gate::Ineligible,
         };
         if flags & 0xc04 != 0x804 {
             out.prefix.push(Node {
                 renderer: source,
                 target,
-                button: Some(b),
+                receiver: Some(receiver),
             });
             if source == renderer {
                 out.reason = "named_keyboard_button_ineligible";
@@ -188,32 +306,67 @@ pub(super) fn observe(r: &Reader<'_>, base: u64, gui: u64, button: u64) -> Resul
                 continue;
             }
         }
-        b.state = r.i32(target + 0x9c)?;
-        b.handler = r.u64(target + 0xc0)?;
-        b.parent = r.u64(target + 0x178)?;
-        b.wrapper = r.byte(target + 0x1d1)?;
-        b.control = r.byte(target + 0xcc)?;
-        if b.handler != 0 || b.parent != 0 || b.wrapper != 0 || ![0, 2].contains(&b.state) {
-            out.reason = "unsupported_keyboard_button_gate";
-        } else if b.control & 8 == 0 {
-            if source == renderer {
-                out.reason = "named_keyboard_shortcut_disabled";
-            }
-        } else {
-            b.shortcuts = shortcuts(r, target)?;
-            let count = plain_t(&b.shortcuts);
-            if source == renderer {
-                if count != 1 {
-                    out.reason = "named_button_requires_one_plain_t_binding";
+        let reason = match receiver.kind {
+            Kind::Standard => {
+                let parent = r.u64(target + 0x178)?;
+                if named && parent != named_parent {
+                    return Err(invalid(
+                        "Named keyboard parent differs from own direct container",
+                    ));
                 }
-            } else if count != 0 || flags & 2 != 0 {
-                out.reason = "preceding_keyboard_target_can_handle_or_consume_t";
+                let enabled = if parent != 0 {
+                    exact(r, base, parent, 0x34b0428)?;
+                    if r.u64(source + 0x108)? != parent {
+                        return Err(invalid("Keyboard renderer and button parent differ"));
+                    }
+                    Some(r.byte(parent + 0x128)?)
+                } else {
+                    None
+                };
+                let wrapper = r.byte(target + 0x1d1)?;
+                let parent = ParentGate {
+                    parent,
+                    enabled,
+                    wrapper,
+                };
+                // Keep inactive wrappers unsupported, even for predecessors.
+                if enabled == Some(0) || wrapper != 0 {
+                    receiver.gate = Gate::Standard(parent, None);
+                    Some("unsupported_keyboard_button_gate")
+                } else {
+                    let (gate, reason) = base_gate(r, target, flags, named, true)?;
+                    receiver.gate = Gate::Standard(parent, Some(gate));
+                    reason
+                }
             }
+            Kind::Icon | Kind::Track => {
+                let (gate, reason) = base_gate(r, target, flags, false, false)?;
+                receiver.gate = Gate::Direct(gate);
+                reason
+            }
+            Kind::Drag => {
+                let state = r.i32(target + 0x9c)?;
+                receiver.gate = Gate::Drag { state };
+                if state == 0 && flags & 0x6000 == 0 {
+                    None
+                } else {
+                    Some("unsupported_keyboard_drag_gate")
+                }
+            }
+            Kind::InstantTextBox => {
+                // Its exact handler is passive for ordinary key event kind 1
+                // on all optional-pointer branches. No CButton fields apply.
+                receiver.gate = Gate::InstantTextBox;
+                None
+            }
+        };
+        if let Some(reason) = reason {
+            out.reason = reason;
         }
         out.prefix.push(Node {
             renderer: source,
             target,
-            button: Some(b),
+            receiver: Some(receiver),
         });
         if source == renderer || out.reason != "ordinary_t_route_observed" {
             break;

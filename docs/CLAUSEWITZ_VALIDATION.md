@@ -1,5 +1,35 @@
 # Clausewitz-MCP Linux validation
 
+## Mac typed keyboard receiver support — 23 October 2026
+
+Bounded own-GUI observations and exact-build static analysis resolved every
+receiver through the named construction T button: Icon, Drag, Track,
+InstantTextBox and Standard, plus their seven known renderer families. The last
+diagnostic census retained 14,672 stable read witnesses for 1,293 receivers. It
+found one unmodified T binding, on the named button; 144 attached Standard parents
+had the exact known type and enabled byte, and 13 disabled predecessors had zero
+consuming control. The named parent also matched its own direct container.
+
+The Rust observer now implements those independently verified cases. It validates
+class-specific own GUI/graphics/renderer links before handler payload, keeps
+Standard's parent attachment and disabled-state branch separate, and does not
+borrow Standard fields for other classes. Unknown types, competing shortcuts,
+consuming controls and changed witnesses still refuse. Physical input, atomic
+cache completion and construction placement are not established by this census.
+
+All 45 focused panel fixtures and 1,528 Rust tests pass, along with 956 Python
+tests (37 skipped), formatting, strict host/Windows GNU/Linux musl/ARM64 Linux
+musl Clippy, release build and 28-tool offline stdio smoke. Independent source
+review found no actionable mismatch against the sealed static evidence.
+
+The retained owned game reached its original six-hour supervisor deadline before
+the new runtime's live qualification. It exited with code 0; the temporary display
+holder was released and default settings hashes were unchanged. Its controller
+and twelve completed receipts are preserved. No input grant, clock action,
+screenshot or cursor movement accompanied this implementation. Start a fresh
+owned qualification session for the stationary observer, then one bounded Luna
+medium opener gate. The two-year run and full recorded campaigns remain incomplete.
+
 ## Mac live construction alias and keyboard capacity — 23 October 2026
 
 The single normal macOS task-port authorization request completed successfully.
