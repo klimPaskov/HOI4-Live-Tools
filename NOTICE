@@ -139,3 +139,10 @@ Upstream foundation and attribution:
   from the current Mac executable. It extends the attributed map-observation
   approach without copying upstream projection code or foreign offsets.
   The internal pure calculation has no memory, input or placement authority.
+
+  construction/mac_projection/terrain.rs independently follows the current Mac
+  terrain/slab/height procedures. gui/macos/source_point.rs independently maps
+  the shipped mouse getter, SDL focus/initialization and ordinary coordinate
+  cache. No game bytes, SDL source or upstream UI code were copied. These extend
+  the attributed map-observation approach and supply no current-event, routing,
+  engine-call or placement authority.

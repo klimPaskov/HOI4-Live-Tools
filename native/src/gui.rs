@@ -130,12 +130,25 @@ fn source_window(r: &Reader<'_>, base: u64, dimensions: &[i32]) -> Result<Value>
 }
 
 pub fn input_geometry(process: &dyn Process) -> Result<Value> {
+    input_geometry_with_source(process, false)
+}
+
+pub fn input_geometry_with_source(
+    process: &dyn Process,
+    include_source_point: bool,
+) -> Result<Value> {
+    if include_source_point && process.string_abi() != StringAbi::LibCxx {
+        return Err(Error::new(
+            "unsupported_platform",
+            "Optional source-point observation requires the reviewed Mac layout",
+        ));
+    }
     let start = Instant::now();
     process.begin_snapshot()?;
     let observed = crate::research_ui::Witnesses::new(process);
     let r = Reader::new(&observed);
     let base = process.image_base();
-    let mut value = input_geometry_from_reader(&r, base)?;
+    let mut value = input_geometry_from_reader_with_source(&r, base, include_source_point)?;
     let (end_calls, end_bytes) = observed.finish()?;
     process.check()?;
     value["freshness"] = json!({
@@ -149,8 +162,36 @@ pub fn input_geometry(process: &dyn Process) -> Result<Value> {
 /// Caller supplies the encompassing process and final-witness bracket.
 /// Shared with combined own control diagnostics; never an input authorization.
 pub(crate) fn input_geometry_from_reader(r: &Reader<'_>, base: u64) -> Result<Value> {
+    input_geometry_from_reader_with_source(r, base, false)
+}
+
+fn input_geometry_from_reader_with_source(
+    r: &Reader<'_>,
+    base: u64,
+    include_source_point: bool,
+) -> Result<Value> {
     if r.string_abi() == StringAbi::LibCxx {
-        return Ok(macos::from_reader(r, base)?.diagnostic());
+        let geometry = macos::from_reader(r, base)?;
+        let mut value = geometry.diagnostic();
+        if include_source_point {
+            let source = macos::source_point::from_reader(r, base, &geometry, None)?;
+            value["source_point"] = json!({
+                "source":"cached SDL ordinary absolute mouse coordinates",
+                "point":source.point(),"window_dimensions":source.binding().dimensions(),
+                "owned_sdl_window_association_verified":true,
+                "initialized":true,"relative_mode":false,"warp_mode":false,
+                "cache_completion_verified":false,"fresh_event_verified":false,
+                "current_frame_verified":false,"input_authorized":false,
+                "delivery_verified":false
+            });
+        }
+        return Ok(value);
+    }
+    if include_source_point {
+        return Err(Error::new(
+            "unsupported_platform",
+            "Optional source-point observation requires the reviewed Mac layout",
+        ));
     }
     let gs = r.u64(base + 0x44086a8)?;
     let idler = r.u64(base + 0x44085f8)?;
@@ -276,4 +317,38 @@ pub(crate) fn input_geometry_from_reader(r: &Reader<'_>, base: u64) -> Result<Va
         "unverified":["X11 client origin","HiDPI conversion","per-control scalar/pivot","effective hit routing"],
         "observation_paused_game":false
     }))
+}
+
+#[cfg(test)]
+mod source_option_tests {
+    use super::*;
+    use crate::memory::ReadMemory;
+
+    struct NoAccess;
+    impl ReadMemory for NoAccess {
+        fn read(&self, _: u64, _: usize) -> Result<Vec<u8>> {
+            panic!("Optional Mac source flag accessed another platform");
+        }
+    }
+    impl Process for NoAccess {
+        fn image_base(&self) -> u64 {
+            panic!("Unexpected image access")
+        }
+        fn check(&self) -> Result<()> {
+            panic!("Unexpected snapshot/process access")
+        }
+    }
+    #[test]
+    fn non_mac_opt_in_refuses_before_snapshot_or_memory_access() {
+        let error = input_geometry_with_source(&NoAccess, true).unwrap_err();
+        assert_eq!(error.code, "unsupported_platform");
+        let reader = Reader::new(&NoAccess);
+        assert_eq!(
+            input_geometry_from_reader_with_source(&reader, 0, true)
+                .unwrap_err()
+                .code,
+            "unsupported_platform"
+        );
+        assert_eq!(reader.calls.get(), 0);
+    }
 }

@@ -1,7 +1,10 @@
 //! Passive ray arithmetic for Mach-O 089EA519. The scalar f32 grouping follows
-//! 0x102762460/0x102762150 and normalization body 0x102ac6970. No terrain,
-//! memory reads, input, frame freshness or placement authority is supplied.
+//! 0x102762460/0x102762150 and normalization body 0x102ac6970. The child module
+//! supplies one-projection terrain arithmetic. Neither supplies memory reads,
+//! input, frame freshness or placement authority.
 use crate::error::{Error, Result};
+
+pub(crate) mod terrain;
 
 // Observer policy, not an asserted engine limit. Each integer is exact in f32.
 const MAX_CANVAS: i32 = 32_768;

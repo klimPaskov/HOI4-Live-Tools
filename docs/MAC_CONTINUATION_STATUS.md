@@ -1,4 +1,27 @@
-# Mac continuation checkpoint — 23 October 2026
+# Mac continuation checkpoint — 24 October 2026
+
+The native Mac cached-coordinate MCP observer passed stationary qualification
+with a median 0.257 ms RPC / 0.206 ms reader time. `hoi4_input_geometry` adds
+`include_source_point`, a strict Mac-only boolean defaulting off; default reads
+are unchanged. The owned SDL window, getter, initialized absolute mode and final
+witnesses are checked. The observed cached point differed from the OS cursor,
+so current-event, frame, delivery and input authority remain explicitly false.
+
+The separate terrain/bitmap prototype joined the fixed center pixel to own
+province 6521 and Brandenburg 64 in 0.471 seconds including startup. Public pure
+Rust arithmetic reproduced its captured point bit-for-bit. This does not prove
+the full scene picker, ordinary map-click route, eligibility or placement.
+All 1,761 Rust / 956 Python tests (37 skipped), strict checks on four compilation
+targets, release build and 28-tool stdio smoke pass. The preceding `4a23636`
+checkpoint passed all nine CI jobs. See
+[coordinate and terrain evidence](CLAUSEWITZ_VALIDATION.md#mac-cached-coordinates-and-terrain--24-october-2026).
+
+There were no input calls, cursor movements, screenshots or observation pauses.
+The complete own baseline and all six controller files stayed unchanged, and the
+read-only server exited cleanly. No grant, lease, recorder or worker was opened.
+Construction placement, the clean two-year run and full campaigns remain unfinished.
+
+Earlier checkpoints follow.
 
 The native Mac map/camera owner chain and actual rendered ray fields passed
 bounded read-only checks on the retained 1920×1080 Germany session. The larger

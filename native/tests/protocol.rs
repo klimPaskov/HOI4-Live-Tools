@@ -10,6 +10,49 @@ fn server_binary() -> std::path::PathBuf {
 }
 
 #[test]
+fn geometry_source_option_is_strict_and_defaults_off_before_process_access() {
+    let server = hoi4_live_native::protocol::Server {
+        process: None,
+        unavailable: None,
+    };
+    for args in [
+        json!({"include_source_point":null}),
+        json!({"include_source_point":1}),
+        json!({"include_source_point":"true"}),
+        json!({"include_source_point":true,"click":true}),
+    ] {
+        let reply=server.handle(json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"hoi4_input_geometry","arguments":args}})).unwrap();
+        let body: Value =
+            serde_json::from_str(reply["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+        assert_eq!(body["error"]["code"], "invalid_arguments");
+    }
+    let list = server
+        .handle(json!({"jsonrpc":"2.0","id":2,"method":"tools/list"}))
+        .unwrap();
+    let tool = list["result"]["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|t| t["name"] == "hoi4_input_geometry")
+        .unwrap();
+    assert_eq!(
+        tool["inputSchema"]["properties"]["include_source_point"],
+        json!({"type":"boolean","default":false})
+    );
+    assert_eq!(tool["annotations"]["readOnlyHint"], true);
+    for args in [
+        json!({}),
+        json!({"include_source_point":false}),
+        json!({"include_source_point":true}),
+    ] {
+        let reply=server.handle(json!({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"hoi4_input_geometry","arguments":args}})).unwrap();
+        let body: Value =
+            serde_json::from_str(reply["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+        assert_eq!(body["error"]["code"], "capability_unavailable");
+    }
+}
+
+#[test]
 fn production_controls_requires_exact_read_only_target_before_process_access() {
     let server = hoi4_live_native::protocol::Server {
         process: None,

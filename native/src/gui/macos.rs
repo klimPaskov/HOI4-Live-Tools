@@ -2,6 +2,10 @@
 //! build's CGui/CGraphics constructors and SDL Cocoa creation/move/resize code.
 //! SDL caches contentRectForFrameRect, not the enclosing CG window rectangle.
 //! The OS input backend must separately corroborate this content rectangle.
+// Retained-binding accessors also support a future encompassing Map observer.
+#[allow(dead_code)]
+pub(crate) mod source_point;
+
 use crate::{
     error::{Error, Result},
     memory::{Reader, StringAbi},
@@ -358,6 +362,74 @@ mod tests {
         assert_eq!(report["observation_paused_game"], false);
         assert!(report["freshness"]["read_bytes"].as_u64().unwrap() < 1024);
         assert!(!report.to_string().contains(&W.to_string()));
+    }
+    fn source_fixture() -> Fixture {
+        let mut f = Fixture::new();
+        let provider = I + 0xc0000;
+        for (address, value) in [
+            (I + 0x4c8, provider),
+            (provider, B + 0x34a6988),
+            (B + 0x34a6988 + 0xc8, B + 0x26bbf90),
+            (B + 0x34f9960, B + 0x25714e0),
+            (B + 0x36394e8, W),
+        ] {
+            f.word(address, value);
+        }
+        f.put(B + 0x3639510, &[1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+        f.put(B + 0x36394f0, &960i32.to_le_bytes());
+        f.put(B + 0x36394f4, &540i32.to_le_bytes());
+        f
+    }
+    #[test]
+    fn default_geometry_skips_all_optional_source_payload() {
+        // The original fixture has no provider or SDL coordinate fields.
+        let f = Fixture::new();
+        let default = crate::gui::input_geometry(&f).unwrap();
+        let omitted = crate::gui::input_geometry_with_source(&f, false).unwrap();
+        assert!(default.get("source_point").is_none());
+        assert!(omitted.get("source_point").is_none());
+        assert_eq!(
+            default["freshness"]["read_calls"],
+            omitted["freshness"]["read_calls"]
+        );
+        assert_eq!(
+            default["freshness"]["read_bytes"],
+            omitted["freshness"]["read_bytes"]
+        );
+    }
+    #[test]
+    fn optional_source_is_cached_observation_with_no_pointer_or_authority() {
+        let f = source_fixture();
+        let v = crate::gui::input_geometry_with_source(&f, true).unwrap();
+        let source = &v["source_point"];
+        assert_eq!(source["point"], serde_json::json!([960, 540]));
+        assert_eq!(source["owned_sdl_window_association_verified"], true);
+        for name in [
+            "cache_completion_verified",
+            "fresh_event_verified",
+            "current_frame_verified",
+            "input_authorized",
+            "delivery_verified",
+        ] {
+            assert_eq!(source[name], false);
+        }
+        assert_eq!(v["input_mapping_verified"], false);
+        assert!(!source.to_string().contains(&W.to_string()));
+    }
+    #[test]
+    fn optional_source_dependencies_survive_the_outer_final_witness() {
+        for address in [
+            I + 0x4c8,
+            B + 0x34f9960,
+            B + 0x36394e8,
+            B + 0x3639510,
+            B + 0x36394f0,
+        ] {
+            let mut f = source_fixture();
+            f.changed = Some(address);
+            let e = crate::gui::input_geometry_with_source(&f, true).unwrap_err();
+            assert_eq!(e.code, "torn_read", "{address:x}: {e:?}");
+        }
     }
     #[test]
     fn other_abi_refuses_before_layout_reads() {

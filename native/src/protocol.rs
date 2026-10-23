@@ -49,7 +49,7 @@ fn tools(commands: Option<&dyn Commands>) -> Value {
         {"name":"hoi4_capabilities","description":"Verified runtime capabilities and explicit platform/build limitations.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}},
         {"name":"hoi4_overview","description":"Fresh owned-country process snapshot. Pure bounded reads; never pauses.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}},
         {"name":"hoi4_research","description":"Fresh own completed technology IDs with bounded pagination, and active raw research counters. Progress units, days remaining and eligibility remain unverified. Pure reads; never pauses.","inputSchema":{"type":"object","properties":{"offset":{"type":"integer","minimum":0,"maximum":8192},"limit":{"type":"integer","minimum":1,"maximum":100}},"additionalProperties":false}},
-        {"name":"hoi4_input_geometry","description":"Read-only own GUI pointer, dimensions and scale diagnostics. Does not prove client origin, control geometry or click authorization.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}},
+        {"name":"hoi4_input_geometry","description":"Read-only own GUI dimensions and scale diagnostics. Mac-only include_source_point adds witnessed cached ordinary SDL coordinates joined to the owned window; defaults off. No current event/frame, hit routing or input authorization.","inputSchema":{"type":"object","properties":{"include_source_point":{"type":"boolean","default":false}},"additionalProperties":false},"annotations":{"readOnlyHint":true}},
         {"name":"hoi4_research_slot_control","description":"One own research slot by current array index: conditional ordinary callback binding and raw typed renderer diagnostics. Optional include_geometry adds bounded Sprite cache and typed hierarchy observations. No guessed Background name, coordinates or input authorization.","inputSchema":{"type":"object","properties":{"slot":{"type":"integer","minimum":0,"maximum":31},"include_geometry":{"type":"boolean"}},"required":["slot"],"additionalProperties":false}},
         {"name":"hoi4_research_category","description":"Read-only exact public folder ID association with the current own research tree, named tab, dense selection index and ordinary callback. Optional raw Sprite diagnostics; no tab switch or input authorization.","inputSchema":{"type":"object","properties":{"folder_id":{"type":"string","minLength":1,"maxLength":256},"include_geometry":{"type":"boolean"}},"required":["folder_id"],"additionalProperties":false}},
         {"name":"hoi4_research_folders","description":"Fresh sorted exact installed public research-folder IDs for the verified Linux layout. Native macOS returns unsupported_platform before memory reads. Independent of open GUI; canonical keys only, with no aliases, eligibility, geometry or input authorization. Pure reads; never pauses.","inputSchema":{"type":"object","properties":{},"additionalProperties":false},"annotations":{"readOnlyHint":true}},
@@ -527,7 +527,19 @@ impl Server {
                     ))
                 }
             }
-            "hoi4_input_geometry" if object.is_empty() => gui::input_geometry(self.process()?),
+            "hoi4_input_geometry" => {
+                if object.keys().any(|key| key != "include_source_point") {
+                    return Err(Error::new("invalid_arguments", "Unknown geometry argument"));
+                }
+                let include = object
+                    .get("include_source_point")
+                    .unwrap_or(&Value::Bool(false))
+                    .as_bool()
+                    .ok_or_else(|| {
+                        Error::new("invalid_arguments", "include_source_point must be boolean")
+                    })?;
+                gui::input_geometry_with_source(self.process()?, include)
+            }
             "hoi4_research_slot_control" => {
                 if !object.contains_key("slot")
                     || object

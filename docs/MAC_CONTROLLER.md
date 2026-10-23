@@ -325,6 +325,20 @@ point, or qualify arbitrary modal routing and campaign integration.
 
 ## Action limits and recovery
 
+`hoi4_input_geometry` can separately observe cached Mac source coordinates with
+`include_source_point: true`. This strict boolean defaults off and changes no
+default reads or controller permissions. It validates the own SDL window, exact
+mouse getter/current dispatch, initialization and ordinary absolute mode inside
+the complete witnessed geometry read. Linux refuses this option before snapshot
+or memory access. The typed foundation can retain the original provider and
+window for a future adapter; public JSON never becomes input authority.
+
+The stationary test measured 0.257 ms median RPC and found that the cached point
+differed from the OS cursor. Initialization and mouse focus do not prove the
+latest event. A future click requires separate original-scope OS/client/cache
+correlation, GUI/scene routing and same-attempt action readback. This option sends
+no input and grants no current-event, frame, delivery or placement authority.
+
 Each Mac worker cycle admits at most one durable input intent under its original
 five-second deadline, narrowed by the existing lease and cancellation flag. The
 new-day readiness scan still skips waiting or unavailable entries; an active

@@ -7728,3 +7728,58 @@ recovered but not yet ported or live qualified. SDL window association, complete
 scene/GUI picking precedence, eligibility and ordinary placement input remain
 unqualified. No map click occurred. The clean two-year run and full recorded
 campaigns remain unfinished; paused component tests measure no game-year rate.
+
+## Mac cached coordinates and terrain — 24 October 2026
+
+The optional Mac `hoi4_input_geometry` argument `include_source_point` defaults
+off. Omission and explicit false preserve the original output and read counts.
+The source observer requires the current exact mouse getter/dynapi target,
+original owned SDL window, matching dimensions and initialized ordinary absolute
+coordinates before reading X/Y. Focus changes can retain old X/Y while resetting
+initialization, so initialization 1, relative 0 and warp 0 are required. Original
+typed provider/Geometry retention is available internally; no serialized output
+is parsed back into input authority. Linux opt-in refuses before snapshot reads.
+
+All 1,761 Rust tests and 956 Python tests (37 skipped), strict Clippy on Mac,
+Windows GNU and x86_64/ARM64 Linux musl, release build and default 28-tool stdio
+smoke passed. The additions include 15 terrain, 17 typed source-point, three Mac
+observer integration, one no-access platform and one strict protocol fixture.
+All 38 unrelated WIP files stayed byte-exact. The preceding `4a23636` passed all
+nine GitHub CI jobs. This source adds no construction action or worker permission.
+
+Stationary native MCP qualification passed on the original owned native 1920×1080
+Mac Germany session: 17 tool calls, median optional RPC 0.257 ms and reader
+0.206 ms. The five optional reads each retained 78 logical read requests and
+632 bytes, including final witnesses. Complete own clock, Research, Focus,
+production and queue remained unchanged, as did all six controller files.
+There were zero input calls, activations, cursor movements, screenshots or
+observation pauses. No input binding, lease, grant, recorder or worker was opened;
+the read-only server ended with EOF exit 0 under the original supervisor expiry.
+
+The cached SDL point was `[62, 10]`; the stationary OS cursor converted to client
+`[1045, 742]`. Their mismatch is preserved. This qualifies the cached observer,
+not current cursor mapping: initialization/focus and identical repeated reads
+are insufficient event/frame proof. All freshness, delivery and input-authority
+flags stay false. A first copied candidate lacked executable permission and
+failed before child creation or game reads; correcting only that artifact's mode
+allowed the read-only test. Its original failure remains preserved.
+
+A separate private prototype verified exact rooted CMap RTTI and repeated terrain,
+height-grid and bitmap headers, all 5632×2048 with contiguous height-byte strides.
+One fixed requested center pixel used fresh rendered matrices and one active
+projection, with no plane substitution. Ninety terrain nodes, 39 sampler calls
+over 20 unique bytes and 18 candidates produced world point
+`[3008.0068359375, 9.699999809265137, 1568.7242431640625]`. One bounded bitmap entry
+joined to province 6521 and requested own-owned-and-controlled Brandenburg 64;
+own authorization preceded location payload. Samples, headers, catalog entries,
+owners and own clock/process scope were repeated. The probe took 0.471 seconds
+including startup, with 144 Reader calls/1,330 bytes excluding its separate
+clock-context readers. It sent no input and did not verify the actual mouse.
+
+Public pure Rust ray/terrain sources reproduced that captured case bit-for-bit,
+including all candidate/traversal/sample counts, with zero process reads. This
+is captured-data equivalence; a public map memory reader is not yet connected.
+Terrain/bitmap lookup does not establish the full scene picker, strategic-region
+preference, ordinary mouse phase, GUI interception, eligibility or map placement.
+No map button was pressed. The clean two-year run and full recorded campaigns
+remain unfinished, and paused component tests establish no game-year rate.

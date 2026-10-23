@@ -1,6 +1,22 @@
 # Rust foundation provenance
 
-## Passive Mac ray arithmetic
+## Passive Mac cached source coordinates
+
+`gui/macos/source_point.rs` independently follows the same Mac UUID/SHA below.
+CPdxMouse virtual `+0xc8` (`0x1026bbf90`, helper `0x1026b5e60`) reaches the
+current SDL dynapi target `0x1025714e0`, which reads cached signed X/Y. Focus
+setter `0x10256fcb0` changes the window and resets initialization without clearing
+coordinates. Cocoa absolute path `0x102642d70` truncates window-relative X and
+window-height minus Y; the getter adds no scale/origin transformation.
+
+The reader binds the original owned Geometry/provider/window, exact getter and
+current dispatch target, requires initialization 1 and relative/warp modes 0
+before coordinates, and relies on the encompassing final witnesses. Public
+`include_source_point` defaults off and adds no reads when omitted. Live testing
+found that valid cached coordinates can differ from the OS pointer; no current
+event, frame, delivery or input authority is supplied. No SDL source was copied.
+
+## Passive Mac ray and terrain arithmetic
 
 `construction/mac_projection.rs` independently follows Mach-O UUID
 `089EA519-6780-353B-8E39-4E9309B444D4`, SHA-256
@@ -16,6 +32,16 @@ code, SDL source or foreign offsets were copied. Own rooted live metadata and
 captured-data calculations are separate evidence. The pure function supplies
 no process reads, terrain intersection, frame freshness, province identity,
 input, eligibility or placement authority.
+
+The child `construction/mac_projection/terrain.rs` separately follows complete
+procedures `0x1019302e0`, `0x102a9bc00`, `0x102a9bd80` and height sampling
+`0x1007c5240`. It preserves ordered quadrant traversal, the 256-candidate cap,
+byte-height floor, representative leaf distance and closest-candidate grouping.
+An unsupported or indeterminate case refuses. Node/sample bounds are observer
+policies. It supports one supplied typed ray and a caller-owned sample callback;
+there is no process reader, alternate-projection or plane-fallback substitution,
+full scene picker, GUI routing or placement permission. Captured-data equivalence
+is separate from the private prototype's live own-state join.
 
 ## Retained Mac Find identity and optional edit focus
 

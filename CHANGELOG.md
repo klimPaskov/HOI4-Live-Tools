@@ -2,6 +2,14 @@
 
 ## Unreleased native preview
 
+- Add optional Mac cached SDL source-point diagnostics with exact owned-window,
+  getter and initialized absolute-mode checks. Default geometry reads stay
+  unchanged. Stationary native MCP qualification measured 0.257 ms median RPC;
+  the cached point differed from the OS pointer and grants no click authority.
+  Add internal bounded one-projection terrain arithmetic; the captured center
+  point reproduces bit-for-bit and joins own Brandenburg in a private prototype.
+  Full picking, placement and worker integration remain unfinished.
+
 - Add internal Mac ray arithmetic from independently recovered current-build
   projection, affine and normalization procedures, with bounded finite inputs
   and explicit scalar rounding. Eighteen debug/release fixtures and captured

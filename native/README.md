@@ -104,6 +104,17 @@ Original typed identity and complete queue/selection are checked throughout;
 possible partial input stays quarantined. It grants no placement or worker
 permission. See the [Find contract](../docs/MAC_CONTROLLER.md#construction-find-qualification).
 
+`hoi4_input_geometry` accepts Mac-only `include_source_point: true`. Omission or
+false adds no source reads. The optional output reports cached ordinary SDL
+coordinates joined to the original owned window, with complete final witnesses.
+Its stationary MCP test measured 0.257 ms median RPC; the cached point differed
+from the OS cursor. Current-event/frame, routing, delivery and input authority
+remain false. This is a diagnostic, not a click point.
+
+Internal ray/terrain arithmetic now reproduces a captured center-point calculation
+bit-for-bit. The private terrain/bitmap prototype joined it to own Brandenburg;
+scene picking, ordinary map input and construction placement remain unqualified.
+
 The Mac durable worker has passed recorded Research, Focus and production
 component tests, including plan revisions and reconnects. Canonical Mac process
 timestamps retain byte-exact scope and restart equality. The separate legacy
