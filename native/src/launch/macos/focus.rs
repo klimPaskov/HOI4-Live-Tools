@@ -136,6 +136,17 @@ fn wait_for<T>(until: Instant, probe: impl FnMut() -> Result<Option<T>>) -> Resu
         probe,
     )
 }
+/// Visibility can precede the game's displayed-country binding. Observe that
+/// transition inside the original deadline without clicking the opener again.
+/// A nonzero foreign country remains an immediate refusal from the probe.
+fn wait_for_tree(
+    until: Instant,
+    mut probe: impl FnMut() -> Result<binding::FocusViewState>,
+) -> Result<()> {
+    wait_for(until, || {
+        Ok((probe()? == binding::FocusViewState::Ready).then_some(()))
+    })
+}
 fn wait_window<T>(
     until: Instant,
     window: Duration,
@@ -305,9 +316,7 @@ fn start_inner(
     trace.stage("clear_notices");
     clear_notices(process, keys)?;
     trace.stage("inspect_open_views");
-    if !sample(process, &owner, key, |r, i, o| {
-        binding::open(r, i, o, MACOS.focus_view)
-    })? {
+    if sample(process, &owner, key, binding::view_state)? == binding::FocusViewState::Hidden {
         if !sample(process, &owner, key, |r, i, o| {
             binding::open(r, i, o, MACOS.politics_view)
         })? {
@@ -325,14 +334,9 @@ fn start_inner(
         let probe = || sample(process, &owner, key, binding::focus_button);
         let candidate = settle(until, probe)?;
         click(process, keys, &candidate, until, probe)?;
-        trace.stage("open_tree_readback");
-        wait_for(until, || {
-            Ok(sample(process, &owner, key, |r, i, o| {
-                binding::open(r, i, o, MACOS.focus_view)
-            })?
-            .then_some(()))
-        })?;
     }
+    trace.stage("open_tree_readback");
+    wait_for_tree(until, || sample(process, &owner, key, binding::view_state))?;
     trace.stage("tree_layout");
     wait_for(until, || {
         Ok(sample(process, &owner, key, binding::node)?.map(|_| ()))
@@ -432,6 +436,36 @@ fn start_inner(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn tree_readiness_waits_for_positive_own_binding_without_preparation_or_input() {
+        use binding::FocusViewState::{Hidden, Opening, Ready};
+        let mut states = [Ok(Opening), Ok(Hidden), Ok(Ready)].into_iter();
+        let mut observations = 0;
+        wait_for_tree(Instant::now() + Duration::from_secs(1), || {
+            observations += 1;
+            states.next().unwrap()
+        })
+        .unwrap();
+        assert_eq!(observations, 3);
+        assert!(states.next().is_none());
+    }
+    #[test]
+    fn tree_readiness_does_not_retry_foreign_country_or_extend_original_deadline() {
+        let mut observations = 0;
+        let error = wait_for_tree(Instant::now() + Duration::from_secs(1), || {
+            observations += 1;
+            Err(Error::new(
+                "foreign_focus_scope",
+                "different displayed country",
+            ))
+        })
+        .unwrap_err();
+        assert_eq!(error.code, "foreign_focus_scope");
+        assert_eq!(observations, 1);
+        let until = Instant::now() + Duration::from_millis(10);
+        let error = wait_for_tree(until, || Ok(binding::FocusViewState::Opening)).unwrap_err();
+        assert_eq!(error.code, "action_deadline");
+    }
     #[test]
     fn stage_window_expiry_is_distinct_from_the_original_action_deadline() {
         let future = Instant::now() + Duration::from_secs(10);

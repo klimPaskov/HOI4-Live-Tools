@@ -6440,3 +6440,59 @@ reopen. Validation passed 1,373 Rust tests, 956 Python tests (37 skipped), forma
 strict host/Windows/Linux-musl/ARM64-Linux-musl Clippy and a release build. These
 checks do not establish durable live Focus acceptance; the next recorded gate
 combines Focus, Research and one existing-line production allocation.
+
+## Mac mixed Focus worker ownership refusal — 23 October 2026
+
+One Luna player at medium reasoning ran immutable `b31e10b` against the healthy
+owned 1080p Mac Germany session in FAIR mode. Economic Growth was already active
+from the preceding verified manual gate. The plan queued Autobahn then KdF,
+EM Engineering then Radio in slot 2, and one infantry-equipment factory step.
+
+The paused worker verified EM Engineering and the 10→11 factory change. All 21
+production allocations were checked; only the requested line changed, and the
+other Research slots remained empty. Both completed entries and the plan survived
+STOP/release/EOF and a new broker/worker. Two 3.2-second idle windows preserved
+controller-file bytes, sizes and modification times. The second worker then ran
+at speed 3 without observation pauses.
+
+After natural Economic Growth completion, Autobahn preparation failed with
+`foreign_focus_scope` at `tree_layout`: stage 3.895 ms, total 1,028.562 ms, zero
+requested pans. The exact displayed-country value was not retained; the error
+merged unset and different-country cases. Existing video frames show the
+completion popup followed by Politics. They do not establish a foreign tree or a
+successful tree opening. No node/Start stage was reached, no retry occurred, and
+the original durable Autobahn intent remains unresolved. Radio and KdF stayed
+pending. This is a failed mixed gate, not durable Focus acceptance.
+
+STOP joined the worker. Lease release returned `action_uncertain` because the
+controller was quarantined; broker EOF ended its live ownership. The recorder
+stopped explicitly and finalized 120.293333 seconds, 3,544 encoded frames at
+1920×1108. All 235 native source files and pinned helpers stayed unchanged. The
+69 player RPCs included 15 bounded read-only `input_busy` digest retries and the
+refused release. Successful overview and governor-call medians were 0.346 ms and
+10.666 ms respectively; the latter mixes start, stop and digest operations and is
+not a pure digest benchmark.
+
+The last actual driver overview was 4 February 1936 15:00, unpaused at speed 3;
+the handback's 3 February date came from the preceding persisted progress sample.
+No end-test pause or recovery input was issued. After explicit handback, a separate
+broker without input access read 8 March 21:00, completed Economic Growth, idle
+Focus, EM Engineering still active and infantry allocation 11. The reads did not
+change any controller files. The exact owned supervisor then closed the game;
+its return code was 0 and default settings were unchanged. This was supervisor
+cleanup, not a verified ordinary UI exit. No complete unpaused interval or
+per-year campaign throughput is claimed.
+
+The subsequent readiness correction distinguishes Hidden, Opening (visible but
+country unset), and Ready (visible and positively own-bound). Only Ready ends the
+bounded observation wait. A nonzero foreign country still refuses immediately,
+without following its pointer or reading item/panel arrays. Strict node, pan and
+Start checks continue to reject unset ownership. The opener is never clicked
+again during this wait, and the original action deadline is retained. Sparse
+fixtures exercise these states and final witnesses; a fresh live gate must
+establish whether the correction resolves the observed failure.
+
+Validation of the correction passed 1,381 Rust tests, 956 Python tests (37
+skipped), formatting, strict host/Windows/Linux-musl/ARM64-Linux-musl Clippy and
+the release build. These checks do not establish live readiness or campaign
+acceptance.

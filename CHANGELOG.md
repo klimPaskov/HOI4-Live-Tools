@@ -2,6 +2,13 @@
 
 ## Unreleased native preview
 
+- Preserve the first Mac Focus/Research/production worker gate: Research and the
+  factory step survived reconnect with unchanged idle files, but Focus navigation
+  quarantined an ownership mismatch after natural completion. Wait for positive
+  own-tree readiness within the original deadline; visibility alone is no longer
+  enough. Keep foreign-country refusal and the unresolved controller. This
+  correction requires fresh live qualification.
+
 - Add a default-off Mac daily Focus preview with coherent typed own-target
   evidence, retained target/status guards, and a fresh activation receipt.
   Queued Focus entries require natural completed membership before advancing.

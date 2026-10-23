@@ -317,12 +317,42 @@ fn view(r: &Reader<'_>, image: u64, own: &Owner, slot: u64) -> Result<View> {
 pub(super) fn open(r: &Reader<'_>, image: u64, own: &Owner, slot: u64) -> Result<bool> {
     gui_tree::visible(r, view(r, image, own, slot)?.root)
 }
-fn own_view(r: &Reader<'_>, image: u64, own: &Owner) -> Result<View> {
-    let v = view(r, image, own, MACOS.focus_view)?;
-    if r.u64(v.object + MACOS.displayed_country)? != own.country {
+/// Readiness only. None of these states binds a target or authorizes input.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum FocusViewState {
+    Hidden,
+    Opening,
+    Ready,
+}
+fn displayed_country(r: &Reader<'_>, v: &View, own: &Owner) -> Result<u64> {
+    let displayed = r.u64(v.object + MACOS.displayed_country)?;
+    if displayed != 0 && displayed != own.country {
         return Err(Error::new(
             "foreign_focus_scope",
-            "Positive displayed own country required",
+            "Displayed Focus country differs from own country",
+        ));
+    }
+    Ok(displayed)
+}
+/// Used only within the caller's complete ownership/witness bracket. Do not
+/// follow the displayed country or inspect item, panel, or renderer payloads.
+pub(super) fn view_state(r: &Reader<'_>, image: u64, own: &Owner) -> Result<FocusViewState> {
+    let v = view(r, image, own, MACOS.focus_view)?;
+    let displayed = displayed_country(r, &v, own)?;
+    if !gui_tree::visible(r, v.root)? {
+        Ok(FocusViewState::Hidden)
+    } else if displayed == 0 {
+        Ok(FocusViewState::Opening)
+    } else {
+        Ok(FocusViewState::Ready)
+    }
+}
+fn own_view(r: &Reader<'_>, image: u64, own: &Owner) -> Result<View> {
+    let v = view(r, image, own, MACOS.focus_view)?;
+    if displayed_country(r, &v, own)? == 0 {
+        return Err(Error::new(
+            "foreign_focus_scope",
+            "Displayed Focus country is unset",
         ));
     }
     if !gui_tree::visible(r, v.root)? {

@@ -490,15 +490,157 @@ fn zero_or_foreign_displayed_country_refuses_before_item_and_panel_arrays() {
         for detail_probe in [false, true] {
             let mut f = Fake::new();
             f.word(FOCUS_VIEW + 0x1990, country);
-            let code = if detail_probe {
-                observe(&f, KEY, None, detail).unwrap_err().code
+            let error = if detail_probe {
+                observe(&f, KEY, None, detail).unwrap_err()
             } else {
-                observe(&f, KEY, None, symbols).unwrap_err().code
+                observe(&f, KEY, None, symbols).unwrap_err()
             };
-            assert_eq!(code, "foreign_focus_scope");
+            assert_eq!(error.code, "foreign_focus_scope");
+            assert_eq!(
+                error.message,
+                if country == 0 {
+                    "Displayed Focus country is unset"
+                } else {
+                    "Displayed Focus country differs from own country"
+                }
+            );
             assert!(f.untouched(FOCUS_VIEW + 0x18f0, 16));
             assert!(f.untouched(FOCUS_VIEW + 0x1938, 16));
         }
+    }
+}
+
+fn sparse_readiness(displayed: u64, visible: bool) -> Fake {
+    let mut f = Fake::new();
+    f.word(FOCUS_VIEW + MACOS.displayed_country, displayed);
+    f.put(FOCUS_ROOT + 0x95, &[if visible { 8 } else { 0 }]);
+    // Readiness must work without materialized collections, their payloads,
+    // zoom, or root children. A following country pointer is also unmapped.
+    f.unmap(FOCUS_VIEW + MACOS.items, 16);
+    f.unmap(FOCUS_VIEW + MACOS.panels, 16);
+    f.unmap(FOCUS_VIEW + MACOS.zoom, 4);
+    f.unmap(FOCUS_ROOT + 0xd30, 16);
+    f.unmap(ITEM, 0x1000);
+    f.unmap(PANEL, 0x1000);
+    f
+}
+
+fn assert_no_readiness_payload(f: &Fake) {
+    assert!(f.untouched(FOCUS_VIEW + MACOS.items, 16));
+    assert!(f.untouched(FOCUS_VIEW + MACOS.panels, 16));
+    assert!(f.untouched(FOCUS_VIEW + MACOS.zoom, 4));
+    assert!(f.untouched(FOCUS_ROOT + 0xd30, 16));
+    assert!(f.untouched(ITEM, 0x1000));
+    assert!(f.untouched(PANEL, 0x1000));
+    assert!(f.untouched(FOREIGN, 0x1000));
+}
+
+#[test]
+fn visible_unset_focus_view_is_opening_without_item_or_panel_arrays() {
+    let f = sparse_readiness(0, true);
+    assert_eq!(
+        observe(&f, KEY, None, view_state).unwrap().1,
+        FocusViewState::Opening
+    );
+    assert_no_readiness_payload(&f);
+    assert_eq!(f.checks.get(), 2);
+}
+
+#[test]
+fn hidden_unset_focus_view_is_hidden_without_item_or_panel_arrays() {
+    let f = sparse_readiness(0, false);
+    assert_eq!(
+        observe(&f, KEY, None, view_state).unwrap().1,
+        FocusViewState::Hidden
+    );
+    assert_no_readiness_payload(&f);
+    assert_eq!(f.checks.get(), 2);
+}
+
+#[test]
+fn hidden_own_focus_view_is_hidden_without_item_or_panel_arrays() {
+    let f = sparse_readiness(COUNTRY, false);
+    assert_eq!(
+        observe(&f, KEY, None, view_state).unwrap().1,
+        FocusViewState::Hidden
+    );
+    assert_no_readiness_payload(&f);
+    assert_eq!(f.checks.get(), 2);
+}
+
+#[test]
+fn visible_own_focus_view_is_ready_without_authorizing_a_target() {
+    let f = sparse_readiness(COUNTRY, true);
+    assert_eq!(
+        observe(&f, KEY, None, view_state).unwrap().1,
+        FocusViewState::Ready
+    );
+    assert_no_readiness_payload(&f);
+    assert_eq!(f.checks.get(), 2);
+
+    // Ready did not prove the still-unmapped target/obstacle payloads.
+    let f = sparse_readiness(COUNTRY, true);
+    assert_eq!(
+        observe(&f, KEY, None, node).unwrap_err().code,
+        "fixture_unmapped"
+    );
+    assert!(f.untouched(FOCUS_VIEW + MACOS.items, 16));
+}
+
+#[test]
+fn foreign_readiness_refuses_before_visibility_country_payload_or_arrays() {
+    for visible in [false, true] {
+        let mut f = sparse_readiness(FOREIGN, visible);
+        // A nonzero foreign scope must refuse without treating it as hidden
+        // or pending, even when visibility itself has not materialized.
+        f.unmap(FOCUS_ROOT + 0x95, 1);
+        let error = observe(&f, KEY, None, view_state).unwrap_err();
+        assert_eq!(error.code, "foreign_focus_scope");
+        assert_eq!(
+            error.message,
+            "Displayed Focus country differs from own country"
+        );
+        assert!(f.untouched(FOCUS_ROOT + 0x95, 1));
+        assert_no_readiness_payload(&f);
+    }
+}
+
+#[test]
+fn readiness_states_require_final_view_witness_and_process_check() {
+    for (displayed, visible, state) in [
+        (0, true, FocusViewState::Opening),
+        (0, false, FocusViewState::Hidden),
+        (COUNTRY, false, FocusViewState::Hidden),
+        (COUNTRY, true, FocusViewState::Ready),
+    ] {
+        for address in [
+            IDLER + MACOS.manager,
+            MANAGER + MACOS.focus_view,
+            FOCUS_VIEW + MACOS.view_root,
+            FOCUS_ROOT,
+            FOCUS_ROOT + 0x95,
+            FOCUS_VIEW + MACOS.displayed_country,
+        ] {
+            let mut f = sparse_readiness(displayed, visible);
+            f.torn = Some(address);
+            let initially_observed = Cell::new(None);
+            let result = observe(&f, KEY, None, |r, image, own| {
+                let value = view_state(r, image, own)?;
+                initially_observed.set(Some(value));
+                Ok(value)
+            });
+            assert_eq!(initially_observed.get(), Some(state));
+            assert_eq!(result.unwrap_err().code, "torn_read", "{address:x}");
+            assert_eq!(f.checks.get(), 1);
+            assert_no_readiness_payload(&f);
+        }
+        let mut f = sparse_readiness(displayed, visible);
+        f.fail_final = true;
+        assert_eq!(
+            observe(&f, KEY, None, view_state).unwrap_err().code,
+            "ownership_changed"
+        );
+        assert_no_readiness_payload(&f);
     }
 }
 

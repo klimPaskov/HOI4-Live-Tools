@@ -9,6 +9,29 @@ failed campaigns. Do not control the shared Windows game.
 
 ## Current checkpoint
 
+The first recorded mixed Focus/Research/production gate on `b31e10b` verified
+Research and infantry allocation 10→11, retained both across reconnect, and
+observed unchanged files in two idle windows. After natural Economic Growth
+completion, Autobahn preparation quarantined `foreign_focus_scope` at tree layout,
+before any pan request. Its original intent remains unresolved. STOP joined the
+worker, quarantine refused lease release, and broker EOF ended the live owner.
+The recording finalized at 120.293333 seconds, 3,544 frames and 1920×1108. Later
+read-only checks confirmed completed Economic Growth, idle Focus, EM Engineering
+still active and infantry allocation 11. The owned game was closed with default
+settings unchanged. Do not replay, settle or reset this controller.
+
+The exact mismatched displayed-country value was not retained. The recording
+shows the completion popup followed by Politics, so it does not establish a
+foreign-country view or a successful tree opening. The next correction separates
+hidden, opening-with-no-country and positively own-bound Focus views. It waits
+read-only under the original deadline, with immediate refusal for a nonzero
+foreign country. Qualify this on a fresh owned session; the two-year run and full
+campaigns remain outstanding. See [the failure evidence](CLAUSEWITZ_VALIDATION.md#mac-mixed-focus-worker-ownership-refusal--23-october-2026).
+The correction passed 1,381 Rust tests, 956 Python tests (37 skipped), formatting,
+strict host/Windows/Linux-musl/ARM64-Linux-musl Clippy and the release build.
+
+The preceding implementation and qualification checkpoints are retained below.
+
 The Mac daily-worker implementation is now present behind default-off owner
 permissions. It retains ordered Research and one-factory production plans,
 uses fresh typed completion evidence, joins on stop/EOF, and checks persisted

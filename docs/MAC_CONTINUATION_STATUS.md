@@ -1,4 +1,36 @@
-# Mac continuation checkpoint — 11 October 2026
+# Mac continuation checkpoint — 23 October 2026
+
+The user has authorized macOS testing. Typed durable Focus joins the default-off
+Research and production worker. All nine exact-head CI jobs passed on its
+`b31e10b` implementation checkpoint. The subsequent own-view readiness correction
+passed 1,381 Rust tests and 956 Python tests (37 skipped), plus formatting, strict
+cross-platform Clippy and the release build. It still needs a fresh live gate.
+
+The latest successful manual gate used one Luna player at medium reasoning and the
+native 1920×1080 Mac game. Its single Economic Growth assignment verified in
+3.65 seconds. Independent reads confirmed active Focus, unchanged Research and
+production, and no unresolved input. The 109.78-second window recording finalized
+at 1920×1108. The two earlier timed-out Focus controllers remain preserved and
+blocked; neither was replayed or reset.
+
+The following mixed gate verified Research, the one-factory change, same-plan
+reconnect and unchanged idle files. It then quarantined the Autobahn intent during
+Focus-screen ownership checks after natural Economic Growth completion. No retry
+or recovery input occurred. The 120.29-second recording finalized cleanly; the
+owned game was subsequently closed, with default settings unchanged. The exact
+displayed-country mismatch was not recorded, so its cause remains unproven.
+The correction waits for a positively bound own Focus view under the original
+deadline while retaining immediate foreign-country refusal. A fresh live gate,
+clean two-year run and full recorded campaigns remain required.
+
+Use [the current handoff](LINUX_RUST_HANDOFF.md),
+[validation evidence](CLAUSEWITZ_VALIDATION.md) and
+[Mac controller contract](MAC_CONTROLLER.md) for current work.
+
+## Preserved earlier checkpoints
+
+The following paragraphs retain earlier stop states and implementation limits;
+they do not describe the active session.
 
 The latest paused Focus qualification added canonical own-target and final GUI
 checks under one original deadline. Its single economic-growth attempt timed out

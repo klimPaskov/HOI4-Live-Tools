@@ -58,161 +58,98 @@ To uninstall, run `python install.py uninstall`. See
 configuration and the command line, and [the tool reference](docs/tools.md) for
 every tool and argument.
 
-## Native Rust preview (Linux)
+## Native Rust preview
 
-The preview is a new runtime built on [Clausewitz-MCP](https://github.com/smerss/Clausewitz-MCP).
-It reads the game's own state directly instead of using screenshots and OCR, so
-reads take tens of milliseconds and never pause the game. Every input it sends
-is an ordinary player action, checked against fresh game state before and after.
+The native runtime builds on [Clausewitz-MCP](https://github.com/smerss/Clausewitz-MCP).
+It reads structured state directly from the owned game process. Reads do not
+pause, take screenshots or move the cursor. Inputs use ordinary player controls
+and fresh state checks; unknown builds and unsupported operations refuse explicitly.
+The primary live path does not depend on save parsing or screenshot polling.
 
-Build it with Rust 1.86 or newer:
+Build with Rust 1.86 or newer:
 
 ```sh
 cargo build --manifest-path native/Cargo.toml --release --locked
 cargo test --manifest-path native/Cargo.toml --locked
 ```
 
-Then follow [the native setup guide](native/README.md) and
-[the owned Linux launch instructions](docs/OWNED_LINUX_LAUNCHER.md). Only the
-documented Linux x86_64 game build (1.19.3) has been tested. Unknown builds,
-platforms and capabilities refuse explicitly, and the launcher never takes over a
-game it did not start.
+Follow [native setup](native/README.md) and the platform notes below. This branch
+is a developer preview, not a replacement release for the Windows package.
 
-### What works today (recorded live tests on Linux)
+### Linux
 
-- **Observation:** country overview, research, Focus, production lines and
-  construction, returned as compact digests (under 2 KB) in about 15–80 ms.
-- **Time:** pause, resume, speed and day advancement with verified readback.
-- **Production:** opening the panel and changing one factory on an exact own line,
-  with verified counts, historical replays and no-op checks. Production004 passed
-  10→11→10 on 21 October 2026; changes took about 0.77 seconds each. Production006
-  passed the daily worker gate on 22 October: 14 factories across three days,
-  daily budgets and completed-plan restart without repeating input. Production008
-  verified manual panel closing and the Research/Focus round trip, with unchanged
-  allocations and replay/no-op checks. Mixed-panel worker planning and full
-  campaign acceptance remain pending.
-- **Research and Focus:** exact-ID assignments in all four research slots,
-  automatic refill when research completes, Focus search and start, and durable
-  daily plans that survive restarts without repeating input.
-- **Construction:** opening the construction panel and selecting a building type
-  (dockyard), with replay-safe receipts. Run077 passed this gate on 17 October 2026.
-- **Map search:** opening the game's own Find view, typing a state ID and jumping
-  the camera to that state, verified from game memory (Run086, 17 October 2026).
-- **Building placement:** with a building selected and the camera on an own
-  state, one map click queues it there. The result is verified as the exact
-  queued amount of that building in that state. Run091 placed an arms factory in
-  Brandenburg on 18 October 2026, and Run092 placed a dockyard in West Prussia,
-  a coastal state, the same day.
+The tested native Linux game is HOI4 1.19.3 x86_64. The
+[owned launcher](docs/OWNED_LINUX_LAUNCHER.md) verifies process ownership and never
+takes over an unrelated game. Recorded tests cover:
 
-ResearchClose002 passed direct Research-panel closing with Luna medium: 14 steps,
-19 calls without errors, preserved assignments and historical replay/no-op checks.
-Closing took about one second; reads and replays took milliseconds. It uses
-Research permission alone, without assigning a Focus to switch panels.
-Mixed004 completed research-assignment and production goals across three days.
-A player path error prevented its final checks; a faster follow-up exposed an
-opening-readiness gap. The correction and completed-plan restart still need a
-full recorded mixed-plan test.
+- Structured country, Research, Focus, production and construction reads.
+- Verified clock control, Research and Focus assignments, natural Research
+  refill, and durable daily plans that preserve completed work across restart.
+- One-factory changes on an existing own production line, panel transitions,
+  per-day budgets and completed-plan restart without repeated input.
+- Construction-panel selection, state search, and verified arms-factory and
+  dockyard placement in owned states.
 
-Mixed production/research standing plans now have an explicit opt-in developer
-preview with persistent selections and separate panel-navigation budgets. Their
-recorded advancing-time live gate is still pending.
+The combined production/Research worker remains an opt-in preview with an
+unfinished advancing-time acceptance gate. Provincial buildings, new production
+lines, bulk allocation and combat control remain open.
 
-Future campaign tests and recordings use native **1920×1080 or higher** with
-readable UI. ARM Linux/FEX now starts HOI4 at 1080p using guest software rendering.
-Luna entered historical Normal Germany and verified own-state reads and stationary
-Research open/close keys. Median local MCP reads were **2.9–6.1 ms** for research,
-overview and production in five paused-game samples each, with recording active.
-These are diagnostics, not campaign throughput or a successful campaign.
+ARM64 Linux through FEX reached historical Normal Germany at 1080p and verified
+own-state reads plus stationary Research-panel keys. Five paused-game samples per
+reader measured local medians of 2.9–6.1 ms with recording active. The pinned FEX
+adapter is disabled by default and still needs live adapter acceptance. See
+[FEX setup](docs/OWNED_LINUX_LAUNCHER.md#arm64-linux-with-fex) and
+[the qualification record](docs/CLAUSEWITZ_VALIDATION.md#fex-own-state-and-stationary-input-qualification--22-october-2026).
 
-The Rust FEX adapter has an explicit pinned-build 1080p validation opt-in; it is
-disabled by default and still needs live adapter and mixed-plan acceptance.
-See [the evidence and retained failures](docs/CLAUSEWITZ_VALIDATION.md#fex-own-state-and-stationary-input-qualification--22-october-2026)
-and [setup requirements](docs/OWNED_LINUX_LAUNCHER.md#arm64-linux-with-fex).
-The user has now authorized switching back to macOS for testing and final videos.
+### macOS
 
-### macOS preview (live-tested on one build)
+Current testing uses native Mac HOI4 1.19.3 x86_64 under Rosetta, with a verified
+**1920×1080, UI scale 1** profile. Game GUI geometry is independently checked
+against the owned OS window before input. The
+[Rust-managed recorder](docs/MAC_RECORDING.md) captures a 1920×1108 window,
+including the titlebar around the 1080p game client.
 
-The macOS adapter reads one owned game's memory and sends ordinary mouse and
-keyboard input to its verified frontmost window. The current build is Steam
-1.19.3 x86_64 under Rosetta, with a fixed **1920×1080, UI scale 1** input profile.
-Mac GUI/SDL geometry is recovered independently, corroborated against the owned
-OS window and rechecked before each input. Reads never pause or move the cursor.
-See [the input geometry contract](docs/MAC_INPUT_GEOMETRY.md).
+Recorded component tests have verified Research, Focus, clock control and
+one-factory production changes. Research queues have survived reconnect and
+refilled after natural completion, with unchanged idle plan files. These tests
+also retained harness failures; they are not a clean campaign acceptance run.
+The latest manual Focus gate verified Economic Growth in 3.65 seconds after two
+preserved timeout failures. A default-off durable Focus adapter now joins the
+Research and production worker. Its first combined live gate preserved those
+assignments across reconnect, then stopped during Focus-screen ownership checks
+after natural Economic Growth completion. The unresolved intent remains blocked;
+successive durable Focus assignment is not yet accepted.
 
-An earlier Luna medium test verified research, Focus and clock actions. Research
-took about 2 seconds and Focus about 4 seconds. The date-limited test failed when
-a model delay before its final pause advanced the game three extra days; that
-failure is retained. Recorded window capture passed at 1920×1108 and about 29.4
-FPS, including the titlebar around the 1080p game client. This is qualification
-evidence, not a successful campaign.
+Measured Mac overview/Research/digest medians were about 0.3/1.7/10.6 ms in the
+recorded component run, with zero observation pauses. A separate target-only
+Focus probe measured 8.66 ms versus 63.99 ms for complete obstacle geometry.
+These samples describe particular reads, not overall campaign throughput.
 
-A follow-up mixed test passed research and production planning across one game
-day, stopping at the intended date. Its 20 RPCs had no errors; the existing
-assignments and other production lines stayed unchanged. The recording captured
-the full test, but its guard stopped capture after player handback, so recorder
-lifecycle acceptance remains open.
+See [the controller and worker contract](docs/MAC_CONTROLLER.md),
+[input geometry](docs/MAC_INPUT_GEOMETRY.md), and
+[recorded results and failures](docs/CLAUSEWITZ_VALIDATION.md).
+Broader legacy plan adapters remain separate from the durable worker; peace
+conferences and naval invasions are not implemented.
 
-The new [Rust-managed Mac recorder](docs/MAC_RECORDING.md) adds precise guard
-diagnostics, explicit stopping and owner-loss finalization. Its two-minute capture
-and stop/failure checks passed; long campaign filming remains unverified. The durable observation producer
-also passed live sequence/reopen checks at a 13 ms median across 20 paused-game
-samples. The [Mac controller](docs/MAC_CONTROLLER.md) now retains its identity
-across reconnects and shares input quarantine between clock and gameplay actions.
-The default-off [Mac background worker](docs/MAC_CONTROLLER.md) now adds durable
-Research queues and one-step production allocation, shared input quarantine,
-stop/join and reconnect checks. The corrected worker verified a factory step,
-same-plan restart, unchanged idle files and natural Research refill on Mac.
-The advancing test needed continuation after a transient-read harness failure;
-its final whole-collection assertion also failed when a naval line disappeared.
-All three assignments were independently verified, with no quarantine or repeated
-factory input. These component results do not establish a clean campaign gate.
-Overview/Research/digest medians were about 0.3/1.7/10.6 ms, with zero observation
-pauses. See [the results and retained failures](docs/CLAUSEWITZ_VALIDATION.md#mac-mixed-worker-restart-and-refill--23-october-2026).
+Mac memory access requires Developer Tools permission and an ad-hoc signed tool
+binary (`native/macos/debugger.entitlements`). The game is never re-signed.
+Missing access returns a capability error for client telemetry/UI fallback.
+The public Research-folder diagnostic remains Linux-only.
 
-The newer Focus path adds canonical target and final GUI checks under an original
-five-second deadline. Its first recorded attempt timed out and retained an
-unresolved intent, blocking further input on that controller. The game stayed
-paused with no Focus active; no retry or reset occurred. See [the failed gate and
-remaining work](docs/CLAUSEWITZ_VALIDATION.md#mac-focus-input-binding-and-deadline-refusal--23-october-2026).
-Durable Mac Focus and full campaigns remain unaccepted.
+### Remaining acceptance work
 
-The subsequent target-only Focus probe measured **8.66 ms**, versus **63.99 ms**
-for complete obstacle geometry, over ten alternating samples each on the paused
-Mac game. Node checks now avoid unrelated renderer reads; actual panning retains
-complete obstacle checks. This is read-path timing, not action latency or campaign
-acceptance. [Probe contract and limits](docs/MAC_CONTROLLER.md#qualification-limits).
-The next fresh recorded attempt still exhausted its action budget during repeated
-short pans. That unresolved attempt remains preserved.
-The revised bounded pan planner subsequently passed one fresh recorded Mac
-Economic Growth assignment in 3.65 seconds. Independent memory checks confirmed
-activation. Durable Focus and full campaign acceptance remain pending.
+- Qualify mixed standing plans and expand economy, shortage repair and warfare.
+- Implement and live-test the native Windows adapter.
+- Complete a clean two-year Luna run, then the recorded FAIR Germany and China
+  campaigns. Final showcase videos must come from macOS at 1080p or higher.
+- Validate long campaign recording and publish only after release acceptance.
 
-The public research-folder diagnostic remains Linux-only and explicitly refuses
-on Mac.
-
-The earlier preview also contains construction, politics, training, army, air
-and diplomacy adapters. The older Mac plan runner remains synchronous with scheduling state
-in memory, separate from the optional durable worker. Broader plans, restart
-recovery and full-campaign acceptance remain unfinished. Peace conferences and
-naval invasions are not supported yet.
-
-Mac memory access needs a Developer Tools grant and an ad-hoc signed tool binary
-(`native/macos/debugger.entitlements`). Startup checks authorization without
-opening a password dialog. Missing access returns a capability error so clients
-can select telemetry/UI fallback. The game itself is never re-signed.
-
-### Not done yet
-
-- Linux production scrolling, new lines, bulk allocation and standing economy plans.
-- Linux provincial buildings (naval bases, forts, coastal forts), army, air and naval control.
-- Economy and warfare automation (standing plans, shortage repair, invasions).
-- A native Windows adapter.
-- The clean two-year run and the recorded FAIR Germany and China campaigns.
-
-Measurements, failed runs and open limits are recorded in
-[the measured comparison](docs/CLAUSEWITZ_COMPARISON.md),
-[the validation record](docs/CLAUSEWITZ_VALIDATION.md) and
-[the current acceptance plan](docs/LINUX_RUST_HANDOFF.md).
+All nine CI jobs pass on the durable Focus implementation checkpoint across
+Linux, Windows and macOS. Offline tests do not prove native game behavior.
+For measurements, retained failures and the next gate, use
+[the comparison](docs/CLAUSEWITZ_COMPARISON.md),
+[validation record](docs/CLAUSEWITZ_VALIDATION.md) and
+[current handoff](docs/LINUX_RUST_HANDOFF.md).
 
 ## Campaign rules
 
@@ -220,8 +157,8 @@ Campaigns run on Normal difficulty with vanilla rules and historical AI. There a
 no cheats, console commands, save editing, hidden enemy information or
 reload-to-undo.
 
-- **FAIR** (default) follows common multiplayer house rules but still plays well:
-  encirclements, concentrated attacks and supported invasions.
+- **FAIR** (default) follows the reviewed multiplayer-style house policy and
+  permits normal tactical play, including encirclements and concentrated attacks.
 - **META** allows single-player metas and UI tricks a human could use.
 
 The [campaign playbook](skills/hoi4-campaign-playbook/SKILL.md) defines both modes.
@@ -235,7 +172,7 @@ and cannot be reached by campaign automation.
 | Python / Windows (1.1.0) | Mod-testing tools and recorded play attempts | Clean campaign acceptance |
 | Python / macOS | Platform work and limited diagnostic play | Reliable live acceptance |
 | Rust / Linux | Owned launch, fast state reads, time, research, Focus, daily plans, one-factory production changes, construction panel, map search and state-building placement | Provincial placement, economy, army and naval control; campaign acceptance |
-| Rust / macOS | Owned runs on one build: reads, economy, armies, diplomacy, air, standing plans | Peace conference, naval invasions, campaign acceptance |
+| Rust / macOS | Owned 1080p runs: structured reads, Research/Focus/clock, factory changes, recording and durable-plan component checks | Mixed-plan acceptance, wider automation, peace conferences, naval invasions and campaigns |
 | Rust / Windows | Portable protocol and fixture tests in CI | Native adapter and live tests |
 
 Passing tests or listing a tool does not mean live play works. Only recorded live
