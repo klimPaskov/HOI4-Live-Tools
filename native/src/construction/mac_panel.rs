@@ -223,6 +223,16 @@ fn opener(
         && flags & 8 != 0
         && windows.iter().all(|w| w.visible() && w.idle())
     {
+        let canvas = crate::gui::macos::canvas_from_reader(r, base, registry)?;
+        if canvas.physical != [GAME.0 as i32, GAME.1 as i32]
+            || canvas.logical != canvas.physical
+            || canvas.scale != 1.0
+        {
+            return Err(Error::new(
+                "gui_geometry_unavailable",
+                "Mac opener rectangle requires the reviewed 1920x1080 canvas at GUI scale 1",
+            ));
+        }
         let rect = gui_tree::rect(r, base, button, GAME)?;
         if rect.x < 0
             || rect.y < 0
@@ -357,6 +367,6 @@ pub fn snapshot(process: &dyn Process, geometry: bool) -> Result<Value> {
 }
 
 pub(crate) fn tool() -> Value {
-    json!({"name":"hoi4_construction_panel_probe","description":"Read-only Mac construction panel/topbar opener binding. Verifies own manager/view, managed mode, named aliases, exact callback and optional current renderer rectangle. Already-selected mode skips the toggle control even while visibility is pending. No input, settled-frame, global routing or placement authority; never pauses or moves the cursor.",
+    json!({"name":"hoi4_construction_panel_probe","description":"Read-only Mac construction panel/topbar opener binding. Verifies own manager/view, managed mode, named aliases, exact callback and optional renderer rectangle on the independently checked 1920x1080 canvas at GUI scale 1. Already-selected mode skips the toggle control even while visibility is pending. No input, settled-frame, global routing or placement authority; never pauses or moves the cursor.",
         "inputSchema":{"type":"object","properties":{"include_geometry":{"type":"boolean","default":false}},"additionalProperties":false},"annotations":{"readOnlyHint":true}})
 }

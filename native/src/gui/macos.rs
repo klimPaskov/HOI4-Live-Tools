@@ -86,18 +86,20 @@ fn ivar(r: &Reader<'_>, base: u64, offset: u64) -> Result<u64> {
     )?;
     Ok(value)
 }
-/// Caller must finish a Witnesses bracket; no build offsets from Linux apply.
-pub(crate) fn from_reader(r: &Reader<'_>, base: u64) -> Result<Geometry> {
+/// The canvas is an own-GUI graphics association, not an OS window or input
+/// grant. Callers retain it inside their encompassing final-witness bracket.
+pub(crate) struct Canvas {
+    pub object: u64,
+    pub physical: [i32; 2],
+    pub logical: [i32; 2],
+    pub scale: f32,
+}
+pub(crate) fn canvas_from_reader(r: &Reader<'_>, base: u64, gui: u64) -> Result<Canvas> {
     require(
         r.string_abi() == StringAbi::LibCxx,
-        "Mac geometry requires the reviewed Mach-O layout",
+        "Mac canvas requires the reviewed Mach-O layout",
     )?;
-    let idler = pointer(r.u64(base + 0x35196c0)?)?;
-    require(
-        r.u64(idler)? == base + 0x3308f90,
-        "In-game Mac idler required",
-    )?;
-    let gui = pointer(r.u64(idler + 0x4c0)?)?;
+    pointer(gui)?;
     require(
         r.u64(gui)? == base + 0x34974d0,
         "Exact Mac game GUI required",
@@ -123,6 +125,27 @@ pub(crate) fn from_reader(r: &Reader<'_>, base: u64) -> Result<Geometry> {
         scale.is_finite() && (0.25..=8.0).contains(&scale),
         "Bounded finite GUI scale required",
     )?;
+    Ok(Canvas {
+        object: graphics,
+        physical: [dims[0], dims[1]],
+        logical: [dims[2], dims[3]],
+        scale,
+    })
+}
+/// Caller must finish a Witnesses bracket; no build offsets from Linux apply.
+pub(crate) fn from_reader(r: &Reader<'_>, base: u64) -> Result<Geometry> {
+    require(
+        r.string_abi() == StringAbi::LibCxx,
+        "Mac geometry requires the reviewed Mach-O layout",
+    )?;
+    let idler = pointer(r.u64(base + 0x35196c0)?)?;
+    require(
+        r.u64(idler)? == base + 0x3308f90,
+        "In-game Mac idler required",
+    )?;
+    let gui = pointer(r.u64(idler + 0x4c0)?)?;
+    let canvas = canvas_from_reader(r, base, gui)?;
+    let graphics = canvas.object;
     let video = pointer(r.u64(base + 0x3639800)?)?;
     // Cocoa_CreateDevice constructor callback stores, not borrowed Linux offsets.
     for (offset, function) in [(0x8, 0x263fea0), (0x48, 0x2643a50), (0x128, 0x2644350)] {
@@ -151,7 +174,7 @@ pub(crate) fn from_reader(r: &Reader<'_>, base: u64) -> Result<Geometry> {
             .chunks_exact(4)
             .map(|v| i32::from_le_bytes(v.try_into().unwrap()))
             .collect();
-        if rect[2..] == dims[..2] {
+        if rect[2..] == canvas.physical {
             require(selected.is_none(), "Ambiguous SDL game window dimensions")?;
             require(
                 rect[..2].iter().all(|v| v.unsigned_abs() <= 1_000_000),
@@ -175,9 +198,9 @@ pub(crate) fn from_reader(r: &Reader<'_>, base: u64) -> Result<Geometry> {
                 objects: [
                     idler, gui, graphics, video, backend, window, data, nswindow, view, listener,
                 ],
-                physical: [dims[0], dims[1]],
-                logical: [dims[2], dims[3]],
-                scale,
+                physical: canvas.physical,
+                logical: canvas.logical,
+                scale: canvas.scale,
                 client: rect.try_into().unwrap(),
                 flags: r.i32(window + 0x40)? as u32,
             });

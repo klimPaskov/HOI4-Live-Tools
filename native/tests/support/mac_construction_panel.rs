@@ -16,6 +16,7 @@ const NODE: u64 = 0x4a0000;
 const FUNCTOR: u64 = 0x4b0000;
 const SPRITE: u64 = 0x4c0000;
 const TYPE: u64 = 0x4d0000;
+const GRAPHICS: u64 = 0x4e0000;
 
 fn name(f: &mut MacFixture, widget: u64, text: &str) {
     let kind = widget + 0x1000000;
@@ -113,6 +114,12 @@ fn fixture(mode: i32) -> MacFixture {
     f
 }
 fn geometry(f: &mut MacFixture) {
+    f.word(GUI + 0x98, GRAPHICS);
+    f.word(GRAPHICS, BASE + 0x33dafa8);
+    for (offset, dimension) in [(0x170, 1920), (0x174, 1080), (0x178, 1920), (0x17c, 1080)] {
+        f.int(GRAPHICS + offset, dimension);
+    }
+    f.put(GRAPHICS + 0x2c5b0, &1_f32.to_le_bytes());
     f.word(BUTTON + 0xd8, SPRITE);
     f.word(SPRITE, BASE + 0x34bdb10);
     f.word(SPRITE + 8, TYPE);
@@ -142,7 +149,7 @@ fn closed_panel_binds_exact_own_opener_without_default_geometry() {
     assert_eq!(v["input_authorized"], false);
     assert_eq!(v["global_modal_clear_verified"], false);
     assert!(v["opener"]["rect"].is_null());
-    not_read(&f, &[BUTTON + 0xd8]);
+    not_read(&f, &[BUTTON + 0xd8, GUI + 0x98]);
 }
 #[test]
 fn explicitly_requested_rect_comes_from_the_bound_button_renderer() {
@@ -152,6 +159,58 @@ fn explicitly_requested_rect_comes_from_the_bound_button_renderer() {
     assert_eq!(v["opener"]["rect"], json!({"x":220,"y":10,"w":34,"h":32}));
     assert_eq!(v["settled_frame_verified"], false);
     assert_eq!(v["input_authorized"], false);
+}
+#[test]
+fn unsupported_canvas_refuses_before_renderer_payload() {
+    for (field, dimension) in [
+        (GRAPHICS + 0x170, 2560),
+        (GRAPHICS + 0x174, 1440),
+        (GRAPHICS + 0x178, 960),
+        (GRAPHICS + 0x17c, 540),
+    ] {
+        let mut f = fixture(2);
+        geometry(&mut f);
+        f.int(field, dimension);
+        assert_eq!(
+            snapshot(&f, true).unwrap_err().code,
+            "gui_geometry_unavailable"
+        );
+        not_read(&f, &[BUTTON + 0xd8, SPRITE]);
+        assert!(snapshot(&f, false).is_ok());
+    }
+    let mut f = fixture(2);
+    geometry(&mut f);
+    f.put(GRAPHICS + 0x2c5b0, &1.5_f32.to_le_bytes());
+    assert_eq!(
+        snapshot(&f, true).unwrap_err().code,
+        "gui_geometry_unavailable"
+    );
+    not_read(&f, &[BUTTON + 0xd8, SPRITE]);
+}
+#[test]
+fn foreign_or_malformed_graphics_cannot_supply_opener_geometry() {
+    for field in [GUI + 0x98, GRAPHICS] {
+        let mut f = fixture(2);
+        geometry(&mut f);
+        f.word(FOREIGN, 0);
+        f.word(field, FOREIGN);
+        assert_eq!(snapshot(&f, true).unwrap_err().code, "invalid_gui_geometry");
+        not_read(&f, &[BUTTON + 0xd8, SPRITE]);
+    }
+    for dimension in [0, -1, 16385] {
+        let mut f = fixture(2);
+        geometry(&mut f);
+        f.int(GRAPHICS + 0x170, dimension);
+        assert_eq!(snapshot(&f, true).unwrap_err().code, "invalid_gui_geometry");
+        not_read(&f, &[BUTTON + 0xd8]);
+    }
+    for scale in [f32::NAN, f32::INFINITY, 0.0, 8.5] {
+        let mut f = fixture(2);
+        geometry(&mut f);
+        f.put(GRAPHICS + 0x2c5b0, &scale.to_le_bytes());
+        assert_eq!(snapshot(&f, true).unwrap_err().code, "invalid_gui_geometry");
+        not_read(&f, &[BUTTON + 0xd8]);
+    }
 }
 #[test]
 fn already_selected_mode_never_reads_toggle_control_even_with_pending_visibility() {
@@ -289,6 +348,11 @@ fn all_opener_fields_are_rechecked_in_the_final_witness() {
         TOPBAR + 0x3290 + 0x1e0,
         TOPBAR + 0x3290 + 0x3c0,
         SPRITE + 0xb0,
+        GUI + 0x98,
+        GRAPHICS,
+        GRAPHICS + 0x170,
+        GRAPHICS + 0x178,
+        GRAPHICS + 0x2c5b0,
     ] {
         let mut f = fixture(2);
         geometry(&mut f);

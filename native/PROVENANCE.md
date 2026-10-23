@@ -28,6 +28,11 @@ The member requests manager mode `0x11` through `0x20eef40`. Managed mode at
 already-selected managed mode toggles it closed, so mode `0x11` skips opener
 reads even while visibility is pending. The optional rectangle comes from the
 bound renderer only when local ancestors are visible with idle transitions.
+The optional rectangle also requires the independently bound own graphics canvas
+to have physical/logical 1920×1080 dimensions and scale 1. The shared typed canvas
+reader reuses the existing Mac geometry constructor evidence and bounds; it does
+not add OS-window or input authority. Other profiles explicitly refuse rectangle
+output while ordinary binding observation remains available.
 This does not establish a settled frame or click delivery. The common GUI route,
 capture state, optional global post-click hook and cursor notifications remain
 outside this reader's proof; input remains disabled. Private static evidence

@@ -9,11 +9,15 @@ failed campaigns. Do not control the shared Windows game.
 
 ## Current checkpoint
 
-The new read-only `hoi4_construction_panel_probe` has 12 focused fixtures and
-passes the full 1,467 Rust / 956 Python tests (37 Python skips), strict
-cross-platform checks and release build. It validates the own named topbar
+The new read-only `hoi4_construction_panel_probe` has 14 focused fixtures and
+passes the full 1,469 Rust / 956 Python tests (37 Python skips). The preceding
+opener checkpoint passed all nine CI jobs. The canvas follow-up also passed
+strict cross-platform checks, a release build and a 28-tool offline stdio smoke.
+It validates the own named topbar
 opener/callback and optional renderer rectangle, with an already-selected
-no-toggle guard. It grants no input. Its first live attempt was refused before
+no-toggle guard. Optional geometry now requires a same-witness actual physical/
+logical 1920×1080 graphics canvas at scale 1; ordinary observation remains
+available on other profiles. It grants no input. Its first live attempt was refused before
 game-memory reads by macOS task-port authorization (`-60007`); the prior runtime
 now reports the same denial. Developer Tools remains enabled. Preserve this
 failure and obtain normal local task-port reauthorization before another

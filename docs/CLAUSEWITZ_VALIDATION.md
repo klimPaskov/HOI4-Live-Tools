@@ -1,5 +1,31 @@
 # Clausewitz-MCP Linux validation
 
+## Mac opener canvas binding — 23 October 2026
+
+Review found that the optional opener rectangle used the 1920×1080 transform
+without checking the running graphics canvas. The probe now binds the same own
+GUI to the independently recovered Mac graphics type and requires physical and
+logical 1920×1080 at scale 1 before reading the renderer. Other supported-size
+canvases return `gui_geometry_unavailable`; malformed or foreign graphics refuse
+explicitly. Ordinary opener observation still works without requesting geometry.
+The shared typed canvas reader preserves the existing SDL/Cocoa geometry checks.
+Every canvas field is included in the final witness.
+
+Two new fixtures and expanded torn-read checks pass, bringing the full Rust
+suite to 1,469 tests. The full Python suite also passes: 956 tests, 37 skipped.
+Formatting, strict host/Windows/Linux-musl/ARM64-Linux-musl Clippy, the release
+build and a 28-tool offline stdio smoke pass. The latter used no game session.
+The preceding opener commit `0a688c5` passed all nine CI jobs. There is no new
+live geometry evidence: the macOS authorization refusal below is unresolved,
+and the unchanged denied probe was not retried. Input remains disabled.
+
+The next offline routing design is pinned separately: mouse-hit/capture nodes
+belong to the already-bound graphics object and feed a reversed delivery list.
+The processed mouse stamp is written before rebuilding, so it is not a commit
+marker. Current route instances, optional Standard-button gates and hover effects
+still need qualification. A correlated route snapshot must not be advertised as
+atomic delivery proof or used to settle an old uncertain input.
+
 ## Mac construction opener prerequisite and authorization refusal — 23 October 2026
 
 `hoi4_construction_panel_probe` adds a separate read-only Mac topbar observer.
