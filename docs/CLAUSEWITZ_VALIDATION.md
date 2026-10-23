@@ -6775,3 +6775,47 @@ the existing Focus-input probe; that failed assertion is retained separately.
 These are offline correction results. Qualify normal daily-budget live admission
 on the healthy retained Mac controller before claiming live acceptance of this
 scheduler change. The two-year run and full campaigns remain incomplete.
+
+## Mac cycle admission and production cap pass — 23 October 2026
+
+Runtime `3b84ebc` passed all nine exact-head CI jobs. The first recorded attempt
+stopped at the owned-game foreground check before opening MCP, acquiring a lease,
+starting a worker or sending input. Its 1920×1108 recording finalized at 11.973333
+seconds and 351 frames. Independent reads and file hashes confirmed the unchanged
+paused 20 May 20:00 controller. That attempt remains preserved.
+
+A new grant explicitly permitted one activation of the exact owned application
+before recording. Luna medium then advanced to 21 May 01:00 and paused for this
+bounded component test. Revision 3 retained all ten completed entries and added
+an infantry factory target of 12 and a support-equipment target of 3, under the
+normal core daily budget of three attempts. The separate production cap remains
+one step per game day; the reviewed expected outcome included its refusal.
+
+The fresh-day batch verified infantry 11→12. A separate `advanced: false`
+same-day batch retained support at 2 and recorded its explicit `NotQueued` cap
+refusal. The final core budget showed two attempts used and one remaining.
+Exactly eleven entries were Complete; support remained Pending with one attempt,
+the exact cap reason and current day. Both intent records were retained, with one
+verified terminal and one refused terminal. Support had no production binding or
+ordinary input record. There was no quarantine or uncertain delivery.
+
+The run used one worker start and two clock calls, zero observation pauses and
+one planned test pause. Its brief advancing interval was 0.763–1.000 seconds;
+the production assertions ran paused. This is not continuous-play or full-plan
+completion evidence. The 29 RPCs included four bounded read-only input-busy
+retries; median successful overview, Research and governor calls were 0.344,
+1.780 and 11.588 ms. No gameplay screenshot or unnecessary cursor movement occurred.
+
+STOP joined the worker, release ended the lease and broker EOF closed cleanly.
+The recording finalized at 1920×1108, 15.671667 seconds and 461 frames, with a
+readable UI. Independent reads confirmed paused 21 May 01:00, speed 3, infantry
+12, support 2, all other allocations unchanged, the same four active technologies
+and active eastern Autobahn Focus. All old receipts and the journal prefix remained
+intact. Controller files and 239 native sources/pinned helpers were unchanged.
+All grants are closed; the healthy game remains paused without a worker, lease
+or recorder.
+
+Next, continue this same plan/controller across another game day to qualify the
+known zero-input refusal's ordinary retry while retaining its history. Never
+reset the Pending entry or replay any older uncertain controller. The two-year
+run, wider durable domains and full recorded campaigns remain outstanding.

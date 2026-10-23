@@ -1,5 +1,22 @@
 # Mac continuation checkpoint — 23 October 2026
 
+The latest bounded gate on `3b84ebc` verified Mac cycle admission and the separate
+production cap. Germany is paused on 21 May 1936 at 01:00, speed 3: infantry has
+12 factories; support remains at 2 with a known `NotQueued` one-step-per-day
+refusal. Revision 3 retains eleven Complete entries and that one Pending entry.
+The core daily budget is two used, one remaining. Independent reads confirmed
+all prior receipts, other allocations and controller files unchanged. All grants
+are closed; no worker, lease or recorder remains.
+
+All nine exact-head CI jobs passed. The successful 1080p-client gate recorded
+15.671667 seconds at 1920×1108. Its preceding foreground-check failure sent no
+input and remains preserved. Future grants should permit one activation of the
+exact owned game before recording. Next, resume the same plan across the next
+game day to finish the known zero-input refusal without resetting history.
+This does not yet qualify a two-year run or a full campaign.
+
+The preceding mixed and revision component evidence follows.
+
 Two recorded Mac component gates now pass on runtime `7cde19f`, with one Luna
 medium player at native 1920×1080. The mixed gate verified Focus handoffs,
 Research refill, infantry factories 10→11 and reconnect. A same-controller

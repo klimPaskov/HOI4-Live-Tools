@@ -2,6 +2,10 @@
 
 ## Unreleased native preview
 
+- Qualify Mac cycle admission with a verified factory step followed by a separate
+  same-day production-cap refusal. Preserve the Pending entry, budget and full
+  history; retain the preceding no-input foreground-check failure.
+
 - Limit each Mac worker cycle to one input attempt so later actions cannot inherit
   an earlier action's nearly exhausted deadline. Preserve same-day continuation,
   daily budgets, readiness checks and Linux batch behavior.

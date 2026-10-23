@@ -9,6 +9,28 @@ failed campaigns. Do not control the shared Windows game.
 
 ## Current checkpoint
 
+The latest Mac cycle-admission gate passed on `3b84ebc`, with all nine CI jobs
+passing. Revision 3 now has eleven Complete entries and one Pending support
+production entry with a known `NotQueued` daily-cap refusal. Independent reads
+confirmed paused 21 May 1936 01:00, speed 3, infantry factories 12, support 2,
+unchanged other allocations and retained old receipts. All grants are closed;
+the healthy owned game remains open without a worker, lease or recorder. A prior
+foreground-check failure sent no input and remains preserved. See
+[the live admission/cap evidence](CLAUSEWITZ_VALIDATION.md#mac-cycle-admission-and-production-cap-pass--23-october-2026).
+
+Next, use the same controller and identical plan across the next game day to
+finish the known zero-input refusal while retaining its history. Permit one
+exact owned-app activation before recording if needed. Do not reset any entries
+or reuse older uncertain controllers. Then extend durable construction: existing
+Mac queue/location layouts are reusable, but the legacy first-page JSON aggregate
+and centre-click adapter are not typed completion proof. A coherent complete
+queue/context/state/template/membership observation and independently bound Mac
+controls must precede conversion into a durable receipt. Politics/army adapters
+also need typed proof before integration. The clean two-year run and full campaigns
+remain incomplete.
+
+The preceding revision and mixed checkpoints are preserved below.
+
 A same-controller Mac revision-2 continuation also passed on runtime `7cde19f`.
 It retained the original five completed receipts and added five Focus/Research
 assignments, with verified update, reconnect and daily-budget preservation. Fresh

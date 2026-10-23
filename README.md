@@ -147,7 +147,7 @@ The public Research-folder diagnostic remains Linux-only.
   campaigns. Final showcase videos must come from macOS at 1080p or higher.
 - Validate long campaign recording and publish only after release acceptance.
 
-All nine CI jobs passed on the mixed-plan checkpoint (`7cde19f`) across
+All nine CI jobs passed on the Mac cycle-admission checkpoint (`3b84ebc`) across
 Linux, Windows and macOS. Offline tests do not prove native game behavior.
 For measurements, retained failures and the next gate, use
 [the comparison](docs/CLAUSEWITZ_COMPARISON.md),
