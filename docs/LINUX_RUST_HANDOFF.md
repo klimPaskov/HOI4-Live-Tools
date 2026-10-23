@@ -9,6 +9,26 @@ failed campaigns. Do not control the shared Windows game.
 
 ## Current checkpoint
 
+The second mixed Mac gate on `6713553` again passed manual Economic Growth
+(3.67 seconds), Research, the infantry factory step, reconnect and idle-file
+checks. It then quarantined a torn pre-input clock observation while dismissing
+the natural-completion notice, before reaching Focus-view readiness. Autobahn's
+original intent remains unresolved; never replay, settle or reset it. STOP joined,
+broker EOF ended ownership, and the 123.11-second recording finalized cleanly.
+Independent reads retained the expected assignments and unchanged controller
+files. The exact owned game is closed, with default settings unchanged. See
+[the second failure](CLAUSEWITZ_VALIDATION.md#mac-mixed-focus-pre-input-torn-read--23-october-2026).
+
+The correction adds bounded read-only recovery inside the pre-input clock guard.
+It preserves the original deadline and immediate coherent scope refusal; no input
+is retried. Validation passed 1,390 Rust tests, 956 Python tests (37 skipped),
+formatting, strict cross-platform Clippy and the release build. Qualify it in a fresh owned Mac session
+with one Luna medium player. The earlier own-view readiness correction passed
+all nine exact-head CI jobs but still lacks natural-completion live acceptance.
+The clean two-year run and full campaigns remain outstanding.
+
+The preceding checkpoint remains preserved below.
+
 The first recorded mixed Focus/Research/production gate on `b31e10b` verified
 Research and infantry allocation 10→11, retained both across reconnect, and
 observed unchanged files in two idle windows. After natural Economic Growth

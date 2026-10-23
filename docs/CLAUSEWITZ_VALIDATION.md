@@ -6496,3 +6496,56 @@ Validation of the correction passed 1,381 Rust tests, 956 Python tests (37
 skipped), formatting, strict host/Windows/Linux-musl/ARM64-Linux-musl Clippy and
 the release build. These checks do not establish live readiness or campaign
 acceptance.
+
+## Mac mixed Focus pre-input torn read — 23 October 2026
+
+A fresh native 1080p Mac Germany session ran immutable `6713553`, whose nine
+exact-head CI jobs passed. One Luna medium player verified Economic Growth in
+3,669.741 ms while paused at 1 January 1936 12:00. Independent read-only checks
+confirmed the active target and unchanged Research/production. Its recording
+finalized at 1920×1108 and 157.255 seconds: 4,635 encoded frames versus 4,634 in
+the recorder's progress count. That discrepancy remains recorded.
+
+The following mixed worker repeated the preceding plan: Autobahn then KdF,
+EM Engineering then Radio in slot 2, and infantry factories 10→11. Research and
+the factory step verified while paused. The exact plan and completed entries
+survived a new broker/worker; two 3.2-second idle windows preserved controller
+bytes, sizes and modification times. All other allocations and Research slots
+were unchanged. Speed 3 and unpause verified separately; observations never paused.
+
+After natural Economic Growth completion, notice dismissal quarantined a
+`torn_read`: `stage=clear_notices`, stage 144.658 ms, total 151.183 ms, zero
+requested pans. The generic “Campaign anchors changed during observation” message
+covers several snapshot fields; it does not identify which field changed.
+This happened before Focus-view readiness, so this gate establishes neither
+success nor failure of that correction at natural completion. The Autobahn intent
+remains unresolved, KdF and Radio pending. No action was retried or settled.
+
+STOP joined the worker; quarantine refused lease release, and broker EOF ended
+live ownership. All 235 native sources and pinned helpers remained unchanged.
+The 68 player RPCs included 14 bounded read-only `input_busy` digest retries and
+the refused release. Explicit recording stop finalized 123.111667 seconds,
+3,629 frames at 1920×1108. The existing final frame shows the completion notice,
+with Production behind it and the cursor over OK. No gameplay screenshot or
+end-test pause was added.
+
+The last actual driver overview was 4 February 1936 05:00, unpaused at speed 3;
+the handback's earlier date came from persisted progress. Independent reads after
+handback observed 12 March 06:00, completed Economic Growth, idle Focus,
+EM Engineering still active and infantry allocation 11. All other military and
+surviving naval allocations were unchanged, with no missing or new lines.
+Controller files stayed unchanged. Exact owned-supervisor cleanup closed the
+game with return code 0 and default settings unchanged; this was not a verified
+ordinary UI exit. The unpaused interval has no verified ending pause, so no
+per-year throughput is claimed.
+
+The next correction retries only a discarded complete pre-input clock observation
+on `torn_read`, at most three times with 2 ms waits clipped to the original action
+deadline. Stop, lease and process identity are checked around each attempt/wait;
+a coherent campaign-scope failure still refuses immediately. No input is retried.
+Fresh live qualification, a clean two-year run and full campaigns remain required.
+
+The pre-input recovery correction passed 1,390 Rust tests, 956 Python tests
+(37 skipped), formatting, strict host/Windows/Linux-musl/ARM64-Linux-musl
+Clippy and the release build. These checks are offline evidence; fresh live
+qualification remains required.

@@ -1,27 +1,23 @@
 # Mac continuation checkpoint — 23 October 2026
 
-The user has authorized macOS testing. Typed durable Focus joins the default-off
-Research and production worker. All nine exact-head CI jobs passed on its
-`b31e10b` implementation checkpoint. The subsequent own-view readiness correction
-passed 1,381 Rust tests and 956 Python tests (37 skipped), plus formatting, strict
-cross-platform Clippy and the release build. It still needs a fresh live gate.
+The user has authorized macOS testing. The latest fresh Luna medium manual
+Focus gate verified Economic Growth in 3.67 seconds at native 1920×1080. The
+following mixed worker again verified Research, infantry factories 10→11,
+same-plan reconnect and unchanged idle files. It stopped on a torn memory read
+while dismissing the natural Focus-completion notice. This preceded the corrected
+Focus-view readiness check, which therefore remains unqualified at that transition.
 
-The latest successful manual gate used one Luna player at medium reasoning and the
-native 1920×1080 Mac game. Its single Economic Growth assignment verified in
-3.65 seconds. Independent reads confirmed active Focus, unchanged Research and
-production, and no unresolved input. The 109.78-second window recording finalized
-at 1920×1108. The two earlier timed-out Focus controllers remain preserved and
-blocked; neither was replayed or reset.
+The mixed recording finalized at 1920×1108, 123.11 seconds and 3,629 frames.
+Independent reads confirmed completed Economic Growth, idle Focus, EM Engineering
+still active, infantry allocation 11 and unchanged other allocations. The exact
+owned game is now closed with default settings unchanged. Autobahn's original
+intent remains unresolved; there was no reset, replay, recovery input or end pause.
 
-The following mixed gate verified Research, the one-factory change, same-plan
-reconnect and unchanged idle files. It then quarantined the Autobahn intent during
-Focus-screen ownership checks after natural Economic Growth completion. No retry
-or recovery input occurred. The 120.29-second recording finalized cleanly; the
-owned game was subsequently closed, with default settings unchanged. The exact
-displayed-country mismatch was not recorded, so its cause remains unproven.
-The correction waits for a positively bound own Focus view under the original
-deadline while retaining immediate foreign-country refusal. A fresh live gate,
-clean two-year run and full recorded campaigns remain required.
+All nine CI jobs passed on the recorded `6713553` readiness checkpoint. The next
+correction bounds read-only recovery of inconsistent pre-input clock observations
+under the original deadline. Validate it and run a fresh gate with one Luna medium
+player. Neither of the two mixed failures is campaign acceptance. A clean two-year
+run and full recorded campaigns remain required.
 
 Use [the current handoff](LINUX_RUST_HANDOFF.md),
 [validation evidence](CLAUSEWITZ_VALIDATION.md) and

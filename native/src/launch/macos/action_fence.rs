@@ -10,7 +10,8 @@ use crate::{
 };
 use std::{
     sync::atomic::{AtomicBool, Ordering},
-    time::Instant,
+    thread,
+    time::{Duration, Instant},
 };
 
 pub(super) struct Fence<'a> {
@@ -61,10 +62,39 @@ impl Fence<'_> {
     /// Called before each new native input, including after cursor settling.
     /// Key/button release cleanup remains unconditional in the transport.
     pub(super) fn input_check(&self) -> Result<()> {
-        self.live()?;
-        let context = game::clock_context(self)?;
-        same_scope(self.expected, &context, self.epoch)?;
-        self.live()
+        self.check_context(|| game::clock_context(self), || self.live(), thread::sleep)
+    }
+    fn check_context(
+        &self,
+        mut observe: impl FnMut() -> Result<ClockContext>,
+        mut live: impl FnMut() -> Result<()>,
+        mut wait: impl FnMut(Duration),
+    ) -> Result<()> {
+        let mut retries = 0;
+        loop {
+            live()?;
+            let result = observe();
+            live()?;
+            match result {
+                Ok(context) => {
+                    same_scope(self.expected, &context, self.epoch)?;
+                    return live();
+                }
+                // Discard and replace only a complete read-only clock probe.
+                // No UI call, input, coherent scope refusal or other read error
+                // is retried, and the original deadline is never renewed.
+                Err(error) if error.code == "torn_read" && retries < 3 => {
+                    retries += 1;
+                    live()?;
+                    wait(
+                        Duration::from_millis(2)
+                            .min(self.until.saturating_duration_since(Instant::now())),
+                    );
+                    live()?;
+                }
+                Err(error) => return Err(error),
+            }
+        }
     }
 }
 impl ReadMemory for Fence<'_> {
@@ -110,6 +140,9 @@ impl Process for Fence<'_> {
         self.process.identity()
     }
 }
+
+#[cfg(test)]
+mod retry_tests;
 
 #[cfg(test)]
 mod tests {

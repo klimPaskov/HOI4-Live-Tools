@@ -115,6 +115,12 @@ that finishes after expiry is discarded. Click cancellation during pointer
 settling prevents mouse-down; release cleanup remains unconditional after a
 possible dispatch. Reads never move the cursor.
 
+The pre-input clock guard may replace a discarded `torn_read` observation up to
+three times, with 2 ms waits clipped to that same deadline. Stop, lease and exact
+process identity are checked around each observation and wait. Coherent scope
+changes and other errors refuse immediately; late results cannot authorize input.
+This recovery repeats only reads, never a UI action or an uncertain intent.
+
 The worker persists its intent before any UI preparation. Research completion
 requires a fresh, typed empty-to-assigned transition in the exact own slot.
 Focus requires a fresh exact idle-to-active transition with unchanged canonical

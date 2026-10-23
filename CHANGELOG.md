@@ -2,6 +2,12 @@
 
 ## Unreleased native preview
 
+- Preserve the second mixed Mac gate: manual Focus, Research, factory allocation,
+  reconnect and idle-file checks passed, but an inconsistent pre-input clock read
+  quarantined notice dismissal before Focus navigation. Retain the unresolved
+  intent. Bound read-only clock recovery to three retries within the original
+  action deadline; never retry input or coherent scope failures.
+
 - Preserve the first Mac Focus/Research/production worker gate: Research and the
   factory step survived reconnect with unchanged idle files, but Focus navigation
   quarantined an ownership mismatch after natural completion. Wait for positive
