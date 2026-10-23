@@ -1,5 +1,22 @@
 # Rust foundation provenance
 
+## Passive Mac ray arithmetic
+
+`construction/mac_projection.rs` independently follows Mach-O UUID
+`089EA519-6780-353B-8E39-4E9309B444D4`, SHA-256
+`09419b087f8b4656c00df337bf838ff34c9b1d816b76cef5383ae6a4ac15b1fb`.
+Complete file-backed procedures `0x102762460`, `0x102762150` and `0x102ac6970`
+establish pixel truncation, column-major projection and affine transforms,
+homogeneous division and scalar normalization. The internal function preserves
+separate f32 operation grouping and refuses nonfinite or degenerate arithmetic.
+Its canvas limit is an observer policy, not an asserted engine limit.
+
+This extends the attributed map-observation approach; no upstream projection
+code, SDL source or foreign offsets were copied. Own rooted live metadata and
+captured-data calculations are separate evidence. The pure function supplies
+no process reads, terrain intersection, frame freshness, province identity,
+input, eligibility or placement authority.
+
 ## Retained Mac Find identity and optional edit focus
 
 `construction/mac_find/retained.rs` separates original process/campaign/country,

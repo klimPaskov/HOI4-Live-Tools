@@ -12,6 +12,26 @@ failed campaigns. Do not control the shared Windows game.
 
 ## Current checkpoint
 
+The native Mac map/camera owner chain and actual rendered ray fields passed
+bounded read-only checks on the retained 1920×1080 Germany session. The larger
+probe read 670 bytes in 56 Reader calls; total process time was 0.573 seconds.
+There was no input, cursor movement, screenshot or observation pause. The actual
+camera origin is separate from Find's desired eye/look coordinates.
+
+An internal pure Rust ray calculation now preserves the recovered scalar f32
+grouping. Eighteen debug/release fixtures and calculations using the captured
+own-camera matrices pass. All 1,724 Rust / 956 Python tests (37 skipped), strict
+checks on four compilation targets, release build and default 28-tool stdio smoke
+pass. The preceding `ced071d` checkpoint passed all nine CI jobs. See
+[ray evidence](CLAUSEWITZ_VALIDATION.md#mac-passive-map-owners-and-ray-arithmetic--23-october-2026).
+
+This adds no MCP action or worker permission. Terrain/bitmap picking, cursor
+window association, map input and placement remain unfinished. The original
+owned game deadline is unchanged; no lease, grant or recorder was opened.
+The clean two-year run and full campaign recordings remain unfinished.
+
+Earlier checkpoints follow.
+
 The recorded Luna-medium native MCP Find-navigation test passed on the Mac
 1920×1080 client. The default-off `hoi4_construction_find_state` typed the owned
 state ID `64` and Return once, then verified closed Find and the original map

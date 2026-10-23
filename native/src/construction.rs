@@ -10,6 +10,9 @@ mod location;
 pub(crate) mod mac_find;
 mod mac_find_focus;
 pub mod mac_panel;
+// Passive foundation; retained until the typed Map-point reader connects.
+#[allow(dead_code)]
+pub(crate) mod mac_projection;
 pub mod mac_ui;
 mod selection;
 pub mod target_snapshot;

@@ -2,6 +2,12 @@
 
 ## Unreleased native preview
 
+- Add internal Mac ray arithmetic from independently recovered current-build
+  projection, affine and normalization procedures, with bounded finite inputs
+  and explicit scalar rounding. Eighteen debug/release fixtures and captured
+  own-camera calculations pass. Rooted live map/camera metadata is verified;
+  terrain picking, map placement and worker integration remain unfinished.
+
 - Add default-off Mac `hoi4_construction_find_state`: an already-open verified
   box receives one owned decimal state ID and Return. Retain original typed
   control/state, complete queue and inactive selection throughout; quarantine

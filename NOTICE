@@ -134,3 +134,8 @@ Upstream foundation and attribution:
   with independently recovered Mac control/state identities, complete queue
   guards and strict once-only journal semantics. They use ordinary player keys;
   no upstream engine posting code or cross-platform offsets are copied.
+
+  construction/mac_projection.rs independently recovers scalar ray arithmetic
+  from the current Mac executable. It extends the attributed map-observation
+  approach without copying upstream projection code or foreign offsets.
+  The internal pure calculation has no memory, input or placement authority.

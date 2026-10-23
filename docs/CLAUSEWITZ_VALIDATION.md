@@ -7684,3 +7684,47 @@ It does not qualify a point for placement, atomic/general modal routing,
 construction worker integration, continuous play or long campaign recording.
 The game remains paused with Find hidden and the requested camera centered.
 The clean two-year Luna run and all full campaign recordings remain unfinished.
+
+## Mac passive map owners and ray arithmetic — 23 October 2026
+
+Exact current-file analysis recovered the graphical-map object through the own
+idler resources, its primary/secondary RTTI, original GUI graphics, map-global
+and camera-setter joins. A fixed read-only metadata probe verified every owner
+join twice under the retained owned process, original supervisor deadline and
+paused own Germany scope. It read 304 bytes in 38 Reader calls and took
+0.626 seconds including process startup. Its mouse-provider observation was
+limited to the rooted type header.
+
+A second probe verified that the projection's global graphics equals the own
+Canvas and both dimension pairs are 1920×1080. It captured and repeated the
+complete finite projection/affine blocks, actual origin, wrap/alternate flags
+and current normalization/SDL dispatch targets. Complete original owner and
+own clock-scope joins were retained. It read 670 bytes in 56 Reader calls and
+took 0.573 seconds including startup. Both probes used zero input, cursor moves,
+screenshots, observation pauses, engine calls or memory writes. No input grant,
+lease or recorder was opened. Their bound narrowed the original six-hour expiry
+to two seconds; it did not renew or replace that ownership window.
+
+The actual rendered origin differs from Find's desired eye/look fields, so Find
+centering alone cannot supply a ray. The new internal pure calculation truncates
+client pixels, applies the recovered column-major projection and affine fields,
+performs homogeneous division and normalizes with separate scalar f32 operations.
+It preserves explicit operation grouping without fused arithmetic. Finite inputs,
+intermediates, bounded canvas and a nondegenerate direction are required. These
+are observer refusals where stricter than the engine, not new engine claims.
+
+All 18 new fixtures pass in debug and release, covering transform composition,
+orientation, pixel truncation, homogeneous division, rounding and invalid inputs.
+An offline runner using the captured own matrices produced a downward center ray
+and consistent adjacent-pixel directions. That runner made no process reads;
+its result is not a current picked-province proof or observation of the game
+executing its projection. All 1,724 Rust tests and 956 Python tests (37 skipped),
+strict Clippy on Mac, Windows GNU and both Linux musl targets, release build and
+default 28-tool stdio smoke passed. All 38 unrelated WIP files stayed byte-exact.
+
+The source is internal arithmetic only, with no new MCP tool, memory reader,
+input or worker permission. Static terrain traversal and bitmap lookup are
+recovered but not yet ported or live qualified. SDL window association, complete
+scene/GUI picking precedence, eligibility and ordinary placement input remain
+unqualified. No map click occurred. The clean two-year run and full recorded
+campaigns remain unfinished; paused component tests measure no game-year rate.
