@@ -38,6 +38,8 @@ extern "C" {
     fn CGWindowListCopyWindowInfo(option: u32, relative_to: u32) -> CFTypeRef;
     fn CGRectMakeWithDictionaryRepresentation(dict: CFTypeRef, rect: *mut Rect) -> bool;
     fn CGEventCreateKeyboardEvent(source: CFTypeRef, key: u16, down: bool) -> CFTypeRef;
+    fn CGEventCreate(source: CFTypeRef) -> CFTypeRef;
+    fn CGEventGetLocation(event: CFTypeRef) -> Point;
     fn CGEventSetFlags(event: CFTypeRef, flags: u64);
     fn CGEventSourceFlagsState(state: i32) -> u64;
     fn CGEventSourceButtonState(state: i32, button: u32) -> bool;
@@ -388,11 +390,22 @@ fn drag_sequence(
 
 /// A click can be cancelled after its pointer settle. Once down was attempted,
 /// release is unconditional and a failed release gets one cleanup retry.
+#[cfg(test)]
 fn click_sequence(
     point: Point,
     down: u32,
     up: u32,
+    check: impl FnMut() -> Result<()>,
+    post: impl FnMut(u32, Point) -> Result<()>,
+    pause: impl FnMut(std::time::Duration),
+) -> Result<()> {
+    click_sequence_checked(point, (down, up), check, || Ok(()), post, pause)
+}
+fn click_sequence_checked(
+    point: Point,
+    (down, up): (u32, u32),
     mut check: impl FnMut() -> Result<()>,
+    mut before_down: impl FnMut() -> Result<()>,
     mut post: impl FnMut(u32, Point) -> Result<()>,
     mut pause: impl FnMut(std::time::Duration),
 ) -> Result<()> {
@@ -400,6 +413,7 @@ fn click_sequence(
     post(MOUSE_MOVED, point)?;
     pause(std::time::Duration::from_millis(60));
     check()?;
+    before_down()?;
     let dispatched = post(down, point);
     if dispatched.is_ok() {
         pause(std::time::Duration::from_millis(50));
@@ -410,6 +424,60 @@ fn click_sequence(
     }
     pause(std::time::Duration::from_millis(40));
     dispatched.and(released)
+}
+
+/// Allocate the complete ordinary mouse sequence before any event is posted.
+/// The final target/deadline check therefore follows down-event allocation,
+/// and cleanup never needs a new allocation after possible delivery.
+struct MouseEvents([CFTypeRef; 3]);
+impl MouseEvents {
+    fn new(point: Point) -> Result<Self> {
+        let events = Self(
+            [MOUSE_MOVED, LEFT_MOUSE_DOWN, LEFT_MOUSE_UP].map(|kind| unsafe {
+                CGEventCreateMouseEvent(std::ptr::null(), kind, point, LEFT_BUTTON)
+            }),
+        );
+        if events.0.iter().any(|event| event.is_null()) {
+            return Err(Error::new(
+                "input_unavailable",
+                "Complete ordinary mouse event sequence unavailable",
+            ));
+        }
+        for &event in &events.0 {
+            unsafe {
+                CGEventSetFlags(event, 0);
+            }
+        }
+        Ok(events)
+    }
+    fn post(&self, kind: u32) -> Result<()> {
+        let index = match kind {
+            MOUSE_MOVED => 0,
+            LEFT_MOUSE_DOWN => 1,
+            LEFT_MOUSE_UP => 2,
+            _ => {
+                return Err(Error::new(
+                    "input_unavailable",
+                    "Unknown ordinary mouse event",
+                ))
+            }
+        };
+        unsafe {
+            CGEventPost(HID_EVENT_TAP, self.0[index]);
+        }
+        Ok(())
+    }
+}
+impl Drop for MouseEvents {
+    fn drop(&mut self) {
+        for &event in &self.0 {
+            if !event.is_null() {
+                unsafe {
+                    CFRelease(event);
+                }
+            }
+        }
+    }
 }
 
 enum ProcessBinding<'p> {
@@ -544,27 +612,52 @@ impl<'p> MacKeys<'p> {
     /// One left click at a game-logical point after a fresh front-most check:
     /// move, settle, press, release. The cursor stays where it clicked.
     pub fn click(&self, game: (u32, u32), x: f64, y: f64) -> Result<Point> {
+        self.click_checked(game, x, y, &|| Ok(()))
+    }
+    /// One ordinary unmodified click with an additional post-move check before
+    /// down. Any failure may follow cursor motion; it is not proof of no input.
+    pub(crate) fn click_checked(
+        &self,
+        game: (u32, u32),
+        x: f64,
+        y: f64,
+        before_down: &dyn Fn() -> Result<()>,
+    ) -> Result<Point> {
         let point = client_point(self.verified_content(game)?, x, y)?;
-        click_sequence(
+        let events = MouseEvents::new(point)?;
+        click_sequence_checked(
             point,
-            LEFT_MOUSE_DOWN,
-            LEFT_MOUSE_UP,
+            (LEFT_MOUSE_DOWN, LEFT_MOUSE_UP),
             || self.preflight(),
-            |kind, point| {
-                // A null source is permitted. Release every allocated event.
-                unsafe {
-                    let event = CGEventCreateMouseEvent(std::ptr::null(), kind, point, LEFT_BUTTON);
-                    if event.is_null() {
-                        return Err(Error::new("input_unavailable", "Mouse event unavailable"));
-                    }
-                    CGEventPost(HID_EVENT_TAP, event);
-                    CFRelease(event);
-                }
-                Ok(())
-            },
+            before_down,
+            |kind, _| events.post(kind),
             std::thread::sleep,
         )?;
         Ok(point)
+    }
+    /// Read the current OS cursor in the same screen coordinate space used by
+    /// CGEvent mouse posts. Creating this snapshot posts no event.
+    pub(crate) fn confirm_cursor_at(&self, game: (u32, u32), x: f64, y: f64) -> Result<()> {
+        let expected = client_point(self.verified_content(game)?, x, y)?;
+        let actual = unsafe {
+            let event = CGEventCreate(std::ptr::null());
+            if event.is_null() {
+                return Err(Error::new(
+                    "input_unavailable",
+                    "Current cursor snapshot unavailable",
+                ));
+            }
+            let point = CGEventGetLocation(event);
+            CFRelease(event);
+            point
+        };
+        if actual != expected {
+            return Err(Error::new(
+                "input_cursor_changed",
+                "OS cursor differs from the original construction target",
+            ));
+        }
+        self.preflight()
     }
     /// One left-button drag between game-logical points in small steps, after a
     /// fresh front-most check. Used to pan views; never to move game objects.
@@ -1209,6 +1302,48 @@ mod tests {
 #[cfg(test)]
 mod click_cleanup_tests {
     use super::*;
+    #[test]
+    fn checked_click_validates_after_move_and_never_posts_down_after_refusal() {
+        use std::cell::RefCell;
+        for refuse in [false, true] {
+            let trace = RefCell::new(Vec::new());
+            let result = click_sequence_checked(
+                Point { x: 10.0, y: 20.0 },
+                (LEFT_MOUSE_DOWN, LEFT_MOUSE_UP),
+                || {
+                    trace.borrow_mut().push("check");
+                    Ok(())
+                },
+                || {
+                    trace.borrow_mut().push("target");
+                    if refuse {
+                        Err(Error::new("target_changed", "fixture"))
+                    } else {
+                        Ok(())
+                    }
+                },
+                |kind, _| {
+                    trace.borrow_mut().push(match kind {
+                        MOUSE_MOVED => "move",
+                        LEFT_MOUSE_DOWN => "down",
+                        LEFT_MOUSE_UP => "up",
+                        _ => panic!(),
+                    });
+                    Ok(())
+                },
+                |_| trace.borrow_mut().push("wait"),
+            );
+            let trace = trace.into_inner();
+            assert_eq!(&trace[..5], &["check", "move", "wait", "check", "target"]);
+            if refuse {
+                assert_eq!(trace.len(), 5);
+                assert_eq!(result.unwrap_err().code, "target_changed");
+            } else {
+                result.unwrap();
+                assert_eq!(&trace[5..], &["down", "wait", "up", "wait"]);
+            }
+        }
+    }
     #[test]
     fn stop_after_settle_prevents_down_and_all_later_motion() {
         let mut checks = 0;

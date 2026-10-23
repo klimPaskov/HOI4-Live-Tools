@@ -1,5 +1,28 @@
 # Mac continuation checkpoint — 23 October 2026
 
+The recorded Luna-medium ordinary selection test passed on native macOS with a
+1920×1080 game client. One cursor move and left click selected `arms_factory`;
+typed same-attempt readback verified mode 1 and the original template, with the
+complete own construction queue unchanged. The selection RPC took 240.087 ms;
+the complete 18-call driver took 1.503 seconds. There were no screenshots, clock
+calls, workers, observation pauses or input retries. The 1920×1108 H.264 recording
+finalized at 67.938333 seconds and 1,999 frames.
+
+The default-off `hoi4_construction_select` retains the original own scope,
+catalog, target and full queue across input. An already-selected target needs no
+input; possible delivery remains uncertain unless this same attempt verifies it.
+All 1,611 Rust / 956 Python tests (37 skipped), four strict compilation-target
+checks, release build and 28-tool offline protocol smoke pass. Selection does not
+place construction. Typed state targeting, placement and worker integration are
+next; the clean two-year run and full campaign recordings remain unfinished.
+See [selection evidence](CLAUSEWITZ_VALIDATION.md#mac-ordinary-construction-selection--23-october-2026).
+
+The user resumed work after the handoff. The previous task-owned game and
+supervisor have exited; their close report confirms unchanged default settings.
+The original session was not extended or adopted. Preserve its eight journal rows
+and completed footage. A new live session requires fresh owned identities.
+
+Earlier checkpoints follow.
 The requested construction-button geometry observer passed stationary live
 qualification on the retained native Mac 1920×1080 Germany session. It located
 the military-factory button at client rectangle (452, 268, 46, 46) and read the

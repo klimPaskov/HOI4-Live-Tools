@@ -1,5 +1,5 @@
-//! Replace only a wholly discarded read-only opener proof. The original
-//! binding, journal and once-only key producer remain outside this loop.
+//! Replace only a wholly discarded read-only construction proof. The original
+//! binding, journal and once-only input producer remain outside this loop.
 use super::super::action_fence::Fence;
 use crate::error::{Error, Result};
 use std::{
@@ -10,7 +10,7 @@ use std::{
 const ATTEMPTS: usize = 4;
 const INTERVAL: Duration = Duration::from_millis(2);
 
-pub(super) fn observe<T>(
+pub(in crate::launch::macos) fn observe<T>(
     fence: &Fence<'_>,
     phase: &'static str,
     producer: impl FnMut() -> Result<T>,
@@ -28,7 +28,7 @@ pub(super) fn observe<T>(
 fn expired() -> Error {
     Error::new(
         "action_deadline",
-        "Original construction opener observation deadline expired",
+        "Original construction action observation deadline expired",
     )
 }
 

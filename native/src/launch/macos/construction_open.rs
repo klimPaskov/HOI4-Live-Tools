@@ -21,7 +21,7 @@ use std::{thread, time::Duration};
 #[path = "construction_open/delivery_tests.rs"]
 mod delivery_tests;
 
-mod read_recovery;
+pub(super) mod read_recovery;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Mode {

@@ -85,6 +85,12 @@ Use `already_open_only: true` for an open-panel verification that cannot send a
 keypress if the panel changes. It requires an initially open panel and uses a
 separate durable action identity; historical ordinary-T requests omit the option.
 
+The separate default-off `hoi4_construction_select` selects one ordinary building
+on the open construction panel. It retains the original scope and queue, performs
+at most one unmodified move/click and verifies the exact template from game state.
+A recorded Luna-medium test passed at native 1920×1080 in 240 ms. It does not
+select a state or place construction. See the [selection contract](../docs/MAC_CONTROLLER.md#construction-selection-qualification).
+
 The Mac durable worker has passed recorded Research, Focus and production
 component tests, including plan revisions and reconnects. Canonical Mac process
 timestamps retain byte-exact scope and restart equality. The separate legacy

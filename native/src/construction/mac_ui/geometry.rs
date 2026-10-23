@@ -5,7 +5,7 @@
 use super::{exact, invalid, pointer, window, Interface};
 use crate::{
     construction::mac_panel::routing,
-    error::Result,
+    error::{Error, Result},
     gui::macos::canvas_from_reader,
     gui_tree::{self, Rect},
     memory::Reader,
@@ -55,6 +55,80 @@ impl Observation {
             "input_authorized":false,"settled_frame_verified":false,"delivery_verified":false,
             "prerequisites_evaluated":false})
     }
+}
+
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+impl super::Observation {
+    pub(crate) fn selection_control_point(&self) -> Result<(f64, f64)> {
+        let binding = self.selection_geometry()?;
+        Ok((
+            f64::from(binding.rect.x + binding.rect.w / 2),
+            f64::from(binding.rect.y + binding.rect.h / 2),
+        ))
+    }
+    fn selection_geometry(&self) -> Result<&Binding> {
+        let target = self
+            .choices
+            .target
+            .as_ref()
+            .filter(|t| t.callback.is_some());
+        if !self.choices.complete || !self.queue.complete {
+            return Err(unavailable());
+        }
+        target
+            .and_then(|t| t.geometry.as_ref())
+            .and_then(|g| g.binding.as_ref())
+            .ok_or_else(unavailable)
+    }
+    /// Keep the original canonical target and rectangle. Hover/state/cache
+    /// changes may occur during ordinary movement; a new candidate never wins.
+    pub(crate) fn require_same_choice_geometry(
+        &self,
+        now: &Self,
+        require_route: bool,
+    ) -> Result<()> {
+        self.selection_unchanged(now)?;
+        let before_geometry = self.selection_geometry()?;
+        let after_geometry = now.selection_geometry()?;
+        let before = self.choices.target.as_ref().ok_or_else(unavailable)?;
+        let after = now.choices.target.as_ref().ok_or_else(unavailable)?;
+        if self.choices.paths != now.choices.paths
+            || self.choices.grids != now.choices.grids
+            || self.choices.items != now.choices.items
+            || self.panel.object != now.panel.object
+            || self.panel.root != now.panel.root
+            || before.item != after.item
+            || before.template != after.template
+            || before.window != after.window
+            || before.button != after.button
+            || before.callback != after.callback
+            || before_geometry.ancestors != after_geometry.ancestors
+            || before_geometry.button != after_geometry.button
+            || before_geometry.graphics != after_geometry.graphics
+            || before_geometry.renderer != after_geometry.renderer
+            || before_geometry.parent != after_geometry.parent
+            || before_geometry.rect != after_geometry.rect
+        {
+            return Err(Error::new(
+                "construction_choice_changed",
+                "Original requested construction control or geometry changed",
+            ));
+        }
+        if require_route {
+            after_geometry
+                .routing
+                .as_ref()
+                .ok_or_else(unavailable)?
+                .require_ordinary_target(true)?;
+        }
+        Ok(())
+    }
+}
+fn unavailable() -> Error {
+    Error::new(
+        "construction_choice_unavailable",
+        "Complete original callback, requested geometry and own queue required",
+    )
 }
 
 pub(super) fn observe(

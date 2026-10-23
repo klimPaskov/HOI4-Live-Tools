@@ -101,6 +101,12 @@ Upstream foundation and attribution:
   construction/mac_ui/geometry.rs independently joins the requested button's
   own ancestor chain, graphical parent and renderer, reusing the witnessed Mac
   canvas and routing readers without executing engine predicates or callbacks.
+  construction/mac_ui/selection_state.rs independently retains the original
+  own construction scope, canonical template and full queue across an attempt.
+  launch/macos/construction_select.rs combines those facts with ordinary macOS
+  cursor input and strict durable receipts, without game callbacks or memory
+  writes. This extends the attributed own-state/action-readback approach;
+  no upstream UI code or foreign-platform offsets were copied.
   They reuse the attributed construction semantics
   without copying upstream UI code or another platform's offsets. These readers
   execute no callback and grant no placement or input authority.

@@ -135,8 +135,8 @@ bracket, without executing the callback or authorizing input. Default reads add
 no callback access. A recorded ordinary T opener and subsequent read-only samples
 verified the visible four-grid list and requested building callback. The separate
 conversion item is retained only as the own shared-grid singleton; its embedded
-callback is never treated as a building template. Ordinary selection and placement
-remain pending live qualification.
+callback is never treated as a building template. Ordinary selection has passed
+the bounded component test below; placement remains unqualified.
 
 Independent `include_geometry` now adds the requested button's own renderer,
 full client containment, visible idle ancestors and ordinary UI gates inside that
@@ -204,8 +204,48 @@ and compact scope are retained in the private intent. One recorded ordinary T
 attempt now has a same-attempt Verified receipt. Its broader gate failed at the
 subsequently corrected choice reader. A later recorded continuation verified exact
 historical receipt replay and the guarded already-open path with zero new keys,
-retaining the original failure and successful opener. Selection, placement and
-worker construction integration remain pending. Legacy adapters are preserved.
+retaining the original failure and successful opener. The separate selection
+component is described below; placement and worker construction integration
+remain pending. Legacy adapters are preserved.
+
+## Construction selection qualification
+
+`hoi4_construction_select` additionally requires `construction_selection: true`
+in private `input.json`. This strict boolean defaults off. Pass `building_id`,
+`state_id`, `request_id` and `lease_token`. The state must be owned and controlled
+by the player; here it binds the original scope, not a map-click destination.
+This tool does not select a state, place construction or run the daily worker.
+
+Initial canonical reads retain typed process/campaign/own-state, catalog, exact
+ordinary target and complete ordered queue identity. Mode 0 never follows an
+inactive template pointer; mode 1 must name a canonical ordinary template.
+Unsupported selection modes and incomplete or unsupported queues refuse. Queue
+progress may advance normally, while identity, amounts and membership must match.
+Private journal evidence includes compact scope and a fingerprint; serialized
+JSON is not used as authority for later readback.
+
+If the exact template is already selected, fresh canonical evidence can verify
+it without reading old choice controls or sending input. Otherwise the initially
+open panel, requested callback, button and rectangle remain fixed through one
+ordinary move/click. After cursor settling, the OS cursor and complete observed
+route must match the requested target and ordinary gates. These caches are not
+atomic delivery acknowledgments. A successful receipt additionally requires this
+attempt's fresh canonical mode-1 target and unchanged complete queue.
+
+The original five-second deadline is narrowed by the lease; recovery replaces
+only discarded torn reads. Intent is durable before cursor movement. Errors in
+the possible-input stage remain uncertain, even if no button delivery is known.
+There is no input retry or later settlement. Historical Verified replays report
+`current_selection_verified: false`. Move/down/up events are allocated before
+movement; the last guard follows allocation and release needs no allocation
+following possible down.
+
+The recorded Luna-medium test passed with one ordinary move/click, no screenshots,
+clock calls or observation pauses. Its selection RPC took 240.087 ms at native
+1920×1080. Same-attempt readback verified the original template with the full queue
+unchanged. An already-selected zero-input path has fixture coverage but has not
+yet had its own live component gate. This is selection qualification; placement,
+continuous-play acceptance and full campaigns remain unfinished.
 
 ## Action limits and recovery
 

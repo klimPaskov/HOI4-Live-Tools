@@ -17,6 +17,10 @@ use std::{collections::BTreeSet, time::Instant};
 
 mod callback;
 mod geometry;
+#[cfg_attr(not(any(target_os = "macos", test)), allow(dead_code))]
+mod selection_state;
+#[allow(unused_imports)]
+pub(crate) use selection_state::{bind_selection, SelectionAnchor, SelectionState};
 
 #[derive(Clone, Copy, Default)]
 pub struct Options {
@@ -112,9 +116,12 @@ impl Choices {
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Binding {
     process: Identity,
+    base: u64,
+    own_tag: i32,
     country: u64,
     production: u64,
     state: u64,
+    state_id: i32,
     registry: u64,
     manager: u64,
     catalog: catalog::Catalog,
@@ -473,9 +480,12 @@ fn observe(
     let queue = super::queue_summary(&lines, key, state_id);
     let binding = Binding {
         process: process_identity,
+        base,
+        own_tag,
         country,
         production,
         state,
+        state_id,
         registry,
         manager,
         catalog,
@@ -485,7 +495,7 @@ fn observe(
     };
     let (calls, bytes) = w.finish()?;
     process.check()?;
-    if process.identity() != Some(&binding.process) {
+    if process.identity() != Some(&binding.process) || process.image_base() != binding.base {
         return Err(Error::new(
             "ownership_changed",
             "Construction process identity changed during observation",
@@ -502,6 +512,27 @@ fn observe(
         read_bytes: r.bytes.get() + bytes,
         elapsed_ms: start.elapsed().as_secs_f64() * 1000.0,
     })
+}
+
+/// Full current UI binding for one ordinary selection attempt. This remains
+/// separate from the lightweight canonical readback and grants no input.
+#[cfg_attr(not(any(target_os = "macos", test)), allow(dead_code))]
+pub(crate) fn observe_choice(
+    process: &dyn Process,
+    key: &str,
+    state_id: i32,
+    include_routing: bool,
+) -> Result<Observation> {
+    observe(
+        process,
+        key,
+        state_id,
+        Options {
+            callback: true,
+            geometry: true,
+            routing: include_routing,
+        },
+    )
 }
 
 pub fn snapshot(process: &dyn Process, key: &str, state_id: i32) -> Result<Value> {

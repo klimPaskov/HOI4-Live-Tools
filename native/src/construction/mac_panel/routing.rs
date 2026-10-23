@@ -173,6 +173,35 @@ pub(in crate::construction) fn observe(
 }
 
 impl Observation {
+    /// Narrow ordinary-input correlation. This does not assert an atomic cache
+    /// generation or physical delivery; same-attempt game readback is required.
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+    pub(in crate::construction) fn require_ordinary_target(
+        &self,
+        parent_verified: bool,
+    ) -> Result<()> {
+        if self.sources.iter().filter(|p| **p == self.renderer).count() != 1
+            || self.targets.iter().filter(|p| **p == self.button).count() != 1
+            || self.targets.first() != Some(&self.button)
+            || self.aliases_match != [true, true]
+            || self.current != self.expected_stamp
+            || self.processed != self.expected_stamp
+            || self.processed_event_point != self.target_point
+            || self.dispatch_skip != 0
+            || (self.conditional_enable != 0 && self.flags & 2 == 0)
+            || self.flags & 0xc00 != 0x800
+            || self.flags & 0x2000 == 0
+            || self.wrapper_gate != 0
+            || (self.optional_gate_present && !parent_verified)
+            || self.post_click_hook_present
+        {
+            return Err(crate::error::Error::new(
+                "construction_route_unavailable",
+                "Current cursor and complete hit route must correlate with the original requested button",
+            ));
+        }
+        Ok(())
+    }
     pub(super) fn diagnostic(&self) -> Value {
         self.diagnostic_with_parent(false)
     }
@@ -204,5 +233,85 @@ impl Observation {
             "cache_completion_verified":false,"os_cursor_verified":false,
             "input_authorized":false,"delivery_verified":false
         })
+    }
+}
+
+#[cfg(test)]
+mod admission_tests {
+    use super::*;
+    fn ready() -> Observation {
+        Observation {
+            sources: vec![11, 13],
+            targets: vec![12, 14],
+            renderer: 11,
+            button: 12,
+            current: [100.0, 200.0],
+            processed: [100.0, 200.0],
+            to_graphics: [1.0, 1.0],
+            to_event: [1.0, 1.0],
+            target_point: [100, 200],
+            expected_stamp: [100.0, 200.0],
+            processed_event_point: [100, 200],
+            aliases_match: [true, true],
+            dispatch_skip: 0,
+            conditional_enable: 0,
+            flags: 0x2800,
+            wrapper_gate: 0,
+            optional_gate_present: true,
+            post_click_hook_present: false,
+        }
+    }
+    #[test]
+    fn target_correlation_does_not_require_source_tail_or_claim_delivery() {
+        let observation = ready();
+        observation.require_ordinary_target(true).unwrap();
+        let d = observation.diagnostic_with_parent(true);
+        assert_eq!(d["source_tail_matches_renderer"], false);
+        for key in [
+            "cache_completion_verified",
+            "os_cursor_verified",
+            "input_authorized",
+            "delivery_verified",
+        ] {
+            assert_eq!(d[key], false);
+        }
+        assert!(observation.require_ordinary_target(false).is_err());
+    }
+    #[test]
+    fn stale_ambiguous_or_intercepted_routes_refuse_without_replacing_the_target() {
+        let changes: [fn(&mut Observation); 16] = [
+            |o| o.sources.clear(),
+            |o| o.sources.push(o.renderer),
+            |o| o.targets.clear(),
+            |o| o.targets.push(o.button),
+            |o| o.targets.swap(0, 1),
+            |o| o.aliases_match[0] = false,
+            |o| o.aliases_match[1] = false,
+            |o| o.current[0] += 1.0,
+            |o| o.processed[0] += 1.0,
+            |o| o.processed_event_point[1] += 1,
+            |o| o.dispatch_skip = 1,
+            |o| o.conditional_enable = 1,
+            |o| o.flags &= !0x2000,
+            |o| o.flags |= 0x400,
+            |o| o.wrapper_gate = 1,
+            |o| o.post_click_hook_present = true,
+        ];
+        for change in changes {
+            let mut o = ready();
+            change(&mut o);
+            assert_eq!(
+                o.require_ordinary_target(true).unwrap_err().code,
+                "construction_route_unavailable"
+            );
+        }
+    }
+    #[test]
+    fn supported_conditional_flag_and_absent_graphical_parent_remain_valid() {
+        let mut o = ready();
+        o.conditional_enable = 1;
+        o.flags |= 2;
+        o.optional_gate_present = false;
+        o.require_ordinary_target(false).unwrap();
     }
 }

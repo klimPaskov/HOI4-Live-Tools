@@ -7460,3 +7460,58 @@ preserved. No new campaign footage was recorded by this read-only test.
 Next implement typed original selection and full-queue readback, then a separately
 bounded ordinary selection attempt. Placement, daily-worker integration, the
 clean two-year run and full recorded Germany/China campaigns remain unfinished.
+
+## Mac ordinary construction selection — 23 October 2026
+
+The separate default-off `hoi4_construction_select` retains immutable typed
+process/campaign/own-state, public catalog, ordinary target and complete ordered
+queue facts. Readback validates original pointer edges before replacement payload
+and needs no old panel, callback, renderer or route. Inactive mode never follows
+the old template pointer; unsupported modes and incomplete queue facts refuse.
+A compact private fingerprint records the original evidence, but cannot authorize
+later settlement or replace the typed in-memory binding.
+
+One strict durable intent precedes all cursor input. An already-selected target
+requires fresh evidence and no input. Otherwise the original callback, control,
+rectangle and own graphics stay fixed through one ordinary unmodified move/click.
+After settling, the OS cursor and complete observed route must match the target
+and ordinary gates. Canonical same-attempt mode-1 selection and the unchanged
+full queue decide success. Route caches do not themselves prove delivery.
+The five-second deadline is never renewed; possible-input failures remain
+uncertain and cannot be retried. Move/down/up allocation now precedes movement,
+so the final guard follows allocation and release needs no later allocation.
+
+Thirty-two added tests cover typed scope/readback, stale replacement edges,
+unsupported selection/queue facts, durable intent/replay/quarantine, default-off
+configuration, route predicates and the final down guard. All 1,611 Rust tests
+and 956 Python tests (37 skipped) pass, as do formatting, strict host/Windows-GNU/
+Linux-musl/ARM64-Linux-musl Clippy, release build and 28-tool offline protocol smoke.
+A read-only review caught the mouse allocation issue before the final checks;
+the corrected path had no subsequent actionable finding.
+
+One Luna-medium player then passed the bounded recorded test in the retained
+Normal/historical Germany session. One cursor move and click at the original
+military-factory button selected `arms_factory`. `state_id: 64` bound own scope;
+no state was selected and no construction was placed. The selection RPC took
+240.087 ms; the full 18-call driver took 1.503 seconds, including one owned-app
+activation. Fresh complete before/after player reads confirmed unchanged paused
+1 January 1936 12:00, speed 0, Research, Focus, production, target and empty queue.
+There were zero screenshots, clock calls, worker starts, observation pauses or
+input retries. No real time per game year is established by this paused test.
+
+The original six journal rows remained byte-exact; the selection intent and
+Verified receipt brought the total to eight. The five other controller files
+were unchanged. All 270 pinned source/binary/helper files remained frozen, and
+38 unrelated work-in-progress files retained their hashes. Lease release and
+successful MCP EOF completed. The grant closed and the recorder finalized at
+1920×1108 H.264, 67.938333 seconds and 1,999 frames, with native 1920×1080 client
+geometry independently established. Video stream metadata passed; this checkpoint
+does not claim an additional visual review. A further root-only fresh memory
+read was not performed because the user requested stopping.
+
+After the user resumed, frozen files and unrelated work still matched. The old
+game and supervisor had exited after their original bounded lifetime; the close
+report records game return code 0 and unchanged default settings. No lifetime was
+renewed, replacement process adopted or input replayed. All old evidence remains.
+Typed placement, construction worker integration, the clean two-year Luna run
+and full recorded campaigns remain unfinished.

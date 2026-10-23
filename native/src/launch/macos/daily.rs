@@ -885,6 +885,7 @@ mod tests {
             daily_production: false,
             daily_focus: false,
             construction_panel: false,
+            construction_selection: false,
         }
     }
     #[test]
