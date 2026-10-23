@@ -1,5 +1,31 @@
 # Mac continuation checkpoint — 23 October 2026
 
+The read-only Find/camera tool now supports the independently recovered native
+Mac layout as well as Linux. Stationary qualification passed in a fresh native
+1920×1080 Germany session: median reader/RPC time was 0.442/0.484 ms. It verified
+the hidden own Find view, finite camera coordinates and own Brandenburg template
+anchor, with zero input, screenshots, cursor movement or observation pauses.
+Before/after complete Research, Focus, production and queue state stayed unchanged.
+Visible Find results, text-focus and ordinary search input remain unqualified.
+
+The separate typed placement-readback foundation verifies exactly one requested
+building increment or one matching new queue line while retaining every original
+row and scope. An unchanged queue is Pending. It is not connected to input or the
+worker. All 1,642 Rust / 956 Python tests (37 skipped), strict checks on four
+compilation targets, release build and offline MCP smoke pass. The prior selection
+commit `acd6f6e` passed all nine CI jobs. See
+[Find and queue-delta evidence](CLAUSEWITZ_VALIDATION.md#mac-findcamera-and-placement-readback-foundation--23-october-2026).
+
+The fresh game remains paused at 1 January 1936 12:00 with no input grant,
+controller, worker or active recording. Its menu recording was stopped by macOS
+with ScreenCaptureKit error -3821 and is preserved as failed. Normal task-port
+authorization is restored; the first temporary authorization helper's grant was
+not retained, which was corrected without changing system security policy.
+Ordinary Find/state targeting, placement input, construction worker integration,
+the clean two-year run and full recorded campaigns remain unfinished.
+
+Earlier checkpoints follow.
+
 The recorded Luna-medium ordinary selection test passed on native macOS with a
 1920×1080 game client. One cursor move and left click selected `arms_factory`;
 typed same-attempt readback verified mode 1 and the original template, with the

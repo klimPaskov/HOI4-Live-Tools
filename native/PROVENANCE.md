@@ -1,5 +1,43 @@
 # Rust foundation provenance
 
+## Mac Find/camera and exact placement delta
+
+`construction/mac_find.rs` independently recovers Mach-O UUID
+`089EA519-6780-353B-8E39-4E9309B444D4`, SHA256
+`09419b087f8b4656c00df337bf838ff34c9b1d816b76cef5383ae6a4ac15b1fb`.
+Addresses here are RVAs. Exact file bytes, RTTI, LC_FUNCTION_STARTS and decoded
+instructions were cross-checked with Ghidra pseudocode. No Linux offsets or
+upstream UI implementation were copied; decompiler output is private evidence,
+not original source or proof of execution.
+
+Constructor `0x207b1f0` installs CFindView primary `0x3457c38`, own idler `+0xc30`,
+window `+0xc38`, query string `+0xc48`, first-row cache `+0xc88` and result header
+`+0xc90`. Refresh `0x207c140` reads count `+0xc9c` and traverses 0x40-byte entries.
+It may retain an old first row when count is zero; the observer therefore skips
+that stale pointer and payload. Row constructor/refresh `0x207f360`/`0x207f6d0`
+uses CSearchableGridBoxItem primary `0x34580d8`, copies entry kind `+0x38` to
+row `+0x408`, and entry object `+0x30` to the kind's `+0x3f0/+0x3f8/+0x400`.
+State kind 2 must join the fresh state catalog. Other object kinds are not followed.
+Hidden Find windows skip query and row payload; root ownership and local states
+remain separately observed, without input or settled-frame authority.
+
+Ordinary selection `0x207f5d0` passes a kind-2 state to the own idler virtual
+`+0x1e0`, `0x75c000`. Its ordinary branch reads state `+0x20` template map position
+`+0x120`. CStateTemplate primary `0x337de78` is independently identified by RTTI.
+Both idler camera getters `+0x148/+0x150` resolve to `0x77bd30`, returning `+0x708`.
+Setter `0x1929770` writes eye `+0x698`, look-at `+0x6a4`, and look-at height 9.5;
+eye Z also depends on map settings. The reader reports finite bounded coordinates
+and exact horizontal anchor comparison. Wrapped-map equivalence, text-focus,
+map-hit routing and placement eligibility remain unqualified.
+
+`construction/mac_ui/placement_state.rs` separately retains the selected original
+canonical target, own scope, full catalog and ordered complete queue. Replacement
+queue payload follows original non-queue ownership checks. Verification permits
+one matching amount increment or one inserted amount-one line, with every old
+row and relative order intact. Zero delta is Pending. Existing selection proof
+still requires an entirely unchanged queue. Neither reader creates a deadline,
+authorizes input or invokes an engine function.
+
 ## Typed Mac keyboard receiver prefix
 
 `construction/mac_panel/shortcut.rs` uses independently retained static evidence

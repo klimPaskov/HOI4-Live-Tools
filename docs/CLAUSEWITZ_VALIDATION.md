@@ -7515,3 +7515,61 @@ report records game return code 0 and unchanged default settings. No lifetime wa
 renewed, replacement process adopted or input replayed. All old evidence remains.
 Typed placement, construction worker integration, the clean two-year Luna run
 and full recorded campaigns remain unfinished.
+
+## Mac Find/camera and placement-readback foundation — 23 October 2026
+
+The existing read-only Find tool now dispatches to independently recovered Mac
+and Linux layouts. Mac constructor/RTTI and decoded ordinary paths establish its
+Find/window/query, result header and 0x40-byte entries, canonical state row,
+own camera getter and state-template map position. Ghidra pseudocode corroborated
+the exact file-backed instruction evidence. These are static facts, not engine
+execution. No callbacks or game functions are invoked.
+
+The Mac snapshot verifies own scope and interface links in a full witness bracket
+and repeats exact process checks. Hidden Find windows skip stale query/row data.
+Visible first-state rows must match the first entry and fresh state catalog;
+other result-kind objects are not followed. Review caught a valid zero-result
+case that retains the old row. The corrected reader skips that pointer/payload
+and reports no current first result. A regression covers this state; the initial
+candidate was never used live. Camera coordinates must be finite and bounded;
+foreign requested states do not expose anchor payload. Exact horizontal position
+comparison does not establish wrapped-map equivalence or current screen routing.
+
+Separately, the typed placement-readback foundation retains the original selected
+ordinary target, own scope, full catalog and complete ordered queue. Replacement
+queue reads follow original non-queue edges and exact selection. It accepts one
+matching existing-line increment or one matching inserted amount-one row while
+preserving every old row/order. An unchanged queue is Pending. It creates no
+input, retry, deadline or worker capability; ordinary state targeting and durable
+placement input remain unfinished.
+
+All 1,642 Rust and 956 Python tests (37 skipped) passed, plus strict Clippy on
+host, Windows GNU and Linux x86_64/ARM64 musl, release build and offline protocol
+checks. The additions include 22 placement and nine Mac Find fixtures. Original
+selection tests still pass. The prior selection commit `acd6f6e` passed all nine
+CI jobs after its full reachable-history audit.
+
+A new task-owned native Mac 1920×1080 instance replaced the expired prior session.
+One Luna-medium player started fresh vanilla Germany 1936 on Normal/historical
+settings. The menu capture subsequently failed with ScreenCaptureKit -3821,
+"Stream was stopped by the system"; it is preserved as failed, not accepted
+campaign footage. All grants closed. A read-only task-access check then refused
+without prompting. Normal OS authorization restored access after a temporary
+helper's discard-rights flag was corrected; no system security policy changed.
+
+Stationary qualification of the corrected reader passed on the fresh paused
+Germany campaign at 1 January 1936 12:00, speed 0. A target-free sample and three
+Brandenburg samples verified a materialized hidden idle own Find root, camera
+coordinates and canonical own state-64 anchor (3008, 1569). The camera was not at
+that exact anchor. Query/results remained unavailable because the view was hidden.
+Median native/RPC time was 0.442/0.484 ms; the complete 16-call driver took
+0.546 seconds. Complete before/after Research (47 researched), Focus, production
+(21 lines), target and empty construction queue were unchanged.
+
+There were zero input/lease calls, cursor movements, screenshots or observation
+pauses; no input controller was configured. Source/binary/helper pins were
+unchanged and MCP exited successfully on EOF. This qualifies hidden-view/camera/
+own-anchor observations only. Visible results, text-focus, ordinary Find input,
+map targeting and placement, worker integration, the clean two-year run and full
+recorded campaigns remain unfinished. Real time per campaign year is not measured
+by this paused component test.

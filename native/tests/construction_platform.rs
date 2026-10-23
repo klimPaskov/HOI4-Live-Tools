@@ -101,15 +101,15 @@ fn mac_ui_probe_refuses_linux_before_any_process_access() {
 }
 
 #[test]
-fn mac_find_refuses_with_and_without_requested_state_before_any_process_access() {
+fn mac_find_enters_its_own_snapshot_and_does_not_retry_process_failure() {
     let process = UnavailableProcess::new(StringAbi::LibCxx);
     for state in [None, Some(1), Some(4095)] {
         assert_eq!(
             find_view::snapshot(&process, state).unwrap_err().code,
-            "unsupported_platform"
+            "fixture_access"
         );
     }
-    process.assert_untouched();
+    assert_eq!(process.accesses.load(Ordering::SeqCst), 3);
 }
 
 #[test]
@@ -216,8 +216,6 @@ fn public_mac_routes_preserve_explicit_platform_refusal_without_read_retries() {
             "hoi4_construction_controls",
             json!({"building_id":"arms_factory","include_geometry":true}),
         ),
-        ("hoi4_construction_find_view", json!({})),
-        ("hoi4_construction_find_view", json!({"state_id":64})),
         ("hoi4_construction_queue", json!({"include_ui":true})),
         (
             "hoi4_construction_queue",

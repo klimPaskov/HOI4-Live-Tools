@@ -103,49 +103,30 @@ adapter is disabled by default and still needs live adapter acceptance. See
 
 ### macOS
 
-Current testing uses native Mac HOI4 1.19.3 x86_64 under Rosetta, with a verified
-**1920×1080, UI scale 1** profile. Game GUI geometry is independently checked
-against the owned OS window before input. The
-[Rust-managed recorder](docs/MAC_RECORDING.md) captures a 1920×1108 window,
-including the titlebar around the 1080p game client.
+The native preview supports one Steam **HOI4 1.19.3 x86_64 build under Rosetta**
+with a verified **1920×1080, UI scale 1** input profile. It checks the owned game
+and window before input. [Window recording](docs/MAC_RECORDING.md) captures
+1920×1108, including the titlebar around the game client.
 
-A recorded Mac mixed standing-plan test now passes Research assignment/refill,
-successive Focus handoffs, one-factory production changes, reconnect and unchanged
-idle plan files. One Luna medium player ran it at native 1920×1080. Germany
-advanced 108.8 game days in about 290 seconds with zero observation pauses and
-one explicit pause at the test's end. The recording finalized cleanly.
+Recorded Luna-medium component tests passed Research refill, Focus handoffs,
+one-factory production changes, durable plan revisions/reconnects, construction
+opening and ordinary building-template selection. The selection call took
+240 ms. A separate stationary Find/camera reader measured 0.48 ms per RPC with
+zero input, screenshots or pauses. These are measurements of specific tested
+paths. See [the validation record](docs/CLAUSEWITZ_VALIDATION.md) for scope and
+preserved failures.
 
-The default-off durable worker verified all five planned assignments. A second
-recorded test retained them through a plan revision and reconnect, added five
-assignments, and filled all four Research slots. Independent reads confirmed
-Focus handoffs and unchanged production allocations. A subsequent daily-cap test
-and next-day retry brought the retained plan to twelve completed entries while
-preserving the original zero-input refusal. A compact construction-target reader
-now validates the whole queue; thirteen stationary Mac samples had a 1.38 ms
-median. Durable construction placement remains unfinished.
-This is component qualification; the clean two-year run and full campaigns remain
-unfinished. Earlier failed controllers remain blocked and preserved in
-[the validation record](docs/CLAUSEWITZ_VALIDATION.md).
+Construction placement and its worker integration remain unfinished. Find input,
+peace conferences, naval invasions, the clean two-year acceptance run and full
+campaigns remain open. Broader legacy adapters remain separate from the durable
+worker. The [controller contract](docs/MAC_CONTROLLER.md) describes current
+permissions, receipts and recovery.
 
-In that run, median overview/Research/governor calls took approximately
-0.37/1.70/10.92 ms. The manual Focus action took 3.76 seconds. A separate
-target-only Focus read measured 8.66 ms versus 63.99 ms for complete obstacle
-geometry. These measurements describe specific tested paths, not every tool.
-
-See [the controller and worker contract](docs/MAC_CONTROLLER.md) and
-[input geometry](docs/MAC_INPUT_GEOMETRY.md). Broader legacy plan adapters remain
-separate from the durable worker; peace conferences and naval invasions are not
-implemented.
-
-Construction opening now has a separate default-off preview that uses one
-ordinary T keypress and durable receipts, without moving the cursor. Its current
-shortcut reader and failure handling pass offline checks; live qualification is
-pending normal macOS task-port authorization. It is not yet a campaign capability.
-
-Mac memory access requires Developer Tools permission and an ad-hoc signed tool
-binary (`native/macos/debugger.entitlements`). The game is never re-signed.
-Missing access returns a capability error for client telemetry/UI fallback.
-The public Research-folder diagnostic remains Linux-only.
+Mac memory access requires Developer Tools authorization and a signed tool with
+`native/macos/debugger.entitlements`; the game is never re-signed. Missing access
+returns a capability error for telemetry/UI fallback. Screenshots and saves are
+not the primary native observation path. The public Research-folder diagnostic
+remains Linux-only.
 
 ### Remaining acceptance work
 

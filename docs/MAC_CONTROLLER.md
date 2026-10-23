@@ -154,6 +154,39 @@ discards private typed identity/context between calls, and its UI placement stag
 are not connected to the worker. A future adapter must retain and revalidate those
 identities across ordinary input. Readback success does not authorize placement.
 
+## Find and placement readback foundation
+
+`hoi4_construction_find_view` now dispatches to independently recovered Linux
+or Mac layouts. The Mac path verifies own campaign/production, registry/manager,
+Find/idler and window ownership in one witnessed snapshot. It reports finite
+camera coordinates and an optional own state's canonical template anchor.
+A foreign target exposes no anchor payload. Hidden views skip retained queries
+and rows. A visible first row must match the first result entry and current state
+catalog; count zero returns no current first row even if an old cache is retained.
+Other result kinds expose metadata without following their objects.
+
+The Mac layout uses its own 0x40-byte result entries and camera owner link;
+it does not borrow the Linux reader's fields. Text-focus, settled/current-frame,
+wrapped-map equivalence, input routing and placement eligibility are unqualified.
+A stationary hidden-view/camera/own-anchor test passed at 0.484 ms median RPC,
+with no input, cursor movement, screenshot or pause. The visible result path has
+fixture coverage and still needs live qualification before ordinary Find input.
+
+The internal `SelectionAnchor::placement_anchor` additionally requires the exact
+requested ordinary template already selected. Its replacement queue observation
+validates original non-queue edges, catalog and selection before new row payload,
+then completes the same witness and process checks. It returns Pending for a
+complete unchanged queue. Success requires exactly one matching old line amount
+increment or one matching new amount-one line in the requested own state, with
+all original row identities, amounts and relative order otherwise unchanged.
+Unsupported/incomplete queues or any unrelated mutation refuse.
+
+This foundation has no registered placement action or worker permission. A future
+adapter must retain the original lease/deadline, prove actual state/map targeting,
+persist intent before possible input and preserve uncertainty on failed readback.
+An observed queue delta alone does not prove input delivery or completed building
+construction. Legacy placement remains a separate unqualified path.
+
 ## Construction opener qualification
 
 `hoi4_construction_panel_probe` accepts independent `include_shortcut: true`.

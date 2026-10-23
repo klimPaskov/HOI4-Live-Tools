@@ -91,6 +91,12 @@ at most one unmodified move/click and verifies the exact template from game stat
 A recorded Luna-medium test passed at native 1920×1080 in 240 ms. It does not
 select a state or place construction. See the [selection contract](../docs/MAC_CONTROLLER.md#construction-selection-qualification).
 
+`hoi4_construction_find_view` now uses separate Linux and Mac layouts. The Mac
+hidden-view/camera/own-anchor path passed stationary qualification at 0.48 ms
+median RPC time with zero input. Visible result/focus/navigation qualification
+remains pending. An internal typed queue-delta foundation checks one future
+placement; no new placement action or worker permission is enabled.
+
 The Mac durable worker has passed recorded Research, Focus and production
 component tests, including plan revisions and reconnects. Canonical Mac process
 timestamps retain byte-exact scope and restart equality. The separate legacy

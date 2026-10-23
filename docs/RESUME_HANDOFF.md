@@ -1,7 +1,9 @@
 # Resume handoff — 23 October 2026
 
-The user has resumed work. Read [the current checkpoint](LINUX_RUST_HANDOFF.md)
-for subsequent changes. The historical pause snapshot below preserves the tested
+The user has resumed work. The selection checkpoint was published as `acd6f6e`
+with all nine CI jobs passing. A fresh owned Mac session now has stationary
+Find/camera evidence and a typed placement-readback foundation. Read
+[the current checkpoint](LINUX_RUST_HANDOFF.md) for subsequent changes. The historical pause snapshot below preserves the tested
 uncommitted state and its evidence; its old process has since exited with default
 settings unchanged. Never reconnect to that expired session or rerun its driver.
 

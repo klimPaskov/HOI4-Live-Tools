@@ -14,6 +14,13 @@ use crate::{
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
+// Prospective readback foundation only; no placement adapter is registered.
+#[allow(dead_code)]
+#[path = "placement_state.rs"]
+mod placement_state;
+#[allow(unused_imports)]
+pub(crate) use placement_state::{PlacementAnchor, PlacementDelta, PlacementReadback};
+
 #[cfg(test)]
 #[path = "../../../tests/support/mac_construction_selection_state.rs"]
 mod tests;
@@ -229,7 +236,7 @@ fn entry(r: &Reader<'_>, header: u64, index: usize, stride: usize) -> Result<Vec
 
 /// Guard original pointer edges before any replacement payload. Repeated reads
 /// through the same Witnesses reject a mid-observation edge change immediately.
-fn original_edges(r: &Reader<'_>, anchor: &SelectionAnchor) -> Result<()> {
+fn original_non_queue_edges(r: &Reader<'_>, anchor: &SelectionAnchor) -> Result<()> {
     let b = &anchor.original.binding;
     let g = game::layout(r);
     let l = construction::layout(r);
@@ -304,6 +311,12 @@ fn original_edges(r: &Reader<'_>, anchor: &SelectionAnchor) -> Result<()> {
             "Construction catalog membership changed before payload",
         ));
     }
+    Ok(())
+}
+
+fn original_edges(r: &Reader<'_>, anchor: &SelectionAnchor) -> Result<()> {
+    original_non_queue_edges(r, anchor)?;
+    let b = &anchor.original.binding;
     if members(r, b.production + 0x70, construction::LINE_LIMIT)? != b.queue_members {
         return Err(changed(
             "Construction queue membership changed before payload",
@@ -312,11 +325,27 @@ fn original_edges(r: &Reader<'_>, anchor: &SelectionAnchor) -> Result<()> {
     Ok(())
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum QueueRead {
+    Unchanged,
+    Placement,
+}
+
 fn canonical(
     process: &dyn Process,
     key: &str,
     state_id: i32,
     expected: Option<&SelectionAnchor>,
+) -> Result<SelectionState> {
+    canonical_with_queue(process, key, state_id, expected, QueueRead::Unchanged)
+}
+
+fn canonical_with_queue(
+    process: &dyn Process,
+    key: &str,
+    state_id: i32,
+    expected: Option<&SelectionAnchor>,
+    queue_read: QueueRead,
 ) -> Result<SelectionState> {
     validate_key(key)?;
     construction::find_view::validate_state_id(i64::from(state_id))?;
@@ -352,7 +381,10 @@ fn canonical(
     let r = Reader::new(&w);
     w.section("mac_construction_selection_original_edges");
     if let Some(anchor) = expected {
-        original_edges(&r, anchor)?;
+        match queue_read {
+            QueueRead::Unchanged => original_edges(&r, anchor)?,
+            QueueRead::Placement => original_non_queue_edges(&r, anchor)?,
+        }
     }
     w.section("mac_construction_selection_owner");
     let (country, production) = economy::own_production(&r, base)?;
@@ -397,6 +429,13 @@ fn canonical(
     w.section("mac_construction_selection_mode");
     let selection = super::selection(&r, manager, &catalog)?;
     supported(&selection)?;
+    if queue_read == QueueRead::Placement
+        && expected.is_none_or(|anchor| selection != anchor.original.selection)
+    {
+        return Err(changed(
+            "Original exact ordinary selection required before replacement queue payload",
+        ));
+    }
     w.section("mac_construction_selection_queue");
     let lines = construction::lines_in(&r, base, production, own_tag, true)?;
     let summary = construction::queue_summary(&lines, key, state_id);
