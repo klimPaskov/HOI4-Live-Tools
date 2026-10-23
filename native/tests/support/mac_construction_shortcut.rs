@@ -211,7 +211,7 @@ fn missing_duplicate_and_bounded_sources_cannot_claim_delivery() {
         not_read(&f, &[PREVIOUS_KEYS, KEYS]);
     }
     for (a, value) in [
-        (GRAPHICS + 0x70, 4097),
+        (GRAPHICS + 0x70, 20_001),
         (BUTTON + 0xa8, 129),
         (KEYS + 24, -1),
         (KEYS + 28, 1),
@@ -220,6 +220,22 @@ fn missing_duplicate_and_bounded_sources_cannot_claim_delivery() {
         f.int(a, value);
         assert!(read(&f).is_err());
     }
+}
+#[test]
+fn reserved_keyboard_capacity_never_expands_active_membership_reads() {
+    for capacity in [10_368, 20_000] {
+        let mut f = keyboard();
+        f.int(GRAPHICS + 0x70, capacity);
+        let value = read(&f).unwrap();
+        assert_eq!(value["opener"]["shortcut"]["source_count"], 3);
+        assert_eq!(value["opener"]["shortcut"]["ordinary_route_observed"], true);
+        not_read(&f, &[SOURCE + 24, FOREIGN]);
+    }
+    let mut f = keyboard();
+    f.int(GRAPHICS + 0x70, 10_368);
+    f.int(GRAPHICS + 0x74, 4097);
+    assert_eq!(read(&f).unwrap_err().code, "invalid_construction");
+    not_read(&f, &[SOURCE, PREVIOUS_KEYS, KEYS]);
 }
 #[test]
 fn full_membership_and_each_inspected_binding_survive_final_witness() {

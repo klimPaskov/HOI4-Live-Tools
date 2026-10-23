@@ -34,10 +34,16 @@ pub(super) struct Observation {
     reason: &'static str,
 }
 
-fn array(r: &Reader<'_>, at: u64, stride: usize, bound: usize) -> Result<Vec<u8>> {
+fn array(
+    r: &Reader<'_>,
+    at: u64,
+    stride: usize,
+    count_bound: usize,
+    capacity_bound: usize,
+) -> Result<Vec<u8>> {
     let (header, data, count) = r.array_header(at)?;
     let capacity = i32::from_le_bytes(header[8..12].try_into().unwrap()) as usize;
-    if capacity > bound {
+    if count > count_bound || capacity > capacity_bound {
         return Err(invalid(
             "Keyboard collection exceeds complete observation bound",
         ));
@@ -51,7 +57,7 @@ fn array(r: &Reader<'_>, at: u64, stride: usize, bound: usize) -> Result<Vec<u8>
     r.read(data, count * stride)
 }
 fn shortcuts(r: &Reader<'_>, button: u64) -> Result<Vec<Vec<u8>>> {
-    let bytes = array(r, button + 0xa0, 40, 128)?;
+    let bytes = array(r, button + 0xa0, 40, 128, 128)?;
     let mut result = Vec::new();
     for entry in bytes.chunks_exact(40) {
         let data = u64::from_le_bytes(entry[16..24].try_into().unwrap());
@@ -127,7 +133,10 @@ pub(super) fn observe(r: &Reader<'_>, base: u64, gui: u64, button: u64) -> Resul
         out.reason = "unsupported_keyboard_dispatch_mode";
         return Ok(out);
     }
-    out.sources = array(r, graphics + 0x68, 8, 4096)?
+    // The keyboard cache retains allocation after UI teardown. Bound active
+    // membership separately; spare slots are never read or interpreted. The
+    // complete header remains witnessed under Reader's 20,000-capacity limit.
+    out.sources = array(r, graphics + 0x68, 8, 4096, 20_000)?
         .chunks_exact(8)
         .map(|v| u64::from_le_bytes(v.try_into().unwrap()))
         .collect();

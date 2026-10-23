@@ -73,7 +73,7 @@ fn fixture(mode: i32) -> MacFixture {
         (TOPBAR + 0x60, MANAGER),
         (TOPBAR + 0x30, MANAGER),
         (TOPBAR + 0x68, TOPROOT),
-        (TOPBAR + 0x88, MENU + 0x30),
+        (TOPBAR + 0x88, MENU),
         (TOPBAR + 0x7428, BUTTON),
     ] {
         f.word(field, value);
@@ -267,6 +267,29 @@ fn foreign_topbar_or_alias_mismatch_refuses_before_callback_or_geometry() {
         assert_eq!(snapshot(&f, true).unwrap_err().code, "invalid_construction");
         not_read(&f, &[FUNCTOR, BUTTON + 0xd8, FOREIGN]);
     }
+}
+#[test]
+fn country_menu_alias_requires_canonical_window_not_raw_membership() {
+    // The live topbar stores TWindow, while its parent's membership stores
+    // TWindow's CGuiObject at +0x30. Raw pointer equality rejected the real UI.
+    let f = fixture(2);
+    assert_eq!(snapshot(&f, false).unwrap()["reason"], "opener_observed");
+    for alias in [MENU + 0x30, MENU + 8, FACTION, 0] {
+        let mut f = fixture(2);
+        f.word(TOPBAR + 0x88, alias);
+        assert_eq!(
+            snapshot(&f, false).unwrap_err().code,
+            "invalid_construction"
+        );
+        not_read(&f, &[MENU + 0xd30, BUTTON, FUNCTOR]);
+    }
+    let mut f = fixture(2);
+    f.word(MENU + 0x88, FOREIGN);
+    assert_eq!(
+        snapshot(&f, false).unwrap_err().code,
+        "invalid_construction"
+    );
+    not_read(&f, &[TOPBAR + 0x88, MENU + 0xd30, FOREIGN]);
 }
 #[test]
 fn inactive_override_or_ambiguous_observers_refuse_before_functor_payload() {

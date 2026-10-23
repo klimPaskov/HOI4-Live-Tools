@@ -2,6 +2,10 @@
 
 ## Unreleased native preview
 
+- Fix Mac construction-opener canonical window comparison and distinguish active
+  keyboard membership from reserved cache capacity. Preserve strict receiver
+  checks; live shortcut delivery remains unqualified.
+
 - Add optional Mac construction-choice callback observation: exact requested-item
   capture, complete single-observer membership and the separately observed
   disable-request flag. Default reads stay unchanged; this grants no input.

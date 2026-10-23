@@ -8,8 +8,14 @@ through `0x22f2c30` / `0x22f0840` installs primary `0x3489640`, own idler `+0x58
 manager `+0x60` and the common manager link `+0x30`. Root `+0x68` and the complete
 named path through `country_menu_window`, `after_faction_button` and
 `after_intel_agency_button` lead to `construction_button`. Setup `0x22f3410`
-caches the country-menu GUI-object pointer at `+0x88` and button at `+0x7428`.
-Both aliases must equal their complete named-membership result.
+caches the canonical country-menu window at `+0x88` and button at `+0x7428`.
+The container's virtual `+0x1f8` resolves to `0x27735b0`; its typed lookup returns
+the window itself. Recursive lookup `0x2775440` adds `+0x30` for GUI-object
+access. Raw child membership instead stores that GUI subobject, so the observer
+validates its exact container and own registry before comparing the canonical
+window with the alias. The button alias needs no container adjustment. A live
+stationary read on 23 October confirmed this distinction; the earlier raw-pointer
+comparison failure is preserved.
 
 The exact Standard button and its own GUI registry reuse independently recovered
 Mac types. Observer secondary primary `0x34ab360` at button `+0x70` owns head/tail

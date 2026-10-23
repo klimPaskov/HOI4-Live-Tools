@@ -1,5 +1,21 @@
 # Mac continuation checkpoint — 23 October 2026
 
+Normal macOS task-port authorization completed, and fresh own-country reads
+succeeded. Live testing then exposed two construction-observer defects: the
+country-menu alias stores the canonical window rather than its GUI subobject,
+and keyboard-cache reserved capacity can exceed active membership. Both are
+corrected with regression coverage. The ordinary opener binding now reads
+successfully; shortcut qualification still refuses an earlier eligible icon
+whose keyboard handler has not yet been mapped. No input grant, pause, screenshot
+or cursor movement accompanied these tests. Next verify the preceding receiver
+types, then finish stationary qualification before one Luna-medium opener gate.
+All 1,519 Rust / 956 Python tests (37 skipped), strict cross-platform checks,
+release build and 28-tool offline protocol smoke pass. The two-year run and full
+campaigns remain unfinished. See
+[the live findings](CLAUSEWITZ_VALIDATION.md#mac-live-construction-alias-and-keyboard-capacity--23-october-2026).
+
+Earlier checkpoints follow.
+
 The Mac construction UI probe now has opt-in exact requested-item callback
 observation, preserving the default read path. It separately reports the cached
 disable-request byte, which is not equivalent to visual button state or current

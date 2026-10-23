@@ -207,12 +207,16 @@ fn opener(
         let Some(child) = named(r, base, windows.last().unwrap().object, key, &mut paths)? else {
             return Ok(None);
         };
-        if key == "country_menu_window" && r.u64(topbar + 0x88)? != child {
+        // Named membership holds the CGuiObject subobject; the topbar alias
+        // retains the canonical TWindow. Compare only after validating the
+        // exact container and its own GUI registry.
+        let child = local(r, base, child, registry)?;
+        if key == "country_menu_window" && r.u64(topbar + 0x88)? != child.object {
             return Err(invalid(
                 "Mac topbar country-menu alias and membership differ",
             ));
         }
-        windows.push(local(r, base, child, registry)?);
+        windows.push(child);
     }
     let Some(button) = named(
         r,

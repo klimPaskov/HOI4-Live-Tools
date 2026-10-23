@@ -1,5 +1,41 @@
 # Clausewitz-MCP Linux validation
 
+## Mac live construction alias and keyboard capacity — 23 October 2026
+
+The single normal macOS task-port authorization request completed successfully.
+Fresh own-country memory reads confirmed the retained paused Germany campaign on
+22 May 1936 at speed 3, Normal difficulty and historical AI. Construction was
+still empty. No OS security policy changed, and no game input was issued.
+
+The first opener probe refused because it compared the raw named child with the
+topbar country-menu alias. Independent exact-file lookup/constructor analysis and
+196 stable live read witnesses established that the alias is the canonical
+TWindow, while named child membership stores its CGuiObject at +0x30. The reader
+now validates the exact container and own GUI registry before comparing canonical
+objects. Its regression rejects raw, neighboring, foreign and null aliases before
+descendant payload. Complete named membership and final witnesses remain required.
+
+The corrected ordinary opener binding succeeded in 2.94 ms for one local RPC.
+The opt-in shortcut read then refused because the keyboard cache had 10,368
+reserved slots and 1,897 active entries. Active membership is now independently
+bounded at 4,096; reserved capacity retains the shared 20,000 ceiling. Spare slots
+are never read, and per-button shortcut limits stay 128. Regression checks cover
+large spare capacity, excessive active count and final-header changes.
+
+The next live shortcut probe reached an earlier eligible CIcon and refused its
+unmapped handler. A separate bounded prefix observation confirmed several icons,
+another widget type and an unsupported renderer before reaching the named button.
+These are not silently skipped. Keyboard routing and physical delivery therefore
+remain unqualified. No Luna input grant was opened. The original refusals and a
+private diagnostic helper's corrected array-header mistake are retained separately;
+none are counted as successful campaign play. Controller files stayed unchanged,
+with zero input calls, observation pauses, screenshots or cursor movements.
+
+All 36 focused panel fixtures and the full 1,519 Rust / 956 Python tests
+(37 Python skips) pass, along with formatting, strict host/Windows GNU/Linux
+musl/ARM64 Linux musl Clippy, the release build and a 28-tool offline stdio smoke.
+These checks establish the two corrections, not the unresolved receiver routing.
+
 ## Mac construction-choice callback observation — 23 October 2026
 
 The existing Mac construction UI probe now accepts optional `include_callback`.
