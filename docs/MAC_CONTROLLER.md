@@ -138,6 +138,17 @@ conversion item is retained only as the own shared-grid singleton; its embedded
 callback is never treated as a building template. Ordinary selection and placement
 remain pending live qualification.
 
+Independent `include_geometry` now adds the requested button's own renderer,
+full client containment, visible idle ancestors and ordinary UI gates inside that
+same witness bracket. Nonnull graphical parents must join the exact own item
+frame and renderer; null parents require no attachment reads. The profile is
+native/logical 1920×1080 at scale 1. `include_routing` requires geometry and adds
+complete bounded source/hit lists and cursor-cache correlation. Only active
+entries count toward the 4,096-entry limit; the complete allocation header still
+has the reader's separate 20,000-capacity bound. Neither option evaluates fresh
+prerequisites or proves atomic cache completion, physical delivery, global modal
+clearance or input permission. Default reads retain their previous memory access.
+
 The observed total is not a durable assignment receipt. The legacy adapter still
 discards private typed identity/context between calls, and its UI placement stages
 are not connected to the worker. A future adapter must retain and revalidate those

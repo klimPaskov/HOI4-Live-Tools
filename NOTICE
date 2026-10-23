@@ -98,6 +98,9 @@ Upstream foundation and attribution:
   choice's embedded observer, member capture and disable-request byte.
   The Mac choice reader independently distinguishes the conversion grid item
   by its own view cache; it does not interpret its callback as a building template.
+  construction/mac_ui/geometry.rs independently joins the requested button's
+  own ancestor chain, graphical parent and renderer, reusing the witnessed Mac
+  canvas and routing readers without executing engine predicates or callbacks.
   They reuse the attributed construction semantics
   without copying upstream UI code or another platform's offsets. These readers
   execute no callback and grant no placement or input authority.

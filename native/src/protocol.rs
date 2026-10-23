@@ -690,11 +690,17 @@ impl Server {
             "hoi4_construction_target" | "hoi4_construction_ui_probe" => {
                 let ui_probe = name == "hoi4_construction_ui_probe";
                 if object.keys().any(|k| {
-                    k != "building_id" && k != "state_id" && !(ui_probe && k == "include_callback")
+                    k != "building_id"
+                        && k != "state_id"
+                        && !(ui_probe
+                            && matches!(
+                                k.as_str(),
+                                "include_callback" | "include_geometry" | "include_routing"
+                            ))
                 }) {
                     return Err(Error::new(
                         "invalid_arguments",
-                        "Only building_id, state_id and the UI probe's optional include_callback accepted",
+                        "Only building_id, state_id and the UI probe's optional include_callback, include_geometry and include_routing accepted",
                     ));
                 }
                 let key = object
@@ -710,13 +716,19 @@ impl Server {
                             Error::new("invalid_arguments", "state_id must be an integer")
                         })?,
                 )?;
-                let callback = object
-                    .get("include_callback")
-                    .map(Value::as_bool)
-                    .unwrap_or(Some(false))
-                    .ok_or_else(|| {
-                        Error::new("invalid_arguments", "include_callback must be boolean")
-                    })?;
+                let flag = |key| {
+                    object
+                        .get(key)
+                        .map(Value::as_bool)
+                        .unwrap_or(Some(false))
+                        .ok_or_else(|| {
+                            Error::new("invalid_arguments", format!("{key} must be boolean"))
+                        })
+                };
+                let callback = flag("include_callback")?;
+                let geometry = flag("include_geometry")?;
+                let routing = flag("include_routing")?;
+                construction::mac_panel::validate_options(geometry, routing)?;
                 let process = self.process()?;
                 read_only_recovered(|| {
                     if ui_probe {
@@ -724,7 +736,11 @@ impl Server {
                             process,
                             key,
                             state,
-                            construction::mac_ui::Options { callback },
+                            construction::mac_ui::Options {
+                                callback,
+                                geometry,
+                                routing,
+                            },
                         )
                     } else {
                         construction::target_snapshot::snapshot(process, key, state)

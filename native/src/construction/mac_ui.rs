@@ -16,12 +16,25 @@ use serde_json::{json, Value};
 use std::{collections::BTreeSet, time::Instant};
 
 mod callback;
+mod geometry;
 
 #[derive(Clone, Copy, Default)]
 pub struct Options {
     /// Inspect the requested item's exact ordinary button callback. This does
     /// not establish current eligibility, routing, geometry or input authority.
     pub callback: bool,
+    /// Observe only the requested button's own renderer and ancestor gates.
+    pub geometry: bool,
+    /// Correlate complete mouse-route caches; requires geometry, grants no input.
+    pub routing: bool,
+}
+
+#[derive(Clone, Copy)]
+struct Interface {
+    base: u64,
+    idler: u64,
+    manager: u64,
+    registry: u64,
 }
 
 const GRIDS: [(&str, &str); 4] = [
@@ -55,7 +68,7 @@ impl Panel {
                 .is_some_and(|states| states.iter().all(|state| *state != 2))
     }
 }
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 struct Choice {
     item: u64,
     template: catalog::Template,
@@ -65,6 +78,7 @@ struct Choice {
     button_flags: u8,
     button_state: i32,
     callback: Option<callback::Binding>,
+    geometry: Option<geometry::Observation>,
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum Item {
@@ -73,7 +87,7 @@ enum Item {
     // +0x20 is an embedded callback; never interpret it as a template pointer.
     Conversion { item: u64 },
 }
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 struct Choices {
     // Every named-path membership, grid and item/template join remains private.
     paths: Vec<(u64, Vec<u64>)>,
@@ -230,13 +244,13 @@ fn panel(r: &Reader<'_>, base: u64, idler: u64, manager: u64, registry: u64) -> 
 }
 fn choices(
     r: &Reader<'_>,
-    base: u64,
+    interface: Interface,
     panel: &Panel,
     catalog: &catalog::Catalog,
     target: &catalog::Template,
-    registry: u64,
     options: Options,
 ) -> Result<Choices> {
+    let Interface { base, registry, .. } = interface;
     if !panel.locally_visible() {
         return Ok(Choices::unavailable("panel_not_locally_visible"));
     }
@@ -312,14 +326,14 @@ fn choices(
             }
             out.items.push(Item::Building { item, template });
             if template == target.address {
-                requested = Some(item);
+                requested = Some((item, section));
             }
         }
         out.grids.push((grid, items));
     }
     // Complete membership/type/catalog checks precede ANY target control payload.
     out.complete = true;
-    let Some(item) = requested else {
+    let Some((item, section)) = requested else {
         out.reason = "requested_building_not_in_choices";
         return Ok(out);
     };
@@ -349,6 +363,18 @@ fn choices(
         .callback
         .then(|| callback::observe(r, base, item, button))
         .transpose()?;
+    let geometry = options
+        .geometry
+        .then(|| {
+            geometry::observe(
+                r,
+                interface,
+                [panel.root, possible, section, frame],
+                button,
+                options.routing,
+            )
+        })
+        .transpose()?;
     out.target = Some(Choice {
         item,
         template: target.clone(),
@@ -358,6 +384,7 @@ fn choices(
         button_flags,
         button_state,
         callback,
+        geometry,
     });
     out.reason = "requested_control_observed";
     Ok(out)
@@ -369,6 +396,7 @@ fn observe(
     state_id: i32,
     options: Options,
 ) -> Result<Observation> {
+    super::mac_panel::validate_options(options.geometry, options.routing)?;
     validate_key(key)?;
     super::find_view::validate_state_id(i64::from(state_id))?;
     if process.string_abi() != StringAbi::LibCxx {
@@ -427,7 +455,19 @@ fn observe(
     w.section("mac_construction_panel");
     let panel = panel(&r, base, idler, manager, registry)?;
     w.section("mac_construction_choices");
-    let choices = choices(&r, base, &panel, &catalog, &target, registry, options)?;
+    let choices = choices(
+        &r,
+        Interface {
+            base,
+            idler,
+            manager,
+            registry,
+        },
+        &panel,
+        &catalog,
+        &target,
+        options,
+    )?;
     w.section("mac_construction_queue");
     let lines = super::lines_in(&r, base, production, own_tag, true)?;
     let queue = super::queue_summary(&lines, key, state_id);
@@ -491,8 +531,15 @@ pub fn snapshot_with_options(
         "button_flags_raw":c.button_flags,"locally_shown":c.button_flags&8!=0,
         "button_state_raw":c.button_state,"disabled":c.button_state==3,
         "callback":c.callback.as_ref().map(callback::Binding::summary),
+        "geometry":c.geometry.as_ref().map(geometry::Observation::summary),
         "registry_backlink_verified":true})
     });
+    let geometry_available = o
+        .choices
+        .target
+        .as_ref()
+        .and_then(|c| c.geometry.as_ref())
+        .is_some_and(geometry::Observation::available);
     let callback_verified = o
         .choices
         .target
@@ -522,7 +569,7 @@ pub fn snapshot_with_options(
             "reason":o.choices.reason,"target":target},
         "queue_complete":o.queue.complete,
         "queued":o.queue.complete.then(||json!({"in_state":o.queue.in_state,"elsewhere":o.queue.elsewhere})),
-        "input_authorized":false,"geometry_available":false,"settled_frame_verified":false,
+        "input_authorized":false,"geometry_available":geometry_available,"settled_frame_verified":false,
         "grid_registry_backlink_verified":o.choices.complete,"callback_binding_verified":callback_verified,
         "placement_eligibility_verified":false,"global_modal_clear_verified":false,
         "observation_paused_game":false,
@@ -532,6 +579,6 @@ pub fn snapshot_with_options(
 }
 
 pub(crate) fn tool() -> Value {
-    json!({"name":"hoi4_construction_ui_probe","description":"Read-only native Mac construction observation: own target/state/catalog/complete queue, independently bound panel owner links, local visibility, ordinary canonical selection and full bounded choice membership before the requested button state. Optional include_callback verifies that button's exact observer and item capture in the same witness bracket; it never invokes a callback or proves eligibility. Hidden panels skip choice payload. Unverified modes remain explicit. No geometry, input, navigation, placement or settled-frame authority; never pauses or moves the cursor. Other platforms refuse before process access.",
-        "inputSchema":{"type":"object","properties":{"building_id":{"type":"string","minLength":1,"maxLength":128},"state_id":{"type":"integer","minimum":1,"maximum":4095},"include_callback":{"type":"boolean","default":false}},"required":["building_id","state_id"],"additionalProperties":false},"annotations":{"readOnlyHint":true}})
+    json!({"name":"hoi4_construction_ui_probe","description":"Read-only native Mac construction observation: own target/state/catalog/complete queue, panel owner links, local visibility, ordinary canonical selection and full bounded choice membership before the requested button state. Optional include_callback verifies the exact observer/item capture. Independent include_geometry checks requested-button ancestors, ordinary UI gates and its fully contained renderer rectangle on the own 1920x1080 canvas. Include_routing requires geometry and adds complete bounded mouse-route correlation. Hidden panels skip choice payload. No callback invocation, prerequisite evaluation, input, navigation, placement, atomic route completion or settled-frame authority; never pauses or moves the cursor. Other platforms refuse before process access.",
+        "inputSchema":{"type":"object","properties":{"building_id":{"type":"string","minLength":1,"maxLength":128},"state_id":{"type":"integer","minimum":1,"maximum":4095},"include_callback":{"type":"boolean","default":false},"include_geometry":{"type":"boolean","default":false},"include_routing":{"type":"boolean","default":false}},"required":["building_id","state_id"],"additionalProperties":false},"annotations":{"readOnlyHint":true}})
 }

@@ -581,7 +581,7 @@ fn competing_or_empty_routes_do_not_follow_an_alternative_target() {
 #[test]
 fn malformed_route_headers_refuse_without_truncation_or_payload_reads() {
     for offset in [0x28, 0x50] {
-        for (capacity, count) in [(-1, 0), (1, -1), (1, 2), (4097, 4097)] {
+        for (capacity, count) in [(-1, 0), (1, -1), (1, 2), (4097, 4097), (20001, 2)] {
             let mut f = routing_fixture();
             f.int(GRAPHICS + offset + 8, capacity);
             f.int(GRAPHICS + offset + 12, count);
@@ -592,6 +592,21 @@ fn malformed_route_headers_refuse_without_truncation_or_payload_reads() {
         f.word(GRAPHICS + offset, FOREIGN + 1);
         assert!(snapshot_with_routing(&f, true, true).is_err());
         not_read(&f, &[FOREIGN]);
+    }
+}
+
+#[test]
+fn route_active_count_is_bounded_independently_of_unread_spare_capacity() {
+    for offset in [0x28, 0x50] {
+        for capacity in [4097, 10368, 20000] {
+            let mut f = routing_fixture();
+            f.int(GRAPHICS + offset + 8, capacity);
+            let v = snapshot_with_routing(&f, true, true).unwrap();
+            assert_eq!(v["opener"]["routing"]["source_count"], 2);
+            assert_eq!(v["opener"]["routing"]["route_count"], 2);
+            // Only two active entries exist. Spare allocation is unmapped.
+            not_read(&f, &[SOURCES + 16, ROUTE + 32]);
+        }
     }
 }
 

@@ -9,7 +9,7 @@ const MAX_ENTRIES: usize = 4096;
 const MAX_COORDINATE: f32 = 1_000_000.0;
 
 #[derive(Clone, Debug, PartialEq)]
-pub(super) struct Observation {
+pub(in crate::construction) struct Observation {
     sources: Vec<u64>,
     targets: Vec<u64>,
     renderer: u64,
@@ -33,9 +33,10 @@ pub(super) struct Observation {
 // Reader records both headers and complete payloads in the parent's final
 // witness. The allocator is not an input-routing semantic field.
 fn entries(r: &Reader<'_>, address: u64, stride: usize) -> Result<Vec<u8>> {
-    let (header, data, count) = r.array_header(address)?;
-    let capacity = i32::from_le_bytes(header[8..12].try_into().unwrap());
-    if capacity as usize > MAX_ENTRIES {
+    // Reader validates the entire header, including reserved capacity <=20000.
+    // Only active members are routing facts; never read spare allocation bytes.
+    let (_, data, count) = r.array_header(address)?;
+    if count > MAX_ENTRIES {
         return Err(invalid(
             "Mac mouse route exceeds the complete observation bound",
         ));
@@ -93,7 +94,7 @@ fn convert(point: [f32; 2], factors: [f32; 2]) -> Result<[i32; 2]> {
     Ok([values[0].trunc() as i32, values[1].trunc() as i32])
 }
 
-pub(super) fn observe(
+pub(in crate::construction) fn observe(
     r: &Reader<'_>,
     base: u64,
     gui: u64,
@@ -173,6 +174,11 @@ pub(super) fn observe(
 
 impl Observation {
     pub(super) fn diagnostic(&self) -> Value {
+        self.diagnostic_with_parent(false)
+    }
+    /// The construction-item observer independently verifies a nonnull
+    /// graphical parent. Opener callers retain their original unknown gate.
+    pub(in crate::construction) fn diagnostic_with_parent(&self, verified: bool) -> Value {
         let source_count = self.sources.iter().filter(|p| **p == self.renderer).count();
         let target_count = self.targets.iter().filter(|p| **p == self.button).count();
         json!({
@@ -193,7 +199,7 @@ impl Observation {
             "source_target_flags_eligible":self.flags&0xc00==0x800,
             "conditional_target_gate_clear":self.conditional_enable==0 || self.flags&2!=0,
             "standard_wrapper_gate_raw":self.wrapper_gate,
-            "unsupported_optional_gate_present":self.optional_gate_present,
+            "unsupported_optional_gate_present":self.optional_gate_present && !verified,
             "unsupported_post_click_hook_present":self.post_click_hook_present,
             "cache_completion_verified":false,"os_cursor_verified":false,
             "input_authorized":false,"delivery_verified":false

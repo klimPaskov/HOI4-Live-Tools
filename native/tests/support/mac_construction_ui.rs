@@ -542,14 +542,80 @@ fn probe_protocol_rejects_extra_fields_and_invalid_target_before_binding() {
         json!({"building_id":"arms_factory","state_id":0}),
         json!({"building_id":"bad key","state_id":1}),
         json!({"building_id":"arms_factory","state_id":1,"click":true}),
-        json!({"building_id":"arms_factory","state_id":1,"include_geometry":true}),
-        json!({"building_id":"arms_factory","state_id":1,"include_callback":null}),
-        json!({"building_id":"arms_factory","state_id":1,"include_callback":1}),
-        json!({"building_id":"arms_factory","state_id":1,"include_callback":"true"}),
-        json!({"building_id":"arms_factory","state_id":1,"include_callback":{}}),
+        json!({"building_id":"arms_factory","state_id":1,"include_routing":true}),
+        json!({"building_id":"arms_factory","state_id":1,"include_geometry":false,"include_routing":true}),
     ] {
         let reply=server.handle(json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"hoi4_construction_ui_probe","arguments":args}})).unwrap();
         assert!(reply.to_string().contains("invalid_arguments"), "{reply}");
+    }
+    for field in ["include_callback", "include_geometry", "include_routing"] {
+        for invalid in [json!(null), json!(1), json!("true"), json!({}), json!([])] {
+            let mut args = json!({"building_id":"arms_factory","state_id":1});
+            if field == "include_routing" {
+                args["include_geometry"] = json!(true);
+            }
+            args[field] = invalid;
+            let reply = server
+                .handle(json!({"jsonrpc":"2.0","id":1,"method":"tools/call",
+                    "params":{"name":"hoi4_construction_ui_probe","arguments":args}}))
+                .unwrap();
+            assert!(
+                reply.to_string().contains("invalid_arguments"),
+                "{field}: {reply}"
+            );
+        }
+    }
+}
+
+#[test]
+fn all_supported_option_combinations_reach_binding_without_claiming_it_exists() {
+    let server = Server {
+        process: None,
+        unavailable: None,
+    };
+    for callback in [false, true] {
+        for geometry in [false, true] {
+            for routing in [false, true] {
+                if routing && !geometry {
+                    continue;
+                }
+                let reply = server
+                    .handle(json!({"jsonrpc":"2.0","id":1,"method":"tools/call",
+                        "params":{"name":"hoi4_construction_ui_probe","arguments":{
+                            "building_id":"arms_factory","state_id":1,
+                            "include_callback":callback,"include_geometry":geometry,
+                            "include_routing":routing}}}))
+                    .unwrap();
+                let content: Value =
+                    serde_json::from_str(reply["result"]["content"][0]["text"].as_str().unwrap())
+                        .unwrap();
+                assert_eq!(reply["result"]["isError"], true);
+                assert_eq!(content["error"]["code"], "capability_unavailable");
+            }
+        }
+    }
+}
+
+#[test]
+fn portable_target_rejects_every_ui_only_option_before_binding_even_when_false() {
+    let server = Server {
+        process: None,
+        unavailable: None,
+    };
+    for field in ["include_callback", "include_geometry", "include_routing"] {
+        for enabled in [false, true] {
+            let mut args = json!({"building_id":"arms_factory","state_id":1});
+            args[field] = json!(enabled);
+            let reply = server
+                .handle(json!({"jsonrpc":"2.0","id":1,"method":"tools/call",
+                    "params":{"name":"hoi4_construction_target","arguments":args}}))
+                .unwrap();
+            let content: Value =
+                serde_json::from_str(reply["result"]["content"][0]["text"].as_str().unwrap())
+                    .unwrap();
+            assert_eq!(reply["result"]["isError"], true);
+            assert_eq!(content["error"]["code"], "invalid_arguments", "{field}");
+        }
     }
 }
 

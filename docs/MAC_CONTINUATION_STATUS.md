@@ -1,5 +1,25 @@
 # Mac continuation checkpoint — 23 October 2026
 
+The requested construction-button geometry observer passed stationary live
+qualification on the retained native Mac 1920×1080 Germany session. It located
+the military-factory button at client rectangle (452, 268, 46, 46) and read the
+complete mouse-route caches at 2.459 ms median RPC time. The stationary cursor
+was elsewhere, so the empty hit lists do not qualify a click or delivery.
+There were no input calls, leases, cursor movements, screenshots or observation
+pauses; the complete own-country state and six controller files stayed unchanged.
+
+The new optional `include_geometry` and dependent `include_routing` preserve
+default reads. They verify the requested ancestors, graphical-parent/renderer
+joins and full client containment without evaluating fresh prerequisites or
+granting input. All 1,579 Rust / 956 Python tests (37 skipped), strict checks on
+all four supported compilation targets, release build and 28-tool offline
+protocol smoke pass. Next retain typed selection/queue identity across one
+ordinary selection attempt, then implement placement and worker integration.
+The clean two-year Luna run and full Germany/China campaign recordings remain
+unfinished. See [the live geometry evidence](CLAUSEWITZ_VALIDATION.md#mac-requested-construction-geometry--23-october-2026).
+
+Earlier checkpoints follow.
+
 The recorded Luna-medium continuation passed on the retained native Mac
 1920×1080 Germany session. It replayed the exact earlier Verified opener receipt
 and verified the already-open panel with zero new keypresses. The two action RPCs

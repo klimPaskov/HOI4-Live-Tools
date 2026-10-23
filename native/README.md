@@ -174,6 +174,16 @@ all four visible grids, 22 ordinary building choices, one conversion item and th
 requested callback at 2.290 ms median RPC time, without input, screenshots or
 cursor movement. Ordinary selection and placement remain unqualified.
 
+Independent `"include_geometry": true` observes only the requested button's
+renderer, fully contained client rectangle and visible idle ancestor chain on
+the own 1920×1080 canvas at scale 1. It checks ordinary UI gates and the exact
+graphical-parent association. Hidden, animating, disabled or offscreen controls
+return unavailable geometry; malformed bindings and torn reads fail explicitly.
+`"include_routing": true` requires geometry and adds complete bounded mouse-route
+and cursor-cache correlation. Neither option moves the cursor, evaluates fresh
+prerequisites or grants input. Route stamps do not prove atomic cache completion
+or delivery. Omitted options preserve the default memory-read path.
+
 `hoi4_construction_queue` is a read-only preview (`offset` 0–2048, `limit` 1–128,
 default 32). It validates the entire own collection before paging, recognizes
 exact building and railway layouts, and retains unsupported-type coverage.
@@ -466,7 +476,7 @@ anchors do not establish a load-generation token.
 | `hoi4_production_attempt` | Opt-in Linux preview: one ordinary factory step in an already-open panel, durable original identity/count and canonical readback; selected 10→11→10 gate passed |
 | `hoi4_construction_queue` | Own building/railway lines, canonical keys and signed cost/work counters; one dockyard observed in run071. Run072 observed one state/label with a late-lease deviation; selection and province/railway coverage remain unverified |
 | `hoi4_construction_target` | Complete witnessed queued amounts for one public building and own state; incomplete evidence returns null amounts |
-| `hoi4_construction_ui_probe` | Mac-only own panel/selection/full-choice observation; optional `include_callback` binds the requested item's callback and reports its separate disable-request flag; no input, geometry, settled-frame or placement authority |
+| `hoi4_construction_ui_probe` | Mac-only own panel/selection/full-choice observation; optional callback, requested-button geometry and complete mouse-route correlation; no input, settled-frame or placement authority |
 | `hoi4_construction_panel_probe` | Mac-only panel mode and named topbar opener/callback binding. Optional `include_geometry` verifies a 1920×1080 canvas; `include_routing` also requires geometry. Independent `include_shortcut` checks current T and preceding supported keyboard receivers. No input or atomic delivery authority |
 | `hoi4_technology_list` | Canonical loaded technology IDs with filtering/pagination; no eligibility inference |
 | `hoi4_input_geometry` | GUI dimensions, scale, pointer and conditional source-window diagnostics; no click authority |

@@ -7401,3 +7401,62 @@ It does not retroactively change the earlier failed gates. Typed selection,
 placement, worker integration, the clean two-year run and full recorded campaigns
 remain unfinished; real time per campaign year is not established by this paused
 test.
+
+## Mac requested construction geometry — 23 October 2026
+
+The UI probe now accepts independent strict-boolean `include_geometry` and
+`include_callback`, plus `include_routing` when geometry is true. Invalid types
+and routing without geometry fail before process binding. The portable target
+probe rejects these UI-only options. Omitted flags retain the previous memory
+access path; hidden or missing targets still skip their geometry payload.
+
+All four ordered grids and the public catalog must validate before the requested
+control is inspected. Geometry retains the exact own root, possible-constructions
+container, requested section and item frame, requiring shown flags and idle
+transition states. The ordinary button must retain its own graphics and exact
+sprite backlink; a nonnull graphical parent must join the same frame and renderer.
+Null parents need no attachment reads. Ordinary local input gates and the normal
+callback branch are observed without executing the prerequisite predicate. Only
+a fully contained rectangle on the own native/logical 1920×1080 canvas at scale 1
+is available. Coherent hidden, animating, disabled, offscreen or unsupported-profile
+states return unavailable geometry; malformed bindings and torn reads remain errors.
+
+The shared routing observer retains complete ordered source/hit lists, exact
+entry types and cursor conversions without following unrelated targets. It now
+bounds active membership at 4,096 entries, independently of the reader's validated
+20,000 reserved-capacity bound. Spare allocation payload is never read. A verified
+item graphical parent is distinguished from the opener's unqualified optional
+gate. Route timestamps and aliases remain correlations, not atomic completion or
+input-delivery proof; every public authority flag remains false.
+
+Twenty new geometry fixtures and three protocol/routing tests cover sparse
+requested-only payload, opaque conversion membership, callback independence,
+null parents, every target ancestor, owner/renderer/parent changes, unsupported
+profiles, full containment, malformed geometry, complete route tails and final
+witness tears. Focused UI/panel groups pass 58/46 tests. All 1,579 Rust and 956
+Python tests (37 skipped) pass, with formatting, strict host/Windows-GNU/Linux-musl/
+ARM64-Linux-musl Clippy, release build and 28-tool offline protocol smoke. An
+initial full-suite compile identified an older test's incomplete options literal;
+that fixture was updated to preserve defaults before the successful full run.
+
+Stationary live qualification then passed on the same owned paused Germany
+campaign at 1 January 1936 12:00. A geometry-only sample and three geometry/routing
+samples found the requested military-factory button at client rectangle
+(452, 268, 46, 46), center (475, 291). Median reader time was 2.291 ms and median
+RPC time 2.459 ms. The complete 17-call read-only driver took 0.226 seconds.
+Both geometry-only and callback-enabled paths passed. Four grids still contained
+22 ordinary choices and one opaque conversion item.
+
+The actual cursor cache remained at (1775, 1037), away from the target, and both
+route lists were empty. This qualifies stationary geometry and empty-cache reads,
+not target hover, an ordinary click or placement. Complete before/after own
+Research, Focus, production, target and queue observations were unchanged. All
+six controller files and their six journal rows retained bytes and metadata.
+The candidate had no input adapter or lease; it exited successfully on EOF.
+There were zero cursor movements, screenshots, input calls or observation pauses.
+The original owned process identities, window and six-hour supervisor limit were
+preserved. No new campaign footage was recorded by this read-only test.
+
+Next implement typed original selection and full-queue readback, then a separately
+bounded ordinary selection attempt. Placement, daily-worker integration, the
+clean two-year run and full recorded Germany/China campaigns remain unfinished.

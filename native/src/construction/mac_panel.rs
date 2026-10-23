@@ -18,7 +18,7 @@ use std::{collections::BTreeSet, time::Instant};
 
 const GAME: (u32, u32) = (1920, 1080);
 const CONSTRUCTION: i32 = 0x11;
-mod routing;
+pub(in crate::construction) mod routing;
 mod shortcut;
 
 #[derive(Clone, Copy, Default)]

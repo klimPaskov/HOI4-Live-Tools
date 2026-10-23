@@ -5,6 +5,9 @@ use serde_json::Value;
 const NODE: u64 = 0xd00000;
 const FUNCTION: u64 = 0xd10000;
 
+#[path = "mac_construction_choice_geometry.rs"]
+mod geometry;
+
 fn bound(count: usize) -> MacFixture {
     let mut f = fixture(true, count);
     let item = ITEMS + (count as u64 - 1) * 0x400;
@@ -37,7 +40,15 @@ fn bound(count: usize) -> MacFixture {
     f
 }
 fn read(f: &MacFixture) -> Result<Value> {
-    snapshot_with_options(f, "arms_factory", 1, Options { callback: true })
+    snapshot_with_options(
+        f,
+        "arms_factory",
+        1,
+        Options {
+            callback: true,
+            ..Default::default()
+        },
+    )
 }
 
 #[test]
