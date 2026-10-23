@@ -114,6 +114,9 @@ remain false. This is a diagnostic, not a click point.
 Internal ray/terrain arithmetic now reproduces a captured center-point calculation
 bit-for-bit. The private terrain/bitmap prototype joined it to own Brandenburg;
 scene picking, ordinary map input and construction placement remain unqualified.
+The internal own-scene scope reader separately matched all 35 live candidates to
+own divisions/task forces with exact types and owners. Unknown candidates refuse;
+this supplies membership evidence, with model intersection still unfinished.
 
 The Mac durable worker has passed recorded Research, Focus and production
 component tests, including plan revisions and reconnects. Canonical Mac process

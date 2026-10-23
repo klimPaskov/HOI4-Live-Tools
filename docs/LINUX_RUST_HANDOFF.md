@@ -12,6 +12,29 @@ failed campaigns. Do not control the shared Windows game.
 
 ## Current checkpoint
 
+The internal Mac scene-scope reader passed stationary live qualification: all
+35 picker entries joined fresh own-country sources (30 divisions and five task
+forces), with exact type/owner checks and retained original identities. Unknown
+entries refuse before candidate payload. The exact public source ran through a
+private read-only diagnostic export; there is no added MCP tool or input permission.
+
+The observation took 19.882 ms; the separate process took 3.710 seconds including
+startup. Its two retained reads plus final witnesses used 386 logical requests /
+4,052 bytes, excluding the separate clock-context request counts. The complete
+own-country baseline, camera, OS pointer and six controller files stayed unchanged.
+There was no input, activation, screenshot, observation pause, grant or recorder.
+
+A separate own-province definition/catalog check established the canonical province
+bitmap-return branch at the fixed center. Scene model intersection still precedes
+that fallback and remains unverified; this does not establish the complete picker,
+placement or worker integration. All 1,780 Rust / 956 Python tests (37 skipped),
+strict checks on four compilation targets, release build and 28-tool stdio smoke
+pass. The preceding `c295d57` checkpoint passed all nine CI jobs. The failed cursor
+calibration remains preserved. The clean two-year run and full campaigns remain
+unfinished.
+
+Earlier checkpoints follow.
+
 The native Mac cached-coordinate MCP observer passed stationary qualification
 with a median 0.257 ms RPC / 0.206 ms reader time. `hoi4_input_geometry` adds
 `include_source_point`, a strict Mac-only boolean defaulting off; default reads

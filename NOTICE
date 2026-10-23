@@ -146,3 +146,9 @@ Upstream foundation and attribution:
   cache. No game bytes, SDL source or upstream UI code were copied. These extend
   the attributed map-observation approach and supply no current-event, routing,
   engine-call or placement authority.
+
+  construction/mac_scene_scope.rs independently recovers the current Mac
+  scene-list producers and own division/fleet/task-force joins. It extends the
+  attributed own-map observation approach; no upstream scene code or foreign
+  offsets were copied. Membership is distinct from model intersection, routing
+  and ordinary input qualification.

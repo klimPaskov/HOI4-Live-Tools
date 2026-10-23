@@ -1,5 +1,23 @@
 # Rust foundation provenance
 
+## Passive Mac own scene scope
+
+`construction/mac_scene_scope.rs` independently follows the same UUID/SHA below.
+GS setup `0x1006e4f00` populates picker membership from country arrays at +0x250,
++0x238 (nested fleet +0xb0) and +0x268. Insertion `0x1006e5700`, removal `0x1006e5620`
+and owner update `0x1017dd9f0` show that relationship-admitted objects can enter;
+this is not a blanket own-country list. Exact RTTI/constructors identify CArmy,
+CFleet and CTaskForce; the task-force constructor uses shared selectable kind 1.
+
+The internal reader admits only complete scene membership matched to fresh own
+division/fleet/task-force lists, then checks exact candidate types and own owner
+before kinds. Unknown entries refuse before any candidate payload. Retained
+observations require the original own country, ordered memberships and objects;
+vector buffer reallocation with identical membership is permitted. Callers must
+provide exact process/build/context and final read witnesses. This extends the
+attributed own-map observation approach without upstream scene code, foreign
+offsets, model intersection, GUI routing, input or placement authority.
+
 ## Passive Mac cached source coordinates
 
 `gui/macos/source_point.rs` independently follows the same Mac UUID/SHA below.

@@ -2,6 +2,12 @@
 
 ## Unreleased native preview
 
+- Add an internal Mac own-scene scope reader. Require complete ordered scene
+  membership in fresh own division/fleet/task-force lists, exact types and owner
+  tags; unknown entries refuse before candidate payload. Retained reads reject
+  replacement country and membership before replacement object payload. Model
+  intersection, map routing, placement and worker integration remain unfinished.
+
 - Add optional Mac cached SDL source-point diagnostics with exact owned-window,
   getter and initialized absolute-mode checks. Default geometry reads stay
   unchanged. Stationary native MCP qualification measured 0.257 ms median RPC;

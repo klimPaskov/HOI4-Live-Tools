@@ -13,6 +13,9 @@ pub mod mac_panel;
 // Passive foundation; retained until the typed Map-point reader connects.
 #[allow(dead_code)]
 pub(crate) mod mac_projection;
+// Own scene membership only; model intersection and the map adapter are pending.
+#[allow(dead_code)]
+pub(crate) mod mac_scene_scope;
 pub mod mac_ui;
 mod selection;
 pub mod target_snapshot;
