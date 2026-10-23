@@ -1,8 +1,16 @@
 //! Retained identity for a future same-attempt Find readback. Window lifetime,
 //! query/results and camera coordinates are observations, never input authority.
+use super::super::mac_find_focus::{Control, Focus};
 use super::*;
 use crate::{error::Error, game::ClockContext, memory::StringAbi, platform::Identity};
 use serde_json::json;
+
+/// Navigation pins a current root/control during typing. Closing permits only
+/// that root or its teardown, and never follows the old edit-box payload.
+pub(super) enum ViewGuard<'a> {
+    Typing { window: u64, control: &'a Control },
+    Closing { window: u64 },
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct OwnStateAnchor {
@@ -245,6 +253,9 @@ impl Observation {
     pub(crate) fn camera(&self) -> &CameraState {
         &self.camera
     }
+    pub(super) fn focus(&self) -> Option<&Focus> {
+        self.view.focus.as_ref()
+    }
     pub(crate) fn query(&self) -> Option<&str> {
         match &self.view.query {
             Some(Query::Printable(text)) => Some(text),
@@ -319,6 +330,7 @@ impl FindAnchor {
                 .map(RequestedState::state_id),
             Some(self),
             false,
+            None,
         )
     }
     pub(crate) fn observe_with_focus(&self, process: &dyn Process) -> Result<Observation> {
@@ -330,6 +342,24 @@ impl FindAnchor {
                 .map(RequestedState::state_id),
             Some(self),
             true,
+            None,
+        )
+    }
+    pub(super) fn observe_guarded(
+        &self,
+        process: &dyn Process,
+        guard: ViewGuard<'_>,
+    ) -> Result<Observation> {
+        let include_focus = matches!(guard, ViewGuard::Typing { .. });
+        observe_in(
+            process,
+            self.binding
+                .requested
+                .as_ref()
+                .map(RequestedState::state_id),
+            Some(self),
+            include_focus,
+            Some(guard),
         )
     }
     pub(crate) fn require_same_scope(&self, observation: &Observation) -> Result<()> {
@@ -467,14 +497,14 @@ fn original_edges(r: &Reader<'_>, anchor: &FindAnchor) -> Result<()> {
 }
 
 pub(crate) fn observe(process: &dyn Process, state_id: Option<i32>) -> Result<Observation> {
-    observe_in(process, state_id, None, false)
+    observe_in(process, state_id, None, false, None)
 }
 
 pub(super) fn observe_with_focus(
     process: &dyn Process,
     state_id: Option<i32>,
 ) -> Result<Observation> {
-    observe_in(process, state_id, None, true)
+    observe_in(process, state_id, None, true, None)
 }
 
 fn observe_in(
@@ -482,6 +512,7 @@ fn observe_in(
     state_id: Option<i32>,
     expected: Option<&FindAnchor>,
     include_focus: bool,
+    view_guard: Option<ViewGuard<'_>>,
 ) -> Result<Observation> {
     if let Some(id) = state_id {
         validate_state_id(i64::from(id))?;
@@ -533,6 +564,28 @@ fn observe_in(
     mac_ui::exact(&r, base, find, FIND)?;
     if r.u64(find + 0xc30)? != idler {
         return Err(invalid("Mac Find view must retain the own idler"));
+    }
+    if let Some(guard) = view_guard {
+        w.section("mac_find_original_control");
+        if r.u64(base + 0x35dc058)? != registry {
+            return Err(changed(
+                "Original Find GUI singleton changed before payload",
+            ));
+        }
+        let current = r.u64(find + 0xc38)?;
+        match guard {
+            ViewGuard::Typing { window, control } => {
+                if current != window {
+                    return Err(changed("Original Find window changed during typing"));
+                }
+                control.original_edges(&r, base, find, registry)?;
+            }
+            ViewGuard::Closing { window } => {
+                if current != 0 && current != window {
+                    return Err(changed("Original Find window was replaced after Return"));
+                }
+            }
+        }
     }
     let mut view = view(&r, base, gs, registry, find)?;
     if include_focus {

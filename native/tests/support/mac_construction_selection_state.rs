@@ -774,3 +774,43 @@ fn unsupported_abi_refuses_initial_binding_before_any_snapshot_or_payload() {
     );
     assert_eq!(f.snapshots.get(), 0);
 }
+
+#[test]
+fn navigation_requires_initially_inactive_selection() {
+    let mut f = fixture();
+    let anchor = bind_selection(&f, "arms_factory", 1).unwrap();
+    anchor.require_inactive().unwrap();
+    selected(&mut f, TEMPLATE);
+    assert_eq!(
+        bind_selection(&f, "arms_factory", 1)
+            .unwrap()
+            .require_inactive()
+            .unwrap_err()
+            .code,
+        "construction_selection_unavailable"
+    );
+}
+
+#[test]
+fn navigation_refuses_selection_changes_even_with_the_same_original_queue() {
+    let mut f = fixture();
+    let anchor = bind_selection(&f, "arms_factory", 1).unwrap();
+    selected(&mut f, TEMPLATE);
+    let now = anchor.observe(&f).unwrap();
+    anchor.same_scope_and_queue(&now).unwrap();
+    assert_eq!(
+        anchor.require_unchanged(&now).unwrap_err().code,
+        "construction_state_changed"
+    );
+}
+
+#[test]
+fn navigation_allows_unchanged_inactive_selection_without_any_panel_reads() {
+    let f = fixture();
+    let anchor = bind_selection(&f, "arms_factory", 1).unwrap();
+    anchor
+        .require_unchanged(&anchor.observe(&f).unwrap())
+        .unwrap();
+    assert!(f.untouched(MANAGER + 0x150, 8));
+    assert!(f.untouched(MANAGER + 0x190, 8));
+}

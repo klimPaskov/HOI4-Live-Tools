@@ -173,8 +173,10 @@ skip the retained box entirely. A recorded one-F qualification harness verified
 visible empty-query focus with unchanged campaign state and sub-millisecond MCP
 readback. It creates no released Find action permission. Typed retained evidence
 pins original ownership/state while allowing independently validated current
-window reconstruction. State typing/results/activation, settled/current-frame,
-wrapped-map equivalence, input routing and placement eligibility remain pending.
+window reconstruction. The separately retained navigation adapter below now has
+one owned-state typing/results/activation component test. Settled/current-frame,
+wrapped-map equivalence, general input routing and placement eligibility remain
+pending.
 
 The internal `SelectionAnchor::placement_anchor` additionally requires the exact
 requested ordinary template already selected. Its replacement queue observation
@@ -283,6 +285,43 @@ clock calls or observation pauses. Its selection RPC took 240.087 ms at native
 unchanged. An already-selected zero-input path has fixture coverage but has not
 yet had its own live component gate. This is selection qualification; placement,
 continuous-play acceptance and full campaigns remain unfinished.
+
+## Construction Find qualification
+
+`hoi4_construction_find_state` requires `construction_navigation: true` in private
+`input.json`, a strict boolean that defaults off. Arguments are `building_id`,
+`state_id`, `request_id` and `lease_token`. It starts only with an already-open,
+locally idle, exact focused Find box, empty query and inactive construction
+selection. It never opens Find, clears text, selects a building or places it.
+The target must be owned and controlled by the player; the building binds the
+original catalog and complete queue, without asserting placement eligibility.
+
+The original process/campaign, Find/window, complete control membership, exact
+named edit receiver, owned state/template and map pair remain fixed. Both focus
+aliases and the exact expected decimal prefix are checked freshly before each
+ordinary digit. Return additionally requires the full query and the current
+first result joined to the original state pointer and ID. It is not enough for a
+replacement state to have the same numeric ID. After Return, success requires
+Find closed and camera horizontal coordinates equal to that original map pair.
+Hidden/teardown readback skips the old edit payload; a replacement root refuses.
+The complete construction queue and selection are checked both before and after
+each Find proof, including pending reads and final verification.
+
+The entire attempt shares one original five-second deadline narrowed by the
+lease. Every digit and Return is posted at most once using preallocated down/up
+events with unconditional release. Only complete torn observations can be
+replaced; keys are never retried. A refusal before the first possible key records
+NotApplied. Any later refusal preserves Dispatching and quarantines input across
+reconnects. Later camera/query observations cannot certify that attempt.
+A successful same-ID replay is historical and reports
+`current_camera_verified: false`; it appends nothing and sends no input.
+
+The recorded Luna-medium native 1920×1080 component test typed `64` and Return,
+verified Brandenburg's original camera anchor and replayed the same request.
+The action RPC took 549.335 ms and the full 17-call driver took 2.172 seconds.
+No cursor movement, screenshots, activation, observation pauses or construction
+changes occurred. This does not enable worker construction, establish a map-click
+point, or qualify arbitrary modal routing and campaign integration.
 
 ## Action limits and recovery
 

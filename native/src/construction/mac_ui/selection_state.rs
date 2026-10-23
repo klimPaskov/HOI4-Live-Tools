@@ -92,13 +92,31 @@ impl SelectionState {
 }
 
 impl SelectionAnchor {
-    pub(crate) fn initially_selected(&self) -> bool {
-        matches!(&self.original.selection, Selection::Ordinary(t) if *t == self.original.binding.target)
-    }
-
-    #[cfg(test)]
     pub(crate) fn context(&self) -> &ClockContext {
         &self.original.context
+    }
+    /// Find navigation must not run while a building placement mode is active.
+    pub(crate) fn require_inactive(&self) -> Result<()> {
+        if self.original.selection != Selection::Inactive {
+            return Err(Error::new(
+                "construction_selection_unavailable",
+                "Find navigation requires inactive construction selection",
+            ));
+        }
+        Ok(())
+    }
+    /// Preserve the entire original queue and selection across navigation.
+    pub(crate) fn require_unchanged(&self, now: &SelectionState) -> Result<()> {
+        self.same_scope_and_queue(now)?;
+        if self.original.selection != now.selection {
+            return Err(changed(
+                "Construction selection changed during Find navigation",
+            ));
+        }
+        Ok(())
+    }
+    pub(crate) fn initially_selected(&self) -> bool {
+        matches!(&self.original.selection, Selection::Ordinary(t) if *t == self.original.binding.target)
     }
 
     pub(crate) fn observe(&self, process: &dyn Process) -> Result<SelectionState> {

@@ -13,6 +13,9 @@ use std::time::Instant;
 // Prospective typed readback only; no adapter or construction export uses it.
 #[allow(dead_code)]
 mod retained;
+// Prospective same-attempt read proofs; no input adapter is registered here.
+#[allow(dead_code)]
+pub(crate) mod navigation;
 #[allow(unused_imports)]
 pub(crate) use retained::{
     observe, CameraState, FindAnchor, FindBinding, FirstResult, Observation, OwnStateAnchor,

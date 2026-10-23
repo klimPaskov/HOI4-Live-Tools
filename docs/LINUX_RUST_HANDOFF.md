@@ -12,6 +12,33 @@ failed campaigns. Do not control the shared Windows game.
 
 ## Current checkpoint
 
+The recorded Luna-medium native MCP Find-navigation test passed on the Mac
+1920×1080 client. The default-off `hoi4_construction_find_state` typed the owned
+state ID `64` and Return once, then verified closed Find and the original map
+anchor. The action RPC took 549.335 ms; all 17 driver calls took 2.172 seconds.
+The same-ID historical replay sent no input. There were zero cursor movements,
+screenshots, activations or observation pauses; the full own Research, Focus,
+production, construction queue and clock baseline stayed unchanged.
+
+The adapter retains typed original Find/control/state and complete queue/selection
+identity before and after each Find read. Possible partial typing remains
+quarantined across reconnects, with no key retry or later settlement. Its strict
+`construction_navigation` permission defaults off and enables no worker action.
+All 1,706 Rust / 956 Python tests (37 skipped), strict checks on four compilation
+targets, release build, default 28-tool protocol smoke and candidate read-only
+preflight pass. The prior `8503075` checkpoint passed all nine CI jobs. See
+[navigation evidence](CLAUSEWITZ_VALIDATION.md#mac-ordinary-find-navigation--23-october-2026).
+
+The 1920×1108 H.264 recording finalized with 2,012 encoded frames over 69.101667
+seconds. Its independent screen-output counter reported 2,011 complete callbacks;
+both values are preserved. The recorder exited, the grant closed and the input
+lease/server ended. The game remains paused on 1 January 1936 with Find closed,
+Brandenburg centered and no construction placed. Map placement, worker integration,
+the clean two-year run and full campaign recordings remain unfinished. This
+component does not qualify general modal routing or long campaign recording.
+
+Earlier checkpoints follow.
+
 The recorded Luna-medium Find-focus primitive passed on the native Mac
 1920×1080 client. One ordinary F key opened Find; the opt-in typed MCP observer
 confirmed the exact named edit box and both focused receiver joins. The complete

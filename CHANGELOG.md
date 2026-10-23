@@ -2,6 +2,14 @@
 
 ## Unreleased native preview
 
+- Add default-off Mac `hoi4_construction_find_state`: an already-open verified
+  box receives one owned decimal state ID and Return. Retain original typed
+  control/state, complete queue and inactive selection throughout; quarantine
+  possible partial input without retry or later settlement. A recorded Luna-medium
+  native 1080p gate passed in 549 ms with a zero-input historical replay and no
+  cursor moves, screenshots or observation pauses. Placement and worker integration
+  remain unfinished.
+
 - Support independently verified Mac keyboard receiver families and Standard
   parent/disabled gates. Keep exact ownership, complete ordered membership and
   final read witnesses; unknown handlers still refuse. Live delivery is pending.

@@ -133,6 +133,17 @@ impl Key {
     }
 }
 
+fn find_digit_code(digit: char) -> Result<u16> {
+    const DIGITS: [u16; 10] = [29, 18, 19, 20, 21, 23, 22, 26, 28, 25];
+    if !digit.is_ascii_digit() {
+        return Err(Error::new(
+            "invalid_arguments",
+            "Only an ordinary ASCII decimal digit is accepted",
+        ));
+    }
+    Ok(DIGITS[(digit as u8 - b'0') as usize])
+}
+
 /// One capture of the owned game's client area: BGRA pixels at `scale`
 /// physical pixels per game pixel.
 pub struct Capture {
@@ -850,6 +861,17 @@ impl<'p> MacKeys<'p> {
     /// One short shortcut with a producer-owned delivery classification. Only
     /// checks/allocation before entering down can positively report NotQueued.
     pub(crate) fn press_once(&self, key: Key) -> key_once::Dispatch {
+        self.press_code_once(key.code())
+    }
+    /// Decimal Find input uses the same once-only producer and unconditional
+    /// release. Reject every other character before any native check or event.
+    pub(crate) fn press_digit_once(&self, digit: char) -> key_once::Dispatch {
+        match find_digit_code(digit) {
+            Ok(code) => self.press_code_once(code),
+            Err(error) => key_once::Dispatch::NotQueued(error),
+        }
+    }
+    fn press_code_once(&self, code: u16) -> key_once::Dispatch {
         struct Events {
             down: CFTypeRef,
             up: CFTypeRef,
@@ -892,8 +914,8 @@ impl<'p> MacKeys<'p> {
                 // results, including any partial allocation on failure.
                 let events = unsafe {
                     Events {
-                        down: CGEventCreateKeyboardEvent(std::ptr::null(), key.code(), true),
-                        up: CGEventCreateKeyboardEvent(std::ptr::null(), key.code(), false),
+                        down: CGEventCreateKeyboardEvent(std::ptr::null(), code, true),
+                        up: CGEventCreateKeyboardEvent(std::ptr::null(), code, false),
                     }
                 };
                 if events.down.is_null() || events.up.is_null() {
@@ -1404,6 +1426,22 @@ mod click_cleanup_tests {
                 sent,
                 vec![MOUSE_MOVED, LEFT_MOUSE_DOWN, LEFT_MOUSE_UP, LEFT_MOUSE_UP]
             );
+        }
+    }
+}
+
+#[cfg(test)]
+mod find_digit_tests {
+    use super::*;
+    #[test]
+    fn ansi_find_digits_are_exact_and_other_characters_refuse_before_input() {
+        let codes: Vec<_> = "0123456789"
+            .chars()
+            .map(|v| find_digit_code(v).unwrap())
+            .collect();
+        assert_eq!(codes, vec![29, 18, 19, 20, 21, 23, 22, 26, 28, 25]);
+        for c in ['f', '\n', ' ', '４', 'é'] {
+            assert_eq!(find_digit_code(c).unwrap_err().code, "invalid_arguments");
         }
     }
 }

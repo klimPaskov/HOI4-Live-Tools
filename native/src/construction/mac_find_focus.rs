@@ -1,11 +1,79 @@
 //! Optional Mac Find edit-box/focus facts. This is a passive same-witness
 //! observation, never a prediction of key delivery or permission to type.
-use super::{invalid, mac_ui};
-use crate::{error::Result, memory::Reader};
+use super::{invalid, mac_ui, members};
+use crate::{
+    error::{Error, Result},
+    memory::Reader,
+};
 use serde_json::{json, Value};
 
 const EDIT_BOX: u64 = 0x34add98;
 const TEXT_RECEIVER: u64 = 0x34ae0c8;
+
+/// Immutable control membership only. Dynamic focus aliases and raw widget
+/// flags are checked freshly and are deliberately excluded from identity.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct Control {
+    find: u64,
+    root: u64,
+    registry: u64,
+    edit_box: u64,
+    children: Vec<(u64, Vec<u64>)>,
+}
+
+impl Control {
+    pub(super) fn find(&self) -> u64 {
+        self.find
+    }
+    pub(super) fn root(&self) -> u64 {
+        self.root
+    }
+    pub(super) fn registry(&self) -> u64 {
+        self.registry
+    }
+    pub(super) fn edit_box(&self) -> u64 {
+        self.edit_box
+    }
+    pub(super) fn children(&self) -> &[(u64, Vec<u64>)] {
+        &self.children
+    }
+
+    /// Called only after the retained Find/process/scope links and exact
+    /// original window pointer have been checked in the same witness bracket.
+    pub(super) fn original_edges(
+        &self,
+        r: &Reader<'_>,
+        base: u64,
+        find: u64,
+        registry: u64,
+    ) -> Result<()> {
+        let changed = || {
+            Error::new(
+                "construction_state_changed",
+                "Original Find focus control or membership changed",
+            )
+        };
+        if find != self.find || registry != self.registry || r.u64(find + 0xc40)? != self.edit_box {
+            return Err(changed());
+        }
+        if mac_ui::window(r, base, self.root, registry)? != self.root {
+            return Err(changed());
+        }
+        // Complete pointer membership is compared before visiting a newly
+        // substituted child or the descriptor/name of any replacement.
+        for (parent, original) in &self.children {
+            if members(r, *parent + 0xd30, 4096)? != *original {
+                return Err(changed());
+            }
+        }
+        mac_ui::exact(r, base, self.edit_box, EDIT_BOX)?;
+        if r.u64(self.edit_box + 0x58)? != registry {
+            return Err(changed());
+        }
+        mac_ui::exact(r, base, self.edit_box + 0x180, TEXT_RECEIVER)?;
+        Ok(())
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct Focus {
@@ -20,6 +88,15 @@ pub(super) struct Focus {
 }
 
 impl Focus {
+    pub(super) fn control(&self) -> Control {
+        Control {
+            find: self.find,
+            root: self.root,
+            registry: self.registry,
+            edit_box: self.edit_box,
+            children: self.children.clone(),
+        }
+    }
     pub(super) fn focused(&self) -> bool {
         self.focused == [self.edit_box, self.edit_box + 0x180]
     }

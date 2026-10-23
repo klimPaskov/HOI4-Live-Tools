@@ -112,13 +112,15 @@ Recorded Luna-medium component tests passed Research refill, Focus handoffs,
 one-factory production changes, durable plan revisions/reconnects, construction
 opening and ordinary building-template selection. The selection call took
 240 ms. A recorded one-F Find-focus test also passed, with visible Find reads
-below 1 ms. Stationary Find/camera reads measured 0.48 ms per RPC with zero input. These are measurements of specific tested
-paths. See [the validation record](docs/CLAUSEWITZ_VALIDATION.md) for scope and
+below 1 ms. The native Find action then typed an owned state ID and Return in
+549 ms, with a zero-input historical replay. Stationary Find/camera reads measured
+0.48 ms per RPC with zero input. These are measurements of specific tested paths. See [the validation record](docs/CLAUSEWITZ_VALIDATION.md) for scope and
 preserved failures.
 
-Construction placement and its worker integration remain unfinished. Find state
-search/activation, peace conferences, naval invasions, the clean two-year acceptance run and full
-campaigns remain open. Broader legacy adapters remain separate from the durable
+Construction placement and its worker integration remain unfinished. The Find
+action requires an already-open focused empty box and explicit qualification
+permission. Peace conferences, naval invasions, the clean two-year acceptance run
+and full campaigns remain open. Broader legacy adapters remain separate from the durable
 worker. The [controller contract](docs/MAC_CONTROLLER.md) describes current
 permissions, receipts and recovery.
 

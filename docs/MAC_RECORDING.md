@@ -62,3 +62,10 @@ The recorder never kills or closes the game. An existing output is never replace
 
 This is a recording preview. Short lifecycle tests do not establish long campaign
 reliability, and recording success does not establish gameplay acceptance.
+
+The `frames_complete` screen-output callback counter and the MP4's encoded frame
+count are independent observations; do not assume exact equality. Preserve the
+final result and an independent media probe. The Find-navigation component, for
+example, recorded 2,012 encoded frames and 2,011 complete callbacks with a clean
+explicit stop. Short component recordings do not establish campaign-duration
+reliability.

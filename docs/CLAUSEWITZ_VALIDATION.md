@@ -7632,3 +7632,55 @@ typing/results/activation or grant map placement/worker authority. The Find view
 is left open with an empty focused query for the next original-scope typing gate.
 The clean two-year Luna run and full recorded campaigns remain unfinished;
 real time per game year is not measured by this paused component test.
+
+## Mac ordinary Find navigation — 23 October 2026
+
+The separate default-off native `hoi4_construction_find_state` now types one owned
+state ID into an already-open, idle, exact focused empty Find box, followed by
+Return once. The original typed Find/control/state binding and complete own
+construction queue/selection survive the attempt. Every digit checks the exact
+prefix and both focus aliases; Return checks the original first state object and
+ID. Final readback requires original Find closed and exact original horizontal
+map coordinates. Queue and selection checks bracket every Find proof, including
+pending and final reads. No serialized evidence becomes fresh input authority.
+
+Its strict qualification boolean defaults off. The original five-second Fence,
+exclusive lease, exact native window/geometry, physical input checks and
+preallocated unconditional-release transport apply throughout. Once any key may
+have been posted, later failure preserves uncertainty across reconnects. No
+keypress retry, replacement control adoption or late reached-target settlement
+is permitted. Same-ID successful receipts are historical and do not verify the
+current camera. No worker permission or placement action is enabled.
+
+All 1,706 Rust tests and 956 Python tests (37 skipped) passed. Strict Clippy passed
+on host Mac, Windows GNU, x86_64 Linux musl and ARM64 Linux musl; release build and
+the unbound 28-tool stdio smoke passed. The candidate passed a separate read-only
+preflight. New fixtures include 21 typed navigation cases, 12 adapter/journal
+cases, three inactive-selection cases, a permission-default case and an exact
+ASCII-digit transport case. The late-queue-change fixture was corrected to expect
+the established single Dispatching row; no journal semantics were relaxed.
+The 38 unrelated Python/package/test work-in-progress files remained byte-exact.
+
+Luna medium exclusively executed the frozen native candidate on the same owned
+Mac 1.19.3 Rosetta game, with a 1920×1080 client and UI scale 1. The native MCP
+action typed `64` and Return, then verified the original own Brandenburg anchor
+`[3008, 1569]` after Find closed. It took 549.335 ms. A same-ID historical replay
+returned the identical Verified receipt without input or new journal rows.
+All 17 driver calls took 2.172 seconds. There were zero activations, cursor moves,
+screenshots, observation pauses, input retries or campaign commands. The complete
+own clock, Research, Focus, production and construction queue remained unchanged
+at paused Germany 1 January 1936 12:00, Normal, historical AI and no mods.
+
+The owned 1920×1108 H.264 recording finalized by explicit stop at 69.101667 seconds
+with 2,012 encoded frames. The independent screen-output complete-callback counter
+was 2,011. A private summary initially assumed exact equality; that assertion was
+preserved and corrected to retain both distinct observations. The recording
+result was not rewritten. The recorder exited, Luna returned input ownership,
+the lease/server ended cleanly and the grant closed. The private controller has
+two action rows, Dispatching and Verified; no clock action or worker was started.
+
+This qualifies one ordinary owned-state Find query/Return through the native MCP.
+It does not qualify a point for placement, atomic/general modal routing,
+construction worker integration, continuous play or long campaign recording.
+The game remains paused with Find hidden and the requested camera centered.
+The clean two-year Luna run and all full campaign recordings remain unfinished.

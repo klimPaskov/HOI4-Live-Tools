@@ -96,10 +96,13 @@ reads passed at 0.48 ms median RPC. Optional `include_focus: true` verifies the
 visible Mac box's exact name/type, own registry and both focused receivers in the
 same witness. Default reads skip that payload; Linux refuses this optional flag.
 A recorded one-F Luna test verified visible Mac focus with sub-millisecond reads,
-without cursor movement, screenshots, pauses or campaign changes. State-ID
-search/activation and a released Find adapter remain unfinished. Internal typed
-Find retention and exact placement-delta foundations grant no input or worker
-permission.
+without cursor movement, screenshots, pauses or campaign changes. The separate
+default-off `hoi4_construction_find_state` then passed a recorded owned-state
+query/Return test in 549 ms, with a zero-input historical replay. It requires an
+already-open idle focused empty Find and `construction_navigation: true`.
+Original typed identity and complete queue/selection are checked throughout;
+possible partial input stays quarantined. It grants no placement or worker
+permission. See the [Find contract](../docs/MAC_CONTROLLER.md#construction-find-qualification).
 
 The Mac durable worker has passed recorded Research, Focus and production
 component tests, including plan revisions and reconnects. Canonical Mac process
@@ -318,8 +321,9 @@ and Mac layouts. It reports own Find visibility/query, the first result joined
 to its current state catalog, camera coordinates and the requested own state's
 map anchor. Hidden Mac queries/results are skipped. Optional `include_focus: true`
 is Mac-only and also checks the exact focused edit control; the default keeps
-`text_box_focused: null` on Mac. The Mac empty visible query/focus and Linux
-state search have component evidence; broader Mac result navigation is pending.
+`text_box_focused: null` on Mac. The Mac empty visible query/focus and one original owned-state navigation have
+component evidence, as does Linux state search. General Mac modal routing and
+campaign integration remain unqualified.
 It types, clicks and moves nothing, and a centered camera does not prove a valid
 placement point.
 

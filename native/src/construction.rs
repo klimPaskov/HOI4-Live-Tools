@@ -7,7 +7,7 @@ mod catalog;
 pub mod controls;
 pub mod find_view;
 mod location;
-mod mac_find;
+pub(crate) mod mac_find;
 mod mac_find_focus;
 pub mod mac_panel;
 pub mod mac_ui;
