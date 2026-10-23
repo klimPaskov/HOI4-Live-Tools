@@ -7783,3 +7783,27 @@ Terrain/bitmap lookup does not establish the full scene picker, strategic-region
 preference, ordinary mouse phase, GUI interception, eligibility or map placement.
 No map button was pressed. The clean two-year run and full recorded campaigns
 remain unfinished, and paused component tests establish no game-year rate.
+
+A later separate cursor-only harness gave one Luna-medium player exclusive input.
+It issued one ordinary cursor-moved event and one owned activation, then failed
+an immediate exact OS-position assertion before any post-event source read.
+The first actual post-event OS value was not retained, so the failure cause is
+not established. No corrective movement, buttons, keys, screenshot or game pause
+followed. The read-only MCP server ended with EOF exit 0; input ownership returned
+and the grant closed. Its private once-only execution claim prevents replay.
+
+After handback, a separate builder observation found OS global `[960, 621]` and
+cached client `[960, 540]`, with unchanged own camera, complete baseline and all
+six controller files. This later state does not certify the failed attempt.
+The harness's unconditional immediate assertion is replaced in a private pure
+wait helper by bounded pending observations that record actual OS positions,
+require OS/source/OS agreement and reject late samples without repeating input.
+Six offline cases pass; no additional live input or successful cursor gate is
+claimed. The next grant must use the reviewed bounded wait.
+
+The failed gate's owned native Mac window recording finalized by explicit stop:
+H.264, 1920×1108 around the 1920×1080 client, 94.620 seconds and 2,780 encoded/
+decoded frames. Its independent complete-callback counter also reported 2,780;
+those are separate observations, not an imposed equality invariant. The recorder
+exited normally. No map button was pressed, no construction was placed and no
+campaign acceptance or full campaign recording was achieved.

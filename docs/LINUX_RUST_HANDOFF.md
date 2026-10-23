@@ -33,6 +33,15 @@ The complete own baseline and all six controller files stayed unchanged, and the
 read-only server exited cleanly. No grant, lease, recorder or worker was opened.
 Construction placement, the clean two-year run and full campaigns remain unfinished.
 
+A later recorded Luna-medium cursor calibration failed its immediate OS-position
+comparison after one ordinary move and one activation. No buttons, keys or
+corrective input followed. Separate builder readback later found OS/SDL agreement
+at the center, unchanged camera/baseline and six unchanged controller files;
+it cannot settle the failed attempt. The harness needs a bounded pending-read
+wait and actual-position logging. That replacement wait passes six offline
+cases, with no further input. The 1920×1108 recording finalized at 94.620 seconds
+and 2,780 encoded frames; grant, server and recorder are closed.
+
 Earlier checkpoints follow.
 
 The native Mac map/camera owner chain and actual rendered ray fields passed
