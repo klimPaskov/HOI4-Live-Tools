@@ -78,7 +78,8 @@ The Mac controller also exposes a default-off `hoi4_construction_open`
 qualification tool. It checks the current ordinary T shortcut, persists the
 original intent and sends at most one keypress without moving the cursor.
 Already-selected panels receive no toggle; uncertain input cannot be replayed or
-settled from later UI. Physical delivery remains unqualified. See the
+settled from later UI. One recorded ordinary T opener verified delivery; historical
+replay and the already-open path still need live qualification. See the
 [permission and receipt contract](../docs/MAC_CONTROLLER.md#construction-opener-qualification).
 
 The Mac durable worker has passed recorded Research, Focus and production
@@ -153,6 +154,10 @@ own GUI-registry link. Root transition states are exposed separately: engine
 visibility allows state 1 while it can animate, and state 2 skips choice reads.
 Even both local states being zero does not prove settled renderer geometry.
 The all-grid backlink flag stays false until all four grids validate.
+A separately typed conversion item is allowed only once in the shared grid and
+must match the own view's cached pointer. Its payload is not read as a building
+or callback. Counts distinguish ordinary buildings from this conversion item;
+unknown types and duplicate or foreign items still refuse.
 
 Adding `"include_callback": true` verifies the requested choice's exact single
 observer and item capture inside that same snapshot. It rejects overrides,
@@ -161,8 +166,10 @@ The callback summary retains the byte-wide `disable_requested` flag separately
 from `disabled` (visual state 3). The flag can be set while that visual state
 differs. Neither is a fresh prerequisite evaluation: eligibility, routing,
 geometry, delivery and placement still need independent qualification.
-Omitting the option adds no callback reads. Visible choices remain unqualified
-live while the normal macOS task-access request is pending.
+Omitting the option adds no callback reads. Three stationary live samples verified
+all four visible grids, 22 ordinary building choices, one conversion item and the
+requested callback at 2.290 ms median RPC time, without input, screenshots or
+cursor movement. Ordinary selection and placement remain unqualified.
 
 `hoi4_construction_queue` is a read-only preview (`offset` 0–2048, `limit` 1–128,
 default 32). It validates the entire own collection before paging, recognizes

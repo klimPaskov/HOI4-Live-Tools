@@ -85,6 +85,22 @@ fn complete_choices_bind_only_requested_item_without_exposing_addresses_or_grant
 }
 
 #[test]
+fn ordinary_callback_proof_never_reads_the_conversion_callback() {
+    let mut f = bound(1);
+    add_conversion(&mut f);
+    let v = read(&f).unwrap();
+    assert_eq!(v["choices"]["item_count"], 2);
+    assert_eq!(v["choices"]["conversion_item_count"], 1);
+    assert_eq!(v["callback_binding_verified"], true);
+    assert_eq!(
+        v["choices"]["target"]["callback"]["receiver_matches_requested_item"],
+        true
+    );
+    assert_eq!(v["input_authorized"], false);
+    not_read(&f, &[CONVERSION + 0x10, CONVERSION + 0x20]);
+}
+
+#[test]
 fn observer_overrides_or_wrong_count_refuse_before_list_and_capture() {
     for (field, value) in [
         (BUTTON + 0x70, BASE + 0x34ab368),

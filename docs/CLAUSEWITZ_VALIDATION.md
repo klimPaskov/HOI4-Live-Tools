@@ -7301,3 +7301,50 @@ ARM64-Linux-musl Clippy, release build and the 28-tool offline stdio smoke. Thes
 checks do not establish live delivery. A new recorded same-controller Luna gate
 remains required; construction placement, wider durable domains, the clean
 two-year run and full campaign recordings are unfinished.
+
+## Mac opener delivery and mixed choice grid — 23 October 2026
+
+Runtime `1a96309` passed all nine exact-head CI jobs. On the retained fresh
+Germany 1936 controller, one recorded Luna-medium request then verified the
+ordinary T opener. The action RPC took 1,300.804 ms and retained a same-attempt
+Verified receipt with one keypress. The earlier NotApplied/NotQueued refusal
+remained byte-for-byte intact. No activation, cursor movement, screenshot, clock
+call, worker or observation pause occurred. The broader gate stopped at the
+following read-only choice probe; historical replay and already-open checks did
+not run. Lease release and MCP EOF succeeded. The owned recording finalized at
+1920×1108, 50.558333 seconds and 1,484 frames, for the native 1920×1080 client.
+
+The failure expected ordinary building-item primary RVA `343a9b0` but encountered
+`343aca0`. Independent analysis of the exact Mac binary identifies the latter as
+`CConversionConstructionViewItem`, a separate `CStandardGridBoxItem`. Its `+0x20`
+is an embedded button callback, not a building-template pointer. The own view
+constructor initializes its cached pointer at `+0x470`; the population path
+creates or reuses that item and inserts it once into the shared grid. Capacity
+can suppress insertion, so the supported count is zero or one.
+
+The corrected reader retains this variant only when the exact primary, shared
+grid and own cached pointer all match. It reads no conversion payload or callback.
+All ordered grid membership, complete bounds, duplicate rejection, final witnesses
+and ordinary building/template/target joins remain mandatory. Public counts now
+distinguish conversion items from ordinary building items. Seven new fixtures
+cover unmapped conversion payloads, absent requested targets, wrong caches/grids,
+duplicates, unknown tail items and final witness tears, including callback reads.
+An independent review found no actionable issues in the three-file correction.
+
+Three subsequent stationary read-only samples passed against the already-open
+panel: four complete grids, 22 ordinary choices, one conversion item and the
+requested military-factory callback. The median reader time was 2.100 ms and
+median full RPC time 2.290 ms. Complete own-country before/after observations
+confirmed the unchanged paused 1 January 1936 12:00 campaign, Research, Focus,
+production, empty construction queue and target. All six controller files,
+including the four durable action records, retained their bytes and metadata.
+The observation process had no input adapter or lease and exited cleanly on EOF;
+there were zero input calls, screenshots, cursor movements or observation pauses.
+
+All 1,549 Rust tests and 956 Python tests (37 skipped) pass, together with
+formatting, strict host/Windows-GNU/Linux-musl/ARM64-Linux-musl Clippy, release
+build and 28-tool offline stdio smoke. These results establish the visible reader
+and one original opener, not the entire failed gate or construction placement.
+Keep the controller and verified request ID for a reviewed zero-key historical
+replay/already-open continuation. Selection, placement, worker integration, the
+clean two-year run and full recorded campaigns remain unfinished.

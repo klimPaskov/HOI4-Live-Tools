@@ -18,6 +18,15 @@ const ITEMS: u64 = 0x600000;
 const FRAME: u64 = 0xc00000;
 const BUTTON: u64 = 0xc10000;
 const GRID: u64 = 0x4a0000;
+const CONVERSION: u64 = 0x700000;
+
+fn add_conversion(f: &mut MacFixture) {
+    let shared = GRID + 0x10000;
+    f.array(shared + 0x190, shared + 0x4000, &[CONVERSION]);
+    f.word(CONVERSION, BASE + 0x343aca0);
+    f.word(VIEW + 0x470, CONVERSION);
+    // Its frame/callback/template-shaped payload is deliberately unmapped.
+}
 
 fn text(f: &mut MacFixture, address: u64, value: &str) {
     if value.len() <= 22 {
@@ -179,6 +188,110 @@ fn full_choice_membership_reaches_target_beyond_sixty_four_and_reads_only_its_bu
         not_read(&f, &[ITEMS + i * 0x400 + 0x10]);
     }
     not_read(&f, &[BUTTON + 0xd8]); // This slice never reads renderer geometry.
+}
+
+#[test]
+fn conversion_is_counted_as_opaque_membership_without_reading_building_payload() {
+    let mut f = fixture(true, 70);
+    add_conversion(&mut f);
+    let v = observe(&f, "arms_factory", 1).unwrap();
+    assert_eq!(v["choices"]["complete_membership"], true);
+    assert_eq!(v["choices"]["item_count"], 71);
+    assert_eq!(v["choices"]["ordinary_building_item_count"], 70);
+    assert_eq!(v["choices"]["conversion_item_count"], 1);
+    assert_eq!(v["choices"]["target"]["building_id"], "arms_factory");
+    not_read(&f, &[CONVERSION + 0x10, CONVERSION + 0x20]);
+}
+
+#[test]
+fn conversion_cannot_supply_an_absent_ordinary_building_choice() {
+    let mut f = fixture(true, 1);
+    add_conversion(&mut f);
+    f.array(GRID + 0x190, 0, &[]);
+    let v = observe(&f, "arms_factory", 1).unwrap();
+    assert_eq!(v["choices"]["complete_membership"], true);
+    assert_eq!(v["choices"]["ordinary_building_item_count"], 0);
+    assert_eq!(v["choices"]["conversion_item_count"], 1);
+    assert!(v["choices"]["target"].is_null());
+    assert_eq!(v["choices"]["reason"], "requested_building_not_in_choices");
+    not_read(&f, &[FRAME, BUTTON, CONVERSION + 0x10, CONVERSION + 0x20]);
+}
+
+#[test]
+fn conversion_requires_the_own_view_singleton_before_requested_control_payload() {
+    for owner in [0, FOREIGN, CONVERSION + 0x1000] {
+        let mut f = fixture(true, 1);
+        add_conversion(&mut f);
+        f.word(VIEW + 0x470, owner);
+        assert_eq!(
+            observe(&f, "arms_factory", 1).unwrap_err().code,
+            "invalid_construction"
+        );
+        not_read(&f, &[FOREIGN, FRAME, BUTTON, CONVERSION + 0x20]);
+    }
+}
+
+#[test]
+fn conversion_in_other_grids_or_duplicate_membership_refuses() {
+    for index in [0, 2, 3] {
+        let mut f = fixture(true, 1);
+        add_conversion(&mut f);
+        let shared = GRID + 0x10000;
+        f.array(shared + 0x190, 0, &[]);
+        let grid = GRID + index * 0x10000;
+        let items = if index == 0 {
+            vec![ITEMS, CONVERSION]
+        } else {
+            vec![CONVERSION]
+        };
+        f.array(grid + 0x190, grid + 0x4000, &items);
+        assert_eq!(
+            observe(&f, "arms_factory", 1).unwrap_err().code,
+            "invalid_construction"
+        );
+        not_read(&f, &[VIEW + 0x470, FRAME, BUTTON, CONVERSION + 0x20]);
+    }
+    for other in [CONVERSION, CONVERSION + 0x1000] {
+        let mut f = fixture(true, 1);
+        add_conversion(&mut f);
+        f.word(other, BASE + 0x343aca0);
+        let shared = GRID + 0x10000;
+        f.array(shared + 0x190, shared + 0x4000, &[CONVERSION, other]);
+        assert_eq!(
+            observe(&f, "arms_factory", 1).unwrap_err().code,
+            "invalid_construction"
+        );
+        not_read(&f, &[FRAME, BUTTON, CONVERSION + 0x20, other + 0x20]);
+    }
+}
+
+#[test]
+fn conversion_type_owner_and_list_membership_share_final_witnesses() {
+    for field in [CONVERSION, VIEW + 0x470, GRID + 0x10000 + 0x4000] {
+        let mut f = fixture(true, 1);
+        add_conversion(&mut f);
+        f.final_fault.set(Some(field));
+        assert_eq!(
+            observe(&f, "arms_factory", 1).unwrap_err().code,
+            "torn_read",
+            "{field:x}"
+        );
+    }
+}
+
+#[test]
+fn conversion_does_not_hide_an_unknown_tail_item() {
+    let mut f = fixture(true, 1);
+    add_conversion(&mut f);
+    let other = CONVERSION + 0x1000;
+    f.word(other, BASE + 0x343aca8);
+    let shared = GRID + 0x10000;
+    f.array(shared + 0x190, shared + 0x4000, &[CONVERSION, other]);
+    assert_eq!(
+        observe(&f, "arms_factory", 1).unwrap_err().code,
+        "invalid_construction"
+    );
+    not_read(&f, &[FRAME, BUTTON, CONVERSION + 0x20, other + 0x20]);
 }
 
 #[test]

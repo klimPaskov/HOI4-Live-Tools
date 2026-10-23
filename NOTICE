@@ -90,11 +90,14 @@ Upstream foundation and attribution:
   T shortcut and preceding supported keyboard receivers. The default-off
   launch/macos/construction_open.rs adapter uses ordinary macOS key events,
   typed original bindings and strict durable receipts; it executes no engine
-  callback or memory write. Physical delivery remains subject to live qualification.
+  callback or memory write. One ordinary opener has a recorded live receipt;
+  broader construction input remains subject to live qualification.
   native/src/platform/key_once.rs independently implements ordinary key-pair
   sequencing, positive pre-down refusals and unconditional release cleanup.
   construction/mac_ui/callback.rs independently maps the requested Mac building
   choice's embedded observer, member capture and disable-request byte.
+  The Mac choice reader independently distinguishes the conversion grid item
+  by its own view cache; it does not interpret its callback as a building template.
   They reuse the attributed construction semantics
   without copying upstream UI code or another platform's offsets. These readers
   execute no callback and grant no placement or input authority.

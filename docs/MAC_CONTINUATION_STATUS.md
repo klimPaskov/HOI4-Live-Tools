@@ -1,20 +1,25 @@
 # Mac continuation checkpoint — 23 October 2026
 
-A fresh owned Germany 1936 campaign is running at native 1920×1080. Stationary
-construction-shortcut qualification passed with no input, screenshots or cursor
-movement. The first recorded Luna-medium opener attempt stopped before key-down:
-the keyboard-cache active count changed during its complete witness read. Its
-strict journal retains `NotApplied` / `NotQueued`; independent reads confirmed
-the unchanged paused campaign and closed panel. The 1920×1108 recording finalized
-cleanly at 57.99 seconds. This is failure evidence, not campaign acceptance.
+The second recorded Luna-medium construction opener verified one ordinary T
+keypress on the same owned Germany 1936 controller. The 1920×1080 game client
+remained paused; no cursor movement, screenshot, clock change or observation
+pause occurred. Its 1920×1108 recording finalized at 50.56 seconds. The overall
+gate then failed in the visible-choice reader, while the verified opener receipt
+and earlier positive refusal remained intact. No full campaign has been recorded.
 
-The opener now replaces only wholly discarded torn observations under its
-original five-second deadline, retaining the original binding and once-only key
-transport. All 14 focused recovery tests, 1,542 Rust / 956 Python tests (37 skipped),
-strict cross-platform checks, release build and 28-tool offline protocol smoke
-pass. Next qualify a new request on this same controller, preserving the original
-refusal. Construction delivery, the clean two-year run and full recorded campaigns
-remain unfinished. See [the live failure and correction](CLAUSEWITZ_VALIDATION.md#mac-construction-opener-torn-read-recovery--23-october-2026).
+The reader incorrectly required every grid item to be an ordinary building.
+Independent exact-build mapping identified the separate conversion item; it is
+now accepted only as the own shared-grid singleton, without reading its callback
+as a building template. Three stationary live samples then verified all four
+grids, 22 ordinary choices, one conversion item and the requested building's
+callback at 2.290 ms median RPC time. Campaign state and controller files stayed
+unchanged. All 1,549 Rust / 956 Python tests (37 skipped), strict cross-platform
+checks, release build and 28-tool offline protocol smoke pass.
+
+Next qualify historical receipt replay and the already-open path with zero
+keypresses on this retained controller. Selection, placement, worker integration,
+the clean two-year run and full Germany/China recordings remain unfinished. See
+[the opener and mixed-grid evidence](CLAUSEWITZ_VALIDATION.md#mac-opener-delivery-and-mixed-choice-grid--23-october-2026).
 
 Earlier checkpoints follow.
 

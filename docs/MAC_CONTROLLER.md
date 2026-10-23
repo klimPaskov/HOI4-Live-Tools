@@ -132,8 +132,11 @@ and override/notification/input-handler paths refuse. Its byte-wide
 `disable_requested` flag is separate from visual state 3; neither proves a fresh
 prerequisite evaluation. Callback binding stays inside the original witness
 bracket, without executing the callback or authorizing input. Default reads add
-no callback access. Actual visible choices and ordinary selection remain pending
-live qualification.
+no callback access. A recorded ordinary T opener and subsequent read-only samples
+verified the visible four-grid list and requested building callback. The separate
+conversion item is retained only as the own shared-grid singleton; its embedded
+callback is never treated as a building template. Ordinary selection and placement
+remain pending live qualification.
 
 The observed total is not a durable assignment receipt. The legacy adapter still
 discards private typed identity/context between calls, and its UI placement stages
@@ -177,8 +180,11 @@ successful posting is also unacknowledged and requires the original attempt's
 fresh panel readback. Error codes and unchanged UI never establish no delivery.
 An old uncertain receipt cannot be reclassified using this newer transport.
 The complete original typed binding stays in memory for the attempt; its SHA-256
-and compact scope are retained in the private intent. Live qualification and
-worker construction integration remain pending. Legacy adapters are preserved.
+and compact scope are retained in the private intent. One recorded ordinary T
+attempt now has a same-attempt Verified receipt. Its broader gate still failed at
+the subsequently corrected choice reader; historical replay, already-open input
+suppression and worker construction integration remain pending live qualification.
+Legacy adapters are preserved.
 
 ## Action limits and recovery
 

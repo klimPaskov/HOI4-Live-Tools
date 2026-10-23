@@ -67,11 +67,18 @@ struct Choice {
     callback: Option<callback::Binding>,
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
+enum Item {
+    Building { item: u64, template: u64 },
+    // This is a separate CStandardGridBoxItem, not a building subtype. Its
+    // +0x20 is an embedded callback; never interpret it as a template pointer.
+    Conversion { item: u64 },
+}
+#[derive(Clone, Debug, PartialEq, Eq)]
 struct Choices {
     // Every named-path membership, grid and item/template join remains private.
     paths: Vec<(u64, Vec<u64>)>,
     grids: Vec<(u64, Vec<u64>)>,
-    items: Vec<(u64, u64)>,
+    items: Vec<Item>,
     complete: bool,
     reason: &'static str,
     target: Option<Choice>,
@@ -251,6 +258,7 @@ fn choices(
     let mut seen_grids = BTreeSet::new();
     let mut seen_items = BTreeSet::new();
     let mut seen_templates = BTreeSet::new();
+    let mut conversion_seen = false;
     let mut requested = None;
     for (section_name, grid_name) in GRIDS {
         let Some(section) = named(r, base, possible, section_name, &mut out.paths)? else {
@@ -277,6 +285,24 @@ fn choices(
             if !seen_items.insert(item) {
                 return Err(invalid("Unique construction choice items required"));
             }
+            pointer(item)?;
+            if r.u64(item)? == base + 0x343aca0 {
+                // Exact Mac population 0x101edce50 inserts the view's +0x470
+                // singleton once into shared_item_grid (0x101edd678..6df).
+                // Constructor 0x101edfc50 installs this distinct primary and
+                // builds a callback at +0x20. Retain only its typed membership.
+                if grid_name != "shared_item_grid"
+                    || conversion_seen
+                    || r.u64(panel.object + 0x470)? != item
+                {
+                    return Err(invalid(
+                        "Conversion choice must be the own shared-grid singleton",
+                    ));
+                }
+                conversion_seen = true;
+                out.items.push(Item::Conversion { item });
+                continue;
+            }
             exact(r, base, item, 0x343a9b0)?;
             let template = r.u64(item + 0x20)?;
             if !catalog.templates.contains_key(&template) || !seen_templates.insert(template) {
@@ -284,7 +310,7 @@ fn choices(
                     "Unique valid public construction choice templates required",
                 ));
             }
-            out.items.push((item, template));
+            out.items.push(Item::Building { item, template });
             if template == target.address {
                 requested = Some(item);
             }
@@ -472,6 +498,12 @@ pub fn snapshot_with_options(
         .target
         .as_ref()
         .is_some_and(|c| c.callback.is_some());
+    let conversion_count = o
+        .choices
+        .items
+        .iter()
+        .filter(|item| matches!(item, Item::Conversion { .. }))
+        .count();
     Ok(
         json!({"source":"native witnessed Mac construction UI probe",
         "build_id":"089EA519-6780-353B-8E39-4E9309B444D4",
@@ -485,7 +517,9 @@ pub fn snapshot_with_options(
             "engine_visible":o.panel.engine_visible(),
             "local_transitions_idle":o.panel.transition_states==Some([0,0])},
         "choices":{"complete_membership":o.choices.complete,"grid_count":o.choices.grids.len(),
-            "item_count":o.choices.items.len(),"reason":o.choices.reason,"target":target},
+            "item_count":o.choices.items.len(),"conversion_item_count":conversion_count,
+            "ordinary_building_item_count":o.choices.items.len()-conversion_count,
+            "reason":o.choices.reason,"target":target},
         "queue_complete":o.queue.complete,
         "queued":o.queue.complete.then(||json!({"in_state":o.queue.in_state,"elsewhere":o.queue.elsewhere})),
         "input_authorized":false,"geometry_available":false,"settled_frame_verified":false,
