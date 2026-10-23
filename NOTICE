@@ -84,7 +84,9 @@ Upstream foundation and attribution:
 
   native/src/construction/mac_ui.rs and construction/mac_panel.rs independently
   recover the current Mac construction view, own GUI ownership, named topbar
-  opener and callback data. They reuse the attributed construction semantics
+  opener and callback data. construction/mac_panel/routing.rs independently
+  maps the own renderer, complete mouse-route arrays and cursor conversions.
+  They reuse the attributed construction semantics
   without copying upstream UI code or another platform's offsets. These readers
   execute no callback and grant no placement or input authority.
 

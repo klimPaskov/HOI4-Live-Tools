@@ -9,6 +9,17 @@ failed campaigns. Do not control the shared Windows game.
 
 ## Current checkpoint
 
+The panel probe now includes opt-in typed route/cursor correlation under the
+existing own-process witness. It checks complete bounded source/delivery arrays,
+the exact button/renderer association and independent cursor conversions;
+ordinary default reads remain unchanged. All 24 focused fixtures, 1,479 Rust /
+956 Python tests (37 skipped), strict cross-platform checks and release build pass. It still
+grants no input or atomic cache/delivery authority, and the task-port denial below
+prevents live qualification. Next qualify this observer stationarily after normal
+OS reauthorization, then implement the typed journaled opener and Luna visible-
+grid gate. No new input, screenshot or cursor movement occurred. See
+[the route checkpoint](CLAUSEWITZ_VALIDATION.md#mac-opener-mouse-route-observation--23-october-2026).
+
 The new read-only `hoi4_construction_panel_probe` has 14 focused fixtures and
 passes the full 1,469 Rust / 956 Python tests (37 Python skips). The preceding
 opener checkpoint passed all nine CI jobs. The canvas follow-up also passed

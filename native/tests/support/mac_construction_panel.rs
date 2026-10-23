@@ -1,5 +1,8 @@
 use super::*;
-use hoi4_live_native::{construction::mac_panel::snapshot, protocol::Server};
+use hoi4_live_native::{
+    construction::mac_panel::{snapshot, snapshot_with_routing},
+    protocol::Server,
+};
 use serde_json::json;
 
 const GUI: u64 = 0x400000;
@@ -382,10 +385,306 @@ fn panel_probe_protocol_rejects_unknown_or_mistyped_options() {
     for args in [
         json!({"include_geometry":1}),
         json!({"include_geometry":null}),
+        json!({"include_geometry":true,"include_routing":1}),
+        json!({"include_geometry":true,"include_routing":null}),
+        json!({"include_routing":true}),
+        json!({"include_geometry":false,"include_routing":true}),
         json!({"click":true}),
         json!({"building_id":"arms_factory"}),
     ] {
         let v=server.handle(json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"hoi4_construction_panel_probe","arguments":args}})).unwrap();
         assert!(v.to_string().contains("invalid_arguments"));
+    }
+}
+
+const SOURCES: u64 = 0x520000;
+const ROUTE: u64 = 0x530000;
+
+fn routes(f: &mut MacFixture, sources: &[u64], targets: &[u64]) {
+    f.array(GRAPHICS + 0x50, SOURCES, sources);
+    f.word(GRAPHICS + 0x28, ROUTE);
+    f.int(GRAPHICS + 0x30, targets.len() as i32);
+    f.int(GRAPHICS + 0x34, targets.len() as i32);
+    for (i, target) in targets.iter().enumerate() {
+        f.word(ROUTE + i as u64 * 16, BASE + 0x34b0ab8);
+        f.word(ROUTE + i as u64 * 16 + 8, *target);
+    }
+}
+
+fn routing_fixture() -> MacFixture {
+    let mut f = fixture(2);
+    geometry(&mut f);
+    for (field, value) in [
+        (BUTTON + 0xd0, GRAPHICS),
+        (SPRITE + 0x138, BUTTON),
+        (GUI + 0x120, BUTTON),
+        (GUI + 0x128, BUTTON),
+        (BUTTON + 0x178, 0),
+        (BASE + 0x35dbf60, 0),
+    ] {
+        f.word(field, value);
+    }
+    for field in [GUI + 0x130, GUI + 0x12, BUTTON + 0x1d1] {
+        f.put(field, &[0]);
+    }
+    f.int(BUTTON + 0x64, 0x802);
+    for (offset, value) in [
+        (0x40, 237_f32),
+        (0x44, 26.0),
+        (0x48, 237.0),
+        (0x4c, 26.0),
+        (0x1c0, 1.0),
+        (0x1c4, 1.0),
+        (0x1c8, 1.0),
+        (0x1cc, 1.0),
+    ] {
+        f.put(GRAPHICS + offset, &value.to_le_bytes());
+    }
+    routes(&mut f, &[FOREIGN, SPRITE], &[BUTTON, FOREIGN]);
+    f
+}
+
+#[test]
+fn route_correlation_is_opt_in_and_never_reads_unrelated_target_payloads() {
+    let mut f = fixture(2);
+    geometry(&mut f);
+    assert!(snapshot(&f, true).unwrap()["opener"]["routing"].is_null());
+    not_read(
+        &f,
+        &[
+            GRAPHICS + 0x28,
+            GRAPHICS + 0x50,
+            SPRITE + 0x138,
+            BUTTON + 0xd0,
+        ],
+    );
+    let f = routing_fixture();
+    let v = snapshot_with_routing(&f, true, true).unwrap();
+    let r = &v["opener"]["routing"];
+    assert_eq!(r["source_count"], 2);
+    assert_eq!(r["route_count"], 2);
+    for key in [
+        "renderer_target_join_verified",
+        "source_tail_matches_renderer",
+        "first_route_target_matches_button",
+        "cached_cursor_matches_target",
+        "route_entry_types_verified",
+    ] {
+        assert_eq!(r[key], true, "{key}");
+    }
+    for key in [
+        "cache_completion_verified",
+        "os_cursor_verified",
+        "input_authorized",
+        "delivery_verified",
+    ] {
+        assert_eq!(r[key], false, "{key}");
+    }
+    assert_eq!(r["gui_route_aliases_match_button"], json!([true, true]));
+    not_read(&f, &[FOREIGN]);
+    assert!(!v.to_string().contains(&FOREIGN.to_string()));
+}
+
+#[test]
+fn route_request_still_skips_already_selected_or_hidden_opener() {
+    let f = fixture(0x11);
+    assert!(snapshot_with_routing(&f, true, true).unwrap()["opener"].is_null());
+    not_read(&f, &[MANAGER + 0x188, GUI + 0x98]);
+    let mut f = fixture(2);
+    f.put(MENU + 0x95, &[0]);
+    assert!(snapshot_with_routing(&f, true, true).unwrap()["opener"]["routing"].is_null());
+    not_read(&f, &[GUI + 0x98, GRAPHICS + 0x28]);
+    let f = fixture(2);
+    assert_eq!(
+        snapshot_with_routing(&f, false, true).unwrap_err().code,
+        "invalid_arguments"
+    );
+    assert!(f.reads.borrow().is_empty());
+}
+
+#[test]
+fn route_membership_is_complete_and_selected_duplicates_remain_explicit() {
+    let mut f = routing_fixture();
+    let mut sources = vec![FOREIGN; 70];
+    sources[1] = SPRITE;
+    sources[69] = SPRITE;
+    let mut targets = vec![FOREIGN; 70];
+    targets[0] = BUTTON;
+    targets[69] = BUTTON;
+    routes(&mut f, &sources, &targets);
+    let v = snapshot_with_routing(&f, true, true).unwrap();
+    let r = &v["opener"]["routing"];
+    assert_eq!(r["source_count"], 70);
+    assert_eq!(r["route_count"], 70);
+    assert_eq!(r["selected_source_occurrences"], 2);
+    assert_eq!(r["selected_target_occurrences"], 2);
+    not_read(&f, &[FOREIGN]);
+    for field in [SOURCES + 69 * 8, ROUTE + 69 * 16 + 8] {
+        let mut f = routing_fixture();
+        routes(&mut f, &sources, &targets);
+        f.final_fault.set(Some(field));
+        assert_eq!(
+            snapshot_with_routing(&f, true, true).unwrap_err().code,
+            "torn_read"
+        );
+    }
+}
+
+#[test]
+fn competing_or_empty_routes_do_not_follow_an_alternative_target() {
+    for (sources, targets) in [
+        (vec![SPRITE, FOREIGN], vec![FOREIGN, BUTTON]),
+        (vec![], vec![]),
+    ] {
+        let mut f = routing_fixture();
+        routes(&mut f, &sources, &targets);
+        let v = snapshot_with_routing(&f, true, true).unwrap();
+        assert_eq!(
+            v["opener"]["routing"]["source_tail_matches_renderer"],
+            false
+        );
+        assert_eq!(
+            v["opener"]["routing"]["first_route_target_matches_button"],
+            false
+        );
+        assert_eq!(v["input_authorized"], false);
+        not_read(&f, &[FOREIGN]);
+    }
+}
+
+#[test]
+fn malformed_route_headers_refuse_without_truncation_or_payload_reads() {
+    for offset in [0x28, 0x50] {
+        for (capacity, count) in [(-1, 0), (1, -1), (1, 2), (4097, 4097)] {
+            let mut f = routing_fixture();
+            f.int(GRAPHICS + offset + 8, capacity);
+            f.int(GRAPHICS + offset + 12, count);
+            assert!(snapshot_with_routing(&f, true, true).is_err());
+            not_read(&f, &[if offset == 0x28 { ROUTE } else { SOURCES }]);
+        }
+        let mut f = routing_fixture();
+        f.word(GRAPHICS + offset, FOREIGN + 1);
+        assert!(snapshot_with_routing(&f, true, true).is_err());
+        not_read(&f, &[FOREIGN]);
+    }
+}
+
+#[test]
+fn renderer_owner_target_and_persistent_route_type_must_match() {
+    for (field, value) in [
+        (BUTTON + 0xd0, FOREIGN),
+        (SPRITE + 0x138, FOREIGN),
+        (ROUTE, BASE + 0x34ac070),
+    ] {
+        let mut f = routing_fixture();
+        f.word(field, value);
+        assert_eq!(
+            snapshot_with_routing(&f, true, true).unwrap_err().code,
+            "invalid_construction"
+        );
+        not_read(&f, &[FOREIGN]);
+    }
+    let mut f = routing_fixture();
+    f.word(SPRITE, BASE + 0x34afed0);
+    assert!(snapshot_with_routing(&f, true, true).is_ok());
+}
+
+#[test]
+fn cursor_conversion_uses_both_factor_pairs_and_engine_truncation() {
+    let mut f = routing_fixture();
+    for offset in [0x40, 0x48] {
+        f.put(GRAPHICS + offset, &118.0_f32.to_le_bytes());
+    }
+    f.put(GRAPHICS + 0x1c0, &0.5_f32.to_le_bytes());
+    f.put(GRAPHICS + 0x1c8, &2.0_f32.to_le_bytes());
+    let v = snapshot_with_routing(&f, true, true).unwrap();
+    let r = &v["opener"]["routing"];
+    assert_eq!(r["expected_graphics_stamp"], json!([118.0, 26.0]));
+    assert_eq!(r["processed_event_point"], json!([236, 26]));
+    assert_eq!(r["cached_cursor_matches_target"], false);
+    let mut f = routing_fixture();
+    f.put(GRAPHICS + 0x48, &236.0_f32.to_le_bytes());
+    assert_eq!(
+        snapshot_with_routing(&f, true, true).unwrap()["opener"]["routing"]
+            ["cached_cursor_matches_target"],
+        false
+    );
+}
+
+#[test]
+fn nonfinite_or_unbounded_cursor_conversions_refuse() {
+    for (offset, value) in [
+        (0x40, f32::NAN),
+        (0x4c, f32::INFINITY),
+        (0x1c0, 0.0),
+        (0x1c4, -1.0),
+        (0x1c8, 101.0),
+        (0x48, 1_000_001.0),
+    ] {
+        let mut f = routing_fixture();
+        f.put(GRAPHICS + offset, &value.to_le_bytes());
+        assert_eq!(
+            snapshot_with_routing(&f, true, true).unwrap_err().code,
+            "invalid_construction"
+        );
+    }
+    let mut f = routing_fixture();
+    f.put(GRAPHICS + 0x48, &20_000.0_f32.to_le_bytes());
+    f.put(GRAPHICS + 0x1c8, &100.0_f32.to_le_bytes());
+    assert_eq!(
+        snapshot_with_routing(&f, true, true).unwrap_err().code,
+        "invalid_construction"
+    );
+}
+
+#[test]
+fn wrapper_and_unknown_hook_gates_are_reported_without_following_them() {
+    let mut f = routing_fixture();
+    f.put(GUI + 0x130, &[1]);
+    f.put(GUI + 0x12, &[1]);
+    f.int(BUTTON + 0x64, 0x801); // bit 0 does not satisfy virtual+18's bit 1.
+    f.put(BUTTON + 0x1d1, &[1]);
+    f.word(BUTTON + 0x178, FOREIGN);
+    f.word(BASE + 0x35dbf60, FOREIGN);
+    let v = snapshot_with_routing(&f, true, true).unwrap();
+    let r = &v["opener"]["routing"];
+    assert_eq!(r["conditional_target_gate_clear"], false);
+    assert_eq!(r["source_target_flags_eligible"], true);
+    assert_eq!(r["dispatch_skip_raw"], 1);
+    assert_eq!(r["standard_wrapper_gate_raw"], 1);
+    assert_eq!(r["unsupported_optional_gate_present"], true);
+    assert_eq!(r["unsupported_post_click_hook_present"], true);
+    not_read(&f, &[FOREIGN]);
+}
+
+#[test]
+fn routing_fields_share_the_full_final_witness_bracket() {
+    for field in [
+        BUTTON + 0xd0,
+        SPRITE + 0x138,
+        GRAPHICS + 0x50,
+        GRAPHICS + 0x28,
+        SOURCES + 8,
+        ROUTE + 16,
+        GRAPHICS + 0x40,
+        GRAPHICS + 0x48,
+        GRAPHICS + 0x1c0,
+        GRAPHICS + 0x1cc,
+        GUI + 0x120,
+        GUI + 0x128,
+        GUI + 0x130,
+        GUI + 0x12,
+        BUTTON + 0x64,
+        BUTTON + 0x178,
+        BUTTON + 0x1d1,
+        BASE + 0x35dbf60,
+    ] {
+        let f = routing_fixture();
+        f.final_fault.set(Some(field));
+        assert_eq!(
+            snapshot_with_routing(&f, true, true).unwrap_err().code,
+            "torn_read",
+            "{field:x}"
+        );
     }
 }

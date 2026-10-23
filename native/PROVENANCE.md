@@ -33,10 +33,36 @@ to have physical/logical 1920×1080 dimensions and scale 1. The shared typed can
 reader reuses the existing Mac geometry constructor evidence and bounds; it does
 not add OS-window or input authority. Other profiles explicitly refuse rectangle
 output while ordinary binding observation remains available.
-This does not establish a settled frame or click delivery. The common GUI route,
-capture state, optional global post-click hook and cursor notifications remain
-outside this reader's proof; input remains disabled. Private static evidence
-includes the independent menu/popup/routing investigation and its explicit gaps.
+`construction/mac_panel/routing.rs` adds opt-in correlation on that same canvas.
+Standard constructor `0x2757be4` retains graphics at button `+0xd0`; its call to
+`0x27b6c00` links the unchanged `+0xd8` renderer primary back to the button at
+renderer `+0x138`. CSprite/animated constructors preserve the common graphical
+primary; the accepted types remain `0x34bdb10` and `0x34afed0`. Renderer `+0x120`
+contains packed canvas dimensions, not an owner pointer. Button `+0xd0` must
+equal the own GUI's graphics instance, and renderer `+0x138` the exact button.
+
+Graphics `+0x50` holds 8-byte source pointers; `+0x28` holds 16-byte persistent
+CCollisionObject entries with primary `0x34b0ab8` and target at `+8`, independently
+pinned by appender `0x27bd690` and RTTI. These differ from the temporary
+C2dCollisionObject primary `0x34ac070`. Both complete ordered vectors are bounded
+and final-witness checked; unrelated node/target payloads are never followed.
+Source-tail, first-target and GUI `+0x120/+0x128` matches are reported separately.
+
+Mouse conversion routines `0x27b6f50` / `0x27b6fb0` use factors `+0x1c0/+0x1c4`
+and `+0x1c8/+0x1cc`, truncating toward zero. Current/processed graphics points at
+`+0x40/+0x48` are correlated with the integer rectangle center. Routine
+`0x27b6e20` writes the processed stamp **before** rebuilding, so equality is not
+an atomic completion marker or an observation of the OS cursor. Dispatcher
+`0x27c6a50` uses GUI bytes `+0x130/+0x12`; conditional target virtual `+0x18`
+tests flags `+0x64 & 2`, while source admission uses `flags & 0xc00 == 0x800`.
+Standard wrapper `0x275a210` uses byte `+0x1d1` and optional graphical parent
+`+0x178`. Nonnull parent and global post-click hook at `0x35dbf60` remain
+unsupported and are never dereferenced. All fields share the enclosing witness.
+
+This establishes neither a settled frame nor atomic delivery. Current route and
+hover behavior still need live qualification; input remains disabled. Private
+static evidence retains exact-file bytes, constructor excerpts and RTTI with the
+independent menu/popup/routing investigation and its explicit gaps.
 
 ## Typed Mac construction UI observation
 

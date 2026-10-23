@@ -1,5 +1,15 @@
 # Mac continuation checkpoint — 23 October 2026
 
+The panel probe now has opt-in typed mouse-route observation: complete bounded
+arrays, exact own renderer/target joins and cursor-factor correlations, with no
+additional default reads. All 24 focused fixtures and the full 1,479 Rust / 956
+Python tests (37 skipped), strict cross-platform checks and release build pass.
+It grants no input or
+atomic delivery authority. The next live step is stationary qualification after
+normal local task-port authorization returns, followed by the journaled panel
+opener and one Luna-medium visible-grid gate. No new game input has occurred.
+See [route evidence and limits](CLAUSEWITZ_VALIDATION.md#mac-opener-mouse-route-observation--23-october-2026).
+
 The new construction topbar probe passes 1,469 Rust tests and the full Python
 suite, but its first live attempt was refused before reading game memory by
 macOS task-port authorization (`-60007`). The previously working runtime now
@@ -11,7 +21,7 @@ campaign state is the checkpoint below. Offline routing work continues;
 the new opener has no live qualification or enabled input stage yet. Its optional
 rectangle now verifies the actual own graphics canvas is 1920×1080 at scale 1;
 unsupported profiles refuse geometry while ordinary binding reads stay available.
-The preceding opener commit passed all nine CI jobs.
+The preceding opener and canvas commits passed all nine CI jobs each.
 
 The next-day retry on `3b84ebc` passed with Luna medium. Germany is paused on
 22 May 1936 at 01:00, speed 3: infantry has 12 factories and support has 3.

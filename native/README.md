@@ -439,7 +439,7 @@ anchors do not establish a load-generation token.
 | `hoi4_construction_queue` | Own building/railway lines, canonical keys and signed cost/work counters; one dockyard observed in run071. Run072 observed one state/label with a late-lease deviation; selection and province/railway coverage remain unverified |
 | `hoi4_construction_target` | Complete witnessed queued amounts for one public building and own state; incomplete evidence returns null amounts |
 | `hoi4_construction_ui_probe` | Mac-only own panel/selection/full-choice observation; no input, geometry, settled-frame or placement authority |
-| `hoi4_construction_panel_probe` | Mac-only panel mode and exact named topbar opener/callback binding; optional renderer rectangle requires a verified 1920×1080 canvas at scale 1; read-only, with no routing or input authority |
+| `hoi4_construction_panel_probe` | Mac-only panel mode and named topbar opener/callback binding. `include_geometry` requires a verified 1920×1080 canvas at scale 1. Optional `include_routing` also requires geometry and adds complete bounded mouse-route/cursor correlations; no atomic cache-completion or input authority |
 | `hoi4_technology_list` | Canonical loaded technology IDs with filtering/pagination; no eligibility inference |
 | `hoi4_input_geometry` | GUI dimensions, scale, pointer and conditional source-window diagnostics; no click authority |
 | `hoi4_research_folders` | Exact loaded public folder IDs, independent of open GUI; no technology mapping or eligibility authority |

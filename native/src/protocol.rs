@@ -644,10 +644,13 @@ impl Server {
                 })
             }
             "hoi4_construction_panel_probe" => {
-                if object.keys().any(|key| key != "include_geometry") {
+                if object
+                    .keys()
+                    .any(|key| key != "include_geometry" && key != "include_routing")
+                {
                     return Err(Error::new(
                         "invalid_arguments",
-                        "Only include_geometry accepted",
+                        "Only include_geometry and include_routing accepted",
                     ));
                 }
                 let geometry = object
@@ -657,8 +660,18 @@ impl Server {
                     .ok_or_else(|| {
                         Error::new("invalid_arguments", "include_geometry must be boolean")
                     })?;
+                let routing = object
+                    .get("include_routing")
+                    .map(Value::as_bool)
+                    .unwrap_or(Some(false))
+                    .ok_or_else(|| {
+                        Error::new("invalid_arguments", "include_routing must be boolean")
+                    })?;
+                construction::mac_panel::validate_options(geometry, routing)?;
                 let process = self.process()?;
-                read_only_recovered(|| construction::mac_panel::snapshot(process, geometry))
+                read_only_recovered(|| {
+                    construction::mac_panel::snapshot_with_routing(process, geometry, routing)
+                })
             }
             "hoi4_construction_target" | "hoi4_construction_ui_probe" => {
                 if object.keys().any(|k| k != "building_id" && k != "state_id") {

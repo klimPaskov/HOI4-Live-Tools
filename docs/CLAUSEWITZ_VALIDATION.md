@@ -1,5 +1,35 @@
 # Clausewitz-MCP Linux validation
 
+## Mac opener mouse-route observation — 23 October 2026
+
+The panel probe now accepts `include_routing=true` together with
+`include_geometry=true`. It joins the exact named button's graphics and renderer
+to the own GUI canvas, retains complete bounded source and delivery arrays,
+validates persistent collision-entry types, and reports source-tail/first-target
+and GUI-route correlations. Only the bound button and renderer payloads are
+inspected. Cursor conversions use the independently recovered factors and engine
+truncation; duplicate selected entries, mismatched cursor stamps and unsupported
+handler presence remain explicit. The default probe adds no routing reads.
+
+The processed cursor stamp precedes route rebuilding. Consequently,
+`cache_completion_verified`, `os_cursor_verified`, `input_authorized` and
+`delivery_verified` remain false, even when every reported correlation matches.
+This change enables stationary inspection for a future journaled opener; it
+does not enable clicking, select a building or qualify construction placement.
+
+Ten new focused fixtures cover complete vectors beyond an early prefix, changed
+late entries, malformed headers, foreign targets without payload reads, exact
+renderer ownership, temporary/persistent type confusion, cursor truncation and
+nonfinite values, wrapper gates and full final-witness changes. All 24 focused
+tests pass, together with all 1,479 Rust tests, 956 Python tests (37 skipped),
+formatting, strict host/Windows/Linux-musl/ARM64-Linux-musl Clippy and the release
+build. The signed private binary passes a 28-tool offline stdio smoke, including
+strict routing-option refusal before session access. The preceding `82d061a`
+passed all nine CI jobs.
+No live probe was retried while task-port authorization remained denied; no
+input, pause, screenshot or cursor movement occurred during this work. The
+clean two-year run and complete campaigns remain outstanding.
+
 ## Mac opener canvas binding — 23 October 2026
 
 Review found that the optional opener rectangle used the 1920×1080 transform
