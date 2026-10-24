@@ -1,5 +1,36 @@
 # Rust foundation provenance
 
+## Internal typed Mac direct-recipient foundation
+
+`gui/macos/direct_route.rs` and its `typed`, `model` and `witness` modules
+independently compose the same Mach-O UUID/SHA below. The complete graphical
+builder at `0x1027b05e0`, class/resource procedures documented below and separate
+dispatch guards establish the restricted center-point observation. The root is
+the graphics object's embedded `C2dPositionObject` at +0x1e0; exact primary and
+reciprocal parent checks precede each node's payload. Ordered bounded child
+membership is complete. Unknown classes refuse; unsupported resources cannot
+become geometric misses. No target widget payload or game callback is followed.
+
+The immutable typed graph retains original resource identities and uses the
+existing public hit-envelope functions. Scalar transform grouping, inherited
+clip behavior and conservative nine-box InstantText union are preserved. Child
+traversal is independent of self eligibility and clip rejection. Fresh rebuild,
+strict captured-cache comparison and unqualified-trig results remain distinct;
+the normal C99 zero-angle calculation is an explicit restricted math basis.
+Captured cache discrepancies are diagnostic, never adopted as fresh transforms.
+
+The caller owns original exact build/process/campaign/root bindings, a fixed
+deadline and encompassing final witness/context checks. Request-local witnesses
+recheck consumed fields and complete membership, excluding unused node padding.
+Twenty-six synthetic fixtures cover the transform/clip model, typed rejection,
+type-before-payload guards and late/changed/short witness failures. The internal
+predicate is a provisional complete-data condition for no direct GUI recipient;
+it does not prove cache completion, no GUI effects, full picker semantics or
+input/delivery authority. There is no default read, tool or action registration.
+This extends the attributed Clausewitz observation approach without copying
+upstream GUI code, game bytes or another platform's offsets. Private component
+measurements are documented separately and do not qualify a public adapter.
+
 ## Pure Mac graphical hit envelopes
 
 `gui/macos/hit_envelope.rs` independently follows the same Mac UUID/SHA below.

@@ -12,18 +12,27 @@ failed campaigns. Do not control the shared Windows game.
 
 ## Current checkpoint
 
-The internal pure Mac GUI hit envelopes now cover exact animated-frame,
-masked-shield and progress-bar resource variants, with 36 added fixtures and
-68 focused tests passing. No reader, input permission or release pin changes.
-All 1,886 Rust / 956 Python tests (37 skips), four-target strict checks, release
-and unchanged 28-tool protocol smoke pass.
-A complete private native 1080p geometry snapshot took 1.171 seconds; independent
-captured-data reconstruction covers its class-specific rejection paths with
-explicit arithmetic assumptions and retained cache discrepancies. A separate
-live typed dispatch-guard read took 0.462 ms, with no input, screenshots, cursor
-movement or pauses. These components have not yet qualified the combined public
-route or construction worker. The clean two-year Luna run and full campaign
-recordings remain unfinished. See the [Mac checkpoint](MAC_CONTINUATION_STATUS.md).
+The internal typed Mac GUI foundation now composes complete bounded membership,
+exact types/resources, transform/clip rejection and final consumed-field checks
+using the existing public geometry math. Its 26 focused fixtures pass. This is
+internal source only; no default read, tool or input permission was added.
+All 1,912 Rust / 956 Python tests (37 skips), 120 optimized GUI tests, four-target
+strict checks, release build and unchanged 28-tool stdio checks pass.
+
+The recorded native Mac strict Rust placement component passed: one ordinary
+click increased the original own-state military-factory queue from 1 to 2,
+verified by the retained complete-queue anchor. Exact journal/replay/EOF and
+native 1920×1108 H.264 recording audits passed. The private 17-call driver took
+4.661 seconds; placement took 2.326 seconds including its window/recording guard.
+There was no activation, cursor displacement, clock action or observation pause.
+The adapter and construction worker are not public/accepted yet; the clean
+two-year Luna run and full campaigns remain unfinished. The tested public
+`ea2e43e` math checkpoint has all nine CI jobs green. See the [Mac checkpoint](MAC_CONTINUATION_STATUS.md).
+
+The qualification game has since exited 0 through its identity-checking supervisor
+before the original six-hour expiry. The temporary display holder is gone and all
+five default settings hashes are unchanged. Further live work must start a fresh
+owned session; the previous session's authority must never be extended or adopted.
 
 ## Previous checkpoint
 

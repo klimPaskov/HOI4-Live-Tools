@@ -1,5 +1,46 @@
 # Mac continuation checkpoint — 24 October 2026
 
+The internal typed Mac GUI foundation now retains the complete bounded graphical
+tree, exact class/parent/resource identities, independently rebuilt transforms and
+clips, and final consumed-field witnesses. It reuses the existing public geometry
+math. Twenty-six focused fixtures cover the model, typed guards and witness
+failures. This adds no MCP tool, default read, input permission or release pin;
+the caller must still supply original build, campaign, deadline and final checks.
+
+All 1,912 Rust tests and 956 Python tests (37 skips), 120 optimized GUI fixtures,
+strict checks on four targets, release build and unchanged 28-tool stdio checks
+pass. The 38 unrelated legacy WIP paths remain byte-identical. These are source
+checks; the separately tested private placement adapter is not public yet.
+
+The recorded native Mac strict Rust placement component passed at a 1920×1080
+client size. One ordinary move/down/up increased the original military-factory
+queue line in own Brandenburg from amount 1 to 2. A retained typed queue anchor
+verified the exact +1 effect and preserved every original row. The durable
+journal contains exactly Dispatching → Verified; the identical request replay
+returned the same historical receipt without appending or sending input.
+
+The 17-call private driver took 4.661 seconds, with zero errors. Placement took
+2.326 seconds and replay 72.178 ms; these driver timings include its per-call
+window/recording guard overhead. There was zero activation, cursor displacement,
+keyboard input, screenshot, clock action, worker or observation pause. The game
+started and remained paused, so no real-time-per-game-year result is available.
+
+The native H.264 recording finalized at 1920×1108, 93.211667 seconds and 2,737
+encoded frames; the independent complete-callback counter also reported 2,737.
+It stopped explicitly and the recorder exited 0. Full original baseline, camera,
+all 18 earlier controller files and 38 unrelated legacy WIP paths stayed unchanged
+apart from the verified queue increment. All grants, leases, servers and recorders
+are closed. This is a private component result; public placement, construction
+worker integration, the clean two-year Luna run and full campaigns remain unfinished.
+
+The owned qualification game was closed before its original six-hour expiry by
+its identity-checking supervisor using SIGTERM. The game exited 0, the temporary
+display holder exited, and all five default settings hashes stayed unchanged.
+This was a diagnostic session, not a completed campaign or normal UI close.
+Further live gates require a fresh owned session; development continues offline.
+
+Previous checkpoints follow.
+
 The internal pure Mac hit envelopes now cover exact animated-frame,
 masked-shield and progress-bar resource variants. Thirty-six added fixtures
 preserve their separate size/hit roles, unsigned masked edges and progress-bar

@@ -11,6 +11,10 @@ pub(crate) mod source_point;
 #[allow(dead_code)]
 pub(crate) mod hit_envelope;
 
+// Internal read-only foundation; no default observer or input adapter enabled.
+#[allow(dead_code)]
+pub(crate) mod direct_route;
+
 use crate::{
     error::{Error, Result},
     memory::{Reader, StringAbi},

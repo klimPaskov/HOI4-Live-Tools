@@ -1,5 +1,33 @@
 # Clausewitz-MCP Linux validation
 
+## Internal typed Mac GUI foundation — 24 October 2026
+
+The internal `gui/macos/direct_route` modules retain a complete bounded graphical
+tree with exact class/parent checks before payload, ordered child membership and
+typed resource identities. Transform/clip reduction and conservative InstantText
+union reuse the existing public hit-envelope math; no duplicate math or its 68
+fixtures was added. Unknown types refuse and unsupported geometry cannot count
+as a miss. Captured-cache comparison and unqualified-trig results remain separate
+from the explicit standard zero-angle calculation.
+
+The caller supplies original exact build/process/campaign/root bindings, a fixed
+deadline and final witness/context checks. The request-local witness rechecks all
+consumed fields and complete membership while excluding unused node padding.
+Its narrow no-direct-recipient condition does not establish cache completion,
+absence of GUI effects, full picker semantics or input/delivery authority. No
+default observation, MCP tool, input adapter, permission or release pin changed.
+
+Twenty-six focused fixtures cover transform/clip behavior, type-before-payload,
+conservative refusal and late/changed/short/identity-lost witnesses. This source
+adaptation adds no new live measurement. The separately recorded private strict
+placement component and its exact scope are documented below.
+
+Full source validation passed 1,912 Rust tests, 956 Python tests (37 skipped),
+120 optimized GUI tests, formatting, strict host macOS / Windows GNU / x86 Linux
+musl / ARM64 Linux musl checks, release build and unchanged 28-tool unbound stdio
+checks. All 38 unrelated legacy WIP paths stayed byte-identical. The small source
+adaptation introduces no new live qualification or public placement action.
+
 ## Mac resident center-terrain MCP — 24 October 2026
 
 The resident Rust Mac center-terrain observer passed stationary qualification
@@ -8000,3 +8028,65 @@ formatting, strict host / Windows GNU / x86 Linux musl / ARM64 Linux musl checks
 release build and the unchanged 28-tool unbound stdio smoke. All 38 unrelated
 legacy WIP files were preserved byte-for-byte. These checks are separate from
 live behavior and campaign acceptance.
+
+
+## Mac strict Rust placement component — 24 October 2026
+
+A recorded Luna-medium gate passed through a private Rust MCP placement adapter
+on the owned native 1920×1080 Mac Germany session. The requested ordinary
+`arms_factory` was already selected and own Brandenburg (state 64) centered.
+One ordinary move/down/up increased the original queue line from amount 1 to 2.
+A real retained typed anchor verified the exact complete-queue delta, then
+verified it again after platform checks. No opener, reselection, Find, Escape,
+keyboard, clock or worker operation occurred.
+
+Before dispatch and again before down, the adapter required a complete immutable
+typed graph, independently rebuilt transforms/clips/class bounds, separately
+observed source/route and global guards, original roots and consumed-field final
+witnesses. All 44,186 objects were covered; 1,247 candidates were clip-rejected
+and the remaining 241 outer-rejected under the explicit standard C99 zero-angle
+contract. The final before-down snapshot reported no cache discrepancy. The
+older captured scale discrepancy and its unknown cause remain preserved.
+Neither the narrow condition nor cached source stamps claim atomic delivery,
+full model intersection, positive texture hits or complete picker eligibility.
+Only the original attempt's complete queue readback certified this placement.
+
+The new controller journal contains exactly one version-2 Dispatching / Verified
+pair, with the exact requested action, original campaign identity and returned
+receipt. One identical replay returned that historical receipt without appending;
+the stopped journal remained byte-identical after EOF. No unresolved intent or
+clock record remained. Complete own Research, Focus, production, clock/setup,
+camera, cursor and all 18 earlier controller files stayed unchanged. All 316
+frozen gate files and 38 unrelated legacy WIP paths matched after execution.
+
+The 17-call private driver took 4.661429 seconds, with zero RPC errors, activation
+or cursor displacement. Placement took 2,326.360 ms and historical replay
+72.178 ms; median call time was 77.203 ms. These are driver measurements including
+its per-call OS-window and recording guards, not resident server-only latency.
+The move event stayed at the same fixed center. There were zero screenshots or
+observation pauses. The game remained paused on 1 January 1936, so this gate
+provides no advancing-time or real-time-per-game-year result.
+
+The native desktop-independent owned-window recording finalized as H.264 at
+1920×1108, 93.211667 seconds and 2,737 decoded/encoded frames. Its independently
+counted complete capture callbacks also totaled 2,737. Explicit stop, recorder
+exit 0, lease release and MCP EOF 0 passed. Final raster verification used the
+encoded file; requested geometry was not substituted for encoded evidence.
+
+The private candidate passed all 2,002 Rust tests, strict checks on four targets,
+release/signature and unchanged default 28-tool protocol checks. Its Python
+forwarding boundary passed six no-process regressions and independent review.
+Initial visibility/import/Sync and non-Mac unused-export compile failures are
+preserved; corrections passed before grant. Review also caught and corrected
+late forwarding-pin checks, immutable deadline clipping and durable replay/EOF
+audits before any input. These private counts are separate from the public
+`ea2e43e` checkpoint's 1,886 Rust / 956 Python tests and nine green CI jobs.
+
+All grants, leases, servers and recorders are closed. The private adapter has not
+enabled public input or construction-worker execution. Ordinary cancellation,
+wider standing plans, a clean two-year Luna run and full campaign recordings
+remain unfinished. Before the original six-hour expiry, the identity-checking
+supervisor closed its owned game using SIGTERM. The game exited 0; the temporary
+display holder exited and all five default settings hashes stayed unchanged.
+This does not establish a normal UI close or completed campaign. A new live gate
+requires a fresh owned session, without extending or adopting this one.
