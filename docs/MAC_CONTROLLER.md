@@ -362,7 +362,41 @@ competing actions and workers.
 
 The recorded private Rust component passed on paused native 1080p Germany.
 The generic source port does not establish advancing-time or full-campaign
-acceptance. Ordinary cancellation and construction standing plans remain next.
+acceptance. Construction standing plans remain unfinished.
+
+## Construction cancellation qualification
+
+`hoi4_construction_clear_selection` is a default-off manual qualification tool.
+Arguments are `building_id`, `state_id`, `request_id` and `lease_token`. Enable
+`construction_cancellation: true` in private `input.json`, with an absolute
+`cancellation_deadline_epoch` strictly in the future and at most 180 seconds from
+server binding. Each action retains the minimum of that original bound, its
+lease and 12 seconds. Lease renewal and reconnect cannot extend the bound.
+Other construction flags do not enable cancellation.
+
+An originally inactive selection is verified without a key. Otherwise the exact
+ordinary template must already be selected on the visible idle construction panel.
+The adapter retains the original process, campaign, own-state/template, complete
+queue, close control, callback, renderer and ownership edges. It checks the complete
+fresh keyboard prefix before input; incidental renderer membership may change
+between coherent observations, but the requested target cannot be replaced.
+Unknown recipients, competing shortcuts, unsupported outer receivers and torn
+observations refuse. The narrowly typed hidden plane-selection lifetime object
+is distinct from active keyboard membership. HotkeyManager forwarding is qualified
+only for ordinary unmodified physical Escape, not printable text or arbitrary
+input methods.
+
+A strict durable intent precedes at most one ordinary Escape down/up. Events are
+preallocated and release is unconditional. The panel may close and ordinary GUI
+invalidation may occur. Success requires canonical inactive selection and the
+exact original complete queue twice within the same attempt, including a read
+after platform checks. No mouse move, screenshot, clock command or worker is used.
+Possible-input failures remain uncertain; later state cannot settle them and no
+key retry is allowed. Same-ID replay returns only the original historical receipt,
+without input or journal append; `current_selection_verified` is false.
+
+This is a component qualification path. It does not enable construction standing
+plans or establish advancing-time, full-picker or campaign acceptance.
 
 ## Action limits and recovery
 

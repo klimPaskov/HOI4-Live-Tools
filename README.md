@@ -136,6 +136,13 @@ conferences, naval invasions, the clean two-year acceptance run and full campaig
 remain open. Broader legacy adapters remain separate from the durable worker. The [controller contract](docs/MAC_CONTROLLER.md) describes current
 permissions, receipts and recovery.
 
+The default-off [`hoi4_construction_clear_selection` qualification](docs/MAC_CONTROLLER.md#construction-cancellation-qualification)
+now verifies ordinary Escape cancellation with the complete own queue unchanged.
+A native 1080p action took 686 ms; a separate historical-only replay took 76 ms,
+sent no input and left the original journal unchanged. The failed raw-timestamp
+comparison between those phases is retained. This does not enable construction
+standing plans or establish campaign acceptance.
+
 Mac memory access requires Developer Tools authorization and a signed tool with
 `native/macos/debugger.entitlements`; the game is never re-signed. Missing access
 returns a capability error for telemetry/UI fallback. Screenshots and saves are
@@ -151,7 +158,7 @@ remains Linux-only.
   campaigns. Final showcase videos must come from macOS at 1080p or higher.
 - Validate long campaign recording and publish only after release acceptance.
 
-All nine CI jobs passed on the preceding typed GUI checkpoint (`ad2fb0a`) across
+All nine CI jobs passed on the preceding placement checkpoint (`0b963fb`) across
 Linux, Windows and macOS. Offline tests do not prove native game behavior.
 For measurements, retained failures and the next gate, use
 [the comparison](docs/CLAUSEWITZ_COMPARISON.md),

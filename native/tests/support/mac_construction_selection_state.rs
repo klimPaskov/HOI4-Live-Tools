@@ -962,3 +962,52 @@ fn navigation_allows_unchanged_inactive_selection_without_any_panel_reads() {
     assert!(f.untouched(MANAGER + 0x150, 8));
     assert!(f.untouched(MANAGER + 0x190, 8));
 }
+
+#[test]
+fn cancellation_original_edges_guard_refuses_foreign_maps_before_payload() {
+    let countries = fixture().get_word(GS + 0x2d8);
+    for field in [countries, COUNTRY + 0xd10, IDLER + 0x670] {
+        let mut f = fixture();
+        let a = bind_selection(&f, "arms_factory", 1).unwrap();
+        f.word(field, FOREIGN);
+        f.begin_snapshot().unwrap();
+        let w = Witnesses::new(&f);
+        let r = Reader::new(&w);
+        assert!(a.require_original_edges(&r, BASE, &f.id).is_err());
+        assert!(f.untouched(FOREIGN, 0x1000), "{field:x}");
+    }
+}
+
+#[test]
+fn cancellation_original_edges_guard_checks_process_before_reads_and_queue_members_before_payload()
+{
+    let mut f = fixture();
+    queue(&mut f);
+    let a = bind_selection(&f, "arms_factory", 1).unwrap();
+    f.begin_snapshot().unwrap();
+    let w = Witnesses::new(&f);
+    let r = Reader::new(&w);
+    let mut identity = f.id.clone();
+    identity.start_ticks.push('1');
+    assert!(a.require_original_edges(&r, BASE, &identity).is_err());
+    assert!(a.require_original_edges(&r, BASE + 4096, &f.id).is_err());
+    assert!(f.read_counts().is_empty());
+    f.array(PRODUCTION + 0x70, &[FOREIGN]);
+    f.begin_snapshot().unwrap();
+    let w = Witnesses::new(&f);
+    let r = Reader::new(&w);
+    assert!(a.require_original_edges(&r, BASE, &f.id).is_err());
+    assert!(f.untouched(FOREIGN, 0x1000));
+}
+
+#[test]
+fn cancellation_original_edges_guard_keeps_same_final_witness() {
+    let mut f = fixture();
+    let a = bind_selection(&f, "arms_factory", 1).unwrap();
+    f.begin_snapshot().unwrap();
+    f.tear(COUNTRY + 0xd10, 8, 2);
+    let w = Witnesses::new(&f);
+    let r = Reader::new(&w);
+    a.require_original_edges(&r, BASE, &f.id).unwrap();
+    assert_eq!(w.finish().unwrap_err().code, "torn_read");
+}

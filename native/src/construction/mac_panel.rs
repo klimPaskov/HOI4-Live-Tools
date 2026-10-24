@@ -18,6 +18,8 @@ use std::{collections::BTreeSet, time::Instant};
 
 const GAME: (u32, u32) = (1920, 1080);
 const CONSTRUCTION: i32 = 0x11;
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+pub(crate) mod cancel;
 pub(in crate::construction) mod routing;
 mod shortcut;
 

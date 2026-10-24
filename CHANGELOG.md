@@ -2,6 +2,15 @@
 
 ## Unreleased native preview
 
+- Add default-off Mac ordinary construction cancellation with immutable target
+  ownership, fresh complete keyboard admission, exact inactive/full-queue
+  readback and strict historical-only replay. Recorded native 1080p components
+  verified one Escape in 686 ms and a separate zero-input replay in 76 ms.
+  Preserve the intervening harness freshness-comparison failure and earlier
+  refusals. Construction workers and campaign acceptance remain unfinished.
+- Shorten the current Mac/Linux handoffs and retain their previous contents
+  byte-for-byte in dated checkpoint archives.
+
 - Extend internal pure Mac hit envelopes to exact animated-frame, masked-shield
   and progress-bar resources, with 36 additional fixtures. Preserve separate
   size/hit roles, unsigned masked edges, progress-bar bottom inclusivity and an

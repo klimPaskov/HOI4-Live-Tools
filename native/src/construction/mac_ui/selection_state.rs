@@ -102,6 +102,29 @@ impl SelectionAnchor {
     pub(crate) fn context(&self) -> &ClockContext {
         &self.original.context
     }
+    /// Reuse the original ownership/member guard within another observer's
+    /// Witnesses before it reads any fresh campaign or replacement payload.
+    /// The caller must finish that same bracket and check final process identity.
+    pub(crate) fn require_original_edges(
+        &self,
+        r: &Reader<'_>,
+        base: u64,
+        identity: &crate::platform::Identity,
+    ) -> Result<()> {
+        if r.string_abi() != StringAbi::LibCxx {
+            return Err(Error::new(
+                "unsupported_platform",
+                "Mac selection layout required",
+            ));
+        }
+        let b = &self.original.binding;
+        if base != b.base || identity != &b.process {
+            return Err(changed(
+                "Original selection process changed before ownership reads",
+            ));
+        }
+        original_edges(r, self)
+    }
     /// Find navigation must not run while a building placement mode is active.
     pub(crate) fn require_inactive(&self) -> Result<()> {
         if self.original.selection != Selection::Inactive {

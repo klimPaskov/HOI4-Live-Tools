@@ -4,6 +4,47 @@ use super::{exact, invalid, pointer, Reader, Result, Value};
 use serde::Serialize;
 use serde_json::json;
 
+mod escape;
+pub(super) use escape::{observe_escape_current_prefix, EscapeTarget};
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+pub(super) enum PlainKey {
+    T,
+    Escape,
+}
+impl PlainKey {
+    fn code(self) -> i32 {
+        match self {
+            Self::T => 0x74,
+            Self::Escape => 0x1b,
+        }
+    }
+    fn ready(self) -> &'static str {
+        match self {
+            Self::T => "ordinary_t_route_observed",
+            Self::Escape => "ordinary_escape_route_observed",
+        }
+    }
+    fn conflict(self) -> &'static str {
+        match self {
+            Self::T => "preceding_keyboard_target_can_handle_or_consume_t",
+            Self::Escape => "preceding_keyboard_target_can_handle_or_consume_escape",
+        }
+    }
+    fn absent(self) -> &'static str {
+        match self {
+            Self::T => "named_button_requires_one_plain_t_binding",
+            Self::Escape => "named_button_requires_one_plain_escape_binding",
+        }
+    }
+    fn label(self) -> &'static str {
+        match self {
+            Self::T => "t",
+            Self::Escape => "escape",
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 enum Kind {
     Standard,
@@ -72,6 +113,7 @@ struct Node {
 }
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub(super) struct Observation {
+    key: PlainKey,
     gui: u64,
     graphics: u64,
     renderer: u64,
@@ -119,17 +161,17 @@ fn shortcuts(r: &Reader<'_>, button: u64) -> Result<Vec<Vec<u8>>> {
         if data != 0 {
             pointer(data)?;
         }
-        // Ordinary unmodified T has no extra keys. A nonzero count therefore
+        // Ordinary unmodified keys have no extra keys. A nonzero count therefore
         // cannot match, regardless of contents; never follow those payloads.
         result.push(entry.to_vec());
     }
     Ok(result)
 }
-fn plain_t(entries: &[Vec<u8>]) -> usize {
+fn matches_key(entries: &[Vec<u8>], key: PlainKey) -> usize {
     entries
         .iter()
         .filter(|e| {
-            i32::from_le_bytes(e[..4].try_into().unwrap()) == 0x74
+            i32::from_le_bytes(e[..4].try_into().unwrap()) == key.code()
                 && i32::from_le_bytes(e[8..12].try_into().unwrap()) == 0
                 && i32::from_le_bytes(e[28..32].try_into().unwrap()) == 0
         })
@@ -157,6 +199,7 @@ fn base_gate(
     flags: u32,
     named: bool,
     disabled_standard: bool,
+    key: PlainKey,
 ) -> Result<(BaseGate, Option<&'static str>)> {
     let mut gate = BaseGate {
         state: r.i32(target + 0x9c)?,
@@ -174,7 +217,7 @@ fn base_gate(
         let disabled = u32::from_le_bytes(r.read(target + 0xc8, 4)?.try_into().unwrap());
         gate.disabled = Some(disabled);
         if disabled != 0 || flags & 2 != 0 {
-            reason = Some("preceding_keyboard_target_can_handle_or_consume_t");
+            reason = Some(key.conflict());
         }
     } else if ![0, 2].contains(&gate.state) {
         reason = Some("unsupported_keyboard_button_gate");
@@ -187,13 +230,13 @@ fn base_gate(
             }
         } else {
             gate.shortcuts = shortcuts(r, target)?;
-            let count = plain_t(&gate.shortcuts);
+            let count = matches_key(&gate.shortcuts, key);
             if named {
                 if count != 1 {
-                    reason = Some("named_button_requires_one_plain_t_binding");
+                    reason = Some(key.absent());
                 }
             } else if count != 0 || flags & 2 != 0 {
-                reason = Some("preceding_keyboard_target_can_handle_or_consume_t");
+                reason = Some(key.conflict());
             }
         }
     }
@@ -206,6 +249,18 @@ pub(super) fn observe(
     gui: u64,
     button: u64,
     container: u64,
+) -> Result<Observation> {
+    observe_key(r, base, gui, button, container, PlainKey::T, None)
+}
+
+pub(super) fn observe_key(
+    r: &Reader<'_>,
+    base: u64,
+    gui: u64,
+    button: u64,
+    container: u64,
+    key: PlainKey,
+    original: Option<&Observation>,
 ) -> Result<Observation> {
     if r.u64(base + 0x35dc058)? != gui {
         return Err(invalid(
@@ -227,6 +282,7 @@ pub(super) fn observe(
     let named_parent = r.u64(container + 0x1238)?;
     exact(r, base, named_parent, 0x34b0428)?;
     let mut out = Observation {
+        key,
         gui,
         graphics,
         renderer,
@@ -241,7 +297,7 @@ pub(super) fn observe(
             r.byte(gui + 0x12)?,
             r.byte(gui + 0x130)?,
         ],
-        reason: "ordinary_t_route_observed",
+        reason: key.ready(),
     };
     if out.focused != [0, 0] {
         out.reason = "focused_keyboard_or_text_receiver";
@@ -258,6 +314,11 @@ pub(super) fn observe(
         .chunks_exact(8)
         .map(|v| u64::from_le_bytes(v.try_into().unwrap()))
         .collect();
+    if original.is_some_and(|before| before.key != key || before.sources != out.sources) {
+        return Err(invalid(
+            "Original keyboard source membership changed before payload",
+        ));
+    }
     if out.sources.iter().filter(|v| **v == renderer).count() != 1 {
         out.reason = "named_keyboard_renderer_missing_or_duplicated";
         return Ok(out);
@@ -265,6 +326,14 @@ pub(super) fn observe(
     for source in out.sources.iter().rev().copied() {
         sprite(r, base, source)?;
         let target = r.u64(source + 0x138)?;
+        if original.is_some_and(|before| {
+            before
+                .prefix
+                .get(out.prefix.len())
+                .is_none_or(|old| old.renderer != source || old.target != target)
+        }) {
+            return Err(invalid("Original keyboard receiver changed before payload"));
+        }
         if target == 0 {
             out.prefix.push(Node {
                 renderer: source,
@@ -334,13 +403,13 @@ pub(super) fn observe(
                     receiver.gate = Gate::Standard(parent, None);
                     Some("unsupported_keyboard_button_gate")
                 } else {
-                    let (gate, reason) = base_gate(r, target, flags, named, true)?;
+                    let (gate, reason) = base_gate(r, target, flags, named, true, key)?;
                     receiver.gate = Gate::Standard(parent, Some(gate));
                     reason
                 }
             }
             Kind::Icon | Kind::Track => {
-                let (gate, reason) = base_gate(r, target, flags, false, false)?;
+                let (gate, reason) = base_gate(r, target, flags, false, false, key)?;
                 receiver.gate = Gate::Direct(gate);
                 reason
             }
@@ -368,24 +437,23 @@ pub(super) fn observe(
             target,
             receiver: Some(receiver),
         });
-        if source == renderer || out.reason != "ordinary_t_route_observed" {
+        if source == renderer || out.reason != key.ready() {
             break;
         }
     }
     Ok(out)
 }
 impl Observation {
-    #[cfg(target_os = "macos")]
     pub(super) fn require_ready(&self) -> Result<()> {
-        if self.reason != "ordinary_t_route_observed" {
+        if self.reason != self.key.ready() {
             return Err(invalid(self.reason));
         }
         Ok(())
     }
     pub(super) fn diagnostic(&self) -> Value {
-        json!({"key":"t","source_count":self.sources.len(),"inspected_receiver_count":self.prefix.len(),
+        json!({"key":self.key.label(),"source_count":self.sources.len(),"inspected_receiver_count":self.prefix.len(),
             "focused_receiver_present":self.focused.iter().any(|v|*v!=0),"reason":self.reason,
-            "ordinary_route_observed":self.reason=="ordinary_t_route_observed",
+            "ordinary_route_observed":self.reason==self.key.ready(),
             "complete_source_membership_observed":!self.sources.is_empty(),
             "keyboard_handler_enabled_raw":self.gui_flags[0],"event_flag_raw":self.gui_flags[1],
             "conditional_dispatch_raw":self.gui_flags[2],"skip_dispatch_raw":self.gui_flags[3],

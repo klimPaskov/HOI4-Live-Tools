@@ -1,5 +1,36 @@
 # Rust foundation provenance
 
+## Default-off Mac ordinary cancellation
+
+`construction/mac_panel/cancel.rs`, `mac_panel/shortcut/escape.rs` and
+`launch/macos/construction_cancel.rs` independently compose the same verified Mac
+Mach-O UUID/SHA below. This extends the attributed Clausewitz own-target/readback
+approach; no upstream cancellation implementation, game bytes or foreign offsets
+are copied. The adapter uses ordinary operating-system Escape events, never an
+engine callback invocation or memory write.
+
+The original selection and complete queue remain typed through the attempt.
+Owner edges precede control metadata; the exact original target precedes callback
+payload. Current keyboard membership and predecessor gates are fully re-evaluated
+with encompassing final consumed-field witnesses. Incidental cache membership is
+not immutable target identity. The unchanged strict T predicate remains separate.
+Unknown types and unsupported routing cannot become an inert predecessor.
+
+The current CGameGui lifetime arrays have a distinct purpose from keyboard sources.
+Only the independently inspected hidden, idle plane-selection window is admitted;
+complete bounded membership and original object/root ownership remain retained.
+The independently inspected HotkeyManager wrapper forwards the normal Escape key
+path to the original idler. The shipped Cocoa text producer rejects control bytes
+before making text events; this is an Escape-specific basis, not a general typing
+or arbitrary external input-method claim. Capturing modes and unknown overrides
+refuse. The normal Escape prepass may invalidate existing GUI state.
+
+A generic immutable qualification deadline, durable once-only intent, canonical
+inactive/full-queue readback and historical-only replay bound ordinary input.
+Private read-only CLI exports used for diagnosis are excluded from public source.
+The source and recorded component checks remain distinct from construction-worker,
+advancing-time and campaign acceptance. Earlier failures are retained.
+
 ## Default-off Mac placement qualification
 
 `launch/macos/construction_place.rs` and its `point` module compose the separately

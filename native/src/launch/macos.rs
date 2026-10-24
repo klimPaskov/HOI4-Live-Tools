@@ -7,6 +7,8 @@ mod air;
 mod armies;
 mod construction;
 mod construction_find;
+// Default-off single ordinary Escape qualification.
+mod construction_cancel;
 mod construction_open;
 // Default-off one-action qualification; full campaign acceptance remains false.
 mod construction_place;
@@ -75,18 +77,27 @@ struct Config {
     construction_placement: bool,
     #[serde(default)]
     placement_deadline_epoch: Option<f64>,
+    /// Qualification only: one original ordinary Escape; no worker integration.
+    #[serde(default)]
+    construction_cancellation: bool,
+    #[serde(default)]
+    cancellation_deadline_epoch: Option<f64>,
 }
 
 // Convert the caller's absolute qualification bound once;
 // never renew it on a lease, request, retry or delayed server response.
-fn placement_remaining(enabled: bool, epoch: Option<f64>, now: f64) -> Result<Option<Duration>> {
+fn qualification_remaining(
+    enabled: bool,
+    epoch: Option<f64>,
+    now: f64,
+) -> Result<Option<Duration>> {
     if !enabled {
         return Ok(None);
     }
     let end = epoch.ok_or_else(|| {
         Error::new(
             "invalid_input_binding",
-            "Placement needs its immutable qualification deadline",
+            "Action needs its immutable qualification deadline",
         )
     })?;
     let remaining = end - now;
@@ -98,7 +109,7 @@ fn placement_remaining(enabled: bool, epoch: Option<f64>, now: f64) -> Result<Op
     {
         return Err(Error::new(
             "invalid_input_binding",
-            "Original placement qualification deadline must be within 180 seconds",
+            "Original qualification deadline must be within 180 seconds",
         ));
     }
     Ok(Some(Duration::from_secs_f64(remaining)))
@@ -179,6 +190,8 @@ pub struct MacClock {
     construction_navigation: bool,
     construction_placement: bool,
     placement_until: Option<Instant>,
+    construction_cancellation: bool,
+    cancellation_until: Option<Instant>,
     directory: std::path::PathBuf,
     daily: daily::Controller,
     keys: Arc<MacKeys<'static>>,
@@ -190,17 +203,23 @@ impl MacClock {
     pub fn bind(process: Arc<dyn Process + Send + Sync>, directory: &Path) -> Result<Self> {
         let config: Config = serde_json::from_slice(&std::fs::read(directory.join("input.json"))?)
             .map_err(|e| Error::new("invalid_input_binding", e.to_string()))?;
-        let placement_clock_origin = Instant::now();
+        let qualification_clock_origin = Instant::now();
         let wall = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map_err(|e| Error::new("invalid_input_binding", e.to_string()))?
             .as_secs_f64();
-        let placement_until = placement_remaining(
+        let placement_until = qualification_remaining(
             config.construction_placement,
             config.placement_deadline_epoch,
             wall,
         )?
-        .map(|duration| placement_clock_origin + duration);
+        .map(|duration| qualification_clock_origin + duration);
+        let cancellation_until = qualification_remaining(
+            config.construction_cancellation,
+            config.cancellation_deadline_epoch,
+            wall,
+        )?
+        .map(|duration| qualification_clock_origin + duration);
         let game_identity = process
             .identity()
             .cloned()
@@ -242,6 +261,8 @@ impl MacClock {
             construction_navigation: config.construction_navigation,
             construction_placement: config.construction_placement,
             placement_until,
+            construction_cancellation: config.construction_cancellation,
+            cancellation_until,
             daily,
             directory: directory.to_path_buf(),
             keys,
@@ -348,6 +369,7 @@ impl Commands for MacClock {
             construction_select::tool(),
             construction_find::tool(),
             construction_place::tool(),
+            construction_cancel::tool(),
             daily::Controller::tool(),
             json!({"name":"hoi4_plan","description":"Read or change the standing plan (plan.json in the run directory): research priorities, focus path, construction, training, production, politics, decisions. {op:get} returns it; {op:set, plan:{...}} merges the given keys (null removes a key). hoi4_plan_run carries it out.","inputSchema":{"type":"object","oneOf":[{"properties":{"op":{"const":"get"}},"required":["op"],"additionalProperties":false},{"properties":{"op":{"const":"set"},"plan":{"type":"object"}},"required":["op","plan"],"additionalProperties":false}]}}),
             json!({"name":"hoi4_plan_run","description":"Carry out the standing plan for up to `seconds` (default 60): answer news and single-option events, fill empty research slots and the focus slot from the plan's lists, make planned politics picks and decisions, keep the training queue, put idle military factories on the priority lines and spend idle civilian factories on planned construction. Every step is an ordinary verified action under the given lease; the game is never paused. Returns early when a choice event needs the model or a peace conference opens. Use it instead of hoi4_wait_for while nothing else needs attention.","inputSchema":{"type":"object","properties":{"seconds":{"type":"integer","minimum":1,"maximum":300},"lease_token":{"type":"string"}},"required":["lease_token"],"additionalProperties":false}}),
@@ -403,6 +425,7 @@ impl Commands for MacClock {
                 | "hoi4_construction_select"
                 | "hoi4_construction_find_state"
                 | "hoi4_construction_place"
+                | "hoi4_construction_clear_selection"
                 | "hoi4_politics_options"
                 | "hoi4_politics_choose"
                 | "hoi4_decisions_list"
@@ -436,7 +459,7 @@ impl Commands for MacClock {
         Some(self.directory.join("plan.json"))
     }
     fn capabilities(&self) -> Value {
-        json!({"transport":"ordinary macOS CGEvent keys to the front-most owned window","actions":["set_paused","set_speed","research_start","focus_start","production_add","production_set","construction_add","politics_options","politics_choose","decisions_list","decision_take","train","deploy_locations","army_create","army_front","army_plan","army_offensive","event_choose","diplomacy","diplomacy_act","army_commander","army_group_create","army_split","state_slots","air_wings","air_mission","plan_run"],"lease":"exclusive configured controller","input_profile":{"name":"macos_cocoa_absolute_1920x1080_v1","checked_at_bind":true,"rechecked_before_each_input":true,"diagnostic_alone_authorizes_input":false},"construction_panel":{"enabled":self.construction_panel,"qualification_only":true,"ordinary_key":"t","live_delivery_verified":false,"input_retry":false},"construction_selection":{"enabled":self.construction_selection,"qualification_only":true,"ordinary_clicks_max":1,"input_retry":false,"placement":false},"construction_placement":{"enabled":self.construction_placement,"qualification_only":true,"ordinary_clicks_max":1,"full_picker_verified":false,"atomic_event_verified":false},"construction_navigation":{"enabled":self.construction_navigation,"qualification_only":true,"already_open_only":true,"input_retry":false,"placement":false},"daily_governor":self.daily.capabilities(),"native_posting":false,"full_campaign_acceptance":false})
+        json!({"transport":"ordinary macOS CGEvent keys to the front-most owned window","actions":["set_paused","set_speed","research_start","focus_start","production_add","production_set","construction_add","politics_options","politics_choose","decisions_list","decision_take","train","deploy_locations","army_create","army_front","army_plan","army_offensive","event_choose","diplomacy","diplomacy_act","army_commander","army_group_create","army_split","state_slots","air_wings","air_mission","plan_run"],"lease":"exclusive configured controller","input_profile":{"name":"macos_cocoa_absolute_1920x1080_v1","checked_at_bind":true,"rechecked_before_each_input":true,"diagnostic_alone_authorizes_input":false},"construction_panel":{"enabled":self.construction_panel,"qualification_only":true,"ordinary_key":"t","live_delivery_verified":false,"input_retry":false},"construction_selection":{"enabled":self.construction_selection,"qualification_only":true,"ordinary_clicks_max":1,"input_retry":false,"placement":false},"construction_placement":{"enabled":self.construction_placement,"qualification_only":true,"ordinary_clicks_max":1,"full_picker_verified":false,"atomic_event_verified":false},"construction_cancellation":{"enabled":self.construction_cancellation,"qualification_only":true,"ordinary_key":"escape","ordinary_key_presses_max":1,"input_retry":false,"worker":false},"construction_navigation":{"enabled":self.construction_navigation,"qualification_only":true,"already_open_only":true,"input_retry":false,"placement":false},"daily_governor":self.daily.capabilities(),"native_posting":false,"full_campaign_acceptance":false})
     }
     fn call(&self, process: &dyn Process, name: &str, arguments: &Value) -> Result<Value> {
         if process.identity() != self.process.identity() {
@@ -501,6 +524,53 @@ impl Commands for MacClock {
             journal,
             actions,
         } = &mut *state;
+        if name == "hoi4_construction_clear_selection" {
+            allowed(
+                args,
+                &["building_id", "state_id", "request_id", "lease_token"],
+            )?;
+            let key = string(args, "building_id")?;
+            crate::construction::controls::validate_key(key)?;
+            let state_id = crate::construction::find_view::validate_state_id(
+                args.get("state_id")
+                    .and_then(Value::as_i64)
+                    .ok_or_else(|| {
+                        Error::new("invalid_arguments", "state_id must be an integer")
+                    })?,
+            )?;
+            let id = string(args, "request_id")?;
+            let token = string(args, "lease_token")?;
+            let epoch = guard.epoch.clone();
+            let lease_end = authority.authorize(token, &epoch)?;
+            let request = construction_cancel::Request { id, key, state_id };
+            // A prior Verified receipt is historical: no fresh campaign payload
+            // or input can settle or replace it. Lease and epoch remain required.
+            if let Some(receipt) =
+                construction_cancel::historical_receipt(&request, &epoch, actions)?
+            {
+                return Ok(receipt);
+            }
+            let expected = guard.observe_context(process)?;
+            let fence = action_fence::Fence {
+                process,
+                epoch: &epoch,
+                expected: &expected,
+                authority,
+                token,
+                until: (Instant::now() + Duration::from_secs(12))
+                    .min(lease_end)
+                    .min(self.cancellation_until.unwrap_or_else(Instant::now)),
+                stop: None,
+            };
+            return construction_cancel::run(
+                self.construction_cancellation,
+                request,
+                &epoch,
+                actions,
+                &fence,
+                &self.keys,
+            );
+        }
         if name == "hoi4_construction_place" {
             allowed(
                 args,
@@ -1817,12 +1887,12 @@ mod placement_deadline_tests {
     fn generic_bound_accepts_later_epochs_but_rejects_invalid_wall_clocks() {
         let original = 4_000_000_000.;
         assert_eq!(
-            placement_remaining(true, Some(original), original - 180.).unwrap(),
+            qualification_remaining(true, Some(original), original - 180.).unwrap(),
             Some(Duration::from_secs(180))
         );
-        assert!(placement_remaining(true, Some(original), original - 181.).is_err());
+        assert!(qualification_remaining(true, Some(original), original - 181.).is_err());
         for wall in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
-            assert!(placement_remaining(true, Some(original), wall).is_err());
+            assert!(qualification_remaining(true, Some(original), wall).is_err());
         }
     }
 
@@ -1830,11 +1900,11 @@ mod placement_deadline_tests {
     fn fixed_grant_bound_is_required_and_never_grows_with_a_later_bind() {
         let original = 1000.;
         assert_eq!(
-            placement_remaining(true, Some(original), original - 120.).unwrap(),
+            qualification_remaining(true, Some(original), original - 120.).unwrap(),
             Some(Duration::from_secs(120))
         );
         assert_eq!(
-            placement_remaining(true, Some(original), original - 1.).unwrap(),
+            qualification_remaining(true, Some(original), original - 1.).unwrap(),
             Some(Duration::from_secs(1))
         );
         for end in [
@@ -1844,9 +1914,12 @@ mod placement_deadline_tests {
             Some(f64::INFINITY),
             Some(original + 181.),
         ] {
-            assert!(placement_remaining(true, end, original).is_err());
+            assert!(qualification_remaining(true, end, original).is_err());
         }
-        assert!(placement_remaining(true, Some(original), original).is_err());
-        assert_eq!(placement_remaining(false, None, original).unwrap(), None);
+        assert!(qualification_remaining(true, Some(original), original).is_err());
+        assert_eq!(
+            qualification_remaining(false, None, original).unwrap(),
+            None
+        );
     }
 }

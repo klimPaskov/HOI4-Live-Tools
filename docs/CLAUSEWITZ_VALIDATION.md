@@ -1,4 +1,68 @@
-# Clausewitz-MCP Linux validation
+# Clausewitz-MCP validation
+
+## Native Mac ordinary cancellation and historical replay — 24 October 2026
+
+The default-off `hoi4_construction_clear_selection` qualification retains the
+original own template/state, complete queue, close target/callback and typed
+keyboard admission. It sends at most one ordinary Escape. Canonical inactive
+selection and exact full-queue preservation must both verify twice within that
+same attempt, including after platform checks. Originally inactive selection
+uses no key. Fresh complete keyboard sources may change between coherent reads;
+the original requested target and its owner/renderer/parent identities cannot.
+The known hidden plane-selection lifetime object and ordinary HotkeyManager
+Escape forwarding have separate typed predicates. Unknowns refuse.
+
+One Luna-medium action in paused historical Normal vanilla Germany at native
+1920×1080 received a Verified receipt in **686.065 ms**. The 12 tool RPCs had zero
+errors, one Escape, no cursor movement, activation, screenshot, worker, clock
+command or observation pause. The journal contains exactly Dispatching → Verified.
+The harness then stopped because it compared raw queue observations including
+volatile `freshness`; the complete typed queue projections were equal and that
+was the only differing top-level field. Its raw failed status is preserved; no
+key or action retry was sent. The first recording finalized at **1920×1108 H.264,
+64.770 seconds, 1,906 encoded/decoded frames and 1,906 complete callbacks**.
+
+A separate zero-input continuation narrowed cancellation permission to false,
+preserved the original absolute deadline, and looked up only that exact Verified
+request. The **19-RPC, 2.417-second** driver passed with zero errors; historical
+replay took **76.368 ms**, returned the same receipt and appended nothing. Full
+Research/Focus/production/queue/clock/setup projections matched the original
+baseline. Inactive selection, native geometry, the stationary cursor and all six
+controller files, including journal bytes and mtime, stayed unchanged. Both queue
+comparisons retain the complete raw mapping except freshness, alongside typed
+queue validation. Its recording finalized at **1920×1108 H.264, 33.881667 seconds,
+993 encoded/decoded frames and 993 complete callbacks**. Both recordings stopped
+explicitly and exited 0; recorder owners are absent. Grants, leases and MCP
+servers are closed. Four earlier controllers and 38 unrelated legacy WIP paths
+remain unchanged. These RPC timings include the driver's identity/window/recording
+guards; they are not resident-reader-only benchmarks.
+
+Earlier failures remain preserved: holder mismatch before opener input; one
+verified T followed by a nullable-field harness failure; selected cancellation
+refusal on a nonempty lifetime collection (with storage-budget recording failure);
+and outer receiver refusal before intent/Escape. A later read-only source-membership
+refusal led to immutable-target/fresh-prefix separation. Initial ordering fixtures
+caught a regression, fixed by owner → target → callback checks. A diagnostic build
+first reused a cached artifact with no private CLI and refused before platform
+open; a forced diagnostic rebuild and bounded torn-only read recovery passed.
+Private diagnostic CLI exports are excluded from normal/public source.
+
+The source passed **2,015 Rust tests**, **130 optimized fixtures**, **956 workspace
+Python tests (37 skips)**, formatting, strict all-target checks on macOS/Windows
+GNU/x86 Linux musl/ARM64 Linux musl, release and unchanged **28-tool unbound stdio**.
+The 38 legacy WIP paths are excluded from the publication. These are offline
+checks, separate from the two recorded components. The preceding placement
+checkpoint `0b963fb` passed all nine CI jobs.
+
+The generic qualification deadline is finite, future and within 180 seconds at
+binding; each action retains its original minimum with the lease and 12 seconds.
+Possible-input failures cannot retry or settle from later state. Historical replay
+is served before new action binding and claims no current selection verification.
+The game remained paused, so no real time per game year is measured. This does
+not qualify advancing-time construction, standing plans, the full picker, two-year
+acceptance or any completed campaign. Printable F and decimal text have a separate
+Hotkey character-route gap; Escape's control-character proof does not qualify them.
+See [the contract](MAC_CONTROLLER.md#construction-cancellation-qualification).
 
 ## Default-off Mac strict placement port — 24 October 2026
 

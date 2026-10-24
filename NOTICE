@@ -186,3 +186,12 @@ Upstream foundation and attribution:
   ordinary operating-system input. They execute no game callback or memory
   write. Default-off qualification retains exact queue deltas and strict receipts;
   it does not enable construction workers or establish campaign acceptance.
+
+  construction/mac_panel/cancel.rs, mac_panel/shortcut/escape.rs and
+  launch/macos/construction_cancel.rs extend the attributed own-target/readback
+  approach with independently recovered Mac ordinary Escape routing, retained
+  target/callback ownership, fresh complete keyboard-prefix checks and exact
+  inactive-selection/full-queue readback. No upstream cancellation code, game
+  bytes or foreign offsets are copied. Inputs use ordinary operating-system
+  events; engine calls and memory writes remain excluded. Default-off component
+  qualification does not establish standing-plan or campaign acceptance.

@@ -139,6 +139,15 @@ construction worker or advancing-time/full-picker acceptance. See the
 [placement contract](../docs/MAC_CONTROLLER.md#construction-placement-qualification)
 and [component evidence](../docs/CLAUSEWITZ_VALIDATION.md#mac-strict-rust-placement-component--24-october-2026).
 
+The default-off `hoi4_construction_clear_selection` qualification sends at most
+one ordinary Escape from a retained selected own template, then requires canonical
+inactive selection and the unchanged complete queue twice. An originally inactive
+selection needs no key. Recorded native 1080p components verified the action in
+686 ms and a separate historical-only replay in 76 ms with cancellation disabled.
+The preceding harness timestamp-comparison failure is preserved. There is no
+construction worker permission. See the
+[cancellation contract](../docs/MAC_CONTROLLER.md#construction-cancellation-qualification).
+
 The internal Mac hit-envelope foundation now models separate sprite, cornered,
 InstantText and position-object rejection branches, with 32 arithmetic fixtures.
 Unknown resources and unsupported transforms remain explicit. A private read-only
