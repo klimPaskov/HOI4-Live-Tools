@@ -2,6 +2,13 @@
 
 ## Unreleased native preview
 
+- Record the same-binary FEX capacity comparison at 1080p: the four-CPU, 8 GB
+  trial still left one uncertain Research Intent at five seconds, with no retry
+  or later settlement. Distinguish panel transition evidence from visibility,
+  preserve the separate lease-startup refusal and verify ordinary closure.
+  The fresh private harness uses a shorter lease with a repeated final margin
+  check; no public permission, native deadline or readiness predicate changed.
+
 - Distinguish fixed container-transition origins and first-result times in
   failure-only Research navigation diagnostics, without additional game reads.
   Preserve the complete report through a dedicated bounded 1 KB transport

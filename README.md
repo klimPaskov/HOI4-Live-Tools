@@ -97,21 +97,16 @@ lines, bulk allocation and combat control remain open. An internal durable
 Research-navigation adapter now passes offline Linux fixtures; it has no public
 command or mixed-worker permission and still needs its own live qualification.
 
-ARM64 Linux through FEX reached historical Normal Germany at 1080p and verified
-own-state reads plus stationary Research-panel keys. Five paused-game samples per
-reader measured local medians of 2.9–6.1 ms with recording active. The pinned FEX
-adapter is disabled by default. A later Rust-adapter test reached Germany at
-1920×1080, but its first Research action exceeded the five-second readback
-deadline and remains uncertain. A fresh no-recorder comparison also timed out
-with a pending panel transition; omitting encoding did not resolve it. The panel
-appeared later; no retry was sent.
-A later lower-decoration trial stopped during menu setup before Start or Research
-input, so it adds no action-latency result. Rendering/input latency remains under
-investigation, and live adapter acceptance
-is still open. A separate GL1/native-library startup attempt failed during graphics
-initialization; synthetic rendering success did not establish game compatibility. See
-[FEX setup](docs/OWNED_LINUX_LAUNCHER.md#arm64-linux-with-fex) and
-[the latest comparison](docs/CLAUSEWITZ_VALIDATION.md#fex-no-recorder-research-comparison--24-october-2026).
+ARM64 Linux through FEX has verified own-state reads and lower-level stationary
+Research keys at 1080p. Its pinned Rust input adapter remains disabled by default:
+the latest retained-goal Research action still timed out at five seconds after
+increasing the VM to four CPUs and 8 GB RAM. Complete baseline reads took
+22–50 ms, but no settled Research result was accepted. One uncertain Intent
+remains preserved, with no retry or later settlement; ordinary closure passed.
+These are component diagnostics, with no accepted campaign or annual throughput
+measurement. Earlier setup refusals and the separate native-graphics startup
+failure remain documented. See [FEX setup](docs/OWNED_LINUX_LAUNCHER.md#arm64-linux-with-fex)
+and [the capacity comparison](docs/CLAUSEWITZ_VALIDATION.md#fex-transition-origins-and-capacity-comparison--24-october-2026).
 
 ### macOS
 

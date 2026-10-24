@@ -1,11 +1,14 @@
 # Clausewitz-MCP comparison checkpoint
 
-Latest diagnostic, 24 October 2026: the fresh 1080p FEX retained-goal Research
-request failed at five seconds. Its own in-attempt measurements distinguished
-16 ms of dispatch from 4,958 ms of readback, including waits; no sample accepted
-Research. This identifies where the budget elapsed, not a rendering cause or a
-matched upstream speed comparison. All owned game authority closed normally.
-See [the measured attempt](CLAUSEWITZ_VALIDATION.md#fex-in-attempt-transit-timing--24-october-2026).
+Latest FEX checkpoint, 24 October: the frontend-only sample on the four-CPU,
+8 GB VM showed zero process swap, but the same Rust
+retained-goal Research action still failed at five seconds. Complete baseline
+reads took 22–50 ms; the first transition result returned at 2.110 seconds, with
+no settled Research proof. Both measured attempts and the intervening pre-input
+lease refusal are retained. These are single diagnostic trials, with no matched
+upstream test or general superiority claim. All owned game authority closed
+normally. See the
+[capacity comparison](CLAUSEWITZ_VALIDATION.md#fex-transition-origins-and-capacity-comparison--24-october-2026).
 
 Earlier checkpoint, 22 October 2026: Production006 passed the bounded daily
 production worker with budgeted 10→14 allocation across three days and completed-

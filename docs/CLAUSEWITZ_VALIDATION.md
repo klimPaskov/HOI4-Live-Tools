@@ -1,5 +1,84 @@
 # Clausewitz-MCP validation
 
+## FEX transition origins and capacity comparison — 24 October 2026
+
+Two fresh, unrecorded 1920×1080 trials used the same private Rust binary,
+installed game/FEX hashes, reduced decorative graphics and original five-second
+action bound. Luna medium completed the finite setup sequence under logged FAIR
+mode in each; fresh visual review and structured reads confirmed historical
+Normal vanilla Germany and the initial paused date.
+
+| Measurement | Origin trial, 2 vCPUs / 4 GiB | Capacity trial, 4 vCPUs / 8 GiB |
+| --- | ---: | ---: |
+| Frontend ready | 44.906 s | 35.183 s |
+| Complete baseline before/after binding | 49.892 / 38.485 ms | 21.969 / 49.975 ms |
+| Sole Research RPC | 5,001.482 ms | 5,004.075 ms |
+| Pre-dispatch / dispatch / readback | 24 / 15 / 4,960 ms | 44 / 24 / 4,931 ms |
+| Observer invocations started | 154 | 146 |
+| Complete Idle results | 103 | 48 |
+| Transition rejections naming `research_panel` | 50 | 98 |
+| First Idle / transition result returned | 48 / 3,622 ms | 92 / 2,110 ms |
+| Accepted Research / torn results | 0 / 0 | 0 / 0 |
+
+Both attempts failed with `action_uncertain` and `panel_transit_deadline`.
+Only the last rejected pair, `[0,1]`, is retained; there is no pair histogram
+or complete timeline. The first-result times measure reader returns, not engine
+onset. The origin trial's 154 started invocations include one result outside the
+Idle/transition/torn/Research counters; the capacity trial's 146 equal 48+98.
+Dispatch duration measures server transport, and readback includes waits.
+Neither attempt proves a final/current panel state or a rendering cause.
+
+Passive ten-second samples taken **during frontend setup, not Research readback**
+showed 192.50% aggregate process CPU, about 2.93 GiB RSS and 1.51 GiB process swap
+on the smaller VM; the capacity trial showed 377.73% CPU, about 4.53 GiB RSS and
+zero process swap. CPU percentages use 100% per vCPU.
+The original owned VM shut down normally before the new capacity was started;
+its disk and exact exit evidence were retained. CPU, RAM and cache history differ,
+so these single trials neither isolate causation nor establish a general speedup.
+The trial with zero observed process swap still did not produce a successful
+Research action.
+
+An intervening four-CPU session reached positively reviewed setup and complete
+reads in 55.039/62.624 ms, but its player driver refused before action MCP startup,
+lease, Intent or key: model handoff had consumed the fixed lease admission margin.
+Its original 175-second qualification was preserved without renewal or retry.
+The fresh capacity trial instead used a fixed 60-second lease, repeated the full
+30-second margin check immediately before acquisition, and restricted forwarding
+to exact initial status/acquire and exact cleanup release/status; renewal refused.
+The original qualification and five-second native action bounds stayed unchanged.
+The helper delta passed 126 existing and ten new mocked fixtures, 11 helper
+checks, seven namespace checks and six VM-wrapper fixtures; review found no
+remaining issue before live use. These private harness checks are not public
+MCP functionality or campaign evidence.
+
+Each measured attempt retained exactly one unresolved Intent and sent no retry,
+historical replay, Research-close request, clock action, worker, action-phase
+screenshot or cursor movement. Lease release, zero remaining lease, terminal
+audit and MCP EOF 0 passed. Both owned games closed ordinarily with exit 0;
+independent identity/census checks found game, server, supervisor and display
+absent, temporary configuration/socket/lock removed, and no active authority.
+The origin trial retained 143 private files, the pre-input refusal 139, and the
+capacity trial 141. Two copied descriptive labels in the last harness remained
+stale; raw receipts and explicit errata were preserved. Actual ownership paths,
+action IDs, original pins and cleanup assertions matched that fresh session.
+
+A bounded static slice of the exact Linux ELF independently tied the container's
+position-state setter and update virtuals to the reviewed primary vtable.
+Position completion can snap to its target before a later update clears the
+state; literal visibility is separate. This supports retaining the two-zero
+settled check. The incoming delta's timebase, caller cadence and live progress
+remain unknown. No readiness predicate, deadline or uncertainty quarantine was
+relaxed. A bulk disassembler import did not finish and supplied no function
+evidence; it was closed before the capacity trial, whose static slice used
+bounded ELF/Capstone decoding.
+
+The unchanged private caller passed 2,293 host Rust tests, four-target strict
+checks, release and 74 optimized fixtures on actual ARM Linux, repeated on the
+resized boot. Its public basis `35745b1` passed all nine CI jobs; public-source
+checks were 2,292 host tests and 63 ARM fixtures. The unchanged workspace Python
+suite passed 956 tests with 37 skips. These source checks and paused component
+failures do not qualify mixed workers, a two-year run or any full campaign.
+
 ## FEX in-attempt transit timing — 24 October 2026
 
 A fresh unrecorded GL0 diagnostic reached the frontend in **43.470 seconds**

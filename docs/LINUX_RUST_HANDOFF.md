@@ -7,22 +7,27 @@ from native macOS at 1920×1080 or higher. Do not control the shared Windows gam
 
 ## Current state
 
-The latest retained-goal Linux diagnostic reached positively reviewed historical
-Normal vanilla Germany at 1920×1080. Structured baseline reads took 46/37 ms.
-The sole Research request timed out after 5,003 ms, leaving one uncertain Intent
-with no retry or replay. Internal timing measured 26 ms before dispatch, 16 ms
-in dispatch and 4,958 ms in readback. Its 153 observer results included 94 Idle
-and 59 transition rejections; none accepted Research. These aggregate counts do
-not identify their order, the rejecting container, a rendering cause or the
-final root state. Ordinary close exited 0, the corrected exit census passed
-and no game authority remains. Preserve all failures and closed sessions.
-The next bounded diagnostic names existing container reads and first-result
-times without new reads or a longer deadline. Its retained-transit error limit
-is 1,024 bytes so the transport preserves the complete report; ordinary Research
-errors remain limited to 512 bytes. This revision needs a fresh live gate.
-It passed 2,292 host Rust tests, four-target strict checks, release, 63 targeted
-actual ARM fixtures, the full Python suite and unchanged 28-tool unbound stdio.
-See [the measured attempt](CLAUSEWITZ_VALIDATION.md#fex-in-attempt-transit-timing--24-october-2026).
+The latest 1080p Linux diagnostic used the same Rust binary on a resized four-CPU,
+8 GB VM. Complete baseline reads took 22/50 ms, but the sole retained-goal
+Research request still timed out after 5,004 ms: 24 ms dispatch and 4,931 ms
+readback, 146 observer invocations, 48 complete Idle results and 98 rejections
+naming the Research panel. The last pair was `[0,1]`; there was no accepted
+Research state, retry, replay or later settlement. First transition returned at
+2,110 ms, compared with 3,622 ms in the preceding two-CPU trial. These are reader
+return times, not engine onset. The setup-only sample had zero process swap, but the
+single trials do not isolate causation. Ordinary closure and independent cleanup
+passed; no game or input authority remains.
+
+An intervening test refused before input because model handoff consumed the
+120-second lease's startup margin. A fresh harness fixed the lease at 60 seconds
+and repeated its 30-second margin check immediately before acquisition, retaining
+the original 175-second qualification and five-second action bound. All helper
+fixtures and review passed; the original refusal remains preserved. A bounded
+static Linux slice confirms that position completion and state reset can occur
+on separate updates; literal visibility cannot replace readiness. Caller timebase
+and live progress remain unknown. Next investigate that precise update path and
+the game's split OpenGL loading path before another campaign attempt.
+See [the capacity comparison](CLAUSEWITZ_VALIDATION.md#fex-transition-origins-and-capacity-comparison--24-october-2026).
 
 The placement checkpoint `0b963fb` passed all nine CI jobs across Linux, Windows
 and macOS. The default-off `hoi4_construction_place` qualification
@@ -113,9 +118,11 @@ No public command or mixed-worker route is enabled; live qualification remains o
    Preserve the earlier GL0 pending-transition evidence separately from the new
    retained-goal timeouts, whose final root states are unknown. Fresh setup review
    and the pending-metadata census correction have now passed their components;
-   Research navigation now has internal phase evidence; distinguish the exact
-   rejecting container and first-result timing before attributing a cause or
-   changing the adapter. Live qualification remains open.
+   Research navigation now identifies the rejecting panel and first-result timing.
+   The same binary still failed after the VM capacity increase. Resolve live
+   transition progress/timebase or the split OpenGL route before attributing a
+   cause or changing the adapter. Do not repeat unchanged tests or extend a deadline.
+   Live qualification remains open.
    Never loosen deadlines or settle late.
    Linux diagnostics do not replace native Mac showcase acceptance.
 2. Qualify the internal ordinary navigation adapter around the retained original-goal
