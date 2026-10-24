@@ -719,3 +719,125 @@ fn journal_has_one_writer_and_external_change_blocks_other_domains() {
     fs::write(t.path(), b"replaced").unwrap();
     assert!(j.blocks_game(&scope().epoch.game));
 }
+
+fn failure_diagnostic(error: &Error) -> serde_json::Value {
+    assert_eq!(error.code, "action_uncertain");
+    serde_json::from_str(error.message.split_once("; diagnostics=").unwrap().1).unwrap()
+}
+#[test]
+fn dispatch_expiry_reports_phase_without_reading_after_deadline_or_clearing_intent() {
+    let temp = Temp::new();
+    let start = Instant::now();
+    let mut journal = Journal::open(&temp.path()).unwrap();
+    let mut backend = Fake::new(&temp, start);
+    backend.late_phase = Some("W");
+    let clock = backend.now.clone();
+    let error = journal
+        .execute_with_clock(
+            request(),
+            TOKEN,
+            &authority(),
+            &RwLock::new(true),
+            &mut backend,
+            start + BUDGET,
+            &|| clock.get(),
+        )
+        .unwrap_err();
+    let diagnostic = failure_diagnostic(&error);
+    assert_eq!(diagnostic["historical_diagnostics_only"], true);
+    assert_eq!(diagnostic["dispatch_ms"], 5000);
+    assert_eq!(diagnostic["readback_started"], 0);
+    assert_eq!(diagnostic["readback_ms"], 0);
+    assert_eq!(
+        backend
+            .calls
+            .borrow()
+            .iter()
+            .filter(|v| **v == "read")
+            .count(),
+        1
+    );
+    assert_eq!(
+        backend.calls.borrow().iter().filter(|v| **v == "W").count(),
+        1
+    );
+    assert!(journal.blocks_game(&scope().epoch.game));
+    assert!(matches!(journal.data.records[0].outcome, Outcome::Intent));
+}
+#[test]
+fn retryable_sample_diagnostics_are_bounded_codes_without_error_text_or_current_state() {
+    let temp = Temp::new();
+    let start = Instant::now();
+    let mut journal = Journal::open(&temp.path()).unwrap();
+    let mut backend = Fake::new(&temp, start);
+    backend.reads = VecDeque::from([Ok(snapshot(23, false))]);
+    for i in 0..200 {
+        backend.reads.push_back(Err(Error::new(
+            if i % 2 == 0 {
+                "research_panel_transition"
+            } else {
+                "torn_read"
+            },
+            "private raw pointer 0xdeadbeef\nnot retained",
+        )));
+    }
+    let clock = backend.now.clone();
+    let error = journal
+        .execute_with_clock(
+            request(),
+            TOKEN,
+            &authority(),
+            &RwLock::new(true),
+            &mut backend,
+            start + BUDGET,
+            &|| clock.get(),
+        )
+        .unwrap_err();
+    let diagnostic = failure_diagnostic(&error);
+    assert_eq!(diagnostic["readback_started"], 200);
+    assert_eq!(diagnostic["transition_errors"], 100);
+    assert_eq!(diagnostic["torn_errors"], 100);
+    assert_eq!(diagnostic["pending_idle"], 0);
+    assert_eq!(diagnostic["shown_research"], 0);
+    assert_eq!(diagnostic["last_retryable_code"], "torn_read");
+    assert_eq!(diagnostic["dispatch_ms"], 0);
+    assert_eq!(diagnostic["readback_ms"], 5000);
+    assert!(!error.message.contains("deadbeef") && !error.message.contains("not retained"));
+    assert!(error.message.len() < 768 && !error.message.contains('\n'));
+    assert!(journal.blocks_game(&scope().epoch.game));
+    assert_eq!(
+        backend.calls.borrow().iter().filter(|v| **v == "W").count(),
+        1
+    );
+}
+#[test]
+fn pending_idle_diagnostics_never_claim_research_or_add_an_input_retry() {
+    let temp = Temp::new();
+    let start = Instant::now();
+    let mut journal = Journal::open(&temp.path()).unwrap();
+    let mut backend = Fake::new(&temp, start);
+    backend.reads = (0..201).map(|_| Ok(snapshot(23, false))).collect();
+    let clock = backend.now.clone();
+    let error = journal
+        .execute_with_clock(
+            request(),
+            TOKEN,
+            &authority(),
+            &RwLock::new(true),
+            &mut backend,
+            start + BUDGET,
+            &|| clock.get(),
+        )
+        .unwrap_err();
+    let diagnostic = failure_diagnostic(&error);
+    assert_eq!(diagnostic["readback_started"], 200);
+    assert_eq!(diagnostic["pending_idle"], 200);
+    assert_eq!(diagnostic["shown_research"], 0);
+    assert_eq!(diagnostic["transition_errors"], 0);
+    assert_eq!(diagnostic["last_retryable_code"], serde_json::Value::Null);
+    assert!(journal.blocks_game(&scope().epoch.game));
+    assert_eq!(
+        backend.calls.borrow().iter().filter(|v| **v == "W").count(),
+        1
+    );
+}

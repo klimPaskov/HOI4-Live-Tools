@@ -187,6 +187,61 @@ struct Data {
     records: Vec<Record>,
 }
 
+/// Rejected samples and timing are historical diagnostics, never a current proof.
+/// No reader error text, raw pointer, request goal or journal bytes are retained.
+#[derive(Default)]
+struct ReadbackDiagnostic {
+    started: u32,
+    pending_idle: u32,
+    shown_research: u32,
+    transition_errors: u32,
+    torn_errors: u32,
+    last_retryable: Option<&'static str>,
+}
+impl ReadbackDiagnostic {
+    fn sample_started(&mut self) {
+        self.started = self.started.saturating_add(1);
+    }
+    fn result(&mut self, result: &Result<Progress>) {
+        match result {
+            Ok(Progress::Pending(ManagedPanel::Idle)) => {
+                self.pending_idle = self.pending_idle.saturating_add(1)
+            }
+            Ok(Progress::AtResearch(_)) => {
+                self.shown_research = self.shown_research.saturating_add(1)
+            }
+            Err(error) if error.code == "research_panel_transition" => {
+                self.transition_errors = self.transition_errors.saturating_add(1);
+                self.last_retryable = Some("research_panel_transition");
+            }
+            Err(error) if error.code == "torn_read" => {
+                self.torn_errors = self.torn_errors.saturating_add(1);
+                self.last_retryable = Some("torn_read");
+            }
+            _ => {}
+        }
+    }
+    fn report(
+        &self,
+        dispatch: Option<(Duration, Duration, Duration)>,
+        readback_elapsed: Duration,
+    ) -> serde_json::Value {
+        serde_json::json!({
+            "historical_diagnostics_only":true,
+            "readback_started":self.started,
+            "pending_idle":self.pending_idle,
+            "shown_research":self.shown_research,
+            "transition_errors":self.transition_errors,
+            "torn_errors":self.torn_errors,
+            "last_retryable_code":self.last_retryable,
+            "pre_dispatch_ms":dispatch.map(|v|v.0.as_millis()),
+            "remaining_at_dispatch_ms":dispatch.map(|v|v.1.as_millis()),
+            "dispatch_ms":dispatch.map(|v|v.2.as_millis()),
+            "readback_ms":readback_elapsed.as_millis()
+        })
+    }
+}
+
 pub(crate) struct Journal {
     store: Store,
     data: Data,
@@ -379,8 +434,9 @@ impl Journal {
                 "Transit capacity exhausted before observation/input",
             ));
         }
+        let started = now();
         let until = caller_until
-            .min(now() + BUDGET)
+            .min(started + BUDGET)
             .min(authority.authorize(token, &request.scope.epoch)?);
         let live = || -> Result<()> {
             authority.authorize(token, &request.scope.epoch)?;
@@ -410,6 +466,7 @@ impl Journal {
             now,
         )?;
         live()?;
+        let mut dispatch_timing = None;
         let (record_before, delivery) = match current {
             Progress::AtResearch(shown) => (Facts::observed(shown.observed()), None),
             Progress::Pending(ManagedPanel::Idle) => {
@@ -420,7 +477,13 @@ impl Journal {
                 })?;
                 live()?;
                 let _permit = permit(gate)?;
+                let dispatch_started = now();
                 let delivery = backend.dispatch_once(until);
+                dispatch_timing = Some((
+                    dispatch_started.saturating_duration_since(started),
+                    until.saturating_duration_since(dispatch_started),
+                    now().saturating_duration_since(dispatch_started),
+                ));
                 drop(_permit);
                 if delivery == Delivery::NotQueued {
                     // Known local refusal is safe to persist even after expiry.
@@ -438,27 +501,34 @@ impl Journal {
             }
             _ => return Err(invalid("Original transit departure required")),
         };
+        let readback_started = now();
+        let mut diagnostic = ReadbackDiagnostic::default();
         let effect = (|| -> Result<Box<AtResearch>> {
             loop {
                 live()?;
+                diagnostic.sample_started();
                 let reached = transit.observe_with(
                     &request.scope,
                     &request.entry,
                     |_, _| backend.observe(until),
                     now,
                 );
+                diagnostic.result(&reached);
                 match reached {
                     Ok(Progress::AtResearch(_)) => {
                         backend.confirm_input_idle(until)?;
                         live()?;
                         // Last game proof is AFTER platform idle, under the
                         // original Anchor/Scope/Entry and absolute deadline.
-                        match transit.observe_with(
+                        diagnostic.sample_started();
+                        let final_sample = transit.observe_with(
                             &request.scope,
                             &request.entry,
                             |_, _| backend.observe(until),
                             now,
-                        )? {
+                        );
+                        diagnostic.result(&final_sample);
+                        match final_sample? {
                             Progress::AtResearch(proof) => {
                                 live()?;
                                 return Ok(proof);
@@ -486,8 +556,12 @@ impl Journal {
             Ok(proof) => proof,
             Err(cause) if delivery.is_some() => {
                 return Err(uncertain(&format!(
-                    "Ordinary transit unverified; preserved Intent; cause={}",
-                    cause.code
+                    "Ordinary transit unverified; preserved Intent; cause={}; diagnostics={}",
+                    cause.code,
+                    diagnostic.report(
+                        dispatch_timing,
+                        now().saturating_duration_since(readback_started)
+                    )
                 )))
             }
             Err(cause) => return Err(cause),

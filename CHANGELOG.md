@@ -2,6 +2,12 @@
 
 ## Unreleased native preview
 
+- Add bounded in-attempt timing and readback counters to uncertain ordinary
+  Research transit errors. Retain only fixed retryable codes; diagnostics grant
+  no current proof, later settlement or input retry and leave journals and the
+  original deadline unchanged. Record fresh 1080p setup verification, the retained
+  transit timeout and successful ordinary cleanup through the exit-metadata gap.
+
 - Add an internal durable ordinary Research transit and Linux W adapter, retaining
   the original Focus/production goal through busy slots. Persist Intent before
   once-only input; require a fresh retained-scope read after input idle, preserve

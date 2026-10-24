@@ -6,6 +6,14 @@ plans, construction opening, template selection, Find navigation and one-point
 placement. No clean two-year Luna run or complete Germany, China or Poland
 campaign has been accepted. Mixed-plan and wider warfare automation remain open.
 
+The latest Linux diagnostic has now passed positive 1080p setup review and clean
+ordinary closure, including the previously failing exit-metadata race. Its one
+retained-goal Research request still timed out at five seconds with an uncertain
+Intent and no retry or replay. All owned processes and authority are closed.
+Linux component checks do not replace native Mac campaign recordings. See the
+[fresh qualification](CLAUSEWITZ_VALIDATION.md#fex-retained-goal-transit-qualification--24-october-2026)
+and [current next work](LINUX_RUST_HANDOFF.md#next-work).
+
 ## Ordinary cancellation checkpoint
 
 The later ordinary Find-button component passed with one move/click in 603.114 ms;

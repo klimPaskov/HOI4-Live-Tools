@@ -491,7 +491,8 @@ fn stored_history_rejects_jump_tampering_missing_binding_and_plan_replacement() 
         fs::write(temp.progress(), bytes).unwrap();
         assert!(Progress::open(&temp.progress(), scope(), &[entry(15)]).is_err());
         assert!(Progress::open(&temp.progress(), scope(), &[]).is_err());
-        assert!(Progress::open(&temp.progress(), scope(), &[e]).is_ok());
+        Progress::open(&temp.progress(), scope(), &[e])
+            .unwrap_or_else(|error| panic!("case {case}: {error}"));
     }
 }
 

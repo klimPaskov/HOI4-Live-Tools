@@ -7,6 +7,19 @@ from native macOS at 1920×1080 or higher. Do not control the shared Windows gam
 
 ## Current state
 
+The fresh retained-goal Linux qualification reached positively reviewed historical
+Normal vanilla Germany at 1920×1080. A single later setup still resolved the
+earlier clipping before Start. Structured baseline reads took 29/41 ms, but the
+sole Research transit request timed out after 5,002 ms: server-confirmed delivery,
+one uncertain Intent, no Verified receipt, retry or replay. Its final root state
+and internal timing are unknown. The corrected cleanup passed one ordinary close
+and the actual exit-metadata gap; independent census is clear and no authority
+remains. Preserve all failures and closed sessions. Bounded in-attempt phase
+diagnostics now pass 2,289 host Rust tests, four-target strict checks, release,
+59 targeted actual ARM fixtures and the full Python suite. Use these diagnostics
+in a fresh latency trial; never extend deadlines or settle late.
+See [the fresh qualification record](CLAUSEWITZ_VALIDATION.md#fex-retained-goal-transit-qualification--24-october-2026).
+
 The placement checkpoint `0b963fb` passed all nine CI jobs across Linux, Windows
 and macOS. The default-off `hoi4_construction_place` qualification
 uses one ordinary click, complete typed GUI checks and exact retained full-queue
@@ -93,10 +106,11 @@ No public command or mixed-worker route is enabled; live qualification remains o
    test. Keep earlier successful navigation and the new pregrant refusal separate;
    never generalize Escape's control-byte proof to printable characters.
    Preserve the separate GL1 startup failure and the uncertain GL0 journal.
-   The fresh GL0/no-recorder diagnostic did not resolve the Research timeout.
-   Keep its pending-transition evidence. Compact metadata now permits ordinary
-   close, but setup evidence and the pending-metadata census correction need
-   qualification before another launch. Never loosen deadlines or settle late.
+   Preserve the earlier GL0 pending-transition evidence separately from the new
+   retained-goal timeout, whose final root state is unknown. Fresh setup review
+   and the pending-metadata census correction have now passed their components;
+   Research navigation still needs internal phase evidence and live qualification.
+   Never loosen deadlines or settle late.
    Linux diagnostics do not replace native Mac showcase acceptance.
 2. Qualify the internal ordinary navigation adapter around the retained original-goal
    transit, then connect its current proof to mixed plans. Do not fabricate a

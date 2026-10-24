@@ -1,5 +1,72 @@
 # Clausewitz-MCP validation
 
+## Bounded transit failure diagnostics — 24 October 2026
+
+The internal ordinary Research transaction now reports historical failure-only
+counters for started readback observations, settled Idle/Research snapshots and
+rejected transition/torn samples. It retains only fixed retryable error codes,
+plus monotonic time before dispatch, inside dispatch and in readback, and the
+remaining original budget at dispatch. These are observer invocations and phase
+timings, not kernel-read counts or a current root-state assertion. No later game
+read, raw pointer/error text, journal migration, input retry, deadline renewal or
+new action permission is added. Successful proof and input ordering stay unchanged.
+
+The source passed **2,289 host Rust tests**, four-target strict checks, release,
+**59 targeted optimized fixtures on actual ARM Linux**, the workspace's **956
+Python tests (37 skips)** and identical **28-tool unbound stdio** with empty stderr
+and EOF 0.
+Three new behavioral fixtures distinguish a slow dispatch, repeated rejected
+samples and a still-idle readback while preserving exactly one input attempt
+and its unresolved Intent. Independent review found no actionable defect.
+
+The first full suite failed an existing production-history fixture's final
+reopen assertion. That exact fixture passed alone without a source change;
+the complete rerun also passed. Its assertion now reports the case and actual
+error, without changing expectations, adding a retry or relaxing storage.
+The first failure remains preserved and unexplained. These checks add no new
+live evidence; the preceding retained-goal action remains failed.
+
+## FEX retained-goal transit qualification — 24 October 2026
+
+A fresh owned, unrecorded GL0 session reached the frontend in **42.785 seconds**
+at **1920×1080**. Luna medium completed five released setup clicks. The first
+country-setup frame clipped Historical AI and Start; one bounded later still,
+**43.463 seconds** afterward, showed the complete controls, selected Germany,
+1936, Normal/Regular difficulty and the checked global Historical AI setting.
+Root reviewed that current evidence before authorizing the sixth, once-only
+Start click. No Rules workaround, scrolling or guessed clipped input was used.
+Structured own-country reads independently confirmed those campaign settings,
+the initial date and paused speed zero. Complete pre/post-binding baseline reads
+took **29.368/41.397 ms** without input or screenshots.
+
+The separate private qualification retained an actual own canonical Focus goal;
+it did not fabricate a Research assignment. Its sole stationary W request failed
+after a **5,002.175 ms** server round trip at the original five-second deadline.
+Delivery was server-confirmed, but the action was unverified, leaving exactly
+one Intent and no Verified record. There was no retry, historical replay, close
+key, clock action, worker, action-phase screenshot or cursor movement. Lease
+release, zero remaining lease and MCP EOF 0 passed. The failure records no final
+root state or internal phase timings; this trial does **not** prove that an
+animation caused the timeout or that the panel appeared later. No late result
+was used to settle it. Advancing-time and campaign acceptance remain open.
+
+The corrected lifecycle helper then completed one ordinary window close with
+exit 0. Its retained census encountered the executable-metadata exit gap that
+broke the preceding session and correctly waited for the original process exit;
+there were no census faults or forced game signals. Independent final checks
+found the owned game, server, supervisor and display processes absent, the
+created config/socket/lock removed, and no active grant, lease or recorder.
+All **147** diagnostic artifact files remain private, including the failed
+action and earlier zero-input wrapper/readiness refusals.
+
+The private qualification source passed **2,287 host Rust tests**, strict checks
+on four targets, release, **67 targeted optimized fixtures on actual ARM Linux**,
+the workspace's **956 Python tests (37 skips)** and unchanged **28-tool unbound
+stdio**. Its helper
+package passed **126 mocked fixtures** and 11 helper checks. Public-basis `09ca2bf`
+CI is distinct from this private delta's local checks. No public qualification
+tool, mixed-worker permission or successful live transit is implied.
+
 ## Durable ordinary Research transit — 24 October 2026
 
 The internal Linux adapter now retains the selected original Focus/production
