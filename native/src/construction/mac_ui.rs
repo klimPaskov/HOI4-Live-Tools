@@ -23,6 +23,8 @@ mod selection_state;
 pub(crate) use selection_state::{
     bind_selection, ClearSelectionAnchor, ClearSelectionReadback, SelectionAnchor, SelectionState,
 };
+#[allow(unused_imports)]
+pub(crate) use selection_state::{PlacementAnchor, PlacementDelta};
 
 #[derive(Clone, Copy, Default)]
 pub struct Options {

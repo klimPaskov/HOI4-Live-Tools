@@ -887,6 +887,8 @@ mod tests {
             construction_panel: false,
             construction_selection: false,
             construction_navigation: false,
+            construction_placement: false,
+            placement_deadline_epoch: None,
         }
     }
     #[test]

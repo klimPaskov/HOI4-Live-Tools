@@ -323,6 +323,47 @@ No cursor movement, screenshots, activation, observation pauses or construction
 changes occurred. This does not enable worker construction, establish a map-click
 point, or qualify arbitrary modal routing and campaign integration.
 
+## Construction placement qualification
+
+`hoi4_construction_place` is a default-off manual qualification tool. Its arguments
+are `building_id`, `state_id`, `request_id` and `lease_token`. It requires the exact
+ordinary template already selected, construction panel open and idle, hidden idle
+Find, and the requested own controlled state at the calibrated 1920×1080 client
+center in construction map mode 27. It does not open, select, navigate, cancel or
+change the clock. Construction is not yet a daily-worker domain.
+
+Enable only this qualification by setting `construction_placement: true` in the
+private `input.json`, with `placement_deadline_epoch` set to an absolute Unix time
+strictly in the future and at most 180 seconds from server binding. The bound is
+converted once to a monotonic deadline, with its origin captured before the wall
+clock. Each attempt is bounded by that original deadline, the lease and 12 seconds;
+requests, waits and lease renewal cannot extend it. Other construction flags do
+not enable placement. The qualification driver must also preserve its original
+owned-session lifetime and recording/input grant limits.
+
+The adapter retains original process, campaign, exact target, complete queue,
+map/terrain, native window/source, UI and own-scene bindings. A complete typed GUI
+graph rebuilds supported rejection bounds and separately checks dispatch guards
+before preparation and again before down. Unsupported or possible recipients
+refuse. This narrow precondition does not establish atomic cache completion,
+absence of GUI effects, full model picking or eligibility. Returned route
+diagnostics contain counts and booleans, excluding private pointer anchors and
+cache-discrepancy examples. No JSON is parsed back into action authority.
+
+A durable strict intent precedes the single move/down/up. Exact readback must
+prove one matching original line incremented by one or one new amount-one line,
+with every original row preserved, then prove the same delta after platform
+checks. An unchanged queue is pending until the original deadline. Every failure
+after entering the pointer transport is uncertain; it never retries input or
+settles from later state. Button-up cleanup is unconditional. A verified replay
+returns the original historical receipt without new input or journal append;
+it does not claim current placement. Existing shared uncertainty still blocks
+competing actions and workers.
+
+The recorded private Rust component passed on paused native 1080p Germany.
+The generic source port does not establish advancing-time or full-campaign
+acceptance. Ordinary cancellation and construction standing plans remain next.
+
 ## Action limits and recovery
 
 `hoi4_input_geometry` can separately observe cached Mac source coordinates with

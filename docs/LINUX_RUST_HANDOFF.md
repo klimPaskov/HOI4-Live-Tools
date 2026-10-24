@@ -12,6 +12,28 @@ failed campaigns. Do not control the shared Windows game.
 
 ## Current checkpoint
 
+The native Mac controller now exposes a default-off `hoi4_construction_place`
+qualification tool. It retains original point/target/queue identities, requires
+complete typed direct-GUI rejection and verifies one exact +1 queue change after
+a single ordinary move/down/up. Its generic absolute qualification bound replaces
+the private session expiry; route diagnostics exclude pointer identities.
+Strict receipts, no retry after possible input and historical-only replay remain.
+The recorded private component below is separate from the source port's wider
+advancing-time, construction-worker and campaign acceptance, which are unfinished.
+All 1,941 Rust / 956 Python tests (37 skips), strict four-target checks, release
+and unchanged 28-tool unbound stdio checks pass; 149 optimized fixtures also
+passed on the byte-identical private code. The 38 legacy WIP paths are preserved.
+
+The preceding typed-reader checkpoint `ad2fb0a` passed all nine CI jobs. The old
+qualification session is closed with settings unchanged. A fresh owned native
+1920×1080 session has started for the next gate under its own fixed lifetime;
+menu setup is still offline preparation, with no new input grant or campaign
+result. Ordinary cancellation and mixed construction plans remain next. See the
+[Mac checkpoint](MAC_CONTINUATION_STATUS.md) and
+[placement contract](MAC_CONTROLLER.md#construction-placement-qualification).
+
+## Previous checkpoint
+
 The internal typed Mac GUI foundation now composes complete bounded membership,
 exact types/resources, transform/clip rejection and final consumed-field checks
 using the existing public geometry math. Its 26 focused fixtures pass. This is

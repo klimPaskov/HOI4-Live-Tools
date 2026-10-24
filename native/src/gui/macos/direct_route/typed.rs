@@ -314,6 +314,25 @@ impl TypedObservation {
         }
         Ok(())
     }
+    /// Bounded tool diagnostics omit private pointer identities and examples.
+    /// This renders existing typed facts and is never consumed as authority.
+    pub fn compact_summary(&self) -> Value {
+        let counts = |c: &Counts| {
+            json!({"nodes":c.nodes,"self_objects":c.self_objects,
+                "candidate_targets":c.candidates,"clip_rejected":c.clip_rejected,
+                "geometry_rejected":c.geometry_rejected,"possible":c.possible,
+                "unsupported":c.unsupported,"xy_cache_mismatches":c.xy_mismatch,
+                "scale_cache_mismatches":c.scale_mismatch})
+        };
+        json!({"status":"typed_direct_gui_observation","complete_graph":true,
+            "guard_conditions":self.guards.complete,
+            "fresh_normal_c99_zero":counts(&self.fresh),
+            "strict_cache_normal_c99_zero":counts(&self.strict),
+            "fresh_unqualified_trig":counts(&self.unqualified),
+            "logical_requests":self.calls,"bytes":self.bytes,
+            "cache_completion_verified":false,"full_picker_verified":false,
+            "no_gui_effects_verified":false,"input_authorized":false,"delivery_verified":false})
+    }
     pub fn summary(&self) -> Value {
         json!({"status":"typed_direct_gui_observation","anchors":{"base":self.base,"gui":self.gui,"graphics":self.gfx,"root":self.root},"complete_graph":true,"guard_conditions":self.guards.complete,"up_global_byte":self.guards.up_byte,"up_invalidation_singleton_present":self.guards.singleton.is_some(),"up_invalidation_flag411":self.guards.singleton.map(|x|x.1),"fresh_normal_c99_zero":self.fresh.summary(),"strict_cache_normal_c99_zero":self.strict.summary(),"fresh_unqualified_trig":self.unqualified.summary(),"logical_requests":self.calls,"bytes":self.bytes,"cache_completion_verified":false,"full_picker_verified":false,"no_gui_effects_verified":false,"input_authorized":false,"delivery_verified":false})
     }
@@ -756,6 +775,21 @@ mod tests {
         assert_eq!(o.nodes()[0].children(), &[C]);
         o.require_no_direct_gui_recipient().unwrap();
         assert_eq!(o.summary()["input_authorized"], false);
+        let compact = o.compact_summary();
+        assert_eq!(compact["fresh_normal_c99_zero"]["nodes"], 2);
+        assert!(compact.get("anchors").is_none());
+        for branch in [
+            "fresh_normal_c99_zero",
+            "strict_cache_normal_c99_zero",
+            "fresh_unqualified_trig",
+        ] {
+            assert!(compact[branch].get("scale_discrepancy_examples").is_none());
+            assert!(compact[branch]
+                .as_object()
+                .unwrap()
+                .values()
+                .all(Value::is_u64));
+        }
     }
     #[test]
     fn unknown_primary_stops_before_parent_or_payload() {

@@ -123,11 +123,14 @@ median RPC, compared with 2.00 ms without the option. It leaves the game and
 cursor unchanged and supplies no placement permission; see the
 [resident observer evidence](docs/CLAUSEWITZ_VALIDATION.md#mac-resident-center-terrain-mcp--24-october-2026).
 
-A separate [ordinary placement component](docs/CLAUSEWITZ_VALIDATION.md#mac-ordinary-map-placement--24-october-2026)
-passed: one map move and one click queued exactly one military factory in
-own Brandenburg, verified by a retained native queue anchor. The private driver
-took 8.438 seconds; its 22 RPCs had a 1.161 ms median. Public placement and
-construction worker integration remain unfinished. The Find action requires an
+The default-off [`hoi4_construction_place` qualification](docs/MAC_CONTROLLER.md#construction-placement-qualification)
+uses one ordinary click with the exact template already selected and an owned
+state centered. It verifies an exact +1 queue change, retains durable once-only
+receipts and returns compact route diagnostics. A recorded private Rust component
+passed at native 1080p: its 17-call driver took 4.661 seconds, including guards;
+placement took 2.326 seconds with zero cursor displacement or observation pauses.
+The source port remains a qualification preview; construction worker integration
+and advancing-time acceptance remain unfinished. The Find action requires an
 already-open focused empty box and explicit qualification permission. Peace
 conferences, naval invasions, the clean two-year acceptance run and full campaigns
 remain open. Broader legacy adapters remain separate from the durable worker. The [controller contract](docs/MAC_CONTROLLER.md) describes current
@@ -148,7 +151,7 @@ remains Linux-only.
   campaigns. Final showcase videos must come from macOS at 1080p or higher.
 - Validate long campaign recording and publish only after release acceptance.
 
-All nine CI jobs passed on the Mac own-scene source checkpoint (`71e0075`) across
+All nine CI jobs passed on the preceding typed GUI checkpoint (`ad2fb0a`) across
 Linux, Windows and macOS. Offline tests do not prove native game behavior.
 For measurements, retained failures and the next gate, use
 [the comparison](docs/CLAUSEWITZ_COMPARISON.md),

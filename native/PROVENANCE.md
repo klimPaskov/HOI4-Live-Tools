@@ -1,5 +1,31 @@
 # Rust foundation provenance
 
+## Default-off Mac placement qualification
+
+`launch/macos/construction_place.rs` and its `point` module compose the separately
+recovered Mac selection/queue, center-terrain, source-point, native Cocoa geometry,
+panel/Find, own-scene and typed GUI foundations below. No upstream placement/UI
+code, foreign offsets or game bytes are copied. This extends the attributed
+Clausewitz own-target/readback approach with ordinary OS move/down/up events;
+there is no engine call or memory write.
+
+Original identities and complete queue evidence remain typed in memory through
+the attempt. Exact edge interception protects internal geometry reads before
+replacement payload. Complete direct-recipient rejection and separate dispatch
+guards are checked with final consumed-field witnesses. The normal C99 zero-angle
+calculation is a restricted math basis, not dynamic import or atomic-route proof.
+Queue readback distinguishes unchanged pending state, one original-line increment
+and one new matching amount-one line, preserving every original row.
+
+The generic absolute qualification bound replaces a private diagnostic session's
+fixed expiry. Conversion captures monotonic origin before the wall clock; every
+action keeps the minimum of that original bound, its lease and 12 seconds. A
+redundant duplicate Find field was removed; its original pointer remains in the
+witnessed edge list. Compact returned diagnostics omit raw pointer identities
+and examples. Strict durable intent, no retry after possible motion and historical
+replay are unchanged. The private recorded component is distinct from source-port,
+advancing-time, worker and campaign acceptance.
+
 ## Internal typed Mac direct-recipient foundation
 
 `gui/macos/direct_route.rs` and its `typed`, `model` and `witness` modules

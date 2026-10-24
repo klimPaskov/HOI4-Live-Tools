@@ -1,5 +1,29 @@
 # Mac continuation checkpoint — 24 October 2026
 
+The native Mac controller now includes default-off `hoi4_construction_place`
+qualification: one ordinary center move/down/up, exact retained full-queue +1
+readback, strict durable receipts and no input retry. Its generic absolute
+qualification deadline is clipped by the original lease and 12-second action
+bound; no private session expiry remains in source. Returned route diagnostics
+contain numeric counts and booleans without private pointer identities. This
+ports the separately recorded component below; it is not advancing-time,
+construction-worker, full-picker or campaign acceptance. See the
+[controller contract](MAC_CONTROLLER.md#construction-placement-qualification).
+
+All 1,941 Rust tests and 956 Python tests (37 skips), strict checks on four
+targets, release build and unchanged 28-tool unbound stdio checks pass. Another
+149 optimized placement/GUI/deadline fixtures passed on the byte-identical private
+code. All 38 unrelated legacy WIP paths remain unchanged. No new live result is
+claimed by this source port.
+
+The preceding typed-reader checkpoint `ad2fb0a` passed all nine CI jobs. The
+previous owned qualification session exited 0 before its original expiry, with
+default settings unchanged. A fresh isolated native 1920×1080 session has started
+for the next gate, with its own creation-bound lifetime. Menu setup is still
+offline preparation; no new input grant or campaign result is implied.
+
+Previous checkpoints follow.
+
 The internal typed Mac GUI foundation now retains the complete bounded graphical
 tree, exact class/parent/resource identities, independently rebuilt transforms and
 clips, and final consumed-field witnesses. It reuses the existing public geometry

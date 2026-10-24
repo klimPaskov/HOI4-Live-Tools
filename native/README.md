@@ -127,13 +127,17 @@ Internal ray/terrain arithmetic reproduces a captured center-point calculation
 bit-for-bit. The private terrain/bitmap prototype joined it to own Brandenburg.
 The internal scene reader matched all 35 live candidates to own divisions/task
 forces with exact types and owners; unknown candidates refuse before payload.
-A separate recorded Luna-medium [ordinary point-placement test](../docs/CLAUSEWITZ_VALIDATION.md#mac-ordinary-map-placement--24-october-2026)
-then passed: one map move and down/up, with a retained Rust queue anchor proving
-exactly one military factory added in state 64. The 22-RPC private driver took
-8.438 seconds including startup and guards (1.161 ms median RPC). The prior
-mode-0 harness failure is preserved. Complete model intersection, a public strict
-placement adapter and worker integration remain unfinished; the placement test
-adds no MCP action or permission.
+The default-off `hoi4_construction_place` qualification adapter now composes
+these original bindings with complete typed GUI rejection and separate dispatch
+guards. It sends at most one ordinary center move/down/up and requires exact
+complete-queue +1 readback. A recorded private Rust component passed in a
+4.661-second 17-call driver; placement took 2.326 seconds including platform
+guards, with no cursor displacement or observation pause. The earlier point test
+and failed mode-0 harness remain preserved. The port adds a generic, fixed
+qualification deadline and compact pointer-free route diagnostics; it is not a
+construction worker or advancing-time/full-picker acceptance. See the
+[placement contract](../docs/MAC_CONTROLLER.md#construction-placement-qualification)
+and [component evidence](../docs/CLAUSEWITZ_VALIDATION.md#mac-strict-rust-placement-component--24-october-2026).
 
 The internal Mac hit-envelope foundation now models separate sprite, cornered,
 InstantText and position-object rejection branches, with 32 arithmetic fixtures.

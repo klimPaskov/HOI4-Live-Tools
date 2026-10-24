@@ -462,9 +462,47 @@ pub(crate) fn observe_open(process: &dyn Process) -> Result<Observation> {
         },
     )
 }
+/// No opener or shortcut payload is requested for placement preparation.
+#[cfg(target_os = "macos")]
+pub(crate) fn observe_placement(process: &dyn Process) -> Result<Observation> {
+    observe(process, Options::default())
+}
 
 #[cfg(target_os = "macos")]
 impl Observation {
+    /// Typed current-panel facts only, not modal or map-route authority.
+    pub(crate) fn placement_edges(&self, base: u64) -> Result<Vec<(u64, u64)>> {
+        if !self.selected()
+            || self.selection_mode != 1
+            || self
+                .panel
+                .as_ref()
+                .is_none_or(|p| !p.visible() || !p.idle())
+        {
+            return Err(invalid(
+                "Current ordinary-selected construction panel must be open and idle",
+            ));
+        }
+        let s = &self.scope;
+        Ok(vec![
+            (base + game::MACOS.gs_global, s.anchors[0]),
+            (base + game::MACOS.idler_global, s.anchors[1]),
+            (base + game::MACOS.technology_db_global, s.anchors[2]),
+            (s.anchors[1] + 0x4c0, s.registry),
+            (s.anchors[1] + 0x670, s.manager),
+            (s.manager + 0x180, s.anchors[1]),
+            (s.manager + 0x150, s.view),
+            (s.view + 0x430, s.root),
+            (s.view, base + 0x343aa90),
+            (s.view + 0x428, s.anchors[1]),
+            (s.view + 0x30, s.manager),
+            (self.panel.as_ref().unwrap().object, base + 0x34ac0b0),
+            (self.panel.as_ref().unwrap().object + 0x88, s.registry),
+        ])
+    }
+    pub(crate) fn placement_window_object(&self) -> Option<u64> {
+        self.panel.as_ref().map(|p| p.object)
+    }
     pub(crate) fn selected(&self) -> bool {
         self.managed_mode == CONSTRUCTION
     }

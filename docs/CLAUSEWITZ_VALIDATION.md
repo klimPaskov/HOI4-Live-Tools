@@ -1,5 +1,37 @@
 # Clausewitz-MCP Linux validation
 
+## Default-off Mac strict placement port — 24 October 2026
+
+The native Mac controller now registers `hoi4_construction_place` for explicit
+manual qualification. Other flags and the default observation server do not
+enable it. The actor, point/queue anchors and strict journal compose the recorded
+private component below with the public typed GUI/math foundation. It preserves
+one ordinary move/down/up, original-lease/deadline checks, exact +1 queue readback
+and no later settlement or retry after possible input.
+
+The port removes the private qualification's fixed expiry. Its caller-supplied
+absolute deadline must be finite, future and within 180 seconds at binding;
+monotonic origin precedes wall capture. Each action retains the minimum of that
+bound, lease and 12 seconds. The driver still owns original session/grant limits.
+An unused duplicate Find field was removed after strict Clippy caught it; its
+pointer remains in the complete retained edge witnesses. The initial failure
+and corrected checks are preserved privately.
+
+Tool-facing route diagnostics now render only numeric counts and booleans.
+Internal anchors and cache-discrepancy pointer examples remain private. Typed
+admission and final witnesses are unchanged; diagnostic JSON is never parsed
+back into authority. The generic-bound and output changes are source validation,
+not new live evidence. The tool remains default-off and outside the daily worker;
+full picker, advancing-time and campaign acceptance remain incomplete.
+
+Full public-source validation passed 1,941 Rust tests, 956 Python tests (37 skips),
+formatting, strict host macOS / Windows GNU / x86 Linux musl / ARM64 Linux musl
+checks, release build and unchanged 28-tool unbound stdio checks. On the private
+port, 27 placement, 120 GUI and two deadline fixtures passed optimized; all 296
+code/configuration/fixture files matched public source byte-for-byte, excluding
+only the two updated documentation files. All 38 unrelated legacy WIP paths
+remained unchanged. These checks are separate from the recorded live component.
+
 ## Internal typed Mac GUI foundation — 24 October 2026
 
 The internal `gui/macos/direct_route` modules retain a complete bounded graphical
