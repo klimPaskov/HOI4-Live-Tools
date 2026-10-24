@@ -2,6 +2,8 @@
 
 ## Unreleased native preview
 
+- Make the standing-order idle-Research test publish one simulated day per clock
+  poll, removing a CI feeder-thread race while preserving exact firing checks.
 - Add an internal navigation-only Research transit identity that retains the
   original Focus/production goal and fixed deadline without an empty-slot or
   fabricated Research-assignment dependency. Eighteen fixtures cover busy slots,

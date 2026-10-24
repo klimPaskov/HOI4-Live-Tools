@@ -286,14 +286,23 @@ class ClockWithOrdersTests(ClockCase):
             self.store.add({"k": "rs", "t": "USA", "n": n, "tid": 0, "_date": "1936.1.1.24", "_wall": 1.0})
         self.store.add({"k": "day", "t": "USA", "n": 100, "_date": "1936.1.1.24", "_wall": 1.0, "rslots": 4})
         self.session.standing.set("r", ["research_idle"], queue=[call(tech="a"), call(tech="b")])
-        self.feed(script={}, tick=0.02)
-        self.feeder.fields["rslots"] = 4
-
-        class Day(dict):
-            pass
-        run, res = self.run_with_orders(budget_days=4)
+        # Several feeder ticks may arrive in one batch on a busy CI runner.
+        # A rule intentionally fires once per batch, so publish one day per
+        # poll to verify the every-other-day policy without a scheduler race.
+        counter = [100]
+        def publish(_seconds):
+            if self.state["running"]:
+                counter[0] += 1
+                elapsed = counter[0] - 100
+                self.store.add({"k": "day", "t": "USA", "n": counter[0],
+                                "_date": f"1936.1.{1 + elapsed}.24", "_wall": 1.0, "rslots": 4})
+        with mock.patch.object(clock_mod.time, "sleep", side_effect=publish):
+            run, res = self.run_with_orders(budget_days=4)
         # three idle slots: it fires on the first day and again every other day while they stay idle
         self.assertEqual([c[1]["tech"] for c in self.calls], ["a", "b"])
+        self.assertEqual(self.session.standing.rules["r"]["fired"], 2)
+        self.assertEqual(res["reasons"][0]["code"], "done")
+        self.assertEqual(res["days"], 4)
 
     def test_an_empty_queue_tells_the_agent_once_per_refill(self):
         for n in range(100, 140):

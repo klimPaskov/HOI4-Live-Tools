@@ -24,6 +24,13 @@ optimized transit fixtures**, without a game or input. Independent source review
 found no actionable issue within this scope. These checks do not establish live
 mixed-plan, advancing-time, two-year or campaign acceptance.
 
+The first CI run exposed an unchanged Python standing-order fixture race on
+macOS 3.9: several 20 ms feeder ticks could arrive in one poll, while the rule
+intentionally fires once per batch. The fixture now publishes one day per poll
+and checks both firings and the four-day boundary. It passed 100 isolated
+deterministic runs. Runtime scheduling and game-action deadlines are unchanged;
+the original failed CI log is retained separately.
+
 ## FEX no-recorder Research comparison — 24 October 2026
 
 A fresh owned GL0/software session used the `9837e98` Rust runtime, with all
