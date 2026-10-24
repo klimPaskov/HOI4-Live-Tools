@@ -2,6 +2,13 @@
 
 ## Unreleased native preview
 
+- Make the Research opening timeout fixture consume its captured original
+  deadline after a known post-input pending read. Preserve the Linux CI failure
+  where journal setup exhausted its former 200 ms test budget before input.
+  Production deadlines, delivery classification and retry rules are unchanged.
+  Make the FEX metadata-change fixture set an explicit timestamp after restoring
+  bytes; rapid Linux writes can share a cached timestamp.
+
 - Add an explicit hash-pinned private FEX configuration option to the Linux
   launcher, retaining cleared environment, ordinary ownership and unchanged
   input permissions. Preserve original file/directory identities through startup;

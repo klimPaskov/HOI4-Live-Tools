@@ -90,26 +90,62 @@ fn opening_pending_before_intent_never_sleeps_retries_or_dispatches() {
 }
 #[test]
 fn persistent_opening_animation_obeys_original_deadline_and_quarantines_without_replay() {
+    struct PendingUntilDeadline {
+        inner: Fake,
+        dispatched_deadline: Option<Instant>,
+    }
+    impl Backend for PendingUntilDeadline {
+        fn observe(&mut self) -> Result<OwnState> {
+            let result = self.inner.observe();
+            if result
+                .as_ref()
+                .is_err_and(|cause| cause.code == "research_open_transition")
+            {
+                // This is a post-input timeout fixture, not a journal-fsync
+                // performance test. Consume the caller's original deadline only
+                // after possible input and a known pending read. Never renew it.
+                let deadline = self.dispatched_deadline.unwrap();
+                thread::sleep(
+                    deadline.saturating_duration_since(Instant::now()) + Duration::from_millis(1),
+                );
+            }
+            result
+        }
+        fn candidate(&mut self, target: &Target) -> Result<Candidate> {
+            self.inner.candidate(target)
+        }
+        fn dispatch_once(&mut self, candidate: &Candidate, deadline: Instant) -> Delivery {
+            assert!(self.dispatched_deadline.replace(deadline).is_none());
+            self.inner.dispatch_once(candidate, deadline)
+        }
+        fn confirm_input_idle(&mut self, candidate: &Candidate, deadline: Instant) -> Result<()> {
+            self.inner.confirm_input_idle(candidate, deadline)
+        }
+    }
     let scratch = Scratch::new();
     let a = authority();
     let gate = RwLock::new(true);
     let mut j = Journal::open(&scratch.journal()).unwrap();
-    let mut states = vec![Ok(closed_map_state()), Ok(closed_map_state())];
-    for _ in 0..100 {
-        states.push(Err(pending("[1, 0]")));
-    }
-    let mut f = opener(states);
+    let mut f = PendingUntilDeadline {
+        inner: opener(vec![
+            Ok(closed_map_state()),
+            Ok(closed_map_state()),
+            Err(pending("[1, 0]")),
+        ]),
+        dispatched_deadline: None,
+    };
     let t = target(Stage::OpenPanel);
-    let e = execute(
-        &mut j,
-        "opening-timeout",
-        t.clone(),
-        &a,
-        &gate,
-        &mut f,
-        Duration::from_millis(200),
-    )
-    .unwrap_err();
+    let e = j
+        .execute(
+            "opening-timeout",
+            t.clone(),
+            &"a".repeat(32),
+            &a,
+            &gate,
+            &mut f,
+            Duration::from_secs(5),
+        )
+        .unwrap_err();
     assert_eq!(e.code, "action_uncertain");
     assert!(e.message.contains("cause=research_deadline"));
     assert!(e.message.contains("rejected_open_reads="));
@@ -117,19 +153,20 @@ fn persistent_opening_animation_obeys_original_deadline_and_quarantines_without_
         .message
         .contains("root=research_panel; transitions=[1, 0]"));
     assert!(e.message.len() <= 512);
-    assert_eq!(f.dispatches, 1);
-    assert!(f.calls > 2);
+    assert_eq!(f.inner.dispatches, 1);
+    assert_eq!(f.inner.calls, 3);
+    assert!(Instant::now() >= f.dispatched_deadline.unwrap());
     assert!(j.blocks_game(&epoch().game));
     drop(j);
     let bytes = fs::read(scratch.journal()).unwrap();
     let mut j = Journal::open(&scratch.journal()).unwrap();
-    let calls = f.calls;
+    let calls = f.inner.calls;
     for id in ["opening-timeout", "new-opening-id"] {
         assert_eq!(
-            execute(
-                &mut j,
+            j.execute(
                 id,
                 t.clone(),
+                &"a".repeat(32),
                 &a,
                 &gate,
                 &mut f,
@@ -140,8 +177,8 @@ fn persistent_opening_animation_obeys_original_deadline_and_quarantines_without_
             "action_uncertain"
         );
     }
-    assert_eq!(f.dispatches, 1);
-    assert_eq!(f.calls, calls);
+    assert_eq!(f.inner.dispatches, 1);
+    assert_eq!(f.inner.calls, calls);
     drop(j);
     assert_eq!(fs::read(scratch.journal()).unwrap(), bytes);
 }

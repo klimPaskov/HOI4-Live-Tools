@@ -42,6 +42,20 @@ workspace Python suite passed 956 tests with 37 skips. Independent source
 review found no blocker; original ownership, input permissions and readiness
 deadlines remain unchanged. These checks validate the selector, not HOI4.
 
+The first Linux CI run failed in an existing Research-opening timeout fixture:
+its 200 ms test budget expired while committing Intent, correctly producing
+`input_not_queued` before dispatch rather than the asserted `action_uncertain`.
+The retained failure is followed by a test-only correction that consumes the
+captured original deadline during a known post-input pending read. It verifies
+pending diagnostics, quarantine and no replay without timing journal setup.
+No production code, live deadline or delivery classification changed.
+The next ARM check passed that corrected timeout case but exposed a separate
+fixture assumption: two rapid writes could restore bytes within one cached
+Linux timestamp. The metadata-change control now sets an explicit different
+modification time. The guard checks current bytes and original observed metadata;
+it cannot prove the absence of unobserved writes that leave both identical.
+Both original failed checks remain preserved.
+
 ## FEX transition origins and capacity comparison — 24 October 2026
 
 Two fresh, unrecorded 1920×1080 trials used the same private Rust binary,

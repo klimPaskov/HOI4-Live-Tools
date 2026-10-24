@@ -156,13 +156,20 @@ fn original_file_identity_is_retained_even_if_replacement_bytes_are_identical() 
 }
 
 #[test]
-fn in_place_change_and_restore_does_not_rebind_original_metadata() {
+fn changed_original_metadata_cannot_rebind_after_bytes_are_restored() {
     let fixture = Fixture::new(1, true);
     let guard = Guard::capture(&fixture.spec).unwrap();
     let path = fixture.spec.directory.join(FILES[0]);
     let bytes = fs::read(&path).unwrap();
     fs::write(&path, b"changed").unwrap();
+    assert!(guard.verify().is_err());
     fs::write(&path, &bytes).unwrap();
+    // Linux may reuse its cached timestamp for rapid successive writes. Make
+    // this an explicit metadata-change control, independent of clock resolution.
+    File::open(&path)
+        .unwrap()
+        .set_modified(std::time::UNIX_EPOCH)
+        .unwrap();
     assert!(guard.verify().is_err());
 }
 
