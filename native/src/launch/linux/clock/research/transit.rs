@@ -68,7 +68,7 @@ pub(super) fn execute(
         {
             error.message.push_str(&format!("; transport_error={code}"));
         }
-        transport_failure(error, backend.last_transport.as_ref())
+        transit_transport_failure(error, backend.last_transport.as_ref())
     })?;
     Ok((execution, backend.last_transport))
 }

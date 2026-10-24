@@ -47,7 +47,7 @@ pub(super) fn settled(r: &Reader<'_>, base: u64, root: u64, registry: u64) -> Re
     }
     Ok(r.byte(root + 0xa5)? & 8 != 0)
 }
-fn settled_named(
+pub(super) fn settled_named(
     r: &Reader<'_>,
     base: u64,
     root: u64,

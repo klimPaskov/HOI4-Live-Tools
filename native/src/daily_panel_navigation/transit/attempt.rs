@@ -187,6 +187,50 @@ struct Data {
     records: Vec<Record>,
 }
 
+const TRANSITION_ORIGINS: [&str; 7] = [
+    "research_panel",
+    "research_tree",
+    "facilities_parent",
+    "facilities_view",
+    "research_info",
+    "mode_visibility",
+    "unknown",
+];
+
+// Decode only complete fixed internal messages. Unknown text stays unknown;
+// diagnostic classification never affects retry/input/proof decisions.
+fn transition_origin(message: &str) -> (usize, Option<[u8; 2]>) {
+    if message.len() > 128 {
+        return (6, None);
+    }
+    if message == "Research transit mode/literal visibility not settled" {
+        return (5, None);
+    }
+    let Some(body) =
+        message.strip_prefix("Closing root is in a known animation transition; transitions=")
+    else {
+        return (6, None);
+    };
+    let Some((pair, name)) = body.split_once("; root=") else {
+        return (6, None);
+    };
+    let Some(origin) = TRANSITION_ORIGINS[..5].iter().position(|v| *v == name) else {
+        return (6, None);
+    };
+    let pair = match pair {
+        "[0, 1]" => [0, 1],
+        "[0, 2]" => [0, 2],
+        "[1, 0]" => [1, 0],
+        "[1, 1]" => [1, 1],
+        "[1, 2]" => [1, 2],
+        "[2, 0]" => [2, 0],
+        "[2, 1]" => [2, 1],
+        "[2, 2]" => [2, 2],
+        _ => return (6, None),
+    };
+    (origin, Some(pair))
+}
+
 /// Rejected samples and timing are historical diagnostics, never a current proof.
 /// No reader error text, raw pointer, request goal or journal bytes are retained.
 #[derive(Default)]
@@ -197,15 +241,21 @@ struct ReadbackDiagnostic {
     transition_errors: u32,
     torn_errors: u32,
     last_retryable: Option<&'static str>,
+    transition_origins: [u32; 7],
+    last_transition: Option<(usize, Option<[u8; 2]>)>,
+    first_pending_idle_ms: Option<u128>,
+    first_transition_ms: Option<u128>,
 }
 impl ReadbackDiagnostic {
     fn sample_started(&mut self) {
         self.started = self.started.saturating_add(1);
     }
-    fn result(&mut self, result: &Result<Progress>) {
+    fn result(&mut self, result: &Result<Progress>, elapsed: Duration) {
         match result {
             Ok(Progress::Pending(ManagedPanel::Idle)) => {
-                self.pending_idle = self.pending_idle.saturating_add(1)
+                self.pending_idle = self.pending_idle.saturating_add(1);
+                self.first_pending_idle_ms
+                    .get_or_insert(elapsed.as_millis());
             }
             Ok(Progress::AtResearch(_)) => {
                 self.shown_research = self.shown_research.saturating_add(1)
@@ -213,6 +263,11 @@ impl ReadbackDiagnostic {
             Err(error) if error.code == "research_panel_transition" => {
                 self.transition_errors = self.transition_errors.saturating_add(1);
                 self.last_retryable = Some("research_panel_transition");
+                let transition = transition_origin(&error.message);
+                self.transition_origins[transition.0] =
+                    self.transition_origins[transition.0].saturating_add(1);
+                self.last_transition = Some(transition);
+                self.first_transition_ms.get_or_insert(elapsed.as_millis());
             }
             Err(error) if error.code == "torn_read" => {
                 self.torn_errors = self.torn_errors.saturating_add(1);
@@ -226,6 +281,11 @@ impl ReadbackDiagnostic {
         dispatch: Option<(Duration, Duration, Duration)>,
         readback_elapsed: Duration,
     ) -> serde_json::Value {
+        let origins: serde_json::Map<String, serde_json::Value> = TRANSITION_ORIGINS
+            .iter()
+            .zip(self.transition_origins)
+            .map(|(name, count)| ((*name).into(), serde_json::json!(count)))
+            .collect();
         serde_json::json!({
             "historical_diagnostics_only":true,
             "readback_started":self.started,
@@ -234,6 +294,13 @@ impl ReadbackDiagnostic {
             "transition_errors":self.transition_errors,
             "torn_errors":self.torn_errors,
             "last_retryable_code":self.last_retryable,
+            "transition_origins":origins,
+            "last_transition":self.last_transition.map(|(origin,pair)|
+                serde_json::json!({"origin":TRANSITION_ORIGINS[origin],"pair":pair})),
+            // Result-return timestamps relative to attempt start, not engine
+            // transition onset, dispatch processing or a settled root state.
+            "first_pending_idle_ms":self.first_pending_idle_ms,
+            "first_transition_ms":self.first_transition_ms,
             "pre_dispatch_ms":dispatch.map(|v|v.0.as_millis()),
             "remaining_at_dispatch_ms":dispatch.map(|v|v.1.as_millis()),
             "dispatch_ms":dispatch.map(|v|v.2.as_millis()),
@@ -513,7 +580,7 @@ impl Journal {
                     |_, _| backend.observe(until),
                     now,
                 );
-                diagnostic.result(&reached);
+                diagnostic.result(&reached, now().saturating_duration_since(started));
                 match reached {
                     Ok(Progress::AtResearch(_)) => {
                         backend.confirm_input_idle(until)?;
@@ -527,7 +594,7 @@ impl Journal {
                             |_, _| backend.observe(until),
                             now,
                         );
-                        diagnostic.result(&final_sample);
+                        diagnostic.result(&final_sample, now().saturating_duration_since(started));
                         match final_sample? {
                             Progress::AtResearch(proof) => {
                                 live()?;
@@ -585,6 +652,11 @@ impl Journal {
 
 #[cfg(all(test, unix))]
 mod tests;
+
+#[cfg(all(test, target_os = "linux"))]
+pub(crate) fn fixture_readback_failure() -> Error {
+    tests::readback_failure()
+}
 
 #[cfg(all(test, unix))]
 pub(crate) fn fixture_intent(path: &Path) -> (Journal, Identity) {

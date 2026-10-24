@@ -7,18 +7,22 @@ from native macOS at 1920×1080 or higher. Do not control the shared Windows gam
 
 ## Current state
 
-The fresh retained-goal Linux qualification reached positively reviewed historical
-Normal vanilla Germany at 1920×1080. A single later setup still resolved the
-earlier clipping before Start. Structured baseline reads took 29/41 ms, but the
-sole Research transit request timed out after 5,002 ms: server-confirmed delivery,
-one uncertain Intent, no Verified receipt, retry or replay. Its final root state
-and internal timing are unknown. The corrected cleanup passed one ordinary close
-and the actual exit-metadata gap; independent census is clear and no authority
-remains. Preserve all failures and closed sessions. Bounded in-attempt phase
-diagnostics now pass 2,289 host Rust tests, four-target strict checks, release,
-59 targeted actual ARM fixtures and the full Python suite. Use these diagnostics
-in a fresh latency trial; never extend deadlines or settle late.
-See [the fresh qualification record](CLAUSEWITZ_VALIDATION.md#fex-retained-goal-transit-qualification--24-october-2026).
+The latest retained-goal Linux diagnostic reached positively reviewed historical
+Normal vanilla Germany at 1920×1080. Structured baseline reads took 46/37 ms.
+The sole Research request timed out after 5,003 ms, leaving one uncertain Intent
+with no retry or replay. Internal timing measured 26 ms before dispatch, 16 ms
+in dispatch and 4,958 ms in readback. Its 153 observer results included 94 Idle
+and 59 transition rejections; none accepted Research. These aggregate counts do
+not identify their order, the rejecting container, a rendering cause or the
+final root state. Ordinary close exited 0, the corrected exit census passed
+and no game authority remains. Preserve all failures and closed sessions.
+The next bounded diagnostic names existing container reads and first-result
+times without new reads or a longer deadline. Its retained-transit error limit
+is 1,024 bytes so the transport preserves the complete report; ordinary Research
+errors remain limited to 512 bytes. This revision needs a fresh live gate.
+It passed 2,292 host Rust tests, four-target strict checks, release, 63 targeted
+actual ARM fixtures, the full Python suite and unchanged 28-tool unbound stdio.
+See [the measured attempt](CLAUSEWITZ_VALIDATION.md#fex-in-attempt-transit-timing--24-october-2026).
 
 The placement checkpoint `0b963fb` passed all nine CI jobs across Linux, Windows
 and macOS. The default-off `hoi4_construction_place` qualification
@@ -107,9 +111,11 @@ No public command or mixed-worker route is enabled; live qualification remains o
    never generalize Escape's control-byte proof to printable characters.
    Preserve the separate GL1 startup failure and the uncertain GL0 journal.
    Preserve the earlier GL0 pending-transition evidence separately from the new
-   retained-goal timeout, whose final root state is unknown. Fresh setup review
+   retained-goal timeouts, whose final root states are unknown. Fresh setup review
    and the pending-metadata census correction have now passed their components;
-   Research navigation still needs internal phase evidence and live qualification.
+   Research navigation now has internal phase evidence; distinguish the exact
+   rejecting container and first-result timing before attributing a cause or
+   changing the adapter. Live qualification remains open.
    Never loosen deadlines or settle late.
    Linux diagnostics do not replace native Mac showcase acceptance.
 2. Qualify the internal ordinary navigation adapter around the retained original-goal

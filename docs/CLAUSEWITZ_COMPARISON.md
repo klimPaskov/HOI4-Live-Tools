@@ -1,6 +1,13 @@
 # Clausewitz-MCP comparison checkpoint
 
-Latest checkpoint, 22 October 2026: Production006 passed the bounded daily
+Latest diagnostic, 24 October 2026: the fresh 1080p FEX retained-goal Research
+request failed at five seconds. Its own in-attempt measurements distinguished
+16 ms of dispatch from 4,958 ms of readback, including waits; no sample accepted
+Research. This identifies where the budget elapsed, not a rendering cause or a
+matched upstream speed comparison. All owned game authority closed normally.
+See [the measured attempt](CLAUSEWITZ_VALIDATION.md#fex-in-attempt-transit-timing--24-october-2026).
+
+Earlier checkpoint, 22 October 2026: Production006 passed the bounded daily
 production worker with budgeted 10→14 allocation across three days and completed-
 plan restart without repeated input. Worker starts took 125–146 ms, digests
 60–80 ms and STOP 8–17 ms; final lines took 44 ms and overview 16 ms. The game

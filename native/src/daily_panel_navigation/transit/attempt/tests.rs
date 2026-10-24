@@ -724,6 +724,33 @@ fn failure_diagnostic(error: &Error) -> serde_json::Value {
     assert_eq!(error.code, "action_uncertain");
     serde_json::from_str(error.message.split_once("; diagnostics=").unwrap().1).unwrap()
 }
+
+#[cfg(target_os = "linux")]
+pub(super) fn readback_failure() -> Error {
+    let temp = Temp::new();
+    let start = Instant::now();
+    let mut journal = Journal::open(&temp.path()).unwrap();
+    let mut backend = Fake::new(&temp, start);
+    backend.reads = VecDeque::from([Ok(snapshot(23, false))]);
+    backend.reads.extend((0..200).map(|_| {
+        Err(Error::new(
+        "research_panel_transition",
+        "Closing root is in a known animation transition; transitions=[0, 1]; root=research_panel",
+    ))
+    }));
+    let clock = backend.now.clone();
+    journal
+        .execute_with_clock(
+            request(),
+            TOKEN,
+            &authority(),
+            &RwLock::new(true),
+            &mut backend,
+            start + BUDGET,
+            &|| clock.get(),
+        )
+        .unwrap_err()
+}
 #[test]
 fn dispatch_expiry_reports_phase_without_reading_after_deadline_or_clearing_intent() {
     let temp = Temp::new();
@@ -840,4 +867,103 @@ fn pending_idle_diagnostics_never_claim_research_or_add_an_input_retry() {
         backend.calls.borrow().iter().filter(|v| **v == "W").count(),
         1
     );
+}
+
+#[test]
+fn transition_origin_accepts_only_complete_known_internal_messages() {
+    let prefix = "Closing root is in a known animation transition; transitions=";
+    for (origin, name) in TRANSITION_ORIGINS[..5].iter().enumerate() {
+        for a in 0..=2 {
+            for b in 0..=2 {
+                if a == 0 && b == 0 {
+                    continue;
+                }
+                assert_eq!(
+                    transition_origin(&format!("{prefix}[{a}, {b}]; root={name}")),
+                    (origin, Some([a, b]))
+                );
+            }
+        }
+    }
+    assert_eq!(
+        transition_origin("Research transit mode/literal visibility not settled"),
+        (5, None)
+    );
+    for text in [
+        "[0, 0]; root=research_panel",
+        "[0, 3]; root=research_panel",
+        "[-1, 1]; root=research_panel",
+        "[0,1]; root=research_panel",
+        "[0, 1]",
+        "[0, 1]; root=unrecognized",
+        "[0, 1]; root=research_info; root=research_panel",
+        "[0, 1]; root=research_panel\n",
+        "[0, 1]; root=research_panel; pointer=0xdeadbeef",
+    ] {
+        assert_eq!(transition_origin(&format!("{prefix}{text}")), (6, None));
+    }
+    for text in [
+        "Research mode and literal panel visibility have not settled".into(),
+        "Research transit mode/literal visibility not settled; pointer=0xdeadbeef".into(),
+        "x".repeat(129),
+    ] {
+        assert_eq!(transition_origin(&text), (6, None));
+    }
+}
+
+#[test]
+fn transition_origins_and_first_return_times_preserve_uncertainty_and_one_dispatch() {
+    let temp = Temp::new();
+    let start = Instant::now();
+    let mut journal = Journal::open(&temp.path()).unwrap();
+    let mut backend = Fake::new(&temp, start);
+    backend.reads = VecDeque::from([Ok(snapshot(23, false))]);
+    for i in 0..200 {
+        backend.reads.push_back(if i < 10 {
+            Ok(snapshot(23, false))
+        } else {
+            Err(Error::new("research_panel_transition", match i {
+                10 => "Closing root is in a known animation transition; transitions=[0, 1]; root=research_panel",
+                11 => "Research transit mode/literal visibility not settled",
+                12 => "Closing root is in a known animation transition; transitions=[2, 1]; root=research_info",
+                _ => "private raw pointer 0xdeadbeef\nnever retain",
+            }))
+        });
+    }
+    let clock = backend.now.clone();
+    let error = journal
+        .execute_with_clock(
+            request(),
+            TOKEN,
+            &authority(),
+            &RwLock::new(true),
+            &mut backend,
+            start + BUDGET,
+            &|| clock.get(),
+        )
+        .unwrap_err();
+    let diagnostic = failure_diagnostic(&error);
+    assert_eq!(diagnostic["readback_started"], 200);
+    assert_eq!(diagnostic["pending_idle"], 10);
+    assert_eq!(diagnostic["transition_errors"], 190);
+    assert_eq!(diagnostic["transition_origins"]["research_panel"], 1);
+    assert_eq!(diagnostic["transition_origins"]["mode_visibility"], 1);
+    assert_eq!(diagnostic["transition_origins"]["research_info"], 1);
+    assert_eq!(diagnostic["transition_origins"]["unknown"], 187);
+    assert_eq!(
+        diagnostic["last_transition"],
+        serde_json::json!({"origin":"unknown","pair":null})
+    );
+    assert_eq!(diagnostic["first_pending_idle_ms"], 0);
+    assert_eq!(diagnostic["first_transition_ms"], 250);
+    assert_eq!(diagnostic["shown_research"], 0);
+    assert!(!error.message.contains("deadbeef") && !error.message.contains('\n'));
+    assert!(error.message.len() < 1024);
+    assert!(matches!(journal.data.records[0].outcome, Outcome::Intent));
+    assert!(journal.blocks_game(&scope().epoch.game));
+    assert_eq!(
+        backend.calls.borrow().iter().filter(|v| **v == "W").count(),
+        1
+    );
+    assert!(!backend.calls.borrow().contains(&"idle"));
 }

@@ -266,7 +266,17 @@ pub(super) fn execute_bound(
 }
 
 /// Error-only diagnostics. Delivery is not a game effect, receipt or retry right.
-fn transport_failure(mut error: Error, transport: Option<&Value>) -> Error {
+fn transport_failure(error: Error, transport: Option<&Value>) -> Error {
+    bounded_transport_failure(error, transport, 512)
+}
+
+// The retained transit's fixed diagnostic projection needs room beyond the
+// ordinary 512-byte error. This changes formatting only, never action admission.
+fn transit_transport_failure(error: Error, transport: Option<&Value>) -> Error {
+    bounded_transport_failure(error, transport, 1024)
+}
+
+fn bounded_transport_failure(mut error: Error, transport: Option<&Value>, limit: usize) -> Error {
     let delivery = match transport.and_then(|v| v["delivery"].as_str()) {
         Some("server_confirmed" | "ServerConfirmed") => "server_confirmed",
         Some("not_queued" | "NotQueued") => "not_queued",
@@ -276,7 +286,7 @@ fn transport_failure(mut error: Error, transport: Option<&Value>) -> Error {
     };
     let mut message = format!("transport_delivery={delivery}; game_action_verified=false; ");
     for c in error.message.chars().filter(|c| !c.is_control()) {
-        if message.len() + c.len_utf8() > 512 {
+        if message.len() + c.len_utf8() > limit {
             break;
         }
         message.push(c);
@@ -1019,6 +1029,32 @@ mod tests {
         assert!(error.message.starts_with(
             "transport_delivery=server_confirmed; game_action_verified=false; readback"
         ));
+    }
+    #[test]
+    fn retained_transit_diagnostic_survives_the_actual_transport_formatter() {
+        let original = crate::daily_panel_navigation::transit::attempt::fixture_readback_failure();
+        let original_diagnostic: Value =
+            serde_json::from_str(original.message.split_once("; diagnostics=").unwrap().1).unwrap();
+        for delivery in ["server_confirmed", "unknown"] {
+            let error = transit_transport_failure(
+                original_error(&original),
+                Some(&json!({"delivery":delivery})),
+            );
+            assert_eq!(error.code, "action_uncertain");
+            assert!(error.message.len() > 512 && error.message.len() <= 1024);
+            assert!(!error.message.chars().any(char::is_control));
+            let retained: Value =
+                serde_json::from_str(error.message.split_once("; diagnostics=").unwrap().1)
+                    .unwrap();
+            assert_eq!(retained, original_diagnostic);
+            assert_eq!(retained["transition_errors"], 200);
+            assert_eq!(retained["transition_origins"]["research_panel"], 200);
+            assert_eq!(retained["first_transition_ms"], 0);
+            assert_eq!(
+                retained["last_transition"],
+                json!({"origin":"research_panel","pair":[0,1]})
+            );
+        }
     }
     #[test]
     fn opening_pending_root_binding_is_never_replaced_before_settlement() {

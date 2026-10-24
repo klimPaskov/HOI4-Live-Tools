@@ -2,6 +2,13 @@
 
 ## Unreleased native preview
 
+- Distinguish fixed container-transition origins and first-result times in
+  failure-only Research navigation diagnostics, without additional game reads.
+  Preserve the complete report through a dedicated bounded 1 KB transport
+  formatter. Record the fresh 1080p timeout: 16 ms dispatch, 4,958 ms readback,
+  no accepted Research state, no retry and clean ordinary closure. The rendering
+  cause and final panel state remain unknown.
+
 - Add bounded in-attempt timing and readback counters to uncertain ordinary
   Research transit errors. Retain only fixed retryable codes; diagnostics grant
   no current proof, later settlement or input retry and leave journals and the

@@ -207,10 +207,10 @@ fn read_edges(
     let panel = link(r, view + 0x2f8, original.map(|old| old.roots[0]))?;
     let tree_root = link(r, tree + 0x2f8, original.map(|old| old.roots[1]))?;
     // Validate known original windows before traversing their named membership.
-    closing::settled(r, base, panel, registry)?;
-    closing::settled(r, base, tree_root, registry)?;
+    closing::settled_named(r, base, panel, registry, "research_panel")?;
+    closing::settled_named(r, base, tree_root, registry, "research_tree")?;
     let facilities_parent = link(r, view + 0x910, original.map(|old| old.facilities_parent))?;
-    closing::settled(r, base, facilities_parent, registry)?;
+    closing::settled_named(r, base, facilities_parent, registry, "facilities_parent")?;
     let facilities = link(r, view + 0x900, original.map(|old| old.roots[2]))?;
     exact(r, facilities, base + 0x42f2708)?;
     if r.u64(facilities + 0x68)? != idler || r.u64(facilities + 0x60)? != facilities_parent {
@@ -219,7 +219,7 @@ fn read_edges(
         ));
     }
     let facilities_root = link(r, facilities + 0x70, original.map(|old| old.roots[3]))?;
-    closing::settled(r, base, facilities_root, registry)?;
+    closing::settled_named(r, base, facilities_root, registry, "facilities_view")?;
     let slots = members(
         r,
         scope.own_status + 0xa0,
@@ -331,7 +331,9 @@ fn no_visible_info(r: &Reader<'_>, base: u64, idler: u64, tree: u64, registry: u
         let container = r.u64(info + 0xa88)?;
         if container != 0 {
             pointer(container)?;
-            if !containers.insert(container) || closing::settled(r, base, container, registry)? {
+            if !containers.insert(container)
+                || closing::settled_named(r, base, container, registry, "research_info")?
+            {
                 return Err(refused("No shown Research Info permitted during transit"));
             }
         }

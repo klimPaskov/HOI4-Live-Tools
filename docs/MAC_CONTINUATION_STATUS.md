@@ -6,12 +6,15 @@ plans, construction opening, template selection, Find navigation and one-point
 placement. No clean two-year Luna run or complete Germany, China or Poland
 campaign has been accepted. Mixed-plan and wider warfare automation remain open.
 
-The latest Linux diagnostic has now passed positive 1080p setup review and clean
-ordinary closure, including the previously failing exit-metadata race. Its one
-retained-goal Research request still timed out at five seconds with an uncertain
-Intent and no retry or replay. All owned processes and authority are closed.
-Linux component checks do not replace native Mac campaign recordings. See the
-[fresh qualification](CLAUSEWITZ_VALIDATION.md#fex-retained-goal-transit-qualification--24-october-2026)
+The latest Linux diagnostic passed positive 1080p setup review and ordinary
+closure, including the previously failing exit-metadata race. Its one Research
+request timed out with an uncertain Intent and no retry or replay. Internal
+timing measured 16 ms in dispatch and 4,958 ms in readback, including waits;
+153 results included 59 transition rejections and no accepted Research state.
+The rejecting container, rendering cause and final state remain unknown. All
+owned game processes and authority are closed. Linux component checks do not
+replace native Mac campaign recordings. See the
+[measured attempt](CLAUSEWITZ_VALIDATION.md#fex-in-attempt-transit-timing--24-october-2026)
 and [current next work](LINUX_RUST_HANDOFF.md#next-work).
 
 ## Ordinary cancellation checkpoint

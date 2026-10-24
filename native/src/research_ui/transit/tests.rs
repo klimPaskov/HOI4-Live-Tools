@@ -686,12 +686,21 @@ fn visible_tree_facilities_animation_and_mode_visibility_mismatch_refuse() {
         f.put(root + 0xa5, &[8]);
         assert!(f.bind(ManagedPanel::Idle).is_err());
     }
-    for root in [PANEL, TREE_ROOT, PARENT, FACILITIES_ROOT] {
+    for (root, name) in [
+        (PANEL, "research_panel"),
+        (TREE_ROOT, "research_tree"),
+        (PARENT, "facilities_parent"),
+        (FACILITIES_ROOT, "facilities_view"),
+    ] {
         let mut f = Fixture::new(23);
         f.number(root + 0xeb0, 1);
+        let error = f.bind(ManagedPanel::Idle).unwrap_err();
+        assert_eq!(error.code, "research_panel_transition");
         assert_eq!(
-            f.bind(ManagedPanel::Idle).unwrap_err().code,
-            "research_panel_transition"
+            error.message,
+            format!(
+                "Closing root is in a known animation transition; transitions=[1, 0]; root={name}"
+            )
         );
     }
     let mut f = Fixture::new(5);
@@ -700,6 +709,25 @@ fn visible_tree_facilities_animation_and_mode_visibility_mismatch_refuse() {
         f.bind(ManagedPanel::Research).unwrap_err().code,
         "research_panel_transition"
     );
+}
+#[test]
+fn owned_info_animation_is_named_without_reading_hidden_payload() {
+    let mut f = Fixture::new(23);
+    f.array(TREE + 0xdc0, 0x400000, &[0x401000]);
+    f.word(0x401000, BASE + 0x430bbf0);
+    f.word(0x401a78, IDLER);
+    f.word(0x401a80, TREE);
+    f.word(0x401a88, 0x402000);
+    f.window(0x402000, false);
+    f.number(0x402000 + 0xef8, 2);
+    let error = f.bind(ManagedPanel::Idle).unwrap_err();
+    assert_eq!(error.code, "research_panel_transition");
+    assert_eq!(
+        error.message,
+        "Closing root is in a known animation transition; transitions=[0, 2]; root=research_info"
+    );
+    f.unread(0x401a98, 8);
+    f.unread(0x401ab0, 24);
 }
 #[test]
 fn foreign_display_and_nonordinary_tab_refuse_before_canonical_body() {

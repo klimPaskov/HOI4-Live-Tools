@@ -1,5 +1,61 @@
 # Clausewitz-MCP validation
 
+## FEX in-attempt transit timing — 24 October 2026
+
+A fresh unrecorded GL0 diagnostic reached the frontend in **43.470 seconds**
+at **1920×1080**. Luna medium completed the five setup events, then returned
+ownership. Root reviewed fresh complete controls before the sixth, once-only
+Start. Structured reads independently confirmed vanilla Germany, Normal
+difficulty, historical AI and the initial paused date. Complete pre/post-binding
+reads took **46.415/36.711 ms**. The first menu wrapper request refused before
+input because pins were a path rather than an object; that refusal is preserved.
+A validated wrapper used the actual original pins for the released events.
+
+The sole retained-Focus Research request took **5,002.655 ms** and failed with
+`action_uncertain` at its original five-second deadline. In-attempt diagnostics
+reported **26 ms before dispatch**, **16 ms in dispatch**, **4,973 ms remaining
+at dispatch** and **4,958 ms in readback**, including waits. There were **153**
+observer invocations: **94** accepted Idle results, **59** rejected transition
+results, zero torn results and zero accepted Research results. These are typed
+observer results, not kernel-read or frame counts. Aggregate counts establish
+neither their order nor which container rejected the read. Dispatch duration
+measures server transport, not game processing; readback duration does not prove
+a rendering cause. The final root state remains unknown.
+
+Exactly one unresolved Intent remains, with no Verified record, retry,
+historical replay, Research-close request, clock action, worker, action-phase
+screenshot or cursor movement. Lease release, zero remaining lease, terminal
+controller audit and MCP EOF 0 passed. One ordinary lifecycle close exited 0;
+the corrected census again handled the executable-metadata exit gap without a
+forced game signal. Independent checks found the exact game, server, supervisor
+and display absent, temporary config/socket/lock removed, and no active grant,
+lease or recorder. All **144** collected diagnostic files remain private.
+No game-year throughput or campaign acceptance follows from this paused test.
+
+The private instrumented caller passed **2,290 host Rust tests**, four-target
+strict checks, release and **70 targeted optimized fixtures on actual ARM
+Linux** before this attempt. Its public basis passed all nine CI jobs. These
+private checks remain separate from the unchanged **956 Python tests (37
+skips)** and the public runtime's local tests.
+
+The next diagnostic revision names the five existing container-read sites and
+the mode/visibility mismatch using fixed whitelisted labels, with an explicit
+unknown bucket. It records first Idle/transition result-return times relative
+to attempt start; these are not engine-onset times. It adds no memory read or
+retry. Review caught the ordinary 512-byte transport formatter truncating the
+expanded report. A dedicated retained-transit formatter now allows a bounded
+1,024 bytes; ordinary Research errors retain their 512-byte limit. A Linux
+transaction-to-formatter regression requires the complete diagnostic to survive.
+This revision is offline evidence until a fresh live attempt qualifies it.
+It passed **2,292 host Rust tests**, strict checks on four targets, release,
+**63 targeted optimized fixtures on actual ARM Linux**, the full **956-test
+Python suite (37 skips)** and unchanged **28-tool unbound stdio** with empty
+stderr and EOF 0. Reader fixtures cover each named container; transaction
+fixtures preserve one dispatch, its uncertain Intent, unknown-message redaction
+and first-result timing. The formatter regression ran on actual ARM Linux.
+Independent review confirmed the truncation finding closed. No game or input
+was used by these fixtures, and the earlier candidate and review remain retained.
+
 ## Bounded transit failure diagnostics — 24 October 2026
 
 The internal ordinary Research transaction now reports historical failure-only
