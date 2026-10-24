@@ -27,7 +27,8 @@ jobs:
       - run: cargo test --manifest-path native/Cargo.toml --locked
       - if: runner.os == 'Windows'
         name: Report owned Windows reader fixture outcome
-        run: cargo test --manifest-path native/Cargo.toml --locked --lib platform::windows::native::child_tests:: -- --nocapture --test-threads=1
+        run: |
+          cargo test --manifest-path native/Cargo.toml --locked --lib platform::windows::native::child_tests:: -- --nocapture --test-threads=1
       - if: runner.os == 'Linux'
         run: |
           if [ "$(cat /proc/sys/kernel/yama/ptrace_scope)" = "1" ]; then
