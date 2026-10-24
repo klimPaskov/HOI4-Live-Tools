@@ -25,6 +25,9 @@ jobs:
           rustup target add aarch64-unknown-linux-musl
           cargo clippy --manifest-path native/Cargo.toml --target aarch64-unknown-linux-musl --all-targets --locked -- -D warnings
       - run: cargo test --manifest-path native/Cargo.toml --locked
+      - if: runner.os == 'Windows'
+        name: Report owned Windows reader fixture outcome
+        run: cargo test --manifest-path native/Cargo.toml --locked --lib platform::windows::native::child_tests:: -- --nocapture --test-threads=1
       - if: runner.os == 'Linux'
         run: |
           if [ "$(cat /proc/sys/kernel/yama/ptrace_scope)" = "1" ]; then
