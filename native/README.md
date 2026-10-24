@@ -30,7 +30,19 @@ root binding is retained across pending reads; changed ownership, unknown states
 and pre-input failures remain strict. Stable reads add no wait. Timeout diagnostics
 retain the rejected count and named root/state cause. This does not broaden close
 permissions or require unrelated facilities roots for opening. Fresh live validation
-of this opening-readiness correction remains pending.
+of this opening-readiness correction remains pending. The later 1080p FEX Rust
+adapter attempt failed its first Research opener at the original five-second
+deadline. Its single uncertain Intent remains quarantined despite a later visible
+panel. Error-only diagnostics now preserve a bounded transport-delivery label;
+delivery never establishes the game effect or permits a retry. See
+[the failed component](../docs/CLAUSEWITZ_VALIDATION.md#fex-rust-adapter-attempt--24-october-2026).
+
+An internal read-only construction anchor retains the original own scope,
+requested state, complete canonical catalog and ordered full queue. Fresh reads
+reject changed original edges before following replacement payload and use the
+caller's original deadline. Twenty-one synthetic fixtures exercise both string
+ABIs. This supplies no selection, placement, exact +1, action receipt or worker
+permission; cross-call chronology and deadline ownership remain the caller's job.
 
 ResearchClose002 passed direct Research closing, including historical replays and
 no-ops. Mixed Research/production worker routing has an explicit opt-in preview;

@@ -257,9 +257,29 @@ pub(super) fn execute_bound(
                 json!(backend.rejected_close_reads)
             ));
         }
-        error
+        transport_failure(error, backend.last_transport.as_ref())
     })?;
     Ok((execution, backend.last_transport))
+}
+
+/// Error-only diagnostics. Delivery is not a game effect, receipt or retry right.
+fn transport_failure(mut error: Error, transport: Option<&Value>) -> Error {
+    let delivery = match transport.and_then(|v| v["delivery"].as_str()) {
+        Some("server_confirmed" | "ServerConfirmed") => "server_confirmed",
+        Some("not_queued" | "NotQueued") => "not_queued",
+        Some("unknown" | "Unknown") => "unknown",
+        Some("not_attempted") => "not_attempted",
+        _ => return error,
+    };
+    let mut message = format!("transport_delivery={delivery}; game_action_verified=false; ");
+    for c in error.message.chars().filter(|c| !c.is_control()) {
+        if message.len() + c.len_utf8() > 512 {
+            break;
+        }
+        message.push(c);
+    }
+    error.message = message;
+    error
 }
 
 /// Called only immediately after execute_internal returned its actual error.
@@ -941,6 +961,60 @@ mod tests {
                 tab: 0,
             }),
         }
+    }
+    #[test]
+    fn uncertain_readback_keeps_delivery_diagnostic_without_success_or_retry() {
+        let original = Error::after_possible_input(
+            "Readback deadline/authority ended; never replay",
+            Error::new("research_deadline", "Research attempt deadline reached"),
+        );
+        for delivery in ["server_confirmed", "ServerConfirmed", "unknown", "Unknown"] {
+            let error = transport_failure(
+                original_error(&original),
+                Some(&json!({"delivery":delivery})),
+            );
+            assert_eq!(error.code, "action_uncertain");
+            assert!(error.message.contains("cause=research_deadline"));
+            assert!(error.message.contains("game_action_verified=false"));
+            assert!(!error.message.contains("game_action_verified=true"));
+            assert!(error.message.contains("never replay"));
+        }
+    }
+    fn original_error(error: &Error) -> Error {
+        Error::new(error.code, error.message.clone())
+    }
+    #[test]
+    fn preinput_or_absent_transport_never_changes_error_category() {
+        let error = transport_failure(
+            Error::new("input_not_queued", "local refusal"),
+            Some(&json!({"delivery":"not_queued"})),
+        );
+        assert_eq!(error.code, "input_not_queued");
+        assert!(error.message.contains("transport_delivery=not_queued"));
+        let error = transport_failure(Error::new("ownership_changed", "original scope"), None);
+        assert_eq!(error.code, "ownership_changed");
+        assert_eq!(error.message, "original scope");
+        let error = transport_failure(
+            Error::new("action_uncertain", "preserve"),
+            Some(&json!({"delivery":"invented-success"})),
+        );
+        assert_eq!(error.message, "preserve");
+    }
+    #[test]
+    fn transport_error_diagnostics_are_bounded_and_single_line() {
+        let error = transport_failure(
+            Error::new(
+                "action_uncertain",
+                "readback\n".to_owned() + &"é".repeat(600),
+            ),
+            Some(&json!({"delivery":"server_confirmed"})),
+        );
+        assert_eq!(error.code, "action_uncertain");
+        assert!(error.message.len() <= 512);
+        assert!(!error.message.chars().any(char::is_control));
+        assert!(error.message.starts_with(
+            "transport_delivery=server_confirmed; game_action_verified=false; readback"
+        ));
     }
     #[test]
     fn opening_pending_root_binding_is_never_replaced_before_settlement() {

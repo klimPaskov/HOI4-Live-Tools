@@ -51,10 +51,12 @@ Python/package/test WIP paths remain untouched.
 ## Private continuation and retained failures
 
 A fresh owned native Mac session started at 1920×1080, Normal difficulty,
-historical AI and vanilla rules. It remains a paused January 1936 diagnostic,
-under its own immutable creation-bound lifetime. Check actual ownership and
-cleanup before reconnecting. Earlier grants, leases, servers and recorders are
-closed; their old permissions and deadlines must not be reused.
+historical AI and vanilla rules. It later closed with exit 0 through its verified
+supervisor's owned SIGTERM cleanup; default settings stayed unchanged. The
+conditional window-restore watcher detected a later change in the Docker window
+position and preserved it. No live grant, lease, game client or recorder remains.
+The last task-port check refused with -60007. Future gates need fresh ownership,
+authorization and an original lifetime; never reuse the closed session's bounds.
 
 - The first opener harness refused before input because its lease holder differed.
 - The corrected opener sent one verified ordinary T, then its harness mishandled
@@ -97,6 +99,15 @@ grants, leases, MCP servers and recorders are closed. The game has not advanced;
 there is no real-time-per-game-year result.
 
 ## Continue from here
+
+The separate Linux FEX Rust-adapter trial also closed. Its one Research opener
+timed out, leaving one uncertain Intent without a Verified receipt; a later
+visible panel was not promoted. Preserve that failure while investigating
+rendering/input delay. The internal retained queue foundation passed 21 fixtures
+on both the Mac host and actual ARM Linux, with no action or worker permission.
+Current standalone source checks pass 2,203 Rust tests, four-target strict checks,
+release and unchanged 28-tool unbound stdio; the workspace Python suite passed
+956 tests (37 skips). These checks do not qualify the private composite worker.
 
 Finish the new decimal-character gate when macOS authorization is available, then integrate
 construction into mixed standing plans. Continue with one Luna-medium player,

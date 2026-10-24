@@ -2,6 +2,15 @@
 
 ## Unreleased native preview
 
+- Add an internal read-only retained construction-queue anchor with complete
+  own-country, catalog and ordered queue identity checks under the caller's
+  original deadline. Twenty-one synthetic fixtures cover both supported string
+  ABIs. This does not enable placement or construction workers.
+- Preserve bounded transport-delivery diagnostics on Linux Research errors,
+  without changing error categories, action verification or uncertain-intent
+  quarantine. Record the failed 1080p FEX adapter attempt separately from earlier
+  lower-level input qualification; both owned diagnostic games are now closed.
+
 - Add a dormant Windows read-only foundation with exact process/SID/file
   ownership, bounded PE identity and whole-batch failure handling. Portable
   fixtures check that full ownership inspection happens twice per batch.

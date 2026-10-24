@@ -1,5 +1,9 @@
 //! Complete typed own queue evidence for one public building and own state.
 //! No GUI, input, eligibility, capacity, built-level or completion inference.
+// Prospective original queue observation; no input/worker integration.
+#[allow(dead_code)]
+pub(crate) mod retained;
+
 use super::{
     catalog, controls::validate_key, invalid, location, mac_map_point, QueueLine, QueueSummary,
 };

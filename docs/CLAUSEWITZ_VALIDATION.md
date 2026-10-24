@@ -1,5 +1,51 @@
 # Clausewitz-MCP validation
 
+## FEX Rust adapter attempt — 24 October 2026
+
+One fresh owned ARM64 Linux/FEX session reached historical Normal vanilla Germany
+at **1920×1080, UI scale 1**, in FAIR mode. Frontend startup took **169.759 seconds**.
+Structured own-state reads passed; a fresh three-domain baseline took **163.447 ms**,
+including **21.4 ms** for the overview. The game remained paused on 1 January 1936.
+
+The Luna-medium player made one Research-open request through the Rust adapter.
+It failed in **5,031.143 ms** with `action_uncertain` / `research_deadline`.
+The durable journal contains **one Intent and no Verified receipt**. There was
+no retry, Research-close request, worker or clock command. The attempted-request
+counter does not independently prove physical key delivery. The lease released
+and MCP EOF exited cleanly. Later read-only evidence showed the panel visible;
+recorded-frame analysis placed a broad panel change around **16 seconds after the
+request (±1 second)**. Neither observation settles the original uncertain action.
+Fast state reads do not establish where input/update/rendering delay occurred.
+
+Earlier harness refusals occurred before lease or input: one confused decorated
+window geometry with the absolute client origin, and another exhausted its
+minimum remaining authorization window. Their failures and the corrected fresh
+pre-input authorization are retained separately. No possible-input request was
+replayed. One ordinary window-close request returned 0; the owned game, server,
+display and recording processes are gone, and the created GL config was removed.
+
+The recorder ended with **19,883 encoded frames**, but its original full decode
+audit exceeded **25 seconds** and remains failed. A separate host audit later
+decoded **19,883 frames and packets**, matching progress, at **1920×1080 H.264**
+over **1,325.534 seconds**. This recovers diagnostic evidence without passing the
+original recording or live-action gate. It is not a native Mac showcase video.
+
+Follow-up source changes retain bounded delivery diagnostics on Research errors
+without changing error categories or uncertain-intent quarantine. A separate
+internal read-only construction anchor retains own scope, catalog and full queue
+identity; it grants no action authority. The byte-identical candidate passed
+**2,203 host Rust tests**, **21 optimized queue fixtures**, strict all-target
+checks for four targets, release and unchanged **28-tool unbound stdio**. Actual
+ARM Linux executed **11 Research and 21 queue fixtures**. A host-only Linux test
+filter matched zero tests and was not counted as coverage. The workspace Python
+suite passed **956 tests (37 skips)**; all 38 unrelated WIP paths are unchanged.
+
+Both owned games are now closed. Before another FEX game, compare bounded
+no-game context/render workloads at 1080p; retained evidence shows ARM GL thunking
+can run legacy gears, while explicit GL1 context creation and a later virpipe game
+startup failed separately. No single rendering bottleneck has been established.
+No advancing-time, clean two-year or full campaign success is claimed.
+
 ## Native Mac ordinary Find click — 24 October 2026
 
 One Luna-medium test in paused historical Normal vanilla Germany at native

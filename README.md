@@ -98,7 +98,11 @@ lines, bulk allocation and combat control remain open.
 ARM64 Linux through FEX reached historical Normal Germany at 1080p and verified
 own-state reads plus stationary Research-panel keys. Five paused-game samples per
 reader measured local medians of 2.9–6.1 ms with recording active. The pinned FEX
-adapter is disabled by default and still needs live adapter acceptance. See
+adapter is disabled by default. A later Rust-adapter test reached Germany at
+1920×1080, but its first Research action exceeded the five-second readback
+deadline and remains uncertain. The panel appeared later; no retry was sent.
+Rendering/input latency remains under investigation, and live adapter acceptance
+is still open. See
 [FEX setup](docs/OWNED_LINUX_LAUNCHER.md#arm64-linux-with-fex) and
 [the qualification record](docs/CLAUSEWITZ_VALIDATION.md#fex-own-state-and-stationary-input-qualification--22-october-2026).
 

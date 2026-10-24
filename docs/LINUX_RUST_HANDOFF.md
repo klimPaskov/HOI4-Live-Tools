@@ -32,11 +32,25 @@ Local source checks passed 2,158 Rust tests, 327 optimized checks and 956
 workspace Python tests (37 skips), strict all-target checks on four compilation
 targets, release and unchanged 28-tool unbound stdio. The 38 unrelated legacy
 Python/package/test WIP paths remain preserved and excluded from publication.
-The latest recorded owned Mac state is paused historical Normal vanilla Germany
-in January 1936 at 1920×1080, with inactive selection and an empty queue. All
-grants, leases, MCP servers and recorders are closed. Private process metadata
-lives outside Git; inspect actual identity/cleanup and original lifetime before
-reconnecting. An expired session must never be extended or adopted.
+Both owned diagnostic games are now closed, with no active input grants, leases,
+MCP game clients or recorders. The Mac supervisor closed its exact owned game
+with exit 0; default settings stayed unchanged. Its conditional window-restore
+watcher preserved a subsequently changed Docker position. A future live test
+requires a fresh owned session and lifetime; never adopt the closed sessions.
+
+The latest FEX Rust-adapter test reached paused historical Normal vanilla Germany
+at 1920×1080. Its first Research opener failed after 5,031 ms with one uncertain
+Intent, no Verified receipt and no retry. Late panel visibility did not settle
+the action. Its original recording audit exceeded 25 seconds and remains failed;
+a separate later audit decoded all 19,883 frames. Rendering/input delay is under
+investigation before another game launch. See [the validation record](CLAUSEWITZ_VALIDATION.md#fex-rust-adapter-attempt--24-october-2026).
+
+The current public-source candidate passed 2,203 Rust tests, 21 optimized queue
+fixtures, strict all-target checks for four targets, release and unchanged
+28-tool unbound stdio. Actual ARM Linux executed 11 Research and 21 queue fixtures.
+The workspace Python suite passed 956 tests (37 skips), including preserved WIP.
+The new retained queue reader is internal and read-only; mixed construction
+execution remains disabled and its private Mac implementation unqualified.
 
 ## Next work
 
@@ -44,6 +58,9 @@ reconnecting. An expired session must never be extended or adopted.
    is available again. Ordinary named Find-button opening has passed its component
    test. Keep earlier successful navigation and the new pregrant refusal separate;
    never generalize Escape's control-byte proof to printable characters.
+   Diagnose the separate FEX delay with bounded no-game rendering/context tests
+   before a fresh Linux live attempt; preserve the uncertain journal and original
+   deadline. Linux diagnostics do not replace native Mac showcase acceptance.
 2. Integrate construction with mixed standing plans and complete the advancing-time
    gate. Keep reads stationary and event-driven; observations never pause.
 3. Complete shortage repair, wider economy actions, combat, naval invasions and

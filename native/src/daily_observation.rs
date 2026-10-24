@@ -142,7 +142,7 @@ fn same(a: &ClockContext, b: &ClockContext) -> bool {
         && a.difficulty == b.difficulty
         && a.historical_raw == b.historical_raw
 }
-fn own_scope(r: &Reader<'_>, base: u64, scope: &Scope) -> Result<()> {
+pub(crate) fn own_scope(r: &Reader<'_>, base: u64, scope: &Scope) -> Result<()> {
     // Both ABI layouts come from the independently reviewed canonical readers.
     // The enclosing Witnesses retains every guard through the final readback;
     // changed links must fail before a broader reader can follow a new owner.
@@ -241,6 +241,57 @@ fn read(
     }
     Ok((body, context))
 }
+// Original own scope checked before replacement payload; no sequence, store or input.
+#[allow(dead_code)]
+pub(crate) fn scoped_clock(
+    process: &dyn Process,
+    scope: &Scope,
+    until: Instant,
+) -> Result<ClockContext> {
+    scope.validate()?;
+    deadline(until)?;
+    if process.identity() != Some(&scope.epoch.game) {
+        return Err(Error::new(
+            "ownership_changed",
+            "Scoped startup process differs",
+        ));
+    }
+    let timed = Timed {
+        inner: process,
+        until,
+    };
+    timed.begin_snapshot()?;
+    let w = Witnesses::new(&timed);
+    let r = Reader::new(&w);
+    own_scope(&r, process.image_base(), scope)?;
+    let context = crate::game::context_from_reader(&r, process.image_base())?;
+    if context.anchors != scope.anchors
+        || context.player != scope.epoch.player
+        || context.difficulty != 2
+        || context.historical_raw != 1
+        || context.playthrough_id.is_empty()
+        || !scope
+            .epoch
+            .campaign
+            .ends_with(&format!(":{}", context.playthrough_id))
+    {
+        return Err(Error::new(
+            "ownership_changed",
+            "Scoped startup campaign differs",
+        ));
+    }
+    w.finish()?;
+    timed.check()?;
+    deadline(until)?;
+    if process.identity() != Some(&scope.epoch.game) {
+        return Err(Error::new(
+            "ownership_changed",
+            "Scoped startup process changed during observation",
+        ));
+    }
+    Ok(context)
+}
+
 impl Producer {
     pub fn open(
         process: &dyn Process,
