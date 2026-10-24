@@ -22,6 +22,10 @@ FEX translation research:
   FEXInterpreter/ELFCodeLoader.h were consulted for guest exec and auxiliary
   vector semantics. The explicit translated-process ownership checks are new
   project code. No FEX source, binary or root filesystem is redistributed.
+  Common/Config.cpp, FEXCore configuration loading, the stock ThunksDB.json
+  interface and LinuxSyscalls/FileManagement.cpp were also consulted for an
+  isolated, explicitly pinned local graphics profile. Its Rust validation and
+  immutable-file guards are independent project code.
 
 Upstream foundation and attribution:
   smerss/Clausewitz-MCP — https://github.com/smerss/Clausewitz-MCP

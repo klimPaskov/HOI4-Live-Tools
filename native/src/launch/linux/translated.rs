@@ -7,6 +7,8 @@ use super::*;
 pub(super) struct FexLaunch {
     pub executable: PathBuf,
     pub sha256: String,
+    #[serde(default)]
+    pub config_directory: Option<fex_config::Spec>,
 }
 
 /// Explicit owner-only validation route, not a claim of campaign acceptance.
@@ -198,6 +200,7 @@ mod tests {
         let relative = FexLaunch {
             executable: "FEX".into(),
             sha256: "a".repeat(64),
+            config_directory: None,
         };
         assert_eq!(
             launch_image(Path::new("/game"), Some(&relative))
@@ -208,6 +211,7 @@ mod tests {
         let unknown = FexLaunch {
             executable: std::env::current_exe().unwrap(),
             sha256: "a".repeat(64),
+            config_directory: None,
         };
         assert!(launch_image(Path::new("/game"), Some(&unknown)).is_err());
         assert!(serde_json::from_value::<FexLaunch>(

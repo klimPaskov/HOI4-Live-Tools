@@ -107,6 +107,9 @@ These are component diagnostics, with no accepted campaign or annual throughput
 measurement. Earlier setup refusals and the separate native-graphics startup
 failure remain documented. See [FEX setup](docs/OWNED_LINUX_LAUNCHER.md#arm64-linux-with-fex)
 and [the capacity comparison](docs/CLAUSEWITZ_VALIDATION.md#fex-transition-origins-and-capacity-comparison--24-october-2026).
+Later [isolated graphics controls](docs/CLAUSEWITZ_VALIDATION.md#fex-mixed-loader-graphics-controls--24-october-2026)
+support a private unified GL profile, now selectable with explicit launcher hash
+pins. Its actual game compatibility and effect on latency remain unverified.
 
 ### macOS
 

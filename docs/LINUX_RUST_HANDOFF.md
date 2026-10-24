@@ -7,6 +7,15 @@ from native macOS at 1920×1080 or higher. Do not control the shared Windows gam
 
 ## Current state
 
+The later isolated mixed-loader comparison has a candidate graphics correction:
+native ARM, guest GL0 and a private unified GL1 definition passed both context
+methods; the two stock GL1 controls still refused. No game or input ran. The
+Rust launcher now accepts an explicit private configuration with two hash pins,
+original metadata guards and a pre-staged empty `AppConfig/`, passing its path
+only to the selected child. Actual game compatibility, Research latency and
+campaign acceptance remain open. See
+[the controls and retained setup failure](CLAUSEWITZ_VALIDATION.md#fex-mixed-loader-graphics-controls--24-october-2026).
+
 The latest 1080p Linux diagnostic used the same Rust binary on a resized four-CPU,
 8 GB VM. Complete baseline reads took 22/50 ms, but the sole retained-goal
 Research request still timed out after 5,004 ms: 24 ms dispatch and 4,931 ms
@@ -119,9 +128,11 @@ No public command or mixed-worker route is enabled; live qualification remains o
    retained-goal timeouts, whose final root states are unknown. Fresh setup review
    and the pending-metadata census correction have now passed their components;
    Research navigation now identifies the rejecting panel and first-result timing.
-   The same binary still failed after the VM capacity increase. Resolve live
-   transition progress/timebase or the split OpenGL route before attributing a
-   cause or changing the adapter. Do not repeat unchanged tests or extend a deadline.
+   The same binary still failed after the VM capacity increase. The isolated
+   unified GL profile now passes its synthetic controls; validate the explicit
+   launcher option and use a fresh owned game to measure startup and one Research
+   action under the original deadline. Do not attribute the game failure or a
+   speedup from synthetic frame timing. Do not repeat unchanged tests or extend a deadline.
    Live qualification remains open.
    Never loosen deadlines or settle late.
    Linux diagnostics do not replace native Mac showcase acceptance.

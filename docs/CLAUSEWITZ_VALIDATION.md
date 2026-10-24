@@ -1,5 +1,47 @@
 # Clausewitz-MCP validation
 
+## FEX mixed-loader graphics controls — 24 October 2026
+
+No-game 1920×1080 probes isolated a split/legacy OpenGL dispatch mismatch.
+Separate legacy and split-loader paths passed all 18 controls. A later mixed
+path retained split ELF dependencies and opened legacy `libGL.so.1` globally,
+matching bounded static observations from the installed executable. Stock GL1
+then returned null GL identity through direct/global lookup despite a matching
+current GLX context and valid procedure lookup. These synthetic associations
+do not establish the game's exact lazy-PLT binding or the cause of its failure.
+
+A fresh comparison used direct imported GL identity functions, the same x86
+probe bytes across FEX controls and private configuration directories. The
+candidate added split OpenGL/GLX aliases to the existing GL thunk definition.
+Native ARM, guest GL0 and unified GL1 each passed both legacy and explicit 2.1
+context methods: 120 measured frames after eight warmups, matching current
+context/display/drawable and zero GL/X errors. Unified GL1 mapped ARM Mesa and
+the x86 guest thunk; imported, global and procedure GL identities agreed.
+The two stock GL1 controls still refused before workload admission. Their
+pre-ready failures have no complete mapping census. The aggregate exit remains
+1 and `all_contexts_succeeded` remains false: six successes and two negatives.
+
+The earlier private-profile setup attempt refused because FEX created a missing
+empty `AppConfig/` and changed the pinned parent directory. That failure is
+preserved. The fresh comparison pre-staged the directory and retained its
+original identity. All eight children and the isolated display closed; original
+user/system configuration remained unchanged. There was no game, input, cursor
+movement, screenshot or recording. Synthetic frame timing proves neither game
+throughput nor presentation.
+
+The Rust launcher now has an explicit optional private-profile selector,
+[documented here](OWNED_LINUX_LAUNCHER.md#arm64-linux-with-fex). It passes only
+the selected path to the owned child and validates pinned files before launch
+and endpoint publication. A fresh installed-game test with the original action
+deadline remains necessary; earlier failed games are not reclassified.
+
+Launcher source checks passed 2,292 host Rust tests, four-target strict Clippy,
+release builds and the 28-tool unbound stdio check. Actual ARM Linux executed
+all 12 optimized private-profile fixtures without game or input. The full
+workspace Python suite passed 956 tests with 37 skips. Independent source
+review found no blocker; original ownership, input permissions and readiness
+deadlines remain unchanged. These checks validate the selector, not HOI4.
+
 ## FEX transition origins and capacity comparison — 24 October 2026
 
 Two fresh, unrecorded 1920×1080 trials used the same private Rust binary,

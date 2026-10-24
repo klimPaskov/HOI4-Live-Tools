@@ -34,6 +34,7 @@ use std::{
     time::{Duration, Instant},
 };
 mod clock;
+mod fex_config;
 mod translated;
 
 #[derive(Clone, Deserialize)]
@@ -1283,6 +1284,12 @@ pub fn serve(path: &Path) -> Result<()> {
     let executable = config.executable.canonicalize()?;
     platform::verify_executable(&executable)?;
     let launch_image = translated::launch_image(&executable, config.fex.as_ref())?;
+    let fex_config = config
+        .fex
+        .as_ref()
+        .and_then(|fex| fex.config_directory.as_ref())
+        .map(fex_config::Guard::capture)
+        .transpose()?;
     let executable_meta = fs::metadata(&launch_image)?;
     let _launch_lock = launch_lock()?;
     duplicate_game(&executable)?;
@@ -1405,6 +1412,9 @@ pub fn serve(path: &Path) -> Result<()> {
         .env("LD_LIBRARY_PATH", game_dir)
         .env("HOI4_PATH", game_dir)
         .env("SDL_AUDIODRIVER", "dummy");
+    if let Some(profile) = &fex_config {
+        profile.configure(&mut command)?;
+    }
     match config.renderer {
         Renderer::Default => {}
         Renderer::LlvmPipe => {
@@ -1426,6 +1436,9 @@ pub fn serve(path: &Path) -> Result<()> {
     // never become the saved cleanup identity.
     let socket_meta = fs::symlink_metadata(directory.join("control.sock"))?;
     install_signals()?;
+    if let Some(profile) = &fex_config {
+        profile.verify()?;
+    }
     let mut child = OwnedChild::spawn(&mut command)?;
     let game = capture_identity(child.child.id() as i32)?;
     child.identity = Some(game.clone());
@@ -1470,6 +1483,9 @@ pub fn serve(path: &Path) -> Result<()> {
         Ok(process) => (Some(process), None),
         Err(error) => (None, Some(error)),
     };
+    if let Some(profile) = &fex_config {
+        profile.verify()?;
+    }
     let endpoint = Endpoint {
         version: 1,
         nonce: nonce()?,

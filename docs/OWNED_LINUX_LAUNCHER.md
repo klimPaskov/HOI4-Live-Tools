@@ -75,6 +75,38 @@ The kernel child identity names FEX, while the session's optional `translated`
 descriptor identifies the separate guest image. Omitting `fex` preserves native
 launching and the previous session format.
 
+For isolated graphics validation, `fex` also accepts an optional
+`config_directory` object with `directory`, `config_sha256` and
+`thunks_db_sha256`. The directory must be an absolute canonical private path,
+owned by the ordinary user, containing exactly `Config.json`, `ThunksDB.json`
+and a pre-existing empty `AppConfig/`. Pin the two files' actual lowercase
+SHA-256 values. Files are private regular files, bounded to 64 KiB each;
+symlinks, duplicate JSON fields, additional entries and changed identities are
+refused. The launcher never creates or repairs this profile.
+
+`Config.json` currently accepts only
+`{"Config":{"RootFS":"/absolute/rootfs.sqsh"},"ThunksDB":{"GL":1}}`,
+with `GL` either 0 or 1. `ThunksDB.json` uses FEX's `DB` definition format.
+The `GL` entry must name `libGL-guest.so`, retain the four stock legacy aliases
+and either omit or include all four reviewed split-library aliases:
+`libOpenGL.so.0`, `libOpenGL.so.0.0.0`, `libGLX.so.0` and `libGLX.so.0.0.0`,
+each under `@PREFIX_LIB@/`. Other database entries remain caller-reviewed,
+hash-pinned definitions; this option adds no local enable switches for them.
+The RootFS bytes and global FEX configuration remain separately provisioned
+inputs, not launcher-verified assets.
+
+The selected child alone receives `FEX_APP_CONFIG_LOCATION` with its required
+trailing slash. Inherited FEX environment variables are still cleared.
+Original directory/file metadata and hashes are rechecked before spawn and
+before endpoint publication; a replacement is never automatically rebound.
+Omitting this option preserves the existing FEX configuration lookup.
+FEX's global settings still load. See the
+[tagged configuration implementation](https://github.com/FEX-Emu/FEX/blob/FEX-2610/Source/Common/Config.cpp#L612)
+and [definition loader](https://github.com/FEX-Emu/FEX/blob/FEX-2610/Source/Tools/LinuxEmulation/LinuxSyscalls/FileManagement.cpp#L48).
+The unified GL profile passed isolated synthetic controls; actual game
+compatibility and performance remain unqualified. See
+[the graphics comparison](CLAUSEWITZ_VALIDATION.md#fex-mixed-loader-graphics-controls--24-october-2026).
+
 Readiness waits only for missing initial guest load coverage, within one ten-second
 deadline. Wrong hashes, ownership, offsets and permission errors do not retry.
 Snapshot checks pin guest file identity, load coverage and immutable headers;

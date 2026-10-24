@@ -2,6 +2,14 @@
 
 ## Unreleased native preview
 
+- Add an explicit hash-pinned private FEX configuration option to the Linux
+  launcher, retaining cleared environment, ordinary ownership and unchanged
+  input permissions. Preserve original file/directory identities through startup;
+  refuse per-app overrides, duplicate fields, symlinks and replacements.
+  Record the isolated mixed-loader comparison: unified forwarding passed both
+  context methods while two stock GL1 negatives remain failures. This is not
+  installed-game compatibility or campaign acceptance.
+
 - Record the same-binary FEX capacity comparison at 1080p: the four-CPU, 8 GB
   trial still left one uncertain Research Intent at five seconds, with no retry
   or later settlement. Distinguish panel transition evidence from visibility,
