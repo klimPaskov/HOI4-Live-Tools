@@ -26,6 +26,10 @@ pub mod mixed_destination;
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 pub mod opening;
 
+// Dormant retained read-only foundation; no input/tool/worker registration yet.
+#[allow(dead_code)]
+pub(crate) mod transit;
+
 /// Witness reads always reach the process. Request-local shared metadata/proofs
 /// may avoid duplicate reads, but their original bytes must pass finish below.
 pub(crate) struct Witnesses<'a> {

@@ -2,6 +2,14 @@
 
 ## Unreleased native preview
 
+- Add an internal retained Linux Research transit reader that produces typed
+  snapshots under original ownership, membership and deadline witnesses. Thirty
+  sparse fixtures cover busy slots, natural completion and refused replacements.
+  Legacy JSON, executable stages, journals and worker permissions stay unchanged.
+- Record the lower-decoration 1080p Linux setup refusal before campaign Start
+  or Research input. Compact lifecycle metadata allowed ordinary close despite
+  oversized telemetry; retain the separate exit-time census cleanup failure
+  and independent owned resource closure. No latency or campaign result is claimed.
 - Make the standing-order idle-Research test publish one simulated day per clock
   poll, removing a CI feeder-thread race while preserving exact firing checks.
 - Add an internal navigation-only Research transit identity that retains the

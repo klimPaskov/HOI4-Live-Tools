@@ -39,6 +39,11 @@ Error-only diagnostics now preserve a bounded transport-delivery label;
 delivery never establishes the game effect or permits a retry. See
 [the latest failed component](../docs/CLAUSEWITZ_VALIDATION.md#fex-no-recorder-research-comparison--24-october-2026).
 
+A later lower-decoration 1080p diagnostic stopped at a pre-input menu refusal,
+before campaign Start or Research. It adds no action-latency evidence; its
+ordinary close and separate exit-time cleanup failure are retained in
+[the setup record](../docs/CLAUSEWITZ_VALIDATION.md#fex-reduced-decoration-setup-refusal-and-cleanup--24-october-2026).
+
 An internal read-only construction anchor retains the original own scope,
 requested state, complete canonical catalog and ordered full queue. Fresh reads
 reject changed original edges before following replacement payload and use the
@@ -55,8 +60,15 @@ production goal, exact own scope, ordered slot/root identities and caller
 deadline. Busy Research slots and natural completion do not require a fabricated
 Research assignment. This is trusted internal observation data, with no input,
 goal receipt, persistence or recovery authority. The executable assignment opener
-still requires an actual empty slot; busy-slot navigation and mixed worker wiring
-remain unfinished. Existing permissions and journal schemas are unchanged.
+still requires an actual empty slot; executable busy-slot navigation and mixed
+worker wiring remain unfinished. Existing permissions and journal schemas are unchanged.
+
+An internal Linux anchor now supplies typed navigation snapshots from fresh
+retained process/memory witnesses, checking original owner, root, slot and catalog
+edges before replacement payloads. It retains the same absolute deadline through
+final batched witnesses and process checks. Thirty sparse fixtures cover busy slots,
+natural completion, poisoned replacements and late reads. This adds read-only
+observation, with no keyboard admission or executable navigation transaction.
 
 ResearchClose002 passed direct Research closing, including historical replays and
 no-ops. Mixed Research/production worker routing has an explicit opt-in preview;

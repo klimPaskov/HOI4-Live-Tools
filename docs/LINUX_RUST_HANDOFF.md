@@ -53,7 +53,7 @@ refused an oversized diagnostic record before closing; one separate owned
 ordinary close and resource cleanup finished. No game or input authority remains. See
 [the validation record](CLAUSEWITZ_VALIDATION.md#fex-gl-context-and-frontend-diagnostics--24-october-2026).
 
-The current public-source candidate passed 2,232 Rust tests, strict all-target
+The current public-source candidate passed 2,262 Rust tests, strict all-target
 checks for four targets, release and unchanged 28-tool unbound stdio. Actual ARM
 Linux executed 32 optimized retained-queue/selection fixtures; the preceding
 checkpoint also executed 11 Research fixtures.
@@ -66,6 +66,22 @@ The internal read-only queue now optionally joins typed Linux inactive/requested
 selection in the same witness. Default readers stay unchanged; mixed construction
 execution remains disabled and its private Mac implementation unqualified.
 
+A later fresh GL0 trial reduced decorative graphics at 1920×1080 and reached
+the frontend in 46.592 seconds. Luna stopped during setup after a pre-input
+menu-helper refusal; the raw journal contains five released clicks, no Start
+and no Research attempt. It does not answer the latency question. Compact
+lifecycle metadata allowed one ordinary close despite 84,757-byte telemetry,
+but full helper cleanup then failed at an exit-time process-metadata race.
+Independent owned display cleanup finished, with no game signal or active
+authority. The separate pending-metadata correction passed 111 mocked fixtures
+and remains offline-only. Fix setup evidence and qualification helpers before
+another session; do not adopt the closed session or guess clipped settings.
+
+The retained Linux typed reader additionally passed 30 optimized sparse fixtures
+on actual ARM Linux, with no game or input. It now supplies original-scope
+Research snapshots without JSON parsing or fabricated assignments. The durable
+ordinary-navigation transaction and mixed-worker wiring remain unfinished.
+
 ## Next work
 
 1. Complete the new decimal-character gate after macOS task-port authorization
@@ -74,8 +90,9 @@ execution remains disabled and its private Mac implementation unqualified.
    never generalize Escape's control-byte proof to printable characters.
    Preserve the separate GL1 startup failure and the uncertain GL0 journal.
    The fresh GL0/no-recorder diagnostic did not resolve the Research timeout.
-   Keep its pending-transition evidence and fix compact lifecycle metadata before
-   another launch; never loosen the deadline or settle from later visibility.
+   Keep its pending-transition evidence. Compact metadata now permits ordinary
+   close, but setup evidence and the pending-metadata census correction need
+   qualification before another launch. Never loosen deadlines or settle late.
    Linux diagnostics do not replace native Mac showcase acceptance.
 2. Build an ordinary navigation adapter around the retained original-goal transit;
    do not fabricate a Research assignment or relax existing permission exclusions.

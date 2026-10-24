@@ -103,7 +103,9 @@ adapter is disabled by default. A later Rust-adapter test reached Germany at
 deadline and remains uncertain. A fresh no-recorder comparison also timed out
 with a pending panel transition; omitting encoding did not resolve it. The panel
 appeared later; no retry was sent.
-Rendering/input latency remains under investigation, and live adapter acceptance
+A later lower-decoration trial stopped during menu setup before Start or Research
+input, so it adds no action-latency result. Rendering/input latency remains under
+investigation, and live adapter acceptance
 is still open. A separate GL1/native-library startup attempt failed during graphics
 initialization; synthetic rendering success did not establish game compatibility. See
 [FEX setup](docs/OWNED_LINUX_LAUNCHER.md#arm64-linux-with-fex) and

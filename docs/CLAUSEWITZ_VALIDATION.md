@@ -1,5 +1,67 @@
 # Clausewitz-MCP validation
 
+## Retained typed Research transit reader — 24 October 2026
+
+An internal Linux reader now produces typed navigation snapshots under one
+retained process, original own scope and absolute caller deadline. It checks
+original UI links, complete slot/catalog membership and current own technology
+joins before following substituted payloads. Busy slots, natural completion and
+advancing dates are supported. Changed owners, rebuilt roots, unsupported sources,
+torn reads, regressed dates and late positive reads refuse. The deadline also
+covers final batched witnesses and process checks; observations never renew it.
+
+This reader accepts already-materialized ordinary Idle/Research roots only. It
+does not prove keyboard admission, send input, persist a navigation transaction
+or complete the retained Focus/production goal. Existing assignment opening,
+closing, actors, journals, worker exclusions and tool descriptors are unchanged.
+The shared canonical helper returns typed assignment keys directly; legacy JSON
+retains its existing fields and meaning.
+
+The final source passed **2,262 host Rust tests**, strict all-target checks on
+macOS, Windows GNU, x86 Linux musl and ARM Linux musl, release and identical
+**28-tool unbound stdio**. Actual owned ARM Linux ran all **30 new optimized
+sparse fixtures**, with no game or input. The first test run correctly refused
+one fixture's noncanonical production handle; only that fixture was corrected,
+and the failed log remains preserved. These results qualify a read-only source
+component, not executable navigation, mixed-worker or campaign acceptance.
+
+## FEX reduced-decoration setup refusal and cleanup — 24 October 2026
+
+A fresh owned GL0/software session used the `cadc620` public binary, all nine
+successful exact-source CI jobs, a **1920×1080** client and no recorder. Only
+decorative graphics were reduced; units, borders and tooltips stayed enabled.
+Frontend startup took **46.592 seconds**. Luna medium completed **five** ordinary
+menu clicks, all released. A proposed Custom Game Rules click was rejected by
+the helper's broad bottom-right Start-region predicate before creating a request
+file or Intent. The next sequential request would also have been number six,
+not seven. The original player report counted six events; the independent raw
+journal corrected that count. Both the report and refusal remain preserved.
+
+The setup frame showed Germany and Regular difficulty, but Historical AI was
+not verified. The session stopped before campaign Start, binding, lease or
+Research action. This trial therefore gives **no Research-latency comparison**,
+advancing-time result or campaign evidence. The game-action deadline was not
+extended. There were no workers, clock actions or observation pauses.
+
+Compact original window/session metadata now separates lifecycle authority from
+bulky diagnostic telemetry. One ordinary window close returned 0 and exited both
+game and owner despite the actual **84,757-byte** frontend diagnostic. Full
+helper cleanup nevertheless failed: the game's `/proc` executable link disappeared
+just before its retained pidfd became readable, leaving a sticky census fault.
+Root separately proved game/owner exit and closed only the exact owned orphan
+display processes. Final independent census was clear; grants were retired and
+the created config, display socket and lock were absent. No game signal or
+repeated close was sent. The original full-cleanup failure remains failed.
+
+A separate offline candidate keeps that missing-metadata interval unresolved
+until the original retained pidfd proves exit. It continues tracking children
+during the interval; live pending metadata blocks restoration, while resumed-live
+metadata and concrete ownership errors remain sticky. Review caught and corrected
+a missing pending-parent ancestry scan. **111 mocked helper fixtures**, eleven
+source checks and the unchanged **956-test Python suite (37 skips)** passed.
+The polling census still has no atomic fork coverage. This candidate is neither
+installed into the closed session nor live-qualified.
+
 ## Navigation-only Research transit foundation — 24 October 2026
 
 An internal volatile transit now retains the complete original Focus or production

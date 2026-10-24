@@ -273,6 +273,38 @@ pub(crate) fn observe_from_reader(
     limit: usize,
     include_context: bool,
 ) -> Result<(Value, Option<ResearchContext>)> {
+    let observed = observe_model_from_reader(r, base, offset, limit, include_context)?;
+    Ok((observed.body, observed.context))
+}
+
+/// Typed canonical Research facts for an enclosing retained navigation witness.
+/// This does not parse public JSON or authorize any ordinary action.
+pub(crate) fn navigation_from_reader(
+    r: &Reader<'_>,
+    base: u64,
+) -> Result<(ResearchContext, Vec<Option<String>>)> {
+    let observed = observe_model_from_reader(r, base, 0, 1, true)?;
+    let context = observed.context.ok_or_else(|| {
+        Error::new(
+            "research_unavailable",
+            "Typed own Research context unavailable",
+        )
+    })?;
+    Ok((context, observed.researching))
+}
+
+struct ObservedResearch {
+    body: Value,
+    context: Option<ResearchContext>,
+    researching: Vec<Option<String>>,
+}
+fn observe_model_from_reader(
+    r: &Reader<'_>,
+    base: u64,
+    offset: usize,
+    limit: usize,
+    include_context: bool,
+) -> Result<ObservedResearch> {
     let g = game::layout(r);
     let l = layout(r);
     let gs = r.u64(base + g.gs_global)?;
@@ -337,6 +369,7 @@ pub(crate) fn observe_from_reader(
         witnesses.insert(*pointer, tech);
     }
     let mut slot_output = Vec::new();
+    let mut researching = Vec::new();
     let mut slot_witnesses = Vec::new();
     let mut slot_ids = BTreeSet::new();
     let mut slot_pointers = BTreeSet::new();
@@ -351,6 +384,7 @@ pub(crate) fn observe_from_reader(
         let current = r.u64(slot + 0x18)?;
         slot_witnesses.push((slot, current));
         if current == 0 {
+            researching.push(None);
             slot_output.push(json!({"slot":index,"researching":null,"progress_raw":null,"progress":null,"days_remaining":null}));
         } else {
             let tech = model.technology(current)?;
@@ -360,6 +394,7 @@ pub(crate) fn observe_from_reader(
                     "Duplicate active technology",
                 ));
             }
+            researching.push(Some(tech.key.clone()));
             slot_output.push(json!({"slot":index,"researching":tech.key,"progress_raw":tech.progress,"progress":null,"days_remaining":null}));
             if let Some(prior) = witnesses.get(&current) {
                 if prior != &tech {
@@ -438,8 +473,8 @@ pub(crate) fn observe_from_reader(
     let count = completed_output.len();
     let page: Vec<_> = completed_output.iter().skip(offset).take(limit).collect();
     let next = offset.saturating_add(page.len());
-    Ok((
-        json!({
+    Ok(ObservedResearch {
+        body: json!({
             "source":"native own research","build_id":g.build_id,"owned":true,
             "researched":page,"researched_count":count,"offset":offset,
             "next_offset":if next < count { Some(next) } else { None },"slots":slot_output,
@@ -448,5 +483,6 @@ pub(crate) fn observe_from_reader(
             "eligibility":"unavailable","observation_paused_game":false,
         }),
         context,
-    ))
+        researching,
+    })
 }
