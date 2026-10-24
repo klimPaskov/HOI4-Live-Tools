@@ -6,14 +6,22 @@ plans, construction opening, template selection, Find navigation and one-point
 placement. No clean two-year Luna run or complete Germany, China or Poland
 campaign has been accepted. Mixed-plan and wider warfare automation remain open.
 
-Later Linux no-game controls isolated a mixed-loader GL mismatch and qualified
+The latest Linux check reached the actual 1920×1080 game using the explicitly
+pinned unified GL profile, but its one Research transit still timed out at five
+seconds. Dispatch took 19 ms and readback 4,950 ms; no retry, Research-close,
+replay or late settlement followed. Ordinary closure and the independent audit
+passed, with no owned game, grant or lease remaining and unchanged global FEX
+inputs. No video was recorded. This does not change the native Mac campaign
+requirement. See [the installed-game result](CLAUSEWITZ_VALIDATION.md#fex-unified-profile-installed-game-check--24-october-2026).
+
+Earlier Linux no-game controls isolated a mixed-loader GL mismatch and qualified
 a private unified GL definition in both tested context methods. Six controls
 succeeded and two stock GL1 controls remained typed failures. The new explicit
-Rust launcher profile is separately hash-pinned; actual HOI4 behavior and
-performance remain unverified. See
+Rust launcher profile is separately hash-pinned; broader gameplay and
+performance remain unqualified. See
 [the graphics controls](CLAUSEWITZ_VALIDATION.md#fex-mixed-loader-graphics-controls--24-october-2026).
 
-The latest Linux diagnostic still failed on a four-CPU, 8 GB VM: its one Research
+The preceding Linux diagnostic still failed on a four-CPU, 8 GB VM: its one Research
 request took 5,004 ms, including 24 ms dispatch and 4,931 ms readback. The observer
 returned 48 complete Idle results and 98 transition rejections naming the Research
 panel; only the last pair `[0,1]` is retained. No settled Research result, retry,

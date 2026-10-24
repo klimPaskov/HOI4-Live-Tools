@@ -2,6 +2,12 @@
 
 ## Unreleased native preview
 
+- Record the unified FEX profile's actual 1080p startup and own-state reads.
+  The sole retained-goal Research action still timed out at five seconds;
+  preserve its Intent, zero retries and clean ordinary closure. Add bounded
+  Research-panel pair counts and last-result timestamps using already consumed
+  errors, without new game reads, input, proof or deadline changes.
+
 - Make the Research opening timeout fixture consume its captured original
   deadline after a known post-input pending read. Preserve the Linux CI failure
   where journal setup exhausted its former 200 ms test budget before input.

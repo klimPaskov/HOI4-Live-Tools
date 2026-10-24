@@ -1,5 +1,61 @@
 # Clausewitz-MCP validation
 
+## FEX unified-profile installed-game check — 24 October 2026
+
+A fresh owned, unrecorded game used the explicit unified GL1 profile on the
+four-vCPU, 8 GiB ARM Linux VM. It reached the actual frontend in 40.236 seconds;
+mapped libraries included ARM Mesa and both guest and host GL thunks. The client
+was 1920×1080. One Luna player at medium reasoning completed six once-only
+ordinary setup clicks under FAIR mode. Fresh visual review and native reads
+confirmed 1936 Germany, Normal difficulty, historical AI and no enabled mods.
+Complete baseline reads before/after binding took 318.749/63.124 ms.
+
+The one retained-goal Research request failed with `action_uncertain` and
+`panel_transit_deadline`. Request-to-response time was 5,021.085 ms, including
+5,001.571 ms after forwarding. Native diagnostics reported 29 ms before dispatch,
+19 ms dispatch, 4,970 ms remaining at dispatch and 4,950 ms readback. There were
+173 observer invocations: seven complete Idle returns and 166 transition errors
+tagged `research_panel`, zero torn errors and no accepted Research result.
+First Idle/transition returns occurred at 65/321 ms relative to attempt start.
+Only the last pair `[0,1]` was recorded; these errors precede the literal-visible
+read and final witnesses. Zero torn errors therefore does not establish coherent
+rejected samples, and the result does not prove all pairs were identical.
+Earlier first-transition returns of 2,110 ms and 3,622 ms remain separate single
+trials. These are reader-return times, not engine onset or a controlled speedup.
+
+The durable journal retains exactly one Intent and no Verified receipt. No retry,
+historical replay, Research-close, later settlement, clock action, worker,
+action-phase screenshot or cursor movement followed. Physical key delivery is
+unknown; server-confirmed transport is not a verified game effect. Lease release,
+zero remaining lease and MCP EOF zero passed. Pre-attempt baselines were paused
+at the initial date. There were zero observation-pause/clock calls, no accepted
+final game state and no annual throughput measurement. This is a failed
+component check, not a campaign.
+
+The original supervisor closed the owned game ordinarily with exit zero before
+its fixed lifetime ended. Independent ownership/census checks found all game,
+server, supervisor and display processes absent, both grants retired and no
+lease or recorder. All 147 private JSON/log artifacts were retained outside Git.
+Original user/system FEX files and RootFS bytes and metadata matched; the global
+per-game configuration remained absent. The separate unified profile stayed
+private. Earlier startup failures and timeouts are not reclassified.
+
+The next failure-only diagnostic retains counts in the fixed pair order
+`01, 02, 10, 11, 12, 20, 21, 22`, plus last Idle/transition result-return times.
+`research_panel_pair_changes` counts changes between classified panel pairs;
+intervening Idle, torn, other-root or unknown results are not interpolated.
+It consumes existing errors, adds no game read and grants no proof, retry or
+deadline extension. The original Research readiness predicate stays unchanged.
+
+The diagnostic delta passed 2,294 host Rust tests, strict all-target checks for
+four compilation targets, release build, the unchanged 28-tool unbound stdio
+check and 956 workspace Python tests (37 skips), including the Python protocol
+smoke. Actual ARM Linux passed 82 optimized targeted tests with no game or input.
+Its wrapper then failed a mistaken expected-count assertion of 81; the original
+exit-one wrapper receipt is preserved separately from the successful test child,
+with no rerun or changed test result. These are source checks, not live evidence
+for the new pair history or mixed-plan acceptance.
+
 ## FEX mixed-loader graphics controls — 24 October 2026
 
 No-game 1920×1080 probes isolated a split/legacy OpenGL dispatch mismatch.
@@ -32,8 +88,8 @@ throughput nor presentation.
 The Rust launcher now has an explicit optional private-profile selector,
 [documented here](OWNED_LINUX_LAUNCHER.md#arm64-linux-with-fex). It passes only
 the selected path to the owned child and validates pinned files before launch
-and endpoint publication. A fresh installed-game test with the original action
-deadline remains necessary; earlier failed games are not reclassified.
+and endpoint publication. Its later installed-game check is recorded above;
+earlier failed games are not reclassified.
 
 Launcher source checks passed 2,292 host Rust tests, four-target strict Clippy,
 release builds and the 28-tool unbound stdio check. Actual ARM Linux executed

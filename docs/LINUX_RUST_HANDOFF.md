@@ -7,16 +7,19 @@ from native macOS at 1920×1080 or higher. Do not control the shared Windows gam
 
 ## Current state
 
-The later isolated mixed-loader comparison has a candidate graphics correction:
-native ARM, guest GL0 and a private unified GL1 definition passed both context
-methods; the two stock GL1 controls still refused. No game or input ran. The
-Rust launcher now accepts an explicit private configuration with two hash pins,
-original metadata guards and a pre-staged empty `AppConfig/`, passing its path
-only to the selected child. Actual game compatibility, Research latency and
-campaign acceptance remain open. See
-[the controls and retained setup failure](CLAUSEWITZ_VALIDATION.md#fex-mixed-loader-graphics-controls--24-october-2026).
+The explicit unified FEX GL profile now reached the actual 1920×1080 game in
+40.236 seconds, with ARM Mesa and guest/host GL thunks verified in its mappings.
+Luna medium completed ordinary setup for historical Normal vanilla Germany in
+FAIR mode. Fresh own-state reads passed, but the sole retained-goal Research
+action still timed out at five seconds: 19 ms dispatch and 4,950 ms readback,
+seven complete Idle results and 166 transition rejections naming the panel.
+Only the last pair `[0,1]` was retained; no final/current readiness or renderer
+cause is established. No retry, replay, Research-close or late settlement ran.
+Ordinary close exited zero; all owned processes, grants and leases are closed,
+and original global FEX inputs stayed unchanged. No recording or campaign
+acceptance is claimed. See [the installed-game check](CLAUSEWITZ_VALIDATION.md#fex-unified-profile-installed-game-check--24-october-2026).
 
-The latest 1080p Linux diagnostic used the same Rust binary on a resized four-CPU,
+The preceding 1080p Linux diagnostic used the same Rust binary on a resized four-CPU,
 8 GB VM. Complete baseline reads took 22/50 ms, but the sole retained-goal
 Research request still timed out after 5,004 ms: 24 ms dispatch and 4,931 ms
 readback, 146 observer invocations, 48 complete Idle results and 98 rejections
@@ -128,11 +131,13 @@ No public command or mixed-worker route is enabled; live qualification remains o
    retained-goal timeouts, whose final root states are unknown. Fresh setup review
    and the pending-metadata census correction have now passed their components;
    Research navigation now identifies the rejecting panel and first-result timing.
-   The same binary still failed after the VM capacity increase. The isolated
-   unified GL profile now passes its synthetic controls; validate the explicit
-   launcher option and use a fresh owned game to measure startup and one Research
-   action under the original deadline. Do not attribute the game failure or a
-   speedup from synthetic frame timing. Do not repeat unchanged tests or extend a deadline.
+   The same binary still failed after the VM capacity increase. The unified GL
+   profile now passes synthetic controls and actual startup, but the fresh
+   Research request still timed out. Inspect the precise update/timebase path;
+   retain pair histograms and return times within any future original attempt.
+   These describe rejected samples, not coherent current readiness. Do not
+   attribute a speedup from single-trial return times or synthetic frame timing.
+   Do not repeat unchanged live tests or extend a deadline.
    Live qualification remains open.
    Never loosen deadlines or settle late.
    Linux diagnostics do not replace native Mac showcase acceptance.

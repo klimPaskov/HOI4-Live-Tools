@@ -775,6 +775,13 @@ fn dispatch_expiry_reports_phase_without_reading_after_deadline_or_clearing_inte
     assert_eq!(diagnostic["dispatch_ms"], 5000);
     assert_eq!(diagnostic["readback_started"], 0);
     assert_eq!(diagnostic["readback_ms"], 0);
+    assert_eq!(diagnostic["last_pending_idle_ms"], serde_json::Value::Null);
+    assert_eq!(diagnostic["last_transition_ms"], serde_json::Value::Null);
+    assert_eq!(
+        diagnostic["research_panel_pairs"],
+        serde_json::json!([0, 0, 0, 0, 0, 0, 0, 0])
+    );
+    assert_eq!(diagnostic["research_panel_pair_changes"], 0);
     assert_eq!(
         backend
             .calls
@@ -956,6 +963,13 @@ fn transition_origins_and_first_return_times_preserve_uncertainty_and_one_dispat
     );
     assert_eq!(diagnostic["first_pending_idle_ms"], 0);
     assert_eq!(diagnostic["first_transition_ms"], 250);
+    assert_eq!(diagnostic["last_pending_idle_ms"], 225);
+    assert_eq!(diagnostic["last_transition_ms"], 4975);
+    assert_eq!(
+        diagnostic["research_panel_pairs"],
+        serde_json::json!([1, 0, 0, 0, 0, 0, 0, 0])
+    );
+    assert_eq!(diagnostic["research_panel_pair_changes"], 0);
     assert_eq!(diagnostic["shown_research"], 0);
     assert!(!error.message.contains("deadbeef") && !error.message.contains('\n'));
     assert!(error.message.len() < 1024);
@@ -966,4 +980,103 @@ fn transition_origins_and_first_return_times_preserve_uncertainty_and_one_dispat
         1
     );
     assert!(!backend.calls.borrow().contains(&"idle"));
+}
+
+#[test]
+fn pair_history_distinguishes_interleaved_returns_without_retry_or_settlement() {
+    let temp = Temp::new();
+    let start = Instant::now();
+    let mut journal = Journal::open(&temp.path()).unwrap();
+    let mut backend = Fake::new(&temp, start);
+    backend.reads = VecDeque::from([Ok(snapshot(23, false))]);
+    for i in 0..200 {
+        backend.reads.push_back(match i {
+            0 | 3 => Ok(snapshot(23, false)),
+            5 => Err(Error::new("torn_read", "not a root sample")),
+            _ => Err(Error::new("research_panel_transition", match i {
+                2 => "Closing root is in a known animation transition; transitions=[2, 1]; root=research_tree",
+                6 => "Closing root is in a known animation transition; transitions=[0, 2]; root=research_panel",
+                7 => "Closing root is in a known animation transition; transitions=[1, 0]; root=research_panel",
+                8 => "Closing root is in a known animation transition; transitions=[0, 0]; root=research_panel; pointer=0xdeadbeef",
+                _ => "Closing root is in a known animation transition; transitions=[0, 1]; root=research_panel",
+            })),
+        });
+    }
+    let clock = backend.now.clone();
+    let error = journal
+        .execute_with_clock(
+            request(),
+            TOKEN,
+            &authority(),
+            &RwLock::new(true),
+            &mut backend,
+            start + BUDGET,
+            &|| clock.get(),
+        )
+        .unwrap_err();
+    let diagnostic = failure_diagnostic(&error);
+    assert_eq!(
+        diagnostic["research_panel_pairs"],
+        serde_json::json!([193, 1, 1, 0, 0, 0, 0, 0])
+    );
+    assert_eq!(diagnostic["research_panel_pair_changes"], 3);
+    assert_eq!(diagnostic["pending_idle"], 2);
+    assert_eq!(diagnostic["first_pending_idle_ms"], 0);
+    assert_eq!(diagnostic["last_pending_idle_ms"], 75);
+    assert_eq!(diagnostic["first_transition_ms"], 25);
+    assert_eq!(diagnostic["last_transition_ms"], 4975);
+    assert_eq!(diagnostic["transition_origins"]["research_tree"], 1);
+    assert_eq!(diagnostic["transition_origins"]["unknown"], 1);
+    assert_eq!(diagnostic["shown_research"], 0);
+    assert!(!error.message.contains("deadbeef") && error.message.len() < 1024);
+    assert_eq!(clock.get(), start + BUDGET);
+    assert_eq!(
+        backend
+            .calls
+            .borrow()
+            .iter()
+            .filter(|v| **v == "read")
+            .count(),
+        201
+    );
+    assert_eq!(
+        backend.calls.borrow().iter().filter(|v| **v == "W").count(),
+        1
+    );
+    assert!(!backend.calls.borrow().contains(&"idle"));
+    assert_eq!(journal.data.records.len(), 1);
+    assert!(matches!(journal.data.records[0].outcome, Outcome::Intent));
+    assert!(journal.blocks_game(&scope().epoch.game));
+}
+
+#[test]
+fn classified_pair_counters_saturate_without_retaining_foreign_or_unknown_pairs() {
+    let mut diagnostic = ReadbackDiagnostic {
+        research_panel_pairs: [u32::MAX; 8],
+        research_panel_pair_changes: u32::MAX,
+        ..Default::default()
+    };
+    for a in 0..=2 {
+        for b in 0..=2 {
+            if a == 0 && b == 0 {
+                continue;
+            }
+            let error = Err(Error::new("research_panel_transition", format!(
+                "Closing root is in a known animation transition; transitions=[{a}, {b}]; root=research_panel"
+            )));
+            diagnostic.result(&error, Duration::from_millis(4999));
+        }
+    }
+    assert_eq!(diagnostic.research_panel_pairs, [u32::MAX; 8]);
+    assert_eq!(diagnostic.research_panel_pair_changes, u32::MAX);
+    let previous = diagnostic.previous_research_panel_pair;
+    for message in [
+        "Closing root is in a known animation transition; transitions=[0, 1]; root=research_info",
+        "Closing root is in a known animation transition; transitions=[0, 1]; root=research_panel\n",
+    ] {
+        diagnostic.result(&Err(Error::new("research_panel_transition", message)), BUDGET);
+    }
+    assert_eq!(diagnostic.research_panel_pairs, [u32::MAX; 8]);
+    assert_eq!(diagnostic.previous_research_panel_pair, previous);
+    assert!(!diagnostic.report(None, BUDGET).to_string().contains('\n'));
 }

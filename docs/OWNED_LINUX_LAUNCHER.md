@@ -103,9 +103,10 @@ Omitting this option preserves the existing FEX configuration lookup.
 FEX's global settings still load. See the
 [tagged configuration implementation](https://github.com/FEX-Emu/FEX/blob/FEX-2610/Source/Common/Config.cpp#L612)
 and [definition loader](https://github.com/FEX-Emu/FEX/blob/FEX-2610/Source/Tools/LinuxEmulation/LinuxSyscalls/FileManagement.cpp#L48).
-The unified GL profile passed isolated synthetic controls; actual game
-compatibility and performance remain unqualified. See
-[the graphics comparison](CLAUSEWITZ_VALIDATION.md#fex-mixed-loader-graphics-controls--24-october-2026).
+The unified GL profile passed isolated synthetic controls and a fresh actual-game
+startup at 1920×1080. Own-state reads passed, but the retained-goal Research
+action still timed out; gameplay performance and campaign acceptance remain
+unqualified. See [the installed-game check](CLAUSEWITZ_VALIDATION.md#fex-unified-profile-installed-game-check--24-october-2026).
 
 Readiness waits only for missing initial guest load coverage, within one ten-second
 deadline. Wrong hashes, ownership, offsets and permission errors do not retry.

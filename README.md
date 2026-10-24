@@ -99,17 +99,13 @@ command or mixed-worker permission and still needs its own live qualification.
 
 ARM64 Linux through FEX has verified own-state reads and lower-level stationary
 Research keys at 1080p. Its pinned Rust input adapter remains disabled by default:
-the latest retained-goal Research action still timed out at five seconds after
-increasing the VM to four CPUs and 8 GB RAM. Complete baseline reads took
-22–50 ms, but no settled Research result was accepted. One uncertain Intent
-remains preserved, with no retry or later settlement; ordinary closure passed.
-These are component diagnostics, with no accepted campaign or annual throughput
-measurement. Earlier setup refusals and the separate native-graphics startup
-failure remain documented. See [FEX setup](docs/OWNED_LINUX_LAUNCHER.md#arm64-linux-with-fex)
-and [the capacity comparison](docs/CLAUSEWITZ_VALIDATION.md#fex-transition-origins-and-capacity-comparison--24-october-2026).
-Later [isolated graphics controls](docs/CLAUSEWITZ_VALIDATION.md#fex-mixed-loader-graphics-controls--24-october-2026)
-support a private unified GL profile, now selectable with explicit launcher hash
-pins. Its actual game compatibility and effect on latency remain unverified.
+the latest retained-goal Research action still timed out at five seconds. The
+explicitly pinned unified GL profile reached the actual 1920×1080 game and
+own-country reads passed, but Research readiness did not verify. Dispatch took
+19 ms; readback took 4,950 ms. The uncertain Intent remains preserved without
+retry or later settlement, and ordinary closure passed. No campaign or annual
+throughput result is accepted. See [FEX setup](docs/OWNED_LINUX_LAUNCHER.md#arm64-linux-with-fex)
+and [the installed-game result](docs/CLAUSEWITZ_VALIDATION.md#fex-unified-profile-installed-game-check--24-october-2026).
 
 ### macOS
 

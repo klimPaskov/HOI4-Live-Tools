@@ -245,6 +245,13 @@ struct ReadbackDiagnostic {
     last_transition: Option<(usize, Option<[u8; 2]>)>,
     first_pending_idle_ms: Option<u128>,
     first_transition_ms: Option<u128>,
+    last_pending_idle_ms: Option<u128>,
+    last_transition_ms: Option<u128>,
+    // Fixed order: 01, 02, 10, 11, 12, 20, 21, 22. These are rejected
+    // Research-panel samples only, not a complete/current root observation.
+    research_panel_pairs: [u32; 8],
+    research_panel_pair_changes: u32,
+    previous_research_panel_pair: Option<[u8; 2]>,
 }
 impl ReadbackDiagnostic {
     fn sample_started(&mut self) {
@@ -256,6 +263,7 @@ impl ReadbackDiagnostic {
                 self.pending_idle = self.pending_idle.saturating_add(1);
                 self.first_pending_idle_ms
                     .get_or_insert(elapsed.as_millis());
+                self.last_pending_idle_ms = Some(elapsed.as_millis());
             }
             Ok(Progress::AtResearch(_)) => {
                 self.shown_research = self.shown_research.saturating_add(1)
@@ -268,6 +276,22 @@ impl ReadbackDiagnostic {
                     self.transition_origins[transition.0].saturating_add(1);
                 self.last_transition = Some(transition);
                 self.first_transition_ms.get_or_insert(elapsed.as_millis());
+                self.last_transition_ms = Some(elapsed.as_millis());
+                if let (0, Some(pair)) = transition {
+                    // The exact parser admits only eight known nonzero pairs.
+                    // Other roots, torn reads and unknown text add no pair.
+                    let index = usize::from(pair[0]) * 3 + usize::from(pair[1]) - 1;
+                    self.research_panel_pairs[index] =
+                        self.research_panel_pairs[index].saturating_add(1);
+                    if self
+                        .previous_research_panel_pair
+                        .is_some_and(|previous| previous != pair)
+                    {
+                        self.research_panel_pair_changes =
+                            self.research_panel_pair_changes.saturating_add(1);
+                    }
+                    self.previous_research_panel_pair = Some(pair);
+                }
             }
             Err(error) if error.code == "torn_read" => {
                 self.torn_errors = self.torn_errors.saturating_add(1);
@@ -301,6 +325,12 @@ impl ReadbackDiagnostic {
             // transition onset, dispatch processing or a settled root state.
             "first_pending_idle_ms":self.first_pending_idle_ms,
             "first_transition_ms":self.first_transition_ms,
+            "last_pending_idle_ms":self.last_pending_idle_ms,
+            "last_transition_ms":self.last_transition_ms,
+            "research_panel_pairs":self.research_panel_pairs,
+            // Changes between classified panel-pair returns; intervening
+            // results are not evidence of uninterrupted animation or progress.
+            "research_panel_pair_changes":self.research_panel_pair_changes,
             "pre_dispatch_ms":dispatch.map(|v|v.0.as_millis()),
             "remaining_at_dispatch_ms":dispatch.map(|v|v.1.as_millis()),
             "dispatch_ms":dispatch.map(|v|v.2.as_millis()),
