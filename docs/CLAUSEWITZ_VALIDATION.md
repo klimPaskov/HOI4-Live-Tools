@@ -1,5 +1,76 @@
 # Clausewitz-MCP validation
 
+## FEX bounded animation diagnostic — 24 October 2026
+
+A fresh owned, unrecorded 1920×1080 game used the same pinned unified GL1
+profile on four vCPUs and 8 GiB. The frontend arrived in 35.931 seconds. One
+Luna player at medium reasoning completed six ordinary setup clicks; fresh
+visual review and structured reads confirmed 1936 Germany, Normal difficulty,
+historical AI and no mods under FAIR policy. Complete baseline reads took
+49.409/40.107 ms before/after binding. These are single component observations,
+not an annual throughput or controlled rendering comparison.
+
+The sole retained-goal Research call again failed with `action_uncertain` and
+`panel_transit_deadline`: 5,022.065 ms request-to-response, 5,003.550 ms after
+forwarding, 29 ms before dispatch, 21 ms dispatch and 4,951 ms readback. Its
+170 observer invocations returned 18 complete Idle results and 152 transition
+errors, all classified as Research-panel pair `[0,1]`, with zero classified pair
+changes, zero torn errors and no accepted Research result. First/last Idle
+returns were 65/701 ms; first/last transition returns were 735/4,998 ms.
+Those partial errors precede full Snapshot witnesses and do not themselves
+establish coherent rejected snapshots.
+
+A private opt-in collector admitted at most three read-only probes under that
+same original action deadline, with no new admission in its last 500 ms.
+It added no waits or input. Each probe retained the original process, image,
+own-country model memberships, GUI owners and root, with bounded reads and
+final witnesses. It exported scalar values and pointer-only update membership,
+without following other registry entries. All three probes completed:
+
+| Collector admission ms | Return ms | Read ms | Position elapsed | Active duration | State | Completed |
+| ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| 729 | 735 | 6 | 0.1 | 0.3 | 1 | false |
+| 2,254 | 2,264 | 9 | 0.2 | 0.3 | 1 | false |
+| 4,234 | 4,244 | 10 | 0.3 | 0.3 | 1 | false |
+
+Float decimals are shortened; the third elapsed value equals the duration's
+raw f32 value. All samples reported own Research mode 5, flags 8 and literal
+shown true. Scalar state stayed 0. Each current update vector had 258 entries
+and contained the original root's secondary address exactly once. This proves
+those diagnostic values and membership at three witnessed returns. Membership
+does not prove that a particular updater executed. Raw time units, exact cadence,
+higher float source and the cause of the timeout remain unknown. Equality,
+literal shown and these historical reports cannot replace the unchanged
+two-zero settled predicate. Generic observer-return times include admitted
+diagnostic work; they are not engine-onset times or an uninstrumented speedup.
+
+The journal retains one Intent and no Verified receipt. After the error, only
+lease release/status and MCP EOF ran; release, zero remaining lease and EOF zero
+passed. No retry, replay, Research-close, later settlement, clock action, worker,
+action-phase screenshot or cursor movement followed. Physical key delivery is
+unknown. No final current game state, recording, campaign or real-time-per-year
+result is accepted; observations issued zero pauses.
+
+The original supervisor closed the owned game ordinarily with exit zero. The
+independent audit retained 145 private JSON/log files, found owned game, server,
+supervisor and display processes absent, both grants retired and no lease or
+recorder. Global FEX files and RootFS bytes/metadata stayed unchanged. Descendant
+sampling is bounded rather than atomic; the exit metadata gap and independent
+empty census remain recorded. An initial retirement wrapper omitted its required
+JSON argument and refused before any write; the separately recorded corrected
+call issued the sole stop. No failed result was overwritten or promoted.
+
+The public dormant producer and its fixtures passed 2,310 host Rust tests,
+four-target strict checks, release, unchanged 28-tool unbound stdio and 956 Python
+tests (37 skips). Actual ARM Linux passed 98 targeted tests on the same producer
+source. The private collector/qualification integration separately passed 2,313
+host Rust tests and 130 targeted tests on actual ARM Linux, plus the four-target,
+release and protocol checks. Its helper gate passed 150 applicable mocked
+fixtures and all 11 inert checks; obsolete preparation-premise cases and their
+initial failures remain explicit. Only the dormant producer enters public
+source: no diagnostic tool, collector, qualification route or worker permission
+is enabled. Offline checks do not qualify a live action or mixed plans.
+
 ## FEX unified-profile installed-game check — 24 October 2026
 
 A fresh owned, unrecorded game used the explicit unified GL1 profile on the

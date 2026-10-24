@@ -101,11 +101,13 @@ ARM64 Linux through FEX has verified own-state reads and lower-level stationary
 Research keys at 1080p. Its pinned Rust input adapter remains disabled by default:
 the latest retained-goal Research action still timed out at five seconds. The
 explicitly pinned unified GL profile reached the actual 1920×1080 game and
-own-country reads passed, but Research readiness did not verify. Dispatch took
-19 ms; readback took 4,950 ms. The uncertain Intent remains preserved without
-retry or later settlement, and ordinary closure passed. No campaign or annual
-throughput result is accepted. See [FEX setup](docs/OWNED_LINUX_LAUNCHER.md#arm64-linux-with-fex)
-and [the installed-game result](docs/CLAUSEWITZ_VALIDATION.md#fex-unified-profile-installed-game-check--24-october-2026).
+own-country reads passed, but Research readiness did not verify. The latest
+private diagnostic captured changing animation values under the original bound;
+they do not establish readiness or update cadence. The uncertain Intent remains
+preserved without retry or later settlement, and ordinary closure passed.
+No campaign or annual throughput result is accepted. See
+[FEX setup](docs/OWNED_LINUX_LAUNCHER.md#arm64-linux-with-fex) and
+[the bounded animation check](docs/CLAUSEWITZ_VALIDATION.md#fex-bounded-animation-diagnostic--24-october-2026).
 
 ### macOS
 

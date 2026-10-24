@@ -7,7 +7,22 @@ from native macOS at 1920×1080 or higher. Do not control the shared Windows gam
 
 ## Current state
 
-The explicit unified FEX GL profile now reached the actual 1920×1080 game in
+The latest private 1080p FEX gate still failed the original five-second Research
+deadline. Its bounded read-only probe returned three fully witnessed own-root
+samples: position elapsed values 0.1, 0.2 and 0.3 against duration 0.3, all with
+state 1 and completion false. Each pointer-only update census contained the
+original root once among 258 entries. Raw time units, higher clock source and
+cadence remain unknown; these observations do not grant readiness. One Intent
+and no Verified receipt remain, with no retry or late settlement. Ordinary
+closure and the independent 145-file audit passed. The dormant public producer
+has no tool or worker route; the private collector and qualification stay private.
+See [the bounded animation result](CLAUSEWITZ_VALIDATION.md#fex-bounded-animation-diagnostic--24-october-2026).
+
+A fresh noninteractive Mac task-port query still returned -60007 without UI,
+game launch or policy changes. Keep native Mac acceptance pending local access;
+do not repeat an unchanged failing live gate.
+
+The preceding explicit unified FEX GL profile reached the actual 1920×1080 game in
 40.236 seconds, with ARM Mesa and guest/host GL thunks verified in its mappings.
 Luna medium completed ordinary setup for historical Normal vanilla Germany in
 FAIR mode. Fresh own-state reads passed, but the sole retained-goal Research
@@ -36,8 +51,9 @@ and repeated its 30-second margin check immediately before acquisition, retainin
 the original 175-second qualification and five-second action bound. All helper
 fixtures and review passed; the original refusal remains preserved. A bounded
 static Linux slice confirms that position completion and state reset can occur
-on separate updates; literal visibility cannot replace readiness. Caller timebase
-and live progress remain unknown. Next investigate that precise update path and
+on separate updates; literal visibility cannot replace readiness. The later
+bounded samples above show changing values, while caller timebase remains unknown.
+Next investigate that precise update path and
 the game's split OpenGL loading path before another campaign attempt.
 See [the capacity comparison](CLAUSEWITZ_VALIDATION.md#fex-transition-origins-and-capacity-comparison--24-october-2026).
 
@@ -133,7 +149,9 @@ No public command or mixed-worker route is enabled; live qualification remains o
    Research navigation now identifies the rejecting panel and first-result timing.
    The same binary still failed after the VM capacity increase. The unified GL
    profile now passes synthetic controls and actual startup, but the fresh
-   Research request still timed out. Inspect the precise update/timebase path;
+   Research request still timed out. The later bounded three-sample diagnostic
+   observed changing values without a settled panel. Inspect the higher update
+   caller/timebase and distinguish raw value progress from cadence or readiness;
    retain pair histograms and return times within any future original attempt.
    These describe rejected samples, not coherent current readiness. Do not
    attribute a speedup from single-trial return times or synthetic frame timing.

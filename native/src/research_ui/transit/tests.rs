@@ -1,4 +1,5 @@
 use super::*;
+mod animation_diagnostics;
 use crate::{
     actions::Epoch,
     daily_governor::{EconomyTarget, Entry, Intent},

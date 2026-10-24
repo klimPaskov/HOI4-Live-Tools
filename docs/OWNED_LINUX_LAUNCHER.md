@@ -106,7 +106,10 @@ and [definition loader](https://github.com/FEX-Emu/FEX/blob/FEX-2610/Source/Tool
 The unified GL profile passed isolated synthetic controls and a fresh actual-game
 startup at 1920×1080. Own-state reads passed, but the retained-goal Research
 action still timed out; gameplay performance and campaign acceptance remain
-unqualified. See [the installed-game check](CLAUSEWITZ_VALIDATION.md#fex-unified-profile-installed-game-check--24-october-2026).
+unqualified. A later private bounded probe observed changing own animation
+values without a settled panel. Registration and raw values do not establish
+update cadence. See [the animation check](CLAUSEWITZ_VALIDATION.md#fex-bounded-animation-diagnostic--24-october-2026)
+and [the preceding installed-game check](CLAUSEWITZ_VALIDATION.md#fex-unified-profile-installed-game-check--24-october-2026).
 
 Readiness waits only for missing initial guest load coverage, within one ten-second
 deadline. Wrong hashes, ownership, offsets and permission errors do not retry.

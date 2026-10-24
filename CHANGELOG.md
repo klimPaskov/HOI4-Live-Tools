@@ -2,6 +2,12 @@
 
 ## Unreleased native preview
 
+- Add a dormant read-only Linux animation probe for the retained own Research
+  root, with original ownership, membership, witnesses and expiry guards.
+  A private three-sample gate observed changing values but still timed out at
+  five seconds; preserve its uncertain Intent and clean closure. No public
+  diagnostic tool, action permission or readiness change is enabled.
+
 - Record the unified FEX profile's actual 1080p startup and own-state reads.
   The sole retained-goal Research action still timed out at five seconds;
   preserve its Intent, zero retries and clean ordinary closure. Add bounded

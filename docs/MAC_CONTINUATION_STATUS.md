@@ -6,13 +6,18 @@ plans, construction opening, template selection, Find navigation and one-point
 placement. No clean two-year Luna run or complete Germany, China or Poland
 campaign has been accepted. Mixed-plan and wider warfare automation remain open.
 
-The latest Linux check reached the actual 1920×1080 game using the explicitly
-pinned unified GL profile, but its one Research transit still timed out at five
-seconds. Dispatch took 19 ms and readback 4,950 ms; no retry, Research-close,
-replay or late settlement followed. Ordinary closure and the independent audit
-passed, with no owned game, grant or lease remaining and unchanged global FEX
-inputs. No video was recorded. This does not change the native Mac campaign
-requirement. See [the installed-game result](CLAUSEWITZ_VALIDATION.md#fex-unified-profile-installed-game-check--24-october-2026).
+The latest Linux check reached the actual 1920×1080 game using the pinned
+unified GL profile, but its one Research transit still timed out at five seconds.
+Three bounded historical samples showed changing own-root animation values;
+all remained in transition. Dispatch took 21 ms and readback 4,951 ms. No retry,
+Research-close, replay or late settlement followed. Ordinary closure and the
+independent audit passed, with no owned game, grant or lease remaining and
+unchanged global FEX inputs. No video was recorded. This does not change the
+native Mac campaign requirement. See [the animation check](CLAUSEWITZ_VALIDATION.md#fex-bounded-animation-diagnostic--24-october-2026).
+
+A fresh noninteractive Mac task-port preflight still returned -60007. It
+launched no game, displayed no authorization UI and changed no shared policy.
+Native Mac memory access remains externally blocked pending local authorization.
 
 Earlier Linux no-game controls isolated a mixed-loader GL mismatch and qualified
 a private unified GL definition in both tested context methods. Six controls

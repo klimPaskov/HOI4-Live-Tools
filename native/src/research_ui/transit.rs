@@ -655,5 +655,7 @@ fn keyboard_clear(r: &Reader<'_>, base: u64, scope: &Scope, e: &Edges, shown: bo
     Ok(())
 }
 
+mod animation;
+
 #[cfg(test)]
 mod tests;
