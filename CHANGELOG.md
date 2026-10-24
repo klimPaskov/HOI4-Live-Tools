@@ -2,6 +2,13 @@
 
 ## Unreleased native preview
 
+- Add internal pure Mac class-specific hit-envelope calculations with 32
+  fixtures for scalar rounding, edge inclusivity, orientation and separate
+  size/hit resources. Unknown or unsupported cases cannot become a miss.
+  Record a private stationary 44,186-object graphical metadata census with
+  complete field witnesses in 912 ms. Full GUI routing and placement remain
+  unfinished; no MCP registration, input permission or release pin changes.
+
 - Add optional resident Mac center-terrain evidence to `hoi4_construction_target`.
   Default reads stay unchanged; strict opt-in joins the fixed 1080p center to the
   requested own state within the complete snapshot. Native stationary MCP tests

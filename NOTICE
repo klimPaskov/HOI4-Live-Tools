@@ -163,3 +163,8 @@ Upstream foundation and attribution:
   selection and complete-queue readback to canonical inactive mode. It uses no
   upstream command implementation, invokes no engine function and grants no
   ordinary Escape or panel-navigation permission.
+
+  gui/macos/hit_envelope.rs independently recovers a restricted set of current
+  Mac class-specific geometric rejection branches. This extends the attributed
+  observation approach without upstream hit-testing code, game bytes or foreign
+  offsets. Pure arithmetic establishes no GUI-route or input authority.

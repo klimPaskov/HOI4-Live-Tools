@@ -135,6 +135,14 @@ mode-0 harness failure is preserved. Complete model intersection, a public stric
 placement adapter and worker integration remain unfinished; the placement test
 adds no MCP action or permission.
 
+The internal Mac hit-envelope foundation now models separate sprite, cornered,
+InstantText and position-object rejection branches, with 32 arithmetic fixtures.
+Unknown resources and unsupported transforms remain explicit. A private read-only
+metadata census covered 44,186 graphical objects in 912 ms with stable final
+field witnesses and no input or screenshots. This census and the pure calculations
+do not establish full GUI routing or enable placement. See
+[graphical evidence](../docs/CLAUSEWITZ_VALIDATION.md#mac-graphical-metadata-and-pure-envelopes--24-october-2026).
+
 The Mac durable worker has passed recorded Research, Focus and production
 component tests, including plan revisions and reconnects. Canonical Mac process
 timestamps retain byte-exact scope and restart equality. The separate legacy

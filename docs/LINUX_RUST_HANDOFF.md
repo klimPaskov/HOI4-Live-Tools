@@ -12,6 +12,19 @@ failed campaigns. Do not control the shared Windows game.
 
 ## Current checkpoint
 
+The internal pure Mac GUI hit-envelope foundation adds 32 arithmetic fixtures,
+with 1,850 Rust / 956 Python tests passing (37 Python skips), strict checks on four
+compilation targets, release build and unchanged 28-tool stdio smoke. A private
+stationary native 1080p census completed all 44,186 graphical objects in 912 ms,
+with final field witnesses and no input, screenshots, cursor movement or pauses.
+A separate resource-type-pointer census completed in 1.180 seconds; an earlier
+parent-change refusal remains preserved. Resource geometry and full GUI routing
+are unfinished. No public placement or worker permission is enabled, and the
+clean two-year Luna run and full campaign recordings remain unfinished. See the
+[current Mac checkpoint](MAC_CONTINUATION_STATUS.md) for the next work.
+
+## Previous checkpoint
+
 The resident Rust Mac center-terrain observer passed stationary qualification
 through the public MCP. `hoi4_construction_target` now accepts
 `include_map_point: true`; omission or false preserves the existing read path.

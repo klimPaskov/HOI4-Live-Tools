@@ -1,5 +1,28 @@
 # Mac continuation checkpoint — 24 October 2026
 
+The internal pure Mac hit-envelope foundation now models the distinct rejection
+branches for known SpriteType, CorneredTile, alignment-zero InstantText and
+C2dPositionObject. It preserves scalar f32 grouping, truncation and edge rules;
+unsupported resources/transforms cannot become a geometric miss. Its 32 fixtures
+bring the full passing Rust suite to 1,850. All 956 Python tests (37 skips), strict
+checks on four compilation targets, release build and 28-tool stdio smoke pass.
+No public observation path, action registration, permission or release pin changed.
+
+A private read-only census completed all 44,186 graphical objects at native
+1920×1080 in 912 ms, with stable final consumed-field witnesses. A separate
+resource-type-pointer census completed in 1.180 seconds. Complete own state,
+camera, cursor and all 18 controller files stayed unchanged; there was zero input,
+activation, screenshot, worker or observation pause. The preceding resource scan's
+reciprocal-parent refusal remains preserved. Resource geometry, complete GUI
+routing, the strict placement adapter and construction worker remain unfinished.
+See [graphical evidence](CLAUSEWITZ_VALIDATION.md#mac-graphical-metadata-and-pure-envelopes--24-october-2026).
+
+All input grants, leases and recorders remain closed. Germany remains paused on
+1 January 1936, with the previously verified single factory queued. No clean
+two-year Luna run or full campaign recording has completed.
+
+Previous checkpoints follow.
+
 The resident Rust Mac center-terrain observer passed stationary qualification
 through the public MCP. `hoi4_construction_target` now accepts
 `include_map_point: true`; omission or false preserves the existing read path.

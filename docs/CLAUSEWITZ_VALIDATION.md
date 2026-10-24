@@ -7901,3 +7901,43 @@ decoded frames. Its independent complete-callback counter also reported 2,780;
 those are separate observations, not an imposed equality invariant. The recorder
 exited normally. No map button was pressed, no construction was placed and no
 campaign acceptance or full campaign recording was achieved.
+
+
+## Mac graphical metadata and pure envelopes — 24 October 2026
+
+A private read-only native helper completed a stationary census of all 44,186
+engine-traversed graphical objects on the owned 1920×1080 Mac Germany session.
+Ten exact independently recovered classes were admitted only after primary and
+reciprocal-parent checks. Unknown classes stopped before payload; two chart
+families were added only after separate exact-file constructor/RTTI review.
+Traversal followed the engine's byte-128 child gate independently of self-144.
+No widget target, model, texture or unknown resource payload was followed.
+
+The complete observation and final original-field witnesses took 912.332 ms,
+using 142,904 initial logical requests / 16,437,256 bytes, plus final witnesses.
+Batched known-object transport compares every consumed field while excluding
+unused padding/counters. Seventeen predecessor fixtures and an added chart
+fixture passed; private fixture counts are separate from public native tests.
+Earlier count/read-budget and broad-prefix consistency refusals remain preserved.
+
+Complete own Research, Focus, production, queue, clock/setup, camera, OS cursor
+and all 18 files across three controllers stayed unchanged. There was no input,
+activation, screenshot, worker, grant, recorder or observation pause. MCP EOF
+exited 0. Germany remained paused on 1 January 1936; no advancing-time or
+real-time-per-year result follows. A subsequent resource-prefix census refused
+a changed reciprocal parent before payload. A separate follow-up completed in
+1.180 seconds, following active resource type pointers only. Unknown resource
+payload stayed untouched; neither attempt qualifies resource geometry.
+
+The public change adds only internal pure class-specific outer-rejection math,
+with 32 generated arithmetic fixtures. It distinguishes Rejected, Possible and
+Unsupported, retaining the exact f32/truncation/edge behavior for known SpriteType,
+CorneredTile, alignment-zero InstantText and C2dPositionObject branches. Separate
+size/hit resources and loaded-resource guards are required. Callers still need
+current original class/resource bindings, independently prepared transforms,
+complete GUI source/route and focus/global guards, final witnesses and ordinary
+input qualification. Neither this census nor the arithmetic establishes cache
+completion, full GUI routing, delivery, eligibility or input authority. The
+private strict placement scaffold remains unregistered and refuses its unresolved
+route gate. Construction worker integration, the clean two-year Luna run and
+full recorded campaigns remain unfinished.

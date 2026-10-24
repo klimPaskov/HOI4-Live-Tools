@@ -6,6 +6,11 @@
 #[allow(dead_code)]
 pub(crate) mod source_point;
 
+// Pure reviewed rejection math for a future independent GUI recipient reader.
+// No live reader, command adapter or protocol permission is registered here.
+#[allow(dead_code)]
+pub(crate) mod hit_envelope;
+
 use crate::{
     error::{Error, Result},
     memory::{Reader, StringAbi},

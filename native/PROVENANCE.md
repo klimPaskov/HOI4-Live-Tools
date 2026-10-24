@@ -1,5 +1,29 @@
 # Rust foundation provenance
 
+## Pure Mac graphical hit envelopes
+
+`gui/macos/hit_envelope.rs` independently follows the same Mac UUID/SHA below.
+Complete procedures `0x1027ed5d0..0x1027ed670`, `0x1027ed3a0`, `0x1027ed3e0`,
+`0x1027ed6a0`, `0x10284b8d0`, `0x10284fb20`, `0x10284fe70`, `0x10278a150`,
+`0x10278a170` and `0x1027d2cd0` establish the separate class rejection branches.
+The internal pure functions cover C2dPositionObject, CorneredTileSprite,
+alignment-zero InstantText and sprite-like dispatch through exact CSpriteType
+RVA `0x34bde68`. They preserve scalar f32 grouping, truncation stages and each
+branch's distinct edge inclusivity. Size resource +0x168 is separate from the
+animated/Shield hit resource +0x1b0. Loaded resource index +0x188 must be
+nonnegative before using the known lazy size helper's no-write branch.
+
+Callers must establish exact current class/resource ownership, independently
+prepared inherited transforms and encompassing original read witnesses.
+Non-unit inherited scale, rotation, unknown/unloaded resources, unsupported
+alignment and zero-size fallback refuse to supply a geometric miss. Bounds
+are observer policy. Thirty-two generated fixtures cover rounding-sensitive
+pixel decisions, orientation, separate resources, edges and unsupported cases.
+These functions neither read memory nor establish a positive texture hit,
+complete GUI route, cache completion, input or placement authority. They extend
+the attributed Clausewitz observation approach; no upstream hit-testing source,
+game bytes or other platform's offsets were copied.
+
 ## Resident Mac center-terrain and selection clearing
 
 `construction/mac_map_point.rs` independently follows the Mach-O UUID/SHA below.
