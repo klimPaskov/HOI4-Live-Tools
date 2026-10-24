@@ -143,6 +143,11 @@ field witnesses and no input or screenshots. This census and the pure calculatio
 do not establish full GUI routing or enable placement. See
 [graphical evidence](../docs/CLAUSEWITZ_VALIDATION.md#mac-graphical-metadata-and-pure-envelopes--24-october-2026).
 
+The pure foundation also covers exact animated-frame, masked-shield and
+progress-bar variants, with 36 additional fixtures. Their size/hit roles and
+edge rules remain separate; progress bars require an explicit standard zero-angle
+math contract. These internal functions add no live read or action permission.
+
 The Mac durable worker has passed recorded Research, Focus and production
 component tests, including plan revisions and reconnects. Canonical Mac process
 timestamps retain byte-exact scope and restart equality. The separate legacy

@@ -1,5 +1,38 @@
 # Mac continuation checkpoint — 24 October 2026
 
+The internal pure Mac hit envelopes now cover exact animated-frame,
+masked-shield and progress-bar resource variants. Thirty-six added fixtures
+preserve their separate size/hit roles, unsigned masked edges and progress-bar
+bottom inclusivity. Progress requires an explicit standard zero-angle math
+contract; an unqualified contract remains Unsupported. The 68 focused fixtures
+pass. This adds no reader, route/input permission or release pin.
+
+All 1,886 Rust tests and 956 Python tests (37 skips), strict checks on four
+compilation targets, release build and unchanged 28-tool stdio smoke pass.
+
+A private stationary native 1080p geometry snapshot covered all 44,186 graphical
+objects in 1.171 seconds. Independent offline reconstruction rejected 1,247
+candidates by clip and the remaining 241 by class-specific outer bounds under
+the explicit standard sincos-zero contract. Without that contract, four progress
+cases stay Unsupported. One captured scale-cache discrepancy remains recorded;
+the fresh-rebuild calculation uses the recovered branch inputs, never that cache.
+These captured calculations provide no current-event or cache-completion proof.
+
+A separate 25-request / 188-byte live dispatch-guard read took 0.462 ms. It
+observed the fixed point, unit factors, empty source/route lists and no focus or
+post-route capture target. The active mouse-up flag was traced to the exact
+existing button-menu observer; its ordinary refresh write is allowed by this
+private diagnostic. The preceding strict-zero mismatch remains preserved.
+Complete own baseline, camera, cursor and all 18 controller files stayed
+unchanged, with no input, activation, screenshot, worker or observation pause.
+The guards and geometry have not yet qualified a combined public route adapter.
+
+All input grants, leases and recorders remain closed. No clean two-year Luna run
+or full campaign recording has completed. Germany remains paused on 1 January
+1936 with the previously verified single factory queued.
+
+Previous checkpoints follow.
+
 The internal pure Mac hit-envelope foundation now models the distinct rejection
 branches for known SpriteType, CorneredTile, alignment-zero InstantText and
 C2dPositionObject. It preserves scalar f32 grouping, truncation and edge rules;

@@ -168,3 +168,8 @@ Upstream foundation and attribution:
   Mac class-specific geometric rejection branches. This extends the attributed
   observation approach without upstream hit-testing code, game bytes or foreign
   offsets. Pure arithmetic establishes no GUI-route or input authority.
+
+  gui/macos/hit_envelope/variants.rs independently extends those pure branches
+  to exact FrameAnimated, Masked/Shield and Progressbar resources. It retains
+  their separate size/hit and edge rules; no upstream resource code, game bytes
+  or foreign-platform offsets were copied. No reader or input adapter is added.

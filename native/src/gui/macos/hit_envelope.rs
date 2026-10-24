@@ -310,5 +310,7 @@ pub fn position_object(
     Ok(Decision::Possible)
 }
 
+pub mod variants;
+
 #[cfg(test)]
 mod tests;

@@ -12,16 +12,18 @@ failed campaigns. Do not control the shared Windows game.
 
 ## Current checkpoint
 
-The internal pure Mac GUI hit-envelope foundation adds 32 arithmetic fixtures,
-with 1,850 Rust / 956 Python tests passing (37 Python skips), strict checks on four
-compilation targets, release build and unchanged 28-tool stdio smoke. A private
-stationary native 1080p census completed all 44,186 graphical objects in 912 ms,
-with final field witnesses and no input, screenshots, cursor movement or pauses.
-A separate resource-type-pointer census completed in 1.180 seconds; an earlier
-parent-change refusal remains preserved. Resource geometry and full GUI routing
-are unfinished. No public placement or worker permission is enabled, and the
-clean two-year Luna run and full campaign recordings remain unfinished. See the
-[current Mac checkpoint](MAC_CONTINUATION_STATUS.md) for the next work.
+The internal pure Mac GUI hit envelopes now cover exact animated-frame,
+masked-shield and progress-bar resource variants, with 36 added fixtures and
+68 focused tests passing. No reader, input permission or release pin changes.
+All 1,886 Rust / 956 Python tests (37 skips), four-target strict checks, release
+and unchanged 28-tool protocol smoke pass.
+A complete private native 1080p geometry snapshot took 1.171 seconds; independent
+captured-data reconstruction covers its class-specific rejection paths with
+explicit arithmetic assumptions and retained cache discrepancies. A separate
+live typed dispatch-guard read took 0.462 ms, with no input, screenshots, cursor
+movement or pauses. These components have not yet qualified the combined public
+route or construction worker. The clean two-year Luna run and full campaign
+recordings remain unfinished. See the [Mac checkpoint](MAC_CONTINUATION_STATUS.md).
 
 ## Previous checkpoint
 

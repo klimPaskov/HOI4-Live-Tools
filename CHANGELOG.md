@@ -2,6 +2,11 @@
 
 ## Unreleased native preview
 
+- Extend internal pure Mac hit envelopes to exact animated-frame, masked-shield
+  and progress-bar resources, with 36 additional fixtures. Preserve separate
+  size/hit roles, unsigned masked edges, progress-bar bottom inclusivity and an
+  explicit zero-angle trigonometric contract. No new reader, action or permission.
+
 - Add internal pure Mac class-specific hit-envelope calculations with 32
   fixtures for scalar rounding, edge inclusivity, orientation and separate
   size/hit resources. Unknown or unsupported cases cannot become a miss.

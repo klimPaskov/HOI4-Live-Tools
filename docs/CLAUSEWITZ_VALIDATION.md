@@ -7941,3 +7941,62 @@ completion, full GUI routing, delivery, eligibility or input authority. The
 private strict placement scaffold remains unregistered and refuses its unresolved
 route gate. Construction worker integration, the clean two-year Luna run and
 full recorded campaigns remain unfinished.
+
+
+## Mac resource variants and dispatch guards — 24 October 2026
+
+The internal public pure envelopes add exact FrameAnimated, Masked/Shield and
+Progressbar renderer/resource pairs. Constructor/dispatch recovery precedes
+payload interpretation; no base layout is inferred solely from a type name.
+The 36 new arithmetic fixtures retain separate size/hit resources, loaded Frame
+no-write guards, unscaled unsigned Masked hit edges and Progress top-excluded /
+integer-bottom-included bounds. Progress accepts an explicit standard sincos-zero
+contract; an unqualified contract remains Unsupported. The 32 original fixtures
+are unchanged. No live reader, default observation, command registration or
+permission is added. Provenance is recorded in `native/PROVENANCE.md`.
+
+A private complete geometry census observed all 44,186 objects at native
+1920×1080 in 1,170.564 ms, with 155,887 initial logical requests / 16,525,372 bytes
+plus original-field final witnesses. Known resource geometry was followed only
+after exact current primaries. All 1,488 active target candidates had the expected
+canvas, and all Sprite/Frame assets satisfied the conservative loaded gate.
+Complete own Research, Focus, production, queue, clock/setup, camera, OS cursor
+and 18 controller files stayed unchanged. MCP EOF exited 0, with zero input,
+activation, screenshot, worker, grant, recorder or observation pause.
+
+An independently reviewed offline evaluator reconstructs transforms and clips
+from this sealed capture. It uses the exact epsilon and scalar grouping,
+independent child/self clip behavior and a conservative nine-box union for known
+InstantText alignments. Of 1,488 targets, 1,247 are clip-rejected; under the explicit
+normal-zero math contract all remaining 241 are outer-rejected. Without that
+contract, four Progress cases remain Unsupported. A stricter optional comparison
+against captured scale caches adds one Unsupported: all 1,626 self XY caches
+match, while one scale differs. Its cause remains unproved. Fresh-rebuild math
+uses the branch's independently reconstructed scale, never the captured scale.
+The private 87 normal/optimized fixtures and captured evaluation are separate
+from public tests and do not prove live freshness, positive texture hits,
+cache completion, GUI routing, delivery or input authority.
+
+A separate read-only live guard observation used 25 initial logical requests /
+188 bytes plus final witnesses and took 0.462 ms. It observed current/processed
+point 960,540, unit conversion factors, the expected canvas and empty source/
+route lists. GUI focus, post-route mouse-up object and post-click hook were null.
+An initial strict-zero policy refused global mouse-up flag 1; this refusal is
+preserved. Exact-file follow-up identified the getter's original singleton and
+final `CLegacyButtonObserverGlue<CButtonMenu>` primary. The later typed probe
+observed that nonnull object before its flag byte. Ordinary mouse-up writes its
+refresh byte to 1; this is an accepted ordinary GUI effect, not a claim of no
+GUI effects. No getter, constructor or engine function was invoked by the tool.
+The typed probe retained the full unchanged baseline/camera/cursor/controller
+checks and clean EOF. It still grants no input or cache-completion authority.
+
+A combined typed fresh graph/geometry/guard reader, strict placement integration,
+construction worker, clean two-year Luna run and full campaign recordings remain
+unfinished. The game stayed paused on 1 January 1936; no advancing-time or
+real-time-per-game-year result follows from these diagnostics.
+
+The exact public source passed all 1,886 Rust tests, 956 Python tests (37 skips),
+formatting, strict host / Windows GNU / x86 Linux musl / ARM64 Linux musl checks,
+release build and the unchanged 28-tool unbound stdio smoke. All 38 unrelated
+legacy WIP files were preserved byte-for-byte. These checks are separate from
+live behavior and campaign acceptance.

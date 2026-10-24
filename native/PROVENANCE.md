@@ -24,6 +24,24 @@ complete GUI route, cache completion, input or placement authority. They extend
 the attributed Clausewitz observation approach; no upstream hit-testing source,
 game bytes or other platform's offsets were copied.
 
+`gui/macos/hit_envelope/variants.rs` extends this independently recovered math
+with exact renderer/resource pairs: FrameAnimated `0x34afed0` / `0x34b01c8`,
+Shield `0x33e2b28` / MaskedSpriteType `0x33e1c08`, and Progressbar `0x34ba6f0` /
+`0x34ba610`. Complete constructors and dispatch procedures `0x1027af5f0`,
+`0x1019d3800`, `0x102831e30`, `0x1019d3fd0`, `0x1019d4420`, `0x102833210`,
+`0x102833250` and `0x102832c10` establish their distinct size and hit paths.
+Frame resource dispatch is checked before reusing Sprite arithmetic. Masked hit
+bounds use unscaled strict unsigned comparisons while size remains tile/scale
+dependent. Progress hit bounds exclude the top and include the integer bottom.
+
+Progress requires an explicit standard sincos-zero arithmetic contract; the
+unqualified value stays Unsupported. Static analysis identifies the shipped
+`___sincosf_stret` stub, without observing its current dynamic binding or calling
+it. Thirty-six additional synthetic fixtures cover these branches, independent
+resources, edge/rounding counterexamples and refusal propagation. The existing
+32 fixtures remain unchanged. No reader, cache-generation claim, GUI-route or
+input capability is added; exact current bindings remain caller obligations.
+
 ## Resident Mac center-terrain and selection clearing
 
 `construction/mac_map_point.rs` independently follows the Mach-O UUID/SHA below.
