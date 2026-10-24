@@ -213,6 +213,7 @@ pub(super) fn execute_internal(
         .as_ref()
         .is_some_and(|p| p.journal.blocks_game(&target.epoch.game))
         || state.journal.blocks_game(&target.epoch.game)
+        || state.research_transits.blocks_game(&target.epoch.game)
         || state
             .construction
             .as_ref()
@@ -411,6 +412,7 @@ pub(super) fn failure_evidence(
         .as_ref()
         .is_some_and(|p| p.journal.blocks_game(&target.epoch.game))
         || state.journal.blocks_game(&target.epoch.game)
+        || state.research_transits.blocks_game(&target.epoch.game)
         || state
             .construction
             .as_ref()

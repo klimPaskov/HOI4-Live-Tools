@@ -1,5 +1,7 @@
 //! Narrow ordinary research preview using the parent's exact controller/lease.
 use super::*;
+#[allow(dead_code)] // Internal qualification; no tool/worker route is enabled.
+mod transit;
 use crate::{
     platform::x11::{PointerDelivery, PointerDisplay},
     research,
@@ -188,6 +190,7 @@ pub(super) fn execute_bound(
         .as_ref()
         .is_some_and(|p| p.journal.blocks_game(&target.epoch.game))
         || state.journal.blocks_game(&target.epoch.game)
+        || state.research_transits.blocks_game(&target.epoch.game)
         || state
             .construction
             .as_ref()
@@ -295,6 +298,7 @@ pub(super) fn failure_evidence(
             .as_ref()
             .is_some_and(|p| p.journal.blocks_game(&target.epoch.game))
         || state.journal.blocks_game(&target.epoch.game)
+        || state.research_transits.blocks_game(&target.epoch.game)
         || state
             .construction
             .as_ref()

@@ -55,20 +55,27 @@ JSON reads are unchanged. These are read-only facts, with no selection input,
 placement, exact +1, action receipt or worker permission; cross-call chronology
 and deadline ownership remain the caller's job.
 
-An internal navigation-only Research transit retains the original Focus or
-production goal, exact own scope, ordered slot/root identities and caller
-deadline. Busy Research slots and natural completion do not require a fabricated
-Research assignment. This is trusted internal observation data, with no input,
-goal receipt, persistence or recovery authority. The executable assignment opener
-still requires an actual empty slot; executable busy-slot navigation and mixed
-worker wiring remain unfinished. Existing permissions and journal schemas are unchanged.
+An internal Linux Research transit retains the original Focus or production goal,
+exact own scope, ordered slot/root identities and one absolute deadline. Busy
+slots and natural completion do not require a fabricated Research assignment.
+The retained reader checks original owner, root, slot and catalog edges before
+replacement payloads, through final batched witnesses and process checks.
 
-An internal Linux anchor now supplies typed navigation snapshots from fresh
-retained process/memory witnesses, checking original owner, root, slot and catalog
-edges before replacement payloads. It retains the same absolute deadline through
-final batched witnesses and process checks. Thirty sparse fixtures cover busy slots,
-natural completion, poisoned replacements and late reads. This adds read-only
-observation, with no keyboard admission or executable navigation transaction.
+A separate bounded private journal and ordinary W adapter now implement the
+transaction internally. Intent is durable before input; the adapter sends at most
+one stationary W, checks the reviewed game/X11 keyboard gates, then observes the
+original scope again after input-idle acknowledgement. Uncertain input cannot be
+retried or settled by a late panel. Historical receipts cannot reconstruct a
+current proof or complete the retained final goal. Late terminal persistence
+provides no admission; reopening an input-bearing journal conservatively requires
+separately qualified recovery. Stdio reconnects keep the existing controller.
+The journal loads and blocks other actuators independently of profile/worker flags.
+
+Actual ARM Linux passed 56 targeted synthetic fixtures covering the transaction,
+retained reader and construction/production blockers. These are offline checks;
+no new tool, flag, mixed-worker route or campaign permission is enabled. The
+existing assignment opener still requires a genuine empty requested slot. Legacy
+journals are neither migrated nor reinterpreted. Live qualification remains open.
 
 ResearchClose002 passed direct Research closing, including historical replays and
 no-ops. Mixed Research/production worker routing has an explicit opt-in preview;

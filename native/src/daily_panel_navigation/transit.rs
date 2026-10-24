@@ -13,6 +13,11 @@ use crate::{
 };
 use std::{sync::Arc, time::Instant};
 
+// The durable ordinary-navigation stage has its own format. It cannot load or
+// manufacture assignment receipts or complete the retained governor goal.
+#[allow(dead_code)] // Internal qualification only; worker routing stays disabled.
+pub(crate) mod attempt;
+
 fn invalid(message: &str) -> Error {
     Error::new("invalid_panel_transit", message)
 }

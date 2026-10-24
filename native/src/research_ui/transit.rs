@@ -350,6 +350,15 @@ pub(crate) struct Anchor {
     until: Instant,
 }
 impl Anchor {
+    /// Bind exactly one current settled Idle/Research observation. This avoids
+    /// probing one assumed panel and rediscovering a different owner on retry.
+    pub(crate) fn bind_current(
+        process: &dyn Process,
+        scope: &Scope,
+        until: Instant,
+    ) -> Result<(Self, Snapshot)> {
+        Self::bind_mode(process, scope, None, until, &Instant::now)
+    }
     pub(crate) fn bind(
         process: &dyn Process,
         scope: &Scope,
@@ -375,6 +384,15 @@ impl Anchor {
                 ))
             }
         };
+        Self::bind_mode(process, scope, Some(expected_mode), until, now)
+    }
+    fn bind_mode(
+        process: &dyn Process,
+        scope: &Scope,
+        expected_mode: Option<i32>,
+        until: Instant,
+        now: &dyn Fn() -> Instant,
+    ) -> Result<(Self, Snapshot)> {
         boundary(process, scope, None, until, now)?;
         let base = process.image_base();
         let (original, snapshot) = sample(
@@ -382,8 +400,9 @@ impl Anchor {
             scope,
             base,
             None,
-            Some(expected_mode),
+            expected_mode,
             None,
+            false,
             until,
             now,
         )?;
@@ -402,10 +421,23 @@ impl Anchor {
     pub(crate) fn observe(&mut self, process: &dyn Process) -> Result<Snapshot> {
         self.observe_with_clock(process, &Instant::now)
     }
+    /// Same retained sample and final witness, additionally requiring the
+    /// reviewed ordinary keyboard predicate. No input is sent by this read.
+    pub(crate) fn observe_for_input(&mut self, process: &dyn Process) -> Result<Snapshot> {
+        self.observe_mode(process, &Instant::now, true)
+    }
     fn observe_with_clock(
         &mut self,
         process: &dyn Process,
         now: &dyn Fn() -> Instant,
+    ) -> Result<Snapshot> {
+        self.observe_mode(process, now, false)
+    }
+    fn observe_mode(
+        &mut self,
+        process: &dyn Process,
+        now: &dyn Fn() -> Instant,
+        keyboard: bool,
     ) -> Result<Snapshot> {
         boundary(process, &self.scope, Some(self.base), self.until, now)?;
         let (_, snapshot) = sample(
@@ -415,6 +447,7 @@ impl Anchor {
             Some(&self.original),
             None,
             Some(self.last_date),
+            keyboard,
             self.until,
             now,
         )?;
@@ -466,6 +499,7 @@ fn sample(
     original: Option<&Edges>,
     expected_mode: Option<i32>,
     last_date: Option<i32>,
+    keyboard: bool,
     until: Instant,
     now: &dyn Fn() -> Instant,
 ) -> Result<(Edges, Snapshot)> {
@@ -569,10 +603,54 @@ fn sample(
         }),
     };
     let snapshot = Snapshot::from_observed(scope, state, &context)?;
+    if keyboard {
+        witnesses.section("transit_keyboard");
+        keyboard_clear(&r, base, scope, &edges, shown)?;
+    }
     witnesses.finish()?;
     timed.check()?;
     boundary(process, scope, Some(base), until, now)?;
     Ok((edges, snapshot))
+}
+
+fn keyboard_clear(r: &Reader<'_>, base: u64, scope: &Scope, e: &Edges, shown: bool) -> Result<()> {
+    // Same reviewed predicate as ordinary Research closing, in this original
+    // Anchor's bounded witness. Discovery of another target cannot replace it.
+    let [gs, idler, _] = scope.anchors;
+    let engine = crate::production_panel::engine(
+        r,
+        base,
+        gs,
+        idler,
+        e.manager,
+        e.registry,
+        &mut Vec::new(),
+    )?;
+    let common = crate::construction::controls::blockers(
+        r,
+        base,
+        scope.own_country,
+        idler,
+        e.manager,
+        e.registry,
+    )?;
+    let gui_clear = r.byte(e.registry + 0x150)? == 0
+        && r.byte(e.registry + 0x12)? == 0
+        && r.u64(e.registry + 0x158)? == 0
+        && r.u64(e.registry + 0x230)? == 0;
+    let common_clear = common["available"] == true
+        && common["politics_root"]["settled_visible"] == false
+        && common["focus_root_settled_hidden"] == true
+        && common["research_panel_settled_visible"] == shown
+        && common["research_tree_settled_visible"] == false
+        && common["focus_detail_visible_animating_counts"] == serde_json::json!([0, 0])
+        && common["own_research_info_visible_animating_counts"] == serde_json::json!([0, 0]);
+    if engine["conservative_engine_clear"] != true || !common_clear || !gui_clear {
+        return Err(refused(
+            "Ordinary Research transit keyboard/capture/window gates refused",
+        ));
+    }
+    Ok(())
 }
 
 #[cfg(test)]

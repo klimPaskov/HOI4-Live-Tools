@@ -2,6 +2,15 @@
 
 ## Unreleased native preview
 
+- Add an internal durable ordinary Research transit and Linux W adapter, retaining
+  the original Focus/production goal through busy slots. Persist Intent before
+  once-only input; require a fresh retained-scope read after input idle, preserve
+  uncertainty across reconnects, and quarantine input-bearing records on controller
+  restart until recovery is qualified. Load its separate journal independently of
+  permissions and block all other action domains. Twenty-six additional fixtures
+  cover transaction, reader and internal cross-domain boundaries; no public tool
+  or worker route is enabled. Legacy journal formats remain unchanged.
+
 - Add an internal retained Linux Research transit reader that produces typed
   snapshots under original ownership, membership and deadline witnesses. Thirty
   sparse fixtures cover busy slots, natural completion and refused replacements.

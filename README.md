@@ -93,7 +93,9 @@ takes over an unrelated game. Recorded tests cover:
 
 The combined production/Research worker remains an opt-in preview with an
 unfinished advancing-time acceptance gate. Provincial buildings, new production
-lines, bulk allocation and combat control remain open.
+lines, bulk allocation and combat control remain open. An internal durable
+Research-navigation adapter now passes offline Linux fixtures; it has no public
+command or mixed-worker permission and still needs its own live qualification.
 
 ARM64 Linux through FEX reached historical Normal Germany at 1080p and verified
 own-state reads plus stationary Research-panel keys. Five paused-game samples per

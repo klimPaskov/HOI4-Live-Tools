@@ -1,5 +1,42 @@
 # Clausewitz-MCP validation
 
+## Durable ordinary Research transit — 24 October 2026
+
+The internal Linux adapter now retains the selected original Focus/production
+entry while navigating from settled Idle to ordinary Research, including fully
+busy slots and natural completion. A separate versioned, bounded, single-writer
+private journal persists Intent before at most one stationary W. The reviewed
+engine/window/GUI and X11 keyboard predicates must pass. Readback retains the
+original scope and absolute caller/lease/five-second deadline; its final game
+observation follows platform input-idle acknowledgement. Known animation/torn
+samples permit read-only waiting, never another key.
+
+Possible input without a timely verified result stays quarantined across IDs and
+controller generations for that exact game. Historical receipts cannot construct
+current proof or complete the retained final goal. Even successful terminal
+persistence that finishes late gives no current admission. Reopening an
+input-bearing Verified record is conservatively quarantined until a separate
+restart-recovery admission is qualified; ordinary stdio reconnects retain the
+same controller and its timely in-process admission. No legacy journal is migrated.
+The new journal loads before X11 regardless of profiles/worker permissions, and
+clock, Research, Focus, production, construction and daily paths all check it.
+Lease release, STOP and status remain available.
+
+The final source passed **2,286 host Rust tests**, strict all-target checks for
+macOS, Windows GNU, x86 Linux musl and ARM Linux musl, release and identical
+**28-tool unbound stdio** with empty stderr and clean EOF. The workspace Python
+suite passed **956 tests (37 skips)**. Actual owned ARM Linux executed **56 targeted
+optimized synthetic fixtures**, including 21 new transaction cases, 33 retained
+reader cases and two internal production/construction quarantine cases, with no
+game or input. Initial compilation exposed two missing serialization-error
+conversions; strict lint then required boxing the historical result. Both failures
+are retained and the final checks passed. Independent review found no actionable
+transaction or wiring issue.
+
+These checks do not qualify a live W, restart recovery, mixed worker or campaign.
+No public command, profile flag or worker permission was added. The final Focus
+or production action still needs its own independent current canonical proof.
+
 ## Retained typed Research transit reader — 24 October 2026
 
 An internal Linux reader now produces typed navigation snapshots under one

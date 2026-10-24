@@ -679,6 +679,7 @@ fn unresolved(state: &ControlState) -> bool {
         .as_ref()
         .is_some_and(|p| p.journal.blocks_game(&state.guard.epoch.game))
         || state.journal.blocks_game(&state.guard.epoch.game)
+        || state.research_transits.blocks_game(&state.guard.epoch.game)
         || state
             .construction
             .as_ref()

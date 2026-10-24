@@ -79,8 +79,12 @@ another session; do not adopt the closed session or guess clipped settings.
 
 The retained Linux typed reader additionally passed 30 optimized sparse fixtures
 on actual ARM Linux, with no game or input. It now supplies original-scope
-Research snapshots without JSON parsing or fabricated assignments. The durable
-ordinary-navigation transaction and mixed-worker wiring remain unfinished.
+Research snapshots without JSON parsing or fabricated assignments. The separate durable ordinary-navigation transaction and Linux W adapter now
+pass 2,286 host Rust tests, four-target strict checks, release, unchanged 28-tool
+unbound stdio and 56 targeted optimized fixtures on actual ARM Linux. Intent,
+post-idle original-scope readback and cross-domain quarantine are implemented
+internally. Reopened input-bearing journals require separately qualified recovery.
+No public command or mixed-worker route is enabled; live qualification remains open.
 
 ## Next work
 
@@ -94,8 +98,11 @@ ordinary-navigation transaction and mixed-worker wiring remain unfinished.
    close, but setup evidence and the pending-metadata census correction need
    qualification before another launch. Never loosen deadlines or settle late.
    Linux diagnostics do not replace native Mac showcase acceptance.
-2. Build an ordinary navigation adapter around the retained original-goal transit;
-   do not fabricate a Research assignment or relax existing permission exclusions.
+2. Qualify the internal ordinary navigation adapter around the retained original-goal
+   transit, then connect its current proof to mixed plans. Do not fabricate a
+   Research assignment, reconstruct proof from historical receipts or relax existing
+   permission exclusions. Controller restart recovery remains deliberately blocked
+   for input-bearing transit records until separately qualified.
    Integrate construction with mixed standing plans and complete the advancing-time
    gate. Keep reads stationary and event-driven; observations never pause.
 3. Complete shortage repair, wider economy actions, combat, naval invasions and

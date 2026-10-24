@@ -168,6 +168,7 @@ pub(super) fn execute_bound(
         guard,
         authority,
         journal,
+        research_transits,
         research,
         focus,
         construction,
@@ -178,6 +179,7 @@ pub(super) fn execute_bound(
         .ok_or_else(|| Error::new("capability_unavailable", "Production profile unavailable"))?;
     let domains = Domains {
         clock: journal,
+        transits: research_transits,
         research: research.as_ref(),
         focus: focus.as_ref(),
         construction: construction.as_ref(),
@@ -206,13 +208,15 @@ pub(super) fn execute_bound(
 }
 struct Domains<'a> {
     clock: &'a Journal,
+    transits: &'a transit_stage::Journal,
     research: Option<&'a research::Service>,
     focus: Option<&'a focus::Service>,
     construction: Option<&'a construction::Service>,
 }
 impl step::UnresolvedInputs for Domains<'_> {
     fn clear(&self, game: &Identity) -> Result<()> {
-        if self.clock.blocks_game(game)
+        if self.transits.blocks_game(game)
+            || self.clock.blocks_game(game)
             || self.research.is_some_and(|v| v.journal.blocks_game(game))
             || self.focus.is_some_and(|v| v.journal.blocks_game(game))
             || self
@@ -634,6 +638,32 @@ impl step::Backend for ProductionBackend<'_> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn transit_quarantine_blocks_internal_production_without_other_profiles() {
+        use super::*;
+        use crate::production_step::UnresolvedInputs;
+        use std::os::unix::fs::PermissionsExt;
+        let directory =
+            std::env::temp_dir().join(format!("production-transit-domain-{}", std::process::id()));
+        std::fs::create_dir(&directory).unwrap();
+        std::fs::set_permissions(&directory, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let (transits, game) = transit_stage::fixture_intent(&directory.join("transits.json"));
+        let clock = Journal::open(&directory.join("clock.jsonl")).unwrap();
+        let domains = Domains {
+            clock: &clock,
+            transits: &transits,
+            research: None,
+            focus: None,
+            construction: None,
+        };
+        assert_eq!(domains.clear(&game).unwrap_err().code, "action_uncertain");
+        let mut other = game;
+        other.start_ticks.push('1');
+        domains.clear(&other).unwrap();
+        drop(transits);
+        drop(clock);
+        std::fs::remove_dir_all(directory).unwrap();
+    }
     use super::*;
     fn epoch() -> Epoch {
         Epoch {

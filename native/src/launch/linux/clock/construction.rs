@@ -196,6 +196,7 @@ pub(super) fn call(
         guard,
         authority,
         journal,
+        research_transits,
         research,
         focus,
         construction,
@@ -206,6 +207,7 @@ pub(super) fn call(
         .ok_or_else(|| Error::new("capability_unavailable", "Construction profile unavailable"))?;
     let domains = Domains {
         clock: journal,
+        transits: research_transits,
         research: research.as_ref(),
         focus: focus.as_ref(),
         production: production.as_ref(),
@@ -247,12 +249,19 @@ pub(super) fn call(
 }
 struct Domains<'a> {
     clock: &'a Journal,
+    transits: &'a transit_stage::Journal,
     research: Option<&'a research::Service>,
     focus: Option<&'a focus::Service>,
     production: Option<&'a production::Service>,
 }
 impl stage::UnresolvedInputs for Domains<'_> {
     fn observe(&self, game: &Identity) -> Result<stage::DomainBlocks> {
+        if self.transits.blocks_game(game) {
+            return Err(Error::new(
+                "action_uncertain",
+                "Unresolved Research transit blocks construction",
+            ));
+        }
         Ok(stage::DomainBlocks {
             clock: self.clock.blocks_game(game),
             research: self.research.is_some_and(|v| v.journal.blocks_game(game)),
@@ -585,6 +594,41 @@ impl stage::Backend for ConstructionBackend<'_> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn transit_quarantine_blocks_internal_construction_without_other_profiles() {
+        use super::*;
+        use crate::construction_stage::UnresolvedInputs;
+        use std::os::unix::fs::PermissionsExt;
+        let directory = std::env::temp_dir().join(format!(
+            "construction-transit-domain-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir(&directory).unwrap();
+        std::fs::set_permissions(&directory, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let (transits, game) = transit_stage::fixture_intent(&directory.join("transits.json"));
+        let clock = Journal::open(&directory.join("clock.jsonl")).unwrap();
+        let domains = Domains {
+            clock: &clock,
+            transits: &transits,
+            research: None,
+            focus: None,
+            production: None,
+        };
+        assert_eq!(domains.observe(&game).unwrap_err().code, "action_uncertain");
+        let mut other = game;
+        other.start_ticks.push('1');
+        let clear = domains.observe(&other).unwrap();
+        assert!(
+            !clear.clock
+                && !clear.research
+                && !clear.focus
+                && !clear.construction
+                && !clear.production
+        );
+        drop(transits);
+        drop(clock);
+        std::fs::remove_dir_all(directory).unwrap();
+    }
     use super::*;
     #[test]
     fn action_shapes_never_accept_coordinates_raw_keys_or_railway() {

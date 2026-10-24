@@ -3,6 +3,7 @@
 use super::*;
 use crate::{
     actions::{Action, Backend, Epoch, Journal, State},
+    daily_panel_navigation::transit::attempt as transit_stage,
     game::{self, ClockContext},
     input_lease::InputAuthority,
     platform::{
@@ -187,6 +188,7 @@ struct ControlState {
     guard: Guard,
     authority: InputAuthority,
     journal: Journal,
+    research_transits: transit_stage::Journal,
     research: Option<research::Service>,
     focus: Option<focus::Service>,
     construction: Option<construction::Service>,
@@ -243,6 +245,15 @@ impl ClockService {
             ));
         }
         daily::Controller::check_panel_journal(directory)?;
+        // Load independently of every profile/worker flag, before opening X11.
+        let research_transits =
+            transit_stage::Journal::open(&directory.join("research-transits.json"))?;
+        if research_transits.blocks_game(&binding.game) {
+            return Err(Error::new(
+                "action_uncertain",
+                "Original-game Research transit requires qualified recovery",
+            ));
+        }
         let mut controls = X11Controls::open(
             process,
             display.number,
@@ -306,6 +317,7 @@ impl ClockService {
                 },
                 authority,
                 journal,
+                research_transits,
                 research,
                 focus,
                 construction,
@@ -546,10 +558,11 @@ impl Commands for ClockService {
         self.daily.input_check()?;
         drop(input_permit(&self.input_gate)?);
         let mut state = self.input_state()?;
-        if state
-            .production
-            .as_ref()
-            .is_some_and(|p| p.journal.blocks_game(&state.guard.epoch.game))
+        if state.research_transits.blocks_game(&state.guard.epoch.game)
+            || state
+                .production
+                .as_ref()
+                .is_some_and(|p| p.journal.blocks_game(&state.guard.epoch.game))
             || state
                 .construction
                 .as_ref()

@@ -114,7 +114,7 @@ blocked helper cleanup before a close intent; a separate ordinary close exited
 the game, and exact resource cleanup finished without a game signal. Both failures
 are retained. No game or input authority remains. The internal queue now also offers an opt-in
 typed Linux selection read in that same witness, with default readers unchanged.
-Current standalone checks pass 2,262 Rust tests, four-target strict checks,
+Current standalone checks pass 2,286 Rust tests, four-target strict checks,
 release and unchanged 28-tool unbound stdio; actual ARM Linux passed 32 optimized
 queue/selection fixtures. The workspace Python suite passed 956 tests (37 skips).
 Another 18 optimized fixtures passed on actual ARM Linux for the internal
@@ -135,6 +135,13 @@ The new retained Linux typed Research reader also passed 30 optimized sparse
 fixtures on actual ARM Linux without a game or input. It preserves original
 ownership, membership and caller deadlines; it grants no executable navigation
 or worker permission.
+
+The internal Linux ordinary-navigation stage now has a separate durable journal,
+once-only stationary W adapter and post-idle original-scope readback. Actual ARM
+Linux passed 56 targeted synthetic fixtures, including transaction and cross-domain
+quarantine checks; there was no game or input. Historical receipts grant no current
+proof, and input-bearing controller restart recovery is still blocked. Public tools
+and mixed-worker permissions remain unchanged; this is not a new live acceptance.
 
 Finish the new decimal-character gate when macOS authorization is available, then integrate
 construction into mixed standing plans. Continue with one Luna-medium player,

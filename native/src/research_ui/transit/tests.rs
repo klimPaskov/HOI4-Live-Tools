@@ -33,6 +33,54 @@ const TEMPLATE: u64 = 0x110000;
 const POISON: u64 = 0xdead0000;
 const PLAYTHROUGH: &str = "aabbccdd-1122-4344-8566-778899aabbcc";
 
+#[test]
+fn bind_current_uses_observed_settled_panel_without_assumed_source_retry() {
+    for mode in [23, 5] {
+        let f = Fixture::new(mode);
+        let (mut anchor, s) = Anchor::bind_current(&f, &f.scope(), f.until).unwrap();
+        assert_eq!(
+            s.panel(),
+            if mode == 23 {
+                ManagedPanel::Idle
+            } else {
+                ManagedPanel::Research
+            }
+        );
+        assert_eq!(anchor.observe(&f).unwrap().panel(), s.panel());
+    }
+}
+
+#[test]
+fn bind_current_unknown_source_cannot_fall_back_or_read_research_payload() {
+    let f = Fixture::new(13);
+    assert_eq!(
+        Anchor::bind_current(&f, &f.scope(), f.until)
+            .unwrap_err()
+            .code,
+        "research_transit_precondition"
+    );
+    assert!(!f.reads.borrow().iter().any(|(a, _)| *a == TECHNOLOGY));
+}
+
+#[test]
+fn ordinary_input_read_requires_extra_keyboard_facts_and_original_owner_first() {
+    let mut f = Fixture::new(23);
+    let (mut anchor, _) = Anchor::bind_current(&f, &f.scope(), f.until).unwrap();
+    // Observation-only sparse memory intentionally supplies no keyboard gates.
+    assert!(anchor.observe_for_input(&f).is_err());
+    f.word(MANAGER + 0xf0, POISON);
+    f.reads.borrow_mut().clear();
+    assert_eq!(
+        anchor.observe_for_input(&f).unwrap_err().code,
+        "ownership_changed"
+    );
+    assert!(!f
+        .reads
+        .borrow()
+        .iter()
+        .any(|(a, _)| *a == POISON || *a == MANAGER + 0x3e1));
+}
+
 // Sparse generated fields derived from tests/snapshot.rs owned_research_fixture
 // and support/research_close_cases.rs, not a captured process or game payload.
 struct Fixture {
