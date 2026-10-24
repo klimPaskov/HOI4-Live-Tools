@@ -25,7 +25,8 @@ builds and previews mod content.
 | Test mods and try agent play today | **[1.1.0 release](https://github.com/klimPaskov/HOI4-Live-Tools/releases/latest)** (Python) | Windows 10/11 | Stable release |
 | Help build the fast native runtime | **Rust preview** (build from source, [`native/`](native/README.md)) | Linux x86_64, macOS (Steam 1.19.3 x86_64 under Rosetta) | Developer preview |
 
-The Windows native adapter is planned (see [the Windows handoff](docs/WINDOWS_HANDOFF.md)).
+The Windows native game adapter is unfinished. An internal read-only foundation
+is available for development; see [the Windows port](docs/WINDOWS_HANDOFF.md).
 No full campaign has been accepted on any runtime yet. Earlier Mac campaign
 defeats remain preserved alongside the later qualification tests. Status details
 are below.
@@ -194,7 +195,7 @@ and cannot be reached by campaign automation.
 | Python / macOS | Platform work and limited diagnostic play | Reliable live acceptance |
 | Rust / Linux | Owned launch, fast state reads, time, research, Focus, daily plans, one-factory production changes, construction panel, map search and state-building placement | Provincial placement, economy, army and naval control; campaign acceptance |
 | Rust / macOS | Owned 1080p runs: structured reads, Research/Focus/clock, factory changes, recording and durable-plan component checks | Mixed-plan acceptance, wider automation, peace conferences, naval invasions and campaigns |
-| Rust / Windows | Portable protocol and fixture tests in CI | Native adapter and live tests |
+| Rust / Windows | Portable protocol and dormant owned-reader fixtures | Native game adapter, input and live tests |
 
 Passing tests or listing a tool does not mean live play works. Only recorded live
 runs count, and failures are kept in the record. See the [changelog](CHANGELOG.md)

@@ -232,3 +232,7 @@ mod session_tests {
         assert!(serde_json::from_value::<Session>(translated).is_err());
     }
 }
+
+// Dormant owned read-only foundation; no Process/ReadMemory or server binding.
+#[allow(dead_code)]
+pub(crate) mod windows;

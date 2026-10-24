@@ -1507,3 +1507,32 @@ Open `0x2a3ba80` clears the query and focuses the text box; `0x2a3c250` activate
 the first result row (`+0x8c0`) through `0x2a3f060`. Visibility uses the exact
 container's local bit 3; close `0x2a3bbe0` hides the window before setting bit
 `0x10`, which persists while hidden. No upstream code was copied.
+
+
+## Dormant Windows owned reader
+
+`platform/windows.rs` and its subordinate modules are new Rust implementations
+informed by this project's legacy `hoi4_live/memory/winproc.py`, `pe.py`,
+`reader.py`, `layout.py` and memory-reader tests. No upstream source or game
+binary data was copied. There are no Windows game offsets, MSVC string/RTTI
+assumptions, Process/ReadMemory implementation or production build profiles.
+Clausewitz-MCP's process-reader architecture remains acknowledged in NOTICE.
+
+Win32 contracts were checked against Microsoft Learn documentation for
+[process access rights](https://learn.microsoft.com/en-us/windows/win32/procthread/process-security-and-access-rights),
+[creation FILETIME](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-getprocesstimes),
+[token information](https://learn.microsoft.com/en-us/windows/win32/api/securitybaseapi/nf-securitybaseapi-gettokeninformation),
+[file identity](https://learn.microsoft.com/en-us/windows/win32/api/winbase/ns-winbase-file_id_info),
+[Toolhelp processes](https://learn.microsoft.com/en-us/windows/win32/api/tlhelp32/ns-tlhelp32-processentry32w)
+and [modules](https://learn.microsoft.com/en-us/windows/win32/api/tlhelp32/ns-tlhelp32-moduleentry32w),
+[region queries](https://learn.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualqueryex),
+[read-only transfers](https://learn.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-readprocessmemory)
+and [PE format](https://learn.microsoft.com/en-us/windows/win32/debug/pe-format).
+The optional IsWow64Process2 export is resolved from resident kernel32;
+unavailable architecture checks refuse. Handles use RAII, and the adapter
+requests no write/injection/control rights or privilege changes.
+
+Portable generated fixtures and a Windows-only owned synthetic-child endpoint
+are separate from game evidence. Production cannot select their generated
+profile. The empty production allowlist refuses before VM-read rights or remote
+payload; the module remains disconnected from all tools and input.

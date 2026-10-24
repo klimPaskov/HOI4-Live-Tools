@@ -64,10 +64,16 @@ return a capability error. Logs and setup errors go to stderr.
 | Linux x86_64 | Owned launch/reconnects, exact-build reads, waits, clock keys, research, Focus/daily plans, construction and one-factory production previews |
 | Linux ARM64 with FEX | Pinned translator and x86 guest reader; own-state and stationary XTest key qualification passed at 1080p; explicit Rust input validation opt-in, live adapter acceptance pending |
 | macOS | Separate owned task-port and ordinary-input preview on one Steam 1.19.3 Rosetta build; see the [platform status](../README.md#macos) |
-| Windows | Portable protocol and fixtures; native live adapter remains unavailable |
+| Windows | Dormant owned read-only foundation and portable fixtures; game attachment, input and live acceptance remain unavailable |
 
 Three-OS CI validates shared code. It does not establish live compatibility.
 Layouts must be recovered and verified separately for each platform and build.
+
+The internal [Windows reader](src/platform/windows/README.md) retains exact
+process/file ownership and checks batches without repeating full metadata
+censuses for each field. Its production build allowlist is empty; it implements
+no game adapter and registers no tools. The Windows synthetic-child fixture is
+separate from HOI4 acceptance. See [remaining port work](../docs/WINDOWS_HANDOFF.md).
 
 The [Mac window recorder](../docs/MAC_RECORDING.md) is a separate `--record`
 command for macOS 15+. Rust supervises a bundled ScreenCaptureKit bridge, with

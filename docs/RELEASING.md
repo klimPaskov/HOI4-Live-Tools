@@ -1,18 +1,27 @@
 # Releasing
 
-Nothing here is automated; a release is a short list of commands and one upload. Run them from the repository root
-on Windows.
+These packaging steps apply to the released Windows Python package. Run them
+from the repository root on Windows. The Rust source remains a development
+preview; this guide does not package it or establish its release acceptance.
+
+Do not create a release or change downstream pins until the required live
+acceptance passes. Current component tests and offline CI are insufficient.
+See [the current acceptance requirements](LINUX_RUST_HANDOFF.md). Source preview
+commits can be published separately after tests and a full reachable-history
+audit of the exact branch.
 
 ## Checklist
 
 1. **Version.** Set the same version in `hoi4_live/__init__.py`, `pyproject.toml` and the top entry of
-   `CHANGELOG.md` (`## 1.0.1 - date`). Semantic versioning: a new tool or argument is a minor release, a fix a patch,
+   `CHANGELOG.md` (`## <version> - date`). Semantic versioning: a new tool or argument is a minor release, a fix a patch,
    a removed or renamed tool a major one. Update the tool count in `README.md` and `docs/STATUS.md` if it changed
    (`python -m hoi4_live docs` regenerates `docs/tools.md`).
-2. **Tests.** `cd tests` then `python -m unittest discover -s . -p "test_*.py"`. The top-bar and panel readers need
-   the Windows OCR host and the game's files; run the installer tests alone with `python -m unittest test_installer`.
-3. **Live check.** With the game closed or idle on the main menu, install the candidate into a scratch prefix and
-   look at it:
+2. **Tests.** `python -m unittest discover -s tests -v`. The top-bar and panel readers need
+   the Windows OCR host and the game's files; run the installer tests alone with `python -m unittest discover -s tests -p test_installer.py -v`.
+3. **Live check.** Install the candidate into a scratch prefix with the game
+   closed. A later game check must use an exact owned test instance; never take
+   over a user's unrelated game. Installation selftest and a short scenario do
+   not replace campaign acceptance:
 
    ```
    python scripts/build_release.py --allow-dirty --out %TEMP%\hoi4live_candidate
@@ -34,12 +43,16 @@ on Windows.
    `RELEASE_URL`, `RELEASE_SHA256`, `RELEASE_SIZE`, and update the same values in the `mcp.hoi4_live.bootstrap`
    component of `hoi4-mod-setup.manifest.json` (the contract test `scripts/test_live_bootstrap_contract.py` fails
    until both agree). Run `python -m unittest discover -s scripts -p "test_*.py"` there.
-8. **Publish.** Tag and push this repository, create the GitHub release `v<version>` with the changelog entry as its
+8. **Publish.** After live acceptance, audit every reachable commit/tag/blob of
+   the exact branch and release tag for credentials, private paths, mod data and
+   unintended artifacts. Use only explicit branch/tag refspecs; never push
+   `private/*`, `--all`, `--mirror` or unrelated tags. Tag and push this repository,
+   create the GitHub release `v<version>` with the changelog entry as its
    notes and attach exactly the built `hoi4-live-tools-<version>.zip` and `SHA256SUMS.txt`:
 
    ```
    git tag -a v<version> -m "HOI4 Live Tools <version>"
-   git push origin master --tags
+   git push origin refs/heads/master:refs/heads/master refs/tags/v<version>:refs/tags/v<version>
    gh release create v<version> dist/hoi4-live-tools-<version>.zip dist/SHA256SUMS.txt --title "HOI4 Live Tools <version>" --notes "<the changelog entry>"
    ```
 

@@ -2,6 +2,13 @@
 
 ## Unreleased native preview
 
+- Add a dormant Windows read-only foundation with exact process/SID/file
+  ownership, bounded PE identity and whole-batch failure handling. Portable
+  fixtures check that full ownership inspection happens twice per batch.
+  Include a Windows-only owned synthetic-child fixture; production build
+  profiles remain empty, with no game adapter, input or tool registration.
+  Replace the outdated Windows port guide with current support and acceptance.
+
 - Add default-off Mac ordinary Find-button opening with retained target/queue
   identity, bounded route waits and strict historical replay. A recorded native
   1080p component verified one click in 603 ms without screenshots or pauses.
