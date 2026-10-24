@@ -59,6 +59,26 @@ fn fixture() -> Fixture {
     ] {
         f.word(at, value);
     }
+    // Navigation additionally retains the ordinary outer printable receiver.
+    // Mouse opener/focus-only readers deliberately do not need these fields.
+    for (at, value) in [
+        (REGISTRY + 0x98, 0x9c0000),
+        (0x9c0000, BASE + 0x33dafa8),
+        (IDLER + 0x4f8, 0x9d0000),
+        (BASE + 0x3639ad8, 0x9d0000),
+        (0x9d0038, IDLER),
+        (0x9d0300, 0x9c0000),
+        (0x9d0308, REGISTRY),
+        (BASE + 0x3308f90 + 0x20, BASE + 0x776fe0),
+        (BASE + 0x35d8c60, 0x9e0000),
+        (0x9e0000, BASE + 0x34a6760),
+        (BASE + 0x35d8dd0, 0),
+    ] {
+        f.word(at, value);
+    }
+    f.put(IDLER + 0x7b5, &[1]);
+    f.put(BASE + 0x3519990, &[0]);
+    f.put(0x9e0044, &[0]);
     f.put(WINDOW + 0x95, &[8]);
     f.int(WINDOW + 0x12b8, 0);
     f.int(WINDOW + 0x1270, 0);
@@ -627,3 +647,6 @@ fn invalid_state_non_mac_abi_and_changed_process_never_read_control_payload() {
     );
     assert!(f.read_counts().is_empty());
 }
+
+#[path = "mac_construction_find_characters.rs"]
+mod characters;

@@ -238,6 +238,8 @@ pub(crate) struct Observation {
     read_calls: u64,
     read_bytes: usize,
     elapsed_ms: f64,
+    pub(super) opening: Option<super::opener::button::Binding>,
+    pub(super) characters: Option<super::characters::Binding>,
 }
 
 impl Observation {
@@ -246,6 +248,9 @@ impl Observation {
     }
     pub(crate) fn binding(&self) -> &FindBinding {
         &self.binding
+    }
+    pub(super) fn view(&self) -> &View {
+        &self.view
     }
     pub(crate) fn root(&self) -> &RootLifecycle {
         &self.view.root
@@ -331,6 +336,8 @@ impl FindAnchor {
             Some(self),
             false,
             None,
+            None,
+            None,
         )
     }
     pub(crate) fn observe_with_focus(&self, process: &dyn Process) -> Result<Observation> {
@@ -342,6 +349,8 @@ impl FindAnchor {
                 .map(RequestedState::state_id),
             Some(self),
             true,
+            None,
+            None,
             None,
         )
     }
@@ -360,6 +369,27 @@ impl FindAnchor {
             Some(self),
             include_focus,
             Some(guard),
+            None,
+            None,
+        )
+    }
+    pub(super) fn observe_characters(
+        &self,
+        process: &dyn Process,
+        guard: ViewGuard<'_>,
+        characters: &super::characters::Binding,
+    ) -> Result<Observation> {
+        observe_in(
+            process,
+            self.binding
+                .requested
+                .as_ref()
+                .map(RequestedState::state_id),
+            Some(self),
+            true,
+            Some(guard),
+            None,
+            Some(super::characters::ReadGuard::Original(characters)),
         )
     }
     pub(crate) fn require_same_scope(&self, observation: &Observation) -> Result<()> {
@@ -497,14 +527,44 @@ fn original_edges(r: &Reader<'_>, anchor: &FindAnchor) -> Result<()> {
 }
 
 pub(crate) fn observe(process: &dyn Process, state_id: Option<i32>) -> Result<Observation> {
-    observe_in(process, state_id, None, false, None)
+    observe_in(process, state_id, None, false, None, None, None)
 }
 
 pub(super) fn observe_with_focus(
     process: &dyn Process,
     state_id: Option<i32>,
 ) -> Result<Observation> {
-    observe_in(process, state_id, None, true, None)
+    observe_in(process, state_id, None, true, None, None, None)
+}
+
+pub(super) fn observe_for_characters(process: &dyn Process, state_id: i32) -> Result<Observation> {
+    observe_in(
+        process,
+        Some(state_id),
+        None,
+        true,
+        None,
+        None,
+        Some(super::characters::ReadGuard::Bind),
+    )
+}
+
+pub(super) fn observe_opener(
+    process: &dyn Process,
+    state_id: i32,
+    expected: Option<&FindAnchor>,
+    guard: super::opener::ReadGuard<'_>,
+    view: Option<ViewGuard<'_>>,
+) -> Result<Observation> {
+    observe_in(
+        process,
+        Some(state_id),
+        expected,
+        true,
+        view,
+        Some(guard),
+        None,
+    )
 }
 
 fn observe_in(
@@ -513,6 +573,8 @@ fn observe_in(
     expected: Option<&FindAnchor>,
     include_focus: bool,
     view_guard: Option<ViewGuard<'_>>,
+    opening_guard: Option<super::opener::ReadGuard<'_>>,
+    character_guard: Option<super::characters::ReadGuard<'_>>,
 ) -> Result<Observation> {
     if let Some(id) = state_id {
         validate_state_id(i64::from(id))?;
@@ -540,6 +602,14 @@ fn observe_in(
     }
     let w = Witnesses::new(process);
     let r = Reader::new(&w);
+    w.section("mac_find_open_original_edges");
+    if let Some(guard) = &opening_guard {
+        guard.before_context(&r, base, &identity)?;
+    }
+    w.section("mac_find_character_original_edges");
+    if let Some(guard) = &character_guard {
+        guard.before_context(&r, base)?;
+    }
     w.section("mac_find_original_edges");
     if let Some(anchor) = expected {
         original_edges(&r, anchor)?;
@@ -548,12 +618,20 @@ fn observe_in(
     let (country, production) = economy::own_production(&r, base)?;
     let own_tag = r.i32(country + 8)?;
     let context = game::context_from_reader(&r, base)?;
+    if let Some(guard) = &opening_guard {
+        same_context(guard.context(), &context)?;
+    }
     if let Some(anchor) = expected {
         same_context(&anchor.context, &context)?;
     }
     let [gs, idler, _] = context.anchors;
     let registry = r.u64(idler + 0x4c0)?;
     mac_ui::exact(&r, base, registry, 0x34974d0)?;
+    w.section("mac_find_characters");
+    let characters = character_guard
+        .as_ref()
+        .map(|guard| guard.observe(&r, base, idler, registry))
+        .transpose()?;
     let manager = r.u64(idler + 0x670)?;
     pointer(manager)?;
     if r.u64(manager + 0x180)? != idler {
@@ -597,6 +675,25 @@ fn observe_in(
         };
         view.focus = super::super::mac_find_focus::observe(&r, base, find, root, registry)?;
     }
+    w.section("mac_find_open_control");
+    let opening = opening_guard
+        .as_ref()
+        .map(|guard| {
+            guard.control(
+                &r,
+                base,
+                [
+                    context.anchors[0],
+                    context.anchors[1],
+                    registry,
+                    manager,
+                    find,
+                ],
+                &view,
+            )
+        })
+        .transpose()?
+        .flatten();
     w.section("mac_find_camera");
     let camera = camera(&r, idler)?;
     let requested = state_id
@@ -627,6 +724,8 @@ fn observe_in(
         read_calls: r.calls.get() + calls as u64,
         read_bytes: r.bytes.get() + bytes,
         elapsed_ms: start.elapsed().as_secs_f64() * 1000.0,
+        opening,
+        characters,
     };
     if let Some(anchor) = expected {
         anchor.require_same_scope(&observation)?;

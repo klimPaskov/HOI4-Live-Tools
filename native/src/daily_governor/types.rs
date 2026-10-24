@@ -80,6 +80,13 @@ pub enum EconomyTarget {
         state_id: u32,
         total_levels: u16,
     },
+    /// Ensure a queued minimum once, not built levels or a recurring refill.
+    /// A runtime must separately opt in a verified composite adapter.
+    ConstructionQueue {
+        building: String,
+        state_id: u32,
+        minimum_queued: u16,
+    },
     Production {
         line_id: String,
         equipment_id: String,
@@ -146,6 +153,20 @@ impl Intent {
                     key(building)?;
                     if *state_id == 0 || !(1..=200).contains(total_levels) {
                         return Err(invalid("Explicit bounded construction target required"));
+                    }
+                }
+                EconomyTarget::ConstructionQueue {
+                    building,
+                    state_id,
+                    minimum_queued,
+                } => {
+                    crate::construction::controls::validate_key(building)
+                        .map_err(|_| invalid("Canonical queued building ID required"))?;
+                    if !(1..=4095).contains(state_id)
+                        || !(1..=200).contains(minimum_queued)
+                        || building == "rail_way"
+                    {
+                        return Err(invalid("Bounded ordinary building queue target required"));
                     }
                 }
                 EconomyTarget::Production {
@@ -496,3 +517,7 @@ pub enum Readiness {
     Unavailable(String),
     BlockingDecision(String),
 }
+
+#[cfg(test)]
+#[path = "construction_queue_schema.rs"]
+mod construction_queue_schema;

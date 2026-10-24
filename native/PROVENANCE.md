@@ -1,5 +1,28 @@
 # Rust foundation provenance
 
+## Mac Find opening and pointer occlusion
+
+The new `construction/mac_find/opener` and `characters` modules independently
+compose the same inspected Mac Mach-O build identified below. They retain own
+construction/Find/control identity and complete consumed-field witnesses; no
+engine callback, memory write or foreign platform offset is used. Character
+forwarding admission treats the original disabled path and exact owned empty
+HotkeyManager table separately. An unknown capture, sentinel or receiver refuses.
+Escape's control-byte predicate is not reused as printable-character evidence.
+
+The ordinary opener retains the exact named MapModes child, renderer, callback
+and target. After its single move it waits only for an explicit supported route
+correlation to become positive within the original bound; it never moves twice.
+The generic platform occlusion policy and Mac adapter use public window metadata
+in onscreen order. Another window covering the intended point refuses regardless
+of layer. A cursor-level exception requires narrow metadata and fresh bounded
+system-process identity checks; it is not a general overlay exception.
+
+These are extensions of the attributed Clausewitz own-target/readback approach;
+no upstream code was copied for these modules. Opaque selection/placement/clearing
+handoffs and queued-minimum plan syntax add no worker input authority. Component
+recordings and offline validation remain separate from campaign acceptance.
+
 ## Default-off Mac ordinary cancellation
 
 `construction/mac_panel/cancel.rs`, `mac_panel/shortcut/escape.rs` and

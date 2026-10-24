@@ -37,6 +37,22 @@ fn is_false(value: &bool) -> bool {
     !*value
 }
 impl Spec {
+    fn reject_unimplemented_queue(&self) -> Result<()> {
+        if self.entries.iter().any(|entry| {
+            matches!(
+                entry.intent,
+                core::Intent::Economy {
+                    target: core::EconomyTarget::ConstructionQueue { .. }
+                }
+            )
+        }) {
+            return Err(Error::new(
+                "capability_unavailable",
+                "ConstructionQueue has no verified Linux daily composite adapter",
+            ));
+        }
+        Ok(())
+    }
     fn plan(&self, scope: core::Scope) -> core::Plan {
         core::Plan {
             version: self.version,
@@ -160,6 +176,7 @@ impl Controller {
                         Error::new("invalid_arguments", "Explicit plan required")
                     })?)
                     .map_err(|e| Error::new("invalid_arguments", e.to_string()))?;
+                spec.reject_unimplemented_queue()?;
                 self.input_check()?;
                 drop(input_permit(&owner.input_gate)?);
                 let mut active = try_state(&self.active)?;
@@ -418,6 +435,7 @@ impl Controller {
                         Error::new("invalid_arguments", "Explicit plan required")
                     })?)
                     .map_err(|e| Error::new("invalid_arguments", e.to_string()))?;
+                spec.reject_unimplemented_queue()?;
                 let active = try_state(&self.active)?;
                 let active = active
                     .as_ref()
@@ -1393,6 +1411,16 @@ impl core::Backend for DailyBackend<'_> {
         if matches!(
             entry.intent,
             core::Intent::Economy {
+                target: core::EconomyTarget::ConstructionQueue { .. }
+            }
+        ) {
+            return Ok(core::Readiness::Unavailable(
+                "ConstructionQueue has no verified Linux daily composite adapter".into(),
+            ));
+        }
+        if matches!(
+            entry.intent,
+            core::Intent::Economy {
                 target: core::EconomyTarget::Production { .. }
             }
         ) {
@@ -1475,6 +1503,16 @@ impl core::Backend for DailyBackend<'_> {
         before: &core::Observation,
         until: Instant,
     ) -> Result<core::Outcome> {
+        if matches!(
+            attempt.entry.intent,
+            core::Intent::Economy {
+                target: core::EconomyTarget::ConstructionQueue { .. }
+            }
+        ) {
+            return Ok(core::Outcome::NotQueued(
+                "ConstructionQueue has no verified Linux daily composite adapter".into(),
+            ));
+        }
         if matches!(
             attempt.entry.intent,
             core::Intent::Economy {
@@ -2582,6 +2620,25 @@ mod tests {
             details.get(id, "assignments").unwrap()["value"]["latest_completion"],
             Value::Null
         );
+    }
+    #[test]
+    fn construction_queue_schema_refuses_linux_start_update_before_preparation() {
+        let mut value = json!({"version":1,"revision":1,"entries":[{"id":"queued","intent":{
+            "kind":"Economy","target":{"kind":"ConstructionQueue","building":"arms_factory","state_id":64,"minimum_queued":2}
+        }}],"max_actions_per_day":1,"max_observation_age_ms":1000,"review_day":null});
+        for grant in [false, true] {
+            value["focus_permission"] = json!(grant);
+            value["production_permission"] = json!(grant);
+            let spec: Spec = serde_json::from_value(value.clone()).unwrap();
+            let error = spec.reject_unimplemented_queue().unwrap_err();
+            assert_eq!(error.code, "capability_unavailable");
+            assert!(error.message.contains("ConstructionQueue"));
+        }
+        value["entries"][0]["intent"] = json!({"kind":"Research","technology_id":"radio","slot":0});
+        serde_json::from_value::<Spec>(value)
+            .unwrap()
+            .reject_unimplemented_queue()
+            .unwrap();
     }
     #[test]
     fn player_json_cannot_supply_trusted_scope_or_process_pointers() {

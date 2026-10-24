@@ -7,8 +7,8 @@ from native macOS at 1920×1080 or higher. Do not control the shared Windows gam
 
 ## Current state
 
-The published placement checkpoint is `0b963fb`; all nine CI jobs passed across
-Linux, Windows and macOS. The default-off `hoi4_construction_place` qualification
+The placement checkpoint `0b963fb` passed all nine CI jobs across Linux, Windows
+and macOS. The default-off `hoi4_construction_place` qualification
 uses one ordinary click, complete typed GUI checks and exact retained full-queue
 +1 verification. Historical replay sends no input. This is component evidence,
 not construction-worker or campaign acceptance.
@@ -20,7 +20,15 @@ failure compared volatile queue freshness; its raw failure is preserved. Full
 baseline, queue, cursor and original journal preservation passed in the separate
 zero-input continuation. See [the Mac checkpoint](MAC_CONTINUATION_STATUS.md).
 
-Local source checks passed 2,015 Rust tests, 130 optimized fixtures and 956
+The next ordinary Find-button component passed in 603 ms with one move/click,
+unchanged complete queue and input-free historical replay. Native 1920×1108
+recording finalized with 1,609 matching encoded/decoded frames and capture callbacks.
+The next decimal gate refused during pregrant startup because macOS task-port
+authorization requires interaction (status -60007). No input, lease or grant was
+issued; its system-stopped recording failed. Preserve both failures and verify
+authorization before further live testing.
+
+Local source checks passed 2,158 Rust tests, 327 optimized checks and 956
 workspace Python tests (37 skips), strict all-target checks on four compilation
 targets, release and unchanged 28-tool unbound stdio. The 38 unrelated legacy
 Python/package/test WIP paths remain preserved and excluded from publication.
@@ -32,11 +40,10 @@ reconnecting. An expired session must never be extended or adopted.
 
 ## Next work
 
-1. Finish ordinary Find opening and decimal text admission. Prefer the exact
-   named button's ordinary click to avoid printable F's separate Hotkey capture
-   branch. The private mouse-opener implementation is not qualified yet. Existing
-   Find typing still needs current character-route admission; earlier successful
-   navigation remains preserved. Never generalize Escape's control-byte proof.
+1. Complete the new decimal-character gate after macOS task-port authorization
+   is available again. Ordinary named Find-button opening has passed its component
+   test. Keep earlier successful navigation and the new pregrant refusal separate;
+   never generalize Escape's control-byte proof to printable characters.
 2. Integrate construction with mixed standing plans and complete the advancing-time
    gate. Keep reads stationary and event-driven; observations never pause.
 3. Complete shortage repair, wider economy actions, combat, naval invasions and

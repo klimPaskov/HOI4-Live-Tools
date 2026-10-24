@@ -52,6 +52,10 @@ impl Spec {
                 ));
             }
             match e.intent {
+                core::Intent::Economy { target: core::EconomyTarget::ConstructionQueue { .. } } => {
+                    return Err(Error::new("capability_unavailable",
+                        "ConstructionQueue has no verified Mac daily composite adapter"));
+                }
                 core::Intent::Research { slot, .. } if research && slot <= 15 => (),
                 core::Intent::Focus { ref focus_id } if focus => crate::own_focus::validate_key(focus_id)?,
                 core::Intent::Economy {
@@ -721,6 +725,16 @@ impl core::Backend for DailyBackend<'_> {
         entry: &core::Entry,
         observed: &core::Observation,
     ) -> Result<core::Readiness> {
+        if matches!(
+            entry.intent,
+            core::Intent::Economy {
+                target: core::EconomyTarget::ConstructionQueue { .. }
+            }
+        ) {
+            return Ok(core::Readiness::Unavailable(
+                "ConstructionQueue has no verified Mac daily composite adapter".into(),
+            ));
+        }
         if matches!(entry.intent, core::Intent::Research { .. }) {
             research::readiness(&research::observe(self.process)?, entry, observed)
         } else if let core::Intent::Focus { focus_id } = &entry.intent {
@@ -742,6 +756,16 @@ impl core::Backend for DailyBackend<'_> {
         before: &core::Observation,
         deadline: Instant,
     ) -> Result<core::Outcome> {
+        if matches!(
+            attempt.entry.intent,
+            core::Intent::Economy {
+                target: core::EconomyTarget::ConstructionQueue { .. }
+            }
+        ) {
+            return Ok(core::Outcome::NotQueued(
+                "ConstructionQueue has no verified Mac daily composite adapter".into(),
+            ));
+        }
         // The core has persisted Intent before entering this method.
         let expected = self
             .last_context
@@ -891,6 +915,8 @@ mod tests {
             placement_deadline_epoch: None,
             construction_cancellation: false,
             cancellation_deadline_epoch: None,
+            construction_find_open: false,
+            find_open_deadline_epoch: None,
         }
     }
     #[test]
@@ -927,6 +953,27 @@ mod tests {
         assert!(
             !c.daily_focus && !c.daily_research && !c.daily_production && !c.construction_panel
         );
+    }
+    #[test]
+    fn construction_queue_schema_is_explicitly_unsupported_with_every_existing_permission() {
+        for research in [false, true] {
+            for production in [false, true] {
+                for focus in [false, true] {
+                    let mut s = spec();
+                    s.production_permission = true;
+                    s.entries[0].intent = core::Intent::Economy {
+                        target: core::EconomyTarget::ConstructionQueue {
+                            building: "arms_factory".into(),
+                            state_id: 64,
+                            minimum_queued: 2,
+                        },
+                    };
+                    let error = s.plan(scope(), research, production, focus).unwrap_err();
+                    assert_eq!(error.code, "capability_unavailable");
+                    assert!(error.message.contains("ConstructionQueue"));
+                }
+            }
+        }
     }
     #[test]
     fn missing_plan_never_bootstraps_over_any_nonempty_daily_artifact() {

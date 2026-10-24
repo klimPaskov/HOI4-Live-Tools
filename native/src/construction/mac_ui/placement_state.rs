@@ -24,6 +24,8 @@ pub(crate) enum PlacementDelta {
 #[derive(Clone, Debug)]
 pub(crate) struct PlacementReadback {
     delta: PlacementDelta,
+    original: PlacementAnchor,
+    observed: SelectionState,
 }
 impl PlacementReadback {
     pub(crate) fn delta(&self) -> PlacementDelta {
@@ -31,6 +33,45 @@ impl PlacementReadback {
     }
     pub(crate) fn placed(&self) -> bool {
         self.delta != PlacementDelta::Pending
+    }
+    /// Promote only the complete classified +1 observation, without another
+    /// read/rebind. Pending has no handoff proof and cannot seed clearing.
+    pub(crate) fn proof(&self) -> Option<PlacementProof> {
+        self.placed().then(|| PlacementProof {
+            original: self.original.clone(),
+            placed: SelectionAnchor {
+                original: self.observed.clone(),
+            },
+            delta: self.delta,
+        })
+    }
+}
+
+/// Exact +1 proof with the full proven post-placement queue retained in memory.
+/// No public constructor/serde or JSON receipt can create this transition.
+#[derive(Clone, Debug)]
+pub(crate) struct PlacementProof {
+    original: PlacementAnchor,
+    placed: SelectionAnchor,
+    delta: PlacementDelta,
+}
+impl PlacementProof {
+    pub(crate) fn original_anchor(&self) -> &SelectionAnchor {
+        &self.original.selected
+    }
+    pub(crate) fn placed_anchor(&self) -> &SelectionAnchor {
+        &self.placed
+    }
+    pub(crate) fn delta(&self) -> PlacementDelta {
+        self.delta
+    }
+    pub(crate) fn context(&self) -> &crate::game::ClockContext {
+        self.placed.context()
+    }
+    /// The expected new queue is taken only from this exact +1 proof. The old
+    /// pre-placement queue remains retained by original_anchor().
+    pub(crate) fn clear_anchor(&self) -> Result<super::ClearSelectionAnchor> {
+        self.placed.clear_selection_anchor()
     }
 }
 
@@ -73,6 +114,8 @@ impl PlacementAnchor {
         )?;
         Ok(PlacementReadback {
             delta: self.classify(&state)?,
+            original: self.clone(),
+            observed: state,
         })
     }
 

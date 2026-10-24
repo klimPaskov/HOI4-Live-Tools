@@ -2189,3 +2189,7 @@ fn explicit_focus_search_hint_preserves_legacy_serialization_and_rejects_other_d
     };
     assert_eq!(entry.validate().unwrap_err().code, "invalid_plan");
 }
+
+#[cfg(unix)]
+#[path = "construction_queue_tests.rs"]
+mod construction_queue;

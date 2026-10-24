@@ -143,7 +143,7 @@ fn callback(
 // are not the current keyboard route. Exact hidden plane-selection windows are
 // retained here because their ordinary update returns alive without UI work.
 // This narrowly admits the observed inert class; unknown classes still refuse.
-fn hidden_lifetimes(
+pub(in crate::construction) fn hidden_lifetimes(
     r: &Reader<'_>,
     base: u64,
     gui: u64,

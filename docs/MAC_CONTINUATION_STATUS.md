@@ -8,6 +8,17 @@ campaign has been accepted. Mixed-plan and wider warfare automation remain open.
 
 ## Ordinary cancellation checkpoint
 
+The later ordinary Find-button component passed with one move/click in 603.114 ms;
+same-ID historical replay took 144.838 ms and appended no journal row. The complete
+baseline/queue stayed unchanged. Its 1920×1108 H.264 recording explicitly stopped
+and finalized with 1,609 matching encoded/decoded frames and capture callbacks.
+All leases, grants, servers and recorders are closed. The next decimal gate refused
+during startup on macOS task-port authorization (-60007), before any grant, lease
+or input. The system also stopped that recording (-3821); it remains failed.
+Offline source checks now pass 2,158 Rust tests, 327 optimized checks, the full
+Python suite, four-target strict checks, release and unchanged unbound stdio.
+The combined construction actor remains private and unqualified.
+
 The default-off cancellation source passed 2,015 Rust tests, 130 optimized fixtures,
 956 workspace Python tests (37 skips), strict all-target checks on four platforms,
 release and unchanged 28-tool unbound stdio. Its recorded one-Escape action and
@@ -87,7 +98,7 @@ there is no real-time-per-game-year result.
 
 ## Continue from here
 
-Finish ordinary Find opening and decimal text admission, then integrate
+Finish the new decimal-character gate when macOS authorization is available, then integrate
 construction into mixed standing plans. Continue with one Luna-medium player,
 fresh original scope, complete queue, native geometry and strict once-only
 receipts. Complete advancing-time acceptance, shortage repair and warfare

@@ -13,6 +13,11 @@ use std::time::Instant;
 // Prospective typed readback only; no adapter or construction export uses it.
 #[allow(dead_code)]
 mod retained;
+// Internal ordinary-character forwarding guard; no input authority.
+mod characters;
+// Internal prospective proof only; no permission/tool/dispatch registration.
+#[cfg_attr(not(any(target_os = "macos", test)), allow(dead_code))]
+pub(crate) mod opener;
 // Prospective same-attempt read proofs; no input adapter is registered here.
 #[allow(dead_code)]
 pub(crate) mod navigation;

@@ -143,6 +143,13 @@ sent no input and left the original journal unchanged. The failed raw-timestamp
 comparison between those phases is retained. This does not enable construction
 standing plans or establish campaign acceptance.
 
+The default-off `hoi4_construction_find_open` qualification now opens the exact
+named Find button with one ordinary click. A recorded native 1080p test verified
+it in 603 ms, preserving the full queue; historical replay sent no input.
+Pointer actions also reject windows covering the intended point, including
+floating panels. Decimal character admission has separate checks; mixed
+construction plans remain under development. See [current evidence](docs/CLAUSEWITZ_VALIDATION.md).
+
 Mac memory access requires Developer Tools authorization and a signed tool with
 `native/macos/debugger.entitlements`; the game is never re-signed. Missing access
 returns a capability error for telemetry/UI fallback. Screenshots and saves are

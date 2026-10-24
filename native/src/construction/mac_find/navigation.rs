@@ -16,6 +16,7 @@ pub(crate) struct NavigationAnchor {
     find: FindAnchor,
     window: u64,
     control: Control,
+    characters: super::characters::Binding,
     decimal: String,
 }
 
@@ -89,7 +90,7 @@ fn typing_control(observation: &Observation) -> Result<Control> {
 /// Binding starts with an already-visible, idle and focused Find. It never
 /// opens, focuses, clears or changes the query, and accepts only an own target.
 pub(crate) fn bind(process: &dyn Process, state_id: i32) -> Result<NavigationAnchor> {
-    let observation = retained::observe_with_focus(process, Some(state_id))?;
+    let observation = retained::observe_for_characters(process, state_id)?;
     let find = observation.anchor()?;
     if find.binding().own_state().is_none() {
         return Err(unavailable("Original owned Find state anchor required"));
@@ -110,6 +111,10 @@ pub(crate) fn bind(process: &dyn Process, state_id: i32) -> Result<NavigationAnc
         find,
         window,
         control,
+        characters: observation
+            .characters
+            .clone()
+            .ok_or_else(|| unavailable("Original character forwarding binding required"))?,
         decimal: state_id.to_string(),
     })
 }
@@ -123,12 +128,13 @@ impl NavigationAnchor {
     }
 
     fn typing_observation(&self, process: &dyn Process) -> Result<Observation> {
-        let observation = self.find.observe_guarded(
+        let observation = self.find.observe_characters(
             process,
             retained::ViewGuard::Typing {
                 window: self.window,
                 control: &self.control,
             },
+            &self.characters,
         )?;
         if typing_control(&observation)? != self.control {
             return Err(Error::new(
@@ -235,6 +241,7 @@ impl NavigationAnchor {
             "state":state.state(),"state_id":state.state_id(),"template":state.template(),
             "map_position":state.map_position(),"decimal_query":self.decimal,
             "initial_query":"","initial_both_focus_aliases_match":true,
+            "character_forwarding":self.characters.forwarding_kind(),
             "control_find":self.control.find(),"control_registry":self.control.registry(),
             "member_path_count":self.control.children().len(),
             "member_count":self.control.children().iter().map(|(_,members)|members.len()).sum::<usize>(),

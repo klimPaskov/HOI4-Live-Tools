@@ -19,14 +19,16 @@ use sha2::{Digest, Sha256};
 #[path = "placement_state.rs"]
 mod placement_state;
 #[allow(unused_imports)]
-pub(crate) use placement_state::{PlacementAnchor, PlacementDelta, PlacementReadback};
+pub(crate) use placement_state::{
+    PlacementAnchor, PlacementDelta, PlacementProof, PlacementReadback,
+};
 
 // Readback only. A future ordinary Escape attempt must retain this original
 // scope and complete queue; this adds no key transport or command permission.
 #[allow(dead_code)]
 mod clearing_state;
 #[allow(unused_imports)]
-pub(crate) use clearing_state::{ClearSelectionAnchor, ClearSelectionReadback};
+pub(crate) use clearing_state::{ClearSelectionAnchor, ClearSelectionReadback, ClearedProof};
 
 #[cfg(test)]
 #[path = "../../../tests/support/mac_construction_selection_state.rs"]
@@ -42,6 +44,27 @@ pub(crate) struct SelectionState {
 #[derive(Clone, Debug)]
 pub(crate) struct SelectionAnchor {
     original: SelectionState,
+}
+
+/// A witnessed inactive-to-requested-selection transition. It retains both
+/// exact queues/scopes; this is never a fresh baseline or input authority.
+#[derive(Clone, Debug)]
+pub(crate) struct SelectedProof {
+    original: SelectionAnchor,
+    selected: SelectionAnchor,
+}
+// Prospective composite handoff; existing primitive actors remain unchanged.
+#[allow(dead_code)]
+impl SelectedProof {
+    pub(crate) fn original_anchor(&self) -> &SelectionAnchor {
+        &self.original
+    }
+    pub(crate) fn selected_anchor(&self) -> &SelectionAnchor {
+        &self.selected
+    }
+    pub(crate) fn context(&self) -> &ClockContext {
+        self.selected.context()
+    }
 }
 
 fn changed(message: &str) -> Error {
@@ -144,6 +167,27 @@ impl SelectionAnchor {
             ));
         }
         Ok(())
+    }
+    /// Observe the original inactive scope and complete queue once. Inactive
+    /// is pending; another selected template is a refusal, never a new target.
+    /// The caller retains the same attempt/Fence; this grants no input.
+    #[allow(dead_code)] // Prospective typed composite only, not yet registered.
+    pub(crate) fn observe_selected(&self, process: &dyn Process) -> Result<Option<SelectedProof>> {
+        self.require_inactive()?;
+        let now = self.observe(process)?;
+        self.same_scope_and_queue(&now)?;
+        if now.selection == Selection::Inactive {
+            return Ok(None);
+        }
+        if !self.is_selected(&now) {
+            return Err(changed(
+                "Construction selected another target during selection",
+            ));
+        }
+        Ok(Some(SelectedProof {
+            original: self.clone(),
+            selected: SelectionAnchor { original: now },
+        }))
     }
     pub(crate) fn initially_selected(&self) -> bool {
         matches!(&self.original.selection, Selection::Ordinary(t) if *t == self.original.binding.target)

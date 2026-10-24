@@ -41,7 +41,7 @@ struct Scope {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-struct Window {
+pub(in crate::construction) struct Window {
     object: u64,
     flags: u8,
     states: [i32; 2],

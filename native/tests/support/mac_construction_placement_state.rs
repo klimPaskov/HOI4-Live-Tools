@@ -507,3 +507,6 @@ fn private_baseline_retains_original_selected_target_and_complete_queue_fingerpr
     assert_eq!(baseline["queue_member_count"], 2);
     assert!(serde_json::to_vec(&baseline).unwrap().len() < 8192);
 }
+
+#[path = "mac_construction_handoffs.rs"]
+mod handoffs;

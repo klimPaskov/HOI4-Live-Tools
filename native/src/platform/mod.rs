@@ -8,6 +8,8 @@ use std::path::Path;
 // by macOS. Other native input adapters keep their existing delivery contracts.
 #[cfg(any(target_os = "macos", test))]
 pub(crate) mod key_once;
+#[cfg(any(target_os = "macos", test))]
+pub(crate) mod mouse_occlusion;
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct Identity {
     pub pid: i32,

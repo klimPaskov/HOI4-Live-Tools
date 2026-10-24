@@ -2,6 +2,15 @@
 
 ## Unreleased native preview
 
+- Add default-off Mac ordinary Find-button opening with retained target/queue
+  identity, bounded route waits and strict historical replay. A recorded native
+  1080p component verified one click in 603 ms without screenshots or pauses.
+- Reject pointer actions when another window covers the intended point,
+  including floating panels. Add independently checked printable-character
+  admission and opaque construction handoffs. Introduce distinct queued-minimum
+  plan syntax and scheduling; its native worker adapters explicitly refuse
+  until the composite implementation is qualified.
+
 - Add default-off Mac ordinary construction cancellation with immutable target
   ownership, fresh complete keyboard admission, exact inactive/full-queue
   readback and strict historical-only replay. Recorded native 1080p components

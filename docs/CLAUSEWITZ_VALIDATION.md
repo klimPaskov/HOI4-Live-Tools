@@ -1,5 +1,48 @@
 # Clausewitz-MCP validation
 
+## Native Mac ordinary Find click — 24 October 2026
+
+One Luna-medium test in paused historical Normal vanilla Germany at native
+1920×1080 verified the exact named Find button with one ordinary move/click.
+The **22-tool-call driver took 5.150 seconds**, with zero errors; the action took
+**603.114 ms** and its same-ID historical replay **144.838 ms**. Find became
+visible, empty and focused. Complete own queue, Research/Focus/production and
+clock/setup projections stayed unchanged. There were no keys, screenshots,
+activation, workers, clock commands or observation pauses. The journal retained
+exactly Dispatching → Verified; replay appended nothing. Lease release and MCP
+EOF passed. The recording explicitly stopped and exited 0 at **1920×1108 H.264,
+54.763333 seconds, 1,609 encoded/decoded frames and 1,609 complete callbacks**.
+
+Earlier menu attempts sent possible input before losing foreground. Private
+onscreen metadata and system logs identified an overlapping floating Docker
+window above the intended New Game point. Their original failures are preserved;
+they are not pre-input refusals. The new platform guard checks every onscreen
+layer at the intended point and rejects occluders. Its separate read-only native
+qualification passed without input. A narrow verified system-cursor exception
+uses current bounded process identity rather than a fixed PID. The successful
+menu setup and Find test followed reversible environment preparation.
+
+One Find harness stopped before identity checks/MCP/input because its manifest
+omitted an evidence pin; the corrected fresh test requires complete pins. The
+next decimal qualification then stopped during pregrant startup with macOS
+task-access status **-60007**, before any lease, action or input. The OS also
+stopped that recording with ScreenCaptureKit **-3821**; it is a failed recording,
+not a successful gate. Their causal relationship is unknown. A separate read-only
+check of the previously successful helper confirmed the task-access refusal.
+
+The exact code/configuration/fixture source passed **2,158 Rust tests**, **327
+optimized checks**, **956 Python tests (37 skips)**, formatting, strict all-target
+checks on macOS/Windows GNU/x86 Linux musl/ARM64 Linux musl, release and unchanged
+**28-tool unbound stdio**. All 317 code/configuration/fixture files match that
+validated private source; the two public documentation files retain newer
+cancellation documentation. All 38 unrelated legacy WIP paths remain unchanged.
+
+Printable-character forwarding, opaque construction handoffs and distinct
+`ConstructionQueue` syntax/scheduling are foundations. Queue execution still
+explicitly refuses on Mac/Linux; the composite actor remains private and
+unqualified. No advancing-time, two-year or full campaign acceptance is claimed.
+The paused game provides no real-time-per-game-year result.
+
 ## Native Mac ordinary cancellation and historical replay — 24 October 2026
 
 The default-off `hoi4_construction_clear_selection` qualification retains the

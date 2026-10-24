@@ -173,6 +173,30 @@ pub(in crate::construction) fn observe(
 }
 
 impl Observation {
+    /// Only the Find mouse opener may wait read-only after its single move.
+    /// Unsupported dispatch gates still refuse immediately. Correlation must
+    /// eventually satisfy the unchanged complete predicate below; Pending is
+    /// never authority to post a button event or to move the cursor again.
+    pub(in crate::construction) fn require_find_pre_down(
+        &self,
+        parent_verified: bool,
+    ) -> Result<()> {
+        if self.dispatch_skip != 0
+            || (self.conditional_enable != 0 && self.flags & 2 == 0)
+            || self.flags & 0xc00 != 0x800
+            || self.wrapper_gate != 0
+            || (self.optional_gate_present && !parent_verified)
+            || self.post_click_hook_present
+        {
+            return self.require_ordinary_target(parent_verified);
+        }
+        self.require_ordinary_target(parent_verified).map_err(|_| {
+            crate::error::Error::new(
+                "construction_route_pending",
+                "Original Find move awaits complete current cursor/hit correlation",
+            )
+        })
+    }
     /// Narrow ordinary-input correlation. This does not assert an atomic cache
     /// generation or physical delivery; same-attempt game readback is required.
     #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
@@ -313,5 +337,58 @@ mod admission_tests {
         o.flags |= 2;
         o.optional_gate_present = false;
         o.require_ordinary_target(false).unwrap();
+    }
+    #[test]
+    fn find_pending_never_weakens_the_positive_complete_route_predicate() {
+        let o = ready();
+        o.require_find_pre_down(true).unwrap();
+        o.require_ordinary_target(true).unwrap();
+        let changes: [fn(&mut Observation); 11] = [
+            |o| o.sources.clear(),
+            |o| o.sources.push(o.renderer),
+            |o| o.targets.clear(),
+            |o| o.targets.push(o.button),
+            |o| o.targets.swap(0, 1),
+            |o| o.aliases_match[0] = false,
+            |o| o.aliases_match[1] = false,
+            |o| o.current[0] += 1.0,
+            |o| o.processed[0] += 1.0,
+            |o| o.processed_event_point[1] += 1,
+            |o| o.flags &= !0x2000,
+        ];
+        for change in changes {
+            let mut changed = ready();
+            change(&mut changed);
+            assert_eq!(
+                changed.require_find_pre_down(true).unwrap_err().code,
+                "construction_route_pending"
+            );
+            assert_eq!(
+                changed.require_ordinary_target(true).unwrap_err().code,
+                "construction_route_unavailable"
+            );
+        }
+    }
+    #[test]
+    fn find_unsupported_dispatch_gates_refuse_without_entering_a_wait() {
+        let changes: [fn(&mut Observation); 5] = [
+            |o| o.dispatch_skip = 1,
+            |o| o.conditional_enable = 1,
+            |o| o.flags |= 0x400,
+            |o| o.wrapper_gate = 1,
+            |o| o.post_click_hook_present = true,
+        ];
+        for change in changes {
+            let mut o = ready();
+            change(&mut o);
+            assert_eq!(
+                o.require_find_pre_down(true).unwrap_err().code,
+                "construction_route_unavailable"
+            );
+        }
+        assert_eq!(
+            ready().require_find_pre_down(false).unwrap_err().code,
+            "construction_route_unavailable"
+        );
     }
 }

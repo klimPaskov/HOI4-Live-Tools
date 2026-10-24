@@ -4,6 +4,7 @@
 //! permission of the responsible app. Clicks target game-logical points inside
 //! the owned window's content rectangle. No text, activation or engine call.
 use super::key_once;
+mod occlusion;
 use crate::{
     error::{Error, Result},
     gui::macos::{self, Geometry},
@@ -425,6 +426,7 @@ fn click_sequence_checked(
     pause(std::time::Duration::from_millis(60));
     check()?;
     before_down()?;
+    check()?;
     let dispatched = post(down, point);
     if dispatched.is_ok() {
         pause(std::time::Duration::from_millis(50));
@@ -602,6 +604,18 @@ impl<'p> MacKeys<'p> {
         }
         Ok(())
     }
+    /// The exact pointer point must reach this window through the current OS
+    /// stack, including nonzero-level overlays. The system cursor exception is
+    /// independently typed; a game GUI hit beneath an OS overlay is insufficient.
+    fn point_preflight(&self, point: Point) -> Result<()> {
+        self.preflight()?;
+        occlusion::require(self.window, point)?;
+        self.process.get().check()?;
+        for check in &self.input_guards {
+            check()?;
+        }
+        Ok(())
+    }
     /// Read-only combined-session state. Never release user-held input to make
     /// a production receipt pass. Recheck the owned geometry on both sides.
     pub(crate) fn confirm_input_idle(&self) -> Result<()> {
@@ -639,7 +653,7 @@ impl<'p> MacKeys<'p> {
         click_sequence_checked(
             point,
             (LEFT_MOUSE_DOWN, LEFT_MOUSE_UP),
-            || self.preflight(),
+            || self.point_preflight(point),
             before_down,
             |kind, _| events.post(kind),
             std::thread::sleep,
@@ -699,25 +713,33 @@ impl<'p> MacKeys<'p> {
         let pause = |ms: u64| std::thread::sleep(std::time::Duration::from_millis(ms));
         // SAFETY: a null source is allowed; every event is released after posting.
         unsafe {
-            let post = |event: CFTypeRef, flags: u64| -> Result<()> {
+            let post = |event: CFTypeRef, flags: u64, pointer: bool| -> Result<()> {
                 if event.is_null() {
                     return Err(Error::new("input_unavailable", "Input event unavailable"));
                 }
                 CGEventSetFlags(event, flags);
-                CGEventPost(HID_EVENT_TAP, event);
+                let ready = if pointer {
+                    self.point_preflight(point)
+                } else {
+                    Ok(())
+                };
+                if ready.is_ok() {
+                    CGEventPost(HID_EVENT_TAP, event);
+                }
                 CFRelease(event);
-                Ok(())
+                ready
             };
             let modifier = |down: bool| -> Result<()> {
                 let event = CGEventCreateKeyboardEvent(std::ptr::null(), SHIFT_KEY, down);
                 if !event.is_null() {
                     CGEventSetType(event, FLAGS_CHANGED);
                 }
-                post(event, if down { SHIFT_FLAGS } else { 0 })
+                post(event, if down { SHIFT_FLAGS } else { 0 }, false)
             };
             post(
                 CGEventCreateMouseEvent(std::ptr::null(), MOUSE_MOVED, point, LEFT_BUTTON),
                 0,
+                true,
             )?;
             pause(100);
             self.preflight()?;
@@ -728,11 +750,13 @@ impl<'p> MacKeys<'p> {
                 post(
                     CGEventCreateMouseEvent(std::ptr::null(), LEFT_MOUSE_DOWN, point, LEFT_BUTTON),
                     SHIFT_FLAGS,
+                    true,
                 )?;
                 pause(60);
                 post(
                     CGEventCreateMouseEvent(std::ptr::null(), LEFT_MOUSE_UP, point, LEFT_BUTTON),
                     SHIFT_FLAGS,
+                    false,
                 )
             })();
             pause(150);
@@ -759,8 +783,16 @@ impl<'p> MacKeys<'p> {
                 if event.is_null() {
                     return Err(Error::new("input_unavailable", "Mouse event unavailable"));
                 }
-                CGEventPost(HID_EVENT_TAP, event);
+                let ready = if kind == RIGHT_MOUSE_UP || kind == LEFT_MOUSE_UP {
+                    Ok(()) // Release cleanup is never suppressed by occlusion.
+                } else {
+                    self.point_preflight(point)
+                };
+                if ready.is_ok() {
+                    CGEventPost(HID_EVENT_TAP, event);
+                }
                 CFRelease(event);
+                ready?;
             }
             std::thread::sleep(std::time::Duration::from_millis(pause));
         }
@@ -809,8 +841,16 @@ impl<'p> MacKeys<'p> {
                 if event.is_null() {
                     return Err(Error::new("input_unavailable", "Mouse event unavailable"));
                 }
-                CGEventPost(HID_EVENT_TAP, event);
+                let ready = if kind == RIGHT_MOUSE_UP || kind == LEFT_MOUSE_UP {
+                    Ok(()) // Release cleanup is never suppressed by occlusion.
+                } else {
+                    self.point_preflight(point)
+                };
+                if ready.is_ok() {
+                    CGEventPost(HID_EVENT_TAP, event);
+                }
                 CFRelease(event);
+                ready?;
             }
             Ok(())
         };
@@ -836,16 +876,24 @@ impl<'p> MacKeys<'p> {
             if moved.is_null() {
                 return Err(Error::new("input_unavailable", "Mouse event unavailable"));
             }
-            CGEventPost(HID_EVENT_TAP, moved);
+            let ready = self.point_preflight(point);
+            if ready.is_ok() {
+                CGEventPost(HID_EVENT_TAP, moved);
+            }
             CFRelease(moved);
+            ready?;
             std::thread::sleep(std::time::Duration::from_millis(60));
             self.preflight()?;
             let wheel = CGEventCreateScrollWheelEvent(std::ptr::null(), 0, 1, pixels);
             if wheel.is_null() {
                 return Err(Error::new("input_unavailable", "Scroll event unavailable"));
             }
-            CGEventPost(HID_EVENT_TAP, wheel);
+            let ready = self.point_preflight(point);
+            if ready.is_ok() {
+                CGEventPost(HID_EVENT_TAP, wheel);
+            }
             CFRelease(wheel);
+            ready?;
         }
         std::thread::sleep(std::time::Duration::from_millis(120));
         Ok(())
@@ -1362,9 +1410,103 @@ mod click_cleanup_tests {
                 assert_eq!(result.unwrap_err().code, "target_changed");
             } else {
                 result.unwrap();
-                assert_eq!(&trace[5..], &["down", "wait", "up", "wait"]);
+                assert_eq!(&trace[5..], &["check", "down", "wait", "up", "wait"]);
             }
         }
+    }
+    #[test]
+    fn point_guard_runs_after_control_reads_and_cannot_suppress_release() {
+        use crate::platform::mouse_occlusion::{require_target, Window};
+        use std::cell::{Cell, RefCell};
+        let game = Window {
+            id: 1,
+            owner: 10,
+            layer: 0,
+            bounds: [0.0, 0.0, 100.0, 100.0],
+            alpha: 1.0,
+            onscreen: true,
+            owner_name: None,
+            name: None,
+        };
+        let cover = Window {
+            id: 2,
+            owner: 20,
+            layer: 3,
+            ..game.clone()
+        };
+        for stage in [0, 1, 2] {
+            let occluded = Cell::new(stage == 0);
+            let posted = RefCell::new(Vec::new());
+            let result = click_sequence_checked(
+                Point { x: 10.0, y: 20.0 },
+                (LEFT_MOUSE_DOWN, LEFT_MOUSE_UP),
+                || {
+                    let windows = if occluded.get() {
+                        vec![cover.clone(), game.clone()]
+                    } else {
+                        vec![game.clone()]
+                    };
+                    require_target([10.0, 20.0], 1, 10, game.bounds, &windows, None)
+                },
+                || {
+                    if stage == 1 {
+                        occluded.set(true);
+                    } // Overlay appears during the arbitrary control/read callback.
+                    Ok(())
+                },
+                |kind, _| {
+                    posted.borrow_mut().push(kind);
+                    if kind == LEFT_MOUSE_DOWN {
+                        occluded.set(true);
+                    } // New obstruction cannot suppress mandatory up.
+                    Ok(())
+                },
+                |_| {},
+            );
+            let posted = posted.into_inner();
+            match stage {
+                0 => {
+                    assert_eq!(result.unwrap_err().code, "input_point_occluded");
+                    assert!(posted.is_empty());
+                }
+                1 => {
+                    assert_eq!(result.unwrap_err().code, "input_point_occluded");
+                    assert_eq!(posted, vec![MOUSE_MOVED]);
+                }
+                _ => {
+                    result.unwrap();
+                    assert_eq!(posted, vec![MOUSE_MOVED, LEFT_MOUSE_DOWN, LEFT_MOUSE_UP]);
+                }
+            }
+        }
+    }
+    #[test]
+    fn original_deadline_is_rechecked_after_before_down_reads() {
+        use std::cell::Cell;
+        let expired = Cell::new(false);
+        let mut posted = Vec::new();
+        let result = click_sequence_checked(
+            Point { x: 10.0, y: 20.0 },
+            (LEFT_MOUSE_DOWN, LEFT_MOUSE_UP),
+            || {
+                if expired.get() {
+                    Err(Error::new("action_deadline", "fixture"))
+                } else {
+                    Ok(())
+                }
+            },
+            || {
+                expired.set(true);
+                Ok(())
+            },
+            |kind, _| {
+                posted.push(kind);
+                Ok(())
+            },
+            |_| {},
+        );
+        assert_eq!(result.unwrap_err().code, "action_deadline");
+        assert_eq!(posted, vec![MOUSE_MOVED]);
     }
     #[test]
     fn stop_after_settle_prevents_down_and_all_later_motion() {

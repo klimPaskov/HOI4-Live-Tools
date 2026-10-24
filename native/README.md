@@ -992,6 +992,16 @@ canonical selection, window, named Start button, callback, visibility, geometry
 and final stability checks. A narrower read does not authorize retrying an old
 refused or uncertain action.
 
+The default-off `hoi4_construction_find_open` qualification opens the exact own
+Find button with at most one move/click, preserving the complete construction
+queue. Its native 1080p component took 603 ms; historical replay was input-free.
+Mac pointer transport checks the first window covering the intended point across
+all onscreen layers. A narrow verified system-cursor exception is separate from
+foreign-window occlusion. Reads do not activate, pause or move the game.
+Printable-character admission and typed construction handoffs remain distinct
+from full campaign acceptance. `ConstructionQueue` plan entries express a queued
+minimum; execution is explicitly unsupported until the composite adapter passes.
+
 ## Provenance and acknowledgements
 
 This foundation builds on [smerss/Clausewitz-MCP](https://github.com/smerss/Clausewitz-MCP),

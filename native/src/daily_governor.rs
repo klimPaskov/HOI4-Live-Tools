@@ -101,6 +101,20 @@ pub struct DailyResult {
     pub blocking_decision: Option<String>,
     pub digest: Value,
 }
+// Only the distinct queued-minimum intent participates in this group. Legacy
+// Construction total_levels is deliberately not a queued-amount specification.
+fn construction_queue_key(entry: &Entry) -> Option<(&str, u32)> {
+    match &entry.intent {
+        Intent::Economy {
+            target:
+                EconomyTarget::ConstructionQueue {
+                    building, state_id, ..
+                },
+        } => Some((building, *state_id)),
+        _ => None,
+    }
+}
+
 fn reason(s: &str) -> String {
     s.chars().filter(|c| !c.is_control()).take(160).collect()
 }
@@ -588,7 +602,40 @@ impl Governor {
             .cloned()
             .collect()
     }
+    /// Pending queue heads are independent for each canonical building/state.
+    /// A refused or unresolved head blocks later goals for its pair. Complete
+    /// entries stay complete; this query never reopens them or proves readiness.
+    pub fn pending_construction(&self, day: i64) -> Vec<Entry> {
+        self.state
+            .plan
+            .entries
+            .iter()
+            .filter(|entry| {
+                construction_queue_key(entry).is_some()
+                    && self.queue_head(entry)
+                    && matches!(self.state.entries.get(&entry.id),
+                    Some(EntryState::Pending { reason_day, .. }) if *reason_day != Some(day))
+            })
+            .cloned()
+            .collect()
+    }
     fn queue_head(&self, entry: &Entry) -> bool {
+        if let Some(key) = construction_queue_key(entry) {
+            return self
+                .state
+                .plan
+                .entries
+                .iter()
+                .find(|candidate| {
+                    construction_queue_key(candidate) == Some(key)
+                        && !matches!(
+                            self.state.entries.get(&candidate.id),
+                            Some(EntryState::Complete { .. })
+                        )
+                })
+                .is_some_and(|head| head.id == entry.id);
+        }
+
         if let Intent::Economy {
             target: EconomyTarget::Production { line_id, .. },
         } = &entry.intent
@@ -841,6 +888,24 @@ impl Governor {
                 return Err(Error::new(
                     "plan_conflict",
                     "Existing production line queue order must remain an unchanged prefix",
+                ));
+            }
+        }
+        let queues: std::collections::BTreeSet<_> = self
+            .state
+            .plan
+            .entries
+            .iter()
+            .filter_map(construction_queue_key)
+            .collect();
+        for key in queues {
+            let belongs = |entry: &&Entry| construction_queue_key(entry) == Some(key);
+            let old: Vec<_> = self.state.plan.entries.iter().filter(belongs).collect();
+            let updated: Vec<_> = next.entries.iter().filter(belongs).collect();
+            if !updated.starts_with(&old) {
+                return Err(Error::new(
+                    "plan_conflict",
+                    "Existing construction building/state queue order must remain an unchanged prefix",
                 ));
             }
         }
