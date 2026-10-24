@@ -46,13 +46,21 @@ a separate later audit decoded all 19,883 frames. Rendering/input delay is under
 investigation. Subsequent no-game context tests passed, but the fresh GL1 game
 failed graphics initialization with Missing GL version and SIGSEGV. Its ordinary
 close failed; exact owned resource cleanup, including a forked crash process,
-finished separately. No game or input authority remains. See
+finished separately. A fresh no-recorder GL0 comparison reached Germany in
+47.191 seconds, but its Research opener also timed out after five seconds with
+one uncertain Intent and pending root transition [0, 1]. Its lifecycle helper
+refused an oversized diagnostic record before closing; one separate owned
+ordinary close and resource cleanup finished. No game or input authority remains. See
 [the validation record](CLAUSEWITZ_VALIDATION.md#fex-gl-context-and-frontend-diagnostics--24-october-2026).
 
-The current public-source candidate passed 2,214 Rust tests, strict all-target
+The current public-source candidate passed 2,232 Rust tests, strict all-target
 checks for four targets, release and unchanged 28-tool unbound stdio. Actual ARM
 Linux executed 32 optimized retained-queue/selection fixtures; the preceding
 checkpoint also executed 11 Research fixtures.
+The internal navigation-only Research transit also passed 18 optimized fixtures
+on actual ARM Linux. It retains the original Focus/production goal through busy
+slots and natural completion, but adds no executable route, permission or journal
+migration. The existing assignment opener still requires an actual empty slot.
 The workspace Python suite passed 956 tests (37 skips), including preserved WIP.
 The internal read-only queue now optionally joins typed Linux inactive/requested
 selection in the same witness. Default readers stay unchanged; mixed construction
@@ -65,10 +73,13 @@ execution remains disabled and its private Mac implementation unqualified.
    test. Keep earlier successful navigation and the new pregrant refusal separate;
    never generalize Escape's control-byte proof to printable characters.
    Preserve the separate GL1 startup failure and the uncertain GL0 journal.
-   A fresh GL0/no-recorder diagnostic can test recording-load interference,
-   with descendant tracking fixed before launch and no old authority reused.
+   The fresh GL0/no-recorder diagnostic did not resolve the Research timeout.
+   Keep its pending-transition evidence and fix compact lifecycle metadata before
+   another launch; never loosen the deadline or settle from later visibility.
    Linux diagnostics do not replace native Mac showcase acceptance.
-2. Integrate construction with mixed standing plans and complete the advancing-time
+2. Build an ordinary navigation adapter around the retained original-goal transit;
+   do not fabricate a Research assignment or relax existing permission exclusions.
+   Integrate construction with mixed standing plans and complete the advancing-time
    gate. Keep reads stationary and event-driven; observations never pause.
 3. Complete shortage repair, wider economy actions, combat, naval invasions and
    verified ID-based recovery. Keep campaign FAIR/META permissions separate from

@@ -2,6 +2,15 @@
 
 ## Unreleased native preview
 
+- Add an internal navigation-only Research transit identity that retains the
+  original Focus/production goal and fixed deadline without an empty-slot or
+  fabricated Research-assignment dependency. Eighteen fixtures cover busy slots,
+  natural completion, identity changes and deadline handling. This does not add
+  an executable route, worker permission or journal migration.
+- Record the fresh 1080p no-recorder FEX comparison: structured reads passed,
+  but the one Research opener remained uncertain at its original five-second
+  deadline. Preserve the separate bounded-diagnostic cleanup failure and later
+  exact owned resource cleanup. No retry or campaign acceptance is claimed.
 - Join optional typed Linux construction selection to the retained complete
   queue in one witnessed read, preserving the original manager and catalog.
   Eleven additional fixtures cover inactive/requested transitions, replacement

@@ -12,6 +12,9 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::path::Path;
 mod departure;
+// Separate volatile route identity. Existing persisted v1 destinations/departures
+// and worker permissions are intentionally unchanged.
+pub(crate) mod transit;
 #[cfg(any(target_os = "linux", all(test, unix)))]
 pub(crate) use departure::Source;
 use departure::Step;

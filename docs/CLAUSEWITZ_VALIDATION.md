@@ -1,5 +1,64 @@
 # Clausewitz-MCP validation
 
+## Navigation-only Research transit foundation — 24 October 2026
+
+An internal volatile transit now retains the complete original Focus or production
+entry, own scope, Research roots/ordered slot pointers and fixed caller deadline.
+It requires no Research technology/slot target and permits busy slots, natural
+completion and advancing dates. Changed original identities, unknown panels,
+regressing chronology and late positive observations refuse. Concrete callback
+errors remain concrete even when late; no read loop, retry or deadline renewal is
+introduced. Callers still own fresh process/memory witnesses and canonical final
+target proof: these types are trusted internal data, not sealed reader authority.
+
+Panel readiness cannot become a goal receipt. Existing ordinary assignment opening
+still requires an actual empty slot, and existing worker permission exclusions,
+persisted journal schemas and uncertainty rules remain unchanged. A future ordinary
+navigation adapter needs its own stage semantics, current-effect receipt and
+durable reconnect design. This foundation is not an executable busy-slot route.
+
+The byte-identical source passed **2,232 host Rust tests**, strict all-target
+checks on macOS, Windows GNU, x86 Linux musl and ARM64 Linux musl, release and
+unchanged **28-tool unbound stdio**. Actual owned ARM Linux executed all **18 new
+optimized transit fixtures**, without a game or input. Independent source review
+found no actionable issue within this scope. These checks do not establish live
+mixed-plan, advancing-time, two-year or campaign acceptance.
+
+## FEX no-recorder Research comparison — 24 October 2026
+
+A fresh owned GL0/software session used the `9837e98` Rust runtime, with all
+nine exact-source CI jobs passed, original graphical settings, no recorder and
+a **1920×1080** client. Luna medium reached vanilla FAIR Germany with Normal
+difficulty and historical AI. Frontend startup took **47.191 seconds**; the
+fresh paused overview/complete Research/geometry baseline took **50.870 ms**.
+The earlier recorded startup took 169.759 seconds, but cache and environment
+differences prevent attributing that difference solely to recording load.
+
+The one Research opener still failed: **5,023.810 ms** from driver request to
+response, including **5,011.339 ms** after forwarding. Delivery was
+`server_confirmed`, while `game_action_verified=false`. The original five-second
+deadline ended after **46 rejected opening reads**; the last retained root was
+literally shown with transition states **[0, 1]**. There is **one Intent and no
+Verified receipt**, no retry, historical replay or close action. Omitting the
+recorder therefore did not make this action meet its deadline. It does not
+identify the underlying update/rendering bottleneck.
+
+Independent later reads showed the panel visible and the complete baseline
+unchanged; they do not settle the uncertain attempt. Lease release and MCP EOF
+passed. The MCP gate used no screenshots, cursor movement, worker, clock or
+observation-pause command. The game remained paused, so there is no
+real-time-per-game-year measurement or advancing-time acceptance.
+
+The frozen lifecycle helper then refused before any close intent because its
+**84,756-byte** diagnostic frontend record exceeded its **65,536-byte** reader
+bound. Root retained this failure and sent one separately scoped ordinary
+window-close request, which returned 0 and exited the game. An immediate
+owner-absence assertion also failed; a subsequent independent audit proved its
+exit without a signal. Only the exact owned display processes needed SIGTERM.
+Final process census was clear, both grants retired, and the created FEX config
+and display socket were absent. No game signal or repeated close was sent.
+The cleanup and action failures remain failures; no campaign is accepted.
+
 ## FEX GL context and frontend diagnostics — 24 October 2026
 
 A bounded no-game test passed six 1920×1080 rendering workloads: native ARM,

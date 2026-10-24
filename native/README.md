@@ -33,9 +33,11 @@ permissions or require unrelated facilities roots for opening. Fresh live valida
 of this opening-readiness correction remains pending. The later 1080p FEX Rust
 adapter attempt failed its first Research opener at the original five-second
 deadline. Its single uncertain Intent remains quarantined despite a later visible
-panel. Error-only diagnostics now preserve a bounded transport-delivery label;
+panel. A separate no-recorder comparison also timed out with its shown root still
+in transition state [0, 1]; encoding load alone does not explain the failure.
+Error-only diagnostics now preserve a bounded transport-delivery label;
 delivery never establishes the game effect or permits a retry. See
-[the failed component](../docs/CLAUSEWITZ_VALIDATION.md#fex-rust-adapter-attempt--24-october-2026).
+[the latest failed component](../docs/CLAUSEWITZ_VALIDATION.md#fex-no-recorder-research-comparison--24-october-2026).
 
 An internal read-only construction anchor retains the original own scope,
 requested state, complete canonical catalog and ordered full queue. Fresh reads
@@ -47,6 +49,14 @@ cover the both-ABI queue and Linux selection boundaries. Default queue and legac
 JSON reads are unchanged. These are read-only facts, with no selection input,
 placement, exact +1, action receipt or worker permission; cross-call chronology
 and deadline ownership remain the caller's job.
+
+An internal navigation-only Research transit retains the original Focus or
+production goal, exact own scope, ordered slot/root identities and caller
+deadline. Busy Research slots and natural completion do not require a fabricated
+Research assignment. This is trusted internal observation data, with no input,
+goal receipt, persistence or recovery authority. The executable assignment opener
+still requires an actual empty slot; busy-slot navigation and mixed worker wiring
+remain unfinished. Existing permissions and journal schemas are unchanged.
 
 ResearchClose002 passed direct Research closing, including historical replays and
 no-ops. Mixed Research/production worker routing has an explicit opt-in preview;

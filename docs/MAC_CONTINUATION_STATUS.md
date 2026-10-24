@@ -108,11 +108,19 @@ on both the Mac host and actual ARM Linux, with no action or worker permission.
 The later GL1 frontend attempt failed during graphics initialization with Missing
 GL version and SIGSEGV; ordinary close also failed. Its exact owned processes,
 including a forked crash process missed by the helper, were separately closed.
-No game or input authority remains. The internal queue now also offers an opt-in
+The fresh no-recorder GL0 trial also timed out at the original Research deadline,
+with a shown root still in transition [0, 1]. Its oversized frontend diagnostic
+blocked helper cleanup before a close intent; a separate ordinary close exited
+the game, and exact resource cleanup finished without a game signal. Both failures
+are retained. No game or input authority remains. The internal queue now also offers an opt-in
 typed Linux selection read in that same witness, with default readers unchanged.
-Current standalone checks pass 2,214 Rust tests, four-target strict checks,
+Current standalone checks pass 2,232 Rust tests, four-target strict checks,
 release and unchanged 28-tool unbound stdio; actual ARM Linux passed 32 optimized
 queue/selection fixtures. The workspace Python suite passed 956 tests (37 skips).
+Another 18 optimized fixtures passed on actual ARM Linux for the internal
+navigation-only Research transit. It retains the original Focus/production goal
+without an empty Research slot dependency; executable routing, worker permissions
+and persisted journals remain unchanged.
 These checks do not qualify the private composite worker or a live campaign.
 
 Finish the new decimal-character gate when macOS authorization is available, then integrate

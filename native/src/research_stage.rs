@@ -192,6 +192,40 @@ impl OwnState {
             ));
         }
         target.validate_key()?;
+        self.validate_observed_panel()?;
+        if self.panel_binding.is_none() && target.stage == Stage::ClosePanel {
+            return Err(error(
+                "research_precondition",
+                "ClosePanel requires original panel identity proof",
+            ));
+        }
+        Ok(())
+    }
+    /// Navigation-only validation: no technology, requested slot or assignment
+    /// goal exists. Complete positive panel identity is still required.
+    pub(crate) fn validate_navigation(&self, epoch: &Epoch) -> Result<()> {
+        if &self.epoch != epoch
+            || !(1..=32).contains(&self.researching.len())
+            || self.visible_info.len() > 64
+            || self
+                .selected_slot
+                .is_some_and(|s| s as usize >= self.researching.len())
+        {
+            return Err(error(
+                "ownership_changed",
+                "Research navigation own context changed",
+            ));
+        }
+        self.validate_observed_panel()?;
+        if self.panel_binding.is_none() {
+            return Err(error(
+                "research_precondition",
+                "Research navigation requires original panel identity proof",
+            ));
+        }
+        Ok(())
+    }
+    fn validate_observed_panel(&self) -> Result<()> {
         if let Some(folder) = &self.selected_folder {
             key(folder)?;
         }
@@ -205,11 +239,6 @@ impl OwnState {
         }
         if let Some(binding) = &self.panel_binding {
             binding.validate(self)?;
-        } else if target.stage == Stage::ClosePanel {
-            return Err(error(
-                "research_precondition",
-                "ClosePanel requires original panel identity proof",
-            ));
         }
         Ok(())
     }
