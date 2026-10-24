@@ -1,5 +1,47 @@
 # Clausewitz-MCP validation
 
+## FEX GL context and frontend diagnostics — 24 October 2026
+
+A bounded no-game test passed six 1920×1080 rendering workloads: native ARM,
+FEX guest GL0 and FEX GL1, each with legacy and explicit OpenGL 2.1 contexts.
+All cases reported zero X errors. Median measured start intervals were
+2.26–2.32 ms native, 2.93–2.96 ms GL0 and 2.37–2.38 ms GL1. These measure a
+synthetic rendering-call workload, not display presentation or game input.
+Different Mesa versions also prevent treating the difference as an isolated
+architecture effect. Original probe processes and temporary configs closed.
+
+A separate fresh GL1/software game attempt then failed before the frontend.
+At 1920×1080 client geometry, the game logged `glewInit failed: Missing GL version`
+and SIGSEGV during graphics initialization; its setup log remained empty.
+There were no menu actions, gameplay input, screenshots, recorder or player grant.
+The synthetic context result therefore does not qualify the game's GL1 path.
+
+One ordinary window-close request was confirmed by the X server, but the game
+did not exit. Resource cleanup required SIGKILL after the exact owned game
+ignored SIGTERM. A forked crash process also outlived it, exposing a diagnostic
+helper's descendant-tracking defect: the temporary config had been removed
+before that descendant exited. Root separately verified and closed this own
+isolated-run process. Final census found no game/server/display/recorder,
+and the created config and display socket were absent. Original frontend and
+ordinary-close failures remain failed; cleanup does not turn them into passes.
+
+The next Linux mixed-plan foundation adds only an internal typed selection
+observation joined to the original own scope, catalog and complete ordered queue.
+Inactive mode skips the old selection pointer; requested mode must match the
+original ordinary template, including when another valid template is present.
+Changed managers refuse before replacement payload. Default both-ABI queue and
+legacy JSON readers stay unchanged. This is not input, exact +1, cancellation,
+worker or campaign qualification.
+
+This candidate passed **2,214 host Rust tests**, strict all-target checks on
+macOS, Windows GNU, x86 Linux musl and ARM64 Linux musl, release and unchanged
+**28-tool unbound stdio**. Actual owned ARM Linux executed all **32 optimized
+retained-queue/selection fixtures**. These are synthetic fixtures, without a
+game or input. The workspace Python suite passed **956 tests (37 skips)** and
+all 38 unrelated legacy WIP paths stayed byte-identical. An initial check command
+requested an uninstalled GNU Linux target; the corrected installed musl check
+passed. No native Windows game or new Mac live acceptance follows from this.
+
 ## FEX Rust adapter attempt — 24 October 2026
 
 One fresh owned ARM64 Linux/FEX session reached historical Normal vanilla Germany
@@ -40,10 +82,10 @@ ARM Linux executed **11 Research and 21 queue fixtures**. A host-only Linux test
 filter matched zero tests and was not counted as coverage. The workspace Python
 suite passed **956 tests (37 skips)**; all 38 unrelated WIP paths are unchanged.
 
-Both owned games are now closed. Before another FEX game, compare bounded
-no-game context/render workloads at 1080p; retained evidence shows ARM GL thunking
-can run legacy gears, while explicit GL1 context creation and a later virpipe game
-startup failed separately. No single rendering bottleneck has been established.
+Both owned games are now closed. The subsequent bounded context and frontend
+diagnostics above preserve those separate outcomes. Earlier explicit GL1 context
+and virpipe startup failures remain retained. No single rendering bottleneck has
+been established.
 No advancing-time, clean two-year or full campaign success is claimed.
 
 ## Native Mac ordinary Find click — 24 October 2026

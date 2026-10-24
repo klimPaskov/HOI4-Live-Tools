@@ -2,6 +2,11 @@
 
 ## Unreleased native preview
 
+- Join optional typed Linux construction selection to the retained complete
+  queue in one witnessed read, preserving the original manager and catalog.
+  Eleven additional fixtures cover inactive/requested transitions, replacement
+  pointers, other valid templates and unchanged default reads. This grants no
+  action or worker permission. Preserve the separate GL1 game-startup failure.
 - Add an internal read-only retained construction-queue anchor with complete
   own-country, catalog and ordered queue identity checks under the caller's
   original deadline. Twenty-one synthetic fixtures cover both supported string

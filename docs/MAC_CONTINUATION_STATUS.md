@@ -105,9 +105,15 @@ timed out, leaving one uncertain Intent without a Verified receipt; a later
 visible panel was not promoted. Preserve that failure while investigating
 rendering/input delay. The internal retained queue foundation passed 21 fixtures
 on both the Mac host and actual ARM Linux, with no action or worker permission.
-Current standalone source checks pass 2,203 Rust tests, four-target strict checks,
-release and unchanged 28-tool unbound stdio; the workspace Python suite passed
-956 tests (37 skips). These checks do not qualify the private composite worker.
+The later GL1 frontend attempt failed during graphics initialization with Missing
+GL version and SIGSEGV; ordinary close also failed. Its exact owned processes,
+including a forked crash process missed by the helper, were separately closed.
+No game or input authority remains. The internal queue now also offers an opt-in
+typed Linux selection read in that same witness, with default readers unchanged.
+Current standalone checks pass 2,214 Rust tests, four-target strict checks,
+release and unchanged 28-tool unbound stdio; actual ARM Linux passed 32 optimized
+queue/selection fixtures. The workspace Python suite passed 956 tests (37 skips).
+These checks do not qualify the private composite worker or a live campaign.
 
 Finish the new decimal-character gate when macOS authorization is available, then integrate
 construction into mixed standing plans. Continue with one Luna-medium player,

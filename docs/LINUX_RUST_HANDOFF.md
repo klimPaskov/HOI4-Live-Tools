@@ -43,13 +43,19 @@ at 1920×1080. Its first Research opener failed after 5,031 ms with one uncertai
 Intent, no Verified receipt and no retry. Late panel visibility did not settle
 the action. Its original recording audit exceeded 25 seconds and remains failed;
 a separate later audit decoded all 19,883 frames. Rendering/input delay is under
-investigation before another game launch. See [the validation record](CLAUSEWITZ_VALIDATION.md#fex-rust-adapter-attempt--24-october-2026).
+investigation. Subsequent no-game context tests passed, but the fresh GL1 game
+failed graphics initialization with Missing GL version and SIGSEGV. Its ordinary
+close failed; exact owned resource cleanup, including a forked crash process,
+finished separately. No game or input authority remains. See
+[the validation record](CLAUSEWITZ_VALIDATION.md#fex-gl-context-and-frontend-diagnostics--24-october-2026).
 
-The current public-source candidate passed 2,203 Rust tests, 21 optimized queue
-fixtures, strict all-target checks for four targets, release and unchanged
-28-tool unbound stdio. Actual ARM Linux executed 11 Research and 21 queue fixtures.
+The current public-source candidate passed 2,214 Rust tests, strict all-target
+checks for four targets, release and unchanged 28-tool unbound stdio. Actual ARM
+Linux executed 32 optimized retained-queue/selection fixtures; the preceding
+checkpoint also executed 11 Research fixtures.
 The workspace Python suite passed 956 tests (37 skips), including preserved WIP.
-The new retained queue reader is internal and read-only; mixed construction
+The internal read-only queue now optionally joins typed Linux inactive/requested
+selection in the same witness. Default readers stay unchanged; mixed construction
 execution remains disabled and its private Mac implementation unqualified.
 
 ## Next work
@@ -58,9 +64,10 @@ execution remains disabled and its private Mac implementation unqualified.
    is available again. Ordinary named Find-button opening has passed its component
    test. Keep earlier successful navigation and the new pregrant refusal separate;
    never generalize Escape's control-byte proof to printable characters.
-   Diagnose the separate FEX delay with bounded no-game rendering/context tests
-   before a fresh Linux live attempt; preserve the uncertain journal and original
-   deadline. Linux diagnostics do not replace native Mac showcase acceptance.
+   Preserve the separate GL1 startup failure and the uncertain GL0 journal.
+   A fresh GL0/no-recorder diagnostic can test recording-load interference,
+   with descendant tracking fixed before launch and no old authority reused.
+   Linux diagnostics do not replace native Mac showcase acceptance.
 2. Integrate construction with mixed standing plans and complete the advancing-time
    gate. Keep reads stationary and event-driven; observations never pause.
 3. Complete shortage repair, wider economy actions, combat, naval invasions and

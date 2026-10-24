@@ -621,3 +621,193 @@ fn late_final_success_is_discarded_under_same_original_deadline() {
         );
     }
 }
+
+const MANAGER: u64 = 0xb00000;
+fn linux_fixture(mode: i32) -> Fixture {
+    let mut f = fixture(StringAbi::LibStdCxx);
+    let idler = scope(&f).anchors[1];
+    f.word(idler + 0x6b8, MANAGER);
+    f.word(MANAGER + 0x180, idler);
+    f.int(MANAGER + 0x3f0, mode);
+    f.word(MANAGER + 0x3e8, TEMPLATE);
+    f.word(DB + 0x3a8, NULL);
+    f
+}
+fn linux_bind(f: &Fixture) -> Anchor {
+    Anchor::bind_linux_selection_scoped(f, &scope(f), "arms_factory", 1, until()).unwrap()
+}
+#[test]
+fn default_queue_remains_gui_free_on_both_abis() {
+    for abi in abis() {
+        let f = fixture(abi);
+        let idler = scope(&f).anchors[1];
+        let a = bind(&f);
+        assert_eq!(a.linux_selection(), None);
+        assert_eq!(
+            a.observe_unchanged(&f, until()).unwrap().linux_selection(),
+            None
+        );
+        assert!(f.untouched(idler + 0x6b8, 8));
+        assert!(f.untouched(MANAGER, 0x400));
+    }
+}
+#[test]
+fn linux_selection_refuses_mac_abi_before_snapshot_or_payload() {
+    let f = fixture(StringAbi::LibCxx);
+    let s = scope(&f);
+    let before = f.read_counts();
+    let snapshots = f.snapshots.get();
+    assert_eq!(
+        Anchor::bind_linux_selection_scoped(&f, &s, "arms_factory", 1, until())
+            .unwrap_err()
+            .code,
+        "unsupported_platform"
+    );
+    assert_eq!(f.snapshots.get(), snapshots);
+    assert_eq!(f.read_counts(), before);
+}
+#[test]
+fn inactive_linux_selection_never_reads_default_pointer_or_railway_cache() {
+    let mut f = linux_fixture(0);
+    f.word(MANAGER + 0x3e8, FOREIGN);
+    f.word(DB + 0x3a8, FOREIGN);
+    let a = linux_bind(&f);
+    assert_eq!(a.linux_selection(), Some(Selection::Inactive));
+    let o = a.observe_unchanged(&f, until()).unwrap();
+    assert_eq!(o.linux_selection(), Some(Selection::Inactive));
+    assert!(f.untouched(MANAGER + 0x3e8, 8));
+    assert!(f.untouched(DB + 0x3a8, 8));
+    assert!(f.untouched(FOREIGN, 0x10000));
+}
+#[test]
+fn same_original_queue_can_observe_selection_transitions_without_claiming_effect() {
+    let mut f = linux_fixture(0);
+    let a = linux_bind(&f);
+    f.int(MANAGER + 0x3f0, 1);
+    f.set_date(a.context().date_raw + 25);
+    f.word(LINE + 0x38, 100);
+    let o = a.observe_unchanged(&f, until()).unwrap();
+    assert_eq!(o.linux_selection(), Some(Selection::Requested));
+    assert_eq!(o.line_count(), a.line_count());
+    assert_eq!(o.context().date_raw, a.context().date_raw + 25);
+    assert_eq!(a.linux_selection(), Some(Selection::Inactive));
+    f.int(MANAGER + 0x3f0, 0);
+    f.word(MANAGER + 0x3e8, FOREIGN);
+    assert_eq!(
+        a.observe_unchanged(&f, until()).unwrap().linux_selection(),
+        Some(Selection::Inactive)
+    );
+}
+#[test]
+fn manager_replacement_and_backlink_fail_before_replacement_or_queue_payload() {
+    for replacement in [true, false] {
+        let mut f = linux_fixture(1);
+        let a = linux_bind(&f);
+        if replacement {
+            f.word(scope(&f).anchors[1] + 0x6b8, FOREIGN);
+        } else {
+            f.word(MANAGER + 0x180, FOREIGN);
+        }
+        poison(&f, a.observe_unchanged(&f, until()).unwrap_err());
+        assert!(f.untouched(MANAGER + 0x3f0, 4));
+        assert!(f.untouched(PRODUCTION + 0x70, 16));
+    }
+}
+#[test]
+fn unsupported_modes_and_nonrequested_templates_never_follow_selected_payload() {
+    for mode in [-1, 2, 3, 4, i32::MAX] {
+        let mut f = linux_fixture(mode);
+        f.word(MANAGER + 0x3e8, FOREIGN);
+        let e = Anchor::bind_linux_selection_scoped(&f, &scope(&f), "arms_factory", 1, until())
+            .unwrap_err();
+        assert_eq!(e.code, "construction_selection_unavailable");
+        assert!(f.untouched(MANAGER + 0x3e8, 8));
+        assert!(f.untouched(FOREIGN, 0x10000));
+    }
+    for selected in [FOREIGN, NULL, 0] {
+        let mut f = linux_fixture(1);
+        let a = linux_bind(&f);
+        f.word(MANAGER + 0x3e8, selected);
+        let e = a.observe_unchanged(&f, until()).unwrap_err();
+        assert_eq!(e.code, "construction_selection_unavailable");
+        assert!(f.untouched(FOREIGN, 0x10000));
+        assert!(f.untouched(DB + 0x3a8, 8));
+    }
+}
+#[test]
+fn typed_linux_selection_cannot_adopt_replacement_catalog_or_same_name_template() {
+    for replacement in [true, false] {
+        let mut f = linux_fixture(1);
+        let a = linux_bind(&f);
+        if replacement {
+            let l = c::layout(&Reader::new(&f));
+            f.word(BASE + l.database_global, FOREIGN);
+        } else {
+            f.word(f.get_word(DB + 0x40) + 8, FOREIGN);
+            f.word(MANAGER + 0x3e8, FOREIGN);
+        }
+        poison(&f, a.observe_unchanged(&f, until()).unwrap_err());
+        assert!(f.untouched(MANAGER + 0x3e8, 8));
+    }
+}
+#[test]
+fn railway_cache_cannot_relabel_requested_template_as_ordinary() {
+    let mut f = linux_fixture(1);
+    let a = linux_bind(&f);
+    f.word(DB + 0x3a8, TEMPLATE);
+    assert_eq!(
+        a.observe_unchanged(&f, until()).unwrap_err().code,
+        "construction_selection_unavailable"
+    );
+}
+#[test]
+fn linux_selection_and_queue_share_final_witness_and_original_deadline() {
+    for address in [MANAGER + 0x3f0, MANAGER + 0x3e8] {
+        let mut f = linux_fixture(1);
+        let a = linux_bind(&f);
+        let size = if address == MANAGER + 0x3f0 { 4 } else { 8 };
+        f.tear(address, size, 2);
+        assert_eq!(
+            a.observe_unchanged(&f, until()).unwrap_err().code,
+            "torn_read"
+        );
+    }
+    let mut f = linux_fixture(1);
+    let a = linux_bind(&f);
+    f.int(LINE + 0x48, 3);
+    assert!(a.observe_unchanged(&f, until()).is_err());
+    let snapshots = f.snapshots.get();
+    assert_eq!(
+        a.observe_unchanged(&f, Instant::now()).unwrap_err().code,
+        "construction_queue_deadline"
+    );
+    assert_eq!(f.snapshots.get(), snapshots);
+}
+#[test]
+fn another_valid_original_catalog_member_is_not_requested_selection() {
+    let mut f = linux_fixture(1);
+    let other = 0xc00000;
+    let l = c::layout(&Reader::new(&f));
+    f.word(other, BASE + l.template_vtable);
+    f.put(other + 0x18, &[1]);
+    f.int(other + l.template_ordinal, 2);
+    f.string(other + l.template_key, "dockyard");
+    f.array(DB + 0x40, &[NULL, TEMPLATE, other]);
+    let a = linux_bind(&f);
+    f.word(MANAGER + 0x3e8, other);
+    assert_eq!(
+        a.observe_unchanged(&f, until()).unwrap_err().code,
+        "construction_selection_unavailable"
+    );
+    assert!(f.untouched(DB + 0x3a8, 8));
+}
+#[test]
+fn original_scope_replacement_refuses_before_linux_manager_access() {
+    let mut f = linux_fixture(1);
+    let a = linux_bind(&f);
+    let idler = scope(&f).anchors[1];
+    f.word(BASE + f.game_layout().idler_global, FOREIGN);
+    poison(&f, a.observe_unchanged(&f, until()).unwrap_err());
+    assert!(f.untouched(idler + 0x6b8, 8));
+    assert!(f.untouched(MANAGER, 0x400));
+}

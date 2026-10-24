@@ -102,7 +102,8 @@ adapter is disabled by default. A later Rust-adapter test reached Germany at
 1920×1080, but its first Research action exceeded the five-second readback
 deadline and remains uncertain. The panel appeared later; no retry was sent.
 Rendering/input latency remains under investigation, and live adapter acceptance
-is still open. See
+is still open. A separate GL1/native-library startup attempt failed during graphics
+initialization; synthetic rendering success did not establish game compatibility. See
 [FEX setup](docs/OWNED_LINUX_LAUNCHER.md#arm64-linux-with-fex) and
 [the qualification record](docs/CLAUSEWITZ_VALIDATION.md#fex-own-state-and-stationary-input-qualification--22-october-2026).
 

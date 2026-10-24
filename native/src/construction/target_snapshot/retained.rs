@@ -13,8 +13,10 @@ use crate::{
 };
 use std::time::Instant;
 
+mod linux_selection;
 #[cfg(test)]
 mod tests;
+pub(crate) use linux_selection::Selection;
 
 fn changed(message: &str) -> Error {
     Error::new("construction_queue_changed", message)
@@ -89,6 +91,7 @@ struct Snapshot {
     queue_header: Vec<u8>,
     members: Vec<u64>,
     rows: Vec<QueueLine>,
+    linux_selection: Option<linux_selection::Observation>,
 }
 #[derive(Clone, Debug)]
 pub(crate) struct Anchor {
@@ -111,6 +114,10 @@ impl Observation {
     pub(crate) fn line_count(&self) -> usize {
         self.snapshot.members.len()
     }
+    /// Current read-only facts, never a verified input or placement receipt.
+    pub(crate) fn linux_selection(&self) -> Option<Selection> {
+        self.snapshot.linux_selection.as_ref().map(|s| s.selection)
+    }
 }
 impl Anchor {
     pub(crate) fn bind_scoped(
@@ -119,6 +126,28 @@ impl Anchor {
         key: &str,
         state_id: i32,
         until: Instant,
+    ) -> Result<Self> {
+        Self::bind(process, scope, key, state_id, until, false)
+    }
+    /// Opt-in Linux selection plus the complete original queue. The default
+    /// both-ABI queue reader remains GUI-free; no action/worker is connected.
+    pub(crate) fn bind_linux_selection_scoped(
+        process: &dyn Process,
+        scope: &Scope,
+        key: &str,
+        state_id: i32,
+        until: Instant,
+    ) -> Result<Self> {
+        c::require_linux_ui(process.string_abi())?;
+        Self::bind(process, scope, key, state_id, until, true)
+    }
+    fn bind(
+        process: &dyn Process,
+        scope: &Scope,
+        key: &str,
+        state_id: i32,
+        until: Instant,
+        linux_selection: bool,
     ) -> Result<Self> {
         c::controls::validate_key(key)?;
         c::find_view::validate_state_id(i64::from(state_id))?;
@@ -134,7 +163,7 @@ impl Anchor {
         // Scoped preflight only, never joined into proof. The complete reader
         // repeats own_scope and context in its own single encompassing witness.
         daily_observation::scoped_clock(process, scope, until)?;
-        let original = observe(process, scope, key, state_id, None, until)?;
+        let original = observe(process, scope, key, state_id, None, until, linux_selection)?;
         if process.image_base() != base || process.string_abi() != abi {
             return Err(changed("Original base/ABI changed during binding"));
         }
@@ -166,6 +195,9 @@ impl Anchor {
     pub(crate) fn line_count(&self) -> usize {
         self.original.members.len()
     }
+    pub(crate) fn linux_selection(&self) -> Option<Selection> {
+        self.original.linux_selection.as_ref().map(|s| s.selection)
+    }
     pub(crate) fn observe_unchanged(
         &self,
         process: &dyn Process,
@@ -179,6 +211,7 @@ impl Anchor {
                 self.state_id,
                 Some(self),
                 until,
+                self.original.linux_selection.is_some(),
             )?,
         })
     }
@@ -326,6 +359,7 @@ fn observe(
     state_id: i32,
     original: Option<&Anchor>,
     until: Instant,
+    include_linux_selection: bool,
 ) -> Result<Snapshot> {
     scope.validate()?;
     deadline(until)?;
@@ -344,6 +378,16 @@ fn observe(
     let r = Reader::new(&w);
     w.section("retained_queue_scope");
     daily_observation::own_scope(&r, base, scope)?;
+    let manager = if include_linux_selection {
+        c::require_linux_ui(abi)?;
+        Some(linux_selection::manager(
+            &r,
+            scope.anchors[1],
+            original.and_then(|a| a.original.linux_selection.as_ref().map(|s| s.manager)),
+        )?)
+    } else {
+        None
+    };
     if let Some(a) = original {
         non_queue_edges(&r, a)?;
     }
@@ -367,6 +411,9 @@ fn observe(
     let catalog = catalog::observe(&r, base)?;
     catalog.required(key)?;
     let catalog_header = header(&r, catalog.database + 0x40)?;
+    let linux_selection = manager
+        .map(|manager| linux_selection::observe(&r, manager, &catalog, key))
+        .transpose()?;
     if let Some(a) = original {
         queue_edges(&r, a)?;
     }
@@ -433,5 +480,6 @@ fn observe(
         queue_header,
         members: lines.members,
         rows: lines.known,
+        linux_selection,
     })
 }

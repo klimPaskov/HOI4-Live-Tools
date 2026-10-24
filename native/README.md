@@ -40,9 +40,13 @@ delivery never establishes the game effect or permits a retry. See
 An internal read-only construction anchor retains the original own scope,
 requested state, complete canonical catalog and ordered full queue. Fresh reads
 reject changed original edges before following replacement payload and use the
-caller's original deadline. Twenty-one synthetic fixtures exercise both string
-ABIs. This supplies no selection, placement, exact +1, action receipt or worker
-permission; cross-call chronology and deadline ownership remain the caller's job.
+caller's original deadline. An internal opt-in Linux reader additionally joins
+inactive or exactly requested selection to that same queue snapshot, retaining
+the original manager before reading its payload. Thirty-two synthetic fixtures
+cover the both-ABI queue and Linux selection boundaries. Default queue and legacy
+JSON reads are unchanged. These are read-only facts, with no selection input,
+placement, exact +1, action receipt or worker permission; cross-call chronology
+and deadline ownership remain the caller's job.
 
 ResearchClose002 passed direct Research closing, including historical replays and
 no-ops. Mixed Research/production worker routing has an explicit opt-in preview;
