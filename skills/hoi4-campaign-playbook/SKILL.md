@@ -21,18 +21,26 @@ two-day pause loop and skip-on-failure examples are not showcase procedure.
 
 ## Load only what is needed
 
-1. Read [rules and modes](references/rules-and-modes.md) at campaign setup.
-2. Read [operating loop](references/operating-loop.md) to declare the standing
-   plan and control the daily governor. Keep it available during play.
-3. Read [strategy](references/strategy.md) for economic and military decisions.
-4. Read the [country-agnostic playbook](references/generic-playbook.md) for army
-   organisation, templates, build-up, war execution, the peace conference and
-   common mistakes.
-5. Load one country card: [Germany FAIR](references/germany-fair.md),
-   [Nationalist China FAIR](references/china-fair.md), or
-   [Poland META](references/poland-meta.md).
-6. Consult [sources and version checks](references/sources.md) when verifying
-   patch-dependent mechanics, a rule's origin or a proposed META exploit.
+Start at the [playbook index](references/INDEX.md): a one-page navigator that maps
+each situation to the right file. Core files, in reading order:
+
+1. [Rules and modes](references/rules-and-modes.md) at campaign setup.
+2. [Operating loop](references/operating-loop.md): standing plan and daily governor.
+3. [Strategy](references/strategy.md) and the [country-agnostic playbook](references/generic-playbook.md).
+4. Domain playbooks (game-file verified for 1.19.3; each ends with automatable
+   rules, live decisions and tool needs): [economy and build orders](references/economy-build-orders.md),
+   [research, doctrines and special projects](references/research-doctrines-projects.md),
+   [templates, equipment and production](references/templates-equipment-production.md),
+   [supply, logistics and deployment](references/supply-logistics-deployment.md),
+   [war, air, naval and peace](references/war-air-naval-peace.md),
+   [politics, diplomacy and espionage](references/politics-diplomacy-espionage.md).
+5. One country card with a dated checkpoint table: [Germany FAIR](references/germany-fair.md),
+   [Nationalist China FAIR](references/china-fair.md) or [Poland META](references/poland-meta.md).
+6. [Sources and version checks](references/sources.md) when verifying patch-dependent mechanics.
+
+Missing tools and reliability defects are tracked in
+[PLAYBOOK_TOOL_GAPS](../../docs/PLAYBOOK_TOOL_GAPS.md). Where a playbook rule needs a
+tool that does not exist, hand back with the exact gap; never improvise raw input.
 
 ## Non-negotiable campaign boundary
 
@@ -45,7 +53,7 @@ two-day pause loop and skip-on-failure examples are not showcase procedure.
   are permitted. Read-only observation does not authorize hidden information.
 - Never enter test mode to prepare a campaign. A checkpoint may resume a real
   interruption; never pick an older checkpoint to reverse an outcome.
-- One `gpt-6-luna` player at medium reasoning owns acceptance-run input.
+- One Haiku 5.5 player at medium effort owns acceptance-run input (latest user direction; supersedes the older Luna instruction).
   Builder and offline helpers do not control the same game. Verify Linux first;
   Windows and macOS need independent live acceptance. The shared Windows game
   remains reserved for separate mod testing.
@@ -62,7 +70,7 @@ Resolve current focus/tech/unit/state/region IDs from the installed build.
 Keep the public repository free of private paths and campaign artifacts.
 
 The ordered showcase assignment is Germany FAIR, Nationalist China FAIR, then
-Poland META, after the separate clean two-year Luna acceptance. Country cards
+Poland META, after the separate clean two-year Haiku acceptance. Country cards
 define milestones and evidence; a plan is not a result. Recording starts before
 the campaign and ends after the victory proof. Five hours per campaign is a
 target budget, not a substitute for a conclusive result.

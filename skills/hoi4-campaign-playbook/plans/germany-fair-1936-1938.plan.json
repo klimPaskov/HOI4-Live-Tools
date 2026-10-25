@@ -1,0 +1,258 @@
+{
+  "_comment": "Germany FAIR 1936-01-01 -> 1938-01-01 standing plan. Explained section by section in germany-fair-1936-1938.md. Keys starting with _ are ignored by the runner. Validate with scripts/validate_plan.py.",
+  "_validator": {
+    "tag": "GER",
+    "start_date": "1936.1.1",
+    "stop_date": "1938.1.1",
+    "history_file": "history/countries/GER - Germany.txt"
+  },
+  "active": true,
+  "stop_on_failure": false,
+  "stop_on_date": "1938.01.01",
+  "auto_events": true,
+  "wait_events_days": 3,
+  "event_options": {
+    "germany_mefo_bills.1": 0
+  },
+  "alarms": {
+    "political_power": 200,
+    "consumer_goods_ratio": 0.45,
+    "idle_civilian_factories": 4,
+    "idle_military_factories": 2,
+    "unassigned_divisions": 2
+  },
+  "research_fallback": true,
+  "research_priority": [
+    "basic_machine_tools",
+    "construction1",
+    "electronic_mechanical_engineering",
+    "interwar_artillery",
+    "radio",
+    "improved_machine_tools",
+    "construction2",
+    "interwar_antitank",
+    "tech_logistics_company",
+    "concentrated_industry",
+    "tech_maintenance_company",
+    "armor_tech_1",
+    "improved_equipment_conversion",
+    "concentrated_industry2",
+    "excavation1",
+    "infantry_weapons2",
+    "support_weapons",
+    "support_weapons2",
+    "fuel_refining2",
+    "tech_signal_company",
+    "tech_field_hospital",
+    "mechanical_computing",
+    "oil_processing",
+    "rubber_processing",
+    "excavation2",
+    "improved_radio",
+    "radio_detection",
+    "basic_fortification_tech",
+    "armor_tech_2",
+    "engine_tech_2",
+    "basic_medium_tank_chassis",
+    "land_fort_tech_1",
+    "computing_machine",
+    "basic_medium_tank",
+    "artillery1",
+    "antiair1",
+    "antitank1",
+    "improved_infantry_weapons",
+    "advanced_machine_tools",
+    "construction3",
+    "concentrated_industry3",
+    "advanced_equipment_conversion",
+    "excavation3",
+    "tech_engineers2",
+    "tech_recon2",
+    "tech_logistics_company2",
+    "tech_maintenance_company2",
+    "tech_signal_company2",
+    "tech_field_hospital2",
+    "wartime_train",
+    "aa_hmg",
+    "range_improvements",
+    "basic_encryption",
+    "basic_decryption",
+    "cavity_magnatron",
+    "tech_military_police",
+    "improved_oil_processing",
+    "improved_rubber_processing",
+    "fuel_refining3",
+    "improved_small_airframe",
+    "engines_3",
+    "fighter2",
+    "CAS2",
+    "tactical_bomber2",
+    "mechanised_infantry",
+    "improved_infantry_weapons_2",
+    "artillery2",
+    "support_weapons3",
+    "antitank2",
+    "antiair2",
+    "armored_train"
+  ],
+  "focus_path": [
+    "GER_the_four_year_plan",
+    "GER_remilitarize_the_rhineland",
+    "GER_accelerate_the_rearmament_program",
+    "GER_establish_production_targets",
+    "GER_construct_the_reichsautobahn",
+    "GER_kdf_wagen_factories",
+    "GER_develop_modern_maneuver_warfare",
+    "GER_fortify_the_vaterland",
+    "GER_reorganize_the_wehrmacht",
+    "GER_expanding_the_luftwaffe",
+    "GER_concentrated_armament_program",
+    "GER_develop_heraeus_facilities",
+    "GER_anschluss",
+    "GER_aeronautical_research_institute",
+    "GER_form_the_jagdwaffe",
+    "GER_adopt_new_panzer_doctrine",
+    "GER_panzer_troops_school",
+    "GER_bribe_senior_officers",
+    "GER_autonomy_in_the_kriegsschulen",
+    "GER_expand_the_truppenschulen",
+    "GER_demand_sudetenland",
+    "GER_first_vienna_award",
+    "GER_fate_of_czechoslovakia"
+  ],
+  "focus_fallback": [
+    "GER_fallschirmjager",
+    "GER_develop_the_knickebein",
+    "GER_reorganize_the_luftwaffe",
+    "GER_advanced_panzer_research",
+    "GER_strengthen_the_kriegsmarine",
+    "GER_re_establish_the_seekriegsleitung",
+    "GER_trade_interdiction"
+  ],
+  "politics": [
+    {
+      "category": "government",
+      "slot": 3,
+      "idea": "GER_hjalmar_schacht"
+    },
+    {
+      "category": "government",
+      "slot": 1,
+      "idea": "free_trade"
+    },
+    {
+      "category": "government",
+      "slot": 0,
+      "idea": "extensive_conscription"
+    },
+    {
+      "category": "government",
+      "slot": 4,
+      "idea": "GER_joachim_von_ribbentrop"
+    }
+  ],
+  "decisions": [
+    "GER_construct_the_westwall"
+  ],
+  "training": {
+    "template": "Infanterie-Division",
+    "queue": 4,
+    "batch": 2,
+    "deploy_state": 64
+  },
+  "production_min_idle": 12,
+  "production_priority": [
+    "infantry_equipment",
+    "artillery_equipment",
+    "support_equipment"
+  ],
+  "production": [
+    {
+      "equipment": "small_plane_airframe_1",
+      "factories": 3
+    },
+    {
+      "equipment": "small_plane_cas_airframe_1",
+      "factories": 2
+    },
+    {
+      "equipment": "artillery_equipment_1",
+      "factories": 3
+    },
+    {
+      "equipment": "infantry_equipment_1",
+      "factories": 2
+    },
+    {
+      "equipment": "motorized_equipment_1",
+      "factories": 1
+    }
+  ],
+  "construction_min_idle": 4,
+  "construction_full_days": 14,
+  "construction": [
+    {
+      "building": "industrial_complex",
+      "count": 2,
+      "states": [
+        60,
+        55,
+        53,
+        54,
+        68,
+        52,
+        50,
+        57
+      ]
+    },
+    {
+      "building": "arms_factory",
+      "count": 2,
+      "fallback_any_own_state": true,
+      "states": [
+        59,
+        64,
+        56,
+        51,
+        42,
+        978,
+        66,
+        67
+      ]
+    },
+    {
+      "building": "infrastructure",
+      "count": 1,
+      "states": [
+        66,
+        67,
+        5,
+        61,
+        62,
+        63,
+        68,
+        50,
+        53,
+        56,
+        58,
+        60,
+        763,
+        909,
+        978
+      ]
+    }
+  ],
+  "armies": {
+    "max": 24,
+    "min_for_general": 8,
+    "absorb": true,
+    "generals": [
+      "Gerd von Rundstedt",
+      "Fedor von Bock",
+      "Wilhelm Ritter von Leeb",
+      "Günther von Kluge",
+      "Wilhelm List",
+      "Ewald von Kleist"
+    ]
+  }
+}

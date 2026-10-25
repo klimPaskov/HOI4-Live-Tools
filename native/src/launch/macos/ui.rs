@@ -77,6 +77,13 @@ const POPUP_ROOT: u64 = 0x430;
 
 /// Shown notice pop-ups (list order) with their OK button rectangles.
 fn notices(r: &Reader<'_>, image: u64) -> Result<Vec<gui_tree::Rect>> {
+    Ok(notices_with_kind(r, image)?
+        .into_iter()
+        .map(|(rect, _)| rect)
+        .collect())
+}
+/// Shown notices with their window class (vtable offset in the image).
+fn notices_with_kind(r: &Reader<'_>, image: u64) -> Result<Vec<(gui_tree::Rect, u64)>> {
     if r.string_abi() != StringAbi::LibCxx {
         return Ok(Vec::new());
     }
@@ -100,12 +107,48 @@ fn notices(r: &Reader<'_>, image: u64) -> Result<Vec<gui_tree::Rect>> {
             // A notice whose button is laid out off screen cannot block a click.
             if gui_tree::shown(r, ok)? {
                 if let Ok(rect) = gui_tree::rect(r, image, ok, (1920, 1080)) {
-                    out.push(rect);
+                    out.push((rect, kind - image));
                 }
             }
         }
     }
     Ok(out)
+}
+/// What a notice window class is, as far as the build notes say. Window text is
+/// not read, so most classes are only named by their offset.
+fn notice_kind_name(vtable: u64) -> String {
+    match vtable {
+        0x34729e0 => "confirmation pop-up (CConfirmationPopUpWindow, e.g. a doctrine milestone)".into(),
+        0x34871b8 => "surrendered pop-up (CSurrenderedPopupWindow, seized equipment)".into(),
+        other => format!("notice window class +{other:#x} (research/focus finished, peace summary or world tension)"),
+    }
+}
+/// The ui_blocked refusal: what was still on screen, from memory only.
+fn blocked_error(count: usize, shown: &[u64], events: &[String]) -> Error {
+    let kinds = shown
+        .iter()
+        .map(|k| notice_kind_name(*k))
+        .collect::<Vec<_>>()
+        .join("; ");
+    let kinds = if kinds.is_empty() {
+        "classes unreadable".to_string()
+    } else {
+        kinds
+    };
+    let events = if events.is_empty() {
+        "no event window read as open".to_string()
+    } else {
+        format!("open events: {}", events.join(", "))
+    };
+    Error::new(
+        "ui_blocked",
+        format!(
+            "Notice pop-ups did not close: {} still shown ({kinds}); {events}. Window text is not read. \
+             Clicking their OK buttons did not reduce the count; answer any listed event first \
+             (hoi4_events), then retry once the pop-ups are gone.",
+            count
+        ),
+    )
 }
 /// Acknowledge shown notice pop-ups so they cannot swallow the next click.
 /// Stacking order is not in the list, so candidates are tried from the end;
@@ -146,7 +189,12 @@ pub(super) fn dismiss_notices(
             return if shown.is_empty() {
                 Ok(cleared)
             } else {
-                Err(Error::new("ui_blocked", "Notice pop-ups did not close"))
+                // Best effort: the kinds and events are context only.
+                let kinds = read(process, notices_with_kind)
+                    .map(|v| v.into_iter().map(|(_, k)| k).collect::<Vec<_>>())
+                    .unwrap_or_default();
+                let events = read(process, super::events::open_ids).unwrap_or_default();
+                Err(blocked_error(shown.len(), &kinds, &events))
             };
         };
         if cleared + misses >= 12 {
@@ -444,6 +492,9 @@ pub(super) fn find_state(
     state: i32,
 ) -> Result<()> {
     use crate::platform::macos_input::Key;
+    // The Recruit & Deploy panel covers the left half of the map, where the
+    // box selections and map clicks that follow a Find would otherwise land.
+    super::deployment::leave(process, keys);
     keys.press(Key::letter('f')?)?;
     wait(process, "open find", find_open)?;
     thread::sleep(Duration::from_millis(150));
@@ -539,5 +590,27 @@ pub(super) fn settled<T: PartialEq>(
             ));
         }
         last = now;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn blocked_error_names_notice_classes_and_open_events() {
+        let e = blocked_error(2, &[0x34729e0, 0x3472580], &["news.288".to_string()]);
+        assert_eq!(e.code, "ui_blocked");
+        assert!(e.message.contains("2 still shown"));
+        assert!(e.message.contains("CConfirmationPopUpWindow"));
+        assert!(e.message.contains("+0x3472580"));
+        assert!(e.message.contains("open events: news.288"));
+    }
+    #[test]
+    fn blocked_error_stays_useful_when_context_is_unreadable() {
+        let e = blocked_error(1, &[], &[]);
+        assert_eq!(e.code, "ui_blocked");
+        assert!(e.message.contains("1 still shown"));
+        assert!(e.message.contains("classes unreadable"));
+        assert!(e.message.contains("no event window read as open"));
     }
 }

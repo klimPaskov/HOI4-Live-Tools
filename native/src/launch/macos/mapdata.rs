@@ -58,7 +58,7 @@ fn positions(dir: &Path) -> Result<std::sync::Arc<Positions>> {
 }
 
 /// Province IDs listed in a state history file's `provinces = { ... }` block.
-fn parse_state_provinces(text: &str) -> Vec<i32> {
+pub(super) fn parse_state_provinces(text: &str) -> Vec<i32> {
     let Some(start) = text.find("provinces") else {
         return Vec::new();
     };

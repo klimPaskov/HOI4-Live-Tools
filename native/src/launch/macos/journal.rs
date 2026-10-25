@@ -4,6 +4,16 @@
 //! settlement contract. Strict version-2 intents never settle after an uncertain
 //! attempt: only that original attempt may certify delivery or positive no-input.
 //! Every unresolved dispatch quarantines shared input.
+//!
+//! Settlement rule: compare only what the action can change. The game runs at
+//! speed 3-5 while an action is journaled, so unrelated state (other research
+//! slots, production lines, armies, queues, date, resources) drifts. A `settle`
+//! closure that needs that state unchanged returns `Outcome::Unknown`, leaves a
+//! `Dispatching` intent open and freezes ALL Mac input. Each closure must read
+//! only the fields its action writes: `Reached` when the exact target effect is
+//! present, `Unchanged` only when every possible effect is provably absent,
+//! `Diverged` for a settled mismatch, `Unknown` for partial or foreign effects.
+//! The pure rules live in `settle.rs` (and `research::settle`) with tests.
 use crate::{
     actions::Epoch,
     error::{Error, Result},
@@ -314,6 +324,35 @@ impl GameJournal {
         settle: &mut dyn FnMut() -> Result<Outcome>,
         dispatch: &mut dyn FnMut() -> Result<()>,
     ) -> Result<Receipt> {
+        self.execute_with(id, epoch, action, settle, dispatch, false)
+    }
+    /// Like `execute`. `retry_unchanged` is only for adapters whose `Unchanged`
+    /// verdict is a pure function of fresh game state (no before-snapshot): then
+    /// a retry of an unresolved request id may also settle as not applied.
+    /// Settlement reads are retried a bounded number of times on `torn_read`
+    /// (the game rewrites its memory while running); no input is ever re-sent.
+    pub fn execute_with(
+        &mut self,
+        id: &str,
+        epoch: &Epoch,
+        action: Value,
+        settle: &mut dyn FnMut() -> Result<Outcome>,
+        dispatch: &mut dyn FnMut() -> Result<()>,
+        retry_unchanged: bool,
+    ) -> Result<Receipt> {
+        let mut settle_torn = || {
+            let mut attempt = 0u64;
+            loop {
+                match settle() {
+                    Err(e) if e.code == "torn_read" && attempt < 8 => {
+                        attempt += 1;
+                        std::thread::sleep(std::time::Duration::from_millis(15 * attempt));
+                    }
+                    other => return other,
+                }
+            }
+        };
+        let settle: &mut dyn FnMut() -> Result<Outcome> = &mut settle_torn;
         if self.poisoned {
             return Err(Error::new(
                 "action_uncertain",
@@ -346,6 +385,7 @@ impl GameJournal {
             // an unresolved retry until original baselines are durable.
             let mut retry_settle = || match settle()? {
                 reached @ Outcome::Reached(_) => Ok(reached),
+                unchanged @ Outcome::Unchanged(_) if retry_unchanged => Ok(unchanged),
                 _ => Ok(Outcome::Unknown),
             };
             return self.settle(previous, &mut retry_settle).map_err(|error| {

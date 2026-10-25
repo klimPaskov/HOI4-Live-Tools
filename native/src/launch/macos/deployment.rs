@@ -181,6 +181,19 @@ fn train_button(r: &Reader<'_>, image: u64, name: &str) -> Result<Rect> {
     gui_tree::rect(r, image, button, GAME)
 }
 
+/// Close the Recruit & Deploy panel when an earlier action left it open: it covers
+/// the left half of the map, so a later box selection or map click would miss.
+/// Best effort (the panel toggles with the same ordinary key that opened it).
+pub(super) fn leave(process: &dyn Process, keys: &MacKeys) {
+    if !read(process, open).unwrap_or(false) {
+        return;
+    }
+    if keys.press(Key::letter('u').unwrap_or(Key::Escape)).is_err() {
+        return;
+    }
+    let _ = wait(process, "close deployment", |r, i| Ok(!open(r, i)?));
+}
+
 /// Queue `count` divisions of template `name`; the caller has journaled intent.
 pub(super) fn train(process: &dyn Process, keys: &MacKeys, name: &str, count: usize) -> Result<()> {
     clear_notices(process, keys)?;

@@ -229,3 +229,87 @@ fn journal_refuses_cross_version_outcomes_and_unknown_receipt_semantics() {
         std::fs::remove_dir_all(d).unwrap();
     }
 }
+
+#[cfg(test)]
+mod retry_settle_tests {
+    use super::super::tests::{dir, epoch, journal};
+    use super::super::*;
+    use serde_json::json;
+
+    fn open_intent(j: &mut GameJournal) {
+        let mut settle = || Ok(Outcome::Unknown);
+        let mut dispatch = || Err(Error::new("action_deadline", "late"));
+        assert!(j
+            .execute(
+                "a1",
+                &epoch(),
+                json!({"kind":"k"}),
+                &mut settle,
+                &mut dispatch
+            )
+            .is_err());
+        assert!(j.unresolved().is_some());
+    }
+    #[test]
+    fn baseline_free_unchanged_settles_a_retry_and_unblocks_input() {
+        let d = dir("retry-unchanged");
+        let mut j = journal(&d);
+        open_intent(&mut j);
+        let mut settle = || Ok(Outcome::Unchanged(json!({})));
+        let mut dispatch = || panic!("a retry never re-sends input");
+        let r = j
+            .execute_with(
+                "a1",
+                &epoch(),
+                json!({"kind":"k"}),
+                &mut settle,
+                &mut dispatch,
+                true,
+            )
+            .unwrap();
+        assert_eq!(r.status, Status::NotApplied);
+        assert!(j.unresolved().is_none());
+    }
+    #[test]
+    fn default_retry_still_refuses_unchanged() {
+        let d = dir("retry-default");
+        let mut j = journal(&d);
+        open_intent(&mut j);
+        let mut settle = || Ok(Outcome::Unchanged(json!({})));
+        let mut dispatch = || panic!("no input");
+        assert!(j
+            .execute(
+                "a1",
+                &epoch(),
+                json!({"kind":"k"}),
+                &mut settle,
+                &mut dispatch
+            )
+            .is_err());
+        assert!(j.unresolved().is_some());
+    }
+    #[test]
+    fn torn_reads_in_settlement_are_retried_but_other_errors_are_not() {
+        let d = dir("torn");
+        let mut j = journal(&d);
+        let mut calls = 0;
+        let mut settle = || {
+            calls += 1;
+            if calls < 3 {
+                Err(Error::new("torn_read", "Snapshot witness changed"))
+            } else {
+                Ok(Outcome::Reached(json!({})))
+            }
+        };
+        let mut dispatch = || Err(Error::new("action_deadline", "late"));
+        let r = j.execute(
+            "t1",
+            &epoch(),
+            json!({"kind":"k"}),
+            &mut settle,
+            &mut dispatch,
+        );
+        assert!(r.is_ok());
+        assert_eq!(calls, 3);
+    }
+}

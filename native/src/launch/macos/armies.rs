@@ -148,7 +148,7 @@ fn membership(r: &Reader<'_>, image: u64) -> Result<BTreeMap<String, u64>> {
     Ok(out)
 }
 /// division id -> state id where it stands (None while moving or unknown).
-fn division_states(r: &Reader<'_>, image: u64) -> Result<BTreeMap<String, Option<i32>>> {
+pub(super) fn division_states(r: &Reader<'_>, image: u64) -> Result<BTreeMap<String, Option<i32>>> {
     let u = ui(r)?;
     let l = crate::construction::layout(r);
     let country = own_country(r, image)?;
@@ -230,15 +230,15 @@ pub(super) fn armies(process: &dyn Process) -> Result<Value> {
                 )
             })
             .collect::<Result<Vec<_>>>()?;
-        let mut by_state: BTreeMap<i32, usize> = BTreeMap::new();
+        let mut by_state: BTreeMap<i32, Vec<&String>> = BTreeMap::new();
         for id in &unassigned {
             if let Some(Some(state)) = places.get(id) {
-                *by_state.entry(*state).or_default() += 1;
+                by_state.entry(*state).or_default().push(id);
             }
         }
         let by_state: Vec<Value> = by_state
             .into_iter()
-            .map(|(state, n)| json!({"state_id":state,"divisions":n}))
+            .map(|(state, ids)| json!({"state_id":state,"divisions":ids.len(),"division_ids":ids}))
             .collect();
         let groups = army_groups(r, image)?
             .into_iter()
@@ -257,6 +257,296 @@ pub(super) fn armies(process: &dyn Process) -> Result<Value> {
             "unassigned_by_state":by_state}),
         )
     })
+}
+/// Most divisions the planner puts into one army.
+pub(super) const ARMY_CAP: usize = 24;
+
+/// What `hoi4_army_assign` does for the unassigned divisions in one state.
+#[derive(Debug, PartialEq)]
+pub(super) enum AssignMode {
+    /// Fold them into the standing army `army` without disturbing the others.
+    Absorb { army: String },
+    /// No army stands there: the ordinary new-army path creates one.
+    CreateNew,
+}
+#[derive(Debug, PartialEq)]
+pub(super) struct AssignPlan {
+    pub state: i32,
+    pub mode: AssignMode,
+    /// Unassigned divisions standing in the state.
+    pub unassigned: usize,
+    /// Divisions the action is expected to move (all of them unless the army is nearly full).
+    pub take: usize,
+    /// Unassigned divisions left over because the army reached the cap.
+    pub overflow: usize,
+    /// Divisions of the receiving army afterwards (None for a new army).
+    pub army_after: Option<usize>,
+    /// A new army larger than the cap needs this many divisions split off afterwards.
+    pub then_split: usize,
+    /// Divisions of the receiving army standing in the state (0 for a new army).
+    pub target_here: usize,
+}
+impl AssignPlan {
+    pub(super) fn to_json(&self) -> Value {
+        let (mode, army) = match &self.mode {
+            AssignMode::Absorb { army } => ("absorb", json!(army)),
+            AssignMode::CreateNew => ("create_new", Value::Null),
+        };
+        json!({"state_id":self.state,"mode":mode,"army":army,"unassigned":self.unassigned,
+            "take":self.take,"overflow":self.overflow,"army_after":self.army_after,
+            "then_split":self.then_split,"army_cap":ARMY_CAP,
+            "target_here":self.target_here,"executable": true,"unmapped_control": false})
+    }
+}
+
+/// Decide, from a `hoi4_armies` view alone, where the unassigned divisions in
+/// `state` go: into `target` (or, without one, the army standing there with
+/// the most room under `cap`), or into a new army when none stands there.
+/// Reads nothing and presses nothing; every refusal happens before any input.
+pub(super) fn plan_assign(
+    view: &Value,
+    state: i32,
+    target: Option<&str>,
+    cap: usize,
+) -> Result<AssignPlan> {
+    let key = state.to_string();
+    let unassigned = view["unassigned_by_state"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|row| row["state_id"].as_i64() == Some(state as i64))
+        .filter_map(|row| row["divisions"].as_u64())
+        .sum::<u64>() as usize;
+    if unassigned == 0 {
+        return Err(Error::new(
+            "no_unassigned_here",
+            format!(
+                "No unassigned division stands in state {state} (hoi4_armies unassigned_by_state); \
+                 divisions on the move are not counted. Nothing was clicked."
+            ),
+        ));
+    }
+    struct Standing {
+        name: String,
+        here: usize,
+        total: usize,
+    }
+    let armies: Vec<Standing> = view["armies"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|a| {
+            Some(Standing {
+                name: a["army"].as_str()?.to_string(),
+                here: a["states"][&key].as_u64().unwrap_or(0) as usize,
+                total: a["division_count"]
+                    .as_u64()
+                    .map(|n| n as usize)
+                    .or_else(|| a["divisions"].as_array().map(Vec::len))?,
+            })
+        })
+        .collect();
+    let chosen = match target {
+        Some(name) => {
+            let army = armies.iter().find(|a| a.name == name).ok_or_else(|| {
+                Error::new(
+                    "no_such_army",
+                    format!("No own army is named {name}. Nothing was clicked."),
+                )
+            })?;
+            if army.here == 0 {
+                return Err(Error::new(
+                    "target_not_in_state",
+                    format!(
+                        "{name} has no division in state {state}; absorbing is only planned for an army \
+                         standing where the unassigned divisions are. Nothing was clicked."
+                    ),
+                ));
+            }
+            Some(army)
+        }
+        None => armies.iter().filter(|a| a.here > 0).max_by(|a, b| {
+            let room = |x: &Standing| cap.saturating_sub(x.total);
+            room(a)
+                .cmp(&room(b))
+                .then(a.here.cmp(&b.here))
+                .then(b.name.cmp(&a.name))
+        }),
+    };
+    let Some(army) = chosen else {
+        return Ok(AssignPlan {
+            state,
+            mode: AssignMode::CreateNew,
+            unassigned,
+            take: unassigned,
+            overflow: 0,
+            army_after: None,
+            then_split: unassigned.saturating_sub(cap),
+            target_here: 0,
+        });
+    };
+    let room = cap.saturating_sub(army.total);
+    if room == 0 {
+        return Err(Error::new(
+            "army_full",
+            format!(
+                "{} already holds {} divisions (cap {cap}); {unassigned} unassigned division(s) wait in \
+                 state {state}. Split that army with hoi4_army_split first or name another army. Nothing \
+                 was clicked.",
+                army.name, army.total
+            ),
+        ));
+    }
+    let take = unassigned.min(room);
+    Ok(AssignPlan {
+        state,
+        mode: AssignMode::Absorb {
+            army: army.name.clone(),
+        },
+        unassigned,
+        take,
+        overflow: unassigned - take,
+        army_after: Some(army.total + take),
+        then_split: 0,
+        target_here: army.here,
+    })
+}
+
+/// The unassigned division ids of `state` from the same view (settlement pool).
+pub(super) fn unassigned_ids(view: &Value, state: i32) -> Vec<String> {
+    view["unassigned_by_state"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|row| row["state_id"].as_i64() == Some(state as i64))
+        .flat_map(|row| row["division_ids"].as_array().into_iter().flatten())
+        .filter_map(|id| id.as_str().map(String::from))
+        .collect()
+}
+
+/// Refusal decided before any input (and before the action is journaled).
+pub(super) fn assign_preflight(_plan: &AssignPlan) -> Result<()> {
+    Ok(())
+}
+/// Carry out a plan. A new army uses the ordinary new-army card. Absorbing is
+/// the game's own affordance, found live: with the unassigned divisions
+/// selected, a RIGHT-click on the standing army's card assigns the selection
+/// ("Click to select / Right-click to assign the selected Divisions").
+/// The box selection also takes divisions of other armies standing nearby, and
+/// the right-click would move those too, so the selection size must equal the
+/// unassigned plus the target army's divisions in this state; otherwise nothing
+/// is clicked on the card.
+/// Selection boxes (game points) for gathering a state's divisions, usual size first.
+const ASSIGN_BOXES: [((f64, f64), (f64, f64)); 7] = [
+    ((560.0, 260.0), (1360.0, 860.0)),
+    ((560.0, 260.0), (1400.0, 980.0)),
+    ((560.0, 220.0), (1480.0, 980.0)),
+    ((480.0, 260.0), (1400.0, 980.0)),
+    ((480.0, 220.0), (1560.0, 960.0)),
+    ((420.0, 190.0), (1640.0, 980.0)),
+    ((640.0, 300.0), (1300.0, 980.0)),
+];
+pub(super) fn assign(process: &dyn Process, keys: &MacKeys, plan: &AssignPlan) -> Result<()> {
+    let army = match &plan.mode {
+        AssignMode::CreateNew => return create(process, keys, plan.state, false),
+        AssignMode::Absorb { army } => army,
+    };
+    clear_notices(process, keys)?;
+    find_state(process, keys, plan.state)?;
+    let expected = plan.unassigned + plan.target_here;
+    // Divisions stand anywhere in the state, so try the usual box first and
+    // then wider ones; the card is only right-clicked when the selection holds
+    // exactly the expected divisions (a new drag replaces the selection).
+    let mut sizes = Vec::new();
+    let mut exact = false;
+    for (from, to) in ASSIGN_BOXES {
+        keys.drag(GAME, from, to)?;
+        std::thread::sleep(std::time::Duration::from_millis(350));
+        let size = read(process, selection_size)? as usize;
+        sizes.push(size);
+        if size == expected {
+            exact = true;
+            break;
+        }
+    }
+    if !exact {
+        return Err(Error::new(
+            "selection_mismatch",
+            format!(
+                "The box selections held {sizes:?} divisions but {expected} were expected (unassigned {} plus {army}'s \
+                 {} here), so they also took divisions of another army or missed some. Nothing was assigned; the \
+                 right-click on the card was not sent.",
+                plan.unassigned, plan.target_here
+            ),
+        ));
+    }
+    let before = read(process, membership)?;
+    let card = read(process, |r, i| card_rect(r, i, army, "portrait_btn"))?;
+    clear_notices(process, keys)?;
+    let (x, y) = card.center();
+    keys.right_click(GAME, x, y)?;
+    wait(process, "divisions assigned", |r, i| {
+        let now = membership(r, i)?;
+        Ok(now != before)
+    })
+    .map_err(|_| {
+        Error::new(
+            "input_readback_failed",
+            "The right-click on the army card changed no division membership within 3 s; re-read hoi4_armies before trying again",
+        )
+    })
+}
+
+/// Refusals for `hoi4_army_create` that need no input, decided from the
+/// `armies()` view: the box selection only gathers own divisions standing
+/// around the state, and one that takes every division of an existing army
+/// would delete it. Divisions on the move have no state and are not counted,
+/// so this refuses only on positive evidence of where divisions stand.
+pub(super) fn check_create(view: &Value, state: i32, absorb: bool) -> Result<()> {
+    let key = state.to_string();
+    let unassigned: u64 = view["unassigned_by_state"]
+        .as_array()
+        .map(|rows| {
+            rows.iter()
+                .filter(|row| row["state_id"].as_i64() == Some(state as i64))
+                .filter_map(|row| row["divisions"].as_u64())
+                .sum()
+        })
+        .unwrap_or(0);
+    let mut standing: Vec<(String, u64)> = Vec::new();
+    for army in view["armies"].as_array().into_iter().flatten() {
+        if let (Some(name), Some(n)) = (army["army"].as_str(), army["states"][&key].as_u64()) {
+            if n > 0 {
+                standing.push((name.to_string(), n));
+            }
+        }
+    }
+    if unassigned > 0 || (absorb && !standing.is_empty()) {
+        return Ok(());
+    }
+    if standing.is_empty() {
+        return Err(Error::new(
+            "no_own_divisions",
+            format!(
+                "No own division stands in state {state} (hoi4_armies lists none there, assigned or \
+                 not); divisions on the move are not counted. Nothing was clicked. Pick a state from \
+                 hoi4_armies (unassigned_by_state or an army's states) or wait for the divisions to arrive."
+            ),
+        ));
+    }
+    let named: Vec<String> = standing
+        .iter()
+        .map(|(name, n)| format!("{name} ({n})"))
+        .collect();
+    Err(Error::new(
+        "already_in_army",
+        format!(
+            "All own divisions in state {state} already belong to: {}; no unassigned division stands \
+             there, so a new army could only be made by deleting that army. Nothing was clicked. \
+             Use absorb_existing: true to fold them into a new army, or hoi4_army_split on that army.",
+            named.join(", ")
+        ),
+    ))
 }
 fn selection_size(r: &Reader<'_>, image: u64) -> Result<u64> {
     let idler = r.u64(image + game::layout(r).idler_global)?;
@@ -307,10 +597,35 @@ pub(super) fn create(
     // The selection box stays clear of the left-hand panels; Escape is not used
     // because on a free map it opens the game menu.
     find_state(process, keys, state)?;
-    keys.drag(GAME, (560.0, 260.0), (1360.0, 860.0))?;
+    // Unassigned divisions can stand anywhere in the state: when the usual box
+    // does not hold exactly them, try wider boxes (a new drag replaces the
+    // selection) and keep the first exact one; otherwise fall back to the usual
+    // box and the old outcome handling below.
+    let unassigned_here = armies(process)
+        .ok()
+        .map(|view| unassigned_ids(&view, state).len())
+        .filter(|n| *n > 0);
+    keys.drag(GAME, ASSIGN_BOXES[0].0, ASSIGN_BOXES[0].1)?;
     wait(process, "select divisions", |r, i| {
         Ok(selection_size(r, i)? > 0)
     })?;
+    if let Some(expected) = unassigned_here.filter(|_| !absorb) {
+        if read(process, selection_size)? as usize != expected {
+            for (from, to) in ASSIGN_BOXES.iter().skip(1) {
+                keys.drag(GAME, *from, *to)?;
+                std::thread::sleep(std::time::Duration::from_millis(350));
+                if read(process, selection_size)? as usize == expected {
+                    break;
+                }
+            }
+            if read(process, selection_size)? as usize != expected {
+                keys.drag(GAME, ASSIGN_BOXES[0].0, ASSIGN_BOXES[0].1)?;
+                wait(process, "select divisions", |r, i| {
+                    Ok(selection_size(r, i)? > 0)
+                })?;
+            }
+        }
+    }
     let before = read(process, membership)?;
     let groups_before: BTreeSet<u64> = before.values().copied().collect();
     let card = read(process, |r, i| new_card(r, i, false))?;
@@ -347,8 +662,9 @@ pub(super) fn create(
     .map_err(|_| {
         Error::new(
             "input_readback_failed",
-            "No new army: the divisions around this state may already belong to an army \
-             (see hoi4_armies), or none are there",
+            "No new army appeared within 3 s of the new-army card click. The pre-input check found \
+             own divisions standing in this state, so this is not proof of any single cause: \
+             re-read hoi4_armies before trying again (the divisions may have moved or been assigned)",
         )
     })
 }
@@ -738,7 +1054,7 @@ fn leader_root(r: &Reader<'_>, image: u64) -> Result<u64> {
     gui_tree::container(r, root + 0x30, image)?
         .ok_or_else(|| Error::new("invalid_gui", "Commander list window required"))
 }
-fn leader_list_open(r: &Reader<'_>, image: u64) -> Result<bool> {
+pub(super) fn leader_list_open(r: &Reader<'_>, image: u64) -> Result<bool> {
     gui_tree::visible(r, leader_root(r, image)?)
 }
 /// Visible band (top, bottom) of the commander list's rows in game pixels:
@@ -766,7 +1082,10 @@ fn leader_rows(r: &Reader<'_>, image: u64) -> Result<Vec<(String, Rect)>> {
 }
 /// Like `leader_rows`, plus the row's Promote button while it is shown (a
 /// general who is not yet a field marshal).
-fn leader_entries(r: &Reader<'_>, image: u64) -> Result<Vec<(String, Rect, Option<Rect>)>> {
+pub(super) fn leader_entries(
+    r: &Reader<'_>,
+    image: u64,
+) -> Result<Vec<(String, Rect, Option<Rect>)>> {
     let u = ui(r)?;
     let root = leader_root(r, image)?;
     let mut grid = None;
@@ -881,9 +1200,14 @@ fn assign_commander_once(
             .map(|(n, _)| n)
             .collect();
         super::ui::dismiss(process, keys, |r, i| Ok(!leader_list_open(r, i)?));
+        let close = super::commanders::closest_names(general, &names, 5);
         return Err(Error::new(
-            "invalid_target",
-            format!("No such general in the list: {}", names.join(", ")),
+            "unknown_commander",
+            format!(
+                "No such general in the list. Closest: {}. All listed: {}",
+                close.join(", "),
+                names.join(", ")
+            ),
         ));
     };
     let band = read(process, |r, i| Ok(leader_band(r, i)))?;
@@ -1072,4 +1396,99 @@ pub(super) fn split(process: &dyn Process, keys: &MacKeys, army: &str, count: us
         }
         Ok(false)
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn view() -> Value {
+        json!({
+            "unassigned_by_state": [{"state_id": 64, "divisions": 3}],
+            "armies": [
+                {"army": "1st Army", "states": {"10": 4, "64": 2}},
+                {"army": "2nd Army", "states": {"10": 6}},
+            ],
+        })
+    }
+    #[test]
+    fn unassigned_divisions_in_the_state_allow_the_box_selection() {
+        assert!(check_create(&view(), 64, false).is_ok());
+    }
+    #[test]
+    fn divisions_all_in_armies_are_refused_before_input_naming_the_armies() {
+        let e = check_create(&view(), 10, false).unwrap_err();
+        assert_eq!(e.code, "already_in_army");
+        assert!(e.message.contains("1st Army (4)") && e.message.contains("2nd Army (6)"));
+        assert!(e.message.contains("absorb_existing") && e.message.contains("hoi4_army_split"));
+        assert!(e.message.contains("Nothing was clicked"));
+    }
+    fn assign_view() -> Value {
+        json!({
+            "unassigned_by_state": [
+                {"state_id": 64, "divisions": 6, "division_ids": ["a","b","c","d","e","f"]},
+                {"state_id": 66, "divisions": 3, "division_ids": ["g","h","i"]},
+                {"state_id": 70, "divisions": 30, "division_ids": []}],
+            "armies": [
+                {"army": "Army 1", "division_count": 19, "states": {"64": 19}},
+                {"army": "Army 2", "division_count": 10, "states": {"64": 4, "66": 6}},
+                {"army": "Army 3", "division_count": 24, "states": {"70": 24}}],
+        })
+    }
+    #[test]
+    fn unassigned_divisions_go_to_the_standing_army_with_the_most_room() {
+        let plan = plan_assign(&assign_view(), 64, None, ARMY_CAP).unwrap();
+        // Army 1 has room for 5 of the 6, Army 2 for 14: Army 2 takes all six
+        assert_eq!(plan.mode, AssignMode::Absorb { army: "Army 2".into() });
+        assert_eq!((plan.take, plan.overflow, plan.army_after), (6, 0, Some(16)));
+        let plan = plan_assign(&assign_view(), 64, Some("Army 1"), ARMY_CAP).unwrap();
+        assert_eq!((plan.take, plan.overflow, plan.army_after), (5, 1, Some(24)));
+        assert_eq!(plan.to_json()["unmapped_control"], json!(false));
+        assert_eq!(plan.target_here, 19);
+    }
+    #[test]
+    fn without_a_standing_army_a_new_one_is_planned_and_oversize_is_split_after() {
+        let view = json!({"unassigned_by_state": [{"state_id": 5, "divisions": 30}], "armies": []});
+        let plan = plan_assign(&view, 5, None, ARMY_CAP).unwrap();
+        assert_eq!(plan.mode, AssignMode::CreateNew);
+        assert_eq!((plan.take, plan.then_split), (30, 6));
+        assert!(assign_preflight(&plan).is_ok());
+    }
+    #[test]
+    fn assign_refuses_before_input_with_typed_errors() {
+        let v = assign_view();
+        assert_eq!(plan_assign(&v, 99, None, 24).unwrap_err().code, "no_unassigned_here");
+        assert_eq!(plan_assign(&v, 64, Some("Army 9"), 24).unwrap_err().code, "no_such_army");
+        assert_eq!(
+            plan_assign(&v, 66, Some("Army 1"), 24).unwrap_err().code,
+            "target_not_in_state"
+        );
+        // a state where the only standing army is full
+        assert_eq!(plan_assign(&v, 70, None, 24).unwrap_err().code, "army_full");
+        let plan = plan_assign(&v, 66, None, 24).unwrap();
+        // absorbing into a standing army is executable (right-click on the army card)
+        assert!(assign_preflight(&plan).is_ok());
+        assert_eq!(plan.target_here, 6);
+    }
+    #[test]
+    fn the_settlement_pool_is_the_unassigned_ids_of_that_state() {
+        assert_eq!(unassigned_ids(&assign_view(), 66), vec!["g", "h", "i"]);
+        assert!(unassigned_ids(&assign_view(), 1).is_empty());
+    }
+    #[test]
+    fn absorb_existing_may_fold_the_armies_standing_there() {
+        assert!(check_create(&view(), 10, true).is_ok());
+    }
+    #[test]
+    fn a_state_without_own_divisions_is_refused_even_when_absorbing() {
+        for absorb in [false, true] {
+            let e = check_create(&view(), 99, absorb).unwrap_err();
+            assert_eq!(e.code, "no_own_divisions");
+            assert!(e.message.contains("state 99"));
+        }
+        let empty = json!({"unassigned_by_state": [], "armies": []});
+        assert_eq!(
+            check_create(&empty, 1, false).unwrap_err().code,
+            "no_own_divisions"
+        );
+    }
 }

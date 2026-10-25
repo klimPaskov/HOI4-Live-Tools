@@ -258,18 +258,53 @@ fn unchanged<T: PartialEq>(expected: &T, current: &T) -> Result<()> {
     }
     Ok(())
 }
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum ClickStage {
+    Opener,
+    Node,
+    Start,
+}
+/// A disabled control is refused before its click. The detail window's Start
+/// button is disabled by the game when the focus is not available now.
+fn disabled_error(stage: ClickStage) -> Error {
+    match stage {
+        ClickStage::Start => Error::new(
+            "focus_not_available",
+            "The game shows Start disabled for this focus: its requirements are unmet or a mutually \
+             exclusive focus was taken. Observed: the detail window is open and Start is disabled; the \
+             Start button was not clicked. Not read: the game's reason text, so the specific unmet \
+             requirement is unknown. Choose another focus or satisfy its requirements first.",
+        ),
+        ClickStage::Node | ClickStage::Opener => Error::new(
+            "invalid_target",
+            "The game disables this Focus control",
+        ),
+    }
+}
+/// The node click was sent but the detail window never read as open. Only the
+/// readback timeout is retyped; ownership, lease and deadline causes stay.
+fn detail_not_opened(error: Error) -> Error {
+    if error.code != "input_readback_failed" {
+        return error;
+    }
+    Error::new(
+        "focus_detail_not_opened",
+        "Observed: one click on the focus node was sent but its detail window was not read as open \
+         within 3 s; Start was not clicked. Not inferred: whether the click missed, a pop-up took it \
+         or the game was still animating. Re-observe with hoi4_focus_selected_detail before calling \
+         hoi4_focus_start again.",
+    )
+}
 fn click(
     process: &(dyn Process + Send + Sync),
     keys: &MacKeys,
     candidate: &Control,
     until: Instant,
     probe: impl Fn() -> Result<Control> + Send + Sync,
+    stage: ClickStage,
 ) -> Result<()> {
     if candidate.disabled {
-        return Err(Error::new(
-            "invalid_target",
-            "The game disables this Focus control",
-        ));
+        return Err(disabled_error(stage));
     }
     let check = || {
         deadline(until)?;
@@ -338,7 +373,7 @@ fn start_inner(
         trace.stage("focus_opener");
         let probe = || sample(process, &owner, key, binding::focus_button);
         let candidate = settle(until, probe)?;
-        click(process, keys, &candidate, until, probe)?;
+        click(process, keys, &candidate, until, probe, ClickStage::Opener)?;
     }
     trace.stage("open_tree_readback");
     wait_for_tree(until, || sample(process, &owner, key, binding::view_state))?;
@@ -422,16 +457,16 @@ fn start_inner(
             "Focus node drifted outside the tree",
         ));
     }
-    click(process, keys, &candidate, until, node)?;
+    click(process, keys, &candidate, until, node, ClickStage::Node)?;
     trace.stage("detail_open_readback");
-    wait_for(until, || sample(process, &owner, key, binding::detail))?;
+    wait_for(until, || sample(process, &owner, key, binding::detail)).map_err(detail_not_opened)?;
     trace.stage("start_candidate_and_click");
     let detail = || {
         sample(process, &owner, key, binding::detail)?
             .ok_or_else(|| Error::new("input_readback_failed", "Own Focus detail closed"))
     };
     let candidate = settle(until, detail)?;
-    click(process, keys, &candidate, until, detail)?;
+    click(process, keys, &candidate, until, detail, ClickStage::Start)?;
     trace.stage("activation_readback");
     wait_for(until, || {
         Ok((progress(process)?.active_key() == Some(key)).then_some(()))
@@ -441,6 +476,29 @@ fn start_inner(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn disabled_start_is_typed_with_the_limits_of_the_evidence() {
+        let e = disabled_error(ClickStage::Start);
+        assert_eq!(e.code, "focus_not_available");
+        assert!(e.message.contains("not clicked"));
+        assert!(e.message.contains("unmet") && e.message.contains("exclusive"));
+        for stage in [ClickStage::Opener, ClickStage::Node] {
+            assert_eq!(disabled_error(stage).code, "invalid_target");
+        }
+    }
+    #[test]
+    fn detail_timeout_is_typed_but_other_causes_survive() {
+        let e = detail_not_opened(Error::new("input_readback_failed", "window expired"));
+        assert_eq!(e.code, "focus_detail_not_opened");
+        assert!(e.message.contains("hoi4_focus_selected_detail"));
+        for code in [
+            "action_deadline",
+            "ownership_changed",
+            "foreign_focus_scope",
+        ] {
+            assert_eq!(detail_not_opened(Error::new(code, "x")).code, code);
+        }
+    }
     #[test]
     fn tree_readiness_waits_for_positive_own_binding_without_preparation_or_input() {
         use binding::FocusViewState::{Hidden, Ready};

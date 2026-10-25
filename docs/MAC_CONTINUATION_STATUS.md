@@ -38,6 +38,46 @@ Linux component checks do not replace native Mac campaign recordings. See the
 [capacity comparison](CLAUSEWITZ_VALIDATION.md#fex-transition-origins-and-capacity-comparison--24-october-2026)
 and [current next work](LINUX_RUST_HANDOFF.md#next-work).
 
+## 25 October update
+
+A noninteractive `system.privilege.taskport` query (same flags as the Rust
+preflight) returned 0 from a normal user shell; Developer mode is enabled and the
+user is in `_developer`. This is a process-context observation, not live evidence:
+re-run the Rust preflight from the owning session before the decimal-character gate.
+Host checks: 2,310 Rust tests pass in release mode; the venv Python suite passes
+956 tests (37 skips). The system `python3` lacks numpy/cv2, so run the suite with
+`.venv/bin/python`. Private disk cleanup reclaimed about 74 GB of free space
+(Cargo `target` caches, duplicate screenshots, Codex/Docker caches). No campaign,
+two-year run or recording was produced in that session.
+
+Later on 25 October a private Haiku medium run (FAIR Germany, native 1920x1108, 68-tool
+native server) played 1 Jan 1936 to 2 Jan 1938 in two sessions, 415 calls, 31 errors, about
+17-26 real minutes per game year. It is **not** an acceptance pass: a tool restart killed the
+broker, recorder and display holder mid-run (game survived, resumed), the foreground was
+repeatedly taken, and play left political power, divisions, naval production, special projects
+and doctrines unmanaged. See the private OUTCOME note; fix tooling and the brief first.
+
+**Update (late 25 October):** four more private Haiku runs of the same gate followed. Attempts 1-3 each ended in
+a frozen input journal (a 5 s focus deadline mid-pan; a research settle that required all other slots unchanged; an
+unresolved plan-runner focus intent that retries could not settle). Fixed: 12 s up-front action deadlines, scoped pure settle
+rules (`settle.rs`, `research::settle`), a baseline-free retry settle for focus/research and bounded `torn_read` retries
+in settlement (2,352 Rust tests pass). Attempt 4 then played 1 Jan 1936 to 3 Mar 1938 in about 39 minutes (about 18 real
+minutes per game year at speed 3) with 651 calls, no uncertain action, no freeze and one final pause, recorded at native
+1920x1108. It is a reliability result only: management quality was far below the playbook (idle factories, unassigned
+divisions, no generals, no navy/air/espionage/special projects). `hoi4_country_status` (top-bar text read) matched the screen
+for all eight fields in a live check. No acceptance, showcase or recording of a campaign is claimed.
+
+**Update (26 October, early hours):** new management tools were built and checked live at native 1080p:
+`hoi4_commanders` (names and assignments; skill/traits stay null), `hoi4_army_commander` typed pre-checks,
+`hoi4_wars` Stage A (borders, occupation, coverage heuristic; war participants not read), `hoi4_army_assign`
+(new army, or fold unassigned divisions into the standing army by RIGHT-clicking its card with exactly those
+divisions selected; refuses `selection_mismatch` before the click when the box also takes another army's
+divisions, tries up to seven boxes), standing-plan construction by state name (the old runner silently dropped
+names), `stop_on_date`, research/focus fallbacks and a validated Germany plan template
+(`skills/hoi4-campaign-playbook/plans/`, `scripts/validate_plan.py`). 2,417 Rust tests pass. A stricter two-year
+gate with these tools ran reliably (no freeze) but left alarms open; the final rerun is waiting on macOS
+task-port reauthorization (the right's 10-hour timeout expired: -60007; it needs a local password prompt).
+
 ## Ordinary cancellation checkpoint
 
 The later ordinary Find-button component passed with one move/click in 603.114 ms;

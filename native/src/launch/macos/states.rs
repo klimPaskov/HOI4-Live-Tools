@@ -64,13 +64,13 @@ fn parse_names(text: &str) -> Vec<(i32, String)> {
     out
 }
 
-fn names(dir: &Path) -> Result<Vec<(i32, String)>> {
+pub(super) fn names(dir: &Path) -> Result<Vec<(i32, String)>> {
     let text = std::fs::read_to_string(dir.join("localisation/english/state_names_l_english.yml"))
         .map_err(|_| Error::new("map_data_unavailable", "State names unreadable"))?;
     Ok(parse_names(&text))
 }
 
-fn tag_name(r: &Reader<'_>, image: u64, tag: i32) -> Result<String> {
+pub(super) fn tag_name(r: &Reader<'_>, image: u64, tag: i32) -> Result<String> {
     let g = game::layout(r);
     let db = r.u64(image + g.tag_db_global)?;
     let (_, data, count) = r.array_header(db)?;

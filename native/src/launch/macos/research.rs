@@ -231,6 +231,38 @@ pub(super) struct Assignments {
     pub slots: Vec<Option<String>>,
     pub completed: BTreeSet<String>,
 }
+/// How an unresolved `research_start` settles from two own-slot snapshots.
+#[derive(Debug, PartialEq)]
+pub(super) enum Settled {
+    /// The target slot holds the technology.
+    Reached,
+    /// The only effect this action can have (putting `key` into some slot) is
+    /// absent: the target slot is empty and no other slot newly holds `key`.
+    /// Other slots may have changed on their own (research finishing at speed).
+    Unchanged,
+    Unknown,
+}
+pub(super) fn settle(
+    before: &[Option<String>],
+    now: &[Option<String>],
+    slot: usize,
+    key: &str,
+) -> Settled {
+    let target = now.get(slot).cloned().flatten();
+    if target.as_deref() == Some(key) {
+        return Settled::Reached;
+    }
+    let newly_elsewhere = now.iter().enumerate().any(|(i, s)| {
+        i != slot
+            && s.as_deref() == Some(key)
+            && before.get(i).cloned().flatten().as_deref() != Some(key)
+    });
+    if target.is_none() && before.get(slot).cloned().flatten().is_none() && !newly_elsewhere {
+        Settled::Unchanged
+    } else {
+        Settled::Unknown
+    }
+}
 pub(super) fn assignments(process: &dyn Process) -> Result<Assignments> {
     read(process, |r, base| {
         let (slots, completed) = research::assignments(r, base)?;
@@ -242,8 +274,11 @@ pub(super) fn assignments(process: &dyn Process) -> Result<Assignments> {
 pub(super) fn check(before: &Assignments, key: &str, slot: usize) -> Result<()> {
     if before.completed.contains(key) {
         return Err(Error::new(
-            "invalid_target",
-            "Technology already researched",
+            "already_researched",
+            format!(
+                "Technology {key} is already researched (own completed set); nothing was clicked. \
+                 Choose a technology that is not researched yet."
+            ),
         ));
     }
     if before.slots.iter().any(|s| s.as_deref() == Some(key)) {
@@ -375,6 +410,44 @@ pub(super) fn start(process: &dyn Process, keys: &MacKeys, key: &str, slot: usiz
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn own(slots: &[Option<&str>]) -> Vec<Option<String>> {
+        slots.iter().map(|s| s.map(String::from)).collect()
+    }
+    #[test]
+    fn unresolved_start_settles_unchanged_even_when_other_slots_finish() {
+        let before = own(&[Some("a"), Some("b"), None, None]);
+        let now = own(&[None, Some("b2"), None, None]);
+        assert_eq!(settle(&before, &now, 3, "oil"), Settled::Unchanged);
+        assert_eq!(
+            settle(
+                &before,
+                &own(&[Some("a"), Some("b"), None, Some("oil")]),
+                3,
+                "oil"
+            ),
+            Settled::Reached
+        );
+        // started in the wrong slot: cannot prove nothing happened
+        assert_eq!(
+            settle(
+                &before,
+                &own(&[Some("a"), Some("b"), Some("oil"), None]),
+                3,
+                "oil"
+            ),
+            Settled::Unknown
+        );
+        // target slot taken by something else
+        assert_eq!(
+            settle(
+                &before,
+                &own(&[Some("a"), Some("b"), None, Some("x")]),
+                3,
+                "oil"
+            ),
+            Settled::Unknown
+        );
+    }
     fn state(slots: &[Option<&str>], done: &[&str]) -> Assignments {
         Assignments {
             slots: slots.iter().map(|s| s.map(String::from)).collect(),
@@ -385,10 +458,9 @@ mod tests {
     fn refusals_need_no_input() {
         let s = state(&[None, Some("radio")], &["infantry_weapons"]);
         assert!(check(&s, "support_weapons", 0).is_ok());
-        assert_eq!(
-            check(&s, "infantry_weapons", 0).unwrap_err().code,
-            "invalid_target"
-        );
+        let done = check(&s, "infantry_weapons", 0).unwrap_err();
+        assert_eq!(done.code, "already_researched");
+        assert!(done.message.contains("infantry_weapons"));
         assert_eq!(check(&s, "radio", 0).unwrap_err().code, "invalid_target");
         assert_eq!(
             check(&s, "support_weapons", 1).unwrap_err().code,

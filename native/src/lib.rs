@@ -1,4 +1,5 @@
 pub mod actions;
+pub mod alarms;
 pub mod calendar;
 pub mod error;
 #[cfg(any(target_os = "linux", test))]

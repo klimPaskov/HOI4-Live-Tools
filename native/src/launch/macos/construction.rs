@@ -154,6 +154,37 @@ pub(super) fn leave(process: &dyn Process, keys: &MacKeys) {
     });
 }
 
+/// The building button click was sent but the manager's selection never named
+/// the building. Other codes (ownership, lease, torn reads) keep their cause.
+fn select_failed(error: Error, key: &str) -> Error {
+    if error.code != "input_readback_failed" {
+        return error;
+    }
+    Error::new(
+        "building_select_failed",
+        format!(
+            "Observed: after one click on the {key} button the construction manager's selection did not \
+             name {key} within 3 s; nothing was placed and no map click was sent. Not inferred: whether \
+             the click missed, a pop-up took it, or the game refused the selection. Re-read hoi4_events \
+             and the construction queue before trying again; do not assume the state has no free slot."
+        ),
+    )
+}
+/// One centre click was sent with the building selected, yet the own queue in
+/// the state did not grow within 3 s. Memory alone cannot tell which cause.
+fn no_slot_or_not_allowed(key: &str, state: i32) -> Error {
+    Error::new(
+        "no_free_slot_or_not_allowed",
+        format!(
+            "Observed: with {key} selected and state {state} centred, one centre click did not raise the \
+             queued {key} in state {state} within 3 s. Most likely the state has no free building slot or \
+             {key} is not allowed there, but a click that missed the state or a pop-up is not excluded, and \
+             nothing was retried. Check hoi4_state_slots for state {state} (or choose another state) before \
+             trying again; do not repeat the same call."
+        ),
+    )
+}
+
 /// Queue `count` more of building `key` in own state `state`.
 pub(super) fn add(
     process: &dyn Process,
@@ -181,7 +212,8 @@ pub(super) fn add(
     keys.click(GAME, x, y)?;
     wait(process, "select building", |r, i| {
         Ok(selection(r, i)?.1.as_deref() == Some(key))
-    })?;
+    })
+    .map_err(|e| select_failed(e, key))?;
     let result = (|| {
         find_state(process, keys, state)?;
         for _ in 0..count.min(20) {
@@ -200,10 +232,7 @@ pub(super) fn add(
                     break;
                 }
                 if std::time::Instant::now() >= deadline {
-                    return Err(Error::new(
-                        "input_readback_failed",
-                        "The centre click queued nothing more in this state (no free building slot, or the building is not allowed there)",
-                    ));
+                    return Err(no_slot_or_not_allowed(key, state));
                 }
                 thread::sleep(Duration::from_millis(40));
             }
@@ -218,4 +247,38 @@ pub(super) fn add(
     })();
     leave(process, keys);
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn select_readback_timeout_is_typed_and_says_nothing_was_placed() {
+        let e = select_failed(
+            Error::new(
+                "input_readback_failed",
+                "select building: expected game change not observed",
+            ),
+            "arms_factory",
+        );
+        assert_eq!(e.code, "building_select_failed");
+        assert!(e.message.contains("arms_factory"));
+        assert!(e.message.contains("no map click was sent"));
+        assert!(e.message.contains("do not assume"));
+    }
+    #[test]
+    fn other_select_failures_keep_their_cause() {
+        for code in ["ownership_changed", "torn_read", "input_lease_required"] {
+            assert_eq!(select_failed(Error::new(code, "x"), "dockyard").code, code);
+        }
+    }
+    #[test]
+    fn centre_click_without_growth_is_typed_with_the_limits_of_the_evidence() {
+        let e = no_slot_or_not_allowed("industrial_complex", 64);
+        assert_eq!(e.code, "no_free_slot_or_not_allowed");
+        assert!(e.message.contains("state 64"));
+        assert!(e.message.contains("hoi4_state_slots"));
+        assert!(e.message.contains("not excluded"));
+        assert!(e.message.contains("nothing was retried"));
+    }
 }
