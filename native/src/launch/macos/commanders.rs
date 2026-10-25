@@ -8,10 +8,13 @@
 //!   validated grid `hoi4_army_commander` clicks), readable only while that
 //!   list is open. A closed list is never trusted to refuse a name.
 //!
-//! The country's own character list (skill, attack/defense/planning/logistics,
-//! traits, character id) has no reviewed macOS offsets, so those fields are
-//! reported as unavailable rather than guessed.
+//! * the country's own army leaders (`CCountryCharacters` +0x70, see
+//!   `units::leaders`): character id, skill, attack/defense/planning/logistics
+//!   and traits, checked against `common/characters/GER.txt` for Rundstedt,
+//!   List, Bock, Manstein and Heinrici (all five stats equal). They are the
+//!   character's base values; levels gained in the campaign are not read.
 use super::armies;
+use super::units;
 use super::ui::read;
 use crate::{
     error::{Error, Result},
@@ -41,6 +44,8 @@ pub(super) struct Snapshot {
     pub rows: Option<Vec<Row>>,
     /// Rows still present in memory while the list is closed (may be stale).
     pub stale_rows: Option<Vec<Row>>,
+    /// Every army leader of the country (None when the read failed).
+    pub leaders: Option<Vec<units::Leader>>,
 }
 
 fn key(name: &str) -> String {
@@ -267,6 +272,21 @@ pub(super) fn entries(snap: &Snapshot) -> Vec<Value> {
         }
     }
     let list_fresh = snap.rows.is_some();
+    let leaders: BTreeMap<String, &units::Leader> = snap
+        .leaders
+        .iter()
+        .flatten()
+        .map(|l| (key(&l.name), l))
+        .collect();
+    // Leaders the army panel does not list (not recruited, foreign, retired)
+    // appear with available unknown so the roster is complete.
+    for (k, l) in &leaders {
+        acc.entry(k.clone()).or_insert_with(|| Acc {
+            name: l.name.clone(),
+            led: Vec::new(),
+            row: None,
+        });
+    }
     acc.into_values()
         .map(|a| {
             let leads_group = a.led.iter().any(|t| t.is_group);
@@ -289,18 +309,24 @@ pub(super) fn entries(snap: &Snapshot) -> Vec<Value> {
             }
             let available = if !a.led.is_empty() {
                 json!(false)
-            } else if list_fresh {
+            } else if list_fresh && a.row.is_some() {
                 json!(true)
             } else {
                 Value::Null
             };
+            let leader = leaders.get(&key(&a.name));
+            let listed = a.row.is_some() || !a.led.is_empty();
             json!({"name":a.name,"rank":rank,"rank_source":rank_source,"rank_validated":rank_validated,
                 "assigned_to":assigned_to,"promotion_needed_for_group":needs_promotion(true, matches!(a.row, Some((true, _)))),"assigned_to_count":a.led.len(),"available":available,
                 "stale":a.row.is_some_and(|(_, fresh)| !fresh) && a.led.is_empty(),
-                "skill":null,"attack":null,"defense":null,"planning":null,"logistics":null,
-                "traits":null,"id":null,"sources":sources,
+                "skill":leader.map(|l| l.skill),"attack":leader.map(|l| l.attack),
+                "defense":leader.map(|l| l.defense),"planning":leader.map(|l| l.planning),
+                "logistics":leader.map(|l| l.logistics),
+                "traits":leader.map(|l| l.traits.clone()),"id":leader.map(|l| l.id.clone()),
+                "in_country_leader_list":leader.is_some(),"listed_in_panel_or_assigned":listed,
+                "sources":sources,
                 "validated":false,
-                "validated_fields":["name","assigned_to"]})
+                "validated_fields":["name","assigned_to","skill","attack","defense","planning","logistics","traits","id"]})
         })
         .collect()
 }
@@ -309,6 +335,7 @@ pub(super) fn entries(snap: &Snapshot) -> Vec<Value> {
 pub(super) fn snapshot(process: &dyn Process) -> Result<Snapshot> {
     let view = armies::armies(process)?;
     let targets = targets_from_view(&view);
+    let leaders = read(process, units::leaders).ok();
     let (open, rows) = read(process, |r, image| {
         let open = match armies::leader_list_open(r, image) {
             Ok(v) => v,
@@ -334,12 +361,14 @@ pub(super) fn snapshot(process: &dyn Process) -> Result<Snapshot> {
             targets,
             rows,
             stale_rows: None,
+            leaders,
         }
     } else {
         Snapshot {
             targets,
             rows: None,
             stale_rows: rows.filter(|r| !r.is_empty()),
+            leaders,
         }
     })
 }
@@ -386,15 +415,16 @@ pub(super) fn list(process: &dyn Process) -> Result<Value> {
         "without_commander":unled,
         "commander_list_open":list_open,
         "note":note,
+        "leader_roster_read":snap.leaders.is_some(),
         "unavailable_fields":{
-            "fields":["skill","attack","defense","planning","logistics","traits","id"],
-            "reason":"no reviewed macOS offsets for the country character list; reported null, not guessed"},
+            "fields":["rank_of_unassigned_leaders","skill_levels_gained_in_the_campaign"],
+            "reason":"skill/attack/defense/planning/logistics/traits/id are the character's base values from its template; rank (general or field marshal) and levels gained in the campaign are not stored there"},
         "validated":false,
     }))
 }
 
 pub(super) fn tool() -> Value {
-    json!({"name":"hoi4_commanders","description":"Own army commanders: every commander who leads an own army or army group (name, rank, assigned_to) plus, while the army panel's commander list is open, every listed general with available true/false. Skill, attack/defense/planning/logistics, traits and ids are null (no reviewed macOS offsets). Pure memory read: no lease, no input, no cursor. Use the names with hoi4_army_commander; it refuses unknown_commander, commander_unavailable and army_unknown before any click.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}})
+    json!({"name":"hoi4_commanders","description":"Own army commanders: every commander who leads an own army or army group (name, rank, assigned_to) plus, while the army panel's commander list is open, every listed general with available true/false. Every army leader of the country is listed with id, skill, attack, defense, planning, logistics and traits (base values, matched against common/characters for five leaders); not-yet-recruited or foreign leaders are included with listed_in_panel_or_assigned false. Pure memory read: no lease, no input, no cursor. Use the names with hoi4_army_commander; it refuses unknown_commander, commander_unavailable and army_unknown before any click.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}})
 }
 
 #[cfg(test)]
@@ -423,6 +453,7 @@ mod tests {
             ],
             rows,
             stale_rows: None,
+            leaders: None,
         }
     }
     fn names(v: &[&str]) -> Vec<String> {

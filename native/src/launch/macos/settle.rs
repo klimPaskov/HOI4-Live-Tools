@@ -251,10 +251,148 @@ pub(super) fn group_create(before: &Roster, now: &Roster, armies: &[String]) -> 
         Verdict::Unknown
     }
 }
+
+/// The two slots of one own research facility that `hoi4_special_project_assign`
+/// can write: the assigned scientist (character id) and the running project
+/// (template id). Everything else about the facility, the other facilities,
+/// the scientists' experience and the breakthrough accounts drifts on its own
+/// and is not compared. `now` is None when the facility is gone (captured or
+/// dismantled), which proves nothing about this action.
+pub(super) fn special_project(
+    before: super::special_projects::Slots,
+    now: Option<super::special_projects::Slots>,
+    want_scientist: Option<u32>,
+    want_project: Option<u32>,
+) -> Verdict {
+    let Some(now) = now else {
+        return Verdict::Unknown;
+    };
+    let scientist_ok = want_scientist.is_none() || now.scientist == want_scientist;
+    let project_ok = want_project.is_none() || now.project == want_project;
+    if scientist_ok && project_ok {
+        Verdict::Reached
+    } else if now == before {
+        // Neither slot this action writes changed: nothing happened.
+        Verdict::Unchanged
+    } else {
+        // A settled partial or foreign outcome, e.g. the scientist went in but
+        // the project did not start.
+        Verdict::Diverged
+    }
+}
+/// `hoi4_special_project_stop`: the facility's project (template id) before,
+/// and now (project, whether its state machine is in the stopping state). A
+/// project that simply vanished proves nothing about this click (it may have
+/// completed), so only the stopping state is `Reached`.
+pub(super) fn special_stop(
+    before: Option<u32>,
+    now: Option<(Option<u32>, bool)>,
+) -> Verdict {
+    match now {
+        None | Some((None, _)) => Verdict::Unknown,
+        Some((Some(p), true)) if Some(p) == before => Verdict::Reached,
+        Some((Some(p), false)) if Some(p) == before => Verdict::Unchanged,
+        Some(_) => Verdict::Diverged,
+    }
+}
+/// `hoi4_special_project_unassign`: the facility's scientist slot only.
+pub(super) fn special_unassign(
+    before: Option<u32>,
+    now: Option<super::special_projects::Slots>,
+) -> Verdict {
+    match now {
+        None => Verdict::Unknown,
+        Some(s) if s.scientist.is_none() => Verdict::Reached,
+        Some(s) if s.scientist == before => Verdict::Unchanged,
+        Some(_) => Verdict::Diverged,
+    }
+}
+/// `hoi4_special_project_recruit`: the candidate is now an own scientist, is
+/// still on offer (nothing happened), or vanished from both (unknown).
+pub(super) fn special_recruit(owned_now: bool, offered_now: bool) -> Verdict {
+    if owned_now {
+        Verdict::Reached
+    } else if offered_now {
+        Verdict::Unchanged
+    } else {
+        Verdict::Unknown
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn special_stop_unassign_recruit_rules() {
+        use super::super::special_projects::Slots;
+        assert_eq!(special_stop(Some(7), Some((Some(7), true))), Verdict::Reached);
+        assert_eq!(special_stop(Some(7), Some((Some(7), false))), Verdict::Unchanged);
+        assert_eq!(special_stop(Some(7), Some((None, false))), Verdict::Unknown);
+        assert_eq!(special_stop(Some(7), Some((Some(8), false))), Verdict::Diverged);
+        assert_eq!(special_stop(Some(7), None), Verdict::Unknown);
+        let held = Slots { scientist: Some(3), project: None };
+        let empty = Slots { scientist: None, project: None };
+        assert_eq!(special_unassign(Some(3), Some(empty)), Verdict::Reached);
+        assert_eq!(special_unassign(Some(3), Some(held)), Verdict::Unchanged);
+        assert_eq!(
+            special_unassign(Some(3), Some(Slots { scientist: Some(4), project: None })),
+            Verdict::Diverged
+        );
+        assert_eq!(special_unassign(Some(3), None), Verdict::Unknown);
+        assert_eq!(special_recruit(true, false), Verdict::Reached);
+        assert_eq!(special_recruit(false, true), Verdict::Unchanged);
+        assert_eq!(special_recruit(false, false), Verdict::Unknown);
+    }
+
+    #[test]
+    fn special_project_slots_settle_on_what_the_action_writes() {
+        use super::super::special_projects::Slots;
+        let empty = Slots {
+            scientist: None,
+            project: None,
+        };
+        let crewed = Slots {
+            scientist: Some(7),
+            project: None,
+        };
+        let running = Slots {
+            scientist: Some(7),
+            project: Some(30),
+        };
+        assert_eq!(
+            special_project(empty, Some(running), Some(7), Some(30)),
+            Verdict::Reached
+        );
+        assert_eq!(
+            special_project(empty, Some(crewed), Some(7), None),
+            Verdict::Reached
+        );
+        assert_eq!(
+            special_project(crewed, Some(running), None, Some(30)),
+            Verdict::Reached
+        );
+        assert_eq!(
+            special_project(empty, Some(empty), Some(7), Some(30)),
+            Verdict::Unchanged
+        );
+        // scientist assigned, project not started: settled, neither reached nor unchanged
+        assert_eq!(
+            special_project(empty, Some(crewed), Some(7), Some(30)),
+            Verdict::Diverged
+        );
+        // another scientist took the slot
+        let other = Slots {
+            scientist: Some(9),
+            project: None,
+        };
+        assert_eq!(
+            special_project(empty, Some(other), Some(7), None),
+            Verdict::Diverged
+        );
+        // facility gone
+        assert_eq!(special_project(empty, None, Some(7), None), Verdict::Unknown);
+    }
 
     fn view(armies: &[(&str, &[&str], Option<&str>)], free: &[&str], groups: &[&str]) -> Roster {
         Roster::from_view(&json!({

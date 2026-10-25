@@ -15,26 +15,18 @@
 //!   Not yet compared with the live map (checks in the module notes below).
 //!
 //! What this tool does NOT know (reported, never guessed):
-//! - who is at war. `wars` is `null` with reason `offset_not_validated`: the
-//!   `CDiplomacyStatus`/`CWarRelation` offsets of this macOS build are not
-//!   validated (design V9). Hostility is therefore a proxy: a country that
-//!   controls an own-owned state, plus tags the caller passes in `enemies`
-//!   (for example read from the diplomacy or war overview panel).
+//! - war sides, leaders, war score and goal timers (`offset_not_validated`).
+//!   Hostility is the war enemies, a country that controls an own-owned state
+//!   (proxy), and tags the caller passes in `enemies`.
 //! - whether any army holds a front-line order (order contents are unmapped).
 //!   `covered` only says own divisions stand in the border states.
 //!
-//! Stage B discovery procedure (not implemented, no offset is invented):
-//! 1. In a test game, scan the player's `CCountry` object (8-byte aligned words,
-//!    window `+0x100..+0x3000`) for a pointer whose pointee's first word is
-//!    `image + 0x3342770` (`CDiplomacyStatus`); record the hit offset.
-//! 2. Inside that object find an array header (`ptr, cap, size`) whose entries
-//!    are pointers whose first word is `image + 0x3347ca8` (`CWarRelation`);
-//!    empty at peace, so repeat during a war.
-//! 3. Self-check: every country that holds the same relation pointer is the
-//!    other party; the player's relation count must equal the enemy countries
-//!    in the War Overview window, and the enemy's array must contain the same
-//!    pointer. `enemies_from_relations` below is the pure pairing step.
-//! 4. Only then add a `MACOS` layout constant with the recorded evidence.
+//! Stage B (war relations) lives in `diplomacy_state.rs`: the offsets were
+//! discovered by vtable scans on 25 Oct 2026 (CDiplomacyStatus at
+//! `CCountry+0xd30`, relation list at `+0x20`, countries paired by relation
+//! pointer identity). `wars` is the own-war list; hostility adds the war
+//! enemies. Sides, leaders, war score and justification timers stay
+//! `offset_not_validated`.
 use super::ui::read;
 use crate::{
     error::{Error, Result},
@@ -278,6 +270,10 @@ struct Input<'a> {
     adjacency: std::result::Result<&'a Adjacency, String>,
     names: &'a HashMap<i32, String>,
     caller_enemies: &'a BTreeSet<String>,
+    /// enemies from war relations (Stage B), `None` when unreadable
+    war_enemies: Option<&'a BTreeSet<String>>,
+    /// the Stage B `wars` value, or the reason it is missing
+    wars: std::result::Result<&'a Value, String>,
     max_states: usize,
 }
 
@@ -323,6 +319,14 @@ fn analyse(input: &Input<'_>) -> Value {
             .or_default()
             .push("controls_own_owned_state");
     }
+    for tag in input.war_enemies.into_iter().flatten() {
+        if tag != player {
+            hostile
+                .entry(tag.clone())
+                .or_default()
+                .push("war_relation");
+        }
+    }
     for tag in input.caller_enemies {
         if tag != player {
             hostile
@@ -331,11 +335,17 @@ fn analyse(input: &Input<'_>) -> Value {
                 .push("caller_supplied");
         }
     }
-    let enemies_source = match (occupiers.is_empty(), input.caller_enemies.is_empty()) {
-        (true, true) => "none",
-        (_, true) => "occupation_proxy",
-        (true, false) => "caller",
-        (false, false) => "caller_and_occupation_proxy",
+    let enemies_source = match (
+        input.war_enemies.is_some(),
+        occupiers.is_empty(),
+        input.caller_enemies.is_empty(),
+    ) {
+        (true, true, true) => "war_relations",
+        (true, _, _) => "war_relations_plus_proxy",
+        (false, true, true) => "none",
+        (false, _, true) => "occupation_proxy",
+        (false, true, false) => "caller",
+        (false, false, false) => "caller_and_occupation_proxy",
     };
     let is_hostile = |tag: &str| hostile.contains_key(tag);
 
@@ -371,15 +381,16 @@ fn analyse(input: &Input<'_>) -> Value {
     let mut result = json!({
         "source": "native own wars stage A (borders and occupation)",
         "player": player,
-        "wars": null,
-        "wars_reason": "offset_not_validated",
-        "wars_note": "CDiplomacyStatus/CWarRelation offsets are not validated on this macOS build; hostility below is a proxy",
+        "wars": match &input.wars { Ok(v) => (*v).clone(), Err(_) => Value::Null },
+        "wars_reason": match &input.wars { Ok(_) => Value::Null, Err(e) => json!(e) },
+        "wars_note": "Stage B: wars come from CWarRelation pointers in CDiplomacyStatus (see diplomacy_state.rs); sides, leaders, war score and justification timers are offset_not_validated",
         "enemies_source": enemies_source,
         "hostile_tags": hostile.iter().map(|(t, why)| json!({"tag":t,"basis":why})).collect::<Vec<_>>(),
         "occupied_own_states": occupied_own_states,
         "occupied_own_states_truncated": occupied_truncated,
         "own_divisions_in_transit": input.in_transit,
         "validation": {
+            "war_relations": "live validated structurally (pointer identity on a civil war, relation lists match history); the player's own war not yet observed",
             "owner_controller": "live validated (same read as hoi4_states)",
             "division_states": "live validated (same read as hoi4_armies)",
             "adjacency": "derived from install map files, not yet compared with the live map",
@@ -523,35 +534,6 @@ fn analyse(input: &Input<'_>) -> Value {
     result
 }
 
-/// Stage B pairing step, pure: countries that hold the same `CWarRelation`
-/// pointer as the player are the player's enemies. Inputs are relation
-/// pointers per country; nothing here reads memory or knows an offset.
-/// Returns the tags sharing exactly one relation with the player, or an error
-/// when a relation is held by the player alone or by more than two countries
-/// (`war_relation_inconsistent`).
-#[allow(dead_code)]
-fn enemies_from_relations(
-    player: &[u64],
-    others: &[(String, Vec<u64>)],
-) -> Result<BTreeSet<String>> {
-    let mut enemies = BTreeSet::new();
-    for relation in player {
-        let holders: Vec<&String> = others
-            .iter()
-            .filter(|(_, list)| list.contains(relation))
-            .map(|(tag, _)| tag)
-            .collect();
-        if holders.len() != 1 {
-            return Err(Error::new(
-                "war_relation_inconsistent",
-                "A war relation must be held by exactly two countries",
-            ));
-        }
-        enemies.insert(holders[0].clone());
-    }
-    Ok(enemies)
-}
-
 // ---------------------------------------------------------------------------
 // Tool entry point.
 
@@ -597,6 +579,11 @@ pub(super) fn wars(process: &dyn Process, dir: &Path, args: &Map<String, Value>)
         Ok(g) => Ok(g.as_ref()),
         Err(e) => Err(format!("{}: {}", e.code, e.message)),
     };
+    let stage_b = super::diplomacy_state::player_wars(process);
+    let (war_enemies, wars_value) = match &stage_b {
+        Ok(w) => (Some(&w.enemies), Ok(&w.json)),
+        Err(e) => (None, Err(format!("{}: {}", e.code, e.message))),
+    };
     let mut out = analyse(&Input {
         player: &snap.player,
         states: &snap.states,
@@ -605,6 +592,8 @@ pub(super) fn wars(process: &dyn Process, dir: &Path, args: &Map<String, Value>)
         adjacency: graph_ref,
         names: &names,
         caller_enemies: &enemies,
+        war_enemies,
+        wars: wars_value,
         max_states,
     });
     out["observation_paused_game"] = json!(false);
@@ -748,6 +737,8 @@ mod tests {
             adjacency: adj,
             names: &names,
             caller_enemies: &enemies,
+            war_enemies: None,
+            wars: Err("test".to_string()),
             max_states: max,
         })
     }
@@ -773,7 +764,7 @@ mod tests {
         ];
         let v = run(&states, &[], &[], Ok(&adj), 50);
         assert_eq!(v["wars"], Value::Null);
-        assert_eq!(v["wars_reason"], "offset_not_validated");
+        assert_eq!(v["wars_reason"], "test");
         assert_eq!(v["enemies_source"], "none");
         assert_eq!(v["own_divisions_in_transit"], 2);
         let b = v["borders"].as_array().unwrap();
@@ -889,24 +880,32 @@ mod tests {
     }
 
     #[test]
-    fn relation_pairing_is_exact() {
-        let others = vec![
-            ("POL".to_string(), vec![7, 9]),
-            ("FRA".to_string(), vec![8]),
-            ("ENG".to_string(), vec![8, 11]),
-        ];
-        assert_eq!(
-            enemies_from_relations(&[7], &others).unwrap(),
-            BTreeSet::from(["POL".to_string()])
-        );
-        // 8 is held by two other countries: inconsistent.
-        assert_eq!(
-            enemies_from_relations(&[8], &others).unwrap_err().code,
-            "war_relation_inconsistent"
-        );
-        // 5 is held by nobody else.
-        assert!(enemies_from_relations(&[5], &others).is_err());
-        assert!(enemies_from_relations(&[], &others).unwrap().is_empty());
+    fn war_relation_enemies_are_hostile_and_reported() {
+        let states = [row(1, "GER", "GER"), row(2, "POL", "POL")];
+        let adj: Adjacency = [(1, BTreeSet::from([2])), (2, BTreeSet::from([1]))]
+            .into_iter()
+            .collect();
+        let divisions: BTreeMap<i32, usize> = BTreeMap::new();
+        let names: HashMap<i32, String> = HashMap::new();
+        let none = BTreeSet::new();
+        let war = BTreeSet::from(["POL".to_string()]);
+        let wars = json!({"at_war":true,"count":1});
+        let v = analyse(&Input {
+            player: "GER",
+            states: &states,
+            divisions: &divisions,
+            in_transit: 0,
+            adjacency: Ok(&adj),
+            names: &names,
+            caller_enemies: &none,
+            war_enemies: Some(&war),
+            wars: Ok(&wars),
+            max_states: 10,
+        });
+        assert_eq!(v["enemies_source"], "war_relations");
+        assert_eq!(v["wars"]["count"], 1);
+        assert_eq!(v["borders"][0]["hostile"], true);
+        assert_eq!(v["borders"][0]["hostile_basis"][0], "war_relation");
     }
 
     #[test]

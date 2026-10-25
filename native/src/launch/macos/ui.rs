@@ -68,8 +68,11 @@ pub(super) fn wait(
 /// 089EA519). Decisions such as events are never answered here.
 /// 0x34729e0 CConfirmationPopUpWindow (doctrine milestones), 0x34871b8 CSurrenderedPopupWindow
 /// (seized equipment after a capitulation).
-const NOTICE_VTABLES: [u64; 6] = [
-    0x3472580, 0x3472af8, 0x3472c10, 0x3493e80, 0x34729e0, 0x34871b8,
+/// 0x34727b0 CSpecialProjectFinishedPopUpWindow (title "Special Project Completed", Details and
+/// OK, seen live 4 October 1938), 0x34728c8 CSpecialProjectCapturedPopUpWindow (same family; its
+/// `ok_button` is not seen live, a window without one is skipped).
+const NOTICE_VTABLES: [u64; 8] = [
+    0x3472580, 0x3472af8, 0x3472c10, 0x3493e80, 0x34729e0, 0x34871b8, 0x34727b0, 0x34728c8,
 ];
 const GUI_FROM_IDLER: u64 = 0x4c0;
 const POPUP_LIST: u64 = 0x9e0;
@@ -120,6 +123,8 @@ fn notice_kind_name(vtable: u64) -> String {
     match vtable {
         0x34729e0 => "confirmation pop-up (CConfirmationPopUpWindow, e.g. a doctrine milestone)".into(),
         0x34871b8 => "surrendered pop-up (CSurrenderedPopupWindow, seized equipment)".into(),
+        0x34727b0 => "special project completed pop-up (CSpecialProjectFinishedPopUpWindow)".into(),
+        0x34728c8 => "special project captured pop-up (CSpecialProjectCapturedPopUpWindow)".into(),
         other => format!("notice window class +{other:#x} (research/focus finished, peace summary or world tension)"),
     }
 }

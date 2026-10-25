@@ -248,10 +248,30 @@ Mac); Windows runs the legacy Python OCR package. See section 7.
 
 | Field | Content |
 | --- | --- |
-| Exists? | **None** (confirmed by `docs/MANAGEMENT_MATRIX.md`: "Panel reader and start/assign action"). |
+| Exists? | **Yes since 26 October 2026** (macOS only): six tools in `native/src/launch/macos/special_projects.rs`, live-validated on the owned Germany run (January to August 1938). See "3.11.1 What now exists". |
 | What the playbook needs | List available projects/prototypes, allocate scientists, claim rewards. |
-| Proposed tool design | `hoi4_special_projects` R and `hoi4_special_project_start` A `{project, scientists?}` using the same staged-panel approach as research. |
-| Effort | M-L (new panel). Priority P2 (late-game: 1940s content). Platform: per-OS layouts. |
+| Open | Reward choices (`multiple_selection_reward_window`) are not driven: an unanswered choice falls back to the option marked default after the game's timeout. Facility state names need the panel. Which scientists the roster window hides (two level-3 land scientists were absent from it) is unexplained. Linux/Windows have nothing. |
+
+#### 3.11.1 What now exists (macOS 089EA519, `--mac-input`)
+
+| Tool | Kind | What it does |
+| --- | --- | --- |
+| `hoi4_special_projects` | read, memory only, no lease, no input | `specializations[]` (breakthrough points and progress percent, facilities, visible projects), `facilities[]` (facility_id, building, specialization, scientist, running project with `progress_percent`, `iterations_completed`, `iteration_gain_percent`, `stopping`, `unread_iteration_reports`), `scientists[]` (character id, name, skills nuclear/naval/air/land, traits, `assigned_facility_id`), `recruitable{cost_political_power, candidates[]}`, `projects[]` (visible pool: key, specialization, base_days, `running_in_facility_id`; with `rules:true` also the vanilla gates read from the install: breakthrough cost, parent projects, required technologies, the `available` trigger, prototype resources, time class). |
+| `hoi4_special_projects_panel` | lease, opens/closes the Research panel (W) | state name, speed and card text of each facility card; the roster's listed names and which memory scientists it hides; with `facility_id` also the project window of that facility (every visible project with `available_now`, display name, approximate time, requirement text, breakthrough cost) or the running project's progress/phase text. |
+| `hoi4_special_project_assign` | action | `{facility_id, scientist?, project?}`: scientist portrait, roster row, facility icon, project entry, Start. Verified from the facility's own scientist and project slots. |
+| `hoi4_special_project_stop` | action | stop button plus the game's "Stop project" confirmation (accepted); verified by the project's state machine entering the stopping state. A stop takes 10 days and refunds the breakthrough point when no iteration finished. |
+| `hoi4_special_project_unassign` | action | the small button on the scientist portrait; verified when the scientist slot is empty. Refused while a project runs. |
+| `hoi4_special_project_recruit` | action | Scientists, Recruit Scientist, the candidate's row and the game's "Spend N to recruit" confirmation; verified by the character joining the own scientist list. Cost 25/50/75/100 political power by idle scientists. |
+
+A new facility is a normal construction job: `hoi4_construction_add {building: "air_facility"|"land_facility"|"naval_facility"|"nuclear_facility", state_id}` works unchanged (Experimental Facilities section of the construction panel, verified live: queue grew, one slot used). Priority of that line is not controllable by any tool yet: a facility queued behind five factory lines got zero factories until shift+click on its green priority arrow moved it to the top (manual ordinary input, 27 June 1938).
+
+Typed refusals before any input: `facility_unknown`, `unknown_scientist` (closest names), `scientist_wrong_specialization`, `scientist_busy`, `unknown_project`, `project_wrong_specialization`, `project_busy`, `facility_has_project`, `scientist_required`, `already_assigned`, `no_project`, `already_stopping`, `no_scientist`, `unknown_candidate`, `already_recruited`, `insufficient_political_power`. Refusals at the screen without starting anything: `scientist_not_offered`, `project_not_offered`, `project_not_startable`, `unexpected_dialog`, `ui_blocked`.
+
+Validated live (memory against the screen, 26 October 2026, a private run on 26 October 2026): facility, scientist and project counts; breakthrough 35.4 percent against the tooltip; 12.96/80.00/116.24/35.40 raw values against the bars and the 0/0/1/1 counters; recruit cost 100 with fourteen idle scientists; project progress 21 percent and one iteration against the report window; unread reports 2 after iterations 2 and 3; stop state and the 10 day stop; scientist change in a crewed facility; project start spent the land point (1 to 0) and an iteration reward added 25 percent of progress. Also live: a Germany run from 10 January to 4 October 1938 finished sp_land_military_engineering_vehicles (six iterations, iteration gaps of 14 to 40 game days, +25 percent land breakthrough progress per iteration reward, a scientist reaching level 3), then the air facility queued with `hoi4_construction_add` completed (facility 3545), a greyed Jet Engine was refused with `project_not_startable` and Radar started (1 air point spent, refunded on stop). A "Special Project Completed" notice (`CSpecialProjectFinishedPopUpWindow`, OK button) is now acknowledged by `clear_notices` (`ui.rs` NOTICE_VTABLES, the captured variant is added unseen).
+
+Not validated: scientist experience (`xp`), reward choices, the facility card state for a facility captured or dismantled, behaviour with two or more facilities (list scrolling is implemented but untested), supportive scientists, nuclear/naval facilities.
+
+Ordinary UI routes (game 1920x1080; coordinates come from the live GUI tree, never fixed): `W` opens Research; the tab button "Experimental Facilities" (`facilities_tab`); a facility card has two click targets: the facility icon (opens that facility's window) and the scientist portrait (opens the Scientists roster in select mode, one row per fitting scientist, click the row). In a facility window: an available project row, then the Start button; a running project shows a stop button, the iteration reports, Output and Iterations. The roster's `Recruit Scientist` button opens the candidate list (four candidates). `Escape` closes the topmost window.
 
 ### 3.12 Research and doctrines
 
@@ -387,6 +407,27 @@ Mac); Windows runs the legacy Python OCR package. See section 7.
 | Effort | M-L (new offsets); some by GUI read of the top bar as a fallback (M). |
 | Priority | P0 (stability/war support/manpower/resources/wars), P1 (convoys, world). |
 | Platform | Memory offsets are per OS and build and may not be copied; unknown builds must fail explicitly (AGENTS.md). |
+
+---
+
+### 3.23 Doctrines, MIOs, intelligence agency and research extras (native macOS reads, new)
+
+Four pure reads (no lease, no input, never pause; macOS build 089EA519 only, other builds fail with
+`capability_unavailable`). Each result carries `source`, `build_id`, `game_time`, `freshness`, a
+`validated` block and a `not_read` or `state_read:false` block naming what is not mapped. Code:
+`native/src/launch/macos/{doctrines,mios,intelligence,research_extras}.rs`, shared helpers in `mgmt.rs`,
+the tolerant script reader in `script.rs`, live checks in `live_reads_mgmt.rs`.
+
+| Tool | Returns | Live-validated (26 October 2026, Germany) | Not validated or not mapped |
+| --- | --- | --- | --- |
+| `hoi4_doctrines {include_catalog?}` | per folder (land, naval, air, special_forces): grand doctrine (id, loc key, XP cost and type, track list), each track's subdoctrine, mastery, banked mastery, reward estimate; army/navy/air experience; temporary doctrine cost reductions with uses left; with `include_catalog`, adoptable grand doctrines or the track's subdoctrines with script cost and cost after the best reduction | grand doctrines equal the `set_grand_doctrine` lines of the history file (new_mobile_warfare, new_convoy_raiding, new_battlefield_support); experience equals the top bar (166/76/50 shown, 166.19/76.50/50.00 read); cost reductions equal the focus scripts (-0.5, one use, land and air) | track mastery fields (`validated:false`): no track held a subdoctrine on screen, scale 1/32768 inferred (banked values of all countries stay under the 200 cap, an AI track holds 549 mastery against 500 of rewards); the raw flag at track `+0x10` (`flag_0x10`) has no established meaning, so `completed_estimate` uses mastery against the script's reward thresholds only; doctrine cost modifiers (`<folder>_doctrine_cost_factor`) and availability triggers are not evaluated |
+| `hoi4_mios {tag?, include_all?}` | own active designer ideas, organisation catalogue for the own tag (category, equipment, trait count, icon, matching designer idea, `allowed_for_tag` true/false/null), template count in memory | active ideas equal the politics slots (`GER_daimler_benz` plus laws and spirits); 552 organisation templates in memory | per-organisation state (size, funds, unlocked and selectable traits, policy, design team, production lines): no runtime organisation object exists on this build state, so `mio_system.state_read:false`. Designers are the active mechanism here (inference: the organisation DLC system is not in use) |
+| `hoi4_intelligence {include_operations?}` | agency name, the 5 upgrade branches and 21 upgrades from the loaded database with levels, factory use and prerequisites from the scripts, operative mission keys, agency defines, optional operations catalogue | agency name "Abwehr" (and MI6 / NKVD for other countries) matches the install's agency script; branch and upgrade keys read from the live database | created flag, upgrade levels and progress, operative roster (name, nationality, skill, traits, location, operation), intel network levels towards other countries: not mapped, reported `state_read:false` |
+| `hoi4_research_extras` | limited-use technology bonuses ("free research bonus": name, uses left, bonus, categories), limited-use cost reductions, idea research bonuses, technology-sharing factions | the six bonuses equal the focus scripts (four-year plan 1.0 industry spent, fortify the Vaterland 0.5 cat_fortification with 2 uses, Fallschirmjager 1.0 para_tech, ...); armor 0.1 from the Daimler-Benz idea; faction "Axis" | ahead-of-time penalty, licences (one `CEquipmentProductionLicense` exists, owner unmapped), scientists per specialization (see `hoi4_special_projects`) |
+
+Operator notes: add the four names to the broker `READ` set (done in the private `macplay.py`); read
+live with the opt-in test `cargo test --release -- --ignored live_mgmt` (sign the test binary with
+`native/macos/debugger.entitlements`, `HOI4_LIVE_SESSION=<owned session.json>`).
 
 ---
 
@@ -540,6 +581,32 @@ carries a compact payload and the single recommended one-call fix.
 
 ---
 
+## 6b. Naval, air and design reads (macOS, memory only)
+
+Added on `codex/mac-management-tools` (26 October 2026), all pure reads: no lease, no input, no cursor,
+never pause. Code: `native/src/launch/macos/{fleetmem,naval,airread,designs}.rs`; opt-in live checks in
+`live_reads_navalair.rs`. Offsets are macOS 089EA519 only (Germany, April 1938 save state) and are listed in
+the module constants; nothing is copied from Linux or Windows.
+
+| Tool | Returns | Evidence |
+|---|---|---|
+| `hoi4_fleets {ships?, fleet?}` | fleets, task forces (port province, state, strategic region, ship count by type, summed and percent strength, raw mission code), optional ships (id, name, type, hull, variant, strength, max strength, max organisation, experience, morale) | Names, hulls, variants and port locations (provinces 241/6332/6389 -> states 56/763/58) match `history/units/GER_1936_naval_mtg.txt`; max organisation matches `common/units/*.txt` (heavy/light cruiser 40, destroyer 35) |
+| `hoi4_convoys {}` | convoy count, own naval bases with level, convoy production lines | Count 194 equals the top bar on 10 April 1938; base levels 241=8, 6332=5 match `history/states` |
+| `hoi4_air {wing?}` | wings (aircraft type, variant, aircraft, manpower, base, missions, region) and air bases (state, level = capacity/200, capacity, stationed, free) | Wing names per base match `history/units/GER_1936_air_bba.txt`; capacity/200 matches states 50 and 51 |
+| `hoi4_designs {kind?, custom_only?, detail?, name?}` | the 48 own designs: id, name, hull/chassis, parent design, manpower, production lines using it; detail adds non-zero stats and module per slot | Names and hulls match the vanilla ship/plane designs; 168 default-variant stat values match the equipment files (27 differ by modules/bonuses) |
+
+Registered in `tools()`, `supports()` and `call` of `launch/macos.rs`; for the broker add the four names to the
+READ set of `macplay.py`. `hoi4_air_wings` (panel read with input) is unchanged.
+
+Not validated (`validated:false` in the output): the mission code of a task force (0 = idle, 1 = AI task force
+holding a region are the only observed readings), ship morale and experience points, air mission mask and
+region id (decoded from other countries' wings; no own wing had a mission), aircraft count growth over time.
+Not found: admiral of a fleet (the only leader pointers found belonged to foreign fleets), fuel, supply, current
+organisation, needed/escort/lost convoys and convoy routes, the obsolete and producible flags of a design,
+air superiority per region, aces. Design creation and fleet/air orders are untouched (see 3.3, 3.9, 3.10).
+
+---
+
 ## 7. Cross-platform notes
 
 - **macOS (this audit)**: all action tools are in `native/src/launch/macos.rs`, built from ordinary
@@ -588,3 +655,81 @@ carries a compact payload and the single recommended one-call fix.
 - The cause of the m010 government flip and of the focus-detail readback failures.
 - Pause counters: I did not find a tool that reports pause count/seconds and real time per game
   year, though AGENTS.md requires the report.
+
+## Resources, shortages and industry reads (26 October 2026)
+
+Three pure memory reads, no lease, no input, never pause (`native/src/launch/macos/resources.rs`,
+registered in `launch/macos.rs`; also reachable without any input binding through
+`native/src/bin/macprobe.rs SESSION TOOL...`):
+
+- `hoi4_resources`: per oil/aluminium/rubber/tungsten/steel/chromium/coal `produced` (gross per
+  day), `available_for_production`, `needed_by_production`, `balance`, `shortage{short,deficit}`
+  and the ten raw pool `slots`; plus `fuel{stock,capacity,ratio}`. Imports/exports, shortage
+  penalty percent, fuel gain/days left are `null` with a reason.
+- `hoi4_production_shortages`: every military/naval line with the resources it was allocated per
+  day and which of them are in country-wide deficit. Per-line efficiency penalty is `null`.
+- `hoi4_industry`: civilian/military/dockyard counts, PP; consumer goods, output modifier,
+  trade-civilian usage, exact stability/war support, PP daily gain are `null` with reasons
+  (stability and war support are computed on demand: no stored fixed or float value in the
+  country or politics object; use `hoi4_country_status` for the UI-rounded top bar text).
+
+Offsets (macOS 089EA519 only): `country+0xf80` CCountryResources (ten embedded
+CStrategicResourcePool, found by vtable scan), resource ids from the resource database global
+`0x34d0bd0`, `country+0x12e0` CCountryFuelStatus (`+8` stock, `+0x10` capacity), line `+0x58`
+CProductionResourceCost.
+
+Validated live (Germany, a private run on 26 October 2026): slot3 + slot5 equals the Production
+view resource strip for all six shown resources in two screenshots (aluminium 13, rubber -9,
+tungsten -6, steel -13, chromium -1, coal 35); aluminium need equals the sum of line
+allocations; resource ids match state resource sums; industry total equals the top bar number
+(85); fuel stock rises about 33 per game day. Not validated: meaning of slots 1, 2, 6, 7, 8
+(trade, 80% pool), fuel against the top bar "days" text, any trade/convoy value (Trade and
+Logistics views were never open), consumer goods.
+## 9. Update: war and diplomacy state reads (macOS, 25 Oct 2026)
+
+New read tool `hoi4_diplomacy_state` and Stage B of `hoi4_wars`
+(`native/src/launch/macos/diplomacy_state.rs`). Pure memory reads: no input, no lease, no
+pause. Offsets were found by vtable scans on a live Germany 1936 game (provenance in the module
+header), not copied from Linux or Windows.
+
+- Found and live-checked: `CCountry+0xd30` -> `CDiplomacyStatus`; list of relation objects at
+  `+0x20` (each relation is held by both parties: pointer identity pairs wars); relation
+  classes war, guarantee, subject (with autonomy key), non-aggression pact, military access;
+  `GS+0x3b8` faction system (name, members; Axis currently has Germany); `GS+0x650` world
+  tension (`/100000`); date raw to calendar (no leap years). Relation lists matched
+  `history/countries` (FRA/CZE/ROM/YUG/ITA guarantees, ENG and other subjects, ENG-IRQ access).
+- Not found (null with `offset_not_validated`): war sides and leaders, war score, goal
+  justification progress and expiry (goal objects `CWarGoal` are listed unclassified), faction
+  leader/goals/rules, opinion (`CRelationStatus` array at `CCountry+0x1a00`, modifier layout
+  unknown), volunteers, the diplomacy action list. The own war list was only exercised at
+  peace and structurally on the Spanish civil war: re-check when the player has a war.
+- 3.17 gap closed: wars list, faction membership, guarantees given and received, world
+  tension. Still open: war goal timers (P0), `hoi4_diplomacy_act` by country.
+
+---
+
+## 9. Unit-level reads added on macOS (26 October 2026)
+
+Pure memory reads (no lease, no input, no cursor, no pause; 5 to 20 ms each). Code:
+`native/src/launch/macos/{units,template_get,supply,commanders}.rs`. Offsets are for Mach-O 089EA519
+only. Opt-in live checks: `HOI4_LIVE_SESSION=<session.json> cargo test --release live_ -- --ignored`
+(the test binary needs the debugger entitlement signature).
+
+- `hoi4_template_get {template?}`: columns (x then rows), support companies, width, hit points, base
+  organisation (plus the live organisation and the country modifier factor from a live division),
+  manpower, supply use, equipment need per archetype, held variants with per-piece stats, and an
+  equipment-derived stat estimate (`validated:false`). Closes the "read" half of 3.4.
+- `hoi4_supply {strength_below?}`: per division id/army/template/state/province, hit points against
+  the template, manpower, equipment have/need/fill per archetype and shortage list, state
+  infrastructure; per army means; per state building levels. The supply percentage, flow, railway
+  level, hub and state supply capacity are **not readable yet** (`supply_available:false`, the
+  `below_70`/`below_50` lists are empty and say nothing about real supply). Partly closes 3.5/3.6.
+- `hoi4_commanders` now returns skill, attack, defense, planning, logistics, traits and character id
+  for every army leader of the country (36 for Germany, including leaders the army panel does not
+  list). Base values from the character template; rank of unassigned leaders and levels gained
+  in the campaign are not available.
+- Validation (live, Germany 1938): composition equals `history/units/GER_1936.txt` for all five
+  templates; sub-unit stats offset-voted against `common/units` (99 definitions); hit points and
+  manpower of all 38 divisions equal the template sums exactly; organisation equals the template mean
+  times one factor (1.13); equipment held equals need on every division; leader skills and traits
+  equal `common/characters` for 35 of 36 leaders (the 36th is a CHI-id character).
