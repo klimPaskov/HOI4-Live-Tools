@@ -512,7 +512,7 @@ fn build_static(dir: &Path) -> Result<StaticMap> {
     })
 }
 
-fn static_map(dir: &Path) -> Result<Arc<StaticMap>> {
+pub(super) fn static_map(dir: &Path) -> Result<Arc<StaticMap>> {
     static CACHE: OnceLock<Mutex<HashMap<PathBuf, Arc<StaticMap>>>> = OnceLock::new();
     let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
     if let Some(found) = cache.lock().unwrap().get(dir) {

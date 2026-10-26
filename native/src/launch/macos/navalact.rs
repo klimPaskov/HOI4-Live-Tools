@@ -243,7 +243,7 @@ pub(super) fn region_present_now(process: &dyn Process, fleet: &str, region: &st
 }
 
 // ---- driving the navy UI ---------------------------------------------------------------------
-fn click_at(keys: &MacKeys, x: f64, y: f64) -> Result<()> {
+pub(super) fn click_at(keys: &MacKeys, x: f64, y: f64) -> Result<()> {
     keys.click(GAME, x, y).map(|_| ())
 }
 fn pause(ms: u64) {
@@ -266,7 +266,7 @@ pub(super) fn leave_navy_mode(process: &dyn Process, keys: &MacKeys) -> Result<(
     }
     Ok(())
 }
-fn close_region_view(process: &dyn Process, keys: &MacKeys) -> Result<()> {
+pub(super) fn close_region_view(process: &dyn Process, keys: &MacKeys) -> Result<()> {
     for attempt in 0..2 {
         if read(process, nui::region_view)?.is_none() {
             return Ok(());
@@ -315,7 +315,7 @@ pub(super) fn release(process: &dyn Process, keys: &MacKeys) {
     let _ = close_panel(process, keys);
     let _ = leave_navy_mode(process, keys);
 }
-fn select_fleet(process: &dyn Process, keys: &MacKeys, name: &str, order: &[String]) -> Result<()> {
+pub(super) fn select_fleet(process: &dyn Process, keys: &MacKeys, name: &str, order: &[String]) -> Result<()> {
     if read(process, nui::panel_fleet)?.is_some_and(|n| same_name(&n, name)) {
         return Ok(());
     }
@@ -350,7 +350,7 @@ fn select_fleet(process: &dyn Process, keys: &MacKeys, name: &str, order: &[Stri
         "No fleet card opened the wanted fleet panel",
     ))
 }
-fn select_task_force(process: &dyn Process, keys: &MacKeys, name: &str) -> Result<()> {
+pub(super) fn select_task_force(process: &dyn Process, keys: &MacKeys, name: &str) -> Result<()> {
     for _ in 0..14 {
         let entries = settled(process, "task force entries", nui::entries)?;
         // A selected task force is the only one shown; deselect it before selecting another.

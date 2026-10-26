@@ -1,5 +1,6 @@
 //! Thin Mac owner of the portable durable plan. The game clock is never changed
 //! here. Pending work and possible input survive worker/client lifetimes.
+mod date_stop;
 mod focus;
 mod production;
 mod research;
@@ -116,6 +117,32 @@ pub(super) struct Controller {
     active: Mutex<Option<Active>>,
     blocked: Arc<AtomicBool>,
     events: Arc<Events>,
+    date_stop: date_stop::DateStop,
+}
+/// The input precondition shared by manual input, the daily worker and the
+/// date-stop watcher: no quarantine and healthy retained journals.
+fn retained_input_check(
+    directory: &Path,
+    blocked: &AtomicBool,
+    retained: &Mutex<Retained>,
+) -> Result<()> {
+    if blocked.load(Ordering::Acquire) {
+        return Err(Error::new(
+            "action_uncertain",
+            "Mac daily work is quarantined",
+        ));
+    }
+    let result = (|| {
+        let mut retained = lock(retained)?;
+        if retained.governor.is_none() {
+            unsupported_artifacts(directory, false)?;
+        }
+        retained.check()
+    })();
+    if result.as_ref().is_err_and(|e| e.code != "input_busy") {
+        blocked.store(true, Ordering::Release);
+    }
+    result
 }
 fn lock<T>(m: &Mutex<T>) -> Result<MutexGuard<'_, T>> {
     m.try_lock().map_err(|e| match e {
@@ -195,26 +222,35 @@ impl Controller {
             active: Mutex::new(None),
             blocked: Arc::new(AtomicBool::new(false)),
             events: Arc::new(Events::default()),
+            date_stop: date_stop::DateStop::default(),
         })
     }
     pub(super) fn input_check(&self) -> Result<()> {
-        if self.blocked.load(Ordering::Acquire) {
-            return Err(Error::new(
-                "action_uncertain",
-                "Mac daily work is quarantined",
-            ));
-        }
-        let result = (|| {
-            let mut retained = lock(&self.retained)?;
-            if retained.governor.is_none() {
-                unsupported_artifacts(&self.directory, false)?;
-            }
-            retained.check()
-        })();
-        if result.as_ref().is_err_and(|e| e.code != "input_busy") {
-            self.blocked.store(true, Ordering::Release);
-        }
-        result
+        retained_input_check(&self.directory, &self.blocked, &self.retained)
+    }
+    /// Arm (or re-token) the server-side `stop_on_date` watcher with the lease
+    /// the owner just issued or received. The thread is started on first use.
+    pub(super) fn arm_date_stop(&self, owner: &MacClock, token: &str, epoch: &crate::actions::Epoch) {
+        self.date_stop.arm(token.to_owned(), |shared| {
+            Arc::new(date_stop::Live {
+                shared,
+                process: owner.process.clone(),
+                keys: owner.keys.clone(),
+                control: owner.state.clone(),
+                retained: self.retained.clone(),
+                blocked: self.blocked.clone(),
+                directory: self.directory.clone(),
+                epoch: epoch.clone(),
+            })
+        });
+    }
+    /// The lease was released: the watcher can no longer act.
+    pub(super) fn disarm_date_stop(&self) {
+        self.date_stop.disarm();
+    }
+    /// `hoi4_plan` / digest view of the date watcher.
+    pub(super) fn date_stop_status(&self) -> Value {
+        self.date_stop.status_json(&self.directory.join("plan.json"))
     }
     pub(super) fn events(&self) -> Arc<Events> {
         self.events.clone()
@@ -359,6 +395,7 @@ impl Controller {
         }
         drop(state);
         drop(retained);
+        let (arm_token, arm_epoch) = (token.clone(), plan.scope.epoch.clone());
         let stop = Arc::new(AtomicBool::new(false));
         let wake = Arc::new(core::Wakeup::default());
         let report = Arc::new(Mutex::new(json!({"running":true,"observation_pauses":0})));
@@ -401,6 +438,7 @@ impl Controller {
             producer,
             report,
         });
+        self.arm_date_stop(owner, &arm_token, &arm_epoch);
         Ok(
             json!({"running":true,"plan_revision":plan.revision,"worker_instance":instance,"observation_pauses":0}),
         )
@@ -442,7 +480,7 @@ impl Controller {
                 .map(|a| lock(&a.report).map(|v| v.clone()))
                 .transpose()?;
             Ok(
-                json!({"running":active.as_ref().is_some_and(|a|a.life.running()),"quarantined":self.blocked.load(Ordering::Acquire),"observation":observed,"assignments":assignments,"budget":budget,"worker_history":history,"historical":!fresh,"input_authorized":false,"observation_pauses":0}),
+                json!({"running":active.as_ref().is_some_and(|a|a.life.running()),"quarantined":self.blocked.load(Ordering::Acquire),"observation":observed,"assignments":assignments,"budget":budget,"worker_history":history,"date_stop":self.date_stop_status(),"historical":!fresh,"input_authorized":false,"observation_pauses":0}),
             )
         })
     }
@@ -450,6 +488,7 @@ impl Controller {
 impl Drop for Controller {
     fn drop(&mut self) {
         let _ = self.events.retire();
+        self.date_stop.stop();
         let _ = self.stop();
     }
 }

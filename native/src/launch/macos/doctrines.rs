@@ -394,7 +394,7 @@ pub(super) fn read_status_at(
 
 // ---------------------------------------------------------------- assembly
 
-fn xp_type_name(raw: i32) -> &'static str {
+pub(super) fn xp_type_name(raw: i32) -> &'static str {
     match raw {
         1 => "army",
         2 => "navy",
@@ -402,7 +402,7 @@ fn xp_type_name(raw: i32) -> &'static str {
         _ => "unknown",
     }
 }
-fn xp_index(name: &str) -> Option<usize> {
+pub(super) fn xp_index(name: &str) -> Option<usize> {
     match name {
         "army" => Some(0),
         "navy" => Some(1),
@@ -448,7 +448,7 @@ fn pick_sub<'a>(catalog: &'a Catalog, name_key: &str, track: Option<&str>) -> Op
         .copied()
 }
 
-fn best_reduction(snapshot: &Snapshot, folder_template: u64) -> f64 {
+pub(super) fn best_reduction(snapshot: &Snapshot, folder_template: u64) -> f64 {
     snapshot
         .reductions
         .iter()

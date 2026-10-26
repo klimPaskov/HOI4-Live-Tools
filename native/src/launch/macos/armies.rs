@@ -548,7 +548,7 @@ pub(super) fn check_create(view: &Value, state: i32, absorb: bool) -> Result<()>
         ),
     ))
 }
-fn selection_size(r: &Reader<'_>, image: u64) -> Result<u64> {
+pub(super) fn selection_size(r: &Reader<'_>, image: u64) -> Result<u64> {
     let idler = r.u64(image + game::layout(r).idler_global)?;
     r.u64(idler + ui(r)?.selection_size)
 }
@@ -736,7 +736,7 @@ fn card_rect(r: &Reader<'_>, image: u64, army: &str, name: &str) -> Result<Rect>
 
 /// Select exactly `army` with its card: the selection must hold all of its
 /// divisions, not a selection left over from before.
-fn select_army(process: &dyn Process, keys: &MacKeys, army: &str) -> Result<Rect> {
+pub(super) fn select_army(process: &dyn Process, keys: &MacKeys, army: &str) -> Result<Rect> {
     let size = read(process, |r, i| {
         let group = group_named(r, i, army)?;
         Ok(membership(r, i)?.values().filter(|g| **g == group).count() as u64)
@@ -1017,6 +1017,60 @@ pub(super) fn heading_for(
         }
     }
     Ok((heading, total))
+}
+/// Own divisions (by id) whose movement target province (division +0x2ac, the field `heading_for`
+/// uses) lies in `wanted`: (heading, listed). Divisions not found are not counted as listed.
+pub(super) fn divisions_heading_for(
+    r: &Reader<'_>,
+    image: u64,
+    ids: &[String],
+    wanted: &[i32],
+) -> Result<(usize, usize)> {
+    let u = ui(r)?;
+    let country = own_country(r, image)?;
+    let (_, data, count) = r.array_header(country + u.country_divisions)?;
+    let (mut heading, mut listed) = (0, 0);
+    for index in 0..count.min(4096) as u64 {
+        let division = r.u64(data + index * 8)?;
+        let handle = r.read(division + u.division_handle, 8)?;
+        let id = format!(
+            "{:08x}:{:08x}",
+            u32::from_le_bytes(handle[..4].try_into().unwrap()),
+            u32::from_le_bytes(handle[4..].try_into().unwrap())
+        );
+        if !ids.contains(&id) {
+            continue;
+        }
+        listed += 1;
+        if wanted.contains(&r.i32(division + 0x2ac)?) {
+            heading += 1;
+        }
+    }
+    Ok((heading, listed))
+}
+/// Box-select the own divisions standing in `state` (Find view, then the usual boxes) until the
+/// selection holds exactly `expected` divisions; refuses with `selection_mismatch` otherwise.
+pub(super) fn box_select_exact(
+    process: &dyn Process,
+    keys: &MacKeys,
+    state: i32,
+    expected: usize,
+) -> Result<()> {
+    find_state(process, keys, state)?;
+    let mut sizes = Vec::new();
+    for (from, to) in ASSIGN_BOXES {
+        keys.drag(GAME, from, to)?;
+        std::thread::sleep(std::time::Duration::from_millis(350));
+        let size = (read(process, selection_size)? & 0xffff_ffff) as usize;
+        sizes.push(size);
+        if size == expected {
+            return Ok(());
+        }
+    }
+    Err(Error::new(
+        "selection_mismatch",
+        format!("The box selections held {sizes:?} divisions but exactly {expected} were wanted; nothing was ordered"),
+    ))
 }
 /// Order `army` to move to the centre of state `state` (select the army by
 /// its card, Find view centres the state, one right click). A plain move order

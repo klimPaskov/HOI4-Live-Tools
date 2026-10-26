@@ -579,6 +579,24 @@ carries a compact payload and the single recommended one-call fix.
 - Report per session: pause count, pause seconds, real minutes per game year. This needs a server
   counter (3.20); I did not find one.
 
+### 6.4 `stop_on_date` runs in the server, not the broker (macOS)
+
+`plan_run` only evaluated `stop_on_date` when the broker called `hoi4_plan_run`, so a long
+player call fired the pause 9 game days late (1938.01.10 instead of 1938.01.01). The macOS
+server now owns a date watcher thread (`launch/macos/daily/date_stop.rs`): once per real
+second it re-reads `plan.json` (`stop_on_date`, `stop_on_date_pause`, `active`), reads the own
+date from memory (observation never pauses) and, at the first reading at or past the target,
+sends ONE `hoi4_time paused:true` through the ordinary journaled clock path (request id
+`worker-sd-<target hour>-<game pid>`). It acts only under the controller lease (armed by
+`hoi4_input_lease acquire` and by `hoi4_daily_governor start/update`, disarmed by release);
+without a valid lease it reports `stop_on_date_unarmed: no lease` in `hoi4_plan get` and in
+the daily digest `date_stop` and does nothing. An already-paused game gets no input. A request
+id with a journal receipt is never re-sent; an outcome after possible input is final and raises
+the `date_stop_failed` alarm; pre-input refusals (busy controller, torn read, lease gap) are
+retried each second, at most 30 times. `plan_run` keeps its own check and shares the outcome
+(`<outcome> (server date watcher)`), so only one pause is ever sent. The live pause timing
+(within about one game hour at the player's speed) is not validated offline.
+
 ---
 
 ## 6b. Naval, air and design reads (macOS, memory only)
@@ -1142,3 +1160,116 @@ Not validated / known limits:
   No peace action tool exists yet; this click route is the documented one. Also fixed: `peace_conference_open` returned
   `read_bound` after the conference closed (cleared window pointer).
 - The game now has Germany with Luxembourg annexed (1937-01-15, paused, no panel open); the Axis faction still holds only GER.
+
+## 14. Peace conference actions (macOS, 26 October 2026; NOT validated with a conference open)
+
+Code: `native/src/launch/macos/peace.rs` (+ `events::peace_root`). No conference could be arranged: the qualification game was
+at peace and a justified war goal needs about 250 game days plus a campaign to capitulation, more than the task-port
+authorization window allowed. The tools follow the click route documented live in 13a and the element names of
+`interface/peaceconferencewindow.gui`; every result carries `validated:false`. What was checked live: the not-open paths only
+(see the end of this section).
+
+| Tool | Does |
+|---|---|
+| `hoi4_peace_options {states?}` | read (no lease, no input): header texts (`current_player`, `current_score` = own remaining points, `tension`, `bidphase_text`, `scorethisturn_text`, `remainingturns_text`), usable controls (take_state / liberate / puppet / force_government / take_navy / demilitarize / resource_rights / war_reparation / dismantle_industry actions, `end_turn_button`, `done_button`, `reset_button`, tabs), the participant, available-action and bid lists as flat text maps, and owner / occupier of the asked state ids |
+| `hoi4_peace_take {states:[1..8 ids], puppet?, release?, max_cost?}` | choose the demand kind (default Take State, puppet = Puppet, release = Liberate; the button is clicked unless it is already selected), then per state: Find view centres it, click (960,540), verified by the drop of `current_score` within 3 s; reports each state's cost (score drop) |
+| `hoi4_peace_submit` | one click on `end_turn_button` (Submit Demands / End turn); verified when the header phase/turn/score texts change or the window closes |
+| `hoi4_peace_exit` | one click on `done_button` (Confirm and Exit) and the OK of its confirmation (`dismiss_notices`); verified when the window closes |
+
+Typed refusals before any input: `no_conference_open`, `round_not_ready` (end-turn button hidden or disabled: another victor's
+turn, or no turn now), `action_not_available`, `unknown_state`, `state_not_offered` (own state, no owner),
+`cost_exceeds_points` (no points left; with `max_cost` also after a state dearer than the cap, leaving that demand pending),
+`exit_not_available`. After a possible input: `state_not_added` (no score drop; never retried because a second click could
+toggle the demand off), `input_readback_failed`. Settle rules (`peace::take_settle`, `submit_settle`, exit = window closed)
+compare only what the action can change: the score, the header texts, the window's presence. Journaled intent via
+`actions.execute`; a retry with the same request_id never re-clicks. Brokers: `hoi4_peace_options` READ; take/submit/exit ACT.
+
+Costs are not in memory or in the window: the state tooltip shows them, and `hoi4_peace_take` returns each state's cost. The
+blind-bid rules (one submission per round; contested bids refund and rise x1.2) are not modelled; see the playbook
+`war-air-naval-peace.md` section 9.
+
+Live attempt 2 (26 Oct 2026 08:43-09:09, qualification-20261026-air, Germany): STILL NOT VALIDATED, no conference was reached
+in the player's favour.
+- LIVE-VALIDATED during the attempt (not peace tools): `hoi4_diplomacy_act justify_war_goal` Conquer Jutland on DEN (235 days,
+  47 PP) and Conquer Klaipeda on LIT (280 days, 56 PP; the state names offered are the diplomacy view's, `Memel` was refused with
+  the list "Klaipeda, Zemaitija, Suduva, Kaunas, Aukstaitija"); `declare_war` with confirm on DEN (war from 20 Sep 1937 09:00);
+  `hoi4_time` unpause; `hoi4_army_create`/`hoi4_army_move`. At speed 4 the clock ran 0.2 to 0.8 game days per real second
+  (a 235-day justification took about 5.5 minutes, a 280-day one about 24 minutes of mixed load), so a justify + war + capitulation
+  cycle needs 15 to 30 real minutes on this machine.
+- What went wrong (do not repeat): DEN did not capitulate (its capital is on an island, Sjaelland, and the German armies,
+  unassigned and without battle plans, stalled; moves reported divisions_heading 0), the war with DEN dragged for a year,
+  other nations joined, and the unattended German state was overrun (hoi4_states showed 9 German states controlled by DEN, FRA,
+  POL); Germany capitulated in Aug 1939 ("Treaty of Berlin", Poland took 5 states). The LIT declare_war then returned
+  action_uncertain (read_failed, war relations no longer readable). The game was paused (space key) at that point.
+  Lesson: never leave the clock running for hundreds of days without front/battle-plan orders; justify against a target whose
+  capital is reachable by land (LIT Kaunas, not DEN) and pause as soon as the war goal completes.
+- Defect found: after an unresolved action journal, `hoi4_peace_options` (a pure read) is refused with
+  `action_uncertain: Shared Mac input journal is unresolved`; reads should not be gated by the input journal.
+- Peace tools themselves: no new live evidence (no conference open for the player; the only conference was the one that
+  Germany lost). `hoi4_peace_status` read `peace_conference_open:false` correctly afterwards.
+
+Live validation procedure for the next session (all unvalidated parts):
+1. Arrange a conference: justify a war goal on a tiny neighbour (50 PP, 250 days, as with Luxembourg), declare, move 3
+   divisions in, wait for capitulation; `hoi4_events.peace_conference_open` becomes true.
+2. `hoi4_peace_options {states:[<target state>]}`: compare header texts, `controls` (which action buttons are enabled, which
+   one has `selected:true` while Take State is preselected) and the two lists with a screenshot. Fix list names/offsets if the
+   lists are empty (they are read with the generic text offset 0x100 inherited from the diplomacy views).
+3. `hoi4_peace_take {states:[id]}`: check that Find (F) works with the conference open (otherwise centre the camera another way),
+   that the click at (960,540) adds the demand, and that `current_score` drops (95 to 68 for Luxembourg, "Submit Demands 27").
+   If the action button's `selected` flag does not follow `button_state == 2`, change `Button::selected`.
+4. `hoi4_peace_submit`, then `hoi4_peace_exit`: check which of the two buttons the single-round conference shows, whether the exit
+   confirmation OK is closed by `dismiss_notices` (else drive its button explicitly), and the result notice ("took 1 states").
+5. Then a multi-victor conference for the blind-bid rounds (`round_not_ready`, wait window, contested refunds).
+
+## 14. Offline-built tools, not yet validated live (macOS, 26 October 2026)
+
+Built from the game's GUI definitions and localisation without touching a running game; unit tests use fakes only.
+Every description starts `UNVALIDATED (no live test yet):` and every result carries `validated:false`. What to compare on
+screen for each one is in `docs/LIVE_VALIDATION_QUEUE.md`. Code: `native/src/launch/macos/{kit,fleetops,invasion,faction}.rs`
+(`kit.rs` holds the shared harness: journaled intent, fixed fence deadline, window discovery by GUI name and by RTTI vtable,
+pop-up list reads, in-process baselines for idempotent retries).
+
+| Tool | Route (from the .gui files) | Typed refusals before input |
+|---|---|---|
+| `hoi4_fleet_merge {fleet}` | F2, fleet card, no task force selected, `tool_bar_window` `btn_merge` | fleet_unknown, reserve_fleet, nothing_to_change |
+| `hoi4_fleet_split {task_force}` | select the entry, `btn_split_in_half` | task_force_unknown, task_force_too_small, reserve_fleet |
+| `hoi4_fleet_balance {fleet}` | `btn_taskforce_o_matic` (meaning inferred from the name: verify first) | as merge |
+| `hoi4_fleet_reserve {task_force}` | select the entry, `btn_exclude` (set as reserve) | nothing_to_change (already reserve) |
+| `hoi4_fleet_delete {task_force, confirm:"destroy_ships"}` | select the entry, `btn_delete`, confirmation | confirmation_required |
+| `hoi4_fleet_assign {task_force, to_fleet, route?}` | select the entry, right click the receiving fleet card (or drag the entry onto it); reassign dialog accepted | target_is_reserve, nothing_to_change |
+| `hoi4_naval_invasion {state_id, army \| divisions, source_state_id?, with_harbor?, source_offset?, landing_offset?}` | army card (or exact box selection), battle plan toolbar `btn_order_draw_naval_inv`, left click source, right click destination, Return | own_state, enemy_required, not_coastal, source_not_coastal, no_transports, divisions_not_isolated |
+| `hoi4_faction_create {template?, name?, invite?}` | top bar `faction_button` -> New Faction window template card -> Create -> setup window (typed name, Invite Countries) -> Create | already_in_faction, capability_unavailable, template_required/unknown |
+| `hoi4_faction_leave {confirm:"leave_faction"}` | faction view `leave_faction_button` and its confirmation | not_in_faction, confirmation_required |
+| `hoi4_diplomacy_incoming {answer?, which?, index?}` | no `answer`: pure read of the open diplomacy pop-ups (title, description, class); with `answer`: the pop-up's `accept_button` / `decline_button` | no_incoming_proposal, proposal_ambiguous |
+| `hoi4_faction_invite_accept {decline?}` | the same, restricted to a faction invitation | no_incoming_proposal |
+
+Verification is a pure settle rule over fresh memory reads (the affected fleet's ship ids and grouping, the task force's holder,
+battle plan order nodes / divisions heading for the destination, faction membership, the pop-up being gone). The fleet toolbar's
+selection model, the fleet card drop route, the invasion aim points and the confirmation dialog classes are the open
+questions; `hoi4_fleet_balance` may be a different operation than assumed.
+
+Not built: per-wing air aggressiveness / day-night / reinforcement priority (dropdowns in `airselectionview.gui` with no
+memory field to verify them), and a helper that repeats invasions (FAIR: one deliberate order per call).
+
+## 11. Doctrine, agency, operative and organisation actions (macOS, offline-built, 26 October 2026)
+
+Built without any live access from the game's `.gui` files, the RTTI vtable map and the existing helpers; every tool
+is described `UNVALIDATED (no live test yet):` and returns `validated:false`. What to compare on screen is queued per
+tool in `docs/LIVE_VALIDATION_QUEUE.md`.
+
+| Tool | Route | Refusals before input | Read-back |
+| --- | --- | --- | --- |
+| `hoi4_doctrine_adopt {doctrine, track?}` | Shift+E officer corps, `<folder>_doctrine_button`, folder tab, slot, row by localised name, Unlock | doctrine_unknown, no_grand_doctrine, track_required, track_unknown, already_adopted, grand_doctrine_set, track_occupied, subdoctrine_taken, excluded_by_chosen, insufficient_experience (clear shortfall only) | doctrine system in memory (slot names the doctrine) |
+| `hoi4_agency_create` | Shift+W agency view, Create Agency, name/logo window | agency_exists, agency_creation_in_progress, agency_creation_unavailable (from the opened window) | creation progress bar (gui only) |
+| `hoi4_agency_upgrade {branch, upgrade?}` | agency view branch button, upgrades window entry | branch_unknown, upgrade_unknown, agency_not_created, upgrade_in_progress, upgrade_unavailable | upgrade progress bar (gui only) |
+| `hoi4_operative_recruit {candidate?}` | agency view, empty operative slot, recruitment window | agency_not_created, operative_bar_unavailable, no_free_operative_slot, unknown_candidate | recruiting bar / operative count (gui only) |
+| `hoi4_operative_assign {operative, mission, state_id?/country?}` | bar portrait, order bar `btn_mission_N`, Find view, one map click | invalid_arguments, target_required, unknown_country, country_has_no_states, operative_unknown, operative_busy, mission_unavailable | on-mission marker on the bar (gui only) |
+| `hoi4_mio_design_team {organization, slot?}`, `hoi4_mio_policy`, `hoi4_mio_trait {trait_index / list}` | politics view organisation slot, list, details, policy window, trait tree | mio_system_absent (no `industrial_org_entry` on the politics view), organization_unknown, organization_not_allowed, policy_unknown, trait_* | window state only (gui only) |
+
+Shared pieces: `panelkit.rs` (window locator by class vtable in the popup list and the first 0x400 bytes of the
+interface manager, widget search by `.gui` names, grid items), `ui_action.rs` (journaled intent, 12 s fence, one
+dispatch, settle; a refusal found after opening windows but before the first state-changing click is recorded as not
+applied), `loc.rs` (English display names with `$reference$` expansion).
+
+Not built, by design: operation launch (`operation` argument), `boost_ideology`, a mastery reward choice (the window
+has no button for it) and `hoi4_intel_network` (the per-country network values are not mapped in memory).

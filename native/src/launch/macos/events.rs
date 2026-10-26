@@ -278,6 +278,18 @@ fn peace_conference_open(r: &Reader<'_>, image: u64) -> Result<bool> {
         None => Ok(false),
     }
 }
+/// Root container of the open peace conference window, None while closed.
+/// Same pointer path as `peace_conference_open` (validated only for the
+/// closed/open flag; names below it come from peaceconferencewindow.gui).
+pub(super) fn peace_root(r: &Reader<'_>, image: u64) -> Result<Option<u64>> {
+    if !peace_conference_open(r, image)? {
+        return Ok(None);
+    }
+    let idler = r.u64(image + game::layout(r).idler_global)?;
+    let view = r.u64(r.u64(idler + 0x670)? + 0x240)?;
+    let window = r.u64(view + 0x3da0)?;
+    gui_tree::container(r, base_of(r, image, window)?, image)
+}
 /// The peace conference window's own texts while it is open (the player's
 /// current score and the bidding phase), a read of what the window shows.
 /// NOT validated live: no conference could be opened in the qualification

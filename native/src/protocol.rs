@@ -26,6 +26,10 @@ pub trait Commands: Send + Sync {
     fn plan_path(&self) -> Option<std::path::PathBuf> {
         None
     }
+    /// State of the server-side `stop_on_date` watcher, when this adapter has one.
+    fn date_stop_status(&self) -> Option<Value> {
+        None
+    }
     /// Read-only lifecycle notification scoped to this exact owned controller.
     /// Default readers have no worker and retain ordinary bounded polling.
     fn wait_events(&self) -> Option<std::sync::Arc<worker_events::Events>> {
@@ -40,6 +44,12 @@ struct Internal<'a> {
 }
 impl crate::plan_run::Tools for Internal<'_> {
     fn call(&self, name: &str, args: &Value) -> Result<Value> {
+        // Internal read for the runner (never a listed tool): the date watcher's state.
+        if name == "hoi4_date_stop" {
+            return self.commands.date_stop_status().ok_or_else(|| {
+                Error::new("capability_unavailable", "No server-side date watcher")
+            });
+        }
         self.server.call(name, args, Some(self.commands))
     }
 }
@@ -1116,7 +1126,24 @@ impl Server {
                 let path = commands.plan_path().unwrap();
                 if name == "hoi4_plan" {
                     return match object.get("op").and_then(Value::as_str) {
-                        Some("get") if object.len() == 1 => crate::plan_run::read_plan(&path),
+                        Some("get") if object.len() == 1 => {
+                            let mut plan = crate::plan_run::read_plan(&path)?;
+                            // A pending date stop reports whether the server can act on it.
+                            if plan.get("stop_on_date").is_some_and(|v| !v.is_null()) {
+                                if let (Some(status), Some(object)) =
+                                    (commands.date_stop_status(), plan.as_object_mut())
+                                {
+                                    if status["armed"] != json!(true) && status["fired"] != json!(true) {
+                                        object.insert(
+                                            "stop_on_date_unarmed".into(),
+                                            json!(status["state"]),
+                                        );
+                                    }
+                                    object.insert("date_stop".into(), status);
+                                }
+                            }
+                            Ok(plan)
+                        }
                         Some("set") if object.len() == 2 => {
                             let changes = object
                                 .get("plan")

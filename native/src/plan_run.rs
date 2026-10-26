@@ -1403,6 +1403,17 @@ fn date_stop_pause(state: &mut State, tools: &dyn Tools, lease: &str, pause: boo
     {
         return "already paused".into();
     }
+    // The server's own date watcher shares the journal: if it fired or is
+    // sending the pause right now, report that instead of a second pause.
+    if let Ok(watcher) = tools.call("hoi4_date_stop", &json!({})) {
+        let outcome = watcher["outcome"].as_str().unwrap_or("");
+        if watcher["fired"] == json!(true) && !outcome.is_empty() {
+            return format!("{outcome} (server date watcher)");
+        }
+        if watcher["in_flight"] == json!(true) {
+            return "pause in flight (server date watcher); not re-issued".into();
+        }
+    }
     match state.act(tools, lease, "hoi4_time", json!({"paused": true}), "sd") {
         Ok((true, _)) => "paused".into(),
         Ok((false, why)) => format!("pause refused ({why}); not retried"),
@@ -2658,7 +2669,7 @@ mod tests {
         assert_eq!(pauses[0]["paused"], json!(true));
         assert_eq!(pauses[0]["lease_token"], json!("lease"));
         assert!(pauses[0]["request_id"].as_str().unwrap().starts_with("plan-sd-"));
-        assert!(names(&tools).iter().all(|n| n == "hoi4_overview" || n == "hoi4_time"));
+        assert!(names(&tools).iter().all(|n| matches!(n.as_str(), "hoi4_overview" | "hoi4_time" | "hoi4_date_stop")));
         // later ticks (and a later date) never pause again nor act
         for hour in [target(), target() + 5 * DAY] {
             let step = tick(&mut state, &tools, &date_plan(), "lease", hour).unwrap();
@@ -2682,6 +2693,30 @@ mod tests {
         let step = tick(&mut State::default(), &tools, &date_plan(), "l", target()).unwrap();
         assert!(matches!(&step, Tick::DateStop(s) if s.ends_with("already paused")));
         assert!(time_calls(&tools).is_empty());
+    }
+
+    struct WithWatcher<'a>(&'a Fake, Value);
+    impl Tools for WithWatcher<'_> {
+        fn call(&self, name: &str, args: &Value) -> Result<Value> {
+            if name == "hoi4_date_stop" {
+                return Ok(self.1.clone());
+            }
+            self.0.call(name, args)
+        }
+    }
+
+    #[test]
+    fn a_pause_the_server_watcher_fired_or_is_sending_is_not_repeated() {
+        for (watcher, expect) in [
+            (json!({"fired": true, "outcome": "paused"}), "paused (server date watcher)"),
+            (json!({"in_flight": true}), "pause in flight (server date watcher); not re-issued"),
+        ] {
+            let reads = fake(vec![]);
+            let tools = WithWatcher(&reads, watcher);
+            let step = tick(&mut State::default(), &tools, &date_plan(), "l", target() + 9 * DAY).unwrap();
+            assert!(matches!(&step, Tick::DateStop(s) if s.ends_with(expect)), "{step:?}");
+            assert!(time_calls(&reads).is_empty());
+        }
     }
 
     #[test]

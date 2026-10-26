@@ -3,6 +3,7 @@
 //! and fresh memory readback for every step. The clock keeps the Linux tool
 //! contract; research starts are driven by live GUI geometry.
 mod action_fence;
+mod agency_act;
 mod air;
 mod airact;
 mod airread;
@@ -32,19 +33,26 @@ mod diplomacy;
 mod diplomacy_keys;
 mod diplomacy_state;
 mod trade;
+mod peace;
+mod doctrine_act;
 mod doctrines;
 mod events;
+mod faction;
 mod fleetmem;
+mod fleetops;
 mod focus;
 mod front_plan;
 pub(crate) use focus::input_probe as focus_input_probe;
 mod input_gate;
 mod intelligence;
+mod invasion;
 mod journal;
+mod kit;
 #[cfg(test)]
 mod live_reads_navalair;
 mod mapdata;
 mod naval;
+mod panelkit;
 mod navalact;
 mod navalui;
 mod politics;
@@ -55,6 +63,8 @@ mod resources;
 #[cfg(test)]
 mod live_reads_mgmt;
 mod mgmt;
+mod loc;
+mod mio_act;
 mod mios;
 mod research_extras;
 mod script;
@@ -77,6 +87,7 @@ mod live_reads;
 #[cfg(test)]
 mod testmem;
 mod ui;
+mod ui_action;
 mod wars;
 use crate::{
     actions::{Action, Backend, Epoch, Journal, State},
@@ -444,7 +455,6 @@ impl Commands for MacClock {
             country_status::tool(),
             diplomacy_state::tool(),
             diplomacy_state::countries_tool(),
-            json!({"name":"hoi4_faction_create","description":"Create a faction (Create Faction flow). Refused with already_in_faction when the player is in a faction (read from memory; Germany 1936 leads Axis, so the flow could not be exercised) and otherwise with capability_unavailable: the route is the top-bar faction button -> New Faction window (template grid, Create Faction) -> setup window (name, invite countries, Create Faction), and needs the 'can create factions' national-spirit rule; it was never observed, so no input is sent (validated:false). To invite a country into an existing faction use hoi4_diplomacy_act invite_to_faction.","inputSchema":{"type":"object","properties":{"template":{"type":"string","maxLength":64},"name":{"type":"string","maxLength":64},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_peace_status","description":"Read-only: whether the peace conference window is open and, when it is, the texts it shows (current player, score, bidding phase, turns left). Without a conference it returns the route an ordinary player takes (actions list, states on the conference map, End turn). NOT validated live while a conference is open (no war was fought in the qualification game); no peace action tool exists yet.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}}),
             trade::tool(),
             trade::set_tool(),
@@ -475,6 +485,10 @@ impl Commands for MacClock {
             construction_find_open::tool(),
             daily::Controller::tool(),
             json!({"name":"hoi4_plan","description":"Read or change the standing plan (plan.json in the run directory): research priorities, focus path, construction, training, production, politics, decisions. {op:get} returns it; {op:set, plan:{...}} merges the given keys (null removes a key). hoi4_plan_run carries it out.","inputSchema":{"type":"object","oneOf":[{"properties":{"op":{"const":"get"}},"required":["op"],"additionalProperties":false},{"properties":{"op":{"const":"set"},"plan":{"type":"object"}},"required":["op","plan"],"additionalProperties":false}]}}),
+            json!({"name":"hoi4_peace_options","description":"Read the open peace conference from its window: header (current player, own remaining points = current_score, world tension, bidding phase, turn), which controls are usable (demand kinds take_state/liberate/puppet/force_government/take_navy, end turn, done), participant, available-action and bid lists as the window shows them, and for the asked `states` their owner and occupier. Costs are not stored: a state's tooltip shows them and hoi4_peace_take reports each state's cost as the score drop. No lease, no input. validated:false (no conference was arranged live; procedure in docs/PLAYBOOK_TOOL_GAPS.md).","inputSchema":{"type":"object","properties":{"states":{"type":"array","items":{"type":"integer","minimum":1,"maximum":4095},"maxItems":16}},"additionalProperties":false}}),
+            json!({"name":"hoi4_peace_take","description":"In the open peace conference, choose the demand kind (default Take State; puppet:true = Puppet; release:true = Liberate) and add each listed state by centring it with Find and clicking it, verifying each through the drop of the window's score; reports each state's cost. Refusals before input: no_conference_open, round_not_ready, action_not_available, unknown_state, state_not_offered (own state), cost_exceeds_points. `max_cost` stops after a state dearer than it. Nothing is submitted. validated:false.","inputSchema":{"type":"object","properties":{"states":{"type":"array","items":{"type":"integer","minimum":1,"maximum":4095},"minItems":1,"maxItems":8},"puppet":{"type":"boolean"},"release":{"type":"boolean"},"max_cost":{"type":"number","minimum":0},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["states","request_id","lease_token"],"additionalProperties":false}}),
+            json!({"name":"hoi4_peace_submit","description":"Submit Demands for the round (the conference's end-turn button; one submission per round under the blind-bid rules). Refused before input with round_not_ready or no_conference_open. Verified when the header (phase, turn, score of the turn) changes or the window closes. validated:false.","inputSchema":{"type":"object","properties":{"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["request_id","lease_token"],"additionalProperties":false}}),
+            json!({"name":"hoi4_peace_exit","description":"Leave the peace conference (the Confirm and Exit / done button and the OK of its confirmation); accepted bids persist. Refused before input with exit_not_available or no_conference_open. Verified when the conference window closes. validated:false.","inputSchema":{"type":"object","properties":{"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_plan_run","description":"Carry out the standing plan for up to `seconds` (default 60): answer news and single-option events, fill empty research slots and the focus slot from the plan's lists, make planned politics picks and decisions, keep the training queue, put idle military factories on the priority lines and spend idle civilian factories on planned construction. Every step is an ordinary verified action under the given lease; the game is never paused. Returns early when a choice event needs the model or a peace conference opens. Use it instead of hoi4_wait_for while nothing else needs attention.","inputSchema":{"type":"object","properties":{"seconds":{"type":"integer","minimum":1,"maximum":300},"lease_token":{"type":"string"}},"required":["lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_input_lease","description":"Exclusive configured-controller lease for ordinary macOS input. Acquire uses holder; renew/release use only lease_token. Status takes only op. Observations do not need a lease.","inputSchema":{"type":"object","oneOf":[
                 {"properties":{"op":{"const":"acquire"},"holder":{"type":"string"},"seconds":{"type":"integer","minimum":30,"maximum":900}},"required":["op","holder"],"additionalProperties":false},
@@ -525,6 +539,7 @@ impl Commands for MacClock {
             special_projects::stop_tool(),
             special_projects::unassign_tool(),
             special_projects::recruit_tool(),
+            doctrine_act::tool(),
             json!({"name":"hoi4_army_commander","description":"Assign a general (exact name as listed by hoi4_commanders) to an own army, or a field marshal to an own army group (use the army group's name), from the panel's commander list. Verified when the army's commander is that general. Refused before any click with army_unknown (lists valid armies/groups), unknown_commander (5 closest names) or commander_unavailable (already leads another army/group; pass reassign: true to move them).","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"general":{"type":"string"},"reassign":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","general","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_air_wings","description":"Own air wings with air base, assigned region and missions, from the Air Forces Overview (opens it). Changes nothing in the game.","inputSchema":{"type":"object","properties":{"lease_token":{"type":"string"}},"required":["lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_air_mission","description":"Give an own air wing (exact name) a mission over a strategic air region with the game's ordinary controls: wing row of the Air Forces Overview (L), the mission button, the Find view centres `state_id` (any state inside the wanted region) and a right click assigns. Pass `region` (region id or display name, e.g. 'Eastern Germany') instead of or with `state_id`: the state is then chosen from the game's files and the result is verified to be that region. Missions: air_superiority, cas, interception, strategic_bombing, naval_strike, kamikaze, port_strike, logistics_strike, air_supply, training, naval_mines, naval_minesweeping, recon, naval_patrol. Typed refusals before input: wing_unknown, wing_ambiguous, invalid_arguments (unknown mission), region_unknown, region_state_mismatch; the game's own disabling (mission not offered / needs more planes) surfaces as invalid_target. Verified from the wing's mission mask and region id in memory (hoi4_air). No percent or intensity control exists in the game's air UI; aggressiveness and day/night are per-wing cycle buttons not driven by this tool.","inputSchema":{"type":"object","properties":{"wing":{"type":"string","maxLength":128},"mission":{"type":"string"},"state_id":{"type":"integer","minimum":1,"maximum":4095},"region":{"type":"string","maxLength":96},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["wing","mission","request_id","lease_token"],"additionalProperties":false}}),
@@ -544,13 +559,21 @@ impl Commands for MacClock {
             json!({"name":"hoi4_army_assign","description":"Fold the unassigned divisions standing in a state into an existing army there without disturbing other armies, or create a new army when none stands there. Same refusals as hoi4_army_assign_plan, all before any input. Folding into a standing army uses the game's own control (box-select the divisions, RIGHT-click the army's card); it refuses with selection_mismatch, before the click, when the box also took divisions of another army. Creating a new army uses the verified new-army path.","inputSchema":{"type":"object","properties":{"state_id":{"type":"integer","minimum":1,"maximum":4095},"army":{"type":"string","maxLength":128},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["state_id","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_time","description":"Set desired pause or internal speed 0..4 with ordinary keys (Space, keypad +/-) sent only while the owned game window is front-most, each verified by fresh memory readback. Supply exactly one target and a stable request_id; uncertain dispatches are never replayed.","inputSchema":{"type":"object","properties":{"paused":{"type":"boolean"},"speed":{"type":"integer","minimum":0,"maximum":4},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["request_id","lease_token"],"additionalProperties":false}}),
         ])
+        .chain(fleetops::tools())
+        .chain(std::iter::once(invasion::tool()))
+        .chain(faction::tools())
+        .chain(agency_act::tools())
+        .chain(mio_act::tools())
         .collect()
     }
     // Broker allowlist note: `hoi4_country_status` is a pure read (no lease,
     // no input, no cursor); an external broker allowlist that names the other
     // read-only tools (hoi4_armies, hoi4_states, hoi4_events) should list it too.
     fn supports(&self, name: &str) -> bool {
-        matches!(
+        fleetops::handles(name)
+            || faction::handles(name)
+            || name == invasion::TOOL
+            || matches!(
             name,
             "hoi4_daily_governor"
                 | "hoi4_navy_ui"
@@ -592,7 +615,10 @@ impl Commands for MacClock {
                 | "hoi4_diplomacy_state"
                 | "hoi4_diplomacy_countries"
                 | "hoi4_peace_status"
-                | "hoi4_faction_create"
+                | "hoi4_peace_options"
+                | "hoi4_peace_take"
+                | "hoi4_peace_submit"
+                | "hoi4_peace_exit"
                 | "hoi4_trade"
                 | "hoi4_trade_set"
                 | "hoi4_doctrines"
@@ -634,6 +660,14 @@ impl Commands for MacClock {
                 | "hoi4_special_project_stop"
                 | "hoi4_special_project_unassign"
                 | "hoi4_special_project_recruit"
+                | "hoi4_doctrine_adopt"
+                | "hoi4_mio_design_team"
+                | "hoi4_mio_policy"
+                | "hoi4_mio_trait"
+                | "hoi4_agency_create"
+                | "hoi4_agency_upgrade"
+                | "hoi4_operative_recruit"
+                | "hoi4_operative_assign"
                 | "hoi4_army_group_create"
                 | "hoi4_army_split"
                 | "hoi4_state_slots"
@@ -654,6 +688,9 @@ impl Commands for MacClock {
     }
     fn plan_path(&self) -> Option<std::path::PathBuf> {
         Some(self.directory.join("plan.json"))
+    }
+    fn date_stop_status(&self) -> Option<Value> {
+        Some(self.daily.date_stop_status())
     }
     fn capabilities(&self) -> Value {
         json!({"transport":"ordinary macOS CGEvent keys to the front-most owned window","actions":["set_paused","set_speed","research_start","focus_start","production_add","production_set","construction_add","politics_options","politics_choose","decisions_list","decision_take","train","deploy_locations","army_create","army_assign","army_front","army_plan","army_offensive","event_choose","diplomacy","diplomacy_act","army_commander","army_group_create","army_split","template_create","template_edit","template_rename","template_delete","template_options","design_options","design_create","design_obsolete","design_set_production","state_slots","air_wings","air_mission","plan_run"],"lease":"exclusive configured controller","input_profile":{"name":"macos_cocoa_absolute_1920x1080_v1","checked_at_bind":true,"rechecked_before_each_input":true,"diagnostic_alone_authorizes_input":false},"construction_panel":{"enabled":self.construction_panel,"qualification_only":true,"ordinary_key":"t","live_delivery_verified":false,"input_retry":false},"construction_selection":{"enabled":self.construction_selection,"qualification_only":true,"ordinary_clicks_max":1,"input_retry":false,"placement":false},"construction_placement":{"enabled":self.construction_placement,"qualification_only":true,"ordinary_clicks_max":1,"full_picker_verified":false,"atomic_event_verified":false},"construction_cancellation":{"enabled":self.construction_cancellation,"qualification_only":true,"ordinary_key":"escape","ordinary_key_presses_max":1,"input_retry":false,"worker":false},"construction_find_open":{"enabled":self.construction_find_open,"qualification_only":true,"transport":"ordinary_left_click","ordinary_clicks_max":1,"cursor_moves_max":1,"ordinary_key_presses":0,"input_retry":false,"worker":false},"construction_navigation":{"enabled":self.construction_navigation,"qualification_only":true,"already_open_only":true,"input_retry":false,"placement":false},"daily_governor":self.daily.capabilities(),"native_posting":false,"full_campaign_acceptance":false})
@@ -686,6 +723,10 @@ impl Commands for MacClock {
         if name == "hoi4_diplomacy_state" {
             allowed(args, &[])?;
             return diplomacy_state::state(process);
+        }
+        if name == faction::INCOMING && !args.contains_key("answer") {
+            allowed(args, &["which", "index"])?;
+            return faction::incoming_read(process);
         }
         if name == "hoi4_peace_status" {
             allowed(args, &[])?;
@@ -858,6 +899,32 @@ impl Commands for MacClock {
             journal,
             actions,
         } = &mut *state;
+        // Tools built offline from the GUI definitions (all validated:false); see kit.rs.
+        if fleetops::handles(name) || faction::handles(name) || name == invasion::TOOL {
+            let env = kit::Env {
+                process,
+                keys: &self.keys,
+                guard,
+                authority: &*authority,
+                actions,
+            };
+            return if fleetops::handles(name) {
+                fleetops::call(name, args, env)
+            } else if name == invasion::TOOL {
+                invasion::call(args, env)
+            } else {
+                faction::call(name, args, env)
+            };
+        }
+        if mio_act::TOOLS.contains(&name) {
+            return mio_act::call(name, args, process, &self.keys, guard, authority, actions);
+        }
+        if agency_act::TOOLS.contains(&name) {
+            return agency_act::call(name, args, process, &self.keys, guard, authority, actions);
+        }
+        if name == "hoi4_doctrine_adopt" {
+            return doctrine_act::call(args, process, &self.keys, guard, authority, actions);
+        }
         if name == "hoi4_construction_find_open" {
             allowed(
                 args,
@@ -1107,6 +1174,8 @@ impl Commands for MacClock {
                     allowed(args, &["op", "holder", "seconds"])?;
                     let token = nonce()?;
                     authority.acquire(string(args, "holder")?, token.clone(), seconds, &epoch)?;
+                    // The server's own date watcher acts only under this lease.
+                    self.daily.arm_date_stop(self, &token, &epoch);
                     Ok(json!({"lease_token":token,"epoch":epoch,"seconds":seconds}))
                 }
                 "renew" => {
@@ -1117,6 +1186,7 @@ impl Commands for MacClock {
                 "release" => {
                     allowed(args, &["op", "lease_token"])?;
                     authority.release(string(args, "lease_token")?, &epoch)?;
+                    self.daily.disarm_date_stop();
                     Ok(json!({"released":true}))
                 }
                 "status" => {
@@ -2241,22 +2311,6 @@ impl Commands for MacClock {
             let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
             return Ok(json!({"receipt":receipt}));
         }
-        if name == "hoi4_faction_create" {
-            allowed(args, &["template", "name", "request_id", "lease_token"])?;
-            let token = string(args, "lease_token")?;
-            let epoch = guard.observe(process)?.epoch;
-            authority.authorize(token, &epoch)?;
-            if let Some((faction, members)) = diplomacy_state::player_faction(process)? {
-                return Err(Error::new(
-                    "already_in_faction",
-                    format!("The player is in the faction {faction} (members: {}); leave it first or invite countries with hoi4_diplomacy_act invite_to_faction", members.join(", ")),
-                ));
-            }
-            return Err(Error::new(
-                "capability_unavailable",
-                "Faction creation through the New Faction window was never observed (it needs the 'can create factions' rule); no input was sent",
-            ));
-        }
         if name == "hoi4_trade" {
             allowed(args, &["resource", "limit", "lease_token"])?;
             let resource = match args.get("resource") {
@@ -2360,6 +2414,133 @@ impl Commands for MacClock {
             };
             let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
             return Ok(json!({"receipt":receipt}));
+        }
+        if name == "hoi4_peace_options" {
+            allowed(args, &["states"])?;
+            let ids: Vec<i64> = match args.get("states") {
+                None => Vec::new(),
+                Some(v) => v
+                    .as_array()
+                    .filter(|a| a.len() <= 16)
+                    .and_then(|a| a.iter().map(Value::as_i64).collect::<Option<Vec<_>>>())
+                    .ok_or_else(|| Error::new("invalid_arguments", "states must be up to 16 ids"))?,
+            };
+            if ids.iter().any(|v| !(1..4096).contains(v)) {
+                return Err(Error::new("invalid_arguments", "state ids must be 1..4095"));
+            }
+            let ids: Vec<i32> = ids.into_iter().map(|v| v as i32).collect();
+            return peace::options(process, &ids);
+        }
+        if matches!(name, "hoi4_peace_take" | "hoi4_peace_submit" | "hoi4_peace_exit") {
+            let take = name == "hoi4_peace_take";
+            if take {
+                allowed(
+                    args,
+                    &["states", "puppet", "release", "max_cost", "request_id", "lease_token"],
+                )?;
+            } else {
+                allowed(args, &["request_id", "lease_token"])?;
+            }
+            let id = string(args, "request_id")?;
+            let token = string(args, "lease_token")?;
+            let (kind, states, max_cost) = if take {
+                let ids = args
+                    .get("states")
+                    .and_then(Value::as_array)
+                    .and_then(|a| a.iter().map(Value::as_i64).collect::<Option<Vec<_>>>())
+                    .ok_or_else(|| Error::new("invalid_arguments", "states must be state ids"))?;
+                let max_cost = match args.get("max_cost") {
+                    None => None,
+                    Some(v) => Some(v.as_f64().filter(|v| *v >= 0.0 && v.is_finite()).ok_or_else(
+                        || Error::new("invalid_arguments", "max_cost must be a non-negative number"),
+                    )?),
+                };
+                (
+                    peace::Kind::parse(mgmt::flag(args, "puppet")?, mgmt::flag(args, "release")?)?,
+                    peace::validate_states(&ids)?,
+                    max_cost,
+                )
+            } else {
+                (peace::Kind::Take, Vec::new(), None)
+            };
+            let epoch = guard.observe(process)?.epoch;
+            authority.authorize(token, &epoch)?;
+            let retry = actions.receipt_exists(id);
+            let keys = &self.keys;
+            let sent = std::cell::Cell::new(false);
+            let (plan, before_key) = if retry {
+                (None, String::new())
+            } else {
+                keys.preflight()?;
+                match name {
+                    "hoi4_peace_take" => (Some(peace::plan_take(process, kind, &states, max_cost)?), String::new()),
+                    "hoi4_peace_submit" => (None, peace::plan_submit(process)?),
+                    _ => {
+                        peace::plan_exit(process)?;
+                        (None, String::new())
+                    }
+                }
+            };
+            let score_before = plan.as_ref().and_then(|p| p.score_before);
+            let action = match name {
+                "hoi4_peace_take" => json!({"kind":"peace_take","demand":kind.name(),"states":states}),
+                "hoi4_peace_submit" => json!({"kind":"peace_submit"}),
+                _ => json!({"kind":"peace_exit"}),
+            };
+            let tool = name;
+            let mut settle = || {
+                use peace::Settle;
+                let (verdict, detail) = match tool {
+                    "hoi4_peace_take" => {
+                        let now = peace::score_now(process)?;
+                        (
+                            peace::take_settle(score_before, now, sent.get(), retry),
+                            json!({"score_before":score_before,"score_now":now}),
+                        )
+                    }
+                    "hoi4_peace_submit" => {
+                        let now = peace::header_snapshot(process)?;
+                        (
+                            peace::submit_settle(&before_key, now.as_deref(), sent.get() || retry),
+                            json!({"header_now":now}),
+                        )
+                    }
+                    _ => {
+                        let open = peace::is_open(process)?;
+                        (
+                            if !open {
+                                Settle::Reached
+                            } else if sent.get() || retry {
+                                Settle::Diverged
+                            } else {
+                                Settle::Unchanged
+                            },
+                            json!({"conference_open":open}),
+                        )
+                    }
+                };
+                Ok(match verdict {
+                    Settle::Reached => journal::Outcome::Reached(detail),
+                    Settle::Unchanged => journal::Outcome::Unchanged(detail),
+                    Settle::Diverged => journal::Outcome::Diverged(detail),
+                    Settle::Unknown => journal::Outcome::Unknown,
+                })
+            };
+            let mut dispatch = || {
+                authority.authorize(token, &epoch)?;
+                match tool {
+                    "hoi4_peace_take" => {
+                        let plan = plan
+                            .as_ref()
+                            .ok_or_else(|| Error::new("invalid_state", "No plan for this dispatch"))?;
+                        peace::take(process, keys, plan, &sent).map(|_| ())
+                    }
+                    "hoi4_peace_submit" => peace::submit(process, keys, &before_key, &sent).map(|_| ()),
+                    _ => peace::exit(process, keys, &sent).map(|_| ()),
+                }
+            };
+            let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
+            return Ok(json!({"receipt":receipt,"validated":false}));
         }
         if name == "hoi4_event_choose" {
             allowed(args, &["event", "option", "request_id", "lease_token"])?;
