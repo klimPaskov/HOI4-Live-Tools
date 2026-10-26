@@ -884,7 +884,7 @@ impl Commands for MacClock {
             return Ok(json!({"templates":rows}));
         }
         let mut state = crate::daily_worker::input_state(&self.state, || self.daily.input_check())?;
-        if name != "hoi4_input_lease" {
+        if input_gate::applies(name, args) {
             input_gate::check(
                 &state.journal,
                 &state.actions,

@@ -7,6 +7,13 @@ use crate::{
     platform::Identity,
 };
 
+/// The quarantine only guards tools that can send input, i.e. those that take a
+/// controller `lease_token`. Pure reads (no lease, no input) stay available while an
+/// action is unresolved, so the player can still observe the game and settle it.
+pub(super) fn applies(name: &str, args: &serde_json::Map<String, serde_json::Value>) -> bool {
+    name != "hoi4_input_lease" && args.contains_key("lease_token")
+}
+
 pub(super) fn check(
     clock: &Journal,
     game: &GameJournal,
@@ -31,6 +38,15 @@ pub(super) fn check(
 #[cfg(test)]
 mod tests {
     use super::super::journal::Outcome;
+    #[test]
+    fn only_tools_that_can_send_input_are_quarantined() {
+        let with: serde_json::Map<String, serde_json::Value> =
+            serde_json::from_value(serde_json::json!({"lease_token": "t"})).unwrap();
+        let without = serde_json::Map::new();
+        assert!(super::applies("hoi4_time", &with));
+        assert!(!super::applies("hoi4_peace_options", &without));
+        assert!(!super::applies("hoi4_input_lease", &with));
+    }
     use super::*;
     use crate::actions::{Action, Backend, Epoch, State};
     use serde_json::json;
