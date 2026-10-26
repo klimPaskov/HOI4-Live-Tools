@@ -359,7 +359,18 @@ fn goals_of(r: &Reader<'_>, image: u64, country: u64) -> Result<Vec<Goal>> {
     let mut out = Vec::new();
     for array in DS_GOAL_ARRAYS {
         for ptr in r.pointer_array(ds + array)? {
-            if ptr == 0 || r.u64(ptr)? != image + WARGOAL_VTABLE {
+            // One of these arrays holds plain tag indexes once a war is on
+            // (value 6 seen live on 20 Dec 1936 with Luxembourg as the
+            // target): anything that is not a heap pointer is skipped.
+            if ptr < 0x10000 || ptr % 8 != 0 {
+                continue;
+            }
+            let vtable = match r.u64(ptr) {
+                Ok(v) => v,
+                Err(e) if e.code == "read_bound" => continue,
+                Err(e) => return Err(e),
+            };
+            if vtable != image + WARGOAL_VTABLE {
                 continue;
             }
             let ty = r.u64(ptr + WG_TYPE)?;
@@ -666,6 +677,239 @@ pub(super) fn state(process: &dyn Process) -> Result<Value> {
     })?;
     out["freshness"] = json!({"elapsed_ms": started.elapsed().as_secs_f64() * 1000.0});
     Ok(out)
+}
+
+// ---------------------------------------------------------------------------
+// Target-scoped snapshot and the country list (memory only).
+
+fn kind_label(kind: Kind) -> &'static str {
+    match kind {
+        Kind::War => "war",
+        Kind::Guarantee => "guarantee",
+        Kind::Subject => "subject",
+        Kind::NonAggression => "non_aggression",
+        Kind::MilitaryAccess => "military_access",
+        Kind::Other(name) => name,
+    }
+}
+
+/// Tag index of the three-letter tag `tag`, from the game's tag table.
+pub(super) fn tag_index_of(r: &Reader<'_>, image: u64, tag: &str) -> Result<i32> {
+    let g = game::layout(r);
+    let db = r.u64(image + g.tag_db_global)?;
+    let (_, data, count) = r.array_header(db)?;
+    for index in 1..count.min(TAG_BUDGET) {
+        if let Ok(name) = r.string(data + index as u64 * g.tag_stride) {
+            if name == tag {
+                return Ok(index as i32);
+            }
+        }
+    }
+    Err(Error::new(
+        "unknown_country",
+        format!("No country with the tag {tag}"),
+    ))
+}
+
+/// (state id, owner tag index) of every state in the catalog.
+fn state_owners(r: &Reader<'_>, image: u64) -> Result<Vec<(i32, i32)>> {
+    let g = game::layout(r);
+    let l = crate::construction::layout(r);
+    let gs = r.u64(image + g.gs_global)?;
+    let mut out = Vec::new();
+    for state in r.pointer_array(gs + l.gs_states)? {
+        if state == 0 || r.u64(state)? != image + l.state_vtable {
+            continue;
+        }
+        out.push((r.i32(state + l.state_id)?, r.i32(state + l.state_owner)?));
+    }
+    Ok(out)
+}
+
+/// State ids owned by tag `tag`, lowest id first (at most `limit`).
+pub(super) fn states_owned_by(r: &Reader<'_>, image: u64, tag: &str, limit: usize) -> Result<Vec<i32>> {
+    let owner = tag_index_of(r, image, tag)?;
+    let mut ids: Vec<i32> = state_owners(r, image)?
+        .into_iter()
+        .filter(|(_, o)| *o == owner)
+        .map(|(id, _)| id)
+        .collect();
+    ids.sort_unstable();
+    ids.truncate(limit);
+    Ok(ids)
+}
+
+/// What the player's relations with country `tag` look like now.
+pub(super) fn snapshot(r: &Reader<'_>, image: u64, tag: &str) -> Result<super::diplomacy_keys::Snapshot> {
+    let w = world(r, image)?;
+    let me = w.player_tag;
+    let target = tag_index_of(r, image, tag)?;
+    let target_country = *w
+        .country_of
+        .get(&target)
+        .ok_or_else(|| Error::new("unknown_country", "Country not in the game"))?;
+    let theirs: BTreeSet<u64> = r
+        .pointer_array(diplomacy_status(r, image, target_country)? + DS_RELATIONS)?
+        .into_iter()
+        .collect();
+    let (mine, _) = relations_of(r, image, w.player_country)?;
+    let mut snap = super::diplomacy_keys::Snapshot::default();
+    for rel in mine.iter().filter(|x| theirs.contains(&x.ptr)) {
+        snap.rels.insert((kind_label(rel.kind).to_string(), rel.a == me));
+        if rel.kind == Kind::War {
+            snap.at_war = true;
+        }
+    }
+    snap.goals = goals_of(r, image, w.player_country)?
+        .iter()
+        .filter(|g| g.attacker == me && g.target == target)
+        .count();
+    let list = factions(r, image, &w)?;
+    snap.same_faction = list
+        .iter()
+        .any(|f| f.members.contains(&me) && f.members.contains(&target));
+    Ok(snap)
+}
+
+/// Own war goals as plain data: (attacker tag, target tag, type key).
+pub(super) fn own_goals(r: &Reader<'_>, image: u64) -> Result<Vec<(String, String, Option<String>)>> {
+    let w = world(r, image)?;
+    let mut names = Names::new(r, image, &w);
+    Ok(goals_of(r, image, w.player_country)?
+        .into_iter()
+        .map(|g| (names.code(g.attacker), names.code(g.target), g.kind))
+        .collect())
+}
+
+/// (faction name, member tags) of the player's faction, if any.
+pub(super) fn player_faction(process: &dyn Process) -> Result<Option<(String, Vec<String>)>> {
+    read(process, |r, image| {
+        let w = world(r, image)?;
+        let mut names = Names::new(r, image, &w);
+        let list = factions(r, image, &w)?;
+        Ok(list
+            .iter()
+            .find(|f| f.members.contains(&w.player_tag))
+            .map(|f| (f.name.clone(), f.members.iter().map(|t| names.code(*t)).collect())))
+    })
+}
+
+pub(super) fn countries_tool() -> Value {
+    json!({"name":"hoi4_diplomacy_countries","description":"Read-only (memory, no input, no pause): the countries of the world with what the player's own diplomacy shows about them: tag, name, number of states owned, faction name and members' faction, overlord, and the relations between the player and the country (war, guarantee given/received, non-aggression pact, military access each way, subject, lend-lease, docking rights, embargo...). Filters: query (tag or name part), relation (kind such as guarantee, non_aggression, military_access, subject, war), faction (name part), only_with_states (default true), limit (default 50, max 200) and offset. The actions available toward one country are listed by hoi4_diplomacy {country}; enemy opinion, AI intentions and anything hidden are not read.","inputSchema":{"type":"object","properties":{"query":{"type":"string","maxLength":64},"relation":{"type":"string","maxLength":48},"faction":{"type":"string","maxLength":64},"only_with_states":{"type":"boolean"},"limit":{"type":"integer","minimum":1,"maximum":200},"offset":{"type":"integer","minimum":0}},"additionalProperties":false}})
+}
+
+pub(super) fn countries(process: &dyn Process, args: &serde_json::Map<String, Value>) -> Result<Value> {
+    let text = |key: &str| -> Result<Option<String>> {
+        match args.get(key) {
+            None => Ok(None),
+            Some(v) => v
+                .as_str()
+                .filter(|s| !s.is_empty() && s.len() <= 64 && !s.chars().any(char::is_control))
+                .map(|s| Some(s.to_lowercase()))
+                .ok_or_else(|| Error::new("invalid_arguments", format!("Invalid {key}"))),
+        }
+    };
+    let query = text("query")?;
+    let relation = text("relation")?;
+    let faction_filter = text("faction")?;
+    let only_states = match args.get("only_with_states") {
+        None => true,
+        Some(v) => v
+            .as_bool()
+            .ok_or_else(|| Error::new("invalid_arguments", "only_with_states must be boolean"))?,
+    };
+    let limit = match args.get("limit") {
+        None => 50,
+        Some(v) => v
+            .as_u64()
+            .filter(|v| (1..=200).contains(v))
+            .ok_or_else(|| Error::new("invalid_arguments", "limit must be 1..200"))? as usize,
+    };
+    let offset = match args.get("offset") {
+        None => 0,
+        Some(v) => v
+            .as_u64()
+            .ok_or_else(|| Error::new("invalid_arguments", "offset must be a number"))? as usize,
+    };
+    let started = Instant::now();
+    let (rows, total) = read(process, |r, image| {
+        let w = world(r, image)?;
+        let me = w.player_tag;
+        let mut names = Names::new(r, image, &w);
+        let mut owned: HashMap<i32, usize> = HashMap::new();
+        for (_, owner) in state_owners(r, image)? {
+            *owned.entry(owner).or_default() += 1;
+        }
+        let list = factions(r, image, &w)?;
+        let (mine, _) = relations_of(r, image, w.player_country)?;
+        let mine_by_ptr: HashMap<u64, &Rel> = mine.iter().map(|x| (x.ptr, x)).collect();
+        let mut rows = Vec::new();
+        for (tag, country) in &w.country_of {
+            let states = owned.get(tag).copied().unwrap_or(0);
+            if only_states && states == 0 && *tag != me {
+                continue;
+            }
+            let code = names.code(*tag);
+            let name = names.entry(*tag).1;
+            if let Some(q) = &query {
+                if !code.to_lowercase().contains(q)
+                    && !name.as_deref().unwrap_or("").to_lowercase().contains(q)
+                {
+                    continue;
+                }
+            }
+            let faction = list.iter().find(|f| f.members.contains(tag)).map(|f| f.name.clone());
+            if let Some(q) = &faction_filter {
+                if !faction.as_deref().unwrap_or("").to_lowercase().contains(q) {
+                    continue;
+                }
+            }
+            let ptrs = r.pointer_array(diplomacy_status(r, image, *country)? + DS_RELATIONS)?;
+            let mut overlord = None;
+            let mut with_me: Vec<Value> = Vec::new();
+            for ptr in ptrs {
+                if ptr == 0 {
+                    continue;
+                }
+                if let Some(rel) = read_relation(r, image, ptr)? {
+                    if rel.kind == Kind::Subject && rel.b == *tag {
+                        overlord = Some(names.code(rel.a));
+                    }
+                }
+                if *tag != me {
+                    if let Some(rel) = mine_by_ptr.get(&ptr) {
+                        let label = kind_label(rel.kind);
+                        let dir = if rel.kind == Kind::War || rel.kind == Kind::NonAggression {
+                            "mutual"
+                        } else if rel.a == me {
+                            "from_player"
+                        } else {
+                            "to_player"
+                        };
+                        with_me.push(json!({"kind":label,"direction":dir}));
+                    }
+                }
+            }
+            if let Some(q) = &relation {
+                if !with_me.iter().any(|v| {
+                    v["kind"].as_str().is_some_and(|k| k.to_lowercase().contains(q))
+                }) {
+                    continue;
+                }
+            }
+            rows.push(json!({"tag":code,"name":name,"states":states,"is_player":*tag == me,
+                "faction":faction,"overlord":overlord,"relations_with_player":with_me}));
+        }
+        let total = rows.len();
+        Ok((rows.into_iter().skip(offset).take(limit).collect::<Vec<_>>(), total))
+    })?;
+    Ok(json!({"source":"native own diplomacy state (memory)","count":rows.len(),"total_matching":total,
+        "offset":offset,"countries":rows,
+        "validation":{"relations":"same pointer in both countries' relation lists (validated live 25 Oct 2026); direction from the first party tag",
+            "names":"country name string at CCountry+0x10",
+            "gaps":["opinion","ideology","army strength (hidden information, never read)"]},
+        "observation_paused_game":false,"input_authorized":false,
+        "freshness":{"elapsed_ms":started.elapsed().as_secs_f64()*1000.0}}))
 }
 
 #[cfg(test)]

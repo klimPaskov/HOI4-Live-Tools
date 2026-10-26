@@ -57,6 +57,8 @@ const MACOS: Ui = Ui {
     visible_state_rows: 7,
 };
 const GAME: (u32, u32) = (1920, 1080);
+/// Frame number of the diplomacy rows' `accept_icon` (1 decline, 2 accept).
+const ICON_FRAME: u64 = 0x184;
 
 fn ui(r: &Reader<'_>) -> Result<&'static Ui> {
     match r.string_abi() {
@@ -102,7 +104,7 @@ fn state_owner(r: &Reader<'_>, image: u64, state: i32) -> Result<i32> {
     r.i32(object + l.state_owner)
 }
 /// Text without the engine's colour and icon markup.
-fn clean(text: &str) -> String {
+pub(super) fn clean(text: &str) -> String {
     let mut out = String::new();
     let mut chars = text.chars();
     while let Some(c) = chars.next() {
@@ -116,7 +118,7 @@ fn clean(text: &str) -> String {
     }
     out.split_whitespace().collect::<Vec<_>>().join(" ")
 }
-fn find(r: &Reader<'_>, image: u64, object: u64, name: &str, depth: u32) -> Result<Option<u64>> {
+pub(super) fn find(r: &Reader<'_>, image: u64, object: u64, name: &str, depth: u32) -> Result<Option<u64>> {
     for child in gui_tree::children(r, object)? {
         if gui_tree::name(r, child, image)?.as_deref() == Some(name) {
             return Ok(Some(child));
@@ -157,11 +159,13 @@ fn grid_texts(r: &Reader<'_>, image: u64, grid: u64, label: &str) -> Result<Vec<
 }
 
 #[derive(Clone, Debug, PartialEq)]
-struct Row {
+pub(super) struct Row {
     name: String,
     enabled: bool,
     cost: String,
     ai_refuses: bool,
+    /// The row's accept icon shows the green check (the AI would accept).
+    ai_accepts: bool,
     rect: Option<Rect>,
 }
 fn rows(r: &Reader<'_>, image: u64) -> Result<Vec<Row>> {
@@ -194,15 +198,23 @@ fn rows(r: &Reader<'_>, image: u64) -> Result<Vec<Row>> {
             ),
             None => (false, None),
         };
-        let ai_refuses = match gui_tree::child(r, image, frame, "accept_icon")? {
-            Some(icon) => gui_tree::shown(r, icon)?,
-            None => false,
+        // The accept icon is shown for both answers; its frame tells them
+        // apart (macOS 089EA519, read live 26 Oct 2026 against the screen:
+        // 2 is the green check on Italy's non-aggression pact, 1 the red
+        // cross on Poland's and on Italy's invitation to a faction).
+        let (ai_refuses, ai_accepts) = match gui_tree::child(r, image, frame, "accept_icon")? {
+            Some(icon) if gui_tree::shown(r, icon)? => match r.i32(icon + ICON_FRAME)? {
+                2 => (false, true),
+                _ => (true, false),
+            },
+            _ => (false, false),
         };
         out.push(Row {
             name,
             enabled,
             cost: text("cost")?,
             ai_refuses,
+            ai_accepts,
             rect,
         });
     }
@@ -262,6 +274,24 @@ fn dialog_grid(r: &Reader<'_>, image: u64, grid: &str) -> Result<Vec<String>> {
         None => Ok(Vec::new()),
     }
 }
+/// Vertical scroll position (pixels, increasing as the list moves up) of a
+/// dialog grid. macOS 089EA519: the grid object's float at +0x334 moved from
+/// -496 to -481 for one wheel event, the list moving up by 15 screen pixels;
+/// every event is one 15 px tick whatever its size, and the position persists
+/// between dialogs (read live 26 October 2026 in the war-goal state list).
+const GRID_SCROLL: u64 = 0x334;
+fn grid_scroll(r: &Reader<'_>, image: u64, grid: &str) -> Result<f64> {
+    let (_, window) =
+        dialog(r, image)?.ok_or_else(|| Error::new("input_readback_failed", "Dialog closed"))?;
+    let g = find(r, image, window, grid, 0)?
+        .ok_or_else(|| Error::new("gui_target_unavailable", "Dialog list not found"))?;
+    let value = f32::from_bits(r.i32(g + GRID_SCROLL)? as u32);
+    if !value.is_finite() || value.abs() > 100_000.0 {
+        return Err(Error::new("invalid_gui", "List scroll position unreadable"));
+    }
+    Ok(f64::from(value))
+}
+
 fn cancel_dialog(process: &dyn Process, keys: &MacKeys) {
     if let Ok((rect, true)) = read(process, |r, i| dialog_button(r, i, "cancel_button")) {
         let (x, y) = rect.center();
@@ -296,29 +326,84 @@ fn show(process: &dyn Process, keys: &MacKeys, state: i32) -> Result<i32> {
     std::thread::sleep(std::time::Duration::from_millis(300));
     Ok(owner)
 }
-fn row_json(row: &Row) -> Value {
-    json!({"action":row.name,"enabled":row.enabled,"cost":row.cost,"ai_would_refuse":row.ai_refuses})
+
+/// Who a diplomacy call is about: the owner of a state, or a country by tag.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) enum Target {
+    State(i32),
+    Country(String),
 }
 
-/// Diplomatic actions offered toward the owner of state `state`.
-pub(super) fn actions(process: &dyn Process, keys: &MacKeys, state: i32) -> Result<Value> {
-    clear_notices(process, keys)?;
-    show(process, keys, state)?;
-    let found = settled(process, "diplomatic actions", rows)?;
-    Ok(json!({"state_id":state,"actions":found.iter().map(row_json).collect::<Vec<_>>()}))
+/// Tag text of the target without touching the UI.
+pub(super) fn target_tag(process: &dyn Process, target: &Target) -> Result<String> {
+    match target {
+        Target::Country(tag) => Ok(tag.clone()),
+        Target::State(state) => read(process, |r, i| {
+            super::states::tag_name(r, i, state_owner(r, i, *state)?)
+        }),
+    }
 }
-/// Action rows toward the shown country (for settling receipts).
-pub(super) fn current(process: &dyn Process) -> Result<Vec<Value>> {
-    let found = read(process, |r, i| {
-        if open(r, i)? {
-            rows(r, i)
-        } else {
-            Ok(Vec::new())
+
+/// Point the diplomacy view at the target; returns its tag text. A country
+/// is reached through one of its states (the first ones by id); the next
+/// state is tried when the map click lands on another owner.
+fn show_target(process: &dyn Process, keys: &MacKeys, target: &Target) -> Result<String> {
+    match target {
+        Target::State(state) => {
+            let owner = show(process, keys, *state)?;
+            read(process, |r, i| super::states::tag_name(r, i, owner))
         }
-    })?;
-    Ok(found.iter().map(row_json).collect())
+        Target::Country(tag) => {
+            let (index, own, candidates) = read(process, |r, i| {
+                Ok((
+                    super::diplomacy_state::tag_index_of(r, i, tag)?,
+                    player_tag(r, i)?,
+                    super::diplomacy_state::states_owned_by(r, i, tag, 3)?,
+                ))
+            })?;
+            if index == own {
+                return Err(Error::new(
+                    "invalid_target",
+                    "This is the own country; name another country",
+                ));
+            }
+            if read(process, |r, i| Ok(open(r, i)? && shown_tag(r, i)? == index))? {
+                return Ok(tag.clone());
+            }
+            if candidates.is_empty() {
+                return Err(Error::new(
+                    "country_without_states",
+                    format!("{tag} owns no state the diplomacy view can be pointed at"),
+                ));
+            }
+            let mut last = None;
+            for state in candidates {
+                match show(process, keys, state) {
+                    Ok(_) => return Ok(tag.clone()),
+                    Err(e) if e.code == "input_readback_failed" => last = Some(e),
+                    Err(e) => return Err(e),
+                }
+            }
+            Err(last.unwrap_or_else(|| Error::new("gui_target_unavailable", "Country not shown")))
+        }
+    }
+}
+fn row_json(row: &Row) -> Value {
+    json!({"action":row.name,"enabled":row.enabled,"cost":row.cost,"ai_would_refuse":row.ai_refuses,"ai_would_accept":row.ai_accepts,
+        "key":super::diplomacy_keys::spec_of_row(&row.name).map(|s| s.key)})
 }
 
+/// Diplomatic actions offered toward the target.
+pub(super) fn actions(process: &dyn Process, keys: &MacKeys, target: &Target) -> Result<Value> {
+    clear_notices(process, keys)?;
+    let tag = show_target(process, keys, target)?;
+    let found = settled(process, "diplomatic actions", rows)?;
+    let mut out = json!({"country":tag,"actions":found.iter().map(row_json).collect::<Vec<_>>()});
+    if let Target::State(state) = target {
+        out["state_id"] = json!(state);
+    }
+    Ok(out)
+}
 fn click_and_check(
     process: &dyn Process,
     keys: &MacKeys,
@@ -331,6 +416,18 @@ fn click_and_check(
 }
 /// War-goal dialog: choose the type, then the states, by their rows.
 fn war_goal(process: &dyn Process, keys: &MacKeys, kind: &str, states: &[String]) -> Result<()> {
+    let mut info = json!({});
+    war_goal_choose(process, keys, kind, states, &mut info)
+}
+/// As `war_goal`, and note the states the game offers for the chosen type in
+/// `info["states_offered"]`.
+fn war_goal_choose(
+    process: &dyn Process,
+    keys: &MacKeys,
+    kind: &str,
+    states: &[String],
+    info: &mut Value,
+) -> Result<()> {
     let u = &MACOS;
     let (send, _) = settled(process, "send button", |r, i| {
         dialog_button(r, i, "send_button")
@@ -360,6 +457,8 @@ fn war_goal(process: &dyn Process, keys: &MacKeys, kind: &str, states: &[String]
     let offered = settled(process, "war goal states", |r, i| {
         dialog_grid(r, i, "additionals_grid")
     })?;
+    info["states_offered"] = json!(offered);
+    let mut baseline: Option<f64> = None;
     for state in states {
         let index = offered
             .iter()
@@ -370,72 +469,262 @@ fn war_goal(process: &dyn Process, keys: &MacKeys, kind: &str, states: &[String]
                     format!("States offered: {}", offered.join(", ")),
                 )
             })?;
-        if index >= u.visible_state_rows {
-            return Err(Error::new(
-                "gui_target_unavailable",
-                format!(
-                    "Only the first {} offered states are reachable: {}",
-                    u.visible_state_rows,
-                    offered[..u.visible_state_rows.min(offered.len())].join(", ")
-                ),
-            ));
-        }
         let lower = state.to_lowercase();
-        click_and_check(
-            process,
-            keys,
-            (
-                x0 + u.state_row.0,
-                y0 + u.state_row.1 + u.state_row.2 * index as f64,
-            ),
-            "war goal state chosen",
-            |r, i| {
-                Ok(dialog_text(r, i, "wargoal_name")?
-                    .to_lowercase()
-                    .contains(&lower))
-            },
-        )?;
+        // Rows are 30 px slots; the list is scrolled with the wheel until the
+        // wanted row lies in the visible band, using the grid's own scroll
+        // position, then the row is clicked.
+        let slot = u.state_row.2;
+        let band_lo = y0 + u.state_row.1 - 4.0;
+        let band_hi = y0 + u.state_row.1 + slot * u.visible_state_rows as f64 - 14.0;
+        if baseline.is_none() {
+            // The list keeps its scroll position between dialogs and a wheel
+            // event moves it one 15 px tick whatever its size: go to the top
+            // (the position stops changing) so that row 0 sits at the first
+            // slot; the position read there is the reference for every offset.
+            let mut top = read(process, |r, i| grid_scroll(r, i, "additionals_grid"))?;
+            for _ in 0..60 {
+                keys.scroll(GAME, (x0 + u.state_row.0, y0 + u.state_row.1 + 90.0), 40)?;
+                let now = read(process, |r, i| grid_scroll(r, i, "additionals_grid"))?;
+                if (now - top).abs() < 0.5 {
+                    break;
+                }
+                top = now;
+            }
+            baseline = Some(top);
+        }
+        let base_scroll = baseline.unwrap_or(0.0);
+        let mut at = None;
+        let mut seen = String::new();
+        for _ in 0..48 {
+            let now = read(process, |r, i| grid_scroll(r, i, "additionals_grid"))?;
+            let y = y0 + u.state_row.1 + slot * index as f64 - (now - base_scroll);
+            seen = format!("row at y={y:.0}, visible {band_lo:.0}..{band_hi:.0}");
+            if y >= band_lo && y <= band_hi {
+                at = Some((x0 + u.state_row.0, y));
+                break;
+            }
+            // positive wheel moves the list down (towards the top)
+            let wheel = if y > band_hi { -40 } else { 40 };
+            keys.scroll(GAME, (x0 + u.state_row.0, (band_lo + band_hi) / 2.0), wheel)?;
+        }
+        let at = at.ok_or_else(|| {
+            Error::new(
+                "gui_target_unavailable",
+                format!("The state {state} could not be scrolled into view ({seen})"),
+            )
+        })?;
+        click_and_check(process, keys, at, "war goal state chosen", |r, i| {
+            Ok(dialog_text(r, i, "wargoal_name")?
+                .to_lowercase()
+                .contains(&lower))
+        })
+        .map_err(|e| {
+            Error::new(
+                e.code,
+                format!("{} (clicked x={:.0} y={:.0}; {seen}; list scroll base {base_scroll:.0})", e.message, at.0, at.1),
+            )
+        })?;
     }
     Ok(())
 }
 
-/// Take diplomatic action `action` toward the owner of state `state`; the
-/// caller has journaled intent.
-pub(super) fn act(
+/// Dialog windows whose Send button is the whole interaction (or, for war
+/// goals, after the type and states are chosen). Others need choices this
+/// tool cannot make and are cancelled with `dialog_unsupported`.
+const SENDABLE: [&str; 7] = [
+    "generate_wargoal",
+    "add_wargoal",
+    "declare_war",
+    "guarantee",
+    "standard_diplomacy_controller",
+    "invite_faction_diplomacy_controller",
+    "naval_blockade",
+];
+const TEXT_FIELDS: [&str; 6] = [
+    "title",
+    "description",
+    "diplo_reply",
+    "wargoal_name",
+    "wargoal_warning",
+    "threat_value",
+];
+
+/// What the shown dialog says, field by field (empty fields left out).
+fn dialog_texts(process: &dyn Process) -> Value {
+    let mut out = serde_json::Map::new();
+    for field in TEXT_FIELDS {
+        if let Ok(text) = read(process, |r, i| dialog_text(r, i, field)) {
+            if !text.is_empty() {
+                out.insert(field.to_string(), json!(text));
+            }
+        }
+    }
+    Value::Object(out)
+}
+
+/// An action chosen and checked, with the state before it.
+pub(super) struct Plan {
+    pub tag: String,
+    pub row: Row,
+    pub spec: Option<&'static super::diplomacy_keys::Spec>,
+    pub before: super::diplomacy_keys::Snapshot,
+}
+
+fn disabled_hint(key: Option<&str>) -> &'static str {
+    match key {
+        Some("declare_war") => {
+            "Declaring war needs a completed war goal against this country (justify_war_goal, then wait for the justification to finish) or another valid reason (a call to arms, a guarantee to a country at war with it)"
+        }
+        Some("justify_war_goal") | Some("add_war_goal") => {
+            "A war goal needs enough political power, no war goal already against this country, and a valid target (not an ally, not a subject of an ally)"
+        }
+        Some("guarantee") => "Guarantees need political power and a country that is not already guaranteed by you and not in your faction",
+        Some("invite_to_faction") | Some("join_faction") => {
+            "Faction invitations need a faction the player leads (see hoi4_faction_create), an ideology the faction rules allow, and no war against the country"
+        }
+        Some("send_volunteers") | Some("expeditionary_force") => "Needs the country to be at war and an ally or a faction-rule permission",
+        _ => "The game disables this action now (its tooltip names the reason)",
+    }
+}
+
+/// Open the view on the target and choose the row `action` names.
+fn locate(
     process: &dyn Process,
     keys: &MacKeys,
-    state: i32,
+    target: &Target,
     action: &str,
-    kind: Option<&str>,
-    states: &[String],
-) -> Result<()> {
+) -> Result<(String, Vec<Row>, Row, Option<&'static super::diplomacy_keys::Spec>)> {
     clear_notices(process, keys)?;
+    let tag = show_target(process, keys, target)?;
     if read(process, |r, i| Ok(dialog(r, i)?.is_some()))? {
         cancel_dialog(process, keys);
     }
-    show(process, keys, state)?;
-    let before = settled(process, "diplomatic actions", rows)?;
-    let row = before
+    let rows_now = settled(process, "diplomatic actions", rows)?;
+    let names: Vec<String> = rows_now.iter().map(|r| r.name.clone()).collect();
+    let (name, spec) = super::diplomacy_keys::resolve(action, &names)?;
+    let row = rows_now
         .iter()
-        .find(|r| r.name.eq_ignore_ascii_case(action))
+        .find(|r| r.name == name)
         .cloned()
-        .ok_or_else(|| Error::new("invalid_target", "This action is not offered"))?;
+        .ok_or_else(|| Error::new("action_not_offered", "Row vanished"))?;
+    Ok((tag, rows_now, row, spec))
+}
+
+/// All typed refusals that need no input beyond opening the view.
+pub(super) fn plan(
+    process: &dyn Process,
+    keys: &MacKeys,
+    target: &Target,
+    action: &str,
+    try_anyway: bool,
+) -> Result<Plan> {
+    let (tag, _, row, spec) = locate(process, keys, target, action)?;
+    let before = read(process, |r, i| {
+        super::diplomacy_state::snapshot(r, i, &tag)
+    })?;
     if !row.enabled {
-        return Err(Error::new(
-            "invalid_target",
-            "The game disables this action now",
-        ));
+        let mut message = format!(
+            "The game disables '{}' toward {tag} now. {}.",
+            row.name,
+            disabled_hint(spec.map(|s| s.key))
+        );
+        let mut code = "action_disabled";
+        if matches!(spec.map(|s| s.key), Some("declare_war")) {
+            code = "war_goal_required";
+            let goals: Vec<String> = read(process, super::diplomacy_state::own_goals)
+                .unwrap_or_default()
+                .into_iter()
+                .filter(|(_, t, _)| *t == tag)
+                .map(|(_, t, k)| format!("{} vs {t}", k.unwrap_or_else(|| "goal".into())))
+                .collect();
+            message.push_str(&if goals.is_empty() {
+                " Own war goals against this country: none.".to_string()
+            } else {
+                format!(" Own war goals against this country (not yet completed or expired): {}.", goals.join("; "))
+            });
+        }
+        return Err(Error::new(code, message));
+    }
+    if let Some(spec) = spec {
+        if super::diplomacy_keys::already(spec.effect, &before) {
+            return Err(Error::new(
+                "nothing_to_change",
+                format!("'{}' toward {tag} already holds", spec.key),
+            ));
+        }
+        if spec.ai_decides && row.ai_refuses && !try_anyway {
+            return Err(Error::new(
+                "ai_would_refuse",
+                format!(
+                    "The game marks '{}' toward {tag} as one the country would refuse (the red cross on the row); improve relations first, or pass try_anyway:true to send it regardless",
+                    row.name
+                ),
+            ));
+        }
+    }
+    Ok(Plan { tag, row, spec, before })
+}
+
+/// The dispatch's own evidence after sending.
+pub(super) struct Proof {
+    pub rows_changed: bool,
+    pub pp_spent: bool,
+    pub relation: bool,
+    pub dialog: Value,
+}
+
+fn rows_differ(a: &[Row], b: &[Row]) -> bool {
+    a.len() != b.len()
+        || a.iter()
+            .zip(b)
+            .any(|(x, y)| x.name != y.name || x.enabled != y.enabled)
+}
+
+/// Click the planned row, finish its dialog, and wait up to 3 s for the
+/// evidence. `sent` is set just before the first input that can change the
+/// game (the Send click, or the row click of an action without a dialog).
+pub(super) fn execute(
+    process: &dyn Process,
+    keys: &MacKeys,
+    plan: &Plan,
+    kind: Option<&str>,
+    states: &[String],
+    sent: &std::cell::Cell<bool>,
+) -> Result<Proof> {
+    let before_rows = settled(process, "diplomatic actions", rows)?;
+    let row = before_rows
+        .iter()
+        .find(|r| r.name == plan.row.name)
+        .cloned()
+        .ok_or_else(|| Error::new("action_not_offered", "The row is no longer offered"))?;
+    if !row.enabled {
+        return Err(Error::new("action_disabled", "The game disables this action now"));
     }
     let rect = row
         .rect
         .ok_or_else(|| Error::new("gui_target_unavailable", "Action row not on screen"))?;
     let pp_before = super::decisions::political_power(process)?;
+    let known_dialog = plan.spec.map(|s| s.dialog).unwrap_or(false);
+    if !known_dialog {
+        sent.set(true);
+    }
     let (x, y) = rect.center();
     keys.click(GAME, x, y)?;
     std::thread::sleep(std::time::Duration::from_millis(400));
+    let mut texts = Value::Null;
     if let Some((name, _)) = read(process, dialog)? {
-        let flow = (|| -> Result<()> {
-            if name == "generate_wargoal" {
+        let flow = (|| -> Result<Value> {
+            if !SENDABLE.contains(&name.as_str()) {
+                return Err(Error::new(
+                    "dialog_unsupported",
+                    format!("The action opened the dialog '{name}', which needs choices this tool does not make"),
+                ));
+            }
+            let cancelling = name == "generate_wargoal"
+                && read(process, |r, i| dialog_text(r, i, "title"))?
+                    .to_lowercase()
+                    .contains("cancel");
+            if (name == "generate_wargoal" || name == "add_wargoal") && !cancelling {
                 let kind = kind.ok_or_else(|| {
                     Error::new(
                         "invalid_arguments",
@@ -450,6 +739,7 @@ pub(super) fn act(
             let (send, enabled) = settled(process, "send button", |r, i| {
                 dialog_button(r, i, "send_button")
             })?;
+            let texts = dialog_texts(process);
             if !enabled {
                 return Err(Error::new(
                     "invalid_target",
@@ -461,41 +751,104 @@ pub(super) fn act(
                 ));
             }
             let (x, y) = send.center();
+            sent.set(true);
             keys.click(GAME, x, y)?;
-            wait(process, "dialog sent", |r, i| Ok(dialog(r, i)?.is_none()))
+            wait(process, "dialog sent", |r, i| Ok(dialog(r, i)?.is_none()))?;
+            Ok(texts)
         })();
-        if let Err(error) = flow {
-            cancel_dialog(process, keys);
-            return Err(error);
+        match flow {
+            Ok(t) => texts = t,
+            Err(error) => {
+                cancel_dialog(process, keys);
+                return Err(error);
+            }
         }
+    } else {
+        sent.set(true);
     }
     accept_command(process, keys)?;
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+    let ai = plan.spec.map(|s| s.ai_decides).unwrap_or(false);
     loop {
-        let now = read(process, |r, i| {
+        let rows_now = read(process, |r, i| {
             if open(r, i)? {
                 rows(r, i)
             } else {
                 Ok(Vec::new())
             }
         })?;
-        let changed = |a: &[Row], b: &[Row]| {
-            a.len() != b.len()
-                || a.iter()
-                    .zip(b)
-                    .any(|(x, y)| x.name != y.name || x.enabled != y.enabled)
-        };
-        if changed(&now, &before) || super::decisions::political_power(process)? < pp_before {
-            return Ok(());
+        let rows_changed = rows_differ(&rows_now, &before_rows);
+        let pp_spent = super::decisions::political_power(process)? < pp_before;
+        let snap = read(process, |r, i| super::diplomacy_state::snapshot(r, i, &plan.tag))?;
+        let relation = super::diplomacy_keys::verdict(plan.spec, Some(&plan.before), &snap, false)
+            == super::settle::Verdict::Reached
+            && !matches!(plan.spec.map(|s| s.effect), Some(super::diplomacy_keys::Effect::RowsOnly));
+        if relation || ((rows_changed || pp_spent) && !ai) || std::time::Instant::now() >= deadline {
+            return Ok(Proof { rows_changed, pp_spent, relation, dialog: texts });
         }
-        if std::time::Instant::now() >= deadline {
-            return Err(Error::new(
-                "input_readback_failed",
-                "diplomatic action: no change in the offered actions or political power",
-            ));
-        }
-        std::thread::sleep(std::time::Duration::from_millis(60));
+        std::thread::sleep(std::time::Duration::from_millis(80));
     }
+}
+
+/// Read the dialog an action opens (cost, days and options the game shows)
+/// without sending it. For a war goal the type and states are chosen first
+/// when given; the dialog is always cancelled.
+pub(super) fn preview(
+    process: &dyn Process,
+    keys: &MacKeys,
+    target: &Target,
+    action: &str,
+    kind: Option<&str>,
+    states: &[String],
+) -> Result<Value> {
+    let (tag, _, row, spec) = locate(process, keys, target, action)?;
+    let mut out = json!({"country":tag,"row":row_json(&row),"opens_dialog":spec.map(|s| s.dialog)});
+    if !row.enabled || !spec.map(|s| s.dialog).unwrap_or(false) {
+        out["previewed"] = json!(false);
+        out["reason"] = json!(if row.enabled {
+            "this action acts when its row is clicked; there is no dialog to read"
+        } else {
+            disabled_hint(spec.map(|s| s.key))
+        });
+        return Ok(out);
+    }
+    let rect = row
+        .rect
+        .ok_or_else(|| Error::new("gui_target_unavailable", "Action row not on screen"))?;
+    let (x, y) = rect.center();
+    keys.click(GAME, x, y)?;
+    std::thread::sleep(std::time::Duration::from_millis(400));
+    let Some((name, _)) = read(process, dialog)? else {
+        out["previewed"] = json!(false);
+        out["reason"] = json!("no dialog opened");
+        return Ok(out);
+    };
+    let flow = (|| -> Result<Value> {
+        let mut info = json!({"dialog":name});
+        let cancelling = name == "generate_wargoal"
+            && read(process, |r, i| dialog_text(r, i, "title"))?
+                .to_lowercase()
+                .contains("cancel");
+        if (name == "generate_wargoal" || name == "add_wargoal") && !cancelling {
+            let types = read(process, |r, i| dialog_grid(r, i, "wargoals_grid"))?;
+            info["war_goal_types"] = json!(types);
+            if let Some(kind) = kind {
+                war_goal_choose(process, keys, kind, states, &mut info)?;
+            }
+        }
+        info["texts"] = dialog_texts(process);
+        info["send_enabled"] = json!(
+            read(process, |r, i| dialog_button(r, i, "send_button"))
+                .map(|(_, e)| e)
+                .unwrap_or(false)
+        );
+        Ok(info)
+    })();
+    cancel_dialog(process, keys);
+    let info = flow?;
+    out["previewed"] = json!(true);
+    out["dialog_info"] = info;
+    Ok(out)
 }
 
 #[cfg(test)]

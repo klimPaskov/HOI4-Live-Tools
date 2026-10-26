@@ -1039,3 +1039,106 @@ already_assigned, region_not_assigned, unknown_commander; during: mission_unavai
 Not done: moving task forces/ships between fleets (simple drags did nothing), merge/split/dissolve, ship-level moves, and
 `hoi4_naval_invasion` (no enemy coast at peace; the invasion order is made on an army selection, not in the navy UI).
 Brokers must list the new ACT tools. `hoi4_navy_ui` is a debug-only tool.
+
+## 13. Diplomacy, trade and faction actions (macOS, 26 October 2026)
+
+Code: `native/src/launch/macos/{diplomacy,diplomacy_keys,diplomacy_state,trade}.rs` (+ `events.rs` peace status).
+Live-validated on Germany, 22 January to March 1936, in the owned qualification game (paused between calls; the game was run
+for a few game days at a time to let political power accrue and AI proposals resolve).
+
+| Tool | Does | Ordinary-UI route |
+|---|---|---|
+| `hoi4_diplomacy {country\|state_id}` | offered action rows toward a country with canonical `key`, `enabled`, `cost`, `ai_would_refuse` and (new) `ai_would_accept` (the row's green check) | E (diplomacy view); the country is reached through one of its states: Find view (F, state id) then a click on the map |
+| `hoi4_diplomacy {countries:[..6 tags]}` | the same for several countries | same, one after another (about 2 s each) |
+| `hoi4_diplomacy {country, action, war_goal?, states?}` | previews the dialog an action opens (cost text, days, threat) and cancels without sending | row click, dialog read, Cancel |
+| `hoi4_diplomacy_act {country\|state_id, action, ...}` | ONE action, keys below or an exact row name | row click, dialog Send, accepts the command confirmation if any |
+| `hoi4_diplomacy_countries {query, relation, faction, ...}` | all countries with states, faction, overlord and their relations with the player (war, guarantee, pact, access each way, subject, other classes) | memory only |
+| `hoi4_peace_status` | peace conference window open + its texts; otherwise the route | memory (texts unvalidated: no conference was open) |
+| `hoi4_trade {resource?}` | civilian factories, the 7-resource table, and one resource's partners (available, contracted) | R (trade view), click on the resource filter |
+| `hoi4_trade_set {resource, country, amount}` | buy N units (0 cancels, `max`, `needed`) | filter click, partner row click, slider track click + arrow clicks until the window's "Buy amount" equals N, Send |
+| `hoi4_faction_create` | refusal only (see below) | none |
+
+Action keys (`diplomacy_keys.rs`): improve_relations, stop_improving_relations, guarantee, revoke_guarantee,
+non_aggression_pact, cancel_non_aggression_pact, ask/offer/revoke_military_access, ask/offer/revoke_docking_rights,
+send_attache, invite_to_faction, join_faction, kick_from_faction, request_licence_production, start/request_lend_lease,
+send_volunteers, expeditionary_force, return_expeditions, boost_party_popularity, stage_coup, embargo/lift_embargo,
+justify_war_goal, add_war_goal, cancel_war_goal, declare_war, call_allies, join_allies, ask/give_state_control,
+request_garrison_support, annex_subject, release_subject, diplomatic_pressure. An exact row name works for every row.
+
+Typed refusals before any input beyond opening the view: `action_not_offered` (lists the offered rows and keys),
+`action_ambiguous`, `action_disabled` (with a hint), `war_goal_required` (declare war with no completed goal: says what the
+game requires and which own goals exist), `confirmation_required` (declare_war needs `confirm:"declare_war"`),
+`ai_would_refuse` (the red cross on the row; `try_anyway:true` sends regardless), `nothing_to_change`, `unknown_country`,
+`country_without_states`, `invalid_target` (own country). During: `dialog_unsupported` (dialogs that need choices:
+volunteers groups, lend-lease equipment, coup parties, licence selection, call-to-arms wars are cancelled and refused).
+Trade: `partner_not_listed`, `amount_above_available`, `amount_not_offered` (the window sells whole blocks, e.g. 8 rubber
+per civilian factory; the nearest two are named), `resource_mismatch`, `trade_unavailable`.
+
+Receipts are settled from memory by the one relation the action can create or remove (`diplomacy_keys::verdict`): guarantee,
+non-aggression pact, military access, docking rights, improve_relations and the other relation classes (all seen by vtable),
+the player's war goals, a war, faction membership. An AI-decided proposal that the dialog says "They will accept" but that has
+no relation yet (the game is paused; the AI answers when the game runs) is a `Diverged` receipt with `outcome:
+sent_awaiting_ai_reply`, never retried; an AI refusal is `NotApplied`.
+
+Live evidence (screen versus tool, 26 Oct 2026):
+- by tag: `hoi4_diplomacy {country:"POL"}` showed the Poland panel and the 20 rows; `state_id` still works.
+- `justify_war_goal` Poland: preview "War goal will cost you 50.00 Political Power and last 250 days", threat 9 percent
+  (Danzig, Lublin, Wilejka read through the scrolled state list; the list is scrolled one 15 px tick per wheel event);
+  sent: PP 51 to 1, row became "Cancel Justification", the left pane showed the war-goal icon; `cancel_war_goal`: dialog
+  "Cancel Conquer (0%)" (the dialog shows the justification progress, e.g. 11 percent after 25 days), sent, row back.
+- `improve_relations` Poland: relation class `improve_relations` appeared in memory (vtable `+0x3347fe8` confirmed), row became
+  "Stop improving relations"; `stop_improving_relations` removed it.
+- `non_aggression_pact` Italy (green check): "They will accept", the pact appeared in `hoi4_diplomacy_state` after the game ran
+  (4 years, GER/ITA); the same action toward Poland with `try_anyway` was "They will NOT accept", receipt NotApplied.
+- `ask_military_access` Italy: appeared as military access GER->ITA (so "ask" is first party = player); `revoke_military_access`
+  ("Cancel our military access") removed it.
+- `guarantee` Venezuela (the game allows guarantees only of Fascist nations that are not at war; Poland, Italy at war and others
+  were disabled by the tooltip): relation GER->VEN appeared; `revoke_guarantee` removed it.
+- refusals: declare_war on Poland (`war_goal_required` before and after the confirm), NAP Poland (`ai_would_refuse`),
+  revoke_guarantee (`action_not_offered`), own country.
+- trade: rubber from the United Kingdom 16, then 0 (cancelled), then 8; `needed` from the Dutch East Indies bought 16; the
+  Delivered column read "16/16" after the first purchase and `partner_not_listed` listed the partners.
+
+Not validated / known limits:
+- `declare_war` end to end, `invite_to_faction` accepted by an AI, `kick_from_faction`, `join_faction`, subjects (annex,
+  release), embargo, lend-lease, volunteers, expeditionary forces, garrison support, coups: their rows exist or are named after
+  the game's localisation but were not exercised (no war, no subject). They work through exact row names only where the
+  action's dialog is a plain Send dialog.
+- Own war goals in memory: `CWarGoal` objects of a goal in justification are not in the diplomacy status arrays (found with
+  attacker 1 / target 10 as unreferenced objects); justification progress is available only from the Cancel Justification
+  dialog text (`hoi4_diplomacy ... action:"cancel_war_goal"`), so receipts of justify/cancel use the dialog and the rows as proof.
+- Faction creation: Germany leads the faction "Axis" (one member) at the start, so the Create Faction flow could not be
+  reached; `hoi4_faction_create` refuses with `already_in_faction` or `capability_unavailable` and sends nothing. The windows
+  exist (interface manager slots +0x168 `CCountryFactionView`, +0x170 `CFactionSetupWindow` with `faction_template_grid`,
+  `create_faction_button`, `invite_countries`, `create_faction`; the top-bar `faction_button` is hidden while the player has no
+  visible faction). Leaving a faction is the `leave_faction_button` of the faction view; not driven.
+- Peace conference: `peace_conference_open` is the only validated read (`CPeaceConferenceWindow`, manager +0x240, root +0x3da0).
+  Its windows (`available_actions_list`, `take_state_action`, `end_turn_button`, `done_button`, `bidphase_text`, ...) are named
+  in `interface/peaceconferencewindow.gui`; `hoi4_peace_status` reads a few texts (unvalidated) and the route is: pick an action
+  (take state, liberate, puppet, force government, take navy, demilitarise, resource rights, war reparations, dismantle
+  industry), click states on the map, End turn. No tool sends input there yet.
+- Diplomatic tooltips (why a row is disabled) are not read from memory; `action_disabled` carries hints only.
+- Incoming proposals (guarantee/alliance requests to the player) were not observed; there is no accept/refuse tool.
+- Trade slots are the civilian factories the window reports; the settle compares the partner's contracted units in the list of
+  the resource last chosen. Brokers must list `hoi4_diplomacy_countries`, `hoi4_peace_status` (read) and `hoi4_trade`,
+  `hoi4_trade_set`, `hoi4_faction_create` (ACT, lease token).
+
+### 13a. War declaration and peace conference, validated live (26 October 2026, same game)
+- `justify_war_goal` Luxembourg (Conquer, 250 days, 50 PP, threat 2 percent) ran to 100 percent by 18 Dec 1936 (about 250
+  game days; progress was read as "(35%)", "(68%)", "(76%)" from the Cancel Justification dialog); the row `Declare war` became
+  enabled. `declare_war` without `confirm` gave `confirmation_required`; with it the dialog "Select a war goal to declare
+  war" was sent: the world news "The German Reich declared war on Luxembourg", `hoi4_diplomacy_state` showed the war
+  (started 1936-12-20 09:00, goal type `take_state`, array offset 0x80 of the diplomacy status). A bug found and fixed: array
+  0x98 of the diplomacy status holds plain tag indexes once a war is on (value 6), which made `goals_of` fail with
+  `read_bound` (and so `hoi4_diplomacy_state`, `hoi4_wars` stage B and the receipt settle); non-pointers are now skipped.
+  The dispatch's own settle read failed that way, the receipt was left Dispatching and settled by retrying the same
+  request_id after the fix (Verified, war relation GER->LUX seen).
+- The peace route: a 3-division army moved to Luxembourg (`hoi4_army_create`, `hoi4_army_move`); Luxembourg capitulated
+  within two game days; `peace_conference_open` became true. Ordinary clicks on the conference: notices (seized
+  equipment, world news), "Take State" is the preselected action, a click on the Luxembourg state on the map adds the demand
+  (tooltip: state value, factories, resources, world tension; "Submit Demands 27" and score 95 to 68), Submit Demands, then
+  "Confirm and Exit" and its OK. Result popup: "German Reich took 1 states. Luxembourg was annexed. 1049 equipment seized";
+  state 8 owner GER. `hoi4_peace_status` read the open window ("Make your Demands", score 95, turn 1/1, tension 9.71%).
+  No peace action tool exists yet; this click route is the documented one. Also fixed: `peace_conference_open` returned
+  `read_bound` after the conference closed (cleared window pointer).
+- The game now has Germany with Luxembourg annexed (1937-01-15, paused, no panel open); the Axis faction still holds only GER.

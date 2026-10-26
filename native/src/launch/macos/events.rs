@@ -268,10 +268,61 @@ fn peace_conference_open(r: &Reader<'_>, image: u64) -> Result<bool> {
     let idler = r.u64(image + game::layout(r).idler_global)?;
     let view = r.u64(r.u64(idler + 0x670)? + 0x240)?;
     let window = r.u64(view + 0x3da0)?;
+    // After a conference ends the window pointer is cleared (read_bound seen
+    // live on 26 Oct 2026 when the Treaty of Luxembourg window was closed).
+    if window < 0x10000 {
+        return Ok(false);
+    }
     match gui_tree::container(r, base_of(r, image, window)?, image)? {
         Some(object) => gui_tree::visible(r, object),
         None => Ok(false),
     }
+}
+/// The peace conference window's own texts while it is open (the player's
+/// current score and the bidding phase), a read of what the window shows.
+/// NOT validated live: no conference could be opened in the qualification
+/// game (peace, Germany 1936); the window names come from
+/// `interface/peaceconferencewindow.gui` and the root offset from
+/// `peace_conference_open`.
+pub(super) fn peace_status(process: &dyn Process) -> Result<Value> {
+    let open = read(process, peace_conference_open)?;
+    if !open {
+        return Ok(json!({"peace_conference_open":false,"validated":true,
+            "route":"A conference opens when a war ends in the player's victory or defeat; hoi4_events reports peace_conference_open. Bidding is done on the conference map: pick an action in the left list (take state, liberate, puppet, force government, take navy, demilitarise, resource rights, reparations, dismantle industry), click states on the map, then End turn in the right panel. No peace tool sends input yet (validated:false).",
+            "validated_route":false}));
+    }
+    let texts = read(process, |r, image| {
+        let idler = r.u64(image + game::layout(r).idler_global)?;
+        let view = r.u64(r.u64(idler + 0x670)? + 0x240)?;
+        let window = r.u64(view + 0x3da0)?;
+        let Some(root) = gui_tree::container(r, base_of(r, image, window)?, image)? else {
+            return Ok(json!({}));
+        };
+        let mut out = serde_json::Map::new();
+        for name in [
+            "current_player",
+            "current_score",
+            "tension",
+            "bidphase_text",
+            "scorethisturn_text",
+            "remainingturns_text",
+        ] {
+            if let Some(t) = find(r, image, root, name, 0)? {
+                let text = r.string_bounded(t + 0x100, 256)?;
+                let clean: String = text
+                    .chars()
+                    .filter(|c| !c.is_control())
+                    .collect::<String>()
+                    .split_whitespace()
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                out.insert(name.to_string(), json!(clean));
+            }
+        }
+        Ok(Value::Object(out))
+    })?;
+    Ok(json!({"peace_conference_open":true,"texts":texts,"validated":false,
+        "note":"text offsets inherited from the diplomacy views; never read with a conference open"}))
 }
 /// Open events in list order; the last one is drawn on top.
 pub(super) fn list(process: &dyn Process) -> Result<Value> {

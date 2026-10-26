@@ -29,7 +29,9 @@ mod design_ui;
 mod designer;
 mod designs;
 mod diplomacy;
+mod diplomacy_keys;
 mod diplomacy_state;
+mod trade;
 mod doctrines;
 mod events;
 mod fleetmem;
@@ -441,6 +443,11 @@ impl Commands for MacClock {
         vec![
             country_status::tool(),
             diplomacy_state::tool(),
+            diplomacy_state::countries_tool(),
+            json!({"name":"hoi4_faction_create","description":"Create a faction (Create Faction flow). Refused with already_in_faction when the player is in a faction (read from memory; Germany 1936 leads Axis, so the flow could not be exercised) and otherwise with capability_unavailable: the route is the top-bar faction button -> New Faction window (template grid, Create Faction) -> setup window (name, invite countries, Create Faction), and needs the 'can create factions' national-spirit rule; it was never observed, so no input is sent (validated:false). To invite a country into an existing faction use hoi4_diplomacy_act invite_to_faction.","inputSchema":{"type":"object","properties":{"template":{"type":"string","maxLength":64},"name":{"type":"string","maxLength":64},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["request_id","lease_token"],"additionalProperties":false}}),
+            json!({"name":"hoi4_peace_status","description":"Read-only: whether the peace conference window is open and, when it is, the texts it shows (current player, score, bidding phase, turns left). Without a conference it returns the route an ordinary player takes (actions list, states on the conference map, End turn). NOT validated live while a conference is open (no war was fought in the qualification game); no peace action tool exists yet.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}}),
+            trade::tool(),
+            trade::set_tool(),
             naval::fleets_schema(),
             json!({"name":"hoi4_fleet_mission","description":"Give one own task force a mission with the game's ordinary mission buttons (Strategic Navy map mode F2, fleet card, the task force entry's Select button, the mission button; the map mode is restored afterwards). Missions: patrol, strike_force, convoy_raiding, convoy_escort, mine_laying, mine_sweeping, training, invasion_support (all operate in the fleet's assigned sea regions; add regions with hoi4_fleet_region first) and hold (cancel the mission and sail to the closest port). Typed refusals before any input: task_force_unknown, task_force_ambiguous, nothing_to_change, no_assigned_region, reserve_fleet; found while driving: mission_unavailable (the game disables the button, e.g. mine missions without the technology). Verified from the task force's mission code in memory (hold 0, patrol 1, strike force 2, convoy raiding 3, convoy escort 4, training 7, invasion support 9 read back live). One mission per call; the ships sail when the game runs.","inputSchema":{"type":"object","properties":{"task_force":{"type":"string","maxLength":128},"mission":{"type":"string"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["task_force","mission","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_fleet_region","description":"Add a sea region to a fleet's area of operation (or remove it with remove:true) with ordinary input: Strategic Navy map mode, the Find view centres `state_id` (a coastal state next to the sea), left clicks on the map read the sea region names from the game's region view until `region` (exact display name, e.g. 'Eastern North Sea', 'Danish Belts') is found, then the fleet card and a right click on that region (remove: the remove-region button first). Typed refusals: fleet_unknown, already_assigned, region_not_assigned, reserve_fleet; region_not_found lists the sea regions seen (nothing is ordered then); mission_unavailable when the game disables the remove button. The fleet's task forces patrol/escort/raid in this area. Verified from the fleet's region list in memory (hoi4_fleets assigned_regions).","inputSchema":{"type":"object","properties":{"fleet":{"type":"string","maxLength":128},"region":{"type":"string","maxLength":96},"state_id":{"type":"integer","minimum":1,"maximum":4095},"remove":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["fleet","region","state_id","request_id","lease_token"],"additionalProperties":false}}),
@@ -498,8 +505,8 @@ impl Commands for MacClock {
             json!({"name":"hoi4_war_goal_targets","description":"Which enemy-owned states to demand in the peace conference, ranked by points, industry, manpower and resources with tiers (must_take, worth_taking, optional), resource prizes, contiguous blocks, own cores and which states we already occupy. A read, not an action; the conference cost itself is not modelled. No lease.","inputSchema":{"type":"object","properties":{"enemy":{"type":["string","array"],"items":{"type":"string"}},"limit":{"type":"integer","minimum":1,"maximum":100}},"required":["enemy"],"additionalProperties":false}}),
             json!({"name":"hoi4_events","description":"Open event windows in order (the last is on top) with their title and option texts. Pure read; no lease needed.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}}),
             json!({"name":"hoi4_event_choose","description":"Choose an option (0-based, in listed order) of the open event on top by clicking it. Verified when exactly that event window closes.","inputSchema":{"type":"object","properties":{"event":{"type":"string"},"option":{"type":"integer","minimum":0,"maximum":7},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["event","option","request_id","lease_token"],"additionalProperties":false}}),
-            json!({"name":"hoi4_diplomacy","description":"Open the diplomacy view for the owner of a state (Find view centres the state, one click selects the country) and list the offered actions with enabled state, cost and whether the AI would refuse. Changes nothing in the game.","inputSchema":{"type":"object","properties":{"state_id":{"type":"integer","minimum":1,"maximum":4095},"lease_token":{"type":"string"}},"required":["state_id","lease_token"],"additionalProperties":false}}),
-            json!({"name":"hoi4_diplomacy_act","description":"Take one diplomatic action (exact listed name, e.g. Declare war, Justify War goal, Guarantee independence, Improve relations) toward the owner of a state. Justify War goal also needs war_goal (e.g. Conquer) and 1..5 states by name. Verified when the offered actions change or political power is spent.","inputSchema":{"type":"object","properties":{"state_id":{"type":"integer","minimum":1,"maximum":4095},"action":{"type":"string"},"war_goal":{"type":"string"},"states":{"type":"array","items":{"type":"string"},"maxItems":5},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["state_id","action","request_id","lease_token"],"additionalProperties":false}}),
+            json!({"name":"hoi4_diplomacy","description":"Open the diplomacy view for a country and list the offered actions with canonical key, enabled state, cost and whether the AI would refuse (changes nothing in the game). Address the country by `country` (three-letter tag such as POL; the view is pointed at one of its states with the Find view) or by `state_id` of one of its states; `countries` (up to 6 tags) lists several. With `action` (a canonical key such as justify_war_goal, declare_war, guarantee, or an exact row name) it previews what the action's dialog shows (the cost, justification time and options the game displays) and then cancels without sending: for justify_war_goal / add_war_goal add `war_goal` (a type from war_goal_types, e.g. Conquer) and `states` (up to 5 names from states_offered) to read the game's cost text for that exact goal. Read the countries and their relations with hoi4_diplomacy_countries.","inputSchema":{"type":"object","properties":{"country":{"type":"string","pattern":"^[A-Z0-9]{3}$"},"countries":{"type":"array","items":{"type":"string","pattern":"^[A-Z0-9]{3}$"},"maxItems":6},"state_id":{"type":"integer","minimum":1,"maximum":4095},"action":{"type":"string","maxLength":128},"war_goal":{"type":"string","maxLength":128},"states":{"type":"array","items":{"type":"string"},"maxItems":5},"lease_token":{"type":"string"}},"required":["lease_token"],"additionalProperties":false}}),
+            json!({"name":"hoi4_diplomacy_act","description":"Take ONE diplomatic action toward a country with the ordinary diplomacy view. Address it by `country` (tag, e.g. POL) or `state_id`. `action` is a canonical key (improve_relations, guarantee, revoke_guarantee, non_aggression_pact, ask_military_access, offer_military_access, revoke_military_access, ask_docking_rights, offer_docking_rights, send_attache, invite_to_faction, join_faction, kick_from_faction, request_licence_production, start_lend_lease, request_lend_lease, send_volunteers, expeditionary_force, return_expeditions, boost_party_popularity, stage_coup, embargo, justify_war_goal, add_war_goal, cancel_war_goal, declare_war, ...) or an exact row name from hoi4_diplomacy. justify_war_goal / add_war_goal also need `war_goal` (type, e.g. Conquer) and 1..5 `states` by name (preview them first with hoi4_diplomacy). declare_war needs `confirm:\"declare_war\"` and a completed war goal; without one the call is refused with war_goal_required and nothing is sent. Typed refusals before any input: action_not_offered (lists the offered rows), action_disabled, war_goal_required, ai_would_refuse (the game's red cross on the row; pass try_anyway:true to send anyway), nothing_to_change, confirmation_required, dialog_unsupported (dialogs that need choices, e.g. volunteers groups). The receipt is settled from memory by the one relation, war goal, war or faction membership the action can create or remove (see hoi4_diplomacy_state); an AI refusal is a NotApplied receipt.","inputSchema":{"type":"object","properties":{"country":{"type":"string","pattern":"^[A-Z0-9]{3}$"},"state_id":{"type":"integer","minimum":1,"maximum":4095},"action":{"type":"string"},"war_goal":{"type":"string"},"states":{"type":"array","items":{"type":"string"},"maxItems":5},"try_anyway":{"type":"boolean"},"confirm":{"type":"string"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["action","request_id","lease_token"],"additionalProperties":false}}),
             commanders::tool(),
             supply::tool(),
             template_get::tool(),
@@ -583,6 +590,11 @@ impl Commands for MacClock {
                 | "hoi4_industry"
                 | "hoi4_economy_detail"
                 | "hoi4_diplomacy_state"
+                | "hoi4_diplomacy_countries"
+                | "hoi4_peace_status"
+                | "hoi4_faction_create"
+                | "hoi4_trade"
+                | "hoi4_trade_set"
                 | "hoi4_doctrines"
                 | "hoi4_mios"
                 | "hoi4_intelligence"
@@ -674,6 +686,17 @@ impl Commands for MacClock {
         if name == "hoi4_diplomacy_state" {
             allowed(args, &[])?;
             return diplomacy_state::state(process);
+        }
+        if name == "hoi4_peace_status" {
+            allowed(args, &[])?;
+            return events::peace_status(process);
+        }
+        if name == "hoi4_diplomacy_countries" {
+            allowed(
+                args,
+                &["query", "relation", "faction", "only_with_states", "limit", "offset"],
+            )?;
+            return diplomacy_state::countries(process, args);
         }
         if name == "hoi4_fleets" {
             allowed(args, &["ships", "fleet"])?;
@@ -2000,35 +2023,55 @@ impl Commands for MacClock {
                     args,
                     &[
                         "state_id",
+                        "country",
                         "action",
                         "war_goal",
                         "states",
+                        "try_anyway",
+                        "confirm",
                         "request_id",
                         "lease_token",
                     ],
                 )?;
             } else {
-                allowed(args, &["state_id", "lease_token"])?;
+                allowed(
+                    args,
+                    &["state_id", "country", "countries", "action", "war_goal", "states", "lease_token"],
+                )?;
             }
-            let state = args
-                .get("state_id")
-                .and_then(Value::as_i64)
-                .filter(|v| (1..4096).contains(v))
-                .ok_or_else(|| Error::new("invalid_arguments", "state_id must be 1..4095"))?
-                as i32;
-            let token = string(args, "lease_token")?;
-            let epoch = guard.observe(process)?.epoch;
-            authority.authorize(token, &epoch)?;
-            self.keys.preflight()?;
-            if !act {
-                return diplomacy::actions(process, &self.keys, state);
-            }
-            let action_name = string(args, "action")?;
             let text_ok =
                 |v: &str| !v.is_empty() && v.len() <= 128 && !v.chars().any(char::is_control);
-            if !text_ok(action_name) {
-                return Err(Error::new("invalid_arguments", "Invalid action name"));
+            let tag_ok = |v: &str| v.len() == 3 && v.bytes().all(|b| b.is_ascii_uppercase() || b.is_ascii_digit());
+            let tag_of = |v: &Value| -> Result<String> {
+                v.as_str()
+                    .filter(|t| tag_ok(t))
+                    .map(str::to_string)
+                    .ok_or_else(|| Error::new("invalid_arguments", "country must be a three-letter tag such as POL"))
+            };
+            let state_arg = match args.get("state_id") {
+                None => None,
+                Some(v) => Some(
+                    v.as_i64()
+                        .filter(|v| (1..4096).contains(v))
+                        .ok_or_else(|| Error::new("invalid_arguments", "state_id must be 1..4095"))?
+                        as i32,
+                ),
+            };
+            let country_arg = args.get("country").map(tag_of).transpose()?;
+            let many: Vec<String> = match args.get("countries") {
+                None => Vec::new(),
+                Some(v) => v
+                    .as_array()
+                    .filter(|a| a.len() <= 6 && !a.is_empty())
+                    .ok_or_else(|| Error::new("invalid_arguments", "countries must list 1..6 tags"))?
+                    .iter()
+                    .map(&tag_of)
+                    .collect::<Result<Vec<_>>>()?,
+            };
+            if state_arg.is_some() && country_arg.is_some() {
+                return Err(Error::new("invalid_arguments", "Give country or state_id, not both"));
             }
+            let token = string(args, "lease_token")?;
             let kind = match args.get("war_goal") {
                 None => None,
                 Some(v) => Some(
@@ -2054,23 +2097,265 @@ impl Commands for MacClock {
                     })
                     .collect::<Result<Vec<_>>>()?,
             };
+            let epoch = guard.observe(process)?.epoch;
+            authority.authorize(token, &epoch)?;
+            let target = match (state_arg, country_arg) {
+                (Some(state), None) => Some(diplomacy::Target::State(state)),
+                (None, Some(tag)) => Some(diplomacy::Target::Country(tag)),
+                _ => None,
+            };
+            if !act {
+                self.keys.preflight()?;
+                if !many.is_empty() {
+                    if target.is_some() || args.contains_key("action") {
+                        return Err(Error::new(
+                            "invalid_arguments",
+                            "countries cannot be combined with country, state_id or action",
+                        ));
+                    }
+                    let mut out = Vec::new();
+                    for tag in many {
+                        out.push(
+                            match diplomacy::actions(process, &self.keys, &diplomacy::Target::Country(tag.clone())) {
+                                Ok(v) => v,
+                                Err(e) => json!({"country":tag,"error":{"code":e.code,"message":e.message}}),
+                            },
+                        );
+                    }
+                    return Ok(json!({"countries":out}));
+                }
+                let target = target.ok_or_else(|| {
+                    Error::new("invalid_arguments", "country (tag) or state_id is required")
+                })?;
+                return match args.get("action") {
+                    None => diplomacy::actions(process, &self.keys, &target),
+                    Some(a) => {
+                        let a = a
+                            .as_str()
+                            .filter(|v| text_ok(v))
+                            .ok_or_else(|| Error::new("invalid_arguments", "Invalid action name"))?;
+                        diplomacy::preview(process, &self.keys, &target, a, kind, &states)
+                    }
+                };
+            }
+            let target = target
+                .ok_or_else(|| Error::new("invalid_arguments", "country (tag) or state_id is required"))?;
+            let action_name = string(args, "action")?;
+            if !text_ok(action_name) {
+                return Err(Error::new("invalid_arguments", "Invalid action name"));
+            }
+            let flag = |key: &str| -> Result<bool> {
+                match args.get(key) {
+                    None => Ok(false),
+                    Some(v) => v
+                        .as_bool()
+                        .ok_or_else(|| Error::new("invalid_arguments", format!("{key} must be boolean"))),
+                }
+            };
+            let try_anyway = flag("try_anyway")?;
+            let confirm = match args.get("confirm") {
+                None => None,
+                Some(v) => Some(
+                    v.as_str()
+                        .filter(|v| text_ok(v))
+                        .ok_or_else(|| Error::new("invalid_arguments", "Invalid confirm"))?,
+                ),
+            };
             let id = string(args, "request_id")?;
-            let action = json!({"kind":"diplomacy_act","state_id":state,"action":action_name,"war_goal":kind,"states":states});
+            let (state_json, country_json) = match &target {
+                diplomacy::Target::State(s) => (json!(s), Value::Null),
+                diplomacy::Target::Country(t) => (Value::Null, json!(t)),
+            };
+            let action = json!({"kind":"diplomacy_act","state_id":state_json,"country":country_json,"action":action_name,"war_goal":kind,"states":states,"try_anyway":try_anyway});
+            let retry = actions.receipt_exists(id);
             let keys = &self.keys;
-            // The dispatch verifies the change itself; its result decides.
-            let verified = std::cell::Cell::new(false);
+            let plan = if retry {
+                None
+            } else {
+                keys.preflight()?;
+                let plan = diplomacy::plan(process, keys, &target, action_name, try_anyway)?;
+                if plan.spec.map(|s| s.key) == Some("declare_war") && confirm != Some("declare_war") {
+                    return Err(Error::new(
+                        "confirmation_required",
+                        "Declaring war is one explicit step: repeat the call with confirm:\"declare_war\" (the game accepts it only with a completed war goal)",
+                    ));
+                }
+                Some(plan)
+            };
+            let tag = match &plan {
+                Some(p) => p.tag.clone(),
+                None => diplomacy::target_tag(process, &target)?,
+            };
+            let spec = match &plan {
+                Some(p) => p.spec,
+                None => diplomacy_keys::spec_of_key(action_name)
+                    .or_else(|| diplomacy_keys::spec_of_row(action_name)),
+            };
+            let sent = std::cell::Cell::new(false);
+            let proven = std::cell::Cell::new(false);
+            let dialog = std::cell::RefCell::new(Value::Null);
             let mut settle = || {
-                let now = diplomacy::current(process)?;
-                Ok(if verified.get() {
-                    journal::Outcome::Reached(json!({"actions":now}))
-                } else {
-                    journal::Outcome::Unknown
+                let snap = ui::read(process, |r, i| diplomacy_state::snapshot(r, i, &tag))?;
+                let mut verdict = diplomacy_keys::verdict(
+                    spec,
+                    plan.as_ref().map(|p| &p.before),
+                    &snap,
+                    proven.get(),
+                );
+                if verdict == settle::Verdict::Unknown && !retry && !sent.get() {
+                    verdict = settle::Verdict::Unchanged;
+                }
+                // An AI-decided proposal is answered when the game runs: while it
+                // is paused a proposal the AI accepts leaves no relation yet. It
+                // is recorded as sent and never retried (Diverged), not as unchanged.
+                let reply = dialog
+                    .borrow()
+                    .get("diplo_reply")
+                    .and_then(Value::as_str)
+                    .map(str::to_lowercase)
+                    .unwrap_or_default();
+                let awaiting = verdict == settle::Verdict::Unchanged
+                    && spec.is_some_and(|s| s.ai_decides)
+                    && sent.get()
+                    && reply.contains("will accept")
+                    && !reply.contains("not accept");
+                if awaiting {
+                    verdict = settle::Verdict::Diverged;
+                }
+                let detail = json!({"country":tag,"outcome":if awaiting {"sent_awaiting_ai_reply: the country accepts when the game runs; check hoi4_diplomacy_state"} else {""},"ai_reply":reply,
+                    "relations":snap.rels.iter().map(|(k, f)| json!({"kind":k,"from_player":f})).collect::<Vec<_>>(),
+                    "own_war_goals_against":snap.goals,"at_war":snap.at_war,"in_player_faction":snap.same_faction,
+                    "proof":proven.get(),"dialog":dialog.borrow().clone()});
+                Ok(verdict.outcome(detail))
+            };
+            let mut dispatch = || {
+                authority.authorize(token, &epoch)?;
+                let plan = plan
+                    .as_ref()
+                    .ok_or_else(|| Error::new("invalid_state", "No plan for this dispatch"))?;
+                let proof = diplomacy::execute(process, keys, plan, kind, &states, &sent)?;
+                proven.set(proof.rows_changed || proof.pp_spent || proof.relation);
+                *dialog.borrow_mut() = proof.dialog;
+                Ok(())
+            };
+            let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
+            return Ok(json!({"receipt":receipt}));
+        }
+        if name == "hoi4_faction_create" {
+            allowed(args, &["template", "name", "request_id", "lease_token"])?;
+            let token = string(args, "lease_token")?;
+            let epoch = guard.observe(process)?.epoch;
+            authority.authorize(token, &epoch)?;
+            if let Some((faction, members)) = diplomacy_state::player_faction(process)? {
+                return Err(Error::new(
+                    "already_in_faction",
+                    format!("The player is in the faction {faction} (members: {}); leave it first or invite countries with hoi4_diplomacy_act invite_to_faction", members.join(", ")),
+                ));
+            }
+            return Err(Error::new(
+                "capability_unavailable",
+                "Faction creation through the New Faction window was never observed (it needs the 'can create factions' rule); no input was sent",
+            ));
+        }
+        if name == "hoi4_trade" {
+            allowed(args, &["resource", "limit", "lease_token"])?;
+            let resource = match args.get("resource") {
+                None => None,
+                Some(v) => Some(
+                    v.as_str()
+                        .filter(|v| !v.is_empty() && v.len() <= 24 && !v.chars().any(char::is_control))
+                        .ok_or_else(|| Error::new("invalid_arguments", "Invalid resource"))?,
+                ),
+            };
+            let limit = match args.get("limit") {
+                None => 30,
+                Some(v) => v
+                    .as_u64()
+                    .filter(|v| (1..=60).contains(v))
+                    .ok_or_else(|| Error::new("invalid_arguments", "limit must be 1..60"))?
+                    as usize,
+            };
+            let token = string(args, "lease_token")?;
+            let epoch = guard.observe(process)?.epoch;
+            authority.authorize(token, &epoch)?;
+            self.keys.preflight()?;
+            return trade::view(process, &self.keys, resource, limit);
+        }
+        if name == "hoi4_trade_set" {
+            allowed(
+                args,
+                &["resource", "country", "amount", "request_id", "lease_token"],
+            )?;
+            let resource = string(args, "resource")?;
+            let country = string(args, "country")?;
+            for (k, v, max) in [("resource", resource, 24), ("country", country, 64)] {
+                if v.trim().is_empty() || v.len() > max || v.chars().any(char::is_control) {
+                    return Err(Error::new("invalid_arguments", format!("Invalid {k}")));
+                }
+            }
+            let amount = match args.get("amount") {
+                Some(Value::String(s)) if s == "max" => trade::Amount::Max,
+                Some(Value::String(s)) if s == "needed" => trade::Amount::Needed,
+                Some(v) => trade::Amount::Exact(
+                    v.as_i64()
+                        .filter(|v| (0..=100_000).contains(v))
+                        .ok_or_else(|| {
+                            Error::new("invalid_arguments", "amount must be 0..100000, \"max\" or \"needed\"")
+                        })?,
+                ),
+                None => return Err(Error::new("invalid_arguments", "amount is required")),
+            };
+            let id = string(args, "request_id")?;
+            let token = string(args, "lease_token")?;
+            let epoch = guard.observe(process)?.epoch;
+            authority.authorize(token, &epoch)?;
+            let retry = actions.receipt_exists(id);
+            let keys = &self.keys;
+            let action = json!({"kind":"trade_set","resource":resource.to_lowercase(),"country":country.trim().to_lowercase(),"amount":format!("{amount:?}")});
+            let plan = if retry {
+                None
+            } else {
+                keys.preflight()?;
+                Some(trade::plan(process, keys, resource, country)?)
+            };
+            let sent = std::cell::Cell::new(false);
+            let chosen = std::cell::Cell::new(None::<i64>);
+            let target_country = plan.as_ref().map(|p| p.country.clone());
+            let before = plan
+                .as_ref()
+                .and_then(|p| trade::contracted(&p.partner.bought));
+            let want_resource = plan.as_ref().map(|p| p.resource);
+            let mut settle = || {
+                let Some(name) = target_country.clone().or_else(|| Some(country.to_string())) else {
+                    return Ok(journal::Outcome::Unknown);
+                };
+                let index = want_resource.or_else(|| {
+                    (0..7).find(|i| trade::resource_name(*i) == resource.to_lowercase())
+                });
+                let now = trade::bought_now(process, &name)?;
+                let expect = match &amount {
+                    trade::Amount::Exact(n) => Some(*n),
+                    _ => chosen.get(),
+                };
+                let detail = json!({"country":name,"resource":index.map(trade::resource_name),"units_bought_now":now,"expected":expect});
+                Ok(match (now, expect) {
+                    (Some(n), Some(e)) if n == e && (before != Some(n) || sent.get()) => {
+                        journal::Outcome::Reached(detail)
+                    }
+                    (Some(n), _) if Some(n) == before && !sent.get() => journal::Outcome::Unchanged(detail),
+                    (Some(n), Some(_)) if Some(n) == before => journal::Outcome::Unchanged(detail),
+                    (Some(_), _) => journal::Outcome::Diverged(detail),
+                    (None, _) if !sent.get() && !retry => journal::Outcome::Unchanged(detail),
+                    _ => journal::Outcome::Unknown,
                 })
             };
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
-                diplomacy::act(process, keys, state, action_name, kind, &states)?;
-                verified.set(true);
+                let plan = plan
+                    .as_ref()
+                    .ok_or_else(|| Error::new("invalid_state", "No plan for this dispatch"))?;
+                let v = trade::execute(process, keys, plan, &amount, &sent)?;
+                chosen.set(v["chosen"].as_i64());
                 Ok(())
             };
             let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
