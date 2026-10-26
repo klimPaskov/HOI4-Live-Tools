@@ -54,6 +54,37 @@ const GAME: (u32, u32) = (1920, 1080);
 /// Production line list area (rows fully inside are clickable).
 const LIST: (i32, i32) = (360, 1040);
 const CATEGORIES: [&str; 3] = ["infantry_button", "tank_button", "aircraft_button"];
+/// Ships and convoys: the Production panel's naval category button opens the ship selection
+/// window (view +0x1cd8), whose rows `design_ui::rows` reads.
+const NAVAL_CATEGORIES: [&str; 1] = ["naval_button"];
+/// Whether an equipment key is a ship hull or the convoy (the naval category lists those).
+pub(super) fn is_naval_key(key: &str) -> bool {
+    key.starts_with("ship_hull") || key.starts_with("convoy")
+}
+/// The naval selection row for `key`: its equipment button rectangle, if listed and buildable.
+fn naval_row(r: &Reader<'_>, image: u64, key: &str, design: Option<i32>) -> Result<Option<Rect>> {
+    for row in super::design_ui::rows(r, image)? {
+        if !row.shown || row.key != key || row.invalid || row.obsolete {
+            continue;
+        }
+        if design.is_some_and(|id| row.id != id) {
+            continue;
+        }
+        if let Some(button) = row.equipment_button {
+            return Ok(Some(button));
+        }
+    }
+    Ok(None)
+}
+fn naval_offered(r: &Reader<'_>, image: u64) -> Result<Vec<String>> {
+    let mut out = Vec::new();
+    for row in super::design_ui::rows(r, image)? {
+        if row.shown && !row.invalid && !row.obsolete && !out.contains(&row.key) {
+            out.push(row.key);
+        }
+    }
+    Ok(out)
+}
 
 fn ui(r: &Reader<'_>) -> Result<&'static Ui> {
     match r.string_abi() {
@@ -294,33 +325,72 @@ pub(super) fn add(
 ) -> Result<()> {
     clear_notices(process, keys)?;
     ensure_open(process, keys)?;
+    let naval = is_naval_key(key);
+    let categories: &[&str] = if naval { &NAVAL_CATEGORIES } else { &CATEGORIES };
     let before: Vec<u64> = lines(process)?.iter().map(|l| l.handle).collect();
     let mut chosen = None;
     let mut seen: Vec<String> = Vec::new();
-    for category in CATEGORIES {
-        if read(process, selection_open)? {
+    for category in categories {
+        if read(process, super::design_ui::selection_open)? {
             keys.press(Key::Escape)?;
             wait(process, "close selection", |r, i| {
-                Ok(!selection_open(r, i)?)
+                Ok(!super::design_ui::selection_open(r, i)?)
             })?;
             ensure_open(process, keys)?;
         }
         let rect = settled(process, "category", |r, i| category_rect(r, i, category))?;
         click(process, keys, rect)?;
-        wait(process, "open selection", selection_open)?;
-        let found = settled(process, "equipment row", |r, i| selection_row(r, i, key, design))?;
+        wait(process, "open selection", super::design_ui::selection_open)?;
+        let found = if naval {
+            // The list slides in; wait until its rows report their buttons.
+            let _ = wait(process, "selection rows", |r, i| {
+                Ok(super::design_ui::rows(r, i)?
+                    .iter()
+                    .any(|x| x.shown && x.equipment_button.is_some()))
+            });
+            // The ship list is long: scroll the wanted row into the visible band.
+            let mut target = None;
+            let mut last_y: Option<i32> = None;
+            for _ in 0..40 {
+                let Some(rect) = read(process, |r, i| naval_row(r, i, key, design))? else {
+                    break;
+                };
+                // The first row (the convoy) sits right under the class filter header.
+                if rect.y >= 230 && rect.y + rect.h <= 1040 {
+                    target = Some(rect);
+                    break;
+                }
+                if last_y == Some(rect.y) {
+                    break;
+                }
+                last_y = Some(rect.y);
+                keys.scroll(GAME, (780.0, 700.0), if rect.y < 230 { 240 } else { -240 })?;
+                std::thread::sleep(std::time::Duration::from_millis(250));
+            }
+            match target {
+                Some(_) => settled(process, "equipment row", |r, i| naval_row(r, i, key, design))?,
+                None => None,
+            }
+        } else {
+            settled(process, "equipment row", |r, i| selection_row(r, i, key, design))?
+        };
         if let Some(rect) = found {
             chosen = Some(rect);
             break;
         }
-        for key in read(process, offered).unwrap_or_default() {
+        let listed = if naval {
+            read(process, naval_offered)
+        } else {
+            read(process, offered)
+        };
+        for key in listed.unwrap_or_default() {
             if !seen.contains(&key) {
                 seen.push(key);
             }
         }
     }
     let Some(rect) = chosen else {
-        if read(process, selection_open)? {
+        if read(process, super::design_ui::selection_open)? {
             keys.press(Key::Escape)?;
         }
         return Err(Error::new(
@@ -344,7 +414,7 @@ pub(super) fn add(
         .ok_or_else(|| Error::new("input_readback_failed", "New line not found"))?;
     // Choosing a design closes the selection window by itself.
     wait(process, "selection closes", |r, i| {
-        Ok(!selection_open(r, i)?)
+        Ok(!super::design_ui::selection_open(r, i)?)
     })?;
     if !read(process, open)? {
         return Err(Error::new(

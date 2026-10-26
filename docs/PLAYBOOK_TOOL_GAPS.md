@@ -967,3 +967,24 @@ equipment types in the game, `name_taken` is checked per equipment type; Save-As
 bases, the in-place overwrite is not offered by the tool; `design_options` takes about 3 s for upgrade
 designers and 4-12 s for a ship slot scan (production panel open while it works, closed afterwards); the
 brokers must list `hoi4_design_options` and the three action tools in their `ACT` set (all take the lease token; `design_options` without `base` is the only input-free call).
+
+## 12. Naval actions (macOS, 26 October 2026)
+
+Code: `native/src/launch/macos/{navalui,navalact}.rs` (+ `naval.rs` reads, `production.rs` naval add). Live-validated on
+Germany, 15 October 1938, paused, at peace.
+
+| Tool | Does | Ordinary-UI route |
+|---|---|---|
+| `hoi4_fleets` (extended) | per fleet: `admiral`, `assigned_regions`; per task force `mission` code and name (hold 0, patrol 1, strike_force 2, convoy_raiding 3, convoy_escort 4, training 7, reserve 8, invasion_support 9; 5/6 mines inferred) | memory (fleet +0x40 regions, +0xa8 admiral handle, task force +0x36c) |
+| `hoi4_fleet_mission {task_force, mission}` | mission for one task force | F2 (Strategic Navy), fleet card, the entry's Select, mission button; F1 afterwards |
+| `hoi4_fleet_region {fleet, region, state_id, remove?}` | add/remove a sea region of the fleet's area | Find view centres the coastal state, left clicks read region names from the region view, fleet card, right click on the region (remove: red remove-region button first) |
+| `hoi4_fleet_admiral {fleet, admiral \| unassign \| list}` | assign/unassign/list admirals | fleet card, commander portrait, admiral row, accepts the "Reassign the Commander" dialog |
+| `hoi4_fleet_create {task_force}` | new fleet from one task force | select the task force, the bottom bar's "+" card |
+| `hoi4_naval_production_options` | buildable ship/convoy designs, naval lines with indexes | memory |
+| `hoi4_production_add` (naval) / `_set` | ship hull and `convoy_1` lines, dockyard counts | Production panel's naval (anchor) button list, scrolled to the row |
+
+Refusals before input: task_force_unknown/ambiguous, fleet_unknown, nothing_to_change, no_assigned_region, reserve_fleet,
+already_assigned, region_not_assigned, unknown_commander; during: mission_unavailable, region_not_found.
+Not done: moving task forces/ships between fleets (simple drags did nothing), merge/split/dissolve, ship-level moves, and
+`hoi4_naval_invasion` (no enemy coast at peace; the invasion order is made on an army selection, not in the navy UI).
+Brokers must list the new ACT tools. `hoi4_navy_ui` is a debug-only tool.

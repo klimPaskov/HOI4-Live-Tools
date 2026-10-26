@@ -355,6 +355,9 @@ const ACCEPT_DIALOG_VTABLE: u64 = 0x342f1d0;
 /// The game's reassign-commander confirmation (CChangeGroupLeaderDialog); it
 /// has the same accept and decline buttons.
 const REASSIGN_DIALOG_VTABLE: u64 = 0x3437028;
+/// The same confirmation for a fleet's admiral (CChangeNavyLeaderDialog, "Reassign the
+/// Commander", Cancel/OK; seen live 26 October 2026 when an admiral of another fleet was chosen).
+const NAVY_REASSIGN_DIALOG_VTABLE: u64 = 0x3437158;
 /// "Reassign Armies": taking every division out of an army would delete it
 /// and its orders (CReassignFullOrdersGroupDialog); same accept/decline buttons.
 const REASSIGN_ARMIES_DIALOG_VTABLE: u64 = 0x347dba8;
@@ -371,6 +374,7 @@ fn command_dialog(r: &Reader<'_>, image: u64, button: &str) -> Result<Option<gui
         let kind = r.u64(window)?;
         if kind != image + ACCEPT_DIALOG_VTABLE
             && kind != image + REASSIGN_DIALOG_VTABLE
+            && kind != image + NAVY_REASSIGN_DIALOG_VTABLE
             && kind != image + REASSIGN_ARMIES_DIALOG_VTABLE
         {
             continue;

@@ -24,6 +24,21 @@ const FLEET_VTABLE: u64 = 0x32fe7b0;
 const FLEET_HOME_PORT: u64 = 0xd0;
 const FLEET_NAME: u64 = 0xd8;
 const FLEET_TASK_FORCES: u64 = 0xb0;
+/// Fleet area of operation: Clausewitz array of `CStrategicRegion` at fleet +0x40. Matched the
+/// fleet panel's "Active in Regions" and "Moving to assigned region <name>" on 26 October 2026
+/// (one region added by a right click, a second added and removed again).
+const FLEET_REGIONS: u64 = 0x40;
+/// Fleet commander: a character handle {id i32, kind i32} at fleet +0xa8 (zero without admiral);
+/// it equals +0x8/+0xc of the `CNavyLeader` (array at `CCountryCharacters` +0x88 of country
+/// +0xd98; 7 admirals, matching the 7 rows of the game's list), whose name is at +0x38. The
+/// handle appeared at +0xa8 when Alfred Saalwaechter was assigned and cleared on Unassign
+/// (26 October 2026).
+const FLEET_LEADER: u64 = 0xa8;
+const COUNTRY_CHARACTERS: u64 = 0xd98;
+const CHARACTERS_NAVY_LEADERS: u64 = 0x88;
+const LEADER_HANDLE: u64 = 0x8;
+const LEADER_NAME: u64 = 0x38;
+const REGION_LIMIT: usize = 64;
 const TASK_FORCE_VTABLE: u64 = 0x331ef98;
 const TF_NAME: u64 = 0x258;
 const TF_PROVINCE: u64 = 0x1f0;
@@ -50,15 +65,28 @@ const FLEET_LIMIT: usize = 64;
 const TF_LIMIT: usize = 64;
 const SHIP_LIMIT: usize = 512;
 
-/// Best-effort mission names for the raw code (unvalidated; 0 = none and 1 =
-/// the code of AI task forces holding a sea region are the only readings with
-/// supporting evidence).
-fn mission_guess(code: i32) -> Option<&'static str> {
+/// Mission names of the task force mission code (task force +0x36c). 0, 1, 2, 3, 4, 7 and 9 were
+/// set by the game's own mission buttons on 26 October 2026 and read back (hold, patrol, strike
+/// force, convoy raiding, convoy escort, training, naval invasion support); 8 is the code of the
+/// reserve fleet's task force; 5 and 6 (mine laying and sweeping) follow the button numbering
+/// but were disabled by the build state and never set.
+pub(super) fn mission_name(code: i32) -> Option<&'static str> {
     match code {
-        0 => Some("awaiting_orders_or_unknown"),
-        1 => Some("patrol_probable"),
+        0 => Some("hold"),
+        1 => Some("patrol"),
+        2 => Some("strike_force"),
+        3 => Some("convoy_raiding"),
+        4 => Some("convoy_escort"),
+        5 => Some("mine_laying"),
+        6 => Some("mine_sweeping"),
+        7 => Some("training"),
+        8 => Some("reserve"),
+        9 => Some("invasion_support"),
         _ => None,
     }
+}
+fn mission_validated(code: i32) -> bool {
+    matches!(code, 0 | 1 | 2 | 3 | 4 | 7 | 8 | 9)
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -86,6 +114,10 @@ pub(super) struct TaskForce {
 pub(super) struct Fleet {
     pub name: String,
     pub home_port: Option<Place>,
+    /// Assigned sea regions (key, display name).
+    pub regions: Vec<(String, String)>,
+    /// Assigned admiral (None: no commander).
+    pub admiral: Option<String>,
     pub task_forces: Vec<TaskForce>,
 }
 
@@ -128,6 +160,19 @@ fn task_force(r: &Reader<'_>, image: u64, address: u64) -> Result<TaskForce> {
         ships,
     })
 }
+/// Name of the navy leader whose handle equals `handle` (`unknown` when none matches).
+fn admiral_name(r: &Reader<'_>, country: u64, handle: &[u8]) -> Result<String> {
+    let characters = r.u64(country + COUNTRY_CHARACTERS)?;
+    if characters == 0 {
+        return Ok("unknown".to_string());
+    }
+    for leader in pointers(r, characters + CHARACTERS_NAVY_LEADERS, 64)? {
+        if leader != 0 && r.read(leader + LEADER_HANDLE, 8)? == handle {
+            return r.string_bounded(leader + LEADER_NAME, 128);
+        }
+    }
+    Ok("unknown".to_string())
+}
 /// Own fleets of `country` with their task forces and ships.
 pub(super) fn fleets(r: &Reader<'_>, image: u64, country: u64) -> Result<Vec<Fleet>> {
     let mut out = Vec::new();
@@ -137,9 +182,31 @@ pub(super) fn fleets(r: &Reader<'_>, image: u64, country: u64) -> Result<Vec<Fle
         for tf in pointers(r, f + FLEET_TASK_FORCES, TF_LIMIT)? {
             task_forces.push(task_force(r, image, tf)?);
         }
+        let mut regions = Vec::new();
+        for region in pointers(r, f + FLEET_REGIONS, REGION_LIMIT)? {
+            if region == 0 {
+                continue;
+            }
+            let template = r.u64(region + fleetmem::REGION_TEMPLATE)?;
+            if template == 0 {
+                continue;
+            }
+            regions.push((
+                r.string_bounded(template + fleetmem::TEMPLATE_KEY, 64)?,
+                r.string_bounded(template + fleetmem::TEMPLATE_NAME, 128)?,
+            ));
+        }
+        let handle = r.read(f + FLEET_LEADER, 8)?;
+        let admiral = if handle.iter().all(|b| *b == 0) {
+            None
+        } else {
+            Some(admiral_name(r, country, &handle)?)
+        };
         out.push(Fleet {
             name: r.string_bounded(f + FLEET_NAME, 128)?,
+            admiral,
             home_port: fleetmem::place(r, r.u64(f + FLEET_HOME_PORT)?)?,
+            regions,
             task_forces,
         });
     }
@@ -167,8 +234,8 @@ fn task_force_json(t: &TaskForce, with_ships: bool) -> Value {
     let mut v = json!({"task_force":t.name,"location":fleetmem::place_json(&t.place),
         "ship_count":t.ships.len(),"ships_by_type":by_type,
         "strength":round3(hp),"max_strength":round3(max_hp),"strength_percent":percent(hp,max_hp),
-        "mission":{"code":t.mission_code,"guess":mission_guess(t.mission_code),"validated":false},
-        "admiral":null});
+        "mission":{"code":t.mission_code,"name":mission_name(t.mission_code),"validated":mission_validated(t.mission_code)},
+        "admiral":null,"admiral_note":"the admiral leads the fleet: see the fleet's admiral field"});
     if with_ships {
         v["ships"] = Value::Array(t.ships.iter().map(ship_json).collect());
     }
@@ -196,13 +263,14 @@ fn fleets_json(fleets: &[Fleet], with_ships: bool, filter: Option<&str>) -> Valu
             }
         }
         rows.push(json!({"fleet":f.name,"home_port":fleetmem::place_json(&f.home_port),
+            "admiral":f.admiral,"assigned_regions":f.regions.iter().map(|(k, n)| json!({"key":k,"name":n})).collect::<Vec<_>>(),
             "task_forces":f.task_forces.iter().map(|t| task_force_json(t, with_ships)).collect::<Vec<_>>()}));
     }
     json!({"fleets":rows,"totals":{"ships":ships,"ships_by_type":by_type},
         "validated":{"fleet_task_force_ship_names":true,"hulls_and_variants":true,"port_locations":true,
             "strength":"matches hull max_strength at full health; damaged values unverified",
-            "mission":false,"morale":false,"experience_points":false},
-        "unavailable":{"admiral":"leader link not mapped","fuel":"not mapped","supply":"not mapped",
+            "mission":"codes 0 hold, 1 patrol, 2 strike_force, 3 convoy_raiding, 4 convoy_escort, 7 training, 8 reserve, 9 invasion_support were set with the game's buttons and read back; 5/6 (mines) inferred","assigned_regions":"matches the fleet panel's Active in Regions and the region names","morale":false,"experience_points":false},
+        "unavailable":{"admiral_detail":"skills and traits come from hoi4_fleet_admiral list:true","fuel":"not mapped","supply":"not mapped",
             "organisation_current":"not mapped (max_organisation matches the unit definition)"}})
 }
 
@@ -282,7 +350,7 @@ fn convoys_json(total: i32, bases: &[NavalBase], lines: Vec<Value>) -> Value {
 }
 
 pub(super) fn fleets_schema() -> Value {
-    json!({"name":"hoi4_fleets","description":"Own navy read from game memory (no panel, no input, never pauses): fleets, task forces (location: port province, state and strategic region; ship count by type; summed strength and percent; raw mission code with an unvalidated guess; admiral unavailable) and, with ships:true, every ship (id, name, type, hull, design/variant, strength, max strength, max organisation, experience, morale). Filter by fleet or task-force name with `fleet`. Mission, morale and experience fields are validated:false; fuel, supply and current organisation are not mapped.","inputSchema":{"type":"object","properties":{"ships":{"type":"boolean","default":false},"fleet":{"type":"string","maxLength":64}},"additionalProperties":false}})
+    json!({"name":"hoi4_fleets","description":"Own navy read from game memory (no panel, no input, never pauses): fleets, task forces (location: port province, state and strategic region; ship count by type; summed strength and percent; mission code and name: hold, patrol, strike_force, convoy_raiding, convoy_escort, training, reserve, invasion_support; admiral is per fleet) and per fleet the admiral and the assigned sea regions (fleet area of operation) and, with ships:true, every ship (id, name, type, hull, design/variant, strength, max strength, max organisation, experience, morale). Filter by fleet or task-force name with `fleet`. Morale and experience fields are validated:false; fuel, supply and current organisation are not mapped.","inputSchema":{"type":"object","properties":{"ships":{"type":"boolean","default":false},"fleet":{"type":"string","maxLength":64}},"additionalProperties":false}})
 }
 pub(super) fn convoys_schema() -> Value {
     json!({"name":"hoi4_convoys","description":"Own convoy count (equal to the top bar), own naval bases with level, and the convoy production lines, read from game memory (no input, never pauses). Needed convoys, escorts, convoys in use, convoy routes and lost convoys are not mapped and are listed under unavailable.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}})

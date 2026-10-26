@@ -41,6 +41,8 @@ mod journal;
 mod live_reads_navalair;
 mod mapdata;
 mod naval;
+mod navalact;
+mod navalui;
 mod politics;
 mod production;
 mod research;
@@ -438,6 +440,12 @@ impl Commands for MacClock {
             country_status::tool(),
             diplomacy_state::tool(),
             naval::fleets_schema(),
+            json!({"name":"hoi4_fleet_mission","description":"Give one own task force a mission with the game's ordinary mission buttons (Strategic Navy map mode F2, fleet card, the task force entry's Select button, the mission button; the map mode is restored afterwards). Missions: patrol, strike_force, convoy_raiding, convoy_escort, mine_laying, mine_sweeping, training, invasion_support (all operate in the fleet's assigned sea regions; add regions with hoi4_fleet_region first) and hold (cancel the mission and sail to the closest port). Typed refusals before any input: task_force_unknown, task_force_ambiguous, nothing_to_change, no_assigned_region, reserve_fleet; found while driving: mission_unavailable (the game disables the button, e.g. mine missions without the technology). Verified from the task force's mission code in memory (hold 0, patrol 1, strike force 2, convoy raiding 3, convoy escort 4, training 7, invasion support 9 read back live). One mission per call; the ships sail when the game runs.","inputSchema":{"type":"object","properties":{"task_force":{"type":"string","maxLength":128},"mission":{"type":"string"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["task_force","mission","request_id","lease_token"],"additionalProperties":false}}),
+            json!({"name":"hoi4_fleet_region","description":"Add a sea region to a fleet's area of operation (or remove it with remove:true) with ordinary input: Strategic Navy map mode, the Find view centres `state_id` (a coastal state next to the sea), left clicks on the map read the sea region names from the game's region view until `region` (exact display name, e.g. 'Eastern North Sea', 'Danish Belts') is found, then the fleet card and a right click on that region (remove: the remove-region button first). Typed refusals: fleet_unknown, already_assigned, region_not_assigned, reserve_fleet; region_not_found lists the sea regions seen (nothing is ordered then); mission_unavailable when the game disables the remove button. The fleet's task forces patrol/escort/raid in this area. Verified from the fleet's region list in memory (hoi4_fleets assigned_regions).","inputSchema":{"type":"object","properties":{"fleet":{"type":"string","maxLength":128},"region":{"type":"string","maxLength":96},"state_id":{"type":"integer","minimum":1,"maximum":4095},"remove":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["fleet","region","state_id","request_id","lease_token"],"additionalProperties":false}}),
+            json!({"name":"hoi4_fleet_admiral","description":"Put an admiral in command of an own fleet (or unassign with unassign:true) through the fleet panel's 'Select Commander' list: Strategic Navy map mode, the fleet card, the commander portrait, the admiral's row (scrolled into view), a confirmation when he leads another fleet. With list:true it only opens the list and returns the admirals it offers (name, skill) without assigning. Typed refusals before input: fleet_unknown, reserve_fleet, nothing_to_change; unknown_commander lists the names offered. Verified from the fleet's leader in memory. The admirals' skills, traits and rank are the list's own; an admiral who leads another fleet is moved (the game's confirmation is accepted).","inputSchema":{"type":"object","properties":{"fleet":{"type":"string","maxLength":128},"admiral":{"type":"string","maxLength":96},"unassign":{"type":"boolean"},"list":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["fleet","request_id","lease_token"],"additionalProperties":false}}),
+            json!({"name":"hoi4_naval_production_options","description":"Read-only (memory, no input): the ship and convoy designs the Production panel can build (not decommissioned) with their equipment keys and existing lines, and the own naval production lines with their line index and dockyard count. Use the equipment key and optional design id with hoi4_production_add; ship and convoy lines are added through the Production panel's naval category.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}}),
+            json!({"name":"hoi4_fleet_create","description":"Found a new fleet from one own task force with the game's ordinary controls: Strategic Navy map mode, the task force's fleet card, its Select button, then the bottom bar's '+' (new fleet) card; the new fleet holds exactly that task force and gets the game's default name (see hoi4_fleets). Typed refusals before input: task_force_unknown, task_force_ambiguous, nothing_to_change (already alone in its fleet), reserve_fleet. Verified from the fleet list in memory (one more fleet, holding only that task force). Use hoi4_fleet_mission / hoi4_fleet_region / hoi4_fleet_admiral on the new fleet afterwards.","inputSchema":{"type":"object","properties":{"task_force":{"type":"string","maxLength":128},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["task_force","request_id","lease_token"],"additionalProperties":false}}),
+            json!({"name":"hoi4_navy_ui","description":"DEBUG ONLY (never listed to a player): dump the naval UI tree or send one ordinary input.","inputSchema":{"type":"object","properties":{"op":{"type":"string"},"root":{"type":"string"},"path":{"type":"string"},"depth":{"type":"integer"},"index":{"type":"integer"},"items":{"type":"boolean"},"x":{"type":"number"},"y":{"type":"number"},"code":{"type":"integer"},"letter":{"type":"string"},"pixels":{"type":"integer"},"lease_token":{"type":"string"}},"required":["op","lease_token"],"additionalProperties":false}}),
             naval::convoys_schema(),
             airread::schema(),
             designs::schema(),
@@ -466,7 +474,7 @@ impl Commands for MacClock {
                 {"properties":{"op":{"const":"status"}},"required":["op"],"additionalProperties":false}]}}),
             json!({"name":"hoi4_research_start","description":"Start an own technology in an empty research slot with ordinary input (research panel, slot, folder tab, tile, Research), each click located from the live GUI and each stage verified from memory; succeeds only when the slot holds the technology. Refuses researched (code already_researched), already-assigned or busy-slot targets before any input. A tile scrolled out of view is refused. Stable request_id; an unresolved dispatch is settled only by retrying its own request_id.","inputSchema":{"type":"object","properties":{"technology":{"type":"string","maxLength":128},"slot":{"type":"integer","minimum":0,"maximum":15},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["technology","slot","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_focus_start","description":"Start an own national focus with ordinary input (politics panel, focus button, drag-panning the tree until the node is in view, the node, Start), each target located from the live GUI and each stage verified from memory; succeeds only when own focus progress names the focus as active. Refuses completed or already-active focuses, or any while another focus is active, before input. Typed errors: focus_not_available (the detail window opened but the game disables Start: requirements unmet or an exclusive focus taken; Start was not clicked), focus_detail_not_opened (the node click was sent, no detail window read; re-observe before retrying), ui_blocked (names the notice pop-up classes and open events still shown). Stable request_id; an unresolved dispatch is settled only by retrying its own request_id.","inputSchema":{"type":"object","properties":{"focus":{"type":"string","maxLength":128},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["focus","request_id","lease_token"],"additionalProperties":false}}),
-            json!({"name":"hoi4_production_add","description":"Add one own military production line for a base equipment type (e.g. infantry_equipment, artillery_equipment, light_tank_equipment, fighter_equipment) with ordinary input: production panel, category button, the design in the selection window, then +/- until the line requests the given factories. Verified from the own line collection. Refuses equipment with no producible design. Optional `design` (a design id from hoi4_designs / hoi4_design_create, same equipment type) picks that exact variant in the selection window instead of the first listed one. Naval lines are not supported yet.","inputSchema":{"type":"object","properties":{"equipment":{"type":"string","maxLength":128},"factories":{"type":"integer","minimum":1,"maximum":150},"design":{"type":"integer","minimum":1},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["equipment","factories","request_id","lease_token"],"additionalProperties":false}}),
+            json!({"name":"hoi4_production_add","description":"Add one own military or naval production line for a base equipment type (e.g. infantry_equipment, artillery_equipment, light_tank_equipment, fighter_equipment) with ordinary input: production panel, category button, the design in the selection window, then +/- until the line requests the given factories. Verified from the own line collection. Refuses equipment with no producible design. Optional `design` (a design id from hoi4_designs / hoi4_design_create, same equipment type) picks that exact variant in the selection window instead of the first listed one. Ship hulls (ship_hull_*) and convoys (convoy_*) are added through the naval category; see hoi4_naval_production_options.","inputSchema":{"type":"object","properties":{"equipment":{"type":"string","maxLength":128},"factories":{"type":"integer","minimum":1,"maximum":150},"design":{"type":"integer","minimum":1},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["equipment","factories","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_production_set","description":"Set the requested factories of an own production line, addressed by its entry_index and equipment_id from hoi4_production_lines, with the line's ordinary +/- buttons; each click is verified from memory. 0 keeps the line with no factories.","inputSchema":{"type":"object","properties":{"line":{"type":"integer","minimum":0,"maximum":2047},"equipment":{"type":"string","maxLength":128},"factories":{"type":"integer","minimum":0,"maximum":150},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["line","equipment","factories","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_construction_add","description":"Queue more of a building in an own state with ordinary input: construction panel, the building button, the game's Find view to centre the state (F, state_id, Return), then clicks at the screen centre. Verified from the own construction queue (the building located in that state); placement mode is switched off afterwards. Typed errors: building_select_failed (the building button click was sent, the selection never named it, no map click was sent), no_free_slot_or_not_allowed (one centre click did not raise the queue in the state: likely no free slot or building not allowed, not proven; check hoi4_state_slots; never repeat blindly), ui_blocked (names the notice pop-up classes and open events). Building keys: arms_factory, industrial_complex, dockyard, infrastructure, air_base, anti_air_building, radar_station, synthetic_refinery, fuel_silo, rocket_site, ... (state buildings only).","inputSchema":{"type":"object","properties":{"building":{"type":"string","maxLength":64},"state_id":{"type":"integer","minimum":1,"maximum":4095},"count":{"type":"integer","minimum":1,"maximum":10,"default":1},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["building","state_id","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_politics_options","description":"List the ideas offered for one politics slot (opens the slot's selection window and closes it again; changes nothing). category: government (slots 0 mobilization law, 1 trade law, 2 economy law, 3-5 political advisors), research_production (designers) or military_staff. Returns each idea key with the game's enabled state and the slot's current idea.","inputSchema":{"type":"object","properties":{"category":{"type":"string","enum":["government","research_production","military_staff"]},"slot":{"type":"integer","minimum":0,"maximum":7},"lease_token":{"type":"string"}},"required":["category","slot","lease_token"],"additionalProperties":false}}),
@@ -528,6 +536,12 @@ impl Commands for MacClock {
         matches!(
             name,
             "hoi4_daily_governor"
+                | "hoi4_navy_ui"
+                | "hoi4_fleet_mission"
+                | "hoi4_fleet_region"
+                | "hoi4_fleet_create"
+                | "hoi4_naval_production_options"
+                | "hoi4_fleet_admiral"
                 | "hoi4_fleets"
                 | "hoi4_convoys"
                 | "hoi4_air"
@@ -646,6 +660,10 @@ impl Commands for MacClock {
         if name == "hoi4_fleets" {
             allowed(args, &["ships", "fleet"])?;
             return naval::fleets_tool(process, args);
+        }
+        if name == "hoi4_naval_production_options" {
+            allowed(args, &[])?;
+            return navalact::production_options(process);
         }
         if name == "hoi4_convoys" {
             allowed(args, &[])?;
@@ -2081,6 +2099,317 @@ impl Commands for MacClock {
             };
             let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
             return Ok(json!({"receipt":receipt}));
+        }
+        if name == "hoi4_fleet_mission" || name == "hoi4_fleet_region" {
+            let by_mission = name == "hoi4_fleet_mission";
+            if by_mission {
+                allowed(args, &["task_force", "mission", "request_id", "lease_token"])?;
+            } else {
+                allowed(
+                    args,
+                    &["fleet", "region", "state_id", "remove", "request_id", "lease_token"],
+                )?;
+            }
+            let text_arg = |key: &str, max: usize| -> Result<String> {
+                let v = string(args, key)?;
+                if v.trim().is_empty() || v.len() > max || v.chars().any(char::is_control) {
+                    return Err(Error::new("invalid_arguments", format!("Invalid {key}")));
+                }
+                Ok(v.to_string())
+            };
+            let (subject, detail, state, remove) = if by_mission {
+                (text_arg("task_force", 128)?, text_arg("mission", 40)?, 0, false)
+            } else {
+                let state = args
+                    .get("state_id")
+                    .and_then(Value::as_i64)
+                    .filter(|v| (1..4096).contains(v))
+                    .ok_or_else(|| Error::new("invalid_arguments", "state_id must be 1..4095"))?
+                    as i32;
+                (
+                    text_arg("fleet", 128)?,
+                    text_arg("region", 96)?,
+                    state,
+                    mgmt::flag(args, "remove")?,
+                )
+            };
+            let id = string(args, "request_id")?;
+            let token = string(args, "lease_token")?;
+            let expected = guard.observe_context(process)?;
+            let epoch = guard.epoch.clone();
+            let lease_end = authority.authorize(token, &epoch)?;
+            let fence = action_fence::Fence {
+                process,
+                epoch: &epoch,
+                expected: &expected,
+                authority,
+                token,
+                until: (Instant::now() + Duration::from_secs(if by_mission { 60 } else { 120 })).min(lease_end),
+                stop: None,
+            };
+            let check_input = || fence.input_check();
+            let bounded_keys = self.keys.guarded(&fence, &check_input)?;
+            let process: &dyn Process = &fence;
+            let retry = actions.receipt_exists(id);
+            let keys = &bounded_keys;
+            let fleets = navalact::own_fleets(process)?;
+            let mission_plan = if by_mission && !retry {
+                Some(navalact::plan_mission(&fleets, &subject, &detail)?)
+            } else {
+                None
+            };
+            let region_plan = if !by_mission && !retry {
+                Some(navalact::plan_region(&fleets, &subject, &detail, state, remove)?)
+            } else {
+                None
+            };
+            if !retry {
+                bounded_keys.preflight()?;
+            }
+            let action = if by_mission {
+                json!({"kind":"fleet_mission","task_force":subject,"mission":detail})
+            } else {
+                json!({"kind":"fleet_region","fleet":subject,"region":detail,"state_id":state,"remove":remove})
+            };
+            let target_code = navalact::MISSIONS.iter().find(|m| m.0 == detail).map(|m| m.2).unwrap_or(-1);
+            let before_code = mission_plan.as_ref().map(|p| p.before_code);
+            let had_region = region_plan.as_ref().map(|p| p.remove);
+            let info = std::cell::RefCell::new(Value::Null);
+            let mut settle = || {
+                if by_mission {
+                    let now = navalact::mission_code_now(process, &subject)?;
+                    let verdict = match (retry, now) {
+                        (true, Some(c)) if c == target_code => settle::Verdict::Reached,
+                        (true, Some(_)) => settle::Verdict::Unchanged,
+                        _ => navalact::settle_mission(before_code.unwrap_or(-1), now, target_code),
+                    };
+                    Ok(verdict.outcome(json!({"task_force":subject,"mission_code":now})))
+                } else {
+                    let now = navalact::region_present_now(process, &subject, &detail)?;
+                    let want_present = !remove;
+                    let verdict = match (retry, now) {
+                        (true, Some(h)) if h == want_present => settle::Verdict::Reached,
+                        (true, Some(_)) => settle::Verdict::Unchanged,
+                        _ => navalact::settle_region(had_region.unwrap_or(false), now, want_present),
+                    };
+                    Ok(verdict.outcome(json!({"fleet":subject,"region":detail,"present":now})))
+                }
+            };
+            let mut dispatch = || {
+                authority.authorize(token, &epoch)?;
+                if retry {
+                    return Err(Error::new("action_uncertain", "A retried request is never dispatched again"));
+                }
+                *info.borrow_mut() = match (&mission_plan, &region_plan) {
+                    (Some(plan), _) => navalact::set_mission(process, keys, plan)?,
+                    (_, Some(plan)) => navalact::region_op(process, keys, plan)?,
+                    _ => return Err(Error::new("invalid_arguments", "No plan")),
+                };
+                Ok(())
+            };
+            let receipt = actions.execute_with(id, &epoch, action, &mut settle, &mut dispatch, true)?;
+            let after = navalact::own_fleets(process).ok();
+            return Ok(json!({"receipt":receipt,"result":*info.borrow(),
+                "fleets_after":after.map(|f| f.iter().map(|f| json!({"fleet":f.name.trim(),
+                    "regions":f.regions.iter().map(|r| &r.1).collect::<Vec<_>>(),
+                    "task_forces":f.task_forces.iter().map(|t| json!({"task_force":t.name,"mission":naval::mission_name(t.mission_code)})).collect::<Vec<_>>()})).collect::<Vec<_>>())}));
+        }
+        if name == "hoi4_fleet_admiral" {
+            allowed(
+                args,
+                &["fleet", "admiral", "unassign", "list", "request_id", "lease_token"],
+            )?;
+            let text_arg = |key: &str, max: usize| -> Result<String> {
+                let v = string(args, key)?;
+                if v.trim().is_empty() || v.len() > max || v.chars().any(char::is_control) {
+                    return Err(Error::new("invalid_arguments", format!("Invalid {key}")));
+                }
+                Ok(v.to_string())
+            };
+            let fleet = text_arg("fleet", 128)?;
+            let list = mgmt::flag(args, "list")?;
+            let unassign = mgmt::flag(args, "unassign")?;
+            let admiral = match args.get("admiral") {
+                Some(_) => Some(text_arg("admiral", 96)?),
+                None => None,
+            };
+            if list && (unassign || admiral.is_some()) {
+                return Err(Error::new("invalid_arguments", "list takes no admiral or unassign"));
+            }
+            if !list && unassign == admiral.is_some() {
+                return Err(Error::new(
+                    "invalid_arguments",
+                    "Give exactly one of admiral or unassign:true",
+                ));
+            }
+            let id = string(args, "request_id")?;
+            let token = string(args, "lease_token")?;
+            let expected = guard.observe_context(process)?;
+            let epoch = guard.epoch.clone();
+            let lease_end = authority.authorize(token, &epoch)?;
+            let fence = action_fence::Fence {
+                process,
+                epoch: &epoch,
+                expected: &expected,
+                authority,
+                token,
+                until: (Instant::now() + Duration::from_secs(90)).min(lease_end),
+                stop: None,
+            };
+            let check_input = || fence.input_check();
+            let bounded_keys = self.keys.guarded(&fence, &check_input)?;
+            let process: &dyn Process = &fence;
+            let keys = &bounded_keys;
+            let fleets = navalact::own_fleets(process)?;
+            if list {
+                let Some(found) = fleets.iter().find(|f| f.name.trim().eq_ignore_ascii_case(fleet.trim())) else {
+                    return Err(Error::new("fleet_unknown", "No own fleet with this name"));
+                };
+                bounded_keys.preflight()?;
+                let order: Vec<String> = fleets.iter().map(|f| f.name.clone()).collect();
+                let rows = navalact::list_admirals(process, keys, &found.name, &order)?;
+                return Ok(json!({"fleet":found.name.trim(),"current":found.admiral,
+                    "admirals":rows.iter().map(|a| json!({"name":a.name,"skill":a.skill})).collect::<Vec<_>>()}));
+            }
+            let retry = actions.receipt_exists(id);
+            let plan = if retry {
+                None
+            } else {
+                Some(navalact::plan_admiral(&fleets, &fleet, admiral.as_deref())?)
+            };
+            if !retry {
+                bounded_keys.preflight()?;
+            }
+            let before = fleets
+                .iter()
+                .find(|f| f.name.trim().eq_ignore_ascii_case(fleet.trim()))
+                .and_then(|f| f.admiral.clone());
+            let want = admiral.clone();
+            let action = json!({"kind":"fleet_admiral","fleet":fleet,"admiral":admiral,"unassign":unassign});
+            let info = std::cell::RefCell::new(Value::Null);
+            let mut settle = || {
+                let now = navalact::admiral_now(process, &fleet)?;
+                let verdict = if retry {
+                    match &now {
+                        Some(n) if n.as_deref().map(str::trim).map(str::to_lowercase) == want.as_deref().map(str::trim).map(str::to_lowercase) => settle::Verdict::Reached,
+                        Some(_) => settle::Verdict::Unchanged,
+                        None => settle::Verdict::Unknown,
+                    }
+                } else {
+                    navalact::settle_admiral(&before, now.as_ref(), &want)
+                };
+                Ok(verdict.outcome(json!({"fleet":fleet,"admiral":now})))
+            };
+            let mut dispatch = || {
+                authority.authorize(token, &epoch)?;
+                let Some(plan) = &plan else {
+                    return Err(Error::new("action_uncertain", "A retried request is never dispatched again"));
+                };
+                *info.borrow_mut() = navalact::assign_admiral(process, keys, plan)?;
+                Ok(())
+            };
+            let receipt = actions.execute_with(id, &epoch, action, &mut settle, &mut dispatch, true)?;
+            return Ok(json!({"receipt":receipt,"result":*info.borrow()}));
+        }
+        if name == "hoi4_fleet_create" {
+            allowed(args, &["task_force", "request_id", "lease_token"])?;
+            let tf = string(args, "task_force")?;
+            if tf.trim().is_empty() || tf.len() > 128 || tf.chars().any(char::is_control) {
+                return Err(Error::new("invalid_arguments", "Invalid task_force"));
+            }
+            let id = string(args, "request_id")?;
+            let token = string(args, "lease_token")?;
+            let expected = guard.observe_context(process)?;
+            let epoch = guard.epoch.clone();
+            let lease_end = authority.authorize(token, &epoch)?;
+            let fence = action_fence::Fence {
+                process,
+                epoch: &epoch,
+                expected: &expected,
+                authority,
+                token,
+                until: (Instant::now() + Duration::from_secs(60)).min(lease_end),
+                stop: None,
+            };
+            let check_input = || fence.input_check();
+            let bounded_keys = self.keys.guarded(&fence, &check_input)?;
+            let process: &dyn Process = &fence;
+            let keys = &bounded_keys;
+            let retry = actions.receipt_exists(id);
+            let fleets = navalact::own_fleets(process)?;
+            let plan = if retry { None } else { Some(navalact::plan_create(&fleets, tf)?) };
+            if !retry {
+                bounded_keys.preflight()?;
+            }
+            let action = json!({"kind":"fleet_create","task_force":tf});
+            let info = std::cell::RefCell::new(Value::Null);
+            let count_before = fleets.len();
+            let mut settle = || {
+                let now = navalact::own_fleets(process)?;
+                let verdict = match &plan {
+                    Some(p) => navalact::settle_create(&now, p),
+                    None => {
+                        let alone = now.iter().any(|f| f.task_forces.len() == 1 && f.task_forces[0].name.trim().eq_ignore_ascii_case(tf.trim()));
+                        if alone && now.len() > 1 { settle::Verdict::Reached } else { settle::Verdict::Unchanged }
+                    }
+                };
+                let _ = count_before;
+                Ok(verdict.outcome(json!({"fleets":now.iter().map(|f| f.name.trim()).collect::<Vec<_>>()})))
+            };
+            let mut dispatch = || {
+                authority.authorize(token, &epoch)?;
+                let Some(plan) = &plan else {
+                    return Err(Error::new("action_uncertain", "A retried request is never dispatched again"));
+                };
+                *info.borrow_mut() = navalact::create_fleet(process, keys, plan)?;
+                Ok(())
+            };
+            let receipt = actions.execute_with(id, &epoch, action, &mut settle, &mut dispatch, true)?;
+            return Ok(json!({"receipt":receipt,"result":*info.borrow()}));
+        }
+        if name == "hoi4_navy_ui" {
+            allowed(
+                args,
+                &["op", "root", "path", "depth", "index", "items", "x", "y", "code", "letter", "pixels", "lease_token"],
+            )?;
+            let token = string(args, "lease_token")?;
+            let epoch = guard.observe(process)?.epoch;
+            authority.authorize(token, &epoch)?;
+            let op = string(args, "op")?;
+            let num = |k: &str| args.get(k).and_then(Value::as_f64).unwrap_or(0.0);
+            return match op {
+                "dump" => navalui::dump(process, args),
+                "click" => {
+                    self.keys.preflight()?;
+                    self.keys.click(navalui::GAME, num("x"), num("y")).map(|p| json!({"clicked":format!("{p:?}")}))
+                }
+                "rclick" => {
+                    self.keys.preflight()?;
+                    self.keys.right_click(navalui::GAME, num("x"), num("y")).map(|p| json!({"rclicked":format!("{p:?}")}))
+                }
+                "code" => {
+                    self.keys.preflight()?;
+                    self.keys.press_code(num("code") as u16).map(|_| json!({"pressed":num("code")}))
+                }
+                "letter" => {
+                    self.keys.preflight()?;
+                    let c = string(args, "letter")?.chars().next().unwrap_or('z');
+                    self.keys.press(Key::letter(c)?).map(|_| json!({"pressed":c.to_string()}))
+                }
+                "escape" => {
+                    self.keys.preflight()?;
+                    self.keys.press(Key::Escape).map(|_| json!({"pressed":"escape"}))
+                }
+                "find" => {
+                    self.keys.preflight()?;
+                    ui::find_state(process, &self.keys, num("x") as i32).map(|_| json!({"found":num("x")}))
+                }
+                "scroll" => {
+                    self.keys.preflight()?;
+                    self.keys.scroll(navalui::GAME, (num("x"), num("y")), num("pixels") as i32).map(|_| json!({"scrolled":num("pixels")}))
+                }
+                _ => Err(Error::new("invalid_arguments", "Unknown op")),
+            };
         }
         if name == "hoi4_air_wings" {
             allowed(args, &["lease_token"])?;
