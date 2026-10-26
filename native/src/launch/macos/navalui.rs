@@ -389,6 +389,16 @@ pub(super) fn dump(process: &dyn Process, args: &Map<String, Value>) -> Result<V
             "target" => target_bar(r, image)?,
             "toolbar" => tool_bar(r, image)?,
             "bottom" => bottom_bar(r, image)?,
+            custom if custom.starts_with("view:") => {
+                // view:<slot hex>:<field hex> (debug: any interface-manager view's window field).
+                let mut parts = custom.split(':').skip(1);
+                let parse = |p: Option<&str>| {
+                    p.and_then(|v| u64::from_str_radix(v.trim_start_matches("0x"), 16).ok())
+                        .ok_or_else(|| Error::new("invalid_arguments", "view:<slot hex>:<field hex>"))
+                };
+                let (slot, field) = (parse(parts.next())?, parse(parts.next())?);
+                root_at(r, image, view(r, image, slot)?, field)?
+            }
             "entry" => *entry_windows(r, image)?
                 .get(index)
                 .ok_or_else(|| Error::new("invalid_target", "No such entry"))?,

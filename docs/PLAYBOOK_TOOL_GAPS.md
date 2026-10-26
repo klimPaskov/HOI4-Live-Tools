@@ -596,14 +596,65 @@ the module constants; nothing is copied from Linux or Windows.
 | `hoi4_designs {kind?, custom_only?, detail?, name?}` | the 48 own designs: id, name, hull/chassis, parent design, manpower, production lines using it; detail adds non-zero stats and module per slot | Names and hulls match the vanilla ship/plane designs; 168 default-variant stat values match the equipment files (27 differ by modules/bonuses) |
 
 Registered in `tools()`, `supports()` and `call` of `launch/macos.rs`; for the broker add the four names to the
-READ set of `macplay.py`. `hoi4_air_wings` (panel read with input) is unchanged.
+READ set of `macplay.py`. `hoi4_air_wings` (panel read with input) is unchanged; section 6c adds the air orders.
 
 Not validated (`validated:false` in the output): the mission code of a task force (0 = idle, 1 = AI task force
-holding a region are the only observed readings), ship morale and experience points, air mission mask and
-region id (decoded from other countries' wings; no own wing had a mission), aircraft count growth over time.
+holding a region are the only observed readings), ship morale and experience points, aircraft count growth over time.
+The air mission mask and region of own wings were validated later the same day (section 6c).
 Not found: admiral of a fleet (the only leader pointers found belonged to foreign fleets), fuel, supply, current
 organisation, needed/escort/lost convoys and convoy routes, the obsolete and producible flags of a design,
 air superiority per region, aces. Design creation and fleet/air orders are untouched (see 3.3, 3.9, 3.10).
+
+---
+
+## 6c. Air orders, regions and production (macOS, ordinary input)
+
+Added on 26 October 2026 in the main tree (`native/src/launch/macos/{airui,airact,air,airread,mapdata}.rs`, tools in
+`launch/macos.rs`; macOS 089EA519 only). All routes are the game's own controls in the strategic air map (F3); memory
+verifies every step; no step is retried after possible input; the map mode is restored afterwards. For the broker add the
+names to `macplay.py` READ/ACT.
+
+| Tool | Route (ordinary UI) | Typed refusals before input | Verified by |
+|---|---|---|---|
+| `hoi4_air_mission {wing, mission, state_id? / region?}` | L overview row, mission button, Find centres the state, right click | `wing_unknown`, `wing_ambiguous`, `region_unknown`, `region_state_mismatch`, `invalid_arguments` | wing mission mask and region pointer in memory (`hoi4_air`); `region` takes an id or name and is checked |
+| `hoi4_air_rebase {wing, state_id}` | wing row, Find centres the state, base circle located from the game's map icon objects, right click | `wing_unknown`, `air_base_unknown`, `nothing_to_change`, `air_base_full` | wing +0x44 transfer destination (base id), later the base itself |
+| `hoi4_air_wing_create {state_id, aircraft}` | left click on the base circle, N (Add new Air Wing), reserve row of the variant (up to 100 planes per click), Ok | `air_base_unknown`, `air_base_full`; while driving `no_reserve_aircraft`, `aircraft_not_in_reserve` (lists the reserve), `aircraft_ambiguous` | new wing name at the base |
+| `hoi4_air_wing_disband {wing}` | wing row, toolbar delete, OK | `wing_unknown`, `wing_ambiguous` | wing absent (equipment returns to reserve) |
+| `hoi4_air_wing_split {wing}` | wing row, toolbar split (halves the wing) | `wing_in_transfer`, `nothing_to_change` | one more wing, fewer aircraft in the original |
+| `hoi4_air_wing_merge {wing, with?}` | wing row, Shift click on the aircraft type's stack beside the base circle (the game's stack and Merge work on every wing of that type at the base), toolbar merge | `merge_different_base`, `merge_different_type`, `no_merge_partner`, `merge_group_larger` (when `with` names one partner but more wings of the type are there), `wing_in_transfer` | fewer wings of the group left holding all aircraft (a wing holds at most 100: 40+80+40 became 100+60); the selection array decides that exactly the group is selected |
+| `hoi4_air_hold {wing}` | wing row, toolbar Hold Air Wings (the wing then reads 'Standing by') | `nothing_to_change` (already standing by) | assigned-region pointer cleared; the last mission selection stays in the mask |
+| `hoi4_air_regions {}` (read) | memory + map files | | own wings and bases per strategic region, free base capacity |
+| `hoi4_air_region_probe {state_id}` | Find, left click on the region, read the region window, close | | active aircraft by type, detection, efficiency exactly as the air map shows them |
+
+Mapped live on 26 October 2026 (Germany, 1 January 1936, 1920x1080), evidence in `qualification-20261026-air/`:
+* base icons: `CMapIconManagerImpl` (image global +0x351abf0) holds an array of `CAirBaseMapIcon` (world x/z at +0x48/+0x50
+  equal the `air_base` rows of `map/buildings.txt`); the circle sits 7 px right and 6 px below the top-left of its `bg_btn`
+  rectangle; left clicks at 1404,609 and 836,304 selected the right bases, a right click moved a wing;
+* the selected wings are an array at the air selection view +0x60; a wing's assigned region is the pointer at wing +0xb8
+  (file id +0x40, template name), null while the wing stands by (set by a mission order, cleared by Hold); +0x98 is the
+  mission bit mask (1 air superiority, 2 CAS, 4 interception, 8 strategic bombing read live) and stays stale after a
+  Hold; +0xc0/+0xc8 hold the province list of the area (count 87 for Eastern Germany) and +0xc8 is not a region id;
+* a mission button flips the wing's mission bit at once; a held wing keeps the bit but shows the button off, so the
+  tool decides whether to click from the bit in memory (clicking again would clear it and the next right click
+  would assign a region without mission: seen on JG 136 and KG 1);
+* a transfer finishes within hours (JG 132 and JG 134 arrived at 66 and 56 after about 3 game weeks of a speed-4 run,
+  the tool pauses again); the wing window needs reserve planes (disband a wing or produce aircraft first);
+* the game set no range limit on a rebase (a 570 km fighter wing was accepted 207 map units away); missions do have one:
+  `JG 136` (Oberbayern) over Eastern Germany and `KG 1` over North-West Germany were silently ignored (the mission
+  mask was cleared) and are reported as `input_readback_failed` ("did not change");
+* the hold button clears region and mission; a split halves (80 -> 40 + 40) and keeps both halves selected; merge
+  keeps the first wing's name; creating an air group (toolbar button next to split) is NOT part of these tools (it
+  creates a theatre; undo with the toolbar's remove-from-group button).
+
+Existing tools verified live with air content (same session): `hoi4_construction_add {building:"air_base", state_id:50}`
+queued an air base (queue line `air_base`, no slot needed, state must be an own land state below level 10);
+`hoi4_production_add {equipment:"fighter_equipment_1", design:1319, factories:2}` and `{equipment:"CAS_equipment_1",
+design:1323, factories:2}` added new lines next to the existing 1-factory lines.
+
+Not available or not driven: per-wing aggressiveness and day/night (cycle buttons, no memory field found), reinforcement
+preference and niche dropdowns, aces (none exist yet; the wing's ace button needs an ace pilot), paradrop (an army
+ability, not an air wing order), changing the composition of an existing wing (the reorganisation window was reachable
+only through "new wing"), percent or intensity of a mission (the game has none), multi-wing orders in one call.
 
 ---
 

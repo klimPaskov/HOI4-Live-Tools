@@ -84,7 +84,7 @@ fn ui(r: &Reader<'_>) -> Result<&'static Ui> {
         )),
     }
 }
-fn view_root(r: &Reader<'_>, image: u64, slot: u64, root: u64) -> Result<u64> {
+pub(super) fn view_root(r: &Reader<'_>, image: u64, slot: u64, root: u64) -> Result<u64> {
     let u = ui(r)?;
     let idler = r.u64(image + game::layout(r).idler_global)?;
     let view = r.u64(r.u64(idler + u.manager)? + slot)?;
@@ -95,7 +95,7 @@ fn view_root(r: &Reader<'_>, image: u64, slot: u64, root: u64) -> Result<u64> {
     gui_tree::container(r, object + u.container_base, image)?
         .ok_or_else(|| Error::new("invalid_gui", "Air view root required"))
 }
-fn named_child(r: &Reader<'_>, image: u64, object: u64, name: &str) -> Result<Option<u64>> {
+pub(super) fn named_child(r: &Reader<'_>, image: u64, object: u64, name: &str) -> Result<Option<u64>> {
     for child in gui_tree::children(r, object)? {
         if gui_tree::name(r, child, image)?.as_deref() == Some(name) {
             return gui_tree::container(r, child, image);
@@ -103,14 +103,14 @@ fn named_child(r: &Reader<'_>, image: u64, object: u64, name: &str) -> Result<Op
     }
     Ok(None)
 }
-fn text(r: &Reader<'_>, base: u64) -> Result<String> {
+pub(super) fn text(r: &Reader<'_>, base: u64) -> Result<String> {
     r.string_bounded(base + ui(r)?.text, 128)
 }
-fn frame(r: &Reader<'_>, icon: u64) -> Result<i32> {
+pub(super) fn frame(r: &Reader<'_>, icon: u64) -> Result<i32> {
     let u = ui(r)?;
     r.i32(r.u64(icon + u.icon_sprite)? + u.sprite_frame)
 }
-fn entry_frame(r: &Reader<'_>, image: u64, item: u64) -> Result<Option<u64>> {
+pub(super) fn entry_frame(r: &Reader<'_>, image: u64, item: u64) -> Result<Option<u64>> {
     let u = ui(r)?;
     let entry = r.u64(item + u.item_container)?;
     let base = if r.u64(entry)? == image + u.container_vtable {
@@ -122,7 +122,7 @@ fn entry_frame(r: &Reader<'_>, image: u64, item: u64) -> Result<Option<u64>> {
 }
 
 /// Whether the Air Forces Overview list is shown.
-fn overview_open(r: &Reader<'_>, image: u64) -> Result<bool> {
+pub(super) fn overview_open(r: &Reader<'_>, image: u64) -> Result<bool> {
     let u = ui(r)?;
     let root = view_root(r, image, u.overview, u.overview_root)?;
     if !gui_tree::visible(r, root)? {
@@ -134,14 +134,14 @@ fn overview_open(r: &Reader<'_>, image: u64) -> Result<bool> {
     }
 }
 #[derive(Clone, Debug, PartialEq)]
-struct Wing {
-    name: String,
-    base: String,
-    region: String,
-    missions: Vec<i32>,
-    rect: Option<Rect>,
+pub(super) struct Wing {
+    pub name: String,
+    pub base: String,
+    pub region: String,
+    pub missions: Vec<i32>,
+    pub rect: Option<Rect>,
 }
-fn wings(r: &Reader<'_>, image: u64) -> Result<Vec<Wing>> {
+pub(super) fn wings(r: &Reader<'_>, image: u64) -> Result<Vec<Wing>> {
     let u = ui(r)?;
     let root = view_root(r, image, u.overview, u.overview_root)?;
     let units = named_child(r, image, root, "air_units")?
@@ -177,12 +177,17 @@ fn wings(r: &Reader<'_>, image: u64) -> Result<Vec<Wing>> {
     }
     Ok(out)
 }
+/// The air selection view's root window.
+pub(super) fn selection_root(r: &Reader<'_>, image: u64) -> Result<u64> {
+    let u = ui(r)?;
+    view_root(r, image, u.selection, u.selection_root)
+}
 /// Whether wings are selected (the air selection toolbar is shown).
-fn selection_open(r: &Reader<'_>, image: u64) -> Result<bool> {
+pub(super) fn selection_open(r: &Reader<'_>, image: u64) -> Result<bool> {
     let u = ui(r)?;
     gui_tree::visible(r, view_root(r, image, u.selection, u.selection_root)?)
 }
-fn toolbar_button(r: &Reader<'_>, image: u64, name: &str) -> Result<Rect> {
+pub(super) fn toolbar_button(r: &Reader<'_>, image: u64, name: &str) -> Result<Rect> {
     let u = ui(r)?;
     let root = view_root(r, image, u.selection, u.selection_root)?;
     let bar = named_child(r, image, root, "air_wing_toolbar")?
@@ -192,7 +197,7 @@ fn toolbar_button(r: &Reader<'_>, image: u64, name: &str) -> Result<Rect> {
     gui_tree::rect(r, image, button, GAME)
 }
 /// (icon frame, rectangle, enabled, toggled on) of the mission buttons.
-fn mission_buttons(r: &Reader<'_>, image: u64) -> Result<Vec<(i32, Rect, bool, bool)>> {
+pub(super) fn mission_buttons(r: &Reader<'_>, image: u64) -> Result<Vec<(i32, Rect, bool, bool)>> {
     let u = ui(r)?;
     let root = view_root(r, image, u.selection, u.selection_root)?;
     let bar = named_child(r, image, root, "mission_toolbar")?
@@ -221,7 +226,7 @@ fn mission_buttons(r: &Reader<'_>, image: u64) -> Result<Vec<(i32, Rect, bool, b
     }
     Ok(out)
 }
-fn deselect(process: &dyn Process, keys: &MacKeys) -> Result<()> {
+pub(super) fn deselect(process: &dyn Process, keys: &MacKeys) -> Result<()> {
     if read(process, selection_open)? {
         let rect = settled(process, "air toolbar", |r, i| {
             toolbar_button(r, i, "btn_close")
@@ -234,7 +239,7 @@ fn deselect(process: &dyn Process, keys: &MacKeys) -> Result<()> {
     }
     Ok(())
 }
-fn open_overview(process: &dyn Process, keys: &MacKeys) -> Result<()> {
+pub(super) fn open_overview(process: &dyn Process, keys: &MacKeys) -> Result<()> {
     clear_notices(process, keys)?;
     deselect(process, keys)?;
     if !read(process, overview_open)? {
@@ -257,31 +262,9 @@ pub(super) fn list(process: &dyn Process, keys: &MacKeys) -> Result<Value> {
         "missions":MISSIONS.iter().map(|(n, _)| *n).collect::<Vec<_>>()}),
     )
 }
-/// The wing's row as last read (for settling receipts).
-pub(super) fn wing_state(process: &dyn Process, name: &str) -> Result<Option<Value>> {
-    let found = read(process, |r, i| {
-        if overview_open(r, i)? {
-            wings(r, i)
-        } else {
-            Ok(Vec::new())
-        }
-    })?;
-    Ok(found.iter().find(|w| w.name == name).map(wing_json))
-}
-
-/// Give wing `name` mission `mission` over the region containing `state`.
-pub(super) fn assign(
-    process: &dyn Process,
-    keys: &MacKeys,
-    name: &str,
-    mission: &str,
-    state: i32,
-) -> Result<()> {
-    let wanted = MISSIONS
-        .iter()
-        .find(|(n, _)| *n == mission)
-        .map(|(_, f)| *f)
-        .ok_or_else(|| Error::new("invalid_arguments", "Unknown mission"))?;
+/// Select the named wing through its row in the Air Forces Overview (opens it, scrolls the row into
+/// view, one click); returns the row as it was before the click.
+pub(super) fn select_wing(process: &dyn Process, keys: &MacKeys, name: &str) -> Result<Option<Wing>> {
     open_overview(process, keys)?;
     let find = |r: &Reader<'_>, i: u64| -> Result<Option<Rect>> {
         Ok(wings(r, i)?
@@ -313,6 +296,23 @@ pub(super) fn assign(
     keys.click(GAME, x.min(330.0), y)?;
     wait(process, "air wing selected", selection_open)?;
     std::thread::sleep(std::time::Duration::from_millis(250));
+    Ok(before)
+}
+
+/// Give wing `name` mission `mission` over the region containing `state`.
+pub(super) fn assign(
+    process: &dyn Process,
+    keys: &MacKeys,
+    name: &str,
+    mission: &str,
+    state: i32,
+) -> Result<()> {
+    let wanted = MISSIONS
+        .iter()
+        .find(|(n, _)| *n == mission)
+        .map(|(_, f)| *f)
+        .ok_or_else(|| Error::new("invalid_arguments", "Unknown mission"))?;
+    select_wing(process, keys, name)?;
     let buttons = settled(process, "mission buttons", mission_buttons)?;
     let (_, button, enabled, _) = buttons
         .into_iter()
@@ -325,50 +325,49 @@ pub(super) fn assign(
             "The game disables this mission for this wing",
         ));
     }
-    // The button toggles on (state 2); the next right click assigns with it.
-    let toggled = |r: &Reader<'_>, i: u64| -> Result<bool> {
-        Ok(mission_buttons(r, i)?
-            .iter()
-            .any(|(f, _, _, on)| *f == wanted && *on))
+    // A mission button flips the wing's mission bit at once (a held wing keeps its last bit, and the
+    // toolbar then shows the button off although the bit is set: clicking it again would clear the bit
+    // and the right click would assign a region with no mission, seen live on JG 136 and KG 1,
+    // 26 October 2026). So the bit in memory decides whether to click, not the button's look.
+    let bit = 1 << (wanted - 1);
+    let has_bit = |r: &Reader<'_>, i: u64| -> Result<bool> {
+        Ok(super::airact::own_wing(r, i, name)?.is_some_and(|w| w.mission_mask & bit != 0))
     };
     let (x, y) = button.center();
-    for attempt in 0..2 {
-        if read(process, toggled)? {
-            break;
-        }
+    if !read(process, has_bit)? {
         keys.click(GAME, x, y)?;
-        match wait(process, "mission chosen", toggled) {
-            Ok(()) => break,
-            Err(error) if attempt == 1 => {
-                let _ = deselect(process, keys);
-                return Err(error);
-            }
-            Err(_) => std::thread::sleep(std::time::Duration::from_millis(300)),
+        if let Err(error) = wait(process, "mission chosen", has_bit) {
+            let _ = deselect(process, keys);
+            return Err(error);
         }
     }
     find_state(process, keys, state)?;
-    if !read(process, toggled)? {
+    if !read(process, has_bit)? {
         let _ = deselect(process, keys);
         return Err(Error::new(
             "input_readback_failed",
             "The mission choice was lost before the region click",
         ));
     }
+    let area = |w: &super::airread::Wing| (w.mission_mask, w.region_id);
+    let mem_before = read(process, |r, i| super::airact::own_wing(r, i, name))?.map(|w| area(&w));
+    // The camera glides to the state after the Find; give it time to rest before the click.
+    std::thread::sleep(std::time::Duration::from_millis(900));
     keys.right_click(GAME, 960.0, 540.0)?;
     std::thread::sleep(std::time::Duration::from_millis(300));
-    open_overview(process, keys)?;
-    wait(process, "air mission assigned", |r, i| {
-        Ok(wings(r, i)?.iter().any(|w| {
-            w.name == name
-                && !w.region.is_empty()
-                && w.missions.contains(&wanted)
-                && before.as_ref().is_none_or(|b| b.region != w.region || b.missions != w.missions)
+    let result = wait(process, "air mission assigned", |r, i| {
+        Ok(super::airact::own_wing(r, i, name)?.is_some_and(|w| {
+            w.mission_mask & bit != 0
+                && w.region_id > 0
+                && mem_before.is_none_or(|b| b != area(&w))
         }))
     })
     .map_err(|_| {
         Error::new(
             "input_readback_failed",
-            "The wing's region or missions did not change (out of range, or already assigned there)",
+            "The wing's mission or region did not change (the region is out of the wing's range, or the wing already has it)",
         )
-    })
+    });
+    let _ = deselect(process, keys);
+    result
 }

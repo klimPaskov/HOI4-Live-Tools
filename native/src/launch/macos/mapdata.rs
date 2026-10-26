@@ -133,6 +133,108 @@ fn mean(points: impl Iterator<Item = (f64, f64)>) -> Option<(f64, f64)> {
     (n > 0.0).then(|| (sx / n, sz / n))
 }
 
+/// `state;air_base;x;y;z;rotation;adjacent` rows of map/buildings.txt: state -> (x, z).
+pub(super) fn parse_air_bases(text: &str) -> HashMap<i32, (f64, f64)> {
+    let mut out = HashMap::new();
+    for line in text.lines() {
+        let mut f = line.split(';');
+        let (Some(s), Some(kind), Some(x), Some(_), Some(z)) =
+            (f.next(), f.next(), f.next(), f.next(), f.next())
+        else {
+            continue;
+        };
+        if kind.trim() != "air_base" {
+            continue;
+        }
+        if let (Ok(s), Ok(x), Ok(z)) = (s.trim().parse(), x.trim().parse(), z.trim().parse()) {
+            out.entry(s).or_insert((x, z));
+        }
+    }
+    out
+}
+/// Map position of every state's air base, read once per install.
+pub(super) fn air_base_positions(dir: &Path) -> Result<std::sync::Arc<HashMap<i32, (f64, f64)>>> {
+    type Bases = HashMap<i32, (f64, f64)>;
+    static CACHE: OnceLock<Mutex<HashMap<PathBuf, std::sync::Arc<Bases>>>> = OnceLock::new();
+    let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    if let Some(found) = cache.lock().unwrap().get(dir) {
+        return Ok(found.clone());
+    }
+    let text = std::fs::read_to_string(dir.join("map/buildings.txt"))
+        .map_err(|_| Error::new("map_data_unavailable", "Building positions unreadable"))?;
+    let parsed = std::sync::Arc::new(parse_air_bases(&text));
+    cache.lock().unwrap().insert(dir.to_path_buf(), parsed.clone());
+    Ok(parsed)
+}
+
+/// Provinces listed in a strategic region file's `provinces = { ... }` block.
+pub(super) fn parse_region_provinces(text: &str) -> Vec<i32> {
+    parse_state_provinces(text)
+}
+type RegionMap = HashMap<i32, i32>;
+/// Region holding most of a state's provinces: (region id, provinces in it, provinces).
+pub(super) type StateRegions = HashMap<i32, (i32, usize, usize)>;
+/// Province -> strategic region id, read once per install (map/strategicregions/N-Name.txt).
+pub(super) fn province_regions(dir: &Path) -> Result<std::sync::Arc<RegionMap>> {
+    static CACHE: OnceLock<Mutex<HashMap<PathBuf, std::sync::Arc<RegionMap>>>> = OnceLock::new();
+    let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    if let Some(found) = cache.lock().unwrap().get(dir) {
+        return Ok(found.clone());
+    }
+    let entries = std::fs::read_dir(dir.join("map/strategicregions"))
+        .map_err(|_| Error::new("map_data_unavailable", "Strategic regions unreadable"))?;
+    let mut out = HashMap::new();
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        let Some(id) = name.split('-').next().and_then(|v| v.parse::<i32>().ok()) else {
+            continue;
+        };
+        if let Ok(text) = std::fs::read_to_string(entry.path()) {
+            for p in parse_region_provinces(&text) {
+                out.entry(p).or_insert(id);
+            }
+        }
+    }
+    let out = std::sync::Arc::new(out);
+    cache.lock().unwrap().insert(dir.to_path_buf(), out.clone());
+    Ok(out)
+}
+/// Region holding most provinces of each state: state -> (region id, provinces in it, provinces).
+pub(super) fn state_regions(dir: &Path) -> Result<std::sync::Arc<StateRegions>> {
+    type Out = StateRegions;
+    static CACHE: OnceLock<Mutex<HashMap<PathBuf, std::sync::Arc<Out>>>> = OnceLock::new();
+    let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    if let Some(found) = cache.lock().unwrap().get(dir) {
+        return Ok(found.clone());
+    }
+    let regions = province_regions(dir)?;
+    let entries = std::fs::read_dir(dir.join("history/states"))
+        .map_err(|_| Error::new("map_data_unavailable", "State history unreadable"))?;
+    let mut out = HashMap::new();
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        let Some(id) = name.split('-').next().and_then(|v| v.parse::<i32>().ok()) else {
+            continue;
+        };
+        let Ok(text) = std::fs::read_to_string(entry.path()) else {
+            continue;
+        };
+        let provinces = parse_state_provinces(&text);
+        let mut votes: HashMap<i32, usize> = HashMap::new();
+        for p in &provinces {
+            if let Some(r) = regions.get(p) {
+                *votes.entry(*r).or_default() += 1;
+            }
+        }
+        if let Some((r, n)) = votes.into_iter().max_by_key(|(r, n)| (*n, -*r)) {
+            out.insert(id, (r, n, provinces.len()));
+        }
+    }
+    let out = std::sync::Arc::new(out);
+    cache.lock().unwrap().insert(dir.to_path_buf(), out.clone());
+    Ok(out)
+}
+
 /// Unit screen direction (x right, y down) from state `state` toward the
 /// mean position of `provinces` (the army's divisions).
 pub(super) fn direction_to(dir: &Path, state: i32, provinces: &[i32]) -> Result<(f64, f64)> {
@@ -168,5 +270,13 @@ mod tests {
         let s =
             "state={\n id=86\n history={ victory_points = { 1 2 } }\n provinces={\n 3 4 5\n }\n}";
         assert_eq!(parse_state_provinces(s), vec![3, 4, 5]);
+    }
+    #[test]
+    fn parses_air_base_rows() {
+        let b = parse_air_bases("64;arms_factory;1;2;3;0;0\n64;air_base;3024.78;9.70;1565.10;5.08;0\nbad\n52;air_base;2975.56;12.30;1479.55;-0.12;0\n");
+        assert_eq!(b.get(&64), Some(&(3024.78, 1565.10)));
+        assert_eq!(b.get(&52), Some(&(2975.56, 1479.55)));
+        assert_eq!(b.len(), 2);
+        assert_eq!(parse_region_provinces("provinces={ 1 2 3 }"), vec![1, 2, 3]);
     }
 }
