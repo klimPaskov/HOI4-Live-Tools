@@ -87,6 +87,7 @@ pub(super) fn get(process: &dyn Process, only: Option<&str>) -> Result<Value> {
                 .collect();
             rows.push(json!({
                 "template":t.name,
+                "priority":units::priority_name(t.priority),
                 "columns":columns,
                 "support":t.support,
                 "composition":combat,

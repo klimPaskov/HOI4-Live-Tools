@@ -130,8 +130,13 @@ fn open(r: &Reader<'_>, image: u64) -> Result<bool> {
         .ok_or_else(|| Error::new("invalid_gui", "Deployment view root unavailable"))?;
     gui_tree::visible(r, root)
 }
-/// Train button of the row for template `name`.
-fn train_button(r: &Reader<'_>, image: u64, name: &str) -> Result<Rect> {
+/// Row button `button` of the template row `name` and whether the game disables it.
+pub(super) fn row_button(
+    r: &Reader<'_>,
+    image: u64,
+    name: &str,
+    button: &str,
+) -> Result<(Rect, bool)> {
     let u = ui(r)?;
     let names = templates(r, image)?;
     let window = r.u64(view(r, image)? + u.template_window)?;
@@ -170,15 +175,43 @@ fn train_button(r: &Reader<'_>, image: u64, name: &str) -> Result<Rect> {
     };
     let frame = gui_tree::container(r, r.u64(row + u.row_container)?, image)?
         .ok_or_else(|| Error::new("invalid_gui", "Template row window required"))?;
-    let button = gui_tree::child(r, image, frame, "add_template_button")?
-        .ok_or_else(|| Error::new("gui_target_unavailable", "Train button not found"))?;
-    if gui_tree::disabled(r, button)? {
+    let widget = gui_tree::child(r, image, frame, button)?
+        .ok_or_else(|| Error::new("gui_target_unavailable", format!("{button} not found")))?;
+    Ok((
+        gui_tree::rect(r, image, widget, GAME)?,
+        gui_tree::disabled(r, widget)?,
+    ))
+}
+/// Train button of the row for template `name`.
+fn train_button(r: &Reader<'_>, image: u64, name: &str) -> Result<Rect> {
+    let (rect, disabled) = row_button(r, image, name, "add_template_button")?;
+    if disabled {
         return Err(Error::new(
             "invalid_target",
             "The game disables training this template",
         ));
     }
+    Ok(rect)
+}
+/// The panel's own Division Designer button (container +0xc00 of the template window).
+pub(super) fn designer_button(r: &Reader<'_>, image: u64) -> Result<Rect> {
+    let window = r.u64(view(r, image)? + MACOS.template_window)?;
+    let root = gui_tree::container(r, r.u64(window + 0xc00)?, image)?
+        .ok_or_else(|| Error::new("invalid_gui", "Template window root unavailable"))?;
+    let button = gui_tree::child(r, image, root, "open_designer_button")?
+        .ok_or_else(|| Error::new("gui_target_unavailable", "Division Designer button not found"))?;
     gui_tree::rect(r, image, button, GAME)
+}
+/// Open the Recruit & Deploy panel (U) if it is closed.
+pub(super) fn ensure_open(process: &dyn Process, keys: &MacKeys) -> Result<()> {
+    if !read(process, open)? {
+        keys.press(Key::letter('u')?)?;
+        wait(process, "open deployment", open)?;
+        // The panel slides in over about half a second and two reads in one frame look
+        // "settled" in mid-slide (seen live: a click aimed at Edit landed on Train).
+        std::thread::sleep(std::time::Duration::from_millis(1100));
+    }
+    Ok(())
 }
 
 /// Close the Recruit & Deploy panel when an earlier action left it open: it covers

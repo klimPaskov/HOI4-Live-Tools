@@ -50,6 +50,19 @@ pub(super) struct Layout {
     template_name: u64,
     template_grid: u64,
     template_support: u64,
+    /// CDivisionTemplateData (embedded at +0x18 of the own CReferencedDivisionTemplate and
+    /// the Division Designer's working copy): vtable, name, grid, support, priority. Mapped
+    /// live on 26 October 2026: the own template's data equals the designer's draft layout.
+    data_vtable: u64,
+    data_name: u64,
+    data_grid: u64,
+    data_support: u64,
+    data_priority: u64,
+    data_in_template: u64,
+    /// CTechnologyStatus array of every sub-unit definition (106 on this build), and the
+    /// definition's group id (equal for every definition of one `group =`).
+    subunit_catalog: u64,
+    subunit_group: u64,
     subunit_vtable: u64,
     subunit_key: u64,
     equipment_type_vtable: u64,
@@ -88,6 +101,14 @@ const MACOS: Layout = Layout {
     template_name: 0x20,
     template_grid: 0x58,
     template_support: 0x78,
+    data_vtable: 0x32fd7e0,
+    data_name: 0x8,
+    data_grid: 0x40,
+    data_support: 0x60,
+    data_priority: 0x17c,
+    data_in_template: 0x18,
+    subunit_catalog: 0x320,
+    subunit_group: 0x56c,
     subunit_vtable: 0x331e6e8,
     subunit_key: 0x10,
     equipment_type_vtable: 0x3379328,
@@ -253,6 +274,122 @@ pub(super) struct Template {
     pub support: Vec<String>,
     pub subunits: Vec<SubUnit>,
     pub support_units: Vec<SubUnit>,
+    /// 0 reserve, 1 regular, 2 elite (the designer's three priority buttons).
+    pub priority: i32,
+}
+/// The designer's three priority buttons: stored 0, 1, 2.
+pub(super) fn priority_name(p: i32) -> &'static str {
+    match p {
+        0 => "reserve",
+        1 => "regular",
+        2 => "elite",
+        _ => "unknown",
+    }
+}
+pub(super) fn priority_value(name: &str) -> Option<i32> {
+    match name {
+        "reserve" => Some(0),
+        "regular" => Some(1),
+        "elite" => Some(2),
+        _ => None,
+    }
+}
+/// One template layout as the Division Designer's working copy or a saved template stores it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct Layout5 {
+    pub name: String,
+    /// `columns[x]` lists the regiment column x top to bottom, empty cells removed.
+    pub columns: Vec<Vec<String>>,
+    pub support: Vec<String>,
+    pub priority: i32,
+}
+/// Every sub-unit definition (key, group id, width), from the catalog array.
+#[derive(Clone, Debug, PartialEq)]
+pub(super) struct Def {
+    pub address: u64,
+    pub key: String,
+    pub group: i32,
+    pub width: f64,
+}
+pub(super) fn catalog(r: &Reader<'_>, image: u64) -> Result<Vec<Def>> {
+    let l = layout(r)?;
+    let country = own_country(r, image)?;
+    let status = r.u64(country + 0xd08)?;
+    let list = r.pointer_array(status + l.subunit_catalog)?;
+    if list.len() > 400 {
+        return Err(Error::new("invalid_array", "Too many sub-unit definitions"));
+    }
+    let mut out = Vec::new();
+    for p in list {
+        if !is_ptr(p) || r.u64(p)? != image + l.subunit_vtable {
+            continue;
+        }
+        out.push(Def {
+            address: p,
+            key: r.string_bounded(p + l.subunit_key, 64)?,
+            group: r.i32(p + l.subunit_group)?,
+            width: fixed(r, p + SUB.width)?,
+        });
+    }
+    Ok(out)
+}
+/// Key of the sub-unit definition at `p`, None when `p` is not one.
+pub(super) fn key_at(r: &Reader<'_>, image: u64, p: u64) -> Result<Option<String>> {
+    let l = layout(r)?;
+    if p == 0 || !is_ptr(p) || r.u64(p)? != image + l.subunit_vtable {
+        return Ok(None);
+    }
+    Ok(Some(r.string_bounded(p + l.subunit_key, 64)?))
+}
+/// Read the template data object at `data`; cells are sub-unit keys.
+pub(super) fn template_data(r: &Reader<'_>, image: u64, data: u64) -> Result<Layout5> {
+    let l = layout(r)?;
+    exact(r, image, data, l.data_vtable, "template data")?;
+    let key_of = |p: u64| -> Result<Option<String>> {
+        if p == 0 || !is_ptr(p) || r.u64(p)? != image + l.subunit_vtable {
+            return Ok(None); // empty cell (null object)
+        }
+        Ok(Some(r.string_bounded(p + l.subunit_key, 64)?))
+    };
+    let grid = r.pointer_array(data + l.data_grid)?;
+    if grid.len() > 25 {
+        return Err(Error::new("invalid_array", "Template grid exceeds 5x5"));
+    }
+    let mut columns: Vec<Vec<String>> = vec![Vec::new(); 5];
+    for (i, cell) in grid.iter().enumerate() {
+        if let Some(key) = key_of(*cell)? {
+            columns[i / 5].push(key);
+        }
+    }
+    while columns.last().is_some_and(Vec::is_empty) {
+        columns.pop();
+    }
+    let mut support = Vec::new();
+    for cell in r.pointer_array(data + l.data_support)?.into_iter().take(5) {
+        if let Some(key) = key_of(cell)? {
+            support.push(key);
+        }
+    }
+    Ok(Layout5 {
+        name: r.string_bounded(data + l.data_name, 128)?,
+        columns,
+        support,
+        priority: r.i32(data + l.data_priority)?,
+    })
+}
+/// The own templates' layouts in list order (the same data object the designer edits a copy of).
+pub(super) fn template_layouts(r: &Reader<'_>, image: u64) -> Result<Vec<Layout5>> {
+    let l = layout(r)?;
+    let country = own_country(r, image)?;
+    let mut out = Vec::new();
+    for t in r.pointer_array(country + l.country_templates)? {
+        if out.len() >= 128 {
+            return Err(Error::new("invalid_array", "Too many templates"));
+        }
+        exact(r, image, t, l.template_vtable, "division template")?;
+        out.push(template_data(r, image, t + l.data_in_template)?);
+    }
+    Ok(out)
 }
 pub(super) fn read_subunit(r: &Reader<'_>, image: u64, p: u64) -> Result<SubUnit> {
     let l = layout(r)?;
@@ -354,6 +491,7 @@ pub(super) fn templates(r: &Reader<'_>, image: u64) -> Result<Vec<Template>> {
             support,
             subunits,
             support_units,
+            priority: r.i32(t + l.data_in_template + l.data_priority)?,
         });
     }
     Ok(out)

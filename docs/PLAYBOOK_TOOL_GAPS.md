@@ -878,3 +878,92 @@ read, no lease, no input, never pauses, about 4 ms. Offsets for Mach-O 089EA519 
   (computed on demand: DEFAULT 0.5 plus modifiers and party popularity), PP daily gain, fuel days left.
 - Not live-validated: any modifier id whose idea contribution is only part of the total, the
   consumer goods share, free-trade pool semantics. Production/trade panels were never opened.
+
+## 10. Division template management (macOS, 26 October 2026)
+
+Code: `native/src/launch/macos/{designer,template_edit}.rs` (+ `units.rs` template data reader,
+`deployment.rs` row buttons, `live_designer.rs` opt-in live probes). Closes 3.4 (editor half).
+
+- `hoi4_template_create {name, regiments:[[key..]x5 columns], support:[key..5], priority?}`,
+  `hoi4_template_edit {template, regiments?, support?, priority?, new_name?, allow_in_use?}`,
+  `hoi4_template_rename {template, new_name}`, `hoi4_template_delete {template}`,
+  `hoi4_template_options {}` (read through the designer window; lease needed).
+  `priority` is reserve, regular or elite (the designer's three buttons; stored 0/1/2).
+- Route (all ordinary input): `U` opens Recruit & Deploy; the "Division Designer" button (create) or a
+  row's `Edit` button (edit/rename) opens the designer; "Create Empty" in its template dropdown starts a
+  draft; a slot click opens the selection window (group list, then the unlocked units of one group;
+  support slots list companies directly); Shift+click removes a unit; the name box takes typed keys
+  (Backspace to erase, Shift for capitals); priority buttons; `Save`/`Update`/`Rename`. Delete is the
+  row's trash button plus the game's confirmation. Every step is verified against the designer's working
+  copy (`CDivisionTemplateData`, view +0x2110 -> +8) and the saved result against the own template list.
+- Costs (read from the window and returned): 5 army experience per battalion added, replaced or removed,
+  10 per company, +25 for the first unit of a new group (a new column of another group); nothing costs
+  political power. A column holds one group (infantry+mountaineers together; cavalry, artillery, armour
+  each in their own column). Save is disabled by the game when unaffordable.
+- Typed refusals before input: name_taken, name_not_typable, unit_unknown (5 closest keys), unit_wrong_slot,
+  column_mixed_groups, template_too_wide (>40), regiments_gap, support_duplicate, empty_template,
+  template_unknown, nothing_to_change, template_in_use (divisions/training lines; the game refuses delete,
+  and re-organises divisions on a composition edit unless allow_in_use), insufficient_experience (lower
+  bound before any edit, exact cost before Save). Found while building (draft dropped, nothing saved):
+  unit_not_unlocked, slot_locked (row 5 is locked on this build state).
+- Not covered: regimental support row, army HQ templates, Ctrl+click fill, equipment variant selection.
+
+## 11. Equipment designers (macOS, 26 October 2026)
+
+Code: `native/src/launch/macos/{design_ui,design_edit}.rs` (+ `fleetmem.rs` upgrade/obsolete reads,
+`designs.rs`, `production.rs`, opt-in live probes in `live_designs.rs`). Closes 3.3 for upgrade-style
+tanks/planes and for ships; first slice of 3.2's variant selection.
+
+| Tool | Does | Route (ordinary input) |
+|---|---|---|
+| `hoi4_design_options {kind, lease_token, base?, slot?, measure_costs?}` | Without `base`: own designs of that kind with their designer type (`upgrade` or `modules`), no input. With `base` (design id, exact name or type key): opens the base's designer and reads it, closes it again, saves nothing. Upgrade designer: rows (key, label, level, experience per level measured by one step up and down), stats. Ship designer: every slot (locked/fixed/current module) and per slot the selector's categories and unlocked modules with cost text | `Y`, category button (Ships, Armored, Aircraft, Infantry), the row's Create variant button; slot button, category, module |
+| `hoi4_design_create {kind, base, upgrades \| modules, name?, request_id}` | New variant. Tank/plane/other without module slots: `upgrades {gun\|armor\|reliability\|engine\|range\|...: level 0..20}`. Ship: `modules {slot: module_key \| null}` (only named slots change). `name` optional (default `<type> XXXX` derived from the request id so a retry settles on it). Custom (named) ship bases are saved with the designer's Save-As-New so the original and its lines stay | Create variant button; `+` on the upgrade row / slot button, category, module; name box (click, Backspace, typed keys); Save |
+| `hoi4_design_obsolete {design, obsolete?: true\|false, request_id}` | Decommission / recommission a variant | the row's Decommission button in the Production list; "Show outdated equipment" is ticked and restored by the tool when it must reach a hidden row |
+| `hoi4_design_set_production {line, design, accept_progress_loss, request_id}` | Retarget an existing line to another design (same family) | the line's equipment picture, then the design's row in the list that opens; the game warns that line progress is lost |
+| `hoi4_production_add` gains `design` | Selects exactly that design in the add list instead of the first one listed | unchanged add flow |
+| `hoi4_designs` gains `obsolete` and `upgrades` | memory reads | none |
+
+Typed refusals before input: `kind_mismatch`, `base_unknown`, `base_ambiguous`, `slot_unknown`, `name_taken` (per
+equipment type), `name_not_typable`, `nothing_to_change`, `invalid_arguments` (upgrades on a module design and
+the reverse), `design_unknown`, `already_obsolete`, `not_obsolete`, `line_unknown`, `design_wrong_type`,
+`design_obsolete`, `already_building`, `progress_loss_unconfirmed`, `design_wrong_equipment`. Found while
+driving (nothing saved, the draft is dropped): `upgrade_unknown`, `upgrade_level_max`, `slot_locked`,
+`module_unavailable` (lists the unlocked modules), `insufficient_experience`, `design_invalid` (the game
+disables the picture of a design lacking a battery/core module), `design_not_selectable`,
+`designer_unsupported`. Settlement rules sit next to the tools in `design_edit.rs` (`settle_create`,
+`settle_retry`, `settle_obsolete`, `settle_set_production`: only new designs of that base and type, or the one
+flag, or the one line's design are compared; the date, other designs and other lines drift freely).
+
+Costs measured live (army/air/navy experience, never political power): tank upgrade level 10 army per level
+(Main Gun +1 on the Panzer II: 22 -> 12 army experience), plane upgrade level 25 air per level (Engine +1:
+50 -> 25), ship module replace 3-6 navy per module (new empty slot 5, e.g. destroyer with three changed
+modules: 15), Save-As-New of a custom cruiser with one module replaced: 3. Experience is read from the window
+and returned as `experience_before` / `experience_cost`.
+
+Facts found: the tank and plane designs of this build state use the upgrade designer (four rows: tank Armor,
+Reliability, Main Gun, Engine; plane Reliability, Range, Weapons, Engine) opened from the Production list;
+only ship hulls open the module designer. Infantry/support/artillery equipment opens an upgrade designer with no
+rows (nothing to change). The production add list shows the *first* non-obsolete design of an equipment type;
+to build a new variant pass `design` to `hoi4_production_add`, or retarget a line with
+`hoi4_design_set_production`. Decommissioned designs are hidden from that list; the game keeps the filter state
+between openings, so the tools restore it. Designs the game flags invalid (default hulls without a battery) have
+a disabled picture button and cannot be added to a line.
+
+Live evidence (a private run, Germany 15 October 1938, paused): created design 5186 "Pz II Gun1"
+(tank, Main Gun 1; stats read back build_cost_ic 8.55 -> 9.0, soft_attack 16.0 -> 16.48), 5189 "Zz Bf 109 Eng"
+(fighter, Engine 1; maximum_speed 500 -> 510), 5187 "Zz Test DD" (destroyer with ship_light_battery_2,
+ship_anti_air_2 and ship_torpedo_2; modules read back exactly, torpedo_attack 18 -> 24), 5188 "Zz Leipzig AA2"
+(derived from the named Leipzig by Save-As-New, front slot ship_anti_air_2; the original 1356 unchanged), 5190
+"Zz Test DD2"; decommission/recommission of 5186 and of the named Leipzig and the tick/untick of the outdated
+filter; a line retargeted 1335 -> 1336 -> 5186 and a naval line 5187 -> 5190; `hoi4_production_add` with `design`
+5186. All four test lines were cancelled again with the game's own confirmation afterwards; the test designs
+remain in the country's list (the game has no design delete).
+
+Not validated / known limits: the tank/plane module designers (`tank_designer_view`, `plane_designer_view`
+exist in memory but never opened on this build state; the tools refuse with `designer_unsupported`); the
+mid-row slot unlock (`slot_locked` was observed only as a view without a slot definition); airframe and
+non-ship `modules` creation; names are limited to the typable set; a design's name is not unique across
+equipment types in the game, `name_taken` is checked per equipment type; Save-As-New is used for custom ship
+bases, the in-place overwrite is not offered by the tool; `design_options` takes about 3 s for upgrade
+designers and 4-12 s for a ship slot scan (production panel open while it works, closed afterwards); the
+brokers must list `hoi4_design_options` and the three action tools in their `ACT` set (all take the lease token; `design_options` without `base` is the only input-free call).

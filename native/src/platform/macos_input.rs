@@ -902,6 +902,52 @@ impl<'p> MacKeys<'p> {
     pub fn press_code(&self, code: u16) -> Result<()> {
         self.press_raw(code)
     }
+    /// One key press with Shift held (capital letters and shifted symbols in a text box),
+    /// after a fresh front-most check. Shift goes down and up through modifier
+    /// (flags-changed) events, the way the game reads it; it is always released.
+    pub fn press_shifted(&self, code: u16) -> Result<()> {
+        const SHIFT_KEY: u16 = 56;
+        const SHIFT_FLAGS: u64 = 0x2_0002;
+        const FLAGS_CHANGED: u32 = 12;
+        self.preflight()?;
+        let pause = |ms: u64| std::thread::sleep(std::time::Duration::from_millis(ms));
+        // SAFETY: a null source is allowed; every event is released after posting.
+        unsafe {
+            let modifier = |down: bool| -> Result<()> {
+                let event = CGEventCreateKeyboardEvent(std::ptr::null(), SHIFT_KEY, down);
+                if event.is_null() {
+                    return Err(Error::new("input_unavailable", "Modifier event unavailable"));
+                }
+                CGEventSetType(event, FLAGS_CHANGED);
+                CGEventSetFlags(event, if down { SHIFT_FLAGS } else { 0 });
+                CGEventPost(HID_EVENT_TAP, event);
+                CFRelease(event);
+                Ok(())
+            };
+            modifier(true)?;
+            pause(80);
+            let result = (|| {
+                for down in [true, false] {
+                    if down {
+                        self.preflight()?;
+                    }
+                    let event = CGEventCreateKeyboardEvent(std::ptr::null(), code, down);
+                    if event.is_null() {
+                        return Err(Error::new("input_unavailable", "Key event unavailable"));
+                    }
+                    CGEventSetFlags(event, SHIFT_FLAGS);
+                    CGEventPost(HID_EVENT_TAP, event);
+                    CFRelease(event);
+                    pause(40);
+                }
+                Ok(())
+            })();
+            pause(40);
+            // Always release Shift, even when the key failed.
+            modifier(false)?;
+            result
+        }
+    }
     /// One key press (down, then up) after a fresh front-most check.
     pub fn press(&self, key: Key) -> Result<()> {
         self.press_raw(key.code())

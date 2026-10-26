@@ -19,6 +19,7 @@ pub(super) const VARIANT_MODULES: u64 = 0xa8;
 pub(super) const VARIANT_TYPE: u64 = 0x3e0;
 pub(super) const VARIANT_PARENT: u64 = 0x3e8;
 pub(super) const VARIANT_MANPOWER: u64 = 0x410;
+pub(super) const VARIANT_OBSOLETE: u64 = 0x414;
 pub(super) const VARIANT_MAX_STRENGTH: u64 = 0x2d8;
 /// `CEquipmentType` (vtable 0x3379328): key string +0x10, module slots +0x60.
 pub(super) const TYPE_KEY: u64 = 0x10;
@@ -135,6 +136,9 @@ pub(super) struct Variant {
     pub parent_id: Option<i32>,
     pub manpower: i32,
     pub max_strength: f64,
+    /// Decommissioned (marked outdated equipment): variant +0x414, 0/1. Flipped by the
+    /// Production list's Decommission button on 26 October 2026 (0 -> 1, back to 0 by Recommission).
+    pub obsolete: bool,
 }
 pub(super) fn variant(r: &Reader<'_>, image: u64, address: u64) -> Result<Variant> {
     expect(r, address, VARIANT_VTABLE, image, "Equipment variant")?;
@@ -159,6 +163,7 @@ pub(super) fn variant(r: &Reader<'_>, image: u64, address: u64) -> Result<Varian
         parent_id,
         manpower: r.i32(address + VARIANT_MANPOWER)?,
         max_strength: fixed_at(r, address + VARIANT_MAX_STRENGTH)?,
+        obsolete: r.i32(address + VARIANT_OBSOLETE)? != 0,
     })
 }
 /// Non-zero stats of a variant keyed by stat name.
@@ -291,4 +296,46 @@ pub(super) fn own_strategic(
         return Err(Error::new("player_unavailable", "Own strategic slot empty"));
     }
     Ok(own)
+}
+
+/// (slot id, slot name) table of a variant's equipment type (module slots; empty for
+/// equipment without modules).
+pub(super) fn type_slots(r: &Reader<'_>, variant: u64) -> Result<Vec<(i32, String)>> {
+    let kind = r.u64(variant + VARIANT_TYPE)?;
+    if kind == 0 {
+        return Ok(Vec::new());
+    }
+    let (_, slots, count) = r.array_header(kind + TYPE_SLOTS)?;
+    if count > 64 {
+        return Err(Error::new("invalid_array", "Slot list exceeds bound"));
+    }
+    let mut out = Vec::new();
+    for index in 0..count as u64 {
+        let slot = slots + index * SLOT_STRIDE;
+        out.push((r.i32(slot + SLOT_ID)?, r.string_bounded(slot + SLOT_NAME, 128)?));
+    }
+    Ok(out)
+}
+
+/// Upgrade levels of a variant (equipment without modules): array +0x60 of 16-byte entries
+/// `{CEquipmentUpgrade*, i32 level}`, upgrade key (e.g. `tank_gun_upgrade`) at +0x10. Mapped
+/// live on 26 October 2026: a variant created with Main Gun +1 held `tank_gun_upgrade` 1 and
+/// three zero entries.
+pub(super) const VARIANT_UPGRADES: u64 = 0x60;
+pub(super) fn upgrades(r: &Reader<'_>, variant: u64) -> Result<Vec<(String, i32)>> {
+    let (_, data, count) = r.array_header(variant + VARIANT_UPGRADES)?;
+    if count > 32 {
+        return Err(Error::new("invalid_array", "Upgrade list exceeds bound"));
+    }
+    let mut out = Vec::new();
+    for index in 0..count as u64 {
+        let entry = r.read(data + index * 16, 16)?;
+        let upgrade = u64::from_le_bytes(entry[..8].try_into().unwrap());
+        let level = i32::from_le_bytes(entry[8..12].try_into().unwrap());
+        if upgrade == 0 {
+            continue;
+        }
+        out.push((r.string_bounded(upgrade + 0x10, 96)?, level));
+    }
+    Ok(out)
 }

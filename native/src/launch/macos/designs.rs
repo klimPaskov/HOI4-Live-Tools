@@ -28,6 +28,8 @@ pub(super) struct Design {
     pub variant: Variant,
     pub stats: Map<String, Value>,
     pub modules: Vec<(String, String)>,
+    /// Upgrade levels (equipment without module slots), `(upgrade key, level)`.
+    pub upgrades: Vec<(String, i32)>,
     pub lines: Vec<(u64, i32)>,
 }
 
@@ -62,6 +64,7 @@ pub(super) fn designs(r: &Reader<'_>, image: u64, production: u64) -> Result<Vec
         out.push(Design {
             stats: fleetmem::stats(r, address)?,
             modules: fleetmem::modules(r, address)?,
+            upgrades: fleetmem::upgrades(r, address).unwrap_or_default(),
             lines: lines
                 .iter()
                 .filter(|(v, _, _)| *v == address)
@@ -84,7 +87,7 @@ fn expect_unique_ids(designs: &[Design]) -> Result<()> {
     Ok(())
 }
 
-fn design_json(d: &Design, detail: bool, names: &[(i32, String)]) -> Value {
+pub(super) fn design_json(d: &Design, detail: bool, names: &[(i32, String)]) -> Value {
     let v = &d.variant;
     let parent = v.parent_id.map(|p| {
         json!({"id":p,"name":names.iter().find(|(i, _)| *i == p).map(|(_, n)| n)})
@@ -93,7 +96,7 @@ fn design_json(d: &Design, detail: bool, names: &[(i32, String)]) -> Value {
         "class_suffix":(!v.class_suffix.is_empty()).then_some(&v.class_suffix),
         "hull_or_chassis":v.type_key,"kind":kind_of(&v.type_key),
         "default_design":v.parent_id.is_none(),"based_on":parent,
-        "manpower":v.manpower,"in_country_design_list":true,
+        "manpower":v.manpower,"obsolete":v.obsolete,"in_country_design_list":true,
         "production_lines":d.lines.iter().map(|(h, n)| json!({"line_handle":h,"requested_factories":n})).collect::<Vec<_>>()});
     if detail {
         row["stats"] = Value::Object(d.stats.clone());
@@ -103,6 +106,14 @@ fn design_json(d: &Design, detail: bool, names: &[(i32, String)]) -> Value {
                 .map(|(slot, m)| json!({"slot":slot,"module":m}))
                 .collect(),
         );
+        if !d.upgrades.is_empty() {
+            row["upgrades"] = Value::Array(
+                d.upgrades
+                    .iter()
+                    .map(|(k, l)| json!({"upgrade":k,"level":l}))
+                    .collect(),
+            );
+        }
     }
     row
 }
@@ -128,16 +139,35 @@ pub(super) fn view(all: &[Design], kind: Option<&str>, custom_only: bool, detail
         "validated":{"names_and_hulls":true,"stat_offsets":"168 default-variant values matched vanilla files; values include modules and country bonuses",
             "modules":"slot ids matched the hull's slot table; module keys read, not compared to a screen",
             "production_line_join":"line variant pointer equals design address",
-            "obsolete":false},
-        "unavailable":{"obsolete_flag":"not identified","producible":"not identified; every listed design is in the country list",
-            "design_creation":"no tool; designer window not automated"}})
+            "obsolete":"variant +0x414 flipped 0->1->0 by the Production list's Decommission/Recommission buttons (26 October 2026)"},
+        "unavailable":{"producible":"not identified; every listed design is in the country list",
+            "design_creation":"hoi4_design_create (tank/plane upgrades, ship modules); tank and plane module designers not driven"}})
 }
-fn display(v: &Variant) -> String {
+pub(super) fn display(v: &Variant) -> String {
     if v.name.is_empty() {
         v.type_key.clone()
     } else {
         v.name.clone()
     }
+}
+/// Every own design (fresh read bracket); the shared source of `hoi4_designs` and the designer tools.
+pub(super) fn read_all(process: &dyn Process) -> Result<Vec<Design>> {
+    super::ui::read(process, |r, image| {
+        require_libcxx(r)?;
+        let (_, production) = economy::own_production(r, image)?;
+        designs(r, image, production)
+    })
+}
+/// Detail rows (as `hoi4_designs` with detail) for the given designs of one list.
+pub(super) fn rows_json(all: &[Design], pick: impl Fn(&Design) -> bool) -> Vec<Value> {
+    let names: Vec<(i32, String)> = all
+        .iter()
+        .map(|d| (d.variant.id, display(&d.variant)))
+        .collect();
+    all.iter()
+        .filter(|d| pick(d))
+        .map(|d| design_json(d, true, &names))
+        .collect()
 }
 pub(super) fn tool(process: &dyn Process, args: &Map<String, Value>) -> Result<Value> {
     let kind = args.get("kind").and_then(Value::as_str);

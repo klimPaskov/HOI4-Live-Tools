@@ -27,7 +27,6 @@ struct Ui {
     row_container: u64,
     grid_items: u64,
     selection_military: u64,
-    selection_rows: u64,
     selection_root: u64,
     selection_row_variant: u64,
     variant_type: u64,
@@ -46,7 +45,6 @@ const MACOS: Ui = Ui {
     row_container: 0x10,
     grid_items: 0x190,
     selection_military: 0x1cd0,
-    selection_rows: 0xb98,
     selection_root: 0xbd8,
     selection_row_variant: 0xc30,
     variant_type: 0x3e0,
@@ -86,7 +84,7 @@ fn window(r: &Reader<'_>, image: u64, object: u64, name: &str) -> Result<u64> {
 fn military_tab(r: &Reader<'_>, image: u64) -> Result<u64> {
     window(r, image, root(r, image)?, "military_tab")
 }
-fn category_rect(r: &Reader<'_>, image: u64, name: &str) -> Result<Rect> {
+pub(super) fn category_rect(r: &Reader<'_>, image: u64, name: &str) -> Result<Rect> {
     let top = window(r, image, military_tab(r, image)?, "production_win_top")?;
     let button = gui_tree::child(r, image, top, name)?
         .ok_or_else(|| Error::new("gui_target_unavailable", "Category button not found"))?;
@@ -102,13 +100,29 @@ fn selection(r: &Reader<'_>, image: u64) -> Result<(u64, u64)> {
 pub(super) fn selection_open(r: &Reader<'_>, image: u64) -> Result<bool> {
     gui_tree::visible(r, selection(r, image)?.1)
 }
-/// The selection row for `key`: its equipment button rectangle, if listed.
-fn selection_row(r: &Reader<'_>, image: u64, key: &str) -> Result<Option<Rect>> {
+/// The rows the open selection list displays, in list order (the items of its grid). The
+/// window's own row array is a pool that also holds rows of other lists with stale rectangles.
+fn displayed_rows(r: &Reader<'_>, image: u64, root: u64) -> Result<Vec<u64>> {
     let u = ui(r)?;
-    let (window, _) = selection(r, image)?;
-    let (_, data, count) = r.array_header(window + u.selection_rows)?;
-    for index in 0..count.min(256) as u64 {
-        let row = r.u64(data + index * 8)?;
+    let list = window(r, image, root, "equipments")?;
+    let grid = gui_tree::child(r, image, list, "equipments_grid")?
+        .ok_or_else(|| Error::new("gui_target_unavailable", "Selection grid not found"))?;
+    let (_, data, count) = r.array_header(grid + u.grid_items)?;
+    if count > 256 {
+        return Err(Error::new("invalid_gui", "Selection grid exceeds bound"));
+    }
+    (0..count as u64).map(|i| r.u64(data + i * 8)).collect()
+}
+/// The selection row for `key`: its equipment button rectangle, if listed.
+fn selection_row(
+    r: &Reader<'_>,
+    image: u64,
+    key: &str,
+    design: Option<i32>,
+) -> Result<Option<Rect>> {
+    let u = ui(r)?;
+    let (_, root) = selection(r, image)?;
+    for row in displayed_rows(r, image, root)? {
         let variant = r.u64(row + u.selection_row_variant)?;
         if variant == 0 {
             continue;
@@ -117,10 +131,17 @@ fn selection_row(r: &Reader<'_>, image: u64, key: &str) -> Result<Option<Rect>> 
         if kind == 0 || r.string_bounded(kind + u.type_key, 128)? != key {
             continue;
         }
+        if design.is_some_and(|id| r.i32(variant + 0xc).ok() != Some(id)) {
+            continue;
+        }
         let Some(frame) = gui_tree::container(r, r.u64(row + u.row_container)?, image)? else {
             continue;
         };
         if let Some(button) = gui_tree::child(r, image, frame, "equipment_button")? {
+            // A design the game will not build has a disabled button (state 3): never offered.
+            if gui_tree::disabled(r, button)? {
+                continue;
+            }
             return Ok(Some(gui_tree::rect(r, image, button, GAME)?));
         }
     }
@@ -129,11 +150,9 @@ fn selection_row(r: &Reader<'_>, image: u64, key: &str) -> Result<Option<Rect>> 
 /// Equipment keys of the designs the open selection offers.
 fn offered(r: &Reader<'_>, image: u64) -> Result<Vec<String>> {
     let u = ui(r)?;
-    let (window, _) = selection(r, image)?;
-    let (_, data, count) = r.array_header(window + u.selection_rows)?;
+    let (_, root) = selection(r, image)?;
     let mut out = Vec::new();
-    for index in 0..count.min(256) as u64 {
-        let row = r.u64(data + index * 8)?;
+    for row in displayed_rows(r, image, root)? {
         let variant = r.u64(row + u.selection_row_variant)?;
         if variant == 0 {
             continue;
@@ -167,7 +186,7 @@ pub(super) fn row(r: &Reader<'_>, image: u64, handle: u64) -> Result<Option<u64>
     }
     Ok(None)
 }
-fn button(r: &Reader<'_>, image: u64, handle: u64, name: &str) -> Result<Option<Rect>> {
+pub(super) fn button(r: &Reader<'_>, image: u64, handle: u64, name: &str) -> Result<Option<Rect>> {
     let Some(frame) = row(r, image, handle)? else {
         return Ok(None);
     };
@@ -196,6 +215,16 @@ fn click(process: &dyn Process, keys: &MacKeys, rect: Rect) -> Result<()> {
 
 /// Bring the row's +/- buttons inside the list area by scrolling the list.
 pub(super) fn reveal(process: &dyn Process, keys: &MacKeys, handle: u64) -> Result<()> {
+    reveal_named(process, keys, handle, "factories_add_1x", i32::MAX)
+}
+/// Bring the named row button of the line inside the list area and return its rectangle.
+pub(super) fn reveal_named(
+    process: &dyn Process,
+    keys: &MacKeys,
+    handle: u64,
+    name: &str,
+    min_visible: i32,
+) -> Result<()> {
     for _ in 0..40 {
         // Never scroll unless the list is on screen; the wheel zooms the map.
         if !read(process, open)? {
@@ -204,9 +233,9 @@ pub(super) fn reveal(process: &dyn Process, keys: &MacKeys, handle: u64) -> Resu
                 "Production panel closed while adjusting a line",
             ));
         }
-        let rect = read(process, |r, i| button(r, i, handle, "factories_add_1x"))?;
+        let rect = read(process, |r, i| button(r, i, handle, name))?;
         match rect {
-            Some(r) if r.y >= LIST.0 && r.y + r.h <= LIST.1 => return Ok(()),
+            Some(r) if r.y >= LIST.0 && r.y + r.h.min(min_visible) <= LIST.1 => return Ok(()),
             Some(r) => {
                 let pixels = if r.y < LIST.0 { 240 } else { -240 };
                 keys.scroll(GAME, (260.0, 700.0), pixels)?;
@@ -256,7 +285,13 @@ fn adjust(process: &dyn Process, keys: &MacKeys, handle: u64, target: i32) -> Re
 }
 
 /// Add one line for base equipment `key` and set it to `factories`.
-pub(super) fn add(process: &dyn Process, keys: &MacKeys, key: &str, factories: i32) -> Result<()> {
+pub(super) fn add(
+    process: &dyn Process,
+    keys: &MacKeys,
+    key: &str,
+    factories: i32,
+    design: Option<i32>,
+) -> Result<()> {
     clear_notices(process, keys)?;
     ensure_open(process, keys)?;
     let before: Vec<u64> = lines(process)?.iter().map(|l| l.handle).collect();
@@ -273,7 +308,7 @@ pub(super) fn add(process: &dyn Process, keys: &MacKeys, key: &str, factories: i
         let rect = settled(process, "category", |r, i| category_rect(r, i, category))?;
         click(process, keys, rect)?;
         wait(process, "open selection", selection_open)?;
-        let found = settled(process, "equipment row", |r, i| selection_row(r, i, key))?;
+        let found = settled(process, "equipment row", |r, i| selection_row(r, i, key, design))?;
         if let Some(rect) = found {
             chosen = Some(rect);
             break;

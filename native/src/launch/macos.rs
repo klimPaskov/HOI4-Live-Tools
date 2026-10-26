@@ -22,6 +22,9 @@ mod country_status;
 mod daily;
 mod decisions;
 mod deployment;
+mod design_edit;
+mod design_ui;
+mod designer;
 mod designs;
 mod diplomacy;
 mod diplomacy_state;
@@ -56,8 +59,13 @@ mod states;
 mod stateslots;
 mod supply;
 mod supplymem;
+mod template_edit;
 mod template_get;
 mod units;
+#[cfg(test)]
+mod live_designer;
+#[cfg(test)]
+mod live_designs;
 #[cfg(test)]
 mod live_reads;
 #[cfg(test)]
@@ -458,7 +466,7 @@ impl Commands for MacClock {
                 {"properties":{"op":{"const":"status"}},"required":["op"],"additionalProperties":false}]}}),
             json!({"name":"hoi4_research_start","description":"Start an own technology in an empty research slot with ordinary input (research panel, slot, folder tab, tile, Research), each click located from the live GUI and each stage verified from memory; succeeds only when the slot holds the technology. Refuses researched (code already_researched), already-assigned or busy-slot targets before any input. A tile scrolled out of view is refused. Stable request_id; an unresolved dispatch is settled only by retrying its own request_id.","inputSchema":{"type":"object","properties":{"technology":{"type":"string","maxLength":128},"slot":{"type":"integer","minimum":0,"maximum":15},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["technology","slot","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_focus_start","description":"Start an own national focus with ordinary input (politics panel, focus button, drag-panning the tree until the node is in view, the node, Start), each target located from the live GUI and each stage verified from memory; succeeds only when own focus progress names the focus as active. Refuses completed or already-active focuses, or any while another focus is active, before input. Typed errors: focus_not_available (the detail window opened but the game disables Start: requirements unmet or an exclusive focus taken; Start was not clicked), focus_detail_not_opened (the node click was sent, no detail window read; re-observe before retrying), ui_blocked (names the notice pop-up classes and open events still shown). Stable request_id; an unresolved dispatch is settled only by retrying its own request_id.","inputSchema":{"type":"object","properties":{"focus":{"type":"string","maxLength":128},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["focus","request_id","lease_token"],"additionalProperties":false}}),
-            json!({"name":"hoi4_production_add","description":"Add one own military production line for a base equipment type (e.g. infantry_equipment, artillery_equipment, light_tank_equipment, fighter_equipment) with ordinary input: production panel, category button, the design in the selection window, then +/- until the line requests the given factories. Verified from the own line collection. Refuses equipment with no producible design. Naval lines are not supported yet.","inputSchema":{"type":"object","properties":{"equipment":{"type":"string","maxLength":128},"factories":{"type":"integer","minimum":1,"maximum":150},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["equipment","factories","request_id","lease_token"],"additionalProperties":false}}),
+            json!({"name":"hoi4_production_add","description":"Add one own military production line for a base equipment type (e.g. infantry_equipment, artillery_equipment, light_tank_equipment, fighter_equipment) with ordinary input: production panel, category button, the design in the selection window, then +/- until the line requests the given factories. Verified from the own line collection. Refuses equipment with no producible design. Optional `design` (a design id from hoi4_designs / hoi4_design_create, same equipment type) picks that exact variant in the selection window instead of the first listed one. Naval lines are not supported yet.","inputSchema":{"type":"object","properties":{"equipment":{"type":"string","maxLength":128},"factories":{"type":"integer","minimum":1,"maximum":150},"design":{"type":"integer","minimum":1},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["equipment","factories","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_production_set","description":"Set the requested factories of an own production line, addressed by its entry_index and equipment_id from hoi4_production_lines, with the line's ordinary +/- buttons; each click is verified from memory. 0 keeps the line with no factories.","inputSchema":{"type":"object","properties":{"line":{"type":"integer","minimum":0,"maximum":2047},"equipment":{"type":"string","maxLength":128},"factories":{"type":"integer","minimum":0,"maximum":150},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["line","equipment","factories","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_construction_add","description":"Queue more of a building in an own state with ordinary input: construction panel, the building button, the game's Find view to centre the state (F, state_id, Return), then clicks at the screen centre. Verified from the own construction queue (the building located in that state); placement mode is switched off afterwards. Typed errors: building_select_failed (the building button click was sent, the selection never named it, no map click was sent), no_free_slot_or_not_allowed (one centre click did not raise the queue in the state: likely no free slot or building not allowed, not proven; check hoi4_state_slots; never repeat blindly), ui_blocked (names the notice pop-up classes and open events). Building keys: arms_factory, industrial_complex, dockyard, infrastructure, air_base, anti_air_building, radar_station, synthetic_refinery, fuel_silo, rocket_site, ... (state buildings only).","inputSchema":{"type":"object","properties":{"building":{"type":"string","maxLength":64},"state_id":{"type":"integer","minimum":1,"maximum":4095},"count":{"type":"integer","minimum":1,"maximum":10,"default":1},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["building","state_id","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_politics_options","description":"List the ideas offered for one politics slot (opens the slot's selection window and closes it again; changes nothing). category: government (slots 0 mobilization law, 1 trade law, 2 economy law, 3-5 political advisors), research_production (designers) or military_staff. Returns each idea key with the game's enabled state and the slot's current idea.","inputSchema":{"type":"object","properties":{"category":{"type":"string","enum":["government","research_production","military_staff"]},"slot":{"type":"integer","minimum":0,"maximum":7},"lease_token":{"type":"string"}},"required":["category","slot","lease_token"],"additionalProperties":false}}),
@@ -485,6 +493,15 @@ impl Commands for MacClock {
             commanders::tool(),
             supply::tool(),
             template_get::tool(),
+            template_edit::create_tool(),
+            template_edit::edit_tool(),
+            template_edit::rename_tool(),
+            template_edit::delete_tool(),
+            template_edit::options_tool(),
+            design_edit::options_tool(),
+            design_edit::create_tool(),
+            design_edit::obsolete_tool(),
+            design_edit::set_production_tool(),
             special_projects::tool(),
             special_projects::panel_tool(),
             special_projects::assign_tool(),
@@ -566,6 +583,15 @@ impl Commands for MacClock {
                 | "hoi4_commanders"
                 | "hoi4_supply"
                 | "hoi4_template_get"
+                | "hoi4_template_create"
+                | "hoi4_template_edit"
+                | "hoi4_template_rename"
+                | "hoi4_template_delete"
+                | "hoi4_template_options"
+                | "hoi4_design_options"
+                | "hoi4_design_create"
+                | "hoi4_design_obsolete"
+                | "hoi4_design_set_production"
                 | "hoi4_special_projects"
                 | "hoi4_special_projects_panel"
                 | "hoi4_special_project_assign"
@@ -586,7 +612,7 @@ impl Commands for MacClock {
         Some(self.directory.join("plan.json"))
     }
     fn capabilities(&self) -> Value {
-        json!({"transport":"ordinary macOS CGEvent keys to the front-most owned window","actions":["set_paused","set_speed","research_start","focus_start","production_add","production_set","construction_add","politics_options","politics_choose","decisions_list","decision_take","train","deploy_locations","army_create","army_assign","army_front","army_plan","army_offensive","event_choose","diplomacy","diplomacy_act","army_commander","army_group_create","army_split","state_slots","air_wings","air_mission","plan_run"],"lease":"exclusive configured controller","input_profile":{"name":"macos_cocoa_absolute_1920x1080_v1","checked_at_bind":true,"rechecked_before_each_input":true,"diagnostic_alone_authorizes_input":false},"construction_panel":{"enabled":self.construction_panel,"qualification_only":true,"ordinary_key":"t","live_delivery_verified":false,"input_retry":false},"construction_selection":{"enabled":self.construction_selection,"qualification_only":true,"ordinary_clicks_max":1,"input_retry":false,"placement":false},"construction_placement":{"enabled":self.construction_placement,"qualification_only":true,"ordinary_clicks_max":1,"full_picker_verified":false,"atomic_event_verified":false},"construction_cancellation":{"enabled":self.construction_cancellation,"qualification_only":true,"ordinary_key":"escape","ordinary_key_presses_max":1,"input_retry":false,"worker":false},"construction_find_open":{"enabled":self.construction_find_open,"qualification_only":true,"transport":"ordinary_left_click","ordinary_clicks_max":1,"cursor_moves_max":1,"ordinary_key_presses":0,"input_retry":false,"worker":false},"construction_navigation":{"enabled":self.construction_navigation,"qualification_only":true,"already_open_only":true,"input_retry":false,"placement":false},"daily_governor":self.daily.capabilities(),"native_posting":false,"full_campaign_acceptance":false})
+        json!({"transport":"ordinary macOS CGEvent keys to the front-most owned window","actions":["set_paused","set_speed","research_start","focus_start","production_add","production_set","construction_add","politics_options","politics_choose","decisions_list","decision_take","train","deploy_locations","army_create","army_assign","army_front","army_plan","army_offensive","event_choose","diplomacy","diplomacy_act","army_commander","army_group_create","army_split","template_create","template_edit","template_rename","template_delete","template_options","design_options","design_create","design_obsolete","design_set_production","state_slots","air_wings","air_mission","plan_run"],"lease":"exclusive configured controller","input_profile":{"name":"macos_cocoa_absolute_1920x1080_v1","checked_at_bind":true,"rechecked_before_each_input":true,"diagnostic_alone_authorizes_input":false},"construction_panel":{"enabled":self.construction_panel,"qualification_only":true,"ordinary_key":"t","live_delivery_verified":false,"input_retry":false},"construction_selection":{"enabled":self.construction_selection,"qualification_only":true,"ordinary_clicks_max":1,"input_retry":false,"placement":false},"construction_placement":{"enabled":self.construction_placement,"qualification_only":true,"ordinary_clicks_max":1,"full_picker_verified":false,"atomic_event_verified":false},"construction_cancellation":{"enabled":self.construction_cancellation,"qualification_only":true,"ordinary_key":"escape","ordinary_key_presses_max":1,"input_retry":false,"worker":false},"construction_find_open":{"enabled":self.construction_find_open,"qualification_only":true,"transport":"ordinary_left_click","ordinary_clicks_max":1,"cursor_moves_max":1,"ordinary_key_presses":0,"input_retry":false,"worker":false},"construction_navigation":{"enabled":self.construction_navigation,"qualification_only":true,"already_open_only":true,"input_retry":false,"placement":false},"daily_governor":self.daily.capabilities(),"native_posting":false,"full_campaign_acceptance":false})
     }
     fn call(&self, process: &dyn Process, name: &str, arguments: &Value) -> Result<Value> {
         if process.identity() != self.process.identity() {
@@ -1216,6 +1242,440 @@ impl Commands for MacClock {
             let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
             return Ok(json!({"receipt":receipt}));
         }
+        if name == "hoi4_design_options" {
+            allowed(args, &["kind", "base", "slot", "measure_costs", "lease_token"])?;
+            let kind = design_edit::kind_arg(args)?;
+            let token = string(args, "lease_token")?;
+            let expected = guard.observe_context(process)?;
+            let epoch = guard.epoch.clone();
+            let lease_end = authority.authorize(token, &epoch)?;
+            let Some(base) = args.get("base") else {
+                return design_edit::options_listing(process, kind);
+            };
+            let base = design_edit::base_arg(base)?;
+            let slot = match args.get("slot") {
+                None => None,
+                Some(v) => Some(
+                    v.as_str()
+                        .filter(|s| !s.is_empty() && s.len() <= 64 && s.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_'))
+                        .ok_or_else(|| Error::new("invalid_arguments", "Invalid slot name"))?,
+                ),
+            };
+            let measure = args.get("measure_costs").and_then(Value::as_bool).unwrap_or(true);
+            let fence = action_fence::Fence {
+                process,
+                epoch: &epoch,
+                expected: &expected,
+                authority,
+                token,
+                until: (Instant::now() + Duration::from_secs(240)).min(lease_end),
+                stop: None,
+            };
+            let check_input = || fence.input_check();
+            let bounded_keys = self.keys.guarded(&fence, &check_input)?;
+            let process: &dyn Process = &fence;
+            bounded_keys.preflight()?;
+            return design_edit::options(process, &bounded_keys, kind, &base, slot, measure);
+        }
+        if name == "hoi4_design_obsolete" || name == "hoi4_design_set_production" {
+            let obsolete = name == "hoi4_design_obsolete";
+            if obsolete {
+                allowed(args, &["design", "obsolete", "request_id", "lease_token"])?;
+            } else {
+                allowed(
+                    args,
+                    &["line", "design", "accept_progress_loss", "request_id", "lease_token"],
+                )?;
+            }
+            let design = args
+                .get("design")
+                .and_then(Value::as_i64)
+                .and_then(|d| i32::try_from(d).ok())
+                .filter(|d| *d > 0)
+                .ok_or_else(|| Error::new("invalid_arguments", "design must be a positive design id"))?;
+            let want_obsolete = match args.get("obsolete") {
+                None => true,
+                Some(v) if obsolete => v
+                    .as_bool()
+                    .ok_or_else(|| Error::new("invalid_arguments", "obsolete must be a boolean"))?,
+                Some(_) => return Err(Error::new("invalid_arguments", "obsolete applies to hoi4_design_obsolete")),
+            };
+            let line = if obsolete {
+                0
+            } else {
+                args.get("line")
+                    .and_then(Value::as_u64)
+                    .filter(|l| *l > 0)
+                    .ok_or_else(|| Error::new("invalid_arguments", "line must be a production line handle"))?
+            };
+            let accept = args
+                .get("accept_progress_loss")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            let id = string(args, "request_id")?;
+            let token = string(args, "lease_token")?;
+            let expected = guard.observe_context(process)?;
+            let epoch = guard.epoch.clone();
+            let lease_end = authority.authorize(token, &epoch)?;
+            let fence = action_fence::Fence {
+                process,
+                epoch: &epoch,
+                expected: &expected,
+                authority,
+                token,
+                until: (Instant::now() + Duration::from_secs(90)).min(lease_end),
+                stop: None,
+            };
+            let check_input = || fence.input_check();
+            let bounded_keys = self.keys.guarded(&fence, &check_input)?;
+            let process: &dyn Process = &fence;
+            let retry = actions.receipt_exists(id);
+            let keys = &bounded_keys;
+            if obsolete {
+                let all = designs::read_all(process)?;
+                let before = all.iter().find(|d| d.variant.id == design).map(|d| d.variant.obsolete);
+                let found = if retry {
+                    all.iter().find(|d| d.variant.id == design).cloned()
+                } else {
+                    let d = design_edit::plan_obsolete(&all, design, want_obsolete)?.clone();
+                    bounded_keys.preflight()?;
+                    Some(d)
+                };
+                let Some(found) = found else {
+                    return Err(Error::new("design_unknown", format!("No own design {design}")));
+                };
+                let action = json!({"kind":"design_obsolete","design":design,"obsolete":want_obsolete});
+                let info = std::cell::RefCell::new(Value::Null);
+                let mut settle = || {
+                    let now = design_edit::obsolete_flag(process, design)?;
+                    let detail = json!({"design":design,"obsolete":now});
+                    let verdict = design_edit::settle_obsolete(before.unwrap_or(!want_obsolete), now, want_obsolete);
+                    Ok(verdict.outcome(detail))
+                };
+                let mut dispatch = || {
+                    authority.authorize(token, &epoch)?;
+                    if retry {
+                        return Err(Error::new("action_uncertain", "A retried request is never dispatched again"));
+                    }
+                    *info.borrow_mut() = design_edit::obsolete_apply(process, keys, &found, want_obsolete)?;
+                    Ok(())
+                };
+                let receipt = actions.execute_with(id, &epoch, action, &mut settle, &mut dispatch, true)?;
+                return Ok(json!({"receipt":receipt,"designer":*info.borrow()}));
+            }
+            let all = designs::read_all(process)?;
+            let lines = production::lines(process)?;
+            let change = if retry {
+                design_edit::LineChange {
+                    handle: line,
+                    design,
+                    from_design: None,
+                    naval: false,
+                }
+            } else {
+                let c = design_edit::plan_set_production(&lines, &all, line, design, accept)?;
+                bounded_keys.preflight()?;
+                c
+            };
+            let action = json!({"kind":"design_set_production","line":line,"design":design});
+            let info = std::cell::RefCell::new(Value::Null);
+            let mut settle = || {
+                let all = designs::read_all(process)?;
+                let detail = json!({"line":line,"design":design});
+                Ok(design_edit::settle_set_production(&all, &change).outcome(detail))
+            };
+            let mut dispatch = || {
+                authority.authorize(token, &epoch)?;
+                if retry {
+                    return Err(Error::new("action_uncertain", "A retried request is never dispatched again"));
+                }
+                *info.borrow_mut() = design_edit::set_production_apply(process, keys, &change)?;
+                Ok(())
+            };
+            let receipt = actions.execute_with(id, &epoch, action, &mut settle, &mut dispatch, true)?;
+            return Ok(json!({"receipt":receipt,"change":*info.borrow()}));
+        }
+        if name == "hoi4_design_create" {
+            allowed(
+                args,
+                &["kind", "base", "upgrades", "modules", "name", "request_id", "lease_token"],
+            )?;
+            let input = design_edit::Input {
+                kind: design_edit::kind_arg(args)?,
+                base: design_edit::base_arg(
+                    args.get("base")
+                        .ok_or_else(|| Error::new("invalid_arguments", "base is required"))?,
+                )?,
+                upgrades: match args.get("upgrades") {
+                    Some(v) => design_edit::upgrades_arg(v)?,
+                    None => Default::default(),
+                },
+                modules: match args.get("modules") {
+                    Some(v) => design_edit::modules_arg(v)?,
+                    None => Default::default(),
+                },
+                name: design_edit::name_arg(args.get("name"))?,
+            };
+            let id = string(args, "request_id")?;
+            let token = string(args, "lease_token")?;
+            let expected = guard.observe_context(process)?;
+            let epoch = guard.epoch.clone();
+            let lease_end = authority.authorize(token, &epoch)?;
+            // A design with several steps takes about a minute of ordinary clicks; the
+            // deadline is fixed up front and never renewed.
+            let fence = action_fence::Fence {
+                process,
+                epoch: &epoch,
+                expected: &expected,
+                authority,
+                token,
+                until: (Instant::now() + Duration::from_secs(240)).min(lease_end),
+                stop: None,
+            };
+            let check_input = || fence.input_check();
+            let bounded_keys = self.keys.guarded(&fence, &check_input)?;
+            let process: &dyn Process = &fence;
+            let retry = actions.receipt_exists(id);
+            let catalogue = design_edit::catalogue(process)?;
+            let planned = design_edit::plan(&input, &catalogue, id, retry)?;
+            if !retry {
+                bounded_keys.preflight()?;
+            }
+            let action = json!({
+                "kind": "design_create",
+                "design_kind": input.kind,
+                "base": planned.base_id,
+                "upgrades": input.upgrades,
+                "modules": input.modules,
+                "name": planned.want.name,
+            });
+            let info = std::cell::RefCell::new(Value::Null);
+            let keys = &bounded_keys;
+            let mut settle = || {
+                let now = designs::read_all(process)?;
+                let verdict = if retry {
+                    design_edit::settle_retry(&now, &planned.want)
+                } else {
+                    design_edit::settle_create(&planned.before_ids, &now, &planned.want)
+                };
+                let detail = json!({"design_name":planned.want.name,"base":planned.base_id});
+                Ok(if retry && verdict == settle::Verdict::Unchanged {
+                    journal::Outcome::Diverged(detail)
+                } else {
+                    verdict.outcome(detail)
+                })
+            };
+            let mut dispatch = || {
+                authority.authorize(token, &epoch)?;
+                if retry {
+                    return Err(Error::new(
+                        "action_uncertain",
+                        "A retried request is never dispatched again",
+                    ));
+                }
+                *info.borrow_mut() = design_edit::apply(process, keys, &planned, input.kind)?;
+                Ok(())
+            };
+            let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
+            let all = designs::read_all(process)?;
+            let saved = all
+                .iter()
+                .find(|d| !planned.before_ids.contains(&d.variant.id) && design_edit::matches_want(d, &planned.want))
+                .or_else(|| all.iter().find(|d| design_edit::matches_want(d, &planned.want)));
+            let row = saved.map_or(Value::Null, |d| design_edit::design_row(&all, d.variant.id));
+            return Ok(json!({"receipt":receipt,"designer":*info.borrow(),"design":row}));
+        }
+        if name == "hoi4_template_options" {
+            allowed(args, &["lease_token"])?;
+            let token = string(args, "lease_token")?;
+            let epoch = guard.observe(process)?.epoch;
+            authority.authorize(token, &epoch)?;
+            self.keys.preflight()?;
+            return template_edit::options(process, &self.keys);
+        }
+        if matches!(
+            name,
+            "hoi4_template_create"
+                | "hoi4_template_edit"
+                | "hoi4_template_rename"
+                | "hoi4_template_delete"
+        ) {
+            let kind = &name["hoi4_template_".len()..];
+            match kind {
+                "create" => allowed(
+                    args,
+                    &["name", "regiments", "support", "priority", "request_id", "lease_token"],
+                )?,
+                "edit" => allowed(
+                    args,
+                    &[
+                        "template",
+                        "regiments",
+                        "support",
+                        "priority",
+                        "new_name",
+                        "allow_in_use",
+                        "request_id",
+                        "lease_token",
+                    ],
+                )?,
+                "rename" => allowed(args, &["template", "new_name", "request_id", "lease_token"])?,
+                _ => allowed(args, &["template", "request_id", "lease_token"])?,
+            }
+            let existing = if kind == "create" {
+                None
+            } else {
+                Some(string(args, "template")?)
+            };
+            if existing.is_some_and(|t| t.is_empty() || t.len() > 128 || t.chars().any(char::is_control)) {
+                return Err(Error::new("invalid_arguments", "Invalid template name"));
+            }
+            let input = template_edit::Input {
+                existing,
+                name: match kind {
+                    "create" => Some(
+                        template_edit::name_arg(args.get("name"), "name")?
+                            .ok_or_else(|| Error::new("invalid_arguments", "name is required"))?,
+                    ),
+                    "edit" | "rename" => template_edit::name_arg(args.get("new_name"), "new_name")?,
+                    _ => None,
+                },
+                regiments: match args.get("regiments") {
+                    Some(v) => Some(template_edit::parse_regiments(v)?),
+                    None if kind == "create" => {
+                        return Err(Error::new("invalid_arguments", "regiments is required"))
+                    }
+                    None => None,
+                },
+                support: match args.get("support") {
+                    Some(v) => Some(template_edit::parse_support(v)?),
+                    None if kind == "create" => Some(Vec::new()),
+                    None => None,
+                },
+                priority: template_edit::priority_arg(args.get("priority"))?,
+                allow_in_use: args
+                    .get("allow_in_use")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false),
+            };
+            if kind == "rename" && input.name.is_none() {
+                return Err(Error::new("invalid_arguments", "new_name is required"));
+            }
+            let id = string(args, "request_id")?;
+            let token = string(args, "lease_token")?;
+            let expected = guard.observe_context(process)?;
+            let epoch = guard.epoch.clone();
+            let lease_end = authority.authorize(token, &epoch)?;
+            // A template with ten battalions takes about a minute of ordinary clicks; the
+            // deadline is fixed up front and never renewed.
+            let fence = action_fence::Fence {
+                process,
+                epoch: &epoch,
+                expected: &expected,
+                authority,
+                token,
+                until: (Instant::now() + Duration::from_secs(180)).min(lease_end),
+                stop: None,
+            };
+            let check_input = || fence.input_check();
+            let bounded_keys = self.keys.guarded(&fence, &check_input)?;
+            let process: &dyn Process = &fence;
+            let retry = actions.receipt_exists(id);
+            if kind == "delete" {
+                let template = existing.unwrap_or_default();
+                let before = if retry {
+                    template_edit::layouts(process)?
+                        .into_iter()
+                        .find(|l| l.name == template)
+                } else {
+                    let (before, _) = template_edit::plan_delete(process, template)?;
+                    bounded_keys.preflight()?;
+                    Some(before)
+                };
+                let action = json!({"kind":"template_delete","template":template});
+                let keys = &bounded_keys;
+                let mut settle = || {
+                    let now = template_edit::layouts(process)?
+                        .into_iter()
+                        .find(|l| l.name == template);
+                    let detail = json!({"template":template,"still_listed":now.is_some()});
+                    let verdict = match &before {
+                        Some(b) => template_edit::settle_delete(b, now.as_ref()),
+                        None if now.is_none() => settle::Verdict::Reached,
+                        None => settle::Verdict::Unknown,
+                    };
+                    Ok(if retry && verdict == settle::Verdict::Unchanged {
+                        journal::Outcome::Diverged(detail)
+                    } else {
+                        verdict.outcome(detail)
+                    })
+                };
+                let mut dispatch = || {
+                    authority.authorize(token, &epoch)?;
+                    if retry {
+                        return Err(Error::new(
+                            "action_uncertain",
+                            "A retried request is never dispatched again",
+                        ));
+                    }
+                    template_edit::delete(process, keys, template)
+                };
+                let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
+                return Ok(json!({"receipt":receipt}));
+            }
+            let list = template_edit::layouts(process)?;
+            let (want, before, _) = template_edit::build_want(&input, &list)?;
+            let planned = if retry {
+                None
+            } else {
+                let defs = template_edit::catalog(process)?;
+                let usage = match existing {
+                    Some(n) => Some(template_edit::usage(process, n)?),
+                    None => None,
+                };
+                let planned = template_edit::plan_request(&input, &list, &defs, usage.as_ref())?;
+                bounded_keys.preflight()?;
+                Some(planned)
+            };
+            let action = json!({
+                "kind": format!("template_{kind}"),
+                "template": existing,
+                "layout": {
+                    "name": want.name,
+                    "regiments": want.columns,
+                    "support": want.support,
+                    "priority": want.priority,
+                },
+            });
+            let info = std::cell::RefCell::new(Value::Null);
+            let keys = &bounded_keys;
+            let mut settle = || {
+                let now_list = template_edit::layouts(process)?;
+                let now = now_list
+                    .iter()
+                    .find(|l| l.name == want.name)
+                    .or_else(|| before.as_ref().and_then(|b| now_list.iter().find(|l| l.name == b.name)))
+                    .cloned();
+                let detail = json!({"template":want.name,"layout_saved":now.as_ref() == Some(&want)});
+                let verdict = template_edit::settle_layout(before.as_ref(), now.as_ref(), &want);
+                Ok(if retry && verdict == settle::Verdict::Unchanged {
+                    journal::Outcome::Diverged(detail)
+                } else {
+                    verdict.outcome(detail)
+                })
+            };
+            let mut dispatch = || {
+                authority.authorize(token, &epoch)?;
+                let planned = planned.as_ref().ok_or_else(|| {
+                    Error::new("action_uncertain", "A retried request is never dispatched again")
+                })?;
+                *info.borrow_mut() = template_edit::apply(process, keys, planned)?;
+                Ok(())
+            };
+            let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
+            let row = template_edit::readback(process, &want.name).ok();
+            return Ok(json!({"receipt":receipt,"designer":*info.borrow(),"template":row}));
+        }
         if name == "hoi4_special_project_recruit" {
             allowed(args, &["scientist", "request_id", "lease_token"])?;
             let scientist = special_projects::name_arg(args.get("scientist"), "scientist")?
@@ -1337,7 +1797,7 @@ impl Commands for MacClock {
             if adding {
                 allowed(
                     args,
-                    &["equipment", "factories", "request_id", "lease_token"],
+                    &["equipment", "factories", "design", "request_id", "lease_token"],
                 )?;
             } else {
                 allowed(
@@ -1364,6 +1824,18 @@ impl Commands for MacClock {
                 .filter(|v| (i64::from(adding)..=150).contains(v))
                 .ok_or_else(|| Error::new("invalid_arguments", "factories out of range"))?
                 as i32;
+            let design = match args.get("design") {
+                None => None,
+                Some(v) if adding => Some(
+                    v.as_i64()
+                        .and_then(|d| i32::try_from(d).ok())
+                        .filter(|d| *d > 0)
+                        .ok_or_else(|| Error::new("invalid_arguments", "design must be a positive design id"))?,
+                ),
+                Some(_) => {
+                    return Err(Error::new("invalid_arguments", "design applies to adding a line"))
+                }
+            };
             let index = if adding {
                 None
             } else {
@@ -1392,10 +1864,17 @@ impl Commands for MacClock {
             let check_input = || fence.input_check();
             let bounded_keys = self.keys.guarded(&fence, &check_input)?;
             let process: &dyn Process = &fence;
-            let action = json!({"kind":name.trim_start_matches("hoi4_"),"equipment":key,"factories":factories,"line":index});
+            let action = if design.is_some() {
+                json!({"kind":name.trim_start_matches("hoi4_"),"equipment":key,"factories":factories,"line":index,"design":design})
+            } else {
+                json!({"kind":name.trim_start_matches("hoi4_"),"equipment":key,"factories":factories,"line":index})
+            };
             let before = production::lines(process)?;
             let retry = actions.receipt_exists(id);
             if !retry {
+                if let Some(wanted) = design {
+                    design_edit::check_production_design(&designs::read_all(process)?, wanted, key)?;
+                }
                 if let Some(index) = index {
                     if before.get(index).and_then(|l| l.key.as_deref()) != Some(key) {
                         return Err(Error::new(
@@ -1430,9 +1909,17 @@ impl Commands for MacClock {
                             .iter()
                             .filter(|l| !before.iter().any(|b| b.handle == l.handle))
                             .collect();
-                        if added
-                            .iter()
-                            .any(|l| l.key.as_deref() == Some(key) && l.requested == factories)
+                        let design_ok = match design {
+                            None => true,
+                            Some(wanted) => designs::read_all(process)?.iter().any(|d| {
+                                d.variant.id == wanted
+                                    && d.lines.iter().any(|(h, _)| added.iter().any(|l| l.handle == *h))
+                            }),
+                        };
+                        if design_ok
+                            && added
+                                .iter()
+                                .any(|l| l.key.as_deref() == Some(key) && l.requested == factories)
                         {
                             journal::Outcome::Reached(detail)
                         } else if added.is_empty() {
@@ -1459,7 +1946,7 @@ impl Commands for MacClock {
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
                 match index {
-                    None => production::add(process, keys, key, factories),
+                    None => production::add(process, keys, key, factories, design),
                     Some(index) => production::set(process, keys, index, key, factories),
                 }
             };
