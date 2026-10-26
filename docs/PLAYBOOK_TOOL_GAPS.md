@@ -719,11 +719,9 @@ only. Opt-in live checks: `HOI4_LIVE_SESSION=<session.json> cargo test --release
   organisation (plus the live organisation and the country modifier factor from a live division),
   manpower, supply use, equipment need per archetype, held variants with per-piece stats, and an
   equipment-derived stat estimate (`validated:false`). Closes the "read" half of 3.4.
-- `hoi4_supply {strength_below?}`: per division id/army/template/state/province, hit points against
-  the template, manpower, equipment have/need/fill per archetype and shortage list, state
-  infrastructure; per army means; per state building levels. The supply percentage, flow, railway
-  level, hub and state supply capacity are **not readable yet** (`supply_available:false`, the
-  `below_70`/`below_50` lists are empty and say nothing about real supply). Partly closes 3.5/3.6.
+- `hoi4_supply {strength_below?}`: see section 10 (supply system mapped on 26 October 2026: division
+  supply status, province supply/demand/flows, state local supply, hubs and railway levels). Hit
+  points, manpower, equipment fill and infrastructure as before.
 - `hoi4_commanders` now returns skill, attack, defense, planning, logistics, traits and character id
   for every army leader of the country (36 for Germany, including leaders the army panel does not
   list). Base values from the character template; rank of unassigned leaders and levels gained
@@ -733,3 +731,150 @@ only. Opt-in live checks: `HOI4_LIVE_SESSION=<session.json> cargo test --release
   manpower of all 38 divisions equal the template sums exactly; organisation equals the template mean
   times one factor (1.13); equipment held equals need on every division; leader skills and traits
   equal `common/characters` for 35 of 36 leaders (the 36th is a CHI-id character).
+
+---
+
+## 10. War planning intelligence (macOS, offline-built, 26 October 2026)
+
+Three pure reads in `native/src/launch/macos/front_plan.rs` (no lease, no input, no cursor, no pause).
+All logic is pure functions over a `StateGraph` (install map facts plus the state owner/controller the
+political map shows plus own division positions), so it is unit-tested with fixtures and was also run
+against the real installed game files (`HOI4_GAME_DIR=... cargo test --release real_install_war_plans --
+--ignored --nocapture`). **No live validation against a running game yet**: the ownership and division
+reads are the already validated ones of `hoi4_wars`/`hoi4_armies`; the new planning output is a
+heuristic and only checked against history (below).
+
+- `hoi4_front_plan {enemy, max_axes?}`: `enemy` is one tag, a comma list or an array. Per contiguous
+  border with each named enemy (border pairs sharing a state form one front): own and enemy border
+  states, ranked attack axes (cheapest route through enemy-controlled states, cost from terrain
+  movement and attack malus, infrastructure, state size, urban share and province bunkers, to the enemy
+  capital and the highest-value states, with the whole route), holding line and second line for the
+  fronts that do not attack, own divisions in the border states and within two states, divisions
+  required (strike plus half the hold line, or the hold line) and missing, and `suggested_calls` with
+  concrete `hoi4_army_front` / `hoi4_army_offensive` / `hoi4_army_plan` arguments for the nearest own
+  armies (add `request_id` and `lease_token`). The two best fronts attack when their best axis is at
+  least half the global best; the rest hold. Offensives target the first state of the route; call the
+  tool again after each capture.
+- `hoi4_encirclement_candidates {enemy, max_gap?=2 (0..3), limit?=6}`: pockets of enemy-controlled
+  states that taking at most `max_gap` neck states would cut from the bulk of the enemy (largest
+  connected block by states stays "main"). Sea, `impassable` states and any non-enemy controller
+  (neutral or allied) are walls. Per pocket: neck, the two own states farthest apart that touch it
+  (pincer arms, centre distance), divisions needed per arm against available, value (points,
+  industry, manpower, resources, capital), `capital_inside`, `sea_escape_possible`, neighbouring
+  third-party states, a score (value over effort) and call suggestions. `pincer_ready:false` means
+  only one own state touches the neck. Already cut-off blocks (`gap 0`) are listed when an own state
+  touches them. Worst-case coalition search at gap 3 takes about 1.7 s; the default is milliseconds.
+- `hoi4_war_goal_targets {enemy, limit?=25}`: enemy-owned states ranked for the peace conference by
+  points, industry, manpower and strategic resources (+ capital, + own core), tiers
+  must_take (best 60 percent of the value), worth_taking (next 25), optional; resource prizes;
+  contiguous blocks; states we already control. The conference cost itself is not modelled.
+
+Map facts (install files, vanilla only, mods ignored): land adjacency from `provinces.bmp` pixel contact
+minus the `impassable` rows of `adjacencies.csv`; sea contact only marks a state coastal; strait/sea
+rows are naval rules and ignored; terrain from `definition.csv` plus `common/terrain`; state category,
+infrastructure, factories, docks, resources, points, cores and bunkers from `history/states`; capitals
+from `history/countries`. Not modelled: rivers, supply, air cover, weather, allied territory as
+passage, naval invasions, the enemy's real unit positions (never read).
+
+History checks on the real 1936 map (start-of-game ownership, Germany as the player):
+- vs POL: the cheapest capital axis is Lodz (Silesia/Posen side) to Warsaw; the next are Katowice to
+  Krakow and Gdynia; fronts include East Prussia, Pomerania, Ostmark (Brandenburg east) and Silesia,
+  the Case White shape. Pocket 1 is Danzig/Gdynia/Poznan/Plock behind Lodz, Bialystok and Warsaw, with
+  arms from Silesia and Koenigsberg: the corridor-and-Vistula-bend encirclement.
+- vs CZE: Bohemia (capital) is the cheapest axis; the Bohemia pocket cut at Moravia and Sudeten
+  Silesia has arms from Lower and Upper Silesia (a second pocket uses Lower Bavaria, state 53).
+- vs FRA alone: the only land border is Alsace-Lorraine (bunkers, route cost 9.7, 13 divisions);
+  adding BEL and HOL makes the best axis the Ardennes to Wallonia to Flanders (Fall Gelb) and the
+  Maginot front a hold front.
+
+## 10. Supply system read (hoi4_supply, 26 October 2026)
+
+Pure memory read (no lease, no input, no cursor, no pause, about 10 ms). Code:
+`native/src/launch/macos/supplymem.rs` (memory layer, offsets and the evidence for each) and
+`supply.rs` (tool). Also reachable without any input binding through `macprobe SESSION hoi4_supply`
+(`read_only_call`); the `--session` stdio server offers it only with an input binding. Mach-O 089EA519
+only, fails closed with `capability_unavailable` on other builds.
+
+What the tool returns (all `validated:false` unless the list below says otherwise):
+
+| Field | Source | Meaning |
+|---|---|---|
+| `divisions[].supply_percent` / `supply_ratio` / `supply_need` / `supply_received` / `supply_band` | division (`CArmy`) +0x40 / +0x30 / +0x50 | Supply status (received over needed), need and receipt per day; band `full` (100), `ok` (70 up), `low` (50 up), `very_low` |
+| `divisions[].province_supply` / `province_demand` / `province_headroom` | `CSupplySystem` +0x130 province record | Supply the province receives against the demand of the units standing in it |
+| `provinces[]` | same, plus `CRailwayManager` | per stack province: `supply`, `demand`, `headroom` (negative = overdrawn), `flows[{node, flow, node_province, node_kind}]`, `supply_hub`, `railway_level`, `naval_base_level` |
+| `overdrawn_provinces[]` | derived | stacks that draw more than the province receives, worst first |
+| `states[].local_supply` | `CSupplySystem` +0x28 state record | the engine's local state supply (formula below) |
+| `supply_nodes[]` | `CCountrySupplySystem` node pool | own hubs and ports with province, railway and naval base level |
+| `below_70`, `below_50`, `summary`, `armies[].supply_percent_mean/lowest` | derived | filled now; they are real lists |
+
+Validation on the live Germany 1938 game (46 divisions, paused, run `a private run`):
+
+- State local supply: `local_supply = 0.3 x infrastructure + max(0.1, 0.18e-6 x manpower) + 0.2 x
+  local_supplies + sum(0.2 + 0.05 x vp)` (defines `INFRA_TO_SUPPLY`, `AVAILABLE_MANPOWER_STATE_SUPPLY`,
+  `SUPPLY_BASE_MULT` and the `local_supplies` key of `history/states`) matches 700 of 1081 states
+  within 0.001; nearly all the rest differ by an exact multiple of 0.3 (infrastructure built since the
+  1936 files). Strong, the one exactly validated field.
+- Nodes: the pool header says 31 used; 31 records were found (ids 24..54, one in slot 64, past the
+  header capacity 63); every hub province has a `supply_node` building (29 of 31 are listed in
+  `map/supply_nodes.txt`, the other two are level 1 ports) and every port a `naval_base`.
+- Railway level: the province `rail_way` building; 2786 of 3213 equal the highest link level in
+  `map/railways.txt`.
+- Division supply status: consistent but **not compared with the screen**. On all 46 divisions
+  `received = need x ratio` exactly; 27 divisions read 100 percent and the 19 stacked in province 6521
+  (Brandenburg, 16 + 3 divisions, demand 12.70 against province supply 10.16) read 94.5 percent; every
+  other province has demand far below its supply. The localisation string `ARMY_UNIT_SUPPLY` is
+  `Supply status: VALUE|%0Y`, and no map counter showed the `low_supply` mark. The game was paused for
+  the whole check, so the ratio's behaviour over time (it probably ramps) is unobserved.
+- The top bar `supply_value` of `hoi4_country_status` is not this number (its icon is the equipment
+  icon of `topbar.gui`); do not compare the two.
+
+Not mapped (typed null, listed under `unavailable`): hub capacity and railway throughput, trucks and
+trains in stock, the stored supply buffer, attrition, convoy-borne naval supply, air supply. The field
+at division +0x78 (equal to `need x (1 - f)` for a per-province constant `f`, 0.2633 / 0.7896 / 0.7349
+or 1.0) is the candidate for the "Stored" buffer of `ARMY_UNIT_SUPPLY_DESC_OK`; it is not reported.
+Foreign states and provinces are not read; state supply of an occupied state follows the occupier
+population factor 0.2 (`NON_CORE_MANPOWER_STATE_SUPPLY`), not checked.
+
+Discovery procedure (to redo on another build or to extend):
+
+1. Vtable scan (`S/vtmap.json` RTTI to vtable) for `CSupplySystem`, `CCountrySupplySystem`,
+   `CRailwayManager`, `CProvinceRailwayInfo`, `CLogisticsStatus`; the first and `CRailwayManager` are
+   single objects and are referenced from the game state at +0x398 and +0x3a0 (search the game state
+   for their addresses).
+2. Dump `CSupplySystem` as `{ptr, cap, size}` arrays: sizes 13414, 1082 and 440 are the province, state
+   and country counts, 8092 and 94 are static graph tables. Find the stride from the repeating
+   allocator pointer (province record 0xd8, state record 0x28).
+3. Division: diff 0x30..0x90 across all divisions; the field that is 1.0 for most and one lower value
+   for divisions that share a province is the ratio, its neighbours are need and received.
+4. For every candidate check an identity, not a plausibility: `received = need x ratio`, `province
+   demand = sum(need) x constant`, `node pool size = used count`, state value = the formula above.
+5. To validate the ratio on screen (open): select a division in a province whose demand exceeds its
+   supply (hover the unit card or the army banner for `Supply status`), or let the game run and watch
+   the ratio of a stack move, then compare with the tooltip and set `validated:true`. A cheap way to
+   make the effect visible without cheating: move several divisions into one province without a hub.
+
+## Economy detail read (26 October 2026)
+
+`hoi4_economy_detail` (`native/src/launch/macos/economy_detail.rs`; also via `macprobe`): pure memory
+read, no lease, no input, never pauses, about 4 ms. Offsets for Mach-O 089EA519 only.
+
+- Laws (validated): active ideas `politics+0x50` (`CIdea` +0x18 id string, modifiers `idea+0x60`,
+  count `idea+0x6c`); economy, trade and conscription law ids are told apart by the id lists of
+  `common/ideas/_economic.txt` and `_manpower.txt`. Germany 1938 read
+  `partial_economic_mobilisation`, `free_trade`, `extensive_conscription`.
+- Aggregated country modifier table (`country+0x550`, embedded `CModifier`, 16-byte `{id, flag,
+  fixed}` entries): all 87 entries are returned raw; ids named by correlation with active idea
+  values: conscription (73, 0.05), consumer_goods_expected_value (103, total 0.35 = law 0.25 + 0.10
+  from another source), conversion costs, research_speed_factor, training_time_factor,
+  min_export (224, 0.8 under free trade), fuel_gain_factor, arms factory speed, cic boost.
+- Civilian factory consumers (`production+0x430`): consumer goods raw count 52 of 59 civilian
+  factories, 7 left for projects (equals `civilian_factories_available_for_projects`). The relation
+  to expected_value 0.35 is NOT identified, so the share is validated:false.
+- Top bar industry number 101 equals military 36 + dockyards 10 + the production block count 55
+  (screenshot of 26 Oct 1938); the civilian trigger count is 59.
+- Still null: trade deals and trade-civilian usage (no deal object found; resource pool slots 1, 2
+  stay zero without deals), factory output modifier id, manpower (available, total, growth, recruited;
+  `country+0x2e8` CCountryManpower holds only two unidentified values), stability and war support
+  (computed on demand: DEFAULT 0.5 plus modifiers and party popularity), PP daily gain, fuel days left.
+- Not live-validated: any modifier id whose idea contribution is only part of the total, the
+  consumer goods share, free-trade pool semantics. Production/trade panels were never opened.

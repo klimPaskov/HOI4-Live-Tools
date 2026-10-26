@@ -75,7 +75,7 @@ fn parse_definition(text: &str) -> HashMap<u32, (i32, bool)> {
 }
 
 /// Pairs of touching land provinces (4-neighbourhood) in a 24 bpp BMP.
-fn land_edges(bmp: &[u8], defs: &HashMap<u32, (i32, bool)>) -> Result<BTreeSet<(i32, i32)>> {
+pub(super) fn land_edges(bmp: &[u8], defs: &HashMap<u32, (i32, bool)>) -> Result<BTreeSet<(i32, i32)>> {
     let bad = |m: &'static str| Error::new("map_data_unavailable", m);
     if bmp.len() < 54 || &bmp[..2] != b"BM" {
         return Err(bad("provinces.bmp is not a BMP"));
@@ -197,22 +197,22 @@ fn adjacency(dir: &Path) -> Result<Arc<Adjacency>> {
 // Memory snapshot (same validated reads as hoi4_states / hoi4_armies).
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-struct StateRow {
-    id: i32,
-    owner: String,
-    controller: String,
+pub(super) struct StateRow {
+    pub(super) id: i32,
+    pub(super) owner: String,
+    pub(super) controller: String,
 }
 
-struct Snapshot {
-    player: String,
-    states: Vec<StateRow>,
+pub(super) struct Snapshot {
+    pub(super) player: String,
+    pub(super) states: Vec<StateRow>,
     /// own divisions standing in each state
-    divisions: BTreeMap<i32, usize>,
+    pub(super) divisions: BTreeMap<i32, usize>,
     /// own divisions with no known state (moving or unreadable)
-    in_transit: usize,
+    pub(super) in_transit: usize,
 }
 
-fn snapshot(r: &Reader<'_>, image: u64) -> Result<Snapshot> {
+pub(super) fn snapshot(r: &Reader<'_>, image: u64) -> Result<Snapshot> {
     let g = game::layout(r);
     let l = crate::construction::layout(r);
     let gs = r.u64(image + g.gs_global)?;

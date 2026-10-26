@@ -29,6 +29,7 @@ mod doctrines;
 mod events;
 mod fleetmem;
 mod focus;
+mod front_plan;
 pub(crate) use focus::input_probe as focus_input_probe;
 mod input_gate;
 mod intelligence;
@@ -40,6 +41,7 @@ mod naval;
 mod politics;
 mod production;
 mod research;
+mod economy_detail;
 mod resources;
 #[cfg(test)]
 mod live_reads_mgmt;
@@ -53,6 +55,7 @@ mod special_projects;
 mod states;
 mod stateslots;
 mod supply;
+mod supplymem;
 mod template_get;
 mod units;
 #[cfg(test)]
@@ -415,6 +418,8 @@ pub fn read_only_call(process: &dyn Process, name: &str) -> Result<Value> {
         "hoi4_resources" => resources::resources(process),
         "hoi4_production_shortages" => resources::production_shortages(process),
         "hoi4_industry" => resources::industry(process),
+        "hoi4_supply" => supply::report(process, 0.7),
+        "hoi4_economy_detail" => economy_detail::detail(process),
         _ => Err(Error::new("capability_unavailable", "Unknown read-only tool")),
     }
 }
@@ -435,6 +440,7 @@ impl Commands for MacClock {
         ]
         .into_iter()
         .chain(resources::tools())
+        .chain([economy_detail::tool()])
         .chain([
             construction_open::tool(),
             construction_select::tool(),
@@ -469,6 +475,9 @@ impl Commands for MacClock {
             json!({"name":"hoi4_army_offensive","description":"Draw an offensive line for an own army that already holds a front line, into a target state: army card, Find view centres the state, offensive-line drawing (X), one right-button drag from the army's side to the state. Verified by new battle-plan orders on the army; execute the plan afterwards.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"state_id":{"type":"integer","minimum":1,"maximum":4095},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","state_id","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_states","description":"Find states by English name (accent-insensitive substring, or the exact ID), or list every state a country owns or controls by its tag (e.g. GER), with owner and controller as the political map shows them. Pure read.","inputSchema":{"type":"object","properties":{"query":{"type":"string"}},"required":["query"],"additionalProperties":false}}),
             json!({"name":"hoi4_wars","description":"Own land borders, occupied and threatened own states, from state owner/controller, own division positions and state adjacency derived from the install map files. Pure read; no lease. Stage B: wars lists the own wars (enemies, allies at war, start date) from war relations; sides, leaders, war score and justification timers are unvalidated; hostility is the war enemies plus the occupation proxy and the optional enemies tags you pass; covered is a heuristic (own divisions stand in the border states), not a front-line-order read. Alerts: own_state_occupied, border_uncovered, threatened_state_undefended.","inputSchema":{"type":"object","properties":{"enemies":{"type":"array","items":{"type":"string","minLength":3,"maxLength":3},"maxItems":32},"max_states":{"type":"integer","minimum":1,"maximum":1100}},"additionalProperties":false}}),
+            json!({"name":"hoi4_front_plan","description":"War plan for the named enemy tags (a tag, a comma list or an array): per contiguous border the own and enemy border states, ranked attack axes (cheapest route by terrain, infrastructure, urban and bunkers toward the enemy capital and valuable states, with the states along it), holding-line and second-line states for the other fronts, own divisions per front versus what is missing, and concrete hoi4_army_front / hoi4_army_offensive / hoi4_army_plan suggestions with state ids (add request_id and lease_token). Pure read; visible ownership and own division positions only, vanilla map files; no lease.","inputSchema":{"type":"object","properties":{"enemy":{"type":["string","array"],"items":{"type":"string"},"description":"enemy tag(s), e.g. POL or [\"FRA\",\"BEL\"]"},"max_axes":{"type":"integer","minimum":1,"maximum":6}},"required":["enemy"],"additionalProperties":false}}),
+            json!({"name":"hoi4_encirclement_candidates","description":"Pockets of enemy-controlled states that taking at most max_gap neck states would cut off: the pocket, the neck, the two pincer arms (own state into neck state), divisions needed and available per arm, value (points, industry, manpower, resources) and a score; sea, impassable states and neutral neighbours count as walls. Pure read; no lease.","inputSchema":{"type":"object","properties":{"enemy":{"type":["string","array"],"items":{"type":"string"}},"max_gap":{"type":"integer","minimum":0,"maximum":3},"limit":{"type":"integer","minimum":1,"maximum":20}},"required":["enemy"],"additionalProperties":false}}),
+            json!({"name":"hoi4_war_goal_targets","description":"Which enemy-owned states to demand in the peace conference, ranked by points, industry, manpower and resources with tiers (must_take, worth_taking, optional), resource prizes, contiguous blocks, own cores and which states we already occupy. A read, not an action; the conference cost itself is not modelled. No lease.","inputSchema":{"type":"object","properties":{"enemy":{"type":["string","array"],"items":{"type":"string"}},"limit":{"type":"integer","minimum":1,"maximum":100}},"required":["enemy"],"additionalProperties":false}}),
             json!({"name":"hoi4_events","description":"Open event windows in order (the last is on top) with their title and option texts. Pure read; no lease needed.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}}),
             json!({"name":"hoi4_event_choose","description":"Choose an option (0-based, in listed order) of the open event on top by clicking it. Verified when exactly that event window closes.","inputSchema":{"type":"object","properties":{"event":{"type":"string"},"option":{"type":"integer","minimum":0,"maximum":7},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["event","option","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_diplomacy","description":"Open the diplomacy view for the owner of a state (Find view centres the state, one click selects the country) and list the offered actions with enabled state, cost and whether the AI would refuse. Changes nothing in the game.","inputSchema":{"type":"object","properties":{"state_id":{"type":"integer","minimum":1,"maximum":4095},"lease_token":{"type":"string"}},"required":["state_id","lease_token"],"additionalProperties":false}}),
@@ -531,6 +540,7 @@ impl Commands for MacClock {
                 | "hoi4_resources"
                 | "hoi4_production_shortages"
                 | "hoi4_industry"
+                | "hoi4_economy_detail"
                 | "hoi4_diplomacy_state"
                 | "hoi4_doctrines"
                 | "hoi4_mios"
@@ -538,6 +548,9 @@ impl Commands for MacClock {
                 | "hoi4_research_extras"
                 | "hoi4_states"
                 | "hoi4_wars"
+                | "hoi4_front_plan"
+                | "hoi4_encirclement_candidates"
+                | "hoi4_war_goal_targets"
                 | "hoi4_events"
                 | "hoi4_event_choose"
                 | "hoi4_diplomacy"
@@ -595,7 +608,7 @@ impl Commands for MacClock {
         }
         if matches!(
             name,
-            "hoi4_resources" | "hoi4_production_shortages" | "hoi4_industry"
+            "hoi4_resources" | "hoi4_production_shortages" | "hoi4_industry" | "hoi4_economy_detail"
         ) {
             allowed(args, &[])?;
             return read_only_call(process, name);
@@ -682,6 +695,22 @@ impl Commands for MacClock {
                 .ok_or_else(|| Error::new("map_data_unavailable", "Game identity unavailable"))?
                 .exe;
             return wars::wars(process, &mapdata::game_dir(exe)?, args);
+        }
+        if matches!(
+            name,
+            "hoi4_front_plan" | "hoi4_encirclement_candidates" | "hoi4_war_goal_targets"
+        ) {
+            allowed(args, &["enemy", "enemies", "max_axes", "max_gap", "limit"])?;
+            let exe = &process
+                .identity()
+                .ok_or_else(|| Error::new("map_data_unavailable", "Game identity unavailable"))?
+                .exe;
+            let dir = mapdata::game_dir(exe)?;
+            return match name {
+                "hoi4_front_plan" => front_plan::front_plan_tool(process, &dir, args),
+                "hoi4_encirclement_candidates" => front_plan::encirclement_tool(process, &dir, args),
+                _ => front_plan::war_goal_tool(process, &dir, args),
+            };
         }
         if name == "hoi4_events" {
             allowed(args, &[])?;
