@@ -78,6 +78,18 @@ names), `stop_on_date`, research/focus fallbacks and a validated Germany plan te
 gate with these tools ran reliably (no freeze) but left alarms open; the final rerun is waiting on macOS
 task-port reauthorization (the right's 10-hour timeout expired: -60007; it needs a local password prompt).
 
+**Update (26 October, morning):** the macOS server now exposes 119 tools (`docs/TOOLS_MACOS.md`, generated), 2,641 Rust
+tests pass. Checked live at native 1080p: special projects (six tools), template editor, equipment/ship designs and production
+retargeting, naval missions/regions/admirals/fleets and naval production, air wings/rebase/missions, diplomacy by tag with trade,
+war goals and declare war, resources/shortages/industry/economy detail, supply (state side validated against the game's formula),
+templates and commander stats, front/encirclement planner, server-side date stop (offline-tested), reads of doctrines, MIOs,
+intelligence, fleets, convoys, air and designs. Not live-validated (19 tools marked UNVALIDATED, queue in
+`docs/LIVE_VALIDATION_QUEUE.md`): peace conference actions, doctrine adoption, agency/operatives, MIO actions, fleet merge/split/
+balance/reserve/delete/assign, naval invasion, faction create/leave, incoming proposals. Known gaps: per-division supply percentage
+unconfirmed on screen, trade deals/manpower/stability/war support exact values not in memory, per-wing air controls.
+The macOS task-port right expired at about 09:19; the next live session starts with `security authorize -u system.privilege.taskport`
+(the user approves the dialog), then the queue, then the strict gate and the recorded Germany FAIR campaign.
+
 ## Ordinary cancellation checkpoint
 
 The later ordinary Find-button component passed with one move/click in 603.114 ms;
