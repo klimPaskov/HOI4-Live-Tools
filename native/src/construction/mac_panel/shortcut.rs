@@ -57,11 +57,11 @@ impl Kind {
     fn observe(r: &Reader<'_>, base: u64, object: u64) -> Result<Self> {
         pointer(object)?;
         match r.u64(object)?.checked_sub(base) {
-            Some(0x34aafa0) => Ok(Self::Standard),
-            Some(0x34a81a8) => Ok(Self::Icon),
-            Some(0x34aa400) => Ok(Self::Drag),
-            Some(0x34c0918) => Ok(Self::Track),
-            Some(0x34b1768) => Ok(Self::InstantTextBox),
+            Some(0x36b9738) => Ok(Self::Standard),
+            Some(0x36b6880) => Ok(Self::Icon),
+            Some(0x36b8b50) => Ok(Self::Drag),
+            Some(0x36cf3a0) => Ok(Self::Track),
+            Some(0x36c00e0) => Ok(Self::InstantTextBox),
             _ => Err(invalid("Unsupported keyboard-target primary type")),
         }
     }
@@ -69,10 +69,10 @@ impl Kind {
         // Independent Mac constructor/registration proofs. In particular,
         // Icon's +d0 is its renderer; Drag/Track's +d8 is not a pointer.
         match self {
-            Self::Standard => (0xd0, 0xd8),
-            Self::Icon => (0xe0, 0xd0),
-            Self::Drag => (0xd0, 0x100),
-            Self::Track => (0xd0, 0xe8),
+            Self::Standard => (0xd8, 0xe0),
+            Self::Icon => (0xe8, 0xd8),
+            Self::Drag => (0xd8, 0x108),
+            Self::Track => (0xd8, 0xf0),
             Self::InstantTextBox => (0x88, 0xb0),
         }
     }
@@ -149,7 +149,7 @@ fn array(
     r.read(data, count * stride)
 }
 fn shortcuts(r: &Reader<'_>, button: u64) -> Result<Vec<Vec<u8>>> {
-    let bytes = array(r, button + 0xa0, 40, 128, 128)?;
+    let bytes = array(r, button + 0xa8, 40, 128, 128)?;
     let mut result = Vec::new();
     for entry in bytes.chunks_exact(40) {
         let data = u64::from_le_bytes(entry[16..24].try_into().unwrap());
@@ -183,7 +183,7 @@ fn sprite(r: &Reader<'_>, base: u64, node: u64) -> Result<()> {
     // CTextSprite's secondary base is deliberately not normalized.
     let primary = r.u64(node)?.checked_sub(base);
     if ![
-        0x34bdb10, 0x34afed0, 0x34acdc0, 0x34ba6f0, 0x34b1b30, 0x33e2b28, 0x34c0380,
+        0x36cc528, 0x36be530, 0x36bb6a0, 0x36c9210, 0x36c04b8, 0x35edb70, 0x36cee08,
     ]
     .into_iter()
     .any(|rva| Some(rva) == primary)
@@ -203,7 +203,7 @@ fn base_gate(
 ) -> Result<(BaseGate, Option<&'static str>)> {
     let mut gate = BaseGate {
         state: r.i32(target + 0x9c)?,
-        handler: r.u64(target + 0xc0)?,
+        handler: r.u64(target + 0xc8)?,
         disabled: None,
         control: None,
         shortcuts: Vec::new(),
@@ -214,7 +214,7 @@ fn base_gate(
     } else if gate.state == 3 && disabled_standard && !named {
         // The disabled base path bypasses shortcuts but can still consume.
         // C8 is a u32, unlike CC and the Standard parent's enabled byte.
-        let disabled = u32::from_le_bytes(r.read(target + 0xc8, 4)?.try_into().unwrap());
+        let disabled = u32::from_le_bytes(r.read(target + 0xd0, 4)?.try_into().unwrap());
         gate.disabled = Some(disabled);
         if disabled != 0 || flags & 2 != 0 {
             reason = Some(key.conflict());
@@ -222,7 +222,7 @@ fn base_gate(
     } else if ![0, 2].contains(&gate.state) {
         reason = Some("unsupported_keyboard_button_gate");
     } else {
-        let control = r.byte(target + 0xcc)?;
+        let control = r.byte(target + 0xd4)?;
         gate.control = Some(control);
         if control & 8 == 0 {
             if named {
@@ -262,25 +262,25 @@ pub(super) fn observe_key(
     key: PlainKey,
     original: Option<&Observation>,
 ) -> Result<Observation> {
-    if r.u64(base + 0x35dc058)? != gui {
+    if r.u64(base + 0x37eda08)? != gui {
         return Err(invalid(
             "Keyboard handler must use the same own GUI singleton",
         ));
     }
     let graphics = r.u64(gui + 0x98)?;
-    exact(r, base, graphics, 0x33dafa8)?;
-    if r.u64(button + 0xd0)? != graphics {
+    exact(r, base, graphics, 0x35e5b58)?;
+    if r.u64(button + 0xd8)? != graphics {
         return Err(invalid("Keyboard button graphics owner differs"));
     }
-    let renderer = r.u64(button + 0xd8)?;
+    let renderer = r.u64(button + 0xe0)?;
     sprite(r, base, renderer)?;
     if r.u64(renderer + 0x138)? != button {
         return Err(invalid("Keyboard renderer must retain the named button"));
     }
     // Only the already-owned direct CContainerWindow supplies this field.
-    exact(r, base, container, 0x34ac0b0)?;
-    let named_parent = r.u64(container + 0x1238)?;
-    exact(r, base, named_parent, 0x34b0428)?;
+    exact(r, base, container, 0x36ba978)?;
+    let named_parent = r.u64(container + 0x1358)?;
+    exact(r, base, named_parent, 0x36bea88)?;
     let mut out = Observation {
         key,
         gui,
@@ -377,14 +377,14 @@ pub(super) fn observe_key(
         }
         let reason = match receiver.kind {
             Kind::Standard => {
-                let parent = r.u64(target + 0x178)?;
+                let parent = r.u64(target + 0x180)?;
                 if named && parent != named_parent {
                     return Err(invalid(
                         "Named keyboard parent differs from own direct container",
                     ));
                 }
                 let enabled = if parent != 0 {
-                    exact(r, base, parent, 0x34b0428)?;
+                    exact(r, base, parent, 0x36bea88)?;
                     if r.u64(source + 0x108)? != parent {
                         return Err(invalid("Keyboard renderer and button parent differ"));
                     }
@@ -392,7 +392,7 @@ pub(super) fn observe_key(
                 } else {
                     None
                 };
-                let wrapper = r.byte(target + 0x1d1)?;
+                let wrapper = r.byte(target + 0x1d9)?;
                 let parent = ParentGate {
                     parent,
                     enabled,

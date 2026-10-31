@@ -51,17 +51,17 @@ impl Fake {
             torn: None,
         };
         for (a, v) in [
-            (0x3519740, GS),
-            (0x35196c0, ID),
-            (GS, 0x3306260),
-            (ID, 0x3308f90),
-            (CO, 0x337bc38),
+            (0x372b040, GS),
+            (0x372afc0, ID),
+            (GS, 0x35044e8),
+            (ID, 0x35089d8),
+            (CO, 0x357e388),
             (CO + 0x10f8, TREE),
-            (TREE, 0x33863a8),
-            (0x34d0a10, DB),
-            (DB, 0x3386528),
-            (A, 0x3386468),
-            (Z, 0x3386468),
+            (TREE, 0x3589048),
+            (0x3704440, DB),
+            (DB, 0x35891c8),
+            (A, 0x3589108),
+            (Z, 0x3589108),
             (A + 0x130, TREE),
             (Z + 0x130, TREE),
         ] {
@@ -118,7 +118,7 @@ impl Process for Fake {
 fn mac_catalog_reads_own_canonical_keys_without_linux_or_ui_offsets() {
     let f = Fake::new();
     let v = own_focus::snapshot(&f, 0, 1, Some("GER_")).unwrap();
-    assert_eq!(v["build_id"], "089EA519-6780-353B-8E39-4E9309B444D4");
+    assert_eq!(v["build_id"], "DFA875A5-25BA-35E0-9736-627F8A5C4396");
     assert_eq!(v["catalog_count"], 2);
     assert_eq!(v["next_offset"], 1);
     assert_eq!(v["focuses"][0]["key"], "GER_rhineland");
@@ -171,8 +171,8 @@ fn ownership_and_final_witnesses_refuse() {
         "invalid_focus_owner"
     );
     for target in [
-        0x3519740,
-        0x35196c0,
+        0x372b040,
+        0x372afc0,
         GS,
         ID,
         GS + 0x4d8,
@@ -229,12 +229,12 @@ fn progress_fixture() -> Fake {
     let mut f = Fake::new();
     let progress = 0x170000;
     // Mac RTTI for the existing own CCountry primary object.
-    f.word(0x337bc38 - 8, 0x180000);
+    f.word(0x357e388 - 8, 0x180000);
     f.word(0x180000 + 8, 0x190000);
     f.put(0x190000, b"8CCountry\0");
     f.int(GS + 0x428, 60_759_371);
     f.word(CO + 0x1108, progress);
-    f.word(progress, 0x33865d0);
+    f.word(progress, 0x3589270);
     f.word(progress + 8, CO);
     f.word(progress + 0x10, Z);
     f.array(progress + 0x40, 0x240000, &[A, A]);

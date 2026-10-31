@@ -5,21 +5,21 @@ const APP: u64 = 0x9d0000;
 
 fn empty(f: &mut Fixture) {
     for (at, value) in [
-        (BASE + 0x35d8dd0, HOTKEYS),
-        (HOTKEYS, BASE + 0x34a7db8),
-        (BASE + 0x34a7db8 + 0x20, BASE + 0x26ebf10),
-        (BASE + 0x327b430, BASE + 0x34fd970),
-        (HOTKEYS + 8, BASE + 0x34fd970),
+        (BASE + 0x37ea778, HOTKEYS),
+        (HOTKEYS, BASE + 0x36b6490),
+        (BASE + 0x36b6490 + 0x20, BASE + 0x2867050),
+        (BASE + 0x3477260, BASE + 0x370ce20),
+        (HOTKEYS + 8, BASE + 0x370ce20),
     ] {
         f.word(at, value);
     }
-    f.put(BASE + 0x35d8dd8, &[1]);
+    f.put(BASE + 0x37ea780, &[1]);
     f.int(HOTKEYS + 0x64, 0);
     f.int(HOTKEYS + 0x10, 0);
     f.int(HOTKEYS + 0x14, 0);
     f.put(HOTKEYS + 0x18, &[0]);
-    f.put(BASE + 0x34fd974, &[0]);
-    f.put(BASE + 0x34fd99c, &[0xff]);
+    f.put(BASE + 0x370ce24, &[0]);
+    f.put(BASE + 0x370ce4c, &[0xff]);
 }
 
 #[test]
@@ -32,13 +32,13 @@ fn exact_owned_empty_wrapper_supports_each_digit_and_return_under_one_find_witne
         "owned_hotkeys_flag1_exact_empty_table"
     );
     for prefix in ["", "6", "64"] {
-        f.string(FIND + 0xc48, prefix);
+        f.string(FIND + 0xd68, prefix);
         let snapshots = f.snapshots.get();
         assert!(anchor.observe_prefix(&f, prefix).unwrap().is_some());
         assert_eq!(f.snapshots.get(), snapshots + 1);
-        assert!(!f.untouched(BASE + 0x34fd974, 1));
+        assert!(!f.untouched(BASE + 0x370ce24, 1));
         assert!(!f.untouched(EDIT + 0x239, 1));
-        assert!(!f.untouched(FIND + 0xc48, 24));
+        assert!(!f.untouched(FIND + 0xd68, 24));
     }
     full_query(&mut f);
     assert!(anchor.observe_return(&f).unwrap().is_some());
@@ -54,19 +54,19 @@ fn current_capture_change_refuses_before_even_a_pending_query_or_return() {
         anchor.observe_prefix(&f, "6").unwrap_err().code,
         "construction_state_changed"
     );
-    assert!(f.untouched(FIND + 0xc48, 24));
+    assert!(f.untouched(FIND + 0xd68, 24));
     assert!(f.untouched(EDIT, 8));
     full_query(&mut f);
     assert_eq!(
         anchor.observe_return(&f).unwrap_err().code,
         "construction_state_changed"
     );
-    assert!(f.untouched(FIND + 0xc48, 24));
+    assert!(f.untouched(FIND + 0xd68, 24));
 }
 
 #[test]
 fn original_application_and_override_changes_refuse_before_find_or_foreign_payload() {
-    for at in [BASE + 0x35d8dd0, BASE + 0x3639ad8, IDLER + 0x4f8] {
+    for at in [BASE + 0x37ea778, BASE + 0x384b758, IDLER + 0x4f8] {
         let mut f = fixture();
         empty(&mut f);
         let anchor = bind(&f, 64).unwrap();
@@ -76,7 +76,7 @@ fn original_application_and_override_changes_refuse_before_find_or_foreign_paylo
             "construction_state_changed"
         );
         assert!(f.untouched(FOREIGN, 0x400));
-        assert!(f.untouched(FIND + 0xc48, 24));
+        assert!(f.untouched(FIND + 0xd68, 24));
         // Character edges are rejected before even the campaign context read.
         assert!(f.untouched(GS + crate::game::MACOS.player_tag, 4));
     }
@@ -86,7 +86,7 @@ fn original_application_and_override_changes_refuse_before_find_or_foreign_paylo
 fn changed_sentinel_alias_or_header_is_not_a_new_bind() {
     for (at, value) in [
         (HOTKEYS + 8, FOREIGN),
-        (BASE + 0x327b430, FOREIGN),
+        (BASE + 0x3477260, FOREIGN),
         (HOTKEYS + 0x10, 1),
     ] {
         let mut f = fixture();
@@ -99,14 +99,14 @@ fn changed_sentinel_alias_or_header_is_not_a_new_bind() {
         }
         assert!(anchor.observe_prefix(&f, "").is_err());
         assert!(f.untouched(FOREIGN, 80));
-        assert!(f.untouched(BASE + 0x34fd970, 80));
-        assert!(f.untouched(FIND + 0xc48, 24));
+        assert!(f.untouched(BASE + 0x370ce20, 80));
+        assert!(f.untouched(FIND + 0xd68, 24));
     }
 }
 
 #[test]
 fn character_final_witness_tear_discards_otherwise_coherent_find() {
-    for (at, size) in [(BASE + 0x34fd99c, 1), (HOTKEYS + 0x10, 4), (APP + 0x38, 8)] {
+    for (at, size) in [(BASE + 0x370ce4c, 1), (HOTKEYS + 0x10, 4), (APP + 0x38, 8)] {
         let mut f = fixture();
         empty(&mut f);
         // Bind reads each field once, then final witness reads it a second time.
@@ -120,10 +120,10 @@ fn default_focus_and_mouse_typing_guard_do_not_request_character_admission() {
     let mut f = fixture();
     // Unsupported outer receiver is irrelevant to a passive focus read and
     // the mouse opener's existing post-click typing-control readback.
-    f.word(BASE + 0x35d8dd0, FOREIGN);
+    f.word(BASE + 0x37ea778, FOREIGN);
     let observed = retained::observe_with_focus(&f, Some(64)).unwrap();
     assert!(observed.characters.is_none());
-    assert!(f.untouched(BASE + 0x35d8dd0, 8));
+    assert!(f.untouched(BASE + 0x37ea778, 8));
     let control = observed.focus().unwrap().control();
     let find = observed.anchor().unwrap();
     find.observe_guarded(
@@ -134,7 +134,7 @@ fn default_focus_and_mouse_typing_guard_do_not_request_character_admission() {
         },
     )
     .unwrap();
-    assert!(f.untouched(BASE + 0x35d8dd0, 8));
+    assert!(f.untouched(BASE + 0x37ea778, 8));
     assert!(f.untouched(FOREIGN, 8));
 }
 
@@ -144,13 +144,13 @@ fn final_closed_read_skips_character_and_old_control_payload_after_return() {
     empty(&mut f);
     let anchor = bind(&f, 64).unwrap();
     closed(&mut f);
-    f.word(FIND + 0xc40, FOREIGN);
+    f.word(FIND + 0xd60, FOREIGN);
     f.word(REGISTRY + 0x138, 0);
     f.word(REGISTRY + 0x210, 0);
-    f.word(BASE + 0x35d8dd0, FOREIGN);
+    f.word(BASE + 0x37ea778, FOREIGN);
     assert!(anchor.observe_finished(&f).unwrap().is_some());
-    assert!(f.untouched(BASE + 0x35d8dd0, 8));
-    assert!(f.untouched(FIND + 0xc40, 8));
+    assert!(f.untouched(BASE + 0x37ea778, 8));
+    assert!(f.untouched(FIND + 0xd60, 8));
     assert!(f.untouched(FOREIGN, 8));
 }
 

@@ -183,7 +183,7 @@ pub(crate) fn from_reader(
     // Existing bounded/aligned pointer policy, plus space for every used RVA.
     // This does not replace the caller's exact Mach-O image/build validation.
     pointer(base)?;
-    if base.checked_add(0x36330a8).is_none_or(|v| v > MAX_ADDRESS)
+    if base.checked_add(0x3844d10).is_none_or(|v| v > MAX_ADDRESS)
         || !(1..COUNTRY_LIMIT as i32).contains(&requested_state_id)
     {
         return Err(invalid(
@@ -239,7 +239,7 @@ pub(crate) fn from_reader(
         slot(&states, requested_state_id as usize, 8)?,
         original.map(|b| b.state),
     )?;
-    exact(r, base, state, 0x337caf0)?;
+    exact(r, base, state, 0x357f410)?;
     if r.i32(state + 0xc0)? != tag || r.i32(state + 0xc4)? != tag {
         return Err(invalid(
             "Requested state must be owned and controlled before payload",
@@ -248,7 +248,7 @@ pub(crate) fn from_reader(
     if r.i32(state + 0x40)? != requested_state_id {
         return Err(invalid("Requested canonical state identity required"));
     }
-    let mode_object = edge(r, base + 0x36330a0, original.map(|b| b.mode_object))?;
+    let mode_object = edge(r, base + 0x3844d08, original.map(|b| b.mode_object))?;
     if r.u64(mode_object + 0x48)? != gs {
         return Err(invalid("Map mode must retain own GS before enum payload"));
     }
@@ -260,23 +260,23 @@ pub(crate) fn from_reader(
         ));
     }
     let gui = edge(r, idler + 0x4c0, original.map(|b| b.gui))?;
-    exact(r, base, gui, 0x34974d0)?;
+    exact(r, base, gui, 0x36a5810)?;
     let graphics = edge(r, gui + 0x98, original.map(|b| b.graphics))?;
-    exact(r, base, graphics, 0x33dafa8)?;
+    exact(r, base, graphics, 0x35e5b58)?;
     let resource = edge(r, idler + 0x4f8, original.map(|b| b.resource))?;
     if r.u64(resource + 0x300)? != graphics || r.u64(resource + 0x308)? != gui {
         return Err(invalid("Own resource GUI/graphics backlinks required"));
     }
     let map = edge(r, resource + 0x310, original.map(|b| b.map))?;
-    exact(r, base, map, 0x33dab60)?;
-    exact(r, base, map + 8, 0x33dab98)?;
-    let camera = edge(r, idler + 0x708, original.map(|b| b.camera))?;
-    let data = edge(r, base + 0x3519a00, original.map(|b| b.data))?;
-    exact(r, base, data, 0x330b5b8)?;
+    exact(r, base, map, 0x35e5478)?;
+    exact(r, base, map + 8, 0x35e54b0)?;
+    let camera = edge(r, idler + 0x718, original.map(|b| b.camera))?;
+    let data = edge(r, base + 0x372b328, original.map(|b| b.data))?;
+    exact(r, base, data, 0x350ae90)?;
     if r.u64(map + 0x18)? != graphics
         || r.u64(map + 0x20)? != camera
         || r.u64(map + 0x28)? != data
-        || r.u64(base + 0x35dc028)? != graphics
+        || r.u64(base + 0x37ed9d8)? != graphics
     {
         return Err(invalid(
             "Exact own graphical map/camera/data joins required",
@@ -287,7 +287,7 @@ pub(crate) fn from_reader(
         std::array::from_fn(|i| i32::from_le_bytes(canvas[i * 4..i * 4 + 4].try_into().unwrap()));
     if d != [1920, 1080, 1920, 1080]
         || floats::<1>(r, graphics + 0x2c5b0)? != [1.0]
-        || r.u64(base + 0x32a1d28)? != base + 0x2ac6970
+        || r.u64(base + 0x349f108)? != base + 0x2c5ddc0
         || r.read(camera + 0x670, 2)? != [0, 0]
     {
         return Err(invalid("Qualified center canvas/scale/projection required"));
@@ -371,7 +371,7 @@ pub(crate) fn from_reader(
         slot(&provinces, province_id as usize, 8)?,
         original.map(|b| b.province),
     )?;
-    exact(r, base, province, 0x337c7e8)?;
+    exact(r, base, province, 0x357f020)?;
     if r.i32(province + 0x188)? != tag {
         return Err(invalid(
             "Own province control required before province payload",

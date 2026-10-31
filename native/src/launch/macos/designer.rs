@@ -38,16 +38,16 @@ pub(super) const GAME: (u32, u32) = (1920, 1080);
 const MANAGER: u64 = 0x670;
 const VIEW: u64 = 0x250;
 const VIEW_ROOT: u64 = 0x68;
-const DRAFT_HOLDER: u64 = 0x2110;
+const DRAFT_HOLDER: u64 = 0x2410;
 const DRAFT_DATA: u64 = 8;
 const GRID_ITEMS: u64 = 0x190;
 const ITEM_CONTAINER: u64 = 0x10;
 const TEXT: u64 = 0x100;
-const BUTTON_TEXT: u64 = 0x158;
-const UNIT_ITEM_DEFINITION: u64 = 0x3f8;
+const BUTTON_TEXT: u64 = 0x160;
+const UNIT_ITEM_DEFINITION: u64 = 0x458;
 // CDropDownBox members (the template dropdown of the designer).
-const DD_EXPAND: u64 = 0x880;
-const DD_WINDOW: u64 = 0x888;
+const DD_EXPAND: u64 = 0x940;
+const DD_WINDOW: u64 = 0x948;
 /// Slot pitch of the grids (`slotsize` in divisiondesignerview.gui).
 const REGIMENT_PITCH: (i32, i32) = (102, 46);
 const SUPPORT_PITCH: i32 = 35;

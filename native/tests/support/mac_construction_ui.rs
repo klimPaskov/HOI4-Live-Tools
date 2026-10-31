@@ -23,8 +23,8 @@ const CONVERSION: u64 = 0x700000;
 fn add_conversion(f: &mut MacFixture) {
     let shared = GRID + 0x10000;
     f.array(shared + 0x190, shared + 0x4000, &[CONVERSION]);
-    f.word(CONVERSION, BASE + 0x343aca0);
-    f.word(VIEW + 0x470, CONVERSION);
+    f.word(CONVERSION, BASE + 0x3647690);
+    f.word(VIEW + 0x4d0, CONVERSION);
     // Its frame/callback/template-shaped payload is deliberately unmapped.
 }
 
@@ -42,38 +42,38 @@ fn named(f: &mut MacFixture, widget: u64, name: &str) {
     let kind = widget + 0x1000000;
     f.word(widget + 0x50, kind);
     f.word(widget + 0x58, REGISTRY);
-    f.word(kind, BASE + 0x34b0e18);
+    f.word(kind, BASE + 0x36bf800);
     text(f, kind + 0x28, name);
 }
 fn window(f: &mut MacFixture, object: u64, name: &str, children: &[u64]) {
-    f.word(object, BASE + 0x34ac0b0);
+    f.word(object, BASE + 0x36ba978);
     // Generated non-primary GUI base; container() joins back to the exact
     // primary at -0x30, rather than requiring this header to be a primary.
     f.word(object + 0x30, 0);
     f.put(object + 0x95, &[8]);
     named(f, object + 0x30, name);
-    f.array(object + 0xd30, object + 0x4000, children);
+    f.array(object + 0xe50, object + 0x4000, children);
 }
 fn fixture(visible: bool, count: usize) -> MacFixture {
     let mut f = construction_target::construction();
     f.array(PRODUCTION + 0x70, 0, &[]);
     f.word(IDLER + 0x4c0, REGISTRY);
-    f.word(REGISTRY, BASE + 0x34974d0);
+    f.word(REGISTRY, BASE + 0x36a5810);
     f.word(IDLER + 0x670, MANAGER);
     f.word(MANAGER + 0x180, IDLER);
     f.word(MANAGER + 0x150, VIEW);
     f.int(MANAGER + 0x3c0, 0);
     // Inactive selection pointer and hidden-panel children are deliberately
     // unmapped: even reading them would be an unexpected fixture access.
-    f.word(VIEW, BASE + 0x343aa90);
-    f.word(VIEW + 0x428, IDLER);
+    f.word(VIEW, BASE + 0x3647478);
+    f.word(VIEW + 0x488, IDLER);
     f.word(VIEW + 0x30, MANAGER);
-    f.word(VIEW + 0x430, ROOT);
-    f.word(ROOT, BASE + 0x34ac0b0);
+    f.word(VIEW + 0x490, ROOT);
+    f.word(ROOT, BASE + 0x36ba978);
     f.put(ROOT + 0x95, &[if visible { 8 } else { 0 }]);
     f.word(ROOT + 0x88, REGISTRY);
-    f.int(ROOT + 0x12b8, 0);
-    f.int(ROOT + 0x1270, 0);
+    f.int(ROOT + 0x13d8, 0);
+    f.int(ROOT + 0x1390, 0);
     if !visible {
         return f;
     }
@@ -91,7 +91,7 @@ fn fixture(visible: bool, count: usize) -> MacFixture {
         let section = 0x450000 + i as u64 * 0x10000;
         let grid = GRID + i as u64 * 0x10000;
         window(&mut f, section, section_name, &[grid]);
-        f.word(grid, BASE + 0x34be068);
+        f.word(grid, BASE + 0x36cca80);
         named(&mut f, grid, grid_name);
         let items: Vec<_> = if i == 0 {
             (0..count).map(|i| ITEMS + i as u64 * 0x400).collect()
@@ -114,12 +114,12 @@ fn fixture(visible: bool, count: usize) -> MacFixture {
             format!("building_{i}")
         };
         templates.push(template);
-        f.word(template, BASE + 0x332e908);
+        f.word(template, BASE + 0x352fa88);
         f.put(template + 0x18, &[1]);
         f.int(template + 0x290, i as i32 + 1);
         f.string(template + 0x228, &key);
         let item = ITEMS + i as u64 * 0x400;
-        f.word(item, BASE + 0x343a9b0);
+        f.word(item, BASE + 0x3647398);
         f.word(item + 0x20, template);
         if target {
             f.word(item + 0x10, FRAME);
@@ -127,7 +127,7 @@ fn fixture(visible: bool, count: usize) -> MacFixture {
     }
     f.array(BUILDING_DB + 0x40, 0xb00000, &templates);
     window(&mut f, FRAME, "construction_choice", &[BUTTON]);
-    f.word(BUTTON, BASE + 0x34aafa0);
+    f.word(BUTTON, BASE + 0x36b9738);
     named(&mut f, BUTTON, "start_construction_button");
     f.put(BUTTON + 0x65, &[8]);
     f.int(BUTTON + 0x9c, 0);
@@ -165,7 +165,7 @@ fn hidden_panel_observes_owned_scope_and_queue_without_choices_or_selection_payl
         &f,
         &[
             MANAGER + 0x3b8,
-            ROOT + 0xd30,
+            ROOT + 0xe50,
             BASE + 0x44085f8,
             IDLER + 0x6b8,
         ],
@@ -187,7 +187,7 @@ fn full_choice_membership_reaches_target_beyond_sixty_four_and_reads_only_its_bu
     for i in 0..69 {
         not_read(&f, &[ITEMS + i * 0x400 + 0x10]);
     }
-    not_read(&f, &[BUTTON + 0xd8]); // This slice never reads renderer geometry.
+    not_read(&f, &[BUTTON + 0xe0]); // This slice never reads renderer geometry.
 }
 
 #[test]
@@ -222,7 +222,7 @@ fn conversion_requires_the_own_view_singleton_before_requested_control_payload()
     for owner in [0, FOREIGN, CONVERSION + 0x1000] {
         let mut f = fixture(true, 1);
         add_conversion(&mut f);
-        f.word(VIEW + 0x470, owner);
+        f.word(VIEW + 0x4d0, owner);
         assert_eq!(
             observe(&f, "arms_factory", 1).unwrap_err().code,
             "invalid_construction"
@@ -249,12 +249,12 @@ fn conversion_in_other_grids_or_duplicate_membership_refuses() {
             observe(&f, "arms_factory", 1).unwrap_err().code,
             "invalid_construction"
         );
-        not_read(&f, &[VIEW + 0x470, FRAME, BUTTON, CONVERSION + 0x20]);
+        not_read(&f, &[VIEW + 0x4d0, FRAME, BUTTON, CONVERSION + 0x20]);
     }
     for other in [CONVERSION, CONVERSION + 0x1000] {
         let mut f = fixture(true, 1);
         add_conversion(&mut f);
-        f.word(other, BASE + 0x343aca0);
+        f.word(other, BASE + 0x3647690);
         let shared = GRID + 0x10000;
         f.array(shared + 0x190, shared + 0x4000, &[CONVERSION, other]);
         assert_eq!(
@@ -267,7 +267,7 @@ fn conversion_in_other_grids_or_duplicate_membership_refuses() {
 
 #[test]
 fn conversion_type_owner_and_list_membership_share_final_witnesses() {
-    for field in [CONVERSION, VIEW + 0x470, GRID + 0x10000 + 0x4000] {
+    for field in [CONVERSION, VIEW + 0x4d0, GRID + 0x10000 + 0x4000] {
         let mut f = fixture(true, 1);
         add_conversion(&mut f);
         f.final_fault.set(Some(field));
@@ -284,7 +284,7 @@ fn conversion_does_not_hide_an_unknown_tail_item() {
     let mut f = fixture(true, 1);
     add_conversion(&mut f);
     let other = CONVERSION + 0x1000;
-    f.word(other, BASE + 0x343aca8);
+    f.word(other, BASE + 0x3647698);
     let shared = GRID + 0x10000;
     f.array(shared + 0x190, shared + 0x4000, &[CONVERSION, other]);
     assert_eq!(
@@ -297,7 +297,7 @@ fn conversion_does_not_hide_an_unknown_tail_item() {
 #[test]
 fn duplicate_or_unknown_tail_items_refuse_before_requested_control_payload() {
     for (field, value) in [
-        (ITEMS + 69 * 0x400, BASE + 0x343a9b8),
+        (ITEMS + 69 * 0x400, BASE + 0x36473a0),
         (ITEMS + 69 * 0x400 + 0x20, 0xa00000),
         (ITEMS + 69 * 0x400 + 0x20, FOREIGN),
         (GRID + 0x4000 + 69 * 8, ITEMS),
@@ -334,7 +334,7 @@ fn foreign_state_or_view_backlinks_refuse_before_unrelated_payload() {
     );
     for (field, value) in [
         (MANAGER + 0x180, FOREIGN),
-        (VIEW + 0x428, FOREIGN),
+        (VIEW + 0x488, FOREIGN),
         (VIEW + 0x30, FOREIGN),
     ] {
         let mut f = fixture(true, 1);
@@ -380,12 +380,12 @@ fn unverified_selection_modes_never_read_the_selected_pointer_or_cache() {
 
 #[test]
 fn unknown_null_and_base_grid_primaries_refuse_before_list_payload() {
-    for primary in [0x34b61f8, 0x34b0b70, 0x34be390, 0x34be070] {
+    for primary in [0x36c4c18, 0x36bf548, 0x36ccdb8, 0x36cca88] {
         let mut f = fixture(true, 1);
         f.word(GRID, BASE + primary);
         let e = observe(&f, "arms_factory", 1).unwrap_err();
         assert_eq!(e.code, "invalid_construction");
-        assert!(e.message.contains("expected rva_34be068"));
+        assert!(e.message.contains("expected rva_36cca80"));
         not_read(&f, &[GRID + 0x190, ITEMS, FRAME]);
     }
 }
@@ -401,12 +401,12 @@ fn duplicate_named_sections_or_controls_do_not_select_the_first_match() {
     not_read(&f, &[GRID, FRAME]);
     let mut f = fixture(true, 1);
     named(&mut f, BUTTON + 0x1000, "start_construction_button");
-    f.array(FRAME + 0xd30, FRAME + 0x4000, &[BUTTON, BUTTON + 0x1000]);
+    f.array(FRAME + 0xe50, FRAME + 0x4000, &[BUTTON, BUTTON + 0x1000]);
     assert_eq!(
         observe(&f, "arms_factory", 1).unwrap_err().code,
         "invalid_construction"
     );
-    not_read(&f, &[BUTTON + 0x9c, BUTTON + 0xd8]);
+    not_read(&f, &[BUTTON + 0x9c, BUTTON + 0xe0]);
 }
 
 #[test]
@@ -414,12 +414,12 @@ fn changed_ownership_catalog_membership_visibility_or_button_fails_final_witness
     for field in [
         MANAGER + 0x180,
         VIEW + 0x30,
-        VIEW + 0x428,
-        VIEW + 0x430,
+        VIEW + 0x488,
+        VIEW + 0x490,
         ROOT + 0x95,
         ROOT + 0x88,
-        ROOT + 0x12b8,
-        ROOT + 0x1270,
+        ROOT + 0x13d8,
+        ROOT + 0x1390,
         POSSIBLE + 0x88,
         GRID + 0x58,
         BUILDING_DB + 0x40,
@@ -444,8 +444,8 @@ fn changed_ownership_catalog_membership_visibility_or_button_fails_final_witness
 fn every_requested_gui_owner_must_match_before_dependent_payload() {
     for (field, unread) in [
         (ROOT + 0x88, ROOT + 0x95),
-        (POSSIBLE + 0x88, POSSIBLE + 0xd30),
-        (0x450000 + 0x88, 0x450000 + 0xd30),
+        (POSSIBLE + 0x88, POSSIBLE + 0xe50),
+        (0x450000 + 0x88, 0x450000 + 0xe50),
         (GRID + 0x58, GRID + 0x190),
         (GRID + 3 * 0x10000 + 0x58, ITEMS + 0x10),
         (FRAME + 0x88, FRAME + 0x95),
@@ -462,7 +462,7 @@ fn every_requested_gui_owner_must_match_before_dependent_payload() {
 
 #[test]
 fn root_transition_two_skips_choice_payload_even_when_local_flag_is_shown() {
-    for field in [ROOT + 0x12b8, ROOT + 0x1270] {
+    for field in [ROOT + 0x13d8, ROOT + 0x1390] {
         let mut f = fixture(false, 0);
         f.put(ROOT + 0x95, &[8]);
         f.int(field, 2);
@@ -472,13 +472,13 @@ fn root_transition_two_skips_choice_payload_even_when_local_flag_is_shown() {
         assert_eq!(v["panel"]["local_transitions_idle"], false);
         assert_eq!(v["choices"]["reason"], "panel_transition_hiding");
         assert_eq!(v["grid_registry_backlink_verified"], false);
-        not_read(&f, &[ROOT + 0xd30]);
+        not_read(&f, &[ROOT + 0xe50]);
     }
 }
 
 #[test]
 fn root_transition_one_is_engine_visible_but_never_settled_or_input_ready() {
-    for field in [ROOT + 0x12b8, ROOT + 0x1270] {
+    for field in [ROOT + 0x13d8, ROOT + 0x1390] {
         let mut f = fixture(true, 1);
         f.int(field, 1);
         let v = observe(&f, "arms_factory", 1).unwrap();
@@ -492,21 +492,21 @@ fn root_transition_one_is_engine_visible_but_never_settled_or_input_ready() {
 
 #[test]
 fn unknown_root_transition_refuses_before_choice_payload() {
-    for field in [ROOT + 0x12b8, ROOT + 0x1270] {
+    for field in [ROOT + 0x13d8, ROOT + 0x1390] {
         for state in [-1, 3, i32::MAX] {
             let mut f = fixture(false, 0);
             f.int(field, state);
             let error = observe(&f, "arms_factory", 1).unwrap_err();
             assert_eq!(error.code, "invalid_construction");
             assert!(error.message.contains("transition state"));
-            not_read(&f, &[ROOT + 0xd30]);
+            not_read(&f, &[ROOT + 0xe50]);
         }
     }
 }
 
 #[test]
 fn unmaterialized_panel_and_root_preserve_explicit_unavailability() {
-    for field in [MANAGER + 0x150, VIEW + 0x430] {
+    for field in [MANAGER + 0x150, VIEW + 0x490] {
         let mut f = fixture(false, 0);
         f.word(field, 0);
         let v = observe(&f, "arms_factory", 1).unwrap();
@@ -641,7 +641,7 @@ fn ui_probe_rejects_the_target_only_map_option_even_when_false() {
 fn missing_later_grid_keeps_partial_membership_and_never_reads_an_early_target_control() {
     let mut f = fixture(true, 1);
     // First grid already contains the target; the fourth section has no grid.
-    f.array(0x480000 + 0xd30, 0, &[]);
+    f.array(0x480000 + 0xe50, 0, &[]);
     let v = observe(&f, "arms_factory", 1).unwrap();
     assert_eq!(v["choices"]["complete_membership"], false);
     assert_eq!(v["choices"]["grid_count"], 3);
@@ -655,7 +655,7 @@ fn unknown_tail_after_an_early_target_still_refuses_before_its_control() {
     let mut f = fixture(true, 70);
     f.string(0xa00000 + 0x228, "arms_factory");
     f.string(TARGET_TEMPLATE + 0x228, "building_69");
-    f.word(ITEMS + 69 * 0x400, BASE + 0x343a9b8);
+    f.word(ITEMS + 69 * 0x400, BASE + 0x36473a0);
     assert_eq!(
         observe(&f, "arms_factory", 1).unwrap_err().code,
         "invalid_construction"

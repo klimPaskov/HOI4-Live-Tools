@@ -396,7 +396,7 @@ pub(super) struct Control {
     pub disabled: bool,
 }
 fn button(r: &Reader<'_>, image: u64, widget: u64) -> Result<(Rect, bool)> {
-    exact(r, widget, image + 0x34aafa0)?; // already reviewed CButtonStandard
+    exact(r, widget, image + 0x36b9738)?; // already reviewed CButtonStandard
     if !gui_tree::shown(r, widget)? {
         return Err(Error::new(
             "gui_target_unavailable",

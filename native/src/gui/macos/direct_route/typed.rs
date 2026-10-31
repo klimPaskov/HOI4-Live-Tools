@@ -9,16 +9,16 @@ use e::{basis, Common, Decision, ProgressTrig};
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
 const TYPES: &[(u64, &str)] = &[
-    (0x34b0428, "C2dPositionObject"),
-    (0x34bdb10, "CSprite"),
-    (0x34afed0, "CFrameAnimatedSprite"),
-    (0x34acdc0, "CCorneredTileSprite"),
-    (0x34ba6f0, "CProgressbarSprite"),
-    (0x34b1b30, "CInstantTextObject"),
-    (0x33e2b28, "CShieldObject"),
-    (0x34c0380, "CTextSprite"),
-    (0x34ba0f8, "C2dPieChartTemplate<SPieVertex>"),
-    (0x34b1f38, "CLineChart"),
+    (0x36bea88, "C2dPositionObject"),
+    (0x36cc528, "CSprite"),
+    (0x36be530, "CFrameAnimatedSprite"),
+    (0x36bb6a0, "CCorneredTileSprite"),
+    (0x36c9210, "CProgressbarSprite"),
+    (0x36c04b8, "CInstantTextObject"),
+    (0x35edb70, "CShieldObject"),
+    (0x36cee08, "CTextSprite"),
+    (0x36c8c18, "C2dPieChartTemplate<SPieVertex>"),
+    (0x36c0840, "CLineChart"),
 ];
 const CANVAS: [i32; 2] = [1920, 1080];
 const POINT: [f32; 2] = [960.0, 540.0];
@@ -101,28 +101,28 @@ fn asset(
         primary,
     });
     Ok(match primary.checked_sub(base) {
-        Some(0x34bde68) => Asset::Sprite(basis::SpriteType {
-            primary_rva: 0x34bde68,
+        Some(0x36cc880) => Asset::Sprite(basis::SpriteType {
+            primary_rva: 0x36cc880,
             texture: ints(r, a + 0x8c)?,
             tiles: ints(r, a + 0x78)?,
             orientation: r.i32(a + 0xfc)?,
             loaded_index: r.i32(a + 0x188)?,
         }),
-        Some(0x34b01c8) => Asset::Frame(e::FrameResource {
-            primary_rva: 0x34b01c8,
+        Some(0x36be828) => Asset::Frame(e::FrameResource {
+            primary_rva: 0x36be828,
             dimensions: ints(r, a + 0x8c)?,
             tiles: ints(r, a + 0x78)?,
             orientation: r.i32(a + 0xfc)?,
             loaded_index: r.i32(a + 0x188)?,
         }),
-        Some(0x33e1c08) => Asset::Masked(e::MaskedResource {
-            primary_rva: 0x33e1c08,
+        Some(0x35ec9d8) => Asset::Masked(e::MaskedResource {
+            primary_rva: 0x35ec9d8,
             dimensions: ints(r, a + 0x210)?,
             tiles: ints(r, a + 0x78)?,
             orientation: r.i32(a + 0xfc)?,
         }),
-        Some(0x34ba610) => Asset::Progress(e::ProgressResource {
-            primary_rva: 0x34ba610,
+        Some(0x36c9130) => Asset::Progress(e::ProgressResource {
+            primary_rva: 0x36c9130,
             dimensions: ints(r, a + 0xdc)?,
         }),
         _ => Asset::Unsupported,
@@ -219,16 +219,16 @@ fn guards(r: &Reader<'_>, base: u64, gui: u64, gfx: u64) -> Result<Guards> {
     let skip = r.byte(gui + 0x130)?;
     let conditional = r.byte(gui + 0x12)?;
     let focus = r.u64(gui + 0x138)?;
-    let up = r.byte(base + 0x35dbfa8)?;
-    let up_object = r.u64(base + 0x35dc000)?;
-    let post = r.u64(base + 0x35dbf60)?;
+    let up = r.byte(base + 0x37ed958)?;
+    let up_object = r.u64(base + 0x37ed9b0)?;
+    let post = r.u64(base + 0x37ed910)?;
     let singleton = if up == 1 {
-        let a = r.u64(base + 0x35dbfa0)?;
+        let a = r.u64(base + 0x37ed950)?;
         if a == 0 {
             return Err(invalid("Up invalidation singleton absent"));
         }
         ptr(a)?;
-        if r.u64(a)? != base + 0x34aabd0 {
+        if r.u64(a)? != base + 0x36b9360 {
             return Err(invalid(
                 "Exact final up singleton primary required before411",
             ));
@@ -348,7 +348,7 @@ pub fn observe(
         ptr(a)?
     }
     if base
-        .checked_add(0x35dc008)
+        .checked_add(0x37ed9b8)
         .is_none_or(|x| x > 0x7fff_ffff_0000)
     {
         return Err(invalid("Bounded image base required"));
@@ -360,9 +360,9 @@ pub fn observe(
     {
         return Err(invalid("Original embedded root association required"));
     }
-    if r.u64(gui)? != base + 0x34974d0
+    if r.u64(gui)? != base + 0x36a5810
         || r.u64(gui + 0x98)? != gfx
-        || r.u64(gfx)? != base + 0x33dafa8
+        || r.u64(gfx)? != base + 0x35e5b58
     {
         return Err(invalid("Original exact GUI/graphics join required"));
     }
@@ -385,7 +385,7 @@ pub fn observe(
         else {
             return Err(invalid("Unknown node primary before payload"));
         };
-        if parent == 0 && primary != base + 0x34b0428 {
+        if parent == 0 && primary != base + 0x36bea88 {
             return Err(invalid("Exact root primary required"));
         }
         if r.u64(object + 0x108)? != parent {
@@ -613,7 +613,7 @@ fn evaluate(nodes: &[Node], trig: ProgressTrig, strict: bool) -> Result<Counts> 
             Shape::Frame(Asset::Frame(a), Asset::Frame(b)) => e::frame(
                 POINT,
                 e::FrameRenderer {
-                    primary_rva: 0x34afed0,
+                    primary_rva: 0x36be530,
                     common: c,
                     local_scale: m.rs[1],
                 },
@@ -623,7 +623,7 @@ fn evaluate(nodes: &[Node], trig: ProgressTrig, strict: bool) -> Result<Counts> 
             Shape::Masked(Asset::Masked(a), Asset::Masked(b)) => e::masked(
                 POINT,
                 e::MaskedRenderer {
-                    primary_rva: 0x33e2b28,
+                    primary_rva: 0x35edb70,
                     common: c,
                     local_scale: m.rs[1],
                 },
@@ -633,7 +633,7 @@ fn evaluate(nodes: &[Node], trig: ProgressTrig, strict: bool) -> Result<Counts> 
             Shape::Progress(Asset::Progress(a), angle) => e::progress(
                 POINT,
                 e::ProgressRenderer {
-                    primary_rva: 0x34ba6f0,
+                    primary_rva: 0x36c9210,
                     common: c,
                     rotation: *angle,
                 },
@@ -727,11 +727,11 @@ mod tests {
         f.span(G, 0x220);
         f.span(X, 0x400);
         f.span(C, 0x200);
-        f.span(B + 0x35dbf60, 0xb0);
+        f.span(B + 0x37ed910, 0xb0);
         f.span(D, 8);
-        f.u(G, B + 0x34974d0);
+        f.u(G, B + 0x36a5810);
         f.u(G + 0x98, X);
-        f.u(X, B + 0x33dafa8);
+        f.u(X, B + 0x35e5b58);
         for at in [X + 0x40, X + 0x48] {
             f.f(at, 960.0);
             f.f(at + 4, 540.0)
@@ -742,14 +742,14 @@ mod tests {
         }
         f.i(X + 0x170, 1920);
         f.i(X + 0x174, 1080);
-        f.u(R, B + 0x34b0428);
+        f.u(R, B + 0x36bea88);
         f.u(R + 0xc0, D);
         f.i(R + 0xc8, 1);
         f.i(R + 0xcc, 1);
         f.put(R + 0x128, &[1]);
         f.f(R + 0x114, 1.0);
         f.u(D, C);
-        f.u(C, B + 0x34acdc0);
+        f.u(C, B + 0x36bb6a0);
         f.u(C + 0x108, R);
         f.put(C + 0x144, &[1]);
         f.u(C + 0x138, 0x600000);
@@ -819,7 +819,7 @@ mod tests {
     #[test]
     fn unknown_resource_payload_is_not_followed_and_remains_unsupported() {
         let mut f = fixture();
-        f.u(C, B + 0x34bdb10);
+        f.u(C, B + 0x36cc528);
         f.u(C + 0x168, 0x700000);
         f.u(0x700000, B + 2);
         let o = observe(&Reader::new(&f), B, G, X, R).unwrap();
@@ -838,16 +838,16 @@ mod tests {
     #[test]
     fn typed_up_invalidation_accepts_only_exact_singleton_before_flag() {
         let mut f = fixture();
-        f.put(B + 0x35dbfa8, &[1]);
-        f.u(B + 0x35dbfa0, 0x700000);
-        f.u(0x700000, B + 0x34aabd0);
+        f.put(B + 0x37ed958, &[1]);
+        f.u(B + 0x37ed950, 0x700000);
+        f.u(0x700000, B + 0x36b9360);
         f.put(0x700411, &[1]);
         observe(&Reader::new(&f), B, G, X, R)
             .unwrap()
             .require_no_direct_gui_recipient()
             .unwrap();
         f.reads.borrow_mut().clear();
-        f.u(0x700000, B + 0x346bff0);
+        f.u(0x700000, B + 0x3644900);
         assert!(observe(&Reader::new(&f), B, G, X, R).is_err());
         assert!(!f.reads.borrow().contains(&(0x700411, 1)));
     }

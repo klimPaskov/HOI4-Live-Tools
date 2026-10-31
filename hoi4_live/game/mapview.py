@@ -167,18 +167,29 @@ def _fold(text):
     return re.sub(r"\W+", "", "".join(c for c in t if not unicodedata.combining(c)).lower())
 
 
+def _press_find(session):
+    """Open the Find view: Ctrl+F (HOI4 1.19.4+), then F (1.19.3 and older) if it did not open.
+
+    Untested on Windows 1.19.4; each chord is pressed once and verified by OCR before the next.
+    """
+    opened, res = False, None
+    for combo in ("ctrl+f", "f"):
+        session.input.key(combo)
+        for _ in range(4):
+            time.sleep(0.6)
+            opened, res = _find_open(session)
+            if opened:
+                return opened, res
+    return opened, res
+
+
 def _find_hits(session, name):
     """Open the Find view, paste name, return (exact or near hits top to bottom, OCR result)."""
     want = _fold(name)
     session.park_cursor()
     opened, res = _find_open(session)
     if not opened:
-        session.input.key("f")
-        for _ in range(4):
-            time.sleep(0.6)
-            opened, res = _find_open(session)
-            if opened:
-                break
+        opened, res = _press_find(session)
     if not opened:
         return None, res
     with clipboard.Preserved():
@@ -258,12 +269,7 @@ def go_to_id(session, sid, expect=None):
         session.park_cursor()
         opened, res = _find_open(session)
         if not opened:
-            session.input.key("f")
-            for _ in range(4):
-                time.sleep(0.6)
-                opened, res = _find_open(session)
-                if opened:
-                    break
+            opened, res = _press_find(session)
         if not opened:
             last = {"seen": [l.text for l in res.lines][:20], "note": "the Find view did not open"}
             continue

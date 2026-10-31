@@ -3,7 +3,7 @@
 //! every rectangle is a click target, never an authorisation.
 //!
 //! Mapped live on 26 October 2026 (Germany, 1 January 1936, 1920x1080, F3 strategic air map mode):
-//! * `CMapIconManagerImpl` (image global +0x351abf0) holds one array per map icon type (header
+//! * `CMapIconManagerImpl` (image global +0x372c530) holds one array per map icon type (header
 //!   stride 0x18 from +0x8); the array whose elements carry the `CAirBaseMapIcon` vtable lists every
 //!   air base icon of every country: world position floats at +0x48/+0x50 (x, z of the
 //!   `air_base` row of map/buildings.txt), the icon's container window at +0x10 whose `bg_btn`
@@ -25,8 +25,8 @@ use crate::{
 };
 
 pub(super) const GAME: (u32, u32) = (1920, 1080);
-const ICON_GLOBAL: u64 = 0x351abf0;
-const ICON_VTABLE: u64 = 0x33dcad0;
+const ICON_GLOBAL: u64 = 0x372c530;
+const ICON_VTABLE: u64 = 0x35e77d8;
 const ICON_ARRAYS: u64 = 0x8;
 const ICON_ARRAY_STRIDE: u64 = 0x18;
 const ICON_TYPES: u64 = 34;
@@ -35,13 +35,13 @@ const ICON_POSITION: u64 = 0x48;
 /// The base circle's centre relative to the `bg_btn` rectangle's top-left corner.
 pub(super) const ICON_CENTER: (i32, i32) = (7, 6);
 const GUI_FROM_IDLER: u64 = 0x4c0;
-const POPUP_LIST: u64 = 0x9e0;
-const POPUP_ROOT: u64 = 0x430;
+const POPUP_LIST: u64 = 0xa70;
+const POPUP_ROOT: u64 = 0x490;
 const CONTAINER_BASE: u64 = 0x30;
 pub(super) const SLOT_STRATEGIC: u64 = 0x198;
 const SLOT_SELECTION: u64 = 0x200;
 const SELECTED_WINGS: u64 = 0x60;
-const STRATEGIC_ROOT: u64 = 0x430;
+const STRATEGIC_ROOT: u64 = 0x490;
 
 #[derive(Clone, Debug, PartialEq)]
 pub(super) struct BaseIcon {

@@ -83,7 +83,7 @@ fn original_queue_members_and_amounts_cannot_be_adopted_at_selection_promotion()
 
 #[test]
 fn replacement_scope_or_same_named_catalog_target_refuses_before_new_payload() {
-    for at in [IDLER + 0x670, COUNTRY + 0xd10, BASE + 0x34d0ac0] {
+    for at in [IDLER + 0x670, COUNTRY + 0xd10, BASE + 0x3703ad0] {
         let mut f = fixture(&[LINE]);
         let before = original(&mut f);
         select(&mut f);
@@ -360,7 +360,7 @@ fn incomplete_or_excess_delta_never_exposes_a_handoff_proof() {
             0 => f.int(LINE + 0x48, 4),
             1 => {
                 f.array(PRODUCTION + 0x70, &[LINE, NEW]);
-                f.word(NEW + 0x70, 0);
+                f.word(NEW + 0x78, 0);
             }
             _ => {
                 f.array(PRODUCTION + 0x70, &[LINE, NEW]);

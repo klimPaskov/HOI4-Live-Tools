@@ -287,25 +287,25 @@ mod mac_canonical_tests {
                 fault: None,
             };
             for (address, value) in [
-                (IMAGE + 0x3519740, GS),
-                (IMAGE + 0x35196c0, IDLER),
-                (IMAGE + 0x34d0de0, 0x1d0000),
-                (IMAGE + 0x3506580, TAGS),
-                (GS, IMAGE + 0x3306260),
-                (IDLER, IMAGE + 0x3308f90),
-                (COUNTRY, IMAGE + 0x337bc38),
+                (IMAGE + 0x372b040, GS),
+                (IMAGE + 0x372afc0, IDLER),
+                (IMAGE + 0x3706540, 0x1d0000),
+                (IMAGE + 0x3717d50, TAGS),
+                (GS, IMAGE + 0x35044e8),
+                (IDLER, IMAGE + 0x35089d8),
+                (COUNTRY, IMAGE + 0x357e388),
                 (COUNTRY + 0xd08, RESEARCH),
                 (COUNTRY + 0xd10, PRODUCTION),
                 (COUNTRY + 0x1108, FOCUS),
-                (RESEARCH, IMAGE + 0x339e4e8),
+                (RESEARCH, IMAGE + 0x35a7258),
                 (RESEARCH + 0x130, COUNTRY),
-                (FOCUS, IMAGE + 0x33865d0),
+                (FOCUS, IMAGE + 0x3589270),
                 (FOCUS + 0x10, 0),
-                (PRODUCTION, IMAGE + 0x338b678),
-                (PRODUCTION + 0x290, COUNTRY),
-                (IMAGE + 0x34d0be0, EQUIPMENT_DB),
-                (EQUIPMENT_DB, IMAGE + 0x3377a90),
-                (TYPE, IMAGE + 0x3379328),
+                (PRODUCTION, IMAGE + 0x358e0c8),
+                (PRODUCTION + 0x2a8, COUNTRY),
+                (IMAGE + 0x36e0210, EQUIPMENT_DB),
+                (EQUIPMENT_DB, IMAGE + 0x357a240),
+                (TYPE, IMAGE + 0x357bad8),
             ] {
                 f.word(address, value);
             }
@@ -342,21 +342,21 @@ mod mac_canonical_tests {
                 (LINE, VARIANT, HANDLE, 10),
                 (OTHER, VARIANT + 0x1000, HANDLE + (1 << 32), 5),
             ] {
-                f.word(line, IMAGE + 0x338a030);
+                f.word(line, IMAGE + 0x358ca80);
                 f.word(line + 0x20, PRODUCTION);
                 f.word(line + 8, handle);
                 f.int(line + 0x14, count);
                 f.int(line + 0x18, 0);
                 f.int(line + 0xe8, count);
                 f.word(line + 0x88, variant);
-                f.word(variant, IMAGE + 0x337aac8);
+                f.word(variant, IMAGE + 0x357d1b8);
                 f.int(variant + 0x14, 7);
                 f.word(variant + 0x3e0, TYPE);
             }
             for (ordinal, (table, name)) in [
-                (0x337bc38, "CCountry"),
-                (0x33865d0, "CNationalFocusProgress"),
-                (0x339e4e8, "CTechnologyStatus"),
+                (0x357e388, "CCountry"),
+                (0x3589270, "CNationalFocusProgress"),
+                (0x35a7258, "CTechnologyStatus"),
             ]
             .into_iter()
             .enumerate()
@@ -470,7 +470,7 @@ mod mac_canonical_tests {
     fn every_mac_identity_count_and_membership_is_a_final_witness() {
         for fault in [
             COUNTRY + 0xd10,
-            PRODUCTION + 0x290,
+            PRODUCTION + 0x2a8,
             PRODUCTION + 0x58,
             ARRAY,
             ARRAY + 8,

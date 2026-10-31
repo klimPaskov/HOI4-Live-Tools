@@ -7,7 +7,7 @@
 
 // Independently recovered for Mach-O089EA519; see native/PROVENANCE.md.
 // Extends the attributed Clausewitz observation approach; no upstream hit code.
-pub const SPRITE_TYPE_PRIMARY_RVA: u64 = 0x34bde68;
+pub const SPRITE_TYPE_PRIMARY_RVA: u64 = 0x36cc880;
 // Observer policy, not engine constants. Values remain well inside exact i32
 // conversion/addition limits; all arithmetic below still checks intermediates.
 pub const MAX_CANVAS: i32 = 32_768;

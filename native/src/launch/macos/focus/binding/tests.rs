@@ -157,14 +157,14 @@ impl Fake {
         self.put(address, &bytes);
     }
     fn focus(&mut self, object: u64, key: &str) {
-        self.word(object, 0x3386468);
+        self.word(object, 0x3589108);
         self.word(object + 0x130, OWN_TREE);
         self.string(object + 0x18, key);
     }
     fn container(&mut self, object: u64, children: &[u64]) {
-        self.word(object, 0x34ac0b0);
+        self.word(object, 0x36ba978);
         self.put(object + 0x95, &[8]);
-        self.array(object + 0xd30, children);
+        self.array(object + 0xe50, children);
     }
     fn name(&mut self, widget: u64, name: &str) {
         let kind = self.alloc();
@@ -173,7 +173,7 @@ impl Fake {
         self.string(kind + 0x28, name);
     }
     fn widget(&mut self, object: u64, name: &str, button: bool, rect: Rect) {
-        self.word(object, if button { 0x34aafa0 } else { 0x34a81a8 });
+        self.word(object, if button { 0x36b9738 } else { 0x36b6880 });
         self.name(object, name);
         self.put(object + 0x65, &[8]);
         if button {
@@ -181,8 +181,8 @@ impl Fake {
         }
         let sprite = self.alloc();
         let kind = self.alloc();
-        self.word(object + if button { 0xd8 } else { 0xd0 }, sprite);
-        self.word(sprite, 0x34bdb10);
+        self.word(object + if button { 0xe0 } else { 0xd8 }, sprite);
+        self.word(sprite, 0x36cc528);
         self.word(sprite + 8, kind);
         self.int(kind + 0x78, 1);
         self.int(kind + 0x8c, rect.w);
@@ -205,10 +205,10 @@ impl Fake {
     }
     fn with_other_node() -> Self {
         let mut f = Self::new();
-        f.word(SECOND_ITEM, 0x3405b78);
+        f.word(SECOND_ITEM, 0x3611108);
         f.word(SECOND_ITEM + 0x20, OTHER);
         f.word(SECOND_ITEM + 0x10, OTHER_NODE);
-        f.array(FOCUS_VIEW + 0x18f0, &[ITEM, SECOND_ITEM]);
+        f.array(FOCUS_VIEW + 0x2d70, &[ITEM, SECOND_ITEM]);
         f.container(OTHER_NODE, &[OTHER_SYMBOL, OTHER_BACKGROUND]);
         f.widget(
             OTHER_SYMBOL,
@@ -245,32 +245,32 @@ impl Fake {
         f.word(STATUS + 0x130, COUNTRY);
         f.int(STATUS + 0x138, 1);
         for (address, value) in [
-            (0x3519740, GS),
-            (0x35196c0, IDLER),
-            (GS, 0x3306260),
-            (IDLER, 0x3308f90),
-            (COUNTRY, 0x337bc38),
+            (0x372b040, GS),
+            (0x372afc0, IDLER),
+            (GS, 0x35044e8),
+            (IDLER, 0x35089d8),
+            (COUNTRY, 0x357e388),
             (COUNTRY + 0x10f8, OWN_TREE),
             (COUNTRY + 0x1108, PROGRESS),
-            (OWN_TREE, 0x33863a8),
-            (0x34d0a10, DATABASE),
-            (DATABASE, 0x3386528),
-            (PROGRESS, 0x33865d0),
+            (OWN_TREE, 0x3589048),
+            (0x3704440, DATABASE),
+            (DATABASE, 0x35891c8),
+            (PROGRESS, 0x3589270),
             (PROGRESS + 8, COUNTRY),
             (PROGRESS + 0x10, 0),
             (IDLER + 0x670, MANAGER),
             (MANAGER + 0x130, FOCUS_VIEW),
             (MANAGER + 0x128, POLITICS_VIEW),
             (FOCUS_VIEW, MACOS.focus_view_vtable),
-            (FOCUS_VIEW + 0x430, FOCUS_ROOT),
-            (POLITICS_VIEW + 0x430, POLITICS_ROOT),
-            (FOCUS_VIEW + 0x1990, COUNTRY),
-            (ITEM, 0x3405b78),
+            (FOCUS_VIEW + 0x490, FOCUS_ROOT),
+            (POLITICS_VIEW + 0x490, POLITICS_ROOT),
+            (FOCUS_VIEW + 0x2e10, COUNTRY),
+            (ITEM, 0x3611108),
             (ITEM + 0x20, TARGET),
             (ITEM + 0x10, NODE),
-            (PANEL, 0x3405158),
-            (PANEL + 0xba8, TARGET),
-            (PANEL + 0xba0, DETAIL_FRAME),
+            (PANEL, 0x36106d8),
+            (PANEL + 0xcc8, TARGET),
+            (PANEL + 0xcc0, DETAIL_FRAME),
         ] {
             f.word(address, value);
         }
@@ -287,14 +287,14 @@ impl Fake {
         f.array(PROGRESS + 0x40, &[]);
         f.focus(TARGET, KEY);
         f.focus(OTHER, "GER_autarky");
-        f.float(FOCUS_VIEW + 0x19b0, 1.0);
-        f.array(FOCUS_VIEW + 0x18f0, &[ITEM]);
-        f.array(FOCUS_VIEW + 0x1938, &[PANEL]);
+        f.float(FOCUS_VIEW + 0x2e34, 1.0);
+        f.array(FOCUS_VIEW + 0x2d70, &[ITEM]);
+        f.array(FOCUS_VIEW + 0x2db8, &[PANEL]);
         f.container(FOCUS_ROOT, &[]);
         f.container(POLITICS_ROOT, &[GOAL + 0x30]);
         f.container(GOAL, &[OPEN_BUTTON]);
         // Containers appear in parent children lists as their GUI-object base.
-        f.word(GOAL + 0x30, 0x34ac100);
+        f.word(GOAL + 0x30, 0x36ba9c8);
         f.name(GOAL + 0x30, "active_goal");
         f.container(NODE, &[SYMBOL, BACKGROUND]);
         f.container(DETAIL_FRAME, &[START]);
@@ -476,7 +476,7 @@ fn foreign_node_or_selected_detail_refuses_before_foreign_ui_payload() {
     assert!(f.untouched(FOREIGN, 0x1000));
     assert!(f.untouched(NODE, 0x1000));
     let mut f = Fake::new();
-    f.word(PANEL + 0xba8, FOREIGN);
+    f.word(PANEL + 0xcc8, FOREIGN);
     assert_eq!(
         observe(&f, KEY, None, detail).unwrap_err().code,
         "foreign_focus_scope"
@@ -566,7 +566,7 @@ fn sparse_readiness(country_override: u64, visible: bool) -> Fake {
     f.unmap(FOCUS_VIEW + MACOS.items, 16);
     f.unmap(FOCUS_VIEW + MACOS.panels, 16);
     f.unmap(FOCUS_VIEW + MACOS.zoom, 4);
-    f.unmap(FOCUS_ROOT + 0xd30, 16);
+    f.unmap(FOCUS_ROOT + 0xe50, 16);
     f.unmap(ITEM, 0x1000);
     f.unmap(PANEL, 0x1000);
     f
@@ -576,7 +576,7 @@ fn assert_no_readiness_payload(f: &Fake) {
     assert!(f.untouched(FOCUS_VIEW + MACOS.items, 16));
     assert!(f.untouched(FOCUS_VIEW + MACOS.panels, 16));
     assert!(f.untouched(FOCUS_VIEW + MACOS.zoom, 4));
-    assert!(f.untouched(FOCUS_ROOT + 0xd30, 16));
+    assert!(f.untouched(FOCUS_ROOT + 0xe50, 16));
     assert!(f.untouched(ITEM, 0x1000));
     assert!(f.untouched(PANEL, 0x1000));
     assert!(f.untouched(FOREIGN, 0x1000));
@@ -662,8 +662,8 @@ fn readiness_states_require_final_view_witness_and_process_check() {
         (COUNTRY, true, FocusViewState::Ready),
     ] {
         for address in [
-            0x3519740,
-            0x35196c0,
+            0x372b040,
+            0x372afc0,
             game::layout(&Reader::new(&Fake::new())).technology_db_global,
             GS + 0x4d8,
             COUNTRY + 0xd08,
@@ -767,9 +767,9 @@ fn changed_own_override_branch_cannot_replace_a_captured_control() {
 fn repeated_items_and_distinct_duplicate_target_nodes_are_ambiguous() {
     for second in [ITEM, SECOND_ITEM] {
         let mut f = Fake::new();
-        f.word(SECOND_ITEM, 0x3405b78);
+        f.word(SECOND_ITEM, 0x3611108);
         f.word(SECOND_ITEM + 0x20, TARGET);
-        f.array(FOCUS_VIEW + 0x18f0, &[ITEM, second]);
+        f.array(FOCUS_VIEW + 0x2d70, &[ITEM, second]);
         assert_eq!(
             observe(&f, KEY, None, symbols).unwrap_err().code,
             "invalid_gui"
@@ -783,10 +783,10 @@ fn repeated_items_and_distinct_duplicate_target_nodes_are_ambiguous() {
 fn repeated_panels_and_multiple_visible_target_details_are_ambiguous() {
     for second in [PANEL, SECOND_PANEL] {
         let mut f = Fake::new();
-        f.word(SECOND_PANEL, 0x3405158);
-        f.word(SECOND_PANEL + 0xba8, TARGET);
-        f.word(SECOND_PANEL + 0xba0, DETAIL_FRAME);
-        f.array(FOCUS_VIEW + 0x1938, &[PANEL, second]);
+        f.word(SECOND_PANEL, 0x36106d8);
+        f.word(SECOND_PANEL + 0xcc8, TARGET);
+        f.word(SECOND_PANEL + 0xcc0, DETAIL_FRAME);
+        f.array(FOCUS_VIEW + 0x2db8, &[PANEL, second]);
         assert_eq!(
             observe(&f, KEY, None, detail).unwrap_err().code,
             "invalid_gui"
@@ -798,20 +798,20 @@ fn repeated_panels_and_multiple_visible_target_details_are_ambiguous() {
 fn duplicate_named_node_start_and_opener_controls_refuse() {
     let mut f = Fake::new();
     f.name(SECOND_SYMBOL, "symbol");
-    f.array(NODE + 0xd30, &[SYMBOL, SECOND_SYMBOL, BACKGROUND]);
+    f.array(NODE + 0xe50, &[SYMBOL, SECOND_SYMBOL, BACKGROUND]);
     assert_eq!(
         observe(&f, KEY, None, symbols).unwrap_err().code,
         "invalid_gui"
     );
     let mut f = Fake::new();
     f.name(SECOND_START, "start");
-    f.array(DETAIL_FRAME + 0xd30, &[START, SECOND_START]);
+    f.array(DETAIL_FRAME + 0xe50, &[START, SECOND_START]);
     assert_eq!(
         observe(&f, KEY, None, detail).unwrap_err().code,
         "invalid_gui"
     );
     let mut f = Fake::new();
-    f.array(GOAL + 0xd30, &[OPEN_BUTTON, OPEN_BUTTON]);
+    f.array(GOAL + 0xe50, &[OPEN_BUTTON, OPEN_BUTTON]);
     assert_eq!(
         observe(&f, KEY, None, focus_button).unwrap_err().code,
         "invalid_gui"
@@ -821,7 +821,7 @@ fn duplicate_named_node_start_and_opener_controls_refuse() {
 #[test]
 fn oversized_panel_list_refuses_before_its_unmapped_payload() {
     let mut f = Fake::new();
-    f.header(FOCUS_VIEW + 0x1938, FOREIGN, 9, 9);
+    f.header(FOCUS_VIEW + 0x2db8, FOREIGN, 9, 9);
     assert_eq!(
         observe(&f, KEY, None, detail).unwrap_err().code,
         "invalid_array"
@@ -832,16 +832,16 @@ fn oversized_panel_list_refuses_before_its_unmapped_payload() {
 #[test]
 fn torn_roots_membership_view_and_renderer_never_return_a_candidate() {
     let reference = Fake::new();
-    let sprite = reference.get_word(SYMBOL + 0xd0);
+    let sprite = reference.get_word(SYMBOL + 0xd8);
     let sprite_type = reference.get_word(sprite + 8);
     for address in [
-        0x3519740,
+        0x372b040,
         COUNTRY + 0x10f8,
         TARGET + 0x130,
         IDLER + 0x670,
-        FOCUS_VIEW + 0x1990,
-        FOCUS_VIEW + 0x18f0,
-        SYMBOL + 0xd0,
+        FOCUS_VIEW + 0x2e10,
+        FOCUS_VIEW + 0x2d70,
+        SYMBOL + 0xd8,
         sprite + 0xb0,
         sprite_type + 0x8c,
     ] {
@@ -888,7 +888,7 @@ fn hidden_start_or_detail_refuses_and_disabled_start_remains_explicit() {
 #[test]
 fn an_icon_named_start_cannot_supply_button_state() {
     let mut f = Fake::new();
-    f.word(START, 0x34a81a8);
+    f.word(START, 0x36b6880);
     assert_eq!(
         observe(&f, KEY, None, detail).unwrap_err().code,
         "invalid_focus_type"
@@ -900,10 +900,10 @@ fn an_icon_named_start_cannot_supply_button_state() {
 fn every_visible_obstacle_requires_supported_finite_geometry() {
     for variant in 0..3 {
         let mut f = Fake::new();
-        let sprite = f.get_word(BACKGROUND + 0xd0);
+        let sprite = f.get_word(BACKGROUND + 0xd8);
         let kind = f.get_word(sprite + 8);
         match variant {
-            0 => f.word(sprite, 0x34bdb18),
+            0 => f.word(sprite, 0x36cc530),
             1 => f.int(kind + 0x8c, 0),
             _ => f.float(sprite + 0xb0, f32::NAN),
         }
@@ -953,7 +953,7 @@ fn final_control_equality_detects_movement_and_disabled_state_changes() {
         if change_state {
             changed.int(START + 0x9c, 3);
         } else {
-            let sprite = changed.get_word(START + 0xd8);
+            let sprite = changed.get_word(START + 0xe0);
             changed.float(sprite + 0xb0, 91.0);
         }
         let current = observe(&changed, KEY, Some(&original_owner), detail)
@@ -994,13 +994,13 @@ fn target_probe_skips_unrelated_container_and_target_background_geometry() {
     let mut f = Fake::with_other_node();
     f.unmap(SECOND_ITEM + 0x10, 8);
     f.unmap(OTHER_NODE, 0x1000);
-    f.unmap(BACKGROUND + 0xd0, 8);
+    f.unmap(BACKGROUND + 0xd8, 8);
     assert!(observe(&f, KEY, None, node).unwrap().1.is_some());
     assert!(f.untouched(SECOND_ITEM + 0x10, 8));
     assert!(f.untouched(OTHER_NODE, 0x1000));
     assert!(f.untouched(OTHER_SYMBOL, 0x1000));
     assert!(f.untouched(BACKGROUND + 0x65, 1));
-    assert!(f.untouched(BACKGROUND + 0xd0, 8));
+    assert!(f.untouched(BACKGROUND + 0xd8, 8));
 }
 
 #[test]
@@ -1014,7 +1014,7 @@ fn target_geometry_success_cannot_authorize_an_unproved_drag_background() {
             } else {
                 OTHER_SYMBOL
             };
-            let sprite = f.get_word(widget + 0xd0);
+            let sprite = f.get_word(widget + 0xd8);
             f.unmap(sprite, 0x1000);
         }
         assert!(observe(&target, KEY, None, node).unwrap().1.is_some());
@@ -1031,10 +1031,10 @@ fn both_probes_validate_all_items_before_any_target_container_payload() {
         for full in [false, true] {
             let mut f = Fake::new();
             f.unmap(NODE, 0x1000);
-            f.word(SECOND_ITEM, if mode == 3 { 0x3405b80 } else { 0x3405b78 });
+            f.word(SECOND_ITEM, if mode == 3 { 0x3611110 } else { 0x3611108 });
             f.word(SECOND_ITEM + 0x20, if mode == 2 { FOREIGN } else { TARGET });
             f.array(
-                FOCUS_VIEW + 0x18f0,
+                FOCUS_VIEW + 0x2d70,
                 &[ITEM, if mode == 0 { ITEM } else { SECOND_ITEM }],
             );
             let error = if full {
@@ -1060,21 +1060,21 @@ fn both_probes_validate_all_items_before_any_target_container_payload() {
 #[test]
 fn target_probe_witnesses_non_target_item_membership_and_full_target_geometry() {
     let reference = Fake::with_other_node();
-    let sprite = reference.get_word(SYMBOL + 0xd0);
+    let sprite = reference.get_word(SYMBOL + 0xd8);
     let kind = reference.get_word(sprite + 8);
     for address in [
-        0x3519740,
+        0x372b040,
         COUNTRY + 0x10f8,
         TARGET + 0x130,
-        FOCUS_VIEW + 0x18f0,
+        FOCUS_VIEW + 0x2d70,
         SECOND_ITEM,
         SECOND_ITEM + 0x20,
-        FOCUS_VIEW + 0x1990,
-        FOCUS_VIEW + 0x19b0,
+        FOCUS_VIEW + 0x2e10,
+        FOCUS_VIEW + 0x2e34,
         ITEM + 0x10,
         NODE + 0x95,
         SYMBOL + 0x65,
-        SYMBOL + 0xd0,
+        SYMBOL + 0xd8,
         sprite,
         sprite + 0xb0,
         kind + 0x8c,
@@ -1092,7 +1092,7 @@ fn target_probe_witnesses_non_target_item_membership_and_full_target_geometry() 
 #[test]
 fn target_probe_preserves_absent_hidden_and_ambiguous_symbol_behavior() {
     let mut f = Fake::with_other_node();
-    f.array(FOCUS_VIEW + 0x18f0, &[SECOND_ITEM]);
+    f.array(FOCUS_VIEW + 0x2d70, &[SECOND_ITEM]);
     assert!(observe(&f, KEY, None, node).unwrap().1.is_none());
     assert!(f.untouched(OTHER_NODE, 0x1000));
     let mut f = Fake::new();
@@ -1107,7 +1107,7 @@ fn target_probe_preserves_absent_hidden_and_ambiguous_symbol_behavior() {
     );
     let mut f = Fake::new();
     f.name(SECOND_SYMBOL, "symbol");
-    f.array(NODE + 0xd30, &[SYMBOL, SECOND_SYMBOL, BACKGROUND]);
+    f.array(NODE + 0xe50, &[SYMBOL, SECOND_SYMBOL, BACKGROUND]);
     assert_eq!(
         observe(&f, KEY, None, node).unwrap_err().code,
         "invalid_gui"
@@ -1122,9 +1122,9 @@ fn target_probe_keeps_original_owner_and_final_control_equality() {
     for zoom_changed in [false, true] {
         let mut f = Fake::new();
         if zoom_changed {
-            f.float(FOCUS_VIEW + 0x19b0, 0.5);
+            f.float(FOCUS_VIEW + 0x2e34, 0.5);
         } else {
-            let sprite = f.get_word(SYMBOL + 0xd0);
+            let sprite = f.get_word(SYMBOL + 0xd8);
             f.float(sprite + 0xb0, -59.0);
         }
         let changed = observe(&f, KEY, Some(&owner), node).unwrap().1.unwrap();
@@ -1189,7 +1189,7 @@ fn read_only_probe_projects_identical_target_and_measures_only_requested_geometr
 #[test]
 fn read_only_probe_predicts_pan_without_authorizing_input() {
     let mut f = Fake::with_other_node();
-    let sprite = f.get_word(SYMBOL + 0xd0);
+    let sprite = f.get_word(SYMBOL + 0xd8);
     f.float(sprite + 0xb0, -2000.0);
     let value = super::super::probe::snapshot(&f, KEY, true).unwrap();
     assert_eq!(value["pan"]["required"], true);
@@ -1207,7 +1207,7 @@ fn read_only_probe_predicts_pan_without_authorizing_input() {
 fn read_only_probe_never_projects_torn_geometry_or_invalid_own_scope() {
     for include_pan in [false, true] {
         let mut f = Fake::new();
-        f.torn = Some(f.get_word(SYMBOL + 0xd0) + 0xb0);
+        f.torn = Some(f.get_word(SYMBOL + 0xd8) + 0xb0);
         assert_eq!(
             super::super::probe::snapshot(&f, KEY, include_pan)
                 .unwrap_err()

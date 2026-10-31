@@ -28,9 +28,9 @@ pub(crate) use retained::{
 };
 use retained::{Query, RequestedState, Results, View};
 
-const FIND: u64 = 0x3457c38;
-const ROW: u64 = 0x34580d8;
-const STATE_TEMPLATE: u64 = 0x337de78;
+const FIND: u64 = 0x3665308;
+const ROW: u64 = 0x36657b0;
+const STATE_TEMPLATE: u64 = 0x3580798;
 const ENTRY_BYTES: usize = 0x40;
 
 fn refreshing() -> crate::error::Error {
@@ -38,7 +38,7 @@ fn refreshing() -> crate::error::Error {
 }
 
 fn first_row(r: &Reader<'_>, base: u64, gs: u64, find: u64) -> Result<Results> {
-    let (_, data, count) = r.array_header(find + 0xc90)?;
+    let (_, data, count) = r.array_header(find + 0xdb0)?;
     if count > 20_000 || (count > 0 && data % 8 != 0) {
         return Err(invalid("Bounded aligned Mac Find results required"));
     }
@@ -51,12 +51,12 @@ fn first_row(r: &Reader<'_>, base: u64, gs: u64, find: u64) -> Result<Results> {
             first: None,
         });
     }
-    let row = r.u64(find + 0xc88)?;
+    let row = r.u64(find + 0xda8)?;
     if row == 0 {
         return Ok(Results { count, first: None });
     }
     mac_ui::exact(r, base, row, ROW)?;
-    let kind = r.i32(row + 0x408)?;
+    let kind = r.i32(row + 0x468)?;
     let bytes = r.read(data, ENTRY_BYTES)?;
     let entry_kind = i32::from_le_bytes(bytes[0x38..0x3c].try_into().unwrap());
     if kind != entry_kind {
@@ -68,9 +68,9 @@ fn first_row(r: &Reader<'_>, base: u64, gs: u64, find: u64) -> Result<Results> {
         state_id: None,
     };
     let field = match kind {
-        1 => Some(0x3f0),
-        2 => Some(0x3f8),
-        3 => Some(0x400),
+        1 => Some(0x450),
+        2 => Some(0x458),
+        3 => Some(0x460),
         _ => None,
     };
     if let Some(offset) = field {
@@ -99,7 +99,7 @@ fn first_row(r: &Reader<'_>, base: u64, gs: u64, find: u64) -> Result<Results> {
 }
 
 fn view(r: &Reader<'_>, base: u64, gs: u64, registry: u64, find: u64) -> Result<View> {
-    let window = r.u64(find + 0xc38)?;
+    let window = r.u64(find + 0xd58)?;
     let mut out = View {
         root: RootLifecycle::Unmaterialized,
         query: None,
@@ -112,7 +112,7 @@ fn view(r: &Reader<'_>, base: u64, gs: u64, registry: u64, find: u64) -> Result<
     }
     let root = mac_ui::window(r, base, window, registry)?;
     let flags = r.byte(root + 0x95)?;
-    let states = [r.i32(root + 0x12b8)?, r.i32(root + 0x1270)?];
+    let states = [r.i32(root + 0x13d8)?, r.i32(root + 0x1390)?];
     if states.iter().any(|s| !(0..=2).contains(s)) {
         return Err(invalid(
             "Mac Find transition state outside reviewed encoding",
@@ -128,7 +128,7 @@ fn view(r: &Reader<'_>, base: u64, gs: u64, registry: u64, find: u64) -> Result<
     // Hidden retained rows/queries cannot be current Find results. Avoid those
     // payloads entirely, including the stale first-row pointer.
     if visible {
-        let text = r.string_bounded(find + 0xc48, 64)?;
+        let text = r.string_bounded(find + 0xd68, 64)?;
         out.query = Some(if text.bytes().all(|b| (0x20..0x7f).contains(&b)) {
             Query::Printable(text)
         } else {
@@ -143,7 +143,7 @@ fn camera(r: &Reader<'_>, idler: u64) -> Result<CameraState> {
     // Exact idler virtual +148/+150 returns this+708. The ordinary state
     // centring path reads template+120 and calls 101929770, which writes the
     // eye at +698 and look-at at +6a4, setting look-at height from its constant.
-    let object = r.u64(idler + 0x708)?;
+    let object = r.u64(idler + 0x718)?;
     pointer(object)?;
     let bytes = r.read(object + 0x698, 24)?;
     let values: Vec<f32> = bytes

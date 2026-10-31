@@ -6,16 +6,16 @@ fn actual_resident_reader_binds_original_point_source_panel_find_and_scene() {
     let mut f = point_memory();
     let a = Anchor::bind(&f, 1, &context(&f)).unwrap();
     assert_eq!(a.observe(&f, true).unwrap(), [62, 10]);
-    f.int(BASE + 0x36394f0, 960);
-    f.int(BASE + 0x36394f4, 540);
+    f.int(BASE + 0x384b170, 960);
+    f.int(BASE + 0x384b174, 540);
     assert_eq!(a.observe(&f, true).unwrap(), [960, 540]);
     assert_eq!(
         a.private_baseline()["world_bits"],
         json!([0x453c001c_u32, 0x411b3333_u32, 0x44c4172d_u32])
     );
     assert_eq!(a.private_baseline()["modal_route_qualified"], false);
-    assert!(f.untouched(FIND + 0xc48, 24));
-    assert!(f.untouched(FIND + 0xc88, 8));
+    assert!(f.untouched(FIND + 0xd68, 24));
+    assert!(f.untouched(FIND + 0xda8, 8));
 }
 #[test]
 fn unsupported_or_multiple_sdl_windows_refuse_before_next_window_payload() {
@@ -27,14 +27,14 @@ fn unsupported_or_multiple_sdl_windows_refuse_before_next_window_payload() {
 #[test]
 fn retained_geometry_and_ui_edges_refuse_before_replacement_payload() {
     for at in [
-        BASE + 0x3639800,
+        BASE + 0x384b480,
         VIDEO + 0x2c8,
         WINDOW + 0xd8,
         DRIVER + 0x10,
         MANAGER + 0x150,
-        PANEL + 0x430,
+        PANEL + 0x490,
         MANAGER + 0x190,
-        FIND + 0xc38,
+        FIND + 0xd58,
     ] {
         let mut f = point_memory();
         let a = Anchor::bind(&f, 1, &context(&f)).unwrap();
@@ -50,16 +50,16 @@ fn retained_geometry_and_ui_edges_refuse_before_replacement_payload() {
 fn hidden_or_animating_panel_and_visible_find_refuse_without_query_payload() {
     for (at, raw) in [
         (ROOT + 0x95, vec![0]),
-        (ROOT + 0x12b8, 1i32.to_le_bytes().to_vec()),
-        (ROOT + 0x1270, 2i32.to_le_bytes().to_vec()),
+        (ROOT + 0x13d8, 1i32.to_le_bytes().to_vec()),
+        (ROOT + 0x1390, 2i32.to_le_bytes().to_vec()),
         (FIND_ROOT + 0x95, vec![8]),
     ] {
         let mut f = point_memory();
         let a = Anchor::bind(&f, 1, &context(&f)).unwrap();
         f.put(at, &raw);
         assert!(a.observe(&f, false).is_err());
-        assert!(f.untouched(FIND + 0xc48, 24));
-        assert!(f.untouched(FIND + 0xc88, 8));
+        assert!(f.untouched(FIND + 0xd68, 24));
+        assert!(f.untouched(FIND + 0xda8, 8));
     }
 }
 #[test]
@@ -67,13 +67,13 @@ fn visible_find_is_refused_even_at_initial_bind_before_query_or_rows() {
     let mut f = point_memory();
     f.put(FIND_ROOT + 0x95, &[8]);
     assert!(Anchor::bind(&f, 1, &context(&f)).is_err());
-    assert!(f.untouched(FIND + 0xc48, 24));
-    assert!(f.untouched(FIND + 0xc88, 8));
+    assert!(f.untouched(FIND + 0xd68, 24));
+    assert!(f.untouched(FIND + 0xda8, 8));
 }
 #[test]
 fn unmaterialized_hidden_find_does_not_require_any_old_control_payload() {
     let mut f = point_memory();
-    f.word(FIND + 0xc38, 0);
+    f.word(FIND + 0xd58, 0);
     let a = Anchor::bind(&f, 1, &context(&f)).unwrap();
     assert!(a.observe(&f, true).is_ok());
     assert!(f.untouched(FIND_ROOT, 0x2000));
@@ -92,7 +92,7 @@ fn scene_initial_unknown_and_retained_source_changes_refuse_before_foreign_paylo
 }
 #[test]
 fn changed_sdl_focus_and_original_map_scope_never_use_new_payload() {
-    for at in [BASE + 0x36394e8, DATA + 0x130, PROVINCE + 0xc0] {
+    for at in [BASE + 0x384b168, DATA + 0x130, PROVINCE + 0xc0] {
         let mut f = point_memory();
         let a = Anchor::bind(&f, 1, &context(&f)).unwrap();
         f.word(at, FOREIGN);
@@ -135,7 +135,7 @@ fn process_or_campaign_replacement_refuses_as_original_scope() {
 }
 #[test]
 fn late_geometry_and_source_witness_tears_do_not_bind_a_new_point() {
-    for at in [GUI + 0x98, BASE + 0x36394f0] {
+    for at in [GUI + 0x98, BASE + 0x384b170] {
         let mut f = point_memory();
         let expected = context(&f);
         f.tear(at, 8, 2);

@@ -49,34 +49,34 @@ pub(super) fn observe(
     route: bool,
 ) -> Result<Target> {
     let mut edges = Vec::new();
-    edge(r, button, base + 0x34aafa0, &mut edges)?;
+    edge(r, button, base + 0x36b9738, &mut edges)?;
     edge(r, button + 0x58, gui, &mut edges)?;
     let desc = r.u64(button + 0x50)?;
     pointer(desc)?;
     edge(r, button + 0x50, desc, &mut edges)?;
     // Exact Standard descriptor, already named by the complete parent scan.
-    edge(r, desc, base + 0x34ab7c0, &mut edges)?;
-    edge(r, button + 0xd0, gfx, &mut edges)?;
-    let sprite = r.u64(button + 0xd8)?;
+    edge(r, desc, base + 0x36b9f98, &mut edges)?;
+    edge(r, button + 0xd8, gfx, &mut edges)?;
+    let sprite = r.u64(button + 0xe0)?;
     pointer(sprite)?;
-    edge(r, button + 0xd8, sprite, &mut edges)?;
+    edge(r, button + 0xe0, sprite, &mut edges)?;
     let primary = r.u64(sprite)?;
     let resource_primary = match primary {
-        p if p == base + 0x34bdb10 => base + 0x34bde68,
-        p if p == base + 0x34afed0 => base + 0x34b01c8,
+        p if p == base + 0x36cc528 => base + 0x36cc880,
+        p if p == base + 0x36be530 => base + 0x36be828,
         _ => return Err(changed("Exact Find Standard sprite required")),
     };
     edge(r, sprite, primary, &mut edges)?;
     edge(r, sprite + 0x138, button, &mut edges)?;
-    let parent = r.u64(button + 0x178)?;
-    edge(r, button + 0x178, parent, &mut edges)?;
+    let parent = r.u64(button + 0x180)?;
+    edge(r, button + 0x180, parent, &mut edges)?;
     // All three attachment identities are required even in the null variant.
     // Compare own fields before following a possible nonnull parent payload.
-    edge(r, root + 0x1238, parent, &mut edges)?;
+    edge(r, root + 0x1358, parent, &mut edges)?;
     edge(r, sprite + 0x108, parent, &mut edges)?;
     if parent != 0 {
         pointer(parent)?;
-        edge(r, parent, base + 0x34b0428, &mut edges)?;
+        edge(r, parent, base + 0x36bea88, &mut edges)?;
         if r.byte(parent + 0x128)? == 0 {
             return Err(changed("Find graphical parent is inactive"));
         }
@@ -96,8 +96,8 @@ pub(super) fn observe(
     if r.byte(button + 0x65)? & 8 == 0 || ![0, 2].contains(&r.i32(button + 0x9c)?) {
         return Err(changed("Find button is hidden or not ready"));
     }
-    let cc = r.byte(button + 0xcc)?;
-    if cc & 8 == 0 || cc & 0x40 != 0 || r.byte(button + 0x1d1)? != 0 || r.u64(button + 0xc0)? != 0 {
+    let cc = r.byte(button + 0xd4)?;
+    if cc & 8 == 0 || cc & 0x40 != 0 || r.byte(button + 0x1d9)? != 0 || r.u64(button + 0xc8)? != 0 {
         return Err(changed(
             "Find button is disabled or has an unsupported handler",
         ));

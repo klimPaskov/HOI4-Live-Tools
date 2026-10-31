@@ -23,8 +23,8 @@ impl Binding {
 pub(super) fn observe(r: &Reader<'_>, base: u64, item: u64, button: u64) -> Result<Binding> {
     // Caller has proved the requested item's exact primary/template membership
     // and its named frame/button's own registry. Do not infer an item+8 owner.
-    exact(r, base, button + 0x70, 0x34ab360)?;
-    if r.u64(button + 0x90)? != 0 || r.byte(button + 0x8c)? != 0 || r.u64(button + 0xc0)? != 0 {
+    exact(r, base, button + 0x70, 0x36b9b18)?;
+    if r.u64(button + 0x90)? != 0 || r.byte(button + 0x8c)? != 0 || r.u64(button + 0xc8)? != 0 {
         return Err(invalid(
             "Mac choice observer override, active notification or input handler is unverified",
         ));
@@ -51,15 +51,15 @@ pub(super) fn observe(r: &Reader<'_>, base: u64, item: u64, button: u64) -> Resu
     }
     // Current Mach-O constructor 0x101ed5310, helper 0x101ee0030 and the
     // 0x1022988a0 fields copy: twenty callable slots, only the first supplied.
-    exact(r, base, glue, 0x343ade8)?;
+    exact(r, base, glue, 0x36477d8)?;
     for index in 2..=20 {
         if r.u64(glue + index * 0x30)? != 0 {
             return Err(invalid("Mac choice has an additional callback"));
         }
     }
     let function = r.u64(glue + 0x30)?;
-    exact(r, base, function, 0x343ae78)?;
-    if r.u64(function + 8)? != base + 0x1ed5640
+    exact(r, base, function, 0x3647870)?;
+    if r.u64(function + 8)? != base + 0x16f8600
         || r.u64(function + 0x10)? != 0
         || r.u64(function + 0x18)? != item
     {
@@ -70,7 +70,7 @@ pub(super) fn observe(r: &Reader<'_>, base: u64, item: u64, button: u64) -> Resu
     // Refresh calls Standard virtual +0x2a0 (0x1027511b0), which writes this
     // byte's bit 0x40. State +0x9c alone can differ while the wrapper temporarily
     // enters state 3. This retained flag is not a fresh prerequisite evaluation.
-    let flags_cc = r.byte(button + 0xcc)?;
+    let flags_cc = r.byte(button + 0xd4)?;
     Ok(Binding {
         node,
         glue,

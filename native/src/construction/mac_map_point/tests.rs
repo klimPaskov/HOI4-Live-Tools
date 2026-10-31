@@ -99,37 +99,37 @@ impl Fixture {
             short_at: None,
         };
         for (a, v) in [
-            (B + 0x3519740, GS),
-            (B + 0x35196c0, IDLER),
-            (GS, B + 0x3306260),
-            (IDLER, B + 0x3308f90),
-            (COUNTRY, B + 0x337bc38),
-            (STATE, B + 0x337caf0),
-            (B + 0x36330a0, MODE),
+            (B + 0x372b040, GS),
+            (B + 0x372afc0, IDLER),
+            (GS, B + 0x35044e8),
+            (IDLER, B + 0x35089d8),
+            (COUNTRY, B + 0x357e388),
+            (STATE, B + 0x357f410),
+            (B + 0x3844d08, MODE),
             (MODE + 0x48, GS),
             (IDLER + 0x4c0, GUI),
-            (GUI, B + 0x34974d0),
+            (GUI, B + 0x36a5810),
             (GUI + 0x98, GRAPHICS),
-            (GRAPHICS, B + 0x33dafa8),
+            (GRAPHICS, B + 0x35e5b58),
             (IDLER + 0x4f8, RESOURCE),
             (RESOURCE + 0x300, GRAPHICS),
             (RESOURCE + 0x308, GUI),
             (RESOURCE + 0x310, MAP),
-            (MAP, B + 0x33dab60),
-            (MAP + 8, B + 0x33dab98),
+            (MAP, B + 0x35e5478),
+            (MAP + 8, B + 0x35e54b0),
             (MAP + 0x18, GRAPHICS),
             (MAP + 0x20, CAMERA),
             (MAP + 0x28, DATA),
-            (IDLER + 0x708, CAMERA),
-            (B + 0x3519a00, DATA),
-            (DATA, B + 0x330b5b8),
-            (B + 0x35dc028, GRAPHICS),
-            (B + 0x32a1d28, B + 0x2ac6970),
+            (IDLER + 0x718, CAMERA),
+            (B + 0x372b328, DATA),
+            (DATA, B + 0x350ae90),
+            (B + 0x37ed9d8, GRAPHICS),
+            (B + 0x349f108, B + 0x2c5ddc0),
             (DATA + 0x130, HEIGHT),
             (DATA + 0x7d0, BITMAP),
             (HEIGHT + 0x28, HEIGHT_BYTES),
             (BITMAP + 0x18, BITMAP_BYTES),
-            (PROVINCE, B + 0x337c7e8),
+            (PROVINCE, B + 0x357f020),
             (PROVINCE + 0xc0, STATE),
             (PROVINCE + 0xb8, DEFINITION),
         ] {
@@ -429,7 +429,7 @@ fn nonpolymorphic_headers_and_unrelated_input_scene_payload_are_not_read() {
         (BITMAP, 0x18),
         (DEFINITION, 8),
         (IDLER + 0x4c8, 8),
-        (B + 0x34f9960, 8),
+        (B + 0x3708e00, 8),
         (GS + 0x5e0, 16),
         (PROVINCE + 0xc8, 8),
     ] {
@@ -439,17 +439,17 @@ fn nonpolymorphic_headers_and_unrelated_input_scene_payload_are_not_read() {
 #[test]
 fn original_owner_and_object_edges_refuse_before_replacement_payload() {
     for address in [
-        B + 0x3519740,
-        B + 0x35196c0,
+        B + 0x372b040,
+        B + 0x372afc0,
         COUNTRIES,
         STATES + STATE_ID as u64 * 8,
-        B + 0x36330a0,
+        B + 0x3844d08,
         IDLER + 0x4c0,
         GUI + 0x98,
         IDLER + 0x4f8,
         RESOURCE + 0x310,
-        IDLER + 0x708,
-        B + 0x3519a00,
+        IDLER + 0x718,
+        B + 0x372b328,
         DATA + 0x130,
         DATA + 0x7d0,
         PROVINCES + PROVINCE_ID as u64 * 8,
@@ -576,7 +576,7 @@ fn canvas_projection_alternates_and_nonfinite_camera_refuse() {
         assert!(f.observe(STATE_ID, None).is_err());
     }
     let mut f = Fixture::new();
-    f.word(B + 0x32a1d28, B + 0x1234);
+    f.word(B + 0x349f108, B + 0x1234);
     assert!(f.observe(STATE_ID, None).is_err());
 }
 #[test]
@@ -587,7 +587,7 @@ fn changed_exact_owner_backlinks_refuse() {
         MAP + 0x18,
         MAP + 0x20,
         MAP + 0x28,
-        B + 0x35dc028,
+        B + 0x37ed9d8,
     ] {
         let mut f = Fixture::new();
         f.word(a, REPLACEMENT);
@@ -611,7 +611,7 @@ fn short_metadata_samples_and_bitmap_reads_are_never_accepted() {
 #[test]
 fn final_witness_refuses_late_owner_metadata_and_sample_tears() {
     for a in [
-        B + 0x3519740,
+        B + 0x372b040,
         GS + 0x290 + 12,
         STATE + 0xc4,
         CAMERA + 0x190,

@@ -104,15 +104,15 @@ pub(in crate::construction) fn observe(
 ) -> Result<Observation> {
     // CButtonStandard ctor retains the own GUI graphics at +d0, then links
     // its +d8 renderer directly back to this primary via renderer+138.
-    if r.u64(button + 0xd0)? != graphics {
+    if r.u64(button + 0xd8)? != graphics {
         return Err(invalid(
             "Mac opener and GUI must retain the same graphics owner",
         ));
     }
-    let renderer = r.u64(button + 0xd8)?;
+    let renderer = r.u64(button + 0xe0)?;
     pointer(renderer)?;
     let primary = r.u64(renderer)?;
-    if ![base + 0x34bdb10, base + 0x34afed0].contains(&primary) {
+    if ![base + 0x36cc528, base + 0x36be530].contains(&primary) {
         return Err(invalid(
             "Exact Mac opener sprite required for route correlation",
         ));
@@ -132,7 +132,7 @@ pub(in crate::construction) fn observe(
     for entry in route.chunks_exact(16) {
         // Persisted CCollisionObject entries differ from the temporary
         // C2dCollisionObject used while assembling the scratch array.
-        if u64::from_le_bytes(entry[..8].try_into().unwrap()) != base + 0x34b0ab8 {
+        if u64::from_le_bytes(entry[..8].try_into().unwrap()) != base + 0x36bf490 {
             return Err(invalid("Exact Mac collision-route entry type required"));
         }
         targets.push(u64::from_le_bytes(entry[8..].try_into().unwrap()));
@@ -149,7 +149,7 @@ pub(in crate::construction) fn observe(
     let flags = u32::from_le_bytes(r.read(button + 0x64, 4)?.try_into().unwrap());
     // The parent already binds button+58 to this exact own registry. Do not
     // dereference unknown optional Standard or global post-click handlers.
-    exact(r, base, gui, 0x34974d0)?;
+    exact(r, base, gui, 0x36a5810)?;
     Ok(Observation {
         sources,
         targets,
@@ -166,9 +166,9 @@ pub(in crate::construction) fn observe(
         dispatch_skip: r.byte(gui + 0x130)?,
         conditional_enable: r.byte(gui + 0x12)?,
         flags,
-        wrapper_gate: r.byte(button + 0x1d1)?,
-        optional_gate_present: r.u64(button + 0x178)? != 0,
-        post_click_hook_present: r.u64(base + 0x35dbf60)? != 0,
+        wrapper_gate: r.byte(button + 0x1d9)?,
+        optional_gate_present: r.u64(button + 0x180)? != 0,
+        post_click_hook_present: r.u64(base + 0x37ed910)? != 0,
     })
 }
 

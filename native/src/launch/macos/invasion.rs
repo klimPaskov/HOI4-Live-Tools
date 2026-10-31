@@ -42,7 +42,7 @@ use std::{collections::BTreeSet, thread, time::Duration};
 
 pub(super) const TOOL: &str = "hoi4_naval_invasion";
 /// `CBattlePlansTools` (the view that owns `battleplantools_window`), image offset from the RTTI map.
-const BATTLE_PLAN_TOOLS: u64 = 0x3435b80;
+const BATTLE_PLAN_TOOLS: u64 = 0x36424c8;
 const OFFSET_LIMIT: i64 = 350;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

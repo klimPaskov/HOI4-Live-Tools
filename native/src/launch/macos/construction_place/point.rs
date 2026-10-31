@@ -61,8 +61,8 @@ fn edges(r: &Reader<'_>, expected: &[(u64, u64)]) -> Result<()> {
     Ok(())
 }
 fn single_window(r: &Reader<'_>, base: u64) -> Result<()> {
-    let video = source_pointer(r.u64(base + 0x3639800)?)?;
-    for (o, f) in [(8, 0x263fea0), (0x48, 0x2643a50), (0x128, 0x2644350)] {
+    let video = source_pointer(r.u64(base + 0x384b480)?)?;
+    for (o, f) in [(8, 0x27b8910), (0x48, 0x27bc4c0), (0x128, 0x27bcdc0)] {
         if r.u64(video + o)? != base + f {
             return Err(changed(
                 "Exact Cocoa backend required before window payload",
@@ -79,8 +79,8 @@ fn single_window(r: &Reader<'_>, base: u64) -> Result<()> {
 }
 fn geometry_edges(r: &Reader<'_>, base: u64, g: &macos::Geometry) -> Result<Vec<(u64, u64)>> {
     let [i, gui, gfx, video, backend, window, data, nswindow, view, listener] = g.objects;
-    let vi = r.u64(base + 0x34ce008)?;
-    let li = r.u64(base + 0x34cdfa8)?;
+    let vi = r.u64(base + 0x36dcdf8)?;
+    let li = r.u64(base + 0x36dcd98)?;
     if [vi, li]
         .iter()
         .any(|v| !(8..=4096).contains(v) || v % 8 != 0)
@@ -88,10 +88,10 @@ fn geometry_edges(r: &Reader<'_>, base: u64, g: &macos::Geometry) -> Result<Vec<
         return Err(changed("Bounded original Cocoa ivar offsets required"));
     }
     Ok(vec![
-        (base + 0x35196c0, i),
+        (base + 0x372afc0, i),
         (i + 0x4c0, gui),
         (gui + 0x98, gfx),
-        (base + 0x3639800, video),
+        (base + 0x384b480, video),
         (video + 0x5a8, backend),
         (video + 0x2c8, window),
         (window + 0xe8, 0),
@@ -101,8 +101,8 @@ fn geometry_edges(r: &Reader<'_>, base: u64, g: &macos::Geometry) -> Result<Vec<
         (data + 0x10, view),
         (data + 0x30, listener),
         (data + 0x38, backend),
-        (base + 0x34ce008, vi),
-        (base + 0x34cdfa8, li),
+        (base + 0x36dcdf8, vi),
+        (base + 0x36dcd98, li),
         (view + vi, window),
         (listener + li, data),
     ])
@@ -195,15 +195,15 @@ impl Ui {
         let r = Reader::new(&w);
         edges(&r, &e)?;
         let find = source_pointer(r.u64(manager + 0x190)?)?;
-        if r.u64(find)? != base + 0x3457c38 || r.u64(find + 0xc30)? != idler {
+        if r.u64(find)? != base + 0x3665308 || r.u64(find + 0xd50)? != idler {
             return Err(changed("Own exact Find required before root payload"));
         }
-        let find_root = r.u64(find + 0xc38)?;
+        let find_root = r.u64(find + 0xd58)?;
         e.extend([
             (manager + 0x190, find),
-            (find + 0xc30, idler),
-            (find + 0xc38, find_root),
-            (find, base + 0x3457c38),
+            (find + 0xd50, idler),
+            (find + 0xd58, find_root),
+            (find, base + 0x3665308),
         ]);
         let ui = Self {
             manager,
@@ -222,8 +222,8 @@ impl Ui {
         if r.i32(self.manager + 0x3a8)? != 17
             || r.i32(self.manager + 0x3c0)? != 1
             || r.byte(self.panel + 0x95)? & 8 == 0
-            || r.i32(self.panel + 0x12b8)? != 0
-            || r.i32(self.panel + 0x1270)? != 0
+            || r.i32(self.panel + 0x13d8)? != 0
+            || r.i32(self.panel + 0x1390)? != 0
         {
             return Err(changed(
                 "Current selected construction panel must remain open and idle",
@@ -236,8 +236,8 @@ impl Ui {
                 .ok_or_else(|| changed("Exact Find root required"))?;
             if r.u64(root + 0x88)? != self.registry
                 || r.byte(root + 0x95)? & 8 != 0
-                || r.i32(root + 0x12b8)? != 0
-                || r.i32(root + 0x1270)? != 0
+                || r.i32(root + 0x13d8)? != 0
+                || r.i32(root + 0x1390)? != 0
             {
                 return Err(changed(
                     "Find must remain hidden and idle before map placement",

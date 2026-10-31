@@ -38,8 +38,8 @@ fn own(r: &Reader<'_>, at: u64, want: u64, edges: &mut Vec<(u64, u64)>) -> Resul
 fn window(r: &Reader<'_>, base: u64, p: u64, gui: u64, shown: bool) -> Result<()> {
     if mac_ui::window(r, base, p, gui)? != p
         || (r.byte(p + 0x95)? & 8 != 0) != shown
-        || r.i32(p + 0x12b8)? != 0
-        || r.i32(p + 0x1270)? != 0
+        || r.i32(p + 0x13d8)? != 0
+        || r.i32(p + 0x1390)? != 0
     {
         return Err(changed(
             "Exact own Find opener window must be locally idle in its required visibility",
@@ -50,7 +50,7 @@ fn window(r: &Reader<'_>, base: u64, p: u64, gui: u64, shown: bool) -> Result<()
 fn hidden(r: &Reader<'_>, base: u64, at: u64, gui: u64, edges: &mut Vec<(u64, u64)>) -> Result<()> {
     let p = edge(r, at, edges)?;
     if p != 0 {
-        own(r, p, base + 0x34ac0b0, edges)?;
+        own(r, p, base + 0x36ba978, edges)?;
         own(r, p + 0x88, gui, edges)?;
         window(r, base, p, gui, false)?;
     }
@@ -64,7 +64,7 @@ impl Binding {
             }
         }
         for (parent, children) in &self.paths {
-            if members(r, parent + 0xd30, 4096)? != *children {
+            if members(r, parent + 0xe50, 4096)? != *children {
                 return Err(changed(
                     "Original Find click child membership replaced before payload",
                 ));
@@ -99,15 +99,15 @@ fn mouse_receiver(
     app: u64,
     edges: &mut Vec<(u64, u64)>,
 ) -> Result<MouseReceiver> {
-    let receiver = edge(r, base + 0x35d8dd0, edges)?;
+    let receiver = edge(r, base + 0x37ea778, edges)?;
     if receiver == 0 {
         return Ok(MouseReceiver::Direct);
     }
     crate::construction::pointer(receiver)?;
-    own(r, receiver, base + 0x34a7db8, edges)?;
-    own(r, base + 0x3639ad8, app, edges)?;
-    own(r, base + 0x34a7db8 + 0x20, base + 0x26ebf10, edges)?;
-    let character_mode = r.byte(base + 0x35d8dd8)?;
+    own(r, receiver, base + 0x36b6490, edges)?;
+    own(r, base + 0x384b758, app, edges)?;
+    own(r, base + 0x36b6490 + 0x20, base + 0x2867050, edges)?;
+    let character_mode = r.byte(base + 0x37ea780)?;
     let idle_stage = match character_mode {
         0 => None,
         1 => {
@@ -162,7 +162,7 @@ pub(super) fn observe(
     if base < 0x10000
         || base % 4096 != 0
         || base
-            .checked_add(0x3639ae0)
+            .checked_add(0x384b760)
             .is_none_or(|p| p > 0x7fff_ffff_0000)
     {
         return Err(changed("Bounded aligned image base required"));
@@ -174,12 +174,12 @@ pub(super) fn observe(
     own(r, base + game::MACOS.gs_global, gs, &mut edges)?;
     own(r, base + game::MACOS.idler_global, idler, &mut edges)?;
     own(r, gs, base + game::MACOS.gs_vtable, &mut edges)?;
-    own(r, idler, base + 0x3308f90, &mut edges)?;
-    own(r, gui, base + 0x34974d0, &mut edges)?;
-    own(r, base + 0x35196c0, idler, &mut edges)?;
-    own(r, base + 0x35dbf60, 0, &mut edges)?;
+    own(r, idler, base + 0x35089d8, &mut edges)?;
+    own(r, gui, base + 0x36a5810, &mut edges)?;
+    own(r, base + 0x372afc0, idler, &mut edges)?;
+    own(r, base + 0x37ed910, 0, &mut edges)?;
     own(r, idler + 0x4c0, gui, &mut edges)?;
-    own(r, base + 0x35dc058, gui, &mut edges)?;
+    own(r, base + 0x37eda08, gui, &mut edges)?;
     own(r, idler + 0x670, manager, &mut edges)?;
     own(r, manager + 0x180, idler, &mut edges)?;
     own(r, manager + 0x190, find, &mut edges)?;
@@ -188,9 +188,9 @@ pub(super) fn observe(
             "Find click requires inactive ordinary construction selection",
         ));
     }
-    if r.u64(base + 0x3308f90 + 0x20)? != base + 0x776fe0
-        || r.byte(idler + 0x7b5)? != 1
-        || r.byte(base + 0x3519990)? != 0
+    if r.u64(base + 0x35089d8 + 0x20)? != base + 0x7bb2c0
+        || r.byte(idler + 0x7e1)? != 1
+        || r.byte(base + 0x372b2b8)? != 0
     {
         return Err(changed("Ordinary owned main-frame receiver required"));
     }
@@ -198,7 +198,7 @@ pub(super) fn observe(
     own(r, gui + 0x210, 0, &mut edges)?;
     let popup_windows = hidden_lifetimes(r, base, gui, &mut edges)?;
     let gfx = edge(r, gui + 0x98, &mut edges)?;
-    own(r, gfx, base + 0x33dafa8, &mut edges)?;
+    own(r, gfx, base + 0x35e5b58, &mut edges)?;
     let app = edge(r, idler + 0x4f8, &mut edges)?;
     pointer(app)?;
     own(r, app + 0x300, gfx, &mut edges)?;
@@ -206,51 +206,51 @@ pub(super) fn observe(
     own(r, app + 0x38, idler, &mut edges)?;
     let receiver = mouse_receiver(r, base, app, &mut edges)?;
     // Callback21459d0's precise blocked-manager path20ed8d0.
-    if r.byte(gs + 0x9b9)? != 1 || r.byte(idler + 0x898)? != 0 {
+    if r.byte(gs + 0x9b9)? != 1 || r.byte(idler + 0x8c8)? != 0 {
         return Err(changed("Find callback is currently blocked"));
     }
-    let settings = edge(r, idler + 0x768, &mut edges)?;
+    let settings = edge(r, idler + 0x778, &mut edges)?;
     if settings != 0 {
-        own(r, settings, base + 0x345b9e0, &mut edges)?;
+        own(r, settings, base + 0x3669110, &mut edges)?;
         own(r, settings + 0x28, idler, &mut edges)?;
         hidden(r, base, settings + 0x7e0, gui, &mut edges)?;
     }
     let menu = edge(r, manager + 0x218, &mut edges)?;
-    own(r, menu, base + 0x3461428, &mut edges)?;
-    own(r, menu + 0x2668, idler, &mut edges)?;
-    own(r, menu + 0x2670, manager, &mut edges)?;
-    hidden(r, base, menu + 0x2678, gui, &mut edges)?;
-    let career = edge(r, menu + 0x2690, &mut edges)?;
+    own(r, menu, base + 0x366ebf8, &mut edges)?;
+    own(r, menu + 0x2a28, idler, &mut edges)?;
+    own(r, menu + 0x2a30, manager, &mut edges)?;
+    hidden(r, base, menu + 0x2a38, gui, &mut edges)?;
+    let career = edge(r, menu + 0x2a50, &mut edges)?;
     if career != 0 {
-        own(r, career, base + 0x33f8b50, &mut edges)?;
-        own(r, career + 0x1880, idler, &mut edges)?;
-        own(r, career + 0x1890, menu, &mut edges)?;
-        hidden(r, base, career + 0x1888, gui, &mut edges)?;
+        own(r, career, base + 0x3603cd8, &mut edges)?;
+        own(r, career + 0x23a0, idler, &mut edges)?;
+        own(r, career + 0x23b0, menu, &mut edges)?;
+        hidden(r, base, career + 0x23a8, gui, &mut edges)?;
     }
     let lobby = edge(r, manager + 0x248, &mut edges)?;
     if lobby != 0 {
-        own(r, lobby, base + 0x346ff10, &mut edges)?;
+        own(r, lobby, base + 0x367da48, &mut edges)?;
         own(r, lobby + 0x48, idler, &mut edges)?;
         hidden(r, base, lobby + 0x38, gui, &mut edges)?;
         hidden(r, base, lobby + 0x40, gui, &mut edges)?;
     }
     // The ordinary callback does not materialize a null Find root.
-    own(r, find, base + 0x3457c38, &mut edges)?;
-    own(r, find + 0xc30, idler, &mut edges)?;
-    let hidden_find = edge(r, find + 0xc38, &mut edges)?;
+    own(r, find, base + 0x3665308, &mut edges)?;
+    own(r, find + 0xd50, idler, &mut edges)?;
+    let hidden_find = edge(r, find + 0xd58, &mut edges)?;
     if hidden_find == 0 {
         return Err(changed("Ordinary click needs a materialized hidden Find"));
     }
-    own(r, hidden_find, base + 0x34ac0b0, &mut edges)?;
+    own(r, hidden_find, base + 0x36ba978, &mut edges)?;
     own(r, hidden_find + 0x88, gui, &mut edges)?;
     window(r, base, hidden_find, gui, false)?;
     let map = edge(r, manager + 0x228, &mut edges)?;
-    own(r, map, base + 0x3466b88, &mut edges)?;
+    own(r, map, base + 0x36743d8, &mut edges)?;
     own(r, map + 0x30, manager, &mut edges)?;
-    own(r, map + 0x22a8, manager, &mut edges)?;
-    own(r, map + 0x22b0, idler, &mut edges)?;
-    let root = edge(r, map + 0x23d0, &mut edges)?;
-    own(r, root, base + 0x34ac0b0, &mut edges)?;
+    own(r, map + 0x2608, manager, &mut edges)?;
+    own(r, map + 0x2610, idler, &mut edges)?;
+    let root = edge(r, map + 0x2730, &mut edges)?;
+    own(r, root, base + 0x36ba978, &mut edges)?;
     own(r, root + 0x88, gui, &mut edges)?;
     window(r, base, root, gui, true)?;
     let mut paths = Vec::new();
@@ -262,11 +262,11 @@ pub(super) fn observe(
     }
     let geometry = super::geometry::observe(r, base, gui, gfx, root, button, route)?;
     let mut callback_edges = Vec::new();
-    own(r, button, base + 0x34aafa0, &mut callback_edges)?;
+    own(r, button, base + 0x36b9738, &mut callback_edges)?;
     own(r, button + 0x58, gui, &mut callback_edges)?;
-    own(r, button + 0x70, base + 0x34ab360, &mut callback_edges)?;
+    own(r, button + 0x70, base + 0x36b9b18, &mut callback_edges)?;
     own(r, button + 0x90, 0, &mut callback_edges)?;
-    own(r, button + 0xc0, 0, &mut callback_edges)?;
+    own(r, button + 0xc8, 0, &mut callback_edges)?;
     if r.i32(button + 0x88)? != 1 || r.byte(button + 0x8c)? != 0 {
         return Err(changed("Exactly one active Find callback required"));
     }
@@ -278,20 +278,20 @@ pub(super) fn observe(
     if r.byte(node + 0x18)? != 0 {
         return Err(changed("Removed click observer refused"));
     }
-    let glue = map + 0x1350;
+    let glue = map + 0x1530;
     own(r, node, glue, &mut callback_edges)?;
-    own(r, glue, base + 0x3467198, &mut callback_edges)?;
+    own(r, glue, base + 0x36749f0, &mut callback_edges)?;
     for i in 2..=20 {
         own(r, glue + i * 0x30, 0, &mut callback_edges)?;
     }
     let function = edge(r, glue + 0x30, &mut callback_edges)?;
-    own(r, function, base + 0x3467228, &mut callback_edges)?;
-    own(r, function + 8, base + 0x21459d0, &mut callback_edges)?;
+    own(r, function, base + 0x3674a88, &mut callback_edges)?;
+    own(r, function + 8, base + 0x22b03c0, &mut callback_edges)?;
     own(r, function + 0x10, 0, &mut callback_edges)?;
     own(r, function + 0x18, map, &mut callback_edges)?;
     // Own named membership remains immutable; incidental route/source lists do not.
     for (parent, _) in &paths {
-        edge(r, parent + 0xd30, &mut edges)?;
+        edge(r, parent + 0xe50, &mut edges)?;
     }
     let now = Binding {
         edges,

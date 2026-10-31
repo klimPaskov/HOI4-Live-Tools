@@ -906,20 +906,26 @@ impl<'p> MacKeys<'p> {
     /// after a fresh front-most check. Shift goes down and up through modifier
     /// (flags-changed) events, the way the game reads it; it is always released.
     pub fn press_shifted(&self, code: u16) -> Result<()> {
-        const SHIFT_KEY: u16 = 56;
-        const SHIFT_FLAGS: u64 = 0x2_0002;
+        self.press_modified(code, 56, 0x2_0002)
+    }
+    /// One key press with (left) Control held, the same way as `press_shifted`.
+    /// HOI4 1.19.4 moved the Find view to Ctrl+F (`interface/mapmodes_interface.gui`).
+    pub fn press_control(&self, code: u16) -> Result<()> {
+        self.press_modified(code, 59, 0x4_0001)
+    }
+    fn press_modified(&self, code: u16, modifier_key: u16, modifier_flags: u64) -> Result<()> {
         const FLAGS_CHANGED: u32 = 12;
         self.preflight()?;
         let pause = |ms: u64| std::thread::sleep(std::time::Duration::from_millis(ms));
         // SAFETY: a null source is allowed; every event is released after posting.
         unsafe {
             let modifier = |down: bool| -> Result<()> {
-                let event = CGEventCreateKeyboardEvent(std::ptr::null(), SHIFT_KEY, down);
+                let event = CGEventCreateKeyboardEvent(std::ptr::null(), modifier_key, down);
                 if event.is_null() {
                     return Err(Error::new("input_unavailable", "Modifier event unavailable"));
                 }
                 CGEventSetType(event, FLAGS_CHANGED);
-                CGEventSetFlags(event, if down { SHIFT_FLAGS } else { 0 });
+                CGEventSetFlags(event, if down { modifier_flags } else { 0 });
                 CGEventPost(HID_EVENT_TAP, event);
                 CFRelease(event);
                 Ok(())
@@ -935,7 +941,7 @@ impl<'p> MacKeys<'p> {
                     if event.is_null() {
                         return Err(Error::new("input_unavailable", "Key event unavailable"));
                     }
-                    CGEventSetFlags(event, SHIFT_FLAGS);
+                    CGEventSetFlags(event, modifier_flags);
                     CGEventPost(HID_EVENT_TAP, event);
                     CFRelease(event);
                     pause(40);
@@ -943,7 +949,7 @@ impl<'p> MacKeys<'p> {
                 Ok(())
             })();
             pause(40);
-            // Always release Shift, even when the key failed.
+            // Always release the modifier, even when the key failed.
             modifier(false)?;
             result
         }

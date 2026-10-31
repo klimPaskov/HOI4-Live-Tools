@@ -33,7 +33,7 @@ const LINUX: Layout = Layout {
 /// 30 CArmy divisions and the field offsets agree with aligned methods.
 const MACOS: Layout = Layout {
     country_divisions: 0x250,
-    division_vtable: 0x32af5a8,
+    division_vtable: 0x34ace60,
     strength: 0x418,
     organisation: 0x420,
     province_id: 0x9c,

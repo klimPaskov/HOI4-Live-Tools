@@ -39,15 +39,16 @@ struct Ui {
 const MACOS: Ui = Ui {
     manager: 0x670,
     overview: 0x158,
-    overview_root: 0x430,
+    overview_root: 0x490,
     selection: 0x200,
     selection_root: 0x28,
-    container_vtable: 0x34ac0b0,
+    container_vtable: 0x36ba978,
     container_base: 0x30,
     grid_items: 0x190,
     item_container: 0x10,
     text: 0x100,
-    icon_sprite: 0xd0,
+    // 1.19.4: CIcon renderer moved 0xd0 -> 0xd8 (live: mission toolbar icon +0xd8 is the CSprite).
+    icon_sprite: 0xd8,
     sprite_frame: 0x34,
 };
 const GAME: (u32, u32) = (1920, 1080);
@@ -245,6 +246,9 @@ pub(super) fn open_overview(process: &dyn Process, keys: &MacKeys) -> Result<()>
     if !read(process, overview_open)? {
         keys.press(Key::letter('l')?)?;
         wait(process, "air overview open", overview_open)?;
+        // A row click right after L was lost now and then on 1.19.4.1 (31 October 2026: the
+        // selection never appeared, the same call succeeded later); let the list settle first.
+        std::thread::sleep(std::time::Duration::from_millis(400));
     }
     Ok(())
 }

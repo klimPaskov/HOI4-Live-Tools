@@ -42,14 +42,14 @@ const LINUX: Layout = Layout {
 /// RTTI name, template index/array moved by the 24-byte key string, threshold
 /// from the level comparison shared by both builds' code.
 const MACOS: Layout = Layout {
-    database_vtable: 0x339eda0,
-    template_vtable: 0x339ed10,
+    database_vtable: 0x35a7d10,
+    template_vtable: 0x35a7c80,
     database_templates: 0x40,
     template_index: 0x28,
     template_threshold: 0x39c,
-    technology_vtable: 0x339e3e8,
-    status_vtable: 0x339e4e8,
-    slot_vtable: 0x339e488,
+    technology_vtable: 0x35a7158,
+    status_vtable: 0x35a7258,
+    slot_vtable: 0x35a71f8,
 };
 pub(crate) fn layout(r: &Reader<'_>) -> &'static Layout {
     match r.string_abi() {

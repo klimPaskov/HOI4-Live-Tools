@@ -90,7 +90,7 @@ pub(crate) struct Observation {
 fn local(r: &Reader<'_>, base: u64, object: u64, registry: u64) -> Result<Window> {
     let object = window(r, base, object, registry)?;
     let flags = r.byte(object + 0x95)?;
-    let states = [r.i32(object + 0x12b8)?, r.i32(object + 0x1270)?];
+    let states = [r.i32(object + 0x13d8)?, r.i32(object + 0x1390)?];
     if states.iter().any(|state| !(0..=2).contains(state)) {
         return Err(invalid("Unknown Mac opener container transition state"));
     }
@@ -102,14 +102,14 @@ fn local(r: &Reader<'_>, base: u64, object: u64, registry: u64) -> Result<Window
 }
 
 fn callback(r: &Reader<'_>, base: u64, button: u64, topbar: u64) -> Result<Callback> {
-    exact(r, base, button + 0x70, 0x34ab360)?;
+    exact(r, base, button + 0x70, 0x36b9b18)?;
     if r.u64(button + 0x90)? != 0 {
         return Err(invalid("Mac opener cannot use a single-observer override"));
     }
     if r.byte(button + 0x8c)? != 0 {
         return Err(invalid("Mac opener observer notification is in progress"));
     }
-    if r.u64(button + 0xc0)? != 0 {
+    if r.u64(button + 0xc8)? != 0 {
         return Err(invalid("Mac opener has an unverified input handler"));
     }
     let mut link = r.u64(button + 0x78)?;
@@ -140,13 +140,13 @@ fn callback(r: &Reader<'_>, base: u64, button: u64, topbar: u64) -> Result<Callb
     if link != 0 || previous != tail || (count == 0 && tail != 0) {
         return Err(invalid("Mac opener observer endpoints disagree"));
     }
-    let glue = topbar + 0x3290;
+    let glue = topbar + 0x4440;
     if observers != [glue] {
         return Err(invalid(
             "Exactly the own Mac construction opener observer required",
         ));
     }
-    exact(r, base, glue, 0x3489788)?;
+    exact(r, base, glue, 0x3697a60)?;
     // Ordinary left-down/release notify more than the first function. An
     // additional handler could suppress or change the intended view toggle.
     for offset in [0x60, 0x150, 0x180, 0x1b0, 0x1e0, 0x2d0, 0x3c0] {
@@ -155,8 +155,8 @@ fn callback(r: &Reader<'_>, base: u64, button: u64, topbar: u64) -> Result<Callb
         }
     }
     let function = r.u64(glue + 0x30)?;
-    exact(r, base, function, 0x3489818)?;
-    if r.u64(function + 8)? != base + 0x22f27d0
+    exact(r, base, function, 0x3697af8)?;
+    if r.u64(function + 8)? != base + 0x2460fb0
         || r.u64(function + 0x10)? != 0
         || r.u64(function + 0x18)? != topbar
     {
@@ -183,7 +183,7 @@ fn opener(
     if topbar == 0 {
         return Ok(None);
     }
-    exact(r, base, topbar, 0x3489640)?;
+    exact(r, base, topbar, 0x3697918)?;
     if r.u64(topbar + 0x58)? != idler
         || r.u64(topbar + 0x60)? != manager
         || r.u64(topbar + 0x30)? != manager
@@ -230,12 +230,12 @@ fn opener(
     else {
         return Ok(None);
     };
-    if r.u64(topbar + 0x7428)? != button {
+    if r.u64(topbar + 0x8c38)? != button {
         return Err(invalid(
             "Mac topbar construction alias and membership differ",
         ));
     }
-    exact(r, base, button, 0x34aafa0)?;
+    exact(r, base, button, 0x36b9738)?;
     if r.u64(button + 0x58)? != registry {
         return Err(invalid(
             "Mac opener button must retain the own GUI registry",
@@ -338,7 +338,7 @@ fn observe(process: &dyn Process, options: Options) -> Result<Observation> {
     let context = game::context_from_reader(&r, base)?;
     let idler = context.anchors[1];
     let registry = r.u64(idler + 0x4c0)?;
-    exact(&r, base, registry, 0x34974d0)?;
+    exact(&r, base, registry, 0x36a5810)?;
     let manager = r.u64(idler + 0x670)?;
     pointer(manager)?;
     if r.u64(manager + 0x180)? != idler {
@@ -348,13 +348,13 @@ fn observe(process: &dyn Process, options: Options) -> Result<Observation> {
     let selection_mode = r.i32(manager + 0x3c0)?;
     w.section("mac_construction_panel_root");
     let view = r.u64(manager + 0x150)?;
-    exact(&r, base, view, 0x343aa90)?;
-    if r.u64(view + 0x428)? != idler || r.u64(view + 0x30)? != manager {
+    exact(&r, base, view, 0x3647478)?;
+    if r.u64(view + 0x488)? != idler || r.u64(view + 0x30)? != manager {
         return Err(invalid(
             "Mac construction panel must retain both own backlinks",
         ));
     }
-    let root = r.u64(view + 0x430)?;
+    let root = r.u64(view + 0x490)?;
     let panel = if root == 0 {
         None
     } else {
@@ -494,11 +494,11 @@ impl Observation {
             (s.anchors[1] + 0x670, s.manager),
             (s.manager + 0x180, s.anchors[1]),
             (s.manager + 0x150, s.view),
-            (s.view + 0x430, s.root),
-            (s.view, base + 0x343aa90),
-            (s.view + 0x428, s.anchors[1]),
+            (s.view + 0x490, s.root),
+            (s.view, base + 0x3647478),
+            (s.view + 0x488, s.anchors[1]),
             (s.view + 0x30, s.manager),
-            (self.panel.as_ref().unwrap().object, base + 0x34ac0b0),
+            (self.panel.as_ref().unwrap().object, base + 0x36ba978),
             (self.panel.as_ref().unwrap().object + 0x88, s.registry),
         ])
     }

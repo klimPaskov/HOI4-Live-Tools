@@ -37,9 +37,13 @@ Descriptions are the tools' own text; see `PLAYBOOK_TOOL_GAPS.md` for validation
 
 ## Research, doctrines, special projects
 
+- `hoi4_doctrine_adopt` (A): UNVALIDATED (no live test yet): adopt a grand doctrine (e.g.
 - `hoi4_doctrines` (R): Own doctrines read from game memory (no input, no lease, never pauses).
 - `hoi4_focus_start` (A): Start an own national focus with ordinary input (politics panel, focus button, drag-panning the tree until the node is in view, the node, Start), each target located from the live GUI and each stage verified from memory;
 - `hoi4_intelligence` (R): Own intelligence agency, read-only (no input, no lease, never pauses).
+- `hoi4_mio_design_team` (A): UNVALIDATED (no live test yet): put a military-industrial organisation into a design-team slot of the politics view:
+- `hoi4_mio_policy` (A): UNVALIDATED (no live test yet): attach a policy to an organisation:
+- `hoi4_mio_trait` (A): UNVALIDATED (no live test yet): queue a trait of an organisation's trait tree:
 - `hoi4_mios` (R): Military-industrial organisations and designers for the own country, read-only (no input, no lease, never pauses).
 - `hoi4_research_extras` (R): Own research bonuses that the research panel only shows as tooltips, read from game memory (no input, no lease, never pauses):
 - `hoi4_research_start` (A): Start an own technology in an empty research slot with ordinary input (research panel, slot, folder tab, tile, Research), each click located from the live GUI and each stage verified from memory;
@@ -58,9 +62,12 @@ Descriptions are the tools' own text; see `PLAYBOOK_TOOL_GAPS.md` for validation
 - `hoi4_diplomacy` (A): Open the diplomacy view for a country and list the offered actions with canonical key, enabled state, cost and whether the AI would refuse (changes nothing in the game).
 - `hoi4_diplomacy_act` (A): Take ONE diplomatic action toward a country with the ordinary diplomacy view.
 - `hoi4_diplomacy_countries` (R): Read-only (memory, no input, no pause):
+- `hoi4_diplomacy_incoming` (R): UNVALIDATED (no live test yet) - Incoming diplomatic proposals (guarantee, alliance or faction invitation, lend-lease request, call to arms, ...) as open pop-ups.
 - `hoi4_diplomacy_state` (R): Own diplomatic situation from memory, no input, no lease, no pause:
 - `hoi4_encirclement_candidates` (R): Pockets of enemy-controlled states that taking at most max_gap neck states would cut off:
-- `hoi4_faction_create` (R): Create a faction (Create Faction flow).
+- `hoi4_faction_create` (A): UNVALIDATED (no live test yet) - Create a faction through the ordinary windows:
+- `hoi4_faction_invite_accept` (A): UNVALIDATED (no live test yet) - Answer the open faction invitation pop-up ('<country> wants us to join their faction'):
+- `hoi4_faction_leave` (A): UNVALIDATED (no live test yet) - Leave the player's faction (as the leader this dismantles it) with the faction view's leave button (top bar faction button, leave_faction_button) and the game's confirmation.
 - `hoi4_front_plan` (R): War plan for the named enemy tags (a tag, a comma list or an array):
 - `hoi4_politics_choose` (A): Take an idea (law, advisor, designer) for one politics slot with ordinary input;
 - `hoi4_politics_options` (A): List the ideas offered for one politics slot (opens the slot's selection window and closes it again;
@@ -111,14 +118,30 @@ Descriptions are the tools' own text; see `PLAYBOOK_TOOL_GAPS.md` for validation
 - `hoi4_air_wings` (A): Own air wings with air base, assigned region and missions, from the Air Forces Overview (opens it).
 - `hoi4_convoys` (R): Own convoy count (equal to the top bar), own naval bases with level, and the convoy production lines, read from game memory (no input, never pauses).
 - `hoi4_fleet_admiral` (A): Put an admiral in command of an own fleet (or unassign with unassign:true) through the fleet panel's 'Select Commander' list:
+- `hoi4_fleet_assign` (A): UNVALIDATED (no live test yet) - Move one own task force into another own fleet:
+- `hoi4_fleet_balance` (A): UNVALIDATED (no live test yet) - Rebalance the ships of one own fleet's task forces with the toolbar's Task-force-o-matic button (btn_taskforce_o_matic;
 - `hoi4_fleet_create` (A): Found a new fleet from one own task force with the game's ordinary controls:
+- `hoi4_fleet_delete` (A): UNVALIDATED (no live test yet) - DESTROY one own task force and its ships with the toolbar delete button (btn_delete) and the 'Delete task force' confirmation.
+- `hoi4_fleet_merge` (A): UNVALIDATED (no live test yet) - Merge all task forces of one own fleet into a single task force:
 - `hoi4_fleet_mission` (A): Give one own task force a mission with the game's ordinary mission buttons (Strategic Navy map mode F2, fleet card, the task force entry's Select button, the mission button;
 - `hoi4_fleet_region` (A): Add a sea region to a fleet's area of operation (or remove it with remove:true) with ordinary input:
+- `hoi4_fleet_reserve` (A): UNVALIDATED (no live test yet) - Send one own task force to the reserve fleet with the toolbar's set-as-reserve button (btn_exclude);
+- `hoi4_fleet_split` (A): UNVALIDATED (no live test yet) - Split one own task force in half:
 - `hoi4_fleets` (R): Own navy read from game memory (no panel, no input, never pauses):
+- `hoi4_naval_invasion` (A): UNVALIDATED (no live test yet) - Order ONE naval invasion of an enemy coastal state for land units:
 - `hoi4_navy_ui` (A): DEBUG ONLY (never listed to a player):
 
 ## Other
 
+- `hoi4_agency_create` (A): UNVALIDATED (no live test yet): create the intelligence agency with ordinary input:
+- `hoi4_agency_upgrade` (A): UNVALIDATED (no live test yet): start an agency upgrade:
+- `hoi4_auto_import` (A): HOI4 1.19.4 Automatic Importing (Trade view):
+- `hoi4_operative_assign` (A): UNVALIDATED (no live test yet): send a recruited operative (`operative` = 0-based position among the recruited ones on the operative bar) on a mission:
+- `hoi4_operative_recruit` (A): UNVALIDATED (no live test yet): recruit an operative into a free slot of the operative bar:
+- `hoi4_peace_exit` (A): Leave the peace conference (the Confirm and Exit / done button and the OK of its confirmation);
+- `hoi4_peace_options` (R): Read the open peace conference from its window:
 - `hoi4_peace_status` (R): Read-only:
+- `hoi4_peace_submit` (A): Submit Demands for the round (the conference's end-turn button;
+- `hoi4_peace_take` (A): In the open peace conference, choose the demand kind (default Take State;
 - `hoi4_states` (R): Find states by English name (accent-insensitive substring, or the exact ID), or list every state a country owns or controls by its tag (e.g.
 

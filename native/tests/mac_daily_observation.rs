@@ -103,20 +103,20 @@ impl MacFixture {
             repeated_pointer: None,
         };
         for (address, value) in [
-            (BASE + 0x3519740, GS),
-            (BASE + 0x35196c0, IDLER),
-            (BASE + 0x34d0de0, DATABASE),
-            (BASE + 0x3506580, 0x196000),
-            (GS, BASE + 0x3306260),
-            (IDLER, BASE + 0x3308f90),
-            (COUNTRY, BASE + 0x337bc38),
+            (BASE + 0x372b040, GS),
+            (BASE + 0x372afc0, IDLER),
+            (BASE + 0x3706540, DATABASE),
+            (BASE + 0x3717d50, 0x196000),
+            (GS, BASE + 0x35044e8),
+            (IDLER, BASE + 0x35089d8),
+            (COUNTRY, BASE + 0x357e388),
             (COUNTRY + 0xd08, STATUS),
             (COUNTRY + 0x1108, FOCUS),
-            (FOCUS, BASE + 0x33865d0),
+            (FOCUS, BASE + 0x3589270),
             (FOCUS + 0x10, 0),
-            (STATUS, BASE + 0x339e4e8),
+            (STATUS, BASE + 0x35a7258),
             (STATUS + 0x130, COUNTRY),
-            (DATABASE, BASE + 0x339eda0),
+            (DATABASE, BASE + 0x35a7d10),
         ] {
             f.word(address, value);
         }
@@ -154,11 +154,11 @@ impl MacFixture {
         for (i, key) in ["basic_machine_tools", "construction1"].iter().enumerate() {
             let technology = TECHNOLOGY + i as u64 * 0x400;
             let template = TEMPLATE + i as u64 * 0x400;
-            f.word(template, BASE + 0x339ed10);
+            f.word(template, BASE + 0x35a7c80);
             f.string(template + 8, key);
             f.int(template + 0x28, i as i32 + 1);
             f.int(template + 0x39c, 1);
-            f.word(technology, BASE + 0x339e3e8);
+            f.word(technology, BASE + 0x35a7158);
             f.word(technology + 0x158, STATUS);
             f.word(technology + 0x160, template);
             f.int(technology + 0x174, i as i32);
@@ -166,17 +166,17 @@ impl MacFixture {
         }
         for (i, current) in [TECHNOLOGY, 0].into_iter().enumerate() {
             let slot = SLOT + i as u64 * 0x100;
-            f.word(slot, BASE + 0x339e488);
+            f.word(slot, BASE + 0x35a71f8);
             f.word(slot + 0x10, STATUS);
             f.word(slot + 0x18, current);
         }
         for (i, (table, name)) in [
-            (0x337bc38, "CCountry"),
-            (0x33865d0, "CNationalFocusProgress"),
-            (0x339e4e8, "CTechnologyStatus"),
-            (0x339e488, "CResearchSlot"),
-            (0x339e3e8, "CTechnology"),
-            (0x339ed10, "CTechnologyTemplate"),
+            (0x357e388, "CCountry"),
+            (0x3589270, "CNationalFocusProgress"),
+            (0x35a7258, "CTechnologyStatus"),
+            (0x35a71f8, "CResearchSlot"),
+            (0x35a7158, "CTechnology"),
+            (0x35a7c80, "CTechnologyTemplate"),
         ]
         .into_iter()
         .enumerate()
@@ -375,15 +375,15 @@ fn mac_producer_persists_exact_scope_sequence_and_unknown_counts() {
 #[test]
 fn changed_mac_roots_types_and_foreign_owners_refuse_before_payload() {
     for (field, replacement) in [
-        (BASE + 0x3519740, FOREIGN),
-        (BASE + 0x35196c0, FOREIGN),
-        (BASE + 0x34d0de0, FOREIGN),
-        (GS, BASE + 0x3306268),
-        (IDLER, BASE + 0x3308f98),
-        (DATABASE, BASE + 0x339eda8),
+        (BASE + 0x372b040, FOREIGN),
+        (BASE + 0x372afc0, FOREIGN),
+        (BASE + 0x3706540, FOREIGN),
+        (GS, BASE + 0x35044f0),
+        (IDLER, BASE + 0x35089e0),
+        (DATABASE, BASE + 0x35a7d18),
         (0x195000, FOREIGN),
         (COUNTRY + 0xd08, FOREIGN),
-        (STATUS, BASE + 0x339e4f0),
+        (STATUS, BASE + 0x35a7260),
         (STATUS + 0x130, FOREIGN),
     ] {
         let mut f = MacFixture::new();
@@ -454,9 +454,9 @@ fn mac_canonical_foreign_slots_and_technologies_refuse_before_template_payload()
 #[test]
 fn mac_final_witnesses_cover_roots_owners_arrays_keys_and_counters() {
     for address in [
-        BASE + 0x3519740,
-        BASE + 0x35196c0,
-        BASE + 0x34d0de0,
+        BASE + 0x372b040,
+        BASE + 0x372afc0,
+        BASE + 0x3706540,
         GS,
         IDLER,
         DATABASE,
@@ -467,7 +467,7 @@ fn mac_final_witnesses_cover_roots_owners_arrays_keys_and_counters() {
         GS + 0x2d8,
         0x195000,
         COUNTRY,
-        BASE + 0x337bc38 - 8,
+        BASE + 0x357e388 - 8,
         0x200008,
         0x200040,
         COUNTRY + 0xd08,

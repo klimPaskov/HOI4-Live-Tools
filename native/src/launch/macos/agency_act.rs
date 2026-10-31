@@ -136,9 +136,30 @@ fn refusal(r: Option<(&'static str, String)>) -> std::result::Result<(), Fail> {
     }
 }
 
+/// Whether the top bar shows its `intel_agency_button` (interface manager +0x670, top bar view
+/// +0x188, root +0x68). The game hides it when the agency feature is not active (La Resistance
+/// not enabled: seen live on 1.19.4.1, 31 October 2026, where Shift+W then opens nothing).
+fn agency_button_shown(r: &Reader<'_>, i: u64) -> Result<Option<bool>> {
+    let idler = r.u64(i + crate::game::layout(r).idler_global)?;
+    let topbar = r.u64(r.u64(idler + 0x670)? + 0x188)?;
+    let Some(root) = gui_tree::container(r, r.u64(topbar + 0x68)?, i)? else {
+        return Ok(None);
+    };
+    match pk::find(r, i, root, "intel_agency_button", 4)? {
+        Some(button) => Ok(Some(gui_tree::shown(r, button)?)),
+        None => Ok(None),
+    }
+}
+
 fn open_agency(process: &dyn Process, keys: &MacKeys<'_>) -> Result<()> {
     if pk::open_now(process, &pk::AGENCY_VIEW) {
         return Ok(());
+    }
+    if read(process, agency_button_shown).ok().flatten() == Some(false) {
+        return Err(Error::new(
+            "agency_unavailable",
+            "The game hides the intelligence agency button (the agency needs the La Resistance DLC, not active in this game); nothing was sent",
+        ));
     }
     keys.press_shifted(KEY_W)?;
     wait(process, "open intelligence agency view", |r, i| {

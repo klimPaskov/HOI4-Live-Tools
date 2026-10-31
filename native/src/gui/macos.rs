@@ -37,7 +37,7 @@ impl Geometry {
     pub fn diagnostic(&self) -> Value {
         json!({
             "source":"native own GUI and SDL Cocoa diagnostics",
-            "build_id":"089EA519-6780-353B-8E39-4E9309B444D4",
+            "build_id":"DFA875A5-25BA-35E0-9736-627F8A5C4396",
             "physical_dimensions":self.physical,"logical_dimensions":self.logical,
             "gui_scale":self.scale,"native_content_rectangle":self.client,
             "window_flags":self.flags,"cocoa_backlinks_verified":true,
@@ -114,13 +114,13 @@ pub(crate) fn canvas_from_reader(r: &Reader<'_>, base: u64, gui: u64) -> Result<
     )?;
     pointer(gui)?;
     require(
-        r.u64(gui)? == base + 0x34974d0,
+        r.u64(gui)? == base + 0x36a5810,
         "Exact Mac game GUI required",
     )?;
     // CGui ctor 0x27c4739 stores its graphics argument here.
     let graphics = pointer(r.u64(gui + 0x98)?)?;
     require(
-        r.u64(graphics)? == base + 0x33dafa8,
+        r.u64(graphics)? == base + 0x35e5b58,
         "Exact Mac game graphics required",
     )?;
     let dimensions = r.read(graphics + 0x170, 16)?;
@@ -132,7 +132,7 @@ pub(crate) fn canvas_from_reader(r: &Reader<'_>, base: u64, gui: u64) -> Result<
         dims.iter().all(|v| (1..=16384).contains(v)),
         "Bounded graphics dimensions required",
     )?;
-    // Constructor 0x27b1161, consumed by the scale transform at 0x27b1223.
+    // Constructor 0x293db21, consumed by the scale transform at 0x293dbe3.
     let scale = f32::from_le_bytes(r.read(graphics + 0x2c5b0, 4)?.try_into().unwrap());
     require(
         scale.is_finite() && (0.25..=8.0).contains(&scale),
@@ -151,17 +151,17 @@ pub(crate) fn from_reader(r: &Reader<'_>, base: u64) -> Result<Geometry> {
         r.string_abi() == StringAbi::LibCxx,
         "Mac geometry requires the reviewed Mach-O layout",
     )?;
-    let idler = pointer(r.u64(base + 0x35196c0)?)?;
+    let idler = pointer(r.u64(base + 0x372afc0)?)?;
     require(
-        r.u64(idler)? == base + 0x3308f90,
+        r.u64(idler)? == base + 0x35089d8,
         "In-game Mac idler required",
     )?;
     let gui = pointer(r.u64(idler + 0x4c0)?)?;
     let canvas = canvas_from_reader(r, base, gui)?;
     let graphics = canvas.object;
-    let video = pointer(r.u64(base + 0x3639800)?)?;
+    let video = pointer(r.u64(base + 0x384b480)?)?;
     // Cocoa_CreateDevice constructor callback stores, not borrowed Linux offsets.
-    for (offset, function) in [(0x8, 0x263fea0), (0x48, 0x2643a50), (0x128, 0x2644350)] {
+    for (offset, function) in [(0x8, 0x27b8910), (0x48, 0x27bc4c0), (0x128, 0x27bcdc0)] {
         require(
             r.u64(video + offset)? == base + function,
             "Reviewed Cocoa video backend required",
@@ -201,8 +201,8 @@ pub(crate) fn from_reader(r: &Reader<'_>, base: u64) -> Result<Geometry> {
                 r.u64(data)? == window && r.u64(data + 0x38)? == backend,
                 "Reciprocal Cocoa driver association required",
             )?;
-            let view_offset = ivar(r, base, 0x34ce008)?;
-            let listener_offset = ivar(r, base, 0x34cdfa8)?;
+            let view_offset = ivar(r, base, 0x36dcdf8)?;
+            let listener_offset = ivar(r, base, 0x36dcd98)?;
             require(
                 r.u64(view + view_offset)? == window && r.u64(listener + listener_offset)? == data,
                 "Reciprocal Cocoa view/listener association required",
@@ -276,17 +276,17 @@ mod tests {
                 changed: None,
             };
             for (address, value) in [
-                (B + 0x35196c0, I),
-                (I, B + 0x3308f90),
+                (B + 0x372afc0, I),
+                (I, B + 0x35089d8),
                 (I + 0x4c0, G),
-                (G, B + 0x34974d0),
+                (G, B + 0x36a5810),
                 (G + 0x98, R),
-                (R, B + 0x33dafa8),
-                (B + 0x3639800, V),
+                (R, B + 0x35e5b58),
+                (B + 0x384b480, V),
                 (V + 0x5a8, BACKEND),
-                (V + 8, B + 0x263fea0),
-                (V + 0x48, B + 0x2643a50),
-                (V + 0x128, B + 0x2644350),
+                (V + 8, B + 0x27b8910),
+                (V + 0x48, B + 0x27bc4c0),
+                (V + 0x128, B + 0x27bcdc0),
                 (V + 0x2c8, W),
                 (W, V + 0x2d8),
                 (W + 0xd8, D),
@@ -296,8 +296,8 @@ mod tests {
                 (D + 0x10, VIEW),
                 (D + 0x30, LISTENER),
                 (D + 0x38, BACKEND),
-                (B + 0x34ce008, 536),
-                (B + 0x34cdfa8, 32),
+                (B + 0x36dcdf8, 536),
+                (B + 0x36dcd98, 32),
                 (VIEW + 536, W),
                 (LISTENER + 32, D),
             ] {
@@ -377,16 +377,16 @@ mod tests {
         let provider = I + 0xc0000;
         for (address, value) in [
             (I + 0x4c8, provider),
-            (provider, B + 0x34a6988),
-            (B + 0x34a6988 + 0xc8, B + 0x26bbf90),
-            (B + 0x34f9960, B + 0x25714e0),
-            (B + 0x36394e8, W),
+            (provider, B + 0x36b5388),
+            (B + 0x36b5388 + 0xc8, B + 0x2834a90),
+            (B + 0x3708e00, B + 0x26e9f50),
+            (B + 0x384b168, W),
         ] {
             f.word(address, value);
         }
-        f.put(B + 0x3639510, &[1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
-        f.put(B + 0x36394f0, &960i32.to_le_bytes());
-        f.put(B + 0x36394f4, &540i32.to_le_bytes());
+        f.put(B + 0x384b190, &[1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+        f.put(B + 0x384b170, &960i32.to_le_bytes());
+        f.put(B + 0x384b174, &540i32.to_le_bytes());
         f
     }
     #[test]
@@ -429,10 +429,10 @@ mod tests {
     fn optional_source_dependencies_survive_the_outer_final_witness() {
         for address in [
             I + 0x4c8,
-            B + 0x34f9960,
-            B + 0x36394e8,
-            B + 0x3639510,
-            B + 0x36394f0,
+            B + 0x3708e00,
+            B + 0x384b168,
+            B + 0x384b190,
+            B + 0x384b170,
         ] {
             let mut f = source_fixture();
             f.changed = Some(address);
@@ -451,7 +451,7 @@ mod tests {
     #[test]
     fn every_dependency_must_survive_final_witness() {
         for address in [
-            B + 0x35196c0,
+            B + 0x372afc0,
             I,
             G,
             R,
@@ -459,7 +459,7 @@ mod tests {
             R + 0x170,
             R + 0x178,
             R + 0x2c5b0,
-            B + 0x3639800,
+            B + 0x384b480,
             V + 8,
             V + 0x48,
             V + 0x128,
@@ -475,8 +475,8 @@ mod tests {
             D + 0x10,
             D + 0x30,
             D + 0x38,
-            B + 0x34ce008,
-            B + 0x34cdfa8,
+            B + 0x36dcdf8,
+            B + 0x36dcd98,
             VIEW + 536,
             LISTENER + 32,
         ] {
@@ -504,7 +504,7 @@ mod tests {
             f.word(address, 0);
             assert!(observe(&f).is_err(), "{address:x}");
         }
-        for address in [B + 0x34ce008, B + 0x34cdfa8] {
+        for address in [B + 0x36dcdf8, B + 0x36dcd98] {
             for value in [0, 7, 4097, u64::MAX] {
                 let mut f = Fixture::new();
                 f.word(address, value);

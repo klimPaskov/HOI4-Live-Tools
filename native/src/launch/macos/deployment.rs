@@ -36,9 +36,9 @@ struct Ui {
 const MACOS: Ui = Ui {
     manager: 0x670,
     view: 0x138,
-    view_root: 0x430,
-    template_window: 0x438,
-    window_rows: 0xb90,
+    view_root: 0x490,
+    template_window: 0x498,
+    window_rows: 0xcb0,
     row_container: 0x10,
     country_templates: 0x180,
     template_name: 0x20,
@@ -196,7 +196,7 @@ fn train_button(r: &Reader<'_>, image: u64, name: &str) -> Result<Rect> {
 /// The panel's own Division Designer button (container +0xc00 of the template window).
 pub(super) fn designer_button(r: &Reader<'_>, image: u64) -> Result<Rect> {
     let window = r.u64(view(r, image)? + MACOS.template_window)?;
-    let root = gui_tree::container(r, r.u64(window + 0xc00)?, image)?
+    let root = gui_tree::container(r, r.u64(window + 0xd20)?, image)?
         .ok_or_else(|| Error::new("invalid_gui", "Template window root unavailable"))?;
     let button = gui_tree::child(r, image, root, "open_designer_button")?
         .ok_or_else(|| Error::new("gui_target_unavailable", "Division Designer button not found"))?;

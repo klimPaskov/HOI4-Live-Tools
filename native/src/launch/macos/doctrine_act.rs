@@ -340,6 +340,34 @@ fn selection_root(r: &crate::memory::Reader<'_>, i: u64) -> Result<Option<u64>> 
         }
     }
     match pk::locate(r, i, &pk::DOCTRINE_SELECTION)? {
+        Some(root) if gui_tree::visible(r, root)? => return Ok(Some(root)),
+        _ => {}
+    }
+    embedded_selection_root(r, i)
+}
+/// 1.19.4: the list is a member of the doctrine view's `CFolderView` (view +0x498, list pointer
+/// +0x4f0, the list's root window `doctrine_selection_list` at list +0x20) and is neither a child of the view's tree nor in
+/// the pop-up list or the interface manager (seen live 31 October 2026: the Screens track's
+/// "Select a Subdoctrine" window open while both older lookups found nothing).
+fn embedded_selection_root(r: &crate::memory::Reader<'_>, i: u64) -> Result<Option<u64>> {
+    const MANAGER_SLOT: u64 = 0x108;
+    const FOLDER_VIEW: u64 = 0x498;
+    const SELECTION: u64 = 0x4f0;
+    const SELECTION_ROOT: u64 = 0x20;
+    let idler = r.u64(i + crate::game::layout(r).idler_global)?;
+    let view = r.u64(r.u64(idler + 0x670)? + MANAGER_SLOT)?;
+    if view == 0 || r.u64(view)? != i + pk::DOCTRINE_VIEW.vtable {
+        return Ok(None);
+    }
+    let folder = r.u64(view + FOLDER_VIEW)?;
+    if folder == 0 {
+        return Ok(None);
+    }
+    let list = r.u64(folder + SELECTION)?;
+    if list == 0 || r.u64(list)? != i + pk::DOCTRINE_SELECTION.vtable {
+        return Ok(None);
+    }
+    match gui_tree::container(r, r.u64(list + SELECTION_ROOT)?, i)? {
         Some(root) if gui_tree::visible(r, root)? => Ok(Some(root)),
         _ => Ok(None),
     }

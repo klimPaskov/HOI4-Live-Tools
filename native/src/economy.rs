@@ -102,7 +102,7 @@ pub(crate) fn own_production(r: &Reader<'_>, base: u64) -> Result<(u64, u64)> {
     }
     let production = r.u64(country + g.country_production)?;
     exact(r, production, base + g.production_vtable)?;
-    if r.u64(production + 0x290)? != country {
+    if r.u64(production + game::layout(r).production(0x290))? != country {
         return Err(Error::new(
             "invalid_economy_owner",
             "Own production country join required",
@@ -127,22 +127,22 @@ pub fn snapshot(process: &dyn Process) -> Result<Value> {
         ));
     }
     let context = game::context_from_reader(&r, base)?;
-    let mil = raw(&r, production + 0x2b8, false)? / FIXED;
-    let naval = raw(&r, production + 0x318, false)? / FIXED;
-    let civ = raw(&r, production + 0x378, false)? / FIXED;
+    let mil = raw(&r, production + g.production(0x2b8), false)? / FIXED;
+    let naval = raw(&r, production + g.production(0x318), false)? / FIXED;
+    let civ = raw(&r, production + g.production(0x378), false)? / FIXED;
     let military = subtract(
         mil,
-        count(&r, production + 0x2f8)?,
-        count(&r, production + 0x300)?,
+        count(&r, production + g.production(0x2f8))?,
+        count(&r, production + g.production(0x300))?,
     )?;
     let civilian = subtract(
         civ,
-        count(&r, production + 0x3b8)?,
-        count(&r, production + 0x3c0)?,
+        count(&r, production + g.production(0x3b8))?,
+        count(&r, production + g.production(0x3c0))?,
     )?;
     let naval = subtract(naval, 0, 0)?;
-    let project_cost = raw(&r, production + 0x390, false)? / FIXED;
-    let project_adjustment = count(&r, production + 0x3b0)?;
+    let project_cost = raw(&r, production + g.production(0x390), false)? / FIXED;
+    let project_adjustment = count(&r, production + g.production(0x3b0))?;
     let project = civ
         .checked_sub(project_cost)
         .and_then(|v| v.checked_sub(project_adjustment))

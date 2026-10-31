@@ -44,8 +44,8 @@ pub(super) fn handles(name: &str) -> bool {
 }
 
 /// `CCountryFactionView` and `CFactionSetupWindow` (RTTI map) and their interface manager slots.
-const FACTION_VIEW: (u64, u64) = (0x3334ec8, 0x168);
-const SETUP_VIEW: (u64, u64) = (0x3338d90, 0x170);
+const FACTION_VIEW: (u64, u64) = (0x3536180, 0x168);
+const SETUP_VIEW: (u64, u64) = (0x353a060, 0x170);
 const NAME_BOX_FROM_ICON: (f64, f64) = (222.0, 1.0);
 
 fn pause(ms: u64) {
@@ -263,7 +263,7 @@ fn drive_create(process: &dyn Process, keys: &MacKeys<'_>, plan: &CreatePlan) ->
                 let setup = need(r, i, "faction_setup_window")?;
                 let edit = kit::find_deep(r, i, setup, "name_selection", 4)?
                     .ok_or_else(|| Error::new("gui_target_unavailable", "name_selection not found"))?;
-                nui::edit_text(r, edit)
+                nui::edit_text(r, i, edit)
             })?;
         }
         let mut invited = Vec::new();
@@ -383,10 +383,10 @@ pub(super) struct Proposal {
 }
 fn window_class(kind: u64) -> &'static str {
     match kind {
-        0x344e0d0 => "standard",
-        0x344e1f8 => "scripted",
-        0x344e320 => "incoming_lend_lease",
-        0x344e448 => "foreign_manpower",
+        0x365b5f8 => "standard",
+        0x365b720 => "scripted",
+        0x365b848 => "incoming_lend_lease",
+        0x365b970 => "foreign_manpower",
         _ => "base",
     }
 }

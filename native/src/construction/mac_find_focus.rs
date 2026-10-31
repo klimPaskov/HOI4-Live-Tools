@@ -7,8 +7,8 @@ use crate::{
 };
 use serde_json::{json, Value};
 
-const EDIT_BOX: u64 = 0x34add98;
-const TEXT_RECEIVER: u64 = 0x34ae0c8;
+const EDIT_BOX: u64 = 0x36bc6a0;
+const TEXT_RECEIVER: u64 = 0x36bc9e0;
 
 /// Immutable control membership only. Dynamic focus aliases and raw widget
 /// flags are checked freshly and are deliberately excluded from identity.
@@ -53,7 +53,7 @@ impl Control {
                 "Original Find focus control or membership changed",
             )
         };
-        if find != self.find || registry != self.registry || r.u64(find + 0xc40)? != self.edit_box {
+        if find != self.find || registry != self.registry || r.u64(find + 0xd60)? != self.edit_box {
             return Err(changed());
         }
         if mac_ui::window(r, base, self.root, registry)? != self.root {
@@ -62,7 +62,7 @@ impl Control {
         // Complete pointer membership is compared before visiting a newly
         // substituted child or the descriptor/name of any replacement.
         for (parent, original) in &self.children {
-            if members(r, *parent + 0xd30, 4096)? != *original {
+            if members(r, *parent + 0xe50, 4096)? != *original {
                 return Err(changed());
             }
         }
@@ -129,10 +129,10 @@ pub(super) fn observe(
     if r.byte(root + 0x95)? & 8 == 0 {
         return Ok(None);
     }
-    if r.u64(base + 0x35dc058)? != registry {
+    if r.u64(base + 0x37eda08)? != registry {
         return Err(invalid("Mac Find focus must use the own GUI singleton"));
     }
-    let edit_box = r.u64(find + 0xc40)?;
+    let edit_box = r.u64(find + 0xd60)?;
     if edit_box == 0 {
         return Ok(None);
     }

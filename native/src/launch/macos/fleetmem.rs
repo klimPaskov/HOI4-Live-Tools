@@ -10,8 +10,8 @@ use crate::{
 };
 use serde_json::{json, Map, Value};
 
-/// Equipment variant (`CEquipmentVariant`, vtable 0x337aac8).
-pub(super) const VARIANT_VTABLE: u64 = 0x337aac8;
+/// Equipment variant (`CEquipmentVariant`, vtable 0x357d1b8).
+pub(super) const VARIANT_VTABLE: u64 = 0x357d1b8;
 pub(super) const VARIANT_ID: u64 = 0xc;
 pub(super) const VARIANT_NAME: u64 = 0x28;
 pub(super) const VARIANT_CLASS_SUFFIX: u64 = 0x40;
@@ -21,7 +21,7 @@ pub(super) const VARIANT_PARENT: u64 = 0x3e8;
 pub(super) const VARIANT_MANPOWER: u64 = 0x410;
 pub(super) const VARIANT_OBSOLETE: u64 = 0x414;
 pub(super) const VARIANT_MAX_STRENGTH: u64 = 0x2d8;
-/// `CEquipmentType` (vtable 0x3379328): key string +0x10, module slots +0x60.
+/// `CEquipmentType` (vtable 0x357bad8): key string +0x10, module slots +0x60.
 pub(super) const TYPE_KEY: u64 = 0x10;
 pub(super) const TYPE_SLOTS: u64 = 0x60;
 pub(super) const SLOT_STRIDE: u64 = 0x40;

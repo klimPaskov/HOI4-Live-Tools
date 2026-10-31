@@ -10,7 +10,7 @@
 //!   as the install's `intelligence_agencies` script defines them). Every
 //!   country has such an object and a default name, so the name does not say
 //!   whether the agency has been created.
-//! * CHECKED live: the loaded upgrade database (`image+0x34d0e50`,
+//! * CHECKED live: the loaded upgrade database (`image+0x3704b10`,
 //!   `CAgencyUpgradeDatabase`, branch array `+0x70`, upgrades in each branch's
 //!   array `+0x30`) names 5 branches and 21 upgrades; the install's
 //!   `intelligence_agency_upgrades` script supplies levels and modifiers.
@@ -42,7 +42,7 @@ const AGENCY: u64 = 0xd68;
 const AGENCY_TYPE: &str = "19CIntelligenceAgency";
 const AGENCY_OWNER: u64 = 0x10;
 const AGENCY_NAME: u64 = 0x80;
-const UPGRADE_DB: u64 = 0x34d0e50;
+const UPGRADE_DB: u64 = 0x3704b10;
 const UPGRADE_DB_TYPE: &str = "22CAgencyUpgradeDatabase";
 const DB_BRANCHES: u64 = 0x70;
 const BRANCH_TYPE: &str = "20CAgencyUpgradeBranch";

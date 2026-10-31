@@ -14,15 +14,15 @@ const OTHER: u64 = 0x950000;
 fn fixture() -> Fixture {
     let mut f = Fixture::new(StringAbi::LibCxx);
     for (at, value) in [
-        (BASE + 0x35dc058, GUI),
-        (FIND + 0xc40, BOX),
-        (ROOT, BASE + 0x34ac0b0),
+        (BASE + 0x37eda08, GUI),
+        (FIND + 0xd60, BOX),
+        (ROOT, BASE + 0x36ba978),
         (ROOT + 0x88, GUI),
         (BOX, BASE + EDIT_BOX),
         (BOX + 0x180, BASE + TEXT_RECEIVER),
         (BOX + 0x58, GUI),
         (BOX + 0x50, KIND),
-        (KIND, BASE + 0x34ae140),
+        (KIND, BASE + 0x36bca58),
         (GUI + 0x138, BOX),
         (GUI + 0x210, BOX + 0x180),
     ] {
@@ -32,7 +32,7 @@ fn fixture() -> Fixture {
     f.put(BOX + 0x64, &0x804u32.to_le_bytes());
     f.put(BOX + 0x239, &[1]);
     f.string(KIND + 0x28, "to_find_text");
-    f.array(ROOT + 0xd30, &[BOX]);
+    f.array(ROOT + 0xe50, &[BOX]);
     f
 }
 
@@ -74,9 +74,9 @@ fn hidden_and_unmaterialized_find_skip_edit_box_and_alias_payloads() {
     for root in [0, ROOT] {
         let mut f = fixture();
         f.put(ROOT + 0x95, &[0]);
-        f.word(FIND + 0xc40, OTHER);
+        f.word(FIND + 0xd60, OTHER);
         assert!(read(&f, root).unwrap().is_none());
-        assert!(f.untouched(FIND + 0xc40, 8));
+        assert!(f.untouched(FIND + 0xd60, 8));
         assert!(f.untouched(GUI + 0x138, 8));
         assert!(f.untouched(GUI + 0x210, 8));
         assert!(f.untouched(OTHER, 8));
@@ -86,7 +86,7 @@ fn hidden_and_unmaterialized_find_skip_edit_box_and_alias_payloads() {
 #[test]
 fn absent_edit_box_stays_unknown() {
     let mut f = fixture();
-    f.word(FIND + 0xc40, 0);
+    f.word(FIND + 0xd60, 0);
     assert!(read(&f, ROOT).unwrap().is_none());
     assert!(f.untouched(GUI + 0x138, 8));
 }
@@ -94,7 +94,7 @@ fn absent_edit_box_stays_unknown() {
 #[test]
 fn foreign_scope_type_or_receiver_refuses_before_alias_reads() {
     for (at, value) in [
-        (BASE + 0x35dc058, OTHER),
+        (BASE + 0x37eda08, OTHER),
         (ROOT + 0x88, OTHER),
         (BOX, BASE + EDIT_BOX + 8),
         (BOX + 0x58, OTHER),
@@ -112,12 +112,12 @@ fn foreign_scope_type_or_receiver_refuses_before_alias_reads() {
 #[test]
 fn missing_renamed_or_ambiguous_named_child_refuses() {
     let mut f = fixture();
-    f.array(ROOT + 0xd30, &[]);
+    f.array(ROOT + 0xe50, &[]);
     assert!(read(&f, ROOT).is_err());
     let mut f = fixture();
     f.string(KIND + 0x28, "other_text");
     assert!(read(&f, ROOT).is_err());
     let mut f = fixture();
-    f.array(ROOT + 0xd30, &[BOX, BOX]);
+    f.array(ROOT + 0xe50, &[BOX, BOX]);
     assert!(read(&f, ROOT).is_err());
 }

@@ -473,13 +473,13 @@ fn original_edges(r: &Reader<'_>, anchor: &FindAnchor) -> Result<()> {
         ));
     }
     mac_ui::exact(r, b.base, b.production, g.production_vtable)?;
-    if r.u64(b.production + 0x290)? != b.country {
+    if r.u64(b.production + crate::game::layout(r).production(0x290))? != b.country {
         return Err(changed("Find production owner changed before payload"));
     }
     if r.u64(idler + 0x4c0)? != b.registry || r.u64(idler + 0x670)? != b.manager {
         return Err(changed("Find own interface changed before payload"));
     }
-    mac_ui::exact(r, b.base, b.registry, 0x34974d0)?;
+    mac_ui::exact(r, b.base, b.registry, 0x36a5810)?;
     if r.u64(b.manager + 0x180)? != idler {
         return Err(changed("Find manager owner changed before payload"));
     }
@@ -487,10 +487,10 @@ fn original_edges(r: &Reader<'_>, anchor: &FindAnchor) -> Result<()> {
         return Err(changed("Original Find object changed before payload"));
     }
     mac_ui::exact(r, b.base, b.find, FIND)?;
-    if r.u64(b.find + 0xc30)? != idler {
+    if r.u64(b.find + 0xd50)? != idler {
         return Err(changed("Find idler backlink changed before payload"));
     }
-    if r.u64(idler + 0x708)? != b.camera {
+    if r.u64(idler + 0x718)? != b.camera {
         return Err(changed("Find camera object changed before payload"));
     }
     if let Some(state) = b.own_state() {
@@ -626,7 +626,7 @@ fn observe_in(
     }
     let [gs, idler, _] = context.anchors;
     let registry = r.u64(idler + 0x4c0)?;
-    mac_ui::exact(&r, base, registry, 0x34974d0)?;
+    mac_ui::exact(&r, base, registry, 0x36a5810)?;
     w.section("mac_find_characters");
     let characters = character_guard
         .as_ref()
@@ -640,17 +640,17 @@ fn observe_in(
     w.section("mac_find_view");
     let find = r.u64(manager + 0x190)?;
     mac_ui::exact(&r, base, find, FIND)?;
-    if r.u64(find + 0xc30)? != idler {
+    if r.u64(find + 0xd50)? != idler {
         return Err(invalid("Mac Find view must retain the own idler"));
     }
     if let Some(guard) = view_guard {
         w.section("mac_find_original_control");
-        if r.u64(base + 0x35dc058)? != registry {
+        if r.u64(base + 0x37eda08)? != registry {
             return Err(changed(
                 "Original Find GUI singleton changed before payload",
             ));
         }
-        let current = r.u64(find + 0xc38)?;
+        let current = r.u64(find + 0xd58)?;
         match guard {
             ViewGuard::Typing { window, control } => {
                 if current != window {

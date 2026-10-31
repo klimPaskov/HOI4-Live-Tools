@@ -32,7 +32,7 @@ const SPRITE: u64 = 0x2100000;
 const SPRITE_TYPE: u64 = 0x2110000;
 
 fn template(f: &mut Fixture, pointer: u64, ordinal: i32, key: &str) {
-    f.word(pointer, BASE + 0x332e908);
+    f.word(pointer, BASE + 0x352fa88);
     f.put(pointer + 0x18, &[1]);
     f.int(pointer + 0x290, ordinal);
     f.string(pointer + 0x228, key);
@@ -42,14 +42,14 @@ fn fixture() -> Fixture {
     let mut f = Fixture::new(StringAbi::LibCxx);
     for (field, value) in [
         (COUNTRY + 0xd10, PRODUCTION),
-        (PRODUCTION, BASE + 0x338b678),
-        (PRODUCTION + 0x290, COUNTRY),
-        (BASE + 0x34d0ac0, DATABASE),
-        (DATABASE, BASE + 0x332dd28),
-        (NULL, BASE + 0x332def8),
-        (STATE, BASE + 0x337caf0),
+        (PRODUCTION, BASE + 0x358e0c8),
+        (PRODUCTION + 0x2a8, COUNTRY),
+        (BASE + 0x3703ad0, DATABASE),
+        (DATABASE, BASE + 0x352eea8),
+        (NULL, BASE + 0x352f078),
+        (STATE, BASE + 0x357f410),
         (IDLER + 0x4c0, GUI),
-        (GUI, BASE + 0x34974d0),
+        (GUI, BASE + 0x36a5810),
         (IDLER + 0x670, MANAGER),
         (MANAGER + 0x180, IDLER),
     ] {
@@ -75,17 +75,17 @@ fn selected(f: &mut Fixture, pointer: u64) {
 
 fn queue(f: &mut Fixture) {
     for (field, value) in [
-        (LINE, BASE + 0x3389c40),
+        (LINE, BASE + 0x358c690),
         (LINE + 8, 0x10000003b),
         (LINE + 0x20, PRODUCTION),
         (LINE + 0x28, 100000),
         (LINE + 0x30, 100),
         (LINE + 0x38, 0),
-        (LINE + 0x70, BUILDING),
-        (BUILDING, BASE + 0x332dcb0),
+        (LINE + 0x78, BUILDING),
+        (BUILDING, BASE + 0x352ee30),
         (BUILDING + 0x1a8, STATE + 0x110),
         (BUILDING + 0x1b0, TEMPLATE),
-        (STATE + 0x110, BASE + 0x332e6a8),
+        (STATE + 0x110, BASE + 0x352f828),
     ] {
         f.word(field, value);
     }
@@ -95,15 +95,15 @@ fn queue(f: &mut Fixture) {
         (LINE + 0x40, 1),
         (LINE + 0x44, 0),
         (LINE + 0x48, 2),
-        (LINE + 0x78, 0),
+        (LINE + 0x80, 0),
         (STATE + 0x178, 2),
         (STATE + 0x17c, 1),
         (STATE + 0x180, 0),
     ] {
         f.int(field, value);
     }
-    f.put(LINE + 0x8c, &[0]);
-    f.put(LINE + 0x99, &[0]);
+    f.put(LINE + 0x94, &[0]);
+    f.put(LINE + 0xa1, &[0]);
     f.array(PRODUCTION + 0x70, &[LINE]);
     // State building ordinal map: index1 -> local building index0.
     f.array(STATE + 0x130, &[0]);
@@ -118,28 +118,28 @@ fn name(f: &mut Fixture, widget: u64, key: &str) {
     let kind = widget + 0x3000000;
     f.word(widget + 0x50, kind);
     f.word(widget + 0x58, GUI);
-    f.word(kind, BASE + 0x34b0e18);
+    f.word(kind, BASE + 0x36bf800);
     f.string(kind + 0x28, key);
 }
 fn window(f: &mut Fixture, object: u64, key: &str, children: &[u64]) {
-    f.word(object, BASE + 0x34ac0b0);
+    f.word(object, BASE + 0x36ba978);
     f.word(object + 0x30, 0);
     f.word(object + 0x88, GUI);
     f.put(object + 0x95, &[8]);
-    f.int(object + 0x12b8, 0);
-    f.int(object + 0x1270, 0);
+    f.int(object + 0x13d8, 0);
+    f.int(object + 0x1390, 0);
     name(f, object + 0x30, key);
-    f.array(object + 0xd30, children);
+    f.array(object + 0xe50, children);
 }
 
 fn ui(f: &mut Fixture) {
     f.int(MANAGER + 0x3a8, 17);
     for (field, value) in [
         (MANAGER + 0x150, VIEW),
-        (VIEW, BASE + 0x343aa90),
-        (VIEW + 0x428, IDLER),
+        (VIEW, BASE + 0x3647478),
+        (VIEW + 0x488, IDLER),
         (VIEW + 0x30, MANAGER),
-        (VIEW + 0x430, ROOT),
+        (VIEW + 0x490, ROOT),
     ] {
         f.word(field, value);
     }
@@ -156,41 +156,41 @@ fn ui(f: &mut Fixture) {
         let section = SECTION + i as u64 * 0x10000;
         let grid = GRID + i as u64 * 0x10000;
         window(f, section, section_name, &[grid]);
-        f.word(grid, BASE + 0x34be068);
+        f.word(grid, BASE + 0x36cca80);
         name(f, grid, grid_name);
         f.array(grid + 0x190, if i == 0 { &[ITEM] } else { &[] });
     }
-    f.word(ITEM, BASE + 0x343a9b0);
+    f.word(ITEM, BASE + 0x3647398);
     f.word(ITEM + 0x20, TEMPLATE);
     f.word(ITEM + 0x10, FRAME);
     window(f, FRAME, "construction_choice", &[BUTTON]);
     name(f, BUTTON, "start_construction_button");
     let glue = ITEM + 0x30;
     for (field, value) in [
-        (BUTTON, BASE + 0x34aafa0),
-        (BUTTON + 0x70, BASE + 0x34ab360),
+        (BUTTON, BASE + 0x36b9738),
+        (BUTTON + 0x70, BASE + 0x36b9b18),
         (BUTTON + 0x78, NODE),
         (BUTTON + 0x80, NODE),
         (BUTTON + 0x90, 0),
-        (BUTTON + 0xc0, 0),
-        (BUTTON + 0x178, 0),
+        (BUTTON + 0xc8, 0),
+        (BUTTON + 0x180, 0),
         (NODE, glue),
         (NODE + 8, 0),
         (NODE + 0x10, 0),
-        (glue, BASE + 0x343ade8),
+        (glue, BASE + 0x36477d8),
         (glue + 0x30, FUNCTION),
-        (FUNCTION, BASE + 0x343ae78),
-        (FUNCTION + 8, BASE + 0x1ed5640),
+        (FUNCTION, BASE + 0x3647870),
+        (FUNCTION + 8, BASE + 0x16f8600),
         (FUNCTION + 0x10, 0),
         (FUNCTION + 0x18, ITEM),
         (GUI + 0x98, GRAPHICS),
-        (GRAPHICS, BASE + 0x33dafa8),
-        (BUTTON + 0xd0, GRAPHICS),
-        (BUTTON + 0xd8, SPRITE),
-        (SPRITE, BASE + 0x34bdb10),
+        (GRAPHICS, BASE + 0x35e5b58),
+        (BUTTON + 0xd8, GRAPHICS),
+        (BUTTON + 0xe0, SPRITE),
+        (SPRITE, BASE + 0x36cc528),
         (SPRITE + 8, SPRITE_TYPE),
         (SPRITE + 0x138, BUTTON),
-        (BASE + 0x35dbf60, 0),
+        (BASE + 0x37ed910, 0),
     ] {
         f.word(field, value);
     }
@@ -199,9 +199,9 @@ fn ui(f: &mut Fixture) {
     f.put(NODE + 0x18, &[0]);
     f.put(BUTTON + 0x65, &[8]);
     f.int(BUTTON + 0x9c, 0);
-    f.put(BUTTON + 0xcc, &[8]);
-    f.put(BUTTON + 0x1d1, &[0]);
-    f.put(BASE + 0x3519990, &[0]);
+    f.put(BUTTON + 0xd4, &[8]);
+    f.put(BUTTON + 0x1d9, &[0]);
+    f.put(BASE + 0x372b2b8, &[0]);
     for index in 2..=20 {
         f.word(glue + index * 0x30, 0);
     }
@@ -221,7 +221,7 @@ fn route(f: &mut Fixture, targets: &[u64]) {
     f.array(GRAPHICS + 0x50, &[SPRITE, FOREIGN]);
     let words: Vec<_> = targets
         .iter()
-        .flat_map(|target| [BASE + 0x34b0ab8, *target])
+        .flat_map(|target| [BASE + 0x36bf490, *target])
         .collect();
     f.array(GRAPHICS + 0x28, &words);
     f.int(GRAPHICS + 0x30, targets.len() as i32);
@@ -429,8 +429,8 @@ fn idle_to_exact_target_readback_ignores_obsolete_gui_callback_and_geometry() {
     let before = observe_choice(&f, "arms_factory", 1, false).unwrap();
     let a = before.selection_anchor().unwrap();
     selected(&mut f, TEMPLATE);
-    f.word(VIEW + 0x430, FOREIGN);
-    f.word(BUTTON + 0xd8, FOREIGN);
+    f.word(VIEW + 0x490, FOREIGN);
+    f.word(BUTTON + 0xe0, FOREIGN);
     f.word(FUNCTION + 0x18, FOREIGN);
     let state = a.observe(&f).unwrap();
     a.same_scope_and_queue(&state).unwrap();
@@ -502,16 +502,16 @@ fn original_ownership_edges_refuse_before_any_foreign_payload() {
     let countries = fixture().get_word(GS + 0x2d8);
     let states = fixture().get_word(GS + 0x290);
     for field in [
-        BASE + 0x3519740,
-        BASE + 0x35196c0,
-        BASE + 0x34d0de0,
+        BASE + 0x372b040,
+        BASE + 0x372afc0,
+        BASE + 0x3706540,
         countries,
         COUNTRY + 0xd10,
-        PRODUCTION + 0x290,
+        PRODUCTION + 0x2a8,
         IDLER + 0x4c0,
         IDLER + 0x670,
         MANAGER + 0x180,
-        BASE + 0x34d0ac0,
+        BASE + 0x3703ad0,
         states + 8,
     ] {
         let mut f = fixture();
@@ -607,7 +607,7 @@ fn full_queue_order_is_original_evidence_before_any_replacement_line_payload() {
     let mut f = fixture();
     queue(&mut f);
     let second = LINE + 0x1000;
-    for offset in [0, 0x20, 0x28, 0x30, 0x38, 0x70] {
+    for offset in [0, 0x20, 0x28, 0x30, 0x38, 0x78] {
         f.word(second + offset, f.get_word(LINE + offset));
     }
     f.word(second + 8, 0x20000003b);
@@ -617,12 +617,12 @@ fn full_queue_order_is_original_evidence_before_any_replacement_line_payload() {
         (0x40, 1),
         (0x44, 0),
         (0x48, 2),
-        (0x78, 0),
+        (0x80, 0),
     ] {
         f.int(second + offset, value);
     }
-    f.put(second + 0x8c, &[0]);
-    f.put(second + 0x99, &[0]);
+    f.put(second + 0x94, &[0]);
+    f.put(second + 0xa1, &[0]);
     f.array(PRODUCTION + 0x70, &[LINE, second]);
     let a = bind_selection(&f, "arms_factory", 1).unwrap();
     f.array(PRODUCTION + 0x70, &[second, LINE]);
@@ -658,7 +658,7 @@ fn unsupported_anomalous_or_unlocated_other_rows_are_never_an_empty_queue() {
         queue(&mut f);
         match kind {
             0 => f.word(LINE, BASE + 0x1000), // No main-image type metadata/layout.
-            1 => f.word(LINE, BASE + 0x338a7a8), // Railway location unproved.
+            1 => f.word(LINE, BASE + 0x358d1f8), // Railway location unproved.
             2 => f.word(LINE + 0x28, u64::MAX),
             3 => {
                 template(&mut f, OTHER, 2, "industrial_complex");
@@ -860,10 +860,10 @@ fn typed_control_comparison_refuses_new_rect_callback_or_same_template_item() {
             2 => {
                 let item = ITEM + 0x1000;
                 f.array(GRID + 0x190, &[item]);
-                f.word(item, BASE + 0x343a9b0);
+                f.word(item, BASE + 0x3647398);
                 f.word(item + 0x10, FRAME);
                 f.word(item + 0x20, TEMPLATE);
-                f.word(item + 0x30, BASE + 0x343ade8);
+                f.word(item + 0x30, BASE + 0x36477d8);
                 f.word(item + 0x60, FUNCTION);
                 f.word(NODE, item + 0x30);
                 f.word(FUNCTION + 0x18, item);

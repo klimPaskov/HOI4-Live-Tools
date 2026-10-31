@@ -30,7 +30,7 @@ pub(super) fn observe(
     catalog: &mut Option<Catalog>,
 ) -> Result<Building> {
     let l = super::layout(r);
-    let building = r.u64(line + 0x70)?;
+    let building = r.u64(line + 0x70 + l.line_tail_shift)?;
     if building == 0 {
         return Ok(Building::unavailable("no_building"));
     }

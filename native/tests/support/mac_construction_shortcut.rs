@@ -13,9 +13,9 @@ const POSITION: u64 = 0x5a0000;
 const PREVIOUS_POSITION: u64 = 0x5b0000;
 
 fn bindings(f: &mut MacFixture, button: u64, data: u64, keys: &[i32]) {
-    f.word(button + 0xa0, data);
-    f.int(button + 0xa8, keys.len() as i32);
-    f.int(button + 0xac, keys.len() as i32);
+    f.word(button + 0xa8, data);
+    f.int(button + 0xb0, keys.len() as i32);
+    f.int(button + 0xb4, keys.len() as i32);
     for (i, key) in keys.iter().enumerate() {
         let record = data + i as u64 * 40;
         f.put(record, &[0; 40]);
@@ -24,27 +24,27 @@ fn bindings(f: &mut MacFixture, button: u64, data: u64, keys: &[i32]) {
 }
 fn target(f: &mut MacFixture, button: u64, sprite: u64) {
     for (a, v) in [
-        (button, BASE + 0x34aafa0),
+        (button, BASE + 0x36b9738),
         (button + 0x58, GUI),
-        (button + 0xd0, GRAPHICS),
-        (button + 0xd8, sprite),
-        (button + 0xc0, 0),
-        (button + 0x178, 0),
-        (sprite, BASE + 0x34bdb10),
+        (button + 0xd8, GRAPHICS),
+        (button + 0xe0, sprite),
+        (button + 0xc8, 0),
+        (button + 0x180, 0),
+        (sprite, BASE + 0x36cc528),
         (sprite + 0x138, button),
     ] {
         f.word(a, v);
     }
     f.int(button + 0x64, 0x804);
     f.int(button + 0x9c, 0);
-    f.put(button + 0xcc, &[8]);
-    f.put(button + 0x1d1, &[0]);
+    f.put(button + 0xd4, &[8]);
+    f.put(button + 0x1d9, &[0]);
 }
 fn keyboard() -> MacFixture {
     let mut f = fixture(2);
-    f.word(BASE + 0x35dc058, GUI);
+    f.word(BASE + 0x37eda08, GUI);
     f.word(GUI + 0x98, GRAPHICS);
-    f.word(GRAPHICS, BASE + 0x33dafa8);
+    f.word(GRAPHICS, BASE + 0x35e5b58);
     for a in [GUI + 0x138, GUI + 0x210] {
         f.word(a, 0);
     }
@@ -52,7 +52,7 @@ fn keyboard() -> MacFixture {
     f.put(GUI + 0x130, &[0]);
     target(&mut f, BUTTON, SPRITE);
     target(&mut f, PREVIOUS, PREVIOUS_SPRITE);
-    f.word(AGENCY + 0x1238, POSITION);
+    f.word(AGENCY + 0x1358, POSITION);
     parent(&mut f, BUTTON, SPRITE, POSITION);
     bindings(&mut f, BUTTON, KEYS, &[116]);
     bindings(&mut f, PREVIOUS, PREVIOUS_KEYS, &[121]);
@@ -77,9 +77,9 @@ fn reason(f: &MacFixture) -> String {
         .into()
 }
 fn parent(f: &mut MacFixture, button: u64, sprite: u64, position: u64) {
-    f.word(button + 0x178, position);
+    f.word(button + 0x180, position);
     f.word(sprite + 0x108, position);
-    f.word(position, BASE + 0x34b0428);
+    f.word(position, BASE + 0x36bea88);
     f.put(position + 0x128, &[1]);
 }
 
@@ -101,7 +101,7 @@ fn ordinary_t_is_current_and_reverse_ordered_without_geometry_or_later_payload()
             GRAPHICS + 0x170,
             GRAPHICS + 0x50,
             GUI + 0x120,
-            BASE + 0x35dbf60,
+            BASE + 0x37ed910,
         ],
     );
 }
@@ -109,14 +109,14 @@ fn ordinary_t_is_current_and_reverse_ordered_without_geometry_or_later_payload()
 fn shortcut_payload_is_opt_in_and_selected_panel_never_requires_a_toggle() {
     let f = fixture(2);
     snapshot(&f, false).unwrap();
-    not_read(&f, &[BASE + 0x35dc058, BUTTON + 0xa0]);
+    not_read(&f, &[BASE + 0x37eda08, BUTTON + 0xa8]);
     for shown in [0, 8] {
         let mut f = fixture(17);
         f.put(ROOT + 0x95, &[shown]);
         let v = read(&f).unwrap();
         assert_eq!(v["reason"], "already_selected_no_toggle");
         assert!(v["opener"].is_null());
-        not_read(&f, &[TOPBAR, BASE + 0x35dc058, BUTTON]);
+        not_read(&f, &[TOPBAR, BASE + 0x37eda08, BUTTON]);
     }
 }
 #[test]
@@ -155,7 +155,7 @@ fn prior_matching_or_consuming_button_refuses_even_when_named_target_matches() {
         not_read(&f, &[KEYS]);
     }
     let mut f = keyboard();
-    f.put(PREVIOUS + 0xcc, &[0]);
+    f.put(PREVIOUS + 0xd4, &[0]);
     f.int(PREVIOUS + 0x64, 0x806);
     assert_eq!(reason(&f), "ordinary_t_route_observed");
     not_read(&f, &[PREVIOUS_KEYS]);
@@ -176,19 +176,19 @@ fn current_target_requires_exact_unmodified_single_t_not_disk_configuration() {
     bindings(&mut f, BUTTON, KEYS, &[116, 116]);
     assert_eq!(reason(&f), "named_button_requires_one_plain_t_binding");
     let mut f = keyboard();
-    f.put(BUTTON + 0xcc, &[0]);
+    f.put(BUTTON + 0xd4, &[0]);
     assert_eq!(reason(&f), "named_keyboard_shortcut_disabled");
 }
 #[test]
 fn unsupported_earlier_types_and_foreign_owners_are_not_silently_skipped() {
     for (a, value) in [
-        (PREVIOUS_SPRITE, BASE + 0x34ac070),
-        (PREVIOUS, BASE + 0x34ac0b0),
+        (PREVIOUS_SPRITE, BASE + 0x36ba938),
+        (PREVIOUS, BASE + 0x36ba978),
         (PREVIOUS + 0x58, FOREIGN),
-        (PREVIOUS + 0xd0, FOREIGN),
         (PREVIOUS + 0xd8, FOREIGN),
-        (BASE + 0x35dc058, FOREIGN),
-        (BUTTON + 0xd0, FOREIGN),
+        (PREVIOUS + 0xe0, FOREIGN),
+        (BASE + 0x37eda08, FOREIGN),
+        (BUTTON + 0xd8, FOREIGN),
         (SPRITE + 0x138, FOREIGN),
     ] {
         let mut f = keyboard();
@@ -200,7 +200,7 @@ fn unsupported_earlier_types_and_foreign_owners_are_not_silently_skipped() {
 #[test]
 fn handler_wrapper_parent_and_pressed_predecessors_refuse_before_shortcuts() {
     let mut f = keyboard();
-    f.word(PREVIOUS + 0xc0, FOREIGN);
+    f.word(PREVIOUS + 0xc8, FOREIGN);
     assert_eq!(reason(&f), "unsupported_keyboard_button_gate");
     not_read(&f, &[FOREIGN, PREVIOUS_KEYS, KEYS]);
     for state in [1, -1, 4] {
@@ -210,7 +210,7 @@ fn handler_wrapper_parent_and_pressed_predecessors_refuse_before_shortcuts() {
         not_read(&f, &[PREVIOUS_KEYS]);
     }
     let mut f = keyboard();
-    f.put(PREVIOUS + 0x1d1, &[1]);
+    f.put(PREVIOUS + 0x1d9, &[1]);
     assert_eq!(reason(&f), "unsupported_keyboard_button_gate");
 }
 #[test]
@@ -223,7 +223,7 @@ fn missing_duplicate_and_bounded_sources_cannot_claim_delivery() {
     }
     for (a, value) in [
         (GRAPHICS + 0x70, 20_001),
-        (BUTTON + 0xa8, 129),
+        (BUTTON + 0xb0, 129),
         (KEYS + 24, -1),
         (KEYS + 28, 1),
     ] {
@@ -258,7 +258,7 @@ fn full_membership_and_each_inspected_binding_survive_final_witness() {
         PREVIOUS_KEYS + 4,
         PREVIOUS + 0x64,
         GUI + 0x138,
-        BASE + 0x35dc058,
+        BASE + 0x37eda08,
     ] {
         let f = keyboard();
         f.final_fault.set(Some(a));

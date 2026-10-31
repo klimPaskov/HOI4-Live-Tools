@@ -31,14 +31,14 @@ struct Ui {
 const MACOS: Ui = Ui {
     manager: 0x670,
     view: 0xe0,
-    view_root: 0x430,
+    view_root: 0x490,
     topbar: 0x188,
     topbar_root: 0x68,
     grid_items: 0x190,
     item_container: 0x10,
-    item_decision: 0xc18,
-    targeted_decision: 0xc20,
-    timed_decision: 0x848,
+    item_decision: 0xd38,
+    targeted_decision: 0xd40,
+    timed_decision: 0x908,
     inner_decision: 0x10,
     decision_key: 0x108,
 };

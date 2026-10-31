@@ -40,7 +40,7 @@ fn image_base(base: u64) -> Result<()> {
     if base < 0x10000
         || base % 0x1000 != 0
         || base
-            .checked_add(0x3639ae0)
+            .checked_add(0x384b760)
             .is_none_or(|end| end > 0x7fff_ffff_0000)
     {
         return Err(changed("Bounded aligned character image base required"));
@@ -63,7 +63,7 @@ fn edge(r: &Reader<'_>, at: u64, edges: &mut Vec<(u64, u64)>) -> Result<u64> {
 }
 
 fn ordinary(r: &Reader<'_>, base: u64, idler: u64, pump: u64) -> Result<()> {
-    if r.byte(idler + 0x7b5)? != 1 || r.byte(base + 0x3519990)? != 0 || r.byte(pump + 0x44)? != 0 {
+    if r.byte(idler + 0x7e1)? != 1 || r.byte(base + 0x372b2b8)? != 0 || r.byte(pump + 0x44)? != 0 {
         return Err(changed("Ordinary owned character dispatch required"));
     }
     Ok(())
@@ -73,7 +73,7 @@ fn mode(r: &Reader<'_>, base: u64, receiver: u64, original: Option<&Mode>) -> Re
     if receiver == 0 {
         return Ok(Mode::Direct);
     }
-    let flag = r.byte(base + 0x35d8dd8)?;
+    let flag = r.byte(base + 0x37ea780)?;
     let current = match flag {
         0 => Mode::Disabled,
         1 => Mode::Empty,
@@ -91,8 +91,8 @@ fn mode(r: &Reader<'_>, base: u64, receiver: u64, original: Option<&Mode>) -> Re
     }
     // The defined weak symbol may be coalesced/rebound. Require both current
     // aliases to the exact own non-polymorphic storage BEFORE either state.
-    let sentinel = base + 0x34fd970;
-    if r.u64(base + 0x327b430)? != sentinel || r.u64(receiver + 8)? != sentinel {
+    let sentinel = base + 0x370ce20;
+    if r.u64(base + 0x3477260)? != sentinel || r.u64(receiver + 8)? != sentinel {
         return Err(changed("Original owned character sentinel aliases differ"));
     }
     // Widths follow lookup1026eb390 and constructor1026ea8a0. No bucket key,
@@ -172,31 +172,31 @@ fn observe(r: &Reader<'_>, base: u64, idler: u64, gui: u64) -> Result<Binding> {
     pointer(gui)?;
     let mut edges = Vec::new();
     owned(r, base + game::MACOS.idler_global, idler, &mut edges)?;
-    owned(r, idler, base + 0x3308f90, &mut edges)?;
-    owned(r, base + 0x3308f90 + 0x20, base + 0x776fe0, &mut edges)?;
+    owned(r, idler, base + 0x35089d8, &mut edges)?;
+    owned(r, base + 0x35089d8 + 0x20, base + 0x7bb2c0, &mut edges)?;
     owned(r, idler + 0x4c0, gui, &mut edges)?;
-    owned(r, gui, base + 0x34974d0, &mut edges)?;
-    owned(r, base + 0x35dc058, gui, &mut edges)?;
+    owned(r, gui, base + 0x36a5810, &mut edges)?;
+    owned(r, base + 0x37eda08, gui, &mut edges)?;
     let gfx = edge(r, gui + 0x98, &mut edges)?;
     pointer(gfx)?;
-    owned(r, gfx, base + 0x33dafa8, &mut edges)?;
+    owned(r, gfx, base + 0x35e5b58, &mut edges)?;
     let application = edge(r, idler + 0x4f8, &mut edges)?;
     pointer(application)?;
-    owned(r, base + 0x3639ad8, application, &mut edges)?;
+    owned(r, base + 0x384b758, application, &mut edges)?;
     owned(r, application + 0x38, idler, &mut edges)?;
     owned(r, application + 0x300, gfx, &mut edges)?;
     owned(r, application + 0x308, gui, &mut edges)?;
-    let pump = edge(r, base + 0x35d8c60, &mut edges)?;
+    let pump = edge(r, base + 0x37ea608, &mut edges)?;
     pointer(pump)?;
-    owned(r, pump, base + 0x34a6760, &mut edges)?;
+    owned(r, pump, base + 0x36b5160, &mut edges)?;
     ordinary(r, base, idler, pump)?;
-    let receiver = edge(r, base + 0x35d8dd0, &mut edges)?;
+    let receiver = edge(r, base + 0x37ea778, &mut edges)?;
     if receiver != 0 {
         pointer(receiver)?;
         // Unknown primary refuses before its stage/table or any listener data.
-        exact(r, base, receiver, 0x34a7db8)?;
-        edges.push((receiver, base + 0x34a7db8));
-        owned(r, base + 0x34a7db8 + 0x20, base + 0x26ebf10, &mut edges)?;
+        exact(r, base, receiver, 0x36b6490)?;
+        edges.push((receiver, base + 0x36b6490));
+        owned(r, base + 0x36b6490 + 0x20, base + 0x2867050, &mut edges)?;
     }
     let mode = mode(r, base, receiver, None)?;
     Ok(Binding {

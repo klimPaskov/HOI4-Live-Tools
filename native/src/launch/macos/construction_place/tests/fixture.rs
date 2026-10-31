@@ -32,20 +32,20 @@ const NULL: u64 = 0x922000;
 const BUILDING: u64 = 0x950000;
 const BUILDING2: u64 = 0x951000;
 fn template(f: &mut Fixture, p: u64, i: i32, key: &str) {
-    f.word(p, BASE + 0x332e908);
+    f.word(p, BASE + 0x352fa88);
     f.put(p + 0x18, &[1]);
     f.int(p + 0x290, i);
     f.string(p + 0x228, key);
 }
 fn line(f: &mut Fixture, p: u64, h: u64, building: u64, n: i32) {
     for (a, v) in [
-        (p, BASE + 0x3389c40),
+        (p, BASE + 0x358c690),
         (p + 8, h),
         (p + 0x20, PRODUCTION),
         (p + 0x28, 100000),
         (p + 0x30, 100),
         (p + 0x38, 0),
-        (p + 0x70, building),
+        (p + 0x78, building),
     ] {
         f.word(a, v);
     }
@@ -55,34 +55,34 @@ fn line(f: &mut Fixture, p: u64, h: u64, building: u64, n: i32) {
         (0x40, 1),
         (0x44, 0),
         (0x48, n),
-        (0x78, 0),
+        (0x80, 0),
     ] {
         f.int(p + o, v);
     }
-    f.put(p + 0x8c, &[0]);
-    f.put(p + 0x99, &[0]);
+    f.put(p + 0x94, &[0]);
+    f.put(p + 0xa1, &[0]);
 }
 pub(crate) fn memory() -> Fixture {
     let mut f = Fixture::new(StringAbi::LibCxx);
     for (a, v) in [
         (COUNTRY + 0xd10, PRODUCTION),
-        (PRODUCTION, BASE + 0x338b678),
-        (PRODUCTION + 0x290, COUNTRY),
-        (BASE + 0x34d0ac0, DATABASE),
-        (DATABASE, BASE + 0x332dd28),
-        (NULL, BASE + 0x332def8),
-        (STATE, BASE + 0x337caf0),
+        (PRODUCTION, BASE + 0x358e0c8),
+        (PRODUCTION + 0x2a8, COUNTRY),
+        (BASE + 0x3703ad0, DATABASE),
+        (DATABASE, BASE + 0x352eea8),
+        (NULL, BASE + 0x352f078),
+        (STATE, BASE + 0x357f410),
         (IDLER + 0x4c0, GUI),
-        (GUI, BASE + 0x34974d0),
+        (GUI, BASE + 0x36a5810),
         (IDLER + 0x670, MANAGER),
         (MANAGER + 0x180, IDLER),
         (MANAGER + 0x3b8, TEMPLATE),
         (DATABASE + 0x3a8, NULL),
-        (STATE + 0x110, BASE + 0x332e6a8),
-        (BUILDING, BASE + 0x332dcb0),
+        (STATE + 0x110, BASE + 0x352f828),
+        (BUILDING, BASE + 0x352ee30),
         (BUILDING + 0x1a8, STATE + 0x110),
         (BUILDING + 0x1b0, TEMPLATE),
-        (BUILDING2, BASE + 0x332dcb0),
+        (BUILDING2, BASE + 0x352ee30),
         (BUILDING2 + 0x1a8, STATE + 0x110),
         (BUILDING2 + 0x1b0, OTHER),
     ] {
@@ -146,34 +146,34 @@ pub(crate) fn point_memory() -> Fixture {
     const PROVIDER: u64 = 0x3070000;
     for (a, v) in [
         (GUI + 0x98, GRAPHICS),
-        (GRAPHICS, BASE + 0x33dafa8),
+        (GRAPHICS, BASE + 0x35e5b58),
         (IDLER + 0x4f8, RESOURCE),
         (RESOURCE + 0x300, GRAPHICS),
         (RESOURCE + 0x308, GUI),
         (RESOURCE + 0x310, MAP),
-        (MAP, BASE + 0x33dab60),
-        (MAP + 8, BASE + 0x33dab98),
+        (MAP, BASE + 0x35e5478),
+        (MAP + 8, BASE + 0x35e54b0),
         (MAP + 0x18, GRAPHICS),
         (MAP + 0x20, CAMERA),
         (MAP + 0x28, DATA),
-        (IDLER + 0x708, CAMERA),
-        (BASE + 0x3519a00, DATA),
-        (DATA, BASE + 0x330b5b8),
-        (BASE + 0x36330a0, MODE),
+        (IDLER + 0x718, CAMERA),
+        (BASE + 0x372b328, DATA),
+        (DATA, BASE + 0x350ae90),
+        (BASE + 0x3844d08, MODE),
         (MODE + 0x48, GS),
-        (BASE + 0x35dc028, GRAPHICS),
-        (BASE + 0x32a1d28, BASE + 0x2ac6970),
+        (BASE + 0x37ed9d8, GRAPHICS),
+        (BASE + 0x349f108, BASE + 0x2c5ddc0),
         (DATA + 0x130, HEIGHT),
         (DATA + 0x7d0, BITMAP),
         (HEIGHT + 0x28, HEIGHT_BYTES),
         (BITMAP + 0x18, 0x50000000),
-        (PROVINCE, BASE + 0x337c7e8),
+        (PROVINCE, BASE + 0x357f020),
         (PROVINCE + 0xc0, STATE),
         (PROVINCE + 0xb8, DEF),
-        (BASE + 0x3639800, VIDEO),
-        (VIDEO + 8, BASE + 0x263fea0),
-        (VIDEO + 0x48, BASE + 0x2643a50),
-        (VIDEO + 0x128, BASE + 0x2644350),
+        (BASE + 0x384b480, VIDEO),
+        (VIDEO + 8, BASE + 0x27b8910),
+        (VIDEO + 0x48, BASE + 0x27bc4c0),
+        (VIDEO + 0x128, BASE + 0x27bcdc0),
         (VIDEO + 0x5a8, BACKEND),
         (VIDEO + 0x2c8, WINDOW),
         (WINDOW, VIDEO + 0x2d8),
@@ -184,27 +184,27 @@ pub(crate) fn point_memory() -> Fixture {
         (DRIVER + 0x10, VIEW),
         (DRIVER + 0x30, LISTENER),
         (DRIVER + 0x38, BACKEND),
-        (BASE + 0x34ce008, 16),
-        (BASE + 0x34cdfa8, 24),
+        (BASE + 0x36dcdf8, 16),
+        (BASE + 0x36dcd98, 24),
         (VIEW + 16, WINDOW),
         (LISTENER + 24, DRIVER),
         (IDLER + 0x4c8, PROVIDER),
-        (PROVIDER, BASE + 0x34a6988),
-        (BASE + 0x34a6988 + 0xc8, BASE + 0x26bbf90),
-        (BASE + 0x34f9960, BASE + 0x25714e0),
-        (BASE + 0x36394e8, WINDOW),
+        (PROVIDER, BASE + 0x36b5388),
+        (BASE + 0x36b5388 + 0xc8, BASE + 0x2834a90),
+        (BASE + 0x3708e00, BASE + 0x26e9f50),
+        (BASE + 0x384b168, WINDOW),
         (MANAGER + 0x150, PANEL),
-        (PANEL, BASE + 0x343aa90),
-        (PANEL + 0x428, IDLER),
+        (PANEL, BASE + 0x3647478),
+        (PANEL + 0x488, IDLER),
         (PANEL + 0x30, MANAGER),
-        (PANEL + 0x430, ROOT),
-        (ROOT, BASE + 0x34ac0b0),
+        (PANEL + 0x490, ROOT),
+        (ROOT, BASE + 0x36ba978),
         (ROOT + 0x88, GUI),
         (MANAGER + 0x190, FIND),
-        (FIND, BASE + 0x3457c38),
-        (FIND + 0xc30, IDLER),
-        (FIND + 0xc38, FIND_ROOT),
-        (FIND_ROOT, BASE + 0x34ac0b0),
+        (FIND, BASE + 0x3665308),
+        (FIND + 0xd50, IDLER),
+        (FIND + 0xd58, FIND_ROOT),
+        (FIND_ROOT, BASE + 0x36ba978),
         (FIND_ROOT + 0x88, GUI),
     ] {
         f.word(a, v);
@@ -217,16 +217,16 @@ pub(crate) fn point_memory() -> Fixture {
         (PROVINCE + 0x9c, 117),
         (DEF + 0xbc, 117),
         (WINDOW + 0x40, 0x606),
-        (BASE + 0x3639510, 1),
-        (BASE + 0x3639514, 0),
-        (BASE + 0x3639518, 0),
-        (BASE + 0x36394f0, 62),
-        (BASE + 0x36394f4, 10),
+        (BASE + 0x384b190, 1),
+        (BASE + 0x384b194, 0),
+        (BASE + 0x384b198, 0),
+        (BASE + 0x384b170, 62),
+        (BASE + 0x384b174, 10),
         (MANAGER + 0x3a8, 17),
-        (ROOT + 0x12b8, 0),
-        (ROOT + 0x1270, 0),
-        (FIND_ROOT + 0x12b8, 0),
-        (FIND_ROOT + 0x1270, 0),
+        (ROOT + 0x13d8, 0),
+        (ROOT + 0x1390, 0),
+        (FIND_ROOT + 0x13d8, 0),
+        (FIND_ROOT + 0x1390, 0),
     ] {
         f.int(a, v);
     }

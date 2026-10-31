@@ -39,7 +39,7 @@ fn fixture(abi: StringAbi) -> Fixture {
     for (a, v) in [
         (COUNTRY + g.country_production, PRODUCTION),
         (PRODUCTION, BASE + g.production_vtable),
-        (PRODUCTION + 0x290, COUNTRY),
+        (PRODUCTION + g.production(0x290), COUNTRY),
         (BASE + l.database_global, DB),
         (DB, BASE + l.database_vtable),
         (TEMPLATE, BASE + l.template_vtable),
@@ -85,7 +85,7 @@ fn fixture(abi: StringAbi) -> Fixture {
             (line + 0x28, 100000),
             (line + 0x30, 100),
             (line + 0x38, 0),
-            (line + 0x70, BUILDING),
+            (line + 0x70 + l.line_tail_shift, BUILDING),
         ] {
             f.word(a, v);
         }
@@ -95,12 +95,12 @@ fn fixture(abi: StringAbi) -> Fixture {
             (line + 0x40, 1),
             (line + 0x44, 0),
             (line + 0x48, 2),
-            (line + 0x78, 0),
+            (line + 0x78 + l.line_tail_shift, 0),
         ] {
             f.int(a, v);
         }
-        f.put(line + 0x8c, &[0]);
-        f.put(line + 0x99, &[0]);
+        f.put(line + 0x8c + l.line_tail_shift, &[0]);
+        f.put(line + 0x99 + l.line_tail_shift, &[0]);
     }
     f.array(PRODUCTION + 0x70, &[LINE, LINE2]);
     f
@@ -235,7 +235,7 @@ fn original_production_owner_and_pointer_refuse_before_queue_payload() {
             let address = if field == 0 {
                 COUNTRY + f.game_layout().country_production
             } else {
-                PRODUCTION + 0x290
+                PRODUCTION + f.game_layout().production(0x290)
             };
             f.word(address, FOREIGN);
             poison(&f, a.observe_unchanged(&f, until()).unwrap_err());
@@ -334,7 +334,7 @@ fn queue_amount_handle_building_template_and_location_changes_refuse_before_fore
             match field {
                 0 => f.int(LINE + 0x48, 3),
                 1 => f.word(LINE + 8, 0x30000003b),
-                2 => f.word(LINE + 0x70, FOREIGN),
+                2 => f.word(LINE + 0x70 + l.line_tail_shift, FOREIGN),
                 3 => f.word(BUILDING + l.building_template, FOREIGN),
                 4 => f.word(BUILDING + l.building_status, FOREIGN),
                 _ => f.word(LINE, BASE + l.railway_line_vtable),
@@ -484,7 +484,7 @@ fn with_provincial_row(mut f: Fixture) -> Fixture {
         (building, BASE + l.building_vtable),
         (building + l.building_status, status),
         (building + l.building_template, TEMPLATE),
-        (LINE2 + 0x70, building),
+        (LINE2 + 0x70 + l.line_tail_shift, building),
     ] {
         f.word(a, v);
     }
@@ -530,7 +530,7 @@ fn full_provincial_row_identity_is_retained_before_any_changed_province_payload(
 fn incomplete_queue_is_unavailable_not_zero_and_empty_queue_still_retains_catalog() {
     for abi in abis() {
         let mut f = fixture(abi);
-        f.word(LINE + 0x70, 0);
+        f.word(LINE + 0x70 + c::layout(&Reader::new(&f)).line_tail_shift, 0);
         assert_eq!(
             Anchor::bind_scoped(&f, &scope(&f), "arms_factory", 1, until())
                 .unwrap_err()

@@ -106,10 +106,10 @@ pub(crate) fn from_reader(
     }
 
     let idler = pointer(geometry.objects[0])?;
-    if r.u64(image(base, 0x35196c0)?)? != idler {
+    if r.u64(image(base, 0x372afc0)?)? != idler {
         return Err(changed("Original Mac source idler changed before payload"));
     }
-    if r.u64(idler)? != image(base, 0x3308f90)? {
+    if r.u64(idler)? != image(base, 0x35089d8)? {
         return Err(invalid("Exact Mac source idler required"));
     }
     let provider = r.u64(idler + 0x4c8)?;
@@ -119,10 +119,10 @@ pub(crate) fn from_reader(
         ));
     }
     pointer(provider)?;
-    let primary = image(base, 0x34a6988)?;
+    let primary = image(base, 0x36b5388)?;
     if r.u64(provider)? != primary
-        || r.u64(primary + 0xc8)? != image(base, 0x26bbf90)?
-        || r.u64(image(base, 0x34f9960)?)? != image(base, 0x25714e0)?
+        || r.u64(primary + 0xc8)? != image(base, 0x2834a90)?
+        || r.u64(image(base, 0x3708e00)?)? != image(base, 0x26e9f50)?
     {
         return Err(invalid(
             "Exact Mac mouse getter and SDL implementation required",
@@ -131,12 +131,12 @@ pub(crate) fn from_reader(
 
     let window = pointer(geometry.objects[5])?;
     // Never follow a foreign focus pointer. Coordinates survive focus changes.
-    if r.u64(image(base, 0x36394e8)?)? != window {
+    if r.u64(image(base, 0x384b168)?)? != window {
         return Err(changed(
             "Mac mouse focus must remain the original owned SDL window",
         ));
     }
-    let flags = r.read(image(base, 0x3639510)?, 12)?;
+    let flags = r.read(image(base, 0x384b190)?, 12)?;
     let initialized = i32::from_le_bytes(flags[..4].try_into().unwrap());
     let relative = i32::from_le_bytes(flags[4..8].try_into().unwrap());
     let warp = i32::from_le_bytes(flags[8..].try_into().unwrap());
@@ -148,7 +148,7 @@ pub(crate) fn from_reader(
     }
 
     let video = pointer(geometry.objects[3])?;
-    if r.u64(image(base, 0x3639800)?)? != video {
+    if r.u64(image(base, 0x384b480)?)? != video {
         return Err(changed("Original Mac SDL device changed before payload"));
     }
     if r.u64(window)? != video + 0x2d8 {
@@ -163,7 +163,7 @@ pub(crate) fn from_reader(
 
     // The getter returns these signed window-relative integers without another
     // scale/origin transform. No coordinate payload is read before all gates.
-    let bytes = r.read(image(base, 0x36394f0)?, 8)?;
+    let bytes = r.read(image(base, 0x384b170)?, 8)?;
     let point = [
         i32::from_le_bytes(bytes[..4].try_into().unwrap()),
         i32::from_le_bytes(bytes[4..].try_into().unwrap()),
@@ -199,7 +199,7 @@ mod tests {
     const VIDEO: u64 = I + 0x2000;
     const WINDOW: u64 = I + 0x3000;
     const REPLACEMENT: u64 = I + 0x4000;
-    const POINT: u64 = B + 0x36394f0;
+    const POINT: u64 = B + 0x384b170;
 
     struct Fixture {
         bytes: BTreeMap<u64, u8>,
@@ -231,22 +231,22 @@ mod tests {
                 changed_at_finish: None,
             };
             for (address, value) in [
-                (B + 0x35196c0, I),
-                (I, B + 0x3308f90),
+                (B + 0x372afc0, I),
+                (I, B + 0x35089d8),
                 (I + 0x4c8, PROVIDER),
-                (PROVIDER, B + 0x34a6988),
-                (B + 0x34a6988 + 0xc8, B + 0x26bbf90),
-                (B + 0x34f9960, B + 0x25714e0),
-                (B + 0x36394e8, WINDOW),
-                (B + 0x3639800, VIDEO),
+                (PROVIDER, B + 0x36b5388),
+                (B + 0x36b5388 + 0xc8, B + 0x2834a90),
+                (B + 0x3708e00, B + 0x26e9f50),
+                (B + 0x384b168, WINDOW),
+                (B + 0x384b480, VIDEO),
                 (WINDOW, VIDEO + 0x2d8),
             ] {
                 f.word(address, value);
             }
             for (address, value) in [
-                (B + 0x3639510, 1),
-                (B + 0x3639514, 0),
-                (B + 0x3639518, 0),
+                (B + 0x384b190, 1),
+                (B + 0x384b194, 0),
+                (B + 0x384b198, 0),
                 (WINDOW + 0x28, 1920),
                 (WINDOW + 0x2c, 1080),
                 (POINT, 960),
@@ -360,7 +360,7 @@ mod tests {
     #[test]
     fn focus_reset_cannot_attach_old_coordinates_to_a_new_focus() {
         let mut f = Fixture::new();
-        f.integer(B + 0x3639510, 0);
+        f.integer(B + 0x384b190, 0);
         assert_eq!(
             f.observe(&geometry(), None).unwrap_err().code,
             "input_source_unavailable"
@@ -373,7 +373,7 @@ mod tests {
     fn foreign_or_missing_focus_is_not_followed_and_point_is_skipped() {
         for focus in [0, REPLACEMENT] {
             let mut f = Fixture::new();
-            f.word(B + 0x36394e8, focus);
+            f.word(B + 0x384b168, focus);
             assert_eq!(
                 f.observe(&geometry(), None).unwrap_err().code,
                 "input_source_changed"
@@ -386,9 +386,9 @@ mod tests {
     #[test]
     fn relative_warp_and_unknown_initialization_flags_refuse_before_point() {
         for (address, values) in [
-            (B + 0x3639510, vec![-1, 2, i32::MAX]),
-            (B + 0x3639514, vec![-1, 1, i32::MAX]),
-            (B + 0x3639518, vec![-1, 1, i32::MAX]),
+            (B + 0x384b190, vec![-1, 2, i32::MAX]),
+            (B + 0x384b194, vec![-1, 1, i32::MAX]),
+            (B + 0x384b198, vec![-1, 1, i32::MAX]),
         ] {
             for value in values {
                 let mut f = Fixture::new();
@@ -416,7 +416,7 @@ mod tests {
 
     #[test]
     fn changed_idler_and_video_links_refuse_without_new_payload() {
-        for global in [B + 0x35196c0, B + 0x3639800] {
+        for global in [B + 0x372afc0, B + 0x384b480] {
             let mut f = Fixture::new();
             f.word(global, REPLACEMENT);
             assert_eq!(
@@ -430,9 +430,9 @@ mod tests {
 
     #[test]
     fn wrong_primary_virtual_or_dynapi_refuses_before_coordinates() {
-        for address in [I, PROVIDER, B + 0x34a6988 + 0xc8, B + 0x34f9960] {
+        for address in [I, PROVIDER, B + 0x36b5388 + 0xc8, B + 0x3708e00] {
             let mut f = Fixture::new();
-            f.word(address, B + 0x25714e8);
+            f.word(address, B + 0x26e9f58);
             assert_eq!(
                 f.observe(&geometry(), None).unwrap_err().code,
                 "invalid_input_source"
@@ -556,17 +556,17 @@ mod tests {
     #[test]
     fn every_consumed_dependency_must_survive_the_encompassing_witness() {
         for address in [
-            B + 0x35196c0,
+            B + 0x372afc0,
             I,
             I + 0x4c8,
             PROVIDER,
-            B + 0x34a6988 + 0xc8,
-            B + 0x34f9960,
-            B + 0x36394e8,
-            B + 0x3639510,
-            B + 0x3639514,
-            B + 0x3639518,
-            B + 0x3639800,
+            B + 0x36b5388 + 0xc8,
+            B + 0x3708e00,
+            B + 0x384b168,
+            B + 0x384b190,
+            B + 0x384b194,
+            B + 0x384b198,
+            B + 0x384b480,
             WINDOW,
             WINDOW + 0x28,
             WINDOW + 0x2c,

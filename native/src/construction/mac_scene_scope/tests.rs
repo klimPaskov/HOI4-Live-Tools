@@ -66,7 +66,7 @@ impl Fixture {
         f.list(COUNTRY + 0x238, FLEET_DATA, &[FLEET]);
         f.list(FLEET + 0xb0, TASK_DATA, &[TASK]);
         f.list(GS + 0x5e0, SCENE_DATA, &[ARMY, TASK]);
-        f.word(FLEET, B + 0x32fe7b0);
+        f.word(FLEET, B + 0x34fc2e8);
         f.word(ARMY, B + Kind::Army.primary());
         f.word(TASK, B + Kind::TaskForce.primary());
         f.number(ARMY + 8, 0);

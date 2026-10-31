@@ -27,7 +27,7 @@ const GRAPHICS: u64 = 0x4e0000;
 fn name(f: &mut MacFixture, widget: u64, text: &str) {
     let kind = widget + 0x1000000;
     f.word(widget + 0x50, kind);
-    f.word(kind, BASE + 0x34b0e18);
+    f.word(kind, BASE + 0x36bf800);
     if text.len() <= 22 {
         f.string(kind + 0x28, text);
     } else {
@@ -38,25 +38,25 @@ fn name(f: &mut MacFixture, widget: u64, text: &str) {
     }
 }
 fn local(f: &mut MacFixture, object: u64, shown: bool) {
-    f.word(object, BASE + 0x34ac0b0);
+    f.word(object, BASE + 0x36ba978);
     f.word(object + 0x30, 0);
     f.word(object + 0x88, GUI);
     f.put(object + 0x95, &[if shown { 8 } else { 0 }]);
-    f.int(object + 0x12b8, 0);
-    f.int(object + 0x1270, 0);
+    f.int(object + 0x13d8, 0);
+    f.int(object + 0x1390, 0);
 }
 fn fixture(mode: i32) -> MacFixture {
     let mut f = MacFixture::new();
     for (field, value) in [
         (IDLER + 0x4c0, GUI),
-        (GUI, BASE + 0x34974d0),
+        (GUI, BASE + 0x36a5810),
         (IDLER + 0x670, MANAGER),
         (MANAGER + 0x180, IDLER),
         (MANAGER + 0x150, VIEW),
-        (VIEW, BASE + 0x343aa90),
-        (VIEW + 0x428, IDLER),
+        (VIEW, BASE + 0x3647478),
+        (VIEW + 0x488, IDLER),
         (VIEW + 0x30, MANAGER),
-        (VIEW + 0x430, ROOT),
+        (VIEW + 0x490, ROOT),
     ] {
         f.word(field, value);
     }
@@ -68,13 +68,13 @@ fn fixture(mode: i32) -> MacFixture {
     } // Opener intentionally unmapped for no-toggle path.
     for (field, value) in [
         (MANAGER + 0x188, TOPBAR),
-        (TOPBAR, BASE + 0x3489640),
+        (TOPBAR, BASE + 0x3697918),
         (TOPBAR + 0x58, IDLER),
         (TOPBAR + 0x60, MANAGER),
         (TOPBAR + 0x30, MANAGER),
         (TOPBAR + 0x68, TOPROOT),
         (TOPBAR + 0x88, MENU),
-        (TOPBAR + 0x7428, BUTTON),
+        (TOPBAR + 0x8c38, BUTTON),
     ] {
         f.word(field, value);
     }
@@ -86,24 +86,24 @@ fn fixture(mode: i32) -> MacFixture {
         (AGENCY, BUTTON, "construction_button"),
     ] {
         local(&mut f, object, true);
-        f.array(object + 0xd30, object + 0x4000, &[child]);
+        f.array(object + 0xe50, object + 0x4000, &[child]);
         name(&mut f, child, key);
     }
     for (field, value) in [
-        (BUTTON, BASE + 0x34aafa0),
+        (BUTTON, BASE + 0x36b9738),
         (BUTTON + 0x58, GUI),
-        (BUTTON + 0x70, BASE + 0x34ab360),
+        (BUTTON + 0x70, BASE + 0x36b9b18),
         (BUTTON + 0x78, NODE),
         (BUTTON + 0x80, NODE),
         (BUTTON + 0x90, 0),
-        (BUTTON + 0xc0, 0),
-        (NODE, TOPBAR + 0x3290),
+        (BUTTON + 0xc8, 0),
+        (NODE, TOPBAR + 0x4440),
         (NODE + 8, 0),
         (NODE + 0x10, 0),
-        (TOPBAR + 0x3290, BASE + 0x3489788),
-        (TOPBAR + 0x3290 + 0x30, FUNCTOR),
-        (FUNCTOR, BASE + 0x3489818),
-        (FUNCTOR + 8, BASE + 0x22f27d0),
+        (TOPBAR + 0x4440, BASE + 0x3697a60),
+        (TOPBAR + 0x4440 + 0x30, FUNCTOR),
+        (FUNCTOR, BASE + 0x3697af8),
+        (FUNCTOR + 8, BASE + 0x2460fb0),
         (FUNCTOR + 0x10, 0),
         (FUNCTOR + 0x18, TOPBAR),
     ] {
@@ -112,7 +112,7 @@ fn fixture(mode: i32) -> MacFixture {
     f.int(BUTTON + 0x88, 1);
     f.put(BUTTON + 0x8c, &[0]);
     for offset in [0x60, 0x150, 0x180, 0x1b0, 0x1e0, 0x2d0, 0x3c0] {
-        f.word(TOPBAR + 0x3290 + offset, 0);
+        f.word(TOPBAR + 0x4440 + offset, 0);
     }
     f.put(NODE + 0x18, &[0]);
     f.put(BUTTON + 0x65, &[8]);
@@ -121,13 +121,13 @@ fn fixture(mode: i32) -> MacFixture {
 }
 fn geometry(f: &mut MacFixture) {
     f.word(GUI + 0x98, GRAPHICS);
-    f.word(GRAPHICS, BASE + 0x33dafa8);
+    f.word(GRAPHICS, BASE + 0x35e5b58);
     for (offset, dimension) in [(0x170, 1920), (0x174, 1080), (0x178, 1920), (0x17c, 1080)] {
         f.int(GRAPHICS + offset, dimension);
     }
     f.put(GRAPHICS + 0x2c5b0, &1_f32.to_le_bytes());
-    f.word(BUTTON + 0xd8, SPRITE);
-    f.word(SPRITE, BASE + 0x34bdb10);
+    f.word(BUTTON + 0xe0, SPRITE);
+    f.word(SPRITE, BASE + 0x36cc528);
     f.word(SPRITE + 8, TYPE);
     f.int(TYPE + 0x78, 1);
     f.int(TYPE + 0x8c, 34);
@@ -155,7 +155,7 @@ fn closed_panel_binds_exact_own_opener_without_default_geometry() {
     assert_eq!(v["input_authorized"], false);
     assert_eq!(v["global_modal_clear_verified"], false);
     assert!(v["opener"]["rect"].is_null());
-    not_read(&f, &[BUTTON + 0xd8, GUI + 0x98]);
+    not_read(&f, &[BUTTON + 0xe0, GUI + 0x98]);
 }
 #[test]
 fn explicitly_requested_rect_comes_from_the_bound_button_renderer() {
@@ -181,7 +181,7 @@ fn unsupported_canvas_refuses_before_renderer_payload() {
             snapshot(&f, true).unwrap_err().code,
             "gui_geometry_unavailable"
         );
-        not_read(&f, &[BUTTON + 0xd8, SPRITE]);
+        not_read(&f, &[BUTTON + 0xe0, SPRITE]);
         assert!(snapshot(&f, false).is_ok());
     }
     let mut f = fixture(2);
@@ -191,7 +191,7 @@ fn unsupported_canvas_refuses_before_renderer_payload() {
         snapshot(&f, true).unwrap_err().code,
         "gui_geometry_unavailable"
     );
-    not_read(&f, &[BUTTON + 0xd8, SPRITE]);
+    not_read(&f, &[BUTTON + 0xe0, SPRITE]);
 }
 #[test]
 fn foreign_or_malformed_graphics_cannot_supply_opener_geometry() {
@@ -201,21 +201,21 @@ fn foreign_or_malformed_graphics_cannot_supply_opener_geometry() {
         f.word(FOREIGN, 0);
         f.word(field, FOREIGN);
         assert_eq!(snapshot(&f, true).unwrap_err().code, "invalid_gui_geometry");
-        not_read(&f, &[BUTTON + 0xd8, SPRITE]);
+        not_read(&f, &[BUTTON + 0xe0, SPRITE]);
     }
     for dimension in [0, -1, 16385] {
         let mut f = fixture(2);
         geometry(&mut f);
         f.int(GRAPHICS + 0x170, dimension);
         assert_eq!(snapshot(&f, true).unwrap_err().code, "invalid_gui_geometry");
-        not_read(&f, &[BUTTON + 0xd8]);
+        not_read(&f, &[BUTTON + 0xe0]);
     }
     for scale in [f32::NAN, f32::INFINITY, 0.0, 8.5] {
         let mut f = fixture(2);
         geometry(&mut f);
         f.put(GRAPHICS + 0x2c5b0, &scale.to_le_bytes());
         assert_eq!(snapshot(&f, true).unwrap_err().code, "invalid_gui_geometry");
-        not_read(&f, &[BUTTON + 0xd8]);
+        not_read(&f, &[BUTTON + 0xe0]);
     }
 }
 #[test]
@@ -223,7 +223,7 @@ fn already_selected_mode_never_reads_toggle_control_even_with_pending_visibility
     for (shown, state) in [(0, 0), (8, 1), (8, 2), (8, 0)] {
         let mut f = fixture(0x11);
         f.put(ROOT + 0x95, &[shown]);
-        f.int(ROOT + 0x12b8, state);
+        f.int(ROOT + 0x13d8, state);
         let v = snapshot(&f, true).unwrap();
         assert_eq!(v["reason"], "already_selected_no_toggle");
         assert!(v["opener"].is_null());
@@ -237,7 +237,7 @@ fn active_or_unknown_placement_and_inconsistent_panels_never_reach_topbar() {
         (MANAGER + 0x3c0, 3),
         (MANAGER + 0x3a8, -1),
         (MANAGER + 0x3a8, 24),
-        (ROOT + 0x1270, 1),
+        (ROOT + 0x1390, 1),
     ] {
         let mut f = fixture(2);
         f.int(field, value);
@@ -259,13 +259,13 @@ fn foreign_topbar_or_alias_mismatch_refuses_before_callback_or_geometry() {
         TOPBAR + 0x60,
         TOPROOT + 0x88,
         TOPBAR + 0x88,
-        TOPBAR + 0x7428,
+        TOPBAR + 0x8c38,
         BUTTON + 0x58,
     ] {
         let mut f = fixture(2);
         f.word(field, FOREIGN);
         assert_eq!(snapshot(&f, true).unwrap_err().code, "invalid_construction");
-        not_read(&f, &[FUNCTOR, BUTTON + 0xd8, FOREIGN]);
+        not_read(&f, &[FUNCTOR, BUTTON + 0xe0, FOREIGN]);
     }
 }
 #[test]
@@ -281,7 +281,7 @@ fn country_menu_alias_requires_canonical_window_not_raw_membership() {
             snapshot(&f, false).unwrap_err().code,
             "invalid_construction"
         );
-        not_read(&f, &[MENU + 0xd30, BUTTON, FUNCTOR]);
+        not_read(&f, &[MENU + 0xe50, BUTTON, FUNCTOR]);
     }
     let mut f = fixture(2);
     f.word(MENU + 0x88, FOREIGN);
@@ -289,13 +289,13 @@ fn country_menu_alias_requires_canonical_window_not_raw_membership() {
         snapshot(&f, false).unwrap_err().code,
         "invalid_construction"
     );
-    not_read(&f, &[TOPBAR + 0x88, MENU + 0xd30, FOREIGN]);
+    not_read(&f, &[TOPBAR + 0x88, MENU + 0xe50, FOREIGN]);
 }
 #[test]
 fn inactive_override_or_ambiguous_observers_refuse_before_functor_payload() {
     for (field, value) in [
         (BUTTON + 0x90, FOREIGN),
-        (BUTTON + 0xc0, FOREIGN),
+        (BUTTON + 0xc8, FOREIGN),
         (BUTTON + 0x80, 0),
         (NODE + 8, NODE),
         (NODE + 0x10, NODE),
@@ -304,7 +304,7 @@ fn inactive_override_or_ambiguous_observers_refuse_before_functor_payload() {
         let mut f = fixture(2);
         f.word(field, value);
         assert_eq!(snapshot(&f, true).unwrap_err().code, "invalid_construction");
-        not_read(&f, &[FUNCTOR, FOREIGN, BUTTON + 0xd8]);
+        not_read(&f, &[FUNCTOR, FOREIGN, BUTTON + 0xe0]);
     }
     for field in [NODE + 0x18, BUTTON + 0x8c] {
         let mut f = fixture(2);
@@ -320,15 +320,15 @@ fn inactive_override_or_ambiguous_observers_refuse_before_functor_payload() {
 fn competing_click_callbacks_refuse_before_member_or_geometry_reads() {
     for offset in [0x60, 0x150, 0x180, 0x1b0, 0x1e0, 0x2d0, 0x3c0] {
         let mut f = fixture(2);
-        f.word(TOPBAR + 0x3290 + offset, FOREIGN);
+        f.word(TOPBAR + 0x4440 + offset, FOREIGN);
         assert_eq!(snapshot(&f, true).unwrap_err().code, "invalid_construction");
-        not_read(&f, &[FUNCTOR, FOREIGN, BUTTON + 0xd8]);
+        not_read(&f, &[FUNCTOR, FOREIGN, BUTTON + 0xe0]);
     }
 }
 #[test]
 fn wrong_callback_tuple_never_yields_a_rendered_opener() {
     for (field, value) in [
-        (FUNCTOR, BASE + 0x3489820),
+        (FUNCTOR, BASE + 0x3697b00),
         (FUNCTOR + 8, BASE + 0x22f27d8),
         (FUNCTOR + 0x10, 8),
         (FUNCTOR + 0x18, FOREIGN),
@@ -336,27 +336,27 @@ fn wrong_callback_tuple_never_yields_a_rendered_opener() {
         let mut f = fixture(2);
         f.word(field, value);
         assert_eq!(snapshot(&f, true).unwrap_err().code, "invalid_construction");
-        not_read(&f, &[BUTTON + 0xd8, FOREIGN]);
+        not_read(&f, &[BUTTON + 0xe0, FOREIGN]);
     }
 }
 #[test]
 fn hidden_disabled_or_transitioning_topbar_omits_renderer_payload() {
     for (field, value) in [
-        (TOPROOT + 0x1270, 1),
-        (MENU + 0x12b8, 2),
+        (TOPROOT + 0x1390, 1),
+        (MENU + 0x13d8, 2),
         (BUTTON + 0x9c, 3),
     ] {
         let mut f = fixture(2);
         f.int(field, value);
         let v = snapshot(&f, true).unwrap();
         assert!(v["opener"]["rect"].is_null());
-        not_read(&f, &[BUTTON + 0xd8]);
+        not_read(&f, &[BUTTON + 0xe0]);
     }
     let mut f = fixture(2);
     f.put(MENU + 0x95, &[0]);
     let v = snapshot(&f, true).unwrap();
     assert!(v["opener"]["rect"].is_null());
-    not_read(&f, &[BUTTON + 0xd8]);
+    not_read(&f, &[BUTTON + 0xe0]);
 }
 #[test]
 fn all_opener_fields_are_rechecked_in_the_final_witness() {
@@ -365,17 +365,17 @@ fn all_opener_fields_are_rechecked_in_the_final_witness() {
         MANAGER + 0x3c0,
         TOPBAR + 0x58,
         TOPBAR + 0x88,
-        TOPBAR + 0x7428,
-        TOPROOT + 0xd30,
+        TOPBAR + 0x8c38,
+        TOPROOT + 0xe50,
         MENU + 0x88,
         NODE + 0x18,
         FUNCTOR + 8,
         FUNCTOR + 0x18,
         BUTTON + 0x90,
         BUTTON + 0x8c,
-        BUTTON + 0xc0,
-        TOPBAR + 0x3290 + 0x1e0,
-        TOPBAR + 0x3290 + 0x3c0,
+        BUTTON + 0xc8,
+        TOPBAR + 0x4440 + 0x1e0,
+        TOPBAR + 0x4440 + 0x3c0,
         SPRITE + 0xb0,
         GUI + 0x98,
         GRAPHICS,
@@ -432,7 +432,7 @@ fn routes(f: &mut MacFixture, sources: &[u64], targets: &[u64]) {
     f.int(GRAPHICS + 0x30, targets.len() as i32);
     f.int(GRAPHICS + 0x34, targets.len() as i32);
     for (i, target) in targets.iter().enumerate() {
-        f.word(ROUTE + i as u64 * 16, BASE + 0x34b0ab8);
+        f.word(ROUTE + i as u64 * 16, BASE + 0x36bf490);
         f.word(ROUTE + i as u64 * 16 + 8, *target);
     }
 }
@@ -441,16 +441,16 @@ fn routing_fixture() -> MacFixture {
     let mut f = fixture(2);
     geometry(&mut f);
     for (field, value) in [
-        (BUTTON + 0xd0, GRAPHICS),
+        (BUTTON + 0xd8, GRAPHICS),
         (SPRITE + 0x138, BUTTON),
         (GUI + 0x120, BUTTON),
         (GUI + 0x128, BUTTON),
-        (BUTTON + 0x178, 0),
-        (BASE + 0x35dbf60, 0),
+        (BUTTON + 0x180, 0),
+        (BASE + 0x37ed910, 0),
     ] {
         f.word(field, value);
     }
-    for field in [GUI + 0x130, GUI + 0x12, BUTTON + 0x1d1] {
+    for field in [GUI + 0x130, GUI + 0x12, BUTTON + 0x1d9] {
         f.put(field, &[0]);
     }
     f.int(BUTTON + 0x64, 0x802);
@@ -481,7 +481,7 @@ fn route_correlation_is_opt_in_and_never_reads_unrelated_target_payloads() {
             GRAPHICS + 0x28,
             GRAPHICS + 0x50,
             SPRITE + 0x138,
-            BUTTON + 0xd0,
+            BUTTON + 0xd8,
         ],
     );
     let f = routing_fixture();
@@ -613,9 +613,9 @@ fn route_active_count_is_bounded_independently_of_unread_spare_capacity() {
 #[test]
 fn renderer_owner_target_and_persistent_route_type_must_match() {
     for (field, value) in [
-        (BUTTON + 0xd0, FOREIGN),
+        (BUTTON + 0xd8, FOREIGN),
         (SPRITE + 0x138, FOREIGN),
-        (ROUTE, BASE + 0x34ac070),
+        (ROUTE, BASE + 0x36ba938),
     ] {
         let mut f = routing_fixture();
         f.word(field, value);
@@ -626,7 +626,7 @@ fn renderer_owner_target_and_persistent_route_type_must_match() {
         not_read(&f, &[FOREIGN]);
     }
     let mut f = routing_fixture();
-    f.word(SPRITE, BASE + 0x34afed0);
+    f.word(SPRITE, BASE + 0x36be530);
     assert!(snapshot_with_routing(&f, true, true).is_ok());
 }
 
@@ -684,9 +684,9 @@ fn wrapper_and_unknown_hook_gates_are_reported_without_following_them() {
     f.put(GUI + 0x130, &[1]);
     f.put(GUI + 0x12, &[1]);
     f.int(BUTTON + 0x64, 0x801); // bit 0 does not satisfy virtual+18's bit 1.
-    f.put(BUTTON + 0x1d1, &[1]);
-    f.word(BUTTON + 0x178, FOREIGN);
-    f.word(BASE + 0x35dbf60, FOREIGN);
+    f.put(BUTTON + 0x1d9, &[1]);
+    f.word(BUTTON + 0x180, FOREIGN);
+    f.word(BASE + 0x37ed910, FOREIGN);
     let v = snapshot_with_routing(&f, true, true).unwrap();
     let r = &v["opener"]["routing"];
     assert_eq!(r["conditional_target_gate_clear"], false);
@@ -701,7 +701,7 @@ fn wrapper_and_unknown_hook_gates_are_reported_without_following_them() {
 #[test]
 fn routing_fields_share_the_full_final_witness_bracket() {
     for field in [
-        BUTTON + 0xd0,
+        BUTTON + 0xd8,
         SPRITE + 0x138,
         GRAPHICS + 0x50,
         GRAPHICS + 0x28,
@@ -716,9 +716,9 @@ fn routing_fields_share_the_full_final_witness_bracket() {
         GUI + 0x130,
         GUI + 0x12,
         BUTTON + 0x64,
-        BUTTON + 0x178,
-        BUTTON + 0x1d1,
-        BASE + 0x35dbf60,
+        BUTTON + 0x180,
+        BUTTON + 0x1d9,
+        BASE + 0x37ed910,
     ] {
         let f = routing_fixture();
         f.final_fault.set(Some(field));

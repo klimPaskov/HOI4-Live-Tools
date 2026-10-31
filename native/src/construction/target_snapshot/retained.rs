@@ -254,7 +254,7 @@ fn non_queue_edges(r: &Reader<'_>, anchor: &Anchor) -> Result<()> {
         return Err(changed("Original production changed before payload"));
     }
     location::exact(r, b.production, base + g.production_vtable)?;
-    if r.u64(b.production + 0x290)? != anchor.scope.own_country {
+    if r.u64(b.production + crate::game::layout(r).production(0x290))? != anchor.scope.own_country {
         return Err(changed("Original production owner changed"));
     }
     let gs = anchor.scope.anchors[0];
@@ -306,7 +306,7 @@ fn queue_edges(r: &Reader<'_>, anchor: &Anchor) -> Result<()> {
         if r.u64(row.address + 0x20)? != b.production
             || r.u64(row.address + 8)? != row.handle
             || r.i32(row.address + 0x48)? != row.amount
-            || r.u64(row.address + 0x70)? != building
+            || r.u64(row.address + 0x70 + l.line_tail_shift)? != building
         {
             return Err(changed(
                 "Original row owner/handle/amount/building changed before payload",

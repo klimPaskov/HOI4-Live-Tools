@@ -111,9 +111,9 @@ fn callback(
     view: u64,
     edges: &mut Vec<(u64, u64)>,
 ) -> Result<()> {
-    exact(r, base, button + 0x70, 0x34ab360)?;
+    exact(r, base, button + 0x70, 0x36b9b18)?;
     owned(r, button + 0x90, 0, edges)?;
-    owned(r, button + 0xc0, 0, edges)?;
+    owned(r, button + 0xc8, 0, edges)?;
     if r.byte(button + 0x8c)? != 0 || r.i32(button + 0x88)? != 1 {
         return Err(changed("Exactly one inactive-list close observer required"));
     }
@@ -127,14 +127,14 @@ fn callback(
     }
     let glue = view + 0x40;
     owned(r, node, glue, edges)?;
-    exact(r, base, glue, 0x34466a8)?;
+    exact(r, base, glue, 0x3653528)?;
     // The reviewed constructor has one virtual-member callback, not competing
     // notification bundles. All nineteen other std::function pointers absent.
     for index in 2..=20 {
         owned(r, glue + index * 0x30, 0, edges)?;
     }
     let function = edge(r, glue + 0x30, edges)?;
-    exact(r, base, function, 0x3446738)?;
+    exact(r, base, function, 0x36535c0)?;
     owned(r, function + 8, 0x91, edges)?;
     owned(r, function + 0x10, 0, edges)?;
     owned(r, function + 0x18, view, edges)
@@ -151,7 +151,7 @@ pub(in crate::construction) fn hidden_lifetimes(
 ) -> Result<Vec<Window>> {
     let mut entries = Vec::new();
     let mut seen = std::collections::BTreeSet::new();
-    for at in [gui + 0x9e0, gui + 0x9f8] {
+    for at in [gui + 0xa70, gui + 0xa88] {
         let (header, data, count) = r.array_header(at)?;
         let capacity = i32::from_le_bytes(header[8..12].try_into().unwrap());
         if count > 64 || capacity > 64 || entries.len() + count > 64 {
@@ -181,14 +181,14 @@ pub(in crate::construction) fn hidden_lifetimes(
     for object in entries {
         // Exact current-build CPlaneTypeSelectionWindow primary; do not infer
         // payload shape from RTTI names or a compatible-looking first word.
-        owned(r, object, base + 0x33ec9d0, edges)?;
-        if r.byte(object + 0x438)? != 0 || r.byte(object + 0x439)? != 0 {
+        owned(r, object, base + 0x35f7af0, edges)?;
+        if r.byte(object + 0x498)? != 0 || r.byte(object + 0x499)? != 0 {
             return Err(changed("Popup lifetime is closing or timed"));
         }
-        let root = edge(r, object + 0x430, edges)?;
+        let root = edge(r, object + 0x490, edges)?;
         pointer(root)?;
         // Require the original primary form before any root payload.
-        owned(r, root, base + 0x34ac0b0, edges)?;
+        owned(r, root, base + 0x36ba978, edges)?;
         owned(r, root + 0x88, gui, edges)?;
         if !roots.insert(root) {
             return Err(changed("Popup lifetime roots are not unique"));
@@ -211,17 +211,17 @@ fn escape_receiver(
     application: u64,
     edges: &mut Vec<(u64, u64)>,
 ) -> Result<OuterReceiver> {
-    let receiver = edge(r, base + 0x35d8dd0, edges)?;
+    let receiver = edge(r, base + 0x37ea778, edges)?;
     if receiver == 0 {
         return Ok(OuterReceiver::Direct);
     }
     pointer(receiver)?;
-    owned(r, receiver, base + 0x34a7db8, edges)?;
+    owned(r, receiver, base + 0x36b6490, edges)?;
     // The wrapper's getter must resolve the original application BEFORE
     // current wrapper payload; its application+38 receiver is already retained.
-    owned(r, base + 0x3639ad8, application, edges)?;
-    owned(r, base + 0x34a7db8 + 0x20, base + 0x26ebf10, edges)?;
-    let character_mode = r.byte(base + 0x35d8dd8)?;
+    owned(r, base + 0x384b758, application, edges)?;
+    owned(r, base + 0x36b6490 + 0x20, base + 0x2867050, edges)?;
+    let character_mode = r.byte(base + 0x37ea780)?;
     let idle_stage = match character_mode {
         0 => None,
         1 => {
@@ -242,7 +242,7 @@ fn image_base(base: u64) -> Result<()> {
     if base < 0x10000
         || base % 0x1000 != 0
         || base
-            .checked_add(0x3639ae0)
+            .checked_add(0x384b760)
             .is_none_or(|p| p > 0x7fff_ffff_0000)
     {
         return Err(changed("Bounded aligned image base required"));
@@ -266,31 +266,31 @@ fn from_reader(
     if let Some(before) = original {
         before.require_original(r, base)?;
     }
-    exact(r, base, idler, 0x3308f90)?;
+    exact(r, base, idler, 0x35089d8)?;
     // Exact own event receiver20 copies the event into idler+710. It does not
     // invoke the close observer or bypass the ordinary queue.
-    if r.u64(base + 0x3308f90 + 0x20)? != base + 0x776fe0 {
+    if r.u64(base + 0x35089d8 + 0x20)? != base + 0x7bb2c0 {
         return Err(changed("Owned ordinary event receiver differs"));
     }
     // Main-frame routing reaches the ordinary GUI path only through this
     // byte gate; the alternate path is outside this narrow qualification.
-    if r.byte(idler + 0x7b5)? != 1 || r.byte(base + 0x3519990)? != 0 {
+    if r.byte(idler + 0x7e1)? != 1 || r.byte(base + 0x372b2b8)? != 0 {
         return Err(changed("Ordinary owned main-frame GUI dispatch required"));
     }
     let mut edges = Vec::new();
     let gui = edge(r, idler + 0x4c0, &mut edges)?;
-    exact(r, base, gui, 0x34974d0)?;
-    owned(r, base + 0x35dc058, gui, &mut edges)?;
+    exact(r, base, gui, 0x36a5810)?;
+    owned(r, base + 0x37eda08, gui, &mut edges)?;
     // No focused receiver is followed; lifetime windows use a separate typed guard.
     owned(r, gui + 0x138, 0, &mut edges)?;
     owned(r, gui + 0x210, 0, &mut edges)?;
     // The Escape prepass may set this existing singleton's +411 byte before
     // routing; forbid unbound allocation/alternate types, not ordinary invalidation.
-    let escape_invalidation = match r.byte(base + 0x35dbfa8)? {
+    let escape_invalidation = match r.byte(base + 0x37ed958)? {
         0 => None,
         1 => {
-            let singleton = edge(r, base + 0x35dbfa0, &mut edges)?;
-            exact(r, base, singleton, 0x34aabd0)?;
+            let singleton = edge(r, base + 0x37ed950, &mut edges)?;
+            exact(r, base, singleton, 0x36b9360)?;
             let invalidated = r.byte(singleton + 0x411)?;
             if invalidated > 1 {
                 return Err(changed("Unsupported Escape GUI invalidation state"));
@@ -301,7 +301,7 @@ fn from_reader(
     };
     let popup_windows = hidden_lifetimes(r, base, gui, &mut edges)?;
     let gfx = edge(r, gui + 0x98, &mut edges)?;
-    exact(r, base, gfx, 0x33dafa8)?;
+    exact(r, base, gfx, 0x35e5b58)?;
     let application = edge(r, idler + 0x4f8, &mut edges)?;
     pointer(application)?;
     // Proven resource/application path; no polymorphic first-word inference.
@@ -309,16 +309,16 @@ fn from_reader(
     owned(r, application + 0x308, gui, &mut edges)?;
     owned(r, application + 0x38, idler, &mut edges)?;
     let outer_receiver = escape_receiver(r, base, application, &mut edges)?;
-    let pump = edge(r, base + 0x35d8c60, &mut edges)?;
-    exact(r, base, pump, 0x34a6760)?;
+    let pump = edge(r, base + 0x37ea608, &mut edges)?;
+    exact(r, base, pump, 0x36b5160)?;
     if r.byte(pump + 0x44)? != 0 {
         return Err(changed("SDL keyboard diversion is enabled"));
     }
     // Cocoa keyCode53 -> scancode41; SDL's producer reads this current
     // semantic keymap entry. Do not assume the named/disk Escape mapping.
-    if r.i32(base + 0x3638d28)? != 0x1b
-        || r.byte(base + 0x3638aab)? != 0
-        || r.read(base + 0x3638880, 2)? != [0, 0]
+    if r.i32(base + 0x384a9a8)? != 0x1b
+        || r.byte(base + 0x384a72b)? != 0
+        || r.read(base + 0x384a500, 2)? != [0, 0]
     {
         return Err(changed(
             "Current unmodified released SDL Escape mapping required",
@@ -338,10 +338,10 @@ fn from_reader(
         ));
     }
     let view = edge(r, manager + 0x150, &mut edges)?;
-    exact(r, base, view, 0x343aa90)?;
-    owned(r, view + 0x428, idler, &mut edges)?;
+    exact(r, base, view, 0x3647478)?;
+    owned(r, view + 0x488, idler, &mut edges)?;
     owned(r, view + 0x30, manager, &mut edges)?;
-    let root = edge(r, view + 0x430, &mut edges)?;
+    let root = edge(r, view + 0x490, &mut edges)?;
     let panel = local(r, base, root, gui)?;
     if !panel.visible() || !panel.idle() {
         return Err(changed(
@@ -349,22 +349,22 @@ fn from_reader(
         ));
     }
     let find = edge(r, manager + 0x190, &mut edges)?;
-    exact(r, base, find, 0x3457c38)?;
-    owned(r, find + 0xc30, idler, &mut edges)?;
-    hidden(r, base, find + 0xc38, gui, &mut edges)?;
+    exact(r, base, find, 0x3665308)?;
+    owned(r, find + 0xd50, idler, &mut edges)?;
+    hidden(r, base, find + 0xd58, gui, &mut edges)?;
     let menu = edge(r, manager + 0x218, &mut edges)?;
-    exact(r, base, menu, 0x3461428)?;
-    owned(r, menu + 0x2668, idler, &mut edges)?;
-    owned(r, menu + 0x2670, manager, &mut edges)?;
-    hidden(r, base, menu + 0x2678, gui, &mut edges)?;
-    let career = edge(r, menu + 0x2690, &mut edges)?;
+    exact(r, base, menu, 0x366ebf8)?;
+    owned(r, menu + 0x2a28, idler, &mut edges)?;
+    owned(r, menu + 0x2a30, manager, &mut edges)?;
+    hidden(r, base, menu + 0x2a38, gui, &mut edges)?;
+    let career = edge(r, menu + 0x2a50, &mut edges)?;
     if career != 0 {
-        exact(r, base, career, 0x33f8b50)?;
-        owned(r, career + 0x1880, idler, &mut edges)?;
-        owned(r, career + 0x1890, menu, &mut edges)?;
-        hidden(r, base, career + 0x1888, gui, &mut edges)?;
+        exact(r, base, career, 0x3603cd8)?;
+        owned(r, career + 0x23a0, idler, &mut edges)?;
+        owned(r, career + 0x23b0, menu, &mut edges)?;
+        hidden(r, base, career + 0x23a8, gui, &mut edges)?;
     }
-    let children = members(r, panel.object + 0xd30, 4096)?;
+    let children = members(r, panel.object + 0xe50, 4096)?;
     if original.is_some_and(|b| b.paths.first() != Some(&(panel.object, children.clone()))) {
         return Err(changed(
             "Original close-button membership changed before names/payload",
@@ -376,7 +376,7 @@ fn from_reader(
     if original.is_some_and(|b| b.button != button) {
         return Err(changed("Original close button replaced"));
     }
-    exact(r, base, button, 0x34aafa0)?;
+    exact(r, base, button, 0x36b9738)?;
     let mut callback_edges = Vec::new();
     owned(r, button + 0x58, gui, &mut callback_edges)?;
     callback(r, base, button, view, &mut callback_edges)?;

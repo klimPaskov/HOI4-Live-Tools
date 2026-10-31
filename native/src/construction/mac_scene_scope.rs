@@ -23,8 +23,8 @@ pub(crate) enum Kind {
 impl Kind {
     fn primary(self) -> u64 {
         match self {
-            Self::Army => 0x32af5a8,
-            Self::TaskForce => 0x331ef98,
+            Self::Army => 0x34ace60,
+            Self::TaskForce => 0x351f208,
         }
     }
     fn raw(self) -> i32 {
@@ -145,7 +145,7 @@ pub(crate) fn from_reader(
     let mut pool: BTreeMap<u64, Kind> = armies.iter().map(|&a| (a, Kind::Army)).collect();
     let mut tasks = Vec::with_capacity(fleets.len());
     for (i, fleet) in fleets.iter().enumerate() {
-        mac_ui::exact(r, base, *fleet, 0x32fe7b0)?;
+        mac_ui::exact(r, base, *fleet, 0x34fc2e8)?;
         let current = members(r, fleet + 0xb0, LIMIT)?;
         if original.is_some_and(|b| b.tasks.get(i) != Some(&current)) {
             return Err(changed(

@@ -6,19 +6,19 @@
 //! Provenance (macOS 1.19.3 build 089EA519, found 26 Oct 2026 by RTTI scans,
 //! embedded-vtable scans and value correlation against the screen and the
 //! game files; nothing is copied from Linux/Windows):
-//! - `country + 0x550` is an embedded `CModifier` (vtable `0x330d160`): the
+//! - `country + 0x550` is an embedded `CModifier` (vtable `0x350cdc0`): the
 //!   country's aggregated modifier table. Entry array pointer at `+0x10`, i32
 //!   capacity at `+0x18`, i32 count at `+0x1c`; 16-byte entries
 //!   `{i32 modifier id, i32 flag/junk, i64 value x100000}` sorted by id, zero
 //!   modifiers absent. The same entry layout is used by every idea
 //!   (`idea + 0x60` pointer, i32 count at `idea + 0x6c`).
-//! - `politics + 0x50` is the array of active `CIdea` (vtable `0x3385678`);
+//! - `politics + 0x50` is the array of active `CIdea` (vtable `0x35882b8`);
 //!   the id string is a libc++ string at `idea + 0x18`. Laws are told apart
 //!   by the id lists of `common/ideas/_economic.txt` and `_manpower.txt`.
-//! - `country + 0x2e8` embedded `CCountryManpower` (vtable `0x330b4b8`).
-//! - `production + 0x430..0x4a0` five consumer objects of the civilian
-//!   factories (consumer goods `0x338ab30`, special projects, licensed
-//!   production, trade `0x338abf0`, contract payment).
+//! - `country + 0x2e8` embedded `CCountryManpower` (vtable `0x350ad90`).
+//! - `production + 0x448..0x4b8` (1.19.4) five consumer objects of the civilian
+//!   factories (consumer goods `0x358d580`, special projects, licensed
+//!   production, trade `0x358d640`, contract payment).
 //! - `country + 0x12e0` `CCountryFuelStatus` (`+8` stock, `+0x10` capacity).
 //!
 //! Modifier id names were identified by correlation: each name below is an
@@ -38,24 +38,24 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 const FIXED: f64 = 100_000.0;
 const COUNTRY_MODIFIER: u64 = 0x550;
-const MODIFIER_VTABLE: u64 = 0x330d160;
+const MODIFIER_VTABLE: u64 = 0x350cdc0;
 const COUNTRY_MANPOWER: u64 = 0x2e8;
-const MANPOWER_VTABLE: u64 = 0x330b4b8;
+const MANPOWER_VTABLE: u64 = 0x350ad90;
 const COUNTRY_FUEL: u64 = 0x12e0;
-const FUEL_VTABLE: u64 = 0x32b4e10;
+const FUEL_VTABLE: u64 = 0x34b2928;
 const POLITICS_IDEAS: u64 = 0x50;
-const IDEA_VTABLE: u64 = 0x3385678;
+const IDEA_VTABLE: u64 = 0x35882b8;
 const IDEA_NAME: u64 = 0x18;
 const IDEA_MODIFIERS: u64 = 0x60;
 const IDEA_MODIFIER_COUNT: u64 = 0x6c;
-const CONSUMERS: u64 = 0x430;
+const CONSUMERS: u64 = 0x448; // 1.19.4: +0x18 (was 0x430 in 1.19.3)
 /// `(label, offset from the consumers base, vtable)`.
 const CONSUMER_KINDS: [(&str, u64, u64); 5] = [
-    ("consumer_goods", 0, 0x338ab30),
-    ("special_projects", 0x18, 0x338ab70),
-    ("licensed_production", 0x30, 0x338abb0),
-    ("trade", 0x48, 0x338abf0),
-    ("contract_payment", 0x60, 0x338ac30),
+    ("consumer_goods", 0, 0x358d580),
+    ("special_projects", 0x18, 0x358d5c0),
+    ("licensed_production", 0x30, 0x358d600),
+    ("trade", 0x48, 0x358d640),
+    ("contract_payment", 0x60, 0x358d680),
 ];
 const ENTRY_LIMIT: usize = 400;
 const IDEA_LIMIT: usize = 200;
@@ -229,9 +229,9 @@ fn snapshot(r: &Reader<'_>, image: u64) -> Result<Detail> {
     }
     let consumer_goods_taken = r.i32(production + CONSUMERS + 0x10)?;
     let blocks = [
-        r.read(production + 0x2b0, 0x58)?,
-        r.read(production + 0x310, 0x58)?,
-        r.read(production + 0x370, 0x58)?,
+        r.read(production + 0x2c8, 0x58)?,
+        r.read(production + 0x328, 0x58)?,
+        r.read(production + 0x388, 0x58)?,
     ];
     let manpower_object = country + COUNTRY_MANPOWER;
     object_vtable(r, manpower_object, image, MANPOWER_VTABLE, "country manpower")?;

@@ -14,23 +14,23 @@ pub(super) fn construction() -> MacFixture {
     f.int(COUNTRY + 8, 1);
     for (a, v) in [
         (COUNTRY + 0xd10, PRODUCTION),
-        (PRODUCTION, BASE + 0x338b678),
-        (PRODUCTION + 0x290, COUNTRY),
-        (BASE + 0x34d0ac0, BUILDING_DB),
-        (BUILDING_DB, BASE + 0x332dd28),
-        (BUILDING_TEMPLATE, BASE + 0x332e908),
-        (STATE, BASE + 0x337caf0),
-        (BUILDING, BASE + 0x332dcb0),
+        (PRODUCTION, BASE + 0x358e0c8),
+        (PRODUCTION + 0x2a8, COUNTRY),
+        (BASE + 0x3703ad0, BUILDING_DB),
+        (BUILDING_DB, BASE + 0x352eea8),
+        (BUILDING_TEMPLATE, BASE + 0x352fa88),
+        (STATE, BASE + 0x357f410),
+        (BUILDING, BASE + 0x352ee30),
         (BUILDING + 0x1a8, STATE + 0x110),
         (BUILDING + 0x1b0, BUILDING_TEMPLATE),
-        (STATE + 0x110, BASE + 0x332e6a8),
-        (LINE, BASE + 0x3389c40),
+        (STATE + 0x110, BASE + 0x352f828),
+        (LINE, BASE + 0x358c690),
         (LINE + 8, 0x10000003b),
         (LINE + 0x20, PRODUCTION),
         (LINE + 0x28, 100000),
         (LINE + 0x30, 100),
         (LINE + 0x38, 0),
-        (LINE + 0x70, BUILDING),
+        (LINE + 0x78, BUILDING),
     ] {
         f.word(a, v);
     }
@@ -40,7 +40,7 @@ pub(super) fn construction() -> MacFixture {
         0x370000,
         &[NULL_TEMPLATE, BUILDING_TEMPLATE],
     );
-    f.word(NULL_TEMPLATE, BASE + 0x332def8);
+    f.word(NULL_TEMPLATE, BASE + 0x352f078);
     f.put(NULL_TEMPLATE + 0x18, &[0]);
     f.put(BUILDING_TEMPLATE + 0x18, &[1]);
     f.string(BUILDING_TEMPLATE + 0x228, "arms_factory");
@@ -58,7 +58,7 @@ pub(super) fn construction() -> MacFixture {
         (LINE + 0x40, 1),
         (LINE + 0x44, 0),
         (LINE + 0x48, 2),
-        (LINE + 0x78, 0),
+        (LINE + 0x80, 0),
     ] {
         f.int(a, v);
     }
@@ -68,8 +68,8 @@ pub(super) fn construction() -> MacFixture {
     f.int(STATE + 0x13c, 2);
     f.int(0x390004, 0);
     f.array(STATE + 0x148, 0x3a0000, &[BUILDING]);
-    f.put(LINE + 0x8c, &[0]);
-    f.put(LINE + 0x99, &[0]);
+    f.put(LINE + 0x94, &[0]);
+    f.put(LINE + 0xa1, &[0]);
     f
 }
 #[test]
@@ -110,7 +110,7 @@ fn mac_target_false_map_option_preserves_default_fields_and_avoids_camera_reads(
         .reads
         .borrow()
         .iter()
-        .any(|(a, _)| { *a == BASE + 0x3519a00 || *a == BASE + 0x36330a0 || *a == IDLER + 0x708 }));
+        .any(|(a, _)| { *a == BASE + 0x372b328 || *a == BASE + 0x3844d08 || *a == IDLER + 0x718 }));
 }
 #[test]
 fn mac_construction_target_empty_queue_still_validates_target_and_does_not_read_ui() {
@@ -156,7 +156,7 @@ fn mac_construction_target_foreign_control_and_torn_scope_never_prove_counts() {
 #[test]
 fn mac_construction_target_unavailable_building_is_not_zero() {
     let mut f = construction();
-    f.word(LINE + 0x70, 0);
+    f.word(LINE + 0x78, 0);
     let v = target(&f, "arms_factory", 1).unwrap();
     assert_eq!(v["complete"], false);
     assert!(v["queued"].is_null());
@@ -165,9 +165,9 @@ fn mac_construction_target_unavailable_building_is_not_zero() {
 #[test]
 fn mac_construction_target_null_template_requires_exact_inactive_slot_zero() {
     for (address, bytes) in [
-        (NULL_TEMPLATE, (BASE + 0x332df00).to_le_bytes().to_vec()),
+        (NULL_TEMPLATE, (BASE + 0x352f080).to_le_bytes().to_vec()),
         (NULL_TEMPLATE + 0x18, vec![1]),
-        (BUILDING_TEMPLATE, (BASE + 0x332def8).to_le_bytes().to_vec()),
+        (BUILDING_TEMPLATE, (BASE + 0x352f078).to_le_bytes().to_vec()),
     ] {
         let mut f = construction();
         f.put(address, &bytes);

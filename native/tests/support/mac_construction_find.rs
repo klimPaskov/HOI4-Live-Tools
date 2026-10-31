@@ -26,39 +26,39 @@ fn fixture() -> Fixture {
     let mut f = Fixture::new(StringAbi::LibCxx);
     for (field, value) in [
         (COUNTRY + 0xd10, PRODUCTION),
-        (PRODUCTION, BASE + 0x338b678),
-        (PRODUCTION + 0x290, COUNTRY),
+        (PRODUCTION, BASE + 0x358e0c8),
+        (PRODUCTION + 0x2a8, COUNTRY),
         (IDLER + 0x4c0, REGISTRY),
-        (REGISTRY, BASE + 0x34974d0),
+        (REGISTRY, BASE + 0x36a5810),
         (IDLER + 0x670, MANAGER),
         (MANAGER + 0x180, IDLER),
         (MANAGER + 0x190, FIND_OBJECT),
         (FIND_OBJECT, BASE + FIND),
-        (FIND_OBJECT + 0xc30, IDLER),
-        (FIND_OBJECT + 0xc38, WINDOW),
-        (WINDOW, BASE + 0x34ac0b0),
+        (FIND_OBJECT + 0xd50, IDLER),
+        (FIND_OBJECT + 0xd58, WINDOW),
+        (WINDOW, BASE + 0x36ba978),
         (WINDOW + 0x88, REGISTRY),
-        (FIND_OBJECT + 0xc88, FIRST_ROW),
+        (FIND_OBJECT + 0xda8, FIRST_ROW),
         (FIRST_ROW, BASE + ROW),
-        (FIRST_ROW + 0x3f8, STATE),
-        (IDLER + 0x708, CAMERA),
-        (STATE, BASE + 0x337caf0),
+        (FIRST_ROW + 0x458, STATE),
+        (IDLER + 0x718, CAMERA),
+        (STATE, BASE + 0x357f410),
         (STATE + 0x20, TEMPLATE),
         (TEMPLATE, BASE + STATE_TEMPLATE),
     ] {
         f.word(field, value);
     }
     f.put(WINDOW + 0x95, &[8]);
-    f.int(WINDOW + 0x12b8, 0);
-    f.int(WINDOW + 0x1270, 0);
-    f.string(FIND_OBJECT + 0xc48, "1");
-    f.word(FIND_OBJECT + 0xc90, ENTRIES);
-    f.int(FIND_OBJECT + 0xc98, 1);
-    f.int(FIND_OBJECT + 0xc9c, 1);
+    f.int(WINDOW + 0x13d8, 0);
+    f.int(WINDOW + 0x1390, 0);
+    f.string(FIND_OBJECT + 0xd68, "1");
+    f.word(FIND_OBJECT + 0xdb0, ENTRIES);
+    f.int(FIND_OBJECT + 0xdb8, 1);
+    f.int(FIND_OBJECT + 0xdbc, 1);
     f.put(ENTRIES, &[0; ENTRY_BYTES]);
     f.word(ENTRIES + 0x30, STATE);
     f.int(ENTRIES + 0x38, 2);
-    f.int(FIRST_ROW + 0x408, 2);
+    f.int(FIRST_ROW + 0x468, 2);
     f.array(GS + 0x290, &[0, STATE]);
     f.int(STATE + 0x40, 1);
     f.int(STATE + 0xc0, 1);
@@ -107,15 +107,15 @@ fn hidden_and_unmaterialized_find_skip_retained_query_and_rows() {
         if materialized {
             f.put(WINDOW + 0x95, &[0]);
         } else {
-            f.word(FIND_OBJECT + 0xc38, 0);
+            f.word(FIND_OBJECT + 0xd58, 0);
         }
-        f.word(FIND_OBJECT + 0xc88, 0xdead0000);
+        f.word(FIND_OBJECT + 0xda8, 0xdead0000);
         let value = snapshot(&f, None).unwrap();
         assert_eq!(value["find_view"]["materialized"], materialized);
         assert!(value["find_view"]["query"].is_null());
         assert!(value["find_view"]["results"].is_null());
-        assert!(f.untouched(FIND_OBJECT + 0xc48, 24));
-        assert!(f.untouched(FIND_OBJECT + 0xc88, 8));
+        assert!(f.untouched(FIND_OBJECT + 0xd68, 24));
+        assert!(f.untouched(FIND_OBJECT + 0xda8, 8));
         assert!(f.untouched(0xdead0000, 8));
     }
 }
@@ -147,20 +147,20 @@ fn first_result_kind_and_object_disagreement_refuse_as_refresh() {
 #[test]
 fn visible_empty_results_skip_the_retained_old_row() {
     let mut f = fixture();
-    f.int(FIND_OBJECT + 0xc9c, 0);
-    f.word(FIND_OBJECT + 0xc88, 0xdead0000);
+    f.int(FIND_OBJECT + 0xdbc, 0);
+    f.word(FIND_OBJECT + 0xda8, 0xdead0000);
     let value = snapshot(&f, None).unwrap();
     assert_eq!(value["find_view"]["results"]["result_count"], 0);
     assert!(value["find_view"]["results"]["first_row"].is_null());
-    assert!(f.untouched(FIND_OBJECT + 0xc88, 8));
+    assert!(f.untouched(FIND_OBJECT + 0xda8, 8));
     assert!(f.untouched(0xdead0000, 8));
 }
 
 #[test]
 fn other_result_kinds_do_not_follow_their_object_payload() {
-    for (kind, field) in [(1, 0x3f0), (3, 0x400)] {
+    for (kind, field) in [(1, 0x450), (3, 0x460)] {
         let mut f = fixture();
-        f.int(FIRST_ROW + 0x408, kind);
+        f.int(FIRST_ROW + 0x468, kind);
         f.int(ENTRIES + 0x38, kind);
         f.word(FIRST_ROW + field, 0xdead0000);
         f.word(ENTRIES + 0x30, 0xdead0000);
@@ -195,10 +195,10 @@ fn camera_and_anchor_comparison_are_facts_without_delivery_authority() {
 fn stale_own_links_types_state_catalog_and_local_states_refuse() {
     for (field, value) in [
         (FIND_OBJECT, BASE + FIND + 8),
-        (FIND_OBJECT + 0xc30, IDLER + 8),
+        (FIND_OBJECT + 0xd50, IDLER + 8),
         (MANAGER + 0x180, IDLER + 8),
         (WINDOW + 0x88, REGISTRY + 8),
-        (STATE, BASE + 0x337caf8),
+        (STATE, BASE + 0x357f418),
         (TEMPLATE, BASE + STATE_TEMPLATE + 8),
     ] {
         let mut f = fixture();
@@ -206,7 +206,7 @@ fn stale_own_links_types_state_catalog_and_local_states_refuse() {
         assert!(snapshot(&f, Some(1)).is_err(), "field {field:x}");
     }
     let mut f = fixture();
-    f.int(WINDOW + 0x1270, 3);
+    f.int(WINDOW + 0x1390, 3);
     assert!(snapshot(&f, Some(1)).is_err());
     let mut f = fixture();
     f.int(STATE + 0x40, 2);
@@ -216,7 +216,7 @@ fn stale_own_links_types_state_catalog_and_local_states_refuse() {
 #[test]
 fn final_witness_and_exact_process_check_cannot_be_skipped() {
     let mut f = fixture();
-    f.tear(FIRST_ROW + 0x408, 4, 2);
+    f.tear(FIRST_ROW + 0x468, 4, 2);
     assert_eq!(snapshot(&f, Some(1)).unwrap_err().code, "torn_read");
     let mut f = fixture();
     f.swap_final_identity = true;
@@ -227,11 +227,11 @@ fn final_witness_and_exact_process_check_cannot_be_skipped() {
 }
 
 fn root(f: &mut Fixture, object: u64, registry: u64, flags: u8, transitions: [i32; 2]) {
-    f.word(object, BASE + 0x34ac0b0);
+    f.word(object, BASE + 0x36ba978);
     f.word(object + 0x88, registry);
     f.put(object + 0x95, &[flags]);
-    f.int(object + 0x12b8, transitions[0]);
-    f.int(object + 0x1270, transitions[1]);
+    f.int(object + 0x13d8, transitions[0]);
+    f.int(object + 0x1390, transitions[1]);
 }
 
 #[test]
@@ -275,7 +275,7 @@ fn typed_observation_retains_exact_scope_and_own_state_without_focus_payload() {
     assert_eq!(anchor.binding(), binding);
     assert_eq!(anchor.context(), observation.context());
     anchor.require_same_scope(&observation).unwrap();
-    for address in [FIND_OBJECT + 0xc40, REGISTRY + 0x138, REGISTRY + 0x210] {
+    for address in [FIND_OBJECT + 0xd60, REGISTRY + 0x138, REGISTRY + 0x210] {
         assert!(f.untouched(address, 8));
     }
 }
@@ -287,7 +287,7 @@ fn retained_camera_coordinates_query_and_clock_controls_may_change() {
     f.set_date(DATE + 1);
     f.int(GS + 0x47c, 3);
     f.put(IDLER + 0x679, &[0]);
-    f.string(FIND_OBJECT + 0xc48, "changed query");
+    f.string(FIND_OBJECT + 0xd68, "changed query");
     floats(
         &mut f,
         CAMERA + 0x698,
@@ -307,13 +307,13 @@ fn retained_camera_coordinates_query_and_clock_controls_may_change() {
 #[test]
 fn retained_find_models_materialization_rebuild_hide_and_teardown() {
     let mut f = fixture();
-    f.word(FIND_OBJECT + 0xc38, 0);
+    f.word(FIND_OBJECT + 0xd58, 0);
     let initial = observe(&f, Some(1)).unwrap();
     assert_eq!(initial.root(), &RootLifecycle::Unmaterialized);
     assert_eq!(initial.query(), None);
     assert_eq!(initial.result_count(), None);
     let anchor = initial.anchor().unwrap();
-    f.word(FIND_OBJECT + 0xc38, WINDOW);
+    f.word(FIND_OBJECT + 0xd58, WINDOW);
     let now = anchor.observe(&f).unwrap();
     assert!(now.root().visible());
     assert!(now.root().local_transitions_idle());
@@ -321,7 +321,7 @@ fn retained_find_models_materialization_rebuild_hide_and_teardown() {
 
     let replacement = WINDOW + 0x20000;
     root(&mut f, replacement, REGISTRY, 8, [1, 0]);
-    f.word(FIND_OBJECT + 0xc38, replacement);
+    f.word(FIND_OBJECT + 0xd58, replacement);
     let now = anchor.observe(&f).unwrap();
     assert_eq!(
         now.root(),
@@ -333,22 +333,22 @@ fn retained_find_models_materialization_rebuild_hide_and_teardown() {
         }
     );
     assert!(!now.root().local_transitions_idle());
-    assert!(f.untouched(WINDOW, 0x1300));
+    assert!(f.untouched(WINDOW, 0x1420));
 
     f.put(replacement + 0x95, &[0]);
-    f.word(FIND_OBJECT + 0xc88, FOREIGN);
+    f.word(FIND_OBJECT + 0xda8, FOREIGN);
     let hidden = anchor.observe(&f).unwrap();
     assert!(!hidden.root().visible());
     assert_eq!(hidden.query(), None);
     assert_eq!(hidden.first_result(), None);
-    assert!(f.untouched(FIND_OBJECT + 0xc48, 24));
-    assert!(f.untouched(FIND_OBJECT + 0xc88, 8));
-    f.word(FIND_OBJECT + 0xc38, 0);
+    assert!(f.untouched(FIND_OBJECT + 0xd68, 24));
+    assert!(f.untouched(FIND_OBJECT + 0xda8, 8));
+    f.word(FIND_OBJECT + 0xd58, 0);
     assert_eq!(
         anchor.observe(&f).unwrap().root(),
         &RootLifecycle::Unmaterialized
     );
-    assert!(f.untouched(replacement, 0x1300));
+    assert!(f.untouched(replacement, 0x1420));
 }
 
 #[test]
@@ -365,12 +365,12 @@ fn every_new_root_requires_exact_own_container_before_query_payload() {
             [0, 0],
         );
         if bad_type {
-            f.word(replacement, BASE + 0x34ac0b8);
+            f.word(replacement, BASE + 0x36ba980);
         }
-        f.word(FIND_OBJECT + 0xc38, replacement);
+        f.word(FIND_OBJECT + 0xd58, replacement);
         assert!(anchor.observe(&f).is_err());
-        assert!(f.untouched(FIND_OBJECT + 0xc48, 24));
-        assert!(f.untouched(FIND_OBJECT + 0xc88, 8));
+        assert!(f.untouched(FIND_OBJECT + 0xd68, 24));
+        assert!(f.untouched(FIND_OBJECT + 0xda8, 8));
         assert!(f.untouched(FOREIGN, 0x1000));
     }
 }
@@ -380,18 +380,18 @@ fn retained_edges_reject_replacement_before_foreign_object_payload() {
     let countries = fixture().get_word(GS + 0x2d8);
     let states = fixture().get_word(GS + 0x290);
     for field in [
-        BASE + 0x3519740,
-        BASE + 0x35196c0,
-        BASE + 0x34d0de0,
+        BASE + 0x372b040,
+        BASE + 0x372afc0,
+        BASE + 0x3706540,
         countries,
         COUNTRY + 0xd10,
-        PRODUCTION + 0x290,
+        PRODUCTION + 0x2a8,
         IDLER + 0x4c0,
         IDLER + 0x670,
         MANAGER + 0x180,
         MANAGER + 0x190,
-        FIND_OBJECT + 0xc30,
-        IDLER + 0x708,
+        FIND_OBJECT + 0xd50,
+        IDLER + 0x718,
         states + 8,
         STATE + 0x20,
     ] {
@@ -403,8 +403,8 @@ fn retained_edges_reject_replacement_before_foreign_object_payload() {
             "construction_state_changed",
             "{field:x}"
         );
-        assert!(f.untouched(FOREIGN, 0x1300), "{field:x}");
-        assert!(f.untouched(FIND_OBJECT + 0xc48, 24), "{field:x}");
+        assert!(f.untouched(FOREIGN, 0x1420), "{field:x}");
+        assert!(f.untouched(FIND_OBJECT + 0xd68, 24), "{field:x}");
     }
 }
 
@@ -420,7 +420,7 @@ fn retained_ownership_loss_refuses_before_state_template_and_view_payload() {
         );
         assert!(f.untouched(STATE + 0x20, 8));
         assert!(f.untouched(TEMPLATE, 0x128));
-        assert!(f.untouched(FIND_OBJECT + 0xc48, 24));
+        assert!(f.untouched(FIND_OBJECT + 0xd68, 24));
     }
 }
 
@@ -431,7 +431,7 @@ fn same_id_state_or_same_position_template_replacement_is_not_adopted() {
         let anchor = observe(&f, Some(1)).unwrap().anchor().unwrap();
         if replace_state {
             let replacement = STATE + 0x20000;
-            f.word(replacement, BASE + 0x337caf0);
+            f.word(replacement, BASE + 0x357f410);
             f.int(replacement + 0x40, 1);
             f.int(replacement + 0xc0, 1);
             f.int(replacement + 0xc4, 1);
@@ -471,7 +471,7 @@ fn retained_map_anchor_and_state_id_are_exact_even_with_same_pointers() {
             anchor.observe(&f).unwrap_err().code,
             "construction_state_changed"
         );
-        assert!(f.untouched(FIND_OBJECT + 0xc48, 24));
+        assert!(f.untouched(FIND_OBJECT + 0xd68, 24));
     }
 }
 
@@ -492,7 +492,7 @@ fn retained_campaign_setup_player_playthrough_and_chronology_cannot_change() {
             "construction_state_changed",
             "{field:x}"
         );
-        assert!(f.untouched(FIND_OBJECT + 0xc48, 24));
+        assert!(f.untouched(FIND_OBJECT + 0xd68, 24));
     }
     let mut f = fixture();
     let anchor = observe(&f, Some(1)).unwrap().anchor().unwrap();
@@ -501,7 +501,7 @@ fn retained_campaign_setup_player_playthrough_and_chronology_cannot_change() {
         anchor.observe(&f).unwrap_err().code,
         "construction_state_changed"
     );
-    assert!(f.untouched(FIND_OBJECT + 0xc48, 24));
+    assert!(f.untouched(FIND_OBJECT + 0xd68, 24));
 }
 
 struct OtherBase<'a>(&'a Fixture);
@@ -569,20 +569,20 @@ fn foreign_requested_state_stays_public_metadata_but_cannot_be_retained_as_own()
 fn typed_empty_results_skip_retained_row_and_do_not_claim_a_target_result() {
     let mut f = fixture();
     let anchor = observe(&f, Some(1)).unwrap().anchor().unwrap();
-    f.int(FIND_OBJECT + 0xc9c, 0);
-    f.word(FIND_OBJECT + 0xc88, FOREIGN);
+    f.int(FIND_OBJECT + 0xdbc, 0);
+    f.word(FIND_OBJECT + 0xda8, FOREIGN);
     let now = anchor.observe(&f).unwrap();
     assert_eq!(now.result_count(), Some(0));
     assert!(now.first_result().is_none());
     assert!(!now.first_row_is_requested_state());
-    assert!(f.untouched(FIND_OBJECT + 0xc88, 8));
+    assert!(f.untouched(FIND_OBJECT + 0xda8, 8));
     assert!(f.untouched(FOREIGN, 0x1000));
 }
 
 #[test]
 fn retained_observation_requires_final_window_camera_and_edge_witnesses() {
     for (field, size, nth) in [
-        (FIND_OBJECT + 0xc38, 8, 2),
+        (FIND_OBJECT + 0xd58, 8, 2),
         (CAMERA + 0x698, 24, 2),
         (MANAGER + 0x190, 8, 2),
         (TEMPLATE + 0x120, 4, 3),
@@ -623,13 +623,13 @@ fn focus_fixture() -> Fixture {
     let edit = 0x9a0000;
     let kind = 0x9b0000;
     for (at, value) in [
-        (BASE + 0x35dc058, REGISTRY),
-        (FIND_OBJECT + 0xc40, edit),
-        (edit, BASE + 0x34add98),
-        (edit + 0x180, BASE + 0x34ae0c8),
+        (BASE + 0x37eda08, REGISTRY),
+        (FIND_OBJECT + 0xd60, edit),
+        (edit, BASE + 0x36bc6a0),
+        (edit + 0x180, BASE + 0x36bc9e0),
         (edit + 0x58, REGISTRY),
         (edit + 0x50, kind),
-        (kind, BASE + 0x34ae140),
+        (kind, BASE + 0x36bca58),
         (REGISTRY + 0x138, edit),
         (REGISTRY + 0x210, edit + 0x180),
     ] {
@@ -638,7 +638,7 @@ fn focus_fixture() -> Fixture {
     f.put(edit + 0x64, &0x804u32.to_le_bytes());
     f.put(edit + 0x239, &[1]);
     f.string(kind + 0x28, "to_find_text");
-    f.array(WINDOW + 0xd30, &[edit]);
+    f.array(WINDOW + 0xe50, &[edit]);
     f
 }
 
@@ -648,7 +648,7 @@ fn default_find_retains_null_focus_and_skips_all_new_focus_payloads() {
     let value = snapshot(&f, Some(1)).unwrap();
     assert!(value["find_view"]["text_box_focused"].is_null());
     assert!(value["find_view"].get("focus").is_none());
-    for field in [FIND_OBJECT + 0xc40, REGISTRY + 0x138, REGISTRY + 0x210] {
+    for field in [FIND_OBJECT + 0xd60, REGISTRY + 0x138, REGISTRY + 0x210] {
         assert!(f.untouched(field, 8));
     }
 }
@@ -668,11 +668,11 @@ fn optional_focus_renders_the_same_witnessed_exact_box_and_aliases() {
 fn optional_focus_hidden_view_skips_stale_edit_and_aliases() {
     let mut f = focus_fixture();
     f.put(WINDOW + 0x95, &[0]);
-    f.word(FIND_OBJECT + 0xc40, 0xdead0000);
+    f.word(FIND_OBJECT + 0xd60, 0xdead0000);
     let value = snapshot_with_focus(&f, Some(1), true).unwrap();
     assert!(value["find_view"]["focus"].is_null());
     assert!(value["find_view"]["text_box_focused"].is_null());
-    assert!(f.untouched(FIND_OBJECT + 0xc40, 8));
+    assert!(f.untouched(FIND_OBJECT + 0xd60, 8));
     assert!(f.untouched(REGISTRY + 0x210, 8));
 }
 
@@ -698,5 +698,5 @@ fn retained_focus_read_refuses_replaced_find_before_its_edit_payload() {
         "construction_state_changed"
     );
     assert!(f.untouched(0xdead0000, 8));
-    assert!(f.untouched(FIND_OBJECT + 0xc40, 8));
+    assert!(f.untouched(FIND_OBJECT + 0xd60, 8));
 }

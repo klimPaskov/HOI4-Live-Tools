@@ -44,18 +44,18 @@ pub(crate) struct Layout {
 /// and sprite rectangles matching the topbar .gui positions; then confirmed by
 /// clicks on a research slot, a technology tile and the Research button.
 const MACOS: Layout = Layout {
-    container_vtable: 0x34ac0b0,
+    container_vtable: 0x36ba978,
     container_base: 0x30,
     widget_type: 0x50,
     type_name: 0x28,
-    children: 0xd30,
+    children: 0xe50,
     visibility: 0x95,
     visible_bit: 8,
-    // CIcon, CButtonStandard.
-    renderers: &[(0x34a81a8, 0xd0), (0x34aafa0, 0xd8)],
+    // CIcon, CButtonStandard, CCheckBox (1.19.4: +8 on the first two; checkbox mapped live).
+    renderers: &[(0x36b6880, 0xd8), (0x36b9738, 0xe0), (0x36ba080, 0xa8)],
     // CSprite, CFrameAnimatedSprite.
-    sprite_vtables: &[0x34bdb10, 0x34afed0],
-    text_sprite_vtable: 0x34c0380,
+    sprite_vtables: &[0x36cc528, 0x36be530],
+    text_sprite_vtable: 0x36cee08,
     text_sprite_size: 0x1b0,
     sprite_translation: 0xb0,
     sprite_type: 0x8,
@@ -334,12 +334,12 @@ mod tests {
         m.q(bar + MACOS.children, list);
         m.put(bar + MACOS.children + 8, &[1, 0, 0, 0, 1, 0, 0, 0]);
         m.q(list, icon);
-        m.q(icon, IMAGE + 0x34a81a8);
+        m.q(icon, IMAGE + 0x36b6880);
         m.q(icon + MACOS.widget_type, ty_icon);
         m.q(ty_icon, IMAGE + 0x200);
         m.short(ty_icon + MACOS.type_name, "pol_power_value_bg");
-        m.q(icon + 0xd0, sprite);
-        m.q(sprite, IMAGE + 0x34bdb10);
+        m.q(icon + 0xd8, sprite);
+        m.q(sprite, IMAGE + 0x36cc528);
         m.put(sprite + 0xb0, &(-864f32).to_le_bytes());
         m.put(sprite + 0xb4, &510f32.to_le_bytes());
         m.q(sprite + 8, kind);

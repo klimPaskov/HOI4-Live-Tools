@@ -61,24 +61,24 @@ fn target(
     container: u64,
 ) -> Result<EscapeTarget> {
     let mut edges = Vec::new();
-    owned(r, base + 0x35dc058, gui, &mut edges)?;
-    typed(r, gui, base + 0x34974d0, &mut edges)?;
+    owned(r, base + 0x37eda08, gui, &mut edges)?;
+    typed(r, gui, base + 0x36a5810, &mut edges)?;
     let graphics = edge(r, gui + 0x98, &mut edges)?;
-    typed(r, graphics, base + 0x33dafa8, &mut edges)?;
-    typed(r, button, base + 0x34aafa0, &mut edges)?;
+    typed(r, graphics, base + 0x35e5b58, &mut edges)?;
+    typed(r, button, base + 0x36b9738, &mut edges)?;
     owned(r, button + 0x58, gui, &mut edges)?;
-    owned(r, button + 0xd0, graphics, &mut edges)?;
-    let renderer = edge(r, button + 0xd8, &mut edges)?;
+    owned(r, button + 0xd8, graphics, &mut edges)?;
+    let renderer = edge(r, button + 0xe0, &mut edges)?;
     sprite(r, base, renderer)?;
     let renderer_primary = edge(r, renderer, &mut edges)?;
     owned(r, renderer + 0x138, button, &mut edges)?;
     // The already-owned direct container supplies its own attached graphical
     // parent; do not infer a generic GUI owner from graphical object payload.
-    typed(r, container, base + 0x34ac0b0, &mut edges)?;
+    typed(r, container, base + 0x36ba978, &mut edges)?;
     owned(r, container + 0x88, gui, &mut edges)?;
-    let named_parent = edge(r, container + 0x1238, &mut edges)?;
-    typed(r, named_parent, base + 0x34b0428, &mut edges)?;
-    owned(r, button + 0x178, named_parent, &mut edges)?;
+    let named_parent = edge(r, container + 0x1358, &mut edges)?;
+    typed(r, named_parent, base + 0x36bea88, &mut edges)?;
+    owned(r, button + 0x180, named_parent, &mut edges)?;
     owned(r, renderer + 0x108, named_parent, &mut edges)?;
     Ok(EscapeTarget {
         base,

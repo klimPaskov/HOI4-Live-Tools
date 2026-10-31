@@ -27,7 +27,8 @@ each situation to the right file. Core files, in reading order:
 1. [Rules and modes](references/rules-and-modes.md) at campaign setup.
 2. [Operating loop](references/operating-loop.md): standing plan and daily governor.
 3. [Strategy](references/strategy.md) and the [country-agnostic playbook](references/generic-playbook.md).
-4. Domain playbooks (game-file verified for 1.19.3; each ends with automatable
+4. Domain playbooks (game-file verified for 1.19.3, rechecked for 1.19.4.1: Find is Ctrl+F,
+   Automatic Importing exists (hoi4_auto_import), manual trades are blocked while it is on; each ends with automatable
    rules, live decisions and tool needs): [economy and build orders](references/economy-build-orders.md),
    [research, doctrines and special projects](references/research-doctrines-projects.md),
    [templates, equipment and production](references/templates-equipment-production.md),

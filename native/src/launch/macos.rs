@@ -458,6 +458,7 @@ impl Commands for MacClock {
             json!({"name":"hoi4_peace_status","description":"Read-only: whether the peace conference window is open and, when it is, the texts it shows (current player, score, bidding phase, turns left). Without a conference it returns the route an ordinary player takes (actions list, states on the conference map, End turn). NOT validated live while a conference is open (no war was fought in the qualification game); no peace action tool exists yet.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}}),
             trade::tool(),
             trade::set_tool(),
+            trade::auto_import_tool(),
             naval::fleets_schema(),
             json!({"name":"hoi4_fleet_mission","description":"Give one own task force a mission with the game's ordinary mission buttons (Strategic Navy map mode F2, fleet card, the task force entry's Select button, the mission button; the map mode is restored afterwards). Missions: patrol, strike_force, convoy_raiding, convoy_escort, mine_laying, mine_sweeping, training, invasion_support (all operate in the fleet's assigned sea regions; add regions with hoi4_fleet_region first) and hold (cancel the mission and sail to the closest port). Typed refusals before any input: task_force_unknown, task_force_ambiguous, nothing_to_change, no_assigned_region, reserve_fleet; found while driving: mission_unavailable (the game disables the button, e.g. mine missions without the technology). Verified from the task force's mission code in memory (hold 0, patrol 1, strike force 2, convoy raiding 3, convoy escort 4, training 7, invasion support 9 read back live). One mission per call; the ships sail when the game runs.","inputSchema":{"type":"object","properties":{"task_force":{"type":"string","maxLength":128},"mission":{"type":"string"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["task_force","mission","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_fleet_region","description":"Add a sea region to a fleet's area of operation (or remove it with remove:true) with ordinary input: Strategic Navy map mode, the Find view centres `state_id` (a coastal state next to the sea), left clicks on the map read the sea region names from the game's region view until `region` (exact display name, e.g. 'Eastern North Sea', 'Danish Belts') is found, then the fleet card and a right click on that region (remove: the remove-region button first). Typed refusals: fleet_unknown, already_assigned, region_not_assigned, reserve_fleet; region_not_found lists the sea regions seen (nothing is ordered then); mission_unavailable when the game disables the remove button. The fleet's task forces patrol/escort/raid in this area. Verified from the fleet's region list in memory (hoi4_fleets assigned_regions).","inputSchema":{"type":"object","properties":{"fleet":{"type":"string","maxLength":128},"region":{"type":"string","maxLength":96},"state_id":{"type":"integer","minimum":1,"maximum":4095},"remove":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["fleet","region","state_id","request_id","lease_token"],"additionalProperties":false}}),
@@ -621,6 +622,7 @@ impl Commands for MacClock {
                 | "hoi4_peace_exit"
                 | "hoi4_trade"
                 | "hoi4_trade_set"
+                | "hoi4_auto_import"
                 | "hoi4_doctrines"
                 | "hoi4_mios"
                 | "hoi4_intelligence"
@@ -2334,6 +2336,57 @@ impl Commands for MacClock {
             authority.authorize(token, &epoch)?;
             self.keys.preflight()?;
             return trade::view(process, &self.keys, resource, limit);
+        }
+        if name == "hoi4_auto_import" {
+            allowed(args, &["enabled", "budget", "request_id", "lease_token"])?;
+            let enabled = match args.get("enabled") {
+                None => None,
+                Some(Value::Bool(v)) => Some(*v),
+                Some(_) => return Err(Error::new("invalid_arguments", "enabled must be boolean")),
+            };
+            let budget = match args.get("budget") {
+                None => None,
+                Some(v) => Some(
+                    v.as_i64()
+                        .filter(|v| (0..=500).contains(v))
+                        .ok_or_else(|| Error::new("invalid_arguments", "budget must be 0..500"))?,
+                ),
+            };
+            let token = string(args, "lease_token")?;
+            let epoch = guard.observe(process)?.epoch;
+            authority.authorize(token, &epoch)?;
+            if enabled.is_none() && budget.is_none() {
+                self.keys.preflight()?;
+                let state = trade::auto_import_read(process, &self.keys)?;
+                return Ok(json!({"auto_import":state.json(),"changed":false}));
+            }
+            let id = string(args, "request_id")?;
+            let retry = actions.receipt_exists(id);
+            if !retry {
+                self.keys.preflight()?;
+            }
+            let keys = &self.keys;
+            let action = json!({"kind":"auto_import","enabled":enabled,"budget":budget});
+            let before = if retry { None } else { Some(trade::auto_import_read(process, keys)?) };
+            let mut settle = || {
+                let state = trade::auto_import_read(process, keys)?;
+                let reached = enabled.is_none_or(|e| state.enabled == Some(e))
+                    && budget.is_none_or(|b| state.budget == Some(b));
+                let detail = state.json();
+                Ok(if reached {
+                    journal::Outcome::Reached(detail)
+                } else if before.as_ref() == Some(&state) {
+                    journal::Outcome::Unchanged(detail)
+                } else {
+                    journal::Outcome::Diverged(detail)
+                })
+            };
+            let mut dispatch = || {
+                authority.authorize(token, &epoch)?;
+                trade::auto_import_set(process, keys, enabled, budget).map(|_| ())
+            };
+            let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
+            return Ok(json!({"receipt":receipt}));
         }
         if name == "hoi4_trade_set" {
             allowed(

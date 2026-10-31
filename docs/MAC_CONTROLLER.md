@@ -106,6 +106,18 @@ loss stop the worker. Terminal notifications integrate with server-side waits.
 The older `hoi4_plan_run` remains a separate synchronous runner. It shares the
 input gate; it is not the durable worker described here.
 
+## Server-side stop_on_date watcher
+
+A small thread owned by the daily controller (`daily/date_stop.rs`) pauses the game when the
+own date reaches `plan.json`'s `stop_on_date`, independent of broker traffic. It is armed with
+the controller lease token by `hoi4_input_lease acquire` or `hoi4_daily_governor start/update`
+and uses the same `Control` fence, epoch, journal and `ClockBackend` as `hoi4_time`. It reads
+the clock lock-free once per second, never pauses to observe, does nothing when the game is
+already paused, never re-sends a request id (`worker-sd-<hour>-<pid>`) that has a receipt and
+treats any outcome after possible input as final (digest `date_stop.outcome`, alarm
+`date_stop_failed`). Without a lease it reports `stop_on_date_unarmed: no lease`. State is in
+the `date_stop` key of `hoi4_daily_governor` digest and of `hoi4_plan get`.
+
 ## Construction observation foundation
 
 `hoi4_construction_target` is a compact read-only tool shared with the inspected

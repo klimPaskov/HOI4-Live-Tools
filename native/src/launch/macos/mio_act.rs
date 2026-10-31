@@ -188,7 +188,7 @@ fn deep_all(
             deep_all(r, image, inner, wanted, depth - 1, budget, out)?;
         } else {
             let mut grids = Vec::new();
-            if r.u64(child)? == image + 0x34be068 {
+            if r.u64(child)? == image + 0x36cca80 {
                 grids.push(child);
             }
             for grid in grids {

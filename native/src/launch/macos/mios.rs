@@ -6,7 +6,7 @@
 //! January 1938, game pid in the run's identity file):
 //!
 //! * CHECKED live: the organisation template database
-//!   (`image+0x34d0cb0`, `COrganisationDatabase`, template array `+0x58`)
+//!   (`image+0x3705890`, `COrganisationDatabase`, template array `+0x58`)
 //!   holds 552 templates, and the own active ideas (politics status
 //!   `country+0xd38`, idea array `+0x50`, idea key string `+0x18`) include
 //!   `GER_daimler_benz`, the designer the player took; the other five are laws
@@ -42,7 +42,7 @@ use std::{
     time::Instant,
 };
 
-const ORGANISATION_DB: u64 = 0x34d0cb0;
+const ORGANISATION_DB: u64 = 0x3705890;
 const DB_TEMPLATES: u64 = 0x58;
 const POLITICS_TYPE: &str = "16CPoliticalStatus";
 const ACTIVE_IDEAS: u64 = 0x50;

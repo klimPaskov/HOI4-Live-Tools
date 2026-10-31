@@ -23,7 +23,7 @@ builds and previews mod content.
 | You want to… | Use | Platform | Maturity |
 | --- | --- | --- | --- |
 | Test mods and try agent play today | **[1.1.0 release](https://github.com/klimPaskov/HOI4-Live-Tools/releases/latest)** (Python) | Windows 10/11 | Stable release |
-| Help build the fast native runtime | **Rust preview** (build from source, [`native/`](native/README.md)) | Linux x86_64, macOS (Steam 1.19.3 x86_64 under Rosetta) | Developer preview |
+| Help build the fast native runtime | **Rust preview** (build from source, [`native/`](native/README.md)) | Linux x86_64 (1.19.3), macOS (Steam 1.19.4.1 x86_64 under Rosetta) | Developer preview |
 
 The Windows native game adapter is unfinished. An internal read-only foundation
 is available for development; see [the Windows port](docs/WINDOWS_HANDOFF.md).
@@ -79,7 +79,8 @@ is a developer preview, not a replacement release for the Windows package.
 
 ### Linux
 
-The tested native Linux game is HOI4 1.19.3 x86_64. The
+The tested native Linux game is HOI4 1.19.3 x86_64 (1.19.4 is not yet validated on Linux;
+the build gate refuses an unknown build). The
 [owned launcher](docs/OWNED_LINUX_LAUNCHER.md) verifies process ownership and never
 takes over an unrelated game. Recorded tests cover:
 
@@ -111,7 +112,8 @@ No campaign or annual throughput result is accepted. See
 
 ### macOS
 
-The native preview supports one Steam **HOI4 1.19.3 x86_64 build under Rosetta**
+The native preview supports one Steam **HOI4 1.19.4.1 (checksum f584) x86_64 build under Rosetta**
+(see [the 1.19.4 update notes](docs/HOI4_1_19_4_UPDATE.md); the 1.19.3 build is no longer accepted on macOS)
 with a verified **1920×1080, UI scale 1** input profile. It checks the owned game
 and window before input. [Window recording](docs/MAC_RECORDING.md) captures
 1920×1108, including the titlebar around the game client.

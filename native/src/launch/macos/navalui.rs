@@ -1,4 +1,4 @@
-//! Naval UI reads on macOS (089EA519): the Strategic Navy map mode (F2), the fleet cards of the
+//! Naval UI reads on macOS (1.19.4.1, DFA875A5): the Strategic Navy map mode (F2), the fleet cards of the
 //! bottom bar, the fleet panel (`CNaviesView`) with its task force entries, the mission bar and
 //! the leader window. Memory reads only; every rectangle comes from the laid-out sprites and is
 //! a click target, never an authorization.
@@ -11,6 +11,11 @@
 //!   `target_bar_window` +0x6c88, `tool_bar_window` +0x6e40; the displayed task force entries are
 //!   the Clausewitz array at view +0x30 (`CTaskForceViewEntry`, whose window pointer is entry
 //!   +0x2390).
+//!
+//! 1.19.4.1 (31 October 2026, located by RTTI class of each pointer): `CNaviesView` grew, so the
+//! leader window moved +0x4218 -> +0x4ca8 and the panel windows +0xe90 (+0x7b00/+0x7b10/+0x7b18,
+//! toolbar +0x7cd0, task forces +0x7cb8); the bottom bar root moved +0x850 -> +0x910 and window
+//! roots +0x4b8 -> +0x518. Entry window +0x2390 and task force name +0x258 await an open panel.
 use super::ui::read;
 use crate::{
     error::{Error, Result},
@@ -25,26 +30,26 @@ pub(super) const GAME: (u32, u32) = (1920, 1080);
 const MANAGER: u64 = 0x670;
 pub(super) const SLOT_BOTTOM: u64 = 0x1c8;
 pub(super) const SLOT_NAVIES: u64 = 0x1e0;
-const BOTTOM_ROOT: u64 = 0x850;
-const NV_WINDOW: u64 = 0x6c70;
-const NV_ACTION: u64 = 0x6c80;
+const BOTTOM_ROOT: u64 = 0x910;
+const NV_WINDOW: u64 = 0x7b00;
+const NV_ACTION: u64 = 0x7b10;
 /// `CNavyLeaderWindow` member of the fleet view and its root window `navyleaderwindow`.
-const NV_LEADER_WINDOW: u64 = 0x4218;
-const LEADER_ROOT: u64 = 0x4b8;
-const NV_TARGET: u64 = 0x6c88;
-const NV_TOOLBAR: u64 = 0x6e40;
+const NV_LEADER_WINDOW: u64 = 0x4ca8;
+const LEADER_ROOT: u64 = 0x518;
+const NV_TARGET: u64 = 0x7b18;
+const NV_TOOLBAR: u64 = 0x7cd0;
 const NV_ENTRIES: u64 = 0x30;
-const ENTRY_WINDOW: u64 = 0x2390;
+const ENTRY_WINDOW: u64 = 0x26f0;
 /// Task forces the panel shows now (`CTaskForce`, name at +0x258): all of the fleet's while none is
 /// selected, only the selected one afterwards. The shown entry windows are re-bound to them in the
 /// same order (selecting the second task force showed it in the first window, 26 October 2026).
-const NV_TASK_FORCES: u64 = 0x6e28;
+const NV_TASK_FORCES: u64 = 0x7cb8;
 const TF_NAME: u64 = 0x258;
 
 const GRID_ITEMS: u64 = 0x190;
 const ITEM_CONTAINER: u64 = 0x10;
 const TEXT: u64 = 0x100;
-const BUTTON_TEXT: u64 = 0x158;
+const BUTTON_TEXT: u64 = 0x160;
 
 pub(super) fn libcxx(r: &Reader<'_>) -> Result<()> {
     match r.string_abi() {
@@ -129,11 +134,27 @@ pub(super) fn window_of(r: &Reader<'_>, image: u64, parent: u64, name: &str) -> 
 
 // ---- fleet panel, cards, entries, mission bar, region view -------------------------------------
 const REGION_VIEW_SLOT: u64 = 0xd0;
-const REGION_ROOT: u64 = 0x430;
+// 1.19.4: view root 0x430 -> 0x490 (live: CCountryNavalRegionView +0x490 is `navalregionview`).
+const REGION_ROOT: u64 = 0x490;
 /// Edit boxes (`fleet_name`, `unit_name`) keep their text at +0x3b8 (read live on 26 October 2026).
-const EDIT_TEXT: u64 = 0x3b8;
-pub(super) fn edit_text(r: &Reader<'_>, widget: u64) -> Result<String> {
-    Ok(super::special_projects::plain(&r.string_bounded(widget + EDIT_TEXT, 160)?))
+// 1.19.4: CEditBox text 0x3b8 -> 0x3c8 (live: `fleet_name` +0x3c8 reads "Kriegsmarine").
+const EDIT_TEXT: u64 = 0x3c8;
+/// 1.19.4: a fleet founded in game (default name, e.g. "German Reich Flotta 1") leaves the edit
+/// buffer empty and shows its name only in the box's `CInstantTextObject` (edit +0x190, vtable
+/// 0x36c04b8, text +0x178); "Kriegsmarine" reads the same in both (live, 31 October 2026).
+const EDIT_SHOWN: u64 = 0x190;
+const SHOWN_VTABLE: u64 = 0x36c04b8;
+const SHOWN_TEXT: u64 = 0x178;
+pub(super) fn edit_text(r: &Reader<'_>, image: u64, widget: u64) -> Result<String> {
+    let typed = super::special_projects::plain(&r.string_bounded(widget + EDIT_TEXT, 160)?);
+    if !typed.is_empty() {
+        return Ok(typed);
+    }
+    let shown = r.u64(widget + EDIT_SHOWN)?;
+    if shown == 0 || r.u64(shown)? != image + SHOWN_VTABLE {
+        return Ok(typed);
+    }
+    Ok(super::special_projects::plain(&r.string_bounded(shown + SHOWN_TEXT, 160)?))
 }
 /// Whether the Strategic Navy map mode is on (its fleet bar is shown only there).
 pub(super) fn navy_mode(r: &Reader<'_>, image: u64) -> Result<bool> {
@@ -161,7 +182,7 @@ pub(super) fn panel_fleet(r: &Reader<'_>, image: u64) -> Result<Option<String>> 
         return Ok(None);
     };
     let name = child_of(r, image, header, "fleet_name")?;
-    Ok(Some(edit_text(r, name)?))
+    Ok(Some(edit_text(r, image, name)?))
 }
 /// Screen rectangle of a header widget.
 pub(super) fn header_rect(r: &Reader<'_>, image: u64, name: &str) -> Result<Rect> {

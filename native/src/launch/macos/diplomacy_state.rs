@@ -8,14 +8,14 @@
 //! Provenance (macOS 1.19.3.0, LC_UUID 089EA519, discovered 25 Oct 2026 with
 //! read-only memory scans on a live Germany 1936 campaign; every offset was
 //! found by scanning for vtables, none was copied from another platform):
-//! - `CCountry + 0xd30` -> `CDiplomacyStatus` (vtable `+0x3342770`). Self
+//! - `CCountry + 0xd30` -> `CDiplomacyStatus` (vtable `+0x3544268`). Self
 //!   checking: the pointee's first word must be the vtable.
 //! - `CDiplomacyStatus + 0x20`: array `{ptr, cap i32, size i32}` of pointers
 //!   to relation objects, every relation is listed by BOTH parties (same
-//!   pointer in both lists). Seen live with vtables CWarRelation `0x3347ca8`,
-//!   CGuaranteeRelation `0x3348258`, CSubjectRelation `0x3348598`,
-//!   CNonAggressionPactRelation `0x3348328`, CMilitaryAccessRelation
-//!   `0x3347e48`. The other relation classes are recognised by vtable only
+//!   pointer in both lists). Seen live with vtables CWarRelation `0x354a170`,
+//!   CGuaranteeRelation `0x354a720`, CSubjectRelation `0x354aa60`,
+//!   CNonAggressionPactRelation `0x354a7f0`, CMilitaryAccessRelation
+//!   `0x354a310`. The other relation classes are recognised by vtable only
 //!   (never seen populated) and reported as `other`.
 //! - Relation object: `+0x0xc` i32 first party tag index, `+0x10` i32 second
 //!   party, `+0x20` i32 start date (game hours), `+0x38` i32 end date
@@ -24,17 +24,17 @@
 //!   `give_military_access` in the second's file); non-aggression pact is
 //!   symmetric. War relation: the two tag fields are NOT reliable (civil war
 //!   countries), so the other party is found by pointer identity only.
-//! - Subject relation `+0x50` -> `CAutonomousState` (vtable `+0x3342550`),
+//! - Subject relation `+0x50` -> `CAutonomousState` (vtable `+0x3544048`),
 //!   libc++ string key at `+0x8` (for example `autonomy_integrated_puppet`).
-//! - `GS + 0x3b8` -> `CFactionSystem` (vtable `+0x333e920`), array of
-//!   `CFaction*` at `+0x20` (vtable `+0x333ccd0`, string name at `+0x18`,
+//! - `GS + 0x3b8` -> `CFactionSystem` (vtable `+0x3540478`), array of
+//!   `CFaction*` at `+0x20` (vtable `+0x353e188`, string name at `+0x18`,
 //!   array of `CCountry*` members at `+0x48`, first element the founder; the
 //!   faction leader is NOT located, so `leader` is the first member and is
 //!   marked unvalidated).
-//! - `GS + 0x650` -> `CWorldThreat` (vtable `+0x3349148`), `+0x8` i32
+//! - `GS + 0x650` -> `CWorldThreat` (vtable `+0x354b628`), `+0x8` i32
 //!   fixed-point world tension (`/100000`).
-//! - `CWarGoal` (vtable `+0x3325720`): `+0x38`/`+0x3c` i32 attacker/target tag
-//!   index, `+0x40` -> `CWarGoalType` (vtable `+0x3385390`) with libc++ key at
+//! - `CWarGoal` (vtable `+0x3525bf8`): `+0x38`/`+0x3c` i32 attacker/target tag
+//!   index, `+0x40` -> `CWarGoalType` (vtable `+0x3587fd0`) with libc++ key at
 //!   `+0x10`. Which array of the diplomacy status holds which role of goal is
 //!   not established, so goals are reported unclassified with their raw array
 //!   offset, and justification progress/expiry are `offset_not_validated`.
@@ -58,7 +58,7 @@ use std::{
 };
 
 const DIPLOMACY: u64 = 0xd30;
-const DIPLOMACY_VTABLE: u64 = 0x3342770;
+const DIPLOMACY_VTABLE: u64 = 0x3544268;
 const DS_RELATIONS: u64 = 0x20;
 /// Arrays of the diplomacy status that hold `CWarGoal*` (seen live).
 const DS_GOAL_ARRAYS: [u64; 4] = [0x50, 0x68, 0x80, 0x98];
@@ -68,21 +68,21 @@ const REL_START: u64 = 0x20;
 const REL_END: u64 = 0x38;
 const REL_AUTONOMY: u64 = 0x50;
 const NO_DATE: i32 = 43_808_760;
-const AUTONOMY_VTABLE: u64 = 0x3342550;
+const AUTONOMY_VTABLE: u64 = 0x3544048;
 const GS_FACTIONS: u64 = 0x3b8;
-const FACTION_SYSTEM_VTABLE: u64 = 0x333e920;
+const FACTION_SYSTEM_VTABLE: u64 = 0x3540478;
 const FS_LIST: u64 = 0x20;
-const FACTION_VTABLE: u64 = 0x333ccd0;
+const FACTION_VTABLE: u64 = 0x353e188;
 const FACTION_NAME: u64 = 0x18;
 const FACTION_MEMBERS: u64 = 0x48;
 const GS_THREAT: u64 = 0x650;
-const THREAT_VTABLE: u64 = 0x3349148;
+const THREAT_VTABLE: u64 = 0x354b628;
 const THREAT_VALUE: u64 = 0x8;
-const WARGOAL_VTABLE: u64 = 0x3325720;
+const WARGOAL_VTABLE: u64 = 0x3525bf8;
 const WG_ATTACKER: u64 = 0x38;
 const WG_TARGET: u64 = 0x3c;
 const WG_TYPE: u64 = 0x40;
-const WG_TYPE_VTABLE: u64 = 0x3385390;
+const WG_TYPE_VTABLE: u64 = 0x3587fd0;
 const WG_TYPE_KEY: u64 = 0x10;
 const START_DATE_RAW: i32 = 60_759_371;
 const TAG_BUDGET: usize = 1024;
@@ -101,23 +101,23 @@ enum Kind {
 
 fn classify(vtable: u64) -> Option<Kind> {
     Some(match vtable {
-        0x3347ca8 => Kind::War,
-        0x3348258 => Kind::Guarantee,
-        0x3348598 => Kind::Subject,
-        0x3348328 => Kind::NonAggression,
-        0x3347e48 => Kind::MilitaryAccess,
-        0x3341dc0 => Kind::Other("air_base_access"),
-        0x3341e90 => Kind::Other("offer_air_base_access"),
-        0x3342018 => Kind::Other("docking_rights"),
-        0x33420e8 => Kind::Other("offer_docking_rights"),
-        0x33421e8 => Kind::Other("naval_blockade"),
-        0x3347d78 => Kind::Other("licence_production_access"),
-        0x3347f18 => Kind::Other("offer_military_access"),
-        0x3347fe8 => Kind::Other("improve_relations"),
-        0x33480b8 => Kind::Other("attache"),
-        0x3348188 => Kind::Other("boost_party_popularity"),
-        0x33483f8 => Kind::Other("lend_lease"),
-        0x33486f8 => Kind::Other("embargo"),
+        0x354a170 => Kind::War,
+        0x354a720 => Kind::Guarantee,
+        0x354aa60 => Kind::Subject,
+        0x354a7f0 => Kind::NonAggression,
+        0x354a310 => Kind::MilitaryAccess,
+        0x35438d8 => Kind::Other("air_base_access"),
+        0x35439a8 => Kind::Other("offer_air_base_access"),
+        0x3543b30 => Kind::Other("docking_rights"),
+        0x3543c00 => Kind::Other("offer_docking_rights"),
+        0x3543d00 => Kind::Other("naval_blockade"),
+        0x354a240 => Kind::Other("licence_production_access"),
+        0x354a3e0 => Kind::Other("offer_military_access"),
+        0x354a4b0 => Kind::Other("improve_relations"),
+        0x354a580 => Kind::Other("attache"),
+        0x354a650 => Kind::Other("boost_party_popularity"),
+        0x354a8c0 => Kind::Other("lend_lease"),
+        0x354abc0 => Kind::Other("embargo"),
         _ => return None,
     })
 }
@@ -442,7 +442,7 @@ fn all_war_holders(r: &Reader<'_>, image: u64, w: &World) -> Result<Holders> {
     for (tag, country) in &w.country_of {
         let ds = diplomacy_status(r, image, *country)?;
         for ptr in r.pointer_array(ds + DS_RELATIONS)? {
-            if ptr != 0 && r.u64(ptr)? == image + 0x3347ca8 {
+            if ptr != 0 && r.u64(ptr)? == image + 0x354a170 {
                 let holders = out.entry(ptr).or_default();
                 if !holders.contains(tag) {
                     holders.push(*tag);
@@ -933,12 +933,12 @@ mod tests {
 
     #[test]
     fn classifies_the_live_seen_relation_vtables() {
-        assert_eq!(classify(0x3347ca8), Some(Kind::War));
-        assert_eq!(classify(0x3348258), Some(Kind::Guarantee));
-        assert_eq!(classify(0x3348598), Some(Kind::Subject));
-        assert_eq!(classify(0x3348328), Some(Kind::NonAggression));
-        assert_eq!(classify(0x3347e48), Some(Kind::MilitaryAccess));
-        assert_eq!(classify(0x33486f8), Some(Kind::Other("embargo")));
+        assert_eq!(classify(0x354a170), Some(Kind::War));
+        assert_eq!(classify(0x354a720), Some(Kind::Guarantee));
+        assert_eq!(classify(0x354aa60), Some(Kind::Subject));
+        assert_eq!(classify(0x354a7f0), Some(Kind::NonAggression));
+        assert_eq!(classify(0x354a310), Some(Kind::MilitaryAccess));
+        assert_eq!(classify(0x354abc0), Some(Kind::Other("embargo")));
         assert_eq!(classify(0x1234), None);
     }
 

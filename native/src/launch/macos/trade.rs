@@ -27,11 +27,14 @@ use serde_json::{json, Value};
 
 const MANAGER: u64 = 0x670;
 const VIEW: u64 = 0x140;
-const ROOT: u64 = 0x430;
-const OFFER_ROOT: u64 = 0x2440;
+const ROOT: u64 = 0x490;
+/// CCountryTradeView -> CTradeOfferWindow (vtable 0x3698030) -> root container (1.19.4).
+const OFFER_WINDOW: u64 = 0x1ac8;
+const OFFER_VTABLE: u64 = 0x3698030;
+const OFFER_ROOT: u64 = 0xd60;
 const GRID_ITEMS: u64 = 0x190;
 const ITEM_CONTAINER: u64 = 0x10;
-const CONTAINER_VTABLE: u64 = 0x34ac0b0;
+const CONTAINER_VTABLE: u64 = 0x36ba978;
 const CONTAINER_BASE: u64 = 0x30;
 const TEXT: u64 = 0x100;
 const GAME: (u32, u32) = (1920, 1080);
@@ -69,11 +72,29 @@ fn open(r: &Reader<'_>, image: u64) -> Result<bool> {
 fn offer_root(r: &Reader<'_>, image: u64) -> Result<u64> {
     let idler = r.u64(image + crate::game::layout(r).idler_global)?;
     let view = r.u64(r.u64(idler + MANAGER)? + VIEW)?;
-    gui_tree::container(r, r.u64(view + OFFER_ROOT)?, image)?
-        .ok_or_else(|| Error::new("invalid_gui", "Trade offer window unavailable"))
+    // 1.19.4: the view points at its CTradeOfferWindow (+0x1ac8), whose root container is at
+    // +0xd60 (named `tradeoffer_window`). Both are checked before the root is trusted.
+    let offer = r.u64(view + OFFER_WINDOW)?;
+    if !(0x10000..=0x7fff_ffff_0000).contains(&offer) || offer % 8 != 0 {
+        return Err(Error::new("invalid_gui", "Trade offer window not created yet"));
+    }
+    if r.u64(offer)? != image + OFFER_VTABLE {
+        return Err(Error::new("invalid_gui", "Trade offer window class unexpected"));
+    }
+    let root = r.u64(offer + OFFER_ROOT)?;
+    if root == 0 || r.u64(root)? != image + CONTAINER_VTABLE
+        || gui_tree::name(r, root + CONTAINER_BASE, image)?.as_deref() != Some("tradeoffer_window")
+    {
+        return Err(Error::new("invalid_gui", "Trade offer window not created yet"));
+    }
+    Ok(root)
 }
 fn offer_open(r: &Reader<'_>, image: u64) -> Result<bool> {
-    gui_tree::visible(r, offer_root(r, image)?)
+    match offer_root(r, image) {
+        Ok(root) => gui_tree::visible(r, root),
+        Err(e) if e.code == "invalid_gui" => Ok(false),
+        Err(e) => Err(e),
+    }
 }
 fn text_of(r: &Reader<'_>, image: u64, parent: u64, name: &str) -> Result<String> {
     Ok(match find(r, image, parent, name, 0)? {
@@ -174,7 +195,9 @@ fn civilian_factories(r: &Reader<'_>, image: u64) -> Result<Value> {
         let t = text_of(r, image, root, name)?;
         Ok(t.trim().parse::<i64>().map(|v| json!(v)).unwrap_or(json!(t)))
     };
-    Ok(json!({"total":n("civ_factories")?,"used":n("factories_used")?,"available":n("factories_available")?}))
+    // 1.19.4 renamed `factories_used` to `factories_trade` and added `factories_consumer`.
+    Ok(json!({"total":n("civ_factories")?,"used_for_trade":n("factories_trade")?,
+        "consumer_goods":n("factories_consumer")?,"available":n("factories_available")?}))
 }
 
 fn ensure_open(process: &dyn Process, keys: &MacKeys) -> Result<()> {
@@ -216,6 +239,9 @@ fn resource_index(name: &str) -> Result<usize> {
 
 pub(super) fn tool() -> Value {
     json!({"name":"hoi4_trade","description":"Read the Trade view (opens it with the R key, changes nothing): the player's civilian factories and, for the seven resources (oil, aluminium, rubber, tungsten, steel, chromium, coal), balance, produced, imported, exported, special projects, production lines and needed; with `resource` it also selects that resource's filter and lists its trade partners (country, units bought now, units available as 'current/available', convoys used). Selecting a filter is an ordinary click on the view. Set a purchase with hoi4_trade_set.","inputSchema":{"type":"object","properties":{"resource":{"type":"string","maxLength":24},"limit":{"type":"integer","minimum":1,"maximum":60},"lease_token":{"type":"string"}},"required":["lease_token"],"additionalProperties":false}})
+}
+pub(super) fn auto_import_tool() -> Value {
+    json!({"name":"hoi4_auto_import","description":"HOI4 1.19.4 Automatic Importing (Trade view): without enabled/budget it reads whether it is on, its civilian factory budget and the factories available for trade (opens the view with R, changes nothing). With enabled (true/false) and/or budget (civilian factories; only while on) it clicks the checkbox and the budget slider, verified from the view's own checkbox frame and budget text. The game then starts and ends trades itself to cover resource shortages (oil also covers fuel) and blocks manual trades: hoi4_trade_set refuses with auto_import_enabled while it is on. Import priority order and accepted shortages are left at the game's settings.","inputSchema":{"type":"object","properties":{"enabled":{"type":"boolean"},"budget":{"type":"integer","minimum":0,"maximum":500},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["lease_token"],"additionalProperties":false}})
 }
 pub(super) fn set_tool() -> Value {
     json!({"name":"hoi4_trade_set","description":"Buy `amount` units of `resource` from partner `country` (exact name as hoi4_trade lists it) through the Trade view: select the resource filter, click the partner's row, set the offer window's buy slider (a click on its track, then its arrows until the window's own 'Buy amount' reads the number) and press Send. amount: an integer (0 cancels the purchase), \"max\" or \"needed\" (the window's button that buys what the country needs). Typed refusals before anything is sent: partner_not_listed (lists the partners), amount_above_available (the window's maximum is named), trade_unavailable (the game offers no slider). Verified from the partner's contracted units in the view's Delivered column after Send (the game moves the goods with convoys over the following days; imports show in the balance table once they arrive).","inputSchema":{"type":"object","properties":{"resource":{"type":"string","maxLength":24},"country":{"type":"string","maxLength":64},"amount":{"anyOf":[{"type":"integer","minimum":0,"maximum":100000},{"type":"string","enum":["max","needed"]}]},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["resource","country","amount","request_id","lease_token"],"additionalProperties":false}})
@@ -311,6 +337,13 @@ pub(super) fn plan(
     ensure_open(process, keys)?;
     if read(process, offer_open)? {
         close_offer(process, keys);
+    }
+    if read(process, auto_import_enabled)? == Some(true) {
+        return Err(Error::new(
+            "auto_import_enabled",
+            "Automatic Importing is on; the game blocks manual trades. Turn it off with \
+             hoi4_auto_import {enabled:false} first, or let it manage imports.",
+        ));
     }
     select_resource(process, keys, index)?;
     let list = settled(process, "trade partners", partners)?;
@@ -501,6 +534,12 @@ pub(super) fn resource_name(index: usize) -> &'static str {
 mod tests {
     use super::*;
     #[test]
+    fn budget_text_colour_tells_whether_auto_import_is_on() {
+        assert_eq!(enabled_from_budget_text("\u{11}g5\u{11}!"), Some(false));
+        assert_eq!(enabled_from_budget_text("5"), Some(true));
+        assert_eq!(enabled_from_budget_text(""), None);
+    }
+    #[test]
     fn resources_are_named_by_index_or_name() {
         assert_eq!(resource_index("oil").unwrap(), 0);
         assert_eq!(resource_index("Aluminum").unwrap(), 1);
@@ -522,4 +561,139 @@ mod tests {
         assert_eq!(buy_amount("Buy amount: 168 For civilian factories: 3"), Some(168));
         assert_eq!(buy_amount("nothing"), None);
     }
+}
+
+// ---- 1.19.4 Automatic Importing -------------------------------------------------------------
+// The Trade view's `auto_import_checkbox` (CCheckBox, renderer sprite +0xa8), the budget
+// text `auto_import_budget_txt`, and the slider `auto_import_slider` (track 145 px wide, 85 px
+// right of `auto_import_budget_bg`, see interface/countrytradeview.gui). The game spends up to
+// the budget of civilian factories on imports of resources in shortage and blocks manual trades
+// while it is on. The priority window (order, accepted shortages, oil-for-fuel) is not driven.
+const AUTO_TRACK_DX: f64 = 85.0;
+const AUTO_TRACK_W: f64 = 145.0;
+const AUTO_TRACK_DY: f64 = 12.0;
+const AUTO_KNOB: f64 = 16.0;
+
+fn auto_checkbox(r: &Reader<'_>, image: u64) -> Result<u64> {
+    let root = view_root(r, image)?;
+    find(r, image, root, "auto_import_checkbox", 0)?
+        .ok_or_else(|| Error::new("capability_unavailable", "This build has no Automatic Importing checkbox"))
+}
+/// Whether Automatic Importing is on, from what the view shows: the game greys the budget text
+/// (colour code `\u{11}g`) while it is off and prints it plain while it is on (mapped live
+/// 31 October 2026; the checkbox's own state word also encodes hover, so it is not used).
+pub(super) fn auto_import_enabled(r: &Reader<'_>, image: u64) -> Result<Option<bool>> {
+    let root = view_root(r, image)?;
+    let _ = auto_checkbox(r, image)?;
+    let Some(text) = find(r, image, root, "auto_import_budget_txt", 0)? else {
+        return Ok(None);
+    };
+    Ok(enabled_from_budget_text(&r.string_bounded(text + TEXT, 64)?))
+}
+pub(super) fn enabled_from_budget_text(raw: &str) -> Option<bool> {
+    let digits = clean(raw);
+    if digits.trim().parse::<i64>().is_err() {
+        return None;
+    }
+    Some(!raw.starts_with("\u{11}g"))
+}
+fn auto_budget(r: &Reader<'_>, image: u64) -> Result<Option<i64>> {
+    let root = view_root(r, image)?;
+    Ok(text_of(r, image, root, "auto_import_budget_txt")?.trim().parse::<i64>().ok())
+}
+fn available_factories(r: &Reader<'_>, image: u64) -> Result<Option<i64>> {
+    let root = view_root(r, image)?;
+    let t = text_of(r, image, root, "factories_available")?;
+    Ok(t.rsplit(' ').next().and_then(|v| v.trim().parse::<i64>().ok()))
+}
+#[derive(Clone, Debug, PartialEq)]
+pub(super) struct AutoImport {
+    pub enabled: Option<bool>,
+    pub budget: Option<i64>,
+    pub available: Option<i64>,
+}
+fn auto_state(r: &Reader<'_>, image: u64) -> Result<AutoImport> {
+    Ok(AutoImport {
+        enabled: auto_import_enabled(r, image)?,
+        budget: auto_budget(r, image)?,
+        available: available_factories(r, image)?,
+    })
+}
+impl AutoImport {
+    pub(super) fn json(&self) -> Value {
+        json!({"enabled":self.enabled,"budget_factories":self.budget,"available_factories":self.available})
+    }
+}
+/// Open the Trade view and read the Automatic Importing state (changes nothing).
+pub(super) fn auto_import_read(process: &dyn Process, keys: &MacKeys) -> Result<AutoImport> {
+    clear_notices(process, keys)?;
+    ensure_open(process, keys)?;
+    settled(process, "automatic importing", auto_state)
+}
+/// Turn Automatic Importing on/off and/or set its civilian factory budget with ordinary clicks:
+/// the checkbox, then clicks on the slider track until the view's own budget text reads `budget`.
+pub(super) fn auto_import_set(
+    process: &dyn Process,
+    keys: &MacKeys,
+    enabled: Option<bool>,
+    budget: Option<i64>,
+) -> Result<AutoImport> {
+    let before = auto_import_read(process, keys)?;
+    if before.enabled.is_none() {
+        return Err(Error::new("invalid_gui", "Automatic Importing checkbox state unreadable"));
+    }
+    let want_on = enabled.unwrap_or(before.enabled == Some(true));
+    if budget.is_some() && !want_on {
+        return Err(Error::new(
+            "invalid_arguments",
+            "The budget can only be changed while Automatic Importing is on (the game disables the slider)",
+        ));
+    }
+    if let Some(want) = enabled {
+        if before.enabled != Some(want) {
+            let rect = settled(process, "auto import checkbox", |r, i| {
+                gui_tree::rect(r, i, auto_checkbox(r, i)?, GAME)
+            })?;
+            let (x, y) = rect.center();
+            keys.click(GAME, x, y)?;
+            wait(process, "automatic importing toggled", move |r, i| {
+                Ok(auto_import_enabled(r, i)? == Some(want))
+            })?;
+        }
+    }
+    if let Some(want) = budget {
+        let limit = read(process, auto_state)?;
+        // The slider's maximum is the factories available for trade (20 in a 1936 Germany start).
+        let max = limit.available.unwrap_or(0).max(limit.budget.unwrap_or(0));
+        if want < 0 || want > max {
+            return Err(Error::new(
+                "amount_above_available",
+                format!("Budget {want} is outside 0..={max} (civilian factories available for trade)"),
+            ));
+        }
+        let bg = settled(process, "auto import budget", |r, i| {
+            let root = view_root(r, i)?;
+            let icon = find(r, i, root, "auto_import_budget_bg", 0)?
+                .ok_or_else(|| Error::new("gui_target_unavailable", "Budget box not found"))?;
+            gui_tree::rect(r, i, icon, GAME)
+        })?;
+        // The track is click-transparent: the knob is dragged along it.
+        let x0 = f64::from(bg.x) + AUTO_TRACK_DX + AUTO_KNOB / 2.0;
+        let span = AUTO_TRACK_W - AUTO_KNOB;
+        let y = f64::from(bg.y) + AUTO_TRACK_DY;
+        let at = |v: i64| x0 + span * v as f64 / max.max(1) as f64;
+        let mut now = limit.budget.unwrap_or(0);
+        for _ in 0..6 {
+            if now == want {
+                break;
+            }
+            keys.drag(GAME, (at(now), y), (at(want), y))?;
+            std::thread::sleep(std::time::Duration::from_millis(300));
+            match read(process, auto_budget)? {
+                Some(v) => now = v,
+                None => break,
+            }
+        }
+    }
+    read(process, auto_state)
 }

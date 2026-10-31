@@ -40,18 +40,20 @@ struct Ui {
 /// and the computed option centre lies on the drawn option.
 const MACOS: Ui = Ui {
     gui: 0x4c0,
-    popups: 0x9e0,
-    event_window_vtable: 0x33db0d8,
+    popups: 0xa70,
+    event_window_vtable: 0x35e5c88,
     root: 0x28,
     event: 0x40,
     event_id: 0x18,
-    container_vtable: 0x34ac0b0,
+    container_vtable: 0x36ba978,
     container_base: 0x30,
     grid_items: 0x190,
     item_container: 0x10,
     grid_position: 0x70,
     grid_slot: 0xd4,
-    icon_position: 0xf4,
+    // 1.19.4: CIcon fields +8 (live: the news picture's local position (59, 91) of
+    // eventwindow.gui sits at +0xfc; grid position +0x70 and slot +0xd4 unchanged).
+    icon_position: 0xfc,
     text: 0x100,
 };
 const GAME: (u32, u32) = (1920, 1080);
@@ -267,7 +269,7 @@ fn peace_conference_open(r: &Reader<'_>, image: u64) -> Result<bool> {
     ui(r)?;
     let idler = r.u64(image + game::layout(r).idler_global)?;
     let view = r.u64(r.u64(idler + 0x670)? + 0x240)?;
-    let window = r.u64(view + 0x3da0)?;
+    let window = r.u64(view + 0x43a0)?;
     // After a conference ends the window pointer is cleared (read_bound seen
     // live on 26 Oct 2026 when the Treaty of Luxembourg window was closed).
     if window < 0x10000 {
@@ -287,7 +289,7 @@ pub(super) fn peace_root(r: &Reader<'_>, image: u64) -> Result<Option<u64>> {
     }
     let idler = r.u64(image + game::layout(r).idler_global)?;
     let view = r.u64(r.u64(idler + 0x670)? + 0x240)?;
-    let window = r.u64(view + 0x3da0)?;
+    let window = r.u64(view + 0x43a0)?;
     gui_tree::container(r, base_of(r, image, window)?, image)
 }
 /// The peace conference window's own texts while it is open (the player's
@@ -306,7 +308,7 @@ pub(super) fn peace_status(process: &dyn Process) -> Result<Value> {
     let texts = read(process, |r, image| {
         let idler = r.u64(image + game::layout(r).idler_global)?;
         let view = r.u64(r.u64(idler + 0x670)? + 0x240)?;
-        let window = r.u64(view + 0x3da0)?;
+        let window = r.u64(view + 0x43a0)?;
         let Some(root) = gui_tree::container(r, base_of(r, image, window)?, image)? else {
             return Ok(json!({}));
         };
@@ -435,9 +437,9 @@ mod tests {
             }
             fn read(&self, address: u64, len: usize) -> Result<Vec<u8>> {
                 match (address, len) {
-                    (0x35196c0, 8) => Ok(0x100000u64.to_le_bytes().to_vec()),
+                    (0x372afc0, 8) => Ok(0x100000u64.to_le_bytes().to_vec()),
                     (0x1004c0, 8) => Ok(0x110000u64.to_le_bytes().to_vec()),
-                    (0x1109e0, 16) => Ok(vec![0; 16]),
+                    (0x110a70, 16) => Ok(vec![0; 16]),
                     _ => Err(Error::new(
                         "fixture_missing_peace",
                         "Peace view unavailable",

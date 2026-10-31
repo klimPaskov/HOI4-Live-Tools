@@ -39,37 +39,37 @@ const GAME: (u32, u32) = (1920, 1080);
 const MANAGER: u64 = 0x670;
 const TECH_VIEW: u64 = 0xf0;
 const TREE_VIEW: u64 = 0xf8;
-const VIEW_ROOT: u64 = 0x430;
+const VIEW_ROOT: u64 = 0x490;
 /// CFacilitiesTabView pointer inside the technology (Research) view.
-const TAB_VIEW: u64 = 0xcf0;
-const VT_TAB_VIEW: u64 = 0x3398798;
+const TAB_VIEW: u64 = 0xe10;
+const VT_TAB_VIEW: u64 = 0x35a0300;
 const TAB_ROSTER: u64 = 0x70;
-const TAB_PROGRAM_VIEW: u64 = 0x8b0;
+const TAB_PROGRAM_VIEW: u64 = 0x970;
 const ROSTER_ROOT: u64 = 0x20;
 /// The roster keeps the Recruit Scientist window it created here.
-const ROSTER_RECRUIT: u64 = 0xd68;
-const VT_RECRUIT_WINDOW: u64 = 0x339bda0;
-const RECRUIT_CONFIRM: u64 = 0x980;
+const ROSTER_RECRUIT: u64 = 0xe88;
+const VT_RECRUIT_WINDOW: u64 = 0x35a3908;
+const RECRUIT_CONFIRM: u64 = 0xa40;
 const PROGRAM_VIEW_ROOT: u64 = 0x28;
-const VT_PROGRAM_VIEW: u64 = 0x339a150;
-const VT_ROSTER: u64 = 0x3399fa0;
+const VT_PROGRAM_VIEW: u64 = 0x35a1cb8;
+const VT_ROSTER: u64 = 0x35a1b08;
 /// Own country: program status (facilities, projects, breakthroughs) and the
 /// character collection (scientist list).
 const COUNTRY_PROGRAMS: u64 = 0xd50;
 const COUNTRY_CHARACTERS: u64 = 0xd98;
-const VT_PROGRAM_STATUS: u64 = 0x3398248;
-const VT_PROGRAM: u64 = 0x3394d20;
-const VT_PROJECT_POOL: u64 = 0x3397d48;
-const VT_PROJECT: u64 = 0x3394e10;
-const VT_PROJECT_TEMPLATE: u64 = 0x3395c90;
-const VT_STATE_MACHINE: u64 = 0x3397ef8;
-const VT_SIMPLE_STATE: u64 = 0x3397e28;
-const VT_COUNTRY_CHARACTERS: u64 = 0x332f5b8;
-const VT_SCIENTIST: u64 = 0x332fdb0;
-const VT_CHARACTER: u64 = 0x332efe0;
-const VT_TRAIT: u64 = 0x3330120;
+const VT_PROGRAM_STATUS: u64 = 0x359fdb0;
+const VT_PROGRAM: u64 = 0x359c918;
+const VT_PROJECT_POOL: u64 = 0x359f8b0;
+const VT_PROJECT: u64 = 0x359ca08;
+const VT_PROJECT_TEMPLATE: u64 = 0x359d7f8;
+const VT_STATE_MACHINE: u64 = 0x359fa60;
+const VT_SIMPLE_STATE: u64 = 0x359f990;
+const VT_COUNTRY_CHARACTERS: u64 = 0x3530728;
+const VT_SCIENTIST: u64 = 0x3530f20;
+const VT_CHARACTER: u64 = 0x3530150;
+const VT_TRAIT: u64 = 0x3531290;
 /// Global specialization database (4 templates, ids consecutive).
-const SPEC_DB_GLOBAL: u64 = 0x34d0b50;
+const SPEC_DB_GLOBAL: u64 = 0x3705fe0;
 const SPEC_DB_TEMPLATES: u64 = 0x58;
 const PROJECT_STRIDE: u64 = 0x1b8;
 /// Scientist list inside the character collection; the recruitment pool is an
@@ -81,9 +81,9 @@ const MAX_PROGRAMS: usize = 64;
 const MAX_PROJECTS: usize = 128;
 const MAX_SCIENTISTS: usize = 128;
 // GUI item classes.
-const VT_PROGRAM_ITEM: u64 = 0x33994b0;
-const VT_SCIENTIST_ITEM: u64 = 0x3399e08;
-const VT_PROJECT_ITEM: u64 = 0x339ada8;
+const VT_PROGRAM_ITEM: u64 = 0x35a1018;
+const VT_SCIENTIST_ITEM: u64 = 0x35a1970;
+const VT_PROJECT_ITEM: u64 = 0x35a2910;
 const GRID_ITEMS: u64 = 0x190;
 const ITEM_CONTAINER: u64 = 0x10;
 const PROGRAM_ITEM_HANDLE: u64 = 0x38;
@@ -1525,10 +1525,10 @@ fn pick_scientist(process: &dyn Process, keys: &MacKeys, name: &str) -> Result<(
 // ---- confirmation dialog -------------------------------------------------------
 /// The game's generic confirmation (CGenericDefaultConfirmationPopUpWindow:
 /// title, description, accept_button, decline_button), e.g. "Stop project".
-const VT_CONFIRM: u64 = 0x338d640;
+const VT_CONFIRM: u64 = 0x358ff80;
 const GUI_FROM_IDLER: u64 = 0x4c0;
-const POPUP_LIST: u64 = 0x9e0;
-const POPUP_ROOT: u64 = 0x430;
+const POPUP_LIST: u64 = 0xa70;
+const POPUP_ROOT: u64 = 0x490;
 /// One confirmation window (title, accept and decline rectangles) when it is
 /// a visible generic confirmation.
 fn confirm_in(

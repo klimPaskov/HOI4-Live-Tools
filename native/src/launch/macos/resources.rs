@@ -4,21 +4,21 @@
 //!
 //! Provenance (macOS 1.19.3 build 089EA519, found 26 Oct 2026 by RTTI/vtable
 //! scans and value correlation; nothing is copied from Linux/Windows):
-//! - `country + 0xf80` points to a `CCountryResources` (vtable `0x339faf8`).
+//! - `country + 0xf80` points to a `CCountryResources` (vtable `0x35a8b50`).
 //!   Inside it sit ten embedded `CStrategicResourcePool` objects (vtable
-//!   `0x331e228`; pool +8 = data pointer into the same object, pool +0x10 =
+//!   `0x351e498`; pool +8 = data pointer into the same object, pool +0x10 =
 //!   i32 count 8). An entry is 16 bytes `{i64 amount (x100000), i32 id}`. The
 //!   eight ids are the seven strategic resources plus an unused id 357.
 //! - resource ids come from `CStrategicResourceDatabase` (global
-//!   `base + 0x34d0bd0`, vtable `0x331e370`, pointer array at `+0x28`, i32
+//!   `base + 0x37058c0`, vtable `0x351e5e0`, pointer array at `+0x28`, i32
 //!   count at `+0x30`): entry 0 is a null object, entries 1..7 are
-//!   `CStrategicResource` (vtable `0x331e1c8`, id at `+8`) in the order of
+//!   `CStrategicResource` (vtable `0x351e438`, id at `+8`) in the order of
 //!   `common/resources/00_resources.txt` (oil, aluminium, rubber, tungsten,
 //!   steel, chromium, coal).
-//! - `country + 0x12e0` points to `CCountryFuelStatus` (vtable `0x32b4e10`):
+//! - `country + 0x12e0` points to `CCountryFuelStatus` (vtable `0x34b2928`):
 //!   `+0x8` fuel stock, `+0x10` fuel capacity (i64 x100000).
 //! - each production line has a `CProductionResourceCost` at `line + 0x58`:
-//!   three `{vtable 0x338be68, CStrategicResource*, i64 amount}` records of
+//!   three `{vtable 0x358e878, CStrategicResource*, i64 amount}` records of
 //!   0x20 bytes (null object = unused record).
 //!
 //! What is validated and what is not is stated in every payload
@@ -38,15 +38,15 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 const FIXED: f64 = 100_000.0;
 const COUNTRY_RESOURCES: u64 = 0xf80;
 const COUNTRY_FUEL: u64 = 0x12e0;
-const RESOURCES_VTABLE: u64 = 0x339faf8;
-const FUEL_VTABLE: u64 = 0x32b4e10;
-const POOL_VTABLE: u64 = 0x331e228;
-const RESOURCE_VTABLE: u64 = 0x331e1c8;
-const RESOURCE_DB_GLOBAL: u64 = 0x34d0bd0;
-const RESOURCE_DB_VTABLE: u64 = 0x331e370;
-const COST_VTABLE: u64 = 0x338be68;
-const MILITARY_LINE: u64 = 0x338a030;
-const NAVAL_LINE: u64 = 0x338a1b0;
+const RESOURCES_VTABLE: u64 = 0x35a8b50;
+const FUEL_VTABLE: u64 = 0x34b2928;
+const POOL_VTABLE: u64 = 0x351e498;
+const RESOURCE_VTABLE: u64 = 0x351e438;
+const RESOURCE_DB_GLOBAL: u64 = 0x37058c0;
+const RESOURCE_DB_VTABLE: u64 = 0x351e5e0;
+const COST_VTABLE: u64 = 0x358e878;
+const MILITARY_LINE: u64 = 0x358ca80;
+const NAVAL_LINE: u64 = 0x358cc00;
 const EQUIPMENT_VARIANT_TYPE: u64 = 0x3e0;
 /// Bytes of `CCountryResources` scanned for pools (ten pools end at 0x710).
 const OBJECT_SCAN: usize = 0x800;

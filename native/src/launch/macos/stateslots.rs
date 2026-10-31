@@ -26,7 +26,7 @@ struct Ui {
 const MACOS: Ui = Ui {
     manager: 0x670,
     view: 0xc8,
-    view_root: 0x430,
+    view_root: 0x490,
     grid_items: 0x190,
     item_template: 0x28,
     text: 0x100,

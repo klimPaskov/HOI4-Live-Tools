@@ -21,19 +21,19 @@ use crate::{
 use serde_json::{json, Map, Value};
 use std::{collections::BTreeMap, path::Path};
 
-const STRATEGIC_AIR_VTABLE: u64 = 0x331a850;
+const STRATEGIC_AIR_VTABLE: u64 = 0x3519d70;
 const SA_BASES: u64 = 0x10;
-const BASE_VTABLE: u64 = 0x331a7e8;
+const BASE_VTABLE: u64 = 0x3519d08;
 const BASE_ID: u64 = 0xc;
 const BASE_STATE: u64 = 0x68;
 const BASE_PROVINCE: u64 = 0x70;
 const BASE_CAPACITY: u64 = 0x78;
 const BASE_CONTAINERS: u64 = 0x48;
-const CONTAINER_VTABLE: u64 = 0x331a768;
+const CONTAINER_VTABLE: u64 = 0x3519c88;
 const CONTAINER_POOLS: u64 = 0xb8;
-const POOL_VTABLE: u64 = 0x32af020;
+const POOL_VTABLE: u64 = 0x34ac6c0;
 const POOL_WINGS: u64 = 0x28;
-pub(super) const WING_VTABLE: u64 = 0x32aef58;
+pub(super) const WING_VTABLE: u64 = 0x34ac5f8;
 pub(super) const WING_NAME: u64 = 0x938;
 const WING_UNIT: u64 = 0x320;
 const WING_PLANES: u64 = 0x74;

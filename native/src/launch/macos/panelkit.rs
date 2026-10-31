@@ -29,8 +29,8 @@ pub(super) const GAME: (u32, u32) = (1920, 1080);
 
 const MANAGER: u64 = 0x670;
 const GUI_FROM_IDLER: u64 = 0x4c0;
-const POPUP_LIST: u64 = 0x9e0;
-const VIEW_ROOT: u64 = 0x430;
+const POPUP_LIST: u64 = 0xa70;
+const VIEW_ROOT: u64 = 0x490;
 /// Other root offsets seen on reviewed windows (roster/recruit windows keep it
 /// at +0x20, the politics selection window at +0x8); only trusted when the root
 /// carries the expected GUI name.
@@ -54,67 +54,67 @@ pub(super) struct Class {
 
 pub(super) const DOCTRINE_VIEW: Class = Class {
     name: "NDoctrines::CCountryDoctrineView",
-    vtable: 0x334bf68,
+    vtable: 0x354e610,
     root_name: "country_doctrine_view",
 };
 pub(super) const DOCTRINE_SELECTION: Class = Class {
     name: "NDoctrines::CDoctrineSelectionList",
-    vtable: 0x334c270,
+    vtable: 0x354e920,
     root_name: "doctrine_selection_list",
 };
 pub(super) const POLITICS_VIEW: Class = Class {
     name: "CCountryPoliticsView",
-    vtable: 0x3444508,
+    vtable: 0x36511f0,
     root_name: "countrypoliticsview",
 };
 pub(super) const OFFICER_VIEW: Class = Class {
     name: "CCountryArmyOfficerCorpView",
-    vtable: 0x3494960,
+    vtable: 0x36a2a78,
     root_name: "countryofficercorpview",
 };
 pub(super) const AGENCY_VIEW: Class = Class {
     name: "CCountryIntelligenceAgencyView",
-    vtable: 0x3418c58,
+    vtable: 0x36249c0,
     root_name: "countryintelligenceagencyview",
 };
 pub(super) const AGENCY_UPGRADES: Class = Class {
     name: "CAgencyUpgradesWindow",
-    vtable: 0x3416db0,
+    vtable: 0x3622a70,
     root_name: "intelligence_agency_upgrades_window",
 };
 pub(super) const AGENCY_LOGO: Class = Class {
     name: "CAgencyLogoSelectionWindow",
-    vtable: 0x34162c0,
+    vtable: 0x3621f70,
     root_name: "name_logo_agency_selection_window",
 };
 pub(super) const OPERATIVE_BAR: Class = Class {
     name: "COperativeBottomBar",
-    vtable: 0x3419878,
+    vtable: 0x36257e8,
     root_name: "operative_leader_window",
 };
 pub(super) const OPERATIVE_ORDERS: Class = Class {
     name: "COperativeOrderBar",
-    vtable: 0x341a8a8,
+    vtable: 0x3626830,
     root_name: "operative_order_bar",
 };
 pub(super) const OPERATIVE_RECRUIT: Class = Class {
     name: "COperativeLeaderRecruitmentWindow",
-    vtable: 0x348dcf8,
+    vtable: 0x369bd60,
     root_name: "operative_leader_window",
 };
 pub(super) const MIO_LIST: Class = Class {
     name: "NIndustrialOrganisation::COrganisationListWindow",
-    vtable: 0x3421530,
+    vtable: 0x362d5b0,
     root_name: "industrial_organisation_list_window",
 };
 pub(super) const MIO_DETAIL: Class = Class {
     name: "NIndustrialOrganisation::COrganisationDetailWindow",
-    vtable: 0x3420958,
+    vtable: 0x362c958,
     root_name: "industrial_organisation_detail_window",
 };
 pub(super) const MIO_POLICY: Class = Class {
     name: "NIndustrialOrganisation::CPolicyWindow",
-    vtable: 0x3421dd8,
+    vtable: 0x362de58,
     root_name: "industrial_organisation_policy_window",
 };
 
@@ -314,7 +314,7 @@ pub(super) fn items(r: &Reader<'_>, image: u64, grid: u64) -> Result<Vec<Item>> 
 /// Vtable of `gridBoxType` widgets (reviewed on the politics view, macOS
 /// 089EA519); used to find grids whose names the `.gui` files do not give
 /// (windows the game builds in code).
-const GRID_VTABLE: u64 = 0x34be068;
+const GRID_VTABLE: u64 = 0x36cca80;
 pub(super) fn grids(
     r: &Reader<'_>,
     image: u64,
@@ -385,15 +385,15 @@ pub(super) fn open_now(process: &dyn Process, class: &Class) -> bool {
 #[cfg(test)]
 pub(super) mod fixture {
     //! A sparse widget tree in the reviewed macOS layout (container vtable
-    //! 0x34ac0b0, base +0x30, type at base+0x50, name at type+0x28, children
-    //! array at +0xd30, visibility byte +0x95 bit 8, CButtonStandard renderer
-    //! at +0xd8). Mirrors `gui_tree`'s own test fixture.
+    //! 0x36ba978, base +0x30, type at base+0x50, name at type+0x28, children
+    //! array at +0xe50 (1.19.4; +0xd30 in 1.19.3), visibility byte +0x95 bit 8, CButtonStandard renderer
+    //! at +0xe0). Mirrors `gui_tree`'s own test fixture.
     use super::super::mgmt::fake::Mem;
 
     pub(crate) const IMAGE: u64 = 0x1_0000_0000;
-    pub(crate) const CONTAINER_VT: u64 = 0x34ac0b0;
-    pub(crate) const BUTTON_VT: u64 = 0x34aafa0;
-    pub(crate) const SPRITE_VT: u64 = 0x34bdb10;
+    pub(crate) const CONTAINER_VT: u64 = 0x36ba978;
+    pub(crate) const BUTTON_VT: u64 = 0x36b9738;
+    pub(crate) const SPRITE_VT: u64 = 0x36cc528;
     pub(crate) const TYPE_VT: u64 = 0x100;
 
     pub(crate) struct Tree {
@@ -436,9 +436,9 @@ pub(super) mod fixture {
             for (i, c) in children.iter().enumerate() {
                 self.mem.q(list + i as u64 * 8, *c);
             }
-            self.mem.q(object + 0xd30, list);
-            self.mem.i(object + 0xd30 + 8, children.len() as i32);
-            self.mem.i(object + 0xd30 + 12, children.len() as i32);
+            self.mem.q(object + 0xe50, list);
+            self.mem.i(object + 0xe50 + 8, children.len() as i32);
+            self.mem.i(object + 0xe50 + 12, children.len() as i32);
         }
         /// A button (CButtonStandard) with a laid-out sprite at game
         /// rectangle (x, y, w, h); returns its GUI-object base.
@@ -458,7 +458,7 @@ pub(super) mod fixture {
             let ty = (540 - y - h) as f32;
             self.mem.patch(sprite + 0xb0, &tx.to_le_bytes());
             self.mem.patch(sprite + 0xb4, &ty.to_le_bytes());
-            self.mem.q(base + 0xd8, sprite);
+            self.mem.q(base + 0xe0, sprite);
             base
         }
         /// A plain named widget (no renderer), e.g. a text box with `text`.
@@ -623,6 +623,7 @@ mod tests {
         vt.sort_unstable();
         vt.dedup();
         assert_eq!(vt.len(), all.len());
-        assert!(all.iter().all(|c| (0x3300000..0x3500000).contains(&c.vtable)));
+        // __DATA,__const vtables of the 1.19.4.1 (f584) Mach-O lie in this window.
+        assert!(all.iter().all(|c| (0x3480000..0x3800000).contains(&c.vtable)));
     }
 }

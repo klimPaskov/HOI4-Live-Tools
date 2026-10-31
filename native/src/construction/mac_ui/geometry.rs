@@ -156,7 +156,7 @@ pub(super) fn observe(
             ));
         }
         let flags = r.byte(ancestor + 0x95)?;
-        let states = [r.i32(ancestor + 0x12b8)?, r.i32(ancestor + 0x1270)?];
+        let states = [r.i32(ancestor + 0x13d8)?, r.i32(ancestor + 0x1390)?];
         if states.iter().any(|state| !(0..=2).contains(state)) {
             return Err(invalid(
                 "Unknown Mac construction ancestor transition state",
@@ -175,21 +175,21 @@ pub(super) fn observe(
     }
     // +CC bit40 is the cached requested-disable result from the UI's last
     // prerequisite evaluation. A clear bit cannot predict the click predicate.
-    let control = r.byte(button + 0xcc)?;
+    let control = r.byte(button + 0xd4)?;
     if control & 8 == 0 || control & 0x40 != 0 {
         return Ok(Observation::unavailable("requested_button_input_disabled"));
     }
-    if r.byte(button + 0x1d1)? != 0 || r.u64(button + 0xc0)? != 0 {
+    if r.byte(button + 0x1d9)? != 0 || r.u64(button + 0xc8)? != 0 {
         return Ok(Observation::unavailable(
             "requested_button_optional_handler",
         ));
     }
-    if r.u64(base + 0x35196c0)? != idler {
+    if r.u64(base + 0x372afc0)? != idler {
         return Err(invalid(
             "Construction geometry must retain the own global idler",
         ));
     }
-    if r.byte(base + 0x3519990)? != 0 || r.u64(base + 0x35dbf60)? != 0 {
+    if r.byte(base + 0x372b2b8)? != 0 || r.u64(base + 0x37ed910)? != 0 {
         return Ok(Observation::unavailable(
             "ordinary_callback_branch_unavailable",
         ));
@@ -203,14 +203,14 @@ pub(super) fn observe(
             "requested_canvas_profile_unavailable",
         ));
     }
-    if r.u64(button + 0xd0)? != canvas.object {
+    if r.u64(button + 0xd8)? != canvas.object {
         return Err(invalid(
             "Construction button and GUI must retain the same graphics owner",
         ));
     }
-    let renderer = r.u64(button + 0xd8)?;
+    let renderer = r.u64(button + 0xe0)?;
     pointer(renderer)?;
-    if ![base + 0x34bdb10, base + 0x34afed0].contains(&r.u64(renderer)?) {
+    if ![base + 0x36cc528, base + 0x36be530].contains(&r.u64(renderer)?) {
         return Err(invalid("Exact Mac construction sprite required"));
     }
     if r.u64(renderer + 0x138)? != button {
@@ -218,10 +218,10 @@ pub(super) fn observe(
             "Construction renderer must target the same requested button",
         ));
     }
-    let parent = r.u64(button + 0x178)?;
+    let parent = r.u64(button + 0x180)?;
     if parent != 0 {
-        exact(r, base, parent, 0x34b0428)?;
-        if r.u64(renderer + 0x108)? != parent || r.u64(ancestors[3] + 0x1238)? != parent {
+        exact(r, base, parent, 0x36bea88)?;
+        if r.u64(renderer + 0x108)? != parent || r.u64(ancestors[3] + 0x1358)? != parent {
             return Err(invalid(
                 "Construction graphical parent must join the own item frame and renderer",
             ));

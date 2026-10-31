@@ -39,36 +39,51 @@ use std::time::{Duration, Instant};
 pub(super) const GAME: (u32, u32) = (1920, 1080);
 const MANAGER: u64 = 0x670;
 const PRODUCTION_VIEW: u64 = 0xd8;
-const SELECTION_ARMY: u64 = 0x1cd0;
-const SELECTION_NAVY: u64 = 0x1cd8;
-const SEL_ROOT: u64 = 0xbd8;
-const SEL_UDW: u64 = 0xbe0;
+const SELECTION_ARMY: u64 = 0x1f10;
+const SELECTION_NAVY: u64 = 0x1f18;
+const SEL_ROOT: u64 = 0xcf8;
+const SEL_UDW: u64 = 0xd00;
 const ROW_CONTAINER: u64 = 0x10;
-const ROW_VARIANT: u64 = 0xc30;
-const UDW_ROOT: u64 = 0x1540;
-const UDW_VIEW: u64 = 0x1548;
-const UDV_BASE: u64 = 0x7e0;
-const UDV_DRAFT: u64 = 0x7e8;
-const UDV_COST: u64 = 0x7f0;
-const UDW_EDIT_TEXT: u64 = 0x4d8;
+const ROW_VARIANT: u64 = 0xd50;
+const UDW_ROOT: u64 = 0x1720;
+const UDW_VIEW: u64 = 0x1728;
+// 1.19.4: +0xc0 (live: CEquipmentUpgradeDesignerView +0x8a0 holds base design 1319 after its
+// designer opened, +0x8a8 the draft variant (id 0); 0x7e0/0x7e8/0x7f0 in 1.19.3).
+const UDV_BASE: u64 = 0x8a0;
+const UDV_DRAFT: u64 = 0x8a8;
+const UDV_COST: u64 = 0x8b0;
+// 1.19.4: 0x4d8 -> 0x3c8 (live: `variant_name`, now a plain CEditBox, shows "Bf 109" at +0x3c8;
+// +0x4e8 stays empty).
+const UDW_EDIT_TEXT: u64 = 0x3c8;
 const EDV_SHIP: u64 = 0x258;
 const EDV_TANK: u64 = 0x260;
 const EDV_PLANE: u64 = 0x268;
-const EDV_ROOT: u64 = 0xbbb0;
-const EDV_DRAFT: u64 = 0x138;
-const EDV_SLOTS_CUSTOM: u64 = 0xedd0;
-const EDV_SLOTS_FIXED: u64 = 0xede8;
-const EDV_EDIT_TEXT: u64 = 0x3d8;
+// 1.19.4: root window 0xbbb0 -> 0xc730 (live: CEquipmentDesignerView +0xc730 is `countryequipmentdesignerview` in all three slots).
+const EDV_ROOT: u64 = 0xc730;
+// 1.19.4: 0x138 -> 0x178 (live: the open ship designer's draft CEquipmentVariant, id 0).
+const EDV_DRAFT: u64 = 0x178;
+// 1.19.4: slot arrays +0xee0 (static: neighbours 0xed88/0xef10 of CEquipmentDesignerView both
+// moved +0xee0; live: both arrays hold 9 CEquipmentModuleSlotView on a destroyer hull).
+const EDV_SLOTS_CUSTOM: u64 = 0xfcb0;
+const EDV_SLOTS_FIXED: u64 = 0xfcc8;
+// 1.19.4: the name box (CEditBox, view +0xd478, 0xc7d8 in 1.19.3) keeps its text at +0x3c8
+// (live: "Basic Destroyer" with the ship designer open on design 1338).
+const EDV_EDIT_BOX: u64 = 0xd478;
+const EDV_EDIT_TEXT: u64 = 0x3c8;
 const SLOT_DEF: u64 = 0xb0;
-const SLOT_BUTTON: u64 = 0x4a0;
+// 1.19.4: slot view button 0x4a0 -> 0x500 (static +0x60; live: CButtonStandard at +0x500).
+const SLOT_BUTTON: u64 = 0x500;
 const SLOT_ID: u64 = 0x8;
 const SLOT_NAME: u64 = 0x28;
-const ENTRY_MODULE: u64 = 0x818;
+// 1.19.4: 0x818 -> 0x8d8 (live: CEquipmentModuleEntry +0x8d8 is the CEquipmentModule, keys
+// light_ship_engine_1/2 at +0x10).
+const ENTRY_MODULE: u64 = 0x8d8;
 const MODULE_KEY: u64 = 0x10;
 const GRID_ITEMS: u64 = 0x190;
 const ITEM_CONTAINER: u64 = 0x10;
 const TEXT: u64 = 0x100;
-const BUTTON_TEXT: u64 = 0x158;
+// 1.19.4: CButtonStandard text 0x158 -> 0x160 (same move as navalui BUTTON_TEXT).
+const BUTTON_TEXT: u64 = 0x160;
 const VT_ENTRY_REMOVAL: u64 = 0x0;
 
 /// Variant stat scale and the fleetmem decoders are shared with `hoi4_designs`.
@@ -547,7 +562,7 @@ pub(super) fn module_state(r: &Reader<'_>, image: u64) -> Result<ModuleState> {
     let save_label = label_of(r, save)?;
     let dup = named(r, image, root, "duplicate_button")?;
     let edit = named(r, image, root, "equipment_names")?;
-    let edit_box = r.u64(view + 0xc7d8)?;
+    let edit_box = r.u64(view + EDV_EDIT_BOX)?;
     let _ = edit;
     Ok(ModuleState {
         kind,
@@ -613,7 +628,8 @@ pub(super) struct Located {
     /// The filter was ticked by this call to reach a hidden row.
     pub ticked_by_us: bool,
 }
-const CHECKBOX_STATE: u64 = 0x1b8;
+// 1.19.4: CButtonStandard fields past 0xb8 +8 (live: an unticked box reads 1 at +0x1c0).
+const CHECKBOX_STATE: u64 = 0x1c0;
 fn outdated_checkbox_button(r: &Reader<'_>, image: u64) -> Result<u64> {
     let Some(window) = selection_window(r, image)? else {
         return Err(Error::new("gui_target_unavailable", "No selection list is open"));
@@ -633,6 +649,10 @@ fn set_outdated(process: &dyn Process, keys: &MacKeys, want: bool) -> Result<()>
     if read(process, outdated_ticked)? == want {
         return Ok(());
     }
+    // 1.19.4: the selection list slides in from the left; right after it opens the box's sprite
+    // still sits ~370 px left of where it is drawn (read live 31 October 2026: x 322 vs 679), and
+    // a click there misses. Let the slide finish before the rectangle is read.
+    std::thread::sleep(Duration::from_millis(600));
     let rect = settled(process, "outdated box", outdated_checkbox)?;
     click(keys, rect)?;
     wait(process, "outdated filter", |r, i| Ok(outdated_ticked(r, i)? == want))?;

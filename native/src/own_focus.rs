@@ -52,11 +52,11 @@ const LINUX: Layout = Layout {
 /// list and focus ownership by its reciprocal tree pointer. Progress fields
 /// match the shared accesses of both builds' code.
 const MACOS: Layout = Layout {
-    progress_vtable: 0x33865d0,
-    tree_vtable: 0x33863a8,
-    database_global: 0x34d0a10,
-    database_vtable: 0x3386528,
-    focus_vtable: 0x3386468,
+    progress_vtable: 0x3589270,
+    tree_vtable: 0x3589048,
+    database_global: 0x3704440,
+    database_vtable: 0x35891c8,
+    focus_vtable: 0x3589108,
     tree_focuses: 0x28,
     focus_tree: 0x130,
 };

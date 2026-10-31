@@ -66,17 +66,17 @@ pub(super) fn wait(
 /// No-decision notices the server may acknowledge (only an OK button): research
 /// finished, focus finished, peace summary and world tension pop-ups (macOS
 /// 089EA519). Decisions such as events are never answered here.
-/// 0x34729e0 CConfirmationPopUpWindow (doctrine milestones), 0x34871b8 CSurrenderedPopupWindow
+/// 0x36805d0 CConfirmationPopUpWindow (doctrine milestones), 0x3695460 CSurrenderedPopupWindow
 /// (seized equipment after a capitulation).
-/// 0x34727b0 CSpecialProjectFinishedPopUpWindow (title "Special Project Completed", Details and
-/// OK, seen live 4 October 1938), 0x34728c8 CSpecialProjectCapturedPopUpWindow (same family; its
+/// 0x36803a0 CSpecialProjectFinishedPopUpWindow (title "Special Project Completed", Details and
+/// OK, seen live 4 October 1938), 0x36804b8 CSpecialProjectCapturedPopUpWindow (same family; its
 /// `ok_button` is not seen live, a window without one is skipped).
 const NOTICE_VTABLES: [u64; 8] = [
-    0x3472580, 0x3472af8, 0x3472c10, 0x3493e80, 0x34729e0, 0x34871b8, 0x34727b0, 0x34728c8,
+    0x3680170, 0x36806e8, 0x3680800, 0x36a1f88, 0x36805d0, 0x3695460, 0x36803a0, 0x36804b8,
 ];
 const GUI_FROM_IDLER: u64 = 0x4c0;
-const POPUP_LIST: u64 = 0x9e0;
-const POPUP_ROOT: u64 = 0x430;
+const POPUP_LIST: u64 = 0xa70;
+const POPUP_ROOT: u64 = 0x490;
 
 /// Shown notice pop-ups (list order) with their OK button rectangles.
 fn notices(r: &Reader<'_>, image: u64) -> Result<Vec<gui_tree::Rect>> {
@@ -121,10 +121,10 @@ fn notices_with_kind(r: &Reader<'_>, image: u64) -> Result<Vec<(gui_tree::Rect, 
 /// not read, so most classes are only named by their offset.
 fn notice_kind_name(vtable: u64) -> String {
     match vtable {
-        0x34729e0 => "confirmation pop-up (CConfirmationPopUpWindow, e.g. a doctrine milestone)".into(),
-        0x34871b8 => "surrendered pop-up (CSurrenderedPopupWindow, seized equipment)".into(),
-        0x34727b0 => "special project completed pop-up (CSpecialProjectFinishedPopUpWindow)".into(),
-        0x34728c8 => "special project captured pop-up (CSpecialProjectCapturedPopUpWindow)".into(),
+        0x36805d0 => "confirmation pop-up (CConfirmationPopUpWindow, e.g. a doctrine milestone)".into(),
+        0x3695460 => "surrendered pop-up (CSurrenderedPopupWindow, seized equipment)".into(),
+        0x36803a0 => "special project completed pop-up (CSpecialProjectFinishedPopUpWindow)".into(),
+        0x36804b8 => "special project captured pop-up (CSpecialProjectCapturedPopUpWindow)".into(),
         other => format!("notice window class +{other:#x} (research/focus finished, peace summary or world tension)"),
     }
 }
@@ -223,7 +223,7 @@ pub(super) fn dismiss_notices(
 /// CInGameMenu whose window (+0x2678) shows while the menu is open (macOS
 /// 089EA519, mapped live on 18 October 2026).
 const MENU: u64 = 0x218;
-const MENU_WINDOW: u64 = 0x2678;
+const MENU_WINDOW: u64 = 0x2a38;
 fn menu_open(r: &Reader<'_>, image: u64) -> Result<bool> {
     if r.string_abi() != StringAbi::LibCxx {
         return Ok(false);
@@ -320,7 +320,7 @@ fn view_close(r: &Reader<'_>, image: u64, slot: u64) -> Result<Option<gui_tree::
     }
     let idler = r.u64(image + game::layout(r).idler_global)?;
     let view = r.u64(r.u64(idler + MANAGER)? + slot)?;
-    let Some(root) = gui_tree::container(r, r.u64(view + 0x430)?, image)? else {
+    let Some(root) = gui_tree::container(r, r.u64(view + 0x490)?, image)? else {
         return Ok(None);
     };
     if !gui_tree::visible(r, root)? {
@@ -351,16 +351,16 @@ pub(super) fn close_state_view(
 }
 type ViewClose = fn(&Reader<'_>, u64) -> Result<Option<gui_tree::Rect>>;
 /// The game's accept/decline dialog for a command (e.g. replacing a law).
-const ACCEPT_DIALOG_VTABLE: u64 = 0x342f1d0;
+const ACCEPT_DIALOG_VTABLE: u64 = 0x363b690;
 /// The game's reassign-commander confirmation (CChangeGroupLeaderDialog); it
 /// has the same accept and decline buttons.
-const REASSIGN_DIALOG_VTABLE: u64 = 0x3437028;
+const REASSIGN_DIALOG_VTABLE: u64 = 0x3643990;
 /// The same confirmation for a fleet's admiral (CChangeNavyLeaderDialog, "Reassign the
 /// Commander", Cancel/OK; seen live 26 October 2026 when an admiral of another fleet was chosen).
-const NAVY_REASSIGN_DIALOG_VTABLE: u64 = 0x3437158;
+const NAVY_REASSIGN_DIALOG_VTABLE: u64 = 0x3643ac0;
 /// "Reassign Armies": taking every division out of an army would delete it
 /// and its orders (CReassignFullOrdersGroupDialog); same accept/decline buttons.
-const REASSIGN_ARMIES_DIALOG_VTABLE: u64 = 0x347dba8;
+const REASSIGN_ARMIES_DIALOG_VTABLE: u64 = 0x368b8a8;
 
 fn command_dialog(r: &Reader<'_>, image: u64, button: &str) -> Result<Option<gui_tree::Rect>> {
     if r.string_abi() != StringAbi::LibCxx {
@@ -449,17 +449,19 @@ pub(super) fn accept_command(
 }
 /// The game's Find view (interface manager +0x190) on macOS 089EA519: own
 /// idler +0xc30, window +0xc38, query text +0xc48, highlighted result
-/// +0xc88 whose state is at +0x3f8 (state ID +0x40).
+/// +0xc88 whose state is at +0x3f8 (state ID +0x40). 1.19.4: +0x120 for the view fields, state +0x458.
 const MANAGER: u64 = 0x670;
 const FIND_VIEW: u64 = 0x190;
-const FIND_IDLER: u64 = 0xc30;
-const FIND_WINDOW: u64 = 0xc38;
-const FIND_TEXT: u64 = 0xc48;
-const FIND_SELECTED: u64 = 0xc88;
-const RESULT_STATE: u64 = 0x3f8;
+const FIND_IDLER: u64 = 0xd50;
+const FIND_WINDOW: u64 = 0xd58;
+const FIND_TEXT: u64 = 0xd68;
+const FIND_SELECTED: u64 = 0xda8;
+const RESULT_STATE: u64 = 0x458;
 const STATE_ID: u64 = 0x40;
 const DIGITS: [u16; 10] = [29, 18, 19, 20, 21, 23, 22, 26, 28, 25];
 const BACKSPACE: u16 = 51;
+/// ANSI virtual key code of F.
+const FIND_KEY: u16 = 3;
 
 fn find_view(r: &Reader<'_>, image: u64) -> Result<u64> {
     let idler = r.u64(image + game::layout(r).idler_global)?;
@@ -504,7 +506,8 @@ pub(super) fn find_state(
     // The Recruit & Deploy panel covers the left half of the map, where the
     // box selections and map clicks that follow a Find would otherwise land.
     super::deployment::leave(process, keys);
-    keys.press(Key::letter('f')?)?;
+    // 1.19.4 rebound the Find view from F to Ctrl+F.
+    keys.press_control(FIND_KEY)?;
     wait(process, "open find", find_open)?;
     thread::sleep(Duration::from_millis(150));
     // The box keeps the previous query; erase it before typing.
@@ -607,11 +610,11 @@ mod tests {
     use super::*;
     #[test]
     fn blocked_error_names_notice_classes_and_open_events() {
-        let e = blocked_error(2, &[0x34729e0, 0x3472580], &["news.288".to_string()]);
+        let e = blocked_error(2, &[0x36805d0, 0x3680170], &["news.288".to_string()]);
         assert_eq!(e.code, "ui_blocked");
         assert!(e.message.contains("2 still shown"));
         assert!(e.message.contains("CConfirmationPopUpWindow"));
-        assert!(e.message.contains("+0x3472580"));
+        assert!(e.message.contains("+0x3680170"));
         assert!(e.message.contains("open events: news.288"));
     }
     #[test]

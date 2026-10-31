@@ -13,8 +13,8 @@ use std::ffi::CStr;
 mod authorization;
 
 /// The only Mach-O build whose layout has been inspected (1.19.3.0 c01a).
-pub const BUILD_UUID: &str = "089EA519-6780-353B-8E39-4E9309B444D4";
-pub const SHA256: &str = "09419b087f8b4656c00df337bf838ff34c9b1d816b76cef5383ae6a4ac15b1fb";
+pub const BUILD_UUID: &str = "DFA875A5-25BA-35E0-9736-627F8A5C4396";
+pub const SHA256: &str = "d440ad8823e1ca5106b2ff87bc5135acf1b40d56f6bf0a76b52b5b247a668e07";
 
 type MachPort = u32;
 type KernReturn = i32;
@@ -430,8 +430,8 @@ mod tests {
         d
     }
     const UUID: [u8; 16] = [
-        0x08, 0x9E, 0xA5, 0x19, 0x67, 0x80, 0x35, 0x3B, 0x8E, 0x39, 0x4E, 0x93, 0x09, 0xB4, 0x44,
-        0xD4,
+        0xDF, 0xA8, 0x75, 0xA5, 0x25, 0xBA, 0x35, 0xE0, 0x97, 0x36, 0x62, 0x7F, 0x8A, 0x5C, 0x43,
+        0x96,
     ];
     #[test]
     fn macho_uuid_reads_the_verified_build_and_refuses_other_images() {

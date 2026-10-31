@@ -37,8 +37,8 @@ use std::{
 pub(super) const GAME: (u32, u32) = (1920, 1080);
 const MANAGER: u64 = 0x670;
 const GUI_FROM_IDLER: u64 = 0x4c0;
-const POPUP_LIST: u64 = 0x9e0;
-const POPUP_ROOT: u64 = 0x430;
+const POPUP_LIST: u64 = 0xa70;
+const POPUP_ROOT: u64 = 0x490;
 const CONTAINER_BASE: u64 = 0x30;
 /// Prefix of every description: nothing here has been seen working on a live game yet.
 pub(super) const UNVALIDATED: &str = "UNVALIDATED (no live test yet): ";
@@ -265,9 +265,9 @@ pub(super) fn click(keys: &MacKeys<'_>, rect: Rect) -> Result<()> {
 /// Confirmation dialogs with `accept_button` and `decline_button` that a fleet or faction action may
 /// raise: `CAcceptCommandDialog`, `CConfirmCancelNavyActivityDialog`, `CDefaultConfirmationPopUpWindow`,
 /// `CGenericDefaultConfirmationPopUpWindow`, `CDismantleFactionDialog` (vtables from the RTTI map).
-pub(super) const CONFIRM_VTABLES: [u64; 5] = [0x342f1d0, 0x342f518, 0x3472150, 0x338d640, 0x3453cd0];
+pub(super) const CONFIRM_VTABLES: [u64; 5] = [0x363b690, 0x363b9d8, 0x367fd40, 0x358ff80, 0x3661350];
 /// Diplomacy proposal pop-ups: base, standard, scripted, incoming lend-lease, foreign manpower.
-pub(super) const DIPLOMACY_VTABLES: [u64; 5] = [0x344dfa8, 0x344e0d0, 0x344e1f8, 0x344e320, 0x344e448];
+pub(super) const DIPLOMACY_VTABLES: [u64; 5] = [0x365b4d0, 0x365b5f8, 0x365b720, 0x365b848, 0x365b970];
 
 #[derive(Clone, Debug, PartialEq)]
 pub(super) struct Popup {
@@ -334,7 +334,7 @@ mod tests {
     use super::super::testmem::{Mem, IMAGE};
     use super::*;
 
-    const CONTAINER_VT: u64 = 0x34ac0b0;
+    const CONTAINER_VT: u64 = 0x36ba978;
     /// A container object named `name` (GUI type name at base +0x50 -> type +0x28).
     fn window(mem: &Mem, name: &str) -> u64 {
         let object = mem.alloc(0x100);

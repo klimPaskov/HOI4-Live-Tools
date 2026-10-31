@@ -480,6 +480,14 @@ fn observe(
     include_slot_geometry: bool,
     requested_category: Option<(&str, bool, bool)>,
 ) -> Result<(Value, Option<UiContext>)> {
+    // These offsets belong to the reviewed Linux build only; a macOS process
+    // uses the hoi4_research / hoi4_technology_list reads instead.
+    if process.string_abi() != crate::memory::StringAbi::LibStdCxx {
+        return Err(Error::new(
+            "capability_unavailable",
+            "Research tree node reads are reviewed for the Linux build only",
+        ));
+    }
     let start = Instant::now();
     process.begin_snapshot()?;
     let observed = Witnesses::new(process);
@@ -741,6 +749,14 @@ fn observe_target(
     key: &str,
     include_context: bool,
 ) -> Result<(Value, Option<UiContext>)> {
+    // These offsets belong to the reviewed Linux build only; a macOS process
+    // uses the hoi4_research / hoi4_technology_list reads instead.
+    if process.string_abi() != crate::memory::StringAbi::LibStdCxx {
+        return Err(Error::new(
+            "capability_unavailable",
+            "Research tree node reads are reviewed for the Linux build only",
+        ));
+    }
     let start = Instant::now();
     process.begin_snapshot()?;
     let observed = Witnesses::new(process);
@@ -1037,8 +1053,12 @@ mod string_abi_tests {
         assert_eq!(reader.string_abi(), StringAbi::LibCxx);
         assert_eq!(
             crate::game::layout(&reader).build_id,
-            "089EA519-6780-353B-8E39-4E9309B444D4"
+            "DFA875A5-25BA-35E0-9736-627F8A5C4396"
         );
+    }    #[test]
+    fn macos_refuses_linux_research_layout_before_reading() {
+        let error = nodes(&LibCxxProcess).unwrap_err();
+        assert_eq!(error.code, "capability_unavailable");
     }
 }
 

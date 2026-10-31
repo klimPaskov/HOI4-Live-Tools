@@ -188,7 +188,7 @@ pub(super) fn named(
     key: &str,
     paths: &mut Vec<(u64, Vec<u64>)>,
 ) -> Result<Option<u64>> {
-    let children = members(r, parent + 0xd30, 4096)?;
+    let children = members(r, parent + 0xe50, 4096)?;
     let mut found = None;
     for &child in &children {
         if gui_tree::name(r, child, base)?.as_deref() == Some(key) && found.replace(child).is_some()
@@ -233,20 +233,20 @@ fn panel(r: &Reader<'_>, base: u64, idler: u64, manager: u64, registry: u64) -> 
     if object == 0 {
         return Ok(out);
     }
-    exact(r, base, object, 0x343aa90)?;
+    exact(r, base, object, 0x3647478)?;
     // Constructor/base helper chain, not offsets inferred from another view.
-    if r.u64(object + 0x428)? != idler || r.u64(object + 0x30)? != manager {
+    if r.u64(object + 0x488)? != idler || r.u64(object + 0x30)? != manager {
         return Err(invalid(
             "Mac construction view must retain both own backlinks",
         ));
     }
-    let root = r.u64(object + 0x430)?;
+    let root = r.u64(object + 0x490)?;
     if root != 0 {
         out.root = window(r, base, root, registry)?;
         out.flags = Some(r.byte(out.root + 0x95)?);
         // Exact CContainerWindow virtual +0x308 returns true for either state
         // equal to 2. State 1 may still animate: engine-visible is not settled.
-        let states = [r.i32(out.root + 0x12b8)?, r.i32(out.root + 0x1270)?];
+        let states = [r.i32(out.root + 0x13d8)?, r.i32(out.root + 0x1390)?];
         if states.iter().any(|state| !(0..=2).contains(state)) {
             return Err(invalid("Unknown Mac construction root transition state"));
         }
@@ -296,7 +296,7 @@ fn choices(
         };
         // The inspected factory installs CStandardGridBox. Null/base/other
         // derived grids do not authorize reading this list layout.
-        exact(r, base, grid, 0x34be068)?;
+        exact(r, base, grid, 0x36cca80)?;
         owner(r, grid + 0x58, registry)?;
         if !seen_grids.insert(grid) {
             return Err(invalid("Distinct construction grids required"));
@@ -312,14 +312,14 @@ fn choices(
                 return Err(invalid("Unique construction choice items required"));
             }
             pointer(item)?;
-            if r.u64(item)? == base + 0x343aca0 {
+            if r.u64(item)? == base + 0x3647690 {
                 // Exact Mac population 0x101edce50 inserts the view's +0x470
                 // singleton once into shared_item_grid (0x101edd678..6df).
                 // Constructor 0x101edfc50 installs this distinct primary and
                 // builds a callback at +0x20. Retain only its typed membership.
                 if grid_name != "shared_item_grid"
                     || conversion_seen
-                    || r.u64(panel.object + 0x470)? != item
+                    || r.u64(panel.object + 0x4d0)? != item
                 {
                     return Err(invalid(
                         "Conversion choice must be the own shared-grid singleton",
@@ -329,7 +329,7 @@ fn choices(
                 out.items.push(Item::Conversion { item });
                 continue;
             }
-            exact(r, base, item, 0x343a9b0)?;
+            exact(r, base, item, 0x3647398)?;
             let template = r.u64(item + 0x20)?;
             if !catalog.templates.contains_key(&template) || !seen_templates.insert(template) {
                 return Err(invalid(
@@ -364,7 +364,7 @@ fn choices(
         out.reason = "choice_button_unmaterialized";
         return Ok(out);
     };
-    exact(r, base, button, 0x34aafa0)?;
+    exact(r, base, button, 0x36b9738)?;
     owner(r, button + 0x58, registry)?;
     let button_flags = r.byte(button + 0x65)?;
     let button_state = r.i32(button + 0x9c)?;
@@ -456,7 +456,7 @@ fn observe(
     let target = catalog.required(key)?.clone();
     w.section("mac_construction_interface");
     let registry = r.u64(idler + 0x4c0)?;
-    exact(&r, base, registry, 0x34974d0)?;
+    exact(&r, base, registry, 0x36a5810)?;
     let manager = r.u64(idler + 0x670)?;
     pointer(manager)?;
     if r.u64(manager + 0x180)? != idler {
@@ -589,7 +589,7 @@ pub fn snapshot_with_options(
         .count();
     Ok(
         json!({"source":"native witnessed Mac construction UI probe",
-        "build_id":"089EA519-6780-353B-8E39-4E9309B444D4",
+        "build_id":"DFA875A5-25BA-35E0-9736-627F8A5C4396",
         "player":o.campaign.player,"date_raw":o.campaign.date_raw,"paused":o.campaign.paused,
         "building_id":o.binding.target.key,"state_id":state_id,"target_identity_verified":true,
         "selection":selection,

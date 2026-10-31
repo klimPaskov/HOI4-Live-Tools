@@ -373,7 +373,7 @@ fn original_non_queue_edges(r: &Reader<'_>, anchor: &SelectionAnchor) -> Result<
         return Err(changed("Construction production changed before payload"));
     }
     exact(r, b.base, b.production, g.production_vtable)?;
-    if r.u64(b.production + 0x290)? != b.country {
+    if r.u64(b.production + crate::game::layout(r).production(0x290))? != b.country {
         return Err(changed(
             "Construction production owner changed before queue payload",
         ));
@@ -381,7 +381,7 @@ fn original_non_queue_edges(r: &Reader<'_>, anchor: &SelectionAnchor) -> Result<
     if r.u64(idler + 0x4c0)? != b.registry || r.u64(idler + 0x670)? != b.manager {
         return Err(changed("Construction own interface changed before payload"));
     }
-    exact(r, b.base, b.registry, 0x34974d0)?;
+    exact(r, b.base, b.registry, 0x36a5810)?;
     if r.u64(b.manager + 0x180)? != idler {
         return Err(changed("Construction manager owner changed before payload"));
     }
@@ -510,7 +510,7 @@ fn canonical_with_queue(
     }
     w.section("mac_construction_selection_interface");
     let registry = r.u64(idler + 0x4c0)?;
-    exact(&r, base, registry, 0x34974d0)?;
+    exact(&r, base, registry, 0x36a5810)?;
     let manager = r.u64(idler + 0x670)?;
     construction::pointer(manager)?;
     if r.u64(manager + 0x180)? != idler {

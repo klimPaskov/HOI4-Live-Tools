@@ -335,12 +335,15 @@ pub(super) fn select_fleet(process: &dyn Process, keys: &MacKeys, name: &str, or
         let x = f64::from(card.frame.x) + f64::from(card.frame.w) / 2.0;
         let y = (f64::from(card.frame.y) + f64::from(card.frame.h) / 2.0).min(1040.0);
         click_at(keys, x, y)?;
+        // The panel's title edit box is filled while the panel opens; a read in that moment can see
+        // a half-written string (invalid_string, seen live on 1.19.4.1, 31 October 2026), so a failed
+        // read counts as "not open yet" here.
         let ok = wait(process, "fleet panel", |r, i| {
-            Ok(nui::panel_fleet(r, i)?.is_some())
+            Ok(nui::panel_fleet(r, i).ok().flatten().is_some())
         });
         if ok.is_ok() {
             pause(250);
-            if read(process, nui::panel_fleet)?.is_some_and(|n| same_name(&n, name)) {
+            if read(process, |r, i| Ok(nui::panel_fleet(r, i).ok().flatten()))?.is_some_and(|n| same_name(&n, name)) {
                 return Ok(());
             }
         }

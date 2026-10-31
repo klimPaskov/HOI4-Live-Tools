@@ -58,6 +58,12 @@ For campaign strategy and FAIR/META rules, read
   against own-country telemetry/screen; unknown builds and stale/torn reads fail
   explicitly. Native command posting is unproven; only verified ordinary player
   actions may ever enter a campaign command adapter.
+- Game updates: a new HOI4 build is refused (`unsupported_build`) until migrated.
+  macOS: `scripts/macos_build_migrate.py` (vtables, globals, functions),
+  `scripts/macos_field_migrate.py` / `scripts/macos_disp_match.py` (struct field
+  offsets by matched functions), then live class/value checks and real tool runs;
+  record results in `docs/HOI4_<version>_UPDATE.md`. Re-check hotkeys against
+  `keybinds/00_keybinds.txt` and `interface/*.gui` (1.19.4 moved Find to Ctrl+F).
 - Run `python -m unittest discover -s tests -v` after meaningful changes, plus
   targeted protocol/import/backend checks. Offline tests are not live evidence.
   Acceptance is a clean two-year Luna run, then the full recorded Germany and

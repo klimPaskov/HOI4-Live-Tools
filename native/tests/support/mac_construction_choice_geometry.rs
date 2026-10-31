@@ -32,23 +32,23 @@ fn geometric(count: usize, callback: bool) -> MacFixture {
     };
     f.int(MANAGER + 0x3a8, 17);
     for ancestor in [ROOT, POSSIBLE, SECTION, FRAME] {
-        f.int(ancestor + 0x12b8, 0);
-        f.int(ancestor + 0x1270, 0);
+        f.int(ancestor + 0x13d8, 0);
+        f.int(ancestor + 0x1390, 0);
     }
     for (field, value) in [
         (REGISTRY + 0x98, GRAPHICS),
-        (GRAPHICS, BASE + 0x33dafa8),
-        (BUTTON + 0xd0, GRAPHICS),
-        (BUTTON + 0xd8, SPRITE),
-        (BUTTON + 0xc0, 0),
-        (BUTTON + 0x178, PARENT),
-        (SPRITE, BASE + 0x34bdb10),
+        (GRAPHICS, BASE + 0x35e5b58),
+        (BUTTON + 0xd8, GRAPHICS),
+        (BUTTON + 0xe0, SPRITE),
+        (BUTTON + 0xc8, 0),
+        (BUTTON + 0x180, PARENT),
+        (SPRITE, BASE + 0x36cc528),
         (SPRITE + 8, SPRITE_TYPE),
         (SPRITE + 0x108, PARENT),
         (SPRITE + 0x138, BUTTON),
-        (FRAME + 0x1238, PARENT),
-        (PARENT, BASE + 0x34b0428),
-        (BASE + 0x35dbf60, 0),
+        (FRAME + 0x1358, PARENT),
+        (PARENT, BASE + 0x36bea88),
+        (BASE + 0x37ed910, 0),
     ] {
         f.word(field, value);
     }
@@ -56,9 +56,9 @@ fn geometric(count: usize, callback: bool) -> MacFixture {
         f.int(GRAPHICS + offset, value);
     }
     f.put(GRAPHICS + 0x2c5b0, &1_f32.to_le_bytes());
-    f.put(BASE + 0x3519990, &[0]);
-    f.put(BUTTON + 0xcc, &[8]);
-    f.put(BUTTON + 0x1d1, &[0]);
+    f.put(BASE + 0x372b2b8, &[0]);
+    f.put(BUTTON + 0xd4, &[8]);
+    f.put(BUTTON + 0x1d9, &[0]);
     f.put(PARENT + 0x128, &[1]);
     rectangle(&mut f, 300, 200, 120, 40);
     f
@@ -70,7 +70,7 @@ fn with_routes(f: &mut MacFixture, sources: &[u64], targets: &[u64]) {
     f.int(GRAPHICS + 0x30, targets.len() as i32);
     f.int(GRAPHICS + 0x34, targets.len() as i32);
     for (i, target) in targets.iter().enumerate() {
-        f.word(ROUTE + i as u64 * 16, BASE + 0x34b0ab8);
+        f.word(ROUTE + i as u64 * 16, BASE + 0x36bf490);
         f.word(ROUTE + i as u64 * 16 + 8, *target);
     }
     for (field, value) in [(REGISTRY + 0x120, BUTTON), (REGISTRY + 0x128, BUTTON)] {
@@ -125,15 +125,15 @@ fn defaults_keep_geometry_and_routing_payload_unmapped_and_unread() {
         &[
             MANAGER + 0x3a8,
             REGISTRY + 0x98,
-            BUTTON + 0xd0,
             BUTTON + 0xd8,
-            BUTTON + 0xcc,
-            BUTTON + 0x178,
-            FRAME + 0x1238,
-            POSSIBLE + 0x12b8,
-            SECTION + 0x1270,
-            BASE + 0x3519990,
-            BASE + 0x35dbf60,
+            BUTTON + 0xe0,
+            BUTTON + 0xd4,
+            BUTTON + 0x180,
+            FRAME + 0x1358,
+            POSSIBLE + 0x13d8,
+            SECTION + 0x1390,
+            BASE + 0x372b2b8,
+            BASE + 0x37ed910,
         ],
     );
 }
@@ -222,7 +222,7 @@ fn callback_geometry_and_routing_share_one_target_and_leave_conversion_opaque() 
 #[test]
 fn exact_animated_renderer_uses_per_frame_size() {
     let mut f = geometric(1, false);
-    f.word(SPRITE, BASE + 0x34afed0);
+    f.word(SPRITE, BASE + 0x36be530);
     f.int(SPRITE_TYPE + 0x78, 2);
     f.int(SPRITE_TYPE + 0x8c, 240);
     assert_eq!(
@@ -234,10 +234,10 @@ fn exact_animated_renderer_uses_per_frame_size() {
 #[test]
 fn null_graphical_parent_does_not_read_parent_or_attachment_payload() {
     let mut f = geometric(1, false);
-    f.word(BUTTON + 0x178, 0);
+    f.word(BUTTON + 0x180, 0);
     for (field, size) in [
         (SPRITE + 0x108, 8),
-        (FRAME + 0x1238, 8),
+        (FRAME + 0x1358, 8),
         (PARENT, 8),
         (PARENT + 0x128, 1),
     ] {
@@ -253,7 +253,7 @@ fn null_graphical_parent_does_not_read_parent_or_attachment_payload() {
     );
     not_read(
         &f,
-        &[SPRITE + 0x108, FRAME + 0x1238, PARENT, PARENT + 0x128],
+        &[SPRITE + 0x108, FRAME + 0x1358, PARENT, PARENT + 0x128],
     );
 }
 
@@ -268,7 +268,7 @@ fn unrelated_hidden_sections_do_not_become_target_geometry_ancestors() {
         true
     );
     for section in [0x460000, 0x470000, 0x480000] {
-        not_read(&f, &[section + 0x12b8, section + 0x1270]);
+        not_read(&f, &[section + 0x13d8, section + 0x1390]);
     }
 }
 
@@ -278,19 +278,19 @@ fn every_hidden_target_ancestor_prevents_geometry_without_renderer_reads() {
         let mut f = geometric(1, false);
         f.put(ancestor + 0x95, &[0]);
         unavailable(&geometry(&f, false, false).unwrap());
-        not_read(&f, &[BUTTON + 0xd8, SPRITE, GRAPHICS]);
+        not_read(&f, &[BUTTON + 0xe0, SPRITE, GRAPHICS]);
     }
 }
 
 #[test]
 fn every_animating_target_ancestor_prevents_geometry_without_renderer_reads() {
     for ancestor in [ROOT, POSSIBLE, SECTION, FRAME] {
-        for offset in [0x12b8, 0x1270] {
+        for offset in [0x13d8, 0x1390] {
             for state in [1, 2] {
                 let mut f = geometric(1, false);
                 f.int(ancestor + offset, state);
                 unavailable(&geometry(&f, false, false).unwrap());
-                not_read(&f, &[BUTTON + 0xd8, SPRITE, GRAPHICS]);
+                not_read(&f, &[BUTTON + 0xe0, SPRITE, GRAPHICS]);
             }
         }
     }
@@ -299,14 +299,14 @@ fn every_animating_target_ancestor_prevents_geometry_without_renderer_reads() {
 #[test]
 fn unknown_target_ancestor_transition_is_a_structural_refusal() {
     for ancestor in [ROOT, POSSIBLE, SECTION, FRAME] {
-        for offset in [0x12b8, 0x1270] {
+        for offset in [0x13d8, 0x1390] {
             let mut f = geometric(1, false);
             f.int(ancestor + offset, 3);
             assert_eq!(
                 geometry(&f, false, false).unwrap_err().code,
                 "invalid_construction"
             );
-            not_read(&f, &[BUTTON + 0xd8, SPRITE]);
+            not_read(&f, &[BUTTON + 0xe0, SPRITE]);
         }
     }
 }
@@ -315,11 +315,11 @@ fn unknown_target_ancestor_transition_is_a_structural_refusal() {
 fn coherent_button_and_normal_path_gates_report_unavailability_without_callback_reads() {
     for (field, value) in [
         (BUTTON + 0x65, 0),
-        (BUTTON + 0xcc, 0),
-        (BUTTON + 0xcc, 0x48),
-        (BUTTON + 0x1d1, 1),
+        (BUTTON + 0xd4, 0),
+        (BUTTON + 0xd4, 0x48),
+        (BUTTON + 0x1d9, 1),
         (PARENT + 0x128, 0),
-        (BASE + 0x3519990, 1),
+        (BASE + 0x372b2b8, 1),
     ] {
         let mut f = geometric(1, false);
         f.put(field, &[value]);
@@ -331,7 +331,7 @@ fn coherent_button_and_normal_path_gates_report_unavailability_without_callback_
         f.int(BUTTON + 0x9c, state);
         unavailable(&geometry(&f, false, false).unwrap());
     }
-    for field in [BUTTON + 0xc0, BASE + 0x35dbf60] {
+    for field in [BUTTON + 0xc8, BASE + 0x37ed910] {
         let mut f = geometric(1, false);
         f.word(field, FOREIGN);
         unavailable(&geometry(&f, false, false).unwrap());
@@ -388,23 +388,23 @@ fn requested_geometry_never_uses_an_unsupported_canvas_profile() {
         let mut f = geometric(1, false);
         f.int(field, value);
         unavailable(&geometry(&f, false, false).unwrap());
-        not_read(&f, &[BUTTON + 0xd8, SPRITE]);
+        not_read(&f, &[BUTTON + 0xe0, SPRITE]);
     }
     let mut f = geometric(1, false);
     f.put(GRAPHICS + 0x2c5b0, &1.5_f32.to_le_bytes());
     unavailable(&geometry(&f, false, false).unwrap());
-    not_read(&f, &[BUTTON + 0xd8, SPRITE]);
+    not_read(&f, &[BUTTON + 0xe0, SPRITE]);
 }
 
 #[test]
 fn foreign_graphics_renderer_target_or_parent_joins_cannot_be_adopted() {
     for (field, value) in [
-        (BUTTON + 0xd0, FOREIGN),
+        (BUTTON + 0xd8, FOREIGN),
         (SPRITE + 0x138, FOREIGN),
         (SPRITE + 0x108, FOREIGN),
-        (FRAME + 0x1238, FOREIGN),
+        (FRAME + 0x1358, FOREIGN),
         (PARENT, BASE + 0x34b0430),
-        (SPRITE, BASE + 0x34c0380),
+        (SPRITE, BASE + 0x36cee08),
     ] {
         let mut f = geometric(1, false);
         f.word(field, value);
@@ -444,21 +444,21 @@ fn malformed_sprite_geometry_is_not_downgraded_to_coherent_unavailability() {
 fn all_requested_geometry_fields_and_bindings_share_final_witnesses() {
     for field in [
         MANAGER + 0x3a8,
-        BASE + 0x35196c0,
-        BASE + 0x3519990,
-        BASE + 0x35dbf60,
+        BASE + 0x372afc0,
+        BASE + 0x372b2b8,
+        BASE + 0x37ed910,
         POSSIBLE + 0x95,
         SECTION + 0x95,
         FRAME + 0x95,
-        POSSIBLE + 0x12b8,
-        SECTION + 0x1270,
-        FRAME + 0x1238,
-        BUTTON + 0xcc,
-        BUTTON + 0xc0,
-        BUTTON + 0x1d1,
-        BUTTON + 0x178,
-        BUTTON + 0xd0,
+        POSSIBLE + 0x13d8,
+        SECTION + 0x1390,
+        FRAME + 0x1358,
+        BUTTON + 0xd4,
+        BUTTON + 0xc8,
+        BUTTON + 0x1d9,
+        BUTTON + 0x180,
         BUTTON + 0xd8,
+        BUTTON + 0xe0,
         REGISTRY + 0x98,
         GRAPHICS,
         GRAPHICS + 0x170,

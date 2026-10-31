@@ -52,13 +52,13 @@ struct Ui {
 /// division +0xc0, name +0x160).
 const MACOS: Ui = Ui {
     country_divisions: 0x250,
-    division_vtable: 0x32af5a8,
+    division_vtable: 0x34ace60,
     division_group: 0xc0,
     division_handle: 0x18,
     group_name: 0x160,
     selection_size: 0x540,
     manager: 0x670,
-    leader_view_vtable: 0x3463220,
+    leader_view_vtable: 0x3670a20,
     leader_view: 0x1c0,
     leader_portraits: 0x38,
     portrait_window: 0x28,
@@ -67,21 +67,21 @@ const MACOS: Ui = Ui {
     group_orders: 0x98,
     division_location: 0x1f0,
     province_id: 0x9c,
-    order_vtable: 0x3313328,
+    order_vtable: 0x3512bf0,
     // Drawing an offensive line added one COrderInstance under each list.
     order_children: [0x1c8, 0x2a0],
     // Commander list of the army panel: CArmiesView (+0x1d8) holds the
-    // CArmyLeaderWindow (+0x420, root +0x4b8); choosing a general set the
+    // CArmyLeaderWindow (+0x480, root +0x518 in 1.19.4; +0x420/+0x4b8 in 1.19.3); choosing a general set the
     // group's leader (+0x88, name +0x38).
     armies_view: 0x1d8,
-    leader_window: 0x420,
-    leader_window_root: 0x4b8,
+    leader_window: 0x480,
+    leader_window_root: 0x518,
     grid_items: 0x190,
     item_container: 0x10,
     text: 0x100,
     group_leader: 0x88,
     leader_name: 0x38,
-    container_vtable: 0x34ac0b0,
+    container_vtable: 0x36ba978,
     // An army's CArmyGroup (name +0x160, leader +0x88 like an army); its
     // card's group handle is the army group's +0x8. Mapped live on
     // 18 October 2026 after grouping Army 7 and Army 8.

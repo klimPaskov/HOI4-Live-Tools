@@ -109,7 +109,7 @@ impl Fixture {
         f.int(GS + g.player_tag, 1);
         f.int(GS + g.date, DATE);
         let (playthrough, speed, paused, difficulty, historical, slot_table) = match abi {
-            StringAbi::LibCxx => (0x6c8, 0x47c, 0x679, 0x5d0, 0x5d8, 0x339e488),
+            StringAbi::LibCxx => (0x6c8, 0x47c, 0x679, 0x5d0, 0x5d8, 0x35a71f8),
             StringAbi::LibStdCxx => (0x718, 0x4b4, 0x6c1, 0x620, 0x628, 0x4210898),
         };
         f.int(GS + speed, 0);

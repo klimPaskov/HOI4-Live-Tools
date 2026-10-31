@@ -91,7 +91,7 @@ fn live_cancel_last_conveyor() {
     let rect = read(process.as_ref(), |r: &Reader<'_>, image| {
         let idler = r.u64(image + crate::game::layout(r).idler_global)?;
         let view = r.u64(r.u64(idler + 0x670)? + 0x138)?;
-        let root = gui_tree::container(r, r.u64(view + 0x430)?, image)?.unwrap();
+        let root = gui_tree::container(r, r.u64(view + 0x490)?, image)?.unwrap();
         let grid = find(r, image, root, "deployments_list_gridbox")?.expect("grid");
         let (_, data, count) = r.array_header(grid + 0x190)?;
         let mut found = None;

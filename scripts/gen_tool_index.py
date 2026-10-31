@@ -17,6 +17,21 @@ for f in files:
         except Exception:
             pass
         tools.setdefault(name, (desc, needs_lease, f.name))
+# Tools built offline from GUI definitions (fleetops/invasion/faction modules) assemble their text with
+# format!("{}...", kit::UNVALIDATED) or schema("name", &format!("...")); the prefix is added here.
+UNVALIDATED = "UNVALIDATED (no live test yet) - "
+constants = {"TOOL": "hoi4_naval_invasion", "INCOMING": "hoi4_diplomacy_incoming"}
+pat_schema = re.compile(r'schema\(\s*"(hoi4_[a-z0-9_]+)"\s*,\s*&format!\(\s*"((?:[^"\\]|\\.)*)"', re.S)
+pat_format = re.compile(r'"name"\s*:\s*(?:"(hoi4_[a-z0-9_]+)"|(TOOL|INCOMING))\s*,\s*"description"\s*:\s*format!\(\s*"\{\}((?:[^"\\]|\\.)*)"', re.S)
+for f in files:
+    text = f.read_text(errors="replace")
+    for m in pat_schema.finditer(text):
+        tools.setdefault(m.group(1), (UNVALIDATED + m.group(2), True, f.name))
+    for m in pat_format.finditer(text):
+        name = m.group(1) or constants[m.group(2)]
+        # The read form of hoi4_diplomacy_incoming needs no lease; every other one is an action.
+        needs_lease = name != "hoi4_diplomacy_incoming"
+        tools.setdefault(name, (UNVALIDATED + m.group(3), needs_lease, f.name))
 domains = [
     ("Time, plans and events", r"^hoi4_(time|plan|plan_run|wait_for|events|event_choose|capabilities|input_lease|daily_governor|overview)$"),
     ("Economy, construction and production", r"economy|resource|industry|construction|production|state_slots|shortage|trade"),
@@ -43,7 +58,13 @@ for title, _ in domains + [("Other", "")]:
         continue
     out += [f"## {title}", ""]
     for n, d, a in rows:
-        first = re.split(r'(?<=[.;:])\s', d.strip(), maxsplit=1)[0][:260]
+        tag = "UNVALIDATED (no live test yet):"
+        body = d.strip()
+        prefix = ""
+        if body.startswith(tag):
+            prefix, body = tag + " ", body[len(tag):].strip()
+        first = prefix + re.split(r'(?<=[.;:])\s', body, maxsplit=1)[0]
+        first = first[:260]
         out.append(f"- `{n}` ({'A' if a else 'R'}): {first}")
     out.append("")
 print("\n".join(out))

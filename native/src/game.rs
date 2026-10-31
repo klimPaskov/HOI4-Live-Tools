@@ -42,6 +42,10 @@ pub(crate) struct Layout {
     pub(crate) type_metadata: (u64, u64),
     pub(crate) type_names: (u64, u64),
     focus_name: u64,
+    /// CProductionStatus fields at or after `production_shift_from` moved by `production_shift`
+    /// bytes in this build (1.19.4 inserted a 0x18-byte array before the country back-pointer).
+    production_shift_from: u64,
+    production_shift: u64,
     pub(crate) build_id: &'static str,
     source: &'static str,
 }
@@ -74,18 +78,20 @@ pub(crate) const LINUX: Layout = Layout {
     type_metadata: (0x41adde0, 0x436d9f8),
     type_names: (0x3506000, 0x3975f39),
     focus_name: 0x60,
+    production_shift_from: u64::MAX,
+    production_shift: 0,
     build_id: BUILD_ID,
     source: "native process_vm_readv",
 };
 /// macOS Mach-O 089EA519 (libc++), mapped live on 18 October 2026 from RTTI
 /// roots, value changes across unpause, speed and player switches, and RTTI joins.
 pub(crate) const MACOS: Layout = Layout {
-    gs_global: 0x3519740,
-    idler_global: 0x35196c0,
-    technology_db_global: 0x34d0de0,
-    tag_db_global: 0x3506580,
-    gs_vtable: 0x3306260,
-    idler_vtable: 0x3308f90,
+    gs_global: 0x372b040,
+    idler_global: 0x372afc0,
+    technology_db_global: 0x3706540,
+    tag_db_global: 0x3717d50,
+    gs_vtable: 0x35044e8,
+    idler_vtable: 0x35089d8,
     playthrough: 0x6c8,
     date: 0x428,
     speed: 0x47c,
@@ -98,19 +104,31 @@ pub(crate) const MACOS: Layout = Layout {
     tag_stride: 24,
     country_focus_progress: 0x1108,
     country_technology_status: 0xd08,
-    country_vtable: 0x337bc38,
+    country_vtable: 0x357e388,
     country_production: 0xd10,
     country_politics: 0xd38,
     country_focus_tree: 0x10f8,
-    production_vtable: 0x338b678,
-    politics_vtable: 0x3387148,
-    type_metadata: (0x32ade40, 0x34c8ab8),
-    type_names: (0x2cfc2a0, 0x2f18588),
+    production_vtable: 0x358e0c8,
+    politics_vtable: 0x3589e48,
+    type_metadata: (0x34ab4e0, 0x36d78a8),
+    type_names: (0x2e970a0, 0x312b4d8),
     focus_name: 0x50,
-    build_id: "089EA519-6780-353B-8E39-4E9309B444D4",
+    production_shift_from: 0x288,
+    production_shift: 0x18,
+    build_id: "DFA875A5-25BA-35E0-9736-627F8A5C4396",
     source: "native mach_vm_read",
 };
 /// Each supported string ABI belongs to exactly one inspected build.
+impl Layout {
+    /// Offset of a CProductionStatus field given its 1.19.3 (Linux-reviewed) offset.
+    pub(crate) fn production(&self, offset: u64) -> u64 {
+        if offset >= self.production_shift_from {
+            offset + self.production_shift
+        } else {
+            offset
+        }
+    }
+}
 pub(crate) fn layout(r: &Reader<'_>) -> &'static Layout {
     match r.string_abi() {
         crate::memory::StringAbi::LibStdCxx => &LINUX,

@@ -351,7 +351,7 @@ fn unloaded_size_or_hit_resource_is_not_a_proved_miss() {
 fn unknown_resource_type_refuses_before_interpreting_its_dimensions() {
     let r = resource([100, 20], [1, 1]);
     let unknown = SpriteType {
-        primary_rva: 0x34c0380,
+        primary_rva: 0x36cee08,
         texture: [-1, i32::MAX],
         tiles: [0, 0],
         ..r

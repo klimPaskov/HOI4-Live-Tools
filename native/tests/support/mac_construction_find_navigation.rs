@@ -28,32 +28,32 @@ fn fixture() -> Fixture {
     let mut f = Fixture::new(StringAbi::LibCxx);
     for (at, value) in [
         (COUNTRY + 0xd10, PRODUCTION),
-        (PRODUCTION, BASE + 0x338b678),
-        (PRODUCTION + 0x290, COUNTRY),
+        (PRODUCTION, BASE + 0x358e0c8),
+        (PRODUCTION + 0x2a8, COUNTRY),
         (IDLER + 0x4c0, REGISTRY),
-        (REGISTRY, BASE + 0x34974d0),
+        (REGISTRY, BASE + 0x36a5810),
         (IDLER + 0x670, MANAGER),
         (MANAGER + 0x180, IDLER),
         (MANAGER + 0x190, FIND),
-        (FIND, BASE + 0x3457c38),
-        (FIND + 0xc30, IDLER),
-        (FIND + 0xc38, WINDOW),
-        (WINDOW, BASE + 0x34ac0b0),
+        (FIND, BASE + 0x3665308),
+        (FIND + 0xd50, IDLER),
+        (FIND + 0xd58, WINDOW),
+        (WINDOW, BASE + 0x36ba978),
         (WINDOW + 0x88, REGISTRY),
-        (FIND + 0xc88, ROW),
-        (ROW, BASE + 0x34580d8),
-        (ROW + 0x3f8, STATE),
-        (IDLER + 0x708, CAMERA),
-        (STATE, BASE + 0x337caf0),
+        (FIND + 0xda8, ROW),
+        (ROW, BASE + 0x36657b0),
+        (ROW + 0x458, STATE),
+        (IDLER + 0x718, CAMERA),
+        (STATE, BASE + 0x357f410),
         (STATE + 0x20, TEMPLATE),
-        (TEMPLATE, BASE + 0x337de78),
-        (BASE + 0x35dc058, REGISTRY),
-        (FIND + 0xc40, EDIT),
-        (EDIT, BASE + 0x34add98),
-        (EDIT + 0x180, BASE + 0x34ae0c8),
+        (TEMPLATE, BASE + 0x3580798),
+        (BASE + 0x37eda08, REGISTRY),
+        (FIND + 0xd60, EDIT),
+        (EDIT, BASE + 0x36bc6a0),
+        (EDIT + 0x180, BASE + 0x36bc9e0),
         (EDIT + 0x58, REGISTRY),
         (EDIT + 0x50, KIND),
-        (KIND, BASE + 0x34ae140),
+        (KIND, BASE + 0x36bca58),
         (REGISTRY + 0x138, EDIT),
         (REGISTRY + 0x210, EDIT + 0x180),
     ] {
@@ -63,33 +63,33 @@ fn fixture() -> Fixture {
     // Mouse opener/focus-only readers deliberately do not need these fields.
     for (at, value) in [
         (REGISTRY + 0x98, 0x9c0000),
-        (0x9c0000, BASE + 0x33dafa8),
+        (0x9c0000, BASE + 0x35e5b58),
         (IDLER + 0x4f8, 0x9d0000),
-        (BASE + 0x3639ad8, 0x9d0000),
+        (BASE + 0x384b758, 0x9d0000),
         (0x9d0038, IDLER),
         (0x9d0300, 0x9c0000),
         (0x9d0308, REGISTRY),
-        (BASE + 0x3308f90 + 0x20, BASE + 0x776fe0),
-        (BASE + 0x35d8c60, 0x9e0000),
-        (0x9e0000, BASE + 0x34a6760),
-        (BASE + 0x35d8dd0, 0),
+        (BASE + 0x35089d8 + 0x20, BASE + 0x7bb2c0),
+        (BASE + 0x37ea608, 0x9e0000),
+        (0x9e0000, BASE + 0x36b5160),
+        (BASE + 0x37ea778, 0),
     ] {
         f.word(at, value);
     }
-    f.put(IDLER + 0x7b5, &[1]);
-    f.put(BASE + 0x3519990, &[0]);
+    f.put(IDLER + 0x7e1, &[1]);
+    f.put(BASE + 0x372b2b8, &[0]);
     f.put(0x9e0044, &[0]);
     f.put(WINDOW + 0x95, &[8]);
-    f.int(WINDOW + 0x12b8, 0);
-    f.int(WINDOW + 0x1270, 0);
-    f.string(FIND + 0xc48, "");
-    f.word(FIND + 0xc90, ENTRIES);
-    f.int(FIND + 0xc98, 1);
-    f.int(FIND + 0xc9c, 0);
+    f.int(WINDOW + 0x13d8, 0);
+    f.int(WINDOW + 0x1390, 0);
+    f.string(FIND + 0xd68, "");
+    f.word(FIND + 0xdb0, ENTRIES);
+    f.int(FIND + 0xdb8, 1);
+    f.int(FIND + 0xdbc, 0);
     f.put(ENTRIES, &[0; 0x40]);
     f.word(ENTRIES + 0x30, STATE);
     f.int(ENTRIES + 0x38, 2);
-    f.int(ROW + 0x408, 2);
+    f.int(ROW + 0x468, 2);
     let mut states = vec![0; 65];
     states[64] = STATE;
     f.array(GS + 0x290, &states);
@@ -107,13 +107,13 @@ fn fixture() -> Fixture {
     f.put(EDIT + 0x64, &0x20805u32.to_le_bytes());
     f.put(EDIT + 0x239, &[0x91]);
     f.string(KIND + 0x28, "to_find_text");
-    f.array(WINDOW + 0xd30, &[EDIT]);
+    f.array(WINDOW + 0xe50, &[EDIT]);
     f
 }
 
 fn full_query(f: &mut Fixture) {
-    f.string(FIND + 0xc48, "64");
-    f.int(FIND + 0xc9c, 1);
+    f.string(FIND + 0xd68, "64");
+    f.int(FIND + 0xdbc, 1);
 }
 fn closed(f: &mut Fixture) {
     f.put(WINDOW + 0x95, &[0]);
@@ -146,14 +146,14 @@ fn bind_never_opens_focuses_or_clears_an_unready_find() {
     for mode in 0..8 {
         let mut f = fixture();
         match mode {
-            0 => f.word(FIND + 0xc38, 0),
+            0 => f.word(FIND + 0xd58, 0),
             1 => f.put(WINDOW + 0x95, &[0]),
-            2 => f.int(WINDOW + 0x12b8, 1),
+            2 => f.int(WINDOW + 0x13d8, 1),
             3 => f.word(REGISTRY + 0x138, 0),
             4 => f.word(REGISTRY + 0x210, 0),
-            5 => f.string(FIND + 0xc48, "6"),
-            6 => f.string(FIND + 0xc48, "\n"),
-            _ => f.word(FIND + 0xc40, 0),
+            5 => f.string(FIND + 0xd68, "6"),
+            6 => f.string(FIND + 0xd68, "\n"),
+            _ => f.word(FIND + 0xd60, 0),
         }
         assert!(bind(&f, 64).is_err(), "mode {mode}");
     }
@@ -171,11 +171,11 @@ fn decimal_prefix_progression_exposes_only_the_one_next_digit() {
     let mut f = fixture();
     let anchor = bind(&f, 64).unwrap();
     assert!(anchor.observe_prefix(&f, "6").unwrap().is_none());
-    f.string(FIND + 0xc48, "6");
+    f.string(FIND + 0xd68, "6");
     let proof = anchor.observe_prefix(&f, "6").unwrap().unwrap();
     assert_eq!(proof.next_digit(), Some('4'));
     assert!(anchor.observe_prefix(&f, "64").unwrap().is_none());
-    f.string(FIND + 0xc48, "64");
+    f.string(FIND + 0xd68, "64");
     let proof = anchor.observe_prefix(&f, "64").unwrap().unwrap();
     assert_eq!(proof.expected_prefix(), "64");
     assert_eq!(proof.next_digit(), None);
@@ -192,7 +192,7 @@ fn canonical_decimal_supports_single_digit_and_internal_zero_at_state_bound() {
         let anchor = bind(&f, id as i32).unwrap();
         let decimal = id.to_string();
         for index in 0..decimal.len() {
-            f.string(FIND + 0xc48, &decimal[..index]);
+            f.string(FIND + 0xd68, &decimal[..index]);
             let proof = anchor
                 .observe_prefix(&f, &decimal[..index])
                 .unwrap()
@@ -203,8 +203,8 @@ fn canonical_decimal_supports_single_digit_and_internal_zero_at_state_bound() {
                 .unwrap()
                 .is_none());
         }
-        f.string(FIND + 0xc48, &decimal);
-        f.int(FIND + 0xc9c, 1);
+        f.string(FIND + 0xd68, &decimal);
+        f.int(FIND + 0xdbc, 1);
         assert!(anchor.observe_return(&f).unwrap().is_some());
     }
 }
@@ -223,7 +223,7 @@ fn skipped_repeated_reversed_or_unrelated_coherent_query_never_advances() {
     ] {
         let mut f = fixture();
         let anchor = bind(&f, 64).unwrap();
-        f.string(FIND + 0xc48, actual);
+        f.string(FIND + 0xd68, actual);
         assert_eq!(
             anchor.observe_prefix(&f, expected).unwrap_err().code,
             "construction_state_changed",
@@ -282,7 +282,7 @@ fn every_digit_and_return_require_both_current_focus_aliases_and_idle_visibility
         if hide {
             f.put(WINDOW + 0x95, &[0]);
         } else {
-            f.int(WINDOW + 0x1270, 2);
+            f.int(WINDOW + 0x1390, 2);
         }
         assert_eq!(
             anchor.observe_prefix(&f, "").unwrap_err().code,
@@ -297,10 +297,10 @@ fn changed_edit_pointer_or_child_membership_refuses_before_replacement_payload()
         let mut f = fixture();
         let anchor = bind(&f, 64).unwrap();
         match edge {
-            0 => f.word(FIND + 0xc40, FOREIGN),
-            1 => f.array(WINDOW + 0xd30, &[EDIT, FOREIGN]),
-            2 => f.array(WINDOW + 0xd30, &[EDIT, EDIT]),
-            _ => f.array(WINDOW + 0xd30, &[]),
+            0 => f.word(FIND + 0xd60, FOREIGN),
+            1 => f.array(WINDOW + 0xe50, &[EDIT, FOREIGN]),
+            2 => f.array(WINDOW + 0xe50, &[EDIT, EDIT]),
+            _ => f.array(WINDOW + 0xe50, &[]),
         }
         assert_eq!(
             anchor.observe_prefix(&f, "").unwrap_err().code,
@@ -311,7 +311,7 @@ fn changed_edit_pointer_or_child_membership_refuses_before_replacement_payload()
             }
         );
         assert!(f.untouched(FOREIGN, 0x500));
-        assert!(f.untouched(FIND + 0xc48, 24));
+        assert!(f.untouched(FIND + 0xd68, 24));
     }
 }
 
@@ -319,36 +319,36 @@ fn changed_edit_pointer_or_child_membership_refuses_before_replacement_payload()
 fn rebuilt_window_is_not_adopted_even_with_same_own_control_and_name() {
     let mut f = fixture();
     let anchor = bind(&f, 64).unwrap();
-    f.word(FOREIGN, BASE + 0x34ac0b0);
+    f.word(FOREIGN, BASE + 0x36ba978);
     f.word(FOREIGN + 0x88, REGISTRY);
     f.put(FOREIGN + 0x95, &[8]);
-    f.int(FOREIGN + 0x12b8, 0);
-    f.int(FOREIGN + 0x1270, 0);
-    f.array(FOREIGN + 0xd30, &[EDIT]);
-    f.word(FIND + 0xc38, FOREIGN);
+    f.int(FOREIGN + 0x13d8, 0);
+    f.int(FOREIGN + 0x1390, 0);
+    f.array(FOREIGN + 0xe50, &[EDIT]);
+    f.word(FIND + 0xd58, FOREIGN);
     assert_eq!(
         anchor.observe_prefix(&f, "").unwrap_err().code,
         "construction_state_changed"
     );
-    assert!(f.untouched(FOREIGN, 0x1300));
-    assert!(f.untouched(FIND + 0xc48, 24));
+    assert!(f.untouched(FOREIGN, 0x1420));
+    assert!(f.untouched(FIND + 0xd68, 24));
 }
 
 #[test]
 fn original_scope_target_and_global_gui_refuse_before_new_payload() {
     let states = fixture().get_word(GS + 0x290);
     for field in [
-        BASE + 0x3519740,
-        BASE + 0x35196c0,
-        BASE + 0x34d0de0,
+        BASE + 0x372b040,
+        BASE + 0x372afc0,
+        BASE + 0x3706540,
         COUNTRY + 0xd10,
         IDLER + 0x4c0,
         IDLER + 0x670,
         MANAGER + 0x190,
-        IDLER + 0x708,
+        IDLER + 0x718,
         states + 64 * 8,
         STATE + 0x20,
-        BASE + 0x35dc058,
+        BASE + 0x37eda08,
     ] {
         let mut f = fixture();
         let anchor = bind(&f, 64).unwrap();
@@ -358,8 +358,8 @@ fn original_scope_target_and_global_gui_refuse_before_new_payload() {
             "construction_state_changed",
             "{field:x}"
         );
-        assert!(f.untouched(FOREIGN, 0x1300));
-        assert!(f.untouched(FIND + 0xc48, 24));
+        assert!(f.untouched(FOREIGN, 0x1420));
+        assert!(f.untouched(FIND + 0xd68, 24));
     }
 }
 
@@ -420,18 +420,18 @@ fn return_requires_complete_exact_query_and_original_first_state_object_and_id()
     let mut f = fixture();
     let anchor = bind(&f, 64).unwrap();
     for query in ["", "6", "064", "65"] {
-        f.string(FIND + 0xc48, query);
+        f.string(FIND + 0xd68, query);
         assert_eq!(
             anchor.observe_return(&f).unwrap_err().code,
             "construction_state_changed"
         );
     }
-    f.string(FIND + 0xc48, "64");
+    f.string(FIND + 0xd68, "64");
     assert!(anchor.observe_return(&f).unwrap().is_none());
     full_query(&mut f);
-    f.word(FIND + 0xc88, 0);
+    f.word(FIND + 0xda8, 0);
     assert!(anchor.observe_return(&f).unwrap().is_none());
-    f.word(FIND + 0xc88, ROW);
+    f.word(FIND + 0xda8, ROW);
     let proof = anchor.observe_return(&f).unwrap().unwrap();
     assert!(proof.observation().first_row_is_requested_state());
     assert_eq!(
@@ -442,11 +442,11 @@ fn return_requires_complete_exact_query_and_original_first_state_object_and_id()
 
 #[test]
 fn other_kinds_or_foreign_state_result_never_prove_return() {
-    for (kind, offset) in [(1, 0x3f0), (3, 0x400), (0, 0)] {
+    for (kind, offset) in [(1, 0x450), (3, 0x460), (0, 0)] {
         let mut f = fixture();
         let anchor = bind(&f, 64).unwrap();
         full_query(&mut f);
-        f.int(ROW + 0x408, kind);
+        f.int(ROW + 0x468, kind);
         f.int(ENTRIES + 0x38, kind);
         if offset != 0 {
             f.word(ROW + offset, FOREIGN);
@@ -458,13 +458,13 @@ fn other_kinds_or_foreign_state_result_never_prove_return() {
     let mut f = fixture();
     let anchor = bind(&f, 64).unwrap();
     full_query(&mut f);
-    f.word(FOREIGN, BASE + 0x337caf0);
+    f.word(FOREIGN, BASE + 0x357f410);
     f.int(FOREIGN + 0x40, 65);
     let mut states = vec![0; 66];
     states[64] = STATE;
     states[65] = FOREIGN;
     f.array(GS + 0x290, &states);
-    f.word(ROW + 0x3f8, FOREIGN);
+    f.word(ROW + 0x458, FOREIGN);
     f.word(ENTRIES + 0x30, FOREIGN);
     assert!(anchor.observe_return(&f).unwrap().is_none());
     assert!(f.untouched(FOREIGN + 0xc0, 8));
@@ -479,19 +479,19 @@ fn a_same_id_replacement_cannot_prove_return_or_finished() {
     let mut states = vec![0; 65];
     states[64] = FOREIGN;
     f.array(GS + 0x290, &states);
-    f.word(ROW + 0x3f8, FOREIGN);
+    f.word(ROW + 0x458, FOREIGN);
     f.word(ENTRIES + 0x30, FOREIGN);
     assert_eq!(
         anchor.observe_return(&f).unwrap_err().code,
         "construction_state_changed"
     );
-    assert!(f.untouched(FOREIGN, 0x1300));
+    assert!(f.untouched(FOREIGN, 0x1420));
     closed(&mut f);
     assert_eq!(
         anchor.observe_finished(&f).unwrap_err().code,
         "construction_state_changed"
     );
-    assert!(f.untouched(FOREIGN, 0x1300));
+    assert!(f.untouched(FOREIGN, 0x1420));
 }
 
 #[test]
@@ -501,9 +501,9 @@ fn final_requires_closed_find_and_exact_map_coordinates_without_wrap_inference()
     floats(&mut f, CAMERA + 0x6a4, &[3120.0, 9.5, 1480.0]);
     assert!(anchor.observe_finished(&f).unwrap().is_none());
     closed(&mut f);
-    f.int(WINDOW + 0x1270, 2);
+    f.int(WINDOW + 0x1390, 2);
     assert!(anchor.observe_finished(&f).unwrap().is_none());
-    f.int(WINDOW + 0x1270, 0);
+    f.int(WINDOW + 0x1390, 0);
     for look in [
         [3121.0, 9.5, 1480.0],
         [3120.0, 9.5, 1481.0],
@@ -532,16 +532,16 @@ fn final_hidden_or_teardown_skips_retained_edit_query_and_focus_payload() {
         let anchor = bind(&f, 64).unwrap();
         closed(&mut f);
         if teardown {
-            f.word(FIND + 0xc38, 0);
+            f.word(FIND + 0xd58, 0);
         }
-        f.word(FIND + 0xc40, FOREIGN);
+        f.word(FIND + 0xd60, FOREIGN);
         f.word(REGISTRY + 0x138, FOREIGN);
         f.word(REGISTRY + 0x210, FOREIGN);
         assert!(anchor.observe_finished(&f).unwrap().is_some());
         for (address, size) in [
-            (FIND + 0xc40, 8),
-            (FIND + 0xc48, 24),
-            (FIND + 0xc88, 8),
+            (FIND + 0xd60, 8),
+            (FIND + 0xd68, 24),
+            (FIND + 0xda8, 8),
             (REGISTRY + 0x138, 8),
             (REGISTRY + 0x210, 8),
             (EDIT, 0x300),
@@ -560,12 +560,12 @@ fn final_hidden_replacement_root_is_never_adopted_as_original_close() {
     let mut f = fixture();
     let anchor = bind(&f, 64).unwrap();
     closed(&mut f);
-    f.word(FIND + 0xc38, FOREIGN);
+    f.word(FIND + 0xd58, FOREIGN);
     assert_eq!(
         anchor.observe_finished(&f).unwrap_err().code,
         "construction_state_changed"
     );
-    assert!(f.untouched(FOREIGN, 0x1300));
+    assert!(f.untouched(FOREIGN, 0x1420));
 }
 
 #[test]
@@ -573,8 +573,8 @@ fn every_stage_retains_final_witness_and_process_guards() {
     for (field, size) in [
         (REGISTRY + 0x138, 8),
         (REGISTRY + 0x210, 8),
-        (FIND + 0xc38, 8),
-        (WINDOW + 0xd30, 16),
+        (FIND + 0xd58, 8),
+        (WINDOW + 0xe50, 16),
     ] {
         let mut f = fixture();
         let anchor = bind(&f, 64).unwrap();
@@ -588,7 +588,7 @@ fn every_stage_retains_final_witness_and_process_guards() {
     let mut f = fixture();
     let anchor = bind(&f, 64).unwrap();
     full_query(&mut f);
-    f.tear(ROW + 0x408, 4, 2);
+    f.tear(ROW + 0x468, 4, 2);
     assert_eq!(anchor.observe_return(&f).unwrap_err().code, "torn_read");
     let mut f = fixture();
     let anchor = bind(&f, 64).unwrap();

@@ -40,14 +40,14 @@ const LINUX: Layout = Layout {
 /// macOS Mach-O 089EA519 (libc++), mapped live on 18 October 2026: vtables by
 /// RTTI name, database by its sole global, catalog from the shared accessors.
 const MACOS: Layout = Layout {
-    military_line_vtable: 0x338a030,
-    naval_line_vtable: 0x338a1b0,
-    equipment_db_global: 0x34d0be0,
-    equipment_db_vtable: 0x3377a90,
+    military_line_vtable: 0x358ca80,
+    naval_line_vtable: 0x358cc00,
+    equipment_db_global: 0x36e0210,
+    equipment_db_vtable: 0x357a240,
     equipment_catalog: 0x50,
-    variant_vtable: 0x337aac8,
+    variant_vtable: 0x357d1b8,
     variant_type: 0x3e0,
-    equipment_type_vtable: 0x3379328,
+    equipment_type_vtable: 0x357bad8,
 };
 #[cfg(target_os = "macos")]
 /// One own equipment line as the input adapters see it.

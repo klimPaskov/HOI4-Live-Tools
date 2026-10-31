@@ -150,6 +150,9 @@ pub(crate) struct Layout {
     pub(crate) province_status: u64,
     pub(crate) gs_provinces: u64,
     pub(crate) gs_states: u64,
+    /// CBuildingProductionLine fields from +0x70 (building, repairs, conversion, allied)
+    /// moved by this many bytes; 1.19.4 (macOS) inserted 8 bytes before them.
+    pub(crate) line_tail_shift: u64,
 }
 /// Linux ELF a4971c9e (libstdc++).
 const LINUX: Layout = Layout {
@@ -177,35 +180,37 @@ const LINUX: Layout = Layout {
     province_status: 0x1b0,
     gs_provinces: 0x2b0,
     gs_states: 0x2c8,
+    line_tail_shift: 0,
 };
 /// macOS Mach-O 089EA519 (libc++), mapped live on 18 October 2026: vtables by
 /// RTTI name, the database by its sole global, keys/ordinals by catalog
 /// contents, state/province IDs by catalog index and owners by own tag.
 const MACOS: Layout = Layout {
-    building_line_vtable: 0x3389c40,
-    railway_line_vtable: 0x338a7a8,
-    building_vtable: 0x332dcb0,
+    building_line_vtable: 0x358c690,
+    railway_line_vtable: 0x358d1f8,
+    building_vtable: 0x352ee30,
     building_status: 0x1a8,
     building_template: 0x1b0,
-    database_global: 0x34d0ac0,
-    database_vtable: 0x332dd28,
-    template_vtable: 0x332e908,
-    null_template_vtable: 0x332def8,
+    database_global: 0x3703ad0,
+    database_vtable: 0x352eea8,
+    template_vtable: 0x352fa88,
+    null_template_vtable: 0x352f078,
     template_key: 0x228,
     template_ordinal: 0x290,
-    status_vtable: 0x332e6a8,
-    state_vtable: 0x337caf0,
+    status_vtable: 0x352f828,
+    state_vtable: 0x357f410,
     state_owner: 0xc0,
     state_controller: 0xc4,
     state_id: 0x40,
     state_status: 0x110,
-    province_vtable: 0x337c7e8,
+    province_vtable: 0x357f020,
     province_owner: 0x188,
     province_state: 0xc0,
     province_id: 0x9c,
     province_status: 0x190,
     gs_provinces: 0x278,
     gs_states: 0x290,
+    line_tail_shift: 8,
 };
 pub(crate) fn layout(r: &Reader<'_>) -> &'static Layout {
     match r.string_abi() {
@@ -279,9 +284,9 @@ pub(crate) fn lines_in(
         let mut building_identity = None;
         let details = if is_building {
             building_count += 1;
-            let repairs = r.i32(line + 0x78)?;
-            let conversion = boolean(r, line + 0x8c)?;
-            let allied = boolean(r, line + 0x99)?;
+            let repairs = r.i32(line + 0x78 + l.line_tail_shift)?;
+            let conversion = boolean(r, line + 0x8c + l.line_tail_shift)?;
+            let allied = boolean(r, line + 0x99 + l.line_tail_shift)?;
             numeric_policy &= (0..=COUNTER_LIMIT).contains(&repairs);
             let building = buildings::observe(r, base, line, &mut catalog)?;
             canonical = building.key.clone();

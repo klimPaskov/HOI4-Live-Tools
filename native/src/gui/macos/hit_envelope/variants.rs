@@ -9,12 +9,12 @@ use super as basis;
 pub use basis::{Common, GeometryError};
 use basis::{MAX_CANVAS, MAX_COORDINATE, MAX_DIMENSION, MAX_LOCAL_SCALE, MAX_TILES};
 
-pub const FRAME_RENDERER_PRIMARY_RVA: u64 = 0x34afed0;
-pub const FRAME_RESOURCE_PRIMARY_RVA: u64 = 0x34b01c8;
-pub const MASKED_RENDERER_PRIMARY_RVA: u64 = 0x33e2b28;
-pub const MASKED_RESOURCE_PRIMARY_RVA: u64 = 0x33e1c08;
-pub const PROGRESS_RENDERER_PRIMARY_RVA: u64 = 0x34ba6f0;
-pub const PROGRESS_RESOURCE_PRIMARY_RVA: u64 = 0x34ba610;
+pub const FRAME_RENDERER_PRIMARY_RVA: u64 = 0x36be530;
+pub const FRAME_RESOURCE_PRIMARY_RVA: u64 = 0x36be828;
+pub const MASKED_RENDERER_PRIMARY_RVA: u64 = 0x35edb70;
+pub const MASKED_RESOURCE_PRIMARY_RVA: u64 = 0x35ec9d8;
+pub const PROGRESS_RENDERER_PRIMARY_RVA: u64 = 0x36c9210;
+pub const PROGRESS_RESOURCE_PRIMARY_RVA: u64 = 0x36c9130;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Decision {

@@ -13,18 +13,18 @@ fn bound(count: usize) -> MacFixture {
     let item = ITEMS + (count as u64 - 1) * 0x400;
     let glue = item + 0x30;
     for (field, value) in [
-        (BUTTON + 0x70, BASE + 0x34ab360),
+        (BUTTON + 0x70, BASE + 0x36b9b18),
         (BUTTON + 0x78, NODE),
         (BUTTON + 0x80, NODE),
         (BUTTON + 0x90, 0),
-        (BUTTON + 0xc0, 0),
+        (BUTTON + 0xc8, 0),
         (NODE, glue),
         (NODE + 8, 0),
         (NODE + 0x10, 0),
-        (glue, BASE + 0x343ade8),
+        (glue, BASE + 0x36477d8),
         (glue + 0x30, FUNCTION),
-        (FUNCTION, BASE + 0x343ae78),
-        (FUNCTION + 8, BASE + 0x1ed5640),
+        (FUNCTION, BASE + 0x3647870),
+        (FUNCTION + 8, BASE + 0x16f8600),
         (FUNCTION + 0x10, 0),
         (FUNCTION + 0x18, item),
     ] {
@@ -32,7 +32,7 @@ fn bound(count: usize) -> MacFixture {
     }
     f.int(BUTTON + 0x88, 1);
     f.put(BUTTON + 0x8c, &[0]);
-    f.put(BUTTON + 0xcc, &[0]);
+    f.put(BUTTON + 0xd4, &[0]);
     f.put(NODE + 0x18, &[0]);
     for index in 2..=20 {
         f.word(glue + index * 0x30, 0);
@@ -62,7 +62,7 @@ fn default_and_explicit_false_keep_callback_payload_unread() {
     assert_eq!(a["choices"], b["choices"]);
     assert_eq!(a["callback_binding_verified"], false);
     assert!(a["choices"]["target"]["callback"].is_null());
-    not_read(&f, &[BUTTON + 0x70, BUTTON + 0xcc, ITEMS + 0x30]);
+    not_read(&f, &[BUTTON + 0x70, BUTTON + 0xd4, ITEMS + 0x30]);
 }
 
 #[test]
@@ -88,7 +88,7 @@ fn complete_choices_bind_only_requested_item_without_exposing_addresses_or_grant
     for i in 0..69 {
         not_read(&f, &[ITEMS + i * 0x400 + 0x10, ITEMS + i * 0x400 + 0x30]);
     }
-    not_read(&f, &[BUTTON + 0xd8, FOREIGN]);
+    not_read(&f, &[BUTTON + 0xe0, FOREIGN]);
     let rendered = v.to_string();
     for address in [NODE, FUNCTION, ITEMS + 69 * 0x400] {
         assert!(!rendered.contains(&address.to_string()));
@@ -114,9 +114,9 @@ fn ordinary_callback_proof_never_reads_the_conversion_callback() {
 #[test]
 fn observer_overrides_or_wrong_count_refuse_before_list_and_capture() {
     for (field, value) in [
-        (BUTTON + 0x70, BASE + 0x34ab368),
+        (BUTTON + 0x70, BASE + 0x36b9b20),
         (BUTTON + 0x90, FOREIGN),
-        (BUTTON + 0xc0, FOREIGN),
+        (BUTTON + 0xc8, FOREIGN),
     ] {
         let mut f = bound(1);
         f.word(field, value);
@@ -168,9 +168,9 @@ fn every_additional_callable_refuses_before_requested_function_payload() {
 #[test]
 fn exact_item_glue_callable_member_adjustment_and_receiver_are_required() {
     for (field, value) in [
-        (ITEMS + 0x30, BASE + 0x3489788), // Other known Mac Legacy glue.
-        (FUNCTION, BASE + 0x3489818),     // Other known Mac callable.
-        (FUNCTION + 8, BASE + 0x22f27d0), // Topbar opener, not this choice.
+        (ITEMS + 0x30, BASE + 0x3697a60), // Other known Mac Legacy glue.
+        (FUNCTION, BASE + 0x3697af8),     // Other known Mac callable.
+        (FUNCTION + 8, BASE + 0x2460fb0), // Topbar opener, not this choice.
         (FUNCTION + 0x10, 8),
         (FUNCTION + 0x18, FOREIGN),
     ] {
@@ -187,7 +187,7 @@ fn disabled_request_and_transient_visual_state_remain_distinct_non_authorizing_f
         for flag in [0_u8, 0x40, 0xff] {
             let mut f = bound(1);
             f.int(BUTTON + 0x9c, state);
-            f.put(BUTTON + 0xcc, &[flag]);
+            f.put(BUTTON + 0xd4, &[flag]);
             let v = read(&f).unwrap();
             assert_eq!(v["choices"]["target"]["disabled"], state == 3);
             let c = &v["choices"]["target"]["callback"];
@@ -209,8 +209,8 @@ fn changed_membership_capture_or_disable_request_invalidates_same_snapshot() {
         BUTTON + 0x88,
         BUTTON + 0x8c,
         BUTTON + 0x90,
-        BUTTON + 0xc0,
-        BUTTON + 0xcc,
+        BUTTON + 0xc8,
+        BUTTON + 0xd4,
         NODE,
         NODE + 8,
         NODE + 0x10,
@@ -237,7 +237,7 @@ fn hidden_or_incomplete_choices_skip_callback_even_when_requested() {
     assert_eq!(v["callback_binding_verified"], false);
     not_read(&f, &[ITEMS, BUTTON, NODE, FUNCTION]);
     let mut f = fixture(true, 1);
-    f.array(0x480000 + 0xd30, 0, &[]);
+    f.array(0x480000 + 0xe50, 0, &[]);
     let v = read(&f).unwrap();
     assert_eq!(v["choices"]["complete_membership"], false);
     assert_eq!(v["callback_binding_verified"], false);
