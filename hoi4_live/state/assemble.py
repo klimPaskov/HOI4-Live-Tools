@@ -50,7 +50,8 @@ def find_save(session, tag=None, which="latest", now=None, max_files=20):
     d = session.cfg.saves_dir
     if which not in ("latest", "auto"):
         return queries.resolve_save(d, which), None
-    files = sorted((os.path.join(d, f) for f in os.listdir(d) if f.lower().endswith(".hoi4")),
+    names = os.listdir(d) if os.path.isdir(d) else []   # a fresh user folder has no save games/ yet
+    files = sorted((os.path.join(d, f) for f in names if f.lower().endswith(".hoi4")),
                    key=os.path.getmtime, reverse=True)[:max_files]
     from .savefile import SaveFile
     slack_h = 30                           # telemetry lags the screen by up to a day (it logs once a day)

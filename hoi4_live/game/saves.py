@@ -28,7 +28,7 @@ def list_saves(session, pattern=None, limit=50):
     d = saves_dir(session)
     rx = re.compile(pattern, re.I) if pattern else None
     rows = []
-    for f in os.listdir(d):
+    for f in (os.listdir(d) if os.path.isdir(d) else []):
         if not f.lower().endswith(".hoi4"):
             continue
         if rx and not rx.search(f):
