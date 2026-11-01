@@ -307,6 +307,38 @@ fn cancel_drawing(process: &dyn Process, keys: &MacKeys<'_>) {
     pause(300);
     let _ = super::ui::close_menu(process, keys);
 }
+/// Screen point of the target state's coastal province nearest the screen centre (unit
+/// position from map/unitstacks.txt, coastal flag from map/definition.csv).
+fn landing_point(process: &dyn Process, plan: &Plan) -> Result<Option<(f64, f64)>> {
+    let exe = &process
+        .identity()
+        .ok_or_else(|| Error::new("map_data_unavailable", "Game identity unavailable"))?
+        .exe;
+    let dir = mapdata::game_dir(exe)?;
+    let coastal = mapdata::coastal_provinces(&dir)?;
+    let positions = mapdata::positions(&dir)?;
+    let provinces = mapdata::state_provinces(&dir, plan.target_state)?;
+    let points: Vec<(f64, f64)> = provinces
+        .iter()
+        .filter(|p| coastal.contains(p))
+        .filter_map(|p| positions.get(p).copied())
+        .collect();
+    read(process, |r, i| {
+        let mut best: Option<(f64, (f64, f64))> = None;
+        for (x, z) in &points {
+            if let Some((sx, sy)) = super::screenmap::to_screen(r, i, *x, *z)? {
+                if !(470.0..1450.0).contains(&sx) || !(120.0..820.0).contains(&sy) {
+                    continue;
+                }
+                let d = (sx - 960.0).powi(2) + (sy - 540.0).powi(2);
+                if best.is_none_or(|b| d < b.0) {
+                    best = Some((d, (sx, sy)));
+                }
+            }
+        }
+        Ok(best.map(|b| b.1))
+    })
+}
 /// Centre of the solid cyan patch (invasion highlight, about R<90, G>170, B>170) nearest the
 /// screen centre, outside the panels; None when the screen shows none.
 fn nearest_cyan(c: &crate::platform::macos_input::Capture) -> Option<(f64, f64)> {
@@ -368,7 +400,14 @@ pub(super) fn drive(process: &dyn Process, keys: &MacKeys<'_>, plan: &Plan) -> R
         // an order on an own port, seen live 2 November 2026.)
         find_state(process, keys, plan.target_state)?;
         pause(400);
-        let (tx, ty) = aim((960.0, 540.0), plan.landing_offset);
+        // Without an explicit offset, aim at the target state's coastal province nearest the
+        // screen centre, projected through the live camera.
+        let landing = if plan.landing_offset == (0, 0) {
+            landing_point(process, plan).ok().flatten()
+        } else {
+            None
+        };
+        let (tx, ty) = landing.unwrap_or_else(|| aim((960.0, 540.0), plan.landing_offset));
         keys.right_click(kit::GAME, tx, ty)?;
         pause(600);
         keys.press(Key::Return)?;

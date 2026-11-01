@@ -51,6 +51,7 @@ mod kit;
 #[cfg(test)]
 mod live_reads_navalair;
 mod mapdata;
+mod screenmap;
 mod naval;
 mod panelkit;
 mod navalact;

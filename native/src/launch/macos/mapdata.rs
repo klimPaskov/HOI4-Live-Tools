@@ -41,7 +41,7 @@ fn parse_positions(text: &str) -> Positions {
     out
 }
 
-fn positions(dir: &Path) -> Result<std::sync::Arc<Positions>> {
+pub(super) fn positions(dir: &Path) -> Result<std::sync::Arc<Positions>> {
     static CACHE: OnceLock<Mutex<HashMap<PathBuf, std::sync::Arc<Positions>>>> = OnceLock::new();
     let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
     if let Some(found) = cache.lock().unwrap().get(dir) {
@@ -259,6 +259,31 @@ pub(super) fn direction_to(dir: &Path, state: i32, provinces: &[i32]) -> Result<
     Ok((dx / len, dy / len))
 }
 
+/// Coastal land provinces (map/definition.csv: id;r;g;b;land;true;terrain;continent).
+pub(super) fn coastal_provinces(dir: &Path) -> Result<std::sync::Arc<std::collections::HashSet<i32>>> {
+    static CACHE: OnceLock<Mutex<HashMap<PathBuf, std::sync::Arc<std::collections::HashSet<i32>>>>> = OnceLock::new();
+    let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    if let Some(found) = cache.lock().unwrap().get(dir) {
+        return Ok(found.clone());
+    }
+    let text = std::fs::read_to_string(dir.join("map/definition.csv"))
+        .map_err(|_| Error::new("map_data_unavailable", "Province definitions unreadable"))?;
+    let out: std::collections::HashSet<i32> = parse_coastal(&text);
+    let out = std::sync::Arc::new(out);
+    cache.lock().unwrap().insert(dir.to_path_buf(), out.clone());
+    Ok(out)
+}
+pub(super) fn parse_coastal(text: &str) -> std::collections::HashSet<i32> {
+    text.lines()
+        .filter_map(|line| {
+            let f: Vec<&str> = line.split(';').collect();
+            (f.len() > 5 && f[4].trim() == "land" && f[5].trim() == "true")
+                .then(|| f[0].trim().parse::<i32>().ok())
+                .flatten()
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -270,6 +295,11 @@ mod tests {
         let s =
             "state={\n id=86\n history={ victory_points = { 1 2 } }\n provinces={\n 3 4 5\n }\n}";
         assert_eq!(parse_state_provinces(s), vec![3, 4, 5]);
+    }
+    #[test]
+    fn parses_coastal_land_provinces() {
+        let c = parse_coastal("0;0;0;0;land;false;unknown;0\n12;1;2;3;land;true;plains;1\n13;1;2;4;sea;true;ocean;0\n");
+        assert!(c.contains(&12) && !c.contains(&13) && c.len() == 1);
     }
     #[test]
     fn parses_air_base_rows() {
