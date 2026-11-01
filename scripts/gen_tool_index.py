@@ -11,7 +11,7 @@ for f in files:
     for m in pat.finditer(text):
         name, desc = m.group(1), m.group(2)
         tail = text[m.end(): m.end() + 1500]
-        needs_lease = "lease_token" in tail.split('"name"')[0]
+        needs_lease = "lease_token" in re.split(r'"name"\s*:\s*"hoi4_', tail)[0]
         try:
             desc = json.loads('"' + desc + '"')
         except Exception:

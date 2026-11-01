@@ -37,7 +37,7 @@ Descriptions are the tools' own text; see `PLAYBOOK_TOOL_GAPS.md` for validation
 
 ## Research, doctrines, special projects
 
-- `hoi4_doctrine_adopt` (A): UNVALIDATED (no live test yet): adopt a grand doctrine (e.g.
+- `hoi4_doctrine_adopt` (A): Adopt a grand doctrine (e.g.
 - `hoi4_doctrines` (R): Own doctrines read from game memory (no input, no lease, never pauses).
 - `hoi4_focus_start` (A): Start an own national focus with ordinary input (politics panel, focus button, drag-panning the tree until the node is in view, the node, Start), each target located from the live GUI and each stage verified from memory;
 - `hoi4_intelligence` (R): Own intelligence agency, read-only (no input, no lease, never pauses).
@@ -90,13 +90,13 @@ Descriptions are the tools' own text; see `PLAYBOOK_TOOL_GAPS.md` for validation
 - `hoi4_army_split` (A): Split the first N divisions (list order, N 1..19) of an own army into a new army:
 - `hoi4_commanders` (R): Own army commanders:
 - `hoi4_deploy_locations` (A): Give every training line without a deployment location the own state state_id (Find view, the line's location button, one click on the state).
-- `hoi4_design_create` (R): Create a new own equipment variant through the game's designer:
+- `hoi4_design_create` (A): Create a new own equipment variant through the game's designer:
 - `hoi4_design_obsolete` (A): Decommission (obsolete:
 - `hoi4_design_options` (A): What the equipment designers offer, read from the game's own designer windows (Production panel, equipment selection list, the row's Create variant button;
 - `hoi4_designs` (R): Own equipment designs (ship, plane, tank and other variants) read from game memory;
 - `hoi4_division_templates` (R): Own division template names (for hoi4_train) and how many training lines each has queued.
 - `hoi4_supply` (R): Own divisions, the provinces and states they stand in and the supply system, read from game memory (no input, no lease, no pause).
-- `hoi4_template_create` (R): Create a new own division template with ordinary input (U panel, Division Designer button, Create Empty, battalion slots, name box, Save).
+- `hoi4_template_create` (A): Create a new own division template with ordinary input (U panel, Division Designer button, Create Empty, battalion slots, name box, Save).
 - `hoi4_template_delete` (A): Delete an own division template (its Delete button in the U panel and the game's confirmation).
 - `hoi4_template_edit` (A): Edit an own division template in place through its Edit button:
 - `hoi4_template_get` (R): Own division templates read from game memory (no input, no lease, no pause):
@@ -135,7 +135,7 @@ Descriptions are the tools' own text; see `PLAYBOOK_TOOL_GAPS.md` for validation
 ## Other
 
 - `hoi4_agency_create` (A): UNVALIDATED (no live test yet): create the intelligence agency with ordinary input:
-- `hoi4_agency_upgrade` (A): UNVALIDATED (no live test yet): start an agency upgrade:
+- `hoi4_agency_upgrade` (A): Start an agency upgrade:
 - `hoi4_auto_import` (A): HOI4 1.19.4 Automatic Importing (Trade view):
 - `hoi4_operative_assign` (A): UNVALIDATED (no live test yet): send a recruited operative (`operative` = 0-based position among the recruited ones on the operative bar) on a mission:
 - `hoi4_operative_recruit` (A): UNVALIDATED (no live test yet): recruit an operative into a free slot of the operative bar:
@@ -144,6 +144,7 @@ Descriptions are the tools' own text; see `PLAYBOOK_TOOL_GAPS.md` for validation
 - `hoi4_peace_status` (R): Read-only:
 - `hoi4_peace_submit` (A): Submit Demands for the round (the conference's end-turn button;
 - `hoi4_peace_take` (A): In the open peace conference, choose the demand kind (default Take State;
+- `hoi4_save` (A): Save the running game with the game's own Save dialog (Escape, Save, Save) under the name the game proposes (country and date), overwriting a save of the same name, and verify that a save file was written in the run's userdata/save games.
 - `hoi4_states` (R): Find states by English name (accent-insensitive substring, or the exact ID), or list every state a country owns or controls by its tag (e.g.
 - `hoi4_war_risk` (R): Read-only, before justifying or declaring war on `country`:
 
