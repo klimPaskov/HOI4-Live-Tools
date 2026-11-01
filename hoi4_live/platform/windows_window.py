@@ -36,7 +36,18 @@ class GameWindow:
         """Locate the top-level visible window owned by hoi4.exe. Returns hwnd or None."""
         win32.set_dpi_awareness()
         if self._identity is not None:
-            if self.process_backend.capture_process_identity(self._identity.pid) != self._identity:
+            try:
+                current = self.process_backend.capture_process_identity(self._identity.pid)
+            except (OSError, RuntimeError):
+                if win32.pid_alive(self._identity.pid):
+                    raise
+                current = None
+            if current is None:
+                # The bound game exited: it has no window, and forgetting it lets a relaunch bind the new process
+                # (bind_identity refuses a second identity while one is held).
+                self._identity = None
+                self.hwnd = self.pid = None
+            elif current != self._identity:
                 raise ToolError("game process identity changed; refusing to reuse its window",
                                 {"error": "process_identity_changed", "pid": self._identity.pid})
         if (self.hwnd and win32.user32.IsWindow(self.hwnd) and win32.pid_alive(self.pid)
