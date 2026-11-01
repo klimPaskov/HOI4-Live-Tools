@@ -3896,10 +3896,10 @@ impl Commands for MacClock {
             let id = string(args, "request_id")?;
             let retry = actions.receipt_exists(id);
             if !retry {
-                if before.as_deref() == Some(idea) {
+                if before.as_deref() == Some(idea) || politics::holder(process, category, idea)?.is_some() {
                     return Err(Error::new(
                         "invalid_target",
-                        "The slot already holds this idea",
+                        "The slot already holds this idea (or another slot of the category does)",
                     ));
                 }
                 self.keys.preflight()?;
@@ -3909,8 +3909,9 @@ impl Commands for MacClock {
             let keys = &self.keys;
             let mut settle = || {
                 let now = politics::current(process, category, index)?;
-                let detail = json!({"current":now});
-                Ok(if now.as_deref() == Some(idea) {
+                let held = politics::holder(process, category, idea)?;
+                let detail = json!({"current":now,"held_in_slot":held});
+                Ok(if held.is_some() {
                     journal::Outcome::Reached(detail)
                 } else if now == before {
                     journal::Outcome::Unchanged(detail)

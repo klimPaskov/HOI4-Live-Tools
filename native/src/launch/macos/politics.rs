@@ -295,6 +295,21 @@ pub(super) fn current(
     read(process, |r, i| Ok(slot(r, i, category, index)?.0))
 }
 
+/// The slot of `category` that holds `idea`, if any (advisors land in the first free slot).
+pub(super) fn holder(process: &dyn Process, category: &str, idea: &str) -> Result<Option<usize>> {
+    read(process, |r, i| {
+        for index in 0..8 {
+            match slot(r, i, category, index) {
+                Ok((current, _, _)) if current.as_deref() == Some(idea) => return Ok(Some(index)),
+                Ok(_) => {}
+                Err(e) if e.code == "invalid_arguments" => break,
+                Err(e) => return Err(e),
+            }
+        }
+        Ok(None)
+    })
+}
+
 fn open_slot(process: &dyn Process, keys: &MacKeys, category: &str, index: usize) -> Result<()> {
     decline_stale(process, keys)?;
     clear_notices(process, keys)?;
@@ -361,8 +376,21 @@ pub(super) fn choose(
     let (x, y) = rect.center();
     keys.click(GAME, x, y)?;
     accept_command(process, keys)?;
+    // An advisor goes to the category's first free advisor slot, not always the one clicked
+    // (gates 1 and 2, 1 Nov 2026), so the pick counts when any slot of the category holds it.
     wait(process, "idea taken", |r, i| {
-        Ok(slot(r, i, category, index)?.0.as_deref() == Some(idea))
+        if slot(r, i, category, index)?.0.as_deref() == Some(idea) {
+            return Ok(true);
+        }
+        for other in 0..8 {
+            match slot(r, i, category, other) {
+                Ok((current, _, _)) if current.as_deref() == Some(idea) => return Ok(true),
+                Ok(_) => {}
+                Err(e) if e.code == "invalid_arguments" => break,
+                Err(e) => return Err(e),
+            }
+        }
+        Ok(false)
     })?;
     dismiss(process, keys, |r, i| Ok(!window_open(r, i)?));
     Ok(())

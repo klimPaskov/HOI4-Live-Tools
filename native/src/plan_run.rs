@@ -1193,6 +1193,9 @@ fn construction_step(
             continue;
         };
         let known_free = state.con.free.get(&id).map(|(f, _)| i64::from(*f));
+        // Fill idle capacity in one action: each project takes at most 15 civilian
+        // factories, so queue about idle/15 + 1 buildings (job count at least, 5 at most).
+        let want = want.max((idle / 15 + 1).min(5));
         let count = want
             .min(state.con.cap.get(&id).copied().unwrap_or(want))
             .min(known_free.unwrap_or(want))
@@ -2283,6 +2286,9 @@ mod tests {
         let mut state = State::default();
         let first = acted(tick(&mut state, &b, &plan, "l", START).unwrap());
         assert!(first.contains("construct arms_factory 4: false"), "{first}");
+        // A refused batch is retried one building at a time before the state counts as full.
+        let single = acted(tick(&mut state, &b, &plan, "l", START + 1).unwrap());
+        assert!(single.contains("construct arms_factory 4: false") && single.ends_with("x1"), "{single}");
         assert_eq!(
             tick(&mut state, &b, &plan, "l", START + 9 * DAY).unwrap(),
             Tick::Nothing
@@ -2293,7 +2299,7 @@ mod tests {
             "{digest}"
         );
         b.full.clear();
-        let again = acted(tick(&mut state, &b, &plan, "l", START + 10 * DAY).unwrap());
+        let again = acted(tick(&mut state, &b, &plan, "l", START + 10 * DAY + 1).unwrap());
         assert!(again.starts_with("construct arms_factory 4: true"), "{again}");
     }
 

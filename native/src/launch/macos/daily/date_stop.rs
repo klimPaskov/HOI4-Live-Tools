@@ -126,7 +126,6 @@ fn upd(status: &Mutex<Status>, f: impl FnOnce(&mut Status)) {
 }
 
 enum Parsed {
-    Off(&'static str),
     None,
     Invalid(String),
     Target { hour: i64, label: String, pause: bool },
@@ -158,13 +157,6 @@ pub(super) fn step(status: &Mutex<Status>, env: &dyn Env) {
         }
     };
     let (hour, label, pause) = match parse(&plan) {
-        Parsed::Off(why) => {
-            upd(status, |s| {
-                s.target = None;
-                s.state = why.into();
-            });
-            return;
-        }
         Parsed::None => {
             upd(status, |s| {
                 s.target = None;
