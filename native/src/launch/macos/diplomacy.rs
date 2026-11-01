@@ -750,15 +750,24 @@ pub(super) fn execute(
             let (send, enabled) = settled(process, "send button", |r, i| {
                 dialog_button(r, i, "send_button")
             })?;
+            // The dialog's texts are rebuilt after the last selection; let them catch up.
+            std::thread::sleep(std::time::Duration::from_millis(400));
             let texts = dialog_texts(process);
             if !enabled {
+                // The reason (e.g. "Need 48 more Political Power") is in one of the dialog's
+                // texts, not always in wargoal_warning: report them all.
+                let shown: Vec<String> = texts
+                    .as_object()
+                    .map(|m| {
+                        m.iter()
+                            .filter(|(k, _)| k.as_str() != "title")
+                            .filter_map(|(k, v)| v.as_str().map(|s| format!("{k}: {s}")))
+                            .collect()
+                    })
+                    .unwrap_or_default();
                 return Err(Error::new(
                     "invalid_target",
-                    format!(
-                        "The game does not allow sending: {}",
-                        read(process, |r, i| dialog_text(r, i, "wargoal_warning"))
-                            .unwrap_or_default()
-                    ),
+                    format!("The game does not allow sending. Dialog: {}", shown.join(" | ")),
                 ));
             }
             let (x, y) = send.center();
