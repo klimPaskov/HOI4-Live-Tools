@@ -211,7 +211,9 @@ pub(super) fn settle(plan: &Plan, nodes_now: Option<usize>, heading: Option<usiz
     let army = matches!(plan.selector, Selector::Army(_));
     match (army, nodes_now, heading) {
         (_, _, Some(h)) if h > 0 => Verdict::Reached,
-        (true, Some(n), _) if n > plan.nodes_before => Verdict::Reached,
+        // A new order alone does not show where it lands (its target province is not read):
+        // never claimed as reached (seen live: an order landing on an own port).
+        (true, Some(n), _) if n > plan.nodes_before => Verdict::Unknown,
         (true, Some(n), _) if n < plan.nodes_before => Verdict::Diverged,
         (true, Some(_), Some(0)) | (false, _, Some(0)) => Verdict::Unchanged,
         (true, Some(_), None) => Verdict::Unchanged,
@@ -305,6 +307,30 @@ fn cancel_drawing(process: &dyn Process, keys: &MacKeys<'_>) {
     pause(300);
     let _ = super::ui::close_menu(process, keys);
 }
+/// Centre of the solid cyan patch (invasion highlight, about R<90, G>170, B>170) nearest the
+/// screen centre, outside the panels; None when the screen shows none.
+fn nearest_cyan(c: &crate::platform::macos_input::Capture) -> Option<(f64, f64)> {
+    let cyan = |x: f64, y: f64| {
+        c.rgb(x, y)
+            .is_some_and(|(r, g, b)| r < 90 && g > 170 && b > 170 && (i32::from(g) - i32::from(b)).abs() < 70)
+    };
+    let mut best: Option<(f64, f64, f64)> = None;
+    let mut y = 100.0;
+    while y < 820.0 {
+        let mut x = 460.0;
+        while x < 1540.0 {
+            if cyan(x, y) && (0..5).all(|d| cyan(x + f64::from(d), y) && cyan(x, y + f64::from(d))) {
+                let d = (x - 960.0).powi(2) + (y - 540.0).powi(2);
+                if best.is_none_or(|b| d < b.0) {
+                    best = Some((d, x + 2.0, y + 2.0));
+                }
+            }
+            x += 4.0;
+        }
+        y += 4.0;
+    }
+    best.map(|b| (b.1, b.2))
+}
 pub(super) fn drive(process: &dyn Process, keys: &MacKeys<'_>, plan: &Plan) -> Result<Value> {
     clear_notices(process, keys)?;
     match &plan.selector {
@@ -324,15 +350,24 @@ pub(super) fn drive(process: &dyn Process, keys: &MacKeys<'_>, plan: &Plan) -> R
     let drawn = (|| -> Result<()> {
         kit::click(keys, rect)?;
         pause(400);
-        // The source: a left click on the source state's centre.
+        // The source: the game highlights the provinces an invasion can start from in cyan
+        // (seen live 2 November 2026); click the highlighted patch nearest the source state's
+        // centre, else the centre plus the offset.
         find_state(process, keys, plan.source_state)?;
-        pause(300);
-        let (sx, sy) = aim((960.0, 540.0), plan.source_offset);
+        pause(400);
+        let source = if plan.source_offset == (0, 0) {
+            nearest_cyan(&keys.capture(kit::GAME)?)
+        } else {
+            None
+        };
+        let (sx, sy) = source.unwrap_or_else(|| aim((960.0, 540.0), plan.source_offset));
         keys.click(kit::GAME, sx, sy)?;
         pause(500);
-        // The destination: a right click on the destination state's centre.
+        // The destination: a right click on the destination state's centre plus the offset.
+        // (The cyan highlight marks source ports, not landing provinces: aiming at it landed
+        // an order on an own port, seen live 2 November 2026.)
         find_state(process, keys, plan.target_state)?;
-        pause(300);
+        pause(400);
         let (tx, ty) = aim((960.0, 540.0), plan.landing_offset);
         keys.right_click(kit::GAME, tx, ty)?;
         pause(600);
@@ -569,7 +604,7 @@ mod tests {
     #[test]
     fn settlement_reads_orders_and_heading() {
         let p = plan(&request(), &facts()).unwrap();
-        assert_eq!(settle(&p, Some(3), None), Verdict::Reached);
+        assert_eq!(settle(&p, Some(3), None), Verdict::Unknown);
         assert_eq!(settle(&p, Some(2), Some(0)), Verdict::Unchanged);
         assert_eq!(settle(&p, Some(2), None), Verdict::Unchanged);
         assert_eq!(settle(&p, Some(1), Some(0)), Verdict::Diverged);
