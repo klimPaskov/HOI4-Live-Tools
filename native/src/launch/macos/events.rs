@@ -104,6 +104,8 @@ struct Open {
     /// News windows: options are found on screen below this point within
     /// this column (centre x, half width, top y).
     scan: Option<(f64, f64, f64)>,
+    /// Root window name of the event layout (EventWindow, EventWindow_News, ...).
+    layout: String,
 }
 
 fn open_events(r: &Reader<'_>, image: u64) -> Result<Vec<Open>> {
@@ -154,6 +156,7 @@ fn open_events(r: &Reader<'_>, image: u64) -> Result<Vec<Open>> {
             options,
             centres,
             scan,
+            layout: kind,
         });
     }
     Ok(out)
@@ -172,6 +175,28 @@ fn option_centres(
     count: usize,
 ) -> Result<Centres> {
     let u = ui(r)?;
+    if kind == "EventWindow_leader" {
+        // eventwindow.gui: leader_frame at (35, 116) of the window, options_grid at x 115,
+        // 300 px slots, below a description of variable height: scan the option column
+        // under the portrait (seen live 2 November 2026, BBA_italo_ethiopian_war_events.01).
+        let Some(frame) = find(r, image, window, "leader_frame", 0)? else {
+            return Ok((None, None));
+        };
+        let f = gui_tree::rect(r, image, frame, GAME)?;
+        let left = f.x - 35 + 115;
+        let _ = (grid, count);
+        return Ok((None, Some((f64::from(left) + 150.0, 120.0, f64::from(f.y + f.h + 10)))));
+    }
+    if kind == "EventWindow_Operative" {
+        // eventwindow.gui: agency_insignia at (361, 35), options_grid at x 90 (300 px slots)
+        // in bottom_Window under the operative's portrait and description. Not yet seen live.
+        let Some(insignia) = find(r, image, window, "agency_insignia", 0)? else {
+            return Ok((None, None));
+        };
+        let f = gui_tree::rect(r, image, insignia, GAME)?;
+        let left = f.x - 361 + 90;
+        return Ok((None, Some((f64::from(left) + 150.0, 120.0, f64::from(f.y - 35 + 250)))));
+    }
     if kind != "EventWindow" && kind != "EventWindow_News" {
         return Ok((None, None));
     }
@@ -346,7 +371,7 @@ pub(super) fn list(process: &dyn Process) -> Result<Value> {
     Ok(
         json!({"peace_conference_open":peace,"events":open.iter().enumerate().map(|(i, e)| json!({
         "event":e.id,"title":e.title,"options":e.options,"on_top":i == last,
-        "answerable":e.centres.is_some() || e.scan.is_some()})).collect::<Vec<_>>()}),
+        "answerable":e.centres.is_some() || e.scan.is_some(),"layout":e.layout})).collect::<Vec<_>>()}),
     )
 }
 /// Ids of the open events, in list order.
