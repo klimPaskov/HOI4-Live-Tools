@@ -198,7 +198,9 @@ pub fn compute(plan: &Value, seen: &Observations) -> Vec<Value> {
         }
     }
     if let Some(economy) = seen.economy {
-        let civilian = economy["civilian_factories_available_for_projects"].as_i64();
+        let civilian = economy["civilian_factories_idle"]
+            .as_i64()
+            .or(economy["civilian_factories_available_for_projects"].as_i64());
         if let (Some(idle), Some(n)) = (civilian, threshold(config, "idle_civilian_factories", 4.0))
         {
             if idle as f64 >= n {

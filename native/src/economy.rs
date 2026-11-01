@@ -154,10 +154,26 @@ pub fn snapshot(process: &dyn Process) -> Result<Value> {
         })?
         .max(0);
     let project = subtract(project, 0, 0)?;
+    // `project` is the construction POOL (civilian factories left after consumer goods and
+    // trade), not spare capacity: the queue's lines already use part of it. Idle = pool minus
+    // the factories working on queued projects (seen 1 Nov 2026: pool 22, all 22 on lines).
+    let on_construction: Option<i64> = r
+        .i32(country + 8)
+        .ok()
+        .and_then(|tag| crate::construction::lines_in(&r, base, production, tag, false).ok())
+        .map(|lines| {
+            lines
+                .rows
+                .iter()
+                .filter_map(|row| row["active_factories_raw_signed"].as_i64())
+                .filter(|v| (0..=1_000).contains(v))
+                .sum()
+        });
+    let idle = on_construction.map(|used| (project as i64 - used).max(0));
     let pp = raw(&r, politics + 0xe0, true)?;
     let (end_calls, end_bytes) = w.finish()?;
     process.check()?;
     Ok(
-        json!({"source":"native own economy trigger counts","build_id":g.build_id,"owned":true,"player":context.player,"factory_trigger_count":{"military":military,"naval":naval,"civilian":civilian},"civilian_factories_available_for_projects":project,"political_power":{"raw_signed":pp,"raw_units_per_point":FIXED,"exact_rational":{"numerator":pp,"denominator":FIXED},"integer_trigger_count":pp/FIXED},"unavailable":{"ui_factory_totals":true,"idle_builders":true,"stability":true,"war_support":true,"shortages":true},"freshness":{"observed_unix_ms":SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),"elapsed_ms":started.elapsed().as_secs_f64()*1000.0,"read_calls_kind":"logical_read_requests","read_calls":r.calls.get()+end_calls as u64,"read_bytes":r.bytes.get()+end_bytes},"observation_paused_game":false,"input_authorized":false}),
+        json!({"source":"native own economy trigger counts","build_id":g.build_id,"owned":true,"player":context.player,"factory_trigger_count":{"military":military,"naval":naval,"civilian":civilian},"civilian_factories_available_for_projects":project,"civilian_factories_on_construction":on_construction,"civilian_factories_idle":idle,"political_power":{"raw_signed":pp,"raw_units_per_point":FIXED,"exact_rational":{"numerator":pp,"denominator":FIXED},"integer_trigger_count":pp/FIXED},"unavailable":{"ui_factory_totals":true,"idle_builders":true,"stability":true,"war_support":true,"shortages":true},"freshness":{"observed_unix_ms":SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),"elapsed_ms":started.elapsed().as_secs_f64()*1000.0,"read_calls_kind":"logical_read_requests","read_calls":r.calls.get()+end_calls as u64,"read_bytes":r.bytes.get()+end_bytes},"observation_paused_game":false,"input_authorized":false}),
     )
 }

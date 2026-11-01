@@ -1075,8 +1075,11 @@ fn construction_step(
     if jobs.is_empty() {
         return Ok(None);
     }
-    let idle = economy["civilian_factories_available_for_projects"]
+    // Spare capacity: the pool minus what queued projects already use (older servers
+    // report only the pool).
+    let idle = economy["civilian_factories_idle"]
         .as_i64()
+        .or(economy["civilian_factories_available_for_projects"].as_i64())
         .unwrap_or(0);
     let min_idle = plan["construction_min_idle"].as_i64().unwrap_or(4);
     let mut skipped: Vec<String> = Vec::new();
@@ -1696,7 +1699,9 @@ fn construction_alarm(
     }
     let days = plan["alarms"]["construction_stall_days"].as_i64().unwrap_or(5);
     let economy = tools.call("hoi4_economy", &json!({})).ok()?;
-    let idle = economy["civilian_factories_available_for_projects"].as_i64()?;
+    let idle = economy["civilian_factories_idle"]
+        .as_i64()
+        .or(economy["civilian_factories_available_for_projects"].as_i64())?;
     if idle < plan["construction_min_idle"].as_i64().unwrap_or(4) {
         return None;
     }
