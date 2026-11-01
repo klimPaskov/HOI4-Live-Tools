@@ -471,6 +471,19 @@ pub(super) fn assign(process: &dyn Process, keys: &MacKeys, plan: &AssignPlan) -
     let mut sizes = Vec::new();
     let mut exact = false;
     let mut partial = None;
+    // Large states (Eritrea, Hararghe) spread divisions beyond the boxes around the centre:
+    // a second pass zooms the map out two wheel steps around the state's centre.
+    for pass in 0..2 {
+    if exact {
+        break;
+    }
+    if pass == 1 {
+        find_state(process, keys, plan.state)?;
+        keys.scroll(GAME, (960.0, 540.0), -240)?;
+        std::thread::sleep(std::time::Duration::from_millis(200));
+        keys.scroll(GAME, (960.0, 540.0), -240)?;
+        std::thread::sleep(std::time::Duration::from_millis(500));
+    }
     for (k, (from, to)) in ASSIGN_BOXES.into_iter().enumerate() {
         keys.drag(GAME, from, to)?;
         std::thread::sleep(std::time::Duration::from_millis(350));
@@ -485,10 +498,11 @@ pub(super) fn assign(process: &dyn Process, keys: &MacKeys, plan: &AssignPlan) -
         // moved); take it at once, since the drags can pan the map and a later re-drag of the
         // same box picked other divisions (seen live 1 November 2026).
         if plan.others_here == 0 && size > plan.target_here && size < expected {
-            partial = Some((k, size));
+            partial = Some((k + pass * ASSIGN_BOXES.len(), size));
             exact = true;
             break;
         }
+    }
     }
     if !exact {
         return Err(Error::new(
