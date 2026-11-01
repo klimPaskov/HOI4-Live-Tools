@@ -394,7 +394,7 @@ def new_game(session, country=None, bookmark=None, timeout=600, start=True):
         st = "select_country"
     if st == "select_country":
         if country:
-            rx = re.escape(country) if not any(c in country for c in "\^$[]()|*+?") else country
+            rx = re.escape(country) if not any(c in country for c in r"\^$[]()|*+?") else country
             steps.append(ui.click_text(session, rx, retries=3))
             session.sleep(1.0)
         steps.append(ui.click_text(session, r"select\s*country", prefer="bottom"))
