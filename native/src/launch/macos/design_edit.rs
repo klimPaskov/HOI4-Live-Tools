@@ -35,7 +35,7 @@ pub(super) fn options_tool() -> Value {
     json!({"name":"hoi4_design_options","description":"What the equipment designers offer, read from the game's own designer windows (Production panel, equipment selection list, the row's Create variant button; nothing is saved and no experience is spent, the window is closed again). Without `base`: the own designs of that kind that can be a base (design_id, type, name, designer: upgrade or modules) and the held army/air/navy experience, read from memory with no input. With `base` (design_id, or an exact design name or equipment type key): the designer opens on it. Tank/plane without modules: the upgrade rows (key, label, level, experience per level measured by one step up and down, step limit) and the base stats. Ship: every module slot (locked or open, fixed or custom) with its current module and, per slot, the categories and unlocked modules the selector offers (module key, game name, experience cost text). `slot` limits the scan to one slot.","inputSchema":{"type":"object","properties":{"kind":{"type":"string","enum":["tank","plane","ship","other"]},"base":{"type":["integer","string"]},"slot":{"type":"string","maxLength":64},"measure_costs":{"type":"boolean"},"lease_token":{"type":"string"}},"required":["kind","lease_token"],"additionalProperties":false}})
 }
 pub(super) fn create_tool() -> Value {
-    json!({"name":"hoi4_design_create","description":"Create a new own equipment variant through the game's designer: Production panel, equipment selection list, the base design's Create variant button, then the designer's own controls, name box and Save. `kind` tank|plane|other (equipment without module slots) takes `upgrades` {row: level} (the designer's upgrade rows, e.g. armor, reliability, gun, engine, range; absolute levels 0..20, listed by hoi4_design_options); `kind` ship takes `modules` {slot: module_key or null to empty the slot} (slot names and module keys as in hoi4_designs detail/hoi4_design_options; only the slots named are changed, the rest keep the base design's modules). `base` is a design id or an exact design name/type key. Saving a custom (named) ship design uses the designer's Save As New so the original design and its production lines stay unchanged. Spends army/air/navy experience read from the window and returned. Refused before any input: kind_mismatch, base_unknown/base_ambiguous (candidates listed), design_not_offered, slot_unknown (slots listed), name_taken, name_not_typable, nothing_to_change, designer_unsupported. Found while building (nothing saved, the draft is dropped): upgrade_unknown, upgrade_level_max, slot_locked, module_unavailable (unlocked modules listed), insufficient_experience. Verified when exactly one new own design with the requested name and exactly the requested modules (or the designer's computed stats) is listed by hoi4_designs; the receipt carries that row. Use the returned design_id with hoi4_production_add `design`.","inputSchema":{"type":"object","properties":{"kind":{"type":"string","enum":["tank","plane","ship","other"]},"base":{"type":["integer","string"]},"upgrades":{"type":"object","additionalProperties":{"type":"integer","minimum":0,"maximum":20}},"modules":{"type":"object","additionalProperties":{"type":["string","null"],"maxLength":96}},"name":{"type":"string","maxLength":40},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["kind","base","request_id","lease_token"],"additionalProperties":false}})
+    json!({"name":"hoi4_design_create","description":"Create a new own equipment variant through the game's designer: Production panel, equipment selection list, the base design's Create variant button, then the designer's own controls, name box and Save. Equipment without module slots (tanks/planes without No Step Back/By Blood Alone, `other`) takes `upgrades` {row: level} (the designer's upgrade rows, e.g. armor, reliability, gun, engine, range; absolute levels 0..20, listed by hoi4_design_options); equipment with module slots (ships, and tanks/planes with No Step Back/By Blood Alone) takes `modules` {slot: module_key or null to empty the slot} (slot names and module keys as in hoi4_designs detail/hoi4_design_options; only the slots named are changed, the rest keep the base design's modules). `base` is a design id or an exact design name/type key. Saving a custom (named) design uses the designer's Save As New so the original design and its production lines stay unchanged. Spends army/air/navy experience read from the window and returned. Refused before any input: kind_mismatch, base_unknown/base_ambiguous (candidates listed), design_not_offered, slot_unknown (slots listed), name_taken, name_not_typable, nothing_to_change, designer_unsupported. Found while building (nothing saved, the draft is dropped): upgrade_unknown, upgrade_level_max, slot_locked, module_unavailable (unlocked modules listed), insufficient_experience. Verified when exactly one new own design with the requested name and exactly the requested modules (or the designer's computed stats) is listed by hoi4_designs; the receipt carries that row. Use the returned design_id with hoi4_production_add `design`.","inputSchema":{"type":"object","properties":{"kind":{"type":"string","enum":["tank","plane","ship","other"]},"base":{"type":["integer","string"]},"upgrades":{"type":"object","additionalProperties":{"type":"integer","minimum":0,"maximum":20}},"modules":{"type":"object","additionalProperties":{"type":["string","null"],"maxLength":96}},"name":{"type":"string","maxLength":40},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["kind","base","request_id","lease_token"],"additionalProperties":false}})
 }
 pub(super) fn obsolete_tool() -> Value {
     json!({"name":"hoi4_design_obsolete","description":"Decommission (obsolete: true, default) or recommission (obsolete: false) an own equipment variant with the Production selection list's Decommission/Recommission button: a decommissioned variant is marked outdated equipment and hidden from the lists unless Show outdated equipment is ticked (the tool ticks and restores that filter itself when it must reach a hidden row). `design` is the design id from hoi4_designs. Refused before input: design_unknown, already_obsolete, not_obsolete. Verified from the design's obsolete flag in memory (hoi4_designs `obsolete`).","inputSchema":{"type":"object","properties":{"design":{"type":"integer","minimum":1},"obsolete":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["design","request_id","lease_token"],"additionalProperties":false}})
@@ -889,16 +889,13 @@ fn apply_inner(process: &dyn Process, keys: &MacKeys, plan: &Planned, kind: &str
             format!("The {} designer opened for design {}; only the upgrade designer and the ship module designer are driven", opened.name(), plan.base_id),
         ));
     }
-    if opened == Kind::Tank || opened == Kind::Plane {
-        return Err(Error::new(
-            "designer_unsupported",
-            "The tank/plane module designer is not driven yet (not validated); nothing was saved",
-        ));
-    }
-    if opened == Kind::Upgrade {
-        apply_upgrade(process, keys, plan)
-    } else {
-        apply_ship(process, keys, plan)
+    match opened {
+        Kind::Upgrade => apply_upgrade(process, keys, plan),
+        // The tank and plane designers (No Step Back, By Blood Alone) are the same
+        // CEquipmentDesignerView with their own layout: slots, selector, name box and Save.
+        Kind::Tank => apply_modules(process, keys, plan, "tank"),
+        Kind::Plane => apply_modules(process, keys, plan, "plane"),
+        _ => apply_modules(process, keys, plan, "ship"),
     }
 }
 fn apply_upgrade(process: &dyn Process, keys: &MacKeys, plan: &Planned) -> Result<Value> {
@@ -977,7 +974,7 @@ fn check_affordable(cost: Option<i64>, have: Option<i64>, enabled: bool, account
     }
     Ok(())
 }
-fn apply_ship(process: &dyn Process, keys: &MacKeys, plan: &Planned) -> Result<Value> {
+fn apply_modules(process: &dyn Process, keys: &MacKeys, plan: &Planned, kind: &str) -> Result<Value> {
     let s = read(process, module)?;
     if s.type_key != plan.base_key {
         return Err(mismatch("designer hull", format!("{} instead of {}", s.type_key, plan.base_key)));
@@ -1014,14 +1011,14 @@ fn apply_ship(process: &dyn Process, keys: &MacKeys, plan: &Planned) -> Result<V
     if s.name != plan.want.name {
         return Err(mismatch("design name", format!("{:?} instead of {:?}", s.name, plan.want.name)));
     }
-    check_affordable(s.save_cost, s.experience, s.save_enabled, experience_label("ship"))?;
+    check_affordable(s.save_cost, s.experience, s.save_enabled, experience_label(kind))?;
     let cost = s.save_cost;
     let planned_stats = s.stats.clone();
     dui::click_rect(keys, s.save)?;
     let _ = wait(process, "design saved", |r, i| {
         Ok(!dui::designer_open(r, i)? || designs_have(r, i, &plan.want))
     });
-    Ok(json!({"designer":"ship_modules","experience_cost":cost,"experience_before":experience_before,
+    Ok(json!({"designer":format!("{kind}_modules"),"experience_cost":cost,"experience_before":experience_before,
         "modules_before":start,"modules_planned":want_modules,"stats_planned":planned_stats,
         "refit_cost":s.refit_cost,"production_cost":s.production_cost,"name":plan.want.name,
         "save_as_new":plan.custom_base}))

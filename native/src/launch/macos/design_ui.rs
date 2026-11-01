@@ -561,9 +561,9 @@ pub(super) fn module_state(r: &Reader<'_>, image: u64) -> Result<ModuleState> {
     let save = named(r, image, root, "save_button")?;
     let save_label = label_of(r, save)?;
     let dup = named(r, image, root, "duplicate_button")?;
-    let edit = named(r, image, root, "equipment_names")?;
+    // `equipment_names` exists only in the ship designer; the tank and plane designers
+    // (tank_designer_view.gui, plane_designer_view.gui) share the other controls.
     let edit_box = r.u64(view + EDV_EDIT_BOX)?;
-    let _ = edit;
     Ok(ModuleState {
         kind,
         name: r.string_bounded(edit_box + EDV_EDIT_TEXT, 160)?,
@@ -576,9 +576,14 @@ pub(super) fn module_state(r: &Reader<'_>, image: u64) -> Result<ModuleState> {
         reset: gui_tree::rect(r, image, named(r, image, root, "reset_button")?, GAME)?,
         duplicate: gui_tree::rect(r, image, dup, GAME)?,
         duplicate_state: gui_tree::button_state(r, dup)?,
-        name_point: {
+        // Ships keep the offset measured live from the close button (October 2026).
+        name_point: if kind == Kind::Ship {
             let (x, y) = gui_tree::rect(r, image, named(r, image, root, "close_button")?, GAME)?.center();
             (x - 963.0, y + 42.0)
+        } else {
+            // Tank/plane designer: name box measured on screen 1 November 2026 (Panzer II).
+            let (x, y) = gui_tree::rect(r, image, named(r, image, root, "close_button")?, GAME)?.center();
+            (x - 950.0, y + 51.0)
         },
         refit_cost: text_of(r, image, root, "refit_cost").unwrap_or_default(),
         production_cost: text_of(r, image, root, "production_value").unwrap_or_default(),

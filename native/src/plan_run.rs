@@ -1435,12 +1435,7 @@ fn extras_step(
                 if wing["standing_by"] != json!(true) || state.skipped(now, "airwing", &name) {
                     continue;
                 }
-                let kind = text(&wing["aircraft_type"]);
-                let mission = if kind.contains("fighter") {
-                    "air_superiority"
-                } else if kind.to_lowercase().contains("cas") {
-                    "cas"
-                } else {
+                let Some(mission) = war_mission(text(&wing["aircraft_type"])) else {
                     continue;
                 };
                 let (ok, why) = state.act(
@@ -1902,8 +1897,35 @@ pub fn observe_alarms(tools: &dyn Tools, plan: &Value) -> Vec<Value> {
     )
 }
 
+/// Air mission for a wing's aircraft type in war: fighters (legacy `fighter_equipment_*`,
+/// By Blood Alone small airframes and heavy fighters) fly air superiority, CAS flies close air
+/// support; other types (bombers, naval bombers, transports) are left to the player.
+fn war_mission(kind: &str) -> Option<&'static str> {
+    let k = kind.to_lowercase();
+    if k.contains("cas") {
+        Some("cas")
+    } else if k.contains("fighter")
+        || k.starts_with("small_plane_airframe")
+        || k.starts_with("cv_small_plane_airframe")
+    {
+        Some("air_superiority")
+    } else {
+        None
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn war_mission_covers_designer_airframes() {
+        assert_eq!(war_mission("fighter_equipment_1"), Some("air_superiority"));
+        assert_eq!(war_mission("small_plane_airframe_1"), Some("air_superiority"));
+        assert_eq!(war_mission("cv_small_plane_airframe_1"), Some("air_superiority"));
+        assert_eq!(war_mission("small_plane_cas_airframe_1"), Some("cas"));
+        assert_eq!(war_mission("CAS_equipment_1"), Some("cas"));
+        assert_eq!(war_mission("medium_plane_airframe_1"), None);
+        assert_eq!(war_mission("small_plane_naval_bomber_airframe_1"), None);
+    }
     use super::*;
     use std::cell::RefCell;
 
