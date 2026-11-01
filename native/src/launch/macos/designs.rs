@@ -222,6 +222,9 @@ mod tests {
         let base = variant(&mem, 1343, "", "ship_hull_cruiser_panzerschiff", 0);
         let custom = variant(&mem, 1347, "Deutschland", "ship_hull_cruiser_panzerschiff", base);
         let plane = variant(&mem, 1360, "Ju 86", "tac_bomber_equipment_0", 0);
+        // A BBA plane keeps another flag in the byte after the decommission flag (live: 0x01000000).
+        mem.i32(plane + fleetmem::VARIANT_OBSOLETE, 0x0100_0000);
+        mem.i32(base + fleetmem::VARIANT_OBSOLETE, 1);
         // module slot table on the custom design's hull and one chosen module
         let kind = mem.u64_at(custom + fleetmem::VARIANT_TYPE);
         let slots = mem.alloc(0x80);
@@ -249,6 +252,8 @@ mod tests {
         assert_eq!(all.len(), 3);
         assert_eq!(all[1].modules, vec![("fixed_ship_battery_slot".to_string(), "ship_heavy_battery_2".to_string())]);
         assert_eq!(all[2].lines, vec![(777, 3)]);
+        assert!(all[0].variant.obsolete);
+        assert!(!all[2].variant.obsolete);
         let v = view(&all, Some("ship"), true, true, None);
         assert_eq!(v["count"], 1);
         assert_eq!(v["designs"][0]["name"], "Deutschland");

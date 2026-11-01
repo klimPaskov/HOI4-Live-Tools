@@ -136,7 +136,8 @@ pub(super) struct Variant {
     pub parent_id: Option<i32>,
     pub manpower: i32,
     pub max_strength: f64,
-    /// Decommissioned (marked outdated equipment): variant +0x414, 0/1. Flipped by the
+    /// Decommissioned (marked outdated equipment): variant +0x414, one byte 0/1 (BBA planes keep
+    /// another flag at +0x417, so the dword is not a boolean). Flipped by the
     /// Production list's Decommission button on 26 October 2026 (0 -> 1, back to 0 by Recommission).
     pub obsolete: bool,
 }
@@ -163,7 +164,7 @@ pub(super) fn variant(r: &Reader<'_>, image: u64, address: u64) -> Result<Varian
         parent_id,
         manpower: r.i32(address + VARIANT_MANPOWER)?,
         max_strength: fixed_at(r, address + VARIANT_MAX_STRENGTH)?,
-        obsolete: r.i32(address + VARIANT_OBSOLETE)? != 0,
+        obsolete: r.i32(address + VARIANT_OBSOLETE)? & 0xff != 0,
     })
 }
 /// Non-zero stats of a variant keyed by stat name.

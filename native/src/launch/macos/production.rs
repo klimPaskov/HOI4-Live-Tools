@@ -401,7 +401,12 @@ pub(super) fn add(
             ),
         ));
     };
-    click(process, keys, rect)?;
+    // With Arms Against Tyranny a plain click opens the Military Industrial Organization
+    // chooser; Shift+click is the game's own "produce without a Military Industrial
+    // Organization" and adds the line directly (verified 1 November 2026).
+    clear_notices(process, keys)?;
+    let (x, y) = rect.center();
+    keys.shift_click(GAME, x, y)?;
     wait(process, "add line", |r, base| {
         Ok(production_lines::own_lines(r, base)?
             .iter()

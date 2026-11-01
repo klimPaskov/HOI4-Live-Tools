@@ -1075,7 +1075,7 @@ pub(super) fn obsolete_apply(process: &dyn Process, keys: &MacKeys, d: &Design, 
         let located = dui::locate(process, keys, id, kind, !want)?;
         dui::click_obsolete(process, keys, id, want)?;
         wait(process, "obsolete flag", |r, _| {
-            Ok((r.i32(d.variant.address + fleetmem::VARIANT_OBSOLETE)? != 0) == want)
+            Ok((r.i32(d.variant.address + fleetmem::VARIANT_OBSOLETE)? & 0xff != 0) == want)
         })?;
         if located.outdated_ticked {
             dui::untick_outdated(process, keys)?;
