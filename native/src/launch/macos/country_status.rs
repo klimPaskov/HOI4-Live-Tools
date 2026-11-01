@@ -559,9 +559,11 @@ mod tests {
             ("supply_value", Source::Text("1.0".into())),
             ("threat_value", Source::Text("12%".into())),
             ("pol_power", Source::Text("+13".into())),
+            ("command_power_value", Source::Text("130".into())),
         ]);
         let (fields, unavailable) = build_fields(&t);
         assert!(unavailable.is_empty());
+        assert_eq!(fields["command_power"]["value"], json!(130.0));
         assert_eq!(fields["stability"]["value"], json!(0.81));
         assert_eq!(fields["stability"]["raw_text"], json!("81%"));
         assert_eq!(fields["war_support"]["value"], json!(0.05));
@@ -603,7 +605,7 @@ mod tests {
         assert_eq!(fields["stability"]["value"], Value::Null);
         assert!(fields.values().all(|v| v["validated"] == json!(false)));
         assert!(unavailable.iter().any(|u| u["field"] == json!("convoys")));
-        assert_eq!(unavailable.len(), 7);
+        assert_eq!(unavailable.len(), 8);
     }
 
     #[test]
