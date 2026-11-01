@@ -188,8 +188,39 @@ pub(super) fn locate(r: &Reader<'_>, image: u64, class: &Class) -> Result<Option
             }
         }
     }
+    // Windows owned by another view rather than the manager.
+    for (child, owner, offset, root_at) in CHILD_WINDOWS {
+        if *child != class.vtable {
+            continue;
+        }
+        for chunk in bytes.chunks_exact(8) {
+            let p = u64::from_le_bytes(chunk.try_into().unwrap());
+            if plausible(p) && r.u64(p).ok() == Some(image + owner) {
+                let w = r.u64(p + offset).unwrap_or(0);
+                if plausible(w) && r.u64(w).ok() == Some(want) {
+                    let root = r
+                        .u64(w + root_at)
+                        .ok()
+                        .filter(|p| plausible(*p))
+                        .and_then(|p| gui_tree::container(r, p, image).ok().flatten())
+                        .filter(|root| {
+                            container_name(r, image, *root).ok().flatten().as_deref()
+                                == Some(class.root_name)
+                        });
+                    if root.is_some() {
+                        return Ok(root);
+                    }
+                }
+            }
+        }
+    }
     Ok(None)
 }
+/// (child window vtable, owning view vtable, offset of the child in the owner, offset of the
+/// child's root container): on 1.19.4.1 the agency upgrades window hangs off the agency view
+/// at +0x4a8 with its root at +0x50 (mapped live 1 November 2026).
+const CHILD_WINDOWS: &[(u64, u64, u64, u64)] =
+    &[(AGENCY_UPGRADES.vtable, AGENCY_VIEW.vtable, 0x4a8, 0x50)];
 
 /// The window exists and is shown.
 pub(super) fn is_open(r: &Reader<'_>, image: u64, class: &Class) -> Result<bool> {

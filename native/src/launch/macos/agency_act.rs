@@ -72,14 +72,22 @@ fn read_agency(r: &Reader<'_>, i: u64) -> Result<AgencyGui> {
         ),
         _ => (false, false),
     };
-    let upgrading = match pk::find(r, i, root, "upgrade_progressbar", 3)? {
-        Some(bar) if gui_tree::shown(r, bar)? => match gui_tree::container(r, bar, i)? {
-            Some(window) => Some(pk::text(r, i, window, "progressbar_desc", 2)?.unwrap_or_default()),
-            None => Some(String::new()),
-        },
-        _ => None,
+    // The progress bars stay shown when idle, with STATUS_NO_AGENCY_UPGRADE /
+    // STATUS_NO_OPERATIVE_RECRUITED as their text (seen live 1 November 2026).
+    let progress = |name: &str, idle: &str| -> Result<Option<String>> {
+        Ok(match pk::find(r, i, root, name, 3)? {
+            Some(bar) if gui_tree::shown(r, bar)? => match gui_tree::container(r, bar, i)? {
+                Some(window) => {
+                    let text = pk::text(r, i, window, "progressbar_desc", 2)?.unwrap_or_default();
+                    (!idle_text(&text, idle)).then_some(text)
+                }
+                None => Some(String::new()),
+            },
+            _ => None,
+        })
     };
-    let recruiting = pk::shown(r, i, root, "operatives_progressbar", 3)?;
+    let upgrading = progress("upgrade_progressbar", "No upgrade in progress.")?;
+    let recruiting = progress("operatives_progressbar", "No operative being recruited.")?.is_some();
     Ok(AgencyGui {
         created,
         creating,
@@ -107,6 +115,11 @@ pub(super) fn create_refusal(g: &AgencyGui) -> Option<(&'static str, String)> {
         ));
     }
     None
+}
+/// A progress text that says nothing is running (English localisation; the run uses l_english).
+fn idle_text(text: &str, idle: &str) -> bool {
+    let t = text.trim();
+    t.is_empty() || t.eq_ignore_ascii_case(idle) || t.to_ascii_lowercase().starts_with("no ")
 }
 /// Refusal for the agency actions that need an existing agency.
 pub(super) fn needs_agency_refusal(g: &AgencyGui) -> Option<(&'static str, String)> {
@@ -880,7 +893,7 @@ pub(super) const TOOLS: [&str; 4] = [
 pub(super) fn tools() -> Vec<Value> {
     vec![
         json!({"name":"hoi4_agency_create","description":"UNVALIDATED (no live test yet): create the intelligence agency with ordinary input: Shift+W agency view, Create Agency, the name/logo window (default name kept, the first logo chosen when Create is disabled), Create. Whether the agency exists is only on screen, so the refusals come from the opened window before the click: agency_exists, agency_creation_in_progress, agency_creation_unavailable (the game disables the button). Verified from the window only (the creation progress bar appears): verification gui_only, results carry validated:false. Creation takes civilian factories for the define's number of days.","inputSchema":{"type":"object","properties":{"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["request_id","lease_token"],"additionalProperties":false}}),
-        json!({"name":"hoi4_agency_upgrade","description":"UNVALIDATED (no live test yet): start an agency upgrade: Shift+W agency view, the branch button, the upgrade entry in the upgrades window (the named `upgrade`, else the first enabled one). Branch and upgrade keys are those of hoi4_intelligence (branch_intelligence, upgrade_army_department, ...). Typed refusals: branch_unknown, upgrade_unknown (before input, from the loaded database); agency_not_created, upgrade_in_progress, upgrade_unavailable (lists the branch's entries with their enabled state), found from the windows before the click. Verified from the agency view's upgrade progress bar only (verification gui_only). Results carry validated:false.","inputSchema":{"type":"object","properties":{"branch":{"type":"string","maxLength":96},"upgrade":{"type":"string","maxLength":96},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["branch","request_id","lease_token"],"additionalProperties":false}}),
+        json!({"name":"hoi4_agency_upgrade","description":"Start an agency upgrade: Shift+W agency view, the branch button, the upgrade entry in the upgrades window (the named `upgrade`, else the first enabled one). Branch and upgrade keys are those of hoi4_intelligence (branch_intelligence, upgrade_army_department, ...). Typed refusals: branch_unknown, upgrade_unknown (before input, from the loaded database); agency_not_created, upgrade_in_progress, upgrade_unavailable (lists the branch's entries with their enabled state), found from the windows before the click. Verified from the agency view's upgrade progress bar only (verification gui_only). Results carry validated:false.","inputSchema":{"type":"object","properties":{"branch":{"type":"string","maxLength":96},"upgrade":{"type":"string","maxLength":96},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["branch","request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_operative_recruit","description":"UNVALIDATED (no live test yet): recruit an operative into a free slot of the operative bar: Shift+W agency view, the empty slot, the candidate at position `candidate` (0-based, default 0) of the recruitment window (names and traits are not readable, so the choice is by position). Typed refusals found from the windows before the click: agency_not_created, operative_bar_unavailable, no_free_operative_slot, unknown_candidate. Verified from the bar and the recruitment progress bar only (verification gui_only). Results carry validated:false.","inputSchema":{"type":"object","properties":{"candidate":{"type":"integer","minimum":0,"maximum":31},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["request_id","lease_token"],"additionalProperties":false}}),
         json!({"name":"hoi4_operative_assign","description":"UNVALIDATED (no live test yet): send a recruited operative (`operative` = 0-based position among the recruited ones on the operative bar) on a mission: portrait, the order bar's mission button, then one click on the target. State missions (build_intel_network, quiet_intel_network, root_out_resistance) take `state_id`; country missions (counter_intelligence, control_trade, diplomatic_pressure, propaganda) take `country` (a tag; the Find view centres its lowest state id and that click picks the country; counter_intelligence without country starts at home with a right click). boost_ideology (needs the ideology window) and `operation` (operation overview) are not built and refuse with mission_not_built / operation_not_built. Typed refusals: invalid_arguments, target_required, country_has_no_states, unknown_country (before input); agency_not_created, operative_bar_unavailable, operative_unknown, operative_busy, mission_unavailable (the game disables the button) from the windows before the first state-changing click. Verified from the operative's on-mission marker on the bar only (verification gui_only). Results carry validated:false.","inputSchema":{"type":"object","properties":{"operative":{"type":"integer","minimum":0,"maximum":31},"mission":{"type":"string"},"state_id":{"type":"integer","minimum":1,"maximum":4095},"country":{"type":"string","minLength":3,"maxLength":3},"operation":{"type":"string"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["operative","request_id","lease_token"],"additionalProperties":false}}),
     ]
