@@ -400,7 +400,11 @@ pub(super) fn start(process: &dyn Process, keys: &MacKeys, key: &str, slot: usiz
             "The game disables Research for this technology (missing prerequisite or exclusive choice)",
         ));
     }
-    click(button)?;
+    // Arms Against Tyranny: a plain click on Research opens the Military Industrial
+    // Organization chooser for technologies an organisation can take; Shift+Click researches
+    // with the suggested organisation at once (the button's tooltip, 1.19.4.1).
+    let (x, y) = button.center();
+    keys.shift_click(GAME, x, y)?;
     wait(process, "start research", |r, base| {
         let (slots, _) = research::assignments(r, base)?;
         Ok(slots.get(slot).and_then(|s| s.as_deref()) == Some(key))

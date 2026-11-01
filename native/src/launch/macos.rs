@@ -2015,6 +2015,30 @@ impl Commands for MacClock {
             {
                 return Err(Error::new("invalid_arguments", "Invalid equipment key"));
             }
+            // A base key (infantry_equipment) names the newest own variant type of it
+            // (infantry_equipment_2) when the exact key has no own design.
+            let resolved;
+            let key = if adding && !key.ends_with(|c: char| c.is_ascii_digit()) {
+                let all = designs::read_all(process).unwrap_or_default();
+                let exact = all.iter().any(|d| d.variant.type_key == key);
+                let newest = all
+                    .iter()
+                    .filter(|d| !d.variant.obsolete)
+                    .filter_map(|d| {
+                        let rest = d.variant.type_key.strip_prefix(key)?.strip_prefix('_')?;
+                        rest.parse::<u32>().ok().map(|n| (n, d.variant.type_key.clone()))
+                    })
+                    .max();
+                match (exact, newest) {
+                    (false, Some((_, k))) => {
+                        resolved = k;
+                        resolved.as_str()
+                    }
+                    _ => key,
+                }
+            } else {
+                key
+            };
             let factories = args
                 .get("factories")
                 .and_then(Value::as_i64)
