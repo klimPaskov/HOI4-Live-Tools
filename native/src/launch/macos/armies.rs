@@ -600,6 +600,7 @@ pub(super) fn create(
     clear_notices(process, keys)?;
     // The selection box stays clear of the left-hand panels; Escape is not used
     // because on a free map it opens the game menu.
+    default_map_mode(keys)?;
     find_state(process, keys, state)?;
     // Unassigned divisions can stand anywhere in the state: when the usual box
     // does not hold exactly them, try wider boxes (a new drag replaces the
@@ -622,11 +623,19 @@ pub(super) fn create(
                     break;
                 }
             }
-            if read(process, selection_size)? as usize != expected {
-                keys.drag(GAME, ASSIGN_BOXES[0].0, ASSIGN_BOXES[0].1)?;
-                wait(process, "select divisions", |r, i| {
-                    Ok(selection_size(r, i)? > 0)
-                })?;
+            let held = read(process, selection_size)? as usize;
+            if held != expected {
+                // No box holds exactly the unassigned divisions here: a new army would also
+                // take divisions of neighbouring armies (seen live 1 November 2026: a create
+                // pulled 7 divisions out of two armies). Refuse instead of guessing.
+                return Err(Error::new(
+                    "selection_mismatch",
+                    format!(
+                        "No selection box held exactly the {expected} unassigned divisions of state \
+                         {state} (last box: {held}); nothing was created. Deploy new divisions to a \
+                         state without other armies, or fold them with hoi4_army_assign"
+                    ),
+                ));
             }
         }
     }
@@ -1104,12 +1113,20 @@ pub(super) fn divisions_heading_for(
 }
 /// Box-select the own divisions standing in `state` (Find view, then the usual boxes) until the
 /// selection holds exactly `expected` divisions; refuses with `selection_mismatch` otherwise.
+/// Back to the default map mode (F1, mapmodes_interface.gui): in the air map mode left by the
+/// air tools the division counters are hidden and a box selection picks nothing.
+fn default_map_mode(keys: &MacKeys) -> Result<()> {
+    keys.press_code(122)?;
+    std::thread::sleep(std::time::Duration::from_millis(250));
+    Ok(())
+}
 pub(super) fn box_select_exact(
     process: &dyn Process,
     keys: &MacKeys,
     state: i32,
     expected: usize,
 ) -> Result<()> {
+    default_map_mode(keys)?;
     find_state(process, keys, state)?;
     let mut sizes = Vec::new();
     for (from, to) in ASSIGN_BOXES {
