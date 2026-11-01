@@ -74,8 +74,15 @@ pub(super) fn tag_name(r: &Reader<'_>, image: u64, tag: i32) -> Result<String> {
     let g = game::layout(r);
     let db = r.u64(image + g.tag_db_global)?;
     let (_, data, count) = r.array_header(db)?;
-    if tag <= 0 || tag as usize >= count {
+    if tag <= 0 {
         return Err(Error::new("invalid_tag", "Tag index outside the tag table"));
+    }
+    if tag as usize >= count {
+        // Countries created during the game (civil war sides, released nations) have indices
+        // past the static tag table (seen live: the Spanish Civil War in 1936 games). Their
+        // script tag is not read; a placeholder that can never match a real tag keeps reads
+        // over every country working.
+        return Ok(format!("?{tag}"));
     }
     let name = r.string(data + tag as u64 * g.tag_stride)?;
     if name.len() != 3 || !name.bytes().all(|b| b.is_ascii_alphanumeric()) {
