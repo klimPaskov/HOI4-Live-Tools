@@ -193,6 +193,12 @@ fn deep_all(
             }
             for grid in grids {
                 for item in pk::items(r, image, grid)? {
+                    // A grid item's own window carries the template name (the politics view's
+                    // research_production slots are industrial_org_entry items, 1.19.4.1).
+                    if pk::container_name(r, image, item.frame)?.as_deref() == Some(wanted) {
+                        out.push(item.frame + 0x30);
+                        continue;
+                    }
                     deep_all(r, image, item.frame, wanted, depth - 1, budget, out)?;
                 }
             }

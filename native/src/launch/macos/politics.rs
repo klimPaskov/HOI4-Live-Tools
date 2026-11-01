@@ -177,7 +177,10 @@ fn slot(
             return Ok((current, r.u64(item + u.advisor_button)?, Kind::Advisor));
         }
         if r.u64(item)? != image + u.slot_vtable {
-            return Err(Error::new("invalid_gui", "Unknown politics slot class"));
+            return Err(Error::new(
+                "invalid_gui",
+                format!("Unknown politics slot class (vtable +{:#x})", r.u64(item)?.wrapping_sub(image)),
+            ));
         }
         let current = idea_key(r, r.u64(item + u.slot_idea)?)?;
         let button = r.u64(item + u.slot_button)?;

@@ -226,8 +226,12 @@ pub(super) fn locate(r: &Reader<'_>, image: u64, class: &Class) -> Result<Option
 /// (child window vtable, owning view vtable, offset of the child in the owner, offset of the
 /// child's root container): on 1.19.4.1 the agency upgrades window hangs off the agency view
 /// at +0x4a8 with its root at +0x50 (mapped live 1 November 2026).
-const CHILD_WINDOWS: &[(u64, u64, u64, u64)] =
-    &[(AGENCY_UPGRADES.vtable, AGENCY_VIEW.vtable, 0x4a8, 0x50)];
+/// The organisation list hangs off the politics view at +0x3958 (also referenced from each
+/// later organisation slot record, stride 0x470) with its root at +0xf0.
+const CHILD_WINDOWS: &[(u64, u64, u64, u64)] = &[
+    (AGENCY_UPGRADES.vtable, AGENCY_VIEW.vtable, 0x4a8, 0x50),
+    (MIO_LIST.vtable, POLITICS_VIEW.vtable, 0x3958, 0xf0),
+];
 
 /// The window exists and is shown.
 pub(super) fn is_open(r: &Reader<'_>, image: u64, class: &Class) -> Result<bool> {
