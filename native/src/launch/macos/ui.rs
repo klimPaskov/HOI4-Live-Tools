@@ -169,7 +169,21 @@ pub(super) fn clear_notices(
     super::construction::leave(process, keys);
     // A confirmation left open by an interrupted action blocks every click.
     decline_stale(process, keys)?;
-    let cleared = dismiss_notices(process, keys)?;
+    let cleared = match dismiss_notices(process, keys) {
+        Ok(n) => n,
+        Err(e) => {
+            // A notice that will not close while an event is open is cleared by answering
+            // the event: say so instead of ui_blocked (seen live in the Italy test campaign).
+            let open = read(process, super::events::open_ids).unwrap_or_default();
+            if !open.is_empty() {
+                return Err(Error::new(
+                    "events_open",
+                    format!("Answer the open event(s) first: {} (a notice behind them stays until then)", open.join(", ")),
+                ));
+            }
+            return Err(e);
+        }
+    };
     // An event window is drawn over panels; clicks would land on it, so the
     // player answers events before anything else.
     let open = read(process, super::events::open_ids)?;
