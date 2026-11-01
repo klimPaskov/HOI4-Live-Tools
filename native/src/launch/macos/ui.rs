@@ -253,7 +253,8 @@ fn save_root(r: &Reader<'_>, image: u64) -> Result<Option<u64>> {
     if !(0x10000..=0x7fff_ffff_0000).contains(&window) {
         return Ok(None);
     }
-    for offset in (0x400..0x700).step_by(8) {
+    // The root sat at +0x140 (and +0xa80) on 1 Nov 2026; scan rather than assume.
+    for offset in (0x100..0xb00).step_by(8) {
         let field = r.u64(window + offset)?;
         if !(0x10000..=0x7fff_ffff_0000).contains(&field) {
             continue;
@@ -293,7 +294,10 @@ pub(super) fn save_game(
             .ok_or_else(|| Error::new("gui_target_unavailable", "Save button not found"))?;
         gui_tree::rect(r, i, b, (1920, 1080))
     })?;
-    let (x, y) = button.center();
+    // These buttons are drawn by a text sprite whose width is the text texture's (864 px for
+    // "Save Game"), so its centre lies outside the button: click near the left edge instead.
+    let near_left = |r: gui_tree::Rect| (f64::from(r.x) + 40.0, f64::from(r.y) + f64::from(r.h) / 2.0);
+    let (x, y) = near_left(button);
     keys.click((1920, 1080), x, y)?;
     wait(process, "save window", |r, i| Ok(save_root(r, i)?.is_some()))?;
     let confirm = settled(process, "save confirm", |r, i| {
@@ -302,7 +306,7 @@ pub(super) fn save_game(
             .ok_or_else(|| Error::new("gui_target_unavailable", "Save confirm button not found"))?;
         gui_tree::rect(r, i, b, (1920, 1080))
     })?;
-    let (x, y) = confirm.center();
+    let (x, y) = near_left(confirm);
     keys.click((1920, 1080), x, y)?;
     // Overwriting a save of the same name asks for confirmation.
     let _ = accept_command(process, keys);
