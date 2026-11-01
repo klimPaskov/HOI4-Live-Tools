@@ -1,10 +1,15 @@
 {
-  "_comment": "Nationalist China (CHI) FAIR 1936-01-01 -> 1938-01-01 standing plan, No Compromise No Surrender tree (china_nationalist_sea_focus). Explained section by section in china-fair-1936-1938.md. Keys starting with _ are ignored by the runner. Validate with scripts/validate_plan.py.",
+  "_comment": "Nationalist China (CHI) FAIR 1936-01-01 -> 1938-01-01 standing plan for the ACTIVE DLC set Anniversary Pack, Poland: United and Ready, Rocket Launcher Unit Pack (no Waking the Tiger / No Compromise No Surrender: CHI uses generic_focus). Explained section by section in china-fair-1936-1938.md. Keys starting with _ are ignored by the runner. Validate with scripts/validate_plan.py --strict.",
   "_validator": {
     "tag": "CHI",
     "start_date": "1936.1.1",
     "stop_date": "1938.1.1",
-    "history_file": "history/countries/CHI - China.txt"
+    "history_file": "history/countries/CHI - China.txt",
+    "dlcs": [
+      "Anniversary Pack",
+      "Poland: United and Ready",
+      "Rocket Launcher Unit Pack"
+    ]
   },
   "active": true,
   "stop_on_failure": false,
@@ -15,9 +20,9 @@
     "china.1": 0
   },
   "alarms": {
-    "political_power": 250,
+    "political_power": 200,
     "consumer_goods_ratio": 0.45,
-    "idle_civilian_factories": 2,
+    "idle_civilian_factories": 3,
     "idle_military_factories": 2,
     "unassigned_divisions": 2
   },
@@ -25,13 +30,14 @@
   "research_priority": [
     "infantry_weapons1",
     "construction1",
-    "tech_engineers",
     "basic_machine_tools",
+    "tech_support",
+    "tech_engineers",
     "support_weapons",
     "interwar_antitank",
     "concentrated_industry",
-    "interwar_artillery",
     "construction2",
+    "interwar_artillery",
     "electronic_mechanical_engineering",
     "basic_fortification_tech",
     "tech_recon",
@@ -51,44 +57,27 @@
     "construction3",
     "advanced_machine_tools",
     "concentrated_industry3",
-    "improved_infantry_weapons",
-    "tech_recon2"
+    "improved_infantry_weapons"
   ],
   "focus_path": [
-    "CHI_dang_guo",
-    "CHI_promote_the_national_currency",
-    "CHI_denounce_feudalism",
-    "CHI_one_nation_undivided",
-    "CHI_demonstrate_our_resolve",
-    "CHI_initiate_the_gung_ho_movement",
-    "CHI_secure_the_soviet_border",
-    "CHI_send_the_first_lady_abroad",
-    "CHI_decree_the_end_to_corruption",
-    "CHI_the_three_year_plan",
-    "CHI_fund_the_plan_domestically",
-    "CHI_military_affairs_commission_sea",
-    "CHI_protracted_warfare",
-    "CHI_defence_in_depth",
-    "CHI_formalize_field_promotions",
-    "CHI_crackdown_on_corruption_in_recruitment",
-    "CHI_guerrilla_warfare",
-    "CHI_monopolise_resource_extraction",
-    "CHI_central_steel_and_machine_works",
-    "CHI_extend_compulsory_education",
-    "CHI_relocate_factories_from_the_coast",
-    "CHI_the_4_defence_areas",
-    "CHI_bog_them_down_in_the_centre",
-    "CHI_expand_the_tongzi_jun",
-    "CHI_inspect_the_troops"
+    "industrial_effort",
+    "construction_effort",
+    "construction_effort_2",
+    "infrastructure_effort",
+    "construction_effort_3",
+    "production_effort",
+    "army_effort",
+    "equipment_effort",
+    "production_effort_2",
+    "political_effort"
   ],
   "focus_fallback": [
-    "CHI_institute_a_national_registry_of_property",
-    "CHI_rely_on_locals",
-    "CHI_reorganise_the_train",
-    "CHI_coastal_forts",
-    "CHI_the_burma_road",
-    "CHI_the_hanoi_route",
-    "CHI_rocaf"
+    "production_effort_3",
+    "doctrine_effort",
+    "equipment_effort_2",
+    "doctrine_effort_2",
+    "equipment_effort_3",
+    "motorization_effort"
   ],
   "politics": [
     {
@@ -99,17 +88,17 @@
     {
       "category": "government",
       "slot": 3,
-      "idea": "CHI_chen_guofu"
+      "idea": "CHI_h_h_kung"
     }
   ],
   "decisions": [],
   "training": {
-    "template": "Juntuán Reformed",
+    "template": "Sanjiao Jun",
     "queue": 1,
     "batch": 1,
     "deploy_state": 607
   },
-  "production_min_idle": 7,
+  "production_min_idle": 10,
   "production_priority": [
     "infantry_equipment",
     "artillery_equipment",
@@ -118,28 +107,28 @@
   "production": [
     {
       "equipment": "infantry_equipment_0",
-      "factories": 4
+      "factories": 6
     },
     {
       "equipment": "artillery_equipment_1",
-      "factories": 2
+      "factories": 3
     }
   ],
-  "construction_min_idle": 1,
+  "construction_min_idle": 2,
   "construction_full_days": 14,
   "construction": [
     {
       "building": "industrial_complex",
       "count": 1,
       "states": [
+        1037,
         1036,
+        1041,
         602,
         750,
         620,
         600,
-        749,
-        603,
-        748
+        744
       ]
     },
     {
@@ -147,13 +136,14 @@
       "count": 1,
       "fallback_any_own_state": true,
       "states": [
+        1037,
         620,
         603,
         1036,
         602,
         750,
-        600,
-        748
+        1041,
+        605
       ]
     },
     {
@@ -165,6 +155,7 @@
         603,
         748,
         1036,
+        1037,
         602,
         750,
         607,
@@ -178,13 +169,14 @@
     "absorb": true,
     "generals": [
       "Hu Zongnan",
-      "Chen Cheng",
-      "Wei Lihuang",
-      "Zhang Fakui",
       "Sun Li Jen",
-      "Feng Yuxiang",
+      "Wei Lihuang",
+      "Gu Zhutong",
+      "Fu Zuoyi",
+      "Tu Yu-ming",
+      "Tai An-lan",
       "Hsueh Yueh",
-      "Alexander von Falkenhausen",
+      "Zhang Xueliang",
       "Wang Yao-wu"
     ]
   }

@@ -1,19 +1,22 @@
 {
-  "_comment": "Poland META 1936-01-01 -> 1938-01-01 standing plan (build-up phase for the war against Germany and the USSR, Intermarium, Commonwealth). Explained section by section in poland-meta-1936-1938.md. Keys starting with _ are ignored by the runner. Validate with scripts/validate_plan.py --strict.",
+  "_comment": "Poland META 1936-01-01 -> 1938-01-01 standing plan for the ACTIVE DLC set Anniversary Pack + Poland: United and Ready + Rocket Launcher Unit Pack (no No Step Back, By Blood Alone, Man the Guns). Build-up phase for the war against Germany and the USSR and Intermarium. Explained in poland-meta-1936-1938.md. Keys starting with _ are ignored by the runner. Validate with scripts/validate_plan.py --strict.",
   "_validator": {
     "tag": "POL",
     "start_date": "1936.1.1",
     "stop_date": "1938.1.1",
-    "history_file": "history/countries/POL - Poland.txt"
+    "history_file": "history/countries/POL - Poland.txt",
+    "dlcs": [
+      "Anniversary Pack",
+      "Poland: United and Ready",
+      "Rocket Launcher Unit Pack"
+    ]
   },
   "active": true,
   "stop_on_failure": false,
   "stop_on_date": "1938.01.01",
   "auto_events": true,
   "wait_events_days": 3,
-  "event_options": {
-    "NSB_poland_royal_election.1": 0
-  },
+  "event_options": {},
   "alarms": {
     "political_power": 200,
     "consumer_goods_ratio": 0.4,
@@ -48,8 +51,7 @@
     "improved_radio",
     "computing_machine",
     "land_fort_tech_1",
-    "engines_2",
-    "aircraft_construction",
+    "fighter1",
     "basic_encryption",
     "basic_decryption",
     "fuel_refining",
@@ -63,13 +65,11 @@
     "improved_infantry_weapons",
     "tech_engineers2",
     "tech_recon2",
-    "aa_hmg",
     "advanced_equipment_conversion",
     "excavation3",
     "tech_logistics_company2",
     "tech_field_hospital2",
     "tech_signal_company2",
-    "range_improvements",
     "cavity_magnatron",
     "tech_mountaineers2",
     "wartime_train",
@@ -81,9 +81,7 @@
   ],
   "focus_path": [
     "POL_the_four_year_plan",
-    "POL_assemble_the_regency_council",
-    "POL_fulfil_fifth_of_november",
-    "POL_claiming_lithuania",
+    "POL_restore_the_sejm",
     "POL_central_region_strategy",
     "POL_fill_the_railways_gaps",
     "POL_agrarian_reform",
@@ -102,7 +100,6 @@
     "POL_additional_research_slot2",
     "POL_new_military_academy",
     "POL_standardisation_of_equipment",
-    "POL_restoration_of_the_royal_sejm",
     "POL_central_defence_of_poland",
     "POL_local_western_plans",
     "POL_silesia_fortified_area",
@@ -121,8 +118,6 @@
     "POL_artillery_modernisation",
     "POL_air_base_expansion",
     "POL_fighter_modernisation",
-    "POL_institute_royal_guards",
-    "POL_support_monarchism_in_LIT",
     "POL_warsaw_main_railway_station"
   ],
   "politics": [
@@ -134,12 +129,12 @@
     {
       "category": "government",
       "slot": 3,
-      "idea": "POL_stanislaw_wojciechowski"
+      "idea": "POL_eugeniusz_kwiatkowiski"
     },
     {
       "category": "government",
       "slot": 4,
-      "idea": "POL_eugeniusz_kwiatkowiski"
+      "idea": "POL_jozef_beck"
     },
     {
       "category": "government",
@@ -149,7 +144,7 @@
     {
       "category": "government",
       "slot": 5,
-      "idea": "POL_zdzislaw_lubomirski"
+      "idea": "POL_jozef_haller"
     }
   ],
   "decisions": [
@@ -163,7 +158,7 @@
     "batch": 2,
     "deploy_state": 10
   },
-  "production_min_idle": 9,
+  "production_min_idle": 8,
   "production_priority": [
     "infantry_equipment",
     "support_equipment",
@@ -180,10 +175,6 @@
     },
     {
       "equipment": "support_equipment_1",
-      "factories": 1
-    },
-    {
-      "equipment": "small_plane_airframe_1",
       "factories": 1
     }
   ],

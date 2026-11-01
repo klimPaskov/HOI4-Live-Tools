@@ -165,14 +165,32 @@ German and Soviet capitulation evidence; unresolved wars; final settlement owner
 ## 1.19.4.1 corrections (checked against the installed files, 1 November 2026)
 
 These override the sections above; the standing plan is `plans/poland-meta-1936-1938.plan.json`.
-- `POL_claiming_lithuania` cannot be taken directly (`always = no`); the royal election event
-  (`NSB_poland_royal_election.1`, option 0 for Friedrich Christian) completes it.
-- Plan East requires `POL_complete_plan_west` first, which ends the bunker-speed bonus and the
-  remaining Plan West focuses.
-- The Intermarium mission decisions only add +20 alliance preference (one at a time, -10% PP
-  gain for 35 days); invitations come from the focus events (poland.16). The Intermarium chain
-  needs 700k men in fielded divisions.
-- Civilian Economy costs -30% construction speed; Partial Mobilisation has no construction
-  penalty and Poland qualifies on day one.
-- Useful additions: National Defence Fund (-35% consumer goods for 720 days), advisors
-  Wojciechowski, Kwiatkowski and Lubomirski.
+**Active DLC set of the running game** (log: "Active DLC Count: 3"): Anniversary Pack,
+Poland: United and Ready, Rocket Launcher Unit Pack. No Step Back, By Blood Alone, Man the Guns,
+La Resistance, Arms Against Tyranny, Gotterdammerung, Waking the Tiger and No Compromise, No
+Surrender are installed but NOT active. This changes much of the guide above, which assumed No Step Back:
+- `polish_focus` still loads (PUR or NSB), but `allow_branch` hides every NSB root:
+  `POL_assemble_the_regency_council` (so Fifth of November, the royal election events
+  `NSB_poland_royal_election.*`, all monarch lines, Royal Sejm, Royal Guards, King of Lithuania and
+  `POL_LIT_union`), `POL_organize_the_peasants_strike`, `POL_nationalist_constitution`. Sections 3-5
+  (Regency route, election cycle, Tier 2) do not apply. The visible roots are
+  `POL_complete_april_constitution` (Sanation) and `POL_restore_the_sejm` (PUR democratic tree,
+  `allow_branch = NOT NSB`). The plan uses **`POL_restore_the_sejm`**: one 10-point focus removes the
+  April-constitution idea and both Sanation oppositions.
+- PUR still adds `POL_looming_peasants_strike`, `POL_april_constitution_1`, both oppositions and
+  `uncontrolled_exports`, so `POL_agrarian_reform` before 1936-12-31 is still mandatory.
+- Commonwealth: only `form_commonwealth` (formable_nation_decisions.txt, no DLC gate) remains: control
+  Lithuania 11 and 189 plus the 15 Polish core states and have Lithuanian core compliance above 80. That means
+  conquest or `POL_lithuanian_annexation` (via `POL_align_with_the_west`), then compliance.
+- `POL_prepare_for_the_inevitable` (exile tree) needs Man the Guns, and `POL_expand_polish_intelligence*`
+  needs La Resistance: the section 9 exile fallback is unavailable.
+- Air uses the legacy folder (BBA inactive): `fighter_equipment_0/1`, `fighter1`, `CAS1`, not
+  `small_plane_*`, `engines_*` or `aa_hmg`. The legacy air OOB starts one factory on `fighter_equipment_0`.
+- Advisors Wojciechowski and Lubomirski are unreachable (Regency or NSB-only foci). Use
+  Kwiatkowski (+10% civilian construction), Beck (+5% PP) and Haller (+10% arms-factory construction).
+- Still valid without NSB: Plan East requires `POL_complete_plan_west` first (which ends the
+  bunker-speed bonus and the remaining Plan West focuses). The Intermarium missions only add +20
+  alliance preference (one at a time, -10% PP gain for 35 days); invitations come from the focus
+  events (poland.16). The Intermarium chain needs 700k men in fielded divisions. Civilian Economy costs
+  -30% construction speed, while Partial Mobilisation has none and Poland qualifies on day one. National
+  Defence Fund gives -35% consumer goods for 720 days.

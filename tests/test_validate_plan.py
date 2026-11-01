@@ -38,6 +38,23 @@ focus_tree = {
     focus = { id = T_extra cost = 5 }
 }
 """,
+    "common/national_focus/dlc_trees.txt": """
+focus_tree = {
+    id = aaa_dlc_focus
+    country = { factor = 0 modifier = { add = 10 tag = AAA has_dlc = "Test DLC" } }
+    focus = { id = D_root cost = 5 }
+}
+focus_tree = {
+    id = generic_test_focus
+    country = { factor = 1 }
+    default = yes
+    focus = { id = G_root cost = 10 }
+}
+""",
+    "history/countries/BBB - Dlcland.txt": """
+IF = { limit = { has_dlc = "Test DLC" } set_oob = "BBB_dlc" else = { set_oob = "BBB_base" } }
+if = { limit = { NOT = { has_dlc = "Test DLC" } } set_technology = { start_tech = 1 } }
+""",
     "common/units/equipment/infantry.txt": """
 equipments = {
     infantry_equipment = { is_archetype = yes }
@@ -186,6 +203,30 @@ class ValidatePlanTests(unittest.TestCase):
         rep = self.run_plan(politics=[{"category": "government", "slot": 3, "idea": "adviser"}])
         self.assertEqual(rep.errors, [])
         self.assertTrue(any("idea_token" in w for w in rep.warnings))
+
+    def test_focus_keys_must_be_in_the_tree_that_loads_for_the_dlcs(self):
+        meta = dict(GOOD["_validator"], dlcs=[])
+        rep = self.run_plan(_validator=meta, focus_path=["D_root"], focus_fallback=[])
+        self.assertTrue(
+            any("D_root is not in generic_test_focus" in e and "aaa_dlc_focus" in e for e in rep.errors)
+        )
+        rep = self.run_plan(_validator=meta, focus_path=["G_root"], focus_fallback=[])
+        self.assertFalse(any("focus" in e for e in rep.errors))
+        meta = dict(GOOD["_validator"], dlcs=["Test DLC"])
+        rep = self.run_plan(_validator=meta, focus_path=["D_root"], focus_fallback=[])
+        self.assertFalse(any("focus" in e for e in rep.errors))
+        # without "dlcs" the legacy best-match lookup is unchanged
+        rep = self.run_plan(focus_path=["D_root"], focus_fallback=[])
+        self.assertFalse(any("focus" in e for e in rep.errors))
+
+    def test_history_branches_follow_the_dlcs(self):
+        hist = "history/countries/BBB - Dlcland.txt"
+        base = self.game.history_effects(hist, vp.Ctx("BBB", []))
+        self.assertEqual(base["oobs"], ["BBB_base"])
+        self.assertEqual(base["techs"], {"start_tech"})
+        dlc = self.game.history_effects(hist, vp.Ctx("BBB", ["Test DLC"]))
+        self.assertEqual(dlc["oobs"], ["BBB_dlc"])
+        self.assertEqual(dlc["techs"], set())
 
     def test_misc_shapes(self):
         rep = self.run_plan(stop_on_date="1938-01-01", event_options={"x.1": -1}, active="yes")

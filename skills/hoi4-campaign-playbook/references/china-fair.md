@@ -174,15 +174,47 @@ no theater critical-supply alert; 500+ mission-ready aircraft; supplied home-isl
 states in section 5 owned or integrated; Manchukuo/Jehol/East Hebei/Dalian/Taiwan recovered; Hong Kong, Macau, Guangzhouwan through the focus or war; PRC gone; Japan capitulated with settlement proof; no declared state occupied by an enemy; no active war with a remaining enemy major.
 Record: baseline and final factory/division/aircraft counts, warlord status table (member, subject, integrated, annexed), Marco Polo date and choice, each recovered state, Japanese capitulation, and unknown metrics as unknown. Never lower targets late.
 
-## 1.19.4.1 corrections (checked against the installed files, 1 November 2026)
+## 1.19.4.1 corrections (checked against the installed files and the active DLC set, 1 November 2026)
 
-These override the sections above; the standing plan is `plans/china-fair-1936-1938.plan.json`.
-- With No Compromise, No Surrender (and no Waking the Tiger) CHI uses `china_nationalist_sea_focus`
-  and starts with 17 states: Beiping 608, Hebei 614/1039 (Hebei-Chahar), Shandong 597/1038,
-  Sichuan 1037/1041/605/751/752 and Xi'an 744 are warlord states on day one. Start industry is
-  11 civilian, 8 military (6 idle), 2 naval; 2 research slots.
-- Plan defences only in owned states; `CHI_industrial_evacuations_*` is unavailable with this DLC.
-- Partial mobilisation is open on day one and beats waiting; corruption raises law costs by 65%.
-- The Three-Year Plan can be bypassed in war; its spirit only works in peace.
-- `CHI_controlling_our_skies` needs an air doctrine China lacks in 1936; artillery comes from
-  `gw_artillery`, not `interwar_artillery`.
+These override every section above for the current install; the standing plan is
+`plans/china-fair-1936-1938.plan.json`.
+
+- **Active DLC is not the installed set.** The game log (`logs/system.log`, "Active DLC Count: 3")
+  shows only Anniversary Pack, Poland: United and Ready and Rocket Launcher Unit Pack. No Compromise,
+  No Surrender, Waking the Tiger, By Blood Alone, La Resistance, No Step Back, Arms Against Tyranny and
+  Gotterdammerung are installed folders but inactive; `dlc_load.json` does not prove activation.
+  Every `has_dlc` branch for those DLCs is false.
+- **Focus tree:** neither `china_nationalist_sea_focus` (needs NCNS) nor `china_nationalist_focus`
+  (needs Waking the Tiger) loads; CHI gets `generic_focus` (`generic.txt`, factor 1, default).
+  Sections 3-6 and every `CHI_*` focus, the warlord faction/integration system, faction goals,
+  tour focuses, Gung Ho, Soviet/American support focuses and the Dang Guo/Blue Shirt choice are
+  unavailable in this install. Unification of warlords and PRC is by war only.
+- **Start (no NCNS branches):** 28 states, no warlord transfers (Beiping 608, Hebei 614,
+  Shandong 597/1038, Chongqing 1037, Chengdu 1041, Xi'an 744 are CHI); 16 civilian, 11 military
+  (2 on `infantry_equipment_0`, 9 idle), 2 naval factories; OOB `CHI_1936`: 57 divisions
+  ("Juntuán" 4-inf garrison, "Sanjiao Jun" 6-inf, "Qibing Jun" cavalry; no "Juntuán Reformed").
+  Population 100% neutrality.
+- **National spirits (permanent in this install, no removal path):** `CHI_army_corruption_1`
+  (attack and defence -30%, mobilisation speed -35%), `CHI_ineffective_bureaucracy` (conscription
+  -35%), `CHI_incompetent_officers` (command power gain -70%), `CHI_hyper_inflation_1` (consumer
+  goods +10%, factory output -5%), `german_advisors` (land doctrine cost -10%), `CHI_nine_power_treaty`
+  (empty). None of the NCNS corruption variables or modifiers exist. Laws: `free_trade` (from history),
+  `civilian_economy`, volunteer only; laws cost a plain 150 PP.
+- **Start techs:** infantry_weapons, gw_artillery, interwar_antiair, basic_train, gwtank, early_fighter,
+  early_bomber and the pre-MTG ships. **Not** tech_support or tech_trucks (those are NCNS-only).
+  2 research slots.
+- **Characters:** advisors in NCNS `instance` blocks are unavailable (e.g. Chen Guofu, Chen Lifu,
+  Du Yuesheng, Weng Wenhao). Hireable without focuses: H. H. Kung (`CHI_h_h_kung`, captain of
+  industry), Soong Mei-ling (first lady, while Chiang rules), army chiefs He Yingqin, Chen Jitang,
+  Li Zongren; high command Xiao Yisu, Yu Hanmou. Falkenhausen is only an advisor after an old-tree focus.
+  Generals: Hsueh Yueh and Zhang Xueliang (field marshals), Hu Zongnan, Sun Li Jen, Wei Lihuang,
+  Gu Zhutong, Fu Zuoyi, Tu Yu-ming, Tai An-lan, Wang Yao-wu.
+- **Japan:** `japan_wtt_focus` loads for JAP without any DLC. `china.1` (Marco Polo) is sent by
+  `JAP_reinforce_the_beijing_garrison` or by the `JAP_kwantung_army_impatience` timeout; the timer is
+  only started by Japanese focus/NCNS content, so there is no guaranteed latest date. CHI controls
+  Beiping, so CHI receives the event.
+- Partial mobilisation needs only war support > 0.25 (CHI 0.32) and beats Early Mobilisation.
+  `CHI_industrial_evacuations_*` decisions are allowed for CHI only without NCNS but are visible only
+  after old/NCNS-tree focuses, so they are unusable here too.
+- The validator now enforces this: `_validator.dlcs` selects the loaded focus tree, the history
+  branches, the start OOB, allowed character instances and start-date state owners.

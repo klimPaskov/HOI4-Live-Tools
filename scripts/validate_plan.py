@@ -26,7 +26,16 @@ Stdlib only, Python 3.9+. Exit status 0 when there are no errors.
 Optional plan key "_validator" (ignored by the runner):
   {"tag": "GER", "start_date": "1936.1.1", "stop_date": "1938.1.1",
    "completed_techs": [...], "completed_focuses": [...],
-   "history_file": "history/countries/GER - Germany.txt"}
+   "history_file": "history/countries/GER - Germany.txt",
+   "dlcs": ["Anniversary Pack", "Poland: United and Ready"]}
+
+"dlcs" lists the ACTIVE DLC display names (the game log's "Active DLC" lines, not
+dlc_load.json). When present, every has_dlc/tag/original_tag condition in the files
+is evaluated: focus_path/focus_fallback must belong to the focus tree that actually
+loads for the tag (error), start techs and the start OOB follow the history file's
+if/else branches, advisors in disallowed character instances are unknown, and
+construction/deploy states not owned by the tag at the start date are warned about.
+Without "dlcs" every branch is read (legacy behaviour).
 """
 import argparse
 import json
@@ -118,6 +127,111 @@ def txt_files(directory):
 
 
 # --------------------------------------------------------------------------
+# DLC-aware trigger evaluation (only what definitions need: has_dlc, tag,
+# original_tag, always, AND/OR/NOT). Tri-state: True, False or None (unknown).
+
+
+class Ctx:
+    """Evaluation context: the plan's tag and its ACTIVE DLC display names."""
+
+    def __init__(self, tag, dlcs):
+        self.tag = tag
+        self.dlcs = set(dlcs)
+
+
+def _and(results):
+    results = list(results)
+    if any(r is False for r in results):
+        return False
+    return None if any(r is None for r in results) else True
+
+
+def _or(results):
+    results = list(results)
+    if any(r is True for r in results):
+        return True
+    return None if any(r is None for r in results) else False
+
+
+def trigger(items, ctx):
+    """Evaluate a trigger block (implicit AND)."""
+    if not isinstance(items, list):
+        return None
+    return _and(trigger_one(k, v, ctx) for k, v in items)
+
+
+def trigger_one(key, value, ctx):
+    k = (key or "").lower()
+    if k == "has_dlc":
+        return value in ctx.dlcs
+    if k in ("tag", "original_tag"):
+        return value == ctx.tag
+    if k == "always":
+        return value == "yes"
+    if k == "and":
+        return trigger(value, ctx)
+    if k == "or":
+        if not isinstance(value, list):
+            return None
+        return _or(trigger_one(a, b, ctx) for a, b in value)
+    if k == "not":  # HOI4 NOT is NOR
+        if not isinstance(value, list):
+            return None
+        r = _or(trigger_one(a, b, ctx) for a, b in value)
+        return None if r is None else not r
+    return None
+
+
+def run_effects(items, ctx, visit):
+    """Walk an effect block, taking only the if/else_if/else branches that apply
+    under ctx (an unknown limit counts as true). Calls visit(key, value) for
+    every other entry; nested plain blocks are not entered."""
+    taken = None  # state of the sibling if-chain: None (no chain), True, False
+
+    def branch(body):
+        nonlocal taken
+        cond = trigger(get1(body, "limit", []), ctx)
+        if cond is False:
+            return False
+        inner = [(a, b) for a, b in body if (a or "").lower() not in ("limit", "else", "else_if")]
+        run_effects(inner, ctx, visit)
+        return True
+
+    for key, value in items:
+        k = (key or "").lower()
+        if k == "if" and isinstance(value, list):
+            taken = branch(value)
+            if not taken:  # else / else_if written inside the if block
+                for a, b in value:
+                    a = (a or "").lower()
+                    if a == "else_if" and isinstance(b, list) and branch(b):
+                        taken = True
+                        break
+                    if a == "else" and isinstance(b, list):
+                        run_effects(b, ctx, visit)
+                        taken = True
+                        break
+        elif k == "else_if" and isinstance(value, list):
+            if taken is False:
+                taken = branch(value)
+        elif k == "else" and isinstance(value, list):
+            if taken is False:
+                run_effects(value, ctx, visit)
+            taken = None
+        else:
+            visit(key, value)
+
+
+def is_date(key):
+    return bool(key and re.match(r"^\d{4}\.\d+\.\d+$", key))
+
+
+def date_tuple(text):
+    m = re.match(r"^(\d{4})\.(\d+)\.(\d+)", str(text or ""))
+    return tuple(int(x) for x in m.groups()) if m else None
+
+
+# --------------------------------------------------------------------------
 # Game data
 
 
@@ -189,6 +303,115 @@ class Game:
             return have
 
         return self.cached("start:" + history_file, load)
+
+    def history_effects(self, history_file, ctx):
+        """DLC-aware start of a country history file (bookmark date blocks are
+        skipped): {"techs": set, "oobs": [names]}."""
+
+        def load():
+            out = {"techs": set(), "oobs": []}
+            p = self.path(history_file)
+            if not os.path.exists(p):
+                return out
+
+            def visit(k, v):
+                if is_date(k):
+                    return
+                if k == "set_technology" and isinstance(v, list):
+                    out["techs"].update(a for a, b in v if a and b == "1")
+                elif k == "set_oob" and isinstance(v, str):
+                    out["oobs"].append(v)
+
+            run_effects(parse(read(p)), ctx, visit)
+            return out
+
+        key = f"hist:{history_file}:{ctx.tag}:{sorted(ctx.dlcs)}"
+        return self.cached(key, load)
+
+    def tree_weights(self, ctx):
+        """Focus tree id -> (weight for ctx, default flag), like the game's
+        `country = { factor modifier = { add/factor ... } }` selection."""
+
+        def load():
+            out = {}
+            for f in txt_files(self.path("common", "national_focus")):
+                for k, v in parse(read(f)):
+                    if k != "focus_tree" or not isinstance(v, list):
+                        continue
+                    tid = get1(v, "id", os.path.basename(f))
+                    weight = 0.0
+                    country = get1(v, "country")
+                    if isinstance(country, list):
+                        try:
+                            weight = float(get1(country, "factor", "0"))
+                        except ValueError:
+                            weight = 0.0
+                        for mk, mv in country:
+                            if mk != "modifier" or not isinstance(mv, list):
+                                continue
+                            conds = [(a, b) for a, b in mv if a not in ("add", "factor")]
+                            if trigger(conds, ctx) is not True:
+                                continue  # unknown conditions do not pick a tree
+                            try:
+                                if get1(mv, "add") is not None:
+                                    weight += float(get1(mv, "add"))
+                                if get1(mv, "factor") is not None:
+                                    weight *= float(get1(mv, "factor"))
+                            except ValueError:
+                                pass
+                    out[tid] = (weight, get1(v, "default") == "yes")
+            return out
+
+        return self.cached(f"weights:{ctx.tag}:{sorted(ctx.dlcs)}", load)
+
+    def loaded_tree(self, ctx):
+        """The focus tree the game gives ctx.tag with these DLCs (highest positive
+        weight, else the default tree)."""
+        weights = self.tree_weights(ctx)
+        best = max(weights.items(), key=lambda kv: (kv[1][0], kv[1][1]), default=None)
+        if best and best[1][0] > 0:
+            return best[0]
+        for tid, (_, default) in weights.items():
+            if default:
+                return tid
+        return None
+
+    def state_owners(self, ctx, start_date):
+        """state id -> owner at start_date with ctx's DLCs (dated history blocks
+        up to the start date and their if/transfer_state_to effects applied)."""
+
+        def load():
+            start = date_tuple(start_date) or (1936, 1, 1)
+            out = {}
+            sdir = self.path("history", "states")
+            if not os.path.isdir(sdir):
+                return out
+            for f in sorted(os.listdir(sdir)):
+                if not f.endswith(".txt"):
+                    continue
+                st = get1(parse(read(os.path.join(sdir, f))), "state")
+                if not isinstance(st, list) or not str(get1(st, "id", "")).isdigit():
+                    continue
+                hist = get1(st, "history", [])
+                if not isinstance(hist, list):
+                    continue
+                owner = [None]
+
+                def visit(k, v):
+                    if k in ("owner", "transfer_state_to") and isinstance(v, str):
+                        owner[0] = v
+
+                run_effects([(a, b) for a, b in hist if not is_date(a)], ctx, visit)
+                for a, b in sorted(
+                    ((a, b) for a, b in hist if is_date(a) and isinstance(b, list)),
+                    key=lambda ab: date_tuple(ab[0]),
+                ):
+                    if date_tuple(a) <= start:
+                        run_effects(b, ctx, visit)
+                out[int(get1(st, "id"))] = owner[0]
+            return out
+
+        return self.cached(f"owners:{ctx.tag}:{sorted(ctx.dlcs)}:{start_date}", load)
 
     # focuses: tree id -> {focus id -> info}
     def focus_trees(self):
@@ -295,8 +518,10 @@ class Game:
 
         return self.cached("states", load)
 
-    def ideas(self):
-        """Known idea keys (ideas files), character ids and advisor idea tokens."""
+    def ideas(self, ctx=None):
+        """Known idea keys (ideas files), character ids and advisor idea tokens.
+        With ctx, advisor roles whose `instance`/`allowed` block is false for the
+        plan's tag and DLCs are left out."""
 
         def load():
             keys = set()
@@ -319,10 +544,15 @@ class Game:
                         # 1.19 characters may wrap roles in per-DLC `instance` blocks
                         advs = list(get(body, "advisor"))
                         for inst in get(body, "instance"):
-                            if isinstance(inst, list):
-                                advs.extend(get(inst, "advisor"))
+                            if not isinstance(inst, list):
+                                continue
+                            if ctx and trigger(get1(inst, "allowed", []), ctx) is False:
+                                continue
+                            advs.extend(get(inst, "advisor"))
                         for adv in advs:
                             if not isinstance(adv, list):
+                                continue
+                            if ctx and trigger(get1(adv, "allowed", []), ctx) is False:
                                 continue
                             chars.add(cid)
                             tok = get1(adv, "idea_token")
@@ -330,7 +560,8 @@ class Game:
                                 tokens.add(tok)
             return keys, chars, tokens
 
-        return self.cached("ideas", load)
+        key = "ideas" if ctx is None else f"ideas:{ctx.tag}:{sorted(ctx.dlcs)}"
+        return self.cached(key, load)
 
     def decisions(self):
         def load():
@@ -380,6 +611,15 @@ def date_year(text, default):
     return int(m.group(1)) if m else default
 
 
+def ctx_of(meta):
+    """Evaluation context when the plan declares its active DLCs, else None
+    (legacy mode: every has_dlc branch is read)."""
+    dlcs = meta.get("dlcs")
+    if not isinstance(dlcs, list):
+        return None
+    return Ctx(meta.get("tag", ""), [d for d in dlcs if isinstance(d, str)])
+
+
 def check_research(game, plan, meta, rep):
     keys = strings(plan, "research_priority")
     if "research_priority" in plan and not isinstance(plan["research_priority"], list):
@@ -387,7 +627,11 @@ def check_research(game, plan, meta, rep):
     dup_check(rep, "research_priority", keys)
     techs = game.techs()
     have = set(meta.get("completed_techs", []))
-    have |= game.start_techs(meta.get("history_file", ""))
+    ctx = ctx_of(meta)
+    if ctx:
+        have |= game.history_effects(meta.get("history_file", ""), ctx)["techs"]
+    else:
+        have |= game.start_techs(meta.get("history_file", ""))
     stop_year = date_year(meta.get("stop_date"), 1938)
     done = set(have)
     unknown = 0
@@ -426,19 +670,36 @@ def check_focus(game, plan, meta, rep):
     trees = game.focus_trees()
     if not path and not fallback:
         return
-    # choose the tree that contains most keys
-    best, best_n = None, -1
-    for tid, fs in trees.items():
-        n = sum(1 for k in path + fallback if k in fs)
-        if n > best_n:
-            best, best_n = tid, n
+    ctx = ctx_of(meta)
+    loaded = game.loaded_tree(ctx) if ctx else None
+    if loaded:
+        # the tree the game actually gives this tag with these DLCs
+        best = loaded
+        dl = ", ".join(sorted(ctx.dlcs)) or "none"
+        for label, keys in (("focus_path", path), ("focus_fallback", fallback)):
+            for i, k in enumerate(keys):
+                if k not in trees.get(best, {}):
+                    owners = sorted(t for t, fs in trees.items() if k in fs)
+                    where = f" (it is in {', '.join(owners)})" if owners else ""
+                    rep.error(
+                        f"{label}[{i}]: {k} is not in {best}, the focus tree that loads "
+                        f"for {ctx.tag} with active DLCs [{dl}]{where}"
+                    )
+    else:
+        # choose the tree that contains most keys
+        best, best_n = None, -1
+        for tid, fs in trees.items():
+            n = sum(1 for k in path + fallback if k in fs)
+            if n > best_n:
+                best, best_n = tid, n
     tree = trees.get(best, {})
     done = set(meta.get("completed_focuses", []))
     listed = set(path)
     for i, k in enumerate(path):
         info = tree.get(k)
         if info is None:
-            rep.error(f"focus_path[{i}]: unknown focus {k} (tree {best})")
+            if not loaded:
+                rep.error(f"focus_path[{i}]: unknown focus {k} (tree {best})")
             continue
         for block in info["prereq"]:
             if not (block & (done | set(path[:i]))):
@@ -454,7 +715,8 @@ def check_focus(game, plan, meta, rep):
     for i, k in enumerate(fallback):
         info = tree.get(k)
         if info is None:
-            rep.error(f"focus_fallback[{i}]: unknown focus {k} (tree {best})")
+            if not loaded:
+                rep.error(f"focus_fallback[{i}]: unknown focus {k} (tree {best})")
             continue
         if k in listed:
             rep.error(f"focus_fallback[{i}]: {k} is already in focus_path")
@@ -493,7 +755,10 @@ def check_production(game, plan, rep):
     dup_check(rep, "production_priority", strings(plan, "production_priority"))
 
 
-def check_construction(game, plan, rep):
+def check_construction(game, plan, rep, meta=None):
+    meta = meta or {}
+    ctx = ctx_of(meta)
+    owners = game.state_owners(ctx, meta.get("start_date", "1936.1.1")) if ctx else {}
     buildings = game.buildings()
     states = game.states()
     by_name = {}
@@ -529,6 +794,13 @@ def check_construction(game, plan, rep):
             else:
                 rep.error(f"construction[{i}] {b}: bad state {s!r}")
         dup_check(rep, f"construction[{i}] {b} states", [str(x) for x in ids])
+        for sid in ids:
+            own = owners.get(sid)
+            if ctx and own and own != ctx.tag:
+                rep.warn(
+                    f"construction[{i}] {b}: state {sid} is owned by {own}, not "
+                    f"{ctx.tag}, at the start with the active DLCs"
+                )
         c = e.get("count", 1)
         if not isinstance(c, int) or not 1 <= c <= 10:
             rep.error(f"construction[{i}] {b}: count must be an integer 1..10")
@@ -539,7 +811,7 @@ def check_politics(game, plan, meta, rep):
     if picks and not isinstance(picks, list):
         rep.error("politics must be a list")
         return
-    ideas, chars, tokens = game.ideas()
+    ideas, chars, tokens = game.ideas(ctx_of(meta))
     seen = set()
     for i, p in enumerate(picks):
         if not isinstance(p, dict):
@@ -581,7 +853,9 @@ def check_decisions(game, plan, rep):
             rep.error(f"decisions[{i}]: unknown decision {k}")
 
 
-def check_training(game, plan, rep):
+def check_training(game, plan, rep, meta=None):
+    meta = meta or {}
+    ctx = ctx_of(meta)
     tr = plan.get("training")
     if tr is None:
         return
@@ -596,12 +870,30 @@ def check_training(game, plan, rep):
         rep.error("training.deploy_state is required (a line without a location never deploys)")
     elif dep not in game.states():
         rep.error(f"training.deploy_state: unknown state id {dep}")
+    elif ctx:
+        own = game.state_owners(ctx, meta.get("start_date", "1936.1.1")).get(dep)
+        if own and own != ctx.tag:
+            rep.warn(f"training.deploy_state {dep} is owned by {own}, not {ctx.tag}, at the start")
     name = tr.get("template")
     if not isinstance(name, str) or not name:
         rep.error("training.template is required")
         return
     units = game.path("history", "units")
     found = False
+    oobs = game.history_effects(meta.get("history_file", ""), ctx)["oobs"] if ctx else []
+    if oobs:
+        # only the order of battle the history file loads with these DLCs
+        for oob in oobs:
+            p = os.path.join(units, oob + ".txt")
+            if os.path.exists(p) and '"' + name + '"' in read(p):
+                found = True
+        if not found:
+            rep.warn(
+                f"training.template {name!r} is not in the start OOB "
+                f"{', '.join(oobs)} loaded with the active DLCs (fine if you create "
+                f"it in game before the plan runs)"
+            )
+        return
     if os.path.isdir(units):
         needle = '"' + name + '"'
         for f in sorted(os.listdir(units)):
@@ -656,10 +948,10 @@ def validate(plan, game):
     counts = {"research": check_research(game, plan, meta, rep)}
     check_focus(game, plan, meta, rep)
     check_production(game, plan, rep)
-    check_construction(game, plan, rep)
+    check_construction(game, plan, rep, meta)
     check_politics(game, plan, meta, rep)
     check_decisions(game, plan, rep)
-    check_training(game, plan, rep)
+    check_training(game, plan, rep, meta)
     check_misc(plan, rep)
     counts.update(
         focus=len(strings(plan, "focus_path")),
