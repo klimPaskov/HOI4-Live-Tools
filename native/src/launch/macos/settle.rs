@@ -137,6 +137,23 @@ impl Roster {
         }
         out
     }
+    /// Compact durable form for a journal intent: army names and the pool's homes.
+    pub(super) fn baseline(&self, pool: &[String]) -> Value {
+        serde_json::json!({"names": self.names, "pool": pool})
+    }
+    /// Rebuild the part of a roster that `army_assign` compares: the army names and the
+    /// pool divisions, which were unassigned when the intent was written.
+    pub(super) fn from_baseline(v: &Value) -> (Self, Vec<String>) {
+        let mut out = Self::default();
+        for n in v["names"].as_array().into_iter().flatten() {
+            out.names.insert(text(n));
+        }
+        let pool: Vec<String> = v["pool"].as_array().into_iter().flatten().map(text).collect();
+        for d in &pool {
+            out.home.insert(d.clone(), None);
+        }
+        (out, pool)
+    }
     fn new_names<'a>(&'a self, before: &'a Roster) -> Vec<&'a String> {
         self.names.difference(&before.names).collect()
     }
@@ -191,13 +208,43 @@ pub(super) fn army_assign(
     let only_expected = changes
         .iter()
         .all(|(d, was, to)| was.is_none() && to.as_deref() == Some(army) && pool.contains(*d));
-    if only_expected && changes.len() == take {
+    // The right-click moves the whole box selection, i.e. every unassigned division of the
+    // pool, not only `take` of them (seen live 1 Nov 2026: 10 joined where 8 were planned);
+    // the army cap is restored afterwards with hoi4_army_split.
+    if only_expected && changes.len() >= take {
         Verdict::Reached
     } else {
         Verdict::Unknown
     }
 }
 
+/// Merging army `source` into army `target`: every division the source held now belongs to
+/// the target, and no other division changed army.
+pub(super) fn army_merge(before: &Roster, now: &Roster, source: &str, target: &str) -> Verdict {
+    let moving: Vec<&String> = before
+        .home
+        .iter()
+        .filter(|(_, a)| a.as_deref() == Some(source))
+        .map(|(d, _)| d)
+        .collect();
+    if moving.is_empty() {
+        return Verdict::Unknown;
+    }
+    let arrived = moving
+        .iter()
+        .filter(|d| now.home.get(**d).and_then(|a| a.as_deref()) == Some(target))
+        .count();
+    let others_moved = now.home.iter().any(|(d, a)| {
+        !moving.contains(&d) && before.home.get(d).is_some_and(|b| b != a)
+    });
+    if arrived == 0 && !others_moved {
+        Verdict::Unchanged
+    } else if arrived == moving.len() && !others_moved {
+        Verdict::Reached
+    } else {
+        Verdict::Unknown
+    }
+}
 /// Splitting `count` divisions off `army`: one new army of exactly `count`
 /// divisions, all taken from the source army.
 pub(super) fn army_split(before: &Roster, now: &Roster, army: &str, count: usize) -> Verdict {

@@ -204,11 +204,19 @@ fn character_window(r: &Reader<'_>, image: u64) -> Result<Option<u64>> {
     let gui = r.u64(idler + u.gui_from_idler)?;
     let (_, data, count) = r.array_header(gui + u.root_windows)?;
     for index in 0..count.min(1024) as u64 {
-        let base = r.u64(data + index * 8)?;
-        if gui_tree::name(r, base, image)?.as_deref() != Some("command_character_view_window") {
+        // The root-window list holds container objects (1.19.4, checked live 1 Nov 2026);
+        // the widget name sits behind the GUI base at object + 0x30.
+        let object = r.u64(data + index * 8)?;
+        if !(0x10000..=0x7fff_ffff_0000).contains(&object) {
             continue;
         }
-        if let Some(window) = gui_tree::container(r, base, image)? {
+        let Some(window) = gui_tree::container(r, object, image)? else {
+            continue;
+        };
+        if gui_tree::name(r, window + 0x30, image)?.as_deref() != Some("command_character_view_window") {
+            continue;
+        }
+        {
             if gui_tree::visible(r, window)? {
                 return Ok(Some(window));
             }

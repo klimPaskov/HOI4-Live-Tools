@@ -168,11 +168,11 @@
   ],
   "production": [
     {
-      "equipment": "small_plane_airframe_1",
+      "equipment": "fighter_equipment_1",
       "factories": 3
     },
     {
-      "equipment": "small_plane_cas_airframe_1",
+      "equipment": "CAS_equipment_1",
       "factories": 2
     },
     {

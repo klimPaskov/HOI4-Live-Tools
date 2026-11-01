@@ -174,7 +174,7 @@ so **11 are idle on day one**. The runner's rebalance step (idle factories go to
 `production_priority` line that exists) would push all 11 into rifles before any
 `production` line is added, so the plan sets `production_min_idle: 12` for the start:
 the rebalance stays off and the five `production` entries consume exactly the 11
-idle factories: fighters (`small_plane_airframe_1`) 3, CAS (`small_plane_cas_airframe_1`) 2,
+idle factories: fighters (`fighter_equipment_1`) 3, CAS (`CAS_equipment_1`) 2,
 a second artillery line 3, a second rifle line 2, trucks 1. Targets after day one:
 rifles 12, support 2-3, artillery 4, trucks 3, light tanks 2, fighters 3, CAS 2 (the 1936-37 row of
 templates-equipment-production section 7).
@@ -236,3 +236,9 @@ Deviate when: war is within 12 months (move job 2 first); a state is occupied or
   priority list at the moment a slot frees (it does for any researchable tech).
 * Start-state free slots are computed from `history/states`; the live game adds
   focus-granted slots.
+
+## 1.19.4 gate note (1 November 2026)
+
+The installed game runs without By Blood Alone, so planes are the legacy equipment types
+(`fighter_equipment_1`, `CAS_equipment_1`); airframe keys such as `small_plane_airframe_1`
+are not offered by the production selection and were refused in the gate run.

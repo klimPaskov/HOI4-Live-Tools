@@ -141,6 +141,9 @@ pub(super) fn read_states(process: &dyn Process, keys: &MacKeys, ids: &[i32]) ->
     keys.press_code(122)?;
     std::thread::sleep(std::time::Duration::from_millis(500));
     let mut rows = Vec::new();
+    // One queue read for every state: queued shared-slot buildings hold their slots.
+    let queued_by_state = read(process, |r, i| crate::construction::queued_shared_by_state(r, i))
+        .unwrap_or_default();
     for &id in ids {
         find_state(process, keys, id)?;
         std::thread::sleep(std::time::Duration::from_millis(600));
@@ -179,10 +182,14 @@ pub(super) fn read_states(process: &dyn Process, keys: &MacKeys, ids: &[i32]) ->
                 None
             }
         };
+        let queued = queued_by_state.get(&(id as i32)).copied();
         rows.push(match row {
-            Some(s) => json!({"state_id":id,"name":s.name,"unlocked_slots":s.unlocked,
+            Some(s) => {
+                let free = s.unlocked.saturating_sub(s.used);
+                json!({"state_id":id,"name":s.name,"unlocked_slots":s.unlocked,
                 "max_slots":s.maximum,"used_slots":s.used,
-                "free_slots":s.unlocked.saturating_sub(s.used)}),
+                "free_slots":free,"queued_shared":queued})
+            }
             None => json!({"state_id":id,"error":format!("state view did not open (not an own state?) {why}")}),
         });
         dismiss(process, keys, |r, i| {
@@ -190,7 +197,7 @@ pub(super) fn read_states(process: &dyn Process, keys: &MacKeys, ids: &[i32]) ->
         });
     }
     Ok(json!({"states":rows,
-        "note":"free_slots = unlocked - used; queued projects may also reserve slots"}))
+        "note":"free_slots = unlocked - used, where used already counts queued projects (checked live 1 Nov 2026); queued_shared = queued factories/dockyards/refineries/silos/rocket sites/reactors in the state"}))
 }
 
 #[cfg(test)]

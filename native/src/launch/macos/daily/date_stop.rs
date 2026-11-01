@@ -132,9 +132,8 @@ enum Parsed {
     Target { hour: i64, label: String, pause: bool },
 }
 fn parse(plan: &Value) -> Parsed {
-    if plan["active"] == json!(false) {
-        return Parsed::Off("plan inactive (active:false)");
-    }
+    // stop_on_date is a safety rail, honoured even when the plan's actions are switched off
+    // (active:false): in gate1194 the player deactivated the plan and the game ran past it.
     let (hour, label) = match crate::alarms::stop_on_date(plan) {
         Err(e) => return Parsed::Invalid(e.message),
         Ok(None) => return Parsed::None,
@@ -652,7 +651,8 @@ mod tests {
         let inactive = Fake::new(json!({"stop_on_date": "1938.01.01", "active": false}), target(), false);
         let s3 = Mutex::new(Status::default());
         step(&s3, &inactive);
-        assert_eq!(inactive.pauses.load(Ordering::SeqCst), 0);
+        // The stop date still pauses when the plan's actions are switched off.
+        assert_eq!(inactive.pauses.load(Ordering::SeqCst), 1);
 
         let bad = Fake::new(json!({"stop_on_date": "someday"}), target(), false);
         let s4 = Mutex::new(Status::default());

@@ -62,7 +62,9 @@
 //!   armies                 {"max":24,"min_for_general":8,"generals":["Name",..]} keep every division in an
 //!                          army of at most `max`: create armies where divisions stand unassigned (folding in
 //!                          standing armies when the game refuses and "absorb" is true), split oversized ones, and give the next
-//!                          listed general to an army of at least `min_for_general` divisions
+//!                          listed general to an army of at least `min_for_general` divisions;
+//!                          armies below that size are merged into others (hoi4_army_merge) unless
+//!                          "consolidate": false
 use crate::error::{Error, Result};
 use serde_json::{json, Map, Value};
 use std::{
@@ -112,6 +114,8 @@ pub struct State {
     war_assign: HashMap<String, i32>,
     war_stage: HashMap<String, u8>,
     war_cool: HashMap<String, GameHour>,
+    /// Refusals per politics pick (index): each refusal doubles the wait.
+    pol_fails: HashMap<usize, u32>,
     centers: HashMap<i32, (f64, f64)>,
     con: ConState,
     /// stop_on_date: (target hour, outcome of the single pause attempt)
@@ -183,6 +187,7 @@ impl Default for State {
             war_assign: HashMap::new(),
             war_stage: HashMap::new(),
             war_cool: HashMap::new(),
+            pol_fails: HashMap::new(),
             centers: HashMap::new(),
             con: ConState::default(),
             date_stop: None,
@@ -597,9 +602,14 @@ pub fn tick(
         )?;
         if ok || why.contains("already holds") {
             state.done.insert(key);
+            state.pol_fails.remove(&index);
         } else {
-            // Often just short of political power: try again later.
-            state.skip(now, "pol", &index.to_string(), DAY);
+            // Usually short of political power. Each attempt opens the politics screen, so
+            // back off (3, 6, 12 ... 30 days) instead of retrying every game day.
+            let fails = state.pol_fails.entry(index).or_insert(0);
+            *fails += 1;
+            let days = (3u64 << (*fails - 1).min(4)).min(30);
+            state.skip(now, "pol", &index.to_string(), days as GameHour * DAY);
         }
         return Ok(Tick::Acted(format!(
             "politics {} : {ok} {why}",
@@ -819,6 +829,47 @@ pub fn tick(
                 return Ok(Tick::Acted(format!(
                     "army_split {name} {chunk}: {ok} {why}"
                 )));
+            }
+        }
+        // Consolidate: fold the smallest army below `min_for_general` into the army that ends
+        // fullest without passing `max` (hoi4_army_merge), so generals lead real armies.
+        // An army with battle-plan orders is never emptied (the game deletes its orders).
+        if cfg["consolidate"] != json!(false) {
+            let mut sizes: Vec<(String, u64, bool)> = list(&roster, "armies")
+                .iter()
+                .map(|a| {
+                    (
+                        text(&a["army"]).to_string(),
+                        a["division_count"].as_u64().unwrap_or(0),
+                        a["battle_plan_orders"].as_u64().unwrap_or(0) > 0,
+                    )
+                })
+                .filter(|(_, n, _)| *n > 0)
+                .collect();
+            sizes.sort_by_key(|(_, n, _)| *n);
+            let source = sizes
+                .iter()
+                .find(|(name, n, orders)| *n < min_general && !orders && !state.skipped(now, "armymerge", name))
+                .cloned();
+            if let Some((source, n, _)) = source {
+                let target = sizes
+                    .iter()
+                    .filter(|(name, m, _)| *name != source && n + m <= max)
+                    .max_by_key(|(_, m, _)| *m)
+                    .cloned();
+                if let Some((target, _, _)) = target {
+                    let (ok, why) = state.act(
+                        tools,
+                        lease,
+                        "hoi4_army_merge",
+                        json!({"source": source, "target": target}),
+                        "mg",
+                    )?;
+                    if !ok {
+                        state.skip(now, "armymerge", &source, 2 * DAY);
+                    }
+                    return Ok(Tick::Acted(format!("army_merge {source} -> {target}: {ok} {why}")));
+                }
             }
         }
         let generals = strings(cfg, "generals");
@@ -2471,10 +2522,40 @@ mod tests {
                 }
             }
         }
-        let plan = json!({"armies": {"generals": ["B", "C"]}});
+        let plan = json!({"armies": {"generals": ["B", "C"], "consolidate": false}});
         let mut state = State::default();
         let step = tick(&mut state, &Roster, &plan, "l", START).unwrap();
         assert!(matches!(&step, Tick::Acted(s) if s.starts_with("general B -> Army 3: true")));
+    }
+
+    #[test]
+    fn small_armies_merge_into_the_fullest_army_that_stays_under_the_cap() {
+        struct Roster;
+        impl Tools for Roster {
+            fn call(&self, name: &str, args: &Value) -> Result<Value> {
+                match name {
+                    "hoi4_research" => Ok(json!({"slots": [{"researching": "a"}]})),
+                    "hoi4_focus_completed" => Ok(json!({"active_key": "f"})),
+                    "hoi4_economy" => Ok(json!({"factory_trigger_count": {"military": 0},
+                        "civilian_factories_available_for_projects": 0})),
+                    "hoi4_armies" => Ok(json!({"unassigned_by_state": [], "armies": [
+                        {"army": "Army 1", "division_count": 2, "commander": null},
+                        {"army": "Army 2", "division_count": 23, "commander": "A"},
+                        {"army": "Army 3", "division_count": 12, "commander": "B"},
+                        {"army": "Army 4", "division_count": 1, "commander": null, "battle_plan_orders": 2}]})),
+                    "hoi4_army_merge" => {
+                        assert_eq!(args["source"], json!("Army 1"));
+                        assert_eq!(args["target"], json!("Army 3"));
+                        Ok(json!({"receipt": {"status": "Verified"}}))
+                    }
+                    _ => Ok(json!({})),
+                }
+            }
+        }
+        let plan = json!({"armies": {"generals": ["C"]}});
+        let mut state = State::default();
+        let step = tick(&mut state, &Roster, &plan, "l", START).unwrap();
+        assert!(matches!(&step, Tick::Acted(s) if s.starts_with("army_merge Army 1 -> Army 3: true")), "{step:?}");
     }
 
     struct War {

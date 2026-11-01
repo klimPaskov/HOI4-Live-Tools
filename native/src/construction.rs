@@ -354,6 +354,36 @@ pub(crate) struct QueueSummary {
     pub(crate) elsewhere: i64,
     pub(crate) complete: bool,
 }
+/// Buildings that take a shared state building slot while they are queued.
+pub(crate) const SHARED_SLOT_BUILDINGS: [&str; 7] = [
+    "arms_factory",
+    "industrial_complex",
+    "dockyard",
+    "synthetic_refinery",
+    "fuel_silo",
+    "rocket_site",
+    "nuclear_reactor",
+];
+/// Queued amount of shared-slot buildings per own state (state id -> amount). A queued
+/// project holds its slot, so the slots a state can still take are `free - queued`.
+pub(crate) fn queued_shared_by_state(
+    r: &Reader<'_>,
+    base: u64,
+) -> Result<std::collections::BTreeMap<i32, i64>> {
+    let (country, production) = economy::own_production(r, base)?;
+    let own_tag = r.i32(country + 8)?;
+    let lines = lines_in(r, base, production, own_tag, true)?;
+    let mut out = std::collections::BTreeMap::new();
+    for row in &lines.known {
+        let (Some(key), Some(location)) = (row.key.as_deref(), row.location.as_ref()) else {
+            continue;
+        };
+        if row.building && SHARED_SLOT_BUILDINGS.contains(&key) && (0..=COUNTER_LIMIT).contains(&row.amount) {
+            *out.entry(location.state_id).or_insert(0) += i64::from(row.amount);
+        }
+    }
+    Ok(out)
+}
 pub(crate) fn queue_summary(lines: &Lines, building: &str, state_id: i32) -> QueueSummary {
     let mut summary = QueueSummary {
         in_state: 0,

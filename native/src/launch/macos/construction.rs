@@ -199,6 +199,21 @@ pub(super) fn add(
         keys.press(Key::letter('t')?)?;
         wait(process, "open construction", open)?;
     }
+    // The panel fills its building grids a moment after it opens; an empty read right after
+    // opening is not a refusal (seen live 1 Nov 2026), so wait up to 2 s for the button.
+    let deadline = std::time::Instant::now() + Duration::from_secs(2);
+    loop {
+        if read(process, |r, i| button(r, i, key))?.is_some() {
+            break;
+        }
+        if std::time::Instant::now() >= deadline {
+            return Err(Error::new(
+                "invalid_target",
+                "This building is not offered in the construction panel",
+            ));
+        }
+        thread::sleep(Duration::from_millis(100));
+    }
     let rect = settled(process, "building button", |r, i| {
         button(r, i, key)?.ok_or_else(|| {
             Error::new(
@@ -216,7 +231,12 @@ pub(super) fn add(
     .map_err(|e| select_failed(e, key))?;
     let result = (|| {
         find_state(process, keys, state)?;
-        for _ in 0..count.min(20) {
+        for click in 0..count.min(20) {
+            if click > 0 {
+                // A click right after a placement was ignored by 1.19.4 (gate1194, 1 Nov 2026):
+                // the queue never grew while a fresh call on the same state worked.
+                thread::sleep(Duration::from_millis(600));
+            }
             if read(process, selection)?.1.as_deref() != Some(key) {
                 return Err(Error::new(
                     "input_readback_failed",

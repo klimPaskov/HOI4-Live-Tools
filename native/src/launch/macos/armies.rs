@@ -550,7 +550,9 @@ pub(super) fn check_create(view: &Value, state: i32, absorb: bool) -> Result<()>
 }
 pub(super) fn selection_size(r: &Reader<'_>, image: u64) -> Result<u64> {
     let idler = r.u64(image + game::layout(r).idler_global)?;
-    r.u64(idler + ui(r)?.selection_size)
+    // A 32-bit count: in 1.19.4 the next four bytes are no longer zero (a selection of 26 read
+    // as 0x100_0000_001a on 1 Nov 2026), so the high half is never part of the size.
+    Ok(r.u64(idler + ui(r)?.selection_size)? & 0xffff_ffff)
 }
 /// The new-army card (rightmost portrait button of the card bar) or, with
 /// `leftmost`, the new-army-group card.
@@ -749,6 +751,56 @@ pub(super) fn select_army(process: &dyn Process, keys: &MacKeys, army: &str) -> 
     })?;
     std::thread::sleep(std::time::Duration::from_millis(300));
     Ok(card)
+}
+/// Move every division of army `source` into army `target` with the game's own controls:
+/// a left click on the source card selects exactly its divisions, a right click on the
+/// target card transfers the selection. Verified by membership: all of the source's
+/// divisions now belong to the target's group.
+pub(super) fn merge(process: &dyn Process, keys: &MacKeys, source: &str, target: &str) -> Result<()> {
+    clear_notices(process, keys)?;
+    let (moving, target_group) = read(process, |r, i| {
+        let from = group_named(r, i, source)?;
+        let to = group_named(r, i, target)?;
+        let moving: Vec<String> = membership(r, i)?
+            .into_iter()
+            .filter(|(_, g)| *g == from)
+            .map(|(d, _)| d)
+            .collect();
+        Ok((moving, to))
+    })?;
+    if moving.is_empty() {
+        return Err(Error::new("no_own_divisions", format!("{source} holds no division")));
+    }
+    if moving.len() > PANEL_ROWS {
+        return Err(Error::new(
+            "invalid_target",
+            format!("{source} has more than {PANEL_ROWS} divisions (the rows visible without scrolling); split it first"),
+        ));
+    }
+    // A selected army (its card) is not transferred by a right click; its divisions are:
+    // select them in the army panel (first row, Shift on the last), as hoi4_army_split does.
+    select_army(process, keys, source)?;
+    keys.click(GAME, PANEL_ROW.0, PANEL_ROW.1)?;
+    wait(process, "first division selected", |r, i| Ok(selection_size(r, i)? == 1))?;
+    if moving.len() > 1 {
+        keys.shift_click(GAME, PANEL_ROW.0, PANEL_ROW.1 + PANEL_PITCH * (moving.len() - 1) as f64)?;
+    }
+    wait(process, "divisions selected", |r, i| Ok(selection_size(r, i)? == moving.len() as u64))?;
+    let card = read(process, |r, i| card_rect(r, i, target, "portrait_btn"))?;
+    let (x, y) = card.center();
+    keys.right_click(GAME, x, y)?;
+    // Emptying the source army asks "Reassign Armies" (it will be removed): accept it.
+    super::ui::accept_command(process, keys)?;
+    wait(process, "divisions merged", |r, i| {
+        let now = membership(r, i)?;
+        Ok(moving.iter().all(|d| now.get(d) == Some(&target_group)))
+    })
+    .map_err(|_| {
+        Error::new(
+            "input_readback_failed",
+            "The right-click on the target army card did not move every division within 3 s; re-read hoi4_armies",
+        )
+    })
 }
 /// Screen areas covered by the top bar, the selected army's panel, the
 /// battle-plan toolbar and the army card bar.

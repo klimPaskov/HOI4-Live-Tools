@@ -553,6 +553,7 @@ impl Commands for MacClock {
             json!({"name":"hoi4_air_region_probe","description":"What the player's air map shows for one strategic air region: Find view centres `state_id`, a left click on the region opens the game's region window, which is read (region name, active aircraft by type for us and the enemy: fighters, bombers, close air support, anti-air guns; detection and efficiency percentages) and closed again. Orders nothing; moves the cursor and clicks, so it needs the input lease. Only what the air map displays; no hidden enemy information.","inputSchema":{"type":"object","properties":{"state_id":{"type":"integer","minimum":1,"maximum":4095},"lease_token":{"type":"string"}},"required":["state_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_air_regions","description":"Own wings and air bases grouped by strategic air region, read from memory and the game's map files (no input, never pauses): per region its name, own wings assigned (aircraft, type, missions, base state), aircraft total and the own air bases inside with capacity, aircraft stationed and free capacity; plus the wings that have no region. Enemy presence is not in memory: use hoi4_air_region_probe for the regions that matter.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}}),
             json!({"name":"hoi4_army_group_create","description":"Group two or more own armies into a new army group (army cards with Shift, then the new-army-group card). Give it a field marshal with hoi4_army_commander using the army group's name. Verified when all the armies belong to one new army group.","inputSchema":{"type":"object","properties":{"armies":{"type":"array","items":{"type":"string"},"minItems":2,"maxItems":12},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["armies","request_id","lease_token"],"additionalProperties":false}}),
+            json!({"name":"hoi4_army_merge","description":"Move every division of army `source` into army `target` with the game's own controls: a left click on the source's card selects exactly its divisions, a right click on the target's card transfers them (the empty source army disappears). Use it to fold many small armies into a few full ones (24 divisions each, one general each). Refused before input when either army is unknown, they are the same, or the merged army would exceed 24 divisions (split first). Verified from division membership.","inputSchema":{"type":"object","properties":{"source":{"type":"string"},"target":{"type":"string"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["source","target","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_army_split","description":"Split the first N divisions (list order, N 1..19) of an own army into a new army: the army's card, the panel's first row, Shift on row N, then the new-army card. Use it to bring an oversized army (more than 24 divisions) under its general's cap. Verified by a new army holding exactly those divisions.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"count":{"type":"integer","minimum":1,"maximum":19},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","count","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_state_slots","description":"Free building slots of own states (unlocked, max, used, free) read from each state's view (Find view centres the state, one click opens it). Use it to choose where a factory can still be queued before hoi4_construction_add. Changes nothing in the game; up to 12 states per call.","inputSchema":{"type":"object","properties":{"state_ids":{"type":"array","items":{"type":"integer","minimum":1,"maximum":4095},"minItems":1,"maxItems":12},"lease_token":{"type":"string"}},"required":["state_ids","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_army_create","description":"(optional absorb_existing: true folds armies standing there into the new one) Create one army from the own divisions shown around a state: Find view centres the state, a box selection picks own divisions there, the new-army card creates the army. Verified by a new army in memory; returns its divisions. Refused before any input with already_in_army (every own division in that state belongs to a named army; use absorb_existing or hoi4_army_split) or no_own_divisions (none stand there per hoi4_armies); input_readback_failed after the click makes no claim about the cause.","inputSchema":{"type":"object","properties":{"state_id":{"type":"integer","minimum":1,"maximum":4095},"absorb_existing":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["state_id","request_id","lease_token"],"additionalProperties":false}}),
@@ -672,6 +673,7 @@ impl Commands for MacClock {
                 | "hoi4_operative_assign"
                 | "hoi4_army_group_create"
                 | "hoi4_army_split"
+                | "hoi4_army_merge"
                 | "hoi4_state_slots"
                 | "hoi4_air_wings"
                 | "hoi4_air_mission"
@@ -3232,6 +3234,54 @@ impl Commands for MacClock {
             self.keys.preflight()?;
             return stateslots::read_states(process, &self.keys, &ids);
         }
+        if name == "hoi4_army_merge" {
+            allowed(args, &["source", "target", "request_id", "lease_token"])?;
+            let source = string(args, "source")?;
+            let target = string(args, "target")?;
+            for v in [source, target] {
+                if v.is_empty() || v.len() > 128 || v.chars().any(char::is_control) {
+                    return Err(Error::new("invalid_arguments", "Invalid army name"));
+                }
+            }
+            if source == target {
+                return Err(Error::new("invalid_arguments", "source and target are the same army"));
+            }
+            let id = string(args, "request_id")?;
+            let token = string(args, "lease_token")?;
+            let epoch = guard.observe(process)?.epoch;
+            authority.authorize(token, &epoch)?;
+            let action = json!({"kind":"army_merge","source":source,"target":target});
+            let keys = &self.keys;
+            let view = armies::armies(process)?;
+            let before = settle::Roster::from_view(&view);
+            if !actions.receipt_exists(id) {
+                let size = |name: &str| {
+                    view["armies"].as_array().into_iter().flatten()
+                        .find(|a| a["army"].as_str() == Some(name))
+                        .map(|a| a["division_count"].as_u64().unwrap_or(0))
+                };
+                let (Some(a), Some(b)) = (size(source), size(target)) else {
+                    return Err(Error::new("army_unknown", "Both armies must be own armies (names as hoi4_armies lists them)"));
+                };
+                if a + b > armies::ARMY_CAP as u64 {
+                    return Err(Error::new(
+                        "over_cap",
+                        format!("{source} ({a}) + {target} ({b}) would exceed {} divisions; split first", armies::ARMY_CAP),
+                    ));
+                }
+                self.keys.preflight()?;
+            }
+            let mut settle = || {
+                let now = armies::armies(process)?;
+                Ok(settle::army_merge(&before, &settle::Roster::from_view(&now), source, target).outcome(now))
+            };
+            let mut dispatch = || {
+                authority.authorize(token, &epoch)?;
+                armies::merge(process, keys, source, target)
+            };
+            let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
+            return Ok(json!({"receipt":receipt}));
+        }
         if name == "hoi4_army_split" {
             allowed(args, &["army", "count", "request_id", "lease_token"])?;
             let army = string(args, "army")?;
@@ -3597,24 +3647,44 @@ impl Commands for MacClock {
             let token = string(args, "lease_token")?;
             let epoch = guard.observe(process)?.epoch;
             authority.authorize(token, &epoch)?;
-            let before = armies::armies(process)?;
-            let before_roster = settle::Roster::from_view(&before);
-            let retry = actions.receipt_exists(id);
-            let plan = armies::plan_assign(&before, state, target, armies::ARMY_CAP)?;
-            if !retry {
-                armies::assign_preflight(&plan)?;
-                armies::check_create(&before, state, false)?;
-                self.keys.preflight()?;
-            }
-            let pool = armies::unassigned_ids(&before, state);
             let action = json!({"kind":"army_assign","state_id":state,"army":target});
             let keys = &self.keys;
-            let mut settle = || {
+            if actions.receipt_exists(id) {
+                // A retry settles from the baseline stored in the intent; the pre-checks
+                // would refuse now that the divisions have moved.
+                let mut settle = |baseline: &Value| {
+                    let now = armies::armies(process)?;
+                    let now_roster = settle::Roster::from_view(&now);
+                    let (before_roster, pool) = settle::Roster::from_baseline(baseline);
+                    Ok(match (baseline["army"].as_str(), baseline["take"].as_u64()) {
+                        (Some(army), Some(take)) => {
+                            settle::army_assign(&before_roster, &now_roster, army, &pool, take as usize)
+                                .outcome(now)
+                        }
+                        _ => journal::Outcome::Diverged(now),
+                    })
+                };
+                let receipt = actions.execute_baselined(id, &epoch, action, Value::Null, &mut settle, &mut || {
+                    Err(Error::new("action_uncertain", "A retry never dispatches"))
+                })?;
+                return Ok(json!({"receipt":receipt}));
+            }
+            let before = armies::armies(process)?;
+            let before_roster = settle::Roster::from_view(&before);
+            let plan = armies::plan_assign(&before, state, target, armies::ARMY_CAP)?;
+            armies::assign_preflight(&plan)?;
+            armies::check_create(&before, state, false)?;
+            self.keys.preflight()?;
+            let pool = armies::unassigned_ids(&before, state);
+            let mut baseline = before_roster.baseline(&pool);
+            if let armies::AssignMode::Absorb { army } = &plan.mode {
+                baseline["army"] = json!(army);
+                baseline["take"] = json!(plan.take);
+            }
+            let mut settle = |_: &Value| {
                 let now = armies::armies(process)?;
                 let now_roster = settle::Roster::from_view(&now);
-                Ok(if retry {
-                    journal::Outcome::Diverged(now)
-                } else if let armies::AssignMode::Absorb { army } = &plan.mode {
+                Ok(if let armies::AssignMode::Absorb { army } = &plan.mode {
                     settle::army_assign(&before_roster, &now_roster, army, &pool, plan.take)
                         .outcome(now)
                 } else {
@@ -3625,7 +3695,7 @@ impl Commands for MacClock {
                 authority.authorize(token, &epoch)?;
                 armies::assign(process, keys, &plan)
             };
-            let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
+            let receipt = actions.execute_baselined(id, &epoch, action, baseline, &mut settle, &mut dispatch)?;
             return Ok(json!({"receipt":receipt}));
         }
         if name == "hoi4_train" {
