@@ -125,6 +125,7 @@ Costs below are `research_cost` from G/common/technologies (multiply by 110 for 
 ### 3.2 Electronics, computing, radar, encryption [V electronic_mechanical_engineering.txt]
 
 electronic_mechanical_engineering (1936, cost 1) is the root; it also gates `sp_air_radar` special project (`FROM = { has_tech = electronic_mechanical_engineering }` in radar_projects.txt) [V]. Then: radio (cost 2, root of signals), improved_radio 1938 (gates sp_naval_proximity_fuze), radio_detection (cost 1.75, radar line), computing_machine 1938 (cost 2.5), basic_encryption/decryption 1938, cavity_magnatron 1938, centimetric_radar 1940. Research radar line with the Germany knickebein bonus only if airfields matter; for CHI/POL computing is low priority.
+DLC gates [V, checked 1.19.4.1]: with La Resistance active `basic_encryption`/`basic_decryption` are hidden (`allow_branch = { NOT = { has_dlc = "La Resistance" } }`; cryptology is in the intelligence agency). `radio_detection` and `cavity_magnatron` carry `allow = { is_special_project_completed = sp:sp_air_radar }`: put `sp_air_radar` in the special projects, not the techs in a research list.
 
 ### 3.3 Land equipment lines [V infantry/support/artillery/armor.txt]
 
@@ -136,12 +137,12 @@ electronic_mechanical_engineering (1936, cost 1) is the root; it also gates `sp_
 | Artillery | interwar_artillery 1936 (1.5), artillery1 1939, artillery2 1940, artillery3 1941 | GER 1936 has gw_artillery only |
 | Anti-air / anti-tank | interwar_antiair 1936, antiair1 1939; interwar_antitank 1936, antitank1 1939, antitank2 1940 | AT before 1939 for POL/CHI vs armor |
 | Motorised | tech_trucks, motorised_infantry (1936), mechanised_infantry 1940 | trucks gate logistics (section 7) |
-| Armor | gwtank/basic_light_tank/improved_light_tank 1936; basic_medium_tank (1939, cost 2) + basic_medium_tank_chassis (1938); improved_medium_tank 1941; armor_tech_1/2/3 (1936/38/41, cost 1) and engine_tech_1/2/3 (1934/38/41) modules | modules are cheap, high value; chassis and gun/vehicle tech separate |
+| Armor | Which folder shows depends on No Step Back (`common/technology_tags/00_technology.txt`: `armour_folder` without NSB, `nsb_armour_folder` with it) [V]. With NSB (current macOS set): gwtank_chassis, basic_light_tank_chassis, improved_light_tank_chassis 1936, basic_medium_tank_chassis (1938, cost 2, needs only gwtank_chassis), improved_medium_tank_chassis 1940; armor_tech_1/2/3 (1936/38/41, cost 1) and engine_tech_1/2/3 (1934/38/41) modules; equipment are chassis designs (`light_tank_chassis_2`, `medium_tank_chassis_1`). Without NSB: gwtank/basic_light_tank/improved_light_tank, basic_medium_tank 1939, improved_medium_tank 1941 (`medium_tank_equipment_1`). | modules are cheap, high value; a research list must use the keys of the folder that is shown |
 | Railway | basic_train 1910, wartime_train 1939 | rail throughput |
 
 ### 3.4 Air and naval [V air_techs.txt, bba_air_techs.txt, naval.txt]
 
-Air: fighter1 1936, fighter2 1940; CAS1 1936, CAS2 1940; tactical_bomber1 1936, 2 1940; heavy_fighter1/2, naval_bomber1 1936, strategic_bomber1 1936; airframes basic_small_airframe 1936, improved_small_airframe 1940; engines_1 1922, engines_2 1936, engines_3 1940; modules aa_lmg 1922, aa_hmg 1939, range_improvements 1936.
+Air: the two sets are exclusive (`air_techs_folder` without By Blood Alone, `bba_air_techs_folder` with it) [V]. With BBA (current macOS set): airframes iw_/basic_ (1936)/improved_ (1940)/advanced_ (1944) small, medium and large; engines_1 1922, engines_2 1936, engines_3 1940; modules aa_lmg 1922, aa_hmg 1939, range_improvements 1936, armor_piercing_bombs 1936, heavy_bombs 1940; equipment are airframe designs (`small_plane_airframe_1` fighter, `small_plane_cas_airframe_1` CAS, `medium_plane_airframe_1` bomber). Without BBA: fighter1 1936, fighter2 1940; CAS1 1936, CAS2 1940; tactical_bomber1 1936, 2 1940; heavy_fighter1/2, naval_bomber1, strategic_bomber1 (`fighter_equipment_1`, `CAS_equipment_1`).
 Naval (only if navy matters): basic_destroyer/ light_cruiser/ submarine 1936, improved 1940; transport 1922 for any invasion; landing_craft 1940 (cost 2).
 
 ### 3.5 Role-based ordering
@@ -162,12 +163,14 @@ Slot counts: GER 4 (5 with Heraeus focus), POL 3 (+2 via focus), CHI 2 (+3 via f
 | When | Queue (one per slot) | Source of order |
 |---|---|---|
 | 1936 Jan | basic_machine_tools, infantry_weapons1, construction1, electronic_mechanical_engineering | GER lacks all four at start (GER - Germany.txt l.86-101) [V]; no tech bonus needed |
-| 1936 mid | interwar_artillery, interwar_antitank, tech_logistics_company, fighter1 (+ small airframe) | |
-| 1937 | improved_machine_tools, construction2, concentrated_industry (then 2), tech_maintenance_company, CAS1, armor_tech_1, engine_tech_1 | focus bonuses: industry 1x1 (`GER_industrial_expansion`), etc. |
-| 1938 | infantry_weapons2, support_weapons2, improved_radio, basic_medium_tank_chassis, tech_engineers2 if engineers used | `GER_advanced_panzer_research` gives +100% bonus once for cat_medium_armor [V] |
-| 1939 | basic_medium_tank, improved_infantry_weapons, artillery1, antiair1, advanced_machine_tools, construction3, wartime_train | `GER_artillery_bombardment` 0.5 x2 artillery |
-| 1940 | improved_infantry_weapons_2, artillery2, antitank2, fighter2, tactical_bomber2, mechanised_infantry, engines_3 | |
-| 1941 | improved_medium_tank(+chassis 1940), artillery3, support_weapons3, assembly_line_production, radio_detection/centimetric if air war, super_heavy only if resourced | |
+| 1936 mid | interwar_artillery, interwar_antitank, tech_logistics_company (fighter1 only without BBA; with BBA basic_small_airframe and engines_2 are start techs) | |
+| 1937 | improved_machine_tools, construction2, concentrated_industry (then 2), tech_maintenance_company, armor_tech_1 (NSB; engine_tech_1 is a start tech with NSB), range_improvements / armor_piercing_bombs (BBA) or CAS1 (without BBA) | focus bonuses: industry 1x1 (`GER_industrial_expansion`), etc. |
+| 1938 | infantry_weapons2, support_weapons2, improved_radio, engine_tech_2, armor_tech_2, basic_medium_tank_chassis, tech_engineers2 if engineers used | `GER_advanced_panzer_research` gives +100% bonus once for cat_medium_armor [V] |
+| 1939 | improved_infantry_weapons, artillery1, antiair1, advanced_machine_tools, construction3, wartime_train, aa_hmg (basic_medium_tank only without NSB) | `GER_artillery_bombardment` 0.5 x2 artillery |
+| 1940 | improved_infantry_weapons_2, artillery2, antitank2, mechanised_infantry, engines_3, improved_small_airframe + improved_medium_airframe (BBA) or fighter2 + tactical_bomber2 (without BBA) | |
+| 1941 | improved_medium_tank_chassis (NSB, 1940) or improved_medium_tank, artillery3, support_weapons3, assembly_line_production, centimetric radar after sp_air_radar if air war, super_heavy only if resourced | |
+
+The standing plan `plans/germany-fair-1936-1938.plan.json` implements this table for the active macOS DLC set (NSB + BBA + La Resistance + AAT + Gotterdammerung).
 
 ### 4.2 Nationalist China (FAIR)
 

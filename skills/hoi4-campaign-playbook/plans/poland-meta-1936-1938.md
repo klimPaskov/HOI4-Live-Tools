@@ -1,169 +1,200 @@
 # Poland META standing plan, 1936-01-01 to 1938-01-01
 
-Companion to `poland-meta-1936-1938.plan.json`. It has the same schema as
-`germany-fair-1936-1938.plan.json`. Copy the JSON to the `plan.json` the runner reads
-(`native/src/plan_run.rs`, re-read every tick). Keys that start with `_` are ignored by
-the runner. `_validator` only feeds `scripts/validate_plan.py`.
+Companion to `poland-meta-1936-1938.plan.json`. It uses the same schema as
+`germany-fair-1936-1938.plan.json`. Copy the JSON to the `plan.json` that the runner reads
+(`native/src/plan_run.rs`, which re-reads it every tick). The runner ignores keys that start with `_`.
+`_validator` is read only by `scripts/validate_plan.py`.
 
 ```
-python3 scripts/validate_plan.py skills/hoi4-campaign-playbook/plans/poland-meta-1936-1938.plan.json --strict
-# checked: research=52, focus=27, production=3, construction=3, politics=5, decisions=3; 0 error(s), 0 warning(s)
+python3 scripts/validate_plan.py --strict skills/hoi4-campaign-playbook/plans/poland-meta-1936-1938.plan.json
+# checked: research=53, focus=30, production=3, construction=3, politics=5, decisions=3; 0 error(s), 0 warning(s)
 ```
+
+`--strict` turns warnings into errors, so the plan has no warnings to explain.
 
 **Scope.** This window is the build-up for the campaign goal in
-[poland-meta](../references/poland-meta.md): survive, defeat Germany and the USSR, and form
-Intermarium, plus the Commonwealth where the active DLC set supports it (see below). META means
-the strongest intended mechanics plus exploits a player can do through the normal UI. It still
-bans the console, save editing, memory writes, firing events and reloading to undo.
+[poland-meta](../references/poland-meta.md). The goal: survive, defeat Germany and the USSR, and form
+the Polish-Lithuanian Commonwealth and the Intermarium. META allows the strongest intended mechanics
+and any exploit a player can do through the normal UI. It still bans the console, save editing,
+memory writes, firing events and reloading to undo.
 
-## Active DLC set (this decides the whole plan)
+## Active DLC set (rewritten 1 November 2026)
 
-The running game's log reports **3 active DLCs**: Anniversary Pack, **Poland: United and Ready** (PUR)
-and Rocket Launcher Unit Pack. These are recorded in `_validator.dlcs`. Other DLC folders are
-installed but **not active**: No Step Back (NSB), By Blood Alone (BBA), Man the Guns (MTG),
-La Résistance, Arms Against Tyranny, Götterdämmerung, Waking the Tiger and No Compromise, No
-Surrender. `dlc_load.json` lists nothing as disabled, so it is not the source of truth here.
-Every `has_dlc` below was checked against that set in HOI4 1.19.4.1.
+`_validator.dlcs` lists the 10 installed DLCs by their exact `has_dlc` names: Anniversary Pack,
+Arms Against Tyranny (AAT), By Blood Alone (BBA), Gotterdammerung, Historical German Portraits, La
+Resistance, **No Compromise, No Surrender** (one DLC, with the comma in its name), No Step Back (NSB),
+Poland: United and Ready (PUR) and Rocket Launcher Unit Pack. The validator adds the integrated DLCs
+from `integrated_dlc/` itself: Together for Victory, Death or Dishonor, Waking the Tiger and Man the
+Guns (MTG). The brief counted 11 DLCs, which splits "No Compromise, No Surrender" in two. The
+`dlc/` folder has exactly 10 `.dlc` files.
 
-| Area | Effect without NSB, BBA or MTG (PUR active) |
+This reverses most of the earlier 3-DLC plan:
+
+| Area | With NSB + BBA + AAT + MTG active |
 |---|---|
-| Focus tree | `polish_focus` still loads: its `country` factor needs PUR **or** NSB. |
-| Political roots | `allow_branch` hides `POL_assemble_the_regency_council` (needs NSB), `POL_organize_the_peasants_strike`, `POL_nationalist_constitution`, `POL_elect_a_PSL_leader`, `POL_demand_LIT_pavel` and `POL_demand_pomerania`. **The Regency/monarchy branch is gone**: no Fifth of November, no royal election (`NSB_poland_royal_election.*` is only fired from Fifth of November), no Wettin/Habsburg/Hohenzollern/Romanov lines, no Royal Sejm, Royal Guards, King of Lithuania or `POL_LIT_union`. Visible roots: `POL_complete_april_constitution` (Sanation) and `POL_restore_the_sejm` / `POL_internationalism` (`allow_branch = NOT NSB`, the PUR democratic tree). |
-| Other hidden focuses | `POL_prepare_for_the_inevitable` (needs MTG), `POL_expand_polish_intelligence*` (needs La Résistance). `POL_adaptive_designs` needs Arms Against Tyranny in `available`. `POL_lithuanian_annexation` only reads the GER Oppose Hitler variant. |
-| Start ideas | PUR adds `uncontrolled_exports`, `POL_april_constitution_1`, `POL_looming_peasants_strike` and both Sanation oppositions (history file, `has_dlc = "Poland: United and Ready"`). **The peasant-strike clock still runs**, so Agrarian Reform is still mandatory. |
-| Intermarium | `POL_the_between_the_seas_concept` and its children have no DLC gate. The faction comes from `faction_template_miedzymorze_faction`. Only the manifest is NCNS-gated. |
-| Commonwealth | Only the formable decision `form_commonwealth` (`formable_nation_decisions.txt`, no DLC gate) is left. It needs control of Lithuania's states 11 and 189 plus the 15 Polish core states, Lithuanian core compliance above 80, and no subject status. In practice that means taking Lithuania by war or through `POL_lithuanian_annexation` (after `POL_align_with_the_west`, which is not on the Sejm route) and then raising compliance. This is post-1938 work. |
-| Air | The `bba_air_techs_folder` is unavailable and the legacy `air_techs_folder` is used (`common/technology_tags/00_technology.txt`). Poland starts with `early_fighter`, `early_bomber` and `CAS1` and a variant "PZL P.24" of **`fighter_equipment_0`**. `small_plane_*` keys and BBA techs (`engines_2`, `aircraft_construction`, `aa_hmg`, `range_improvements`) do not exist for this run. |
-| Armour, navy | The legacy `armour_folder` (`gwtank`) and legacy naval techs are used. The plan uses neither. |
-| Characters | Wojciechowski (available only via the NSB Regency, `POL_modus_vivendi` or the NSB-only `POL_reassemble_the_sejm`) and Lubomirski (Regency only) are out. The validator's current DLC check did not flag these advisors or the `small_plane_*` / BBA keys in a negative test, so they were removed by hand from the files. |
+| Focus tree | `polish_focus` (PUR or NSB). The NSB political roots are visible again: `POL_assemble_the_regency_council`, `POL_complete_april_constitution`, `POL_organize_the_peasants_strike` and `POL_nationalist_constitution`. `POL_restore_the_sejm` is now **hidden** (`allow_branch = NOT NSB`), and so is its democratic tree. |
+| Monarchy | Regency -> Fifth of November -> the `NSB_poland_royal_election.*` events -> the Wettin, Habsburg, Hohenzollern, Bermondt or Romanov branches. Royal Sejm, Royal Guards, King of Lithuania and `POL_LIT_union` all work. |
+| Start ideas | PUR still adds `uncontrolled_exports`, `POL_april_constitution_1`, `POL_looming_peasants_strike` and both Sanation oppositions (level 1). Agrarian Reform is still mandatory. |
+| Start techs | BBA air: `iw_small_airframe`, `basic_small_airframe`, `engines_1`, `aa_lmg`, `aa_cannon_1` and `early_bombs`. NSB armour: `gwtank_chassis`. MTG naval hull techs. No `early_fighter`, `fighter1`, `gwtank` or `early_destroyer`. |
+| Air OOB / designs | `POL_1936_air_bba`: one line on `small_plane_airframe_0` "PZL P.11" (an obsolete variant). Designs: "PZL P.24" (`small_plane_airframe_0`) and "PZL P.23" (`small_plane_cas_airframe_1`). There is **no** fighter design on `small_plane_airframe_1`, so draw one in the designer. |
+| Land designs | NSB light tanks "7TP dw" and "7TP jw" (`light_tank_chassis_0`). The plan does not produce them in this window. |
+| Exile tree | `POL_prepare_for_the_inevitable` (needs MTG) and `POL_expand_polish_intelligence` (LaR + MTG) are available, but only once Poland is losing. |
+| Equipment | AAT industrial manufacturers (MIOs) are active. The start infantry line carries `mio:POL_fb_organization`. The runner does not manage MIOs, so the model assigns them. |
+
+## Route chosen (the META opening)
+
+**Economy focuses first, then politics, then the Wettin-Lithuania chain. Intermarium as soon as its gate
+opens.**
+
+* **Regency Council** is the strongest political root for this goal. One 5-point focus removes both
+  Sanation oppositions, makes the government neutral with elections off, and unlocks two
+  top-tier advisors: Wojciechowski (`noble_beurocrat`, +15% PP) and Lubomirski (`staunch_aristocrat`,
+  -20% consumer goods). Fifth of November (5) removes `POL_april_constitution_1` (-15% PP, +15% law and
+  advisor costs). Sanation (`POL_complete_april_constitution`) needs 6-8 more focuses to clear the same
+  maluses. The peasant-strike root and the nationalist root lead away from the endpoint.
+* **Wettin (Friedrich Christian)** is the only monarch branch that ends in `POL_LIT_union`, which
+  annexes a Lithuanian subject and runs `activate_decision = form_commonwealth`. That is the Commonwealth
+  goal. He is the **first** offer (event `NSB_poland_royal_election.1`, 35 days after Fifth of November),
+  so this route costs no "keep looking" delay. Option 0 accepts him and runs
+  `unlock_national_focus = POL_claiming_lithuania`. That is why `event_options` maps it to 0.
+  Habsburg (Czechoslovakia) is the stronger industrial grab, but it is mutually exclusive with
+  `POL_claiming_lithuania`. It would push the Commonwealth back to a conquest of Lithuania and the formable decision.
+* **Economy before the king.** `POL_central_region_strategy` (+2 civilian), `POL_expansion_of_new_towns`
+  (+2 military), `POL_invest_in_the_old_polish_region` (+1 military), `POL_start_central_industrial_region`
+  (+1/+1) and `POL_modernize_congressional_factories` (+2/+2) add **11 instant factories** for 45 focus
+  points. Every month they come earlier compounds. The monarchy chain only pays off in 1938-39.
 
 ## Top-level keys
 
 | Key | Value | Why |
 |---|---|---|
-| `stop_on_date` | `1938.01.01` | The plan's window. If you extend it, extend the focus tail and switch construction to military factories. |
-| `event_options` | `{}` | No verified multi-option Polish event on this route needs automation. The royal election cannot happen without NSB. The Danzig crisis (`germany.86`, 1939) is for the model to decide. |
-| `alarms` | PP 200, CG 0.40, idle civ 3, idle mil 2 | Poland has few factories, so 3 idle civilian factories is already a real loss. |
+| `stop_on_date` | `1938.01.01` | The window. If you extend it, see the tail notes below. |
+| `event_options` | `{"NSB_poland_royal_election.1": 0}` | Accepts Friedrich Christian (Wettin). Without this entry, `auto_events` would wait 3 days and then also pick option 0, but the explicit entry protects the route if the defaults change. |
+| `alarms` | PP 200, CG 0.40, idle civ 3, idle mil 2 | Poland is small, so 3 idle civilian factories is already a real loss. |
+| `doctrines` | `defensive_postures` (infantry track, xp 50), `fire_concentration` (combat_support, xp 100) | Land subdoctrines under the start grand doctrine `grand_battleplan` (`available = always`). xp 50 assumes the -50% from `POL_prepare_for_the_next_war`. Before that focus the tool refuses with `insufficient_experience` and the runner retries 15 days later. **`hoi4_doctrine_adopt` is marked UNVALIDATED in its own tool description.** Check the first adoption by hand. |
+| `special_projects` | `{"priority": []}` | Fills any empty facility with the first visible project. Poland has no facility in this window, so this is a no-op until one exists. |
+| `air.war_missions` | true | Only acts in war. |
 
-## research_priority (52 technologies)
+## research_priority (53 technologies)
 
-The start techs come from `history/countries/POL - Poland.txt` without NSB, BBA or MTG:
-`infantry_weapons1`, `tech_support`, `tech_engineers`, `tech_recon`, `tech_mountaineers`,
-`tech_trucks`, `gw_artillery`, `interwar_antiair`, `fuel_silos`, `synth_oil_experiments`,
-`basic_train`, `gwtank`, `early_fighter`, `early_bomber`, `CAS1`, `early_destroyer` and
-`early_submarine`. Poland starts with **3 slots**. The 4th comes from `POL_additional_research_slot1`.
+Start techs with this DLC set (validator, DLC-aware): `infantry_weapons(1)`, `tech_support`,
+`tech_engineers`, `tech_recon`, `tech_mountaineers`, `tech_trucks`, `gw_artillery`, `interwar_antiair`,
+`fuel_silos`, `synth_oil_experiments`, `basic_train`, `gwtank_chassis`, the BBA set above, and MTG naval
+techs. Poland has **3 slots**. The 4th comes from `POL_additional_research_slot1`, about 1937-02-24.
 
 | Positions | Block | Reason |
 |---|---|---|
-| 1-3 | basic_machine_tools, construction1, electronic_mechanical_engineering | Day-one industry. The Four Year Plan's +100% construction bonus (about 1936-02-05) is kept for construction2. |
-| 4-10 | support_weapons, construction2, radio, improved_machine_tools, interwar_artillery, concentrated_industry, interwar_antitank | Poland lacks support_weapons and interwar_artillery. interwar_antitank unlocks `anti_tank_equipment_1`. Concentrated industry for output. Dispersed is exclusive with it. |
-| 11-25 | excavation1, mechanical_computing, concentrated_industry2, basic_fortification_tech, infantry_weapons2, support_weapons2, motorised_infantry (prerequisite of the support companies), logistics/field hospital/signal, improved_equipment_conversion, excavation2, improved_radio, computing_machine | Fortification tech comes before the 1938 bunker programme. |
-| 26-52 | land_fort_tech_1, **fighter1** (legacy, `fighter_equipment_1`), encryption/decryption, fuel_refining, rubber_processing, construction3, advanced_machine_tools, concentrated_industry3, artillery1, antitank1, antiair1, improved_infantry_weapons, second-tier support, ... | Tail for 1938-39. |
+| 1-3 | basic_machine_tools, construction1, electronic_mechanical_engineering | Day-one industry. |
+| 4-13 | support_weapons, construction2 (Four Year Plan +100% construction bonus, about 02-05), concentrated_industry (Central Region Strategy +100% industry bonus, about 04-15), improved_machine_tools, interwar_artillery, interwar_antitank, radio, excavation1, concentrated_industry2, mechanical_computing | Poland starts without support_weapons, interwar_artillery or electronics. interwar_antitank unlocks `anti_tank_equipment_1` before its dated line (1936-11-15). |
+| 14-26 | infantry_weapons2, support_weapons2, motorised_infantry (needed by the logistics, field hospital and signal companies), basic_fortification_tech, improved_equipment_conversion, excavation2, support companies, improved_radio, computing_machine, fuel_refining, rubber_processing | |
+| 27-28 | **engines_2, aircraft_construction** (BBA) | The BBA air path. Poland already has `basic_small_airframe`. Fighter work goes into the designer, not into legacy `fighter1`. |
+| 29-53 | land_fort_tech_1, encryption/decryption, construction3, advanced_machine_tools, concentrated_industry3, artillery1, antitank1, antiair1, **aa_hmg** (BBA), improved_infantry_weapons, second-tier support, wartime_train, ... | The tail for 1938-39. Nothing is more than one year ahead of 1938 in the first 45 entries. |
 
-## focus_path (27 focuses) and focus_fallback
+There are no legacy keys (`fighter1`, `early_fighter`, `gwtank`, `basic_light_tank`), and no start techs.
 
-One focus point is 7 days. The dates assume the Intermarium gate is not met in 1936.
+## focus_path (30) and focus_fallback (14)
+
+1 focus point = 7 days. Dates assume nothing is blocked.
 
 | # | Focus | Cost | Done about | Note |
 |---|---|---|---|---|
-| 1 | POL_the_four_year_plan | 5 | 1936-02-05 | Construction tech bonus, +10% building speed for 1460 days. |
-| 2 | **POL_restore_the_sejm** | 10 | 04-15 | The META political root without NSB. One focus removes `POL_april_constitution_1` (-15% PP, +15% law and advisor costs) **and** both Sanation oppositions. It adds `POL_empowered_sejm_idea` (+10% stability, -0.1 neutrality drift). It is exclusive only with `POL_complete_april_constitution`, which would instead *raise* the April constitution and both oppositions to level 2 and leave you to dismantle them over 6-8 more focuses. The ruling party stays neutral (elections are off). The follow-ups (`POL_internationalism` -> liberalism/authoritarianism) are not in the path. |
-| 3 | POL_central_region_strategy | 5 | 05-20 | Instant factories and slots in Warsaw, Kielce, Lublin and Łódź. |
-| 4-5 | POL_fill_the_railways_gaps, POL_agrarian_reform | 10+10 | 07-29, 10-07 | Agrarian Reform must finish before 1936-12-31 (Looming Peasants' Strike, 365 days). That leaves about 85 days of margin. |
-| 6-9 | POL_the_between_the_seas_concept, POL_the_mediterranean, POL_coerce_czechoslovakia, POL_austro_hungarian_alliance | 10+5+5+5 | when the gate opens | Gate: `has_army_manpower > 699999`, not a subject, and unaligned or a faction leader. Until then the runner skips the focus and goes on. Once open, the chain runs ahead of the economy focuses so Austria is invited (poland.16) before the March 1938 Anschluss. `GER_anschluss` is bypassed if AUS is in a faction without GER. |
-| 10 | POL_expansion_of_new_towns | 5 | 11-11 | Arms factories (Poznań, Gdynia, Kraków). |
-| 11 | POL_additional_research_slot1 | 10 | 1937-01-20 | 4th slot. Free while Poland has 3 slots. |
-| 12 | POL_national_defence_fund | 10 | 03-31 | **-35% consumer goods for 720 days.** |
-| 13 | POL_start_central_industrial_region | 10 | 06-09 | Factories in Kraków, Stanisławów and Lwów. |
-| 14-15 | POL_prepare_for_the_next_war, POL_plan_west | 5+10 | 07-14, 09-22 | -50% on one land doctrine. Bunker speed +30% (`POL_plan_modifier`) for 547 days in states that border Germany. |
-| 16-18 | POL_invest_in_the_old_polish_region, POL_modernize_congressional_factories, POL_additional_research_slot2 | 5+10+10 | 1937-10 to 1938-03 | Slot2 needs **more than 50 owned factories** once Poland has 4 slots. |
-| 19-27 | new_military_academy, standardisation_of_equipment, central_defence_of_poland (+25% bunker speed, 720 days), local_western_plans, silesia_fortified_area, the_prusya_line, expand_poznan_forts, hel_fortified_area, army_modernisation | | 1938 | Tail: instant bunkers and the `POL_defend_in_west_state` decision. |
+| 1 | POL_the_four_year_plan | 5 | 1936-02-05 | +100% construction tech bonus, +10% building speed for 1460 days. |
+| 2 | POL_assemble_the_regency_council | 5 | 03-11 | Removes both oppositions before their first escalation (175 days). Neutral government, elections off. Unlocks Wojciechowski, Lubomirski and Kakowski. |
+| 3 | POL_central_region_strategy | 5 | 04-15 | 2 instant civilian factories (Warsaw 10, Kielce 90) and slots in Lublin 92 and Łódź 87. |
+| 4 | POL_fulfil_fifth_of_november | 5 | 05-20 | Needs neutrality > 20% and democratic < 50% (start 38/32). Removes the April constitution. The election event arrives about 06-24. |
+| 5-6 | POL_fill_the_railways_gaps, POL_agrarian_reform | 10+10 | 07-29, 10-07 | Agrarian Reform is selected on about 07-29, before the 365-day strike mission ends (12-31), and **selecting** it already adds 70 days to the mission. |
+| 7-10 | POL_the_between_the_seas_concept, POL_the_mediterranean, POL_coerce_czechoslovakia, POL_austro_hungarian_alliance | 10+5+5+5 | when the gate opens | Gate: `has_army_manpower > 699999`, not a subject, and unaligned or a faction leader. The runner skips them until then. Placed early so they take priority once the gate opens, ahead of the March 1938 Anschluss. |
+| 11-12 | POL_expansion_of_new_towns, POL_invest_in_the_old_polish_region | 5+5 | 11-11, 12-16 | +2 military (Poznań 86, Gdynia 807) and +1 military (Kraków 88). |
+| 13 | POL_additional_research_slot1 | 10 | 1937-02-24 | 4th slot. No condition while Poland has 3 slots. |
+| 14-15 | POL_start_central_industrial_region, POL_modernize_congressional_factories | 10+10 | 05-05, 07-14 | +1/+1 (Kraków), then +2 military and +2 civilian (Warsaw, Kielce, Płock). |
+| 16 | POL_national_defence_fund | 10 | 09-22 | -35% consumer goods for 720 days, which covers the 1939 war. |
+| 17 | POL_prepare_for_the_next_war | 5 | 10-27 | -50% on one land doctrine (see `doctrines`). Prerequisite of Plan West. |
+| 18-23 | POL_claiming_lithuania -> royal_sejm -> institute_royal_guards -> support_monarchism_in_LIT -> king_of_lithuania -> LIT_union | 10+10+10+10+5+10 | 1938-01-05 onward | Claiming is unlocked by the election event. Royal Guards gives 2 divisions at 1.0 experience. `POL_king_of_lithuania` needs Lithuanian monarchist support > 79 (or Lithuania as a subject). That comes from **targeted** decisions the runner cannot take (see decisions). |
+| 24 | POL_additional_research_slot2 | 10 | when allowed | Needs > 50 owned factories once Poland has 4 slots. Skipped until then. |
+| 25-30 | POL_plan_west, local_western_plans, silesia_fortified_area, the_prusya_line, expand_poznan_forts, hel_fortified_area | | 1938 | Bunker speed +30% for 547 days, instant bunkers, the `POL_defend_in_west_state` decision. |
 
-`focus_fallback`: Katowice mines (+24 steel, +12 aluminium), Upper Silesia, expand/eastern industrial
-region, anti-air, AT and artillery bonuses, air base, fighter modernisation (without BBA it gives
-the `light_fighter` bonus), Warsaw railway station.
+`focus_fallback`: expand the central industrial region, Katowice mines (+steel, +aluminium), Central
+Defence of Poland, Upper Silesia, eastern investment, the military academy chain (academy ->
+standardisation -> army modernisation -> AT/artillery), invest in anti-air, air bases, fighter
+modernisation, Warsaw railway station.
 
-**Never add:** `POL_complete_april_constitution` (exclusive with the Sejm root); any NSB-hidden
-focus (Regency, election lines, Royal Sejm, `POL_institute_royal_guards`,
-`POL_support_monarchism_in_LIT`, `POL_king_of_lithuania`, `POL_LIT_union`,
-`POL_prepare_for_the_inevitable`). Also `POL_plan_east`, which is blocked until
-`POL_complete_plan_west`, and `POL_complete_plan_west` itself, which removes the bunker modifier and
-closes the remaining Plan West focuses. Leave `POL_clamp_down_on_danzig` to the model. It gives
-75 PP and 50 command power but starts 40 resistance in Danzig. Its follow-up,
-`POL_integrate_gdansk_industries`, is the cheapest way to replace `uncontrolled_exports` with `export_focus`.
+**Never add:** `POL_restore_the_sejm` (hidden under NSB; the validator does not flag it),
+`POL_complete_april_constitution`, `POL_organize_the_peasants_strike`, `POL_nationalist_constitution`
+(exclusive with the Regency), `POL_habsburg`, `POL_hohenzollern`, `POL_cossack_king` or `POL_romanov`
+(exclusive with `POL_claiming_lithuania`; the validator does flag these), `POL_plan_east` (blocked until
+`POL_complete_plan_west`), or `POL_complete_plan_west` (it ends the bunker bonus).
+`POL_clamp_down_on_danzig` vs `POL_develop_polish_ship_building` is the model's call. The Danzig line
+(`POL_integrate_gdansk_industries`) is the only peacetime way to drop `uncontrolled_exports`.
 
 ## politics
 
+The runner skips a pick until political power reaches the pick's `cost`.
+
 | Pick | Cost | Why |
 |---|---|---|
-| government 2 `partial_economic_mobilisation` | 150 (+15% until the Sejm focus) | Civilian Economy gives -30% civilian and military factory construction speed. Partial needs war support > 0.25 (Poland starts at the 0.5 default). It has no construction penalty and gives +10% arms speed. |
-| government 3 `POL_eugeniusz_kwiatkowiski` | advisor | `captain_of_industry`: +10% civilian factory, infrastructure and railway construction. No conditions. |
-| government 4 `POL_jozef_beck` | advisor | `smooth_talking_charmer`: +5% PP, +10% trade opinion. No conditions. |
-| government 0 `limited_conscription` | 150 | War support > 0.1. Gives the manpower for the 700k gate. |
-| government 5 `POL_jozef_haller` | advisor | `war_industrialist`: +10% arms factory construction, for the 1938 switch to military factories. |
+| government 2 `partial_economic_mobilisation` | 173 (150 +15% April constitution) | Civilian Economy: 35% consumer goods and **-30%** civilian and military factory construction speed. Partial: 25% consumer goods, +10% arms speed, no construction penalty. Needs war support > 0.25. |
+| government 3 `POL_stanislaw_wojciechowski` | 173 | `noble_beurocrat`: +15% PP, +5% stability. Available after the Regency (`allowed` needs NSB or PUR). |
+| government 4 `POL_eugeniusz_kwiatkowiski` | 150 | `captain_of_industry`: +10% civilian factory, infrastructure and rail construction. |
+| government 5 `POL_zdzislaw_lubomirski` | 150 | `staunch_aristocrat`: -20% consumer goods. Needs the Regency and a neutral or fascist government. |
+| government 0 `limited_conscription` | 150 | Manpower for the 700k Intermarium gate. War support > 0.1. |
 
-All three advisors are recruited in the history file with no DLC condition. They are character
-ids, and also their `idea_token`s.
+The slot numbers follow the earlier Poland and Germany plans: 0 manpower, 2 economy, 3-5 political
+advisors. Not in the plan: Beck (+5% PP; no free political slot), Haller (+10% arms construction; swap
+him in for Kwiatkowski when construction turns to military factories in 1938), and military staff
+(Sosnkowski `army_chief_defensive_2`, theorist Łupaszko). PP is short through 1937.
 
 ## decisions
 
-`POL_diplomatic_mission_to_CZE`, `_AUS`, `_HUN` (10 PP each, 35 days, -10% PP gain while running,
-one at a time). Each appears after the focus before the invitation. Each adds +20 AI alliance
-strategy toward POL. The invitation itself is the next focus's poland.16 event.
+`POL_diplomatic_mission_to_CZE`, `_AUS`, `_HUN`: 10 PP, 35 days, -10% PP gain, one at a time. Each
+appears after the focus before the invitation. The runner's `hoi4_decision_take` has **no target
+argument**, so the targeted monarchy decisions are **manual**:
+`POL_propagandise_monarchist_sentiment` (50 PP, +10), `POL_double_propagandise_monarchist_sentiment`
+(100 PP, +15, at 25+), `POL_sway_lithuanian_generals` (25 PP + 25 CP, +10) and `POL_invest_in_lithuania`
+(3 civilian factories for 30 days, +10). Target **LIT**. They become visible after
+`POL_support_monarchism_in_LIT` (`POL_is_valid_to_boost_monarchy`). Take them until support > 79, then
+`POL_king_of_lithuania`.
 
 ## training and armies
 
-* `training`: `Dywizja Piechoty` (9 infantry + recon, `history/units/POL_1936.txt`, no DLC
-  condition). 6 in the queue, 2 at a time, deployed in Warsaw (10). The start army is about 320k
-  men. The Intermarium gate needs 700k **fielded** army manpower, about 40 more divisions. **META
-  candidate (unverified):** deploy queued divisions early, with low equipment, to pass
-  `has_army_manpower`. Test it once while watching the tooltip.
-* `armies`: 24 or fewer divisions per army. Generals (recruited unconditionally): Rydz-Śmigły
-  (field marshal, 4), Sikorski (field marshal, 3), Kutrzeba, Abraham, Anders and Sosnkowski.
-  Haller is used as an advisor, not as a general.
+`training`: `Dywizja Piechoty` (9 infantry + recon, `history/units/POL_1936.txt`). 6 in the queue,
+2 at a time, deployed in Warsaw (10). The start army is about 320k. The 700k gate is about 40 more
+divisions in the field, so the Intermarium chain probably opens only in 1938-39. META candidate
+(unverified): deploy under-equipped divisions early to pass `has_army_manpower`, then check the tooltip.
+`armies` is unchanged: at most 24 per army, generals Rydz-Śmigły, Sikorski, Kutrzeba, Abraham, Anders,
+Sosnkowski.
 
 ## production
 
-Start without BBA (`POL_1936.txt` plus `POL_1936_air_legacy.txt`): 11 military factories, 4 of them
-on lines (`infantry_equipment_1` 2, `support_equipment_1` 1, **`fighter_equipment_0` 1**). **7 are idle.**
-`production_min_idle: 8` keeps the rebalance off until rifles 4, artillery 2 and support 1 take
-them. That gives rifles 6 / support 2 / artillery 2 / fighter 1. **Manual edits:** once the lines exist, set
-`production_min_idle` to 2. When `fighter1` is researched, switch the fighter line to
-`fighter_equipment_1`. Add `anti_tank_equipment_1` after interwar_antitank.
+The start lines (`POL_1936` + `POL_1936_air_bba`): 11 military factories. `infantry_equipment_1` 2,
+`support_equipment_1` 1, `small_plane_airframe_0` "PZL P.11" 1. **7 are idle.** `production_min_idle: 8`
+keeps the rebalance off on the first tick, so the plan's lines get the idle factories first:
+`artillery_equipment_1` 4 and `anti_air_equipment_1` 2 (1 idle left). `anti_tank_equipment_1` 2 is dated
+`from 1936.11.15`, after `POL_expansion_of_new_towns` adds 2 military factories and interwar_antitank is
+researched. **Manual edits:** once those three lines exist, set `production_min_idle` to 2 so new
+factories go to rifles. Switch the P.11 line to the "PZL P.24" design, or to a new
+`small_plane_airframe_1` fighter you design. Assign MIOs (AAT) by hand.
 
 ## construction
 
-Free slots at the start: Kraków 88 4, Kielce 90 4, Stanisławów 89 4, Wołyń 93 4, Lwów 91 3, Łódź 87 2,
-Lublin 92 2, Warsaw 0, Danzig 0, and the border states Poznań 86 5 and Katowice 762 5.
+Unchanged: civilian factories in the interior Central Industrial Region (90, 88, 92, 87, 89, 91, 93),
+then military factories in the same states, then infrastructure in the east. From early 1938, put
+`arms_factory` first.
 
-| Job | States | Reason |
-|---|---|---|
-| 1. `industrial_complex` x2 | 90, 88, 92, 87, 89, 91, 93 | Interior Central Industrial Region, behind the Vistula and San. |
-| 2. `arms_factory` x2, fallback any own state | same | Put it first from early 1938. |
-| 3. `infrastructure` | 94, 96, 95, 93, 90, 89, 92, 98, 97 | A sink that uses no slot, and supply for the east. |
+## Pre-war checklist (by 1938-01)
 
-## Pre-war checklist
-
-* **By 1938-01:** Partial Mobilisation and Limited Conscription. Sejm restored (no April
-  constitution, no oppositions). Peasant strike cancelled. National Defence Fund running. 4 research
-  slots (the 5th above 50 factories). Roughly 30+ civilian and 18+ military factories
-  (heuristic; check `hoi4_economy`).
-* **Alliances:** Intermarium, not the Allies. `POL_join_allies` is only reachable through
-  `POL_align_with_the_west`, which needs Sanation or Sejm -> liberalism -> draw closer to Britain,
-  and it requires being in no faction. Invite Czechoslovakia, then Austria and Hungary, before the
-  Anschluss (about 1938-03). Record Austria's faction status monthly. Never accept `germany.86`.
-* **Fortifications (1938-39):** Plan West +30% and Central Defence +25% bunker speed. Instant
-  bunkers in Silesia (88, 762), the Prussia line (97, 98, 807), Poznań/Łódź (86, 87) and Hel (807).
-  Build by hand on the Narew-Vistula-San river towns. The runner has no bunker job.
-* **Army by 1938:** 60+ equipped divisions on the way to 90 by mid-1939. A 4-6 division reserve.
-  AT companies. A fighter wing over Warsaw-Łódź-Kraków.
-* **Commonwealth (after 1938, if pursued):** conquer or annex Lithuania (states 11 and 189), hold
-  the 15 Polish core states, raise Lithuanian core compliance above 80, then take `form_commonwealth`.
+* Partial Mobilisation, Wojciechowski, Kwiatkowski, Lubomirski and Limited Conscription. No
+  oppositions, no April constitution, the strike cancelled, Friedrich Christian king, the National
+  Defence Fund running, 4 research slots.
+* About 11 focus factories plus construction. Check `hoi4_economy`.
+* Monarchy decisions on Lithuania started as soon as `POL_support_monarchism_in_LIT` is done.
+* Intermarium: invite Czechoslovakia, then Austria and Hungary, before the Anschluss (about 1938-03).
+  Record Austria's faction monthly. Never accept `germany.86`.
 
 ## Not verifiable from the files
 
-* Whether early-deployed, under-equipped divisions count toward `has_army_manpower`.
-* AI acceptance of Intermarium invitations, and the AI Anschluss date.
-* Start political power. The exact instant-build counts of the industry focuses, which branch on
-  free slots.
-* Whether a bypassed `GER_anschluss` counts as completed for `POL_lithuanian_annexation`'s condition.
+* Starting political power, and so the exact dates of the politics picks.
+* Whether under-equipped divisions count toward `has_army_manpower`.
+* AI acceptance of Intermarium invitations and of the Lithuanian crown (`NSB_poland_monarchist_events.5`).
+* Whether `hoi4_doctrine_adopt` works live (the tool says it is unvalidated).
+* Whether a bonus earned while a tech is already being researched applies to that tech. The order assumes
+  it applies to the next tech started.

@@ -1,5 +1,5 @@
 {
-  "_comment": "Germany FAIR 1936-01-01 -> 1938-01-01 standing plan. Explained section by section in germany-fair-1936-1938.md. Keys starting with _ are ignored by the runner. Validate with scripts/validate_plan.py.",
+  "_comment": "Germany FAIR 1936-01-01 -> 1938-01-01 standing plan for HOI4 1.19.4.1 with the active DLC set in _validator.dlcs (No Step Back tank designer, By Blood Alone plane designer, La Resistance, Arms Against Tyranny, Gotterdammerung, ...). Explained section by section in germany-fair-1936-1938.md. Keys starting with _ are ignored by the runner. Validate with scripts/validate_plan.py --strict.",
   "_validator": {
     "tag": "GER",
     "start_date": "1936.1.1",
@@ -7,6 +7,13 @@
     "history_file": "history/countries/GER - Germany.txt",
     "dlcs": [
       "Anniversary Pack",
+      "Arms Against Tyranny",
+      "By Blood Alone",
+      "Gotterdammerung",
+      "Historical German Portraits",
+      "La Resistance",
+      "No Compromise, No Surrender",
+      "No Step Back",
       "Poland: United and Ready",
       "Rocket Launcher Unit Pack"
     ]
@@ -54,12 +61,14 @@
     "rubber_processing",
     "excavation2",
     "improved_radio",
-    "radio_detection",
     "basic_fortification_tech",
+    "engine_tech_2",
     "armor_tech_2",
+    "basic_medium_tank_chassis",
     "land_fort_tech_1",
     "computing_machine",
-    "basic_medium_tank",
+    "range_improvements",
+    "armor_piercing_bombs",
     "artillery1",
     "antiair1",
     "antitank1",
@@ -76,23 +85,22 @@
     "tech_signal_company2",
     "tech_field_hospital2",
     "wartime_train",
-    "basic_encryption",
-    "basic_decryption",
-    "cavity_magnatron",
+    "aa_hmg",
     "tech_military_police",
     "improved_oil_processing",
     "improved_rubber_processing",
     "fuel_refining3",
-    "fighter2",
-    "CAS2",
-    "tactical_bomber2",
+    "improved_small_airframe",
+    "engines_3",
+    "improved_medium_airframe",
     "mechanised_infantry",
     "improved_infantry_weapons_2",
     "artillery2",
     "support_weapons3",
     "antitank2",
     "antiair2",
-    "armored_train"
+    "armored_train",
+    "improved_medium_tank_chassis"
   ],
   "focus_path": [
     "GER_the_four_year_plan",
@@ -162,7 +170,7 @@
     "batch": 2,
     "deploy_state": 64
   },
-  "production_min_idle": 12,
+  "production_min_idle": 2,
   "production_priority": [
     "infantry_equipment",
     "artillery_equipment",
@@ -170,39 +178,29 @@
   ],
   "production": [
     {
-      "equipment": "fighter_equipment_1",
-      "factories": 3
+      "equipment": "anti_tank_equipment_1",
+      "factories": 2,
+      "from": "1936.10.01"
     },
     {
-      "equipment": "CAS_equipment_1",
-      "factories": 2
+      "equipment": "anti_air_equipment_1",
+      "factories": 1,
+      "from": "1937.06.01"
     },
     {
-      "equipment": "artillery_equipment_1",
-      "factories": 3
-    },
-    {
-      "equipment": "infantry_equipment_1",
-      "factories": 2
-    },
-    {
-      "equipment": "motorized_equipment_1",
-      "factories": 1
-    },
-    {
-      "equipment": "medium_tank_equipment_1",
+      "equipment": "medium_tank_chassis_1",
       "factories": 6,
       "from": "1938.06.01"
     },
     {
-      "equipment": "fighter_equipment_2",
+      "equipment": "small_plane_airframe_2",
       "factories": 6,
-      "from": "1939.01.01"
+      "from": "1939.06.01"
     },
     {
-      "equipment": "CAS_equipment_2",
+      "equipment": "small_plane_cas_airframe_2",
       "factories": 4,
-      "from": "1939.03.01"
+      "from": "1939.09.01"
     }
   ],
   "construction_min_idle": 4,
@@ -276,7 +274,11 @@
   },
   "construction_fallback_any_own_state": true,
   "special_projects": {
-    "priority": []
+    "priority": [
+      "sp_air_radar",
+      "sp_land_military_engineering_vehicles",
+      "sp_land_flamethrower_tank"
+    ]
   },
   "air": {
     "war_missions": true

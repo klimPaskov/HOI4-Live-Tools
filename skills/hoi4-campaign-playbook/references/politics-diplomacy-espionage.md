@@ -8,6 +8,7 @@ confirmed in a running game; verify with the in-game tooltip before relying on t
 Installed DLC folders (`Hearts of Iron IV/dlc`): German Historical Portraits, Polish Content Pack, Rocket Launcher Pack,
 La Resistance, No Step Back, By Blood Alone, Arms Against Tyranny, Gotterdammerung, No Compromise No Surrender.
 Not in `dlc/`: Man the Guns, Death or Dishonor, Together for Victory, Waking the Tiger (but those four ship in `integrated_dlc/`, i.e. they are part of the base game and `has_dlc` checks for them pass); Poland: United and Ready is `dlc/dlc002`.
+Active in the game log since 1 November 2026 (macOS, 1.19.4.1): all of the folders above plus Anniversary Pack (game-log names: Historical German Portraits, Poland: United and Ready, Rocket Launcher Unit Pack, La Resistance, No Step Back, By Blood Alone, Arms Against Tyranny, Gotterdammerung, No Compromise, No Surrender, Anniversary Pack). For Germany this means the Gotterdammerung Anschluss ratio, the NSB/BBA designer equipment and the La Resistance agency (see germany-fair.md).
 Many branches below are gated on `has_dlc`; the gate decides what exists. Re-check the playset before day one.
 
 ## 1. Political power (PP)

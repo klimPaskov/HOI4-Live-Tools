@@ -1,24 +1,42 @@
-# Nationalist China FAIR showcase (1936 start, HOI4 1.19.3 with No Compromise, No Surrender)
+# Nationalist China FAIR showcase (1936 start, HOI4 1.19.4.1 with No Compromise, No Surrender)
 
 Objective: unify China including warlords and communists, expel and capitulate Japan, recover lost
 territory and finish as a top-tier power. Normal difficulty, vanilla rules, historical AI, FAIR. Play the
-Nationalist tag `CHI`, never Communist China or an unrelated tag.
+Nationalist tag `CHI`, never Communist China or an unrelated tag. The standing plan for the opening is
+[plans/china-fair-1936-1938.plan.json](../plans/china-fair-1936-1938.plan.json) with its
+[explanation](../plans/china-fair-1936-1938.md).
 
-Untagged text is [H]. Evidence tags: **[V path:key]** verified in installed files (build 1.19.3.0); **[L]** seen in Mac runs;
-**[H]** heuristic, check in game. Paths: NF = `common/national_focus/china_nationalist_sea.txt` (NCNS tree
-`china_nationalist_sea_focus`, active because NCNS is installed; the old `china_nationalist.txt` tree is NOT used),
-DEC = `common/decisions/CHI_decisions.txt`, HIST = `history/countries/CHI - China.txt`, JAPDEC = `common/decisions/JAP.txt`.
-One focus point = 7 days [V common/defines/00_defines.lua], so cost 5 = 35 days, 10 = 70 days.
+Untagged text is [H]. Evidence tags: **[V path:key]** verified in installed files (1.19.4.1, checked
+2026-11-01 against the active DLC set); **[L]** seen in Mac runs; **[H]** heuristic, check in game.
+Paths: NF = `common/national_focus/china_nationalist_sea.txt`, DEC = `common/decisions/CHI_decisions.txt`,
+HIST = `history/countries/CHI - China.txt`, JAPDEC = `common/decisions/JAP.txt`.
+One focus point = 7 days, so cost 5 = 35 days, 10 = 70 days.
+
+## 0. Which content loads (read first)
+
+Active DLCs (game log `logs/system.log`, "Active DLC Count: 10"): Anniversary Pack, Arms Against
+Tyranny, By Blood Alone, Gotterdammerung, Historical German Portraits, La Resistance, **No Compromise,
+No Surrender** (one DLC, the comma is part of the name), No Step Back, Poland: United and Ready, Rocket
+Launcher Unit Pack. Integrated into the base game (`integrated_dlc/`, always active): Together for
+Victory, Death or Dishonor, Waking the Tiger, Man the Guns.
+
+* Focus tree [V NF, `china_nationalist.txt`]: `china_nationalist_sea_focus` has weight 1000 for
+  `tag = CHI` with NCNS; `china_nationalist_focus` only 10 (Waking the Tiger). **CHI plays the NCNS tree.**
+  The old `china_nationalist_focus` (Waking the Tiger tree) and `generic_focus` are not used. If NCNS is
+  ever disabled, the WtT tree loads instead and every focus key below is wrong.
+* Every `has_dlc = "No Compromise, No Surrender"` branch in HIST, history/states, characters and events is
+  true: OOB `CHI_1936_sea`, NCNS modifiers, NCNS characters, warlord state transfers.
+* Japan loads `japan_wtt_focus` [V].
 
 ## Contents
 1. Checkpoint table
 2. Start facts and national debuffs
 3. Tree structure and the political choice
-4. Dated focus plan (peace, war, unification)
+4. Focus plan (opening, war, unification)
 5. Warlords: mechanics, faction goals and sequence
 6. Communists
 7. Japan: timing, defence, counter-offensive, capitulation, recovered territory
-8. Laws, research, production, army sizing
+8. Laws, advisors, research, production, army sizing
 9. Foreign assistance, air and navy
 10. Contingencies
 11. Do-not list
@@ -28,27 +46,45 @@ One focus point = 7 days [V common/defines/00_defines.lua], so cost 5 = 35 days,
 
 | Date | Must be true |
 |---|---|
-| 1936-01-01 | Start [V HIST, history/states]: 28 states, 13 civilian / 11 military / 2 naval factories, stability 0.20, war support 0.32, ~85 division entries in `CHI_1936_sea` (many 3-battalion "Juntuan"), neutrality 91% / communism 7% / fascism 2%. Warlords SIK, XSM, SHX, YUN, GXC exist (MEN and MAN are Japanese clients); PRC holds 3 states (Shaanbei 622, Yan'an 1032, Yulin 1046). Focus started on day one. |
-| 1936-03-11 | Dang Guo and Denounce Feudalism done; Chiang Kai-shek still the ruler (`CHI_chiang_kaishek`). |
-| 1936-05-20 | One Nation Undivided done: a faction exists; at least 2 warlords answered the invitation (event SEA_china.7) by 1936-09 [H]; otherwise improve relations and retry the invitation-granting focuses. |
-| 1936-12-31 | Currency + Three-Year Plan + Military Affairs Commission + NCO/field-promotion focus done [H]; all factories busy; first rifle lines running on all 11 military factories; no PP above 150 unspent. |
-| 1937-06-30 | Corruption fixes done (Crackdown on Corruption in Recruitment); 40+ divisions at 70%+ equipment [H]; second-line forts and supply hubs under construction; nothing left empty in Beiping 608, Hebei 614, Shandong 597/Qingdao 743, Shanghai 613, Nanjing 1035. |
-| latest 1937-12-27 | Japan's Kwantung Army timer (725 days) can fire the Marco Polo event china.1 [V JAPDEC:JAP_kwantung_army_impatience, HIST JAP kwantung_army_timeout_time_var = 725]; earlier if Japan finishes `JAP_reinforce_the_beijing_garrison`. Fronts, reserves and the Yangtze/Yellow River lines ready; PP banked for decisions. |
-| 1938-06-30 | No collapse of the northern line; Wuhan 1036 and Chongqing 1037 safe; Gung Ho (needs war) done; Soviet or Western lend-lease flowing (Secure the Soviet Border / Send the First Lady Abroad). |
-| 1939-01-01 | Benchmark [V history/states]: CHI 31 civilian / 16 military, 34 states, JAP 30 / 19 / 17 naval. Be at or above it. |
+| 1936-01-01 | Start [V HIST, history/states, history/units]: 17 states, 11 civilian / 8 military / 2 naval factories, stability 0.20, war support 0.32, 85 divisions in `CHI_1936_sea`, neutrality 91% / communism 7% / fascism 2%. Warlords SHX, GXC, YUN, XSM, SIK, SIC, SND, HBC, GDC, XIC exist (MEN and MAN are Japanese clients); PRC holds 2 states. Focus `CHI_dang_guo` started on day one; 6 idle military factories put to work. |
+| 1936-05-20 | Dang Guo, national currency and the Three-Year Plan done (the plan needs peace). Zhang Qun hired; partial mobilisation bought or PP saved for it. |
+| 1936-09-02 | Denounce Feudalism and One Nation Undivided done: the Chinese United Front exists; warlords answered the invitation (event `SEA_china.7`) [H: acceptance is their AI's choice]. |
+| 1936-12-31 | Fund the Plan Domestically (+2 civs) done; all factories busy; `infantry_equipment_1` line running; no PP above 250 unspent. |
+| 1937-07-14 | Military Affairs Commission, Protracted Warfare, Resource Commission and Central Steel (+3 civs) done [H dates]; river lines and garrisons ready (section 7). |
+| War start (historically 1937-07-07) | `china.1` answered with option 0 (war). Gung Ho (+2 arms factories, needs war) and Demonstrate Our Resolve next in the slot; construction switched to arms factories. |
+| 1938-01-01 | End of the standing plan: Defence in Depth near done; Soviet/Western support focuses queued; no collapse of the Yellow River line. |
+| 1938-06-30 | Wuhan 1036 safe; Soviet or Western lend-lease flowing (Secure the Soviet Border / Send the First Lady Abroad). |
+| 1939-01-01 | Benchmark [V history/states, HIST 1939 block]: CHI 31 civilian / 16 military, 34 states (historical bookmark, includes integrated warlords). Be at or above it. |
 | 1940-12 | Warlords in the faction (at least the tour regions you intend); Japanese front pinned on rivers; 80+ divisions [H]. |
 | 1942-1945 | Faction goal `faction_goal_no_japanese_in_china` complete [V]; Victory over the Invaders done; Crush the Communists war running or won; PRC gone. |
 | Final | Japan capitulated (Tokyo area occupied, settlement proof), all declared unification states owned/integrated, no enemy on declared states, 100+ factories (60+ military), 100+ divisions at 90%, 500+ aircraft, supplied home-island operation (house targets). |
 
 ## 2. Start facts and national debuffs
 
-NCNS start modifiers [V HIST lines 351-470]: Corruption in the Administration (economy cost factor +65%, construction speed -10%, free repair -25%),
-Illicit Trade (consumer goods -15%, factory output -15%), Inefficient Economy (factory efficiency gain -35%, base fuel gain -50%), Neglected Countryside (communist drift +0.05,
-research speed -20%), Corruption in the Armed Forces (conscription factor -78%, defence -15%, morale -25%, attack -5%, organisation -5%, max dig-in -1), Nine Power Treaty (consumer goods, min export,
-enemy wargoal justification time modifiers). Starting techs: infantry_weapons, gw_artillery, interwar_antiair, basic_train, tech_support, tech_trucks. These explain [L] "avoid unlimited recruitment":
-the pool is small until the armed-forces focuses repair it. The 1939 scenario has a very different state (war_economy, service_by_requirement, closed_economy); do not assume it.
+States [V history/states with NCNS]: Fujian 595, Zhejiang 596, Jiangsu 598, Jiangxi 600, Hunan 602,
+Guizhou 603, Anhui 606, Henan 607, Shanghai 613, Hubei 620, Qingdao 743, Zunyi 748, Huangshan 749, Changde
+750, Suzhou 1034, Nanjing 1035 (capital), Wuhan 1036. Beiping, Hebei, Shandong, Sichuan (Chongqing,
+Chengdu), Shaanxi/Xi'an belong to warlords (HBC, SND, SIC, ...). Interior with free slots: Hubei 620,
+Wuhan 1036, Jiangxi 600, Hunan 602, Changde 750, Guizhou 603, Zunyi 748.
 
-Rival benchmarks 1936 base states [V]: JAP 25/15/15, USSR 46/33, UK 32/14, ITA 21/20. Warlord economies are tiny (SHX 3/2, XSM 5/2, SIK 4/1, YUN 3/1, GXC 3/1).
+Army [V `history/units/CHI_1936_sea.txt`]: 48 "Sanjiao Jun" (6 infantry), 17 "Juntuán Reformed" (6
+infantry + support artillery), 14 "Juntuán" (4 infantry, garrison), 6 "Qibing Jun" (cavalry). One
+production line: `infantry_equipment_0` on 2 factories. NSB adds 20 L3/35 and 16 Panzer I to the stockpile.
+
+NCNS start modifiers [V HIST NCNS block]: Corruption in the Administration (political power +35%, consumer
+goods +25%, construction speed -10%, free repair -25%, economy-law cost +65%), Illicit Trade (consumer goods
+-15%, factory output -15%), Inefficient Economy (factory efficiency gain -35%, base fuel gain -50%), Neglected
+Countryside (communist drift +0.05, research speed -20%), Corruption in the Armed Forces (conscription factor
+-78%, defence -15%, morale -25%, attack -5%, organisation -5%, max dig-in -1), ROCAF (air XP -20%, accidents
++25%), Nine Power Treaty (consumer goods, minimum export, enemy war-goal justification), NSB spirit Whampoa
+Military Academy. Focuses change the underlying variables (e.g. currency, decree the end to corruption).
+Starting techs: infantry_weapons, gw_artillery, interwar_antiair, basic_train, tech_support, tech_trucks,
+gwtank_chassis, the BBA airframes and the MTG naval techs. 2 research slots. Laws: game defaults
+(civilian economy, volunteer only, export focus). The 1939 scenario has a very different state (war_economy,
+service_by_requirement, closed_economy, focuses pre-completed); do not assume it.
+
+Rival benchmark: JAP 31 states, 26 civilian / 16 military / 15 naval [V history/states with this DLC set].
+Warlord economies are tiny (GXC 5/3, XSM 5/2, SHX 3/2, SIK 4/1, YUN 3/1, SIC 2/3).
 
 ## 3. Tree structure and the political choice
 
@@ -61,25 +97,41 @@ Choose **Dang Guo -> Denounce Feudalism** [H, reasons V]: it keeps Chiang as rul
 `CHI_prepare_for_a_change_in_leadership` (exclusive; gives the leadership to Wang Jingwei and the Wang Front branch). Denounce Feudalism: +5% stability, every warlord gains opinion modifier
 `CHI_denounced_feudalism`, unlocks Chen Guofu, registers warlord subjects. The Blue Shirt and civilian roots are legal FAIR alternatives but break the recorded plan (Chiang ruling, PRC removal by focus).
 
-## 4. Dated focus plan (earliest-start dates if nothing gates; adapt when the war starts)
+## 4. Focus plan
 
-Peace phase (focus slot never idle) [V for effects, H for the order]:
+Opening (the standing plan's `focus_path`, dates if nothing is refused) [V effects, H order]:
 
-1. **CHI_dang_guo** (5; 1936-01-01 to 02-05).
-2. **CHI_denounce_feudalism** (5; to 03-11).
-3. **CHI_one_nation_undivided** (10; to 05-20): needs a non-subject warlord who is not at war with us; creates `faction_template_chinese_united_front` (or the Wang Front variant if Communist
+1. **CHI_dang_guo** (5; to 1936-02-05).
+2. **CHI_promote_the_national_currency** (5; to 03-11): +25 PP, economy-law cost -10%, consumer goods -5%.
+3. **CHI_the_three_year_plan** (10; needs `has_war = no`, bypassed at war; to 05-20): 1095-day spirit
+   (consumer goods -5%, construction +10%, efficiency gain +10%) that ends at war [V common/ideas/china.txt].
+4. **CHI_denounce_feudalism** (5; to 06-24).
+5. **CHI_one_nation_undivided** (10; to 09-02): needs a non-subject warlord who is not at war with us; creates `faction_template_chinese_united_front` (or the Wang Front variant if Communist
    China already holds the united front) and sends event SEA_china.7 to each eligible warlord (not Sinkiang under `SIK_battle_for_sinkiang`, not HBC). Eligible warlords receive the invitation and +5% war support; acceptance is the AI's choice.
-4. **CHI_promote_the_national_currency** (5; to 06-24): +25 PP, economy cost factor -10%, corruption effects improved; cheaper laws and advisors.
-5. **CHI_the_three_year_plan** (10; needs `has_war = no`; to 09-02): a 1095-day national spirit [V]. Must be taken before Japan attacks.
-6. **CHI_military_affairs_commission_sea** (5; to 10-07): army XP +5%, morale +10%, planning +2% (corruption variables).
-7. **CHI_formalize_field_promotions** (10; training time -25%, org +1%) or **CHI_set_up_an_nco_school** (10; org +2%, training -15%): exclusive; to 1936-12-16.
-8. **CHI_crackdown_on_corruption_in_recruitment** (10; morale +10%, org +2%, event SEA_china_improvement.1): to 1937-02-24.
-9. **CHI_protracted_warfare** (10; defensive_postures subdoctrine), then **CHI_defence_in_depth** (10; defence +5%, max dig-in +1; unlocks decision `CHI_breach_the_yellow_river`), **CHI_the_4_defence_areas** (10; coastal state modifier), **CHI_relocate_factories_from_the_coast** (5; evacuation factor 0.75). Decisive Battles is exclusive-by-prerequisite with Protracted Warfare until each side's follow-up is done: finish the defensive chain first.
-10. **CHI_introduce_the_baojia_system** (10; adds the "Baojia Juntuan" garrison template and 3 half-equipped divisions) or **CHI_expand_the_tongzi_jun** (10; war support +10%): exclusive; then **CHI_inspect_the_troops** (5; needs to be in a faction).
+6. **CHI_fund_the_plan_domestically** (10; to 11-11): +2 civilian factories and slots instantly. The exclusive
+   `CHI_find_foreign_financiers` needs a major with opinion > 19 and pays CIC only from majors above 69.
+7. **CHI_decree_the_end_to_corruption** (5; to 12-16): consumer goods -5%, construction +10%, economy cost -10%.
+8. **CHI_military_affairs_commission_sea** (5; to 1937-01-20): army XP +5%, morale +10%, planning +2%.
+9. **CHI_protracted_warfare** (10; to 03-31): `defensive_postures` sub-doctrine if the infantry track has none
+   (else mastery). Not exclusive with `CHI_decisive_battles`; the defensive branch simply comes first.
+10. **CHI_monopolise_resource_extraction** (5; to 05-05) -> **CHI_central_steel_and_machine_works** (10; to
+    07-14): +3 civilian factories and +30 steel.
+11. War-gated, in the path so they start at the first free slot after the war begins:
+    **CHI_initiate_the_gung_ho_movement** (10; +2 arms factories inland, arms speed +10%, war support +10%),
+    **CHI_demonstrate_our_resolve** (5; needs war with Japan; unlocks the state-targeted
+    `CHI_demonstrate_our_resolve_decision`, 25 PP), then **CHI_defence_in_depth** (10; defence +5%, dig-in +1,
+    unlocks `CHI_breach_the_yellow_river`), **CHI_send_the_first_lady_abroad** and **CHI_secure_the_soviet_border**
+    (10 each, war only), **CHI_arrest_the_seven_gentlemen** (10) -> **CHI_draw_support_from_the_big_families**
+    (5; unlocks H. H. Kung and T. V. Soong).
 
-War phase (Japan attacks): **CHI_demonstrate_our_resolve** (5; needs war with Japan) -> **CHI_secure_the_soviet_border** (10; needs war and USSR; Soviet non-aggression and lend-lease) or
-**CHI_send_the_first_lady_abroad** (10; needs a democratic power not at war with us) -> burma_campaign / the_burma_road; **CHI_initiate_the_gung_ho_movement** (10; war required; +10% arms-factory speed, +10% war support,
-+2 arms factories in inland states); then **CHI_from_many_to_one** (10) -> **CHI_towards_a_professional_army** (10) or **CHI_towards_a_popular_army** (10; needs 1,000,000 army manpower).
+Fillers when nothing above can start: relocate_factories_from_the_coast (5), the_4_defence_areas (10),
+guerrilla_warfare (5), introduce_the_baojia_system (10; exclusive with expand_the_tongzi_jun) ->
+inspect_the_troops (5; needs a faction) -> from_many_to_one (10), formalize_field_promotions (10; exclusive with
+set_up_an_nco_school) -> crackdown_on_corruption_in_recruitment (10), reinforce_connections_with_shanghai_elites
+(5), extend_compulsory_education (5), institute_a_national_registry_of_property (10).
+
+After 1938: **CHI_towards_a_professional_army** (10) or **CHI_towards_a_popular_army** (10; needs 1,000,000
+army manpower), lend-lease branches (section 9), the remaining defence and army reform focuses.
 
 Unification phase: **CHI_the_sky_cannot_have_two_suns** (5) -> **CHI_tour_the_north / tour_the_west / tour_the_south** (5 each; each needs an allied warlord of that region: north = NXM, SHX, GSM, HBC, XIC or SND; west = XSM, KHM, SIK or SIC;
 south = YUN, GXC or GDC) -> **CHI_victory_over_the_invaders** (5; needs faction goal `faction_goal_no_japanese_in_china` complete and no war with Japan) -> **CHI_crush_the_communists** (10; `annex_everything` war goal on PRC, `expire = 0`) ->
@@ -93,35 +145,51 @@ Mechanism [V DEC:CHI_integrate_the_warlords_sea_cat, NF]: warlords join the play
 needs own influence ratio more than twice the target's, costs 125 PP and 15 points of faction influence (refunded by events if refused), then event SEA_china_warlords.1 asks the warlord; success sets
 `autonomy_sea_warlord_subject` (freedom 0.8). After a tour focus the cheaper `..._upgrade` decision costs 75 PP and 10 points. Subjects then drift via `CHI_warlord_autonomy_drift_decision`
 (autonomy), lend-lease and economic/industrial support decisions (cost `CHI_warlord_integration_pp_cost`, 180 days each); `CHI_integrating_states` (100 PP, 50 days, after `CHI_empower_the_mtac`) adds cores.
-Tour focuses reduce the integration cost for that region's warlords.
+Tour focuses reduce the integration cost for that region's warlords. These decisions are targeted, so the
+standing-plan runner (decision key only) cannot take them: they are by-hand actions.
 
-Sequence [H]: faction first (spring 1936), keep relations high (improve-relations, Denounce Feudalism modifier), take the tour focuses as soon as an ally of that region exists even while fighting Japan, press the
+Sequence [H]: faction first (1936), keep relations high (improve-relations, Denounce Feudalism modifier), take the tour focuses as soon as an ally of that region exists even while fighting Japan, press the
 strongest (Guangxi, Shanxi) first because their land borders Japan or the front. A friendly independent warlord is not unification; integrate or annex. Warlord states: SHX Shanxi 615, Suiyuan 621, Ordos 746;
-XSM Gansu 283, Qinghai 604, Ningxia 616 and others; SIK Urumqi 617 and 6 more; YUN Yunnan 325, Dali 747; GXC Guangxi 599, Guangdong 593, Guangzhou 592, Nanning 594, Hainan 591, Nanlu 1033; MEN Chahar 611,
-Xilingol 612, Pailingmiao 1043 [V history/states].
+XSM Gansu 283, Qinghai 604, Ningxia 616 and others; SIK Urumqi 617 and 6 more; YUN Yunnan 325, Dali 747; GXC Guangxi 599, Guangdong 593, Guangzhou 592, Nanning 594, Hainan 591, Nanlu 1033; SIC Chongqing 1037,
+Chengdu 1041 and others; MEN Chahar 611, Xilingol 612, Pailingmiao 1043 [V history/states].
 
 **Faction goals define "subjugated"** [V common/factions/goals/faction_goals_short_term.txt]: `faction_goal_north_subjugated` is complete when NXM, SHX, GSM, HBC, XIC ... have no core state left
 outside China (all their core states owned by CHI); `faction_goal_west_subjugated` does the same for XSM, KHM, SIK, SIC; `faction_goal_south_subjugated` for the southern group. Visible only to CHI with the
 `chinese_united_front` template and the matching tour focus. Medium-term goals `faction_goal_control_the_chinese_capitals`, `faction_goal_control_the_chinese_coast` and `faction_goal_subjugate_the_faction`
-exist; the long-term `faction_goal_no_japanese_in_china` (no Japanese-controlled state in `china_potential_core_mainland_states`) completes with +100 power projection, +20 faction influence to big members and
+(unlocked by `CHI_from_many_to_one`) exist; the long-term `faction_goal_no_japanese_in_china` (no Japanese-controlled state in `china_potential_core_mainland_states`) completes with +100 power projection, +20 faction influence to big members and
 rewards 100 PP / 100 army XP / 100k manpower to qualifying members. Use these as the measurable unification checklist, together with ownership checks per state.
 
 ## 6. Communists
 
-`PRC` starts with 3 weak states and a hostile opinion modifier. Options in order of preference [H]: (a) keep them out of your faction, watch `CHI_communist_infiltration_in_*` decisions (Gansu, Shandong, Jiangsu, Henan, Beijing,
-Hebei, Shanxi, Suiyuan, Xi'an, Ordos [V DEC]); (b) after Victory over the Invaders take **Crush the Communists**, whose war goal never expires; (c) the Blue Shirt path offers `CHI_put_an_end_to_PRC`
-(needs fascism and a border). The Xi'an incident decision `CHI_instigate_xian_incident` (25 PP) belongs to the warlords after 1936-12-01 and can create an early united front with PRC; if it fires, check
-whether PRC joined your faction before pressing warlords. Do not fight PRC and Japan at the same time unless the northern line is stable.
+`PRC` starts with 2 weak states and a hostile opinion modifier. The Xi'an incident is started by a warlord's
+decision `CHI_instigate_xian_incident` (DEC) and reaches CHI as `wtt_xian_incident.1` (go to Xi'an) and
+`wtt_xian_incident.4` (ally with the communists) [V events/WTT_China.txt]. The standing plan answers option 0
+to both: Chiang goes and agrees, PRC is invited into the united front (`wtt_xian_incident.5`). Refusing to go
+expels the instigating warlord from the faction; refusing the alliance leads to `wtt_xian_incident.6`
+(Chiang arrested). Both are worse while Japan is the threat [H].
+
+Later [H]: watch `CHI_communist_infiltration_in_*` decisions (Gansu, Shandong, Jiangsu, Henan, Beijing, Hebei,
+Shanxi, Suiyuan, Xi'an, Ordos [V DEC]); after Victory over the Invaders take **Crush the Communists** (available
+while PRC exists and is not at war with us; its war goal never expires); the Blue Shirt path's
+`CHI_put_an_end_to_PRC` is not on this route. Do not fight PRC and Japan at the same time.
 
 ## 7. Japan
 
-**Timing** [V]: expect the war by 1937-12-27 at the latest; the Marco Polo event china.1 offers "breaking point" (war, Japan declares annex_everything on CHI, SHX, SND, HBC and subjects) or concessions; the historical-focus rule
-removes the concession option for the AI but a player may choose. Prepare so that the war option is survivable.
+**Timing** [V JAPDEC, HIST JAP]: `china.1` (Marco Polo Bridge) is sent by Japan's `JAP_reinforce_the_beijing_garrison`
+path or by the timeout of the mission `JAP_kwantung_army_impatience` (725 days, `kwantung_army_timeout_time_var`),
+which only Japanese focuses activate (`JAP_revere_the_emperor_destroy_the_traitors`, `JAP_sea_purge_the_kodoha_faction`);
+there is no fixed latest date. Option 0 "Breaking point!" is war (Japan declares `annex_everything` on CHI, SHX,
+SND, HBC); option 1 hands over Beiping 608, Shandong 597, Jinan 1038, Hebei 614 and Qingdao 743 (whoever controls
+them) for a 180-day truce. The historical-focus rule removes the concession option for the AI; the plan chooses war.
 
-**Defence** [H]: three layers. North: Beiping 608, Hebei 614, Shandong/Qingdao/Jinan (597, 743, 1038): do not defend every plain; hold the Yellow River and the Beiping-Hankow railway hubs with 2 armies of 12-16 divisions each,
-fortify river towns, keep one reserve army (8-10 divisions) behind Henan 607. Coast: dedicated garrisons (2-3 divisions) in Shanghai 613, Nanjing 1035, Hangzhou/Zhejiang 596, Fujian 595, Guangzhou 592, Hainan 591; Japanese
-landings must be counter-attacked before a supplied bridgehead. Centre: Wuhan 1036 is the hub; Chongqing 1037 and Chengdu 1041 the fallback. Never empty a port repeatedly [FAIR]. Use `CHI_declare_war_zone`, `CHI_bog_them_down`,
-`CHI_holding_state_mission`, industrial evacuation decisions and `CHI_breach_the_yellow_river` only after reading their tooltips (the last has heavy side effects).
+**Defence** [H]: in this DLC set the north (Beiping 608, Hebei 614, Shandong) is warlord land at the start, so CHI's own
+front is Henan 607, Anhui 606, Jiangsu 598 and the coast. Hold the Yellow River and the Beiping-Hankow railway hubs with 2
+armies of 12-16 divisions each, fortify river towns, keep one reserve army (8-10 divisions) at Wuhan 1036. Coast: dedicated
+garrisons (2-3 divisions) in Shanghai 613, Nanjing 1035, Zhejiang 596, Fujian 595, Qingdao 743, Jiangsu 598; Japanese landings
+must be counter-attacked before a supplied bridgehead. Centre: Wuhan 1036 is the hub; Chongqing 1037 and Chengdu 1041 (SIC,
+a warlord) are the fallback only once Sichuan is in the faction or integrated. Never empty a port repeatedly [FAIR]. Use
+`CHI_declare_war_zone`, `CHI_bog_them_down`, `CHI_holding_state_mission`, industrial evacuation decisions and
+`CHI_breach_the_yellow_river` only after reading their tooltips (the last has heavy side effects).
 
 **Counter-offensive** [H]: after equipment and supply allow (1940-1942), concentrate one army on a short axis, close pockets, retake northern hubs, then move on Jehol 610, Manchukuo (328, 714-717, 761), East Hebei 609, Dalian 745, Chahar 611 and
 Taiwan 524 (all China cores or Japanese/puppet holdings [V history/states]). Expelling Japan from the mainland completes the faction goal; it is an intermediate milestone, not Japanese capitulation.
@@ -130,32 +198,45 @@ Taiwan 524 (all China cores or Japanese/puppet holdings [V history/states]). Exp
 [strategy](strategy.md); Kyushu or Shikoku first, then Kansai/Kanto. Defaults [V DEF]: naval invasion preparation 60 days, one plan at a time, base 4 divisions per invasion; techs and ships raise it, read the tooltip.
 Japan capitulates only after the capital region and victory points are held; verify with fresh evidence.
 
-## 8. Laws, research, production, army
+## 8. Laws, advisors, research, production, army
 
-- Laws (150 PP each; cheaper after the currency focus) [V common/ideas/_economic.txt]: leave default until war nears; then `partial_economic_mobilisation` (+10% arms speed) -> `war_economy` (+20%, needs war support above 0.5 and fascism/communism or war with a country at IC ratio above 0.4); `closed_economy` only at war. Conscription: raise only when rifles exist
-  (the armed-forces corruption cuts the pool 78%).
-- Research [H keys]: infantry_weapons1/2 (rifle model), tech_engineers, tech_recon, construction1/2, basic_machine_tools, interwar_antitank, support_weapons, radio, then motorised_infantry/trucks for the reserve, air for fighters/CAS.
-  Neglected countryside lowers research speed 20%; `CHI_extend_compulsory_education` gives a 25% electronics bonus and lowers the penalty.
-- Production [H]: 11 military factories on rifles (8), support (1), artillery (1), trucks (1) in 1936; add anti-tank and AA after the first Japanese armour is seen; navy only after the land defence holds. Civilian factories: construction first (corruption -10% speed),
-  then evacuate coastal industry per the focus when war starts.
-- Army [H]: 60 equipped divisions by 1937-12, 90 by 1940, 100+ by 1944; generals lead 24 or fewer divisions; army groups under field marshals; separate tank and motorised formations (FAIR). Keep garrison templates for resistance areas.
+- Laws [V common/ideas/_economic.txt]: base cost 150 PP, times (1 + economy cost factor): ~248 PP at start (+65%),
+  ~233 after the currency focus. `partial_economic_mobilisation` (war support > 0.25, CHI has 0.32; consumer goods
+  expected value 0.25 instead of 0.35, arms speed +10%) is the first purchase. `war_economy` needs war support above 0.5;
+  `closed_economy` only at war. Conscription: raise only when rifles exist (the armed-forces corruption cuts the pool 78%).
+- Advisors [V common/characters/CHI.txt, NCNS instances]: `CHI_zhang_qun` (political power +15%, no condition) first;
+  `CHI_t_v_soong` (financial expert, consumer goods -15%) and `CHI_h_h_kung` (captain of industry) need
+  `CHI_draw_support_from_the_big_families`; `CHI_chen_guofu` (consumer goods -10%, fascism drift +0.06) after Denounce
+  Feudalism. Army chiefs Huang Qixiang and Teng Chie are hidden after Dang Guo; Falkenhausen (offensive 2, 50 PP) stays.
+- Research [V keys]: 2 slots, -20% speed. infantry_weapons1, basic_machine_tools, construction1, support_weapons,
+  tech_engineers, concentrated_industry, construction2, interwar_antitank, interwar_artillery, then forts, radio and the
+  second tiers. The third slot (`CHI_expand_academica_sinica`) needs the Neglected Countryside research variable at -0.05
+  or better; the dang guo path reaches only -0.12 with its focuses, so it is a post-1938 target via the countryside missions.
+- Production [V start, H mix]: 8 military factories (2 on rifles at start): artillery 3, support 1, rifles 2 + 2 (the
+  `infantry_equipment_1` line from mid-1936), add anti-tank and AA after the first Japanese armour; navy only after the land
+  defence holds. Civilian factories: interior civilian factories first, arms factories from the war start, evacuate coastal
+  industry by hand (state-targeted decision after `CHI_relocate_factories_from_the_coast`).
+- Army [H]: equip the 85 starting divisions before training more; 60 equipped divisions by 1937-12, 90 by 1940, 100+ by 1944;
+  generals lead 24 or fewer divisions; army groups under field marshals; separate tank and motorised formations (FAIR).
+  Keep garrison templates for resistance areas. Template names carry an accent ("Juntuán"); check that
+  `hoi4_division_templates` reads them before automating training.
 
 ## 9. Foreign assistance, air and navy
 
 Lend-lease and support are normal FAIR play. Focuses [V NF]: `CHI_secure_the_soviet_border` (non-aggression, `CHI_soviet_support`, Soviet lend-lease), `CHI_send_the_first_lady_abroad` (`CHI_american_support`),
 `CHI_the_burma_road`, `CHI_the_hanoi_route`, `CHI_the_hump_sea`, `CHI_collaborate_with_allied_forces` -> `CHI_burma_campaign` / `CHI_indo_chinese_campaign`, `CHI_scout_for_air_experts` ->
 `CHI_international_squadron` or `CHI_international_instructors`, `CHI_sell_lend_lease` vs `CHI_allocate_lend_lease` (exclusive). Delivery needs working ports and routes: record actual deliveries, not accepted requests.
-German advisors are already a start spirit in the old tree; `CHI_utilize_german_contacts` and `CHI_the_german_mission` are conditional on German opinion/government [V NF].
+`CHI_utilize_german_contacts` and `CHI_the_german_mission` are on other political branches and conditional on German opinion/government [V NF].
 
-Air [H]: ROCAF has a -20% air XP start modifier [V HIST]; take `CHI_rocaf` -> `CHI_controlling_our_skies` (defence, interception) before `CHI_projecting_power`; 200 fighters before any CAS. Navy [H]: transports and escorts only,
-no battleship programme before 1943; the `CHI_republic_of_china_navy` branch is for late home-island support (long range, strike from below).
+Air [H]: ROCAF has a -20% air XP start modifier [V HIST]; take `CHI_rocaf` -> `CHI_controlling_our_skies` (defence, interception) before `CHI_projecting_power`; 200 fighters before any CAS. With By Blood Alone
+active, aircraft are airframe designs (CHI has the interwar small and medium airframes). Navy [H]: transports and escorts only, no battleship programme before 1943; the `CHI_republic_of_china_navy` branch is for late home-island support (long range, strike from below).
 
 ## 10. Contingencies
 
-- No warlord accepts the faction invitation by 1936-09 [H]: raise opinion with the improve-relations diplomatic action, keep Denounce Feudalism's opinion bonus alive, and re-check every month; acceptance is the warlord AI's choice (event SEA_china.7). Do not switch to preemptive strikes while Japan is the main threat.
-- Japan attacks before 1937-06: skip remaining peace focuses; bank PP; take `CHI_demonstrate_our_resolve` at once; protect Shanghai/Nanjing with garrisons and trade space for time on the Yellow River line.
+- No warlord accepts the faction invitation by 1936-12 [H]: raise opinion with the improve-relations diplomatic action, keep Denounce Feudalism's opinion bonus alive, and re-check every month; acceptance is the warlord AI's choice (event SEA_china.7). Do not switch to preemptive strikes while Japan is the main threat.
+- Japan attacks before 1937-06: the plan's war-gated focuses start automatically; bank PP; protect Shanghai/Nanjing with garrisons and trade space for time on the Yellow River line; move construction to arms factories.
 - Northern line collapses: execute a controlled retreat to the Yangtze and Wuhan hubs, evacuate factories (focus and decisions), preserve the field army [FAIR: no deliberate delete of trapped units].
-- PRC joins a united front through the Xi'an incident [H]: read the faction template and `CHI_one_nation_undivided` branch text (it creates the Wang Front variant if PRC already holds the united front); finish Japan first, then use Crush the Communists after Victory over the Invaders.
+- PRC not in the united front (Xi'an did not fire or was refused): finish Japan first, then use Crush the Communists after Victory over the Invaders.
 - Peace offer from Japan before the mainland is clear: decline unless the lawful later route to capitulation is recorded.
 
 ## 11. Do-not list
@@ -165,7 +246,8 @@ no battleship programme before 1943; the `CHI_republic_of_china_navy` branch is 
 - No `CHI_end_military_primacy` (purges the military leadership); no Blue Shirt branch unless deliberately recording a fascist route.
 - No console, events, save edits, reload, empty-port farming, or exploiting foreign-assistance loops.
 - Do not spend focus time on the navy tree before the land line holds; do not leave the focus slot idle; do not recruit past rifles.
-- Do not leave the three-year plan until after the war starts (requires peace).
+- Do not leave the Three-Year Plan until after the war starts (it requires peace and is bypassed at war).
+- Do not adopt an infantry sub-doctrine by hand before `CHI_protracted_warfare` (it would turn its sub-doctrine reward into mastery).
 
 ## 12. End state and evidence
 
@@ -174,47 +256,11 @@ no theater critical-supply alert; 500+ mission-ready aircraft; supplied home-isl
 states in section 5 owned or integrated; Manchukuo/Jehol/East Hebei/Dalian/Taiwan recovered; Hong Kong, Macau, Guangzhouwan through the focus or war; PRC gone; Japan capitulated with settlement proof; no declared state occupied by an enemy; no active war with a remaining enemy major.
 Record: baseline and final factory/division/aircraft counts, warlord status table (member, subject, integrated, annexed), Marco Polo date and choice, each recovered state, Japanese capitulation, and unknown metrics as unknown. Never lower targets late.
 
-## 1.19.4.1 corrections (checked against the installed files and the active DLC set, 1 November 2026)
+## Correction history
 
-These override every section above for the current install; the standing plan is
-`plans/china-fair-1936-1938.plan.json`.
-
-- **Active DLC is not the installed set.** The game log (`logs/system.log`, "Active DLC Count: 3")
-  shows only Anniversary Pack, Poland: United and Ready and Rocket Launcher Unit Pack. No Compromise,
-  No Surrender, Waking the Tiger, By Blood Alone, La Resistance, No Step Back, Arms Against Tyranny and
-  Gotterdammerung are installed folders but inactive; `dlc_load.json` does not prove activation.
-  Every `has_dlc` branch for those DLCs is false.
-- **Focus tree:** neither `china_nationalist_sea_focus` (needs NCNS) nor `china_nationalist_focus`
-  (needs Waking the Tiger) loads; CHI gets `generic_focus` (`generic.txt`, factor 1, default).
-  Sections 3-6 and every `CHI_*` focus, the warlord faction/integration system, faction goals,
-  tour focuses, Gung Ho, Soviet/American support focuses and the Dang Guo/Blue Shirt choice are
-  unavailable in this install. Unification of warlords and PRC is by war only.
-- **Start (no NCNS branches):** 28 states, no warlord transfers (Beiping 608, Hebei 614,
-  Shandong 597/1038, Chongqing 1037, Chengdu 1041, Xi'an 744 are CHI); 16 civilian, 11 military
-  (2 on `infantry_equipment_0`, 9 idle), 2 naval factories; OOB `CHI_1936`: 57 divisions
-  ("Juntuán" 4-inf garrison, "Sanjiao Jun" 6-inf, "Qibing Jun" cavalry; no "Juntuán Reformed").
-  Population 100% neutrality.
-- **National spirits (permanent in this install, no removal path):** `CHI_army_corruption_1`
-  (attack and defence -30%, mobilisation speed -35%), `CHI_ineffective_bureaucracy` (conscription
-  -35%), `CHI_incompetent_officers` (command power gain -70%), `CHI_hyper_inflation_1` (consumer
-  goods +10%, factory output -5%), `german_advisors` (land doctrine cost -10%), `CHI_nine_power_treaty`
-  (empty). None of the NCNS corruption variables or modifiers exist. Laws: `free_trade` (from history),
-  `civilian_economy`, volunteer only; laws cost a plain 150 PP.
-- **Start techs:** infantry_weapons, gw_artillery, interwar_antiair, basic_train, gwtank, early_fighter,
-  early_bomber and the pre-MTG ships. **Not** tech_support or tech_trucks (those are NCNS-only).
-  2 research slots.
-- **Characters:** advisors in NCNS `instance` blocks are unavailable (e.g. Chen Guofu, Chen Lifu,
-  Du Yuesheng, Weng Wenhao). Hireable without focuses: H. H. Kung (`CHI_h_h_kung`, captain of
-  industry), Soong Mei-ling (first lady, while Chiang rules), army chiefs He Yingqin, Chen Jitang,
-  Li Zongren; high command Xiao Yisu, Yu Hanmou. Falkenhausen is only an advisor after an old-tree focus.
-  Generals: Hsueh Yueh and Zhang Xueliang (field marshals), Hu Zongnan, Sun Li Jen, Wei Lihuang,
-  Gu Zhutong, Fu Zuoyi, Tu Yu-ming, Tai An-lan, Wang Yao-wu.
-- **Japan:** `japan_wtt_focus` loads for JAP without any DLC. `china.1` (Marco Polo) is sent by
-  `JAP_reinforce_the_beijing_garrison` or by the `JAP_kwantung_army_impatience` timeout; the timer is
-  only started by Japanese focus/NCNS content, so there is no guaranteed latest date. CHI controls
-  Beiping, so CHI receives the event.
-- Partial mobilisation needs only war support > 0.25 (CHI 0.32) and beats Early Mobilisation.
-  `CHI_industrial_evacuations_*` decisions are allowed for CHI only without NCNS but are visible only
-  after old/NCNS-tree focuses, so they are unusable here too.
-- The validator now enforces this: `_validator.dlcs` selects the loaded focus tree, the history
-  branches, the start OOB, allowed character instances and start-date state owners.
+- 2026-11-01 (first pass): the reference assumed only 3 active DLCs and the generic tree. Wrong: the log of the
+  current install lists 10 active DLCs including No Compromise, No Surrender.
+- 2026-11-01 (this pass): with NCNS active CHI loads `china_nationalist_sea_focus` (weight 1000), not the Waking the
+  Tiger tree `china_nationalist_focus` (weight 10) and not `generic_focus`. Start counts corrected to the NCNS branches
+  (17 states, 11/8/2 factories, 85 divisions); advisors and generals limited to the NCNS character instances
+  (no Gu Zhutong, Fu Zuoyi, Zhang Xueliang; H. H. Kung needs Draw Support from the Big Families).

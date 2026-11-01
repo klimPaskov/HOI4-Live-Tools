@@ -14,6 +14,16 @@ FORM = `common/decisions/formable_nation_decisions.txt`, DEF = `common/defines/0
 HIST = `history/countries/GER - Germany.txt`. One focus point = 7 days [V DEF:FOCUS_POINT_DAYS],
 so cost 5 = 35 days, 10 = 70 days, 4 = 28 days.
 
+**DLC set** (macOS install, 1.19.4.1 since 2026-10-31): active Anniversary Pack, Arms Against Tyranny, By Blood
+Alone, Gotterdammerung, Historical German Portraits, La Resistance, No Compromise No Surrender, No Step Back,
+Poland: United and Ready, Rocket Launcher Unit Pack; Together for Victory, Death or Dishonor, Waking the Tiger and
+Man the Guns are integrated. Consequences [V HIST]: start OOB `GER_1936_nsb` + `GER_1936_air_bba` + `GER_1936_naval_mtg`;
+tanks and planes are designer equipment (chassis `light_tank_chassis_2` Panzer II, airframes `small_plane_airframe_1`
+Bf 109 D, `small_plane_cas_airframe_1` Ju 87, `medium_plane_airframe_1` He 111/Do 17); legacy keys such as
+`fighter_equipment_1`, `CAS_equipment_1`, `basic_medium_tank`, `fighter2` do not exist in this game. A Panzer III
+(`medium_tank_chassis_1`) or any second-generation plane needs a design created in game first (the history file creates
+them only in the 1939 bookmark). Section 6 and `plans/germany-fair-1936-1938.md` use these keys.
+
 ## Contents
 1. Checkpoint table (use this to detect an off-track run)
 2. Why earlier campaigns failed and the standing countermeasure
@@ -32,7 +42,7 @@ so cost 5 = 35 days, 10 = 70 days, 4 = 28 days.
 
 | Date | Must be true (else: stop, diagnose, fix before continuing) |
 |---|---|
-| 1936-01-01 | Start [V HIST/history states]: 35 civilian / 28 military / 10 naval factories, 4 research slots, ~30 divisions, laws limited_exports + limited_conscription + partial_economic_mobilisation, MEFO Bills mission running. Only 17 military factories have lines (10 rifles, 2 support, 1 artillery, 2 Panzer II, 2 trucks): assign the other 11 on day one. Focus started on day one. |
+| 1936-01-01 | Start [V HIST/history states]: 35 civilian / 28 military / 10 naval factories, 4 research slots, ~30 divisions, laws limited_exports + limited_conscription + partial_economic_mobilisation, MEFO Bills mission running. With this DLC set 20 military factories have lines (10 rifles, 2 support, 1 artillery, 2 Panzer II, 2 trucks, 1 each Bf 109 D, Ju 87, He 111): assign the other 8 on day one. Focus started on day one. |
 | 1936-03-11 | Four Year Plan and Remilitarize the Rhineland done; PP spent (trade-law change, advisors); no idle research slot; every unit assigned to an army (24 or fewer). |
 | 1936-12-31 | 10 focuses done (section 4); trade law changed to export_focus or free_trade; at least 35 divisions with set deployment states; 25+ factories on military lines; civilian queue never empty. |
 | 1937-12-31 | 5th research slot (Heraeus) or a recorded reason; 50+ civilian, 35+ military factories [H]; 60+ fully equipped divisions [H]; Anschluss tooltip "we estimate we have X" checked monthly. |
@@ -175,12 +185,14 @@ chromium/tungsten; `form_greater_german_reich` at the end. Spend PP weekly: laws
 
 **Research** (4 slots, 5th via Heraeus) [H tech keys from common/technologies]: 1936 construction1, basic_machine_tools, infantry_weapons2, tech_engineers,
 tech_recon, radio, artillery1; 1937 construction2, improved_machine_tools, excavation1, support_weapons, antiair1; 1938 advanced_machine_tools (also a
-focus requirement), excavation3 (Vereinigte Stahlwerke), basic_medium_tank_chassis, fighter and CAS upgrades, oil_processing, rubber_processing, improved infantry weapons;
-1939+ doctrines. Never leave a slot idle.
+focus requirement), excavation3 (Vereinigte Stahlwerke), basic_medium_tank_chassis with armor_tech_2/engine_tech_2 (No Step Back keys),
+plane modules range_improvements/armor_piercing_bombs and later improved_small_airframe (By Blood Alone keys; there are no fighter1/2 or CAS1/2
+with BBA), oil_processing, rubber_processing, improved infantry weapons; radar comes from the special project `sp_air_radar`, encryption
+techs are hidden with La Resistance; 1939+ doctrines. Never leave a slot idle.
 
 **Production** [H, formula V]: rifle (infantry_equipment) costs 0.5 IC [V common/units/equipment/infantry.txt]; factory speed 3.5 IC/day [V DEF:BASE_FACTORY_SPEED_MIL];
 so a factory at ~85% makes about 6 rifles/day. Targets: 1936 12-15 factories on rifles, 3 support, 4-6 artillery, 3 trucks, 2 tanks; 1937-38 add fighters and CAS
-(6-10), medium tanks (6-8) by 1939; keep civilian construction going until the 1938 build wave is queued. Factory benchmark: Germany in the 1939.1.1 scenario has 69 civilian,
+(6-10; with BBA raise the existing Bf 109 D / Ju 87 lines, later new airframe designs), medium tanks (6-8, a created Panzer III design on `medium_tank_chassis_1`) by 1939; keep civilian construction going until the 1938 build wave is queued. Factory benchmark: Germany in the 1939.1.1 scenario has 69 civilian,
 62 military, 13 naval (with Austria and the Sudetenland) [V history/states]; a good run is at or above that in January 1939. Rival benchmarks at that date: FRA 45/9, UK 40/18, USSR 65/47, Italy 29/29.
 
 **Army sizing** [H, gates V]: ~30 divisions in 1936 -> 45 (end 1936) -> 60 (end 1937) -> 80 (mid 1938) -> 95+ (June 1939). Template: stock "Infanterie-Division" is 9 infantry

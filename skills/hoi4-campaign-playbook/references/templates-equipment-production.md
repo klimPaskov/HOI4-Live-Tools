@@ -331,7 +331,10 @@ Absolute numbers depend on the actual economy: **read `hoi4_economy` first**.
 `history/states` sums give roughly Germany 35 civ / 28 mil, Poland 18/11,
 China 16/11 at 1936 **[V?]**, so scale the shares below. Starting lines
 (`history/units/*_1936*.txt`): Germany 10 factories on infantry eq, 2 support,
-1 artillery, 2 light tanks (Panzer II), 2 trucks; Poland 2 infantry eq, 1
+1 artillery, 2 light tanks (Panzer II, `light_tank_chassis_2` with No Step Back), 2 trucks,
+and with By Blood Alone 1 each on Bf 109 D (`small_plane_airframe_1`), Ju 87
+(`small_plane_cas_airframe_1`) and He 111 (`medium_plane_airframe_1`) from
+`GER_1936_air_bba.txt` (20 of 28 factories; without BBA the air OOB adds no lines); Poland 2 infantry eq, 1
 support; China 2 on infantry_equipment_0 (efficiency 90, progress 0.5).
 
 | Country/date | Inf eq | Support | Art | Trucks | AT | AA | Tanks | Air |
