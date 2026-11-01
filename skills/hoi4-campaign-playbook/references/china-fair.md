@@ -173,3 +173,16 @@ Define before day one (house defaults unless the user overrides): independent; i
 no theater critical-supply alert; 500+ mission-ready aircraft; supplied home-island operation; non-negative essential equipment trends for 30 days after the last offensive. Territory checklist: all unification
 states in section 5 owned or integrated; Manchukuo/Jehol/East Hebei/Dalian/Taiwan recovered; Hong Kong, Macau, Guangzhouwan through the focus or war; PRC gone; Japan capitulated with settlement proof; no declared state occupied by an enemy; no active war with a remaining enemy major.
 Record: baseline and final factory/division/aircraft counts, warlord status table (member, subject, integrated, annexed), Marco Polo date and choice, each recovered state, Japanese capitulation, and unknown metrics as unknown. Never lower targets late.
+
+## 1.19.4.1 corrections (checked against the installed files, 1 November 2026)
+
+These override the sections above; the standing plan is `plans/china-fair-1936-1938.plan.json`.
+- With No Compromise, No Surrender (and no Waking the Tiger) CHI uses `china_nationalist_sea_focus`
+  and starts with 17 states: Beiping 608, Hebei 614/1039 (Hebei-Chahar), Shandong 597/1038,
+  Sichuan 1037/1041/605/751/752 and Xi'an 744 are warlord states on day one. Start industry is
+  11 civilian, 8 military (6 idle), 2 naval; 2 research slots.
+- Plan defences only in owned states; `CHI_industrial_evacuations_*` is unavailable with this DLC.
+- Partial mobilisation is open on day one and beats waiting; corruption raises law costs by 65%.
+- The Three-Year Plan can be bypassed in war; its spirit only works in peace.
+- `CHI_controlling_our_skies` needs an air doctrine China lacks in 1936; artillery comes from
+  `gw_artillery`, not `interwar_artillery`.

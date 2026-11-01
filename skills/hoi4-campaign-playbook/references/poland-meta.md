@@ -161,3 +161,18 @@ exile industries, intelligence branch (`POL_expand_polish_intelligence`, `POL_ni
 
 Record: chosen route and each election offer; strike-clock status; manpower at each gate; Intermarium members by date; Austria/Czechoslovakia fate; Danzig decision; first German/Soviet contact; each META technique with source, test, cost, outcome;
 German and Soviet capitulation evidence; unresolved wars; final settlement ownership against the 18-state checklist; economy and force condition. Success is the declared predicates, not a clever tactic or a formable alone.
+
+## 1.19.4.1 corrections (checked against the installed files, 1 November 2026)
+
+These override the sections above; the standing plan is `plans/poland-meta-1936-1938.plan.json`.
+- `POL_claiming_lithuania` cannot be taken directly (`always = no`); the royal election event
+  (`NSB_poland_royal_election.1`, option 0 for Friedrich Christian) completes it.
+- Plan East requires `POL_complete_plan_west` first, which ends the bunker-speed bonus and the
+  remaining Plan West focuses.
+- The Intermarium mission decisions only add +20 alliance preference (one at a time, -10% PP
+  gain for 35 days); invitations come from the focus events (poland.16). The Intermarium chain
+  needs 700k men in fielded divisions.
+- Civilian Economy costs -30% construction speed; Partial Mobilisation has no construction
+  penalty and Poland qualifies on day one.
+- Useful additions: National Defence Fund (-35% consumer goods for 720 days), advisors
+  Wojciechowski, Kwiatkowski and Lubomirski.

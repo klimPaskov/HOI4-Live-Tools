@@ -316,8 +316,14 @@ class Game:
                     for cid, body in v:
                         if not cid or not isinstance(body, list):
                             continue
-                        adv = get1(body, "advisor")
-                        if isinstance(adv, list):
+                        # 1.19 characters may wrap roles in per-DLC `instance` blocks
+                        advs = list(get(body, "advisor"))
+                        for inst in get(body, "instance"):
+                            if isinstance(inst, list):
+                                advs.extend(get(inst, "advisor"))
+                        for adv in advs:
+                            if not isinstance(adv, list):
+                                continue
                             chars.add(cid)
                             tok = get1(adv, "idea_token")
                             if tok:
