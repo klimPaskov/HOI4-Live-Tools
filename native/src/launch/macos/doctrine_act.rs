@@ -462,7 +462,20 @@ fn rows(
         let name = pk::text(r, i, item.frame, "doctrine_name", 2)?.unwrap_or_default();
         if found.is_none() && loc::same(&name, display) {
             found = Some(n);
-            rect = pk::rect_of(r, i, item.frame, "select_button", 2).ok();
+            // The row button draws a tiled sprite with no reviewed renderer; its name text
+            // lies inside it, so a point near the text's left edge is on the button.
+            rect = pk::rect_of(r, i, item.frame, "select_button", 2)
+                .or_else(|_| {
+                    // doctrine_icon sits at (10, 4) inside the 246x71 button (doctrines_view.gui):
+                    // the button's middle is 113 px right of the icon's left edge.
+                    pk::rect_of(r, i, item.frame, "doctrine_icon", 2).map(|ic| gui_tree::Rect {
+                        x: ic.x + 103,
+                        y: ic.y + 25,
+                        w: 20,
+                        h: 10,
+                    })
+                })
+                .ok();
         }
         names.push(name);
     }
@@ -628,7 +641,7 @@ pub(super) fn call(
 }
 
 pub(super) fn tool() -> Value {
-    json!({"name":"hoi4_doctrine_adopt","description":"UNVALIDATED (no live test yet): adopt a grand doctrine (e.g. new_mobile_warfare) or a subdoctrine (e.g. mobile_infantry) with ordinary input: Shift+E officer corps view, the folder's doctrine button, the folder tab, the grand doctrine slot or the track's subdoctrine slot, the row whose localised name matches, Unlock (the game's confirmation is accepted). Ids and tracks are those of hoi4_doctrines (include_catalog:true); a subdoctrine that fits several tracks needs `track`. Typed refusals before input: doctrine_unknown, no_grand_doctrine, track_required, track_unknown, already_adopted, grand_doctrine_set, track_occupied, subdoctrine_taken, excluded_by_chosen, insufficient_experience (clear shortfall only; cost modifiers are not read); found while driving: doctrine_not_offered, doctrine_unavailable (Unlock disabled). Verified from the doctrine system in memory (the folder's grand doctrine or the track's subdoctrine names the doctrine). Track mastery rewards unlock by themselves; they have no button. Results carry validated:false.","inputSchema":{"type":"object","properties":{"doctrine":{"type":"string","maxLength":96},"track":{"type":"string","maxLength":64},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["doctrine","request_id","lease_token"],"additionalProperties":false}})
+    json!({"name":"hoi4_doctrine_adopt","description":"Adopt a grand doctrine (e.g. new_mobile_warfare) or a subdoctrine (e.g. mobile_infantry) with ordinary input: Shift+E officer corps view, the folder's doctrine button, the folder tab, the grand doctrine slot or the track's subdoctrine slot, the row whose localised name matches, Unlock (the game's confirmation is accepted). Ids and tracks are those of hoi4_doctrines (include_catalog:true); a subdoctrine that fits several tracks needs `track`. Typed refusals before input: doctrine_unknown, no_grand_doctrine, track_required, track_unknown, already_adopted, grand_doctrine_set, track_occupied, subdoctrine_taken, excluded_by_chosen, insufficient_experience (clear shortfall only; cost modifiers are not read); found while driving: doctrine_not_offered, doctrine_unavailable (Unlock disabled). Verified from the doctrine system in memory (the folder's grand doctrine or the track's subdoctrine names the doctrine). Track mastery rewards unlock by themselves; they have no button. Results carry validated:false.","inputSchema":{"type":"object","properties":{"doctrine":{"type":"string","maxLength":96},"track":{"type":"string","maxLength":64},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["doctrine","request_id","lease_token"],"additionalProperties":false}})
 }
 
 #[cfg(test)]
