@@ -97,27 +97,30 @@
   "focus_path": [
     "GER_the_four_year_plan",
     "GER_remilitarize_the_rhineland",
+    "GER_reorganize_the_wehrmacht",
+    "GER_anschluss",
+    "GER_demand_sudetenland",
+    "GER_first_vienna_award",
+    "GER_fate_of_czechoslovakia",
+    "GER_reassert_eastern_claims",
+    "GER_danzig_or_war",
+    "GER_molotov_ribbentrop_pact",
     "GER_accelerate_the_rearmament_program",
     "GER_establish_production_targets",
     "GER_construct_the_reichsautobahn",
     "GER_kdf_wagen_factories",
     "GER_develop_modern_maneuver_warfare",
     "GER_fortify_the_vaterland",
-    "GER_reorganize_the_wehrmacht",
     "GER_expanding_the_luftwaffe",
     "GER_concentrated_armament_program",
     "GER_develop_heraeus_facilities",
-    "GER_anschluss",
     "GER_aeronautical_research_institute",
     "GER_form_the_jagdwaffe",
     "GER_adopt_new_panzer_doctrine",
     "GER_panzer_troops_school",
     "GER_bribe_senior_officers",
     "GER_autonomy_in_the_kriegsschulen",
-    "GER_expand_the_truppenschulen",
-    "GER_demand_sudetenland",
-    "GER_first_vienna_award",
-    "GER_fate_of_czechoslovakia"
+    "GER_expand_the_truppenschulen"
   ],
   "focus_fallback": [
     "GER_fallschirmjager",
@@ -202,7 +205,8 @@
         52,
         50,
         57
-      ]
+      ],
+      "fallback_any_own_state": true
     },
     {
       "building": "arms_factory",
@@ -238,7 +242,8 @@
         763,
         909,
         978
-      ]
+      ],
+      "fallback_any_own_state": true
     }
   ],
   "armies": {
@@ -253,5 +258,6 @@
       "Wilhelm List",
       "Ewald von Kleist"
     ]
-  }
+  },
+  "construction_fallback_any_own_state": true
 }

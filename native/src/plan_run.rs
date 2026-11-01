@@ -116,6 +116,9 @@ pub struct State {
     war_cool: HashMap<String, GameHour>,
     /// Refusals per politics pick (index): each refusal doubles the wait.
     pol_fails: HashMap<usize, u32>,
+    /// Political power when a pick was last refused: it is not tried again until the
+    /// country has gained some (a refusal is usually a missing few points).
+    pol_pp_at_fail: HashMap<usize, f64>,
     centers: HashMap<i32, (f64, f64)>,
     con: ConState,
     /// stop_on_date: (target hour, outcome of the single pause attempt)
@@ -188,6 +191,7 @@ impl Default for State {
             war_stage: HashMap::new(),
             war_cool: HashMap::new(),
             pol_fails: HashMap::new(),
+            pol_pp_at_fail: HashMap::new(),
             centers: HashMap::new(),
             con: ConState::default(),
             date_stop: None,
@@ -588,10 +592,27 @@ pub fn tick(
         }
     }
     // 4. politics (one-shot picks)
+    let mut political_power: Option<f64> = None;
     for (index, pick) in list(plan, "politics").iter().enumerate() {
         let key = format!("pol:{index}:{}", text(&pick["idea"]));
         if state.done.contains(&key) || state.skipped(now, "pol", &index.to_string()) {
             continue;
+        }
+        if political_power.is_none() {
+            political_power = tools
+                .call("hoi4_economy", &json!({}))
+                .ok()
+                .and_then(|e| e["political_power"]["raw_signed"].as_f64())
+                .map(|raw| raw / 100_000.0);
+        }
+        // Not before the country has gained 15 points since the last refusal, or the
+        // pick's own "cost" when the plan names it.
+        if let Some(pp) = political_power {
+            let need = pick["cost"].as_f64().unwrap_or(0.0);
+            let since = state.pol_pp_at_fail.get(&index).map_or(f64::MIN, |p| p + 15.0);
+            if pp < need || pp < since {
+                continue;
+            }
         }
         let (ok, why) = state.act(
             tools,
@@ -603,7 +624,11 @@ pub fn tick(
         if ok || why.contains("already holds") {
             state.done.insert(key);
             state.pol_fails.remove(&index);
+            state.pol_pp_at_fail.remove(&index);
         } else {
+            if let Some(pp) = political_power {
+                state.pol_pp_at_fail.insert(index, pp);
+            }
             // Usually short of political power. Each attempt opens the politics screen, so
             // back off (3, 6, 12 ... 30 days) instead of retrying every game day.
             let fails = state.pol_fails.entry(index).or_insert(0);
