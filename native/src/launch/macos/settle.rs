@@ -211,7 +211,10 @@ pub(super) fn army_assign(
     // The right-click moves the whole box selection, i.e. every unassigned division of the
     // pool, not only `take` of them (seen live 1 Nov 2026: 10 joined where 8 were planned);
     // the army cap is restored afterwards with hoi4_army_split.
-    if only_expected && changes.len() >= take {
+    // A large state can need several folds: the box may hold only part of the pool when no
+    // other army stands there (then only pool divisions can move). Any such fold is reached.
+    let _ = take;
+    if only_expected {
         Verdict::Reached
     } else {
         Verdict::Unknown
@@ -481,7 +484,8 @@ mod tests {
             &[],
         );
         assert_eq!(army_assign(&before, &now, "A", &pool, 2), Verdict::Reached);
-        assert_eq!(army_assign(&before, &now, "A", &pool, 3), Verdict::Unknown);
+        // a partial fold (a large state needing several boxes) is reached as well
+        assert_eq!(army_assign(&before, &now, "A", &pool, 3), Verdict::Reached);
         let same = view(
             &[("A", &["d1", "d2"], None), ("B", &["d3"], None)],
             &["u1", "u2", "u3"],

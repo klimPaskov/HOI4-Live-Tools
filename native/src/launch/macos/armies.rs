@@ -287,6 +287,8 @@ pub(super) struct AssignPlan {
     pub then_split: usize,
     /// Divisions of the receiving army standing in the state (0 for a new army).
     pub target_here: usize,
+    /// Divisions of other named armies standing in the state.
+    pub others_here: usize,
 }
 impl AssignPlan {
     pub(super) fn to_json(&self) -> Value {
@@ -385,6 +387,7 @@ pub(super) fn plan_assign(
             army_after: None,
             then_split: unassigned.saturating_sub(cap),
             target_here: 0,
+            others_here: 0,
         });
     };
     let room = cap.saturating_sub(army.total);
@@ -411,6 +414,11 @@ pub(super) fn plan_assign(
         army_after: Some(army.total + take),
         then_split: 0,
         target_here: army.here,
+        others_here: armies
+            .iter()
+            .filter(|a| a.name != army.name)
+            .map(|a| a.here)
+            .sum(),
     })
 }
 
@@ -454,6 +462,7 @@ pub(super) fn assign(process: &dyn Process, keys: &MacKeys, plan: &AssignPlan) -
         AssignMode::Absorb { army } => army,
     };
     clear_notices(process, keys)?;
+    default_map_mode(keys)?;
     find_state(process, keys, plan.state)?;
     let expected = plan.unassigned + plan.target_here;
     // Divisions stand anywhere in the state, so try the usual box first and
@@ -461,12 +470,22 @@ pub(super) fn assign(process: &dyn Process, keys: &MacKeys, plan: &AssignPlan) -
     // exactly the expected divisions (a new drag replaces the selection).
     let mut sizes = Vec::new();
     let mut exact = false;
-    for (from, to) in ASSIGN_BOXES {
+    let mut partial = None;
+    for (k, (from, to)) in ASSIGN_BOXES.into_iter().enumerate() {
         keys.drag(GAME, from, to)?;
         std::thread::sleep(std::time::Duration::from_millis(350));
         let size = read(process, selection_size)? as usize;
         sizes.push(size);
         if size == expected {
+            exact = true;
+            break;
+        }
+        // No other army stands in the state: a box holding the target's divisions and part of
+        // the unassigned ones only folds those (settlement checks that only pool divisions
+        // moved); take it at once, since the drags can pan the map and a later re-drag of the
+        // same box picked other divisions (seen live 1 November 2026).
+        if plan.others_here == 0 && size > plan.target_here && size < expected {
+            partial = Some((k, size));
             exact = true;
             break;
         }
@@ -476,9 +495,9 @@ pub(super) fn assign(process: &dyn Process, keys: &MacKeys, plan: &AssignPlan) -
             "selection_mismatch",
             format!(
                 "The box selections held {sizes:?} divisions but {expected} were expected (unassigned {} plus {army}'s \
-                 {} here), so they also took divisions of another army or missed some. Nothing was assigned; the \
-                 right-click on the card was not sent.",
-                plan.unassigned, plan.target_here
+                 {} here), so they took divisions of another army or missed some. Nothing was assigned; the \
+                 right-click on the card was not sent (other armies here: {}, partial box: {:?}).",
+                plan.unassigned, plan.target_here, plan.others_here, partial
             ),
         ));
     }
@@ -606,10 +625,25 @@ pub(super) fn create(
     // does not hold exactly them, try wider boxes (a new drag replaces the
     // selection) and keep the first exact one; otherwise fall back to the usual
     // box and the old outcome handling below.
-    let unassigned_here = armies(process)
-        .ok()
-        .map(|view| unassigned_ids(&view, state).len())
+    let view_before = armies(process).ok();
+    let unassigned_here = view_before
+        .as_ref()
+        .map(|view| unassigned_ids(view, state).len())
         .filter(|n| *n > 0);
+    // Divisions of named armies standing in this state: a box here could take them.
+    let armies_here: usize = view_before
+        .as_ref()
+        .map(|view| {
+            view["armies"]
+                .as_array()
+                .map(|a| {
+                    a.iter()
+                        .map(|x| x["states"][state.to_string()].as_u64().unwrap_or(0) as usize)
+                        .sum()
+                })
+                .unwrap_or(0)
+        })
+        .unwrap_or(0);
     keys.drag(GAME, ASSIGN_BOXES[0].0, ASSIGN_BOXES[0].1)?;
     wait(process, "select divisions", |r, i| {
         Ok(selection_size(r, i)? > 0)
@@ -624,7 +658,10 @@ pub(super) fn create(
                 }
             }
             let held = read(process, selection_size)? as usize;
-            if held != expected {
+            // A part of a large state's unassigned divisions is fine when no army stands
+            // there (seen live: a box held 5 of Eritrea's 18 with no army in the state).
+            let partial_ok = armies_here == 0 && held > 0 && held <= expected;
+            if held != expected && !partial_ok {
                 // No box holds exactly the unassigned divisions here: a new army would also
                 // take divisions of neighbouring armies (seen live 1 November 2026: a create
                 // pulled 7 divisions out of two armies). Refuse instead of guessing.
