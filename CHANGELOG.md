@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased Windows runtime
+
+- Live session on HOI4 1.19.4.1 (2 November 2026, Windows 11, `-debug`, 1920x1080
+  borderless, three launches). Launch to the main menu took 81 to 139 s. A new 1936 game, the
+  top bar, the console and `eval_effect`, popups, events, politics, the focus
+  tree, production lines with an MIO choice and `hoi4_shutdown` worked after
+  these fixes:
+  - Console replies printed in red ("Unknown command", wrong arguments) are read.
+  - The main menu is recognized when OCR garbles one of its buttons.
+  - A server whose game exited can launch a new one: an exited bound process has
+    no window and its binding is dropped.
+  - A user folder without `save games/` reads as having no saves.
+  - The game-font reader no longer fails on a crop with only small glyphs.
+- Seen on 1.19.4.1 and not fixed yet: one of three `hoi4_new_game` START clicks
+  did not register (clicking START again worked). The `hoi4_diplomacy` view of a
+  country whose state name differs from the country name did not open Find.
+  Without the Steam client the game finds no DLC in a fresh user folder unless
+  `launcher-v2.sqlite` and `dlc_signature` from the real one are copied in, and
+  Career Profile is unavailable.
+
 ## Unreleased native preview
 
 - Run091 (18 October 2026, `7f0728c`, Haiku 5.5 player, 512x288) passed the
