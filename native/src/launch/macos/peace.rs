@@ -14,6 +14,7 @@
 //! `done_button`. No input is retried after a possible input.
 use super::diplomacy::{clean, find};
 use super::events::peace_root;
+use super::panelkit as pk;
 use super::ui::{dismiss_notices, find_state, read, wait};
 use crate::{
     error::{Error, Result},
@@ -380,6 +381,8 @@ pub(super) fn options(process: &dyn Process, states: &[i32]) -> Result<Value> {
 pub(super) struct Plan {
     pub kind: Kind,
     pub states: Vec<i32>,
+    /// English names of `states` (same order), matched against the conference's state list.
+    pub names: Vec<String>,
     pub max_cost: Option<f64>,
     pub score_before: Option<f64>,
 }
@@ -426,6 +429,7 @@ pub(super) fn plan_take(
             return Err(Error::new("cost_exceeds_points", "No points left this round"));
         }
         Ok(Plan {
+        names: Vec::new(),
             kind,
             states: states.to_vec(),
             max_cost,
@@ -458,10 +462,19 @@ pub(super) fn take(
     }
     let mut costs = Vec::new();
     let mut last = plan.score_before;
-    for &state in &plan.states {
+    for (n, &state) in plan.states.iter().enumerate() {
         sent.set(true);
-        find_state(process, keys, state)?;
-        keys.click(GAME, 960.0, 540.0)?;
+        let name = plan.names.get(n).cloned().unwrap_or_default();
+        // The conference hides the Find view: pick the state from the window's own list
+        // (country rows expand into state rows), else fall back to centring it on the map.
+        match click_state_row(process, keys, &name) {
+            Ok(()) => {}
+            Err(e) if e.code == "state_row_missing" && std::env::var_os("HOI4_PEACE_LIST_DEBUG").is_none() => {
+                find_state(process, keys, state)?;
+                keys.click(GAME, 960.0, 540.0)?;
+            }
+            Err(e) => return Err(e),
+        }
         let before = last;
         let changed = wait(process, "demand added", |r, i| {
             let now = score(r, i)?;
@@ -494,6 +507,84 @@ pub(super) fn take(
     Ok(json!({"kind":plan.kind.name(),"states":costs,"score_before":plan.score_before,"score_after":last}))
 }
 
+/// Rows of the conference's available-actions list: (country rows: name and expand button,
+/// state rows: name and a point on the row). peaceconferencewindow.gui: aggregated_action_item
+/// (header with action_name and expand) holding available_actions_grid of available_action_item
+/// (country_flag at x 18, action_name at x 110, 29 px high).
+#[allow(clippy::type_complexity)]
+fn list_rows(r: &crate::memory::Reader<'_>, image: u64) -> Result<(Vec<(String, Rect)>, Vec<(String, Rect)>)> {
+    let root = root(r, image)?;
+    let node = find(r, image, root, "available_actions_list", 0)?
+        .ok_or_else(|| Error::new("gui_target_unavailable", "available_actions_list not found"))?;
+    let list = gui_tree::container(r, node, image)?
+        .ok_or_else(|| Error::new("gui_target_unavailable", "available_actions_list is not a window"))?;
+    let (mut countries, mut states) = (Vec::new(), Vec::new());
+    // Country rows are the list's child windows; their state rows ("Select All" first) sit in
+    // an inner grid at y 54 with 29 px slots. The row icons have no reviewed renderer, so the
+    // rows are placed from the country row's expand button at (266, 30).
+    for child in gui_tree::children(r, list)?.into_iter().take(64) {
+        let Some(item) = gui_tree::container(r, child, image)? else { continue };
+        let name = pk::text(r, image, item, "action_name", 3)?.unwrap_or_default();
+        let Ok(expand) = pk::rect_of(r, image, item, "expand", 3) else { continue };
+        countries.push((name, expand));
+        let (ox, oy) = (expand.x - 266, expand.y - 30);
+        let mut grids = Vec::new();
+        pk::grids(r, image, item, 3, &mut grids)?;
+        for grid in grids {
+            for (k, row) in pk::items(r, image, grid)?.into_iter().enumerate() {
+                let state = pk::text(r, image, row.frame, "action_name", 2)?.unwrap_or_default();
+                if state.is_empty() {
+                    continue;
+                }
+                states.push((state, Rect { x: ox + 140, y: oy + 54 + 29 * k as i32 + 7, w: 40, h: 14 }));
+            }
+        }
+    }
+    Ok((countries, states))
+}
+/// Click the state row named `name` in the conference list, expanding country rows first.
+fn click_state_row(process: &dyn Process, keys: &MacKeys, name: &str) -> Result<()> {
+    if name.is_empty() {
+        return Err(Error::new("state_row_missing", "No state name"));
+    }
+    let wanted = |rows: &[(String, Rect)]| rows.iter().find(|(n, _)| super::loc::same(n, name)).map(|(_, r)| *r);
+    let (countries, states) = read(process, list_rows)?;
+    let mut target = wanted(&states);
+    if target.is_none() {
+        for (_, expand) in &countries {
+            let (x, y) = expand.center();
+            keys.click(GAME, x, y)?;
+            std::thread::sleep(Duration::from_millis(350));
+            target = wanted(&read(process, list_rows)?.1);
+            if target.is_some() {
+                break;
+            }
+        }
+    }
+    let rect = match target {
+        Some(r) => r,
+        None => {
+            let (c, s) = read(process, list_rows).unwrap_or_default();
+            return Err(Error::new(
+                "state_row_missing",
+                format!(
+                    "{name} is not in the conference list (countries {:?}, states {:?})",
+                    c.iter().map(|x| &x.0).collect::<Vec<_>>(),
+                    s.iter().map(|x| &x.0).collect::<Vec<_>>()
+                ),
+            ));
+        }
+    };
+    // Text-drawn buttons report their text sprite (864 px wide on 1.19.4.1), whose centre
+    // can fall off screen; their left edge is the button's, so click 120 px in.
+    let (mut x, y) = rect.center();
+    if rect.w > 400 {
+        x = f64::from(rect.x) + 120.0;
+    }
+    keys.click(GAME, x, y).map_err(|e| Error::new(e.code, format!("{} ({name} at {rect:?})", e.message)))?;
+    Ok(())
+}
+
 /// Pre-input check shared by submit and exit.
 pub(super) fn plan_button(process: &dyn Process, name: &'static str, code: &'static str) -> Result<String> {
     read(process, |r, image| {
@@ -524,8 +615,13 @@ fn click_button(process: &dyn Process, keys: &MacKeys, name: &str) -> Result<()>
         }
         b.rect.ok_or_else(|| Error::new("gui_target_unavailable", format!("{name} is off screen")))
     })?;
-    let (x, y) = rect.center();
-    keys.click(GAME, x, y)?;
+    // Text-drawn buttons report their text sprite (864 px wide on 1.19.4.1), whose centre
+    // can fall off screen; their left edge is the button's, so click 120 px in.
+    let (mut x, y) = rect.center();
+    if rect.w > 400 {
+        x = f64::from(rect.x) + 120.0;
+    }
+    keys.click(GAME, x, y).map_err(|e| Error::new(e.code, format!("{} ({name} at {rect:?})", e.message)))?;
     Ok(())
 }
 /// One click on Submit Demands; verified when the header texts change or the
@@ -548,6 +644,7 @@ pub(super) fn exit(process: &dyn Process, keys: &MacKeys, sent: &std::cell::Cell
     sent.set(true);
     click_button(process, keys, "done_button")?;
     let deadline = Instant::now() + Duration::from_secs(6);
+    let mut returned = false;
     loop {
         if !is_open(process)? {
             return Ok(json!({"exited":true}));
@@ -558,8 +655,17 @@ pub(super) fn exit(process: &dyn Process, keys: &MacKeys, sent: &std::cell::Cell
                 "The conference stayed open after Confirm and Exit",
             ));
         }
-        // The confirmation is a notice pop-up with one OK button.
+        // The "Exit Conference" confirmation is a command dialog (OK/Cancel); older builds
+        // showed a notice pop-up with one OK button.
+        let accepted = super::ui::accept_command(process, keys).unwrap_or(false);
         let _ = dismiss_notices(process, keys);
+        // 1.19.4.1: the "Exit Conference" popup (PEACE_DONE_POPUP_DESCRIPTION) is neither;
+        // Return accepts it (verified live 1 November 2026). Pressed once.
+        if !accepted && !returned {
+            std::thread::sleep(Duration::from_millis(300));
+            keys.press_code(36)?;
+            returned = true;
+        }
         std::thread::sleep(Duration::from_millis(200));
     }
 }
