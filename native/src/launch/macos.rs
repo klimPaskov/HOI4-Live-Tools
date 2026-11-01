@@ -3890,20 +3890,18 @@ impl Commands for MacClock {
                 self.keys.preflight()?;
             }
             let keys = &self.keys;
-            let mut settle = || {
+            // The pre-input amount is stored in the intent, so a retry settles against it.
+            let mut settle = |baseline: &Value| {
+                let original = baseline.as_i64().unwrap_or(start);
                 let now = construction::queued(process, key, state)?;
-                let detail = json!({"building":key,"state_id":state,"queued_in_state":now});
-                Ok(if retry {
-                    journal::Outcome::Diverged(detail)
-                } else {
-                    settle::queue_growth(start, now, count).outcome(detail)
-                })
+                let detail = json!({"building":key,"state_id":state,"queued_in_state":now,"queued_before":original});
+                Ok(settle::queue_growth(original, now, count).outcome(detail))
             };
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
                 construction::add(process, keys, key, state, count)
             };
-            let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
+            let receipt = actions.execute_baselined(id, &epoch, action, json!(start), &mut settle, &mut dispatch)?;
             return Ok(json!({"receipt":receipt}));
         }
         if name == "hoi4_focus_start" {

@@ -77,6 +77,8 @@ pub struct GameJournal {
     file: File,
     receipts: BTreeMap<String, Receipt>,
     poisoned: bool,
+    /// Detail of the next intent record (set only inside `execute_baselined`).
+    baseline: Option<Value>,
 }
 fn now() -> u64 {
     SystemTime::now()
@@ -185,6 +187,7 @@ impl GameJournal {
             file,
             receipts,
             poisoned: false,
+            baseline: None,
         })
     }
     fn append(&mut self, record: Receipt) -> Result<Receipt> {
@@ -316,6 +319,46 @@ impl GameJournal {
     }
     /// Run `dispatch` once under a durable intent record. `settle` reads fresh
     /// state and reports what the game shows about this action.
+    /// Like `execute`, but the intent record stores `baseline` (the state read before any
+    /// input) and `settle` is always given that original baseline. A retry of an unresolved
+    /// request id can then settle fully (reached, unchanged or diverged) from the durable
+    /// baseline instead of a fresh, post-dispatch re-read. Intents written without a baseline
+    /// keep the strict "only a reached target settles a retry" rule.
+    pub fn execute_baselined(
+        &mut self,
+        id: &str,
+        epoch: &Epoch,
+        action: Value,
+        baseline: Value,
+        settle: &mut dyn FnMut(&Value) -> Result<Outcome>,
+        dispatch: &mut dyn FnMut() -> Result<()>,
+    ) -> Result<Receipt> {
+        if let Some(previous) = self.receipts.get(id).cloned() {
+            if previous.version == 1
+                && previous.status == Status::Dispatching
+                && same_campaign(&previous.epoch, epoch)
+                && previous.action == action
+                && !self.poisoned
+            {
+                if let Some(original) = previous.detail.get("baseline").cloned() {
+                    let mut stored = || settle(&original);
+                    return self.settle(previous, &mut stored).map_err(|error| {
+                        Error::after_possible_input(
+                            "Previous dispatch remains unresolved; readback failed",
+                            error,
+                        )
+                    });
+                }
+            }
+            let mut legacy = || settle(&baseline);
+            return self.execute_with(id, epoch, action, &mut legacy, dispatch, false);
+        }
+        self.baseline = Some(serde_json::json!({ "baseline": baseline.clone() }));
+        let mut fresh = || settle(&baseline);
+        let result = self.execute_with(id, epoch, action, &mut fresh, dispatch, false);
+        self.baseline = None;
+        result
+    }
     pub fn execute(
         &mut self,
         id: &str,
@@ -410,7 +453,7 @@ impl GameJournal {
             epoch: epoch.clone(),
             action,
             status: Status::Dispatching,
-            detail: Value::Null,
+            detail: self.baseline.clone().unwrap_or(Value::Null),
             unix_ms: now(),
         })?;
         match dispatch() {
@@ -556,6 +599,85 @@ mod tests {
         std::fs::remove_dir_all(dir).unwrap();
     }
 
+    #[test]
+    fn baselined_intent_stores_baseline_and_a_retry_settles_against_it() {
+        let dir = dir("baselined");
+        let e = epoch();
+        let action = json!({"kind":"construction_add","state_id":64});
+        {
+            let mut j = journal(&dir);
+            // The dispatch "fails" after possible input and the readback is a torn/unknown read.
+            let err = j
+                .execute_baselined(
+                    "c1",
+                    &e,
+                    action.clone(),
+                    json!(1),
+                    &mut |_| Err(Error::new("read_failed", "torn")),
+                    &mut || Err(Error::new("input_readback_failed", "no change seen")),
+                )
+                .unwrap_err();
+            assert_eq!(err.code, "action_uncertain");
+            let intent = j.receipts.get("c1").unwrap();
+            assert_eq!(intent.status, Status::Dispatching);
+            assert_eq!(intent.detail, json!({"baseline":1}));
+        }
+        // Restarted server: the fresh baseline would be 2 (the queue grew), the stored one is 1.
+        let mut j = journal(&dir);
+        let mut seen = None;
+        let r = j
+            .execute_baselined(
+                "c1",
+                &e,
+                action,
+                json!(2),
+                &mut |b| {
+                    seen = Some(b.clone());
+                    Ok(if b == &json!(1) { Outcome::Reached(json!(2)) } else { Outcome::Unchanged(json!(2)) })
+                },
+                &mut || panic!("a retry never dispatches"),
+            )
+            .unwrap();
+        assert_eq!(seen, Some(json!(1)));
+        assert_eq!(r.status, Status::Verified);
+    }
+    #[test]
+    fn baselined_retry_can_prove_not_applied_from_the_stored_baseline() {
+        let dir = dir("baselined-unchanged");
+        let e = epoch();
+        let action = json!({"kind":"construction_add","state_id":7});
+        let mut j = journal(&dir);
+        let _ = j.execute_baselined(
+            "c2",
+            &e,
+            action.clone(),
+            json!(3),
+            &mut |_| Err(Error::new("read_failed", "torn")),
+            &mut || Err(Error::new("input_readback_failed", "x")),
+        );
+        let r = j
+            .execute_baselined("c2", &e, action, json!(3), &mut |_| Ok(Outcome::Unchanged(json!(3))), &mut || panic!("no dispatch"))
+            .unwrap();
+        assert_eq!(r.status, Status::NotApplied);
+    }
+    #[test]
+    fn legacy_intent_without_baseline_keeps_the_strict_retry_rule() {
+        let dir = dir("baselined-legacy");
+        let e = epoch();
+        let action = json!({"kind":"construction_add","state_id":9});
+        let mut j = journal(&dir);
+        let _ = j.execute(
+            "c3",
+            &e,
+            action.clone(),
+            &mut || Err(Error::new("read_failed", "torn")),
+            &mut || Err(Error::new("input_readback_failed", "x")),
+        );
+        let err = j
+            .execute_baselined("c3", &e, action, json!(0), &mut |_| Ok(Outcome::Unchanged(json!(0))), &mut || panic!("no dispatch"))
+            .unwrap_err();
+        assert_eq!(err.code, "action_uncertain");
+    }
     #[test]
     fn positively_observed_unchanged_state_settles_a_refusal() {
         let dir = dir("refusal");

@@ -47,7 +47,7 @@ const MACOS: Ui = Ui {
     conveyor_template: 0x18,
     // Label of a training line's location button: a line without a location
     // never deploys its trained division. Mapped live on 18 October 2026.
-    location_label: 0x158,
+    location_label: 0x160, // 1.19.4: CButtonStandard text +8 (was 0x158)
     grid_items: 0x190,
     item_container: 0x10,
 };
