@@ -550,7 +550,7 @@ impl Commands for MacClock {
             json!({"name":"hoi4_politics_options","description":"List the ideas offered for one politics slot (opens the slot's selection window and closes it again; changes nothing). category: government (slots 0 mobilization law, 1 trade law, 2 economy law, 3-5 political advisors), research_production (designers) or military_staff. Returns each idea key with the game's enabled state and the slot's current idea.","inputSchema":{"type":"object","properties":{"category":{"type":"string","enum":["government","research_production","military_staff"]},"slot":{"type":"integer","minimum":0,"maximum":7},"lease_token":{"type":"string"}},"required":["category","slot","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_politics_choose","description":"Take an idea (law, advisor, designer) for one politics slot with ordinary input; verified when the slot holds the idea in memory. Refuses ideas the game disables. Same category/slot numbering as hoi4_politics_options.","inputSchema":{"type":"object","properties":{"category":{"type":"string","enum":["government","research_production","military_staff"]},"slot":{"type":"integer","minimum":0,"maximum":7},"idea":{"type":"string","maxLength":128},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["category","slot","idea","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_decisions_list","description":"Open the decisions panel and list offered decisions (key, enabled by the game, whether a timer for it is running). Changes nothing.","inputSchema":{"type":"object","properties":{"lease_token":{"type":"string"}},"required":["lease_token"],"additionalProperties":false}}),
-            json!({"name":"hoi4_decision_take","description":"Take an own decision with ordinary input (decisions panel, its row, select; the game's confirmation for exactly this decision is accepted). Verified when the decision view shows it taken (timer started, entry gone or disabled). Refuses decisions the game disables.","inputSchema":{"type":"object","properties":{"decision":{"type":"string","maxLength":128},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["decision","request_id","lease_token"],"additionalProperties":false}}),
+            json!({"name":"hoi4_decision_take","description":"Take an own decision with ordinary input (decisions panel, its row, select; the game's confirmation for exactly this decision is accepted). Verified when the decision view shows it taken (timer started, entry gone or disabled). Refuses decisions the game disables. A targeted decision has one row per target: pass `target` (part of the row title as hoi4_decisions_list shows it, e.g. the target country's name) to pick that row.","inputSchema":{"type":"object","properties":{"decision":{"type":"string","maxLength":128},"target":{"type":"string","maxLength":96},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["decision","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_division_templates","description":"Own division template names (for hoi4_train) and how many training lines each has queued. Pure read; no lease needed.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}}),
             json!({"name":"hoi4_train","description":"Queue divisions of an own template with ordinary input (deployment panel, the template's Train button once per division) and give every training line without a location the own state deploy_state_id, since a line without a location never deploys. Each click is verified by one more training line; each location by the line's deployment province.","inputSchema":{"type":"object","properties":{"template":{"type":"string","maxLength":128},"count":{"type":"integer","minimum":1,"maximum":24},"deploy_state_id":{"type":"integer","minimum":1,"maximum":4095},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["template","count","deploy_state_id","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_deploy_locations","description":"Give every training line without a deployment location the own state state_id (Find view, the line's location button, one click on the state). Lines without a location never deploy. Verified by the lines' deployment provinces.","inputSchema":{"type":"object","properties":{"state_id":{"type":"integer","minimum":1,"maximum":4095},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["state_id","request_id","lease_token"],"additionalProperties":false}}),
@@ -3915,8 +3915,16 @@ impl Commands for MacClock {
             return Ok(json!({"decisions":decisions::list(process, &self.keys)?}));
         }
         if name == "hoi4_decision_take" {
-            allowed(args, &["decision", "request_id", "lease_token"])?;
+            allowed(args, &["decision", "target", "request_id", "lease_token"])?;
             let key = string(args, "decision")?;
+            let target = match args.get("target") {
+                None => None,
+                Some(v) => Some(
+                    v.as_str()
+                        .filter(|s| !s.trim().is_empty() && s.len() <= 96)
+                        .ok_or_else(|| Error::new("invalid_arguments", "target must be the target's name as the row shows it"))?,
+                ),
+            };
             if key.is_empty()
                 || key.len() > 128
                 || !key.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
@@ -3930,7 +3938,7 @@ impl Commands for MacClock {
             if !actions.receipt_exists(id) {
                 self.keys.preflight()?;
             }
-            let action = json!({"kind":"decision_take","decision":key});
+            let action = json!({"kind":"decision_take","decision":key,"target":target});
             let keys = &self.keys;
             let pp_before = decisions::political_power(process)?;
             let retry = actions.receipt_exists(id);
@@ -3957,7 +3965,7 @@ impl Commands for MacClock {
             };
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
-                decisions::take(process, keys, key)?;
+                decisions::take(process, keys, key, target)?;
                 verified.set(true);
                 Ok(())
             };

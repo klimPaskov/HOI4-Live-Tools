@@ -101,6 +101,8 @@ fn key_of(r: &Reader<'_>, decision: u64) -> Result<Option<String>> {
 #[derive(Clone, Debug, PartialEq)]
 struct Row {
     key: String,
+    /// The row's title (name_text), e.g. naming the target of a targeted decision.
+    title: String,
     timed: bool,
     enabled: bool,
     rect: Option<Rect>,
@@ -141,8 +143,14 @@ fn rows(r: &Reader<'_>, image: u64) -> Result<Vec<Row>> {
             ),
             None => (false, None),
         };
+        let title = gui_tree::container(r, r.u64(item + u.item_container)?, image)?
+            .map(|frame| super::panelkit::text(r, image, frame, "name_text", 1))
+            .transpose()?
+            .flatten()
+            .unwrap_or_default();
         out.push(Row {
             key,
+            title,
             timed,
             enabled,
             rect,
@@ -175,7 +183,7 @@ pub(super) fn list(process: &dyn Process, keys: &MacKeys) -> Result<Value> {
     let found = settled(process, "decisions", rows)?;
     Ok(json!(found
         .into_iter()
-        .map(|r| json!({"decision":r.key,"active_timer":r.timed,"enabled":r.enabled}))
+        .map(|r| json!({"decision":r.key,"title":r.title,"active_timer":r.timed,"enabled":r.enabled}))
         .collect::<Vec<_>>()))
 }
 
@@ -199,22 +207,32 @@ pub(super) fn state(process: &dyn Process) -> Result<Vec<Value>> {
     })?;
     Ok(found
         .into_iter()
-        .map(|r| json!({"decision":r.key,"active_timer":r.timed,"enabled":r.enabled}))
+        .map(|r| json!({"decision":r.key,"title":r.title,"active_timer":r.timed,"enabled":r.enabled}))
         .collect())
 }
 
 /// Take decision `key`; the caller has journaled intent.
-pub(super) fn take(process: &dyn Process, keys: &MacKeys, key: &str) -> Result<()> {
+pub(super) fn take(process: &dyn Process, keys: &MacKeys, key: &str, target: Option<&str>) -> Result<()> {
     decline_stale(process, keys)?;
     clear_notices(process, keys)?;
     ensure_open(process, keys)?;
     let before = settled(process, "decisions", rows)?;
     let pp_before = political_power(process)?;
-    let row = before
-        .iter()
-        .find(|r| r.key == key && !r.timed)
-        .cloned()
-        .ok_or_else(|| Error::new("invalid_target", "This decision is not offered now"))?;
+    let wanted = target.map(|t| t.trim().to_lowercase());
+    let fits = |r: &Row| {
+        r.key == key && !r.timed && wanted.as_ref().is_none_or(|t| r.title.to_lowercase().contains(t))
+    };
+    let row = before.iter().find(|r| fits(r)).cloned().ok_or_else(|| {
+        let titles: Vec<&str> = before.iter().filter(|r| r.key == key).map(|r| r.title.as_str()).collect();
+        Error::new(
+            "invalid_target",
+            if titles.is_empty() {
+                "This decision is not offered now".to_string()
+            } else {
+                format!("No row of this decision matches the target; its rows: {}", titles.join(" | "))
+            },
+        )
+    })?;
     if before.iter().any(|r| r.key == key && r.timed) {
         return Err(Error::new(
             "invalid_target",
@@ -246,12 +264,7 @@ pub(super) fn take(process: &dyn Process, keys: &MacKeys, key: &str) -> Result<(
         };
         keys.scroll(GAME, (175.0, 600.0), pixels)?;
         let previous = rect;
-        rect = read(process, |r, i| {
-            Ok(rows(r, i)?
-                .into_iter()
-                .find(|x| x.key == key && !x.timed)
-                .and_then(|x| x.rect))
-        })?;
+        rect = read(process, |r, i| Ok(rows(r, i)?.into_iter().find(|x| fits(x)).and_then(|x| x.rect)))?;
         if rect.is_some() && rect == previous {
             band = (LIST.0 - 20, LIST.1 + 22);
         }
@@ -259,7 +272,7 @@ pub(super) fn take(process: &dyn Process, keys: &MacKeys, key: &str) -> Result<(
     let rect = settled(process, "decision button", |r, i| {
         rows(r, i)?
             .into_iter()
-            .find(|x| x.key == key && !x.timed)
+            .find(|x| fits(x))
             .and_then(|x| x.rect)
             .filter(|r| r.y >= band.0 && r.y + r.h <= band.1)
             .ok_or_else(|| Error::new("gui_target_unavailable", "Decision row not in view"))
@@ -292,6 +305,7 @@ mod tests {
     fn row(key: &str, timed: bool, enabled: bool) -> Row {
         Row {
             key: key.into(),
+            title: String::new(),
             timed,
             enabled,
             rect: None,
