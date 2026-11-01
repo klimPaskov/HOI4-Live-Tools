@@ -70,6 +70,17 @@ const EDV_SLOTS_FIXED: u64 = 0xfcc8;
 // (live: "Basic Destroyer" with the ship designer open on design 1338).
 const EDV_EDIT_BOX: u64 = 0xd478;
 const EDV_EDIT_TEXT: u64 = 0x3c8;
+/// The edit box text follows an `i32 -1, i32 0` marker whose position varies with the
+/// box's state: text at +0x3c8 (tank), +0x3d8 (plane) and +0x3e8 (ship), mapped live on
+/// 1 November 2026; extra fields such as the screen size (1920, 1080) come before it.
+fn edit_text(r: &Reader<'_>, edit_box: u64) -> Result<String> {
+    for text in (EDV_EDIT_TEXT..=EDV_EDIT_TEXT + 0x30).step_by(8) {
+        if r.u64(edit_box + text - 8)? == 0xffff_ffff {
+            return r.string_bounded(edit_box + text, 160);
+        }
+    }
+    Err(Error::new("invalid_gui", "Designer name box text not found"))
+}
 const SLOT_DEF: u64 = 0xb0;
 // 1.19.4: slot view button 0x4a0 -> 0x500 (static +0x60; live: CButtonStandard at +0x500).
 const SLOT_BUTTON: u64 = 0x500;
@@ -566,7 +577,7 @@ pub(super) fn module_state(r: &Reader<'_>, image: u64) -> Result<ModuleState> {
     let edit_box = r.u64(view + EDV_EDIT_BOX)?;
     Ok(ModuleState {
         kind,
-        name: r.string_bounded(edit_box + EDV_EDIT_TEXT, 160)?,
+        name: edit_text(r, edit_box)?,
         experience: first_number(&text_of(r, image, root, "experience")?),
         save_cost: first_number(save_label.trim_start_matches(|c: char| !c.is_ascii_digit())),
         save_label,

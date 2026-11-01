@@ -373,6 +373,14 @@ pub(super) fn type_name(
         length -= 1;
         wait(process, "name erased", |r, i| Ok(current(r, i)?.chars().count() == length))?;
     }
+    // The click may leave the cursor inside the text (the plane designer ignores End):
+    // forward-delete whatever is left after it until the box is empty.
+    let mut rest = text()?.chars().count();
+    while rest > 0 {
+        keys.press_code(117)?; // Forward Delete
+        rest -= 1;
+        wait(process, "name erased", |r, i| Ok(current(r, i)?.chars().count() == rest))?;
+    }
     let _ = have;
     let mut typed = String::new();
     for c in name.chars() {
