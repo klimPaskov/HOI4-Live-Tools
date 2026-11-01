@@ -143,22 +143,26 @@
     {
       "category": "government",
       "slot": 3,
-      "idea": "GER_hjalmar_schacht"
+      "idea": "GER_hjalmar_schacht",
+      "cost": 150
     },
     {
       "category": "government",
       "slot": 1,
-      "idea": "free_trade"
+      "idea": "free_trade",
+      "cost": 150
     },
     {
       "category": "government",
       "slot": 0,
-      "idea": "extensive_conscription"
+      "idea": "extensive_conscription",
+      "cost": 150
     },
     {
       "category": "government",
       "slot": 4,
-      "idea": "GER_joachim_von_ribbentrop"
+      "idea": "GER_joachim_von_ribbentrop",
+      "cost": 150
     }
   ],
   "decisions": [
