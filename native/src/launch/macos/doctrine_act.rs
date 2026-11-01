@@ -818,9 +818,9 @@ mod tests {
     }
 
     #[test]
-    fn tool_descriptor_is_marked_unvalidated_and_requires_a_lease() {
+    fn tool_descriptor_is_validated_and_requires_a_lease() {
         let t = tool();
-        assert!(t["description"].as_str().unwrap().starts_with("UNVALIDATED (no live test yet):"));
+        assert!(t["description"].as_str().unwrap().starts_with("Adopt a grand doctrine"));
         let required = t["inputSchema"]["required"].as_array().unwrap();
         assert!(required.iter().any(|v| v == "lease_token"));
     }

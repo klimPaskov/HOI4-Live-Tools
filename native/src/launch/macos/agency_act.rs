@@ -984,9 +984,11 @@ mod tests {
     }
 
     #[test]
-    fn descriptors_are_unvalidated_and_lease_gated() {
+    fn descriptors_mark_validation_and_are_lease_gated() {
         for t in tools() {
-            assert!(t["description"].as_str().unwrap().starts_with("UNVALIDATED (no live test yet):"));
+            let d = t["description"].as_str().unwrap();
+            // Validated live tools drop the marker (agency_upgrade, 1 November 2026).
+            assert_eq!(d.starts_with("UNVALIDATED (no live test yet):"), t["name"] != "hoi4_agency_upgrade");
             assert!(t["inputSchema"]["required"].as_array().unwrap().iter().any(|v| v == "lease_token"));
             assert!(TOOLS.contains(&t["name"].as_str().unwrap()));
         }
