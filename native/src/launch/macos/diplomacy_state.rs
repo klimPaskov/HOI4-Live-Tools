@@ -794,6 +794,45 @@ pub(super) fn player_faction(process: &dyn Process) -> Result<Option<(String, Ve
     })
 }
 
+/// Countries that would fight the player if the player declared war on `target`: the
+/// target's faction members, every country guaranteeing the target, and its overlord and
+/// subjects. A guarantee is "a guarantees b" (see the module notes). Sorted tags, without
+/// the target and the player.
+pub(super) fn war_joiners(process: &dyn Process, target: &str) -> Result<Vec<String>> {
+    read(process, |r, image| {
+        let w = world(r, image)?;
+        let target_index = tag_index_of(r, image, target)?;
+        let mut joiners: BTreeSet<i32> = BTreeSet::new();
+        for faction in factions(r, image, &w)? {
+            if faction.members.contains(&target_index) {
+                joiners.extend(faction.members.iter().copied());
+            }
+        }
+        for country in w.country_of.values() {
+            let (rels, _) = relations_of(r, image, *country)?;
+            for rel in rels {
+                match rel.kind {
+                    Kind::Guarantee if rel.b == target_index => {
+                        joiners.insert(rel.a);
+                    }
+                    Kind::Subject if rel.a == target_index || rel.b == target_index => {
+                        joiners.insert(rel.a);
+                        joiners.insert(rel.b);
+                    }
+                    _ => {}
+                }
+            }
+        }
+        joiners.remove(&target_index);
+        joiners.remove(&w.player_tag);
+        let mut names = Names::new(r, image, &w);
+        let mut out: Vec<String> = joiners.into_iter().map(|t| names.code(t)).collect();
+        out.sort();
+        out.dedup();
+        Ok(out)
+    })
+}
+
 pub(super) fn countries_tool() -> Value {
     json!({"name":"hoi4_diplomacy_countries","description":"Read-only (memory, no input, no pause): the countries of the world with what the player's own diplomacy shows about them: tag, name, number of states owned, faction name and members' faction, overlord, and the relations between the player and the country (war, guarantee given/received, non-aggression pact, military access each way, subject, lend-lease, docking rights, embargo...). Filters: query (tag or name part), relation (kind such as guarantee, non_aggression, military_access, subject, war), faction (name part), only_with_states (default true), limit (default 50, max 200) and offset. The actions available toward one country are listed by hoi4_diplomacy {country}; enemy opinion, AI intentions and anything hidden are not read.","inputSchema":{"type":"object","properties":{"query":{"type":"string","maxLength":64},"relation":{"type":"string","maxLength":48},"faction":{"type":"string","maxLength":64},"only_with_states":{"type":"boolean"},"limit":{"type":"integer","minimum":1,"maximum":200},"offset":{"type":"integer","minimum":0}},"additionalProperties":false}})
 }

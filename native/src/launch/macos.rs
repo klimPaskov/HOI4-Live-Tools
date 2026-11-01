@@ -449,6 +449,52 @@ pub fn read_only_call(process: &dyn Process, name: &str) -> Result<Value> {
     }
 }
 
+impl MacClock {
+    /// Refuse a declaration of war when a country that would join the war borders the
+    /// player and the shared border is not held: every own border state toward it needs a
+    /// division and the border at least two divisions per state.
+    fn check_war_widening(&self, process: &dyn Process, target: &str) -> Result<()> {
+        let (joiners, weak) = Self::war_risk(process, target)?;
+        if weak.is_empty() {
+            return Ok(());
+        }
+        Err(Error::new(
+            "war_would_widen",
+            format!(
+                "Declaring on {target} also brings in {} (faction, guarantors, overlord/subjects). Borders not held \
+                 (need a division in every border state and two per state): {}. Nothing was sent. Cover these \
+                 borders with fronts first (hoi4_front_plan, hoi4_army_front), or pass accept_widening:true \
+                 to declare anyway.",
+                if joiners.is_empty() { "nobody else".to_string() } else { joiners.join(", ") },
+                weak.join("; ")
+            ),
+        ))
+    }
+    /// (countries that would join a war on `target`, borders with them that are not held).
+    fn war_risk(process: &dyn Process, target: &str) -> Result<(Vec<String>, Vec<String>)> {
+        let joiners = diplomacy_state::war_joiners(process, target)?;
+        let exe = &process
+            .identity()
+            .ok_or_else(|| Error::new("map_data_unavailable", "Game identity unavailable"))?
+            .exe;
+        let report = wars::wars(process, &mapdata::game_dir(exe)?, &serde_json::Map::new())?;
+        let mut weak = Vec::new();
+        for row in report["borders"].as_array().into_iter().flatten() {
+            let Some(tag) = row["neighbour_tag"].as_str() else { continue };
+            if tag != target && !joiners.iter().any(|j| j == tag) {
+                continue;
+            }
+            let states = row["own_border_states"].as_array().map_or(0, Vec::len) as i64;
+            let held = row["own_divisions_in_border_states"].as_i64().unwrap_or(0);
+            let uncovered = row["uncovered_own_border_states"].as_array().map_or(0, Vec::len);
+            if uncovered > 0 || held < 2 * states {
+                weak.push(format!("{tag}: {held} divisions in {states} border states, {uncovered} empty"));
+            }
+        }
+        Ok((joiners, weak))
+    }
+}
+
 impl Commands for MacClock {
     fn tools(&self) -> Vec<Value> {
         vec![
@@ -521,7 +567,8 @@ impl Commands for MacClock {
             json!({"name":"hoi4_events","description":"Open event windows in order (the last is on top) with their title and option texts. Pure read; no lease needed.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}}),
             json!({"name":"hoi4_event_choose","description":"Choose an option (0-based, in listed order) of the open event on top by clicking it. Verified when exactly that event window closes.","inputSchema":{"type":"object","properties":{"event":{"type":"string"},"option":{"type":"integer","minimum":0,"maximum":7},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["event","option","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_diplomacy","description":"Open the diplomacy view for a country and list the offered actions with canonical key, enabled state, cost and whether the AI would refuse (changes nothing in the game). Address the country by `country` (three-letter tag such as POL; the view is pointed at one of its states with the Find view) or by `state_id` of one of its states; `countries` (up to 6 tags) lists several. With `action` (a canonical key such as justify_war_goal, declare_war, guarantee, or an exact row name) it previews what the action's dialog shows (the cost, justification time and options the game displays) and then cancels without sending: for justify_war_goal / add_war_goal add `war_goal` (a type from war_goal_types, e.g. Conquer) and `states` (up to 5 names from states_offered) to read the game's cost text for that exact goal. Read the countries and their relations with hoi4_diplomacy_countries.","inputSchema":{"type":"object","properties":{"country":{"type":"string","pattern":"^[A-Z0-9]{3}$"},"countries":{"type":"array","items":{"type":"string","pattern":"^[A-Z0-9]{3}$"},"maxItems":6},"state_id":{"type":"integer","minimum":1,"maximum":4095},"action":{"type":"string","maxLength":128},"war_goal":{"type":"string","maxLength":128},"states":{"type":"array","items":{"type":"string"},"maxItems":5},"lease_token":{"type":"string"}},"required":["lease_token"],"additionalProperties":false}}),
-            json!({"name":"hoi4_diplomacy_act","description":"Take ONE diplomatic action toward a country with the ordinary diplomacy view. Address it by `country` (tag, e.g. POL) or `state_id`. `action` is a canonical key (improve_relations, guarantee, revoke_guarantee, non_aggression_pact, ask_military_access, offer_military_access, revoke_military_access, ask_docking_rights, offer_docking_rights, send_attache, invite_to_faction, join_faction, kick_from_faction, request_licence_production, start_lend_lease, request_lend_lease, send_volunteers, expeditionary_force, return_expeditions, boost_party_popularity, stage_coup, embargo, justify_war_goal, add_war_goal, cancel_war_goal, declare_war, ...) or an exact row name from hoi4_diplomacy. justify_war_goal / add_war_goal also need `war_goal` (type, e.g. Conquer) and 1..5 `states` by name (preview them first with hoi4_diplomacy). declare_war needs `confirm:\"declare_war\"` and a completed war goal; without one the call is refused with war_goal_required and nothing is sent. Typed refusals before any input: action_not_offered (lists the offered rows), action_disabled, war_goal_required, ai_would_refuse (the game's red cross on the row; pass try_anyway:true to send anyway), nothing_to_change, confirmation_required, dialog_unsupported (dialogs that need choices, e.g. volunteers groups). The receipt is settled from memory by the one relation, war goal, war or faction membership the action can create or remove (see hoi4_diplomacy_state); an AI refusal is a NotApplied receipt.","inputSchema":{"type":"object","properties":{"country":{"type":"string","pattern":"^[A-Z0-9]{3}$"},"state_id":{"type":"integer","minimum":1,"maximum":4095},"action":{"type":"string"},"war_goal":{"type":"string"},"states":{"type":"array","items":{"type":"string"},"maxItems":5},"try_anyway":{"type":"boolean"},"confirm":{"type":"string"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["action","request_id","lease_token"],"additionalProperties":false}}),
+            json!({"name":"hoi4_war_risk","description":"Read-only, before justifying or declaring war on `country`: which countries would join that war on its side (its faction, every country guaranteeing it, its overlord and subjects) and which of our borders with them are not held (need a division in every border state and two per state). hoi4_diplomacy_act declare_war refuses with war_would_widen in that case unless accept_widening:true. Memory and map files only; no input.","inputSchema":{"type":"object","properties":{"country":{"type":"string","pattern":"^[A-Z0-9]{3}$"}},"required":["country"],"additionalProperties":false}}),
+            json!({"name":"hoi4_diplomacy_act","description":"Take ONE diplomatic action toward a country with the ordinary diplomacy view. Address it by `country` (tag, e.g. POL) or `state_id`. `action` is a canonical key (improve_relations, guarantee, revoke_guarantee, non_aggression_pact, ask_military_access, offer_military_access, revoke_military_access, ask_docking_rights, offer_docking_rights, send_attache, invite_to_faction, join_faction, kick_from_faction, request_licence_production, start_lend_lease, request_lend_lease, send_volunteers, expeditionary_force, return_expeditions, boost_party_popularity, stage_coup, embargo, justify_war_goal, add_war_goal, cancel_war_goal, declare_war, ...) or an exact row name from hoi4_diplomacy. justify_war_goal / add_war_goal also need `war_goal` (type, e.g. Conquer) and 1..5 `states` by name (preview them first with hoi4_diplomacy). declare_war needs `confirm:\"declare_war\"` and a completed war goal; without one the call is refused with war_goal_required and nothing is sent. Typed refusals before any input: action_not_offered (lists the offered rows), action_disabled, war_goal_required, ai_would_refuse (the game's red cross on the row; pass try_anyway:true to send anyway), nothing_to_change, confirmation_required, dialog_unsupported (dialogs that need choices, e.g. volunteers groups), war_would_widen (declare_war: the target's faction, guarantors or overlord/subjects border us where the border is not held; lists them; accept_widening:true overrides). The receipt is settled from memory by the one relation, war goal, war or faction membership the action can create or remove (see hoi4_diplomacy_state); an AI refusal is a NotApplied receipt.","inputSchema":{"type":"object","properties":{"country":{"type":"string","pattern":"^[A-Z0-9]{3}$"},"state_id":{"type":"integer","minimum":1,"maximum":4095},"action":{"type":"string"},"war_goal":{"type":"string"},"states":{"type":"array","items":{"type":"string"},"maxItems":5},"try_anyway":{"type":"boolean"},"accept_widening":{"type":"boolean"},"confirm":{"type":"string"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["action","request_id","lease_token"],"additionalProperties":false}}),
             commanders::tool(),
             supply::tool(),
             template_get::tool(),
@@ -630,6 +677,7 @@ impl Commands for MacClock {
                 | "hoi4_research_extras"
                 | "hoi4_states"
                 | "hoi4_wars"
+                | "hoi4_war_risk"
                 | "hoi4_front_plan"
                 | "hoi4_encirclement_candidates"
                 | "hoi4_war_goal_targets"
@@ -821,6 +869,16 @@ impl Commands for MacClock {
         if name == "hoi4_armies" {
             allowed(args, &[])?;
             return armies::armies(process);
+        }
+        if name == "hoi4_war_risk" {
+            allowed(args, &["country"])?;
+            let tag = string(args, "country")?;
+            if tag.len() != 3 || !tag.bytes().all(|b| b.is_ascii_uppercase() || b.is_ascii_digit()) {
+                return Err(Error::new("invalid_arguments", "country must be a three-letter tag"));
+            }
+            let (joiners, weak) = Self::war_risk(process, tag)?;
+            return Ok(json!({"country":tag,"would_join":joiners,"borders_not_held":weak,
+                "declare_would_be_refused":!weak.is_empty()}));
         }
         if name == "hoi4_wars" {
             allowed(args, &["enemies", "max_states"])?;
@@ -2102,6 +2160,7 @@ impl Commands for MacClock {
                         "war_goal",
                         "states",
                         "try_anyway",
+                        "accept_widening",
                         "confirm",
                         "request_id",
                         "lease_token",
@@ -2253,6 +2312,12 @@ impl Commands for MacClock {
                         "confirmation_required",
                         "Declaring war is one explicit step: repeat the call with confirm:\"declare_war\" (the game accepts it only with a completed war goal)",
                     ));
+                }
+                if plan.spec.map(|s| s.key) == Some("declare_war") && !flag("accept_widening")? {
+                    // Ger1 (1 Nov 2026) declared on Poland without reading its guarantors: Britain
+                    // and France joined and walked through an empty Rhine. Refuse before input when
+                    // a country that would join borders us without a held front.
+                    self.check_war_widening(process, &plan.tag)?;
                 }
                 Some(plan)
             };
