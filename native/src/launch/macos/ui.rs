@@ -236,6 +236,93 @@ fn menu_open(r: &Reader<'_>, image: u64) -> Result<bool> {
         None => Err(Error::new("invalid_gui", "Game menu window required")),
     }
 }
+/// CInGameMenu's save window (CInGameMenuSaveWindow, 1.19.4: menu +0x2a48).
+const MENU_SAVE_WINDOW: u64 = 0x2a48;
+fn menu_root(r: &Reader<'_>, image: u64) -> Result<u64> {
+    let idler = r.u64(image + game::layout(r).idler_global)?;
+    let menu = r.u64(r.u64(idler + MANAGER)? + MENU)?;
+    gui_tree::container(r, r.u64(menu + MENU_WINDOW)? + 0x30, image)?
+        .ok_or_else(|| Error::new("invalid_gui", "Game menu window required"))
+}
+/// The shown save window's root (container named `ingamemenu_save`), found by name inside the
+/// save-window object so no root offset is assumed.
+fn save_root(r: &Reader<'_>, image: u64) -> Result<Option<u64>> {
+    let idler = r.u64(image + game::layout(r).idler_global)?;
+    let menu = r.u64(r.u64(idler + MANAGER)? + MENU)?;
+    let window = r.u64(menu + MENU_SAVE_WINDOW)?;
+    if !(0x10000..=0x7fff_ffff_0000).contains(&window) {
+        return Ok(None);
+    }
+    for offset in (0x400..0x700).step_by(8) {
+        let field = r.u64(window + offset)?;
+        if !(0x10000..=0x7fff_ffff_0000).contains(&field) {
+            continue;
+        }
+        let Ok(Some(root)) = gui_tree::container(r, field, image) else { continue };
+        if gui_tree::name(r, root + 0x30, image)?.as_deref() == Some("ingamemenu_save") {
+            return Ok(gui_tree::visible(r, root)?.then_some(root));
+        }
+    }
+    Ok(None)
+}
+/// Save the running game with the game's own Save dialog (Escape, Save, Save) under the name the
+/// game proposes, and verify that a save file in `saves` was written after the call started.
+/// Used at the end of a campaign segment so the next segment continues exactly where it stopped.
+pub(super) fn save_game(
+    process: &dyn Process,
+    keys: &crate::platform::macos_input::MacKeys,
+    saves: &std::path::Path,
+) -> Result<serde_json::Value> {
+    use crate::platform::macos_input::Key;
+    let newest = || -> Option<(std::time::SystemTime, String)> {
+        std::fs::read_dir(saves).ok()?.filter_map(|e| e.ok()).filter_map(|e| {
+            let name = e.file_name().to_string_lossy().to_string();
+            if !name.ends_with(".hoi4") { return None; }
+            Some((e.metadata().ok()?.modified().ok()?, name))
+        }).max()
+    };
+    let before = newest().map(|(t, _)| t);
+    clear_notices(process, keys)?;
+    if !read(process, menu_open)? {
+        keys.press(Key::Escape)?;
+        wait(process, "game menu open", menu_open)?;
+    }
+    let button = settled(process, "save button", |r, i| {
+        let root = menu_root(r, i)?;
+        let b = gui_tree::child(r, i, root, "menu_save_button")?
+            .ok_or_else(|| Error::new("gui_target_unavailable", "Save button not found"))?;
+        gui_tree::rect(r, i, b, (1920, 1080))
+    })?;
+    let (x, y) = button.center();
+    keys.click((1920, 1080), x, y)?;
+    wait(process, "save window", |r, i| Ok(save_root(r, i)?.is_some()))?;
+    let confirm = settled(process, "save confirm", |r, i| {
+        let root = save_root(r, i)?.ok_or_else(|| Error::new("invalid_gui", "Save window closed"))?;
+        let b = gui_tree::child(r, i, root, "save")?
+            .ok_or_else(|| Error::new("gui_target_unavailable", "Save confirm button not found"))?;
+        gui_tree::rect(r, i, b, (1920, 1080))
+    })?;
+    let (x, y) = confirm.center();
+    keys.click((1920, 1080), x, y)?;
+    // Overwriting a save of the same name asks for confirmation.
+    let _ = accept_command(process, keys);
+    let deadline = Instant::now() + Duration::from_secs(60);
+    let written = loop {
+        if let Some((t, name)) = newest() {
+            if before.is_none_or(|b| t > b) {
+                break name;
+            }
+        }
+        if Instant::now() >= deadline {
+            return Err(Error::new("input_readback_failed", "No save file was written within 60 s"));
+        }
+        std::thread::sleep(Duration::from_millis(500));
+    };
+    // Let the writer finish, then close the menu.
+    std::thread::sleep(Duration::from_secs(3));
+    close_menu(process, keys)?;
+    Ok(serde_json::json!({"saved":written,"directory":saves.display().to_string()}))
+}
 /// Close the game menu if an earlier input left it open (Escape closes it).
 pub(super) fn close_menu(
     process: &dyn Process,

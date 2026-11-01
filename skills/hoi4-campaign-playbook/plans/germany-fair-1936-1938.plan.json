@@ -188,6 +188,21 @@
     {
       "equipment": "motorized_equipment_1",
       "factories": 1
+    },
+    {
+      "equipment": "medium_tank_equipment_1",
+      "factories": 6,
+      "from": "1938.06.01"
+    },
+    {
+      "equipment": "fighter_equipment_2",
+      "factories": 6,
+      "from": "1939.01.01"
+    },
+    {
+      "equipment": "CAS_equipment_2",
+      "factories": 4,
+      "from": "1939.03.01"
     }
   ],
   "construction_min_idle": 4,
@@ -259,5 +274,11 @@
       "Ewald von Kleist"
     ]
   },
-  "construction_fallback_any_own_state": true
+  "construction_fallback_any_own_state": true,
+  "special_projects": {
+    "priority": []
+  },
+  "air": {
+    "war_missions": true
+  }
 }

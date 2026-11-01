@@ -750,6 +750,7 @@ pub fn tick(
         let equipment = text(&line["equipment"]).to_string();
         if state.done.contains(&format!("prod:{equipment}"))
             || state.skipped(now, "prod", &equipment)
+            || !reached(line, now)
         {
             continue;
         }
@@ -770,6 +771,10 @@ pub fn tick(
     // 8. construction with idle civilian factories. It comes before the armies
     // (which always find something to retry) so they cannot starve it.
     if let Some(step) = construction_step(state, tools, plan, lease, now, &economy)? {
+        return Ok(Tick::Acted(step));
+    }
+    // 8a. special projects, doctrines, air missions in war (one action at most)
+    if let Some(step) = extras_step(state, tools, plan, lease, now)? {
         return Ok(Tick::Acted(step));
     }
     // 9. every division in an army of sensible size, generals only for real armies
@@ -1296,6 +1301,145 @@ fn construction_step(
 }
 fn text_or(v: &Value) -> String {
     v.as_str().map_or_else(|| v.to_string(), String::from)
+}
+
+/// Whether an entry with an optional "from" date ("YYYY.MM.DD") is due at `now`.
+fn reached(entry: &Value, now: GameHour) -> bool {
+    match entry.get("from") {
+        None | Some(Value::Null) => true,
+        Some(from) => match crate::alarms::stop_on_date(&json!({"stop_on_date": from})) {
+            Ok(Some((hour, _))) => now >= hour,
+            _ => false,
+        },
+    }
+}
+
+/// Routine domains the player tends to forget, one action per tick:
+///   special_projects {"priority":["sp_key",..]}  an empty facility gets an idle scientist of its
+///                    specialisation and the first priority (else visible) project of it;
+///   doctrines [{"doctrine":id,"track":t,"xp":100,"folder":"land"},..]  the next entry is adopted
+///                    once that folder's experience reaches "xp";
+///   air {"war_missions":true}  in war, standing-by fighters fly air superiority and CAS wings
+///                    close air support over our first border state with an enemy.
+fn extras_step(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    if plan["special_projects"].is_object() && !state.skipped(now, "spcheck", "x") {
+        state.skip(now, "spcheck", "x", 7 * DAY);
+        let sp = tools.call("hoi4_special_projects", &json!({}))?;
+        let priority = strings(&plan["special_projects"], "priority");
+        let running: HashSet<String> = list(&sp, "projects")
+            .iter()
+            .filter(|p| !p["running_in_facility_id"].is_null())
+            .map(|p| text(&p["key"]).to_string())
+            .collect();
+        for facility in list(&sp, "facilities") {
+            let Some(id) = facility["facility_id"].as_i64() else { continue };
+            if !facility["project"].is_null() || state.skipped(now, "spfac", &id.to_string()) {
+                continue;
+            }
+            let spec = text(&facility["specialization"]).to_string();
+            let scientist = list(&sp, "scientists")
+                .iter()
+                .filter(|c| c["assigned_facility_id"].is_null())
+                .find(|c| text(&c["specialization"]) == spec || c["skills"][&spec].as_i64().unwrap_or(0) > 0)
+                .map(|c| text(&c["name"]).to_string());
+            let Some(scientist) = scientist else { continue };
+            let pool: Vec<String> = list(&sp, "projects")
+                .iter()
+                .filter(|p| text(&p["specialization"]) == spec && p["running_in_facility_id"].is_null())
+                .map(|p| text(&p["key"]).to_string())
+                .filter(|k| !running.contains(k))
+                .collect();
+            let project = priority
+                .iter()
+                .find(|k| pool.contains(k))
+                .cloned()
+                .or_else(|| pool.first().cloned());
+            let Some(project) = project else { continue };
+            let (ok, why) = state.act(
+                tools,
+                lease,
+                "hoi4_special_project_assign",
+                json!({"facility_id": id, "scientist": scientist, "project": project}),
+                "sj",
+            )?;
+            if !ok {
+                state.skip(now, "spfac", &id.to_string(), 30 * DAY);
+            }
+            return Ok(Some(format!("special project {project} in facility {id} by {scientist}: {ok} {why}")));
+        }
+    }
+    let doctrines = list(plan, "doctrines");
+    if !doctrines.is_empty() && !state.skipped(now, "doccheck", "x") {
+        state.skip(now, "doccheck", "x", 7 * DAY);
+        let read = tools.call("hoi4_doctrines", &json!({}))?;
+        for (index, entry) in doctrines.iter().enumerate() {
+            let key = format!("doc:{index}");
+            if state.done.contains(&key) {
+                continue;
+            }
+            if state.skipped(now, "doc", &key) {
+                break;
+            }
+            let folder = entry["folder"].as_str().unwrap_or("land");
+            let kind = match folder { "air" => "air", "naval" | "navy" => "navy", _ => "army" };
+            let xp = read["experience"][kind]["value"].as_f64().unwrap_or(0.0);
+            if xp < entry["xp"].as_f64().unwrap_or(100.0) {
+                break;
+            }
+            let mut args = json!({"doctrine": entry["doctrine"]});
+            if let Some(track) = entry["track"].as_str() {
+                args["track"] = json!(track);
+            }
+            let (ok, why) = state.act(tools, lease, "hoi4_doctrine_adopt", args, "dc")?;
+            if ok || why.contains("already") {
+                state.done.insert(key);
+            } else {
+                state.skip(now, "doc", &key, 15 * DAY);
+            }
+            return Ok(Some(format!("doctrine {}: {ok} {why}", text(&entry["doctrine"]))));
+        }
+    }
+    if plan["air"]["war_missions"] == json!(true) && !state.skipped(now, "aircheck", "x") {
+        state.skip(now, "aircheck", "x", 3 * DAY);
+        let wars = tools.call("hoi4_wars", &json!({}))?;
+        let front = list(&wars, "borders")
+            .iter()
+            .find(|b| b["hostile"] == json!(true))
+            .and_then(|b| b["own_border_states"].as_array().and_then(|a| a.first()).and_then(Value::as_i64));
+        if let Some(state_id) = front {
+            let air = tools.call("hoi4_air", &json!({}))?;
+            for wing in list(&air, "wings") {
+                let name = text(&wing["wing"]).to_string();
+                if wing["standing_by"] != json!(true) || state.skipped(now, "airwing", &name) {
+                    continue;
+                }
+                let kind = text(&wing["aircraft_type"]);
+                let mission = if kind.contains("fighter") {
+                    "air_superiority"
+                } else if kind.to_lowercase().contains("cas") {
+                    "cas"
+                } else {
+                    continue;
+                };
+                let (ok, why) = state.act(
+                    tools,
+                    lease,
+                    "hoi4_air_mission",
+                    json!({"wing": name, "mission": mission, "state_id": state_id}),
+                    "am",
+                )?;
+                state.skip(now, "airwing", &name, if ok { 30 * DAY } else { 7 * DAY });
+                return Ok(Some(format!("air {name} {mission} over state {state_id}: {ok} {why}")));
+            }
+        }
+    }
+    Ok(None)
 }
 
 /// Game hours between two stages of one army's war order.
@@ -2562,6 +2706,61 @@ mod tests {
         let mut state = State::default();
         let step = tick(&mut state, &Roster, &plan, "l", START).unwrap();
         assert!(matches!(&step, Tick::Acted(s) if s.starts_with("general B -> Army 3: true")));
+    }
+
+    struct Extras(std::cell::RefCell<Vec<(String, Value)>>, bool);
+    impl Tools for Extras {
+        fn call(&self, name: &str, args: &Value) -> Result<Value> {
+            self.0.borrow_mut().push((name.to_string(), args.clone()));
+            match name {
+                "hoi4_research" => Ok(json!({"slots": [{"researching": "a"}]})),
+                "hoi4_focus_completed" => Ok(json!({"active_key": "f"})),
+                "hoi4_economy" => Ok(json!({"factory_trigger_count": {"military": 0},
+                    "civilian_factories_available_for_projects": 0})),
+                "hoi4_special_projects" => Ok(json!({
+                    "facilities": [{"facility_id": 7, "project": null, "scientist": null, "specialization": "land"}],
+                    "projects": [{"key": "sp_land_a", "specialization": "land", "running_in_facility_id": null},
+                                 {"key": "sp_land_b", "specialization": "land", "running_in_facility_id": null},
+                                 {"key": "sp_air_x", "specialization": "air", "running_in_facility_id": null}],
+                    "scientists": [{"name": "Air Person", "specialization": "air", "assigned_facility_id": null, "skills": {"land": 0}},
+                                   {"name": "Land Person", "specialization": "land", "assigned_facility_id": null, "skills": {"land": 2}}]})),
+                "hoi4_wars" => Ok(json!({"borders": [
+                    {"neighbour_tag": "DEN", "hostile": false, "own_border_states": [5]},
+                    {"neighbour_tag": "POL", "hostile": true, "own_border_states": [64, 65]}]})),
+                "hoi4_air" => Ok(json!({"wings": [
+                    {"wing": "KG 1", "aircraft_type": "tac_bomber_equipment_1", "standing_by": true},
+                    {"wing": "JG 1", "aircraft_type": "fighter_equipment_1", "standing_by": true}]})),
+                _ => Ok(json!({"receipt": {"status": "Verified"}})),
+            }
+        }
+    }
+
+    #[test]
+    fn an_empty_facility_gets_a_matching_scientist_and_the_priority_project() {
+        let tools = Extras(Default::default(), false);
+        let plan = json!({"special_projects": {"priority": ["sp_land_b"]}});
+        let mut state = State::default();
+        let step = acted(tick(&mut state, &tools, &plan, "l", START).unwrap());
+        assert!(step.starts_with("special project sp_land_b in facility 7 by Land Person: true"), "{step}");
+    }
+
+    #[test]
+    fn in_war_standing_by_fighters_fly_air_superiority_over_the_enemy_border() {
+        let tools = Extras(Default::default(), false);
+        let plan = json!({"air": {"war_missions": true}});
+        let mut state = State::default();
+        let step = acted(tick(&mut state, &tools, &plan, "l", START).unwrap());
+        assert!(step.starts_with("air JG 1 air_superiority over state 64: true"), "{step}");
+    }
+
+    #[test]
+    fn a_dated_production_line_waits_for_its_date() {
+        let line = json!({"equipment": "medium_tank_equipment_1", "factories": 4, "from": "1938.06.01"});
+        let early = crate::alarms::stop_on_date(&json!({"stop_on_date": "1938.05.31"})).unwrap().unwrap().0;
+        let late = crate::alarms::stop_on_date(&json!({"stop_on_date": "1938.06.02"})).unwrap().unwrap().0;
+        assert!(!reached(&line, early));
+        assert!(reached(&line, late));
+        assert!(reached(&json!({"equipment": "x"}), early));
     }
 
     #[test]
