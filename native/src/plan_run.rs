@@ -745,13 +745,29 @@ pub fn tick(
             }
         }
     }
-    // 7. production lines added once
+    // 7. production lines added once. The runner's memory does not survive a server
+    // restart, so a line that already exists in the game counts as done (a restart on
+    // 1 Nov 2026 re-added five lines).
+    let mut existing: Option<HashSet<String>> = None;
     for line in list(plan, "production") {
         let equipment = text(&line["equipment"]).to_string();
         if state.done.contains(&format!("prod:{equipment}"))
             || state.skipped(now, "prod", &equipment)
             || !reached(line, now)
         {
+            continue;
+        }
+        if existing.is_none() {
+            let read = tools.call("hoi4_production_lines", &json!({"limit": 200})).unwrap_or(Value::Null);
+            existing = Some(
+                list(&read, "lines")
+                    .iter()
+                    .filter_map(|l| l["equipment_id"].as_str().map(str::to_string))
+                    .collect(),
+            );
+        }
+        if existing.as_ref().is_some_and(|e| e.contains(&equipment)) {
+            state.done.insert(format!("prod:{equipment}"));
             continue;
         }
         let (ok, why) = state.act(
