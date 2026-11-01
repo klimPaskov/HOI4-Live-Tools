@@ -59,6 +59,7 @@ const FIELDS: &[(&str, &str, Kind)] = &[
     ("supply", "supply_value", Kind::Number),
     ("convoys", "convoys_count", Kind::Count),
     ("world_tension", "threat_value", Kind::Fraction),
+    ("command_power", "command_power_value", Kind::Number),
 ];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -422,6 +423,19 @@ fn snapshot(r: &Reader<'_>, image: u64) -> Result<Snapshot> {
         context,
         reads: (r.calls.get(), r.bytes.get()),
         build_id: game::layout(r).build_id,
+    })
+}
+
+/// Command power shown in the top bar (UI-rounded); None when the widget is not readable.
+pub(super) fn command_power(r: &Reader<'_>, image: u64) -> Result<Option<f64>> {
+    let root = topbar_root(r, image)?;
+    let (found, _) = locate(r, image, root, &["command_power_value"])?;
+    Ok(match found.get("command_power_value") {
+        Some(base) => match text_of(r, *base)? {
+            Source::Text(raw) => parse(&raw).filter(|p| p.unit == Unit::Plain).map(|p| p.value),
+            _ => None,
+        },
+        None => None,
     })
 }
 

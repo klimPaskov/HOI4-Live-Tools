@@ -93,6 +93,8 @@ const MACOS: Ui = Ui {
 const COMMANDER_SLOT: (f64, f64) = (33.0, 160.0);
 const LEADER_ROWS: (i32, i32) = (140, 625);
 const PORTRAIT_DRAWN: i32 = 90;
+/// Command power for promoting a general to field marshal (00_defines.lua, 1.19.4.1).
+const PROMOTE_LEADER_CP_COST: f64 = 40.0;
 const GAME: (u32, u32) = (1920, 1080);
 
 fn ui(r: &Reader<'_>) -> Result<&'static Ui> {
@@ -1231,9 +1233,13 @@ pub(super) fn leader_entries(
             None => false,
         };
         if let Ok(rect) = gui_tree::rect_unclipped(r, image, button, GAME) {
+            // 1.19.4.1: the leader button's sprite is 210 px tall, so the Promote button is
+            // placed from the row's bottom (centre 402 px right, 22 px up; measured live on
+            // 1 November 2026 against the drawn list).
+            let bottom = rect.y + rect.h;
             let promote = promote_shown.then_some(Rect {
-                x: rect.x + 358,
-                y: rect.y + 51,
+                x: rect.x + 353,
+                y: bottom - 36,
                 w: 98,
                 h: 28,
             });
@@ -1241,6 +1247,34 @@ pub(super) fn leader_entries(
         }
     }
     Ok(out)
+}
+
+/// Whether the named general's Promote button is shown and enabled (None: no such row or
+/// no Promote button). The game disables it without enough command power.
+pub(super) fn promote_enabled(r: &Reader<'_>, image: u64, general: &str) -> Result<Option<bool>> {
+    let u = ui(r)?;
+    let root = leader_root(r, image)?;
+    let wanted = general.to_lowercase();
+    for child in gui_tree::children(r, root)? {
+        let Some(inner) = gui_tree::container(r, child, image)? else { continue };
+        let Some(grid) = gui_tree::child(r, image, inner, "leaders_grid")? else { continue };
+        let (_, data, count) = r.array_header(grid + u.grid_items)?;
+        for index in 0..count.min(256) as u64 {
+            let item = r.u64(data + index * 8)?;
+            let entry = r.u64(item + u.item_container)?;
+            let base = if r.u64(entry)? == image + u.container_vtable { entry + 0x30 } else { entry };
+            let Some(frame) = gui_tree::container(r, base, image)? else { continue };
+            let Some(name) = gui_tree::child(r, image, frame, "name")? else { continue };
+            if r.string_bounded(name + u.text, 128)?.to_lowercase() != wanted {
+                continue;
+            }
+            return Ok(match gui_tree::child(r, image, frame, "promote_btn")? {
+                Some(b) if gui_tree::shown(r, b)? => Some(!gui_tree::disabled(r, b)?),
+                _ => None,
+            });
+        }
+    }
+    Ok(None)
 }
 
 /// Assign general `general` to `army` from the army panel's commander list.
@@ -1337,18 +1371,28 @@ fn assign_commander_once(
             }
         }
         if !open {
-            return Err(Error::new("input_readback_failed", "Commander list closed"));
+            return Err(Error::new(
+                "input_readback_failed",
+                format!("Commander list closed while bringing the row into view (row {rect:?}, list band {band:?})"),
+            ));
         }
         let pixels = if top < band.0 { 240 } else { -240 };
         keys.scroll(GAME, (960.0, 560.0), pixels)?;
-        rect = read(process, find)?
+        std::thread::sleep(std::time::Duration::from_millis(150));
+        let moved = read(process, find)?
             .ok_or_else(|| Error::new("gui_target_unavailable", "General left the list"))?;
+        // The first or last row cannot scroll further: keep it when its middle is shown.
+        if moved == rect {
+            break;
+        }
+        rect = moved;
     }
     let rect = settled(process, "general row", |r, i| {
         find(r, i)?.ok_or_else(|| Error::new("gui_target_unavailable", "General left the list"))
     })?;
     let bottom = rect.y + rect.h;
-    if bottom - PORTRAIT_DRAWN < band.0 || bottom > band.1 {
+    let middle = bottom - PORTRAIT_DRAWN / 2;
+    if middle < band.0 || middle > band.1 {
         return Err(Error::new(
             "gui_target_unavailable",
             format!("General row not in view: {rect:?}"),
@@ -1365,12 +1409,39 @@ fn assign_commander_once(
             .and_then(|(_, _, p)| p))
     };
     if is_group && allow_promote {
+        // The game keeps Promote enabled without enough command power (the tooltip turns
+        // red); PROMOTE_LEADER_CP_COST is 40 in 00_defines.lua (1.19.4.1).
+        let power = read(process, |r, i| super::country_status::command_power(r, i))?;
+        if read(process, |r, i| promote_enabled(r, i, general))?.is_some()
+            && power.is_some_and(|cp| cp < PROMOTE_LEADER_CP_COST)
+        {
+            super::ui::dismiss(process, keys, |r, i| Ok(!leader_list_open(r, i)?));
+            return Err(Error::new(
+                "insufficient_command_power",
+                format!(
+                    "Promoting {general} to field marshal costs {PROMOTE_LEADER_CP_COST} command power and \
+                     {} are held; nothing was changed",
+                    power.unwrap_or_default()
+                ),
+            ));
+        }
+        if read(process, |r, i| promote_enabled(r, i, general))? == Some(false) {
+            super::ui::dismiss(process, keys, |r, i| Ok(!leader_list_open(r, i)?));
+            return Err(Error::new(
+                "promotion_unavailable",
+                format!(
+                    "{general} must be promoted to field marshal to lead an army group, and the game \
+                     disables Promote (not enough command power); nothing was changed"
+                ),
+            ));
+        }
         if let Some(button) = read(process, promote_of)? {
             let (x, y) = button.center();
             keys.click(GAME, x, y)?;
             super::ui::accept_command(process, keys)?;
+            // A closed list hides the button too: only an open list without it counts.
             wait(process, "general promoted", |r, i| {
-                Ok(promote_of(r, i)?.is_none())
+                Ok(leader_list_open(r, i).unwrap_or(false) && promote_of(r, i)?.is_none())
             })?;
             std::thread::sleep(std::time::Duration::from_millis(400));
             // The game closes the list on promotion: open it again.
@@ -1382,7 +1453,10 @@ fn assign_commander_once(
     })?;
     let bottom = rect.y + rect.h;
     if !read(process, |r, i| Ok(leader_list_open(r, i).unwrap_or(false)))? {
-        return Err(Error::new("input_readback_failed", "Commander list closed"));
+        return Err(Error::new(
+            "input_readback_failed",
+            format!("Commander list closed before the click (group {is_group}, row {rect:?})"),
+        ));
     }
     keys.click(
         GAME,
