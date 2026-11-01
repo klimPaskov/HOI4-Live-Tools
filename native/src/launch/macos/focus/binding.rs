@@ -132,7 +132,7 @@ fn owner(r: &Reader<'_>, image: u64, key: &str, expected_status: Option<u64>) ->
         }
         let name = r.string_bounded(focus + 0x18, 256)?;
         if name.is_empty()
-            || !name.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'_')
+            || !name.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'_' || c == b'-')
             || keys.insert(name, focus).is_some()
         {
             return Err(Error::new(

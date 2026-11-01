@@ -918,6 +918,8 @@ fn own_states(r: &Reader<'_>, image: u64) -> Result<Vec<i32>> {
         if state != 0
             && r.u64(state)? == image + l.state_vtable
             && r.i32(state + l.state_owner)? == tag
+            // An own state the enemy occupies is a valid front target (seen live: Ethiopia).
+            && r.i32(state + l.state_controller)? == tag
         {
             out.push(r.i32(state + l.state_id)?);
         }
@@ -930,7 +932,7 @@ pub(super) fn front(process: &dyn Process, keys: &MacKeys, army: &str, state: i3
     if own.contains(&state) {
         return Err(Error::new(
             "invalid_target",
-            "This state is own; choose a state of the country to face",
+            "This state is own and own-controlled; choose a state the enemy owns or occupies",
         ));
     }
     let before = read(process, |r, i| orders(r, i, army))?;

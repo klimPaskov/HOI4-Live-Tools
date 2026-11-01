@@ -1934,7 +1934,7 @@ impl Commands for MacClock {
             let key = string(args, "technology")?;
             if key.is_empty()
                 || key.len() > 128
-                || !key.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
+                || !key.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
             {
                 return Err(Error::new("invalid_arguments", "Invalid technology key"));
             }
@@ -2011,7 +2011,7 @@ impl Commands for MacClock {
             let key = string(args, "equipment")?;
             if key.is_empty()
                 || key.len() > 128
-                || !key.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
+                || !key.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
             {
                 return Err(Error::new("invalid_arguments", "Invalid equipment key"));
             }
@@ -3927,7 +3927,7 @@ impl Commands for MacClock {
             };
             if key.is_empty()
                 || key.len() > 128
-                || !key.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
+                || !key.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
             {
                 return Err(Error::new("invalid_arguments", "Invalid decision key"));
             }
@@ -4006,7 +4006,7 @@ impl Commands for MacClock {
             let idea = string(args, "idea")?;
             if idea.is_empty()
                 || idea.len() > 128
-                || !idea.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
+                || !idea.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
             {
                 return Err(Error::new("invalid_arguments", "Invalid idea key"));
             }
@@ -4051,7 +4051,7 @@ impl Commands for MacClock {
             let key = string(args, "building")?;
             if key.is_empty()
                 || key.len() > 64
-                || !key.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
+                || !key.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
             {
                 return Err(Error::new("invalid_arguments", "Invalid building key"));
             }
@@ -4097,7 +4097,7 @@ impl Commands for MacClock {
             let key = string(args, "focus")?;
             if key.is_empty()
                 || key.len() > 128
-                || !key.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
+                || !key.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
             {
                 return Err(Error::new("invalid_arguments", "Invalid focus key"));
             }

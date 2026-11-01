@@ -369,7 +369,15 @@ class Game:
                             if mk != "modifier" or not isinstance(mv, list):
                                 continue
                             conds = [(a, b) for a, b in mv if a not in ("add", "factor")]
-                            if trigger(conds, ctx) is not True:
+                            result = trigger(conds, ctx)
+                            if result is None:
+                                # Unknown runtime conditions (e.g. "no other country with this
+                                # original tag exists") hold at the start; the tag and DLC
+                                # conditions decide which tree a country gets.
+                                decisive = [(a, b) for a, b in conds
+                                            if (a or "").lower() in ("tag", "original_tag", "has_dlc")]
+                                result = True if decisive and trigger(decisive, ctx) is True else None
+                            if result is not True:
                                 continue  # unknown conditions do not pick a tree
                             try:
                                 if get1(mv, "add") is not None:
