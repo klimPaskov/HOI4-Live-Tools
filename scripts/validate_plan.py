@@ -248,6 +248,25 @@ class Game:
             self._cache[name] = fn()
         return self._cache[name]
 
+    def integrated_dlcs(self):
+        """Display names of DLCs shipped inside the base game (always active)."""
+        def load():
+            names = []
+            base = self.path("integrated_dlc")
+            if not os.path.isdir(base):
+                return names
+            for d in sorted(os.listdir(base)):
+                folder = os.path.join(base, d)
+                if not os.path.isdir(folder):
+                    continue
+                for f in sorted(os.listdir(folder)):
+                    if f.endswith(".dlc"):
+                        m = re.search(r'^name\s*=\s*"([^"]+)"', read(os.path.join(folder, f)), re.M)
+                        if m:
+                            names.append(m.group(1))
+            return names
+        return self.cached("integrated_dlcs", load)
+
     # technologies: key -> {"parents": set, "deps": set, "year": int, "cost": float}
     def techs(self):
         def load():
@@ -611,13 +630,17 @@ def date_year(text, default):
     return int(m.group(1)) if m else default
 
 
-def ctx_of(meta):
+def ctx_of(meta, game=None):
     """Evaluation context when the plan declares its active DLCs, else None
-    (legacy mode: every has_dlc branch is read)."""
+    (legacy mode: every has_dlc branch is read). DLCs integrated into the base
+    game (integrated_dlc/) are always active, though the game log does not list them."""
     dlcs = meta.get("dlcs")
     if not isinstance(dlcs, list):
         return None
-    return Ctx(meta.get("tag", ""), [d for d in dlcs if isinstance(d, str)])
+    names = [d for d in dlcs if isinstance(d, str)]
+    if game is not None:
+        names += game.integrated_dlcs()
+    return Ctx(meta.get("tag", ""), names)
 
 
 def check_research(game, plan, meta, rep):
@@ -627,7 +650,7 @@ def check_research(game, plan, meta, rep):
     dup_check(rep, "research_priority", keys)
     techs = game.techs()
     have = set(meta.get("completed_techs", []))
-    ctx = ctx_of(meta)
+    ctx = ctx_of(meta, game)
     if ctx:
         have |= game.history_effects(meta.get("history_file", ""), ctx)["techs"]
     else:
@@ -670,7 +693,7 @@ def check_focus(game, plan, meta, rep):
     trees = game.focus_trees()
     if not path and not fallback:
         return
-    ctx = ctx_of(meta)
+    ctx = ctx_of(meta, game)
     loaded = game.loaded_tree(ctx) if ctx else None
     if loaded:
         # the tree the game actually gives this tag with these DLCs
@@ -757,7 +780,7 @@ def check_production(game, plan, rep):
 
 def check_construction(game, plan, rep, meta=None):
     meta = meta or {}
-    ctx = ctx_of(meta)
+    ctx = ctx_of(meta, game)
     owners = game.state_owners(ctx, meta.get("start_date", "1936.1.1")) if ctx else {}
     buildings = game.buildings()
     states = game.states()
@@ -811,7 +834,7 @@ def check_politics(game, plan, meta, rep):
     if picks and not isinstance(picks, list):
         rep.error("politics must be a list")
         return
-    ideas, chars, tokens = game.ideas(ctx_of(meta))
+    ideas, chars, tokens = game.ideas(ctx_of(meta, game))
     seen = set()
     for i, p in enumerate(picks):
         if not isinstance(p, dict):
@@ -855,7 +878,7 @@ def check_decisions(game, plan, rep):
 
 def check_training(game, plan, rep, meta=None):
     meta = meta or {}
-    ctx = ctx_of(meta)
+    ctx = ctx_of(meta, game)
     tr = plan.get("training")
     if tr is None:
         return

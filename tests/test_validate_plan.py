@@ -255,5 +255,18 @@ class ValidatePlanTests(unittest.TestCase):
             self.assertEqual(vp.main([path, "--game-dir", self.tmp.name]), 1)
 
 
+    def test_integrated_dlcs_are_always_active(self):
+        with tempfile.TemporaryDirectory() as root:
+            folder = os.path.join(root, "integrated_dlc", "dlc022_waking_the_tiger")
+            os.makedirs(folder)
+            with open(os.path.join(folder, "dlc022.dlc"), "w", encoding="utf-8") as fh:
+                fh.write('name = "Waking the Tiger"\ncategory = "expansion"\n')
+            game = vp.Game(root)
+            self.assertEqual(game.integrated_dlcs(), ["Waking the Tiger"])
+            ctx = vp.ctx_of({"tag": "CHI", "dlcs": ["Anniversary Pack"]}, game)
+            self.assertTrue(vp.trigger_one("has_dlc", "Waking the Tiger", ctx))
+            self.assertIsNone(vp.ctx_of({"tag": "CHI"}, game))
+
+
 if __name__ == "__main__":
     unittest.main()
