@@ -316,7 +316,18 @@ fn show(process: &dyn Process, keys: &MacKeys, state: i32) -> Result<i32> {
     }
     if !read(process, open)? {
         keys.press(Key::letter('e')?)?;
-        wait(process, "open diplomacy", open)?;
+        wait(process, "open diplomacy", |r, i| {
+            Ok(open(r, i)? || super::panelkit::is_open(r, i, &super::panelkit::MARKET_VIEW)?)
+        })?;
+        if !read(process, open)? {
+            // Arms Against Tyranny: E opened the International Market; its bottom button
+            // opens the diplomacy view.
+            super::panelkit::click(process, keys, "market diplomacy button", |r, i| {
+                let root = super::panelkit::open_root(r, i, &super::panelkit::MARKET_VIEW)?;
+                super::panelkit::rect_of(r, i, root, "diplo_view_button", 3)
+            })?;
+            wait(process, "open diplomacy", open)?;
+        }
     }
     find_state(process, keys, state)?;
     keys.click(GAME, 960.0, 540.0)?;

@@ -77,6 +77,13 @@ pub(super) const AGENCY_VIEW: Class = Class {
     vtable: 0x36249c0,
     root_name: "countryintelligenceagencyview",
 };
+/// Arms Against Tyranny: the top bar's diplomacy button (E) opens the International
+/// Market, whose `diplo_view_button` opens the diplomacy view (1.19.4.1).
+pub(super) const MARKET_VIEW: Class = Class {
+    name: "CCountryInternationalMarketView",
+    vtable: 0x3613100,
+    root_name: "countryinternationalmarketview",
+};
 pub(super) const AGENCY_UPGRADES: Class = Class {
     name: "CAgencyUpgradesWindow",
     vtable: 0x3622a70,

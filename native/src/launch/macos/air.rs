@@ -53,7 +53,9 @@ const MACOS: Ui = Ui {
 };
 const GAME: (u32, u32) = (1920, 1080);
 /// Visible band of the overview's wing rows.
-const ROWS: (i32, i32) = (380, 940);
+// 1.19.4.1: the overview list runs down to the "Active in N strategic areas" footer at
+// y about 1050 (measured live 1 November 2026 with 70 wings).
+const ROWS: (i32, i32) = (380, 1040);
 
 /// Mission names and their icon frames (AIR_MISSION_SPOTTING_FACTORS order + 1).
 pub(super) const MISSIONS: [(&str, i32); 14] = [
@@ -287,8 +289,13 @@ pub(super) fn select_wing(process: &dyn Process, keys: &MacKeys, name: &str) -> 
         }
         let pixels = if rect.y < ROWS.0 { 240 } else { -240 };
         keys.scroll(GAME, (260.0, 650.0), pixels)?;
-        rect = read(process, find)?
+        std::thread::sleep(std::time::Duration::from_millis(150));
+        let moved = read(process, find)?
             .ok_or_else(|| Error::new("gui_target_unavailable", "Air wing left the list"))?;
+        if moved == rect {
+            break;
+        }
+        rect = moved;
     }
     let rect = settled(process, "air wing row", |r, i| {
         find(r, i)?
