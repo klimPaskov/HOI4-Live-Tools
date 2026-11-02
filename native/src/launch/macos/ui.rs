@@ -3,8 +3,9 @@ use crate::platform::game_input::GameInput;
 use crate::{
     error::{Error, Result},
     game, gui_tree,
-    memory::{Reader, StringAbi},
+    memory::Reader,
     platform::Process,
+    xlayout::{self, fld, img},
 };
 use std::{
     thread,
@@ -72,12 +73,33 @@ pub(super) fn wait(
 /// 0x36803a0 CSpecialProjectFinishedPopUpWindow (title "Special Project Completed", Details and
 /// OK, seen live 4 October 1938), 0x36804b8 CSpecialProjectCapturedPopUpWindow (same family; its
 /// `ok_button` is not seen live, a window without one is skipped).
-const NOTICE_VTABLES: [u64; 8] = [
-    0x3680170, 0x36806e8, 0x3680800, 0x36a1f88, 0x36805d0, 0x3695460, 0x36803a0, 0x36804b8,
+const NOTICES: [xlayout::Class; 8] = [
+    xlayout::Class::new("CResearchFinishedPopUpWindow", 0x3680170),
+    xlayout::Class::new("CFocusFinishedPopUpWindow", 0x36806e8),
+    xlayout::Class::new("CPeaceSummaryPopUpWindow", 0x3680800),
+    xlayout::Class::new("CWorldTensionPopUpWindow", 0x36a1f88),
+    xlayout::Class::new("CConfirmationPopUpWindow", 0x36805d0),
+    xlayout::Class::new("CSurrenderedPopupWindow", 0x3695460),
+    xlayout::Class::new("CSpecialProjectFinishedPopUpWindow", 0x36803a0),
+    xlayout::Class::new("CSpecialProjectCapturedPopUpWindow", 0x36804b8),
 ];
 const GUI_FROM_IDLER: u64 = 0x4c0;
 const POPUP_LIST: u64 = 0xa70;
 const POPUP_ROOT: u64 = 0x490;
+/// Owners of the fields used here (macOS 1.19.4.1 RTTI names and vtables; 0
+/// where the owning class has no reviewed vtable).
+const IDLER: xlayout::Class = xlayout::Class::new("CInGameIdler", 0x35089d8);
+const GAME_GUI: xlayout::Class = xlayout::Class::new("idler.gui", 0);
+const IFACE_MANAGER: xlayout::Class = xlayout::Class::new("idler.manager", 0);
+const CONTAINER: xlayout::Class = xlayout::Class::new("CContainerWindow", 0x36ba978);
+const CONTAINER_BASE: u64 = 0x30;
+const MENU_CLASS: xlayout::Class = xlayout::Class::new("CInGameMenu", 0);
+const TOPBAR: xlayout::Class = xlayout::Class::new("manager.topbar", 0);
+const STATE_VIEW: xlayout::Class = xlayout::Class::new("manager.state_view", 0);
+const DIPLOMACY_VIEW: xlayout::Class = xlayout::Class::new("manager.diplomacy_view", 0);
+const AIR_REGION_VIEW: xlayout::Class = xlayout::Class::new("manager.air_region_view", 0);
+const FIND: xlayout::Class = xlayout::Class::new("manager.find_view", 0);
+const FIND_ROW: xlayout::Class = xlayout::Class::new("find.result_row", 0);
 
 /// Shown notice pop-ups (list order) with their OK button rectangles.
 fn notices(r: &Reader<'_>, image: u64) -> Result<Vec<gui_tree::Rect>> {
@@ -88,20 +110,23 @@ fn notices(r: &Reader<'_>, image: u64) -> Result<Vec<gui_tree::Rect>> {
 }
 /// Shown notices with their window class (vtable offset in the image).
 fn notices_with_kind(r: &Reader<'_>, image: u64) -> Result<Vec<(gui_tree::Rect, u64)>> {
-    if r.string_abi() != StringAbi::LibCxx {
-        return Ok(Vec::new());
-    }
+    let abi = r.string_abi();
     let idler = r.u64(image + game::layout(r).idler_global)?;
-    let gui = r.u64(idler + GUI_FROM_IDLER)?;
-    let (_, data, count) = r.array_header(gui + POPUP_LIST)?;
+    let gui = r.u64(idler + fld(abi, &IDLER, GUI_FROM_IDLER)?)?;
+    let (_, data, count) = r.array_header(gui + fld(abi, &GAME_GUI, POPUP_LIST)?)?;
+    let mut notices = Vec::with_capacity(NOTICES.len());
+    for class in &NOTICES {
+        notices.push((image + img(abi, class.vtable)?, class));
+    }
     let mut out = Vec::new();
     for index in 0..count.min(32) as u64 {
         let window = r.u64(data + index * 8)?;
         let kind = r.u64(window)?;
-        if !NOTICE_VTABLES.iter().any(|vt| image + vt == kind) {
+        let Some((_, class)) = notices.iter().find(|(vt, _)| *vt == kind) else {
             continue;
-        }
-        let Some(root) = gui_tree::container(r, r.u64(window + POPUP_ROOT)?, image)? else {
+        };
+        let root_at = fld(abi, class, POPUP_ROOT)?;
+        let Some(root) = gui_tree::container(r, r.u64(window + root_at)?, image)? else {
             continue;
         };
         if !gui_tree::visible(r, root)? {
@@ -111,7 +136,7 @@ fn notices_with_kind(r: &Reader<'_>, image: u64) -> Result<Vec<(gui_tree::Rect, 
             // A notice whose button is laid out off screen cannot block a click.
             if gui_tree::shown(r, ok)? {
                 if let Ok(rect) = gui_tree::rect(r, image, ok, (1920, 1080)) {
-                    out.push((rect, kind - image));
+                    out.push((rect, class.vtable));
                 }
             }
         }
@@ -234,31 +259,37 @@ pub(super) fn dismiss_notices(process: &dyn Process, keys: &dyn GameInput) -> Re
 const MENU: u64 = 0x218;
 const MENU_WINDOW: u64 = 0x2a38;
 fn menu_open(r: &Reader<'_>, image: u64) -> Result<bool> {
-    if r.string_abi() != StringAbi::LibCxx {
-        return Ok(false);
-    }
-    let idler = r.u64(image + game::layout(r).idler_global)?;
-    let menu = r.u64(r.u64(idler + MANAGER)? + MENU)?;
-    let window = r.u64(menu + MENU_WINDOW)?;
-    match gui_tree::container(r, window + 0x30, image)? {
+    let menu = menu(r, image)?;
+    let window = r.u64(menu + fld(r.string_abi(), &MENU_CLASS, MENU_WINDOW)?)?;
+    match gui_tree::container(r, window + container_base(r)?, image)? {
         Some(object) => gui_tree::visible(r, object),
         None => Err(Error::new("invalid_gui", "Game menu window required")),
     }
 }
 /// CInGameMenu's save window (CInGameMenuSaveWindow, 1.19.4: menu +0x2a48).
 const MENU_SAVE_WINDOW: u64 = 0x2a48;
-fn menu_root(r: &Reader<'_>, image: u64) -> Result<u64> {
+/// The interface manager (idler +0x670).
+fn manager(r: &Reader<'_>, image: u64) -> Result<u64> {
     let idler = r.u64(image + game::layout(r).idler_global)?;
-    let menu = r.u64(r.u64(idler + MANAGER)? + MENU)?;
-    gui_tree::container(r, r.u64(menu + MENU_WINDOW)? + 0x30, image)?
+    r.u64(idler + fld(r.string_abi(), &IDLER, MANAGER)?)
+}
+fn menu(r: &Reader<'_>, image: u64) -> Result<u64> {
+    r.u64(manager(r, image)? + fld(r.string_abi(), &IFACE_MANAGER, MENU)?)
+}
+fn container_base(r: &Reader<'_>) -> Result<u64> {
+    fld(r.string_abi(), &CONTAINER, CONTAINER_BASE)
+}
+fn menu_root(r: &Reader<'_>, image: u64) -> Result<u64> {
+    let menu = menu(r, image)?;
+    let window = r.u64(menu + fld(r.string_abi(), &MENU_CLASS, MENU_WINDOW)?)?;
+    gui_tree::container(r, window + container_base(r)?, image)?
         .ok_or_else(|| Error::new("invalid_gui", "Game menu window required"))
 }
 /// The shown save window's root (container named `ingamemenu_save`), found by name inside the
 /// save-window object so no root offset is assumed.
 fn save_root(r: &Reader<'_>, image: u64) -> Result<Option<u64>> {
-    let idler = r.u64(image + game::layout(r).idler_global)?;
-    let menu = r.u64(r.u64(idler + MANAGER)? + MENU)?;
-    let window = r.u64(menu + MENU_SAVE_WINDOW)?;
+    let menu = menu(r, image)?;
+    let window = r.u64(menu + fld(r.string_abi(), &MENU_CLASS, MENU_SAVE_WINDOW)?)?;
     if !(0x10000..=0x7fff_ffff_0000).contains(&window) {
         return Ok(None);
     }
@@ -271,7 +302,9 @@ fn save_root(r: &Reader<'_>, image: u64) -> Result<Option<u64>> {
         let Ok(Some(root)) = gui_tree::container(r, field, image) else {
             continue;
         };
-        if gui_tree::name(r, root + 0x30, image)?.as_deref() == Some("ingamemenu_save") {
+        if gui_tree::name(r, root + container_base(r)?, image)?.as_deref()
+            == Some("ingamemenu_save")
+        {
             return Ok(gui_tree::visible(r, root)?.then_some(root));
         }
     }
@@ -384,9 +417,9 @@ fn topbar_rect(r: &Reader<'_>, image: u64, name: &str) -> Result<gui_tree::Rect>
         }
         Ok(None)
     }
-    let idler = r.u64(image + game::layout(r).idler_global)?;
-    let topbar = r.u64(r.u64(idler + MANAGER)? + 0x188)?;
-    let root = gui_tree::container(r, r.u64(topbar + 0x68)?, image)?
+    let abi = r.string_abi();
+    let topbar = r.u64(manager(r, image)? + fld(abi, &IFACE_MANAGER, 0x188)?)?;
+    let root = gui_tree::container(r, r.u64(topbar + fld(abi, &TOPBAR, 0x68)?)?, image)?
         .ok_or_else(|| Error::new("invalid_gui", "Topbar root unavailable"))?;
     let button = find(r, image, root, name, 0)?
         .ok_or_else(|| Error::new("gui_target_unavailable", "Top bar button not found"))?;
@@ -417,24 +450,26 @@ pub(super) fn open_politics(
 /// The state view (manager +0xc8, root +0x430) that a stray map click can
 /// leave open over the army panels: its close button when it is shown.
 fn state_view_close(r: &Reader<'_>, image: u64) -> Result<Option<gui_tree::Rect>> {
-    view_close(r, image, 0xc8)
+    view_close(r, image, 0xc8, &STATE_VIEW)
 }
 /// The diplomacy view (manager +0x110) covers the army panel and cards.
 fn diplomacy_close(r: &Reader<'_>, image: u64) -> Result<Option<gui_tree::Rect>> {
-    view_close(r, image, 0x110)
+    view_close(r, image, 0x110, &DIPLOMACY_VIEW)
 }
 /// The strategic air region window (manager +0x198) that a right click on a
 /// region leaves open over the middle of the map.
 fn air_region_close(r: &Reader<'_>, image: u64) -> Result<Option<gui_tree::Rect>> {
-    view_close(r, image, 0x198)
+    view_close(r, image, 0x198, &AIR_REGION_VIEW)
 }
-fn view_close(r: &Reader<'_>, image: u64, slot: u64) -> Result<Option<gui_tree::Rect>> {
-    if r.string_abi() != StringAbi::LibCxx {
-        return Ok(None);
-    }
-    let idler = r.u64(image + game::layout(r).idler_global)?;
-    let view = r.u64(r.u64(idler + MANAGER)? + slot)?;
-    let Some(root) = gui_tree::container(r, r.u64(view + 0x490)?, image)? else {
+fn view_close(
+    r: &Reader<'_>,
+    image: u64,
+    slot: u64,
+    class: &xlayout::Class,
+) -> Result<Option<gui_tree::Rect>> {
+    let abi = r.string_abi();
+    let view = r.u64(manager(r, image)? + fld(abi, &IFACE_MANAGER, slot)?)?;
+    let Some(root) = gui_tree::container(r, r.u64(view + fld(abi, class, 0x490)?)?, image)? else {
         return Ok(None);
     };
     if !gui_tree::visible(r, root)? {
@@ -472,25 +507,39 @@ const NAVY_REASSIGN_DIALOG_VTABLE: u64 = 0x3643ac0;
 /// "Reassign Armies": taking every division out of an army would delete it
 /// and its orders (CReassignFullOrdersGroupDialog); same accept/decline buttons.
 const REASSIGN_ARMIES_DIALOG_VTABLE: u64 = 0x368b8a8;
+const COMMAND_DIALOGS: [xlayout::Class; 4] = [
+    xlayout::Class::new("CAcceptCommandDialog", ACCEPT_DIALOG_VTABLE),
+    xlayout::Class::new("CChangeGroupLeaderDialog", REASSIGN_DIALOG_VTABLE),
+    xlayout::Class::new("CChangeNavyLeaderDialog", NAVY_REASSIGN_DIALOG_VTABLE),
+    xlayout::Class::new(
+        "CReassignFullOrdersGroupDialog",
+        REASSIGN_ARMIES_DIALOG_VTABLE,
+    ),
+];
+/// The game GUI's popup window list (data pointer and count).
+fn popups(r: &Reader<'_>, image: u64) -> Result<(u64, usize)> {
+    let abi = r.string_abi();
+    let idler = r.u64(image + game::layout(r).idler_global)?;
+    let gui = r.u64(idler + fld(abi, &IDLER, GUI_FROM_IDLER)?)?;
+    let (_, data, count) = r.array_header(gui + fld(abi, &GAME_GUI, POPUP_LIST)?)?;
+    Ok((data, count))
+}
 
 fn command_dialog(r: &Reader<'_>, image: u64, button: &str) -> Result<Option<gui_tree::Rect>> {
-    if r.string_abi() != StringAbi::LibCxx {
-        return Ok(None);
+    let abi = r.string_abi();
+    let (data, count) = popups(r, image)?;
+    let mut dialogs = Vec::with_capacity(COMMAND_DIALOGS.len());
+    for class in &COMMAND_DIALOGS {
+        dialogs.push((image + img(abi, class.vtable)?, class));
     }
-    let idler = r.u64(image + game::layout(r).idler_global)?;
-    let gui = r.u64(idler + GUI_FROM_IDLER)?;
-    let (_, data, count) = r.array_header(gui + POPUP_LIST)?;
     for index in 0..count.min(32) as u64 {
         let window = r.u64(data + index * 8)?;
         let kind = r.u64(window)?;
-        if kind != image + ACCEPT_DIALOG_VTABLE
-            && kind != image + REASSIGN_DIALOG_VTABLE
-            && kind != image + NAVY_REASSIGN_DIALOG_VTABLE
-            && kind != image + REASSIGN_ARMIES_DIALOG_VTABLE
-        {
+        let Some((_, class)) = dialogs.iter().find(|(vt, _)| *vt == kind) else {
             continue;
-        }
-        let Some(root) = gui_tree::container(r, r.u64(window + POPUP_ROOT)?, image)? else {
+        };
+        let root_at = fld(abi, class, POPUP_ROOT)?;
+        let Some(root) = gui_tree::container(r, r.u64(window + root_at)?, image)? else {
             continue;
         };
         if !gui_tree::visible(r, root)? {
@@ -504,14 +553,10 @@ fn command_dialog(r: &Reader<'_>, image: u64, button: &str) -> Result<Option<gui
 }
 /// Whether a "Reassign Armies" confirmation is open.
 pub(super) fn reassign_open(r: &Reader<'_>, image: u64) -> Result<bool> {
-    if r.string_abi() != StringAbi::LibCxx {
-        return Ok(false);
-    }
-    let idler = r.u64(image + game::layout(r).idler_global)?;
-    let gui = r.u64(idler + GUI_FROM_IDLER)?;
-    let (_, data, count) = r.array_header(gui + POPUP_LIST)?;
+    let (data, count) = popups(r, image)?;
+    let want = image + img(r.string_abi(), REASSIGN_ARMIES_DIALOG_VTABLE)?;
     for index in 0..count.min(32) as u64 {
-        if r.u64(r.u64(data + index * 8)?)? == image + REASSIGN_ARMIES_DIALOG_VTABLE {
+        if r.u64(r.u64(data + index * 8)?)? == want {
             return Ok(true);
         }
     }
@@ -562,23 +607,25 @@ const FIND_WINDOW: u64 = 0xd58;
 const FIND_TEXT: u64 = 0xd68;
 const FIND_SELECTED: u64 = 0xda8;
 const RESULT_STATE: u64 = 0x458;
-const STATE_ID: u64 = 0x40;
 const DIGITS: [u16; 10] = [29, 18, 19, 20, 21, 23, 22, 26, 28, 25];
 const BACKSPACE: u16 = 51;
 /// ANSI virtual key code of F.
 const FIND_KEY: u16 = 3;
 
 fn find_view(r: &Reader<'_>, image: u64) -> Result<u64> {
+    let abi = r.string_abi();
     let idler = r.u64(image + game::layout(r).idler_global)?;
-    let find = r.u64(r.u64(idler + MANAGER)? + FIND_VIEW)?;
-    if r.u64(find + FIND_IDLER)? != idler {
+    let manager = r.u64(idler + fld(abi, &IDLER, MANAGER)?)?;
+    let find = r.u64(manager + fld(abi, &IFACE_MANAGER, FIND_VIEW)?)?;
+    if r.u64(find + fld(abi, &FIND, FIND_IDLER)?)? != idler {
         return Err(Error::new("invalid_gui", "Own Find view required"));
     }
     Ok(find)
 }
 pub(super) fn find_open(r: &Reader<'_>, image: u64) -> Result<bool> {
     let find = find_view(r, image)?;
-    match gui_tree::container(r, r.u64(find + FIND_WINDOW)?, image)? {
+    let window = r.u64(find + fld(r.string_abi(), &FIND, FIND_WINDOW)?)?;
+    match gui_tree::container(r, window, image)? {
         Some(window) => gui_tree::visible(r, window),
         None => Ok(false),
     }
@@ -586,14 +633,16 @@ pub(super) fn find_open(r: &Reader<'_>, image: u64) -> Result<bool> {
 /// (query text, highlighted state ID if the highlighted result is a state).
 fn find_result(r: &Reader<'_>, image: u64) -> Result<(String, Option<i32>)> {
     let find = find_view(r, image)?;
-    let text = r.string_bounded(find + FIND_TEXT, 64)?;
-    let row = r.u64(find + FIND_SELECTED)?;
+    let abi = r.string_abi();
+    let text = r.string_bounded(find + fld(abi, &FIND, FIND_TEXT)?, 64)?;
+    let row = r.u64(find + fld(abi, &FIND, FIND_SELECTED)?)?;
     if row == 0 {
         return Ok((text, None));
     }
-    let state = r.u64(row + RESULT_STATE)?;
-    let id = if state != 0 && r.u64(state)? == image + crate::construction::layout(r).state_vtable {
-        Some(r.i32(state + STATE_ID)?)
+    let state = r.u64(row + fld(abi, &FIND_ROW, RESULT_STATE)?)?;
+    let states = crate::construction::layout(r);
+    let id = if state != 0 && r.u64(state)? == image + states.state_vtable {
+        Some(r.i32(state + states.state_id)?)
     } else {
         None
     };

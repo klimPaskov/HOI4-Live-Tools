@@ -24,11 +24,12 @@ use crate::{
     error::{Error, Result},
     game,
     gui_tree::{self, Rect},
-    memory::{Reader, StringAbi},
+    memory::Reader,
     platform::{
         game_input::{GameInput, Key},
         Process,
     },
+    xlayout::{self, fld, img},
 };
 use serde_json::{json, Value};
 use std::{collections::BTreeMap, thread, time::Duration};
@@ -90,6 +91,51 @@ const ITEM_CONTAINER: u64 = 0x10;
 const PROGRAM_ITEM_HANDLE: u64 = 0x38;
 const PROJECT_ITEM_PROJECT: u64 = 0x28;
 const TEXT: u64 = 0x100;
+/// Owners of the fields above and below (macOS 1.19.4.1 RTTI names and
+/// vtables; 0 where the owning class has no reviewed vtable).
+const IDLER: xlayout::Class = xlayout::Class::new("CInGameIdler", 0x35089d8);
+const GAME_GUI: xlayout::Class = xlayout::Class::new("idler.gui", 0);
+const IFACE_MANAGER: xlayout::Class = xlayout::Class::new("idler.manager", 0);
+const TECH: xlayout::Class = xlayout::Class::new("manager.tech_view", 0);
+const TREE: xlayout::Class = xlayout::Class::new("manager.tree_view", 0);
+const TAB: xlayout::Class = xlayout::Class::new("NProject::NUi::CFacilitiesTabView", VT_TAB_VIEW);
+const ROSTER: xlayout::Class = xlayout::Class::new("NProject::NUi::CScientistRoster", VT_ROSTER);
+const RECRUIT: xlayout::Class =
+    xlayout::Class::new("NProject::NUi::CRecruitScientistWindow", VT_RECRUIT_WINDOW);
+const PROGRAM_VIEW: xlayout::Class =
+    xlayout::Class::new("NProject::NUi::CProgramView", VT_PROGRAM_VIEW);
+const COUNTRY: xlayout::Class = xlayout::Class::new("CCountry", 0x357e388);
+const SPEC_DB: xlayout::Class = xlayout::Class::new("NProject::CSpecializationDatabase", 0);
+const SPEC_TEMPLATE: xlayout::Class = xlayout::Class::new("spec.template", 0);
+const STATUS: xlayout::Class = xlayout::Class::new("NProject::CProgramStatus", VT_PROGRAM_STATUS);
+const PROGRAM: xlayout::Class = xlayout::Class::new("NProject::CProgram", VT_PROGRAM);
+const POOL: xlayout::Class = xlayout::Class::new("NProject::CProjectPool", VT_PROJECT_POOL);
+const PROJECT: xlayout::Class = xlayout::Class::new("NProject::CProject", VT_PROJECT);
+const PROJECT_SIZE: xlayout::Class = xlayout::Class::new("NProject::CProject.size", 0);
+const TEMPLATE: xlayout::Class =
+    xlayout::Class::new("NProject::CProjectTemplate", VT_PROJECT_TEMPLATE);
+const HISTORY: xlayout::Class =
+    xlayout::Class::new("NProject::SProjectHistory", VT_PROJECT_HISTORY);
+const MACHINE: xlayout::Class =
+    xlayout::Class::new("NProject::CProjectStateMachine", VT_STATE_MACHINE);
+const SIMPLE_STATE: xlayout::Class =
+    xlayout::Class::new("NProject::CSimpleProjectState", VT_SIMPLE_STATE);
+/// Breakthrough accounts map node (libc++ tree node on macOS).
+const BREAKTHROUGH_NODE: xlayout::Class = xlayout::Class::new("breakthrough.map_node", 0);
+const CHARACTERS: xlayout::Class = xlayout::Class::new("CCountryCharacters", VT_COUNTRY_CHARACTERS);
+const RECRUIT_POOL: xlayout::Class = xlayout::Class::new("characters.recruit_pool", 0);
+const SCIENTIST: xlayout::Class = xlayout::Class::new("CScientist", VT_SCIENTIST);
+const SKILL_LEVEL: xlayout::Class = xlayout::Class::new("scientist.skill_level", 0);
+const SKILL_LEVEL_SIZE: xlayout::Class = xlayout::Class::new("scientist.skill_level.size", 0);
+const CHARACTER: xlayout::Class = xlayout::Class::new("CCharacter", VT_CHARACTER);
+const TRAIT: xlayout::Class = xlayout::Class::new("CScientistTrait", VT_TRAIT);
+const GRID: xlayout::Class = xlayout::Class::new("CStandardGridBox", 0x36cca80);
+const GRID_ITEM: xlayout::Class = xlayout::Class::new("grid.item", 0);
+const TEXT_BOX: xlayout::Class = xlayout::Class::new("gui.text", 0);
+const PROGRAM_ITEM: xlayout::Class =
+    xlayout::Class::new("NProject::NUi::CProgramItem", VT_PROGRAM_ITEM);
+const PROJECT_ITEM: xlayout::Class =
+    xlayout::Class::new("NProject::NUi::CProjectItem", VT_PROJECT_ITEM);
 
 /// Specialization order of `specializations.txt`; the game GUI calls nuclear
 /// "Physics".
@@ -157,14 +203,13 @@ pub(super) struct Snapshot {
     pub breakthroughs: Vec<Breakthrough>,
 }
 
-fn libcxx(r: &Reader<'_>) -> Result<()> {
-    match r.string_abi() {
-        StringAbi::LibCxx => Ok(()),
-        StringAbi::LibStdCxx => Err(Error::new(
-            "capability_unavailable",
-            "Special projects are not reviewed for this build",
-        )),
-    }
+/// Image address of a macOS vtable for this build.
+fn vt(r: &Reader<'_>, image: u64, vtable: u64) -> Result<u64> {
+    Ok(image + img(r.string_abi(), vtable)?)
+}
+/// Field offset of `class` for this build.
+fn at(r: &Reader<'_>, class: &xlayout::Class, mac: u64) -> Result<u64> {
+    fld(r.string_abi(), class, mac)
 }
 fn own_country(r: &Reader<'_>, image: u64) -> Result<u64> {
     let g = game::layout(r);
@@ -186,7 +231,7 @@ fn own_country(r: &Reader<'_>, image: u64) -> Result<u64> {
     Ok(country)
 }
 fn typed(r: &Reader<'_>, image: u64, object: u64, vtable: u64, what: &str) -> Result<()> {
-    if object == 0 || r.u64(object)? != image + vtable {
+    if object == 0 || r.u64(object)? != vt(r, image, vtable)? {
         return Err(Error::new(
             "invalid_type",
             format!("Exact {what} object required"),
@@ -209,11 +254,10 @@ pub(super) fn snapshot(process: &dyn Process) -> Result<Snapshot> {
     read(process, snapshot_from)
 }
 fn snapshot_from(r: &Reader<'_>, image: u64) -> Result<Snapshot> {
-    libcxx(r)?;
     let country = own_country(r, image)?;
     // specialization ids
-    let db = r.u64(image + SPEC_DB_GLOBAL)?;
-    let templates = r.pointer_array(db + SPEC_DB_TEMPLATES)?;
+    let db = r.u64(image + img(r.string_abi(), SPEC_DB_GLOBAL)?)?;
+    let templates = r.pointer_array(db + at(r, &SPEC_DB, SPEC_DB_TEMPLATES)?)?;
     if templates.len() != 4 {
         return Err(Error::new(
             "invalid_array",
@@ -222,7 +266,7 @@ fn snapshot_from(r: &Reader<'_>, image: u64) -> Result<Snapshot> {
     }
     let mut ids = [0i32; 4];
     for (i, t) in templates.iter().enumerate() {
-        ids[i] = r.i32(t + 8)?;
+        ids[i] = r.i32(t + at(r, &SPEC_TEMPLATE, 8)?)?;
     }
     if (1..4).any(|i| ids[i] != ids[0] + i as i32) {
         return Err(Error::new(
@@ -230,48 +274,50 @@ fn snapshot_from(r: &Reader<'_>, image: u64) -> Result<Snapshot> {
             "Specialization ids are not consecutive",
         ));
     }
-    let status = r.u64(country + COUNTRY_PROGRAMS)?;
+    let status = r.u64(country + at(r, &COUNTRY, COUNTRY_PROGRAMS)?)?;
     typed(r, image, status, VT_PROGRAM_STATUS, "program status")?;
     let mut out = Snapshot::default();
     // facilities
-    let (_, data, count) = r.array_header(status + 0x20)?;
+    let (_, data, count) = r.array_header(status + at(r, &STATUS, 0x20)?)?;
     for index in 0..count.min(MAX_PROGRAMS) as u64 {
         let program = r.u64(data + index * 8)?;
         typed(r, image, program, VT_PROGRAM, "program")?;
-        let building = r.string_bounded(program + 0x20, 64)?;
-        let project = r.u64(program + 0x48)?;
-        let scientist = r.u64(program + 0x50)?;
+        let building = r.string_bounded(program + at(r, &PROGRAM, 0x20)?, 64)?;
+        let project = r.u64(program + at(r, &PROGRAM, 0x48)?)?;
+        let scientist = r.u64(program + at(r, &PROGRAM, 0x50)?)?;
         out.facilities.push(Facility {
-            id: r.i32(program + 0x18)?,
-            handle: r.u64(program + 8)?,
+            id: r.i32(program + at(r, &PROGRAM, 0x18)?)?,
+            handle: r.u64(program + at(r, &PROGRAM, 8)?)?,
             spec: spec_of_building(&building),
             building,
             scientist: (scientist != 0).then(|| hi(scientist)),
             project: (project != 0).then(|| lo(project)),
-            unread_reports: r.i32(program + 0x170)?,
+            unread_reports: r.i32(program + at(r, &PROGRAM, 0x170)?)?,
         });
     }
     // visible project pool
-    let pool = r.u64(status + 0x18)?;
+    let pool = r.u64(status + at(r, &STATUS, 0x18)?)?;
     typed(r, image, pool, VT_PROJECT_POOL, "project pool")?;
-    let (_, data, count) = r.array_header(pool + 0x10)?;
+    let (_, data, count) = r.array_header(pool + at(r, &POOL, 0x10)?)?;
+    let stride = at(r, &PROJECT_SIZE, PROJECT_STRIDE)?;
     for index in 0..count.min(MAX_PROJECTS) as u64 {
-        let project = data + index * PROJECT_STRIDE;
+        let project = data + index * stride;
         typed(r, image, project, VT_PROJECT, "project")?;
-        let template = r.u64(project + 0x20)?.wrapping_sub(0x10);
+        let template = project_template(r, project)?;
         typed(r, image, template, VT_PROJECT_TEMPLATE, "project template")?;
+        let machine = r.u64(project + at(r, &PROJECT, 0x28)?)?;
         out.projects.push(Project {
-            id: r.i32(template + 8)? as u32,
-            key: r.string_bounded(template + 0x208, 128)?,
-            spec: spec_index(&ids, r.i32(template + 0x10)?),
-            days: r.i32(template + 0xc)? as u32,
-            running: r.u64(project + 0x60)?,
+            id: r.i32(template + at(r, &TEMPLATE, 8)?)? as u32,
+            key: r.string_bounded(template + at(r, &TEMPLATE, 0x208)?, 128)?,
+            spec: spec_index(&ids, r.i32(template + at(r, &TEMPLATE, 0x10)?)?),
+            days: r.i32(template + at(r, &TEMPLATE, 0xc)?)? as u32,
+            running: r.u64(project + at(r, &PROJECT, 0x60)?)?,
             stopping_days: stopping_days(r, image, project)?,
-            progress_percent: r.i32(r.u64(project + 0x28)? + 0x94)?,
-            iterations: r.i32(r.u64(project + 0x28)? + 0x98)?,
+            progress_percent: r.i32(machine + at(r, &MACHINE, 0x94)?)?,
+            iterations: r.i32(machine + at(r, &MACHINE, 0x98)?)?,
             gain: (
-                r.i32(r.u64(project + 0x28)? + 0x8c)?,
-                r.i32(r.u64(project + 0x28)? + 0x90)?,
+                r.i32(machine + at(r, &MACHINE, 0x8c)?)?,
+                r.i32(machine + at(r, &MACHINE, 0x90)?)?,
             ),
         });
     }
@@ -279,14 +325,14 @@ fn snapshot_from(r: &Reader<'_>, image: u64) -> Result<Snapshot> {
     // id at +0x18, scientist handle at +0x20); the program's own project field stays 0
     // (read live 2 November 2026: Military Engineering Vehicles in facility 3499).
     for index in 0..count.min(MAX_PROJECTS) as u64 {
-        let project = data + index * PROJECT_STRIDE;
-        let history = r.u64(project + 0x68)?;
-        if history == 0 || r.u64(history)? != image + VT_PROJECT_HISTORY {
+        let project = data + index * stride;
+        let history = r.u64(project + at(r, &PROJECT, 0x68)?)?;
+        if history == 0 || r.u64(history)? != vt(r, image, VT_PROJECT_HISTORY)? {
             continue;
         }
-        let facility = r.i32(history + 0x18)?;
-        let template = r.u64(project + 0x20)?.wrapping_sub(0x10);
-        let id = r.i32(template + 8)? as u32;
+        let facility = r.i32(history + at(r, &HISTORY, 0x18)?)?;
+        let template = project_template(r, project)?;
+        let id = r.i32(template + at(r, &TEMPLATE, 8)?)? as u32;
         if let Some(f) = out
             .facilities
             .iter_mut()
@@ -296,7 +342,7 @@ fn snapshot_from(r: &Reader<'_>, image: u64) -> Result<Snapshot> {
         }
     }
     // breakthrough accounts: libc++ tree, root at +0x60, key high dword = spec id
-    let mut stack = vec![r.u64(status + 0x60)?];
+    let mut stack = vec![r.u64(status + at(r, &STATUS, 0x60)?)?];
     let mut seen = 0;
     while let Some(node) = stack.pop() {
         if node == 0 {
@@ -306,19 +352,19 @@ fn snapshot_from(r: &Reader<'_>, image: u64) -> Result<Snapshot> {
         if seen > 16 {
             return Err(Error::new("invalid_array", "Breakthrough tree too large"));
         }
-        stack.push(r.u64(node)?);
-        stack.push(r.u64(node + 8)?);
-        let key = r.u64(node + 0x18)?;
+        stack.push(r.u64(node + at(r, &BREAKTHROUGH_NODE, 0)?)?);
+        stack.push(r.u64(node + at(r, &BREAKTHROUGH_NODE, 8)?)?);
+        let key = r.u64(node + at(r, &BREAKTHROUGH_NODE, 0x18)?)?;
         if let Some(spec) = spec_index(&ids, hi(key) as i32) {
             out.breakthroughs.push(Breakthrough {
                 spec,
-                raw: r.u64(node + 0x20)? as i64,
+                raw: r.u64(node + at(r, &BREAKTHROUGH_NODE, 0x20)?)? as i64,
             });
         }
     }
     out.breakthroughs.sort_by_key(|b| b.spec);
     // scientists
-    let characters = r.u64(country + COUNTRY_CHARACTERS)?;
+    let characters = r.u64(country + at(r, &COUNTRY, COUNTRY_CHARACTERS)?)?;
     typed(
         r,
         image,
@@ -326,7 +372,8 @@ fn snapshot_from(r: &Reader<'_>, image: u64) -> Result<Snapshot> {
         VT_COUNTRY_CHARACTERS,
         "country characters",
     )?;
-    let (_, data, count) = r.array_header(characters + CHARACTERS_SCIENTISTS)?;
+    let (_, data, count) =
+        r.array_header(characters + at(r, &CHARACTERS, CHARACTERS_SCIENTISTS)?)?;
     for index in 0..count.min(MAX_SCIENTISTS) as u64 {
         let scientist = r.u64(data + index * 8)?;
         if scientist == 0 {
@@ -336,7 +383,9 @@ fn snapshot_from(r: &Reader<'_>, image: u64) -> Result<Snapshot> {
             .push(read_scientist(r, image, &ids, scientist)?);
     }
     // recruitment pool: the characters the Recruit Scientist window offers
-    let (_, data, count) = r.array_header(characters + CHARACTERS_POOL + POOL_CANDIDATES)?;
+    let candidates =
+        characters + at(r, &CHARACTERS, CHARACTERS_POOL)? + at(r, &RECRUIT_POOL, POOL_CANDIDATES)?;
+    let (_, data, count) = r.array_header(candidates)?;
     for index in 0..count.min(16) as u64 {
         let scientist = r.u64(data + index * 8)?;
         if scientist == 0 {
@@ -353,42 +402,48 @@ fn snapshot_from(r: &Reader<'_>, image: u64) -> Result<Snapshot> {
 /// running, a CSimpleProjectState (name "STOPPING_STATE", days at +0x48) while
 /// a stop is in progress. Mapped live on 26 October 2026 by stopping a project.
 fn stopping_days(r: &Reader<'_>, image: u64, project: u64) -> Result<Option<i32>> {
-    let machine = r.u64(project + 0x28)?;
+    let machine = r.u64(project + at(r, &PROJECT, 0x28)?)?;
     typed(r, image, machine, VT_STATE_MACHINE, "project state machine")?;
-    let state = r.u64(machine + 8)?;
-    if state != 0 && r.u64(state)? == image + VT_SIMPLE_STATE {
-        return Ok(Some(r.i32(state + 0x48)?));
+    let state = r.u64(machine + at(r, &MACHINE, 8)?)?;
+    if state != 0 && r.u64(state)? == vt(r, image, VT_SIMPLE_STATE)? {
+        return Ok(Some(r.i32(state + at(r, &SIMPLE_STATE, 0x48)?)?));
     }
     Ok(None)
 }
+/// A project's template: its pointer at +0x20 addresses the template's
+/// embedded base at +0x10.
+fn project_template(r: &Reader<'_>, project: u64) -> Result<u64> {
+    Ok(r.u64(project + at(r, &PROJECT, 0x20)?)?
+        .wrapping_sub(at(r, &TEMPLATE, 0x10)?))
+}
 fn read_scientist(r: &Reader<'_>, image: u64, ids: &[i32; 4], scientist: u64) -> Result<Scientist> {
     typed(r, image, scientist, VT_SCIENTIST, "scientist")?;
-    let character = r.u64(scientist + 8)?;
+    let character = r.u64(scientist + at(r, &SCIENTIST, 8)?)?;
     typed(r, image, character, VT_CHARACTER, "character")?;
-    let (_, levels, n) = r.array_header(scientist + 0xf0)?;
+    let (_, levels, n) = r.array_header(scientist + at(r, &SCIENTIST, 0xf0)?)?;
     if n != 4 {
         return Err(Error::new("invalid_array", "Four skill levels required"));
     }
     let mut skills = [0i32; 4];
     for i in 0..4u64 {
-        let entry = levels + i * 0x20;
-        let id = r.i32(entry)?;
-        let at = spec_index(ids, id)
+        let entry = levels + i * at(r, &SKILL_LEVEL_SIZE, 0x20)?;
+        let id = r.i32(entry + at(r, &SKILL_LEVEL, 0)?)?;
+        let slot = spec_index(ids, id)
             .ok_or_else(|| Error::new("invalid_array", "Unknown skill specialization"))?;
-        skills[at] = r.i32(entry + 0x18)?;
+        skills[slot] = r.i32(entry + at(r, &SKILL_LEVEL, 0x18)?)?;
     }
     let mut traits = Vec::new();
-    for t in r.pointer_array(scientist + 0x28)? {
+    for t in r.pointer_array(scientist + at(r, &SCIENTIST, 0x28)?)? {
         typed(r, image, t, VT_TRAIT, "scientist trait")?;
         traits.push((
-            r.string_bounded(t + 0x18, 96)?,
-            r.string_bounded(t + 0x90, 96)?,
+            r.string_bounded(t + at(r, &TRAIT, 0x18)?, 96)?,
+            r.string_bounded(t + at(r, &TRAIT, 0x90)?, 96)?,
         ));
     }
     Ok(Scientist {
-        character: hi(r.u64(character + 8)?),
-        name: r.string_bounded(character + 0x20, 128)?,
-        key: r.string_bounded(character + 0x38, 128)?,
+        character: hi(r.u64(character + at(r, &CHARACTER, 8)?)?),
+        name: r.string_bounded(character + at(r, &CHARACTER, 0x20)?, 128)?,
+        key: r.string_bounded(character + at(r, &CHARACTER, 0x38)?, 128)?,
         skills,
         traits,
     })
@@ -741,13 +796,12 @@ pub(super) fn plan(
 // ---- GUI ------------------------------------------------------------------------
 fn tech_view(r: &Reader<'_>, image: u64) -> Result<u64> {
     let idler = r.u64(image + game::layout(r).idler_global)?;
-    let manager = r.u64(idler + MANAGER)?;
-    r.u64(manager + TECH_VIEW)
+    let manager = r.u64(idler + at(r, &IDLER, MANAGER)?)?;
+    r.u64(manager + at(r, &IFACE_MANAGER, TECH_VIEW)?)
 }
 fn root(r: &Reader<'_>, image: u64) -> Result<u64> {
-    libcxx(r)?;
     let view = tech_view(r, image)?;
-    gui_tree::container(r, r.u64(view + VIEW_ROOT)?, image)?
+    gui_tree::container(r, r.u64(view + at(r, &TECH, VIEW_ROOT)?)?, image)?
         .ok_or_else(|| Error::new("invalid_gui", "Research view root unavailable"))
 }
 fn named(r: &Reader<'_>, image: u64, object: u64, name: &str) -> Result<u64> {
@@ -776,10 +830,10 @@ fn facilities_shown(r: &Reader<'_>, image: u64) -> Result<bool> {
 /// The technology tree (a separate view, opened by a research slot click)
 /// covers the panel; Escape closes it.
 fn tree_open(r: &Reader<'_>, image: u64) -> Result<bool> {
-    libcxx(r)?;
     let idler = r.u64(image + game::layout(r).idler_global)?;
-    let view = r.u64(r.u64(idler + MANAGER)? + TREE_VIEW)?;
-    match gui_tree::container(r, r.u64(view + VIEW_ROOT)?, image)? {
+    let manager = r.u64(idler + at(r, &IDLER, MANAGER)?)?;
+    let view = r.u64(manager + at(r, &IFACE_MANAGER, TREE_VIEW)?)?;
+    match gui_tree::container(r, r.u64(view + at(r, &TREE, VIEW_ROOT)?)?, image)? {
         Some(root) => gui_tree::visible(r, root),
         None => Ok(false),
     }
@@ -792,12 +846,12 @@ fn tab_rect(r: &Reader<'_>, image: u64) -> Result<Rect> {
     gui_tree::rect(r, image, tab, GAME)
 }
 fn tab_view(r: &Reader<'_>, image: u64) -> Result<u64> {
-    let tab = r.u64(tech_view(r, image)? + TAB_VIEW)?;
+    let tab = r.u64(tech_view(r, image)? + at(r, &TECH, TAB_VIEW)?)?;
     typed(r, image, tab, VT_TAB_VIEW, "facilities tab view")?;
     Ok(tab)
 }
 fn items(r: &Reader<'_>, grid: u64) -> Result<Vec<u64>> {
-    let (_, data, count) = r.array_header(grid + GRID_ITEMS)?;
+    let (_, data, count) = r.array_header(grid + at(r, &GRID, GRID_ITEMS)?)?;
     if count > 256 {
         return Err(Error::new("invalid_gui", "Grid item list exceeds bound"));
     }
@@ -812,12 +866,12 @@ fn items(r: &Reader<'_>, grid: u64) -> Result<Vec<u64>> {
         .collect())
 }
 fn item_frame(r: &Reader<'_>, image: u64, item: u64) -> Result<u64> {
-    gui_tree::container(r, r.u64(item + ITEM_CONTAINER)?, image)?
+    gui_tree::container(r, r.u64(item + at(r, &GRID_ITEM, ITEM_CONTAINER)?)?, image)?
         .ok_or_else(|| Error::new("invalid_gui", "Grid item window required"))
 }
 fn text(r: &Reader<'_>, image: u64, parent: u64, name: &str) -> Result<Option<String>> {
     match gui_tree::child(r, image, parent, name)? {
-        Some(t) => Ok(Some(r.string_bounded(t + TEXT, 256)?)),
+        Some(t) => Ok(Some(r.string_bounded(t + at(r, &TEXT_BOX, TEXT)?, 256)?)),
         None => Ok(None),
     }
 }
@@ -880,7 +934,7 @@ fn cards(r: &Reader<'_>, image: u64) -> Result<Vec<Card>> {
     let grid = program_grid(r, image)?;
     let mut out = Vec::new();
     for item in items(r, grid)? {
-        if r.u64(item)? != image + VT_PROGRAM_ITEM {
+        if r.u64(item)? != vt(r, image, VT_PROGRAM_ITEM)? {
             continue;
         }
         let frame = item_frame(r, image, item)?;
@@ -911,7 +965,7 @@ fn cards(r: &Reader<'_>, image: u64) -> Result<Vec<Card>> {
             _ => None,
         };
         out.push(Card {
-            handle: r.u64(item + PROGRAM_ITEM_HANDLE)?,
+            handle: r.u64(item + at(r, &PROGRAM_ITEM, PROGRAM_ITEM_HANDLE)?)?,
             facility: text(r, image, part, "facility_name")?.unwrap_or_default(),
             state: text(r, image, part, "state_name")?.unwrap_or_default(),
             speed: named(r, image, part, "research_speed_window")
@@ -975,11 +1029,15 @@ fn leave(process: &dyn Process, keys: &dyn GameInput) {
 }
 fn program_view_root(r: &Reader<'_>, image: u64) -> Result<Option<u64>> {
     let tab = tab_view(r, image)?;
-    let view = r.u64(tab + TAB_PROGRAM_VIEW)?;
-    if view == 0 || r.u64(view)? != image + VT_PROGRAM_VIEW {
+    let view = r.u64(tab + at(r, &TAB, TAB_PROGRAM_VIEW)?)?;
+    if view == 0 || r.u64(view)? != vt(r, image, VT_PROGRAM_VIEW)? {
         return Ok(None);
     }
-    gui_tree::container(r, r.u64(view + PROGRAM_VIEW_ROOT)?, image)
+    gui_tree::container(
+        r,
+        r.u64(view + at(r, &PROGRAM_VIEW, PROGRAM_VIEW_ROOT)?)?,
+        image,
+    )
 }
 fn program_view_open(r: &Reader<'_>, image: u64) -> Result<bool> {
     match program_view_root(r, image)? {
@@ -989,9 +1047,9 @@ fn program_view_open(r: &Reader<'_>, image: u64) -> Result<bool> {
 }
 fn roster_root(r: &Reader<'_>, image: u64) -> Result<u64> {
     let tab = tab_view(r, image)?;
-    let roster = r.u64(tab + TAB_ROSTER)?;
+    let roster = r.u64(tab + at(r, &TAB, TAB_ROSTER)?)?;
     typed(r, image, roster, VT_ROSTER, "scientist roster")?;
-    gui_tree::container(r, r.u64(roster + ROSTER_ROOT)?, image)?
+    gui_tree::container(r, r.u64(roster + at(r, &ROSTER, ROSTER_ROOT)?)?, image)?
         .ok_or_else(|| Error::new("invalid_gui", "Scientist roster window required"))
 }
 fn roster_open(r: &Reader<'_>, image: u64) -> Result<bool> {
@@ -1006,7 +1064,7 @@ fn roster_rows(r: &Reader<'_>, image: u64) -> Result<Vec<(String, Rect)>> {
         .ok_or_else(|| Error::new("gui_target_unavailable", "Scientist list not found"))?;
     let mut out = Vec::new();
     for item in items(r, grid)? {
-        if r.u64(item)? != image + VT_SCIENTIST_ITEM {
+        if r.u64(item)? != vt(r, image, VT_SCIENTIST_ITEM)? {
             continue;
         }
         let frame = item_frame(r, image, item)?;
@@ -1061,12 +1119,12 @@ fn project_entries(r: &Reader<'_>, image: u64) -> Result<Vec<Entry>> {
         .ok_or_else(|| Error::new("gui_target_unavailable", "Project list not found"))?;
     let mut out = Vec::new();
     for item in items(r, grid)? {
-        if r.u64(item)? != image + VT_PROJECT_ITEM {
+        if r.u64(item)? != vt(r, image, VT_PROJECT_ITEM)? {
             continue;
         }
-        let project = r.u64(item + PROJECT_ITEM_PROJECT)?;
+        let project = r.u64(item + at(r, &PROJECT_ITEM, PROJECT_ITEM_PROJECT)?)?;
         typed(r, image, project, VT_PROJECT, "project")?;
-        let template = r.u64(project + 0x20)?.wrapping_sub(0x10);
+        let template = project_template(r, project)?;
         typed(r, image, template, VT_PROJECT_TEMPLATE, "project template")?;
         let frame = item_frame(r, image, item)?;
         let button = gui_tree::child(r, image, frame, "selectable_button")?
@@ -1077,7 +1135,9 @@ fn project_entries(r: &Reader<'_>, image: u64) -> Result<Vec<Entry>> {
         };
         let shown_text = |name: &str| -> Result<String> {
             match gui_tree::child(r, image, frame, name)? {
-                Some(t) if gui_tree::shown(r, t)? => Ok(plain(&r.string_bounded(t + TEXT, 256)?)),
+                Some(t) if gui_tree::shown(r, t)? => {
+                    Ok(plain(&r.string_bounded(t + at(r, &TEXT_BOX, TEXT)?, 256)?))
+                }
                 _ => Ok(String::new()),
             }
         };
@@ -1096,7 +1156,7 @@ fn project_entries(r: &Reader<'_>, image: u64) -> Result<Vec<Entry>> {
             }
         }
         out.push(Entry {
-            key: r.string_bounded(template + 0x208, 128)?,
+            key: r.string_bounded(template + at(r, &TEMPLATE, 0x208)?, 128)?,
             name: plain(&name),
             kind: plain(&text(r, image, frame, "project_type")?.unwrap_or_default()),
             time: shown_text("project_time")?,
@@ -1114,7 +1174,7 @@ fn speed_if_shown(r: &Reader<'_>, image: u64, frame: u64) -> Result<String> {
         return Ok(String::new());
     };
     match gui_tree::child(r, image, window, "research_speed_text")? {
-        Some(t) if gui_tree::shown(r, t)? => r.string_bounded(t + TEXT, 64),
+        Some(t) if gui_tree::shown(r, t)? => r.string_bounded(t + at(r, &TEXT_BOX, TEXT)?, 64),
         _ => Ok(String::new()),
     }
 }
@@ -1143,7 +1203,9 @@ fn active_info(r: &Reader<'_>, image: u64) -> Result<Option<Active>> {
     let phase = named(r, image, ongoing, "phase_progress_window")?;
     let shown_text = |parent: u64, name: &str| -> Result<String> {
         match gui_tree::child(r, image, parent, name)? {
-            Some(t) if gui_tree::shown(r, t)? => Ok(plain(&r.string_bounded(t + TEXT, 256)?)),
+            Some(t) if gui_tree::shown(r, t)? => {
+                Ok(plain(&r.string_bounded(t + at(r, &TEXT_BOX, TEXT)?, 256)?))
+            }
             _ => Ok(String::new()),
         }
     };
@@ -1572,13 +1634,16 @@ const VT_CONFIRM: u64 = 0x358ff80;
 const GUI_FROM_IDLER: u64 = 0x4c0;
 const POPUP_LIST: u64 = 0xa70;
 const POPUP_ROOT: u64 = 0x490;
+const CONFIRM: xlayout::Class =
+    xlayout::Class::new("CGenericDefaultConfirmationPopUpWindow", VT_CONFIRM);
 /// One confirmation window (title, accept and decline rectangles) when it is
 /// a visible generic confirmation.
 fn confirm_in(r: &Reader<'_>, image: u64, window: u64) -> Result<Option<(String, Rect, Rect)>> {
-    if window == 0 || r.u64(window)? != image + VT_CONFIRM {
+    if window == 0 || r.u64(window)? != vt(r, image, VT_CONFIRM)? {
         return Ok(None);
     }
-    let Some(root) = gui_tree::container(r, r.u64(window + POPUP_ROOT)?, image)? else {
+    let Some(root) = gui_tree::container(r, r.u64(window + at(r, &CONFIRM, POPUP_ROOT)?)?, image)?
+    else {
         return Ok(None);
     };
     if !gui_tree::visible(r, root)? {
@@ -1599,21 +1664,20 @@ fn confirm_in(r: &Reader<'_>, image: u64, window: u64) -> Result<Option<(String,
 /// the recruit confirmation is only reachable through the Recruit Scientist
 /// window (+0x980, seen live), which created it.
 fn confirm(r: &Reader<'_>, image: u64) -> Result<Option<(String, Rect, Rect)>> {
-    libcxx(r)?;
     let idler = r.u64(image + game::layout(r).idler_global)?;
-    let gui = r.u64(idler + GUI_FROM_IDLER)?;
-    let (_, data, count) = r.array_header(gui + POPUP_LIST)?;
+    let gui = r.u64(idler + at(r, &IDLER, GUI_FROM_IDLER)?)?;
+    let (_, data, count) = r.array_header(gui + at(r, &GAME_GUI, POPUP_LIST)?)?;
     for index in 0..count.min(32) as u64 {
         if let Some(found) = confirm_in(r, image, r.u64(data + index * 8)?)? {
             return Ok(Some(found));
         }
     }
     let tab = tab_view(r, image)?;
-    let roster = r.u64(tab + TAB_ROSTER)?;
+    let roster = r.u64(tab + at(r, &TAB, TAB_ROSTER)?)?;
     typed(r, image, roster, VT_ROSTER, "scientist roster")?;
-    let window = r.u64(roster + ROSTER_RECRUIT)?;
-    if window != 0 && r.u64(window)? == image + VT_RECRUIT_WINDOW {
-        return confirm_in(r, image, r.u64(window + RECRUIT_CONFIRM)?);
+    let window = r.u64(roster + at(r, &ROSTER, ROSTER_RECRUIT)?)?;
+    if window != 0 && r.u64(window)? == vt(r, image, VT_RECRUIT_WINDOW)? {
+        return confirm_in(r, image, r.u64(window + at(r, &RECRUIT, RECRUIT_CONFIRM)?)?);
     }
     Ok(None)
 }
@@ -1873,13 +1937,13 @@ fn open_roster_rect(r: &Reader<'_>, image: u64) -> Result<Rect> {
 }
 fn recruit_window_root(r: &Reader<'_>, image: u64) -> Result<Option<u64>> {
     let tab = tab_view(r, image)?;
-    let roster = r.u64(tab + TAB_ROSTER)?;
+    let roster = r.u64(tab + at(r, &TAB, TAB_ROSTER)?)?;
     typed(r, image, roster, VT_ROSTER, "scientist roster")?;
-    let window = r.u64(roster + ROSTER_RECRUIT)?;
-    if window == 0 || r.u64(window)? != image + VT_RECRUIT_WINDOW {
+    let window = r.u64(roster + at(r, &ROSTER, ROSTER_RECRUIT)?)?;
+    if window == 0 || r.u64(window)? != vt(r, image, VT_RECRUIT_WINDOW)? {
         return Ok(None);
     }
-    gui_tree::container(r, r.u64(window + ROSTER_ROOT)?, image)
+    gui_tree::container(r, r.u64(window + at(r, &RECRUIT, ROSTER_ROOT)?)?, image)
 }
 fn recruit_open(r: &Reader<'_>, image: u64) -> Result<bool> {
     match recruit_window_root(r, image)? {
@@ -1903,7 +1967,7 @@ fn recruit_rows(r: &Reader<'_>, image: u64) -> Result<Vec<(String, String, Rect)
         .ok_or_else(|| Error::new("gui_target_unavailable", "Candidate list not found"))?;
     let mut out = Vec::new();
     for item in items(r, grid)? {
-        if r.u64(item)? != image + VT_SCIENTIST_ITEM {
+        if r.u64(item)? != vt(r, image, VT_SCIENTIST_ITEM)? {
             continue;
         }
         let frame = item_frame(r, image, item)?;

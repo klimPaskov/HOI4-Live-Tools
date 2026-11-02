@@ -48,7 +48,6 @@ const F2: u16 = 120;
 
 pub(super) fn own_fleets(process: &dyn Process) -> Result<Vec<Fleet>> {
     read(process, |r, image| {
-        super::fleetmem::require_libcxx(r)?;
         let (country, _) = economy::own_production(r, image)?;
         naval::fleets(r, image, country)
     })
@@ -481,7 +480,6 @@ pub(super) fn set_mission(
         let tf = plan.task_force.clone();
         let code = plan.code;
         wait(process, "mission set", move |r, i| {
-            super::fleetmem::require_libcxx(r)?;
             let (country, _) = economy::own_production(r, i)?;
             Ok(naval::fleets(r, i, country)?
                 .iter()
@@ -607,7 +605,6 @@ pub(super) fn region_op(
         let region = plan.region.clone();
         let remove = plan.remove;
         wait(process, "fleet area changed", move |r, i| {
-            super::fleetmem::require_libcxx(r)?;
             let (country, _) = economy::own_production(r, i)?;
             Ok(naval::fleets(r, i, country)?
                 .iter()
@@ -777,7 +774,6 @@ pub(super) fn assign_admiral(
             super::ui::accept_command(process, keys)?;
             let fleet = plan.fleet.clone();
             wait(process, "admiral unassigned", move |r, i| {
-                super::fleetmem::require_libcxx(r)?;
                 let (country, _) = economy::own_production(r, i)?;
                 Ok(naval::fleets(r, i, country)?
                     .iter()
@@ -836,7 +832,6 @@ pub(super) fn assign_admiral(
         let fleet = plan.fleet.clone();
         let want = wanted.to_string();
         wait(process, "admiral assigned", move |r, i| {
-            super::fleetmem::require_libcxx(r)?;
             let (country, _) = economy::own_production(r, i)?;
             Ok(naval::fleets(r, i, country)?.iter().any(|f| {
                 same_name(&f.name, &fleet)
@@ -962,7 +957,6 @@ pub(super) fn create_fleet(
         let tf = plan.task_force.clone();
         let from = plan.from_fleet.clone();
         wait(process, "new fleet", move |r, i| {
-            super::fleetmem::require_libcxx(r)?;
             let (country, _) = economy::own_production(r, i)?;
             let fleets = naval::fleets(r, i, country)?;
             Ok(fleets.len() == before + 1
