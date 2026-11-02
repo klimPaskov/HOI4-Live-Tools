@@ -13,6 +13,8 @@
     no window and its binding is dropped.
   - A user folder without `save games/` reads as having no saves.
   - The game-font reader no longer fails on a crop with only small glyphs.
+  - Auto capture retries PrintWindow every 15 s after a blank frame instead of
+    staying on ffmpeg ddagrab, which timed out after a relaunch.
 - Seen on 1.19.4.1 and not fixed yet: one of three `hoi4_new_game` START clicks
   did not register (clicking START again worked). The `hoi4_diplomacy` view of a
   country whose state name differs from the country name did not open Find.
