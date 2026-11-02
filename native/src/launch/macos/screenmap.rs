@@ -3,7 +3,11 @@
 //! [0] and [5] are tan(fov/2) horizontally and vertically) and the camera-to-world transform
 //! at +0xd0 (rotation columns, translation = eye), the same blocks the construction ray uses.
 //! Read live 2 November 2026: eye (3104, 50, 1577), look-at (3104, 9.5, 1607), fov y ~45 deg.
-use crate::{error::{Error, Result}, game, memory::Reader};
+use crate::{
+    error::{Error, Result},
+    game,
+    memory::Reader,
+};
 
 const GAME: (f64, f64) = (1920.0, 1080.0);
 /// Height of the map plane used for province points (the camera look-at height).
@@ -15,7 +19,10 @@ fn floats<const N: usize>(r: &Reader<'_>, at: u64) -> Result<[f64; N]> {
     for (k, c) in bytes.chunks_exact(4).enumerate() {
         let v = f32::from_le_bytes(c.try_into().unwrap());
         if !v.is_finite() || v.abs() > 1.0e6 {
-            return Err(Error::new("camera_unavailable", "Camera matrices not finite"));
+            return Err(Error::new(
+                "camera_unavailable",
+                "Camera matrices not finite",
+            ));
         }
         out[k] = f64::from(v);
     }
@@ -53,10 +60,18 @@ mod tests {
     use super::*;
     #[test]
     fn the_look_at_point_projects_to_the_screen_centre() {
-        let proj = [0.736, 0.0, 0.0, 0.0, 0.0, 0.414, 0.0, 0.0, 0.0, 0.0, 0.0, -0.1997, 0.0, 0.0, 1.0, 0.2];
-        let view = [1.0, 0.0, 0.0, 0.0, 0.0, 0.5952, 0.8036, 0.0, 0.0, -0.8036, 0.5952, 0.0, 3103.888, 50.0, 1576.98, 1.0];
+        let proj = [
+            0.736, 0.0, 0.0, 0.0, 0.0, 0.414, 0.0, 0.0, 0.0, 0.0, 0.0, -0.1997, 0.0, 0.0, 1.0, 0.2,
+        ];
+        let view = [
+            1.0, 0.0, 0.0, 0.0, 0.0, 0.5952, 0.8036, 0.0, 0.0, -0.8036, 0.5952, 0.0, 3103.888,
+            50.0, 1576.98, 1.0,
+        ];
         let (x, y) = project(&proj, &view, 3104.0, 1607.0).unwrap();
-        assert!((x - 960.0).abs() < 5.0 && (y - 540.0).abs() < 5.0, "{x} {y}");
+        assert!(
+            (x - 960.0).abs() < 5.0 && (y - 540.0).abs() < 5.0,
+            "{x} {y}"
+        );
         // East (larger x) is to the right; north (larger z) is up the screen.
         assert!(project(&proj, &view, 3114.0, 1607.0).unwrap().0 > x);
         assert!(project(&proj, &view, 3104.0, 1617.0).unwrap().1 < y);

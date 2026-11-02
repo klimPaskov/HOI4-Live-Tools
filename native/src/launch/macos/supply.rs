@@ -112,9 +112,9 @@ fn collect(
 }
 
 fn rail_json(rail: &Option<ProvinceRail>) -> serde_json::Map<String, Value> {
-    let (hub, level, naval) = rail
-        .as_ref()
-        .map_or((false, 0, 0), |x| (x.supply_hub, x.rail_level, x.naval_base_level));
+    let (hub, level, naval) = rail.as_ref().map_or((false, 0, 0), |x| {
+        (x.supply_hub, x.rail_level, x.naval_base_level)
+    });
     let mut m = serde_json::Map::new();
     m.insert("supply_hub".into(), json!(hub));
     m.insert("railway_level".into(), json!(level));
@@ -168,7 +168,9 @@ pub(super) fn report(process: &dyn Process, strength_below: f64) -> Result<Value
                 _ => None,
             };
             let short_types: Vec<&str> = equipment.as_ref().map(|e| short(e)).unwrap_or_default();
-            let fill_min = equipment.as_ref().and_then(|e| lowest(e.iter().map(|x| x.3)));
+            let fill_min = equipment
+                .as_ref()
+                .and_then(|e| lowest(e.iter().map(|x| x.3)));
             let weak = hp_pct.is_some_and(|p| p < strength_below);
             let ds = sup.as_ref().and_then(|s| s.divisions.get(&d.id));
             let ps = sup
@@ -331,7 +333,8 @@ pub(super) fn report(process: &dyn Process, strength_below: f64) -> Result<Value
             s.nodes
                 .iter()
                 .map(|n| {
-                    let mut row = json!({"node":n.id,"kind":kind_name(n.kind),"province_id":n.province});
+                    let mut row =
+                        json!({"node":n.id,"kind":kind_name(n.kind),"province_id":n.province});
                     if let Some(o) = row.as_object_mut() {
                         o.extend(rail_json(s.rails.get(&n.province).unwrap_or(&None)));
                     }

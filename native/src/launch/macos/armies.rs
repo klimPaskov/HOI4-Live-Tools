@@ -180,7 +180,10 @@ pub(super) fn division_states(r: &Reader<'_>, image: u64) -> Result<BTreeMap<Str
     Ok(out)
 }
 /// division id -> province id where it stands (None while moving or unknown).
-pub(super) fn division_provinces(r: &Reader<'_>, image: u64) -> Result<BTreeMap<String, Option<i32>>> {
+pub(super) fn division_provinces(
+    r: &Reader<'_>,
+    image: u64,
+) -> Result<BTreeMap<String, Option<i32>>> {
     let u = ui(r)?;
     let l = crate::construction::layout(r);
     let country = own_country(r, image)?;
@@ -204,9 +207,12 @@ pub(super) fn division_provinces(r: &Reader<'_>, image: u64) -> Result<BTreeMap<
     }
     Ok(out)
 }
+/// Screen rectangle: top-left and bottom-right corners.
+type ScreenBox = ((f64, f64), (f64, f64));
+
 /// Screen box around the projected positions of `ids` (after the camera is placed), with a
 /// margin, when it fits the map area between the panels.
-fn projected_box(process: &dyn Process, ids: &[String]) -> Result<Option<((f64, f64), (f64, f64))>> {
+fn projected_box(process: &dyn Process, ids: &[String]) -> Result<Option<ScreenBox>> {
     let exe = &process
         .identity()
         .ok_or_else(|| Error::new("map_data_unavailable", "Game identity unavailable"))?
@@ -217,9 +223,15 @@ fn projected_box(process: &dyn Process, ids: &[String]) -> Result<Option<((f64, 
         let provinces = division_provinces(r, i)?;
         let mut pts = Vec::new();
         for id in ids {
-            let Some(Some(p)) = provinces.get(id) else { return Ok(None) };
-            let Some((x, z)) = positions.get(p).copied() else { return Ok(None) };
-            let Some(s) = super::screenmap::to_screen(r, i, x, z)? else { return Ok(None) };
+            let Some(Some(p)) = provinces.get(id) else {
+                return Ok(None);
+            };
+            let Some((x, z)) = positions.get(p).copied() else {
+                return Ok(None);
+            };
+            let Some(s) = super::screenmap::to_screen(r, i, x, z)? else {
+                return Ok(None);
+            };
             pts.push(s);
         }
         if pts.is_empty() {
@@ -227,7 +239,10 @@ fn projected_box(process: &dyn Process, ids: &[String]) -> Result<Option<((f64, 
         }
         let (mut x0, mut y0, mut x1, mut y1) = (f64::MAX, f64::MAX, f64::MIN, f64::MIN);
         for (x, y) in pts {
-            x0 = x0.min(x); y0 = y0.min(y); x1 = x1.max(x); y1 = y1.max(y);
+            x0 = x0.min(x);
+            y0 = y0.min(y);
+            x1 = x1.max(x);
+            y1 = y1.max(y);
         }
         let (x0, y0, x1, y1) = (x0 - 45.0, y0 - 45.0, x1 + 45.0, y1 + 30.0);
         Ok((x0 > 460.0 && y0 > 110.0 && x1 < 1540.0 && y1 < 830.0).then_some(((x0, y0), (x1, y1))))
@@ -528,44 +543,52 @@ pub(super) fn assign(process: &dyn Process, keys: &MacKeys, plan: &AssignPlan) -
     // Large states (Eritrea, Hararghe) spread divisions beyond the boxes around the centre:
     // a second pass zooms the map out two wheel steps around the state's centre.
     for pass in 0..2 {
-    if exact {
-        break;
-    }
-    if pass == 1 {
-        find_state(process, keys, plan.state)?;
-        keys.scroll(GAME, (960.0, 540.0), -240)?;
-        std::thread::sleep(std::time::Duration::from_millis(200));
-        keys.scroll(GAME, (960.0, 540.0), -240)?;
-        std::thread::sleep(std::time::Duration::from_millis(500));
-    }
-    for (k, (from, to)) in ASSIGN_BOXES.into_iter().enumerate() {
-        keys.drag(GAME, from, to)?;
-        std::thread::sleep(std::time::Duration::from_millis(350));
-        let size = read(process, selection_size)? as usize;
-        sizes.push(size);
-        if size == expected {
-            exact = true;
+        if exact {
             break;
         }
-        // No other army stands in the state: a box holding the target's divisions and part of
-        // the unassigned ones only folds those (settlement checks that only pool divisions
-        // moved); take it at once, since the drags can pan the map and a later re-drag of the
-        // same box picked other divisions (seen live 1 November 2026).
-        if plan.others_here == 0 && size > plan.target_here && size < expected {
-            partial = Some((k + pass * ASSIGN_BOXES.len(), size));
-            exact = true;
-            break;
+        if pass == 1 {
+            find_state(process, keys, plan.state)?;
+            keys.scroll(GAME, (960.0, 540.0), -240)?;
+            std::thread::sleep(std::time::Duration::from_millis(200));
+            keys.scroll(GAME, (960.0, 540.0), -240)?;
+            std::thread::sleep(std::time::Duration::from_millis(500));
         }
-    }
+        for (k, (from, to)) in ASSIGN_BOXES.into_iter().enumerate() {
+            keys.drag(GAME, from, to)?;
+            std::thread::sleep(std::time::Duration::from_millis(350));
+            let size = read(process, selection_size)? as usize;
+            sizes.push(size);
+            if size == expected {
+                exact = true;
+                break;
+            }
+            // No other army stands in the state: a box holding the target's divisions and part of
+            // the unassigned ones only folds those (settlement checks that only pool divisions
+            // moved); take it at once, since the drags can pan the map and a later re-drag of the
+            // same box picked other divisions (seen live 1 November 2026).
+            if plan.others_here == 0 && size > plan.target_here && size < expected {
+                partial = Some((k + pass * ASSIGN_BOXES.len(), size));
+                exact = true;
+                break;
+            }
+        }
     }
     if !exact {
         // Third pass: a box drawn around the projected positions of the pool and the target's
         // divisions here (map positions through the live camera).
         let view = armies(process)?;
         let mut ids = unassigned_ids(&view, plan.state);
-        if let Some(a) = view["armies"].as_array().and_then(|a| a.iter().find(|x| x["army"] == json!(army))) {
+        if let Some(a) = view["armies"]
+            .as_array()
+            .and_then(|a| a.iter().find(|x| x["army"] == json!(army)))
+        {
             let here = read(process, division_states)?;
-            for d in a["divisions"].as_array().into_iter().flatten().filter_map(|d| d.as_str()) {
+            for d in a["divisions"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|d| d.as_str())
+            {
                 if here.get(d).copied().flatten() == Some(plan.state) {
                     ids.push(d.to_string());
                 }
@@ -909,7 +932,12 @@ pub(super) fn select_army(process: &dyn Process, keys: &MacKeys, army: &str) -> 
 /// a left click on the source card selects exactly its divisions, a right click on the
 /// target card transfers the selection. Verified by membership: all of the source's
 /// divisions now belong to the target's group.
-pub(super) fn merge(process: &dyn Process, keys: &MacKeys, source: &str, target: &str) -> Result<()> {
+pub(super) fn merge(
+    process: &dyn Process,
+    keys: &MacKeys,
+    source: &str,
+    target: &str,
+) -> Result<()> {
     clear_notices(process, keys)?;
     let (moving, target_group) = read(process, |r, i| {
         let from = group_named(r, i, source)?;
@@ -922,7 +950,10 @@ pub(super) fn merge(process: &dyn Process, keys: &MacKeys, source: &str, target:
         Ok((moving, to))
     })?;
     if moving.is_empty() {
-        return Err(Error::new("no_own_divisions", format!("{source} holds no division")));
+        return Err(Error::new(
+            "no_own_divisions",
+            format!("{source} holds no division"),
+        ));
     }
     if moving.len() > PANEL_ROWS {
         return Err(Error::new(
@@ -934,11 +965,19 @@ pub(super) fn merge(process: &dyn Process, keys: &MacKeys, source: &str, target:
     // select them in the army panel (first row, Shift on the last), as hoi4_army_split does.
     select_army(process, keys, source)?;
     keys.click(GAME, PANEL_ROW.0, PANEL_ROW.1)?;
-    wait(process, "first division selected", |r, i| Ok(selection_size(r, i)? == 1))?;
+    wait(process, "first division selected", |r, i| {
+        Ok(selection_size(r, i)? == 1)
+    })?;
     if moving.len() > 1 {
-        keys.shift_click(GAME, PANEL_ROW.0, PANEL_ROW.1 + PANEL_PITCH * (moving.len() - 1) as f64)?;
+        keys.shift_click(
+            GAME,
+            PANEL_ROW.0,
+            PANEL_ROW.1 + PANEL_PITCH * (moving.len() - 1) as f64,
+        )?;
     }
-    wait(process, "divisions selected", |r, i| Ok(selection_size(r, i)? == moving.len() as u64))?;
+    wait(process, "divisions selected", |r, i| {
+        Ok(selection_size(r, i)? == moving.len() as u64)
+    })?;
     let card = read(process, |r, i| card_rect(r, i, target, "portrait_btn"))?;
     let (x, y) = card.center();
     keys.right_click(GAME, x, y)?;
@@ -997,7 +1036,8 @@ fn highlighted_near(
             if !covered(x, y)
                 && !skip(x, y)
                 && changed(x, y)
-                && (0..patch).all(|dy| (0..patch).all(|dx| changed(x + f64::from(dx), y + f64::from(dy))))
+                && (0..patch)
+                    .all(|dy| (0..patch).all(|dx| changed(x + f64::from(dx), y + f64::from(dy))))
             {
                 let d = (x - anchor.0).powi(2) + (y - anchor.1).powi(2);
                 let h = f64::from(patch / 2);
@@ -1055,7 +1095,10 @@ fn controlled_states(r: &Reader<'_>, image: u64) -> Result<Vec<i32>> {
     let mut out = Vec::new();
     for index in 1..count.min(4096) as u64 {
         let state = r.u64(data + index * 8)?;
-        if state != 0 && r.u64(state)? == image + l.state_vtable && r.i32(state + l.state_controller)? == tag {
+        if state != 0
+            && r.u64(state)? == image + l.state_vtable
+            && r.i32(state + l.state_controller)? == tag
+        {
             out.push(r.i32(state + l.state_id)?);
         }
     }
@@ -1074,11 +1117,17 @@ fn front_border_point(process: &dyn Process, army: &str, state: i32) -> Result<O
     let map = super::front_plan::static_map(&dir)?;
     let mine = read(process, controlled_states)?;
     let army_at = read(process, |r, i| army_provinces(r, i, army))?;
-    let pts: Vec<(f64, f64)> = army_at.iter().filter_map(|p| positions.get(p).copied()).collect();
+    let pts: Vec<(f64, f64)> = army_at
+        .iter()
+        .filter_map(|p| positions.get(p).copied())
+        .collect();
     let centre = if pts.is_empty() {
         None
     } else {
-        Some((pts.iter().map(|p| p.0).sum::<f64>() / pts.len() as f64, pts.iter().map(|p| p.1).sum::<f64>() / pts.len() as f64))
+        Some((
+            pts.iter().map(|p| p.0).sum::<f64>() / pts.len() as f64,
+            pts.iter().map(|p| p.1).sum::<f64>() / pts.len() as f64,
+        ))
     };
     let target: Vec<(f64, f64)> = super::mapdata::state_provinces(&dir, state)?
         .iter()
@@ -1087,7 +1136,10 @@ fn front_border_point(process: &dyn Process, army: &str, state: i32) -> Result<O
     let neighbours = map.adj.get(&state).cloned().unwrap_or_default();
     let mut best: Option<(f64, (f64, f64))> = None;
     for n in neighbours.iter().filter(|n| mine.contains(n)) {
-        for p in super::mapdata::state_provinces(&dir, *n)?.iter().filter_map(|p| positions.get(p).copied()) {
+        for p in super::mapdata::state_provinces(&dir, *n)?
+            .iter()
+            .filter_map(|p| positions.get(p).copied())
+        {
             for q in &target {
                 let gap = (p.0 - q.0).hypot(p.1 - q.1);
                 let near_army = centre.map(|c| (q.0 - c.0).hypot(q.1 - c.1)).unwrap_or(0.0);
@@ -1101,7 +1153,11 @@ fn front_border_point(process: &dyn Process, army: &str, state: i32) -> Result<O
     Ok(best.map(|b| b.1))
 }
 #[allow(dead_code)]
-fn front_point_province(process: &dyn Process, army: &str, state: i32) -> Result<Option<(f64, f64)>> {
+fn front_point_province(
+    process: &dyn Process,
+    army: &str,
+    state: i32,
+) -> Result<Option<(f64, f64)>> {
     let exe = &process
         .identity()
         .ok_or_else(|| Error::new("map_data_unavailable", "Game identity unavailable"))?
@@ -1109,7 +1165,10 @@ fn front_point_province(process: &dyn Process, army: &str, state: i32) -> Result
     let dir = super::mapdata::game_dir(exe)?;
     let positions = super::mapdata::positions(&dir)?;
     let mine = read(process, |r, i| army_provinces(r, i, army))?;
-    let pts: Vec<(f64, f64)> = mine.iter().filter_map(|p| positions.get(p).copied()).collect();
+    let pts: Vec<(f64, f64)> = mine
+        .iter()
+        .filter_map(|p| positions.get(p).copied())
+        .collect();
     if pts.is_empty() {
         return Ok(None);
     }
@@ -1147,7 +1206,9 @@ pub(super) fn front(process: &dyn Process, keys: &MacKeys, army: &str, state: i3
     if let Some((x, z)) = near {
         for _ in 0..4 {
             match read(process, |r, i| super::screenmap::to_screen(r, i, x, z))? {
-                Some((sx, sy)) if (520.0..1500.0).contains(&sx) && (160.0..800.0).contains(&sy) => break,
+                Some((sx, sy)) if (520.0..1500.0).contains(&sx) && (160.0..800.0).contains(&sy) => {
+                    break
+                }
                 _ => {
                     keys.scroll(GAME, (960.0, 540.0), -240)?;
                     std::thread::sleep(std::time::Duration::from_millis(400));
@@ -1169,10 +1230,11 @@ pub(super) fn front(process: &dyn Process, keys: &MacKeys, army: &str, state: i3
     // Highlighted border pixels nearest the projected border point first (thin dashed lines).
     if let Some((x, z)) = near {
         if let Some((sx, sy)) = read(process, |r, i| super::screenmap::to_screen(r, i, x, z))? {
-            let mut nearby: Vec<(f64, f64)> = highlighted_near(&plain, &drawing, &tooltip, 3, (sx, sy), 3)
-                .into_iter()
-                .filter(|(x, y)| (x - sx).hypot(y - sy) < 120.0)
-                .collect();
+            let mut nearby: Vec<(f64, f64)> =
+                highlighted_near(&plain, &drawing, &tooltip, 3, (sx, sy), 3)
+                    .into_iter()
+                    .filter(|(x, y)| (x - sx).hypot(y - sy) < 120.0)
+                    .collect();
             nearby.append(&mut candidates);
             candidates = nearby;
         }
@@ -1539,15 +1601,27 @@ pub(super) fn promote_enabled(r: &Reader<'_>, image: u64, general: &str) -> Resu
     let root = leader_root(r, image)?;
     let wanted = general.to_lowercase();
     for child in gui_tree::children(r, root)? {
-        let Some(inner) = gui_tree::container(r, child, image)? else { continue };
-        let Some(grid) = gui_tree::child(r, image, inner, "leaders_grid")? else { continue };
+        let Some(inner) = gui_tree::container(r, child, image)? else {
+            continue;
+        };
+        let Some(grid) = gui_tree::child(r, image, inner, "leaders_grid")? else {
+            continue;
+        };
         let (_, data, count) = r.array_header(grid + u.grid_items)?;
         for index in 0..count.min(256) as u64 {
             let item = r.u64(data + index * 8)?;
             let entry = r.u64(item + u.item_container)?;
-            let base = if r.u64(entry)? == image + u.container_vtable { entry + 0x30 } else { entry };
-            let Some(frame) = gui_tree::container(r, base, image)? else { continue };
-            let Some(name) = gui_tree::child(r, image, frame, "name")? else { continue };
+            let base = if r.u64(entry)? == image + u.container_vtable {
+                entry + 0x30
+            } else {
+                entry
+            };
+            let Some(frame) = gui_tree::container(r, base, image)? else {
+                continue;
+            };
+            let Some(name) = gui_tree::child(r, image, frame, "name")? else {
+                continue;
+            };
             if r.string_bounded(name + u.text, 128)?.to_lowercase() != wanted {
                 continue;
             }
@@ -1694,7 +1768,7 @@ fn assign_commander_once(
     if is_group && allow_promote {
         // The game keeps Promote enabled without enough command power (the tooltip turns
         // red); PROMOTE_LEADER_CP_COST is 40 in 00_defines.lua (1.19.4.1).
-        let power = read(process, |r, i| super::country_status::command_power(r, i))?;
+        let power = read(process, super::country_status::command_power)?;
         if read(process, |r, i| promote_enabled(r, i, general))?.is_some()
             && power.is_some_and(|cp| cp < PROMOTE_LEADER_CP_COST)
         {
@@ -1901,10 +1975,21 @@ mod tests {
     fn unassigned_divisions_go_to_the_standing_army_with_the_most_room() {
         let plan = plan_assign(&assign_view(), 64, None, ARMY_CAP).unwrap();
         // Army 1 has room for 5 of the 6, Army 2 for 14: Army 2 takes all six
-        assert_eq!(plan.mode, AssignMode::Absorb { army: "Army 2".into() });
-        assert_eq!((plan.take, plan.overflow, plan.army_after), (6, 0, Some(16)));
+        assert_eq!(
+            plan.mode,
+            AssignMode::Absorb {
+                army: "Army 2".into()
+            }
+        );
+        assert_eq!(
+            (plan.take, plan.overflow, plan.army_after),
+            (6, 0, Some(16))
+        );
         let plan = plan_assign(&assign_view(), 64, Some("Army 1"), ARMY_CAP).unwrap();
-        assert_eq!((plan.take, plan.overflow, plan.army_after), (5, 1, Some(24)));
+        assert_eq!(
+            (plan.take, plan.overflow, plan.army_after),
+            (5, 1, Some(24))
+        );
         assert_eq!(plan.to_json()["unmapped_control"], json!(false));
         assert_eq!(plan.target_here, 19);
     }
@@ -1919,8 +2004,14 @@ mod tests {
     #[test]
     fn assign_refuses_before_input_with_typed_errors() {
         let v = assign_view();
-        assert_eq!(plan_assign(&v, 99, None, 24).unwrap_err().code, "no_unassigned_here");
-        assert_eq!(plan_assign(&v, 64, Some("Army 9"), 24).unwrap_err().code, "no_such_army");
+        assert_eq!(
+            plan_assign(&v, 99, None, 24).unwrap_err().code,
+            "no_unassigned_here"
+        );
+        assert_eq!(
+            plan_assign(&v, 64, Some("Army 9"), 24).unwrap_err().code,
+            "no_such_army"
+        );
         assert_eq!(
             plan_assign(&v, 66, Some("Army 1"), 24).unwrap_err().code,
             "target_not_in_state"

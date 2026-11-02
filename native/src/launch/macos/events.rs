@@ -185,7 +185,10 @@ fn option_centres(
         let f = gui_tree::rect(r, image, frame, GAME)?;
         let left = f.x - 35 + 115;
         let _ = (grid, count);
-        return Ok((None, Some((f64::from(left) + 150.0, 120.0, f64::from(f.y + f.h + 10)))));
+        return Ok((
+            None,
+            Some((f64::from(left) + 150.0, 120.0, f64::from(f.y + f.h + 10))),
+        ));
     }
     if kind == "EventWindow_Operative" {
         // eventwindow.gui: agency_insignia at (361, 35), options_grid at x 90 (300 px slots)
@@ -195,7 +198,10 @@ fn option_centres(
         };
         let f = gui_tree::rect(r, image, insignia, GAME)?;
         let left = f.x - 361 + 90;
-        return Ok((None, Some((f64::from(left) + 150.0, 120.0, f64::from(f.y - 35 + 250)))));
+        return Ok((
+            None,
+            Some((f64::from(left) + 150.0, 120.0, f64::from(f.y - 35 + 250))),
+        ));
     }
     if kind != "EventWindow" && kind != "EventWindow_News" {
         return Ok((None, None));
@@ -360,8 +366,10 @@ pub(super) fn peace_status(process: &dyn Process) -> Result<Value> {
         }
         Ok(Value::Object(out))
     })?;
-    Ok(json!({"peace_conference_open":true,"texts":texts,"validated":false,
-        "note":"text offsets inherited from the diplomacy views; never read with a conference open"}))
+    Ok(
+        json!({"peace_conference_open":true,"texts":texts,"validated":false,
+        "note":"text offsets inherited from the diplomacy views; never read with a conference open"}),
+    )
 }
 /// Open events in list order; the last one is drawn on top.
 pub(super) fn list(process: &dyn Process) -> Result<Value> {

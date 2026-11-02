@@ -20,9 +20,9 @@
 //! of the selected divisions must head for a province of the destination state (division +0x2ac).
 use super::{
     armies::{self, division_states},
-    diplomacy_state, front_plan, kit,
+    diplomacy_state, front_plan,
     journal::Outcome,
-    mapdata, naval,
+    kit, mapdata, naval,
     settle::Verdict,
     ui::{clear_notices, find_state, read, settled, wait},
     wars,
@@ -49,7 +49,10 @@ const OFFSET_LIMIT: i64 = 350;
 pub(super) enum Selector {
     Army(String),
     /// Division ids that are exactly the own divisions standing in `state`.
-    Divisions { state: i32, ids: Vec<String> },
+    Divisions {
+        state: i32,
+        ids: Vec<String>,
+    },
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub(super) struct Plan {
@@ -97,7 +100,10 @@ fn army_row<'a>(view: &'a Value, name: &str) -> Option<&'a Value> {
 pub(super) fn plan(req: &Request, facts: &Facts) -> Result<Plan> {
     // The destination first: it is the same for both selectors.
     let Some((owner, controller)) = &facts.target_holder else {
-        return Err(Error::new("invalid_target", format!("State {} is not known", req.target_state)));
+        return Err(Error::new(
+            "invalid_target",
+            format!("State {} is not known", req.target_state),
+        ));
     };
     if *owner == facts.player || *controller == facts.player {
         return Err(Error::new(
@@ -116,7 +122,10 @@ pub(super) fn plan(req: &Request, facts: &Facts) -> Result<Plan> {
         ));
     }
     if facts.target_coastal == Some(false) {
-        return Err(Error::new("not_coastal", format!("State {} has no coast to land on", req.target_state)));
+        return Err(Error::new(
+            "not_coastal",
+            format!("State {} has no coast to land on", req.target_state),
+        ));
     }
     if facts.convoys <= 0 {
         return Err(Error::new(
@@ -126,31 +135,53 @@ pub(super) fn plan(req: &Request, facts: &Facts) -> Result<Plan> {
     }
     let (selector, source_state) = match (&req.army, req.divisions.is_empty()) {
         (Some(_), false) | (None, true) => {
-            return Err(Error::new("invalid_arguments", "Give exactly one of army or divisions"));
+            return Err(Error::new(
+                "invalid_arguments",
+                "Give exactly one of army or divisions",
+            ));
         }
         (Some(name), true) => {
             let Some(row) = army_row(&facts.armies, name) else {
-                return Err(Error::new("no_such_army", format!("No own army named {name:?} (hoi4_armies)")));
+                return Err(Error::new(
+                    "no_such_army",
+                    format!("No own army named {name:?} (hoi4_armies)"),
+                ));
             };
             if row["division_count"].as_u64().unwrap_or(0) == 0 {
-                return Err(Error::new("no_own_divisions", format!("{name} has no divisions")));
+                return Err(Error::new(
+                    "no_own_divisions",
+                    format!("{name} has no divisions"),
+                ));
             }
-            let source = req.source_state.or_else(|| row["main_state"].as_i64().map(|s| s as i32));
+            let source = req
+                .source_state
+                .or_else(|| row["main_state"].as_i64().map(|s| s as i32));
             let Some(source) = source else {
                 return Err(Error::new(
                     "army_location_unknown",
                     format!("{name} is on the move; wait until it stands somewhere or pass source_state"),
                 ));
             };
-            (Selector::Army(row["army"].as_str().unwrap_or(name).to_string()), source)
+            (
+                Selector::Army(row["army"].as_str().unwrap_or(name).to_string()),
+                source,
+            )
         }
         (None, false) => {
             let mut states = BTreeSet::new();
             for id in &req.divisions {
                 match facts.division_states.get(id) {
-                    None => return Err(Error::new("no_such_division", format!("No own division {id} (hoi4_armies)"))),
+                    None => {
+                        return Err(Error::new(
+                            "no_such_division",
+                            format!("No own division {id} (hoi4_armies)"),
+                        ))
+                    }
                     Some(None) => {
-                        return Err(Error::new("army_location_unknown", format!("Division {id} is on the move")))
+                        return Err(Error::new(
+                            "army_location_unknown",
+                            format!("Division {id} is on the move"),
+                        ))
                     }
                     Some(Some(s)) => {
                         states.insert(*s);
@@ -181,11 +212,20 @@ pub(super) fn plan(req: &Request, facts: &Facts) -> Result<Plan> {
                     ),
                 ));
             }
-            (Selector::Divisions { state, ids: req.divisions.clone() }, req.source_state.unwrap_or(state))
+            (
+                Selector::Divisions {
+                    state,
+                    ids: req.divisions.clone(),
+                },
+                req.source_state.unwrap_or(state),
+            )
         }
     };
     if source_state == req.target_state {
-        return Err(Error::new("invalid_target", "Source and destination are the same state"));
+        return Err(Error::new(
+            "invalid_target",
+            "Source and destination are the same state",
+        ));
     }
     if facts.source_coastal == Some(false) {
         return Err(Error::new(
@@ -241,7 +281,9 @@ fn gather(process: &dyn Process, req: &Request) -> Result<Facts> {
     let enemies = diplomacy_state::player_wars(process)?.enemies;
     let armies_view = armies::armies(process)?;
     let division_states = read(process, division_states)?;
-    let convoys = naval::convoys_tool(process, &Map::new())?["convoys"]["total"].as_i64().unwrap_or(0);
+    let convoys = naval::convoys_tool(process, &Map::new())?["convoys"]["total"]
+        .as_i64()
+        .unwrap_or(0);
     let source_hint = req.source_state.or_else(|| {
         req.army
             .as_deref()
@@ -260,7 +302,9 @@ fn gather(process: &dyn Process, req: &Request) -> Result<Facts> {
         target_holder,
         enemies,
         target_coastal: map.info.get(&req.target_state).map(|i| i.coastal),
-        source_coastal: source_hint.and_then(|s| map.info.get(&s)).map(|i| i.coastal),
+        source_coastal: source_hint
+            .and_then(|s| map.info.get(&s))
+            .map(|i| i.coastal),
         target_provinces: mapdata::state_provinces(&dir, req.target_state).unwrap_or_default(),
         convoys,
         nodes_before,
@@ -274,10 +318,14 @@ fn progress(process: &dyn Process, plan: &Plan) -> Result<(Option<usize>, Option
         };
         let heading = match &plan.selector {
             Selector::Army(a) if !plan.target_provinces.is_empty() => {
-                armies::heading_for(r, i, a, &plan.target_provinces).ok().map(|h| h.0)
+                armies::heading_for(r, i, a, &plan.target_provinces)
+                    .ok()
+                    .map(|h| h.0)
             }
             Selector::Divisions { ids, .. } if !plan.target_provinces.is_empty() => {
-                armies::divisions_heading_for(r, i, ids, &plan.target_provinces).ok().map(|h| h.0)
+                armies::divisions_heading_for(r, i, ids, &plan.target_provinces)
+                    .ok()
+                    .map(|h| h.0)
             }
             _ => None,
         };
@@ -288,12 +336,23 @@ fn progress(process: &dyn Process, plan: &Plan) -> Result<(Option<usize>, Option
 // ---- driving --------------------------------------------------------------------------------------
 /// A battle plan toolbar button: rectangle and state (3 disabled).
 fn plan_button(r: &Reader<'_>, image: u64, name: &str) -> Result<(Rect, i32)> {
-    let view = kit::find_view(r, image, BATTLE_PLAN_TOOLS)?
-        .ok_or_else(|| Error::new("gui_target_unavailable", "The battle plan tools view was not found"))?;
-    let window = kit::find_window(r, image, view, "battleplantools_window")?
-        .ok_or_else(|| Error::new("gui_target_unavailable", "The battle plan toolbar window was not found"))?;
+    let view = kit::find_view(r, image, BATTLE_PLAN_TOOLS)?.ok_or_else(|| {
+        Error::new(
+            "gui_target_unavailable",
+            "The battle plan tools view was not found",
+        )
+    })?;
+    let window = kit::find_window(r, image, view, "battleplantools_window")?.ok_or_else(|| {
+        Error::new(
+            "gui_target_unavailable",
+            "The battle plan toolbar window was not found",
+        )
+    })?;
     if !gui_tree::visible(r, window)? {
-        return Err(Error::new("gui_target_unavailable", "The battle plan toolbar is not shown (no land units selected?)"));
+        return Err(Error::new(
+            "gui_target_unavailable",
+            "The battle plan toolbar is not shown (no land units selected?)",
+        ));
     }
     kit::rect_deep(r, image, window, name)
 }
@@ -301,7 +360,10 @@ fn pause(ms: u64) {
     thread::sleep(Duration::from_millis(ms));
 }
 fn aim(centre: (f64, f64), offset: (i32, i32)) -> (f64, f64) {
-    (centre.0 + f64::from(offset.0), centre.1 + f64::from(offset.1))
+    (
+        centre.0 + f64::from(offset.0),
+        centre.1 + f64::from(offset.1),
+    )
 }
 /// Cancel the drawing mode (Escape deletes a drawn order) and close the game menu a stray Escape
 /// may have opened.
@@ -346,15 +408,17 @@ fn landing_point(process: &dyn Process, plan: &Plan) -> Result<Option<(f64, f64)
 /// screen centre, outside the panels; None when the screen shows none.
 fn nearest_cyan(c: &crate::platform::macos_input::Capture) -> Option<(f64, f64)> {
     let cyan = |x: f64, y: f64| {
-        c.rgb(x, y)
-            .is_some_and(|(r, g, b)| r < 90 && g > 170 && b > 170 && (i32::from(g) - i32::from(b)).abs() < 70)
+        c.rgb(x, y).is_some_and(|(r, g, b)| {
+            r < 90 && g > 170 && b > 170 && (i32::from(g) - i32::from(b)).abs() < 70
+        })
     };
     let mut best: Option<(f64, f64, f64)> = None;
     let mut y = 100.0;
     while y < 820.0 {
         let mut x = 460.0;
         while x < 1540.0 {
-            if cyan(x, y) && (0..5).all(|d| cyan(x + f64::from(d), y) && cyan(x, y + f64::from(d))) {
+            if cyan(x, y) && (0..5).all(|d| cyan(x + f64::from(d), y) && cyan(x, y + f64::from(d)))
+            {
                 let d = (x - 960.0).powi(2) + (y - 540.0).powi(2);
                 if best.is_none_or(|b| d < b.0) {
                     best = Some((d, x + 2.0, y + 2.0));
@@ -372,9 +436,15 @@ pub(super) fn drive(process: &dyn Process, keys: &MacKeys<'_>, plan: &Plan) -> R
         Selector::Army(name) => {
             armies::select_army(process, keys, name)?;
         }
-        Selector::Divisions { state, ids } => armies::box_select_exact(process, keys, *state, ids.len())?,
+        Selector::Divisions { state, ids } => {
+            armies::box_select_exact(process, keys, *state, ids.len())?
+        }
     }
-    let button = if plan.harbor { "btn_order_draw_naval_inv_with_harbor" } else { "btn_order_draw_naval_inv" };
+    let button = if plan.harbor {
+        "btn_order_draw_naval_inv_with_harbor"
+    } else {
+        "btn_order_draw_naval_inv"
+    };
     let (rect, state) = settled(process, "invasion button", |r, i| plan_button(r, i, button))?;
     if state == 3 {
         return Err(Error::new(
@@ -428,8 +498,14 @@ pub(super) fn drive(process: &dyn Process, keys: &MacKeys<'_>, plan: &Plan) -> R
             _ => None,
         };
         let heading = match &expect.selector {
-            Selector::Army(a) => armies::heading_for(r, i, a, &expect.target_provinces).ok().map(|h| h.0),
-            Selector::Divisions { ids, .. } => armies::divisions_heading_for(r, i, ids, &expect.target_provinces).ok().map(|h| h.0),
+            Selector::Army(a) => armies::heading_for(r, i, a, &expect.target_provinces)
+                .ok()
+                .map(|h| h.0),
+            Selector::Divisions { ids, .. } => {
+                armies::divisions_heading_for(r, i, ids, &expect.target_provinces)
+                    .ok()
+                    .map(|h| h.0)
+            }
         };
         Ok(settle(&expect, nodes, heading) == Verdict::Reached)
     });
@@ -445,9 +521,11 @@ pub(super) fn drive(process: &dyn Process, keys: &MacKeys<'_>, plan: &Plan) -> R
         ));
     }
     let (nodes, heading) = progress(process, plan)?;
-    Ok(json!({"selector":plan.selector,"source_state":plan.source_state,"target_state":plan.target_state,"harbor":plan.harbor,
+    Ok(
+        json!({"selector":plan.selector,"source_state":plan.source_state,"target_state":plan.target_state,"harbor":plan.harbor,
         "battle_plan_nodes_before":plan.nodes_before,"battle_plan_nodes_now":nodes,"divisions_heading_for_target":heading,
-        "note":"An invasion needs convoys, preparation time and naval dominance on the route; read the army card and hoi4_armies for the preparation progress"}))
+        "note":"An invasion needs convoys, preparation time and naval dominance on the route; read the army card and hoi4_armies for the preparation progress"}),
+    )
 }
 
 // ---- dispatch -------------------------------------------------------------------------------------
@@ -456,28 +534,50 @@ fn pair(args: &Map<String, Value>, key: &str) -> Result<(i32, i32)> {
         return Ok((0, 0));
     };
     let a = v.as_array().filter(|a| a.len() == 2);
-    let n = |i: usize| a.and_then(|a| a[i].as_i64()).filter(|n| n.abs() <= OFFSET_LIMIT);
+    let n = |i: usize| {
+        a.and_then(|a| a[i].as_i64())
+            .filter(|n| n.abs() <= OFFSET_LIMIT)
+    };
     match (n(0), n(1)) {
         (Some(x), Some(y)) => Ok((x as i32, y as i32)),
-        _ => Err(Error::new("invalid_arguments", format!("{key} must be [dx, dy] within +-{OFFSET_LIMIT} pixels"))),
+        _ => Err(Error::new(
+            "invalid_arguments",
+            format!("{key} must be [dx, dy] within +-{OFFSET_LIMIT} pixels"),
+        )),
     }
 }
 pub(super) fn call(args: &Map<String, Value>, env: kit::Env<'_>) -> Result<Value> {
     super::allowed(
         args,
-        &["state_id", "army", "divisions", "source_state_id", "with_harbor", "source_offset", "landing_offset", "request_id", "lease_token"],
+        &[
+            "state_id",
+            "army",
+            "divisions",
+            "source_state_id",
+            "with_harbor",
+            "source_offset",
+            "landing_offset",
+            "request_id",
+            "lease_token",
+        ],
     )?;
     let target_state = args
         .get("state_id")
         .and_then(Value::as_i64)
         .filter(|s| (1..=4095).contains(s))
-        .ok_or_else(|| Error::new("invalid_arguments", "state_id must be an integer 1..4095"))? as i32;
+        .ok_or_else(|| Error::new("invalid_arguments", "state_id must be an integer 1..4095"))?
+        as i32;
     let source_state = match args.get("source_state_id") {
         None => None,
         Some(v) => Some(
             v.as_i64()
                 .filter(|s| (1..=4095).contains(s))
-                .ok_or_else(|| Error::new("invalid_arguments", "source_state_id must be an integer 1..4095"))? as i32,
+                .ok_or_else(|| {
+                    Error::new(
+                        "invalid_arguments",
+                        "source_state_id must be an integer 1..4095",
+                    )
+                })? as i32,
         ),
     };
     let divisions: Vec<String> = match args.get("divisions") {
@@ -485,15 +585,27 @@ pub(super) fn call(args: &Map<String, Value>, env: kit::Env<'_>) -> Result<Value
         Some(v) => v
             .as_array()
             .filter(|a| !a.is_empty() && a.len() <= 40)
-            .and_then(|a| a.iter().map(|d| d.as_str().filter(|d| d.len() == 17).map(str::to_string)).collect())
-            .ok_or_else(|| Error::new("invalid_arguments", "divisions must be 1..40 division ids from hoi4_armies"))?,
+            .and_then(|a| {
+                a.iter()
+                    .map(|d| d.as_str().filter(|d| d.len() == 17).map(str::to_string))
+                    .collect()
+            })
+            .ok_or_else(|| {
+                Error::new(
+                    "invalid_arguments",
+                    "divisions must be 1..40 division ids from hoi4_armies",
+                )
+            })?,
     };
     let req = Request {
         army: kit::opt_text_arg(args, "army", 128)?,
         divisions,
         target_state,
         source_state,
-        harbor: args.get("with_harbor").and_then(Value::as_bool).unwrap_or(false),
+        harbor: args
+            .get("with_harbor")
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
         source_offset: pair(args, "source_offset")?,
         landing_offset: pair(args, "landing_offset")?,
     };
@@ -503,7 +615,12 @@ pub(super) fn call(args: &Map<String, Value>, env: kit::Env<'_>) -> Result<Value
         "source_state_id":source_state,"with_harbor":req.harbor,"source_offset":req.source_offset,"landing_offset":req.landing_offset});
     kit::run(
         env,
-        kit::Request { id: &id, token: &token, seconds: 150, action },
+        kit::Request {
+            id: &id,
+            token: &token,
+            seconds: 150,
+            action,
+        },
         &|p| {
             let facts = gather(p, &req)?;
             let planned = plan(&req, &facts)?;
@@ -515,7 +632,9 @@ pub(super) fn call(args: &Map<String, Value>, env: kit::Env<'_>) -> Result<Value
                 // No stored or remembered plan (an intent from before plans were journaled):
                 // nothing can be settled, so the intent is closed as diverged instead of
                 // blocking every later action.
-                return Ok(Outcome::Diverged(json!({"reason":"no stored plan to settle against"})));
+                return Ok(Outcome::Diverged(
+                    json!({"reason":"no stored plan to settle against"}),
+                ));
             };
             let (nodes, heading) = progress(p, &pl)?;
             Ok(settle(&pl, nodes, heading).outcome(json!({"nodes":nodes,"heading":heading,
@@ -580,7 +699,10 @@ mod tests {
     fn plans_an_army_invasion() {
         let p = plan(&request(), &facts()).unwrap();
         assert_eq!(p.selector, Selector::Army("Landungsarmee".into()));
-        assert_eq!((p.source_state, p.target_state, p.nodes_before), (64, 12, 2));
+        assert_eq!(
+            (p.source_state, p.target_state, p.nodes_before),
+            (64, 12, 2)
+        );
         assert_eq!(p.landing_offset, (10, -20));
     }
     #[test]
@@ -626,8 +748,12 @@ mod tests {
     #[test]
     fn army_on_the_move_needs_a_source() {
         let mut f = facts();
-        f.armies = json!({"armies":[{"army":"Landungsarmee","division_count":3,"main_state":null}]});
-        assert_eq!(plan(&request(), &f).unwrap_err().code, "army_location_unknown");
+        f.armies =
+            json!({"armies":[{"army":"Landungsarmee","division_count":3,"main_state":null}]});
+        assert_eq!(
+            plan(&request(), &f).unwrap_err().code,
+            "army_location_unknown"
+        );
         let mut r = request();
         r.source_state = Some(64);
         assert_eq!(plan(&r, &f).unwrap().source_state, 64);
@@ -638,13 +764,28 @@ mod tests {
         r.army = None;
         r.divisions = vec!["00000001:00000001".into(), "00000001:00000002".into()];
         let p = plan(&r, &facts()).unwrap();
-        assert_eq!(p.selector, Selector::Divisions { state: 64, ids: r.divisions.clone() });
+        assert_eq!(
+            p.selector,
+            Selector::Divisions {
+                state: 64,
+                ids: r.divisions.clone()
+            }
+        );
         r.divisions = vec!["00000001:00000001".into()];
-        assert_eq!(plan(&r, &facts()).unwrap_err().code, "divisions_not_isolated");
+        assert_eq!(
+            plan(&r, &facts()).unwrap_err().code,
+            "divisions_not_isolated"
+        );
         r.divisions = vec!["00000001:00000001".into(), "00000001:00000003".into()];
-        assert_eq!(plan(&r, &facts()).unwrap_err().code, "divisions_not_together");
+        assert_eq!(
+            plan(&r, &facts()).unwrap_err().code,
+            "divisions_not_together"
+        );
         r.divisions = vec!["00000001:00000004".into()];
-        assert_eq!(plan(&r, &facts()).unwrap_err().code, "army_location_unknown");
+        assert_eq!(
+            plan(&r, &facts()).unwrap_err().code,
+            "army_location_unknown"
+        );
         r.divisions = vec!["00000001:000000ff".into()];
         assert_eq!(plan(&r, &facts()).unwrap_err().code, "no_such_division");
     }
@@ -678,7 +819,10 @@ mod tests {
     #[test]
     fn tool_schema_is_marked_unvalidated() {
         let t = tool();
-        assert!(t["description"].as_str().unwrap().starts_with("UNVALIDATED (no live test yet): "));
+        assert!(t["description"]
+            .as_str()
+            .unwrap()
+            .starts_with("UNVALIDATED (no live test yet): "));
         assert_eq!(t["name"], TOOL);
         assert_eq!(t["inputSchema"]["required"].as_array().unwrap().len(), 3);
     }

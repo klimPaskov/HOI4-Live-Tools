@@ -230,7 +230,12 @@ impl Controller {
     }
     /// Arm (or re-token) the server-side `stop_on_date` watcher with the lease
     /// the owner just issued or received. The thread is started on first use.
-    pub(super) fn arm_date_stop(&self, owner: &MacClock, token: &str, epoch: &crate::actions::Epoch) {
+    pub(super) fn arm_date_stop(
+        &self,
+        owner: &MacClock,
+        token: &str,
+        epoch: &crate::actions::Epoch,
+    ) {
         self.date_stop.arm(token.to_owned(), |shared| {
             Arc::new(date_stop::Live {
                 shared,
@@ -250,7 +255,8 @@ impl Controller {
     }
     /// `hoi4_plan` / digest view of the date watcher.
     pub(super) fn date_stop_status(&self) -> Value {
-        self.date_stop.status_json(&self.directory.join("plan.json"))
+        self.date_stop
+            .status_json(&self.directory.join("plan.json"))
     }
     pub(super) fn events(&self) -> Arc<Events> {
         self.events.clone()

@@ -118,7 +118,13 @@ pub(super) fn clean(text: &str) -> String {
     }
     out.split_whitespace().collect::<Vec<_>>().join(" ")
 }
-pub(super) fn find(r: &Reader<'_>, image: u64, object: u64, name: &str, depth: u32) -> Result<Option<u64>> {
+pub(super) fn find(
+    r: &Reader<'_>,
+    image: u64,
+    object: u64,
+    name: &str,
+    depth: u32,
+) -> Result<Option<u64>> {
     for child in gui_tree::children(r, object)? {
         if gui_tree::name(r, child, image)?.as_deref() == Some(name) {
             return Ok(Some(child));
@@ -532,7 +538,10 @@ fn war_goal_choose(
         .map_err(|e| {
             Error::new(
                 e.code,
-                format!("{} (clicked x={:.0} y={:.0}; {seen}; list scroll base {base_scroll:.0})", e.message, at.0, at.1),
+                format!(
+                    "{} (clicked x={:.0} y={:.0}; {seen}; list scroll base {base_scroll:.0})",
+                    e.message, at.0, at.1
+                ),
             )
         })?;
     }
@@ -604,7 +613,12 @@ fn locate(
     keys: &MacKeys,
     target: &Target,
     action: &str,
-) -> Result<(String, Vec<Row>, Row, Option<&'static super::diplomacy_keys::Spec>)> {
+) -> Result<(
+    String,
+    Vec<Row>,
+    Row,
+    Option<&'static super::diplomacy_keys::Spec>,
+)> {
     clear_notices(process, keys)?;
     let tag = show_target(process, keys, target)?;
     if read(process, |r, i| Ok(dialog(r, i)?.is_some()))? {
@@ -630,9 +644,7 @@ pub(super) fn plan(
     try_anyway: bool,
 ) -> Result<Plan> {
     let (tag, _, row, spec) = locate(process, keys, target, action)?;
-    let before = read(process, |r, i| {
-        super::diplomacy_state::snapshot(r, i, &tag)
-    })?;
+    let before = read(process, |r, i| super::diplomacy_state::snapshot(r, i, &tag))?;
     if !row.enabled {
         let mut message = format!(
             "The game disables '{}' toward {tag} now. {}.",
@@ -651,7 +663,10 @@ pub(super) fn plan(
             message.push_str(&if goals.is_empty() {
                 " Own war goals against this country: none.".to_string()
             } else {
-                format!(" Own war goals against this country (not yet completed or expired): {}.", goals.join("; "))
+                format!(
+                    " Own war goals against this country (not yet completed or expired): {}.",
+                    goals.join("; ")
+                )
             });
         }
         return Err(Error::new(code, message));
@@ -673,7 +688,12 @@ pub(super) fn plan(
             ));
         }
     }
-    Ok(Plan { tag, row, spec, before })
+    Ok(Plan {
+        tag,
+        row,
+        spec,
+        before,
+    })
 }
 
 /// The dispatch's own evidence after sending.
@@ -709,7 +729,10 @@ pub(super) fn execute(
         .cloned()
         .ok_or_else(|| Error::new("action_not_offered", "The row is no longer offered"))?;
     if !row.enabled {
-        return Err(Error::new("action_disabled", "The game disables this action now"));
+        return Err(Error::new(
+            "action_disabled",
+            "The game disables this action now",
+        ));
     }
     let rect = row
         .rect
@@ -767,7 +790,10 @@ pub(super) fn execute(
                     .unwrap_or_default();
                 return Err(Error::new(
                     "invalid_target",
-                    format!("The game does not allow sending. Dialog: {}", shown.join(" | ")),
+                    format!(
+                        "The game does not allow sending. Dialog: {}",
+                        shown.join(" | ")
+                    ),
                 ));
             }
             let (x, y) = send.center();
@@ -799,12 +825,23 @@ pub(super) fn execute(
         })?;
         let rows_changed = rows_differ(&rows_now, &before_rows);
         let pp_spent = super::decisions::political_power(process)? < pp_before;
-        let snap = read(process, |r, i| super::diplomacy_state::snapshot(r, i, &plan.tag))?;
+        let snap = read(process, |r, i| {
+            super::diplomacy_state::snapshot(r, i, &plan.tag)
+        })?;
         let relation = super::diplomacy_keys::verdict(plan.spec, Some(&plan.before), &snap, false)
             == super::settle::Verdict::Reached
-            && !matches!(plan.spec.map(|s| s.effect), Some(super::diplomacy_keys::Effect::RowsOnly));
-        if relation || ((rows_changed || pp_spent) && !ai) || std::time::Instant::now() >= deadline {
-            return Ok(Proof { rows_changed, pp_spent, relation, dialog: texts });
+            && !matches!(
+                plan.spec.map(|s| s.effect),
+                Some(super::diplomacy_keys::Effect::RowsOnly)
+            );
+        if relation || ((rows_changed || pp_spent) && !ai) || std::time::Instant::now() >= deadline
+        {
+            return Ok(Proof {
+                rows_changed,
+                pp_spent,
+                relation,
+                dialog: texts,
+            });
         }
         std::thread::sleep(std::time::Duration::from_millis(80));
     }
@@ -857,11 +894,9 @@ pub(super) fn preview(
             }
         }
         info["texts"] = dialog_texts(process);
-        info["send_enabled"] = json!(
-            read(process, |r, i| dialog_button(r, i, "send_button"))
-                .map(|(_, e)| e)
-                .unwrap_or(false)
-        );
+        info["send_enabled"] = json!(read(process, |r, i| dialog_button(r, i, "send_button"))
+            .map(|(_, e)| e)
+            .unwrap_or(false));
         Ok(info)
     })();
     cancel_dialog(process, keys);

@@ -10,9 +10,7 @@
 //! superiority, training 2048 = frame 12 - 1 of the mission toolbar); no
 //! German wing had a mission to compare; validated against own orders on 26 October 2026.
 use super::air::MISSIONS;
-use super::fleetmem::{
-    self, expect, pointers, require_libcxx, AIR_BY_COUNTRY, GS_AIR_MANAGER,
-};
+use super::fleetmem::{self, expect, pointers, require_libcxx, AIR_BY_COUNTRY, GS_AIR_MANAGER};
 use crate::{
     error::{Error, Result},
     memory::Reader,

@@ -23,9 +23,9 @@ use super::{
     ui::{clear_notices, find_state, read, settled, wait},
 };
 use crate::{
-    memory::Reader,
     economy,
     error::{Error, Result},
+    memory::Reader,
     platform::{macos_input::MacKeys, Process},
 };
 use serde_json::{json, Value};
@@ -103,7 +103,11 @@ pub(super) fn find_task_force<'a>(
         )),
     }
 }
-pub(super) fn plan_mission(fleets: &[Fleet], task_force: &str, mission: &str) -> Result<MissionPlan> {
+pub(super) fn plan_mission(
+    fleets: &[Fleet],
+    task_force: &str,
+    mission: &str,
+) -> Result<MissionPlan> {
     let Some(&(name, button, code, needs_area)) = MISSIONS.iter().find(|m| m.0 == mission) else {
         return Err(Error::new(
             "invalid_arguments",
@@ -172,11 +176,18 @@ pub(super) fn plan_region(
             "fleet_unknown",
             format!(
                 "No own fleet named {fleet:?}; own fleets: {}",
-                fleets.iter().map(|f| f.name.trim()).collect::<Vec<_>>().join(" | ")
+                fleets
+                    .iter()
+                    .map(|f| f.name.trim())
+                    .collect::<Vec<_>>()
+                    .join(" | ")
             ),
         ));
     };
-    if fleets.last().is_some_and(|l| std::ptr::eq(l, f)) && fleets.len() > 1 && f.task_forces.iter().all(|t| t.mission_code == 8) {
+    if fleets.last().is_some_and(|l| std::ptr::eq(l, f))
+        && fleets.len() > 1
+        && f.task_forces.iter().all(|t| t.mission_code == 8)
+    {
         return Err(Error::new(
             "reserve_fleet",
             "The reserve fleet takes no sea region",
@@ -189,7 +200,11 @@ pub(super) fn plan_region(
             format!(
                 "Fleet {:?} does not operate in {region:?}; its regions: {}",
                 f.name,
-                f.regions.iter().map(|r| r.1.as_str()).collect::<Vec<_>>().join(" | ")
+                f.regions
+                    .iter()
+                    .map(|r| r.1.as_str())
+                    .collect::<Vec<_>>()
+                    .join(" | ")
             ),
         ));
     }
@@ -219,7 +234,11 @@ pub(super) fn settle_mission(before: i32, now: Option<i32>, target: i32) -> supe
     }
 }
 /// A fleet's area changes only by this action: the region present (add) or absent (remove).
-pub(super) fn settle_region(had: bool, has: Option<bool>, want_present: bool) -> super::settle::Verdict {
+pub(super) fn settle_region(
+    had: bool,
+    has: Option<bool>,
+    want_present: bool,
+) -> super::settle::Verdict {
     use super::settle::Verdict;
     match has {
         Some(h) if h == want_present => Verdict::Reached,
@@ -235,7 +254,11 @@ pub(super) fn mission_code_now(process: &dyn Process, task_force: &str) -> Resul
         .find(|t| same_name(&t.name, task_force))
         .map(|t| t.mission_code))
 }
-pub(super) fn region_present_now(process: &dyn Process, fleet: &str, region: &str) -> Result<Option<bool>> {
+pub(super) fn region_present_now(
+    process: &dyn Process,
+    fleet: &str,
+    region: &str,
+) -> Result<Option<bool>> {
     Ok(own_fleets(process)?
         .iter()
         .find(|f| same_name(&f.name, fleet))
@@ -262,7 +285,9 @@ pub(super) fn enter_navy_mode(process: &dyn Process, keys: &MacKeys) -> Result<(
 pub(super) fn leave_navy_mode(process: &dyn Process, keys: &MacKeys) -> Result<()> {
     if read(process, nui::navy_mode)? {
         keys.press_code(F1)?;
-        wait(process, "default map mode", |r, i| Ok(!nui::navy_mode(r, i)?))?;
+        wait(process, "default map mode", |r, i| {
+            Ok(!nui::navy_mode(r, i)?)
+        })?;
     }
     Ok(())
 }
@@ -279,7 +304,9 @@ pub(super) fn close_region_view(process: &dyn Process, keys: &MacKeys) -> Result
         })?;
         let (x, y) = close.center();
         click_at(keys, x, y)?;
-        match wait(process, "region view closed", |r, i| Ok(nui::region_view(r, i)?.is_none())) {
+        match wait(process, "region view closed", |r, i| {
+            Ok(nui::region_view(r, i)?.is_none())
+        }) {
             Ok(()) => return Ok(()),
             Err(error) if attempt == 1 => return Err(error),
             Err(_) => pause(300),
@@ -295,14 +322,22 @@ fn close_panel(process: &dyn Process, keys: &MacKeys) -> Result<()> {
         }
         let entries = read(process, nui::entries)?;
         if let Some(selected) = entries.iter().find(|e| e.selected) {
-            click_at(keys, f64::from(selected.select.x) + 30.0, f64::from(selected.select.y + selected.select.h / 2))?;
+            click_at(
+                keys,
+                f64::from(selected.select.x) + 30.0,
+                f64::from(selected.select.y + selected.select.h / 2),
+            )?;
             pause(500);
             continue;
         }
-        let close = settled(process, "fleet panel close", |r, i| nui::header_rect(r, i, "btn_close"))?;
+        let close = settled(process, "fleet panel close", |r, i| {
+            nui::header_rect(r, i, "btn_close")
+        })?;
         let (x, y) = close.center();
         click_at(keys, x, y)?;
-        let _ = wait(process, "fleet panel closed", |r, i| Ok(!nui::panel_open(r, i)?));
+        let _ = wait(process, "fleet panel closed", |r, i| {
+            Ok(!nui::panel_open(r, i)?)
+        });
     }
     if read(process, nui::panel_open)? {
         return Err(Error::new("ui_blocked", "The fleet panel did not close"));
@@ -315,15 +350,21 @@ pub(super) fn release(process: &dyn Process, keys: &MacKeys) {
     let _ = close_panel(process, keys);
     let _ = leave_navy_mode(process, keys);
 }
-pub(super) fn select_fleet(process: &dyn Process, keys: &MacKeys, name: &str, order: &[String]) -> Result<()> {
+pub(super) fn select_fleet(
+    process: &dyn Process,
+    keys: &MacKeys,
+    name: &str,
+    order: &[String],
+) -> Result<()> {
     if read(process, nui::panel_fleet)?.is_some_and(|n| same_name(&n, name)) {
         return Ok(());
     }
     close_region_view(process, keys)?;
     let cards = settled(process, "fleet cards", nui::cards)?;
-    let wanted = order.iter().position(|n| same_name(n, name)).ok_or_else(|| {
-        Error::new("fleet_unknown", "The fleet is not among the own fleets")
-    })?;
+    let wanted = order
+        .iter()
+        .position(|n| same_name(n, name))
+        .ok_or_else(|| Error::new("fleet_unknown", "The fleet is not among the own fleets"))?;
     // The card order is the fleet order; a different order is detected by the panel title and the
     // other cards are tried once each (a card click only selects, it changes nothing).
     let mut candidates: Vec<usize> = vec![wanted];
@@ -343,7 +384,9 @@ pub(super) fn select_fleet(process: &dyn Process, keys: &MacKeys, name: &str, or
         });
         if ok.is_ok() {
             pause(250);
-            if read(process, |r, i| Ok(nui::panel_fleet(r, i).ok().flatten()))?.is_some_and(|n| same_name(&n, name)) {
+            if read(process, |r, i| Ok(nui::panel_fleet(r, i).ok().flatten()))?
+                .is_some_and(|n| same_name(&n, name))
+            {
                 return Ok(());
             }
         }
@@ -357,7 +400,10 @@ pub(super) fn select_task_force(process: &dyn Process, keys: &MacKeys, name: &st
     for _ in 0..14 {
         let entries = settled(process, "task force entries", nui::entries)?;
         // A selected task force is the only one shown; deselect it before selecting another.
-        if let Some(other) = entries.iter().find(|e| e.selected && !same_name(&e.name, name)) {
+        if let Some(other) = entries
+            .iter()
+            .find(|e| e.selected && !same_name(&e.name, name))
+        {
             click_at(
                 keys,
                 f64::from(other.select.x) + 30.0,
@@ -389,7 +435,9 @@ pub(super) fn select_task_force(process: &dyn Process, keys: &MacKeys, name: &st
         )?;
         let want = name.to_string();
         wait(process, "task force selected", move |r, i| {
-            Ok(nui::entries(r, i)?.iter().any(|e| same_name(&e.name, &want) && e.selected))
+            Ok(nui::entries(r, i)?
+                .iter()
+                .any(|e| same_name(&e.name, &want) && e.selected))
         })?;
         pause(250);
         return Ok(());
@@ -401,18 +449,27 @@ pub(super) fn select_task_force(process: &dyn Process, keys: &MacKeys, name: &st
 }
 
 /// Give the task force its mission with the game's mission button.
-pub(super) fn set_mission(process: &dyn Process, keys: &MacKeys, plan: &MissionPlan) -> Result<Value> {
+pub(super) fn set_mission(
+    process: &dyn Process,
+    keys: &MacKeys,
+    plan: &MissionPlan,
+) -> Result<Value> {
     clear_notices(process, keys)?;
     enter_navy_mode(process, keys)?;
     let result = (|| -> Result<Value> {
         close_region_view(process, keys)?;
         select_fleet(process, keys, &plan.fleet, &plan.order)?;
         select_task_force(process, keys, &plan.task_force)?;
-        let (rect, state) = settled(process, "mission button", |r, i| nui::bar_button(r, i, plan.button))?;
+        let (rect, state) = settled(process, "mission button", |r, i| {
+            nui::bar_button(r, i, plan.button)
+        })?;
         if state == 3 {
             return Err(Error::new(
                 "mission_unavailable",
-                format!("The game disables the {} mission button for this task force", plan.mission),
+                format!(
+                    "The game disables the {} mission button for this task force",
+                    plan.mission
+                ),
             ));
         }
         let (x, y) = rect.center();
@@ -433,7 +490,9 @@ pub(super) fn set_mission(process: &dyn Process, keys: &MacKeys, plan: &MissionP
                 "The task force's mission did not change (the game may have refused it)",
             )
         })?;
-        Ok(json!({"task_force":plan.task_force,"fleet":plan.fleet,"mission":plan.mission,"code":plan.code}))
+        Ok(
+            json!({"task_force":plan.task_force,"fleet":plan.fleet,"mission":plan.mission,"code":plan.code}),
+        )
     })();
     release(process, keys);
     result
@@ -553,7 +612,9 @@ pub(super) fn region_op(process: &dyn Process, keys: &MacKeys, plan: &RegionPlan
                 "The fleet's area did not change (the game may have refused the region)",
             )
         })?;
-        Ok(json!({"fleet":plan.fleet,"region":plan.region,"removed":plan.remove,"regions_seen_while_aiming":seen}))
+        Ok(
+            json!({"fleet":plan.fleet,"region":plan.region,"removed":plan.remove,"regions_seen_while_aiming":seen}),
+        )
     })();
     release(process, keys);
     result
@@ -567,18 +628,32 @@ pub(super) struct AdmiralPlan {
     pub admiral: Option<String>,
     pub order: Vec<String>,
 }
-pub(super) fn plan_admiral(fleets: &[Fleet], fleet: &str, admiral: Option<&str>) -> Result<AdmiralPlan> {
+pub(super) fn plan_admiral(
+    fleets: &[Fleet],
+    fleet: &str,
+    admiral: Option<&str>,
+) -> Result<AdmiralPlan> {
     let Some(f) = fleets.iter().find(|f| same_name(&f.name, fleet)) else {
         return Err(Error::new(
             "fleet_unknown",
             format!(
                 "No own fleet named {fleet:?}; own fleets: {}",
-                fleets.iter().map(|f| f.name.trim()).collect::<Vec<_>>().join(" | ")
+                fleets
+                    .iter()
+                    .map(|f| f.name.trim())
+                    .collect::<Vec<_>>()
+                    .join(" | ")
             ),
         ));
     };
-    if fleets.len() > 1 && fleets.last().is_some_and(|l| std::ptr::eq(l, f)) && f.task_forces.iter().all(|t| t.mission_code == 8) {
-        return Err(Error::new("reserve_fleet", "The reserve fleet has no admiral slot"));
+    if fleets.len() > 1
+        && fleets.last().is_some_and(|l| std::ptr::eq(l, f))
+        && f.task_forces.iter().all(|t| t.mission_code == 8)
+    {
+        return Err(Error::new(
+            "reserve_fleet",
+            "The reserve fleet has no admiral slot",
+        ));
     }
     match (&f.admiral, admiral) {
         (Some(have), Some(want)) if same_name(have, want) => Err(Error::new(
@@ -626,7 +701,12 @@ fn open_leader_list(process: &dyn Process, keys: &MacKeys) -> Result<()> {
     let frame = settled(process, "commander slot", |r, i| {
         let header = nui::header(r, i)?
             .ok_or_else(|| Error::new("gui_target_unavailable", "Fleet panel is not open"))?;
-        crate::gui_tree::rect(r, i, nui::child_of(r, i, header, "naval_unit_leader_frame")?, GAME)
+        crate::gui_tree::rect(
+            r,
+            i,
+            nui::child_of(r, i, header, "naval_unit_leader_frame")?,
+            GAME,
+        )
     })?;
     let (x, y) = frame.center();
     click_at(keys, x, y)?;
@@ -636,15 +716,24 @@ fn open_leader_list(process: &dyn Process, keys: &MacKeys) -> Result<()> {
 }
 fn close_leader_list(process: &dyn Process, keys: &MacKeys) {
     if read(process, |r, i| Ok(nui::leader_open(r, i).unwrap_or(false))).unwrap_or(false) {
-        if let Ok(rect) = settled(process, "commander close", |r, i| nui::leader_button(r, i, "close_button")) {
+        if let Ok(rect) = settled(process, "commander close", |r, i| {
+            nui::leader_button(r, i, "close_button")
+        }) {
             let (x, y) = rect.center();
             let _ = click_at(keys, x, y);
-            let _ = wait(process, "commander list closed", |r, i| Ok(!nui::leader_open(r, i)?));
+            let _ = wait(process, "commander list closed", |r, i| {
+                Ok(!nui::leader_open(r, i)?)
+            });
         }
     }
 }
 /// Names and skills of the admirals the list offers for this fleet (assigns nothing).
-pub(super) fn list_admirals(process: &dyn Process, keys: &MacKeys, fleet: &str, order: &[String]) -> Result<Vec<nui::Admiral>> {
+pub(super) fn list_admirals(
+    process: &dyn Process,
+    keys: &MacKeys,
+    fleet: &str,
+    order: &[String],
+) -> Result<Vec<nui::Admiral>> {
     clear_notices(process, keys)?;
     enter_navy_mode(process, keys)?;
     let result = (|| -> Result<Vec<nui::Admiral>> {
@@ -660,7 +749,11 @@ pub(super) fn list_admirals(process: &dyn Process, keys: &MacKeys, fleet: &str, 
     result
 }
 /// Put `plan.admiral` in command of the fleet (or unassign) from the fleet panel's list.
-pub(super) fn assign_admiral(process: &dyn Process, keys: &MacKeys, plan: &AdmiralPlan) -> Result<Value> {
+pub(super) fn assign_admiral(
+    process: &dyn Process,
+    keys: &MacKeys,
+    plan: &AdmiralPlan,
+) -> Result<Value> {
     clear_notices(process, keys)?;
     enter_navy_mode(process, keys)?;
     let result = (|| -> Result<Value> {
@@ -668,7 +761,9 @@ pub(super) fn assign_admiral(process: &dyn Process, keys: &MacKeys, plan: &Admir
         select_fleet(process, keys, &plan.fleet, &plan.order)?;
         open_leader_list(process, keys)?;
         let Some(wanted) = plan.admiral.as_deref() else {
-            let rect = settled(process, "unassign", |r, i| nui::leader_button(r, i, "no_leader_button"))?;
+            let rect = settled(process, "unassign", |r, i| {
+                nui::leader_button(r, i, "no_leader_button")
+            })?;
             let (x, y) = rect.center();
             click_at(keys, x, y)?;
             super::ui::accept_command(process, keys)?;
@@ -683,10 +778,15 @@ pub(super) fn assign_admiral(process: &dyn Process, keys: &MacKeys, plan: &Admir
             return Ok(json!({"fleet":plan.fleet,"admiral":null}));
         };
         let find = |r: &Reader<'_>, i: u64| -> Result<Option<nui::Admiral>> {
-            Ok(nui::leader_rows(r, i)?.into_iter().find(|a| same_name(&a.name, wanted)))
+            Ok(nui::leader_rows(r, i)?
+                .into_iter()
+                .find(|a| same_name(&a.name, wanted)))
         };
         let Some(mut row) = settled(process, "admiral list", find)? else {
-            let names: Vec<String> = read(process, nui::leader_rows)?.into_iter().map(|a| a.name).collect();
+            let names: Vec<String> = read(process, nui::leader_rows)?
+                .into_iter()
+                .map(|a| a.name)
+                .collect();
             return Err(Error::new(
                 "unknown_commander",
                 format!("No such admiral in the list. Listed: {}", names.join(", ")),
@@ -708,7 +808,8 @@ pub(super) fn assign_admiral(process: &dyn Process, keys: &MacKeys, plan: &Admir
                 .ok_or_else(|| Error::new("gui_target_unavailable", "The admiral left the list"))?;
         }
         let row = settled(process, "admiral row", |r, i| {
-            find(r, i)?.ok_or_else(|| Error::new("gui_target_unavailable", "The admiral left the list"))
+            find(r, i)?
+                .ok_or_else(|| Error::new("gui_target_unavailable", "The admiral left the list"))
         })?;
         let bottom = row.icon.y + row.icon.h;
         if bottom - nui::PORTRAIT_DRAWN < band.0 || bottom > band.1 {
@@ -729,9 +830,10 @@ pub(super) fn assign_admiral(process: &dyn Process, keys: &MacKeys, plan: &Admir
         wait(process, "admiral assigned", move |r, i| {
             super::fleetmem::require_libcxx(r)?;
             let (country, _) = economy::own_production(r, i)?;
-            Ok(naval::fleets(r, i, country)?
-                .iter()
-                .any(|f| same_name(&f.name, &fleet) && f.admiral.as_deref().is_some_and(|a| same_name(a, &want))))
+            Ok(naval::fleets(r, i, country)?.iter().any(|f| {
+                same_name(&f.name, &fleet)
+                    && f.admiral.as_deref().is_some_and(|a| same_name(a, &want))
+            }))
         })?;
         Ok(json!({"fleet":plan.fleet,"admiral":wanted}))
     })();
@@ -776,16 +878,26 @@ pub(super) struct CreatePlan {
 pub(super) fn plan_create(fleets: &[Fleet], task_force: &str) -> Result<CreatePlan> {
     let (index, fleet, tf) = find_task_force(fleets, task_force)?;
     if fleets.len() > 1 && index + 1 == fleets.len() && tf.mission_code == 8 {
-        return Err(Error::new("reserve_fleet", "A reserve task force cannot found a fleet; it holds unassigned ships"));
+        return Err(Error::new(
+            "reserve_fleet",
+            "A reserve task force cannot found a fleet; it holds unassigned ships",
+        ));
     }
     if fleet.task_forces.len() < 2 {
         return Err(Error::new(
             "nothing_to_change",
-            format!("{} is already alone in fleet {:?}", tf.name, fleet.name.trim()),
+            format!(
+                "{} is already alone in fleet {:?}",
+                tf.name,
+                fleet.name.trim()
+            ),
         ));
     }
     if fleets.len() >= 40 {
-        return Err(Error::new("too_many_fleets", "The game's fleet bar holds too many fleets already"));
+        return Err(Error::new(
+            "too_many_fleets",
+            "The game's fleet bar holds too many fleets already",
+        ));
     }
     Ok(CreatePlan {
         task_force: tf.name.clone(),
@@ -797,16 +909,32 @@ pub(super) fn plan_create(fleets: &[Fleet], task_force: &str) -> Result<CreatePl
 /// A new fleet holds exactly the named task force, the old fleet lost it, the fleet count grew by one.
 pub(super) fn settle_create(fleets: &[Fleet], plan: &CreatePlan) -> super::settle::Verdict {
     use super::settle::Verdict;
-    let holder = fleets.iter().find(|f| f.task_forces.iter().any(|t| same_name(&t.name, &plan.task_force)));
+    let holder = fleets.iter().find(|f| {
+        f.task_forces
+            .iter()
+            .any(|t| same_name(&t.name, &plan.task_force))
+    });
     match holder {
-        Some(h) if !same_name(&h.name, &plan.from_fleet) && h.task_forces.len() == 1 && fleets.len() == plan.fleets_before + 1 => Verdict::Reached,
-        Some(h) if same_name(&h.name, &plan.from_fleet) && fleets.len() == plan.fleets_before => Verdict::Unchanged,
+        Some(h)
+            if !same_name(&h.name, &plan.from_fleet)
+                && h.task_forces.len() == 1
+                && fleets.len() == plan.fleets_before + 1 =>
+        {
+            Verdict::Reached
+        }
+        Some(h) if same_name(&h.name, &plan.from_fleet) && fleets.len() == plan.fleets_before => {
+            Verdict::Unchanged
+        }
         Some(_) => Verdict::Diverged,
         None => Verdict::Unknown,
     }
 }
 /// Select the task force, then the bottom bar's "+" card founds a new fleet from it.
-pub(super) fn create_fleet(process: &dyn Process, keys: &MacKeys, plan: &CreatePlan) -> Result<Value> {
+pub(super) fn create_fleet(
+    process: &dyn Process,
+    keys: &MacKeys,
+    plan: &CreatePlan,
+) -> Result<Value> {
     clear_notices(process, keys)?;
     enter_navy_mode(process, keys)?;
     let result = (|| -> Result<Value> {
@@ -815,7 +943,10 @@ pub(super) fn create_fleet(process: &dyn Process, keys: &MacKeys, plan: &CreateP
         select_task_force(process, keys, &plan.task_force)?;
         let (rect, state) = settled(process, "new fleet card", nui::new_fleet_card)?;
         if state == 3 {
-            return Err(Error::new("mission_unavailable", "The game disables the new fleet card"));
+            return Err(Error::new(
+                "mission_unavailable",
+                "The game disables the new fleet card",
+            ));
         }
         let (x, y) = rect.center();
         click_at(keys, x, y)?;
@@ -827,14 +958,24 @@ pub(super) fn create_fleet(process: &dyn Process, keys: &MacKeys, plan: &CreateP
             let (country, _) = economy::own_production(r, i)?;
             let fleets = naval::fleets(r, i, country)?;
             Ok(fleets.len() == before + 1
-                && fleets.iter().any(|f| !same_name(&f.name, &from) && f.task_forces.len() == 1 && same_name(&f.task_forces[0].name, &tf)))
+                && fleets.iter().any(|f| {
+                    !same_name(&f.name, &from)
+                        && f.task_forces.len() == 1
+                        && same_name(&f.task_forces[0].name, &tf)
+                }))
         })?;
         let now = own_fleets(process)?;
         let name = now
             .iter()
-            .find(|f| f.task_forces.iter().any(|t| same_name(&t.name, &plan.task_force)))
+            .find(|f| {
+                f.task_forces
+                    .iter()
+                    .any(|t| same_name(&t.name, &plan.task_force))
+            })
             .map(|f| f.name.trim().to_string());
-        Ok(json!({"task_force":plan.task_force,"new_fleet":name,"from_fleet":plan.from_fleet.trim()}))
+        Ok(
+            json!({"task_force":plan.task_force,"new_fleet":name,"from_fleet":plan.from_fleet.trim()}),
+        )
     })();
     release(process, keys);
     result
@@ -885,12 +1026,34 @@ mod tests {
         let p = plan_mission(&f, "hochseeflotte", "strike_force").unwrap();
         assert_eq!((p.code, p.button, p.before_code), (2, "btn_mission2", 0));
         assert_eq!(p.order[1].trim(), "U-Flotte");
-        assert_eq!(plan_mission(&f, "Nope", "patrol").unwrap_err().code, "task_force_unknown");
-        assert_eq!(plan_mission(&f, "Hochseeflotte", "ram").unwrap_err().code, "invalid_arguments");
-        assert_eq!(plan_mission(&f, "Ostseeflotte", "patrol").unwrap_err().code, "nothing_to_change");
-        assert_eq!(plan_mission(&f, "Hochseeflotte", "hold").unwrap_err().code, "nothing_to_change");
-        assert_eq!(plan_mission(&f, "I. U-Boots", "convoy_raiding").unwrap_err().code, "no_assigned_region");
-        assert_eq!(plan_mission(&f, "Reserve fleet 1", "patrol").unwrap_err().code, "reserve_fleet");
+        assert_eq!(
+            plan_mission(&f, "Nope", "patrol").unwrap_err().code,
+            "task_force_unknown"
+        );
+        assert_eq!(
+            plan_mission(&f, "Hochseeflotte", "ram").unwrap_err().code,
+            "invalid_arguments"
+        );
+        assert_eq!(
+            plan_mission(&f, "Ostseeflotte", "patrol").unwrap_err().code,
+            "nothing_to_change"
+        );
+        assert_eq!(
+            plan_mission(&f, "Hochseeflotte", "hold").unwrap_err().code,
+            "nothing_to_change"
+        );
+        assert_eq!(
+            plan_mission(&f, "I. U-Boots", "convoy_raiding")
+                .unwrap_err()
+                .code,
+            "no_assigned_region"
+        );
+        assert_eq!(
+            plan_mission(&f, "Reserve fleet 1", "patrol")
+                .unwrap_err()
+                .code,
+            "reserve_fleet"
+        );
         // Hold needs no area and works for a task force that has a mission.
         assert_eq!(plan_mission(&f, "Ostseeflotte", "hold").unwrap().code, 0);
     }
@@ -898,13 +1061,31 @@ mod tests {
     fn create_plans_and_settlement() {
         let f = fleets();
         let p = plan_create(&f, "Ostseeflotte").unwrap();
-        assert_eq!((p.fleets_before, p.from_fleet.as_str()), (3, "Kriegsmarine"));
-        assert_eq!(plan_create(&f, "I. U-Boots").unwrap_err().code, "nothing_to_change");
-        assert_eq!(plan_create(&f, "Reserve fleet 1").unwrap_err().code, "reserve_fleet");
-        assert_eq!(plan_create(&f, "Nope").unwrap_err().code, "task_force_unknown");
+        assert_eq!(
+            (p.fleets_before, p.from_fleet.as_str()),
+            (3, "Kriegsmarine")
+        );
+        assert_eq!(
+            plan_create(&f, "I. U-Boots").unwrap_err().code,
+            "nothing_to_change"
+        );
+        assert_eq!(
+            plan_create(&f, "Reserve fleet 1").unwrap_err().code,
+            "reserve_fleet"
+        );
+        assert_eq!(
+            plan_create(&f, "Nope").unwrap_err().code,
+            "task_force_unknown"
+        );
         let mut after = fleets();
         let moved = after[0].task_forces.remove(1);
-        after.push(Fleet { name: "Flotta 2".into(), home_port: None, admiral: None, regions: Vec::new(), task_forces: vec![moved] });
+        after.push(Fleet {
+            name: "Flotta 2".into(),
+            home_port: None,
+            admiral: None,
+            regions: Vec::new(),
+            task_forces: vec![moved],
+        });
         assert_eq!(settle_create(&after, &p), Verdict::Reached);
         assert_eq!(settle_create(&f, &p), Verdict::Unchanged);
     }
@@ -914,17 +1095,34 @@ mod tests {
         let p = plan_region(&f, "kriegsmarine", "Danish Belts", 58, false).unwrap();
         assert_eq!((p.state, p.remove), (58, false));
         assert_eq!(
-            plan_region(&f, "Kriegsmarine", "eastern north sea", 56, false).unwrap_err().code,
+            plan_region(&f, "Kriegsmarine", "eastern north sea", 56, false)
+                .unwrap_err()
+                .code,
             "already_assigned"
         );
         assert_eq!(
-            plan_region(&f, "Kriegsmarine", "Danish Belts", 58, true).unwrap_err().code,
+            plan_region(&f, "Kriegsmarine", "Danish Belts", 58, true)
+                .unwrap_err()
+                .code,
             "region_not_assigned"
         );
-        assert!(plan_region(&f, "Kriegsmarine", "Eastern North Sea", 56, true).unwrap().remove);
-        assert_eq!(plan_region(&f, "U-Flotte", "X", 1, false).unwrap().fleet, "U-Flotte ");
-        assert_eq!(plan_region(&f, "Nope", "X", 1, false).unwrap_err().code, "fleet_unknown");
-        assert_eq!(plan_region(&f, "Reserve", "X", 1, false).unwrap_err().code, "reserve_fleet");
+        assert!(
+            plan_region(&f, "Kriegsmarine", "Eastern North Sea", 56, true)
+                .unwrap()
+                .remove
+        );
+        assert_eq!(
+            plan_region(&f, "U-Flotte", "X", 1, false).unwrap().fleet,
+            "U-Flotte "
+        );
+        assert_eq!(
+            plan_region(&f, "Nope", "X", 1, false).unwrap_err().code,
+            "fleet_unknown"
+        );
+        assert_eq!(
+            plan_region(&f, "Reserve", "X", 1, false).unwrap_err().code,
+            "reserve_fleet"
+        );
     }
     #[test]
     fn settlement_compares_only_the_ordered_field() {
@@ -944,8 +1142,12 @@ mod tests {
         assert!(points.len() > PROBE_LIMIT);
         let first = points[0];
         assert!((first.0 - 960.0).abs() < 200.0 && (first.1 - 500.0).abs() < 200.0);
-        assert!(points.iter().all(|p| p.0 >= 360.0 && p.0 <= 1780.0 && p.1 >= 150.0 && p.1 <= 880.0));
+        assert!(points
+            .iter()
+            .all(|p| p.0 >= 360.0 && p.0 <= 1780.0 && p.1 >= 150.0 && p.1 <= 880.0));
         assert!(!points.iter().any(|p| p.0 > 1450.0 && p.1 < 330.0));
-        assert!(!points.iter().any(|p| (640.0..=1200.0).contains(&p.0) && p.1 > 800.0));
+        assert!(!points
+            .iter()
+            .any(|p| (640.0..=1200.0).contains(&p.0) && p.1 > 800.0));
     }
 }

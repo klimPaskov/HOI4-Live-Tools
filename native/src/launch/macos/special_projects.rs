@@ -287,7 +287,11 @@ fn snapshot_from(r: &Reader<'_>, image: u64) -> Result<Snapshot> {
         let facility = r.i32(history + 0x18)?;
         let template = r.u64(project + 0x20)?.wrapping_sub(0x10);
         let id = r.i32(template + 8)? as u32;
-        if let Some(f) = out.facilities.iter_mut().find(|f| f.id == facility && f.project.is_none()) {
+        if let Some(f) = out
+            .facilities
+            .iter_mut()
+            .find(|f| f.id == facility && f.project.is_none())
+        {
             f.project = Some(id);
         }
     }
@@ -315,7 +319,13 @@ fn snapshot_from(r: &Reader<'_>, image: u64) -> Result<Snapshot> {
     out.breakthroughs.sort_by_key(|b| b.spec);
     // scientists
     let characters = r.u64(country + COUNTRY_CHARACTERS)?;
-    typed(r, image, characters, VT_COUNTRY_CHARACTERS, "country characters")?;
+    typed(
+        r,
+        image,
+        characters,
+        VT_COUNTRY_CHARACTERS,
+        "country characters",
+    )?;
     let (_, data, count) = r.array_header(characters + CHARACTERS_SCIENTISTS)?;
     for index in 0..count.min(MAX_SCIENTISTS) as u64 {
         let scientist = r.u64(data + index * 8)?;
@@ -453,8 +463,14 @@ fn scientist_json(snap: &Snapshot, s: &Scientist) -> Value {
 fn facility_json(snap: &Snapshot, f: &Facility) -> Value {
     let scientist = f
         .scientist
-        .and_then(|c| snap.scientist_by_id(c).map(|s| json!({"character_id": s.character, "name": s.name})))
-        .or_else(|| f.scientist.map(|c| json!({"character_id": c, "name": null})));
+        .and_then(|c| {
+            snap.scientist_by_id(c)
+                .map(|s| json!({"character_id": s.character, "name": s.name}))
+        })
+        .or_else(|| {
+            f.scientist
+                .map(|c| json!({"character_id": c, "name": null}))
+        });
     let project = f.project.map(|id| match snap.project_by_id(id) {
         Some(p) => {
             json!({"key": p.key, "template_id": p.id, "base_days": p.days, "stopping": p.stopping_days.is_some(), "stop_duration_days": p.stopping_days, "progress_percent": p.progress_percent, "iterations_completed": p.iterations, "iteration_gain_percent": [p.gain.0, p.gain.1]})
@@ -899,7 +915,9 @@ fn cards(r: &Reader<'_>, image: u64) -> Result<Vec<Card>> {
             facility: text(r, image, part, "facility_name")?.unwrap_or_default(),
             state: text(r, image, part, "state_name")?.unwrap_or_default(),
             speed: named(r, image, part, "research_speed_window")
-                .and_then(|w| text(r, image, w, "research_speed_text").map(Option::unwrap_or_default))
+                .and_then(|w| {
+                    text(r, image, w, "research_speed_text").map(Option::unwrap_or_default)
+                })
                 .unwrap_or_default(),
             scientist: text(r, image, sci, "scientist_name")?.unwrap_or_default(),
             project,
@@ -1200,7 +1218,12 @@ pub(super) fn facility_arg(v: Option<&Value>) -> Result<Option<i32>> {
             .as_i64()
             .filter(|n| (1..=1_000_000).contains(n))
             .map(|n| Some(n as i32))
-            .ok_or_else(|| Error::new("invalid_arguments", "facility_id must be a positive integer")),
+            .ok_or_else(|| {
+                Error::new(
+                    "invalid_arguments",
+                    "facility_id must be a positive integer",
+                )
+            }),
     }
 }
 pub(super) fn name_arg<'a>(v: Option<&'a Value>, what: &str) -> Result<Option<&'a str>> {
@@ -1219,9 +1242,9 @@ pub(super) fn name_arg<'a>(v: Option<&'a Value>, what: &str) -> Result<Option<&'
 }
 pub(super) fn key_arg(v: Option<&Value>) -> Result<Option<&str>> {
     match name_arg(v, "project")? {
-        Some(k) if !k.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_') => Err(
-            Error::new("invalid_arguments", "Invalid project key"),
-        ),
+        Some(k) if !k.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_') => {
+            Err(Error::new("invalid_arguments", "Invalid project key"))
+        }
         other => Ok(other),
     }
 }
@@ -1273,10 +1296,9 @@ pub(super) fn panel(
             roster = Some(settled(process, "roster rows", roster_names)?);
         }
         if let Some(handle) = handle {
-            let card = cards
-                .iter()
-                .find(|c| c.handle == handle)
-                .ok_or_else(|| Error::new("gui_target_unavailable", "Facility card not in the list"))?;
+            let card = cards.iter().find(|c| c.handle == handle).ok_or_else(|| {
+                Error::new("gui_target_unavailable", "Facility card not in the list")
+            })?;
             let (x, y) = card.open.center();
             keys.click(GAME, x, y)?;
             wait(process, "open facility window", program_view_open)?;
@@ -1457,7 +1479,11 @@ pub(super) fn assign(process: &dyn Process, keys: &MacKeys, plan: &Plan) -> Resu
                 {
                     break;
                 }
-                let pixels = if entry.select.y < PROJECT_BAND.0 { 240 } else { -240 };
+                let pixels = if entry.select.y < PROJECT_BAND.0 {
+                    240
+                } else {
+                    -240
+                };
                 keys.scroll(GAME, (885.0, 500.0), pixels)?;
                 thread::sleep(Duration::from_millis(150));
                 entry = read(process, find_entry)?;
@@ -1548,11 +1574,7 @@ const POPUP_LIST: u64 = 0xa70;
 const POPUP_ROOT: u64 = 0x490;
 /// One confirmation window (title, accept and decline rectangles) when it is
 /// a visible generic confirmation.
-fn confirm_in(
-    r: &Reader<'_>,
-    image: u64,
-    window: u64,
-) -> Result<Option<(String, Rect, Rect)>> {
+fn confirm_in(r: &Reader<'_>, image: u64, window: u64) -> Result<Option<(String, Rect, Rect)>> {
     if window == 0 || r.u64(window)? != image + VT_CONFIRM {
         return Ok(None);
     }
@@ -1610,7 +1632,9 @@ fn accept_confirm(process: &dyn Process, keys: &MacKeys, title: &str) -> Result<
         keys.click(GAME, x, y)?;
         return Err(Error::new(
             "unexpected_dialog",
-            format!("A confirmation titled {found:?} appeared instead of {title:?}; it was declined"),
+            format!(
+                "A confirmation titled {found:?} appeared instead of {title:?}; it was declined"
+            ),
         ));
     }
     let (x, y) = accept.center();
@@ -2021,7 +2045,10 @@ mod tests {
                 sci(6, "Helene Reuter", [0, 0, 0, 1]),
             ],
             breakthroughs: vec![
-                Breakthrough { spec: 2, raw: 11624 },
+                Breakthrough {
+                    spec: 2,
+                    raw: 11624,
+                },
                 Breakthrough { spec: 3, raw: 3540 },
             ],
         }
@@ -2039,14 +2066,22 @@ mod tests {
         assert_eq!(code(plan_unassign(&s, 11)), "facility_has_project");
         assert!(plan_unassign(&s, 12).is_ok());
         let c = |r: Result<&Scientist>| r.map(|s| s.name.clone());
-        assert_eq!(c(plan_recruit(&s, "hedwig orth", Some(318.0))).unwrap(), "Hedwig Orth");
         assert_eq!(
-            c(plan_recruit(&s, "Hedwig Orth", Some(70.0))).unwrap_err().code,
+            c(plan_recruit(&s, "hedwig orth", Some(318.0))).unwrap(),
+            "Hedwig Orth"
+        );
+        assert_eq!(
+            c(plan_recruit(&s, "Hedwig Orth", Some(70.0)))
+                .unwrap_err()
+                .code,
             "insufficient_political_power"
         );
         // power unreadable: no refusal on it
         assert!(plan_recruit(&s, "Hedwig Orth", None).is_ok());
-        assert_eq!(c(plan_recruit(&s, "Eduard Grote", None)).unwrap_err().code, "already_recruited");
+        assert_eq!(
+            c(plan_recruit(&s, "Eduard Grote", None)).unwrap_err().code,
+            "already_recruited"
+        );
         let e = plan_recruit(&s, "Nobody", None).unwrap_err();
         assert_eq!(e.code, "unknown_candidate");
         assert!(e.message.contains("Hedwig Orth") && e.message.contains("Helene Reuter"));
@@ -2067,7 +2102,10 @@ mod tests {
         let v = to_json(&snap());
         assert_eq!(v["recruitable"]["cost_political_power"], 75);
         assert_eq!(v["recruitable"]["candidates"][1]["name"], "Helene Reuter");
-        assert_eq!(v["recruitable"]["candidates"][0]["specialization"], "nuclear");
+        assert_eq!(
+            v["recruitable"]["candidates"][0]["specialization"],
+            "nuclear"
+        );
     }
     #[test]
     fn facility_buildings_map_to_specializations() {
@@ -2082,7 +2120,10 @@ mod tests {
         assert_eq!(s.points(3), 0);
         let v = to_json(&s);
         assert_eq!(v["specializations"][2]["breakthrough_points"], 1);
-        assert_eq!(v["specializations"][3]["breakthrough_progress_percent"], 35.4);
+        assert_eq!(
+            v["specializations"][3]["breakthrough_progress_percent"],
+            35.4
+        );
         assert_eq!(v["specializations"][0]["breakthrough_points"], Value::Null);
     }
     #[test]
@@ -2098,7 +2139,13 @@ mod tests {
     #[test]
     fn assign_scientist_and_project_plan() {
         let s = snap();
-        let p = plan(&s, 10, Some("eduard grote"), Some("sp_land_flamethrower_tank")).unwrap();
+        let p = plan(
+            &s,
+            10,
+            Some("eduard grote"),
+            Some("sp_land_flamethrower_tank"),
+        )
+        .unwrap();
         assert!(p.assign_scientist);
         assert_eq!(p.project.unwrap().id, 100);
         // a facility that already has the scientist only needs the project
@@ -2111,21 +2158,61 @@ mod tests {
     fn refusals_happen_before_any_input() {
         let s = snap();
         let code = |r: Result<Plan>| r.unwrap_err().code;
-        assert_eq!(code(plan(&s, 99, Some("Eduard Grote"), None)), "facility_unknown");
+        assert_eq!(
+            code(plan(&s, 99, Some("Eduard Grote"), None)),
+            "facility_unknown"
+        );
         assert_eq!(code(plan(&s, 10, None, None)), "invalid_arguments");
-        assert_eq!(code(plan(&s, 10, Some("Grotte"), None)), "unknown_scientist");
-        assert_eq!(code(plan(&s, 10, Some("Kurt Tank"), None)), "scientist_wrong_specialization");
+        assert_eq!(
+            code(plan(&s, 10, Some("Grotte"), None)),
+            "unknown_scientist"
+        );
+        assert_eq!(
+            code(plan(&s, 10, Some("Kurt Tank"), None)),
+            "scientist_wrong_specialization"
+        );
         assert_eq!(code(plan(&s, 10, Some("Max Land"), None)), "scientist_busy");
-        assert_eq!(code(plan(&s, 10, None, Some("sp_land_flamethrower_tank"))), "scientist_required");
-        assert_eq!(code(plan(&s, 10, Some("Eduard Grote"), Some("sp_air_radar"))), "project_wrong_specialization");
-        assert_eq!(code(plan(&s, 10, Some("Eduard Grote"), Some("sp_nope"))), "unknown_project");
-        assert_eq!(code(plan(&s, 11, Some("Wernher von Braun"), Some("sp_air_jet_engine"))), "facility_has_project");
-        assert_eq!(code(plan(&s, 11, None, Some("sp_air_radar"))), "already_assigned");
-        assert_eq!(code(plan(&s, 12, Some("Max Land"), None)), "already_assigned");
+        assert_eq!(
+            code(plan(&s, 10, None, Some("sp_land_flamethrower_tank"))),
+            "scientist_required"
+        );
+        assert_eq!(
+            code(plan(&s, 10, Some("Eduard Grote"), Some("sp_air_radar"))),
+            "project_wrong_specialization"
+        );
+        assert_eq!(
+            code(plan(&s, 10, Some("Eduard Grote"), Some("sp_nope"))),
+            "unknown_project"
+        );
+        assert_eq!(
+            code(plan(
+                &s,
+                11,
+                Some("Wernher von Braun"),
+                Some("sp_air_jet_engine")
+            )),
+            "facility_has_project"
+        );
+        assert_eq!(
+            code(plan(&s, 11, None, Some("sp_air_radar"))),
+            "already_assigned"
+        );
+        assert_eq!(
+            code(plan(&s, 12, Some("Max Land"), None)),
+            "already_assigned"
+        );
         // another facility already runs the project
         let mut other = snap();
         other.facilities.push(fac(13, "air_facility", None, None));
-        assert_eq!(code(plan(&other, 13, Some("Wernher von Braun"), Some("sp_air_radar"))), "project_busy");
+        assert_eq!(
+            code(plan(
+                &other,
+                13,
+                Some("Wernher von Braun"),
+                Some("sp_air_radar")
+            )),
+            "project_busy"
+        );
     }
     #[test]
     fn unknown_scientist_lists_closest_names() {
@@ -2134,8 +2221,17 @@ mod tests {
     }
     #[test]
     fn game_text_loses_colour_and_icon_markers() {
-        assert_eq!(plain("\u{11}GSelect\u{11}! which project"), "Select which project");
-        assert_eq!(plain("Approximate time: \u{13}infinity_icon! day(s)"), "Approximate time: unknown day(s)");
-        assert_eq!(plain("\u{11}RRequires a \u{11}! \u{11}YScientist\u{11}! \u{11}Rto start\u{11}!"), "Requires a Scientist to start");
+        assert_eq!(
+            plain("\u{11}GSelect\u{11}! which project"),
+            "Select which project"
+        );
+        assert_eq!(
+            plain("Approximate time: \u{13}infinity_icon! day(s)"),
+            "Approximate time: unknown day(s)"
+        );
+        assert_eq!(
+            plain("\u{11}RRequires a \u{11}! \u{11}YScientist\u{11}! \u{11}Rto start\u{11}!"),
+            "Requires a Scientist to start"
+        );
     }
 }

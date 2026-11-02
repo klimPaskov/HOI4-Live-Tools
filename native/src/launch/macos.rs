@@ -32,8 +32,6 @@ mod designs;
 mod diplomacy;
 mod diplomacy_keys;
 mod diplomacy_state;
-mod trade;
-mod peace;
 mod doctrine_act;
 mod doctrines;
 mod events;
@@ -42,32 +40,40 @@ mod fleetmem;
 mod fleetops;
 mod focus;
 mod front_plan;
+mod peace;
+mod trade;
 pub(crate) use focus::input_probe as focus_input_probe;
+mod economy_detail;
 mod input_gate;
 mod intelligence;
 mod invasion;
 mod journal;
 mod kit;
 #[cfg(test)]
+mod live_designer;
+#[cfg(test)]
+mod live_designs;
+#[cfg(test)]
+mod live_reads;
+#[cfg(test)]
+mod live_reads_mgmt;
+#[cfg(test)]
 mod live_reads_navalair;
+mod loc;
 mod mapdata;
-mod screenmap;
+mod mgmt;
+mod mio_act;
+mod mios;
 mod naval;
-mod panelkit;
 mod navalact;
 mod navalui;
+mod panelkit;
 mod politics;
 mod production;
 mod research;
-mod economy_detail;
-mod resources;
-#[cfg(test)]
-mod live_reads_mgmt;
-mod mgmt;
-mod loc;
-mod mio_act;
-mod mios;
 mod research_extras;
+mod resources;
+mod screenmap;
 mod script;
 mod settle;
 mod special_project_rules;
@@ -78,17 +84,11 @@ mod supply;
 mod supplymem;
 mod template_edit;
 mod template_get;
-mod units;
-#[cfg(test)]
-mod live_designer;
-#[cfg(test)]
-mod live_designs;
-#[cfg(test)]
-mod live_reads;
 #[cfg(test)]
 mod testmem;
 mod ui;
 mod ui_action;
+mod units;
 mod wars;
 use crate::{
     actions::{Action, Backend, Epoch, Journal, State},
@@ -446,7 +446,10 @@ pub fn read_only_call(process: &dyn Process, name: &str) -> Result<Value> {
         "hoi4_industry" => resources::industry(process),
         "hoi4_supply" => supply::report(process, 0.7),
         "hoi4_economy_detail" => economy_detail::detail(process),
-        _ => Err(Error::new("capability_unavailable", "Unknown read-only tool")),
+        _ => Err(Error::new(
+            "capability_unavailable",
+            "Unknown read-only tool",
+        )),
     }
 }
 
@@ -481,15 +484,21 @@ impl MacClock {
         let report = wars::wars(process, &mapdata::game_dir(exe)?, &serde_json::Map::new())?;
         let mut weak = Vec::new();
         for row in report["borders"].as_array().into_iter().flatten() {
-            let Some(tag) = row["neighbour_tag"].as_str() else { continue };
+            let Some(tag) = row["neighbour_tag"].as_str() else {
+                continue;
+            };
             if tag != target && !joiners.iter().any(|j| j == tag) {
                 continue;
             }
             let states = row["own_border_states"].as_array().map_or(0, Vec::len) as i64;
             let held = row["own_divisions_in_border_states"].as_i64().unwrap_or(0);
-            let uncovered = row["uncovered_own_border_states"].as_array().map_or(0, Vec::len);
+            let uncovered = row["uncovered_own_border_states"]
+                .as_array()
+                .map_or(0, Vec::len);
             if uncovered > 0 || held < 2 * states {
-                weak.push(format!("{tag}: {held} divisions in {states} border states, {uncovered} empty"));
+                weak.push(format!(
+                    "{tag}: {held} divisions in {states} border states, {uncovered} empty"
+                ));
             }
         }
         Ok((joiners, weak))
@@ -625,118 +634,118 @@ impl Commands for MacClock {
             || faction::handles(name)
             || name == invasion::TOOL
             || matches!(
-            name,
-            "hoi4_daily_governor"
-                | "hoi4_navy_ui"
-                | "hoi4_fleet_mission"
-                | "hoi4_fleet_region"
-                | "hoi4_fleet_create"
-                | "hoi4_naval_production_options"
-                | "hoi4_fleet_admiral"
-                | "hoi4_fleets"
-                | "hoi4_convoys"
-                | "hoi4_air"
-                | "hoi4_designs"
-                | "hoi4_input_lease"
-                | "hoi4_time"
-                | "hoi4_research_start"
-                | "hoi4_focus_start"
-                | "hoi4_production_add"
-                | "hoi4_production_set"
-                | "hoi4_construction_add"
-                | "hoi4_construction_open"
-                | "hoi4_construction_select"
-                | "hoi4_construction_find_state"
-                | "hoi4_construction_place"
-                | "hoi4_construction_clear_selection"
-                | "hoi4_construction_find_open"
-                | "hoi4_politics_options"
-                | "hoi4_politics_choose"
-                | "hoi4_decisions_list"
-                | "hoi4_decision_take"
-                | "hoi4_division_templates"
-                | "hoi4_train"
-                | "hoi4_deploy_locations"
-                | "hoi4_armies"
-                | "hoi4_country_status"
-                | "hoi4_resources"
-                | "hoi4_production_shortages"
-                | "hoi4_industry"
-                | "hoi4_economy_detail"
-                | "hoi4_diplomacy_state"
-                | "hoi4_diplomacy_countries"
-                | "hoi4_peace_status"
-                | "hoi4_peace_options"
-                | "hoi4_peace_take"
-                | "hoi4_peace_submit"
-                | "hoi4_peace_exit"
-                | "hoi4_trade"
-                | "hoi4_trade_set"
-                | "hoi4_auto_import"
-                | "hoi4_doctrines"
-                | "hoi4_mios"
-                | "hoi4_intelligence"
-                | "hoi4_research_extras"
-                | "hoi4_states"
-                | "hoi4_wars"
-                | "hoi4_war_risk"
-                | "hoi4_save"
-                | "hoi4_front_plan"
-                | "hoi4_encirclement_candidates"
-                | "hoi4_war_goal_targets"
-                | "hoi4_events"
-                | "hoi4_event_choose"
-                | "hoi4_diplomacy"
-                | "hoi4_diplomacy_act"
-                | "hoi4_army_create"
-                | "hoi4_army_assign_plan"
-                | "hoi4_army_assign"
-                | "hoi4_army_front"
-                | "hoi4_army_plan"
-                | "hoi4_army_offensive"
-                | "hoi4_army_move"
-                | "hoi4_army_commander"
-                | "hoi4_commanders"
-                | "hoi4_supply"
-                | "hoi4_template_get"
-                | "hoi4_template_create"
-                | "hoi4_template_edit"
-                | "hoi4_template_rename"
-                | "hoi4_template_delete"
-                | "hoi4_template_options"
-                | "hoi4_design_options"
-                | "hoi4_design_create"
-                | "hoi4_design_obsolete"
-                | "hoi4_design_set_production"
-                | "hoi4_special_projects"
-                | "hoi4_special_projects_panel"
-                | "hoi4_special_project_assign"
-                | "hoi4_special_project_stop"
-                | "hoi4_special_project_unassign"
-                | "hoi4_special_project_recruit"
-                | "hoi4_doctrine_adopt"
-                | "hoi4_mio_design_team"
-                | "hoi4_mio_policy"
-                | "hoi4_mio_trait"
-                | "hoi4_agency_create"
-                | "hoi4_agency_upgrade"
-                | "hoi4_operative_recruit"
-                | "hoi4_operative_assign"
-                | "hoi4_army_group_create"
-                | "hoi4_army_split"
-                | "hoi4_army_merge"
-                | "hoi4_state_slots"
-                | "hoi4_air_wings"
-                | "hoi4_air_mission"
-                | "hoi4_air_rebase"
-                | "hoi4_air_wing_create"
-                | "hoi4_air_wing_disband"
-                | "hoi4_air_hold"
-                | "hoi4_air_wing_split"
-                | "hoi4_air_wing_merge"
-                | "hoi4_air_region_probe"
-                | "hoi4_air_regions"
-        )
+                name,
+                "hoi4_daily_governor"
+                    | "hoi4_navy_ui"
+                    | "hoi4_fleet_mission"
+                    | "hoi4_fleet_region"
+                    | "hoi4_fleet_create"
+                    | "hoi4_naval_production_options"
+                    | "hoi4_fleet_admiral"
+                    | "hoi4_fleets"
+                    | "hoi4_convoys"
+                    | "hoi4_air"
+                    | "hoi4_designs"
+                    | "hoi4_input_lease"
+                    | "hoi4_time"
+                    | "hoi4_research_start"
+                    | "hoi4_focus_start"
+                    | "hoi4_production_add"
+                    | "hoi4_production_set"
+                    | "hoi4_construction_add"
+                    | "hoi4_construction_open"
+                    | "hoi4_construction_select"
+                    | "hoi4_construction_find_state"
+                    | "hoi4_construction_place"
+                    | "hoi4_construction_clear_selection"
+                    | "hoi4_construction_find_open"
+                    | "hoi4_politics_options"
+                    | "hoi4_politics_choose"
+                    | "hoi4_decisions_list"
+                    | "hoi4_decision_take"
+                    | "hoi4_division_templates"
+                    | "hoi4_train"
+                    | "hoi4_deploy_locations"
+                    | "hoi4_armies"
+                    | "hoi4_country_status"
+                    | "hoi4_resources"
+                    | "hoi4_production_shortages"
+                    | "hoi4_industry"
+                    | "hoi4_economy_detail"
+                    | "hoi4_diplomacy_state"
+                    | "hoi4_diplomacy_countries"
+                    | "hoi4_peace_status"
+                    | "hoi4_peace_options"
+                    | "hoi4_peace_take"
+                    | "hoi4_peace_submit"
+                    | "hoi4_peace_exit"
+                    | "hoi4_trade"
+                    | "hoi4_trade_set"
+                    | "hoi4_auto_import"
+                    | "hoi4_doctrines"
+                    | "hoi4_mios"
+                    | "hoi4_intelligence"
+                    | "hoi4_research_extras"
+                    | "hoi4_states"
+                    | "hoi4_wars"
+                    | "hoi4_war_risk"
+                    | "hoi4_save"
+                    | "hoi4_front_plan"
+                    | "hoi4_encirclement_candidates"
+                    | "hoi4_war_goal_targets"
+                    | "hoi4_events"
+                    | "hoi4_event_choose"
+                    | "hoi4_diplomacy"
+                    | "hoi4_diplomacy_act"
+                    | "hoi4_army_create"
+                    | "hoi4_army_assign_plan"
+                    | "hoi4_army_assign"
+                    | "hoi4_army_front"
+                    | "hoi4_army_plan"
+                    | "hoi4_army_offensive"
+                    | "hoi4_army_move"
+                    | "hoi4_army_commander"
+                    | "hoi4_commanders"
+                    | "hoi4_supply"
+                    | "hoi4_template_get"
+                    | "hoi4_template_create"
+                    | "hoi4_template_edit"
+                    | "hoi4_template_rename"
+                    | "hoi4_template_delete"
+                    | "hoi4_template_options"
+                    | "hoi4_design_options"
+                    | "hoi4_design_create"
+                    | "hoi4_design_obsolete"
+                    | "hoi4_design_set_production"
+                    | "hoi4_special_projects"
+                    | "hoi4_special_projects_panel"
+                    | "hoi4_special_project_assign"
+                    | "hoi4_special_project_stop"
+                    | "hoi4_special_project_unassign"
+                    | "hoi4_special_project_recruit"
+                    | "hoi4_doctrine_adopt"
+                    | "hoi4_mio_design_team"
+                    | "hoi4_mio_policy"
+                    | "hoi4_mio_trait"
+                    | "hoi4_agency_create"
+                    | "hoi4_agency_upgrade"
+                    | "hoi4_operative_recruit"
+                    | "hoi4_operative_assign"
+                    | "hoi4_army_group_create"
+                    | "hoi4_army_split"
+                    | "hoi4_army_merge"
+                    | "hoi4_state_slots"
+                    | "hoi4_air_wings"
+                    | "hoi4_air_mission"
+                    | "hoi4_air_rebase"
+                    | "hoi4_air_wing_create"
+                    | "hoi4_air_wing_disband"
+                    | "hoi4_air_hold"
+                    | "hoi4_air_wing_split"
+                    | "hoi4_air_wing_merge"
+                    | "hoi4_air_region_probe"
+                    | "hoi4_air_regions"
+            )
     }
     fn wait_events(&self) -> Option<Arc<crate::protocol::worker_events::Events>> {
         Some(self.daily.events())
@@ -770,7 +779,10 @@ impl Commands for MacClock {
         }
         if matches!(
             name,
-            "hoi4_resources" | "hoi4_production_shortages" | "hoi4_industry" | "hoi4_economy_detail"
+            "hoi4_resources"
+                | "hoi4_production_shortages"
+                | "hoi4_industry"
+                | "hoi4_economy_detail"
         ) {
             allowed(args, &[])?;
             return read_only_call(process, name);
@@ -790,7 +802,14 @@ impl Commands for MacClock {
         if name == "hoi4_diplomacy_countries" {
             allowed(
                 args,
-                &["query", "relation", "faction", "only_with_states", "limit", "offset"],
+                &[
+                    "query",
+                    "relation",
+                    "faction",
+                    "only_with_states",
+                    "limit",
+                    "offset",
+                ],
             )?;
             return diplomacy_state::countries(process, args);
         }
@@ -826,7 +845,10 @@ impl Commands for MacClock {
             allowed(args, &["tag", "include_all"])?;
             let tag = args.get("tag").map(|_| string(args, "tag")).transpose()?;
             if tag.is_some_and(|t| t.len() != 3 || !t.bytes().all(|b| b.is_ascii_uppercase())) {
-                return Err(Error::new("invalid_arguments", "tag must be three capital letters"));
+                return Err(Error::new(
+                    "invalid_arguments",
+                    "tag must be three capital letters",
+                ));
             }
             return mios::mios(process, tag, mgmt::flag(args, "include_all")?);
         }
@@ -849,7 +871,9 @@ impl Commands for MacClock {
                 Some(v) => v
                     .as_f64()
                     .filter(|v| (0.0..=1.0).contains(v))
-                    .ok_or_else(|| Error::new("invalid_arguments", "strength_below must be 0..1"))?,
+                    .ok_or_else(|| {
+                        Error::new("invalid_arguments", "strength_below must be 0..1")
+                    })?,
             };
             return supply::report(process, below);
         }
@@ -859,7 +883,9 @@ impl Commands for MacClock {
                 None => None,
                 Some(v) => Some(
                     v.as_str()
-                        .filter(|s| !s.is_empty() && s.len() <= 128 && !s.chars().any(char::is_control))
+                        .filter(|s| {
+                            !s.is_empty() && s.len() <= 128 && !s.chars().any(char::is_control)
+                        })
                         .ok_or_else(|| Error::new("invalid_arguments", "Invalid template name"))?,
                 ),
             };
@@ -867,7 +893,10 @@ impl Commands for MacClock {
         }
         if name == "hoi4_special_projects" {
             allowed(args, &["rules"])?;
-            return special_projects::list(process, special_projects::rules_arg(args.get("rules"))?);
+            return special_projects::list(
+                process,
+                special_projects::rules_arg(args.get("rules"))?,
+            );
         }
         if name == "hoi4_armies" {
             allowed(args, &[])?;
@@ -876,12 +905,21 @@ impl Commands for MacClock {
         if name == "hoi4_war_risk" {
             allowed(args, &["country"])?;
             let tag = string(args, "country")?;
-            if tag.len() != 3 || !tag.bytes().all(|b| b.is_ascii_uppercase() || b.is_ascii_digit()) {
-                return Err(Error::new("invalid_arguments", "country must be a three-letter tag"));
+            if tag.len() != 3
+                || !tag
+                    .bytes()
+                    .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit())
+            {
+                return Err(Error::new(
+                    "invalid_arguments",
+                    "country must be a three-letter tag",
+                ));
             }
             let (joiners, weak) = Self::war_risk(process, tag)?;
-            return Ok(json!({"country":tag,"would_join":joiners,"borders_not_held":weak,
-                "declare_would_be_refused":!weak.is_empty()}));
+            return Ok(
+                json!({"country":tag,"would_join":joiners,"borders_not_held":weak,
+                "declare_would_be_refused":!weak.is_empty()}),
+            );
         }
         if name == "hoi4_wars" {
             allowed(args, &["enemies", "max_states"])?;
@@ -903,7 +941,9 @@ impl Commands for MacClock {
             let dir = mapdata::game_dir(exe)?;
             return match name {
                 "hoi4_front_plan" => front_plan::front_plan_tool(process, &dir, args),
-                "hoi4_encirclement_candidates" => front_plan::encirclement_tool(process, &dir, args),
+                "hoi4_encirclement_candidates" => {
+                    front_plan::encirclement_tool(process, &dir, args)
+                }
                 _ => front_plan::war_goal_tool(process, &dir, args),
             };
         }
@@ -1349,7 +1389,10 @@ impl Commands for MacClock {
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
                 let plan = plan.as_ref().ok_or_else(|| {
-                    Error::new("action_uncertain", "A retried request is never dispatched again")
+                    Error::new(
+                        "action_uncertain",
+                        "A retried request is never dispatched again",
+                    )
                 })?;
                 special_projects::assign(process, keys, plan)
             };
@@ -1441,7 +1484,10 @@ impl Commands for MacClock {
             return Ok(json!({"receipt":receipt}));
         }
         if name == "hoi4_design_options" {
-            allowed(args, &["kind", "base", "slot", "measure_costs", "lease_token"])?;
+            allowed(
+                args,
+                &["kind", "base", "slot", "measure_costs", "lease_token"],
+            )?;
             let kind = design_edit::kind_arg(args)?;
             let token = string(args, "lease_token")?;
             let expected = guard.observe_context(process)?;
@@ -1455,11 +1501,20 @@ impl Commands for MacClock {
                 None => None,
                 Some(v) => Some(
                     v.as_str()
-                        .filter(|s| !s.is_empty() && s.len() <= 64 && s.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_'))
+                        .filter(|s| {
+                            !s.is_empty()
+                                && s.len() <= 64
+                                && s.bytes().all(|b| {
+                                    b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_'
+                                })
+                        })
                         .ok_or_else(|| Error::new("invalid_arguments", "Invalid slot name"))?,
                 ),
             };
-            let measure = args.get("measure_costs").and_then(Value::as_bool).unwrap_or(true);
+            let measure = args
+                .get("measure_costs")
+                .and_then(Value::as_bool)
+                .unwrap_or(true);
             let fence = action_fence::Fence {
                 process,
                 epoch: &epoch,
@@ -1482,7 +1537,13 @@ impl Commands for MacClock {
             } else {
                 allowed(
                     args,
-                    &["line", "design", "accept_progress_loss", "request_id", "lease_token"],
+                    &[
+                        "line",
+                        "design",
+                        "accept_progress_loss",
+                        "request_id",
+                        "lease_token",
+                    ],
                 )?;
             }
             let design = args
@@ -1490,13 +1551,20 @@ impl Commands for MacClock {
                 .and_then(Value::as_i64)
                 .and_then(|d| i32::try_from(d).ok())
                 .filter(|d| *d > 0)
-                .ok_or_else(|| Error::new("invalid_arguments", "design must be a positive design id"))?;
+                .ok_or_else(|| {
+                    Error::new("invalid_arguments", "design must be a positive design id")
+                })?;
             let want_obsolete = match args.get("obsolete") {
                 None => true,
                 Some(v) if obsolete => v
                     .as_bool()
                     .ok_or_else(|| Error::new("invalid_arguments", "obsolete must be a boolean"))?,
-                Some(_) => return Err(Error::new("invalid_arguments", "obsolete applies to hoi4_design_obsolete")),
+                Some(_) => {
+                    return Err(Error::new(
+                        "invalid_arguments",
+                        "obsolete applies to hoi4_design_obsolete",
+                    ))
+                }
             };
             let line = if obsolete {
                 0
@@ -1504,7 +1572,9 @@ impl Commands for MacClock {
                 args.get("line")
                     .and_then(Value::as_u64)
                     .filter(|l| *l > 0)
-                    .ok_or_else(|| Error::new("invalid_arguments", "line must be a production line handle"))?
+                    .ok_or_else(|| {
+                        Error::new("invalid_arguments", "line must be a production line handle")
+                    })?
             };
             let accept = args
                 .get("accept_progress_loss")
@@ -1531,7 +1601,10 @@ impl Commands for MacClock {
             let keys = &bounded_keys;
             if obsolete {
                 let all = designs::read_all(process)?;
-                let before = all.iter().find(|d| d.variant.id == design).map(|d| d.variant.obsolete);
+                let before = all
+                    .iter()
+                    .find(|d| d.variant.id == design)
+                    .map(|d| d.variant.obsolete);
                 let found = if retry {
                     all.iter().find(|d| d.variant.id == design).cloned()
                 } else {
@@ -1540,25 +1613,38 @@ impl Commands for MacClock {
                     Some(d)
                 };
                 let Some(found) = found else {
-                    return Err(Error::new("design_unknown", format!("No own design {design}")));
+                    return Err(Error::new(
+                        "design_unknown",
+                        format!("No own design {design}"),
+                    ));
                 };
-                let action = json!({"kind":"design_obsolete","design":design,"obsolete":want_obsolete});
+                let action =
+                    json!({"kind":"design_obsolete","design":design,"obsolete":want_obsolete});
                 let info = std::cell::RefCell::new(Value::Null);
                 let mut settle = || {
                     let now = design_edit::obsolete_flag(process, design)?;
                     let detail = json!({"design":design,"obsolete":now});
-                    let verdict = design_edit::settle_obsolete(before.unwrap_or(!want_obsolete), now, want_obsolete);
+                    let verdict = design_edit::settle_obsolete(
+                        before.unwrap_or(!want_obsolete),
+                        now,
+                        want_obsolete,
+                    );
                     Ok(verdict.outcome(detail))
                 };
                 let mut dispatch = || {
                     authority.authorize(token, &epoch)?;
                     if retry {
-                        return Err(Error::new("action_uncertain", "A retried request is never dispatched again"));
+                        return Err(Error::new(
+                            "action_uncertain",
+                            "A retried request is never dispatched again",
+                        ));
                     }
-                    *info.borrow_mut() = design_edit::obsolete_apply(process, keys, &found, want_obsolete)?;
+                    *info.borrow_mut() =
+                        design_edit::obsolete_apply(process, keys, &found, want_obsolete)?;
                     Ok(())
                 };
-                let receipt = actions.execute_with(id, &epoch, action, &mut settle, &mut dispatch, true)?;
+                let receipt =
+                    actions.execute_with(id, &epoch, action, &mut settle, &mut dispatch, true)?;
                 return Ok(json!({"receipt":receipt,"designer":*info.borrow()}));
             }
             let all = designs::read_all(process)?;
@@ -1585,18 +1671,30 @@ impl Commands for MacClock {
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
                 if retry {
-                    return Err(Error::new("action_uncertain", "A retried request is never dispatched again"));
+                    return Err(Error::new(
+                        "action_uncertain",
+                        "A retried request is never dispatched again",
+                    ));
                 }
                 *info.borrow_mut() = design_edit::set_production_apply(process, keys, &change)?;
                 Ok(())
             };
-            let receipt = actions.execute_with(id, &epoch, action, &mut settle, &mut dispatch, true)?;
+            let receipt =
+                actions.execute_with(id, &epoch, action, &mut settle, &mut dispatch, true)?;
             return Ok(json!({"receipt":receipt,"change":*info.borrow()}));
         }
         if name == "hoi4_design_create" {
             allowed(
                 args,
-                &["kind", "base", "upgrades", "modules", "name", "request_id", "lease_token"],
+                &[
+                    "kind",
+                    "base",
+                    "upgrades",
+                    "modules",
+                    "name",
+                    "request_id",
+                    "lease_token",
+                ],
             )?;
             let input = design_edit::Input {
                 kind: design_edit::kind_arg(args)?,
@@ -1678,8 +1776,14 @@ impl Commands for MacClock {
             let all = designs::read_all(process)?;
             let saved = all
                 .iter()
-                .find(|d| !planned.before_ids.contains(&d.variant.id) && design_edit::matches_want(d, &planned.want))
-                .or_else(|| all.iter().find(|d| design_edit::matches_want(d, &planned.want)));
+                .find(|d| {
+                    !planned.before_ids.contains(&d.variant.id)
+                        && design_edit::matches_want(d, &planned.want)
+                })
+                .or_else(|| {
+                    all.iter()
+                        .find(|d| design_edit::matches_want(d, &planned.want))
+                });
             let row = saved.map_or(Value::Null, |d| design_edit::design_row(&all, d.variant.id));
             return Ok(json!({"receipt":receipt,"designer":*info.borrow(),"design":row}));
         }
@@ -1702,7 +1806,14 @@ impl Commands for MacClock {
             match kind {
                 "create" => allowed(
                     args,
-                    &["name", "regiments", "support", "priority", "request_id", "lease_token"],
+                    &[
+                        "name",
+                        "regiments",
+                        "support",
+                        "priority",
+                        "request_id",
+                        "lease_token",
+                    ],
                 )?,
                 "edit" => allowed(
                     args,
@@ -1725,7 +1836,9 @@ impl Commands for MacClock {
             } else {
                 Some(string(args, "template")?)
             };
-            if existing.is_some_and(|t| t.is_empty() || t.len() > 128 || t.chars().any(char::is_control)) {
+            if existing
+                .is_some_and(|t| t.is_empty() || t.len() > 128 || t.chars().any(char::is_control))
+            {
                 return Err(Error::new("invalid_arguments", "Invalid template name"));
             }
             let input = template_edit::Input {
@@ -1852,9 +1965,14 @@ impl Commands for MacClock {
                 let now = now_list
                     .iter()
                     .find(|l| l.name == want.name)
-                    .or_else(|| before.as_ref().and_then(|b| now_list.iter().find(|l| l.name == b.name)))
+                    .or_else(|| {
+                        before
+                            .as_ref()
+                            .and_then(|b| now_list.iter().find(|l| l.name == b.name))
+                    })
                     .cloned();
-                let detail = json!({"template":want.name,"layout_saved":now.as_ref() == Some(&want)});
+                let detail =
+                    json!({"template":want.name,"layout_saved":now.as_ref() == Some(&want)});
                 let verdict = template_edit::settle_layout(before.as_ref(), now.as_ref(), &want);
                 Ok(if retry && verdict == settle::Verdict::Unchanged {
                     journal::Outcome::Diverged(detail)
@@ -1865,7 +1983,10 @@ impl Commands for MacClock {
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
                 let planned = planned.as_ref().ok_or_else(|| {
-                    Error::new("action_uncertain", "A retried request is never dispatched again")
+                    Error::new(
+                        "action_uncertain",
+                        "A retried request is never dispatched again",
+                    )
                 })?;
                 *info.borrow_mut() = template_edit::apply(process, keys, planned)?;
                 Ok(())
@@ -1899,9 +2020,9 @@ impl Commands for MacClock {
             if !retry {
                 let before = special_projects::snapshot(process)?;
                 // Political power is the top-bar text; unreadable means no pre-check on it.
-                let power = country_status::status(process).ok().and_then(|v| {
-                    v["fields"]["political_power"]["value"].as_f64()
-                });
+                let power = country_status::status(process)
+                    .ok()
+                    .and_then(|v| v["fields"]["political_power"]["value"].as_f64());
                 special_projects::plan_recruit(&before, scientist, power)?;
                 bounded_keys.preflight()?;
             }
@@ -1935,7 +2056,9 @@ impl Commands for MacClock {
             let key = string(args, "technology")?;
             if key.is_empty()
                 || key.len() > 128
-                || !key.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+                || !key
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
             {
                 return Err(Error::new("invalid_arguments", "Invalid technology key"));
             }
@@ -1995,7 +2118,13 @@ impl Commands for MacClock {
             if adding {
                 allowed(
                     args,
-                    &["equipment", "factories", "design", "request_id", "lease_token"],
+                    &[
+                        "equipment",
+                        "factories",
+                        "design",
+                        "request_id",
+                        "lease_token",
+                    ],
                 )?;
             } else {
                 allowed(
@@ -2012,7 +2141,9 @@ impl Commands for MacClock {
             let key = string(args, "equipment")?;
             if key.is_empty()
                 || key.len() > 128
-                || !key.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+                || !key
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
             {
                 return Err(Error::new("invalid_arguments", "Invalid equipment key"));
             }
@@ -2027,7 +2158,9 @@ impl Commands for MacClock {
                     .filter(|d| !d.variant.obsolete)
                     .filter_map(|d| {
                         let rest = d.variant.type_key.strip_prefix(key)?.strip_prefix('_')?;
-                        rest.parse::<u32>().ok().map(|n| (n, d.variant.type_key.clone()))
+                        rest.parse::<u32>()
+                            .ok()
+                            .map(|n| (n, d.variant.type_key.clone()))
                     })
                     .max();
                 match (exact, newest) {
@@ -2052,10 +2185,15 @@ impl Commands for MacClock {
                     v.as_i64()
                         .and_then(|d| i32::try_from(d).ok())
                         .filter(|d| *d > 0)
-                        .ok_or_else(|| Error::new("invalid_arguments", "design must be a positive design id"))?,
+                        .ok_or_else(|| {
+                            Error::new("invalid_arguments", "design must be a positive design id")
+                        })?,
                 ),
                 Some(_) => {
-                    return Err(Error::new("invalid_arguments", "design applies to adding a line"))
+                    return Err(Error::new(
+                        "invalid_arguments",
+                        "design applies to adding a line",
+                    ))
                 }
             };
             let index = if adding {
@@ -2095,7 +2233,11 @@ impl Commands for MacClock {
             let retry = actions.receipt_exists(id);
             if !retry {
                 if let Some(wanted) = design {
-                    design_edit::check_production_design(&designs::read_all(process)?, wanted, key)?;
+                    design_edit::check_production_design(
+                        &designs::read_all(process)?,
+                        wanted,
+                        key,
+                    )?;
                 }
                 if let Some(index) = index {
                     if before.get(index).and_then(|l| l.key.as_deref()) != Some(key) {
@@ -2135,7 +2277,9 @@ impl Commands for MacClock {
                             None => true,
                             Some(wanted) => designs::read_all(process)?.iter().any(|d| {
                                 d.variant.id == wanted
-                                    && d.lines.iter().any(|(h, _)| added.iter().any(|l| l.handle == *h))
+                                    && d.lines
+                                        .iter()
+                                        .any(|(h, _)| added.iter().any(|l| l.handle == *h))
                             }),
                         };
                         if design_ok
@@ -2198,40 +2342,60 @@ impl Commands for MacClock {
             } else {
                 allowed(
                     args,
-                    &["state_id", "country", "countries", "action", "war_goal", "states", "lease_token"],
+                    &[
+                        "state_id",
+                        "country",
+                        "countries",
+                        "action",
+                        "war_goal",
+                        "states",
+                        "lease_token",
+                    ],
                 )?;
             }
             let text_ok =
                 |v: &str| !v.is_empty() && v.len() <= 128 && !v.chars().any(char::is_control);
-            let tag_ok = |v: &str| v.len() == 3 && v.bytes().all(|b| b.is_ascii_uppercase() || b.is_ascii_digit());
+            let tag_ok = |v: &str| {
+                v.len() == 3
+                    && v.bytes()
+                        .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit())
+            };
             let tag_of = |v: &Value| -> Result<String> {
                 v.as_str()
                     .filter(|t| tag_ok(t))
                     .map(str::to_string)
-                    .ok_or_else(|| Error::new("invalid_arguments", "country must be a three-letter tag such as POL"))
+                    .ok_or_else(|| {
+                        Error::new(
+                            "invalid_arguments",
+                            "country must be a three-letter tag such as POL",
+                        )
+                    })
             };
-            let state_arg = match args.get("state_id") {
-                None => None,
-                Some(v) => Some(
-                    v.as_i64()
-                        .filter(|v| (1..4096).contains(v))
-                        .ok_or_else(|| Error::new("invalid_arguments", "state_id must be 1..4095"))?
-                        as i32,
-                ),
-            };
+            let state_arg =
+                match args.get("state_id") {
+                    None => None,
+                    Some(v) => Some(v.as_i64().filter(|v| (1..4096).contains(v)).ok_or_else(
+                        || Error::new("invalid_arguments", "state_id must be 1..4095"),
+                    )? as i32),
+                };
             let country_arg = args.get("country").map(tag_of).transpose()?;
             let many: Vec<String> = match args.get("countries") {
                 None => Vec::new(),
                 Some(v) => v
                     .as_array()
                     .filter(|a| a.len() <= 6 && !a.is_empty())
-                    .ok_or_else(|| Error::new("invalid_arguments", "countries must list 1..6 tags"))?
+                    .ok_or_else(|| {
+                        Error::new("invalid_arguments", "countries must list 1..6 tags")
+                    })?
                     .iter()
                     .map(&tag_of)
                     .collect::<Result<Vec<_>>>()?,
             };
             if state_arg.is_some() && country_arg.is_some() {
-                return Err(Error::new("invalid_arguments", "Give country or state_id, not both"));
+                return Err(Error::new(
+                    "invalid_arguments",
+                    "Give country or state_id, not both",
+                ));
             }
             let token = string(args, "lease_token")?;
             let kind = match args.get("war_goal") {
@@ -2292,16 +2456,16 @@ impl Commands for MacClock {
                 return match args.get("action") {
                     None => diplomacy::actions(process, &self.keys, &target),
                     Some(a) => {
-                        let a = a
-                            .as_str()
-                            .filter(|v| text_ok(v))
-                            .ok_or_else(|| Error::new("invalid_arguments", "Invalid action name"))?;
+                        let a = a.as_str().filter(|v| text_ok(v)).ok_or_else(|| {
+                            Error::new("invalid_arguments", "Invalid action name")
+                        })?;
                         diplomacy::preview(process, &self.keys, &target, a, kind, &states)
                     }
                 };
             }
-            let target = target
-                .ok_or_else(|| Error::new("invalid_arguments", "country (tag) or state_id is required"))?;
+            let target = target.ok_or_else(|| {
+                Error::new("invalid_arguments", "country (tag) or state_id is required")
+            })?;
             let action_name = string(args, "action")?;
             if !text_ok(action_name) {
                 return Err(Error::new("invalid_arguments", "Invalid action name"));
@@ -2309,9 +2473,9 @@ impl Commands for MacClock {
             let flag = |key: &str| -> Result<bool> {
                 match args.get(key) {
                     None => Ok(false),
-                    Some(v) => v
-                        .as_bool()
-                        .ok_or_else(|| Error::new("invalid_arguments", format!("{key} must be boolean"))),
+                    Some(v) => v.as_bool().ok_or_else(|| {
+                        Error::new("invalid_arguments", format!("{key} must be boolean"))
+                    }),
                 }
             };
             let try_anyway = flag("try_anyway")?;
@@ -2336,7 +2500,8 @@ impl Commands for MacClock {
             } else {
                 keys.preflight()?;
                 let plan = diplomacy::plan(process, keys, &target, action_name, try_anyway)?;
-                if plan.spec.map(|s| s.key) == Some("declare_war") && confirm != Some("declare_war") {
+                if plan.spec.map(|s| s.key) == Some("declare_war") && confirm != Some("declare_war")
+                {
                     return Err(Error::new(
                         "confirmation_required",
                         "Declaring war is one explicit step: repeat the call with confirm:\"declare_war\" (the game accepts it only with a completed war goal)",
@@ -2415,7 +2580,11 @@ impl Commands for MacClock {
             let epoch = guard.observe(process)?.epoch;
             authority.authorize(token, &epoch)?;
             self.keys.preflight()?;
-            return ui::save_game(process, &self.keys, &self.directory.join("userdata").join("save games"));
+            return ui::save_game(
+                process,
+                &self.keys,
+                &self.directory.join("userdata").join("save games"),
+            );
         }
         if name == "hoi4_trade" {
             allowed(args, &["resource", "limit", "lease_token"])?;
@@ -2423,7 +2592,9 @@ impl Commands for MacClock {
                 None => None,
                 Some(v) => Some(
                     v.as_str()
-                        .filter(|v| !v.is_empty() && v.len() <= 24 && !v.chars().any(char::is_control))
+                        .filter(|v| {
+                            !v.is_empty() && v.len() <= 24 && !v.chars().any(char::is_control)
+                        })
                         .ok_or_else(|| Error::new("invalid_arguments", "Invalid resource"))?,
                 ),
             };
@@ -2471,7 +2642,11 @@ impl Commands for MacClock {
             }
             let keys = &self.keys;
             let action = json!({"kind":"auto_import","enabled":enabled,"budget":budget});
-            let before = if retry { None } else { Some(trade::auto_import_read(process, keys)?) };
+            let before = if retry {
+                None
+            } else {
+                Some(trade::auto_import_read(process, keys)?)
+            };
             let mut settle = || {
                 let state = trade::auto_import_read(process, keys)?;
                 let reached = enabled.is_none_or(|e| state.enabled == Some(e))
@@ -2511,7 +2686,10 @@ impl Commands for MacClock {
                     v.as_i64()
                         .filter(|v| (0..=100_000).contains(v))
                         .ok_or_else(|| {
-                            Error::new("invalid_arguments", "amount must be 0..100000, \"max\" or \"needed\"")
+                            Error::new(
+                                "invalid_arguments",
+                                "amount must be 0..100000, \"max\" or \"needed\"",
+                            )
                         })?,
                 ),
                 None => return Err(Error::new("invalid_arguments", "amount is required")),
@@ -2537,7 +2715,8 @@ impl Commands for MacClock {
                 .and_then(|p| trade::contracted(&p.partner.bought));
             let want_resource = plan.as_ref().map(|p| p.resource);
             let mut settle = || {
-                let Some(name) = target_country.clone().or_else(|| Some(country.to_string())) else {
+                let Some(name) = target_country.clone().or_else(|| Some(country.to_string()))
+                else {
                     return Ok(journal::Outcome::Unknown);
                 };
                 let index = want_resource.or_else(|| {
@@ -2553,7 +2732,9 @@ impl Commands for MacClock {
                     (Some(n), Some(e)) if n == e && (before != Some(n) || sent.get()) => {
                         journal::Outcome::Reached(detail)
                     }
-                    (Some(n), _) if Some(n) == before && !sent.get() => journal::Outcome::Unchanged(detail),
+                    (Some(n), _) if Some(n) == before && !sent.get() => {
+                        journal::Outcome::Unchanged(detail)
+                    }
                     (Some(n), Some(_)) if Some(n) == before => journal::Outcome::Unchanged(detail),
                     (Some(_), _) => journal::Outcome::Diverged(detail),
                     (None, _) if !sent.get() && !retry => journal::Outcome::Unchanged(detail),
@@ -2580,7 +2761,9 @@ impl Commands for MacClock {
                     .as_array()
                     .filter(|a| a.len() <= 16)
                     .and_then(|a| a.iter().map(Value::as_i64).collect::<Option<Vec<_>>>())
-                    .ok_or_else(|| Error::new("invalid_arguments", "states must be up to 16 ids"))?,
+                    .ok_or_else(|| {
+                        Error::new("invalid_arguments", "states must be up to 16 ids")
+                    })?,
             };
             if ids.iter().any(|v| !(1..4096).contains(v)) {
                 return Err(Error::new("invalid_arguments", "state ids must be 1..4095"));
@@ -2588,12 +2771,22 @@ impl Commands for MacClock {
             let ids: Vec<i32> = ids.into_iter().map(|v| v as i32).collect();
             return peace::options(process, &ids);
         }
-        if matches!(name, "hoi4_peace_take" | "hoi4_peace_submit" | "hoi4_peace_exit") {
+        if matches!(
+            name,
+            "hoi4_peace_take" | "hoi4_peace_submit" | "hoi4_peace_exit"
+        ) {
             let take = name == "hoi4_peace_take";
             if take {
                 allowed(
                     args,
-                    &["states", "puppet", "release", "max_cost", "request_id", "lease_token"],
+                    &[
+                        "states",
+                        "puppet",
+                        "release",
+                        "max_cost",
+                        "request_id",
+                        "lease_token",
+                    ],
                 )?;
             } else {
                 allowed(args, &["request_id", "lease_token"])?;
@@ -2608,9 +2801,16 @@ impl Commands for MacClock {
                     .ok_or_else(|| Error::new("invalid_arguments", "states must be state ids"))?;
                 let max_cost = match args.get("max_cost") {
                     None => None,
-                    Some(v) => Some(v.as_f64().filter(|v| *v >= 0.0 && v.is_finite()).ok_or_else(
-                        || Error::new("invalid_arguments", "max_cost must be a non-negative number"),
-                    )?),
+                    Some(v) => Some(
+                        v.as_f64()
+                            .filter(|v| *v >= 0.0 && v.is_finite())
+                            .ok_or_else(|| {
+                                Error::new(
+                                    "invalid_arguments",
+                                    "max_cost must be a non-negative number",
+                                )
+                            })?,
+                    ),
                 };
                 (
                     peace::Kind::parse(mgmt::flag(args, "puppet")?, mgmt::flag(args, "release")?)?,
@@ -2637,7 +2837,12 @@ impl Commands for MacClock {
                         plan.names = plan
                             .states
                             .iter()
-                            .map(|s| all.iter().find(|(id, _)| id == s).map(|(_, n)| n.clone()).unwrap_or_default())
+                            .map(|s| {
+                                all.iter()
+                                    .find(|(id, _)| id == s)
+                                    .map(|(_, n)| n.clone())
+                                    .unwrap_or_default()
+                            })
                             .collect();
                         (Some(plan), String::new())
                     }
@@ -2650,7 +2855,9 @@ impl Commands for MacClock {
             };
             let score_before = plan.as_ref().and_then(|p| p.score_before);
             let action = match name {
-                "hoi4_peace_take" => json!({"kind":"peace_take","demand":kind.name(),"states":states}),
+                "hoi4_peace_take" => {
+                    json!({"kind":"peace_take","demand":kind.name(),"states":states})
+                }
                 "hoi4_peace_submit" => json!({"kind":"peace_submit"}),
                 _ => json!({"kind":"peace_exit"}),
             };
@@ -2697,12 +2904,14 @@ impl Commands for MacClock {
                 authority.authorize(token, &epoch)?;
                 match tool {
                     "hoi4_peace_take" => {
-                        let plan = plan
-                            .as_ref()
-                            .ok_or_else(|| Error::new("invalid_state", "No plan for this dispatch"))?;
+                        let plan = plan.as_ref().ok_or_else(|| {
+                            Error::new("invalid_state", "No plan for this dispatch")
+                        })?;
                         peace::take(process, keys, plan, &sent).map(|_| ())
                     }
-                    "hoi4_peace_submit" => peace::submit(process, keys, &before_key, &sent).map(|_| ()),
+                    "hoi4_peace_submit" => {
+                        peace::submit(process, keys, &before_key, &sent).map(|_| ())
+                    }
                     _ => peace::exit(process, keys, &sent).map(|_| ()),
                 }
             };
@@ -2758,11 +2967,21 @@ impl Commands for MacClock {
         if name == "hoi4_fleet_mission" || name == "hoi4_fleet_region" {
             let by_mission = name == "hoi4_fleet_mission";
             if by_mission {
-                allowed(args, &["task_force", "mission", "request_id", "lease_token"])?;
+                allowed(
+                    args,
+                    &["task_force", "mission", "request_id", "lease_token"],
+                )?;
             } else {
                 allowed(
                     args,
-                    &["fleet", "region", "state_id", "remove", "request_id", "lease_token"],
+                    &[
+                        "fleet",
+                        "region",
+                        "state_id",
+                        "remove",
+                        "request_id",
+                        "lease_token",
+                    ],
                 )?;
             }
             let text_arg = |key: &str, max: usize| -> Result<String> {
@@ -2773,7 +2992,12 @@ impl Commands for MacClock {
                 Ok(v.to_string())
             };
             let (subject, detail, state, remove) = if by_mission {
-                (text_arg("task_force", 128)?, text_arg("mission", 40)?, 0, false)
+                (
+                    text_arg("task_force", 128)?,
+                    text_arg("mission", 40)?,
+                    0,
+                    false,
+                )
             } else {
                 let state = args
                     .get("state_id")
@@ -2799,7 +3023,8 @@ impl Commands for MacClock {
                 expected: &expected,
                 authority,
                 token,
-                until: (Instant::now() + Duration::from_secs(if by_mission { 60 } else { 120 })).min(lease_end),
+                until: (Instant::now() + Duration::from_secs(if by_mission { 60 } else { 120 }))
+                    .min(lease_end),
                 stop: None,
             };
             let check_input = || fence.input_check();
@@ -2814,7 +3039,9 @@ impl Commands for MacClock {
                 None
             };
             let region_plan = if !by_mission && !retry {
-                Some(navalact::plan_region(&fleets, &subject, &detail, state, remove)?)
+                Some(navalact::plan_region(
+                    &fleets, &subject, &detail, state, remove,
+                )?)
             } else {
                 None
             };
@@ -2826,7 +3053,11 @@ impl Commands for MacClock {
             } else {
                 json!({"kind":"fleet_region","fleet":subject,"region":detail,"state_id":state,"remove":remove})
             };
-            let target_code = navalact::MISSIONS.iter().find(|m| m.0 == detail).map(|m| m.2).unwrap_or(-1);
+            let target_code = navalact::MISSIONS
+                .iter()
+                .find(|m| m.0 == detail)
+                .map(|m| m.2)
+                .unwrap_or(-1);
             let before_code = mission_plan.as_ref().map(|p| p.before_code);
             let had_region = region_plan.as_ref().map(|p| p.remove);
             let info = std::cell::RefCell::new(Value::Null);
@@ -2845,7 +3076,9 @@ impl Commands for MacClock {
                     let verdict = match (retry, now) {
                         (true, Some(h)) if h == want_present => settle::Verdict::Reached,
                         (true, Some(_)) => settle::Verdict::Unchanged,
-                        _ => navalact::settle_region(had_region.unwrap_or(false), now, want_present),
+                        _ => {
+                            navalact::settle_region(had_region.unwrap_or(false), now, want_present)
+                        }
                     };
                     Ok(verdict.outcome(json!({"fleet":subject,"region":detail,"present":now})))
                 }
@@ -2853,7 +3086,10 @@ impl Commands for MacClock {
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
                 if retry {
-                    return Err(Error::new("action_uncertain", "A retried request is never dispatched again"));
+                    return Err(Error::new(
+                        "action_uncertain",
+                        "A retried request is never dispatched again",
+                    ));
                 }
                 *info.borrow_mut() = match (&mission_plan, &region_plan) {
                     (Some(plan), _) => navalact::set_mission(process, keys, plan)?,
@@ -2862,7 +3098,8 @@ impl Commands for MacClock {
                 };
                 Ok(())
             };
-            let receipt = actions.execute_with(id, &epoch, action, &mut settle, &mut dispatch, true)?;
+            let receipt =
+                actions.execute_with(id, &epoch, action, &mut settle, &mut dispatch, true)?;
             let after = navalact::own_fleets(process).ok();
             return Ok(json!({"receipt":receipt,"result":*info.borrow(),
                 "fleets_after":after.map(|f| f.iter().map(|f| json!({"fleet":f.name.trim(),
@@ -2872,7 +3109,14 @@ impl Commands for MacClock {
         if name == "hoi4_fleet_admiral" {
             allowed(
                 args,
-                &["fleet", "admiral", "unassign", "list", "request_id", "lease_token"],
+                &[
+                    "fleet",
+                    "admiral",
+                    "unassign",
+                    "list",
+                    "request_id",
+                    "lease_token",
+                ],
             )?;
             let text_arg = |key: &str, max: usize| -> Result<String> {
                 let v = string(args, key)?;
@@ -2889,7 +3133,10 @@ impl Commands for MacClock {
                 None => None,
             };
             if list && (unassign || admiral.is_some()) {
-                return Err(Error::new("invalid_arguments", "list takes no admiral or unassign"));
+                return Err(Error::new(
+                    "invalid_arguments",
+                    "list takes no admiral or unassign",
+                ));
             }
             if !list && unassign == admiral.is_some() {
                 return Err(Error::new(
@@ -2917,7 +3164,10 @@ impl Commands for MacClock {
             let keys = &bounded_keys;
             let fleets = navalact::own_fleets(process)?;
             if list {
-                let Some(found) = fleets.iter().find(|f| f.name.trim().eq_ignore_ascii_case(fleet.trim())) else {
+                let Some(found) = fleets
+                    .iter()
+                    .find(|f| f.name.trim().eq_ignore_ascii_case(fleet.trim()))
+                else {
                     return Err(Error::new("fleet_unknown", "No own fleet with this name"));
                 };
                 bounded_keys.preflight()?;
@@ -2940,13 +3190,19 @@ impl Commands for MacClock {
                 .find(|f| f.name.trim().eq_ignore_ascii_case(fleet.trim()))
                 .and_then(|f| f.admiral.clone());
             let want = admiral.clone();
-            let action = json!({"kind":"fleet_admiral","fleet":fleet,"admiral":admiral,"unassign":unassign});
+            let action =
+                json!({"kind":"fleet_admiral","fleet":fleet,"admiral":admiral,"unassign":unassign});
             let info = std::cell::RefCell::new(Value::Null);
             let mut settle = || {
                 let now = navalact::admiral_now(process, &fleet)?;
                 let verdict = if retry {
                     match &now {
-                        Some(n) if n.as_deref().map(str::trim).map(str::to_lowercase) == want.as_deref().map(str::trim).map(str::to_lowercase) => settle::Verdict::Reached,
+                        Some(n)
+                            if n.as_deref().map(str::trim).map(str::to_lowercase)
+                                == want.as_deref().map(str::trim).map(str::to_lowercase) =>
+                        {
+                            settle::Verdict::Reached
+                        }
                         Some(_) => settle::Verdict::Unchanged,
                         None => settle::Verdict::Unknown,
                     }
@@ -2958,12 +3214,16 @@ impl Commands for MacClock {
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
                 let Some(plan) = &plan else {
-                    return Err(Error::new("action_uncertain", "A retried request is never dispatched again"));
+                    return Err(Error::new(
+                        "action_uncertain",
+                        "A retried request is never dispatched again",
+                    ));
                 };
                 *info.borrow_mut() = navalact::assign_admiral(process, keys, plan)?;
                 Ok(())
             };
-            let receipt = actions.execute_with(id, &epoch, action, &mut settle, &mut dispatch, true)?;
+            let receipt =
+                actions.execute_with(id, &epoch, action, &mut settle, &mut dispatch, true)?;
             return Ok(json!({"receipt":receipt,"result":*info.borrow()}));
         }
         if name == "hoi4_fleet_create" {
@@ -2992,7 +3252,11 @@ impl Commands for MacClock {
             let keys = &bounded_keys;
             let retry = actions.receipt_exists(id);
             let fleets = navalact::own_fleets(process)?;
-            let plan = if retry { None } else { Some(navalact::plan_create(&fleets, tf)?) };
+            let plan = if retry {
+                None
+            } else {
+                Some(navalact::plan_create(&fleets, tf)?)
+            };
             if !retry {
                 bounded_keys.preflight()?;
             }
@@ -3004,28 +3268,54 @@ impl Commands for MacClock {
                 let verdict = match &plan {
                     Some(p) => navalact::settle_create(&now, p),
                     None => {
-                        let alone = now.iter().any(|f| f.task_forces.len() == 1 && f.task_forces[0].name.trim().eq_ignore_ascii_case(tf.trim()));
-                        if alone && now.len() > 1 { settle::Verdict::Reached } else { settle::Verdict::Unchanged }
+                        let alone = now.iter().any(|f| {
+                            f.task_forces.len() == 1
+                                && f.task_forces[0].name.trim().eq_ignore_ascii_case(tf.trim())
+                        });
+                        if alone && now.len() > 1 {
+                            settle::Verdict::Reached
+                        } else {
+                            settle::Verdict::Unchanged
+                        }
                     }
                 };
                 let _ = count_before;
-                Ok(verdict.outcome(json!({"fleets":now.iter().map(|f| f.name.trim()).collect::<Vec<_>>()})))
+                Ok(verdict.outcome(
+                    json!({"fleets":now.iter().map(|f| f.name.trim()).collect::<Vec<_>>()}),
+                ))
             };
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
                 let Some(plan) = &plan else {
-                    return Err(Error::new("action_uncertain", "A retried request is never dispatched again"));
+                    return Err(Error::new(
+                        "action_uncertain",
+                        "A retried request is never dispatched again",
+                    ));
                 };
                 *info.borrow_mut() = navalact::create_fleet(process, keys, plan)?;
                 Ok(())
             };
-            let receipt = actions.execute_with(id, &epoch, action, &mut settle, &mut dispatch, true)?;
+            let receipt =
+                actions.execute_with(id, &epoch, action, &mut settle, &mut dispatch, true)?;
             return Ok(json!({"receipt":receipt,"result":*info.borrow()}));
         }
         if name == "hoi4_navy_ui" {
             allowed(
                 args,
-                &["op", "root", "path", "depth", "index", "items", "x", "y", "code", "letter", "pixels", "lease_token"],
+                &[
+                    "op",
+                    "root",
+                    "path",
+                    "depth",
+                    "index",
+                    "items",
+                    "x",
+                    "y",
+                    "code",
+                    "letter",
+                    "pixels",
+                    "lease_token",
+                ],
             )?;
             let token = string(args, "lease_token")?;
             let epoch = guard.observe(process)?.epoch;
@@ -3036,36 +3326,51 @@ impl Commands for MacClock {
                 "dump" => navalui::dump(process, args),
                 "click" => {
                     self.keys.preflight()?;
-                    self.keys.click(navalui::GAME, num("x"), num("y")).map(|p| json!({"clicked":format!("{p:?}")}))
+                    self.keys
+                        .click(navalui::GAME, num("x"), num("y"))
+                        .map(|p| json!({"clicked":format!("{p:?}")}))
                 }
                 "shiftclick" => {
                     self.keys.preflight()?;
-                    self.keys.shift_click(navalui::GAME, num("x"), num("y")).map(|p| json!({"shift_clicked":format!("{p:?}")}))
+                    self.keys
+                        .shift_click(navalui::GAME, num("x"), num("y"))
+                        .map(|p| json!({"shift_clicked":format!("{p:?}")}))
                 }
                 "rclick" => {
                     self.keys.preflight()?;
-                    self.keys.right_click(navalui::GAME, num("x"), num("y")).map(|p| json!({"rclicked":format!("{p:?}")}))
+                    self.keys
+                        .right_click(navalui::GAME, num("x"), num("y"))
+                        .map(|p| json!({"rclicked":format!("{p:?}")}))
                 }
                 "code" => {
                     self.keys.preflight()?;
-                    self.keys.press_code(num("code") as u16).map(|_| json!({"pressed":num("code")}))
+                    self.keys
+                        .press_code(num("code") as u16)
+                        .map(|_| json!({"pressed":num("code")}))
                 }
                 "letter" => {
                     self.keys.preflight()?;
                     let c = string(args, "letter")?.chars().next().unwrap_or('z');
-                    self.keys.press(Key::letter(c)?).map(|_| json!({"pressed":c.to_string()}))
+                    self.keys
+                        .press(Key::letter(c)?)
+                        .map(|_| json!({"pressed":c.to_string()}))
                 }
                 "escape" => {
                     self.keys.preflight()?;
-                    self.keys.press(Key::Escape).map(|_| json!({"pressed":"escape"}))
+                    self.keys
+                        .press(Key::Escape)
+                        .map(|_| json!({"pressed":"escape"}))
                 }
                 "find" => {
                     self.keys.preflight()?;
-                    ui::find_state(process, &self.keys, num("x") as i32).map(|_| json!({"found":num("x")}))
+                    ui::find_state(process, &self.keys, num("x") as i32)
+                        .map(|_| json!({"found":num("x")}))
                 }
                 "scroll" => {
                     self.keys.preflight()?;
-                    self.keys.scroll(navalui::GAME, (num("x"), num("y")), num("pixels") as i32).map(|_| json!({"scrolled":num("pixels")}))
+                    self.keys
+                        .scroll(navalui::GAME, (num("x"), num("y")), num("pixels") as i32)
+                        .map(|_| json!({"scrolled":num("pixels")}))
                 }
                 _ => Err(Error::new("invalid_arguments", "Unknown op")),
             };
@@ -3098,61 +3403,122 @@ impl Commands for MacClock {
                 | "hoi4_air_wing_merge"
         ) {
             enum Air {
-                Mission { wing: String, mission: String, state: i32, region: Option<i32>, mask: i32 },
-                Rebase { wing: String, state: i32 },
-                Create { state: i32, aircraft: String },
-                Disband { wing: String },
-                Hold { wing: String },
-                Split { wing: String },
-                Merge { wing: String, with: Option<String> },
+                Mission {
+                    wing: String,
+                    mission: String,
+                    state: i32,
+                    region: Option<i32>,
+                    mask: i32,
+                },
+                Rebase {
+                    wing: String,
+                    state: i32,
+                },
+                Create {
+                    state: i32,
+                    aircraft: String,
+                },
+                Disband {
+                    wing: String,
+                },
+                Hold {
+                    wing: String,
+                },
+                Split {
+                    wing: String,
+                },
+                Merge {
+                    wing: String,
+                    with: Option<String>,
+                },
             }
             let op = match name {
                 "hoi4_air_mission" => {
-                    allowed(args, &["wing", "mission", "state_id", "region", "request_id", "lease_token"])?;
+                    allowed(
+                        args,
+                        &[
+                            "wing",
+                            "mission",
+                            "state_id",
+                            "region",
+                            "request_id",
+                            "lease_token",
+                        ],
+                    )?;
                     let wing = airact::text_arg(args, "wing", 128)?;
                     let mission = airact::text_arg(args, "mission", 40)?;
-                    let Some(&(_, frame)) = air::MISSIONS.iter().find(|(n, _)| *n == mission) else {
+                    let Some(&(_, frame)) = air::MISSIONS.iter().find(|(n, _)| *n == mission)
+                    else {
                         return Err(Error::new(
                             "invalid_arguments",
                             format!(
                                 "mission must be one of {}",
-                                air::MISSIONS.iter().map(|m| m.0).collect::<Vec<_>>().join(", ")
+                                air::MISSIONS
+                                    .iter()
+                                    .map(|m| m.0)
+                                    .collect::<Vec<_>>()
+                                    .join(", ")
                             ),
                         ));
                     };
                     let (state, region) = airact::resolve_region(
                         process,
-                        args.get("state_id").map(|_| airact::state_arg(args, "state_id")).transpose()?,
-                        args.get("region").map(|_| airact::text_arg(args, "region", 96)).transpose()?,
+                        args.get("state_id")
+                            .map(|_| airact::state_arg(args, "state_id"))
+                            .transpose()?,
+                        args.get("region")
+                            .map(|_| airact::text_arg(args, "region", 96))
+                            .transpose()?,
                     )?;
-                    Air::Mission { wing, mission, state, region, mask: 1 << (frame - 1) }
+                    Air::Mission {
+                        wing,
+                        mission,
+                        state,
+                        region,
+                        mask: 1 << (frame - 1),
+                    }
                 }
                 "hoi4_air_rebase" => {
                     allowed(args, &["wing", "state_id", "request_id", "lease_token"])?;
-                    Air::Rebase { wing: airact::text_arg(args, "wing", 128)?, state: airact::state_arg(args, "state_id")? }
+                    Air::Rebase {
+                        wing: airact::text_arg(args, "wing", 128)?,
+                        state: airact::state_arg(args, "state_id")?,
+                    }
                 }
                 "hoi4_air_wing_create" => {
                     allowed(args, &["state_id", "aircraft", "request_id", "lease_token"])?;
-                    Air::Create { state: airact::state_arg(args, "state_id")?, aircraft: airact::text_arg(args, "aircraft", 96)? }
+                    Air::Create {
+                        state: airact::state_arg(args, "state_id")?,
+                        aircraft: airact::text_arg(args, "aircraft", 96)?,
+                    }
                 }
                 "hoi4_air_wing_disband" => {
                     allowed(args, &["wing", "request_id", "lease_token"])?;
-                    Air::Disband { wing: airact::text_arg(args, "wing", 128)? }
+                    Air::Disband {
+                        wing: airact::text_arg(args, "wing", 128)?,
+                    }
                 }
                 "hoi4_air_wing_split" => {
                     allowed(args, &["wing", "request_id", "lease_token"])?;
-                    Air::Split { wing: airact::text_arg(args, "wing", 128)? }
+                    Air::Split {
+                        wing: airact::text_arg(args, "wing", 128)?,
+                    }
                 }
                 "hoi4_air_wing_merge" => {
                     allowed(args, &["wing", "with", "request_id", "lease_token"])?;
                     Air::Merge {
                         wing: airact::text_arg(args, "wing", 128)?,
-                        with: args.get("with").map(|_| airact::text_arg(args, "with", 128)).transpose()?,
+                        with: args
+                            .get("with")
+                            .map(|_| airact::text_arg(args, "with", 128))
+                            .transpose()?,
                     }
                 }
                 _ => {
                     allowed(args, &["wing", "request_id", "lease_token"])?;
-                    Air::Hold { wing: airact::text_arg(args, "wing", 128)? }
+                    Air::Hold {
+                        wing: airact::text_arg(args, "wing", 128)?,
+                    }
                 }
             };
             let id = string(args, "request_id")?;
@@ -3193,20 +3559,34 @@ impl Commands for MacClock {
                     Air::Disband { wing } => before = Some(airact::plan_disband(&wings, wing)?),
                     Air::Hold { wing } => before = Some(airact::plan_hold(&wings, wing)?),
                     Air::Split { wing } => split_plan = Some(airact::plan_split(&wings, wing)?),
-                    Air::Merge { wing, with } => merge_plan = Some(airact::plan_merge(&wings, wing, with.as_deref())?),
+                    Air::Merge { wing, with } => {
+                        merge_plan = Some(airact::plan_merge(&wings, wing, with.as_deref())?)
+                    }
                 }
                 bounded_keys.preflight()?;
             }
             let action = match &op {
-                Air::Mission { wing, mission, state, region, .. } => {
+                Air::Mission {
+                    wing,
+                    mission,
+                    state,
+                    region,
+                    ..
+                } => {
                     json!({"kind":"air_mission","wing":wing,"mission":mission,"state_id":state,"region":region})
                 }
-                Air::Rebase { wing, state } => json!({"kind":"air_rebase","wing":wing,"state_id":state}),
-                Air::Create { state, aircraft } => json!({"kind":"air_wing_create","state_id":state,"aircraft":aircraft}),
+                Air::Rebase { wing, state } => {
+                    json!({"kind":"air_rebase","wing":wing,"state_id":state})
+                }
+                Air::Create { state, aircraft } => {
+                    json!({"kind":"air_wing_create","state_id":state,"aircraft":aircraft})
+                }
                 Air::Disband { wing } => json!({"kind":"air_wing_disband","wing":wing}),
                 Air::Hold { wing } => json!({"kind":"air_hold","wing":wing}),
                 Air::Split { wing } => json!({"kind":"air_wing_split","wing":wing}),
-                Air::Merge { wing, with } => json!({"kind":"air_wing_merge","wing":wing,"with":with}),
+                Air::Merge { wing, with } => {
+                    json!({"kind":"air_wing_merge","wing":wing,"with":with})
+                }
             };
             let info = std::cell::RefCell::new(Value::Null);
             let mut settle = || {
@@ -3280,23 +3660,56 @@ impl Commands for MacClock {
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
                 if retry {
-                    return Err(Error::new("action_uncertain", "A retried request is never dispatched again"));
+                    return Err(Error::new(
+                        "action_uncertain",
+                        "A retried request is never dispatched again",
+                    ));
                 }
                 *info.borrow_mut() = match &op {
-                    Air::Mission { wing, mission, state, .. } => {
+                    Air::Mission {
+                        wing,
+                        mission,
+                        state,
+                        ..
+                    } => {
                         airact::mission(process, keys, wing, mission, *state)?;
                         json!({"wing":wing,"mission":mission,"state_id":state})
                     }
-                    Air::Rebase { .. } => airact::rebase(process, keys, rebase_plan.as_ref().ok_or_else(|| Error::new("invalid_arguments", "No plan"))?)?,
-                    Air::Create { .. } => airact::create_wing(process, keys, create_plan.as_ref().ok_or_else(|| Error::new("invalid_arguments", "No plan"))?)?,
+                    Air::Rebase { .. } => airact::rebase(
+                        process,
+                        keys,
+                        rebase_plan
+                            .as_ref()
+                            .ok_or_else(|| Error::new("invalid_arguments", "No plan"))?,
+                    )?,
+                    Air::Create { .. } => airact::create_wing(
+                        process,
+                        keys,
+                        create_plan
+                            .as_ref()
+                            .ok_or_else(|| Error::new("invalid_arguments", "No plan"))?,
+                    )?,
                     Air::Disband { wing } => airact::disband(process, keys, wing)?,
                     Air::Hold { wing } => airact::hold(process, keys, wing)?,
-                    Air::Split { .. } => airact::split(process, keys, split_plan.as_ref().ok_or_else(|| Error::new("invalid_arguments", "No plan"))?)?,
-                    Air::Merge { .. } => airact::merge(process, keys, merge_plan.as_ref().ok_or_else(|| Error::new("invalid_arguments", "No plan"))?)?,
+                    Air::Split { .. } => airact::split(
+                        process,
+                        keys,
+                        split_plan
+                            .as_ref()
+                            .ok_or_else(|| Error::new("invalid_arguments", "No plan"))?,
+                    )?,
+                    Air::Merge { .. } => airact::merge(
+                        process,
+                        keys,
+                        merge_plan
+                            .as_ref()
+                            .ok_or_else(|| Error::new("invalid_arguments", "No plan"))?,
+                    )?,
                 };
                 Ok(())
             };
-            let receipt = actions.execute_with(id, &epoch, action, &mut settle, &mut dispatch, true)?;
+            let receipt =
+                actions.execute_with(id, &epoch, action, &mut settle, &mut dispatch, true)?;
             let (_, after) = airact::own(process)?;
             let after_rows: Vec<Value> = match &op {
                 Air::Mission { wing, .. } | Air::Rebase { wing, .. } | Air::Hold { wing } => after
@@ -3356,7 +3769,10 @@ impl Commands for MacClock {
                 }
             }
             if source == target {
-                return Err(Error::new("invalid_arguments", "source and target are the same army"));
+                return Err(Error::new(
+                    "invalid_arguments",
+                    "source and target are the same army",
+                ));
             }
             let id = string(args, "request_id")?;
             let token = string(args, "lease_token")?;
@@ -3368,12 +3784,18 @@ impl Commands for MacClock {
             let before = settle::Roster::from_view(&view);
             if !actions.receipt_exists(id) {
                 let size = |name: &str| {
-                    view["armies"].as_array().into_iter().flatten()
+                    view["armies"]
+                        .as_array()
+                        .into_iter()
+                        .flatten()
                         .find(|a| a["army"].as_str() == Some(name))
                         .map(|a| a["division_count"].as_u64().unwrap_or(0))
                 };
                 let (Some(a), Some(b)) = (size(source), size(target)) else {
-                    return Err(Error::new("army_unknown", "Both armies must be own armies (names as hoi4_armies lists them)"));
+                    return Err(Error::new(
+                        "army_unknown",
+                        "Both armies must be own armies (names as hoi4_armies lists them)",
+                    ));
                 };
                 if a + b > armies::ARMY_CAP as u64 {
                     return Err(Error::new(
@@ -3385,7 +3807,10 @@ impl Commands for MacClock {
             }
             let mut settle = || {
                 let now = armies::armies(process)?;
-                Ok(settle::army_merge(&before, &settle::Roster::from_view(&now), source, target).outcome(now))
+                Ok(
+                    settle::army_merge(&before, &settle::Roster::from_view(&now), source, target)
+                        .outcome(now),
+                )
             };
             let mut dispatch = || {
                 authority.authorize(token, &epoch)?;
@@ -3768,17 +4193,28 @@ impl Commands for MacClock {
                     let now = armies::armies(process)?;
                     let now_roster = settle::Roster::from_view(&now);
                     let (before_roster, pool) = settle::Roster::from_baseline(baseline);
-                    Ok(match (baseline["army"].as_str(), baseline["take"].as_u64()) {
-                        (Some(army), Some(take)) => {
-                            settle::army_assign(&before_roster, &now_roster, army, &pool, take as usize)
-                                .outcome(now)
-                        }
-                        _ => journal::Outcome::Diverged(now),
-                    })
+                    Ok(
+                        match (baseline["army"].as_str(), baseline["take"].as_u64()) {
+                            (Some(army), Some(take)) => settle::army_assign(
+                                &before_roster,
+                                &now_roster,
+                                army,
+                                &pool,
+                                take as usize,
+                            )
+                            .outcome(now),
+                            _ => journal::Outcome::Diverged(now),
+                        },
+                    )
                 };
-                let receipt = actions.execute_baselined(id, &epoch, action, Value::Null, &mut settle, &mut || {
-                    Err(Error::new("action_uncertain", "A retry never dispatches"))
-                })?;
+                let receipt = actions.execute_baselined(
+                    id,
+                    &epoch,
+                    action,
+                    Value::Null,
+                    &mut settle,
+                    &mut || Err(Error::new("action_uncertain", "A retry never dispatches")),
+                )?;
                 return Ok(json!({"receipt":receipt}));
             }
             let before = armies::armies(process)?;
@@ -3807,7 +4243,14 @@ impl Commands for MacClock {
                 authority.authorize(token, &epoch)?;
                 armies::assign(process, keys, &plan)
             };
-            let receipt = actions.execute_baselined(id, &epoch, action, baseline, &mut settle, &mut dispatch)?;
+            let receipt = actions.execute_baselined(
+                id,
+                &epoch,
+                action,
+                baseline,
+                &mut settle,
+                &mut dispatch,
+            )?;
             return Ok(json!({"receipt":receipt}));
         }
         if name == "hoi4_train" {
@@ -3925,12 +4368,19 @@ impl Commands for MacClock {
                 Some(v) => Some(
                     v.as_str()
                         .filter(|s| !s.trim().is_empty() && s.len() <= 96)
-                        .ok_or_else(|| Error::new("invalid_arguments", "target must be the target's name as the row shows it"))?,
+                        .ok_or_else(|| {
+                            Error::new(
+                                "invalid_arguments",
+                                "target must be the target's name as the row shows it",
+                            )
+                        })?,
                 ),
             };
             if key.is_empty()
                 || key.len() > 128
-                || !key.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+                || !key
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
             {
                 return Err(Error::new("invalid_arguments", "Invalid decision key"));
             }
@@ -4009,14 +4459,18 @@ impl Commands for MacClock {
             let idea = string(args, "idea")?;
             if idea.is_empty()
                 || idea.len() > 128
-                || !idea.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+                || !idea
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
             {
                 return Err(Error::new("invalid_arguments", "Invalid idea key"));
             }
             let id = string(args, "request_id")?;
             let retry = actions.receipt_exists(id);
             if !retry {
-                if before.as_deref() == Some(idea) || politics::holder(process, category, idea)?.is_some() {
+                if before.as_deref() == Some(idea)
+                    || politics::holder(process, category, idea)?.is_some()
+                {
                     return Err(Error::new(
                         "invalid_target",
                         "The slot already holds this idea (or another slot of the category does)",
@@ -4054,7 +4508,9 @@ impl Commands for MacClock {
             let key = string(args, "building")?;
             if key.is_empty()
                 || key.len() > 64
-                || !key.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+                || !key
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
             {
                 return Err(Error::new("invalid_arguments", "Invalid building key"));
             }
@@ -4092,7 +4548,14 @@ impl Commands for MacClock {
                 authority.authorize(token, &epoch)?;
                 construction::add(process, keys, key, state, count)
             };
-            let receipt = actions.execute_baselined(id, &epoch, action, json!(start), &mut settle, &mut dispatch)?;
+            let receipt = actions.execute_baselined(
+                id,
+                &epoch,
+                action,
+                json!(start),
+                &mut settle,
+                &mut dispatch,
+            )?;
             return Ok(json!({"receipt":receipt}));
         }
         if name == "hoi4_focus_start" {
@@ -4100,7 +4563,9 @@ impl Commands for MacClock {
             let key = string(args, "focus")?;
             if key.is_empty()
                 || key.len() > 128
-                || !key.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+                || !key
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
             {
                 return Err(Error::new("invalid_arguments", "Invalid focus key"));
             }

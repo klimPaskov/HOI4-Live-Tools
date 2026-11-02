@@ -99,7 +99,10 @@ pub(super) fn entry_windows(r: &Reader<'_>, image: u64) -> Result<Vec<u64>> {
     let v = view(r, image, SLOT_NAVIES)?;
     let (_, data, count) = r.array_header(v + NV_ENTRIES)?;
     if count > 64 {
-        return Err(Error::new("invalid_array", "Task force entries exceed bound"));
+        return Err(Error::new(
+            "invalid_array",
+            "Task force entries exceed bound",
+        ));
     }
     let mut out = Vec::new();
     for i in 0..count as u64 {
@@ -118,10 +121,14 @@ pub(super) fn grid_items(r: &Reader<'_>, grid: u64) -> Result<Vec<u64>> {
     (0..count as u64).map(|i| r.u64(data + i * 8)).collect()
 }
 pub(super) fn text_at(r: &Reader<'_>, widget: u64) -> Result<String> {
-    Ok(super::special_projects::plain(&r.string_bounded(widget + TEXT, 256)?))
+    Ok(super::special_projects::plain(
+        &r.string_bounded(widget + TEXT, 256)?,
+    ))
 }
 pub(super) fn label_at(r: &Reader<'_>, button: u64) -> Result<String> {
-    Ok(super::special_projects::plain(&r.string_bounded(button + BUTTON_TEXT, 160)?))
+    Ok(super::special_projects::plain(
+        &r.string_bounded(button + BUTTON_TEXT, 160)?,
+    ))
 }
 pub(super) fn child_of(r: &Reader<'_>, image: u64, parent: u64, name: &str) -> Result<u64> {
     gui_tree::child(r, image, parent, name)?
@@ -154,7 +161,9 @@ pub(super) fn edit_text(r: &Reader<'_>, image: u64, widget: u64) -> Result<Strin
     if shown == 0 || r.u64(shown)? != image + SHOWN_VTABLE {
         return Ok(typed);
     }
-    Ok(super::special_projects::plain(&r.string_bounded(shown + SHOWN_TEXT, 160)?))
+    Ok(super::special_projects::plain(
+        &r.string_bounded(shown + SHOWN_TEXT, 160)?,
+    ))
 }
 /// Whether the Strategic Navy map mode is on (its fleet bar is shown only there).
 pub(super) fn navy_mode(r: &Reader<'_>, image: u64) -> Result<bool> {
@@ -238,7 +247,10 @@ pub(super) fn entries(r: &Reader<'_>, image: u64) -> Result<Vec<Entry>> {
         }
     }
     if shown.len() != tf_count {
-        return Err(Error::new("invalid_gui", "Task force list and shown entries disagree"));
+        return Err(Error::new(
+            "invalid_gui",
+            "Task force list and shown entries disagree",
+        ));
     }
     let mut out = Vec::new();
     for (index, window) in shown.into_iter().enumerate() {
@@ -247,7 +259,12 @@ pub(super) fn entries(r: &Reader<'_>, image: u64) -> Result<Vec<Entry>> {
         let select = child_of(r, image, window, "select_btn")?;
         let rect = gui_tree::rect_unclipped(r, image, select, GAME)?;
         let label = label_at(r, select)?;
-        let top = gui_tree::rect_unclipped(r, image, child_of(r, image, window, "background_sprite")?, GAME)?;
+        let top = gui_tree::rect_unclipped(
+            r,
+            image,
+            child_of(r, image, window, "background_sprite")?,
+            GAME,
+        )?;
         out.push(Entry {
             name,
             select: rect,
@@ -262,7 +279,10 @@ pub(super) fn bar_button(r: &Reader<'_>, image: u64, name: &str) -> Result<(Rect
     let bar = action_bar(r, image)?;
     let button = child_of(r, image, bar, name)?;
     if !gui_tree::shown(r, button)? {
-        return Err(Error::new("gui_target_unavailable", format!("{name} is not shown")));
+        return Err(Error::new(
+            "gui_target_unavailable",
+            format!("{name} is not shown"),
+        ));
     }
     Ok((
         gui_tree::rect(r, image, button, GAME)?,
@@ -328,7 +348,12 @@ pub(super) fn leader_rows(r: &Reader<'_>, image: u64) -> Result<Vec<Admiral>> {
 pub(super) fn leader_band(r: &Reader<'_>, image: u64) -> Result<(i32, i32)> {
     let root = leader_root(r, image)?;
     let header = gui_tree::rect_unclipped(r, image, child_of(r, image, root, "sort_name")?, GAME)?;
-    let footer = gui_tree::rect_unclipped(r, image, child_of(r, image, root, "no_leader_button")?, GAME)?;
+    let footer = gui_tree::rect_unclipped(
+        r,
+        image,
+        child_of(r, image, root, "no_leader_button")?,
+        GAME,
+    )?;
     Ok((header.y + header.h, footer.y))
 }
 pub(super) fn leader_button(r: &Reader<'_>, image: u64, name: &str) -> Result<Rect> {
@@ -346,12 +371,17 @@ pub(super) fn new_fleet_card(r: &Reader<'_>, image: u64) -> Result<(Rect, i32)> 
     // The plain button reads disabled (3) at all times; the highlighted twin is shown only while
     // task forces are selected, which is when the card works (seen live 26 October 2026).
     let lit = gui_tree::shown(r, child_of(r, image, card, "portrait_highlighted_btn")?)?;
-    Ok((gui_tree::rect(r, image, button, GAME)?, if lit { 0 } else { 3 }))
+    Ok((
+        gui_tree::rect(r, image, button, GAME)?,
+        if lit { 0 } else { 3 },
+    ))
 }
 
 // ---- debug dump ------------------------------------------------------------------------------
 fn printable(s: &str) -> bool {
-    !s.is_empty() && s.chars().all(|c| !c.is_control() || c == '\u{11}' || c == '\u{12}' || c == '\u{13}')
+    !s.is_empty()
+        && s.chars()
+            .all(|c| !c.is_control() || c == '\u{11}' || c == '\u{12}' || c == '\u{13}')
 }
 fn dump_widget(r: &Reader<'_>, image: u64, pointer: u64, depth: usize) -> Result<Value> {
     let object = gui_tree::container(r, pointer, image)?;
@@ -395,12 +425,21 @@ fn dump_widget(r: &Reader<'_>, image: u64, pointer: u64, depth: usize) -> Result
 /// Debug: dump the tree below a named root.
 pub(super) fn dump(process: &dyn Process, args: &Map<String, Value>) -> Result<Value> {
     let which = args.get("root").and_then(Value::as_str).unwrap_or("panel");
-    let depth = args.get("depth").and_then(Value::as_u64).unwrap_or(2).min(8) as usize;
+    let depth = args
+        .get("depth")
+        .and_then(Value::as_u64)
+        .unwrap_or(2)
+        .min(8) as usize;
     let index = args.get("index").and_then(Value::as_u64).unwrap_or(0) as usize;
     let path: Vec<String> = args
         .get("path")
         .and_then(Value::as_str)
-        .map(|p| p.split('/').filter(|s| !s.is_empty()).map(str::to_string).collect())
+        .map(|p| {
+            p.split('/')
+                .filter(|s| !s.is_empty())
+                .map(str::to_string)
+                .collect()
+        })
         .unwrap_or_default();
     read(process, |r, image| {
         let mut base = match which {
@@ -415,7 +454,9 @@ pub(super) fn dump(process: &dyn Process, args: &Map<String, Value>) -> Result<V
                 let mut parts = custom.split(':').skip(1);
                 let parse = |p: Option<&str>| {
                     p.and_then(|v| u64::from_str_radix(v.trim_start_matches("0x"), 16).ok())
-                        .ok_or_else(|| Error::new("invalid_arguments", "view:<slot hex>:<field hex>"))
+                        .ok_or_else(|| {
+                            Error::new("invalid_arguments", "view:<slot hex>:<field hex>")
+                        })
                 };
                 let (slot, field) = (parse(parts.next())?, parse(parts.next())?);
                 root_at(r, image, view(r, image, slot)?, field)?

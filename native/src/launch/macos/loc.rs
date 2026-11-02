@@ -54,7 +54,9 @@ fn parse_raw(line: &str) -> Option<(String, String)> {
     {
         return None;
     }
-    let rest = rest.trim_start_matches(|c: char| c.is_ascii_digit()).trim_start();
+    let rest = rest
+        .trim_start_matches(|c: char| c.is_ascii_digit())
+        .trim_start();
     let rest = rest.strip_prefix('"')?;
     let end = rest.rfind('"')?;
     Some((key.to_string(), rest[..end].to_string()))
@@ -186,10 +188,15 @@ mod tests {
     fn parses_localisation_lines_and_strips_markup() {
         assert_eq!(
             parse_line(" GRAND_DOCTRINE_MOBILE_WARFARE: \"Mobile Warfare\""),
-            Some(("GRAND_DOCTRINE_MOBILE_WARFARE".into(), "Mobile Warfare".into()))
+            Some((
+                "GRAND_DOCTRINE_MOBILE_WARFARE".into(),
+                "Mobile Warfare".into()
+            ))
         );
         assert_eq!(
-            parse_line("  upgrade_economy_civilian:0 \"§HEconomy§!/civilian\\nsecond £x|1£ $V$ line\""),
+            parse_line(
+                "  upgrade_economy_civilian:0 \"§HEconomy§!/civilian\\nsecond £x|1£ $V$ line\""
+            ),
             Some((
                 "upgrade_economy_civilian".into(),
                 "Economy/civilian second line".into()
@@ -217,7 +224,10 @@ mod tests {
         )
         .unwrap();
         let got = lookup(&dir, &["GER_porsche_organization", "NOR_x"]);
-        assert_eq!(got.get("GER_porsche_organization").map(String::as_str), Some("Porsche"));
+        assert_eq!(
+            got.get("GER_porsche_organization").map(String::as_str),
+            Some("Porsche")
+        );
         assert_eq!(got.get("NOR_x").map(String::as_str), Some("Porsche Norge"));
         std::fs::remove_dir_all(&dir).ok();
     }
@@ -232,7 +242,11 @@ mod tests {
             "l_english:\n AAA: \"First\"\n BBB: \"Other\"\n",
         )
         .unwrap();
-        std::fs::write(loc.join("b_l_english.yml"), "l_english:\n AAA: \"Second\"\n").unwrap();
+        std::fs::write(
+            loc.join("b_l_english.yml"),
+            "l_english:\n AAA: \"Second\"\n",
+        )
+        .unwrap();
         let got = lookup(&dir, &["AAA", "ZZZ"]);
         assert_eq!(got.get("AAA").map(String::as_str), Some("First"));
         assert!(!got.contains_key("ZZZ"));

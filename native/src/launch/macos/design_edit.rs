@@ -51,7 +51,10 @@ pub(super) fn kind_arg(args: &Map<String, Value>) -> Result<&'static str> {
         Some("plane") => Ok("plane"),
         Some("ship") => Ok("ship"),
         Some("other") => Ok("other"),
-        _ => Err(Error::new("invalid_arguments", "kind must be tank, plane, ship or other")),
+        _ => Err(Error::new(
+            "invalid_arguments",
+            "kind must be tank, plane, ship or other",
+        )),
     }
 }
 #[derive(Clone, Debug, PartialEq)]
@@ -71,23 +74,41 @@ pub(super) fn base_arg(v: &Value) -> Result<BaseRef> {
         Some(s) if !s.is_empty() && s.len() <= 96 && !s.chars().any(char::is_control) => {
             Ok(BaseRef::Name(s.to_string()))
         }
-        _ => Err(Error::new("invalid_arguments", "base must be a design id or a name")),
+        _ => Err(Error::new(
+            "invalid_arguments",
+            "base must be a design id or a name",
+        )),
     }
 }
 /// `[a-z0-9_ ]{1,40}` upgrade row keys with levels 0..=MAX_LEVEL.
 pub(super) fn upgrades_arg(v: &Value) -> Result<BTreeMap<String, i64>> {
-    let o = v
-        .as_object()
-        .filter(|o| o.len() <= 12)
-        .ok_or_else(|| Error::new("invalid_arguments", "upgrades must be an object of row: level"))?;
+    let o = v.as_object().filter(|o| o.len() <= 12).ok_or_else(|| {
+        Error::new(
+            "invalid_arguments",
+            "upgrades must be an object of row: level",
+        )
+    })?;
     let mut out = BTreeMap::new();
     for (k, v) in o {
         let level = v
             .as_i64()
             .filter(|l| (0..=MAX_LEVEL).contains(l))
-            .ok_or_else(|| Error::new("invalid_arguments", format!("level of {k} must be 0..{MAX_LEVEL}")))?;
-        if k.is_empty() || k.len() > 40 || !k.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b' ' || b == b'-') {
-            return Err(Error::new("invalid_arguments", format!("Invalid upgrade key {k:?}")));
+            .ok_or_else(|| {
+                Error::new(
+                    "invalid_arguments",
+                    format!("level of {k} must be 0..{MAX_LEVEL}"),
+                )
+            })?;
+        if k.is_empty()
+            || k.len() > 40
+            || !k
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b' ' || b == b'-')
+        {
+            return Err(Error::new(
+                "invalid_arguments",
+                format!("Invalid upgrade key {k:?}"),
+            ));
         }
         out.insert(norm_key(k), level);
     }
@@ -95,25 +116,47 @@ pub(super) fn upgrades_arg(v: &Value) -> Result<BTreeMap<String, i64>> {
 }
 /// slot -> module key (None empties the slot).
 pub(super) fn modules_arg(v: &Value) -> Result<BTreeMap<String, Option<String>>> {
-    let o = v
-        .as_object()
-        .filter(|o| o.len() <= 16)
-        .ok_or_else(|| Error::new("invalid_arguments", "modules must be an object of slot: module"))?;
+    let o = v.as_object().filter(|o| o.len() <= 16).ok_or_else(|| {
+        Error::new(
+            "invalid_arguments",
+            "modules must be an object of slot: module",
+        )
+    })?;
     let mut out = BTreeMap::new();
     for (slot, m) in o {
-        if slot.is_empty() || slot.len() > 64 || !slot.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_') {
-            return Err(Error::new("invalid_arguments", format!("Invalid slot name {slot:?}")));
+        if slot.is_empty()
+            || slot.len() > 64
+            || !slot
+                .bytes()
+                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
+        {
+            return Err(Error::new(
+                "invalid_arguments",
+                format!("Invalid slot name {slot:?}"),
+            ));
         }
         let module = match m {
             Value::Null => None,
             Value::String(s) if s.is_empty() || s == "none" || s == "empty" => None,
             Value::String(s) => {
-                if s.len() > 96 || !s.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_') {
-                    return Err(Error::new("invalid_arguments", format!("Invalid module key {s:?}")));
+                if s.len() > 96
+                    || !s
+                        .bytes()
+                        .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
+                {
+                    return Err(Error::new(
+                        "invalid_arguments",
+                        format!("Invalid module key {s:?}"),
+                    ));
                 }
                 Some(s.clone())
             }
-            _ => return Err(Error::new("invalid_arguments", "a module is a key string or null")),
+            _ => {
+                return Err(Error::new(
+                    "invalid_arguments",
+                    "a module is a key string or null",
+                ))
+            }
         };
         out.insert(slot.clone(), module);
     }
@@ -148,7 +191,11 @@ fn norm_key(k: &str) -> String {
 
 // ---- pure planning ------------------------------------------------------------------------------
 /// The own design a request names, with the kind check.
-pub(super) fn resolve_base<'a>(all: &'a [Design], kind: &str, base: &BaseRef) -> Result<&'a Design> {
+pub(super) fn resolve_base<'a>(
+    all: &'a [Design],
+    kind: &str,
+    base: &BaseRef,
+) -> Result<&'a Design> {
     let of_kind = |d: &&Design| designs::kind_of(&d.variant.type_key) == kind;
     let hit: Vec<&Design> = match base {
         BaseRef::Id(id) => all.iter().filter(|d| d.variant.id == *id).collect(),
@@ -160,7 +207,9 @@ pub(super) fn resolve_base<'a>(all: &'a [Design], kind: &str, base: &BaseRef) ->
                 .collect();
             if by_name.is_empty() {
                 all.iter()
-                    .filter(|d| d.variant.parent_id.is_none() && d.variant.type_key.to_lowercase() == lower)
+                    .filter(|d| {
+                        d.variant.parent_id.is_none() && d.variant.type_key.to_lowercase() == lower
+                    })
                     .collect()
             } else {
                 by_name
@@ -171,7 +220,11 @@ pub(super) fn resolve_base<'a>(all: &'a [Design], kind: &str, base: &BaseRef) ->
         let ids: Vec<String> = hit.iter().map(|d| d.variant.id.to_string()).collect();
         return Err(Error::new(
             "base_ambiguous",
-            format!("{} own designs match; give one design id: {}", hit.len(), ids.join(", ")),
+            format!(
+                "{} own designs match; give one design id: {}",
+                hit.len(),
+                ids.join(", ")
+            ),
         ));
     }
     let Some(found) = hit.first().copied() else {
@@ -182,14 +235,20 @@ pub(super) fn resolve_base<'a>(all: &'a [Design], kind: &str, base: &BaseRef) ->
             .collect();
         return Err(Error::new(
             "base_unknown",
-            format!("No own {kind} design matches {base:?}; designs: {}", names.join(", ")),
+            format!(
+                "No own {kind} design matches {base:?}; designs: {}",
+                names.join(", ")
+            ),
         ));
     };
     let actual = designs::kind_of(&found.variant.type_key);
     if actual != kind {
         return Err(Error::new(
             "kind_mismatch",
-            format!("Design {} is a {actual} design ({}), not {kind}", found.variant.id, found.variant.type_key),
+            format!(
+                "Design {} is a {actual} design ({}), not {kind}",
+                found.variant.id, found.variant.type_key
+            ),
         ));
     }
     Ok(found)
@@ -217,12 +276,16 @@ pub(super) fn expected_modules(
     out
 }
 pub(super) fn module_map(list: &[(String, String)]) -> BTreeMap<String, String> {
-    list.iter().filter(|(_, m)| !m.is_empty()).cloned().collect()
+    list.iter()
+        .filter(|(_, m)| !m.is_empty())
+        .cloned()
+        .collect()
 }
 pub(super) fn name_taken(all: &[Design], type_key: &str, name: &str) -> Result<()> {
-    if all.iter().any(|d| {
-        d.variant.type_key == type_key && d.variant.name.eq_ignore_ascii_case(name)
-    }) {
+    if all
+        .iter()
+        .any(|d| d.variant.type_key == type_key && d.variant.name.eq_ignore_ascii_case(name))
+    {
         return Err(Error::new(
             "name_taken",
             format!("An own {type_key} design is already called {name:?}"),
@@ -286,7 +349,10 @@ pub(super) fn settle_retry(now: &[Design], want: &Want) -> Verdict {
 }
 /// Upgrade row for a key: the window name without `_upgrade`, its short form (after the first
 /// underscore) or the label with underscores.
-pub(super) fn find_upgrade<'a>(rows: &'a [dui::UpgradeRow], key: &str) -> Option<&'a dui::UpgradeRow> {
+pub(super) fn find_upgrade<'a>(
+    rows: &'a [dui::UpgradeRow],
+    key: &str,
+) -> Option<&'a dui::UpgradeRow> {
     let key = norm_key(key);
     rows.iter().find(|r| upgrade_keys(r).contains(&key))
 }
@@ -301,7 +367,9 @@ pub(super) fn upgrade_keys(r: &dui::UpgradeRow) -> Vec<String> {
 }
 pub(super) fn upgrade_short(r: &dui::UpgradeRow) -> String {
     let full = r.window.trim_end_matches("_upgrade");
-    full.split_once('_').map_or(full, |(_, rest)| rest).to_string()
+    full.split_once('_')
+        .map_or(full, |(_, rest)| rest)
+        .to_string()
 }
 
 // ---- reads for the pre-checks ------------------------------------------------------------------
@@ -318,7 +386,10 @@ pub(super) fn catalogue(process: &dyn Process) -> Result<Catalogue> {
         for d in &all {
             slots.insert(d.variant.id, fleetmem::type_slots(r, d.variant.address)?);
         }
-        Ok(Catalogue { designs: all, slots })
+        Ok(Catalogue {
+            designs: all,
+            slots,
+        })
     })
 }
 fn designer_kind(c: &Catalogue, d: &Design) -> &'static str {
@@ -350,7 +421,10 @@ pub(super) fn type_name(
     current: &dyn Fn(&crate::memory::Reader<'_>, u64) -> Result<String>,
 ) -> Result<()> {
     if !designer::typable(name) {
-        return Err(Error::new("name_not_typable", "Design names may use letters, digits, space and - _ . , / ' ( )"));
+        return Err(Error::new(
+            "name_not_typable",
+            "Design names may use letters, digits, space and - _ . , / ' ( )",
+        ));
     }
     let text = || read(process, |r, i| current(r, i));
     let mut have = text()?;
@@ -364,14 +438,23 @@ pub(super) fn type_name(
     if length > 0 {
         keys.press_code(51)?;
         length -= 1;
-        wait(process, "name box focused", |r, i| Ok(current(r, i)?.chars().count() == length))
-            .map_err(|_| Error::new("input_readback_failed", "The name box did not take the keyboard focus"))?;
+        wait(process, "name box focused", |r, i| {
+            Ok(current(r, i)?.chars().count() == length)
+        })
+        .map_err(|_| {
+            Error::new(
+                "input_readback_failed",
+                "The name box did not take the keyboard focus",
+            )
+        })?;
         have = text()?;
     }
     while length > 0 {
         keys.press_code(51)?;
         length -= 1;
-        wait(process, "name erased", |r, i| Ok(current(r, i)?.chars().count() == length))?;
+        wait(process, "name erased", |r, i| {
+            Ok(current(r, i)?.chars().count() == length)
+        })?;
     }
     // The click may leave the cursor inside the text (the plane designer ignores End):
     // forward-delete whatever is left after it until the box is empty.
@@ -379,13 +462,15 @@ pub(super) fn type_name(
     while rest > 0 {
         keys.press_code(117)?; // Forward Delete
         rest -= 1;
-        wait(process, "name erased", |r, i| Ok(current(r, i)?.chars().count() == rest))?;
+        wait(process, "name erased", |r, i| {
+            Ok(current(r, i)?.chars().count() == rest)
+        })?;
     }
     let _ = have;
     let mut typed = String::new();
     for c in name.chars() {
-        let (code, shifted) = designer::key_for(c)
-            .ok_or_else(|| Error::new("name_not_typable", "key"))?;
+        let (code, shifted) =
+            designer::key_for(c).ok_or_else(|| Error::new("name_not_typable", "key"))?;
         if shifted {
             keys.press_shifted(code)?;
         } else {
@@ -423,7 +508,10 @@ fn set_level(process: &dyn Process, keys: &MacKeys, window: &str, target: i64) -
         if (up && row.increase_disabled) || (!up && row.decrease_disabled) {
             return Err(Error::new(
                 "upgrade_level_max",
-                format!("{} stops at level {} (wanted {target}); nothing was saved", row.label, row.level),
+                format!(
+                    "{} stops at level {} (wanted {target}); nothing was saved",
+                    row.label, row.level
+                ),
             ));
         }
         let rect = settled(process, "upgrade step", |r, i| {
@@ -444,7 +532,10 @@ fn set_level(process: &dyn Process, keys: &MacKeys, window: &str, target: i64) -
                 .is_some_and(|x| x.level != before))
         })?;
     }
-    Err(Error::new("input_readback_failed", "Upgrade level not reached within the click bound"))
+    Err(Error::new(
+        "input_readback_failed",
+        "Upgrade level not reached within the click bound",
+    ))
 }
 
 // ---- ship (module) designer -------------------------------------------------------------------------------------
@@ -456,9 +547,17 @@ fn slot_button(s: &dui::ModuleState, slot: &str) -> Result<Rect> {
         .slots
         .iter()
         .find(|v| v.name.as_deref() == Some(slot))
-        .ok_or_else(|| Error::new("slot_unknown", format!("{slot} is not a slot of this design")))?;
+        .ok_or_else(|| {
+            Error::new(
+                "slot_unknown",
+                format!("{slot} is not a slot of this design"),
+            )
+        })?;
     view.button.ok_or_else(|| {
-        Error::new("slot_locked", format!("{slot} is locked in this designer (not unlocked yet); nothing was saved"))
+        Error::new(
+            "slot_locked",
+            format!("{slot} is locked in this designer (not unlocked yet); nothing was saved"),
+        )
     })
 }
 fn draft_module(s: &dui::ModuleState, slot: &str) -> Option<String> {
@@ -477,7 +576,9 @@ fn selector_close(process: &dyn Process, keys: &MacKeys) -> Result<()> {
             Ok(module(r, i)?.selector.as_ref() != Some(&sel))
         });
     }
-    wait(process, "selector closed", |r, i| Ok(module(r, i)?.selector.is_none()))
+    wait(process, "selector closed", |r, i| {
+        Ok(module(r, i)?.selector.is_none())
+    })
 }
 /// Modules the selector lists for `slot`, by category: opens the slot, clicks each category,
 /// reads, backs out. Leaves the selector closed.
@@ -485,7 +586,9 @@ pub(super) fn scan_slot(process: &dyn Process, keys: &MacKeys, slot: &str) -> Re
     let s = read(process, module)?;
     let button = slot_button(&s, slot)?;
     dui::click_rect(keys, button)?;
-    wait(process, "module selector", |r, i| Ok(module(r, i)?.selector.is_some()))?;
+    wait(process, "module selector", |r, i| {
+        Ok(module(r, i)?.selector.is_some())
+    })?;
     let first = read(process, module)?.selector.unwrap();
     let mut out = Vec::new();
     let categories: Vec<_> = first
@@ -507,7 +610,11 @@ pub(super) fn scan_slot(process: &dyn Process, keys: &MacKeys, slot: &str) -> Re
     for name in categories {
         let sel = read(process, module)?.selector;
         let Some(sel) = sel else { break };
-        let Some(entry) = sel.entries.iter().find(|e| e.kind == EntryKind::Category && e.name == name) else {
+        let Some(entry) = sel
+            .entries
+            .iter()
+            .find(|e| e.kind == EntryKind::Category && e.name == name)
+        else {
             continue;
         };
         dui::click_rect(keys, entry.click)?;
@@ -538,7 +645,12 @@ fn entry_json(e: &dui::EntryView) -> Value {
     json!({"module":e.module,"name":e.name,"cost":e.cost})
 }
 /// Put `module` into `slot` (None empties it) through the selector, verified from the draft.
-fn set_slot(process: &dyn Process, keys: &MacKeys, slot: &str, module_key: Option<&str>) -> Result<()> {
+fn set_slot(
+    process: &dyn Process,
+    keys: &MacKeys,
+    slot: &str,
+    module_key: Option<&str>,
+) -> Result<()> {
     let s = read(process, module)?;
     let current = draft_module(&s, slot);
     if current.as_deref() == module_key {
@@ -546,63 +658,39 @@ fn set_slot(process: &dyn Process, keys: &MacKeys, slot: &str, module_key: Optio
     }
     let button = slot_button(&s, slot)?;
     dui::click_rect(keys, button)?;
-    wait(process, "module selector", |r, i| Ok(module(r, i)?.selector.is_some()))?;
-    let result = (|| -> Result<()> {
-        let first = read(process, module)?.selector.unwrap();
-        let Some(want) = module_key else {
-            let removal = first
-                .entries
-                .iter()
-                .find(|e| e.kind == EntryKind::Removal)
-                .ok_or_else(|| Error::new("module_unavailable", format!("{slot} offers no Remove entry (it holds no module)")))?;
-            dui::click_rect(keys, removal.click)?;
-            wait(process, "module removed", |r, i| {
-                let s = module(r, i)?;
-                Ok(s.selector.is_none() && draft_module(&s, slot).is_none())
-            })?;
-            return Ok(());
-        };
-        let mut listed: Vec<String> = Vec::new();
-        for e in &first.entries {
-            if e.kind == EntryKind::Module {
-                if let Some(m) = &e.module {
-                    listed.push(m.clone());
-                }
-            }
-        }
-        if let Some(entry) = first
-            .entries
-            .iter()
-            .find(|e| e.kind == EntryKind::Module && e.module.as_deref() == Some(want))
-        {
-            dui::click_rect(keys, entry.click)?;
-            return finish_pick(process, slot, want);
-        }
-        let categories: Vec<String> = first
-            .entries
-            .iter()
-            .filter(|e| e.kind == EntryKind::Category)
-            .map(|e| e.name.clone())
-            .collect();
-        for name in categories {
-            let sel = read(process, module)?.selector;
-            let Some(sel) = sel else { break };
-            let Some(entry) = sel.entries.iter().find(|e| e.kind == EntryKind::Category && e.name == name) else {
-                continue;
+    wait(process, "module selector", |r, i| {
+        Ok(module(r, i)?.selector.is_some())
+    })?;
+    let result =
+        (|| -> Result<()> {
+            let first = read(process, module)?.selector.unwrap();
+            let Some(want) = module_key else {
+                let removal = first
+                    .entries
+                    .iter()
+                    .find(|e| e.kind == EntryKind::Removal)
+                    .ok_or_else(|| {
+                        Error::new(
+                            "module_unavailable",
+                            format!("{slot} offers no Remove entry (it holds no module)"),
+                        )
+                    })?;
+                dui::click_rect(keys, removal.click)?;
+                wait(process, "module removed", |r, i| {
+                    let s = module(r, i)?;
+                    Ok(s.selector.is_none() && draft_module(&s, slot).is_none())
+                })?;
+                return Ok(());
             };
-            dui::click_rect(keys, entry.click)?;
-            wait(process, "module list", |r, i| {
-                Ok(module(r, i)?
-                    .selector
-                    .is_some_and(|s| s.entries.iter().any(|e| e.kind == EntryKind::Module)))
-            })?;
-            let listed_now = read(process, module)?.selector.unwrap();
-            for e in listed_now.entries.iter().filter(|e| e.kind == EntryKind::Module) {
-                if let Some(m) = &e.module {
-                    listed.push(m.clone());
+            let mut listed: Vec<String> = Vec::new();
+            for e in &first.entries {
+                if e.kind == EntryKind::Module {
+                    if let Some(m) = &e.module {
+                        listed.push(m.clone());
+                    }
                 }
             }
-            if let Some(entry) = listed_now
+            if let Some(entry) = first
                 .entries
                 .iter()
                 .find(|e| e.kind == EntryKind::Module && e.module.as_deref() == Some(want))
@@ -610,21 +698,61 @@ fn set_slot(process: &dyn Process, keys: &MacKeys, slot: &str, module_key: Optio
                 dui::click_rect(keys, entry.click)?;
                 return finish_pick(process, slot, want);
             }
-            dui::click_rect(keys, listed_now.back)?;
-            wait(process, "category list", |r, i| {
-                Ok(module(r, i)?
-                    .selector
-                    .is_some_and(|s| s.entries.iter().any(|e| e.kind == EntryKind::Category)))
-            })?;
-        }
-        Err(Error::new(
-            "module_unavailable",
-            format!(
+            let categories: Vec<String> = first
+                .entries
+                .iter()
+                .filter(|e| e.kind == EntryKind::Category)
+                .map(|e| e.name.clone())
+                .collect();
+            for name in categories {
+                let sel = read(process, module)?.selector;
+                let Some(sel) = sel else { break };
+                let Some(entry) = sel
+                    .entries
+                    .iter()
+                    .find(|e| e.kind == EntryKind::Category && e.name == name)
+                else {
+                    continue;
+                };
+                dui::click_rect(keys, entry.click)?;
+                wait(process, "module list", |r, i| {
+                    Ok(module(r, i)?
+                        .selector
+                        .is_some_and(|s| s.entries.iter().any(|e| e.kind == EntryKind::Module)))
+                })?;
+                let listed_now = read(process, module)?.selector.unwrap();
+                for e in listed_now
+                    .entries
+                    .iter()
+                    .filter(|e| e.kind == EntryKind::Module)
+                {
+                    if let Some(m) = &e.module {
+                        listed.push(m.clone());
+                    }
+                }
+                if let Some(entry) = listed_now
+                    .entries
+                    .iter()
+                    .find(|e| e.kind == EntryKind::Module && e.module.as_deref() == Some(want))
+                {
+                    dui::click_rect(keys, entry.click)?;
+                    return finish_pick(process, slot, want);
+                }
+                dui::click_rect(keys, listed_now.back)?;
+                wait(process, "category list", |r, i| {
+                    Ok(module(r, i)?
+                        .selector
+                        .is_some_and(|s| s.entries.iter().any(|e| e.kind == EntryKind::Category)))
+                })?;
+            }
+            Err(Error::new(
+                "module_unavailable",
+                format!(
                 "{want} is not offered for {slot}; unlocked modules there: {}; nothing was saved",
                 if listed.is_empty() { "none".to_string() } else { listed.join(", ") }
             ),
-        ))
-    })();
+            ))
+        })();
     if result.is_err() {
         let _ = selector_close(process, keys);
     }
@@ -652,8 +780,10 @@ pub(super) fn options_listing(process: &dyn Process, kind: &str) -> Result<Value
                 "production_lines":d.lines.len()})
         })
         .collect();
-    Ok(json!({"kind":kind,"bases":rows,"experience_account":experience_label(kind),
-        "note":"Pass one design_id or name as `base` to open its designer and read the upgrade rows or module slots."}))
+    Ok(
+        json!({"kind":kind,"bases":rows,"experience_account":experience_label(kind),
+        "note":"Pass one design_id or name as `base` to open its designer and read the upgrade rows or module slots."}),
+    )
 }
 pub(super) fn options(
     process: &dyn Process,
@@ -700,7 +830,10 @@ fn options_run(
                 dui::click_rect(keys, row.increase)?;
                 let w = row.window.clone();
                 wait(process, "level up", |r, i| {
-                    Ok(upgrade(r, i)?.rows.iter().any(|x| x.window == w && x.level == row.level + 1))
+                    Ok(upgrade(r, i)?
+                        .rows
+                        .iter()
+                        .any(|x| x.window == w && x.level == row.level + 1))
                 })?;
                 let up = read(process, upgrade)?;
                 cost_per_level = json!(up.save_cost);
@@ -712,7 +845,10 @@ fn options_run(
                     .unwrap_or(row.decrease);
                 dui::click_rect(keys, down)?;
                 wait(process, "level down", |r, i| {
-                    Ok(upgrade(r, i)?.rows.iter().any(|x| x.window == w && x.level == row.level))
+                    Ok(upgrade(r, i)?
+                        .rows
+                        .iter()
+                        .any(|x| x.window == w && x.level == row.level))
                 })?;
             } else if row.increase_disabled {
                 max_level = json!(row.level);
@@ -722,10 +858,12 @@ fn options_run(
                 "keys":upgrade_keys(row)}));
         }
         let s = read(process, upgrade)?;
-        return Ok(json!({"designer":"upgrade","title":s.title,"base":base,"default_name":s.name,
+        return Ok(
+            json!({"designer":"upgrade","title":s.title,"base":base,"default_name":s.name,
             "experience":s.experience,"experience_account":experience_label(kind),
             "upgrades":rows,"stats":s.stats,
-            "route":"Y (Production) -> category button -> the row's Create variant button; + / - on each upgrade row; name box; Save"}));
+            "route":"Y (Production) -> category button -> the row's Create variant button; + / - on each upgrade row; name box; Save"}),
+        );
     }
     let s = read(process, module)?;
     let mut slots = Vec::new();
@@ -742,11 +880,13 @@ fn options_run(
         slots.push(entry);
     }
     let s = read(process, module)?;
-    Ok(json!({"designer":s.kind.name(),"base":base,"default_name":s.name,
+    Ok(
+        json!({"designer":s.kind.name(),"base":base,"default_name":s.name,
         "experience":s.experience,"experience_account":experience_label(kind),
         "slots":slots,"stats":s.stats,"refit_cost":s.refit_cost,"production_cost":s.production_cost,
         "route":"Y (Production) -> Ships button -> the row's Create variant button; slot button -> category -> module; name box; Save",
-        "save_as_new":{"button":"duplicate_button","state":s.duplicate_state}}))
+        "save_as_new":{"button":"duplicate_button","state":s.duplicate_state}}),
+    )
 }
 
 // ---- create --------------------------------------------------------------------------------------------------------------
@@ -785,7 +925,9 @@ pub(super) fn check_production_design(all: &[Design], id: i32, key: &str) -> Res
     if d.variant.obsolete {
         return Err(Error::new(
             "design_obsolete",
-            format!("Design {id} is decommissioned; recommission it with hoi4_design_obsolete first"),
+            format!(
+                "Design {id} is decommissioned; recommission it with hoi4_design_obsolete first"
+            ),
         ));
     }
     Ok(())
@@ -798,7 +940,9 @@ pub(super) fn default_name(stem: &str, request_id: &str) -> String {
         h = (h ^ u32::from(b)).wrapping_mul(16777619);
     }
     const DIGITS: &[u8] = b"ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-    let tag: String = (0..4).map(|i| DIGITS[((h >> (5 * i)) & 31) as usize] as char).collect();
+    let tag: String = (0..4)
+        .map(|i| DIGITS[((h >> (5 * i)) & 31) as usize] as char)
+        .collect();
     let stem: String = stem.chars().take(MAX_NAME - 5).collect();
     format!("{stem} {tag}")
 }
@@ -816,14 +960,21 @@ pub(super) fn plan(input: &Input, c: &Catalogue, request_id: &str, retry: bool) 
             ));
         }
         if input.modules.is_empty() {
-            return Err(Error::new("nothing_to_change", "Name the slots to change in `modules`"));
+            return Err(Error::new(
+                "nothing_to_change",
+                "Name the slots to change in `modules`",
+            ));
         }
         let names: Vec<&str> = base_slots.iter().map(|(_, n)| n.as_str()).collect();
         for slot in input.modules.keys() {
             if !names.contains(&slot.as_str()) {
                 return Err(Error::new(
                     "slot_unknown",
-                    format!("{slot} is not a slot of {}; slots: {}", base.variant.type_key, names.join(", ")),
+                    format!(
+                        "{slot} is not a slot of {}; slots: {}",
+                        base.variant.type_key,
+                        names.join(", ")
+                    ),
                 ));
             }
         }
@@ -835,13 +986,19 @@ pub(super) fn plan(input: &Input, c: &Catalogue, request_id: &str, retry: bool) 
             ));
         }
         if input.upgrades.values().all(|l| *l == 0) {
-            return Err(Error::new("nothing_to_change", "Name at least one upgrade row with a level above 0"));
+            return Err(Error::new(
+                "nothing_to_change",
+                "Name at least one upgrade row with a level above 0",
+            ));
         }
     }
     let expected = modules_designer.then(|| expected_modules(&base.modules, &input.modules));
     if let Some(e) = &expected {
         if *e == module_map(&base.modules) && input.name.is_none() {
-            return Err(Error::new("nothing_to_change", "The modules already are exactly those of the base design"));
+            return Err(Error::new(
+                "nothing_to_change",
+                "The modules already are exactly those of the base design",
+            ));
         }
         if *e == module_map(&base.modules) {
             return Err(Error::new("nothing_to_change", "The modules already are exactly those of the base design; a renamed copy is not created"));
@@ -881,7 +1038,12 @@ pub(super) fn plan(input: &Input, c: &Catalogue, request_id: &str, retry: bool) 
 }
 
 /// Drive the designer to the planned design and Save. Cleans the screen up on every path.
-pub(super) fn apply(process: &dyn Process, keys: &MacKeys, plan: &Planned, kind: &str) -> Result<Value> {
+pub(super) fn apply(
+    process: &dyn Process,
+    keys: &MacKeys,
+    plan: &Planned,
+    kind: &str,
+) -> Result<Value> {
     let result = apply_inner(process, keys, plan, kind);
     dui::leave(process, keys);
     result
@@ -913,10 +1075,16 @@ fn apply_upgrade(process: &dyn Process, keys: &MacKeys, plan: &Planned) -> Resul
         fleetmem::variant(r, i, s.base).map(|v| v.id)
     })?;
     if base_id != plan.base_id {
-        return Err(mismatch("designer base", format!("opened design {base_id} instead of {}", plan.base_id)));
+        return Err(mismatch(
+            "designer base",
+            format!("opened design {base_id} instead of {}", plan.base_id),
+        ));
     }
     if s.rows.iter().any(|r| r.level != 0) {
-        return Err(mismatch("designer start", "the upgrade levels do not start at 0".into()));
+        return Err(mismatch(
+            "designer start",
+            "the upgrade levels do not start at 0".into(),
+        ));
     }
     // Resolve every requested row first: unknown keys drop the draft untouched.
     let mut targets: Vec<(String, i64)> = Vec::new();
@@ -926,7 +1094,11 @@ fn apply_upgrade(process: &dyn Process, keys: &MacKeys, plan: &Planned) -> Resul
                 "upgrade_unknown",
                 format!(
                     "No upgrade row {key:?} in this designer; rows: {}; nothing was saved",
-                    s.rows.iter().map(upgrade_short).collect::<Vec<_>>().join(", ")
+                    s.rows
+                        .iter()
+                        .map(upgrade_short)
+                        .collect::<Vec<_>>()
+                        .join(", ")
                 ),
             )
         })?;
@@ -940,32 +1112,58 @@ fn apply_upgrade(process: &dyn Process, keys: &MacKeys, plan: &Planned) -> Resul
     for (window, level) in &targets {
         let have = s.rows.iter().find(|r| &r.window == window).map(|r| r.level);
         if have != Some(*level) {
-            return Err(mismatch("upgrade levels", format!("{window} is {have:?}, wanted {level}")));
+            return Err(mismatch(
+                "upgrade levels",
+                format!("{window} is {have:?}, wanted {level}"),
+            ));
         }
     }
-    type_name(process, keys, upgrade_name_point(&s), &plan.want.name, &|r, i| Ok(upgrade(r, i)?.name))?;
+    type_name(
+        process,
+        keys,
+        upgrade_name_point(&s),
+        &plan.want.name,
+        &|r, i| Ok(upgrade(r, i)?.name),
+    )?;
     let s = read(process, upgrade)?;
     if s.name != plan.want.name {
-        return Err(mismatch("design name", format!("{:?} instead of {:?}", s.name, plan.want.name)));
+        return Err(mismatch(
+            "design name",
+            format!("{:?} instead of {:?}", s.name, plan.want.name),
+        ));
     }
-    check_affordable(s.save_cost, s.experience, s.save_enabled, experience_label(plan.kind))?;
+    check_affordable(
+        s.save_cost,
+        s.experience,
+        s.save_enabled,
+        experience_label(plan.kind),
+    )?;
     let stats = s.stats.clone();
     let cost = s.save_cost;
     dui::click_rect(keys, s.save)?;
     let _ = wait(process, "design saved", |r, i| {
         Ok(!dui::designer_open(r, i)? || designs_have(r, i, &plan.want))
     });
-    Ok(json!({"designer":"upgrade","experience_cost":cost,"experience_before":experience_before,
+    Ok(
+        json!({"designer":"upgrade","experience_cost":cost,"experience_before":experience_before,
         "levels":targets.iter().map(|(w, l)| json!({"row":w,"level":l})).collect::<Vec<_>>(),
-        "stats_planned":stats,"base_stats":s.base_stats,"name":plan.want.name}))
+        "stats_planned":stats,"base_stats":s.base_stats,"name":plan.want.name}),
+    )
 }
 fn designs_have(r: &crate::memory::Reader<'_>, image: u64, want: &Want) -> bool {
-    let Ok((_, production)) = crate::economy::own_production(r, image) else { return false };
+    let Ok((_, production)) = crate::economy::own_production(r, image) else {
+        return false;
+    };
     designs::designs(r, image, production)
         .map(|all| all.iter().any(|d| matches_want(d, want) && !all.is_empty()))
         .unwrap_or(false)
 }
-fn check_affordable(cost: Option<i64>, have: Option<i64>, enabled: bool, account: &str) -> Result<()> {
+fn check_affordable(
+    cost: Option<i64>,
+    have: Option<i64>,
+    enabled: bool,
+    account: &str,
+) -> Result<()> {
     if let (Some(c), Some(h)) = (cost, have) {
         if c > h {
             return Err(Error::new(
@@ -982,16 +1180,27 @@ fn check_affordable(cost: Option<i64>, have: Option<i64>, enabled: bool, account
     }
     Ok(())
 }
-fn apply_modules(process: &dyn Process, keys: &MacKeys, plan: &Planned, kind: &str) -> Result<Value> {
+fn apply_modules(
+    process: &dyn Process,
+    keys: &MacKeys,
+    plan: &Planned,
+    kind: &str,
+) -> Result<Value> {
     let s = read(process, module)?;
     if s.type_key != plan.base_key {
-        return Err(mismatch("designer hull", format!("{} instead of {}", s.type_key, plan.base_key)));
+        return Err(mismatch(
+            "designer hull",
+            format!("{} instead of {}", s.type_key, plan.base_key),
+        ));
     }
     let start = module_map(&s.modules);
     if start != plan.base_modules {
         return Err(mismatch(
             "designer start",
-            format!("the designer opened with {start:?} instead of the base design's {:?}", plan.base_modules),
+            format!(
+                "the designer opened with {start:?} instead of the base design's {:?}",
+                plan.base_modules
+            ),
         ));
     }
     let experience_before = s.experience;
@@ -1006,30 +1215,48 @@ fn apply_modules(process: &dyn Process, keys: &MacKeys, plan: &Planned, kind: &s
     if module_map(&s.modules) != want_modules {
         return Err(mismatch(
             "modules",
-            format!("the draft holds {:?} instead of {:?}", module_map(&s.modules), want_modules),
+            format!(
+                "the draft holds {:?} instead of {:?}",
+                module_map(&s.modules),
+                want_modules
+            ),
         ));
     }
     // A custom design is saved as a new design (the original and its lines stay unchanged).
     if plan.custom_base && s.duplicate_state == 0 {
         dui::click_rect(keys, s.duplicate)?;
-        wait(process, "save as new", |r, i| Ok(module(r, i)?.duplicate_state != 0))?;
+        wait(process, "save as new", |r, i| {
+            Ok(module(r, i)?.duplicate_state != 0)
+        })?;
     }
-    type_name(process, keys, s.name_point, &plan.want.name, &|r, i| Ok(module(r, i)?.name))?;
+    type_name(process, keys, s.name_point, &plan.want.name, &|r, i| {
+        Ok(module(r, i)?.name)
+    })?;
     let s = read(process, module)?;
     if s.name != plan.want.name {
-        return Err(mismatch("design name", format!("{:?} instead of {:?}", s.name, plan.want.name)));
+        return Err(mismatch(
+            "design name",
+            format!("{:?} instead of {:?}", s.name, plan.want.name),
+        ));
     }
-    check_affordable(s.save_cost, s.experience, s.save_enabled, experience_label(kind))?;
+    check_affordable(
+        s.save_cost,
+        s.experience,
+        s.save_enabled,
+        experience_label(kind),
+    )?;
     let cost = s.save_cost;
     let planned_stats = s.stats.clone();
     dui::click_rect(keys, s.save)?;
     let _ = wait(process, "design saved", |r, i| {
         Ok(!dui::designer_open(r, i)? || designs_have(r, i, &plan.want))
     });
-    Ok(json!({"designer":format!("{kind}_modules"),"experience_cost":cost,"experience_before":experience_before,
+    Ok(
+        json!({"designer":format!("{kind}_modules"),"experience_cost":cost,"experience_before":experience_before,
         "modules_before":start,"modules_planned":want_modules,"stats_planned":planned_stats,
         "refit_cost":s.refit_cost,"production_cost":s.production_cost,"name":plan.want.name,
-        "save_as_new":plan.custom_base}))
+        "save_as_new":plan.custom_base}),
+    )
 }
 pub(super) fn design_row(all: &[Design], id: i32) -> Value {
     designs::rows_json(all, |d| d.variant.id == id)
@@ -1041,7 +1268,11 @@ pub(super) fn design_row(all: &[Design], id: i32) -> Value {
 // ---- decommission / recommission -------------------------------------------------------------------------------------
 pub(super) fn plan_obsolete(all: &[Design], id: i32, want: bool) -> Result<&Design> {
     let Some(d) = all.iter().find(|d| d.variant.id == id) else {
-        let ids: Vec<String> = all.iter().filter(|d| !d.variant.name.is_empty()).map(|d| format!("{} ({})", d.variant.id, d.variant.name)).collect();
+        let ids: Vec<String> = all
+            .iter()
+            .filter(|d| !d.variant.name.is_empty())
+            .map(|d| format!("{} ({})", d.variant.id, d.variant.name))
+            .collect();
         return Err(Error::new(
             "design_unknown",
             format!("No own design {id}; named designs: {}", ids.join(", ")),
@@ -1049,10 +1280,18 @@ pub(super) fn plan_obsolete(all: &[Design], id: i32, want: bool) -> Result<&Desi
     };
     if d.variant.obsolete == want {
         return Err(Error::new(
-            if want { "already_obsolete" } else { "not_obsolete" },
+            if want {
+                "already_obsolete"
+            } else {
+                "not_obsolete"
+            },
             format!(
                 "Design {id} is {} already",
-                if want { "decommissioned" } else { "up to date (not decommissioned)" }
+                if want {
+                    "decommissioned"
+                } else {
+                    "up to date (not decommissioned)"
+                }
             ),
         ));
     }
@@ -1072,7 +1311,12 @@ pub(super) fn obsolete_flag(process: &dyn Process, id: i32) -> Result<Option<boo
         .find(|d| d.variant.id == id)
         .map(|d| d.variant.obsolete))
 }
-pub(super) fn obsolete_apply(process: &dyn Process, keys: &MacKeys, d: &Design, want: bool) -> Result<Value> {
+pub(super) fn obsolete_apply(
+    process: &dyn Process,
+    keys: &MacKeys,
+    d: &Design,
+    want: bool,
+) -> Result<Value> {
     let result = (|| -> Result<Value> {
         let kind = designs::kind_of(&d.variant.type_key);
         let id = d.variant.id;
@@ -1085,10 +1329,12 @@ pub(super) fn obsolete_apply(process: &dyn Process, keys: &MacKeys, d: &Design, 
         if located.outdated_ticked {
             dui::untick_outdated(process, keys)?;
         }
-        Ok(json!({"design_id":id,"obsolete":want,"list":located.category,
+        Ok(
+            json!({"design_id":id,"obsolete":want,"list":located.category,
             "outdated_filter_ticked_by_tool":located.ticked_by_us,
             "outdated_filter_restored_to_unticked":located.outdated_ticked,
-            "route":"Y (Production) -> category button -> the row's Decommission/Recommission button"}))
+            "route":"Y (Production) -> category button -> the row's Decommission/Recommission button"}),
+        )
     })();
     dui::leave(process, keys);
     result
@@ -1114,7 +1360,11 @@ pub(super) fn plan_set_production(
             "line_unknown",
             format!(
                 "No own production line {handle}; lines: {}",
-                lines.iter().map(|l| l.handle.to_string()).collect::<Vec<_>>().join(", ")
+                lines
+                    .iter()
+                    .map(|l| l.handle.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
             ),
         )
     })?;
@@ -1176,30 +1426,50 @@ pub(super) fn settle_set_production(all: &[Design], change: &LineChange) -> Verd
         Verdict::Unknown
     }
 }
-pub(super) fn set_production_apply(process: &dyn Process, keys: &MacKeys, change: &LineChange) -> Result<Value> {
+pub(super) fn set_production_apply(
+    process: &dyn Process,
+    keys: &MacKeys,
+    change: &LineChange,
+) -> Result<Value> {
     let result = (|| -> Result<Value> {
         super::ui::clear_notices(process, keys)?;
         super::production::ensure_open(process, keys)?;
         if read(process, dui::selection_open)? {
             keys.press(Key::Escape)?;
-            wait(process, "close selection", |r, i| Ok(!dui::selection_open(r, i)?))?;
+            wait(process, "close selection", |r, i| {
+                Ok(!dui::selection_open(r, i)?)
+            })?;
         }
         super::production::reveal_named(process, keys, change.handle, "equipment_button", 40)?;
         let rect = settled(process, "line equipment button", |r, i| {
-            super::production::button(r, i, change.handle, "equipment_button")?
-                .ok_or_else(|| Error::new("gui_target_unavailable", "Line equipment button not found"))
+            super::production::button(r, i, change.handle, "equipment_button")?.ok_or_else(|| {
+                Error::new("gui_target_unavailable", "Line equipment button not found")
+            })
         })?;
         // The last line of the list may sit under the panel's lower edge: click its visible top.
-        dui::click_rect(keys, Rect { h: rect.h.min(40), ..rect })?;
+        dui::click_rect(
+            keys,
+            Rect {
+                h: rect.h.min(40),
+                ..rect
+            },
+        )?;
         wait(process, "line change list", dui::selection_open)?;
         let _ = settled(process, "line change rows", |r, i| {
-            Ok(dui::rows(r, i)?.iter().map(|x| (x.id, x.shown)).collect::<Vec<_>>())
+            Ok(dui::rows(r, i)?
+                .iter()
+                .map(|x| (x.id, x.shown))
+                .collect::<Vec<_>>())
         });
         let mut last_y: Option<i32> = None;
         for _ in 0..40 {
             let list = read(process, dui::rows)?;
             let Some(row) = list.iter().find(|x| x.id == change.design && x.shown) else {
-                let offered: Vec<String> = list.iter().filter(|x| x.shown).map(|x| x.id.to_string()).collect();
+                let offered: Vec<String> = list
+                    .iter()
+                    .filter(|x| x.shown)
+                    .map(|x| x.id.to_string())
+                    .collect();
                 return Err(Error::new(
                     "design_not_selectable",
                     format!(
@@ -1216,9 +1486,19 @@ pub(super) fn set_production_apply(process: &dyn Process, keys: &MacKeys, change
                 ));
             }
             let Some(button) = row.equipment_button else {
-                return Err(Error::new("gui_target_unavailable", "The design row has no equipment button"));
+                return Err(Error::new(
+                    "gui_target_unavailable",
+                    "The design row has no equipment button",
+                ));
             };
-            if dui::in_list(&button, if change.naval { "naval_button" } else { "tank_button" }) {
+            if dui::in_list(
+                &button,
+                if change.naval {
+                    "naval_button"
+                } else {
+                    "tank_button"
+                },
+            ) {
                 let b = settled(process, "design row", |r, i| {
                     dui::row_equipment_button(r, i, change.design)?
                         .ok_or_else(|| Error::new("gui_target_unavailable", "Design row not found"))
@@ -1230,17 +1510,29 @@ pub(super) fn set_production_apply(process: &dyn Process, keys: &MacKeys, change
                     let all = designs::designs(r, i, production)?;
                     Ok(settle_set_production(&all, change) == Verdict::Reached)
                 })?;
-                return Ok(json!({"line":change.handle,"design":change.design,"from_design":change.from_design,
-                    "route":"Y (Production) -> the line's equipment picture -> the design's row in the list that opens"}));
+                return Ok(
+                    json!({"line":change.handle,"design":change.design,"from_design":change.from_design,
+                    "route":"Y (Production) -> the line's equipment picture -> the design's row in the list that opens"}),
+                );
             }
             if last_y == Some(button.y) {
-                return Err(Error::new("gui_target_unavailable", "The design row cannot be scrolled into view"));
+                return Err(Error::new(
+                    "gui_target_unavailable",
+                    "The design row cannot be scrolled into view",
+                ));
             }
             last_y = Some(button.y);
-            keys.scroll(dui::GAME, (780.0, 700.0), if button.y < 170 { 240 } else { -240 })?;
+            keys.scroll(
+                dui::GAME,
+                (780.0, 700.0),
+                if button.y < 170 { 240 } else { -240 },
+            )?;
             thread::sleep(Duration::from_millis(250));
         }
-        Err(Error::new("gui_target_unavailable", "The design row did not scroll into view"))
+        Err(Error::new(
+            "gui_target_unavailable",
+            "The design row did not scroll into view",
+        ))
     })();
     dui::leave(process, keys);
     result
@@ -1266,15 +1558,30 @@ mod tests {
                 obsolete: false,
             },
             stats: Map::new(),
-            modules: modules.iter().map(|(a, b)| (a.to_string(), b.to_string())).collect(),
+            modules: modules
+                .iter()
+                .map(|(a, b)| (a.to_string(), b.to_string()))
+                .collect(),
             upgrades: vec![],
             lines: vec![],
         }
     }
     fn all() -> Vec<Design> {
         vec![
-            d(1340, "ship_hull_cruiser_2", "", None, &[("a_slot", "m1"), ("b_slot", "m2")]),
-            d(1356, "ship_hull_cruiser_2", "Leipzig", Some(1340), &[("a_slot", "m1"), ("b_slot", "m3")]),
+            d(
+                1340,
+                "ship_hull_cruiser_2",
+                "",
+                None,
+                &[("a_slot", "m1"), ("b_slot", "m2")],
+            ),
+            d(
+                1356,
+                "ship_hull_cruiser_2",
+                "Leipzig",
+                Some(1340),
+                &[("a_slot", "m1"), ("b_slot", "m3")],
+            ),
             d(1357, "ship_hull_cruiser_2", "Hipper", Some(1340), &[]),
             d(1335, "light_tank_equipment_2", "", None, &[]),
             d(1319, "fighter_equipment_1", "", None, &[]),
@@ -1283,7 +1590,10 @@ mod tests {
     #[test]
     fn arguments_are_parsed_and_typed() {
         assert_eq!(base_arg(&json!(5)).unwrap(), BaseRef::Id(5));
-        assert_eq!(base_arg(&json!("Leipzig")).unwrap(), BaseRef::Name("Leipzig".into()));
+        assert_eq!(
+            base_arg(&json!("Leipzig")).unwrap(),
+            BaseRef::Name("Leipzig".into())
+        );
         assert!(base_arg(&json!(0)).is_err());
         assert!(base_arg(&json!("")).is_err());
         assert!(base_arg(&json!(true)).is_err());
@@ -1307,67 +1617,199 @@ mod tests {
     #[test]
     fn bases_resolve_by_id_name_or_type() {
         let a = all();
-        assert_eq!(resolve_base(&a, "ship", &BaseRef::Id(1356)).unwrap().variant.name, "Leipzig");
-        assert_eq!(resolve_base(&a, "ship", &BaseRef::Name("leipzig".into())).unwrap().variant.id, 1356);
+        assert_eq!(
+            resolve_base(&a, "ship", &BaseRef::Id(1356))
+                .unwrap()
+                .variant
+                .name,
+            "Leipzig"
+        );
+        assert_eq!(
+            resolve_base(&a, "ship", &BaseRef::Name("leipzig".into()))
+                .unwrap()
+                .variant
+                .id,
+            1356
+        );
         // a type key names the default design only
-        assert_eq!(resolve_base(&a, "ship", &BaseRef::Name("ship_hull_cruiser_2".into())).unwrap().variant.id, 1340);
-        assert_eq!(resolve_base(&a, "tank", &BaseRef::Name("light_tank_equipment_2".into())).unwrap().variant.id, 1335);
-        assert_eq!(resolve_base(&a, "plane", &BaseRef::Id(1356)).unwrap_err().code, "kind_mismatch");
+        assert_eq!(
+            resolve_base(&a, "ship", &BaseRef::Name("ship_hull_cruiser_2".into()))
+                .unwrap()
+                .variant
+                .id,
+            1340
+        );
+        assert_eq!(
+            resolve_base(&a, "tank", &BaseRef::Name("light_tank_equipment_2".into()))
+                .unwrap()
+                .variant
+                .id,
+            1335
+        );
+        assert_eq!(
+            resolve_base(&a, "plane", &BaseRef::Id(1356))
+                .unwrap_err()
+                .code,
+            "kind_mismatch"
+        );
         let e = resolve_base(&a, "ship", &BaseRef::Name("nope".into())).unwrap_err();
         assert_eq!(e.code, "base_unknown");
         assert!(e.message.contains("1356"));
         let mut b = all();
         b.push(d(9, "ship_hull_cruiser_2", "Leipzig", Some(1340), &[]));
-        assert_eq!(resolve_base(&b, "ship", &BaseRef::Name("Leipzig".into())).unwrap_err().code, "base_ambiguous");
+        assert_eq!(
+            resolve_base(&b, "ship", &BaseRef::Name("Leipzig".into()))
+                .unwrap_err()
+                .code,
+            "base_ambiguous"
+        );
     }
     fn catalogue_of(all: Vec<Design>) -> Catalogue {
         let mut slots = BTreeMap::new();
         for x in &all {
             if x.variant.type_key.starts_with("ship_hull") {
-                slots.insert(x.variant.id, vec![(1, "a_slot".to_string()), (2, "b_slot".to_string()), (3, "c_slot".to_string())]);
+                slots.insert(
+                    x.variant.id,
+                    vec![
+                        (1, "a_slot".to_string()),
+                        (2, "b_slot".to_string()),
+                        (3, "c_slot".to_string()),
+                    ],
+                );
             } else {
                 slots.insert(x.variant.id, vec![]);
             }
         }
-        Catalogue { designs: all, slots }
+        Catalogue {
+            designs: all,
+            slots,
+        }
     }
     #[test]
     fn requests_are_refused_before_input() {
         let c = catalogue_of(all());
-        let mk = |kind: &'static str, base: BaseRef, up: &[(&str, i64)], mo: &[(&str, Option<&str>)], name: Option<&str>| Input {
+        let mk = |kind: &'static str,
+                  base: BaseRef,
+                  up: &[(&str, i64)],
+                  mo: &[(&str, Option<&str>)],
+                  name: Option<&str>| Input {
             kind,
             base,
             upgrades: up.iter().map(|(k, v)| (k.to_string(), *v)).collect(),
-            modules: mo.iter().map(|(k, v)| (k.to_string(), v.map(str::to_string))).collect(),
+            modules: mo
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.map(str::to_string)))
+                .collect(),
             name: name.map(str::to_string),
         };
         // ship: unknown slot lists the slots
         let plan = |i: &Input, c: &Catalogue| super::plan(i, c, "req1", false);
-        let e = plan(&mk("ship", BaseRef::Id(1340), &[], &[("zz_slot", Some("m9"))], Some("N")), &c).unwrap_err();
+        let e = plan(
+            &mk(
+                "ship",
+                BaseRef::Id(1340),
+                &[],
+                &[("zz_slot", Some("m9"))],
+                Some("N"),
+            ),
+            &c,
+        )
+        .unwrap_err();
         assert_eq!(e.code, "slot_unknown");
         assert!(e.message.contains("a_slot, b_slot, c_slot"));
         // ship: unchanged modules
-        let e = plan(&mk("ship", BaseRef::Id(1340), &[], &[("a_slot", Some("m1"))], Some("N")), &c).unwrap_err();
+        let e = plan(
+            &mk(
+                "ship",
+                BaseRef::Id(1340),
+                &[],
+                &[("a_slot", Some("m1"))],
+                Some("N"),
+            ),
+            &c,
+        )
+        .unwrap_err();
         assert_eq!(e.code, "nothing_to_change");
         // ship: upgrades on a module design / modules on an upgrade design
-        assert_eq!(plan(&mk("ship", BaseRef::Id(1340), &[("gun", 1)], &[], None), &c).unwrap_err().code, "invalid_arguments");
-        assert_eq!(plan(&mk("tank", BaseRef::Id(1335), &[], &[("a", None)], None), &c).unwrap_err().code, "invalid_arguments");
+        assert_eq!(
+            plan(&mk("ship", BaseRef::Id(1340), &[("gun", 1)], &[], None), &c)
+                .unwrap_err()
+                .code,
+            "invalid_arguments"
+        );
+        assert_eq!(
+            plan(
+                &mk("tank", BaseRef::Id(1335), &[], &[("a", None)], None),
+                &c
+            )
+            .unwrap_err()
+            .code,
+            "invalid_arguments"
+        );
         // tank: nothing to change when every level is 0 / none given
-        assert_eq!(plan(&mk("tank", BaseRef::Id(1335), &[("gun", 0)], &[], None), &c).unwrap_err().code, "nothing_to_change");
-        assert_eq!(plan(&mk("tank", BaseRef::Id(1335), &[], &[], None), &c).unwrap_err().code, "nothing_to_change");
+        assert_eq!(
+            plan(&mk("tank", BaseRef::Id(1335), &[("gun", 0)], &[], None), &c)
+                .unwrap_err()
+                .code,
+            "nothing_to_change"
+        );
+        assert_eq!(
+            plan(&mk("tank", BaseRef::Id(1335), &[], &[], None), &c)
+                .unwrap_err()
+                .code,
+            "nothing_to_change"
+        );
         // name taken per equipment type
-        let e = plan(&mk("ship", BaseRef::Id(1340), &[], &[("a_slot", Some("m9"))], Some("leipzig")), &c).unwrap_err();
+        let e = plan(
+            &mk(
+                "ship",
+                BaseRef::Id(1340),
+                &[],
+                &[("a_slot", Some("m9"))],
+                Some("leipzig"),
+            ),
+            &c,
+        )
+        .unwrap_err();
         assert_eq!(e.code, "name_taken");
-        assert_eq!(plan(&mk("ship", BaseRef::Id(1340), &[], &[("a_slot", Some("m9"))], Some("Ok1")), &c).unwrap().want.name, "Ok1");
+        assert_eq!(
+            plan(
+                &mk(
+                    "ship",
+                    BaseRef::Id(1340),
+                    &[],
+                    &[("a_slot", Some("m9"))],
+                    Some("Ok1")
+                ),
+                &c
+            )
+            .unwrap()
+            .want
+            .name,
+            "Ok1"
+        );
         // default name is unique and typable
         let p = plan(&mk("tank", BaseRef::Id(1335), &[("gun", 1)], &[], None), &c).unwrap();
         assert_eq!(p.want.name, default_name("light_tank_equipment_2", "req1"));
-        assert_eq!(p.want.name.chars().count(), "light_tank_equipment_2".len() + 5);
+        assert_eq!(
+            p.want.name.chars().count(),
+            "light_tank_equipment_2".len() + 5
+        );
         assert_ne!(default_name("x", "req1"), default_name("x", "req2"));
         assert!(!p.modules_designer);
         assert_eq!(p.want.parent, 1335);
         // expected modules of a ship
-        let p = plan(&mk("ship", BaseRef::Id(1356), &[], &[("a_slot", None), ("c_slot", Some("m7"))], Some("Zz")), &c).unwrap();
+        let p = plan(
+            &mk(
+                "ship",
+                BaseRef::Id(1356),
+                &[],
+                &[("a_slot", None), ("c_slot", Some("m7"))],
+                Some("Zz"),
+            ),
+            &c,
+        )
+        .unwrap();
         assert!(p.custom_base);
         let m = p.want.modules.unwrap();
         assert_eq!(m.get("a_slot"), None);
@@ -1381,35 +1823,76 @@ mod tests {
             type_key: "ship_hull_cruiser_2".into(),
             name: "Zz".into(),
             parent: 1340,
-            modules: Some([("a_slot".to_string(), "m1".to_string())].into_iter().collect()),
+            modules: Some(
+                [("a_slot".to_string(), "m1".to_string())]
+                    .into_iter()
+                    .collect(),
+            ),
             upgrade_total: None,
         };
         let mut now = all();
         // no new design: unchanged (other designs may change freely)
         assert_eq!(settle_create(&before, &now, &want), Verdict::Unchanged);
-        now.push(d(2000, "ship_hull_cruiser_2", "Zz", Some(1340), &[("a_slot", "m1")]));
+        now.push(d(
+            2000,
+            "ship_hull_cruiser_2",
+            "Zz",
+            Some(1340),
+            &[("a_slot", "m1")],
+        ));
         assert_eq!(settle_create(&before, &now, &want), Verdict::Reached);
         // a new design with other modules is a recorded divergence
-        want.modules = Some([("a_slot".to_string(), "m2".to_string())].into_iter().collect());
+        want.modules = Some(
+            [("a_slot".to_string(), "m2".to_string())]
+                .into_iter()
+                .collect(),
+        );
         assert_eq!(settle_create(&before, &now, &want), Verdict::Diverged);
         // a second derived design of the same base next to the exact one is also diverged
-        want.modules = Some([("a_slot".to_string(), "m1".to_string())].into_iter().collect());
-        now.push(d(2001, "ship_hull_cruiser_2", "Other", Some(1340), &[("a_slot", "m1")]));
+        want.modules = Some(
+            [("a_slot".to_string(), "m1".to_string())]
+                .into_iter()
+                .collect(),
+        );
+        now.push(d(
+            2001,
+            "ship_hull_cruiser_2",
+            "Other",
+            Some(1340),
+            &[("a_slot", "m1")],
+        ));
         assert_eq!(settle_create(&before, &now, &want), Verdict::Diverged);
         // designs of other equipment appearing meanwhile are not this action's business
         now.pop();
-        now.push(d(2002, "light_tank_equipment_2", "Elsewhere", Some(1335), &[]));
+        now.push(d(
+            2002,
+            "light_tank_equipment_2",
+            "Elsewhere",
+            Some(1335),
+            &[],
+        ));
         assert_eq!(settle_create(&before, &now, &want), Verdict::Reached);
         // retry: exact match only
         assert_eq!(settle_retry(&now, &want), Verdict::Reached);
         want.name = "Missing".into();
         assert_eq!(settle_retry(&now, &want), Verdict::Unchanged);
         // upgrade designs match by type and name only
-        let w2 = Want { type_key: "light_tank_equipment_2".into(), name: "Elsewhere".into(), parent: 1335, modules: None, upgrade_total: Some(0) };
+        let w2 = Want {
+            type_key: "light_tank_equipment_2".into(),
+            name: "Elsewhere".into(),
+            parent: 1335,
+            modules: None,
+            upgrade_total: Some(0),
+        };
         assert_eq!(settle_retry(&now, &w2), Verdict::Reached);
     }
     fn row(window: &str, label: &str, level: i64) -> dui::UpgradeRow {
-        let r = Rect { x: 0, y: 0, w: 1, h: 1 };
+        let r = Rect {
+            x: 0,
+            y: 0,
+            w: 1,
+            h: 1,
+        };
         dui::UpgradeRow {
             window: window.into(),
             label: label.into(),
@@ -1422,7 +1905,11 @@ mod tests {
     }
     #[test]
     fn upgrade_rows_match_by_window_short_or_label() {
-        let rows = vec![row("tank_gun_upgrade", "Main Gun", 0), row("tank_armor_upgrade", "Armor", 0), row("plane_engine_upgrade", "Engine", 0)];
+        let rows = vec![
+            row("tank_gun_upgrade", "Main Gun", 0),
+            row("tank_armor_upgrade", "Armor", 0),
+            row("plane_engine_upgrade", "Engine", 0),
+        ];
         assert_eq!(find_upgrade(&rows, "tank_gun").unwrap().label, "Main Gun");
         assert_eq!(find_upgrade(&rows, "gun").unwrap().label, "Main Gun");
         assert_eq!(find_upgrade(&rows, "main_gun").unwrap().label, "Main Gun");
@@ -1433,7 +1920,11 @@ mod tests {
     }
     #[test]
     fn expected_modules_apply_overrides() {
-        let base = vec![("a".to_string(), "m1".to_string()), ("b".to_string(), "m2".to_string()), ("c".to_string(), String::new())];
+        let base = vec![
+            ("a".to_string(), "m1".to_string()),
+            ("b".to_string(), "m2".to_string()),
+            ("c".to_string(), String::new()),
+        ];
         let mut o = BTreeMap::new();
         o.insert("a".to_string(), None);
         o.insert("d".to_string(), Some("m4".to_string()));
@@ -1447,14 +1938,26 @@ mod tests {
     fn obsolete_and_line_change_plans_are_typed() {
         let mut a = all();
         a[1].variant.obsolete = true;
-        assert_eq!(plan_obsolete(&a, 9999, true).unwrap_err().code, "design_unknown");
-        assert_eq!(plan_obsolete(&a, 1356, true).unwrap_err().code, "already_obsolete");
-        assert_eq!(plan_obsolete(&a, 1340, false).unwrap_err().code, "not_obsolete");
+        assert_eq!(
+            plan_obsolete(&a, 9999, true).unwrap_err().code,
+            "design_unknown"
+        );
+        assert_eq!(
+            plan_obsolete(&a, 1356, true).unwrap_err().code,
+            "already_obsolete"
+        );
+        assert_eq!(
+            plan_obsolete(&a, 1340, false).unwrap_err().code,
+            "not_obsolete"
+        );
         assert!(plan_obsolete(&a, 1340, true).is_ok());
         assert!(plan_obsolete(&a, 1356, false).is_ok());
         // settlement compares only the one flag
         assert_eq!(settle_obsolete(false, Some(true), true), Verdict::Reached);
-        assert_eq!(settle_obsolete(false, Some(false), true), Verdict::Unchanged);
+        assert_eq!(
+            settle_obsolete(false, Some(false), true),
+            Verdict::Unchanged
+        );
         assert_eq!(settle_obsolete(true, Some(false), true), Verdict::Diverged);
         assert_eq!(settle_obsolete(false, None, true), Verdict::Unknown);
     }
@@ -1464,8 +1967,18 @@ mod tests {
         let mut a = all();
         a[3].lines = vec![(77, 1)]; // design 1335 builds line 77
         let lines = vec![
-            OwnLine { handle: 77, naval: false, key: Some("light_tank_equipment_2".into()), requested: 1 },
-            OwnLine { handle: 88, naval: true, key: Some("ship_hull_cruiser_2".into()), requested: 1 },
+            OwnLine {
+                handle: 77,
+                naval: false,
+                key: Some("light_tank_equipment_2".into()),
+                requested: 1,
+            },
+            OwnLine {
+                handle: 88,
+                naval: true,
+                key: Some("ship_hull_cruiser_2".into()),
+                requested: 1,
+            },
         ];
         let plan = |h, d, ok| plan_set_production(&lines, &a, h, d, ok);
         assert_eq!(plan(5, 1319, true).unwrap_err().code, "line_unknown");
@@ -1473,12 +1986,23 @@ mod tests {
         assert_eq!(plan(77, 1335, true).unwrap_err().code, "already_building");
         assert_eq!(plan(77, 1340, true).unwrap_err().code, "design_wrong_type");
         assert_eq!(plan(88, 1319, true).unwrap_err().code, "design_wrong_type");
-        assert_eq!(plan(77, 1319, false).unwrap_err().code, "progress_loss_unconfirmed");
+        assert_eq!(
+            plan(77, 1319, false).unwrap_err().code,
+            "progress_loss_unconfirmed"
+        );
         let c = plan(77, 1319, true).unwrap();
-        assert_eq!((c.handle, c.design, c.from_design, c.naval), (77, 1319, Some(1335), false));
+        assert_eq!(
+            (c.handle, c.design, c.from_design, c.naval),
+            (77, 1319, Some(1335), false)
+        );
         let mut b = a.clone();
         b[4].variant.obsolete = true;
-        assert_eq!(plan_set_production(&lines, &b, 77, 1319, true).unwrap_err().code, "design_obsolete");
+        assert_eq!(
+            plan_set_production(&lines, &b, 77, 1319, true)
+                .unwrap_err()
+                .code,
+            "design_obsolete"
+        );
         // settlement: reached when the target design lists the line, unchanged while the old one does
         assert_eq!(settle_set_production(&a, &c), Verdict::Unchanged);
         let mut moved = a.clone();
@@ -1491,11 +2015,24 @@ mod tests {
     #[test]
     fn production_add_design_is_checked() {
         let mut a = all();
-        assert_eq!(check_production_design(&a, 9, "x").unwrap_err().code, "design_unknown");
-        assert_eq!(check_production_design(&a, 1335, "fighter_equipment_1").unwrap_err().code, "design_wrong_equipment");
+        assert_eq!(
+            check_production_design(&a, 9, "x").unwrap_err().code,
+            "design_unknown"
+        );
+        assert_eq!(
+            check_production_design(&a, 1335, "fighter_equipment_1")
+                .unwrap_err()
+                .code,
+            "design_wrong_equipment"
+        );
         assert!(check_production_design(&a, 1335, "light_tank_equipment_2").is_ok());
         a[3].variant.obsolete = true;
-        assert_eq!(check_production_design(&a, 1335, "light_tank_equipment_2").unwrap_err().code, "design_obsolete");
+        assert_eq!(
+            check_production_design(&a, 1335, "light_tank_equipment_2")
+                .unwrap_err()
+                .code,
+            "design_obsolete"
+        );
     }
     #[test]
     fn default_names_are_stable_per_request_and_typable() {

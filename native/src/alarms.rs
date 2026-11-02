@@ -81,7 +81,10 @@ pub fn stop_on_date(plan: &Value) -> crate::error::Result<Option<(i64, String)>>
     };
     let month_index = usize::try_from(month).map_err(|_| bad())?;
     let raw = crate::calendar::encode(year, month_index, day).map_err(|_| bad())?;
-    Ok(Some((i64::from(raw), format!("{year:04}.{month:02}.{day:02}"))))
+    Ok(Some((
+        i64::from(raw),
+        format!("{year:04}.{month:02}.{day:02}"),
+    )))
 }
 
 fn alarm(code: &str, message: String, tool: &str, args_hint: Value) -> Value {
@@ -504,12 +507,26 @@ mod tests {
             json!({"stop_on_date": "1939.09.01.12"}),
             json!({"stop_on_date": {"year": 1939, "month": 9, "day": 1}}),
         ] {
-            assert_eq!(stop_on_date(&plan).unwrap(), Some((want, "1939.09.01".into())));
+            assert_eq!(
+                stop_on_date(&plan).unwrap(),
+                Some((want, "1939.09.01".into()))
+            );
         }
         assert_eq!(stop_on_date(&json!({})).unwrap(), None);
         assert_eq!(stop_on_date(&json!({"stop_on_date": null})).unwrap(), None);
-        for bad in [json!("1939.13.01"), json!("soon"), json!(1939), json!("1939.02.29"), json!({"year": 1939})] {
-            assert_eq!(stop_on_date(&json!({"stop_on_date": bad})).unwrap_err().code, "invalid_plan");
+        for bad in [
+            json!("1939.13.01"),
+            json!("soon"),
+            json!(1939),
+            json!("1939.02.29"),
+            json!({"year": 1939}),
+        ] {
+            assert_eq!(
+                stop_on_date(&json!({"stop_on_date": bad}))
+                    .unwrap_err()
+                    .code,
+                "invalid_plan"
+            );
         }
     }
 
@@ -518,13 +535,22 @@ mod tests {
         let target = crate::calendar::encode(1939, 9, 1).unwrap() as i64;
         let plan = json!({"stop_on_date": "1939.09.01"});
         let at = |hour| {
-            compute(&plan, &Observations { game_hour: Some(hour), ..Default::default() })
+            compute(
+                &plan,
+                &Observations {
+                    game_hour: Some(hour),
+                    ..Default::default()
+                },
+            )
         };
         assert!(at(target - 1).is_empty());
         assert_eq!(codes(&at(target)), ["target_date_reached"]);
         assert_eq!(at(target + 500)[0]["fix"]["tool"], "hoi4_time");
         let off = json!({"stop_on_date": "1939.09.01", "alarms": {"target_date_reached": false}});
-        let seen = Observations { game_hour: Some(target), ..Default::default() };
+        let seen = Observations {
+            game_hour: Some(target),
+            ..Default::default()
+        };
         assert!(compute(&off, &seen).is_empty());
         assert!(compute(&json!({}), &seen).is_empty());
     }

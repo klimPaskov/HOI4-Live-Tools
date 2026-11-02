@@ -1055,7 +1055,8 @@ mod string_abi_tests {
             crate::game::layout(&reader).build_id,
             "DFA875A5-25BA-35E0-9736-627F8A5C4396"
         );
-    }    #[test]
+    }
+    #[test]
     fn macos_refuses_linux_research_layout_before_reading() {
         let error = nodes(&LibCxxProcess).unwrap_err();
         assert_eq!(error.code, "capability_unavailable");

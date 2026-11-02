@@ -1,6 +1,6 @@
 # Windows Python runtime reference
 
-This document describes the existing 1.1.0 Python runtime. The Linux-first Rust migration is tracked in the [project README](../README.md).
+This document describes the Python runtime (1.2.0). The Linux-first Rust migration is tracked in the [project README](../README.md).
 
 An MCP server that lets AI agents drive a running Hearts of Iron IV on Windows: launch and load games, read the
 screen (dates, popups, text, the top bar, tooltips, open panels, the map), run time while answering events, fire

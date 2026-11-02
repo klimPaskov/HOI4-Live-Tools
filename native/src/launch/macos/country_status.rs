@@ -432,7 +432,9 @@ pub(super) fn command_power(r: &Reader<'_>, image: u64) -> Result<Option<f64>> {
     let (found, _) = locate(r, image, root, &["command_power_value"])?;
     Ok(match found.get("command_power_value") {
         Some(base) => match text_of(r, *base)? {
-            Source::Text(raw) => parse(&raw).filter(|p| p.unit == Unit::Plain).map(|p| p.value),
+            Source::Text(raw) => parse(&raw)
+                .filter(|p| p.unit == Unit::Plain)
+                .map(|p| p.value),
             _ => None,
         },
         None => None,

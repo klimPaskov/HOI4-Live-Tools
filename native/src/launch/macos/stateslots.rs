@@ -142,8 +142,10 @@ pub(super) fn read_states(process: &dyn Process, keys: &MacKeys, ids: &[i32]) ->
     std::thread::sleep(std::time::Duration::from_millis(500));
     let mut rows = Vec::new();
     // One queue read for every state: queued shared-slot buildings hold their slots.
-    let queued_by_state = read(process, |r, i| crate::construction::queued_shared_by_state(r, i))
-        .unwrap_or_default();
+    let queued_by_state = read(process, |r, i| {
+        crate::construction::queued_shared_by_state(r, i)
+    })
+    .unwrap_or_default();
     for &id in ids {
         find_state(process, keys, id)?;
         std::thread::sleep(std::time::Duration::from_millis(600));
@@ -182,7 +184,7 @@ pub(super) fn read_states(process: &dyn Process, keys: &MacKeys, ids: &[i32]) ->
                 None
             }
         };
-        let queued = queued_by_state.get(&(id as i32)).copied();
+        let queued = queued_by_state.get(&id).copied();
         rows.push(match row {
             Some(s) => {
                 let free = s.unlocked.saturating_sub(s.used);

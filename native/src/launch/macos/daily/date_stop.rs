@@ -16,8 +16,8 @@
 //!   it is recorded, raised as an alarm and never retried;
 //! * errors raised before any input (busy controller, torn read, lease gap)
 //!   are retried each second, capped at `MAX_ATTEMPTS`, then final.
-use super::{retained_input_check, Retained};
 use super::super::{input_gate, ClockBackend, Control};
+use super::{retained_input_check, Retained};
 use crate::{
     actions::{Action, Status as ReceiptStatus},
     daily_worker,
@@ -60,7 +60,9 @@ impl Status {
         let armed = self.target.is_some()
             && self.token
             && self.lease != Some(false)
-            && self.fired_for.is_none_or(|f| Some(f) != self.target.as_ref().map(|t| t.0));
+            && self
+                .fired_for
+                .is_none_or(|f| Some(f) != self.target.as_ref().map(|t| t.0));
         let mut value = json!({
             "armed": armed,
             "target": self.target.as_ref().map(|t| t.1.clone()),
@@ -106,7 +108,10 @@ pub(super) enum Pause {
     /// no input was sent; try again next second
     Retry(String),
     /// final: `failed` raises the alarm
-    Final { text: String, failed: bool },
+    Final {
+        text: String,
+        failed: bool,
+    },
 }
 
 /// Everything the watcher touches; fakes drive the tests.
@@ -128,7 +133,11 @@ fn upd(status: &Mutex<Status>, f: impl FnOnce(&mut Status)) {
 enum Parsed {
     None,
     Invalid(String),
-    Target { hour: i64, label: String, pause: bool },
+    Target {
+        hour: i64,
+        label: String,
+        pause: bool,
+    },
 }
 fn parse(plan: &Value) -> Parsed {
     // stop_on_date is a safety rail, honoured even when the plan's actions are switched off
@@ -152,7 +161,9 @@ pub(super) fn step(status: &Mutex<Status>, env: &dyn Env) {
     let plan = match env.plan() {
         Ok(plan) => plan,
         Err(e) => {
-            upd(status, |s| s.note = Some(format!("plan unreadable: {}", e.code)));
+            upd(status, |s| {
+                s.note = Some(format!("plan unreadable: {}", e.code))
+            });
             return;
         }
     };
@@ -194,7 +205,9 @@ pub(super) fn step(status: &Mutex<Status>, env: &dyn Env) {
     let (now, paused) = match env.clock() {
         Ok(read) => read,
         Err(e) => {
-            upd(status, |s| s.note = Some(format!("clock unreadable: {}", e.code)));
+            upd(status, |s| {
+                s.note = Some(format!("clock unreadable: {}", e.code))
+            });
             return;
         }
     };
@@ -211,7 +224,11 @@ pub(super) fn step(status: &Mutex<Status>, env: &dyn Env) {
     if now < hour {
         let unarmed = !token || lease == Some(false);
         upd(status, |s| {
-            s.state = if unarmed { UNARMED.into() } else { "waiting".into() };
+            s.state = if unarmed {
+                UNARMED.into()
+            } else {
+                "waiting".into()
+            };
         });
         return;
     }
@@ -240,9 +257,10 @@ pub(super) fn step(status: &Mutex<Status>, env: &dyn Env) {
     match env.pause(&id) {
         Pause::Verified => fire("paused".into(), false),
         Pause::Final { text, failed } => fire(text, failed),
-        Pause::Retry(why) if attempts >= MAX_ATTEMPTS => {
-            fire(format!("pause refused after {attempts} attempts ({why}); not retried"), true)
-        }
+        Pause::Retry(why) if attempts >= MAX_ATTEMPTS => fire(
+            format!("pause refused after {attempts} attempts ({why}); not retried"),
+            true,
+        ),
         Pause::Retry(why) => upd(status, |s| {
             s.in_flight = false;
             s.state = "retrying".into();
@@ -290,25 +308,27 @@ impl DateStop {
         let env = make(self.shared.clone());
         let stop = Arc::new(AtomicBool::new(false));
         let (flag, shared) = (stop.clone(), self.shared.clone());
-        match thread::Builder::new().name("hoi4-mac-date-stop".into()).spawn(move || {
-            while !flag.load(Ordering::Acquire) {
-                let ran = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    step(&shared.status, env.as_ref())
-                }));
-                if ran.is_err() {
-                    upd(&shared.status, |s| {
-                        s.state = "watcher panicked; stop_on_date_unarmed".into();
-                    });
-                    return;
-                }
-                for _ in 0..10 {
-                    if flag.load(Ordering::Acquire) {
+        match thread::Builder::new()
+            .name("hoi4-mac-date-stop".into())
+            .spawn(move || {
+                while !flag.load(Ordering::Acquire) {
+                    let ran = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        step(&shared.status, env.as_ref())
+                    }));
+                    if ran.is_err() {
+                        upd(&shared.status, |s| {
+                            s.state = "watcher panicked; stop_on_date_unarmed".into();
+                        });
                         return;
                     }
-                    thread::sleep(Duration::from_millis(100));
+                    for _ in 0..10 {
+                        if flag.load(Ordering::Acquire) {
+                            return;
+                        }
+                        thread::sleep(Duration::from_millis(100));
+                    }
                 }
-            }
-        }) {
+            }) {
             Ok(handle) => *thread = Some((stop, handle)),
             Err(e) => upd(&self.shared.status, |s| {
                 s.state = format!("watcher not started: {e}");
@@ -340,9 +360,11 @@ impl DateStop {
         }
         let plan = crate::plan_run::read_plan(plan_path).unwrap_or_else(|_| json!({}));
         match parse(&plan) {
-            Parsed::Target { label, .. } => json!({"armed": false, "running": false, "target": label,
+            Parsed::Target { label, .. } => {
+                json!({"armed": false, "running": false, "target": label,
                 "fired": false, "in_flight": false, "state": UNARMED, "outcome": null,
-                "observation_pauses": 0}),
+                "observation_pauses": 0})
+            }
             _ => json!({"armed": false, "running": false, "target": null, "fired": false,
                 "in_flight": false, "state": "no stop_on_date in plan", "outcome": null,
                 "observation_pauses": 0}),
@@ -418,12 +440,13 @@ impl Env for Live {
         let Some(token) = self.shared.token() else {
             return Pause::Retry("no lease".into());
         };
-        let mut control: MutexGuard<'_, Control> = match daily_worker::input_state(&self.control, || {
-            retained_input_check(&self.directory, &self.blocked, &self.retained)
-        }) {
-            Ok(guard) => guard,
-            Err(e) => return classify(&e),
-        };
+        let mut control: MutexGuard<'_, Control> =
+            match daily_worker::input_state(&self.control, || {
+                retained_input_check(&self.directory, &self.blocked, &self.retained)
+            }) {
+                Ok(guard) => guard,
+                Err(e) => return classify(&e),
+            };
         let Control {
             guard,
             authority,
@@ -447,7 +470,13 @@ impl Env for Live {
             authority,
             token: &token,
         };
-        match journal.execute(id, &epoch, Action::SetPaused(true), &mut backend, Duration::from_secs(10)) {
+        match journal.execute(
+            id,
+            &epoch,
+            Action::SetPaused(true),
+            &mut backend,
+            Duration::from_secs(10),
+        ) {
             Ok(receipt) => match receipt.status {
                 ReceiptStatus::Verified => Pause::Verified,
                 ReceiptStatus::NotApplied => Pause::Final {
@@ -455,13 +484,18 @@ impl Env for Live {
                     failed: true,
                 },
                 ReceiptStatus::Dispatching => Pause::Final {
-                    text: "pause uncertain (receipt still dispatching); not retried, settle by hand".into(),
+                    text:
+                        "pause uncertain (receipt still dispatching); not retried, settle by hand"
+                            .into(),
                     failed: true,
                 },
             },
             // The journal records Dispatching before any key: a receipt means input may have happened.
             Err(e) if journal.receipt(id).is_some() => Pause::Final {
-                text: format!("pause uncertain ({}: {}); not retried, settle by hand", e.code, e.message),
+                text: format!(
+                    "pause uncertain ({}: {}); not retried, settle by hand",
+                    e.code, e.message
+                ),
                 failed: true,
             },
             Err(e) => classify(&e),
@@ -515,7 +549,11 @@ mod tests {
         fn pause(&self, id: &str) -> Pause {
             self.pauses.fetch_add(1, Ordering::SeqCst);
             self.ids.lock().unwrap().push(id.into());
-            self.replies.lock().unwrap().pop_front().expect("unexpected extra pause")
+            self.replies
+                .lock()
+                .unwrap()
+                .pop_front()
+                .expect("unexpected extra pause")
         }
     }
     fn target() -> i64 {
@@ -541,7 +579,10 @@ mod tests {
             step(&status, &fake);
         }
         assert_eq!(fake.pauses.load(Ordering::SeqCst), 1);
-        assert_eq!(fake.ids.lock().unwrap()[0], format!("worker-sd-{}-77", target()));
+        assert_eq!(
+            fake.ids.lock().unwrap()[0],
+            format!("worker-sd-{}-77", target())
+        );
         let v = state(&status);
         assert_eq!(v["fired"], true);
         assert_eq!(v["outcome"], "paused");
@@ -604,18 +645,26 @@ mod tests {
         let v = state(&status);
         assert_eq!(v["fired"], true);
         assert_eq!(v["alarm"]["code"], "date_stop_failed");
-        assert!(v["alarm"]["message"].as_str().unwrap().contains("uncertain"));
+        assert!(v["alarm"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("uncertain"));
         for _ in 0..3 {
             step(&status, &fake);
         }
-        assert_eq!(fake.pauses.load(Ordering::SeqCst), 2, "never re-issued after a final outcome");
+        assert_eq!(
+            fake.pauses.load(Ordering::SeqCst),
+            2,
+            "never re-issued after a final outcome"
+        );
     }
 
     #[test]
     fn pre_input_retries_are_capped_then_final() {
         let fake = Fake::new(plan(), target(), false);
-        *fake.replies.lock().unwrap() =
-            (0..MAX_ATTEMPTS).map(|_| Pause::Retry("torn_read: x".into())).collect();
+        *fake.replies.lock().unwrap() = (0..MAX_ATTEMPTS)
+            .map(|_| Pause::Retry("torn_read: x".into()))
+            .collect();
         let status = Mutex::new(Status::default());
         for _ in 0..MAX_ATTEMPTS + 3 {
             step(&status, &fake);
@@ -630,17 +679,32 @@ mod tests {
     #[test]
     fn plan_formats_flags_and_changes_are_followed() {
         let status = Mutex::new(Status::default());
-        let obj = Fake::new(json!({"stop_on_date": {"year": 1938, "month": 1, "day": 1}}), target(), false);
+        let obj = Fake::new(
+            json!({"stop_on_date": {"year": 1938, "month": 1, "day": 1}}),
+            target(),
+            false,
+        );
         step(&status, &obj);
         assert_eq!(obj.pauses.load(Ordering::SeqCst), 1);
 
-        let off = Fake::new(json!({"stop_on_date": "1938.01.01", "stop_on_date_pause": false}), target(), false);
+        let off = Fake::new(
+            json!({"stop_on_date": "1938.01.01", "stop_on_date_pause": false}),
+            target(),
+            false,
+        );
         let s2 = Mutex::new(Status::default());
         step(&s2, &off);
         assert_eq!(off.pauses.load(Ordering::SeqCst), 0);
-        assert_eq!(state(&s2)["outcome"], "not requested (stop_on_date_pause false)");
+        assert_eq!(
+            state(&s2)["outcome"],
+            "not requested (stop_on_date_pause false)"
+        );
 
-        let inactive = Fake::new(json!({"stop_on_date": "1938.01.01", "active": false}), target(), false);
+        let inactive = Fake::new(
+            json!({"stop_on_date": "1938.01.01", "active": false}),
+            target(),
+            false,
+        );
         let s3 = Mutex::new(Status::default());
         step(&s3, &inactive);
         // The stop date still pauses when the plan's actions are switched off.
@@ -650,7 +714,10 @@ mod tests {
         let s4 = Mutex::new(Status::default());
         step(&s4, &bad);
         assert_eq!(bad.pauses.load(Ordering::SeqCst), 0);
-        assert!(state(&s4)["state"].as_str().unwrap().starts_with("invalid plan"));
+        assert!(state(&s4)["state"]
+            .as_str()
+            .unwrap()
+            .starts_with("invalid plan"));
 
         // a later date set after the first fired arms a fresh pause under a new id
         *obj.plan.lock().unwrap() = json!({"stop_on_date": "1938.02.01"});
@@ -693,6 +760,9 @@ mod tests {
         assert_eq!(v["running"], true);
         assert_eq!(v["fired"], true);
         watcher.stop();
-        assert_eq!(watcher.status_json(std::path::Path::new("/nonexistent")) ["running"], false);
+        assert_eq!(
+            watcher.status_json(std::path::Path::new("/nonexistent"))["running"],
+            false
+        );
     }
 }

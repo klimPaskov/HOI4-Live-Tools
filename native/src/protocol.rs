@@ -1133,7 +1133,9 @@ impl Server {
                                 if let (Some(status), Some(object)) =
                                     (commands.date_stop_status(), plan.as_object_mut())
                                 {
-                                    if status["armed"] != json!(true) && status["fired"] != json!(true) {
+                                    if status["armed"] != json!(true)
+                                        && status["fired"] != json!(true)
+                                    {
                                         object.insert(
                                             "stop_on_date_unarmed".into(),
                                             json!(status["state"]),

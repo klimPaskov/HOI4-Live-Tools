@@ -55,7 +55,11 @@ const ENTRY_TEXTS: [&str; 14] = [
     "number_of_items",
 ];
 /// Lists whose entries are read.
-const LISTS: [&str; 3] = ["country_biddings_list", "available_actions_list", "biddings_grid"];
+const LISTS: [&str; 3] = [
+    "country_biddings_list",
+    "available_actions_list",
+    "biddings_grid",
+];
 const BUTTONS: [&str; 17] = [
     "take_state_action",
     "liberate_action",
@@ -139,7 +143,10 @@ pub(super) fn parse_number(text: &str) -> Option<f64> {
         let sign = c == '-' && b.get(i + 1).is_some_and(char::is_ascii_digit);
         if c.is_ascii_digit() || sign {
             let mut j = i + 1;
-            while j < b.len() && (b[j].is_ascii_digit() || (b[j] == '.' && b.get(j + 1).is_some_and(char::is_ascii_digit))) {
+            while j < b.len()
+                && (b[j].is_ascii_digit()
+                    || (b[j] == '.' && b.get(j + 1).is_some_and(char::is_ascii_digit)))
+            {
                 j += 1;
             }
             return b[i..j].iter().collect::<String>().parse().ok();
@@ -164,7 +171,12 @@ pub(super) enum Settle {
 /// Take settle: compare only the score the window shows. A successful take
 /// lowers it; unchanged without a sent click is a clean no-op; an equal score
 /// after a click, or a rise, is a divergence.
-pub(super) fn take_settle(before: Option<f64>, now: Option<f64>, sent: bool, retry: bool) -> Settle {
+pub(super) fn take_settle(
+    before: Option<f64>,
+    now: Option<f64>,
+    sent: bool,
+    retry: bool,
+) -> Settle {
     match (before, now) {
         (Some(b), Some(n)) if n < b - 1e-9 => Settle::Reached,
         (Some(b), Some(n)) if (n - b).abs() <= 1e-9 && !sent && !retry => Settle::Unchanged,
@@ -187,7 +199,13 @@ pub(super) fn submit_settle(before: &str, now: Option<&str>, sent: bool) -> Sett
 fn text_at(r: &Reader<'_>, node: u64) -> Option<String> {
     r.string_bounded(node + TEXT, 256).ok().map(|t| clean(&t))
 }
-fn flat_texts(r: &Reader<'_>, image: u64, object: u64, depth: u32, out: &mut Map<String, Value>) -> Result<()> {
+fn flat_texts(
+    r: &Reader<'_>,
+    image: u64,
+    object: u64,
+    depth: u32,
+    out: &mut Map<String, Value>,
+) -> Result<()> {
     for child in gui_tree::children(r, object)? {
         let Some(name) = gui_tree::name(r, child, image)? else {
             continue;
@@ -245,8 +263,12 @@ fn button(r: &Reader<'_>, image: u64, root: u64, name: &str) -> Result<Option<Bu
     }))
 }
 fn need_button(r: &Reader<'_>, image: u64, root: u64, name: &str) -> Result<Button> {
-    button(r, image, root, name)?
-        .ok_or_else(|| Error::new("gui_target_unavailable", format!("Conference control {name} not found")))
+    button(r, image, root, name)?.ok_or_else(|| {
+        Error::new(
+            "gui_target_unavailable",
+            format!("Conference control {name} not found"),
+        )
+    })
 }
 fn score(r: &Reader<'_>, image: u64) -> Result<Option<f64>> {
     let root = root(r, image)?;
@@ -288,10 +310,19 @@ fn state_owner_controller(r: &Reader<'_>, image: u64, state: i32) -> Result<(i32
             .try_into()
             .unwrap(),
     );
-    if object == 0 || r.u64(object)? != image + l.state_vtable || r.i32(object + l.state_id)? != state {
-        return Err(Error::new("unknown_state", format!("State {state} is not in the catalog")));
+    if object == 0
+        || r.u64(object)? != image + l.state_vtable
+        || r.i32(object + l.state_id)? != state
+    {
+        return Err(Error::new(
+            "unknown_state",
+            format!("State {state} is not in the catalog"),
+        ));
     }
-    Ok((r.i32(object + l.state_owner)?, r.i32(object + l.state_controller)?))
+    Ok((
+        r.i32(object + l.state_owner)?,
+        r.i32(object + l.state_controller)?,
+    ))
 }
 fn player(r: &Reader<'_>, image: u64) -> Result<i32> {
     let g = game::layout(r);
@@ -420,16 +451,22 @@ pub(super) fn plan_take(
                 ));
             }
             if owner <= 0 {
-                return Err(Error::new("state_not_offered", format!("State {state} has no owner")));
+                return Err(Error::new(
+                    "state_not_offered",
+                    format!("State {state} has no owner"),
+                ));
             }
             let _ = controller;
         }
         let score_before = score(r, image)?;
         if score_before.is_some_and(|s| s <= 0.0) {
-            return Err(Error::new("cost_exceeds_points", "No points left this round"));
+            return Err(Error::new(
+                "cost_exceeds_points",
+                "No points left this round",
+            ));
         }
         Ok(Plan {
-        names: Vec::new(),
+            names: Vec::new(),
             kind,
             states: states.to_vec(),
             max_cost,
@@ -454,7 +491,8 @@ pub(super) fn take(
         Ok((b.rect, b.selected))
     })?;
     if !selected {
-        let rect = action.ok_or_else(|| Error::new("gui_target_unavailable", "Action button is off screen"))?;
+        let rect = action
+            .ok_or_else(|| Error::new("gui_target_unavailable", "Action button is off screen"))?;
         let (x, y) = rect.center();
         sent.set(true);
         keys.click(GAME, x, y)?;
@@ -469,7 +507,10 @@ pub(super) fn take(
         // (country rows expand into state rows), else fall back to centring it on the map.
         match click_state_row(process, keys, &name) {
             Ok(()) => {}
-            Err(e) if e.code == "state_row_missing" && std::env::var_os("HOI4_PEACE_LIST_DEBUG").is_none() => {
+            Err(e)
+                if e.code == "state_row_missing"
+                    && std::env::var_os("HOI4_PEACE_LIST_DEBUG").is_none() =>
+            {
                 find_state(process, keys, state)?;
                 keys.click(GAME, 960.0, 540.0)?;
             }
@@ -504,7 +545,9 @@ pub(super) fn take(
         costs.push(json!({"state_id":state,"cost":cost,"score_after":now}));
         last = now;
     }
-    Ok(json!({"kind":plan.kind.name(),"states":costs,"score_before":plan.score_before,"score_after":last}))
+    Ok(
+        json!({"kind":plan.kind.name(),"states":costs,"score_before":plan.score_before,"score_after":last}),
+    )
 }
 
 /// Rows of the conference's available-actions list: (country rows: name and expand button,
@@ -512,20 +555,31 @@ pub(super) fn take(
 /// (header with action_name and expand) holding available_actions_grid of available_action_item
 /// (country_flag at x 18, action_name at x 110, 29 px high).
 #[allow(clippy::type_complexity)]
-fn list_rows(r: &crate::memory::Reader<'_>, image: u64) -> Result<(Vec<(String, Rect)>, Vec<(String, Rect)>)> {
+fn list_rows(
+    r: &crate::memory::Reader<'_>,
+    image: u64,
+) -> Result<(Vec<(String, Rect)>, Vec<(String, Rect)>)> {
     let root = root(r, image)?;
     let node = find(r, image, root, "available_actions_list", 0)?
         .ok_or_else(|| Error::new("gui_target_unavailable", "available_actions_list not found"))?;
-    let list = gui_tree::container(r, node, image)?
-        .ok_or_else(|| Error::new("gui_target_unavailable", "available_actions_list is not a window"))?;
+    let list = gui_tree::container(r, node, image)?.ok_or_else(|| {
+        Error::new(
+            "gui_target_unavailable",
+            "available_actions_list is not a window",
+        )
+    })?;
     let (mut countries, mut states) = (Vec::new(), Vec::new());
     // Country rows are the list's child windows; their state rows ("Select All" first) sit in
     // an inner grid at y 54 with 29 px slots. The row icons have no reviewed renderer, so the
     // rows are placed from the country row's expand button at (266, 30).
     for child in gui_tree::children(r, list)?.into_iter().take(64) {
-        let Some(item) = gui_tree::container(r, child, image)? else { continue };
+        let Some(item) = gui_tree::container(r, child, image)? else {
+            continue;
+        };
         let name = pk::text(r, image, item, "action_name", 3)?.unwrap_or_default();
-        let Ok(expand) = pk::rect_of(r, image, item, "expand", 3) else { continue };
+        let Ok(expand) = pk::rect_of(r, image, item, "expand", 3) else {
+            continue;
+        };
         countries.push((name, expand));
         let (ox, oy) = (expand.x - 266, expand.y - 30);
         let mut grids = Vec::new();
@@ -536,7 +590,15 @@ fn list_rows(r: &crate::memory::Reader<'_>, image: u64) -> Result<(Vec<(String, 
                 if state.is_empty() {
                     continue;
                 }
-                states.push((state, Rect { x: ox + 140, y: oy + 54 + 29 * k as i32 + 7, w: 40, h: 14 }));
+                states.push((
+                    state,
+                    Rect {
+                        x: ox + 140,
+                        y: oy + 54 + 29 * k as i32 + 7,
+                        w: 40,
+                        h: 14,
+                    },
+                ));
             }
         }
     }
@@ -547,7 +609,11 @@ fn click_state_row(process: &dyn Process, keys: &MacKeys, name: &str) -> Result<
     if name.is_empty() {
         return Err(Error::new("state_row_missing", "No state name"));
     }
-    let wanted = |rows: &[(String, Rect)]| rows.iter().find(|(n, _)| super::loc::same(n, name)).map(|(_, r)| *r);
+    let wanted = |rows: &[(String, Rect)]| {
+        rows.iter()
+            .find(|(n, _)| super::loc::same(n, name))
+            .map(|(_, r)| *r)
+    };
     let (countries, states) = read(process, list_rows)?;
     let mut target = wanted(&states);
     if target.is_none() {
@@ -581,12 +647,17 @@ fn click_state_row(process: &dyn Process, keys: &MacKeys, name: &str) -> Result<
     if rect.w > 400 {
         x = f64::from(rect.x) + 120.0;
     }
-    keys.click(GAME, x, y).map_err(|e| Error::new(e.code, format!("{} ({name} at {rect:?})", e.message)))?;
+    keys.click(GAME, x, y)
+        .map_err(|e| Error::new(e.code, format!("{} ({name} at {rect:?})", e.message)))?;
     Ok(())
 }
 
 /// Pre-input check shared by submit and exit.
-pub(super) fn plan_button(process: &dyn Process, name: &'static str, code: &'static str) -> Result<String> {
+pub(super) fn plan_button(
+    process: &dyn Process,
+    name: &'static str,
+    code: &'static str,
+) -> Result<String> {
     read(process, |r, image| {
         let root = root(r, image)?;
         let b = need_button(r, image, root, name)?;
@@ -611,9 +682,13 @@ fn click_button(process: &dyn Process, keys: &MacKeys, name: &str) -> Result<()>
         let root = root(r, image)?;
         let b = need_button(r, image, root, name)?;
         if !usable(b.shown, b.disabled) {
-            return Err(Error::new("round_not_ready", format!("{name} is not usable now")));
+            return Err(Error::new(
+                "round_not_ready",
+                format!("{name} is not usable now"),
+            ));
         }
-        b.rect.ok_or_else(|| Error::new("gui_target_unavailable", format!("{name} is off screen")))
+        b.rect
+            .ok_or_else(|| Error::new("gui_target_unavailable", format!("{name} is off screen")))
     })?;
     // Text-drawn buttons report their text sprite (864 px wide on 1.19.4.1), whose centre
     // can fall off screen; their left edge is the button's, so click 120 px in.
@@ -621,12 +696,18 @@ fn click_button(process: &dyn Process, keys: &MacKeys, name: &str) -> Result<()>
     if rect.w > 400 {
         x = f64::from(rect.x) + 120.0;
     }
-    keys.click(GAME, x, y).map_err(|e| Error::new(e.code, format!("{} ({name} at {rect:?})", e.message)))?;
+    keys.click(GAME, x, y)
+        .map_err(|e| Error::new(e.code, format!("{} ({name} at {rect:?})", e.message)))?;
     Ok(())
 }
 /// One click on Submit Demands; verified when the header texts change or the
 /// window closes. A wait window ("waiting for players") also changes them.
-pub(super) fn submit(process: &dyn Process, keys: &MacKeys, before: &str, sent: &std::cell::Cell<bool>) -> Result<Value> {
+pub(super) fn submit(
+    process: &dyn Process,
+    keys: &MacKeys,
+    before: &str,
+    sent: &std::cell::Cell<bool>,
+) -> Result<Value> {
     sent.set(true);
     click_button(process, keys, "end_turn_button")?;
     wait(process, "demands submitted", |r, i| {
@@ -640,7 +721,11 @@ pub(super) fn submit(process: &dyn Process, keys: &MacKeys, before: &str, sent: 
 /// Click Confirm and Exit (done_button) and the OK of its confirmation; ends
 /// when the conference window closed. The result notice that follows is left
 /// for hoi4_events / the plan runner.
-pub(super) fn exit(process: &dyn Process, keys: &MacKeys, sent: &std::cell::Cell<bool>) -> Result<Value> {
+pub(super) fn exit(
+    process: &dyn Process,
+    keys: &MacKeys,
+    sent: &std::cell::Cell<bool>,
+) -> Result<Value> {
     sent.set(true);
     click_button(process, keys, "done_button")?;
     let deadline = Instant::now() + Duration::from_secs(6);
@@ -678,7 +763,10 @@ mod tests {
         assert_eq!(Kind::parse(false, false).unwrap(), Kind::Take);
         assert_eq!(Kind::parse(true, false).unwrap(), Kind::Puppet);
         assert_eq!(Kind::parse(false, true).unwrap(), Kind::Liberate);
-        assert_eq!(Kind::parse(true, true).unwrap_err().code, "invalid_arguments");
+        assert_eq!(
+            Kind::parse(true, true).unwrap_err().code,
+            "invalid_arguments"
+        );
         assert_eq!(Kind::Puppet.button(), "puppet_action");
     }
     #[test]
@@ -706,11 +794,26 @@ mod tests {
     }
     #[test]
     fn take_settles_only_on_the_score() {
-        assert_eq!(take_settle(Some(95.0), Some(68.0), true, false), Settle::Reached);
-        assert_eq!(take_settle(Some(95.0), Some(95.0), false, false), Settle::Unchanged);
-        assert_eq!(take_settle(Some(95.0), Some(95.0), true, false), Settle::Diverged);
-        assert_eq!(take_settle(Some(95.0), Some(95.0), false, true), Settle::Diverged);
-        assert_eq!(take_settle(Some(68.0), Some(95.0), true, false), Settle::Diverged);
+        assert_eq!(
+            take_settle(Some(95.0), Some(68.0), true, false),
+            Settle::Reached
+        );
+        assert_eq!(
+            take_settle(Some(95.0), Some(95.0), false, false),
+            Settle::Unchanged
+        );
+        assert_eq!(
+            take_settle(Some(95.0), Some(95.0), true, false),
+            Settle::Diverged
+        );
+        assert_eq!(
+            take_settle(Some(95.0), Some(95.0), false, true),
+            Settle::Diverged
+        );
+        assert_eq!(
+            take_settle(Some(68.0), Some(95.0), true, false),
+            Settle::Diverged
+        );
         assert_eq!(take_settle(Some(95.0), None, true, false), Settle::Unknown);
     }
     #[test]

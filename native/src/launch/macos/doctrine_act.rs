@@ -84,7 +84,10 @@ pub(super) fn resolve(
         let Some(folder_index) = folders.iter().position(|f| *f == g.folder) else {
             return Err(Error::new(
                 "doctrine_unknown",
-                format!("Grand doctrine {doctrine} names the unknown folder {}", g.folder),
+                format!(
+                    "Grand doctrine {doctrine} names the unknown folder {}",
+                    g.folder
+                ),
             ));
         };
         return Ok(Target {
@@ -215,7 +218,10 @@ pub(super) struct Estimate {
 /// Refusals about the current slot and experience; pure.
 pub(super) fn check(snapshot: &Snapshot, catalog: &Catalog, t: &Target) -> Result<Estimate> {
     let Some(raw) = snapshot.folders.get(t.folder_index) else {
-        return Err(Error::new("doctrine_unknown", "Folder not in the doctrine system"));
+        return Err(Error::new(
+            "doctrine_unknown",
+            "Folder not in the doctrine system",
+        ));
     };
     match t.kind {
         Kind::Grand => {
@@ -266,7 +272,10 @@ pub(super) fn check(snapshot: &Snapshot, catalog: &Catalog, t: &Target) -> Resul
             if !t.multi_track && chosen.contains(&t.name_key.as_str()) {
                 return Err(Error::new(
                     "subdoctrine_taken",
-                    format!("{} already fills another track and cannot be used twice", t.id),
+                    format!(
+                        "{} already fills another track and cannot be used twice",
+                        t.id
+                    ),
                 ));
             }
             for key in &chosen {
@@ -335,7 +344,11 @@ fn selection_root(r: &crate::memory::Reader<'_>, i: u64) -> Result<Option<u64>> 
     if let Some(view) = pk::locate(r, i, &pk::DOCTRINE_VIEW)? {
         if let Some(base) = pk::find(r, i, view, "doctrine_selection_list", 6)? {
             if let Some(root) = gui_tree::container(r, base, i)? {
-                return Ok(if gui_tree::visible(r, root)? { Some(root) } else { None });
+                return Ok(if gui_tree::visible(r, root)? {
+                    Some(root)
+                } else {
+                    None
+                });
             }
         }
     }
@@ -408,7 +421,11 @@ fn select_folder_tab(process: &dyn Process, keys: &MacKeys<'_>, t: &Target) -> R
         let item = items.get(t.folder_index).ok_or_else(|| {
             Error::new(
                 "folder_tab_missing",
-                format!("The window offers {} folder tabs, not {}", items.len(), t.folder_index + 1),
+                format!(
+                    "The window offers {} folder tabs, not {}",
+                    items.len(),
+                    t.folder_index + 1
+                ),
             )
         })?;
         pk::rect_of(r, i, item.frame, "folder_button", 2)
@@ -482,20 +499,14 @@ fn rows(
     Ok((names, found, rect))
 }
 
-fn adopt(
-    process: &dyn Process,
-    keys: &MacKeys<'_>,
-    t: &Target,
-    display: &str,
-) -> Driven {
+fn adopt(process: &dyn Process, keys: &MacKeys<'_>, t: &Target, display: &str) -> Driven {
     clear_notices(process, keys)?;
     let result: Driven = (|| {
         open_view(process, keys, t)?;
         select_folder_tab(process, keys, t)?;
         open_selection(process, keys, t)?;
-        let (names, found, _) = super::ui::settled(process, "doctrine rows", |r, i| {
-            rows(r, i, display)
-        })?;
+        let (names, found, _) =
+            super::ui::settled(process, "doctrine rows", |r, i| rows(r, i, display))?;
         let Some(row) = found else {
             return Err(refuse(
                 "doctrine_not_offered",
@@ -584,7 +595,9 @@ pub(super) fn call(
     let doctrine = super::string(args, "doctrine")?;
     if doctrine.is_empty()
         || doctrine.len() > 96
-        || !doctrine.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
+        || !doctrine
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'_')
     {
         return Err(Error::new("invalid_arguments", "Invalid doctrine id"));
     }
@@ -592,7 +605,11 @@ pub(super) fn call(
         None => None,
         Some(v) => Some(
             v.as_str()
-                .filter(|s| !s.is_empty() && s.len() <= 64 && s.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_'))
+                .filter(|s| {
+                    !s.is_empty()
+                        && s.len() <= 64
+                        && s.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
+                })
                 .ok_or_else(|| Error::new("invalid_arguments", "Invalid track id"))?,
         ),
     };
@@ -623,7 +640,9 @@ pub(super) fn call(
                 .clone()
                 .ok_or_else(|| Error::new("action_uncertain", "Plan missing at dispatch"))?;
             let seen = adopt(process, keys, &t, &display)?;
-            Ok(json!({"clicked": seen, "doctrine": t.id, "folder": t.folder, "track": t.track.map(|x| x.1)}))
+            Ok(
+                json!({"clicked": seen, "doctrine": t.id, "folder": t.folder, "track": t.track.map(|x| x.1)}),
+            )
         }),
         settle: Box::new(|process, _seen| {
             let l = live(process, doctrine, track)?;
@@ -724,7 +743,10 @@ mod tests {
         let held = snap(Some("GRAND_DOCTRINE_MOBILE_WARFARE"), vec![], 500.0);
         assert_eq!(check(&held, &c, &t).unwrap_err().code, "already_adopted");
         let other = snap(Some("GRAND_DOCTRINE_MASS_ASSAULT"), vec![], 500.0);
-        assert_eq!(check(&other, &c, &t).unwrap_err().code, "grand_doctrine_set");
+        assert_eq!(
+            check(&other, &c, &t).unwrap_err().code,
+            "grand_doctrine_set"
+        );
     }
 
     #[test]
@@ -754,7 +776,9 @@ mod tests {
         let c = cat();
         let none = snap(None, vec![], 500.0);
         assert_eq!(
-            resolve(&none, &c, "mobile_infantry", None).unwrap_err().code,
+            resolve(&none, &c, "mobile_infantry", None)
+                .unwrap_err()
+                .code,
             "no_grand_doctrine"
         );
         let s = snap(
@@ -773,7 +797,9 @@ mod tests {
         let armor = resolve(&s, &c, "solo", Some("armor")).unwrap();
         assert_eq!(armor.track, Some((1, "armor".to_string())));
         assert_eq!(
-            resolve(&s, &c, "mobile_infantry", Some("armor")).unwrap_err().code,
+            resolve(&s, &c, "mobile_infantry", Some("armor"))
+                .unwrap_err()
+                .code,
             "track_unknown"
         );
     }
@@ -782,20 +808,43 @@ mod tests {
     fn subdoctrine_slot_rules() {
         let c = cat();
         let g = "GRAND_DOCTRINE_MOBILE_WARFARE";
-        let occupied = snap(Some(g), vec![track(Some("SUBDOCTRINE_GARRISON")), track(None)], 500.0);
+        let occupied = snap(
+            Some(g),
+            vec![track(Some("SUBDOCTRINE_GARRISON")), track(None)],
+            500.0,
+        );
         let t = resolve(&occupied, &c, "mobile_infantry", None).unwrap();
         assert_eq!(check(&occupied, &c, &t).unwrap_err().code, "track_occupied");
-        let same = snap(Some(g), vec![track(Some("SUBDOCTRINE_MOBILE_INFANTRY")), track(None)], 500.0);
+        let same = snap(
+            Some(g),
+            vec![track(Some("SUBDOCTRINE_MOBILE_INFANTRY")), track(None)],
+            500.0,
+        );
         assert_eq!(check(&same, &c, &t).unwrap_err().code, "already_adopted");
         // xor with a doctrine chosen on another track
-        let xor = snap(Some(g), vec![track(None), track(Some("SUBDOCTRINE_GARRISON"))], 500.0);
+        let xor = snap(
+            Some(g),
+            vec![track(None), track(Some("SUBDOCTRINE_GARRISON"))],
+            500.0,
+        );
         assert_eq!(check(&xor, &c, &t).unwrap_err().code, "excluded_by_chosen");
         // a non-shareable subdoctrine already on the other track
-        let taken = snap(Some(g), vec![track(None), track(Some("SUBDOCTRINE_SOLO"))], 500.0);
+        let taken = snap(
+            Some(g),
+            vec![track(None), track(Some("SUBDOCTRINE_SOLO"))],
+            500.0,
+        );
         let solo = resolve(&taken, &c, "solo", Some("infantry")).unwrap();
-        assert_eq!(check(&taken, &c, &solo).unwrap_err().code, "subdoctrine_taken");
+        assert_eq!(
+            check(&taken, &c, &solo).unwrap_err().code,
+            "subdoctrine_taken"
+        );
         // a shareable one may repeat
-        let shared_taken = snap(Some(g), vec![track(None), track(Some("SUBDOCTRINE_SHARED"))], 500.0);
+        let shared_taken = snap(
+            Some(g),
+            vec![track(None), track(Some("SUBDOCTRINE_SHARED"))],
+            500.0,
+        );
         let shared = resolve(&shared_taken, &c, "shared", Some("infantry")).unwrap();
         assert!(check(&shared_taken, &c, &shared).is_ok());
     }
@@ -806,21 +855,60 @@ mod tests {
         let g = "GRAND_DOCTRINE_MOBILE_WARFARE";
         let before = snap(Some(g), vec![track(None), track(None)], 500.0);
         let t = resolve(&before, &c, "mobile_infantry", None).unwrap();
-        assert_eq!(settle_slot(&t.name_key, slot_now(&before, &t).as_ref().map(|o| o.as_deref())), Verdict::Unchanged);
-        let after = snap(Some(g), vec![track(Some("SUBDOCTRINE_MOBILE_INFANTRY")), track(None)], 400.0);
-        assert_eq!(settle_slot(&t.name_key, slot_now(&after, &t).as_ref().map(|o| o.as_deref())), Verdict::Reached);
-        let wrong = snap(Some(g), vec![track(Some("SUBDOCTRINE_GARRISON")), track(None)], 400.0);
-        assert_eq!(settle_slot(&t.name_key, slot_now(&wrong, &t).as_ref().map(|o| o.as_deref())), Verdict::Diverged);
+        assert_eq!(
+            settle_slot(
+                &t.name_key,
+                slot_now(&before, &t).as_ref().map(|o| o.as_deref())
+            ),
+            Verdict::Unchanged
+        );
+        let after = snap(
+            Some(g),
+            vec![track(Some("SUBDOCTRINE_MOBILE_INFANTRY")), track(None)],
+            400.0,
+        );
+        assert_eq!(
+            settle_slot(
+                &t.name_key,
+                slot_now(&after, &t).as_ref().map(|o| o.as_deref())
+            ),
+            Verdict::Reached
+        );
+        let wrong = snap(
+            Some(g),
+            vec![track(Some("SUBDOCTRINE_GARRISON")), track(None)],
+            400.0,
+        );
+        assert_eq!(
+            settle_slot(
+                &t.name_key,
+                slot_now(&wrong, &t).as_ref().map(|o| o.as_deref())
+            ),
+            Verdict::Diverged
+        );
         // experience drifting or another track filling never matters
-        let drift = snap(Some(g), vec![track(None), track(Some("SUBDOCTRINE_SOLO"))], 1.0);
-        assert_eq!(settle_slot(&t.name_key, slot_now(&drift, &t).as_ref().map(|o| o.as_deref())), Verdict::Unchanged);
+        let drift = snap(
+            Some(g),
+            vec![track(None), track(Some("SUBDOCTRINE_SOLO"))],
+            1.0,
+        );
+        assert_eq!(
+            settle_slot(
+                &t.name_key,
+                slot_now(&drift, &t).as_ref().map(|o| o.as_deref())
+            ),
+            Verdict::Unchanged
+        );
         assert_eq!(settle_slot("X", None), Verdict::Unknown);
     }
 
     #[test]
     fn tool_descriptor_is_validated_and_requires_a_lease() {
         let t = tool();
-        assert!(t["description"].as_str().unwrap().starts_with("Adopt a grand doctrine"));
+        assert!(t["description"]
+            .as_str()
+            .unwrap()
+            .starts_with("Adopt a grand doctrine"));
         let required = t["inputSchema"]["required"].as_array().unwrap();
         assert!(required.iter().any(|v| v == "lease_token"));
     }

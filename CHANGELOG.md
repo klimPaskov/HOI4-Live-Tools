@@ -1,6 +1,27 @@
 # Changelog
 
-## Unreleased Windows runtime
+## 1.2.0 - 2026-11-02
+
+HOI4 1.19.4.1. The Windows runtime gets the 1.19.4.1 fixes below. The native runtime ships for the
+first time as experimental downloadable builds:
+
+- `hoi4-live-native` for macOS (Apple silicon, ad-hoc signed with the debugger entitlement): the
+  full management toolset on HOI4 1.19.4.1 macOS (Mach-O UUID DFA875A5), about 120 tools.
+- `hoi4-live-native` for Linux x86_64: the narrower Linux toolset (telemetry, focus, research,
+  production and construction). It accepts only HOI4 1.19.3 (GNU build ID a4971c9e...); 1.19.4.1
+  Linux builds are refused until their offsets are mapped and verified.
+
+Steam rules for every launcher (Python `hoi4_launch` and the native Linux launcher):
+
+- The game is never started while a Steam client, `steamwebhelper` or `steamcmd` runs
+  (`steam_running`). Under WSL the Windows host is checked too through `tasklist.exe`
+  (`steam_check_unavailable` when interop is off; `HOI4_LIVE_WINDOWS_STEAM_CHECK=skip` only when the
+  harness checks the Windows host itself).
+- No Steam variable (`SteamAppId`, `SteamGameId`, `STEAM_COMPAT_*` ...) or Steam overlay preload
+  reaches the game. The native Linux launcher also gives the game an empty private `HOME` inside the
+  run directory.
+
+### Windows runtime
 
 - Live session on HOI4 1.19.4.1 (2 November 2026, Windows 11, `-debug`, 1920x1080
   borderless, three launches). Launch to the main menu took 81 to 139 s. A new 1936 game, the
@@ -33,7 +54,7 @@
     `launcher-v2.sqlite` and `dlc_signature` from the real one are copied in, and
     Career Profile is unavailable.
 
-## Unreleased native preview
+### Native runtime (macOS and Linux)
 
 - Add a dormant read-only Linux animation probe for the retained own Research
   root, with original ownership, membership, witnesses and expiry guards.
@@ -1117,7 +1138,6 @@
 - Simplify README and preserve the existing Windows reference in a separate doc.
   Strategic commands, governor and Windows/macOS native adapters remain unfinished.
 
-The Python release version and downstream release pins remain unchanged.
 
 ## 1.1.0 - 2026-10-11
 

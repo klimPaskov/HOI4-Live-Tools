@@ -199,8 +199,12 @@ pub(super) fn designer_button(r: &Reader<'_>, image: u64) -> Result<Rect> {
     let window = r.u64(view(r, image)? + MACOS.template_window)?;
     let root = gui_tree::container(r, r.u64(window + 0xd20)?, image)?
         .ok_or_else(|| Error::new("invalid_gui", "Template window root unavailable"))?;
-    let button = gui_tree::child(r, image, root, "open_designer_button")?
-        .ok_or_else(|| Error::new("gui_target_unavailable", "Division Designer button not found"))?;
+    let button = gui_tree::child(r, image, root, "open_designer_button")?.ok_or_else(|| {
+        Error::new(
+            "gui_target_unavailable",
+            "Division Designer button not found",
+        )
+    })?;
     gui_tree::rect(r, image, button, GAME)
 }
 /// Open the Recruit & Deploy panel (U) if it is closed.
@@ -240,8 +244,17 @@ fn conveyors(r: &Reader<'_>, image: u64) -> Result<Vec<(u64, String, i32, i32)>>
     let mut out = Vec::new();
     for line in pointers(r, status + u.conveyors, 1024)? {
         let template = r.u64(line + u.conveyor_template)?;
-        let name = if template != 0 { r.string_bounded(template + u.template_name, 128)? } else { String::new() };
-        out.push((line, name, r.i32(line + CONVEYOR_AMOUNT)?, r.i32(line + CONVEYOR_LINES)?));
+        let name = if template != 0 {
+            r.string_bounded(template + u.template_name, 128)?
+        } else {
+            String::new()
+        };
+        out.push((
+            line,
+            name,
+            r.i32(line + CONVEYOR_AMOUNT)?,
+            r.i32(line + CONVEYOR_LINES)?,
+        ));
     }
     Ok(out)
 }
@@ -254,12 +267,14 @@ fn conveyor_button(r: &Reader<'_>, image: u64, index: usize, name: &str) -> Resu
         .ok_or_else(|| Error::new("gui_target_unavailable", "Deployment list not found"))?;
     let mut k = 0;
     for item in pointers(r, grid + u.grid_items, 1024)? {
-        let kind = crate::research_ui::primary_type_encoding(r, image, r.u64(item)?).unwrap_or_default();
+        let kind =
+            crate::research_ui::primary_type_encoding(r, image, r.u64(item)?).unwrap_or_default();
         if kind != "31CMilitaryDeploymentConveyorView" {
             continue;
         }
         if k == index {
-            let Some(frame) = gui_tree::container(r, r.u64(item + u.item_container)?, image)? else {
+            let Some(frame) = gui_tree::container(r, r.u64(item + u.item_container)?, image)?
+            else {
                 return Ok(None);
             };
             return Ok(match gui_tree::child(r, image, frame, name)? {
@@ -280,16 +295,30 @@ fn click_conveyor(process: &dyn Process, keys: &MacKeys, index: usize, name: &st
             Some(r) => {
                 let far = (r.y - 700).abs() > 1500;
                 let step = if far { 720 } else { 240 };
-                keys.scroll(GAME, (180.0, 700.0), if r.y < LIST.0 { step } else { -step })?
+                keys.scroll(
+                    GAME,
+                    (180.0, 700.0),
+                    if r.y < LIST.0 { step } else { -step },
+                )?
             }
-            None => return Err(Error::new("gui_target_unavailable", format!("Training queue {name} button not found"))),
+            None => {
+                return Err(Error::new(
+                    "gui_target_unavailable",
+                    format!("Training queue {name} button not found"),
+                ))
+            }
         }
         std::thread::sleep(std::time::Duration::from_millis(150));
     }
     let rect = settled(process, "queue button", |r, i| {
         conveyor_button(r, i, index, name)?
             .filter(|r| r.y >= LIST.0 && r.y + r.h.min(40) <= LIST.1)
-            .ok_or_else(|| Error::new("gui_target_unavailable", "Training queue button not in view"))
+            .ok_or_else(|| {
+                Error::new(
+                    "gui_target_unavailable",
+                    "Training queue button not in view",
+                )
+            })
     })?;
     clear_notices(process, keys)?;
     let (mut x, y) = rect.center();
@@ -318,7 +347,9 @@ pub(super) fn train(process: &dyn Process, keys: &MacKeys, name: &str, count: us
     let (x, y) = rect.center();
     keys.click(GAME, x, y)?;
     wait(process, "training queue added", |r, i| {
-        Ok(conveyors(r, i)?.iter().any(|c| !before.contains(&c.0) && c.1 == name))
+        Ok(conveyors(r, i)?
+            .iter()
+            .any(|c| !before.contains(&c.0) && c.1 == name))
     })?;
     let find_new = |r: &Reader<'_>, i: u64| -> Result<(usize, u64, i32, i32)> {
         conveyors(r, i)?
@@ -331,13 +362,22 @@ pub(super) fn train(process: &dyn Process, keys: &MacKeys, name: &str, count: us
     let (index, line, amount, _) = read(process, find_new)?;
     if amount == 0 {
         click_conveyor(process, keys, index, "increase_amount")?;
-        wait(process, "series amount one", |r, i| Ok(r.i32(line + CONVEYOR_AMOUNT)? == 1 && find_new(r, i)?.0 == index))
-            .map_err(|_| Error::new("input_readback_failed", "The new training queue's amount stayed infinite; set it with its + button"))?;
+        wait(process, "series amount one", |r, i| {
+            Ok(r.i32(line + CONVEYOR_AMOUNT)? == 1 && find_new(r, i)?.0 == index)
+        })
+        .map_err(|_| {
+            Error::new(
+                "input_readback_failed",
+                "The new training queue's amount stayed infinite; set it with its + button",
+            )
+        })?;
     }
     for done in 1..count {
         let (index, _, _, _) = read(process, find_new)?;
         click_conveyor(process, keys, index, "add_button")?;
-        wait(process, "training line added", |r, i| Ok(find_new(r, i)?.3 as usize > done))?;
+        wait(process, "training line added", |r, i| {
+            Ok(find_new(r, i)?.3 as usize > done)
+        })?;
     }
     Ok(())
 }

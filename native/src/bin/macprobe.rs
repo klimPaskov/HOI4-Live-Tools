@@ -12,12 +12,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let mut it = spec.split(':');
             let a = u64::from_str_radix(it.next().unwrap_or("0").trim_start_matches("0x"), 16)?;
             let n: usize = it.next().unwrap_or("64").parse()?;
-            let addr = if a < 0x1_0000_0000 { process.image_base() + a } else { a };
+            let addr = if a < 0x1_0000_0000 {
+                process.image_base() + a
+            } else {
+                a
+            };
             match process.read(addr, n) {
                 Ok(b) => {
                     for (i, c) in b.chunks(8).enumerate() {
-                        let v = u64::from_le_bytes({ let mut x = [0u8; 8]; x[..c.len()].copy_from_slice(c); x });
-                        let rva = if v > process.image_base() && v < process.image_base() + 0x1_0000_0000 { format!(" rva {:#x}", v - process.image_base()) } else { String::new() };
+                        let v = u64::from_le_bytes({
+                            let mut x = [0u8; 8];
+                            x[..c.len()].copy_from_slice(c);
+                            x
+                        });
+                        let rva = if v > process.image_base()
+                            && v < process.image_base() + 0x1_0000_0000
+                        {
+                            format!(" rva {:#x}", v - process.image_base())
+                        } else {
+                            String::new()
+                        };
                         println!("{:#06x}: {:#018x}{}", i * 8, v, rva);
                     }
                 }

@@ -163,7 +163,10 @@ pub(super) fn air_base_positions(dir: &Path) -> Result<std::sync::Arc<HashMap<i3
     let text = std::fs::read_to_string(dir.join("map/buildings.txt"))
         .map_err(|_| Error::new("map_data_unavailable", "Building positions unreadable"))?;
     let parsed = std::sync::Arc::new(parse_air_bases(&text));
-    cache.lock().unwrap().insert(dir.to_path_buf(), parsed.clone());
+    cache
+        .lock()
+        .unwrap()
+        .insert(dir.to_path_buf(), parsed.clone());
     Ok(parsed)
 }
 
@@ -260,8 +263,12 @@ pub(super) fn direction_to(dir: &Path, state: i32, provinces: &[i32]) -> Result<
 }
 
 /// Coastal land provinces (map/definition.csv: id;r;g;b;land;true;terrain;continent).
-pub(super) fn coastal_provinces(dir: &Path) -> Result<std::sync::Arc<std::collections::HashSet<i32>>> {
-    static CACHE: OnceLock<Mutex<HashMap<PathBuf, std::sync::Arc<std::collections::HashSet<i32>>>>> = OnceLock::new();
+pub(super) fn coastal_provinces(
+    dir: &Path,
+) -> Result<std::sync::Arc<std::collections::HashSet<i32>>> {
+    static CACHE: OnceLock<
+        Mutex<HashMap<PathBuf, std::sync::Arc<std::collections::HashSet<i32>>>>,
+    > = OnceLock::new();
     let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
     if let Some(found) = cache.lock().unwrap().get(dir) {
         return Ok(found.clone());

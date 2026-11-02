@@ -54,7 +54,10 @@ fn live_designer() {
         out.push(format!("save {:?}", designer::save_button(r, i)));
         out.push(format!("close {:?}", designer::close_button(r, i)));
         for p in 0..3 {
-            out.push(format!("priority {p} {:?}", designer::priority_button(r, i, p)));
+            out.push(format!(
+                "priority {p} {:?}",
+                designer::priority_button(r, i, p)
+            ));
         }
         out.push(format!("selection {:?}", designer::selection(r, i)));
         out.push(format!("layouts {:?}", units::template_layouts(r, i)?));
@@ -97,7 +100,9 @@ fn live_cancel_last_conveyor() {
         let mut found = None;
         for i in 0..count as u64 {
             let item = r.u64(data + i * 8)?;
-            if r.object_type(item, "CMilitaryDeploymentConveyorView").is_err() {
+            if r.object_type(item, "CMilitaryDeploymentConveyorView")
+                .is_err()
+            {
                 continue;
             }
             let frame = gui_tree::container(r, r.u64(item + 0x10)?, image)?.unwrap();

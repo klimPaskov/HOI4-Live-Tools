@@ -326,7 +326,11 @@ pub(super) fn add(
     clear_notices(process, keys)?;
     ensure_open(process, keys)?;
     let naval = is_naval_key(key);
-    let categories: &[&str] = if naval { &NAVAL_CATEGORIES } else { &CATEGORIES };
+    let categories: &[&str] = if naval {
+        &NAVAL_CATEGORIES
+    } else {
+        &CATEGORIES
+    };
     let before: Vec<u64> = lines(process)?.iter().map(|l| l.handle).collect();
     let mut chosen = None;
     let mut seen: Vec<String> = Vec::new();
@@ -368,11 +372,15 @@ pub(super) fn add(
                 std::thread::sleep(std::time::Duration::from_millis(250));
             }
             match target {
-                Some(_) => settled(process, "equipment row", |r, i| naval_row(r, i, key, design))?,
+                Some(_) => settled(process, "equipment row", |r, i| {
+                    naval_row(r, i, key, design)
+                })?,
                 None => None,
             }
         } else {
-            settled(process, "equipment row", |r, i| selection_row(r, i, key, design))?
+            settled(process, "equipment row", |r, i| {
+                selection_row(r, i, key, design)
+            })?
         };
         if let Some(rect) = found {
             chosen = Some(rect);
@@ -460,7 +468,13 @@ pub(super) fn set(
     if factories == 0 {
         // Zero factories removes the line with its close_production_line button
         // (countryproductionlineview.gui); verified when the line handle is gone.
-        reveal_named(process, keys, line.handle, "close_production_line", i32::MAX)?;
+        reveal_named(
+            process,
+            keys,
+            line.handle,
+            "close_production_line",
+            i32::MAX,
+        )?;
         let rect = settled(process, "remove button", |r, i| {
             button(r, i, line.handle, "close_production_line")?
                 .ok_or_else(|| Error::new("gui_target_unavailable", "Remove button not found"))
@@ -472,7 +486,9 @@ pub(super) fn set(
             keys.press(Key::Return)?;
         }
         return wait(process, "line removed", |r, base| {
-            Ok(!production_lines::own_lines(r, base)?.iter().any(|l| l.handle == line.handle))
+            Ok(!production_lines::own_lines(r, base)?
+                .iter()
+                .any(|l| l.handle == line.handle))
         });
     }
     adjust(process, keys, line.handle, factories)

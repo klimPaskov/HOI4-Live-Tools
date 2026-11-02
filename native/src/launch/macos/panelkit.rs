@@ -296,9 +296,8 @@ pub(super) fn need(
     wanted: &str,
     depth: u32,
 ) -> Result<u64> {
-    find(r, image, object, wanted, depth)?.ok_or_else(|| {
-        Error::new("gui_target_unavailable", format!("{wanted} not found"))
-    })
+    find(r, image, object, wanted, depth)?
+        .ok_or_else(|| Error::new("gui_target_unavailable", format!("{wanted} not found")))
 }
 /// Container object of a named child window.
 pub(super) fn need_window(
@@ -469,7 +468,8 @@ pub(super) mod fixture {
         pub(crate) fn container(&mut self, name: &str, visible: bool) -> u64 {
             let object = self.alloc(0x1000);
             self.mem.q(object, IMAGE + CONTAINER_VT);
-            self.mem.patch(object + 0x95, &[if visible { 8 } else { 0 }]);
+            self.mem
+                .patch(object + 0x95, &[if visible { 8 } else { 0 }]);
             self.named(object + 0x30, name);
             object
         }
@@ -565,12 +565,25 @@ mod tests {
         let close = find(&r, IMAGE, root, "close_button", 3).unwrap().unwrap();
         assert_eq!(
             rect(&r, IMAGE, close).unwrap(),
-            Rect { x: 100, y: 200, w: 50, h: 20 }
+            Rect {
+                x: 100,
+                y: 200,
+                w: 50,
+                h: 20
+            }
         );
-        assert_eq!(rect_of(&r, IMAGE, root, "close_button", 1).unwrap().center(), (125.0, 210.0));
+        assert_eq!(
+            rect_of(&r, IMAGE, root, "close_button", 1)
+                .unwrap()
+                .center(),
+            (125.0, 210.0)
+        );
         assert!(find(&r, IMAGE, root, "missing", 3).unwrap().is_none());
         let inner = need_window(&r, IMAGE, root, "inner", 2).unwrap();
-        assert_eq!(text(&r, IMAGE, inner, "label", 1).unwrap().as_deref(), Some("Hello"));
+        assert_eq!(
+            text(&r, IMAGE, inner, "label", 1).unwrap().as_deref(),
+            Some("Hello")
+        );
         // depth 0 does not descend into inner windows
         assert!(find(&r, IMAGE, root, "label", 0).unwrap().is_none());
         let grid = need(&r, IMAGE, inner, "g", 1).unwrap();
@@ -578,12 +591,21 @@ mod tests {
         assert_eq!(items.len(), 2);
         let names: Vec<String> = items
             .iter()
-            .map(|i| text(&r, IMAGE, i.frame, "doctrine_name", 1).unwrap().unwrap())
+            .map(|i| {
+                text(&r, IMAGE, i.frame, "doctrine_name", 1)
+                    .unwrap()
+                    .unwrap()
+            })
             .collect();
         assert_eq!(names, ["Mobile Warfare", "Mass Assault"]);
         assert_eq!(
             rect_of(&r, IMAGE, items[1].frame, "select_button", 1).unwrap(),
-            Rect { x: 10, y: 20, w: 30, h: 40 }
+            Rect {
+                x: 10,
+                y: 20,
+                w: 30,
+                h: 40
+            }
         );
     }
 
@@ -610,14 +632,23 @@ mod tests {
         assert!(is_open(&r, IMAGE, &DOCTRINE_VIEW).unwrap());
         assert_eq!(locate(&r, IMAGE, &AGENCY_VIEW).unwrap(), None);
         assert!(!is_open(&r, IMAGE, &AGENCY_VIEW).unwrap());
-        assert_eq!(root_name(&r, root), Some("country_doctrine_view".to_string()));
+        assert_eq!(
+            root_name(&r, root),
+            Some("country_doctrine_view".to_string())
+        );
         assert_eq!(open_root(&r, IMAGE, &DOCTRINE_VIEW).unwrap(), root);
-        assert_eq!(open_root(&r, IMAGE, &AGENCY_VIEW).unwrap_err().code, "window_not_found");
+        assert_eq!(
+            open_root(&r, IMAGE, &AGENCY_VIEW).unwrap_err().code,
+            "window_not_found"
+        );
         // hidden windows are found but not open
         t.mem.patch(root + 0x95, &[0]);
         let r = Reader::new(&t.mem);
         assert!(!is_open(&r, IMAGE, &DOCTRINE_VIEW).unwrap());
-        assert_eq!(open_root(&r, IMAGE, &DOCTRINE_VIEW).unwrap_err().code, "window_not_open");
+        assert_eq!(
+            open_root(&r, IMAGE, &DOCTRINE_VIEW).unwrap_err().code,
+            "window_not_open"
+        );
     }
 
     #[test]
@@ -666,6 +697,8 @@ mod tests {
         vt.dedup();
         assert_eq!(vt.len(), all.len());
         // __DATA,__const vtables of the 1.19.4.1 (f584) Mach-O lie in this window.
-        assert!(all.iter().all(|c| (0x3480000..0x3800000).contains(&c.vtable)));
+        assert!(all
+            .iter()
+            .all(|c| (0x3480000..0x3800000).contains(&c.vtable)));
     }
 }

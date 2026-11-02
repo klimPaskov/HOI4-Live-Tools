@@ -14,8 +14,8 @@
 //!   List, Bock, Manstein and Heinrici (all five stats equal). They are the
 //!   character's base values; levels gained in the campaign are not read.
 use super::armies;
-use super::units;
 use super::ui::read;
+use super::units;
 use crate::{
     error::{Error, Result},
     platform::Process,

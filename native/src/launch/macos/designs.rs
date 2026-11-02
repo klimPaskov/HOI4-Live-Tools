@@ -38,9 +38,11 @@ pub(super) fn kind_of(key: &str) -> &'static str {
     let k = key.to_lowercase();
     if k.starts_with("ship_hull") || k.starts_with("convoy") || k.contains("submarine") {
         "ship"
-    } else if ["fighter", "bomber", "cas_", "plane", "airframe", "heli", "missile"]
-        .iter()
-        .any(|p| k.contains(p))
+    } else if [
+        "fighter", "bomber", "cas_", "plane", "airframe", "heli", "missile",
+    ]
+    .iter()
+    .any(|p| k.contains(p))
     {
         "plane"
     } else if k.contains("tank") || k.contains("armor") || k.contains("chassis") {
@@ -55,7 +57,11 @@ pub(super) fn designs(r: &Reader<'_>, image: u64, production: u64) -> Result<Vec
     for line in pointers(r, production + PRODUCTION_LINES, 2048)? {
         let variant = r.u64(line + LINE_VARIANT)?;
         if variant != 0 {
-            lines.push((variant, r.u64(line + LINE_HANDLE)?, r.i32(line + LINE_REQUESTED)?));
+            lines.push((
+                variant,
+                r.u64(line + LINE_HANDLE)?,
+                r.i32(line + LINE_REQUESTED)?,
+            ));
         }
     }
     let mut out = Vec::new();
@@ -89,9 +95,9 @@ fn expect_unique_ids(designs: &[Design]) -> Result<()> {
 
 pub(super) fn design_json(d: &Design, detail: bool, names: &[(i32, String)]) -> Value {
     let v = &d.variant;
-    let parent = v.parent_id.map(|p| {
-        json!({"id":p,"name":names.iter().find(|(i, _)| *i == p).map(|(_, n)| n)})
-    });
+    let parent = v
+        .parent_id
+        .map(|p| json!({"id":p,"name":names.iter().find(|(i, _)| *i == p).map(|(_, n)| n)}));
     let mut row = json!({"design_id":v.id,"name":(!v.name.is_empty()).then_some(&v.name),
         "class_suffix":(!v.class_suffix.is_empty()).then_some(&v.class_suffix),
         "hull_or_chassis":v.type_key,"kind":kind_of(&v.type_key),
@@ -117,7 +123,13 @@ pub(super) fn design_json(d: &Design, detail: bool, names: &[(i32, String)]) -> 
     }
     row
 }
-pub(super) fn view(all: &[Design], kind: Option<&str>, custom_only: bool, detail: bool, name: Option<&str>) -> Value {
+pub(super) fn view(
+    all: &[Design],
+    kind: Option<&str>,
+    custom_only: bool,
+    detail: bool,
+    name: Option<&str>,
+) -> Value {
     let names: Vec<(i32, String)> = all
         .iter()
         .map(|d| (d.variant.id, display(&d.variant)))
@@ -220,7 +232,13 @@ mod tests {
         let mem = Mem::new();
         let production = mem.alloc(0x200);
         let base = variant(&mem, 1343, "", "ship_hull_cruiser_panzerschiff", 0);
-        let custom = variant(&mem, 1347, "Deutschland", "ship_hull_cruiser_panzerschiff", base);
+        let custom = variant(
+            &mem,
+            1347,
+            "Deutschland",
+            "ship_hull_cruiser_panzerschiff",
+            base,
+        );
         let plane = variant(&mem, 1360, "Ju 86", "tac_bomber_equipment_0", 0);
         // A BBA plane keeps another flag in the byte after the decommission flag (live: 0x01000000).
         mem.i32(plane + fleetmem::VARIANT_OBSOLETE, 0x0100_0000);
@@ -250,7 +268,13 @@ mod tests {
         let r = Reader::new(&mem);
         let all = designs(&r, IMAGE, production).unwrap();
         assert_eq!(all.len(), 3);
-        assert_eq!(all[1].modules, vec![("fixed_ship_battery_slot".to_string(), "ship_heavy_battery_2".to_string())]);
+        assert_eq!(
+            all[1].modules,
+            vec![(
+                "fixed_ship_battery_slot".to_string(),
+                "ship_heavy_battery_2".to_string()
+            )]
+        );
         assert_eq!(all[2].lines, vec![(777, 3)]);
         assert!(all[0].variant.obsolete);
         assert!(!all[2].variant.obsolete);
@@ -259,9 +283,15 @@ mod tests {
         assert_eq!(v["designs"][0]["name"], "Deutschland");
         assert_eq!(v["designs"][0]["based_on"]["id"], 1343);
         assert_eq!(v["designs"][0]["stats"]["naval_speed"], 26.22);
-        assert_eq!(v["designs"][0]["modules"][0]["module"], "ship_heavy_battery_2");
+        assert_eq!(
+            v["designs"][0]["modules"][0]["module"],
+            "ship_heavy_battery_2"
+        );
         let planes = view(&all, Some("plane"), false, false, Some("ju"));
-        assert_eq!(planes["designs"][0]["production_lines"][0]["requested_factories"], 3);
+        assert_eq!(
+            planes["designs"][0]["production_lines"][0]["requested_factories"],
+            3
+        );
         assert!(planes["designs"][0].get("stats").is_none());
     }
     #[test]
@@ -278,6 +308,9 @@ mod tests {
         mem.pointer_array(production + PRODUCTION_LINES, &[]);
         mem.pointer_array(production + PRODUCTION_VARIANTS, &[a, b]);
         let r = Reader::new(&mem);
-        assert_eq!(designs(&r, IMAGE, production).unwrap_err().code, "invalid_object");
+        assert_eq!(
+            designs(&r, IMAGE, production).unwrap_err().code,
+            "invalid_object"
+        );
     }
 }

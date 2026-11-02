@@ -131,7 +131,14 @@ pub(super) fn run<P: Serialize + DeserializeOwned>(
         *info.borrow_mut() = dispatch(fenced, &bounded, planned)?;
         Ok(())
     };
-    let receipt = actions.execute_baselined(id, &epoch, action, baseline, &mut settle_fn, &mut dispatch_fn)?;
+    let receipt = actions.execute_baselined(
+        id,
+        &epoch,
+        action,
+        baseline,
+        &mut settle_fn,
+        &mut dispatch_fn,
+    )?;
     Ok(json!({"receipt":receipt,"result":*info.borrow(),"validated":false}))
 }
 
@@ -157,16 +164,29 @@ pub(super) fn recall<T: DeserializeOwned>(id: &str) -> Option<T> {
 }
 
 // ---- argument helpers ---------------------------------------------------------------------------
-pub(super) fn text_arg(args: &serde_json::Map<String, Value>, key: &str, max: usize) -> Result<String> {
+pub(super) fn text_arg(
+    args: &serde_json::Map<String, Value>,
+    key: &str,
+    max: usize,
+) -> Result<String> {
     let v = args
         .get(key)
         .and_then(Value::as_str)
         .map(str::trim)
         .filter(|v| !v.is_empty() && v.len() <= max && !v.chars().any(char::is_control))
-        .ok_or_else(|| Error::new("invalid_arguments", format!("{key} must be a non-empty string of at most {max} characters")))?;
+        .ok_or_else(|| {
+            Error::new(
+                "invalid_arguments",
+                format!("{key} must be a non-empty string of at most {max} characters"),
+            )
+        })?;
     Ok(v.to_string())
 }
-pub(super) fn opt_text_arg(args: &serde_json::Map<String, Value>, key: &str, max: usize) -> Result<Option<String>> {
+pub(super) fn opt_text_arg(
+    args: &serde_json::Map<String, Value>,
+    key: &str,
+    max: usize,
+) -> Result<Option<String>> {
     if args.contains_key(key) {
         text_arg(args, key, max).map(Some)
     } else {
@@ -202,7 +222,12 @@ pub(super) fn find_view(r: &Reader<'_>, image: u64, vtable: u64) -> Result<Optio
 }
 /// A container window with GUI name `wanted` held in a pointer field of `object` (a view): the
 /// field is found by scanning, so no field offset has to be known beforehand.
-pub(super) fn find_window(r: &Reader<'_>, image: u64, object: u64, wanted: &str) -> Result<Option<u64>> {
+pub(super) fn find_window(
+    r: &Reader<'_>,
+    image: u64,
+    object: u64,
+    wanted: &str,
+) -> Result<Option<u64>> {
     nui::libcxx(r)?;
     const SPAN: u64 = 0x8000;
     const CHUNK: u64 = 0x1000;
@@ -218,7 +243,8 @@ pub(super) fn find_window(r: &Reader<'_>, image: u64, object: u64, wanted: &str)
                 let Ok(Some(window)) = gui_tree::container(r, p, image) else {
                     continue;
                 };
-                if matches!(gui_tree::name(r, window + CONTAINER_BASE, image), Ok(Some(n)) if n == wanted) {
+                if matches!(gui_tree::name(r, window + CONTAINER_BASE, image), Ok(Some(n)) if n == wanted)
+                {
                     return Ok(Some(window));
                 }
             }
@@ -228,7 +254,13 @@ pub(super) fn find_window(r: &Reader<'_>, image: u64, object: u64, wanted: &str)
     Ok(None)
 }
 /// First widget (GUI-object base) named `wanted` below container object `root`, depth bounded.
-pub(super) fn find_deep(r: &Reader<'_>, image: u64, root: u64, wanted: &str, depth: u32) -> Result<Option<u64>> {
+pub(super) fn find_deep(
+    r: &Reader<'_>,
+    image: u64,
+    root: u64,
+    wanted: &str,
+    depth: u32,
+) -> Result<Option<u64>> {
     for child in gui_tree::children(r, root)? {
         if gui_tree::name(r, child, image)?.as_deref() == Some(wanted) {
             return Ok(Some(child));
@@ -244,13 +276,24 @@ pub(super) fn find_deep(r: &Reader<'_>, image: u64, root: u64, wanted: &str, dep
     Ok(None)
 }
 /// Rectangle of the named widget below `root` when it is shown and on screen.
-pub(super) fn rect_deep(r: &Reader<'_>, image: u64, root: u64, wanted: &str) -> Result<(Rect, i32)> {
+pub(super) fn rect_deep(
+    r: &Reader<'_>,
+    image: u64,
+    root: u64,
+    wanted: &str,
+) -> Result<(Rect, i32)> {
     let widget = find_deep(r, image, root, wanted, 6)?
         .ok_or_else(|| Error::new("gui_target_unavailable", format!("{wanted} not found")))?;
     if !gui_tree::shown(r, widget)? {
-        return Err(Error::new("gui_target_unavailable", format!("{wanted} is not shown")));
+        return Err(Error::new(
+            "gui_target_unavailable",
+            format!("{wanted} is not shown"),
+        ));
     }
-    Ok((gui_tree::rect(r, image, widget, GAME)?, gui_tree::button_state(r, widget).unwrap_or(0)))
+    Ok((
+        gui_tree::rect(r, image, widget, GAME)?,
+        gui_tree::button_state(r, widget).unwrap_or(0),
+    ))
 }
 /// A top bar widget by name (the top bar view is interface manager slot +0x188, root +0x68, the
 /// same route `ui.rs` uses for the player flag): rectangle when it is shown and on screen.
@@ -258,16 +301,25 @@ pub(super) fn topbar_button(r: &Reader<'_>, image: u64, name: &str) -> Result<Re
     let topbar = r.u64(manager(r, image)? + 0x188)?;
     let root = gui_tree::container(r, r.u64(topbar + 0x68)?, image)?
         .ok_or_else(|| Error::new("invalid_gui", "Top bar root unavailable"))?;
-    let widget = find_deep(r, image, root, name, 6)?
-        .ok_or_else(|| Error::new("gui_target_unavailable", format!("Top bar button {name} not found")))?;
+    let widget = find_deep(r, image, root, name, 6)?.ok_or_else(|| {
+        Error::new(
+            "gui_target_unavailable",
+            format!("Top bar button {name} not found"),
+        )
+    })?;
     if !gui_tree::shown(r, widget)? {
-        return Err(Error::new("gui_target_unavailable", format!("Top bar button {name} is not shown")));
+        return Err(Error::new(
+            "gui_target_unavailable",
+            format!("Top bar button {name} is not shown"),
+        ));
     }
     gui_tree::rect(r, image, widget, GAME)
 }
 /// Long text of an instant text box (descriptions exceed the 256 characters `text_at` accepts).
 pub(super) fn long_text(r: &Reader<'_>, widget: u64) -> Result<String> {
-    Ok(super::special_projects::plain(&r.string_bounded(widget + 0x100, 2000)?))
+    Ok(super::special_projects::plain(
+        &r.string_bounded(widget + 0x100, 2000)?,
+    ))
 }
 pub(super) fn click(keys: &MacKeys<'_>, rect: Rect) -> Result<()> {
     let (x, y) = rect.center();
@@ -278,9 +330,11 @@ pub(super) fn click(keys: &MacKeys<'_>, rect: Rect) -> Result<()> {
 /// Confirmation dialogs with `accept_button` and `decline_button` that a fleet or faction action may
 /// raise: `CAcceptCommandDialog`, `CConfirmCancelNavyActivityDialog`, `CDefaultConfirmationPopUpWindow`,
 /// `CGenericDefaultConfirmationPopUpWindow`, `CDismantleFactionDialog` (vtables from the RTTI map).
-pub(super) const CONFIRM_VTABLES: [u64; 5] = [0x363b690, 0x363b9d8, 0x367fd40, 0x358ff80, 0x3661350];
+pub(super) const CONFIRM_VTABLES: [u64; 5] =
+    [0x363b690, 0x363b9d8, 0x367fd40, 0x358ff80, 0x3661350];
 /// Diplomacy proposal pop-ups: base, standard, scripted, incoming lend-lease, foreign manpower.
-pub(super) const DIPLOMACY_VTABLES: [u64; 5] = [0x365b4d0, 0x365b5f8, 0x365b720, 0x365b848, 0x365b970];
+pub(super) const DIPLOMACY_VTABLES: [u64; 5] =
+    [0x365b4d0, 0x365b5f8, 0x365b720, 0x365b848, 0x365b970];
 
 #[derive(Clone, Debug, PartialEq)]
 pub(super) struct Popup {
@@ -316,8 +370,16 @@ pub(super) fn popups(r: &Reader<'_>, image: u64, kinds: &[u64]) -> Result<Vec<Po
 /// Accept (or decline) the game's confirmation of the command just given, if one appears within
 /// a short bound. Returns whether a dialog was answered. Only the classes in `CONFIRM_VTABLES`
 /// are ever answered, so a diplomacy proposal can never be accepted by accident.
-pub(super) fn answer_confirmation(process: &dyn Process, keys: &MacKeys<'_>, accept: bool) -> Result<bool> {
-    let button = if accept { "accept_button" } else { "decline_button" };
+pub(super) fn answer_confirmation(
+    process: &dyn Process,
+    keys: &MacKeys<'_>,
+    accept: bool,
+) -> Result<bool> {
+    let button = if accept {
+        "accept_button"
+    } else {
+        "decline_button"
+    };
     let find = |r: &Reader<'_>, i: u64| -> Result<Option<Rect>> {
         for p in popups(r, i, &CONFIRM_VTABLES)? {
             if let Some(w) = gui_tree::child(r, i, p.root, button)? {
@@ -332,7 +394,9 @@ pub(super) fn answer_confirmation(process: &dyn Process, keys: &MacKeys<'_>, acc
     loop {
         if let Some(rect) = read(process, find)? {
             click(keys, rect)?;
-            wait(process, "confirmation closed", |r, i| Ok(find(r, i)?.is_none()))?;
+            wait(process, "confirmation closed", |r, i| {
+                Ok(find(r, i)?.is_none())
+            })?;
             return Ok(true);
         }
         if Instant::now() >= deadline {
@@ -370,8 +434,14 @@ mod tests {
         let junk = mem.alloc(0x40);
         mem.u64(view + 0x80, junk);
         let r = Reader::new(&mem);
-        assert_eq!(find_window(&r, IMAGE, view, "faction_setup_window").unwrap(), Some(b));
-        assert_eq!(find_window(&r, IMAGE, view, "new_faction_window").unwrap(), Some(a));
+        assert_eq!(
+            find_window(&r, IMAGE, view, "faction_setup_window").unwrap(),
+            Some(b)
+        );
+        assert_eq!(
+            find_window(&r, IMAGE, view, "new_faction_window").unwrap(),
+            Some(a)
+        );
         assert_eq!(find_window(&r, IMAGE, view, "nope").unwrap(), None);
     }
     #[test]
@@ -386,10 +456,22 @@ mod tests {
         let args = json!({"a":"  Hochseeflotte ","b":"","c":"x\u{7}y"});
         let args = args.as_object().unwrap();
         assert_eq!(text_arg(args, "a", 20).unwrap(), "Hochseeflotte");
-        assert_eq!(text_arg(args, "b", 20).unwrap_err().code, "invalid_arguments");
-        assert_eq!(text_arg(args, "c", 20).unwrap_err().code, "invalid_arguments");
-        assert_eq!(text_arg(args, "a", 5).unwrap_err().code, "invalid_arguments");
-        assert_eq!(text_arg(args, "zz", 5).unwrap_err().code, "invalid_arguments");
+        assert_eq!(
+            text_arg(args, "b", 20).unwrap_err().code,
+            "invalid_arguments"
+        );
+        assert_eq!(
+            text_arg(args, "c", 20).unwrap_err().code,
+            "invalid_arguments"
+        );
+        assert_eq!(
+            text_arg(args, "a", 5).unwrap_err().code,
+            "invalid_arguments"
+        );
+        assert_eq!(
+            text_arg(args, "zz", 5).unwrap_err().code,
+            "invalid_arguments"
+        );
         assert_eq!(opt_text_arg(args, "zz", 5).unwrap(), None);
         assert!(same_name(" a ", "A"));
     }

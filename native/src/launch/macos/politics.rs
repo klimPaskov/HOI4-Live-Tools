@@ -179,7 +179,10 @@ fn slot(
         if r.u64(item)? != image + u.slot_vtable {
             return Err(Error::new(
                 "invalid_gui",
-                format!("Unknown politics slot class (vtable +{:#x})", r.u64(item)?.wrapping_sub(image)),
+                format!(
+                    "Unknown politics slot class (vtable +{:#x})",
+                    r.u64(item)?.wrapping_sub(image)
+                ),
             ));
         }
         let current = idea_key(r, r.u64(item + u.slot_idea)?)?;
@@ -216,7 +219,9 @@ fn character_window(r: &Reader<'_>, image: u64) -> Result<Option<u64>> {
         let Some(window) = gui_tree::container(r, object, image)? else {
             continue;
         };
-        if gui_tree::name(r, window + 0x30, image)?.as_deref() != Some("command_character_view_window") {
+        if gui_tree::name(r, window + 0x30, image)?.as_deref()
+            != Some("command_character_view_window")
+        {
             continue;
         }
         {

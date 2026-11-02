@@ -76,16 +76,26 @@ fn offer_root(r: &Reader<'_>, image: u64) -> Result<u64> {
     // +0xd60 (named `tradeoffer_window`). Both are checked before the root is trusted.
     let offer = r.u64(view + OFFER_WINDOW)?;
     if !(0x10000..=0x7fff_ffff_0000).contains(&offer) || offer % 8 != 0 {
-        return Err(Error::new("invalid_gui", "Trade offer window not created yet"));
+        return Err(Error::new(
+            "invalid_gui",
+            "Trade offer window not created yet",
+        ));
     }
     if r.u64(offer)? != image + OFFER_VTABLE {
-        return Err(Error::new("invalid_gui", "Trade offer window class unexpected"));
+        return Err(Error::new(
+            "invalid_gui",
+            "Trade offer window class unexpected",
+        ));
     }
     let root = r.u64(offer + OFFER_ROOT)?;
-    if root == 0 || r.u64(root)? != image + CONTAINER_VTABLE
+    if root == 0
+        || r.u64(root)? != image + CONTAINER_VTABLE
         || gui_tree::name(r, root + CONTAINER_BASE, image)?.as_deref() != Some("tradeoffer_window")
     {
-        return Err(Error::new("invalid_gui", "Trade offer window not created yet"));
+        return Err(Error::new(
+            "invalid_gui",
+            "Trade offer window not created yet",
+        ));
     }
     Ok(root)
 }
@@ -105,12 +115,24 @@ fn text_of(r: &Reader<'_>, image: u64, parent: u64, name: &str) -> Result<String
 /// Entry containers of the grid `grid` inside the window named `window`.
 fn grid_entries(r: &Reader<'_>, image: u64, window: &str, grid: &str) -> Result<Vec<u64>> {
     let root = view_root(r, image)?;
-    let holder = find(r, image, root, window, 0)?
-        .ok_or_else(|| Error::new("gui_target_unavailable", format!("Trade view part {window} not found")))?;
-    let holder = gui_tree::container(r, holder, image)?
-        .ok_or_else(|| Error::new("invalid_gui", format!("Trade view part {window} is not a window")))?;
-    let grid = find(r, image, holder, grid, 0)?
-        .ok_or_else(|| Error::new("gui_target_unavailable", format!("Trade list {grid} not found")))?;
+    let holder = find(r, image, root, window, 0)?.ok_or_else(|| {
+        Error::new(
+            "gui_target_unavailable",
+            format!("Trade view part {window} not found"),
+        )
+    })?;
+    let holder = gui_tree::container(r, holder, image)?.ok_or_else(|| {
+        Error::new(
+            "invalid_gui",
+            format!("Trade view part {window} is not a window"),
+        )
+    })?;
+    let grid = find(r, image, holder, grid, 0)?.ok_or_else(|| {
+        Error::new(
+            "gui_target_unavailable",
+            format!("Trade list {grid} not found"),
+        )
+    })?;
     let (_, data, count) = r.array_header(grid + GRID_ITEMS)?;
     let mut out = Vec::new();
     for index in 0..count.min(128) as u64 {
@@ -142,7 +164,13 @@ fn partners(r: &Reader<'_>, image: u64) -> Result<Vec<Partner>> {
     let mut out = Vec::new();
     for frame in grid_entries(r, image, "trade", "trade_grid")? {
         let mut flag = None;
-        for part in ["country_flag_frame", "country_flag", "available_export_background", "exported_background", "convoys_background"] {
+        for part in [
+            "country_flag_frame",
+            "country_flag",
+            "available_export_background",
+            "exported_background",
+            "convoys_background",
+        ] {
             if let Some(w) = gui_tree::child(r, image, frame, part)? {
                 if let Ok(rect) = gui_tree::rect_unclipped(r, image, w, GAME) {
                     flag = Some(rect);
@@ -176,7 +204,10 @@ fn resource_rows(r: &Reader<'_>, image: u64) -> Result<Vec<Value>> {
     {
         let number = |name: &str| -> Result<Value> {
             let t = text_of(r, image, frame, name)?;
-            Ok(t.trim().parse::<i64>().map(|v| json!(v)).unwrap_or(json!(t)))
+            Ok(t.trim()
+                .parse::<i64>()
+                .map(|v| json!(v))
+                .unwrap_or(json!(t)))
         };
         out.push(json!({
             "resource":RESOURCES.get(index).copied().unwrap_or("unknown"),
@@ -193,11 +224,16 @@ fn civilian_factories(r: &Reader<'_>, image: u64) -> Result<Value> {
     let root = view_root(r, image)?;
     let n = |name: &str| -> Result<Value> {
         let t = text_of(r, image, root, name)?;
-        Ok(t.trim().parse::<i64>().map(|v| json!(v)).unwrap_or(json!(t)))
+        Ok(t.trim()
+            .parse::<i64>()
+            .map(|v| json!(v))
+            .unwrap_or(json!(t)))
     };
     // 1.19.4 renamed `factories_used` to `factories_trade` and added `factories_consumer`.
-    Ok(json!({"total":n("civ_factories")?,"used_for_trade":n("factories_trade")?,
-        "consumer_goods":n("factories_consumer")?,"available":n("factories_available")?}))
+    Ok(
+        json!({"total":n("civ_factories")?,"used_for_trade":n("factories_trade")?,
+        "consumer_goods":n("factories_consumer")?,"available":n("factories_available")?}),
+    )
 }
 
 fn ensure_open(process: &dyn Process, keys: &MacKeys) -> Result<()> {
@@ -265,7 +301,10 @@ pub(super) fn view(
     };
     let (table, factories, list) = settled(process, "trade view", |r, i| {
         Ok((
-            resource_rows(r, i)?.iter().map(Value::to_string).collect::<Vec<_>>(),
+            resource_rows(r, i)?
+                .iter()
+                .map(Value::to_string)
+                .collect::<Vec<_>>(),
             civilian_factories(r, i)?.to_string(),
             partners(r, i)?,
         ))
@@ -296,7 +335,10 @@ fn offer_texts(r: &Reader<'_>, image: u64) -> Result<(String, String, i64, i64)>
     let root = offer_root(r, image)?;
     let country = text_of(r, image, root, "country")?;
     let factories = text_of(r, image, root, "factories_description")?;
-    let min = text_of(r, image, root, "min_amount")?.trim().parse().unwrap_or(0);
+    let min = text_of(r, image, root, "min_amount")?
+        .trim()
+        .parse()
+        .unwrap_or(0);
     let max = text_of(r, image, root, "max_amount")?
         .trim()
         .parse()
@@ -310,8 +352,12 @@ fn buy_amount(text: &str) -> Option<i64> {
 }
 fn offer_button(r: &Reader<'_>, image: u64, name: &str) -> Result<Rect> {
     let root = offer_root(r, image)?;
-    let button = gui_tree::child(r, image, root, name)?
-        .ok_or_else(|| Error::new("gui_target_unavailable", format!("Offer button {name} not found")))?;
+    let button = gui_tree::child(r, image, root, name)?.ok_or_else(|| {
+        Error::new(
+            "gui_target_unavailable",
+            format!("Offer button {name} not found"),
+        )
+    })?;
     gui_tree::rect(r, image, button, GAME)
 }
 fn current_amount(process: &dyn Process) -> Result<Option<i64>> {
@@ -400,7 +446,10 @@ pub(super) fn execute(
     .map_err(|e| {
         Error::new(
             e.code,
-            format!("{} (scroll the partner list so that {} is visible, or sort it)", e.message, plan.country),
+            format!(
+                "{} (scroll the partner list so that {} is visible, or sort it)",
+                e.message, plan.country
+            ),
         )
     })?;
     let (x, y) = rect.center();
@@ -430,14 +479,22 @@ pub(super) fn execute(
                 format!("The window's maximum is {max} units"),
             ));
         }
-        let send = settled(process, "send button", |r, i| offer_button(r, i, "send_button"))?;
+        let send = settled(process, "send button", |r, i| {
+            offer_button(r, i, "send_button")
+        })?;
         let left = f64::from(send.x) - SLIDER_LEFT_OF_SEND;
         let mid = f64::from(send.y) - SLIDER_ABOVE_SEND;
         if max <= min {
-            return Err(Error::new("trade_unavailable", "The game offers no amount to set"));
+            return Err(Error::new(
+                "trade_unavailable",
+                "The game offers no amount to set",
+            ));
         }
         if matches!(amount, Amount::Needed) {
-            let (bx, by) = read(process, |r, i| offer_button(r, i, "buy_needed_amount_button"))?.center();
+            let (bx, by) = read(process, |r, i| {
+                offer_button(r, i, "buy_needed_amount_button")
+            })?
+            .center();
             keys.click(GAME, bx, by)?;
             std::thread::sleep(std::time::Duration::from_millis(300));
         } else {
@@ -453,7 +510,10 @@ pub(super) fn execute(
             let mut last = None;
             for _ in 0..80 {
                 let now = current_amount(process)?.ok_or_else(|| {
-                    Error::new("input_readback_failed", "The offer window shows no 'Buy amount'")
+                    Error::new(
+                        "input_readback_failed",
+                        "The offer window shows no 'Buy amount'",
+                    )
                 })?;
                 if now == target || last == Some(now) {
                     break;
@@ -488,7 +548,10 @@ pub(super) fn execute(
             ));
         }
         let texts = read(process, offer_texts)?;
-        let (sx, sy) = settled(process, "send button", |r, i| offer_button(r, i, "send_button"))?.center();
+        let (sx, sy) = settled(process, "send button", |r, i| {
+            offer_button(r, i, "send_button")
+        })?
+        .center();
         sent.set(true);
         keys.click(GAME, sx, sy)?;
         wait(process, "offer sent", |r, i| Ok(!offer_open(r, i)?))?;
@@ -545,7 +608,10 @@ mod tests {
         assert_eq!(resource_index("Aluminum").unwrap(), 1);
         assert_eq!(resource_index("6").unwrap(), 6);
         assert_eq!(resource_index("coal").unwrap(), 6);
-        assert_eq!(resource_index("gold").unwrap_err().code, "invalid_arguments");
+        assert_eq!(
+            resource_index("gold").unwrap_err().code,
+            "invalid_arguments"
+        );
         assert_eq!(resource_index("7").unwrap_err().code, "invalid_arguments");
     }
     #[test]
@@ -557,8 +623,14 @@ mod tests {
     }
     #[test]
     fn buy_amount_is_read_from_the_window_text() {
-        assert_eq!(buy_amount("Buy amount: 0\nFor civilian factories: 0"), Some(0));
-        assert_eq!(buy_amount("Buy amount: 168 For civilian factories: 3"), Some(168));
+        assert_eq!(
+            buy_amount("Buy amount: 0\nFor civilian factories: 0"),
+            Some(0)
+        );
+        assert_eq!(
+            buy_amount("Buy amount: 168 For civilian factories: 3"),
+            Some(168)
+        );
         assert_eq!(buy_amount("nothing"), None);
     }
 }
@@ -576,8 +648,12 @@ const AUTO_KNOB: f64 = 16.0;
 
 fn auto_checkbox(r: &Reader<'_>, image: u64) -> Result<u64> {
     let root = view_root(r, image)?;
-    find(r, image, root, "auto_import_checkbox", 0)?
-        .ok_or_else(|| Error::new("capability_unavailable", "This build has no Automatic Importing checkbox"))
+    find(r, image, root, "auto_import_checkbox", 0)?.ok_or_else(|| {
+        Error::new(
+            "capability_unavailable",
+            "This build has no Automatic Importing checkbox",
+        )
+    })
 }
 /// Whether Automatic Importing is on, from what the view shows: the game greys the budget text
 /// (colour code `\u{11}g`) while it is off and prints it plain while it is on (mapped live
@@ -588,7 +664,9 @@ pub(super) fn auto_import_enabled(r: &Reader<'_>, image: u64) -> Result<Option<b
     let Some(text) = find(r, image, root, "auto_import_budget_txt", 0)? else {
         return Ok(None);
     };
-    Ok(enabled_from_budget_text(&r.string_bounded(text + TEXT, 64)?))
+    Ok(enabled_from_budget_text(
+        &r.string_bounded(text + TEXT, 64)?,
+    ))
 }
 pub(super) fn enabled_from_budget_text(raw: &str) -> Option<bool> {
     let digits = clean(raw);
@@ -599,12 +677,17 @@ pub(super) fn enabled_from_budget_text(raw: &str) -> Option<bool> {
 }
 fn auto_budget(r: &Reader<'_>, image: u64) -> Result<Option<i64>> {
     let root = view_root(r, image)?;
-    Ok(text_of(r, image, root, "auto_import_budget_txt")?.trim().parse::<i64>().ok())
+    Ok(text_of(r, image, root, "auto_import_budget_txt")?
+        .trim()
+        .parse::<i64>()
+        .ok())
 }
 fn available_factories(r: &Reader<'_>, image: u64) -> Result<Option<i64>> {
     let root = view_root(r, image)?;
     let t = text_of(r, image, root, "factories_available")?;
-    Ok(t.rsplit(' ').next().and_then(|v| v.trim().parse::<i64>().ok()))
+    Ok(t.rsplit(' ')
+        .next()
+        .and_then(|v| v.trim().parse::<i64>().ok()))
 }
 #[derive(Clone, Debug, PartialEq)]
 pub(super) struct AutoImport {
@@ -640,7 +723,10 @@ pub(super) fn auto_import_set(
 ) -> Result<AutoImport> {
     let before = auto_import_read(process, keys)?;
     if before.enabled.is_none() {
-        return Err(Error::new("invalid_gui", "Automatic Importing checkbox state unreadable"));
+        return Err(Error::new(
+            "invalid_gui",
+            "Automatic Importing checkbox state unreadable",
+        ));
     }
     let want_on = enabled.unwrap_or(before.enabled == Some(true));
     if budget.is_some() && !want_on {
@@ -668,7 +754,9 @@ pub(super) fn auto_import_set(
         if want < 0 || want > max {
             return Err(Error::new(
                 "amount_above_available",
-                format!("Budget {want} is outside 0..={max} (civilian factories available for trade)"),
+                format!(
+                    "Budget {want} is outside 0..={max} (civilian factories available for trade)"
+                ),
             ));
         }
         let bg = settled(process, "auto import budget", |r, i| {

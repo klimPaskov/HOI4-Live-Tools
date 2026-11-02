@@ -34,9 +34,16 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
-use std::{thread, time::{Duration, Instant}};
+use std::{
+    thread,
+    time::{Duration, Instant},
+};
 
-pub(super) const TOOLS: [&str; 3] = ["hoi4_faction_create", "hoi4_faction_leave", "hoi4_faction_invite_accept"];
+pub(super) const TOOLS: [&str; 3] = [
+    "hoi4_faction_create",
+    "hoi4_faction_leave",
+    "hoi4_faction_invite_accept",
+];
 pub(super) const INCOMING: &str = "hoi4_diplomacy_incoming";
 /// Actions of this module that send input (the read form of `hoi4_diplomacy_incoming` is separate).
 pub(super) fn handles(name: &str) -> bool {
@@ -76,21 +83,31 @@ fn window(r: &Reader<'_>, image: u64, name: &str) -> Result<Option<(u64, bool)>>
     Ok(None)
 }
 fn open_window(r: &Reader<'_>, image: u64, name: &str) -> Result<Option<u64>> {
-    Ok(window(r, image, name)?.filter(|(_, shown)| *shown).map(|(w, _)| w))
+    Ok(window(r, image, name)?
+        .filter(|(_, shown)| *shown)
+        .map(|(w, _)| w))
 }
 fn need(r: &Reader<'_>, image: u64, name: &str) -> Result<u64> {
-    open_window(r, image, name)?.ok_or_else(|| Error::new("gui_target_unavailable", format!("{name} is not open")))
+    open_window(r, image, name)?
+        .ok_or_else(|| Error::new("gui_target_unavailable", format!("{name} is not open")))
 }
 fn button(r: &Reader<'_>, image: u64, window: &str, widget: &str) -> Result<(Rect, i32)> {
     kit::rect_deep(r, image, need(r, image, window)?, widget)
 }
 /// Close whichever faction windows are open through their own close buttons (best effort).
 fn close_windows(process: &dyn Process, keys: &MacKeys<'_>) {
-    for name in ["invite_countries_window", "faction_setup_window", "new_faction_window", "countryfactionview"] {
+    for name in [
+        "invite_countries_window",
+        "faction_setup_window",
+        "new_faction_window",
+        "countryfactionview",
+    ] {
         if let Ok(Some(_)) = read(process, |r, i| open_window(r, i, name)) {
             if let Ok((rect, _)) = read(process, |r, i| button(r, i, name, "close_button")) {
                 let _ = kit::click(keys, rect);
-                let _ = wait(process, "faction window closed", |r, i| Ok(open_window(r, i, name)?.is_none()));
+                let _ = wait(process, "faction window closed", |r, i| {
+                    Ok(open_window(r, i, name)?.is_none())
+                });
             }
         }
     }
@@ -107,7 +124,9 @@ fn open_from_topbar(process: &dyn Process, keys: &MacKeys<'_>, window_name: &str
         )
     })?;
     kit::click(keys, rect)?;
-    wait(process, window_name, |r, i| Ok(open_window(r, i, window_name)?.is_some()))
+    wait(process, window_name, |r, i| {
+        Ok(open_window(r, i, window_name)?.is_some())
+    })
 }
 
 // ---- templates ------------------------------------------------------------------------------------
@@ -149,16 +168,41 @@ fn templates(r: &Reader<'_>, image: u64) -> Result<Vec<Template>> {
 }
 /// Choose the template: the named one (name or manifest name), or the only one.
 fn pick_template(list: &[(String, String)], wanted: Option<&str>) -> Result<usize> {
-    let names = || list.iter().map(|(n, m)| if m.is_empty() { n.clone() } else { format!("{n} ({m})") }).collect::<Vec<_>>().join(" | ");
+    let names = || {
+        list.iter()
+            .map(|(n, m)| {
+                if m.is_empty() {
+                    n.clone()
+                } else {
+                    format!("{n} ({m})")
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(" | ")
+    };
     match wanted {
         None if list.len() == 1 => Ok(0),
-        None => Err(Error::new("template_required", format!("Several faction templates are offered; pass template: {}", names()))),
+        None => Err(Error::new(
+            "template_required",
+            format!(
+                "Several faction templates are offered; pass template: {}",
+                names()
+            ),
+        )),
         Some(w) => {
-            let hits: Vec<usize> = (0..list.len()).filter(|i| same_name(&list[*i].0, w) || same_name(&list[*i].1, w)).collect();
+            let hits: Vec<usize> = (0..list.len())
+                .filter(|i| same_name(&list[*i].0, w) || same_name(&list[*i].1, w))
+                .collect();
             match hits.len() {
                 1 => Ok(hits[0]),
-                0 => Err(Error::new("template_unknown", format!("No faction template {w:?}; offered: {}", names()))),
-                _ => Err(Error::new("template_ambiguous", format!("Several templates match {w:?}: {}", names()))),
+                0 => Err(Error::new(
+                    "template_unknown",
+                    format!("No faction template {w:?}; offered: {}", names()),
+                )),
+                _ => Err(Error::new(
+                    "template_ambiguous",
+                    format!("Several templates match {w:?}: {}", names()),
+                )),
             }
         }
     }
@@ -179,7 +223,12 @@ pub(super) struct CreatePlan {
     pub name: Option<String>,
     pub invite: Vec<String>,
 }
-pub(super) fn plan_create(member_of: Option<&(String, Vec<String>)>, template: Option<String>, name: Option<String>, invite: Vec<String>) -> Result<CreatePlan> {
+pub(super) fn plan_create(
+    member_of: Option<&(String, Vec<String>)>,
+    template: Option<String>,
+    name: Option<String>,
+    invite: Vec<String>,
+) -> Result<CreatePlan> {
     if let Some((faction, members)) = member_of {
         return Err(Error::new(
             "already_in_faction",
@@ -188,10 +237,17 @@ pub(super) fn plan_create(member_of: Option<&(String, Vec<String>)>, template: O
     }
     if let Some(n) = &name {
         if !designer::typable(n) {
-            return Err(Error::new("name_not_typable", "Faction names may use letters, digits, space and - _ . , / ' ( )"));
+            return Err(Error::new(
+                "name_not_typable",
+                "Faction names may use letters, digits, space and - _ . , / ' ( )",
+            ));
         }
     }
-    Ok(CreatePlan { template, name, invite })
+    Ok(CreatePlan {
+        template,
+        name,
+        invite,
+    })
 }
 /// Membership proves the result: any faction (named as asked when a name was given).
 pub(super) fn settle_create(plan: &CreatePlan, now: Option<&(String, Vec<String>)>) -> Verdict {
@@ -223,7 +279,11 @@ fn invite_rows(r: &Reader<'_>, image: u64) -> Result<Vec<(String, Rect, bool)>> 
             Some(w) => gui_tree::shown(r, w)?,
             None => false,
         };
-        out.push((nui::text_at(r, name)?, gui_tree::rect_unclipped(r, image, select, kit::GAME)?, selected));
+        out.push((
+            nui::text_at(r, name)?,
+            gui_tree::rect_unclipped(r, image, select, kit::GAME)?,
+            selected,
+        ));
     }
     Ok(out)
 }
@@ -233,7 +293,10 @@ fn drive_create(process: &dyn Process, keys: &MacKeys<'_>, plan: &CreatePlan) ->
         open_from_topbar(process, keys, "new_faction_window")?;
         pause(500);
         let mut list = settled(process, "faction templates", templates)?;
-        let pairs: Vec<(String, String)> = list.iter().map(|t| (t.name.clone(), t.manifest.clone())).collect();
+        let pairs: Vec<(String, String)> = list
+            .iter()
+            .map(|t| (t.name.clone(), t.manifest.clone()))
+            .collect();
         let index = pick_template(&pairs, plan.template.as_deref())?;
         for _ in 0..4 {
             if on_screen(list[index].select) {
@@ -246,57 +309,93 @@ fn drive_create(process: &dyn Process, keys: &MacKeys<'_>, plan: &CreatePlan) ->
         }
         let chosen = list[index].clone();
         if !on_screen(chosen.select) {
-            return Err(Error::new("gui_target_unavailable", "The template card could not be scrolled into view"));
+            return Err(Error::new(
+                "gui_target_unavailable",
+                "The template card could not be scrolled into view",
+            ));
         }
         kit::click(keys, chosen.select)?;
         pause(400);
-        let (create, state) = settled(process, "create faction button", |r, i| button(r, i, "new_faction_window", "create_faction_button"))?;
+        let (create, state) = settled(process, "create faction button", |r, i| {
+            button(r, i, "new_faction_window", "create_faction_button")
+        })?;
         if state == 3 {
-            return Err(Error::new("button_disabled", "The game disables the template's Create Faction button"));
+            return Err(Error::new(
+                "button_disabled",
+                "The game disables the template's Create Faction button",
+            ));
         }
         kit::click(keys, create)?;
-        wait(process, "faction setup window", |r, i| Ok(open_window(r, i, "faction_setup_window")?.is_some()))?;
+        wait(process, "faction setup window", |r, i| {
+            Ok(open_window(r, i, "faction_setup_window")?.is_some())
+        })?;
         pause(600);
         if let Some(name) = &plan.name {
-            let (icon, _) = settled(process, "name box anchor", |r, i| button(r, i, "faction_setup_window", "choose_icon_button"))?;
+            let (icon, _) = settled(process, "name box anchor", |r, i| {
+                button(r, i, "faction_setup_window", "choose_icon_button")
+            })?;
             design_edit::type_name(process, keys, name_box_point(icon), name, &|r, i| {
                 let setup = need(r, i, "faction_setup_window")?;
-                let edit = kit::find_deep(r, i, setup, "name_selection", 4)?
-                    .ok_or_else(|| Error::new("gui_target_unavailable", "name_selection not found"))?;
+                let edit = kit::find_deep(r, i, setup, "name_selection", 4)?.ok_or_else(|| {
+                    Error::new("gui_target_unavailable", "name_selection not found")
+                })?;
                 nui::edit_text(r, i, edit)
             })?;
         }
         let mut invited = Vec::new();
         if !plan.invite.is_empty() {
-            let (open, _) = settled(process, "invite button", |r, i| button(r, i, "faction_setup_window", "invite_countries"))?;
+            let (open, _) = settled(process, "invite button", |r, i| {
+                button(r, i, "faction_setup_window", "invite_countries")
+            })?;
             kit::click(keys, open)?;
-            wait(process, "invite window", |r, i| Ok(open_window(r, i, "invite_countries_window")?.is_some()))?;
+            wait(process, "invite window", |r, i| {
+                Ok(open_window(r, i, "invite_countries_window")?.is_some())
+            })?;
             pause(500);
             for wanted in &plan.invite {
                 let rows = settled(process, "invite rows", invite_rows)?;
-                let Some((name, rect, selected)) = rows.iter().find(|(n, _, _)| same_name(n, wanted)).cloned() else {
+                let Some((name, rect, selected)) =
+                    rows.iter().find(|(n, _, _)| same_name(n, wanted)).cloned()
+                else {
                     return Err(Error::new(
                         "invite_country_not_listed",
-                        format!("{wanted:?} is not offered for the new faction; offered: {}", rows.iter().map(|r| r.0.as_str()).collect::<Vec<_>>().join(", ")),
+                        format!(
+                            "{wanted:?} is not offered for the new faction; offered: {}",
+                            rows.iter()
+                                .map(|r| r.0.as_str())
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        ),
                     ));
                 };
                 if !selected {
                     kit::click(keys, rect)?;
                     let n = name.clone();
                     wait(process, "country selected", move |r, i| {
-                        Ok(invite_rows(r, i)?.iter().any(|(x, _, s)| same_name(x, &n) && *s))
+                        Ok(invite_rows(r, i)?
+                            .iter()
+                            .any(|(x, _, s)| same_name(x, &n) && *s))
                     })?;
                 }
                 invited.push(name);
             }
-            let (send, _) = settled(process, "invite confirm", |r, i| button(r, i, "invite_countries_window", "invite_button"))?;
+            let (send, _) = settled(process, "invite confirm", |r, i| {
+                button(r, i, "invite_countries_window", "invite_button")
+            })?;
             kit::click(keys, send)?;
-            wait(process, "invite window closed", |r, i| Ok(open_window(r, i, "invite_countries_window")?.is_none()))?;
+            wait(process, "invite window closed", |r, i| {
+                Ok(open_window(r, i, "invite_countries_window")?.is_none())
+            })?;
             pause(300);
         }
-        let (finish, state) = settled(process, "create faction", |r, i| button(r, i, "faction_setup_window", "create_faction"))?;
+        let (finish, state) = settled(process, "create faction", |r, i| {
+            button(r, i, "faction_setup_window", "create_faction")
+        })?;
         if state == 3 {
-            return Err(Error::new("button_disabled", "The game disables Create Faction (name, template or influence requirements)"));
+            return Err(Error::new(
+                "button_disabled",
+                "The game disables Create Faction (name, template or influence requirements)",
+            ));
         }
         kit::click(keys, finish)?;
         let answered = kit::answer_confirmation(process, keys, true)?;
@@ -316,8 +415,10 @@ fn drive_create(process: &dyn Process, keys: &MacKeys<'_>, plan: &CreatePlan) ->
                 "No faction appeared in memory after Create Faction (the game may need a name, an influence minimum or the 'can create factions' rule); nothing was repeated",
             ));
         };
-        Ok(json!({"template":chosen.name,"template_rule":chosen.rule,"template_goal":chosen.goal,"faction":faction,"members":members,
-            "invited":invited,"confirmation_answered":answered}))
+        Ok(
+            json!({"template":chosen.name,"template_rule":chosen.rule,"template_goal":chosen.goal,"faction":faction,"members":members,
+            "invited":invited,"confirmation_answered":answered}),
+        )
     })();
     close_windows(process, keys);
     result
@@ -342,9 +443,14 @@ fn drive_leave(process: &dyn Process, keys: &MacKeys<'_>, before: &str) -> Resul
     let result = (|| -> Result<Value> {
         open_from_topbar(process, keys, "countryfactionview")?;
         pause(600);
-        let (leave, state) = settled(process, "leave faction button", |r, i| button(r, i, "countryfactionview", "leave_faction_button"))?;
+        let (leave, state) = settled(process, "leave faction button", |r, i| {
+            button(r, i, "countryfactionview", "leave_faction_button")
+        })?;
         if state == 3 {
-            return Err(Error::new("leave_unavailable", "The game disables the leave / dismantle button of the faction view"));
+            return Err(Error::new(
+                "leave_unavailable",
+                "The game disables the leave / dismantle button of the faction view",
+            ));
         }
         kit::click(keys, leave)?;
         let answered = kit::answer_confirmation(process, keys, true)?;
@@ -398,7 +504,11 @@ pub(super) fn classify(window: &str, title: &str, description: &str) -> &'static
         "lend_lease_request"
     } else if window == "foreign_manpower" {
         "manpower_request"
-    } else if text.contains("join their faction") || text.contains("invite to faction") || text.contains("join the faction") || (text.contains("faction") && text.contains("invit")) {
+    } else if text.contains("join their faction")
+        || text.contains("invite to faction")
+        || text.contains("join the faction")
+        || (text.contains("faction") && text.contains("invit"))
+    {
         "faction_invitation"
     } else if text.contains("guarantee") {
         "guarantee"
@@ -408,7 +518,10 @@ pub(super) fn classify(window: &str, title: &str, description: &str) -> &'static
         "military_access"
     } else if text.contains("peace") || text.contains("surrender") {
         "peace_offer"
-    } else if text.contains("call to arms") || text.contains("join the war") || text.contains("join our war") {
+    } else if text.contains("call to arms")
+        || text.contains("join the war")
+        || text.contains("join our war")
+    {
         "call_to_arms"
     } else {
         "other"
@@ -463,14 +576,20 @@ pub(super) fn incoming_read(process: &dyn Process) -> Result<Value> {
 }
 /// Choose the proposal an answer applies to: by `index`, by text in the title or description, or
 /// the only candidate (restricted to `only_class` when given).
-pub(super) fn pick_proposal(list: &[Proposal], which: Option<&str>, index: Option<usize>, only_class: Option<&str>) -> Result<usize> {
+pub(super) fn pick_proposal(
+    list: &[Proposal],
+    which: Option<&str>,
+    index: Option<usize>,
+    only_class: Option<&str>,
+) -> Result<usize> {
     let candidates: Vec<usize> = (0..list.len())
         .filter(|i| only_class.is_none_or(|c| list[*i].class == c))
         .filter(|i| index.is_none_or(|x| list[*i].index == x))
         .filter(|i| {
             which.is_none_or(|w| {
                 let w = w.to_lowercase();
-                list[*i].title.to_lowercase().contains(&w) || list[*i].description.to_lowercase().contains(&w)
+                list[*i].title.to_lowercase().contains(&w)
+                    || list[*i].description.to_lowercase().contains(&w)
             })
         })
         .collect();
@@ -479,15 +598,31 @@ pub(super) fn pick_proposal(list: &[Proposal], which: Option<&str>, index: Optio
         0 => Err(Error::new(
             "no_incoming_proposal",
             match only_class {
-                Some(c) => format!("No open {c} proposal matches (open: {})", list.iter().map(|p| p.title.as_str()).collect::<Vec<_>>().join(" | ")),
-                None => format!("No open proposal matches (open: {})", list.iter().map(|p| p.title.as_str()).collect::<Vec<_>>().join(" | ")),
+                Some(c) => format!(
+                    "No open {c} proposal matches (open: {})",
+                    list.iter()
+                        .map(|p| p.title.as_str())
+                        .collect::<Vec<_>>()
+                        .join(" | ")
+                ),
+                None => format!(
+                    "No open proposal matches (open: {})",
+                    list.iter()
+                        .map(|p| p.title.as_str())
+                        .collect::<Vec<_>>()
+                        .join(" | ")
+                ),
             },
         )),
         _ => Err(Error::new(
             "proposal_ambiguous",
             format!(
                 "Several proposals match; pass index or which. Candidates: {}",
-                candidates.iter().map(|i| format!("{}: {}", list[*i].index, list[*i].title)).collect::<Vec<_>>().join(" | ")
+                candidates
+                    .iter()
+                    .map(|i| format!("{}: {}", list[*i].index, list[*i].title))
+                    .collect::<Vec<_>>()
+                    .join(" | ")
             ),
         )),
     }
@@ -502,7 +637,8 @@ pub(super) struct AnswerPlan {
 }
 /// The proposal is the same one while title and description are equal (the pop-up list shifts).
 fn present(list: &[Proposal], plan: &AnswerPlan) -> bool {
-    list.iter().any(|p| p.title == plan.title && p.description == plan.description)
+    list.iter()
+        .any(|p| p.title == plan.title && p.description == plan.description)
 }
 /// Gone from the list means answered; an accepted faction invitation must also have put the player
 /// into a faction (else the proposal lapsed some other way).
@@ -510,7 +646,11 @@ pub(super) fn settle_answer(plan: &AnswerPlan, list: &[Proposal], in_faction_now
     if present(list, plan) {
         return Verdict::Unchanged;
     }
-    if plan.accept && plan.class == "faction_invitation" && !in_faction_now && !plan.in_faction_before {
+    if plan.accept
+        && plan.class == "faction_invitation"
+        && !in_faction_now
+        && !plan.in_faction_before
+    {
         return Verdict::Diverged;
     }
     Verdict::Reached
@@ -526,18 +666,30 @@ fn drive_answer(process: &dyn Process, keys: &MacKeys<'_>, plan: &AnswerPlan) ->
             .iter()
             .find(|p| p.title == wanted.title && p.description == wanted.description)
             .ok_or_else(|| Error::new("no_incoming_proposal", "The proposal is no longer open"))?;
-        (if wanted.accept { p.accept } else { p.decline })
-            .ok_or_else(|| Error::new("button_disabled", "The game does not offer that answer for this proposal"))
+        (if wanted.accept { p.accept } else { p.decline }).ok_or_else(|| {
+            Error::new(
+                "button_disabled",
+                "The game does not offer that answer for this proposal",
+            )
+        })
     })?;
     kit::click(keys, rect)?;
     let expect = plan.clone();
-    wait(process, "proposal answered", move |r, i| Ok(!present(&proposals_in(r, i)?, &expect))).map_err(|_| {
-        Error::new("input_readback_failed", "The proposal pop-up stayed open after its button; nothing was repeated")
+    wait(process, "proposal answered", move |r, i| {
+        Ok(!present(&proposals_in(r, i)?, &expect))
+    })
+    .map_err(|_| {
+        Error::new(
+            "input_readback_failed",
+            "The proposal pop-up stayed open after its button; nothing was repeated",
+        )
     })?;
     pause(300);
     let in_faction = faction_now(process)?;
-    Ok(json!({"answered":if plan.accept {"accept"} else {"refuse"},"title":plan.title,"class":plan.class,
-        "in_faction_now":in_faction.as_ref().map(|f| f.0.clone())}))
+    Ok(
+        json!({"answered":if plan.accept {"accept"} else {"refuse"},"title":plan.title,"class":plan.class,
+        "in_faction_now":in_faction.as_ref().map(|f| f.0.clone())}),
+    )
 }
 
 // ---- dispatch -------------------------------------------------------------------------------------
@@ -550,10 +702,16 @@ pub(super) fn call(name: &str, args: &Map<String, Value>, env: Env<'_>) -> Resul
     }
 }
 fn ids(args: &Map<String, Value>) -> Result<(String, String)> {
-    Ok((super::string(args, "request_id")?.to_string(), super::string(args, "lease_token")?.to_string()))
+    Ok((
+        super::string(args, "request_id")?.to_string(),
+        super::string(args, "lease_token")?.to_string(),
+    ))
 }
 fn create(args: &Map<String, Value>, env: Env<'_>) -> Result<Value> {
-    super::allowed(args, &["template", "name", "invite", "request_id", "lease_token"])?;
+    super::allowed(
+        args,
+        &["template", "name", "invite", "request_id", "lease_token"],
+    )?;
     let template = kit::opt_text_arg(args, "template", 64)?;
     let name = kit::opt_text_arg(args, "name", 40)?;
     let invite: Vec<String> = match args.get("invite") {
@@ -561,23 +719,55 @@ fn create(args: &Map<String, Value>, env: Env<'_>) -> Result<Value> {
         Some(v) => v
             .as_array()
             .filter(|a| a.len() <= 8)
-            .and_then(|a| a.iter().map(|c| c.as_str().filter(|c| !c.trim().is_empty() && c.len() <= 64 && !c.chars().any(char::is_control)).map(|c| c.trim().to_string())).collect())
-            .ok_or_else(|| Error::new("invalid_arguments", "invite must list up to 8 country names"))?,
+            .and_then(|a| {
+                a.iter()
+                    .map(|c| {
+                        c.as_str()
+                            .filter(|c| {
+                                !c.trim().is_empty()
+                                    && c.len() <= 64
+                                    && !c.chars().any(char::is_control)
+                            })
+                            .map(|c| c.trim().to_string())
+                    })
+                    .collect()
+            })
+            .ok_or_else(|| {
+                Error::new(
+                    "invalid_arguments",
+                    "invite must list up to 8 country names",
+                )
+            })?,
     };
     let (id, token) = ids(args)?;
     let action = json!({"kind":"faction_create","template":template,"name":name,"invite":invite});
     kit::run(
         env,
-        kit::Request { id: &id, token: &token, seconds: 240, action },
+        kit::Request {
+            id: &id,
+            token: &token,
+            seconds: 240,
+            action,
+        },
         &|p| {
             let member = faction_now(p)?;
-            plan_create(member.as_ref(), template.clone(), name.clone(), invite.clone())
+            plan_create(
+                member.as_ref(),
+                template.clone(),
+                name.clone(),
+                invite.clone(),
+            )
         },
         &|p, planned| {
-            let fallback = CreatePlan { template: template.clone(), name: name.clone(), invite: invite.clone() };
+            let fallback = CreatePlan {
+                template: template.clone(),
+                name: name.clone(),
+                invite: invite.clone(),
+            };
             let plan = planned.unwrap_or(&fallback);
             let now = faction_now(p)?;
-            Ok(settle_create(plan, now.as_ref()).outcome(json!({"faction":now.as_ref().map(|f| f.0.clone())})))
+            Ok(settle_create(plan, now.as_ref())
+                .outcome(json!({"faction":now.as_ref().map(|f| f.0.clone())})))
         },
         &|p, keys, planned| drive_create(p, keys, planned),
     )
@@ -594,7 +784,12 @@ fn leave(args: &Map<String, Value>, env: Env<'_>) -> Result<Value> {
     let action = json!({"kind":"faction_leave"});
     kit::run(
         env,
-        kit::Request { id: &id, token: &token, seconds: 120, action },
+        kit::Request {
+            id: &id,
+            token: &token,
+            seconds: 120,
+            action,
+        },
         &|p| {
             let member = faction_now(p)?;
             let before = plan_leave(member.as_ref())?;
@@ -604,7 +799,8 @@ fn leave(args: &Map<String, Value>, env: Env<'_>) -> Result<Value> {
         &|p, planned| {
             let before = planned.cloned().or_else(|| kit::recall::<String>(&id));
             let now = faction_now(p)?;
-            Ok(settle_leave(before.as_deref(), now.as_ref()).outcome(json!({"faction":now.as_ref().map(|f| f.0.clone())})))
+            Ok(settle_leave(before.as_deref(), now.as_ref())
+                .outcome(json!({"faction":now.as_ref().map(|f| f.0.clone())})))
         },
         &|p, keys, before| drive_leave(p, keys, before),
     )
@@ -612,33 +808,60 @@ fn leave(args: &Map<String, Value>, env: Env<'_>) -> Result<Value> {
 /// `hoi4_faction_invite_accept` (accept or `decline:true`) and `hoi4_diplomacy_incoming {answer}`.
 fn answer(args: &Map<String, Value>, env: Env<'_>, faction_only: bool) -> Result<Value> {
     let (accept, which, index, only_class) = if faction_only {
-        super::allowed(args, &["decline", "which", "index", "request_id", "lease_token"])?;
+        super::allowed(
+            args,
+            &["decline", "which", "index", "request_id", "lease_token"],
+        )?;
         (
-            !args.get("decline").and_then(Value::as_bool).unwrap_or(false),
+            !args
+                .get("decline")
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
             kit::opt_text_arg(args, "which", 128)?,
             index_arg(args)?,
             Some("faction_invitation"),
         )
     } else {
-        super::allowed(args, &["answer", "which", "index", "request_id", "lease_token"])?;
+        super::allowed(
+            args,
+            &["answer", "which", "index", "request_id", "lease_token"],
+        )?;
         let accept = match args.get("answer").and_then(Value::as_str) {
             Some("accept") => true,
             Some("refuse") => false,
-            _ => return Err(Error::new("invalid_arguments", "answer must be accept or refuse")),
+            _ => {
+                return Err(Error::new(
+                    "invalid_arguments",
+                    "answer must be accept or refuse",
+                ))
+            }
         };
-        (accept, kit::opt_text_arg(args, "which", 128)?, index_arg(args)?, None)
+        (
+            accept,
+            kit::opt_text_arg(args, "which", 128)?,
+            index_arg(args)?,
+            None,
+        )
     };
     let (id, token) = ids(args)?;
     let action = json!({"kind":"diplomacy_incoming","accept":accept,"which":which,"index":index,"only_class":only_class});
     kit::run(
         env,
-        kit::Request { id: &id, token: &token, seconds: 90, action },
+        kit::Request {
+            id: &id,
+            token: &token,
+            seconds: 90,
+            action,
+        },
         &|p| {
             let list = read(p, proposals_in)?;
             let pick = pick_proposal(&list, which.as_deref(), index, only_class)?;
             let chosen = &list[pick];
             if (accept && chosen.accept.is_none()) || (!accept && chosen.decline.is_none()) {
-                return Err(Error::new("button_disabled", "The game does not offer that answer for this proposal"));
+                return Err(Error::new(
+                    "button_disabled",
+                    "The game does not offer that answer for this proposal",
+                ));
             }
             let planned = AnswerPlan {
                 accept,
@@ -655,7 +878,9 @@ fn answer(args: &Map<String, Value>, env: Env<'_>, faction_only: bool) -> Result
                 // No stored or remembered plan (an intent from before plans were journaled):
                 // nothing can be settled, so the intent is closed as diverged instead of
                 // blocking every later action.
-                return Ok(Outcome::Diverged(json!({"reason":"no stored plan to settle against"})));
+                return Ok(Outcome::Diverged(
+                    json!({"reason":"no stored plan to settle against"}),
+                ));
             };
             let list = read(p, proposals_in)?;
             let member = faction_now(p)?.is_some();
@@ -671,7 +896,12 @@ fn index_arg(args: &Map<String, Value>) -> Result<Option<usize>> {
             .as_u64()
             .filter(|n| *n < 32)
             .map(|n| Some(n as usize))
-            .ok_or_else(|| Error::new("invalid_arguments", "index must be 0..31 (the index shown by hoi4_diplomacy_incoming)")),
+            .ok_or_else(|| {
+                Error::new(
+                    "invalid_arguments",
+                    "index must be 0..31 (the index shown by hoi4_diplomacy_incoming)",
+                )
+            }),
     }
 }
 
@@ -709,82 +939,220 @@ mod tests {
             title: title.into(),
             description: description.into(),
             class: classify(window, title, description).into(),
-            accept: Some(Rect { x: 1, y: 1, w: 2, h: 2 }),
-            decline: Some(Rect { x: 5, y: 1, w: 2, h: 2 }),
+            accept: Some(Rect {
+                x: 1,
+                y: 1,
+                w: 2,
+                h: 2,
+            }),
+            decline: Some(Rect {
+                x: 5,
+                y: 1,
+                w: 2,
+                h: 2,
+            }),
         }
     }
     #[test]
     fn create_refuses_inside_a_faction_and_untypable_names() {
         let m = member("Axis");
-        assert_eq!(plan_create(m.as_ref(), None, None, vec![]).unwrap_err().code, "already_in_faction");
-        assert_eq!(plan_create(None, None, Some("Pakt\u{e4}".into()), vec![]).unwrap_err().code, "name_not_typable");
-        let p = plan_create(None, Some("Fascist".into()), Some("Stahlpakt".into()), vec!["Italy".into()]).unwrap();
+        assert_eq!(
+            plan_create(m.as_ref(), None, None, vec![])
+                .unwrap_err()
+                .code,
+            "already_in_faction"
+        );
+        assert_eq!(
+            plan_create(None, None, Some("Pakt\u{e4}".into()), vec![])
+                .unwrap_err()
+                .code,
+            "name_not_typable"
+        );
+        let p = plan_create(
+            None,
+            Some("Fascist".into()),
+            Some("Stahlpakt".into()),
+            vec!["Italy".into()],
+        )
+        .unwrap();
         assert_eq!(p.name.as_deref(), Some("Stahlpakt"));
     }
     #[test]
     fn create_and_leave_settlement() {
-        let p = CreatePlan { template: None, name: Some("Stahlpakt".into()), invite: vec![] };
+        let p = CreatePlan {
+            template: None,
+            name: Some("Stahlpakt".into()),
+            invite: vec![],
+        };
         assert_eq!(settle_create(&p, None), Verdict::Unchanged);
-        assert_eq!(settle_create(&p, member("stahlpakt").as_ref()), Verdict::Reached);
-        assert_eq!(settle_create(&p, member("Other").as_ref()), Verdict::Diverged);
-        let any = CreatePlan { template: None, name: None, invite: vec![] };
-        assert_eq!(settle_create(&any, member("Whatever").as_ref()), Verdict::Reached);
+        assert_eq!(
+            settle_create(&p, member("stahlpakt").as_ref()),
+            Verdict::Reached
+        );
+        assert_eq!(
+            settle_create(&p, member("Other").as_ref()),
+            Verdict::Diverged
+        );
+        let any = CreatePlan {
+            template: None,
+            name: None,
+            invite: vec![],
+        };
+        assert_eq!(
+            settle_create(&any, member("Whatever").as_ref()),
+            Verdict::Reached
+        );
 
         assert_eq!(plan_leave(member("Axis").as_ref()).unwrap(), "Axis");
         assert_eq!(plan_leave(None).unwrap_err().code, "not_in_faction");
         assert_eq!(settle_leave(Some("Axis"), None), Verdict::Reached);
-        assert_eq!(settle_leave(Some("Axis"), member("axis").as_ref()), Verdict::Unchanged);
-        assert_eq!(settle_leave(Some("Axis"), member("Comintern").as_ref()), Verdict::Diverged);
-        assert_eq!(settle_leave(None, member("Axis").as_ref()), Verdict::Unchanged);
+        assert_eq!(
+            settle_leave(Some("Axis"), member("axis").as_ref()),
+            Verdict::Unchanged
+        );
+        assert_eq!(
+            settle_leave(Some("Axis"), member("Comintern").as_ref()),
+            Verdict::Diverged
+        );
+        assert_eq!(
+            settle_leave(None, member("Axis").as_ref()),
+            Verdict::Unchanged
+        );
     }
     #[test]
     fn templates_are_picked_by_name_or_manifest() {
-        let list = vec![("Alliance".to_string(), "Pact of Steel".to_string()), ("Bloc".to_string(), String::new())];
+        let list = vec![
+            ("Alliance".to_string(), "Pact of Steel".to_string()),
+            ("Bloc".to_string(), String::new()),
+        ];
         assert_eq!(pick_template(&list, Some("bloc")).unwrap(), 1);
         assert_eq!(pick_template(&list, Some("pact of steel")).unwrap(), 0);
-        assert_eq!(pick_template(&list, None).unwrap_err().code, "template_required");
+        assert_eq!(
+            pick_template(&list, None).unwrap_err().code,
+            "template_required"
+        );
         assert_eq!(pick_template(&list[..1], None).unwrap(), 0);
         let e = pick_template(&list, Some("zzz")).unwrap_err();
         assert_eq!(e.code, "template_unknown");
         assert!(e.message.contains("Alliance (Pact of Steel)") && e.message.contains("Bloc"));
-        let twice = vec![("A".to_string(), "x".to_string()), ("a".to_string(), "y".to_string())];
-        assert_eq!(pick_template(&twice, Some("a")).unwrap_err().code, "template_ambiguous");
+        let twice = vec![
+            ("A".to_string(), "x".to_string()),
+            ("a".to_string(), "y".to_string()),
+        ];
+        assert_eq!(
+            pick_template(&twice, Some("a")).unwrap_err().code,
+            "template_ambiguous"
+        );
     }
     #[test]
     fn classifies_by_the_games_wording() {
-        let invite = classify("standard", "Invite to faction", "Italy wants us to join their faction: Axis.");
+        let invite = classify(
+            "standard",
+            "Invite to faction",
+            "Italy wants us to join their faction: Axis.",
+        );
         assert_eq!(invite, "faction_invitation");
-        assert_eq!(classify("standard", "Guarantee independence", "Poland offers a guarantee"), "guarantee");
-        assert_eq!(classify("incoming_lend_lease", "x", "y"), "lend_lease_request");
-        assert_eq!(classify("standard", "Non-aggression pact", "..."), "non_aggression_pact");
-        assert_eq!(classify("standard", "Call to arms", "France asks"), "call_to_arms");
+        assert_eq!(
+            classify(
+                "standard",
+                "Guarantee independence",
+                "Poland offers a guarantee"
+            ),
+            "guarantee"
+        );
+        assert_eq!(
+            classify("incoming_lend_lease", "x", "y"),
+            "lend_lease_request"
+        );
+        assert_eq!(
+            classify("standard", "Non-aggression pact", "..."),
+            "non_aggression_pact"
+        );
+        assert_eq!(
+            classify("standard", "Call to arms", "France asks"),
+            "call_to_arms"
+        );
         assert_eq!(classify("standard", "Hello", "world"), "other");
     }
     #[test]
     fn proposals_are_picked_unambiguously() {
         let list = vec![
-            proposal(0, "standard", "Invite to faction", "Italy wants us to join their faction: Axis."),
-            proposal(1, "standard", "Guarantee independence", "Hungary offers a guarantee"),
-            proposal(2, "standard", "Invite to faction", "Japan wants us to join their faction: Co-Prosperity."),
+            proposal(
+                0,
+                "standard",
+                "Invite to faction",
+                "Italy wants us to join their faction: Axis.",
+            ),
+            proposal(
+                1,
+                "standard",
+                "Guarantee independence",
+                "Hungary offers a guarantee",
+            ),
+            proposal(
+                2,
+                "standard",
+                "Invite to faction",
+                "Japan wants us to join their faction: Co-Prosperity.",
+            ),
         ];
-        assert_eq!(pick_proposal(&list, Some("hungary"), None, None).unwrap(), 1);
+        assert_eq!(
+            pick_proposal(&list, Some("hungary"), None, None).unwrap(),
+            1
+        );
         assert_eq!(pick_proposal(&list, None, Some(2), None).unwrap(), 2);
-        assert_eq!(pick_proposal(&list, None, None, None).unwrap_err().code, "proposal_ambiguous");
-        assert_eq!(pick_proposal(&list, Some("japan"), None, Some("faction_invitation")).unwrap(), 2);
-        assert_eq!(pick_proposal(&list, None, None, Some("faction_invitation")).unwrap_err().code, "proposal_ambiguous");
-        assert_eq!(pick_proposal(&list, Some("zzz"), None, None).unwrap_err().code, "no_incoming_proposal");
-        assert_eq!(pick_proposal(&[], None, None, None).unwrap_err().code, "no_incoming_proposal");
+        assert_eq!(
+            pick_proposal(&list, None, None, None).unwrap_err().code,
+            "proposal_ambiguous"
+        );
+        assert_eq!(
+            pick_proposal(&list, Some("japan"), None, Some("faction_invitation")).unwrap(),
+            2
+        );
+        assert_eq!(
+            pick_proposal(&list, None, None, Some("faction_invitation"))
+                .unwrap_err()
+                .code,
+            "proposal_ambiguous"
+        );
+        assert_eq!(
+            pick_proposal(&list, Some("zzz"), None, None)
+                .unwrap_err()
+                .code,
+            "no_incoming_proposal"
+        );
+        assert_eq!(
+            pick_proposal(&[], None, None, None).unwrap_err().code,
+            "no_incoming_proposal"
+        );
     }
     #[test]
     fn answer_settlement() {
-        let list = vec![proposal(0, "standard", "Invite to faction", "Italy wants us to join their faction: Axis.")];
-        let accept = AnswerPlan { accept: true, title: list[0].title.clone(), description: list[0].description.clone(), class: "faction_invitation".into(), in_faction_before: false };
+        let list = vec![proposal(
+            0,
+            "standard",
+            "Invite to faction",
+            "Italy wants us to join their faction: Axis.",
+        )];
+        let accept = AnswerPlan {
+            accept: true,
+            title: list[0].title.clone(),
+            description: list[0].description.clone(),
+            class: "faction_invitation".into(),
+            in_faction_before: false,
+        };
         assert_eq!(settle_answer(&accept, &list, false), Verdict::Unchanged);
         assert_eq!(settle_answer(&accept, &[], true), Verdict::Reached);
         assert_eq!(settle_answer(&accept, &[], false), Verdict::Diverged);
-        let refuse = AnswerPlan { accept: false, ..accept.clone() };
+        let refuse = AnswerPlan {
+            accept: false,
+            ..accept.clone()
+        };
         assert_eq!(settle_answer(&refuse, &[], false), Verdict::Reached);
-        let other = AnswerPlan { class: "guarantee".into(), ..accept };
+        let other = AnswerPlan {
+            class: "guarantee".into(),
+            ..accept
+        };
         assert_eq!(settle_answer(&other, &[], false), Verdict::Reached);
     }
     #[test]
@@ -799,22 +1167,48 @@ mod tests {
     }
     #[test]
     fn name_box_sits_right_of_the_icon_button() {
-        let icon = Rect { x: 100, y: 400, w: 40, h: 40 };
+        let icon = Rect {
+            x: 100,
+            y: 400,
+            w: 40,
+            h: 40,
+        };
         assert_eq!(name_box_point(icon), (342.0, 421.0));
-        assert!(on_screen(Rect { x: 10, y: 300, w: 197, h: 300 }));
-        assert!(!on_screen(Rect { x: 10, y: 900, w: 197, h: 300 }));
+        assert!(on_screen(Rect {
+            x: 10,
+            y: 300,
+            w: 197,
+            h: 300
+        }));
+        assert!(!on_screen(Rect {
+            x: 10,
+            y: 900,
+            w: 197,
+            h: 300
+        }));
     }
     #[test]
     fn tool_list_is_marked_unvalidated_and_incoming_needs_no_lease() {
         let list = tools();
         assert_eq!(list.len(), TOOLS.len() + 1);
         for entry in &list {
-            assert!(entry["description"].as_str().unwrap().starts_with("UNVALIDATED (no live test yet): "));
+            assert!(entry["description"]
+                .as_str()
+                .unwrap()
+                .starts_with("UNVALIDATED (no live test yet): "));
         }
         let incoming = list.iter().find(|t| t["name"] == INCOMING).unwrap();
         assert!(incoming["inputSchema"].get("required").is_none());
         assert!(handles("hoi4_faction_leave") && handles(INCOMING) && !handles("hoi4_fleet_merge"));
-        assert_eq!(index_arg(json!({"index":3}).as_object().unwrap()).unwrap(), Some(3));
-        assert_eq!(index_arg(json!({"index":99}).as_object().unwrap()).unwrap_err().code, "invalid_arguments");
+        assert_eq!(
+            index_arg(json!({"index":3}).as_object().unwrap()).unwrap(),
+            Some(3)
+        );
+        assert_eq!(
+            index_arg(json!({"index":99}).as_object().unwrap())
+                .unwrap_err()
+                .code,
+            "invalid_arguments"
+        );
     }
 }

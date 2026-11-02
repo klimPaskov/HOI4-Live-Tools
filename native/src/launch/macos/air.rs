@@ -98,7 +98,12 @@ pub(super) fn view_root(r: &Reader<'_>, image: u64, slot: u64, root: u64) -> Res
     gui_tree::container(r, object + u.container_base, image)?
         .ok_or_else(|| Error::new("invalid_gui", "Air view root required"))
 }
-pub(super) fn named_child(r: &Reader<'_>, image: u64, object: u64, name: &str) -> Result<Option<u64>> {
+pub(super) fn named_child(
+    r: &Reader<'_>,
+    image: u64,
+    object: u64,
+    name: &str,
+) -> Result<Option<u64>> {
     for child in gui_tree::children(r, object)? {
         if gui_tree::name(r, child, image)?.as_deref() == Some(name) {
             return gui_tree::container(r, child, image);
@@ -270,7 +275,11 @@ pub(super) fn list(process: &dyn Process, keys: &MacKeys) -> Result<Value> {
 }
 /// Select the named wing through its row in the Air Forces Overview (opens it, scrolls the row into
 /// view, one click); returns the row as it was before the click.
-pub(super) fn select_wing(process: &dyn Process, keys: &MacKeys, name: &str) -> Result<Option<Wing>> {
+pub(super) fn select_wing(
+    process: &dyn Process,
+    keys: &MacKeys,
+    name: &str,
+) -> Result<Option<Wing>> {
     open_overview(process, keys)?;
     let find = |r: &Reader<'_>, i: u64| -> Result<Option<Rect>> {
         Ok(wings(r, i)?

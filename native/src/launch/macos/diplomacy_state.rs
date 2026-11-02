@@ -299,7 +299,10 @@ fn tag_index(value: i32) -> Result<i32> {
     if (0..1024).contains(&value) {
         Ok(value)
     } else {
-        Err(Error::new("invalid_relation", "Relation party out of range"))
+        Err(Error::new(
+            "invalid_relation",
+            "Relation party out of range",
+        ))
     }
 }
 
@@ -473,8 +476,8 @@ impl<'a> Names<'a> {
         if let Some(found) = self.cache.get(&tag) {
             return found.clone();
         }
-        let code = super::states::tag_name(self.r, self.image, tag)
-            .unwrap_or_else(|_| format!("#{tag}"));
+        let code =
+            super::states::tag_name(self.r, self.image, tag).unwrap_or_else(|_| format!("#{tag}"));
         let name = self
             .w
             .country_of
@@ -513,10 +516,12 @@ fn wars_value(r: &Reader<'_>, image: u64, w: &World) -> Result<(Value, BTreeSet<
     let own_wars: Vec<&Rel> = own.iter().filter(|x| x.kind == Kind::War).collect();
     let mut names = Names::new(r, image, w);
     if own_wars.is_empty() {
-        return Ok((json!({"at_war":false,"count":0,"enemies":[],"wars":[],
+        return Ok((
+            json!({"at_war":false,"count":0,"enemies":[],"wars":[],
             "allies_at_war":[],"validated":true,
             "validation":"empty list matches the screen at peace (no war overview shield, no war icon)"}),
-            BTreeSet::new()));
+            BTreeSet::new(),
+        ));
     }
     let ptrs: Vec<u64> = own_wars.iter().map(|x| x.ptr).collect();
     let holders = all_war_holders(r, image, w)?;
@@ -532,19 +537,23 @@ fn wars_value(r: &Reader<'_>, image: u64, w: &World) -> Result<(Value, BTreeSet<
             .filter(|g| g.target == enemy || g.attacker == enemy)
             .map(|g| goal_json(&mut names, g))
             .collect();
-        wars.push(json!({"enemy":names.who(enemy),"started":date_json(rel.start),
+        wars.push(
+            json!({"enemy":names.who(enemy),"started":date_json(rel.start),
             "relation_id":format!("0x{:x}",rel.ptr),
             "war_goals_involving_enemy":related,
             "attacker":null,"defender":null,"sides_reason":"offset_not_validated",
-            "war_score":null,"war_score_reason":"offset_not_validated"}));
+            "war_score":null,"war_score_reason":"offset_not_validated"}),
+        );
     }
     let allies: Vec<Value> = picture.allies.iter().map(|t| names.who(*t)).collect();
-    Ok((json!({"at_war":true,"count":wars.len(),
+    Ok((
+        json!({"at_war":true,"count":wars.len(),
         "enemies":enemy_codes.iter().collect::<Vec<_>>(),"wars":wars,
         "allies_at_war":allies,"leaders":null,"leaders_reason":"offset_not_validated",
         "validated":"enemies and start date by pointer identity (structure live-validated on a civil war); not yet compared with a player war on screen",
         "validation_note":"the player's own war has not been observed live"}),
-        enemy_codes))
+        enemy_codes,
+    ))
 }
 
 pub(super) fn player_wars(process: &dyn Process) -> Result<PlayerWars> {
@@ -635,7 +644,9 @@ pub(super) fn state(process: &dyn Process) -> Result<Value> {
         let others: Vec<Value> = rels
             .iter()
             .filter_map(|x| match x.kind {
-                Kind::Other(name) => Some(json!({"class":name,"with":names.who(if x.a == me { x.b } else { x.a })})),
+                Kind::Other(name) => {
+                    Some(json!({"class":name,"with":names.who(if x.a == me { x.b } else { x.a })}))
+                }
                 _ => None,
             })
             .collect();
@@ -727,7 +738,12 @@ fn state_owners(r: &Reader<'_>, image: u64) -> Result<Vec<(i32, i32)>> {
 }
 
 /// State ids owned by tag `tag`, lowest id first (at most `limit`).
-pub(super) fn states_owned_by(r: &Reader<'_>, image: u64, tag: &str, limit: usize) -> Result<Vec<i32>> {
+pub(super) fn states_owned_by(
+    r: &Reader<'_>,
+    image: u64,
+    tag: &str,
+    limit: usize,
+) -> Result<Vec<i32>> {
     let owner = tag_index_of(r, image, tag)?;
     let mut ids: Vec<i32> = state_owners(r, image)?
         .into_iter()
@@ -740,7 +756,11 @@ pub(super) fn states_owned_by(r: &Reader<'_>, image: u64, tag: &str, limit: usiz
 }
 
 /// What the player's relations with country `tag` look like now.
-pub(super) fn snapshot(r: &Reader<'_>, image: u64, tag: &str) -> Result<super::diplomacy_keys::Snapshot> {
+pub(super) fn snapshot(
+    r: &Reader<'_>,
+    image: u64,
+    tag: &str,
+) -> Result<super::diplomacy_keys::Snapshot> {
     let w = world(r, image)?;
     let me = w.player_tag;
     let target = tag_index_of(r, image, tag)?;
@@ -755,7 +775,8 @@ pub(super) fn snapshot(r: &Reader<'_>, image: u64, tag: &str) -> Result<super::d
     let (mine, _) = relations_of(r, image, w.player_country)?;
     let mut snap = super::diplomacy_keys::Snapshot::default();
     for rel in mine.iter().filter(|x| theirs.contains(&x.ptr)) {
-        snap.rels.insert((kind_label(rel.kind).to_string(), rel.a == me));
+        snap.rels
+            .insert((kind_label(rel.kind).to_string(), rel.a == me));
         if rel.kind == Kind::War {
             snap.at_war = true;
         }
@@ -772,7 +793,10 @@ pub(super) fn snapshot(r: &Reader<'_>, image: u64, tag: &str) -> Result<super::d
 }
 
 /// Own war goals as plain data: (attacker tag, target tag, type key).
-pub(super) fn own_goals(r: &Reader<'_>, image: u64) -> Result<Vec<(String, String, Option<String>)>> {
+pub(super) fn own_goals(
+    r: &Reader<'_>,
+    image: u64,
+) -> Result<Vec<(String, String, Option<String>)>> {
     let w = world(r, image)?;
     let mut names = Names::new(r, image, &w);
     Ok(goals_of(r, image, w.player_country)?
@@ -790,7 +814,12 @@ pub(super) fn player_faction(process: &dyn Process) -> Result<Option<(String, Ve
         Ok(list
             .iter()
             .find(|f| f.members.contains(&w.player_tag))
-            .map(|f| (f.name.clone(), f.members.iter().map(|t| names.code(*t)).collect())))
+            .map(|f| {
+                (
+                    f.name.clone(),
+                    f.members.iter().map(|t| names.code(*t)).collect(),
+                )
+            }))
     })
 }
 
@@ -837,7 +866,10 @@ pub(super) fn countries_tool() -> Value {
     json!({"name":"hoi4_diplomacy_countries","description":"Read-only (memory, no input, no pause): the countries of the world with what the player's own diplomacy shows about them: tag, name, number of states owned, faction name and members' faction, overlord, and the relations between the player and the country (war, guarantee given/received, non-aggression pact, military access each way, subject, lend-lease, docking rights, embargo...). Filters: query (tag or name part), relation (kind such as guarantee, non_aggression, military_access, subject, war), faction (name part), only_with_states (default true), limit (default 50, max 200) and offset. The actions available toward one country are listed by hoi4_diplomacy {country}; enemy opinion, AI intentions and anything hidden are not read.","inputSchema":{"type":"object","properties":{"query":{"type":"string","maxLength":64},"relation":{"type":"string","maxLength":48},"faction":{"type":"string","maxLength":64},"only_with_states":{"type":"boolean"},"limit":{"type":"integer","minimum":1,"maximum":200},"offset":{"type":"integer","minimum":0}},"additionalProperties":false}})
 }
 
-pub(super) fn countries(process: &dyn Process, args: &serde_json::Map<String, Value>) -> Result<Value> {
+pub(super) fn countries(
+    process: &dyn Process,
+    args: &serde_json::Map<String, Value>,
+) -> Result<Value> {
     let text = |key: &str| -> Result<Option<String>> {
         match args.get(key) {
             None => Ok(None),
@@ -862,13 +894,15 @@ pub(super) fn countries(process: &dyn Process, args: &serde_json::Map<String, Va
         Some(v) => v
             .as_u64()
             .filter(|v| (1..=200).contains(v))
-            .ok_or_else(|| Error::new("invalid_arguments", "limit must be 1..200"))? as usize,
+            .ok_or_else(|| Error::new("invalid_arguments", "limit must be 1..200"))?
+            as usize,
     };
     let offset = match args.get("offset") {
         None => 0,
         Some(v) => v
             .as_u64()
-            .ok_or_else(|| Error::new("invalid_arguments", "offset must be a number"))? as usize,
+            .ok_or_else(|| Error::new("invalid_arguments", "offset must be a number"))?
+            as usize,
     };
     let started = Instant::now();
     let (rows, total) = read(process, |r, image| {
@@ -897,7 +931,10 @@ pub(super) fn countries(process: &dyn Process, args: &serde_json::Map<String, Va
                     continue;
                 }
             }
-            let faction = list.iter().find(|f| f.members.contains(tag)).map(|f| f.name.clone());
+            let faction = list
+                .iter()
+                .find(|f| f.members.contains(tag))
+                .map(|f| f.name.clone());
             if let Some(q) = &faction_filter {
                 if !faction.as_deref().unwrap_or("").to_lowercase().contains(q) {
                     continue;
@@ -931,24 +968,36 @@ pub(super) fn countries(process: &dyn Process, args: &serde_json::Map<String, Va
             }
             if let Some(q) = &relation {
                 if !with_me.iter().any(|v| {
-                    v["kind"].as_str().is_some_and(|k| k.to_lowercase().contains(q))
+                    v["kind"]
+                        .as_str()
+                        .is_some_and(|k| k.to_lowercase().contains(q))
                 }) {
                     continue;
                 }
             }
-            rows.push(json!({"tag":code,"name":name,"states":states,"is_player":*tag == me,
-                "faction":faction,"overlord":overlord,"relations_with_player":with_me}));
+            rows.push(
+                json!({"tag":code,"name":name,"states":states,"is_player":*tag == me,
+                "faction":faction,"overlord":overlord,"relations_with_player":with_me}),
+            );
         }
         let total = rows.len();
-        Ok((rows.into_iter().skip(offset).take(limit).collect::<Vec<_>>(), total))
+        Ok((
+            rows.into_iter()
+                .skip(offset)
+                .take(limit)
+                .collect::<Vec<_>>(),
+            total,
+        ))
     })?;
-    Ok(json!({"source":"native own diplomacy state (memory)","count":rows.len(),"total_matching":total,
+    Ok(
+        json!({"source":"native own diplomacy state (memory)","count":rows.len(),"total_matching":total,
         "offset":offset,"countries":rows,
         "validation":{"relations":"same pointer in both countries' relation lists (validated live 25 Oct 2026); direction from the first party tag",
             "names":"country name string at CCountry+0x10",
             "gaps":["opinion","ideology","army strength (hidden information, never read)"]},
         "observation_paused_game":false,"input_authorized":false,
-        "freshness":{"elapsed_ms":started.elapsed().as_secs_f64()*1000.0}}))
+        "freshness":{"elapsed_ms":started.elapsed().as_secs_f64()*1000.0}}),
+    )
 }
 
 #[cfg(test)]
@@ -959,8 +1008,14 @@ mod tests {
     fn dates_follow_the_no_leap_calendar() {
         assert_eq!(iso(60_759_371).as_deref(), Some("1936-01-01 12:00"));
         assert_eq!(iso(60_759_371 + 12).as_deref(), Some("1936-01-02 00:00"));
-        assert_eq!(iso(60_759_371 + 24 * 59).as_deref(), Some("1936-03-01 12:00"));
-        assert_eq!(iso(60_759_371 + 24 * 365).as_deref(), Some("1937-01-01 12:00"));
+        assert_eq!(
+            iso(60_759_371 + 24 * 59).as_deref(),
+            Some("1936-03-01 12:00")
+        );
+        assert_eq!(
+            iso(60_759_371 + 24 * 365).as_deref(),
+            Some("1937-01-01 12:00")
+        );
         // screen: 24:00 on 12 Feb 1937 for raw 60769153, and 17:00 on 26 Aug
         // 1937 for raw 60773824..60773827 (the capture lags the read by 1-6 h)
         assert_eq!(iso(60_769_153).as_deref(), Some("1937-02-13 02:00"));

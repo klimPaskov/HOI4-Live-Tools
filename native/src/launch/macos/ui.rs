@@ -273,7 +273,9 @@ fn save_root(r: &Reader<'_>, image: u64) -> Result<Option<u64>> {
         if !(0x10000..=0x7fff_ffff_0000).contains(&field) {
             continue;
         }
-        let Ok(Some(root)) = gui_tree::container(r, field, image) else { continue };
+        let Ok(Some(root)) = gui_tree::container(r, field, image) else {
+            continue;
+        };
         if gui_tree::name(r, root + 0x30, image)?.as_deref() == Some("ingamemenu_save") {
             return Ok(gui_tree::visible(r, root)?.then_some(root));
         }
@@ -290,11 +292,17 @@ pub(super) fn save_game(
 ) -> Result<serde_json::Value> {
     use crate::platform::macos_input::Key;
     let newest = || -> Option<(std::time::SystemTime, String)> {
-        std::fs::read_dir(saves).ok()?.filter_map(|e| e.ok()).filter_map(|e| {
-            let name = e.file_name().to_string_lossy().to_string();
-            if !name.ends_with(".hoi4") { return None; }
-            Some((e.metadata().ok()?.modified().ok()?, name))
-        }).max()
+        std::fs::read_dir(saves)
+            .ok()?
+            .filter_map(|e| e.ok())
+            .filter_map(|e| {
+                let name = e.file_name().to_string_lossy().to_string();
+                if !name.ends_with(".hoi4") {
+                    return None;
+                }
+                Some((e.metadata().ok()?.modified().ok()?, name))
+            })
+            .max()
     };
     let before = newest().map(|(t, _)| t);
     clear_notices(process, keys)?;
@@ -310,12 +318,18 @@ pub(super) fn save_game(
     })?;
     // These buttons are drawn by a text sprite whose width is the text texture's (864 px for
     // "Save Game"), so its centre lies outside the button: click near the left edge instead.
-    let near_left = |r: gui_tree::Rect| (f64::from(r.x) + 40.0, f64::from(r.y) + f64::from(r.h) / 2.0);
+    let near_left =
+        |r: gui_tree::Rect| (f64::from(r.x) + 40.0, f64::from(r.y) + f64::from(r.h) / 2.0);
     let (x, y) = near_left(button);
     keys.click((1920, 1080), x, y)?;
-    wait(process, "save window", |r, i| Ok(save_root(r, i)?.is_some()))?;
+    wait(
+        process,
+        "save window",
+        |r, i| Ok(save_root(r, i)?.is_some()),
+    )?;
     let confirm = settled(process, "save confirm", |r, i| {
-        let root = save_root(r, i)?.ok_or_else(|| Error::new("invalid_gui", "Save window closed"))?;
+        let root =
+            save_root(r, i)?.ok_or_else(|| Error::new("invalid_gui", "Save window closed"))?;
         let b = gui_tree::child(r, i, root, "save")?
             .ok_or_else(|| Error::new("gui_target_unavailable", "Save confirm button not found"))?;
         gui_tree::rect(r, i, b, (1920, 1080))
@@ -332,7 +346,10 @@ pub(super) fn save_game(
             }
         }
         if Instant::now() >= deadline {
-            return Err(Error::new("input_readback_failed", "No save file was written within 60 s"));
+            return Err(Error::new(
+                "input_readback_failed",
+                "No save file was written within 60 s",
+            ));
         }
         std::thread::sleep(Duration::from_millis(500));
     };

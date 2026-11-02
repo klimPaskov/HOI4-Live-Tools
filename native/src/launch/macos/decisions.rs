@@ -183,7 +183,9 @@ pub(super) fn list(process: &dyn Process, keys: &MacKeys) -> Result<Value> {
     let found = settled(process, "decisions", rows)?;
     Ok(json!(found
         .into_iter()
-        .map(|r| json!({"decision":r.key,"title":r.title,"active_timer":r.timed,"enabled":r.enabled}))
+        .map(
+            |r| json!({"decision":r.key,"title":r.title,"active_timer":r.timed,"enabled":r.enabled})
+        )
         .collect::<Vec<_>>()))
 }
 
@@ -212,7 +214,12 @@ pub(super) fn state(process: &dyn Process) -> Result<Vec<Value>> {
 }
 
 /// Take decision `key`; the caller has journaled intent.
-pub(super) fn take(process: &dyn Process, keys: &MacKeys, key: &str, target: Option<&str>) -> Result<()> {
+pub(super) fn take(
+    process: &dyn Process,
+    keys: &MacKeys,
+    key: &str,
+    target: Option<&str>,
+) -> Result<()> {
     decline_stale(process, keys)?;
     clear_notices(process, keys)?;
     ensure_open(process, keys)?;
@@ -220,16 +227,27 @@ pub(super) fn take(process: &dyn Process, keys: &MacKeys, key: &str, target: Opt
     let pp_before = political_power(process)?;
     let wanted = target.map(|t| t.trim().to_lowercase());
     let fits = |r: &Row| {
-        r.key == key && !r.timed && wanted.as_ref().is_none_or(|t| r.title.to_lowercase().contains(t))
+        r.key == key
+            && !r.timed
+            && wanted
+                .as_ref()
+                .is_none_or(|t| r.title.to_lowercase().contains(t))
     };
     let row = before.iter().find(|r| fits(r)).cloned().ok_or_else(|| {
-        let titles: Vec<&str> = before.iter().filter(|r| r.key == key).map(|r| r.title.as_str()).collect();
+        let titles: Vec<&str> = before
+            .iter()
+            .filter(|r| r.key == key)
+            .map(|r| r.title.as_str())
+            .collect();
         Error::new(
             "invalid_target",
             if titles.is_empty() {
                 "This decision is not offered now".to_string()
             } else {
-                format!("No row of this decision matches the target; its rows: {}", titles.join(" | "))
+                format!(
+                    "No row of this decision matches the target; its rows: {}",
+                    titles.join(" | ")
+                )
             },
         )
     })?;
@@ -264,7 +282,12 @@ pub(super) fn take(process: &dyn Process, keys: &MacKeys, key: &str, target: Opt
         };
         keys.scroll(GAME, (175.0, 600.0), pixels)?;
         let previous = rect;
-        rect = read(process, |r, i| Ok(rows(r, i)?.into_iter().find(|x| fits(x)).and_then(|x| x.rect)))?;
+        rect = read(process, |r, i| {
+            Ok(rows(r, i)?
+                .into_iter()
+                .find(|x| fits(x))
+                .and_then(|x| x.rect))
+        })?;
         if rect.is_some() && rect == previous {
             band = (LIST.0 - 20, LIST.1 + 22);
         }

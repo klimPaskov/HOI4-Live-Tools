@@ -148,7 +148,12 @@ impl Roster {
         for n in v["names"].as_array().into_iter().flatten() {
             out.names.insert(text(n));
         }
-        let pool: Vec<String> = v["pool"].as_array().into_iter().flatten().map(text).collect();
+        let pool: Vec<String> = v["pool"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(text)
+            .collect();
         for d in &pool {
             out.home.insert(d.clone(), None);
         }
@@ -237,9 +242,10 @@ pub(super) fn army_merge(before: &Roster, now: &Roster, source: &str, target: &s
         .iter()
         .filter(|d| now.home.get(**d).and_then(|a| a.as_deref()) == Some(target))
         .count();
-    let others_moved = now.home.iter().any(|(d, a)| {
-        !moving.contains(&d) && before.home.get(d).is_some_and(|b| b != a)
-    });
+    let others_moved = now
+        .home
+        .iter()
+        .any(|(d, a)| !moving.contains(&d) && before.home.get(d).is_some_and(|b| b != a));
     if arrived == 0 && !others_moved {
         Verdict::Unchanged
     } else if arrived == moving.len() && !others_moved {
@@ -334,10 +340,7 @@ pub(super) fn special_project(
 /// and now (project, whether its state machine is in the stopping state). A
 /// project that simply vanished proves nothing about this click (it may have
 /// completed), so only the stopping state is `Reached`.
-pub(super) fn special_stop(
-    before: Option<u32>,
-    now: Option<(Option<u32>, bool)>,
-) -> Verdict {
+pub(super) fn special_stop(before: Option<u32>, now: Option<(Option<u32>, bool)>) -> Verdict {
     match now {
         None | Some((None, _)) => Verdict::Unknown,
         Some((Some(p), true)) if Some(p) == before => Verdict::Reached,
@@ -376,17 +379,38 @@ mod tests {
     #[test]
     fn special_stop_unassign_recruit_rules() {
         use super::super::special_projects::Slots;
-        assert_eq!(special_stop(Some(7), Some((Some(7), true))), Verdict::Reached);
-        assert_eq!(special_stop(Some(7), Some((Some(7), false))), Verdict::Unchanged);
+        assert_eq!(
+            special_stop(Some(7), Some((Some(7), true))),
+            Verdict::Reached
+        );
+        assert_eq!(
+            special_stop(Some(7), Some((Some(7), false))),
+            Verdict::Unchanged
+        );
         assert_eq!(special_stop(Some(7), Some((None, false))), Verdict::Unknown);
-        assert_eq!(special_stop(Some(7), Some((Some(8), false))), Verdict::Diverged);
+        assert_eq!(
+            special_stop(Some(7), Some((Some(8), false))),
+            Verdict::Diverged
+        );
         assert_eq!(special_stop(Some(7), None), Verdict::Unknown);
-        let held = Slots { scientist: Some(3), project: None };
-        let empty = Slots { scientist: None, project: None };
+        let held = Slots {
+            scientist: Some(3),
+            project: None,
+        };
+        let empty = Slots {
+            scientist: None,
+            project: None,
+        };
         assert_eq!(special_unassign(Some(3), Some(empty)), Verdict::Reached);
         assert_eq!(special_unassign(Some(3), Some(held)), Verdict::Unchanged);
         assert_eq!(
-            special_unassign(Some(3), Some(Slots { scientist: Some(4), project: None })),
+            special_unassign(
+                Some(3),
+                Some(Slots {
+                    scientist: Some(4),
+                    project: None
+                })
+            ),
             Verdict::Diverged
         );
         assert_eq!(special_unassign(Some(3), None), Verdict::Unknown);
@@ -441,7 +465,10 @@ mod tests {
             Verdict::Diverged
         );
         // facility gone
-        assert_eq!(special_project(empty, None, Some(7), None), Verdict::Unknown);
+        assert_eq!(
+            special_project(empty, None, Some(7), None),
+            Verdict::Unknown
+        );
     }
 
     fn view(armies: &[(&str, &[&str], Option<&str>)], free: &[&str], groups: &[&str]) -> Roster {
@@ -491,22 +518,42 @@ mod tests {
             &["u1", "u2", "u3"],
             &[],
         );
-        assert_eq!(army_assign(&before, &same, "A", &pool, 3), Verdict::Unchanged);
+        assert_eq!(
+            army_assign(&before, &same, "A", &pool, 3),
+            Verdict::Unchanged
+        );
         // a division taken out of B, a new army or a vanished target is never Reached
         let stolen = view(
             &[("A", &["d1", "d2", "d3"], None), ("B", &[], None)],
             &["u1", "u2", "u3"],
             &[],
         );
-        assert_eq!(army_assign(&before, &stolen, "A", &pool, 1), Verdict::Unknown);
+        assert_eq!(
+            army_assign(&before, &stolen, "A", &pool, 1),
+            Verdict::Unknown
+        );
         let fresh = view(
-            &[("A", &["d1", "d2"], None), ("B", &["d3"], None), ("C", &["u1"], None)],
+            &[
+                ("A", &["d1", "d2"], None),
+                ("B", &["d3"], None),
+                ("C", &["u1"], None),
+            ],
             &["u2", "u3"],
             &[],
         );
-        assert_eq!(army_assign(&before, &fresh, "A", &pool, 1), Verdict::Unknown);
-        let merged = view(&[("B", &["d1", "d2", "d3", "u1"], None)], &["u2", "u3"], &[]);
-        assert_eq!(army_assign(&before, &merged, "A", &pool, 1), Verdict::Unknown);
+        assert_eq!(
+            army_assign(&before, &fresh, "A", &pool, 1),
+            Verdict::Unknown
+        );
+        let merged = view(
+            &[("B", &["d1", "d2", "d3", "u1"], None)],
+            &["u2", "u3"],
+            &[],
+        );
+        assert_eq!(
+            army_assign(&before, &merged, "A", &pool, 1),
+            Verdict::Unknown
+        );
     }
 
     #[test]

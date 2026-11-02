@@ -63,7 +63,10 @@ const ACCESS_OFFER: &[(&str, Dir)] = &[
     ("offer_military_access", Dir::Either),
 ];
 const DOCK_ASK: &[(&str, Dir)] = &[("docking_rights", Dir::Either)];
-const DOCK_OFFER: &[(&str, Dir)] = &[("offer_docking_rights", Dir::Either), ("docking_rights", Dir::Either)];
+const DOCK_OFFER: &[(&str, Dir)] = &[
+    ("offer_docking_rights", Dir::Either),
+    ("docking_rights", Dir::Either),
+];
 const IMPROVE: &[(&str, Dir)] = &[("improve_relations", Dir::FromMe)];
 const LEND: &[(&str, Dir)] = &[("lend_lease", Dir::Either)];
 const ATTACHE: &[(&str, Dir)] = &[("attache", Dir::FromMe)];
@@ -72,44 +75,304 @@ const EMBARGO: &[(&str, Dir)] = &[("embargo", Dir::FromMe)];
 const LICENCE: &[(&str, Dir)] = &[("licence_production_access", Dir::Either)];
 
 pub(super) const SPECS: &[Spec] = &[
-    Spec { key: "improve_relations", rows: &["Improve relations"], effect: Effect::Appears(IMPROVE), ai_decides: false, dialog: true },
-    Spec { key: "stop_improving_relations", rows: &["Stop improving relations"], effect: Effect::Disappears(IMPROVE), ai_decides: false, dialog: true },
-    Spec { key: "guarantee", rows: &["Guarantee independence"], effect: Effect::Appears(G), ai_decides: false, dialog: true },
-    Spec { key: "revoke_guarantee", rows: &["Revoke guarantee", "Remove guarantee", "Revoke guarantee independence", "Cancel guarantee"], effect: Effect::Disappears(G), ai_decides: false, dialog: true },
-    Spec { key: "non_aggression_pact", rows: &["Non-aggression pact"], effect: Effect::Appears(PACT), ai_decides: true, dialog: true },
-    Spec { key: "cancel_non_aggression_pact", rows: &["Cancel non-aggression pact", "Break non-aggression pact", "Cancel pact"], effect: Effect::Disappears(PACT), ai_decides: false, dialog: true },
-    Spec { key: "ask_military_access", rows: &["Ask for military access", "Request military access"], effect: Effect::Appears(ACCESS_ASK), ai_decides: true, dialog: true },
-    Spec { key: "offer_military_access", rows: &["Offer military access", "Give military access"], effect: Effect::Appears(ACCESS_OFFER), ai_decides: true, dialog: true },
-    Spec { key: "revoke_military_access", rows: &["Cancel our military access", "Cancel their military access", "Revoke military access", "Cancel military access", "Remove military access", "Revoke access"], effect: Effect::Disappears(&[("military_access", Dir::Either)]), ai_decides: false, dialog: true },
-    Spec { key: "ask_docking_rights", rows: &["Ask for docking rights", "Request docking rights"], effect: Effect::Appears(DOCK_ASK), ai_decides: true, dialog: true },
-    Spec { key: "offer_docking_rights", rows: &["Offer docking rights", "Give docking rights"], effect: Effect::Appears(DOCK_OFFER), ai_decides: true, dialog: true },
-    Spec { key: "revoke_docking_rights", rows: &["Revoke docking rights", "Cancel docking rights"], effect: Effect::Disappears(&[("docking_rights", Dir::Either), ("offer_docking_rights", Dir::Either)]), ai_decides: false, dialog: false },
-    Spec { key: "send_attache", rows: &["Send attaché", "Send attache"], effect: Effect::Appears(ATTACHE), ai_decides: true, dialog: true },
-    Spec { key: "invite_to_faction", rows: &["Invite to faction"], effect: Effect::FactionJoined, ai_decides: true, dialog: true },
-    Spec { key: "join_faction", rows: &["Request to join faction", "Join faction", "Ask to join faction", "Apply to join faction"], effect: Effect::FactionJoined, ai_decides: true, dialog: true },
-    Spec { key: "kick_from_faction", rows: &["Kick from faction", "Remove from faction", "Expel from faction"], effect: Effect::FactionLeft, ai_decides: false, dialog: true },
-    Spec { key: "request_licence_production", rows: &["Request License Production", "Request Licence Production"], effect: Effect::Appears(LICENCE), ai_decides: true, dialog: true },
-    Spec { key: "start_lend_lease", rows: &["Start Lend lease", "Start Lend-lease", "Offer Lend lease"], effect: Effect::Appears(LEND), ai_decides: false, dialog: true },
-    Spec { key: "request_lend_lease", rows: &["Request Lend lease", "Request Lend-lease"], effect: Effect::Appears(LEND), ai_decides: true, dialog: true },
-    Spec { key: "send_volunteers", rows: &["Send Volunteers"], effect: Effect::RowsOnly, ai_decides: false, dialog: true },
-    Spec { key: "expeditionary_force", rows: &["Expeditionary Force", "Send Expeditionary Force"], effect: Effect::RowsOnly, ai_decides: false, dialog: true },
-    Spec { key: "return_expeditions", rows: &["Return Expeditions"], effect: Effect::RowsOnly, ai_decides: false, dialog: false },
-    Spec { key: "boost_party_popularity", rows: &["Boost party popularity"], effect: Effect::Appears(BOOST), ai_decides: false, dialog: true },
-    Spec { key: "stage_coup", rows: &["Stage a coup"], effect: Effect::RowsOnly, ai_decides: false, dialog: true },
-    Spec { key: "embargo", rows: &["Embargo", "Impose embargo"], effect: Effect::Appears(EMBARGO), ai_decides: false, dialog: false },
-    Spec { key: "lift_embargo", rows: &["Lift embargo", "Remove embargo", "Cancel embargo"], effect: Effect::Disappears(EMBARGO), ai_decides: false, dialog: false },
-    Spec { key: "justify_war_goal", rows: &["Justify War goal", "Justify war goal"], effect: Effect::GoalAdded, ai_decides: false, dialog: true },
-    Spec { key: "add_war_goal", rows: &["Add War goal", "Add war goal"], effect: Effect::GoalAdded, ai_decides: false, dialog: true },
-    Spec { key: "cancel_war_goal", rows: &["Cancel Justification", "Cancel justification", "Cancel War goal"], effect: Effect::GoalRemoved, ai_decides: false, dialog: true },
-    Spec { key: "annex_subject", rows: &["Annex", "Annex subject", "Annex puppet"], effect: Effect::Disappears(&[("subject", Dir::Either)]), ai_decides: false, dialog: true },
-    Spec { key: "release_subject", rows: &["Release subject", "Release as puppet", "Release puppet"], effect: Effect::RowsOnly, ai_decides: false, dialog: true },
-    Spec { key: "diplomatic_pressure", rows: &["Diplomatic pressure", "Send diplomatic pressure"], effect: Effect::RowsOnly, ai_decides: false, dialog: true },
-    Spec { key: "declare_war", rows: &["Declare war"], effect: Effect::WarStarted, ai_decides: false, dialog: true },
-    Spec { key: "call_allies", rows: &["Call allies", "Call to arms"], effect: Effect::RowsOnly, ai_decides: false, dialog: true },
-    Spec { key: "join_allies", rows: &["Join allies", "Join ally's war"], effect: Effect::RowsOnly, ai_decides: false, dialog: true },
-    Spec { key: "ask_state_control", rows: &["Ask for state control"], effect: Effect::RowsOnly, ai_decides: true, dialog: true },
-    Spec { key: "give_state_control", rows: &["Give state control"], effect: Effect::RowsOnly, ai_decides: false, dialog: true },
-    Spec { key: "request_garrison_support", rows: &["Request Garrison support"], effect: Effect::RowsOnly, ai_decides: true, dialog: false },
+    Spec {
+        key: "improve_relations",
+        rows: &["Improve relations"],
+        effect: Effect::Appears(IMPROVE),
+        ai_decides: false,
+        dialog: true,
+    },
+    Spec {
+        key: "stop_improving_relations",
+        rows: &["Stop improving relations"],
+        effect: Effect::Disappears(IMPROVE),
+        ai_decides: false,
+        dialog: true,
+    },
+    Spec {
+        key: "guarantee",
+        rows: &["Guarantee independence"],
+        effect: Effect::Appears(G),
+        ai_decides: false,
+        dialog: true,
+    },
+    Spec {
+        key: "revoke_guarantee",
+        rows: &[
+            "Revoke guarantee",
+            "Remove guarantee",
+            "Revoke guarantee independence",
+            "Cancel guarantee",
+        ],
+        effect: Effect::Disappears(G),
+        ai_decides: false,
+        dialog: true,
+    },
+    Spec {
+        key: "non_aggression_pact",
+        rows: &["Non-aggression pact"],
+        effect: Effect::Appears(PACT),
+        ai_decides: true,
+        dialog: true,
+    },
+    Spec {
+        key: "cancel_non_aggression_pact",
+        rows: &[
+            "Cancel non-aggression pact",
+            "Break non-aggression pact",
+            "Cancel pact",
+        ],
+        effect: Effect::Disappears(PACT),
+        ai_decides: false,
+        dialog: true,
+    },
+    Spec {
+        key: "ask_military_access",
+        rows: &["Ask for military access", "Request military access"],
+        effect: Effect::Appears(ACCESS_ASK),
+        ai_decides: true,
+        dialog: true,
+    },
+    Spec {
+        key: "offer_military_access",
+        rows: &["Offer military access", "Give military access"],
+        effect: Effect::Appears(ACCESS_OFFER),
+        ai_decides: true,
+        dialog: true,
+    },
+    Spec {
+        key: "revoke_military_access",
+        rows: &[
+            "Cancel our military access",
+            "Cancel their military access",
+            "Revoke military access",
+            "Cancel military access",
+            "Remove military access",
+            "Revoke access",
+        ],
+        effect: Effect::Disappears(&[("military_access", Dir::Either)]),
+        ai_decides: false,
+        dialog: true,
+    },
+    Spec {
+        key: "ask_docking_rights",
+        rows: &["Ask for docking rights", "Request docking rights"],
+        effect: Effect::Appears(DOCK_ASK),
+        ai_decides: true,
+        dialog: true,
+    },
+    Spec {
+        key: "offer_docking_rights",
+        rows: &["Offer docking rights", "Give docking rights"],
+        effect: Effect::Appears(DOCK_OFFER),
+        ai_decides: true,
+        dialog: true,
+    },
+    Spec {
+        key: "revoke_docking_rights",
+        rows: &["Revoke docking rights", "Cancel docking rights"],
+        effect: Effect::Disappears(&[
+            ("docking_rights", Dir::Either),
+            ("offer_docking_rights", Dir::Either),
+        ]),
+        ai_decides: false,
+        dialog: false,
+    },
+    Spec {
+        key: "send_attache",
+        rows: &["Send attaché", "Send attache"],
+        effect: Effect::Appears(ATTACHE),
+        ai_decides: true,
+        dialog: true,
+    },
+    Spec {
+        key: "invite_to_faction",
+        rows: &["Invite to faction"],
+        effect: Effect::FactionJoined,
+        ai_decides: true,
+        dialog: true,
+    },
+    Spec {
+        key: "join_faction",
+        rows: &[
+            "Request to join faction",
+            "Join faction",
+            "Ask to join faction",
+            "Apply to join faction",
+        ],
+        effect: Effect::FactionJoined,
+        ai_decides: true,
+        dialog: true,
+    },
+    Spec {
+        key: "kick_from_faction",
+        rows: &[
+            "Kick from faction",
+            "Remove from faction",
+            "Expel from faction",
+        ],
+        effect: Effect::FactionLeft,
+        ai_decides: false,
+        dialog: true,
+    },
+    Spec {
+        key: "request_licence_production",
+        rows: &["Request License Production", "Request Licence Production"],
+        effect: Effect::Appears(LICENCE),
+        ai_decides: true,
+        dialog: true,
+    },
+    Spec {
+        key: "start_lend_lease",
+        rows: &["Start Lend lease", "Start Lend-lease", "Offer Lend lease"],
+        effect: Effect::Appears(LEND),
+        ai_decides: false,
+        dialog: true,
+    },
+    Spec {
+        key: "request_lend_lease",
+        rows: &["Request Lend lease", "Request Lend-lease"],
+        effect: Effect::Appears(LEND),
+        ai_decides: true,
+        dialog: true,
+    },
+    Spec {
+        key: "send_volunteers",
+        rows: &["Send Volunteers"],
+        effect: Effect::RowsOnly,
+        ai_decides: false,
+        dialog: true,
+    },
+    Spec {
+        key: "expeditionary_force",
+        rows: &["Expeditionary Force", "Send Expeditionary Force"],
+        effect: Effect::RowsOnly,
+        ai_decides: false,
+        dialog: true,
+    },
+    Spec {
+        key: "return_expeditions",
+        rows: &["Return Expeditions"],
+        effect: Effect::RowsOnly,
+        ai_decides: false,
+        dialog: false,
+    },
+    Spec {
+        key: "boost_party_popularity",
+        rows: &["Boost party popularity"],
+        effect: Effect::Appears(BOOST),
+        ai_decides: false,
+        dialog: true,
+    },
+    Spec {
+        key: "stage_coup",
+        rows: &["Stage a coup"],
+        effect: Effect::RowsOnly,
+        ai_decides: false,
+        dialog: true,
+    },
+    Spec {
+        key: "embargo",
+        rows: &["Embargo", "Impose embargo"],
+        effect: Effect::Appears(EMBARGO),
+        ai_decides: false,
+        dialog: false,
+    },
+    Spec {
+        key: "lift_embargo",
+        rows: &["Lift embargo", "Remove embargo", "Cancel embargo"],
+        effect: Effect::Disappears(EMBARGO),
+        ai_decides: false,
+        dialog: false,
+    },
+    Spec {
+        key: "justify_war_goal",
+        rows: &["Justify War goal", "Justify war goal"],
+        effect: Effect::GoalAdded,
+        ai_decides: false,
+        dialog: true,
+    },
+    Spec {
+        key: "add_war_goal",
+        rows: &["Add War goal", "Add war goal"],
+        effect: Effect::GoalAdded,
+        ai_decides: false,
+        dialog: true,
+    },
+    Spec {
+        key: "cancel_war_goal",
+        rows: &[
+            "Cancel Justification",
+            "Cancel justification",
+            "Cancel War goal",
+        ],
+        effect: Effect::GoalRemoved,
+        ai_decides: false,
+        dialog: true,
+    },
+    Spec {
+        key: "annex_subject",
+        rows: &["Annex", "Annex subject", "Annex puppet"],
+        effect: Effect::Disappears(&[("subject", Dir::Either)]),
+        ai_decides: false,
+        dialog: true,
+    },
+    Spec {
+        key: "release_subject",
+        rows: &["Release subject", "Release as puppet", "Release puppet"],
+        effect: Effect::RowsOnly,
+        ai_decides: false,
+        dialog: true,
+    },
+    Spec {
+        key: "diplomatic_pressure",
+        rows: &["Diplomatic pressure", "Send diplomatic pressure"],
+        effect: Effect::RowsOnly,
+        ai_decides: false,
+        dialog: true,
+    },
+    Spec {
+        key: "declare_war",
+        rows: &["Declare war"],
+        effect: Effect::WarStarted,
+        ai_decides: false,
+        dialog: true,
+    },
+    Spec {
+        key: "call_allies",
+        rows: &["Call allies", "Call to arms"],
+        effect: Effect::RowsOnly,
+        ai_decides: false,
+        dialog: true,
+    },
+    Spec {
+        key: "join_allies",
+        rows: &["Join allies", "Join ally's war"],
+        effect: Effect::RowsOnly,
+        ai_decides: false,
+        dialog: true,
+    },
+    Spec {
+        key: "ask_state_control",
+        rows: &["Ask for state control"],
+        effect: Effect::RowsOnly,
+        ai_decides: true,
+        dialog: true,
+    },
+    Spec {
+        key: "give_state_control",
+        rows: &["Give state control"],
+        effect: Effect::RowsOnly,
+        ai_decides: false,
+        dialog: true,
+    },
+    Spec {
+        key: "request_garrison_support",
+        rows: &["Request Garrison support"],
+        effect: Effect::RowsOnly,
+        ai_decides: true,
+        dialog: false,
+    },
 ];
 
 /// Lower case, `_` and `-` as spaces, accents folded, single spaces.
@@ -158,7 +421,10 @@ pub(super) fn resolve(action: &str, offered: &[String]) -> Result<(String, Optio
     if let Some(row) = offered.iter().find(|r| norm(r) == wanted) {
         return Ok((row.clone(), spec_of_row(row)));
     }
-    let hits: Vec<&String> = offered.iter().filter(|r| norm(r).contains(&wanted)).collect();
+    let hits: Vec<&String> = offered
+        .iter()
+        .filter(|r| norm(r).contains(&wanted))
+        .collect();
     match hits.len() {
         1 => Ok((hits[0].clone(), spec_of_row(hits[0]))),
         0 => Err(not_offered(action, offered, None)),
@@ -166,7 +432,10 @@ pub(super) fn resolve(action: &str, offered: &[String]) -> Result<(String, Optio
             "action_ambiguous",
             format!(
                 "'{action}' matches several rows: {}",
-                hits.iter().map(|h| h.as_str()).collect::<Vec<_>>().join(", ")
+                hits.iter()
+                    .map(|h| h.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
             ),
         )),
     }
@@ -233,20 +502,39 @@ pub(super) fn verdict(
     proof: bool,
 ) -> Verdict {
     let Some(spec) = spec else {
-        return if proof { Verdict::Reached } else { Verdict::Unknown };
+        return if proof {
+            Verdict::Reached
+        } else {
+            Verdict::Unknown
+        };
     };
     let ai = spec.ai_decides;
     let none = Snapshot::default();
     let b = before.unwrap_or(&none);
     // `Some(true)`: the target effect is in the snapshot now and was not before.
     let (reached, absent) = match spec.effect {
-        Effect::Appears(list) => (has(now, list) && (before.is_none() || !has(b, list)), !has(now, list)),
-        Effect::Disappears(list) => (before.is_some() && has(b, list) && !has(now, list), has(now, list) || before.is_none()),
-        Effect::GoalAdded => (now.goals > b.goals && (before.is_some() || now.goals > 0), now.goals <= b.goals),
-        Effect::GoalRemoved => (before.is_some() && now.goals < b.goals, now.goals >= b.goals || before.is_none()),
+        Effect::Appears(list) => (
+            has(now, list) && (before.is_none() || !has(b, list)),
+            !has(now, list),
+        ),
+        Effect::Disappears(list) => (
+            before.is_some() && has(b, list) && !has(now, list),
+            has(now, list) || before.is_none(),
+        ),
+        Effect::GoalAdded => (
+            now.goals > b.goals && (before.is_some() || now.goals > 0),
+            now.goals <= b.goals,
+        ),
+        Effect::GoalRemoved => (
+            before.is_some() && now.goals < b.goals,
+            now.goals >= b.goals || before.is_none(),
+        ),
         Effect::WarStarted => (now.at_war && !b.at_war, !now.at_war),
         Effect::FactionJoined => (now.same_faction && !b.same_faction, !now.same_faction),
-        Effect::FactionLeft => (before.is_some() && b.same_faction && !now.same_faction, now.same_faction || before.is_none()),
+        Effect::FactionLeft => (
+            before.is_some() && b.same_faction && !now.same_faction,
+            now.same_faction || before.is_none(),
+        ),
         Effect::RowsOnly => (proof, !proof),
     };
     if reached {
@@ -285,13 +573,33 @@ mod tests {
 
     #[test]
     fn keys_resolve_to_offered_rows() {
-        let offered = rows(&["Declare war", "Guarantee independence", "Send attaché", "Non-aggression pact"]);
-        assert_eq!(resolve("guarantee", &offered).unwrap().0, "Guarantee independence");
-        assert_eq!(resolve("non_aggression_pact", &offered).unwrap().0, "Non-aggression pact");
-        assert_eq!(resolve("Non-Aggression Pact", &offered).unwrap().0, "Non-aggression pact");
+        let offered = rows(&[
+            "Declare war",
+            "Guarantee independence",
+            "Send attaché",
+            "Non-aggression pact",
+        ]);
+        assert_eq!(
+            resolve("guarantee", &offered).unwrap().0,
+            "Guarantee independence"
+        );
+        assert_eq!(
+            resolve("non_aggression_pact", &offered).unwrap().0,
+            "Non-aggression pact"
+        );
+        assert_eq!(
+            resolve("Non-Aggression Pact", &offered).unwrap().0,
+            "Non-aggression pact"
+        );
         assert_eq!(resolve("send_attache", &offered).unwrap().0, "Send attaché");
-        assert_eq!(resolve("declare_war", &offered).unwrap().1.unwrap().key, "declare_war");
-        assert_eq!(resolve("aggression", &offered).unwrap().0, "Non-aggression pact");
+        assert_eq!(
+            resolve("declare_war", &offered).unwrap().1.unwrap().key,
+            "declare_war"
+        );
+        assert_eq!(
+            resolve("aggression", &offered).unwrap().0,
+            "Non-aggression pact"
+        );
     }
 
     #[test]
@@ -300,7 +608,10 @@ mod tests {
         let e = resolve("guarantee", &offered).unwrap_err();
         assert_eq!(e.code, "action_not_offered");
         assert!(e.message.contains("Ask for military access"));
-        assert_eq!(resolve("military access", &offered).unwrap_err().code, "action_ambiguous");
+        assert_eq!(
+            resolve("military access", &offered).unwrap_err().code,
+            "action_ambiguous"
+        );
         assert_eq!(resolve("", &offered).unwrap_err().code, "invalid_arguments");
     }
 
@@ -322,10 +633,16 @@ mod tests {
         assert_eq!(verdict(spec, Some(&before), &now, false), Verdict::Reached);
         // a guarantee the target gives us is not ours
         let theirs = snap(&[("guarantee", false)]);
-        assert_eq!(verdict(spec, Some(&before), &theirs, false), Verdict::Unchanged);
+        assert_eq!(
+            verdict(spec, Some(&before), &theirs, false),
+            Verdict::Unchanged
+        );
         // unrelated relations appearing change nothing
         let other = snap(&[("military_access", true)]);
-        assert_eq!(verdict(spec, Some(&before), &other, false), Verdict::Unchanged);
+        assert_eq!(
+            verdict(spec, Some(&before), &other, false),
+            Verdict::Unchanged
+        );
         // retry of an unresolved request: only reaching counts
         assert_eq!(verdict(spec, None, &now, false), Verdict::Reached);
         assert_eq!(verdict(spec, None, &before, false), Verdict::Unknown);
@@ -335,15 +652,26 @@ mod tests {
     fn ai_refusal_is_unchanged_even_when_political_power_moved() {
         let spec = spec_of_key("non_aggression_pact");
         let before = snap(&[]);
-        assert_eq!(verdict(spec, Some(&before), &before, true), Verdict::Unchanged);
         assert_eq!(
-            verdict(spec, Some(&before), &snap(&[("non_aggression", false)]), false),
+            verdict(spec, Some(&before), &before, true),
+            Verdict::Unchanged
+        );
+        assert_eq!(
+            verdict(
+                spec,
+                Some(&before),
+                &snap(&[("non_aggression", false)]),
+                false
+            ),
             Verdict::Reached
         );
         // a non-AI action with its own proof but an unread relation class
         let imp = spec_of_key("improve_relations");
         assert_eq!(verdict(imp, Some(&before), &before, true), Verdict::Reached);
-        assert_eq!(verdict(imp, Some(&before), &before, false), Verdict::Unchanged);
+        assert_eq!(
+            verdict(imp, Some(&before), &before, false),
+            Verdict::Unchanged
+        );
         let on = snap(&[("improve_relations", true)]);
         assert_eq!(verdict(imp, Some(&before), &on, false), Verdict::Reached);
         let stop = spec_of_key("stop_improving_relations");
@@ -354,17 +682,41 @@ mod tests {
     fn war_goals_and_war_are_counted() {
         let justify = spec_of_key("justify_war_goal");
         let mut before = Snapshot::default();
-        let now = Snapshot { goals: 1, ..Snapshot::default() };
-        assert_eq!(verdict(justify, Some(&before), &now, false), Verdict::Reached);
-        assert_eq!(verdict(justify, Some(&before), &before, false), Verdict::Unchanged);
+        let now = Snapshot {
+            goals: 1,
+            ..Snapshot::default()
+        };
+        assert_eq!(
+            verdict(justify, Some(&before), &now, false),
+            Verdict::Reached
+        );
+        assert_eq!(
+            verdict(justify, Some(&before), &before, false),
+            Verdict::Unchanged
+        );
         let cancel = spec_of_key("cancel_war_goal");
         before.goals = 1;
-        assert_eq!(verdict(cancel, Some(&before), &Snapshot::default(), false), Verdict::Reached);
-        assert_eq!(verdict(cancel, Some(&before), &before, false), Verdict::Unchanged);
+        assert_eq!(
+            verdict(cancel, Some(&before), &Snapshot::default(), false),
+            Verdict::Reached
+        );
+        assert_eq!(
+            verdict(cancel, Some(&before), &before, false),
+            Verdict::Unchanged
+        );
         let war = spec_of_key("declare_war");
-        let at_war = Snapshot { at_war: true, ..Snapshot::default() };
-        assert_eq!(verdict(war, Some(&Snapshot::default()), &at_war, false), Verdict::Reached);
-        assert_eq!(verdict(war, Some(&Snapshot::default()), &Snapshot::default(), true), Verdict::Reached);
+        let at_war = Snapshot {
+            at_war: true,
+            ..Snapshot::default()
+        };
+        assert_eq!(
+            verdict(war, Some(&Snapshot::default()), &at_war, false),
+            Verdict::Reached
+        );
+        assert_eq!(
+            verdict(war, Some(&Snapshot::default()), &Snapshot::default(), true),
+            Verdict::Reached
+        );
         assert!(already(Effect::WarStarted, &at_war));
         assert!(!already(Effect::WarStarted, &Snapshot::default()));
     }
@@ -373,18 +725,41 @@ mod tests {
     fn revoking_needs_the_relation_to_disappear() {
         let revoke = spec_of_key("revoke_guarantee");
         let before = snap(&[("guarantee", true)]);
-        assert_eq!(verdict(revoke, Some(&before), &snap(&[]), false), Verdict::Reached);
-        assert_eq!(verdict(revoke, Some(&before), &before, false), Verdict::Unchanged);
+        assert_eq!(
+            verdict(revoke, Some(&before), &snap(&[]), false),
+            Verdict::Reached
+        );
+        assert_eq!(
+            verdict(revoke, Some(&before), &before, false),
+            Verdict::Unchanged
+        );
         assert_eq!(verdict(revoke, None, &snap(&[]), false), Verdict::Unknown);
     }
 
     #[test]
     fn faction_membership_effects() {
         let invite = spec_of_key("invite_to_faction");
-        let now = Snapshot { same_faction: true, ..Snapshot::default() };
-        assert_eq!(verdict(invite, Some(&Snapshot::default()), &now, false), Verdict::Reached);
-        assert_eq!(verdict(invite, Some(&Snapshot::default()), &Snapshot::default(), true), Verdict::Unchanged);
+        let now = Snapshot {
+            same_faction: true,
+            ..Snapshot::default()
+        };
+        assert_eq!(
+            verdict(invite, Some(&Snapshot::default()), &now, false),
+            Verdict::Reached
+        );
+        assert_eq!(
+            verdict(
+                invite,
+                Some(&Snapshot::default()),
+                &Snapshot::default(),
+                true
+            ),
+            Verdict::Unchanged
+        );
         let kick = spec_of_key("kick_from_faction");
-        assert_eq!(verdict(kick, Some(&now), &Snapshot::default(), false), Verdict::Reached);
+        assert_eq!(
+            verdict(kick, Some(&now), &Snapshot::default(), false),
+            Verdict::Reached
+        );
     }
 }

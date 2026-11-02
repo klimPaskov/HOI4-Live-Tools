@@ -355,6 +355,7 @@ pub(crate) struct QueueSummary {
     pub(crate) complete: bool,
 }
 /// Buildings that take a shared state building slot while they are queued.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 pub(crate) const SHARED_SLOT_BUILDINGS: [&str; 7] = [
     "arms_factory",
     "industrial_complex",
@@ -366,6 +367,7 @@ pub(crate) const SHARED_SLOT_BUILDINGS: [&str; 7] = [
 ];
 /// Queued amount of shared-slot buildings per own state (state id -> amount). A queued
 /// project holds its slot, so the slots a state can still take are `free - queued`.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 pub(crate) fn queued_shared_by_state(
     r: &Reader<'_>,
     base: u64,
@@ -378,7 +380,10 @@ pub(crate) fn queued_shared_by_state(
         let (Some(key), Some(location)) = (row.key.as_deref(), row.location.as_ref()) else {
             continue;
         };
-        if row.building && SHARED_SLOT_BUILDINGS.contains(&key) && (0..=COUNTER_LIMIT).contains(&row.amount) {
+        if row.building
+            && SHARED_SLOT_BUILDINGS.contains(&key)
+            && (0..=COUNTER_LIMIT).contains(&row.amount)
+        {
             *out.entry(location.state_id).or_insert(0) += i64::from(row.amount);
         }
     }

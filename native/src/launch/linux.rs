@@ -35,6 +35,7 @@ use std::{
 };
 mod clock;
 mod fex_config;
+mod steam_guard;
 mod translated;
 
 #[derive(Clone, Deserialize)]
@@ -1293,6 +1294,7 @@ pub fn serve(path: &Path) -> Result<()> {
     let executable_meta = fs::metadata(&launch_image)?;
     let _launch_lock = launch_lock()?;
     duplicate_game(&executable)?;
+    steam_guard::refuse_running_steam()?;
     verify_identity(&config.display.server)?;
     if !config.display.xauthority.is_absolute() {
         return Err(Error::new(
@@ -1364,6 +1366,10 @@ pub fn serve(path: &Path) -> Result<()> {
     fs::DirBuilder::new().mode(0o700).create(directory)?;
     let userdata = directory.join("userdata");
     fs::DirBuilder::new().mode(0o700).create(&userdata)?;
+    // Empty private HOME: the Steam API finds no client pipe or Steam folder.
+    // FEX without an explicit config directory still reads the real HOME.
+    let private_home = directory.join("home");
+    fs::DirBuilder::new().mode(0o700).create(&private_home)?;
     if let Some(seed) = &seed {
         write_new(&userdata.join("settings.txt"), seed)?;
     }
@@ -1405,6 +1411,13 @@ pub fn serve(path: &Path) -> Result<()> {
         if let Some(value) = std::env::var_os(name) {
             command.env(name, value);
         }
+    }
+    let fex_needs_home = config
+        .fex
+        .as_ref()
+        .is_some_and(|fex| fex.config_directory.is_none());
+    if !fex_needs_home {
+        command.env("HOME", &private_home);
     }
     command
         .env("DISPLAY", format!(":{}", config.display.number))

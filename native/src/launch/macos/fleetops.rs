@@ -116,7 +116,10 @@ pub(super) struct Plan {
     pub partition: BTreeSet<Vec<i32>>,
 }
 fn ids(f: &Fleet) -> BTreeSet<i32> {
-    f.task_forces.iter().flat_map(|t| t.ships.iter().map(|s| s.id)).collect()
+    f.task_forces
+        .iter()
+        .flat_map(|t| t.ships.iter().map(|s| s.id))
+        .collect()
 }
 fn partition(f: &Fleet) -> BTreeSet<Vec<i32>> {
     f.task_forces
@@ -131,19 +134,28 @@ fn partition(f: &Fleet) -> BTreeSet<Vec<i32>> {
 /// Index of the reserve fleet: the last fleet when it holds only reserve task forces (code 8).
 pub(super) fn reserve_index(fleets: &[Fleet]) -> Option<usize> {
     let last = fleets.last()?;
-    (fleets.len() > 1 && !last.task_forces.is_empty() && last.task_forces.iter().all(|t| t.mission_code == 8))
-        .then(|| fleets.len() - 1)
+    (fleets.len() > 1
+        && !last.task_forces.is_empty()
+        && last.task_forces.iter().all(|t| t.mission_code == 8))
+    .then(|| fleets.len() - 1)
 }
 fn fleet_index(fleets: &[Fleet], name: &str) -> Result<usize> {
-    fleets.iter().position(|f| same_name(&f.name, name)).ok_or_else(|| {
-        Error::new(
-            "fleet_unknown",
-            format!(
-                "No own fleet named {name:?}; own fleets: {}",
-                fleets.iter().map(|f| f.name.trim()).collect::<Vec<_>>().join(" | ")
-            ),
-        )
-    })
+    fleets
+        .iter()
+        .position(|f| same_name(&f.name, name))
+        .ok_or_else(|| {
+            Error::new(
+                "fleet_unknown",
+                format!(
+                    "No own fleet named {name:?}; own fleets: {}",
+                    fleets
+                        .iter()
+                        .map(|f| f.name.trim())
+                        .collect::<Vec<_>>()
+                        .join(" | ")
+                ),
+            )
+        })
 }
 fn base_plan(fleets: &[Fleet], op: Op, index: usize, task_force: Option<&TaskForce>) -> Plan {
     let f = &fleets[index];
@@ -173,7 +185,11 @@ pub(super) fn plan(fleets: &[Fleet], op: Op, subject: &str, to: Option<&str>) ->
         if fleets[index].task_forces.len() < 2 {
             return Err(Error::new(
                 "nothing_to_change",
-                format!("Fleet {:?} has fewer than two task forces to {}", fleets[index].name.trim(), op.label()),
+                format!(
+                    "Fleet {:?} has fewer than two task forces to {}",
+                    fleets[index].name.trim(),
+                    op.label()
+                ),
             ));
         }
         return Ok(base_plan(fleets, op, index, None));
@@ -241,7 +257,9 @@ pub(super) fn settle(plan: &Plan, now: &[Fleet]) -> Verdict {
                 Op::Merge if count == 1 => Verdict::Reached,
                 Op::Split if count == plan.task_forces_before + 1 => Verdict::Reached,
                 Op::Balance if partition(f) != plan.partition => Verdict::Reached,
-                _ if count == plan.task_forces_before && partition(f) == plan.partition => Verdict::Unchanged,
+                _ if count == plan.task_forces_before && partition(f) == plan.partition => {
+                    Verdict::Unchanged
+                }
                 _ => Verdict::Diverged,
             }
         }
@@ -258,7 +276,14 @@ pub(super) fn settle(plan: &Plan, now: &[Fleet]) -> Verdict {
         },
         Op::Assign => match tf.and_then(|t| holder(now, t)) {
             None => Verdict::Unknown,
-            Some((_, f)) if plan.target.as_deref().is_some_and(|t| same_name(&f.name, t)) => Verdict::Reached,
+            Some((_, f))
+                if plan
+                    .target
+                    .as_deref()
+                    .is_some_and(|t| same_name(&f.name, t)) =>
+            {
+                Verdict::Reached
+            }
             Some((_, f)) if same_name(&f.name, &plan.fleet) => Verdict::Unchanged,
             Some(_) => Verdict::Diverged,
         },
@@ -299,9 +324,15 @@ fn toolbar_button(r: &crate::memory::Reader<'_>, image: u64, name: &str) -> Resu
     let bar = nui::tool_bar(r, image)?;
     let button = nui::child_of(r, image, bar, name)?;
     if !gui_tree::shown(r, button)? {
-        return Err(Error::new("gui_target_unavailable", format!("{name} is not shown")));
+        return Err(Error::new(
+            "gui_target_unavailable",
+            format!("{name} is not shown"),
+        ));
     }
-    Ok((gui_tree::rect(r, image, button, nui::GAME)?, gui_tree::button_state(r, button)?))
+    Ok((
+        gui_tree::rect(r, image, button, nui::GAME)?,
+        gui_tree::button_state(r, button)?,
+    ))
 }
 fn wait_fleets(process: &dyn Process, stage: &str, ok: impl Fn(&[Fleet]) -> bool) -> Result<()> {
     wait(process, stage, |r, i| {
@@ -311,12 +342,17 @@ fn wait_fleets(process: &dyn Process, stage: &str, ok: impl Fn(&[Fleet]) -> bool
     })
 }
 fn press_toolbar(process: &dyn Process, keys: &MacKeys<'_>, op: Op) -> Result<()> {
-    let name = op.button().ok_or_else(|| Error::new("invalid_arguments", "No toolbar button"))?;
+    let name = op
+        .button()
+        .ok_or_else(|| Error::new("invalid_arguments", "No toolbar button"))?;
     let (rect, state) = settled(process, "toolbar button", |r, i| toolbar_button(r, i, name))?;
     if state == 3 {
         return Err(Error::new(
             "button_disabled",
-            format!("The game disables the {} button ({name}) for this selection", op.label()),
+            format!(
+                "The game disables the {} button ({name}) for this selection",
+                op.label()
+            ),
         ));
     }
     kit::click(keys, rect)
@@ -360,7 +396,12 @@ fn summary(fleets: &[Fleet]) -> Value {
             .collect(),
     )
 }
-pub(super) fn drive(process: &dyn Process, keys: &MacKeys<'_>, plan: &Plan, drag: bool) -> Result<Value> {
+pub(super) fn drive(
+    process: &dyn Process,
+    keys: &MacKeys<'_>,
+    plan: &Plan,
+    drag: bool,
+) -> Result<Value> {
     with_navy_ui(process, keys, || {
         navalact::select_fleet(process, keys, &plan.fleet, &plan.order)?;
         if plan.op.fleet_level() {
@@ -375,11 +416,19 @@ pub(super) fn drive(process: &dyn Process, keys: &MacKeys<'_>, plan: &Plan, drag
                 .order
                 .iter()
                 .position(|n| same_name(n, target))
-                .ok_or_else(|| Error::new("fleet_unknown", "The receiving fleet is not among the own fleets"))?;
+                .ok_or_else(|| {
+                    Error::new(
+                        "fleet_unknown",
+                        "The receiving fleet is not among the own fleets",
+                    )
+                })?;
             let cards = settled(process, "fleet cards", nui::cards)?;
-            let card = cards
-                .get(index)
-                .ok_or_else(|| Error::new("gui_target_unavailable", "The receiving fleet's card is not shown"))?;
+            let card = cards.get(index).ok_or_else(|| {
+                Error::new(
+                    "gui_target_unavailable",
+                    "The receiving fleet's card is not shown",
+                )
+            })?;
             let x = f64::from(card.frame.x) + f64::from(card.frame.w) / 2.0;
             let y = (f64::from(card.frame.y) + f64::from(card.frame.h) / 2.0).min(1040.0);
             if drag {
@@ -388,10 +437,18 @@ pub(super) fn drive(process: &dyn Process, keys: &MacKeys<'_>, plan: &Plan, drag
                 let entry = entries
                     .iter()
                     .find(|e| same_name(&e.name, tf))
-                    .ok_or_else(|| Error::new("gui_target_unavailable", "The task force entry is not shown"))?;
+                    .ok_or_else(|| {
+                        Error::new(
+                            "gui_target_unavailable",
+                            "The task force entry is not shown",
+                        )
+                    })?;
                 keys.drag(
                     nui::GAME,
-                    (f64::from(entry.select.x) + 30.0, f64::from(entry.select.y + entry.select.h / 2)),
+                    (
+                        f64::from(entry.select.x) + 30.0,
+                        f64::from(entry.select.y + entry.select.h / 2),
+                    ),
                     (x, y),
                 )?;
             } else {
@@ -415,15 +472,18 @@ pub(super) fn drive(process: &dyn Process, keys: &MacKeys<'_>, plan: &Plan, drag
             )
         })?;
         let after = navalact::own_fleets(process)?;
-        Ok(json!({"op":plan.op.label(),"fleet":plan.fleet.trim(),"task_force":plan.task_force,"target":plan.target,
+        Ok(
+            json!({"op":plan.op.label(),"fleet":plan.fleet.trim(),"task_force":plan.task_force,"target":plan.target,
             "confirmation_answered":answered,"route":if plan.op == Op::Assign { if drag {"drag"} else {"right_click"} } else {"toolbar"},
-            "fleets_after":summary(&after)}))
+            "fleets_after":summary(&after)}),
+        )
     })
 }
 
 // ---- dispatch -------------------------------------------------------------------------------------
 pub(super) fn call(name: &str, args: &Map<String, Value>, env: Env<'_>) -> Result<Value> {
-    let op = Op::from_tool(name).ok_or_else(|| Error::new("capability_unavailable", "Unknown fleet tool"))?;
+    let op = Op::from_tool(name)
+        .ok_or_else(|| Error::new("capability_unavailable", "Unknown fleet tool"))?;
     let (subject_key, mut keys): (&str, Vec<&str>) = if op.fleet_level() {
         ("fleet", vec!["fleet"])
     } else {
@@ -437,11 +497,20 @@ pub(super) fn call(name: &str, args: &Map<String, Value>, env: Env<'_>) -> Resul
     }
     super::allowed(args, &keys)?;
     let subject = kit::text_arg(args, subject_key, 128)?;
-    let to = if op == Op::Assign { Some(kit::text_arg(args, "to_fleet", 128)?) } else { None };
+    let to = if op == Op::Assign {
+        Some(kit::text_arg(args, "to_fleet", 128)?)
+    } else {
+        None
+    };
     let drag = match args.get("route").map(|v| v.as_str()) {
         None | Some(Some("right_click")) => false,
         Some(Some("drag")) => true,
-        _ => return Err(Error::new("invalid_arguments", "route must be right_click or drag")),
+        _ => {
+            return Err(Error::new(
+                "invalid_arguments",
+                "route must be right_click or drag",
+            ))
+        }
     };
     if op == Op::Delete && args.get("confirm").and_then(Value::as_str) != Some("destroy_ships") {
         return Err(Error::new(
@@ -454,7 +523,12 @@ pub(super) fn call(name: &str, args: &Map<String, Value>, env: Env<'_>) -> Resul
     let action = json!({"kind":format!("fleet_{}", op.label()),"subject":subject,"to_fleet":to,"route":if drag {"drag"} else {"right_click"}});
     kit::run(
         env,
-        kit::Request { id: &id, token: &token, seconds: 120, action },
+        kit::Request {
+            id: &id,
+            token: &token,
+            seconds: 120,
+            action,
+        },
         &|p| {
             let fleets = navalact::own_fleets(p)?;
             let planned = plan(&fleets, op, &subject, to.as_deref())?;
@@ -517,14 +591,31 @@ mod tests {
         }
     }
     fn tf(name: &str, code: i32, ships: &[i32]) -> TaskForce {
-        TaskForce { name: name.into(), place: None, mission_code: code, ships: ships.iter().map(|i| ship(*i)).collect() }
+        TaskForce {
+            name: name.into(),
+            place: None,
+            mission_code: code,
+            ships: ships.iter().map(|i| ship(*i)).collect(),
+        }
     }
     fn fleet(name: &str, tfs: Vec<TaskForce>) -> Fleet {
-        Fleet { name: name.into(), home_port: None, regions: Vec::new(), admiral: None, task_forces: tfs }
+        Fleet {
+            name: name.into(),
+            home_port: None,
+            regions: Vec::new(),
+            admiral: None,
+            task_forces: tfs,
+        }
     }
     fn world() -> Vec<Fleet> {
         vec![
-            fleet("Kriegsmarine", vec![tf("Hochseeflotte", 0, &[1, 2, 3, 4]), tf("Ostseeflotte", 1, &[5, 6])]),
+            fleet(
+                "Kriegsmarine",
+                vec![
+                    tf("Hochseeflotte", 0, &[1, 2, 3, 4]),
+                    tf("Ostseeflotte", 1, &[5, 6]),
+                ],
+            ),
             fleet("U-Flotte ", vec![tf("I. U-Boots", 0, &[7])]),
             fleet("Reserve", vec![tf("Reserve fleet 1", 8, &[8, 9])]),
         ]
@@ -533,19 +624,75 @@ mod tests {
     #[test]
     fn plans_refuse_before_input() {
         let f = world();
-        assert_eq!(plan(&f, Op::Merge, "kriegsmarine", None).unwrap().task_forces_before, 2);
-        assert_eq!(plan(&f, Op::Merge, "U-Flotte", None).unwrap_err().code, "nothing_to_change");
-        assert_eq!(plan(&f, Op::Merge, "Reserve", None).unwrap_err().code, "reserve_fleet");
-        assert_eq!(plan(&f, Op::Merge, "Nope", None).unwrap_err().code, "fleet_unknown");
-        assert_eq!(plan(&f, Op::Balance, "Kriegsmarine", None).unwrap().partition.len(), 2);
-        assert_eq!(plan(&f, Op::Split, "Hochseeflotte", None).unwrap().ship_ids.len(), 6);
-        assert_eq!(plan(&f, Op::Split, "I. U-Boots", None).unwrap_err().code, "task_force_too_small");
-        assert_eq!(plan(&f, Op::Split, "Reserve fleet 1", None).unwrap_err().code, "reserve_fleet");
-        assert_eq!(plan(&f, Op::Split, "Nope", None).unwrap_err().code, "task_force_unknown");
-        assert_eq!(plan(&f, Op::Reserve, "Reserve fleet 1", None).unwrap_err().code, "nothing_to_change");
-        assert_eq!(plan(&f, Op::Reserve, "Ostseeflotte", None).unwrap().fleet, "Kriegsmarine");
-        assert_eq!(plan(&f, Op::Delete, "Reserve fleet 1", None).unwrap_err().code, "reserve_fleet");
-        assert_eq!(plan(&f, Op::Delete, "I. U-Boots", None).unwrap().task_force.as_deref(), Some("I. U-Boots"));
+        assert_eq!(
+            plan(&f, Op::Merge, "kriegsmarine", None)
+                .unwrap()
+                .task_forces_before,
+            2
+        );
+        assert_eq!(
+            plan(&f, Op::Merge, "U-Flotte", None).unwrap_err().code,
+            "nothing_to_change"
+        );
+        assert_eq!(
+            plan(&f, Op::Merge, "Reserve", None).unwrap_err().code,
+            "reserve_fleet"
+        );
+        assert_eq!(
+            plan(&f, Op::Merge, "Nope", None).unwrap_err().code,
+            "fleet_unknown"
+        );
+        assert_eq!(
+            plan(&f, Op::Balance, "Kriegsmarine", None)
+                .unwrap()
+                .partition
+                .len(),
+            2
+        );
+        assert_eq!(
+            plan(&f, Op::Split, "Hochseeflotte", None)
+                .unwrap()
+                .ship_ids
+                .len(),
+            6
+        );
+        assert_eq!(
+            plan(&f, Op::Split, "I. U-Boots", None).unwrap_err().code,
+            "task_force_too_small"
+        );
+        assert_eq!(
+            plan(&f, Op::Split, "Reserve fleet 1", None)
+                .unwrap_err()
+                .code,
+            "reserve_fleet"
+        );
+        assert_eq!(
+            plan(&f, Op::Split, "Nope", None).unwrap_err().code,
+            "task_force_unknown"
+        );
+        assert_eq!(
+            plan(&f, Op::Reserve, "Reserve fleet 1", None)
+                .unwrap_err()
+                .code,
+            "nothing_to_change"
+        );
+        assert_eq!(
+            plan(&f, Op::Reserve, "Ostseeflotte", None).unwrap().fleet,
+            "Kriegsmarine"
+        );
+        assert_eq!(
+            plan(&f, Op::Delete, "Reserve fleet 1", None)
+                .unwrap_err()
+                .code,
+            "reserve_fleet"
+        );
+        assert_eq!(
+            plan(&f, Op::Delete, "I. U-Boots", None)
+                .unwrap()
+                .task_force
+                .as_deref(),
+            Some("I. U-Boots")
+        );
     }
     #[test]
     fn assign_plans() {
@@ -553,11 +700,34 @@ mod tests {
         let p = plan(&f, Op::Assign, "Ostseeflotte", Some("u-flotte")).unwrap();
         assert_eq!(p.target.as_deref(), Some("U-Flotte "));
         assert_eq!(p.order, vec!["Kriegsmarine", "U-Flotte ", "Reserve"]);
-        assert_eq!(plan(&f, Op::Assign, "Ostseeflotte", Some("Kriegsmarine")).unwrap_err().code, "nothing_to_change");
-        assert_eq!(plan(&f, Op::Assign, "Ostseeflotte", Some("Reserve")).unwrap_err().code, "target_is_reserve");
-        assert_eq!(plan(&f, Op::Assign, "Ostseeflotte", Some("Nope")).unwrap_err().code, "fleet_unknown");
-        assert_eq!(plan(&f, Op::Assign, "Ostseeflotte", None).unwrap_err().code, "invalid_arguments");
-        assert_eq!(plan(&f, Op::Assign, "Reserve fleet 1", Some("Kriegsmarine")).unwrap_err().code, "reserve_fleet");
+        assert_eq!(
+            plan(&f, Op::Assign, "Ostseeflotte", Some("Kriegsmarine"))
+                .unwrap_err()
+                .code,
+            "nothing_to_change"
+        );
+        assert_eq!(
+            plan(&f, Op::Assign, "Ostseeflotte", Some("Reserve"))
+                .unwrap_err()
+                .code,
+            "target_is_reserve"
+        );
+        assert_eq!(
+            plan(&f, Op::Assign, "Ostseeflotte", Some("Nope"))
+                .unwrap_err()
+                .code,
+            "fleet_unknown"
+        );
+        assert_eq!(
+            plan(&f, Op::Assign, "Ostseeflotte", None).unwrap_err().code,
+            "invalid_arguments"
+        );
+        assert_eq!(
+            plan(&f, Op::Assign, "Reserve fleet 1", Some("Kriegsmarine"))
+                .unwrap_err()
+                .code,
+            "reserve_fleet"
+        );
     }
     #[test]
     fn merge_split_balance_settlement() {
@@ -595,7 +765,10 @@ mod tests {
         assert_eq!(settle(&reserve, &f), Verdict::Unchanged);
         let mut after = world();
         let moved = after[0].task_forces.remove(1);
-        after[2].task_forces.push(TaskForce { mission_code: 8, ..moved });
+        after[2].task_forces.push(TaskForce {
+            mission_code: 8,
+            ..moved
+        });
         assert_eq!(settle(&reserve, &after), Verdict::Reached);
         let mut gone = world();
         gone[0].task_forces.remove(1);
@@ -620,12 +793,30 @@ mod tests {
     #[test]
     fn retry_without_baseline_settles_by_arguments() {
         let f = world();
-        assert_eq!(settle_without_baseline(Op::Merge, "Kriegsmarine", None, &f), Verdict::Unchanged);
-        assert_eq!(settle_without_baseline(Op::Delete, "Nope", None, &f), Verdict::Reached);
-        assert_eq!(settle_without_baseline(Op::Reserve, "Ostseeflotte", None, &f), Verdict::Unchanged);
-        assert_eq!(settle_without_baseline(Op::Reserve, "Reserve fleet 1", None, &f), Verdict::Reached);
-        assert_eq!(settle_without_baseline(Op::Assign, "I. U-Boots", Some("U-Flotte"), &f), Verdict::Reached);
-        assert_eq!(settle_without_baseline(Op::Split, "Hochseeflotte", None, &f), Verdict::Unknown);
+        assert_eq!(
+            settle_without_baseline(Op::Merge, "Kriegsmarine", None, &f),
+            Verdict::Unchanged
+        );
+        assert_eq!(
+            settle_without_baseline(Op::Delete, "Nope", None, &f),
+            Verdict::Reached
+        );
+        assert_eq!(
+            settle_without_baseline(Op::Reserve, "Ostseeflotte", None, &f),
+            Verdict::Unchanged
+        );
+        assert_eq!(
+            settle_without_baseline(Op::Reserve, "Reserve fleet 1", None, &f),
+            Verdict::Reached
+        );
+        assert_eq!(
+            settle_without_baseline(Op::Assign, "I. U-Boots", Some("U-Flotte"), &f),
+            Verdict::Reached
+        );
+        assert_eq!(
+            settle_without_baseline(Op::Split, "Hochseeflotte", None, &f),
+            Verdict::Unknown
+        );
     }
     #[test]
     fn plans_survive_the_baseline_round_trip() {
@@ -640,9 +831,15 @@ mod tests {
         assert_eq!(list.len(), TOOLS.len());
         for (entry, name) in list.iter().zip(TOOLS) {
             assert_eq!(entry["name"], name);
-            assert!(entry["description"].as_str().unwrap().starts_with("UNVALIDATED (no live test yet): "));
+            assert!(entry["description"]
+                .as_str()
+                .unwrap()
+                .starts_with("UNVALIDATED (no live test yet): "));
             let required = entry["inputSchema"]["required"].as_array().unwrap();
-            assert!(required.iter().any(|v| v == "request_id") && required.iter().any(|v| v == "lease_token"));
+            assert!(
+                required.iter().any(|v| v == "request_id")
+                    && required.iter().any(|v| v == "lease_token")
+            );
         }
         assert!(handles("hoi4_fleet_delete") && !handles("hoi4_fleet_create"));
     }

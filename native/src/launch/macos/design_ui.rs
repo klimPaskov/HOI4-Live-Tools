@@ -79,7 +79,10 @@ fn edit_text(r: &Reader<'_>, edit_box: u64) -> Result<String> {
             return r.string_bounded(edit_box + text, 160);
         }
     }
-    Err(Error::new("invalid_gui", "Designer name box text not found"))
+    Err(Error::new(
+        "invalid_gui",
+        "Designer name box text not found",
+    ))
 }
 const SLOT_DEF: u64 = 0xb0;
 // 1.19.4: slot view button 0x4a0 -> 0x500 (static +0x60; live: CButtonStandard at +0x500).
@@ -125,13 +128,17 @@ fn named_frame(r: &Reader<'_>, image: u64, parent: u64, name: &str) -> Result<u6
         .ok_or_else(|| Error::new("invalid_gui", format!("{name} is not a window")))
 }
 fn text_at(r: &Reader<'_>, widget: u64) -> Result<String> {
-    Ok(special_projects::plain(&r.string_bounded(widget + TEXT, 256)?))
+    Ok(special_projects::plain(
+        &r.string_bounded(widget + TEXT, 256)?,
+    ))
 }
 fn text_of(r: &Reader<'_>, image: u64, parent: u64, name: &str) -> Result<String> {
     text_at(r, named(r, image, parent, name)?)
 }
 fn label_of(r: &Reader<'_>, button: u64) -> Result<String> {
-    Ok(special_projects::plain(&r.string_bounded(button + BUTTON_TEXT, 160)?))
+    Ok(special_projects::plain(
+        &r.string_bounded(button + BUTTON_TEXT, 160)?,
+    ))
 }
 fn items(r: &Reader<'_>, grid: u64) -> Result<Vec<u64>> {
     let (_, data, count) = r.array_header(grid + GRID_ITEMS)?;
@@ -306,7 +313,11 @@ pub(super) fn open_designer(r: &Reader<'_>, image: u64) -> Result<Option<(Kind, 
             return Ok(Some((Kind::Upgrade, udw, root)));
         }
     }
-    for (slot, kind) in [(EDV_SHIP, Kind::Ship), (EDV_TANK, Kind::Tank), (EDV_PLANE, Kind::Plane)] {
+    for (slot, kind) in [
+        (EDV_SHIP, Kind::Ship),
+        (EDV_TANK, Kind::Tank),
+        (EDV_PLANE, Kind::Plane),
+    ] {
         let (view, root) = edv(r, image, slot)?;
         if gui_tree::visible(r, root)? {
             return Ok(Some((kind, view, root)));
@@ -349,21 +360,30 @@ pub(super) struct UpgradeState {
 }
 pub(super) fn upgrade_state(r: &Reader<'_>, image: u64) -> Result<UpgradeState> {
     let Some((Kind::Upgrade, udw, root)) = open_designer(r, image)? else {
-        return Err(Error::new("designer_closed", "The Create Variant window is not open"));
+        return Err(Error::new(
+            "designer_closed",
+            "The Create Variant window is not open",
+        ));
     };
     let active = named_frame(r, image, root, "active_equipment_view")?;
     let mut rows = Vec::new();
     for view in gui_tree::children(r, active)? {
-        let Some(view) = gui_tree::container(r, view, image)? else { continue };
+        let Some(view) = gui_tree::container(r, view, image)? else {
+            continue;
+        };
         if !gui_tree::visible(r, view)? {
             continue;
         }
         for child in gui_tree::children(r, view)? {
-            let Some(name) = gui_tree::name(r, child, image)? else { continue };
+            let Some(name) = gui_tree::name(r, child, image)? else {
+                continue;
+            };
             if !name.ends_with("_upgrade") {
                 continue;
             }
-            let Some(frame) = gui_tree::container(r, child, image)? else { continue };
+            let Some(frame) = gui_tree::container(r, child, image)? else {
+                continue;
+            };
             if !gui_tree::visible(r, frame)? {
                 continue;
             }
@@ -495,8 +515,12 @@ fn selector(r: &Reader<'_>, image: u64, root: u64) -> Result<Option<SelectorView
     let grid = named(r, image, window, "gb_modules")?;
     let mut entries = Vec::new();
     for item in items(r, grid)? {
-        let Some(kind) = entry_kind(r, image, item)? else { continue };
-        let Some(frame) = gui_tree::container(r, r.u64(item + ITEM_CONTAINER)?, image)? else { continue };
+        let Some(kind) = entry_kind(r, image, item)? else {
+            continue;
+        };
+        let Some(frame) = gui_tree::container(r, r.u64(item + ITEM_CONTAINER)?, image)? else {
+            continue;
+        };
         if !gui_tree::visible(r, frame)? {
             continue;
         }
@@ -589,11 +613,13 @@ pub(super) fn module_state(r: &Reader<'_>, image: u64) -> Result<ModuleState> {
         duplicate_state: gui_tree::button_state(r, dup)?,
         // Ships keep the offset measured live from the close button (October 2026).
         name_point: if kind == Kind::Ship {
-            let (x, y) = gui_tree::rect(r, image, named(r, image, root, "close_button")?, GAME)?.center();
+            let (x, y) =
+                gui_tree::rect(r, image, named(r, image, root, "close_button")?, GAME)?.center();
             (x - 963.0, y + 42.0)
         } else {
             // Tank/plane designer: name box measured on screen 1 November 2026 (Panzer II).
-            let (x, y) = gui_tree::rect(r, image, named(r, image, root, "close_button")?, GAME)?.center();
+            let (x, y) =
+                gui_tree::rect(r, image, named(r, image, root, "close_button")?, GAME)?.center();
             (x - 950.0, y + 51.0)
         },
         refit_cost: text_of(r, image, root, "refit_cost").unwrap_or_default(),
@@ -648,7 +674,10 @@ pub(super) struct Located {
 const CHECKBOX_STATE: u64 = 0x1c0;
 fn outdated_checkbox_button(r: &Reader<'_>, image: u64) -> Result<u64> {
     let Some(window) = selection_window(r, image)? else {
-        return Err(Error::new("gui_target_unavailable", "No selection list is open"));
+        return Err(Error::new(
+            "gui_target_unavailable",
+            "No selection list is open",
+        ));
     };
     let root = gui_tree::container(r, r.u64(window + SEL_ROOT)?, image)?
         .ok_or_else(|| Error::new("invalid_gui", "Selection window root unavailable"))?;
@@ -671,7 +700,9 @@ fn set_outdated(process: &dyn Process, keys: &MacKeys, want: bool) -> Result<()>
     std::thread::sleep(Duration::from_millis(600));
     let rect = settled(process, "outdated box", outdated_checkbox)?;
     click(keys, rect)?;
-    wait(process, "outdated filter", |r, i| Ok(outdated_ticked(r, i)? == want))?;
+    wait(process, "outdated filter", |r, i| {
+        Ok(outdated_ticked(r, i)? == want)
+    })?;
     let _ = settled(process, "outdated rows", |r, i| {
         Ok(rows(r, i)?.iter().map(|x| x.id).collect::<Vec<_>>())
     });
@@ -701,7 +732,9 @@ pub(super) fn locate(
     for category in categories_for(kind) {
         if read(process, selection_open)? {
             keys.press(Key::Escape)?;
-            wait(process, "close selection", |r, i| Ok(!selection_open(r, i)?))?;
+            wait(process, "close selection", |r, i| {
+                Ok(!selection_open(r, i)?)
+            })?;
             super::production::ensure_open(process, keys)?;
         }
         let rect = settled(process, "category", |r, i| {
@@ -711,7 +744,9 @@ pub(super) fn locate(
         wait(process, "open selection", selection_open)?;
         // The list slides in; wait until its rows report their buttons.
         let _ = wait(process, "selection rows", |r, i| {
-            Ok(rows(r, i)?.iter().any(|x| x.shown && x.variant_button.is_some()))
+            Ok(rows(r, i)?
+                .iter()
+                .any(|x| x.shown && x.variant_button.is_some()))
         });
         let _ = settled(process, "selection rows", |r, i| {
             Ok(rows(r, i)?
@@ -777,12 +812,7 @@ pub(super) fn locate(
     ))
 }
 /// Open the designer of the design with this id: `locate`, then the row's Create variant button.
-pub(super) fn open_for(
-    process: &dyn Process,
-    keys: &MacKeys,
-    id: i32,
-    kind: &str,
-) -> Result<Kind> {
+pub(super) fn open_for(process: &dyn Process, keys: &MacKeys, id: i32, kind: &str) -> Result<Kind> {
     // A base that became outdated (older version of a newer design) is only listed when the
     // outdated filter is ticked; `leave` puts the filter back.
     locate(process, keys, id, kind, true)?;
@@ -808,7 +838,12 @@ pub(super) fn open_for(
 /// Click the row's Decommission/Recommission button (the row must be located). The click is
 /// refused at the last moment when the row's button is no longer where it was read, and the
 /// flags of every other listed design must be unchanged afterwards.
-pub(super) fn click_obsolete(process: &dyn Process, keys: &MacKeys, id: i32, want: bool) -> Result<()> {
+pub(super) fn click_obsolete(
+    process: &dyn Process,
+    keys: &MacKeys,
+    id: i32,
+    want: bool,
+) -> Result<()> {
     let b = settled(process, "obsolete button", |r, i| {
         row_of(r, i, id)?
             .and_then(|x| x.obsolete_button)
@@ -821,8 +856,7 @@ pub(super) fn click_obsolete(process: &dyn Process, keys: &MacKeys, id: i32, wan
         .collect();
     let (x, y) = b.center();
     keys.click_checked(GAME, x, y, &|| {
-        let now = read(process, |r, i| row_of(r, i, id))?
-            .and_then(|x| x.obsolete_button);
+        let now = read(process, |r, i| row_of(r, i, id))?.and_then(|x| x.obsolete_button);
         if now == Some(b) {
             Ok(())
         } else {
@@ -865,7 +899,10 @@ pub(super) fn close(process: &dyn Process, keys: &MacKeys) -> Result<()> {
         }
     }
     if read(process, designer_open)? {
-        return Err(Error::new("input_readback_failed", "The designer did not close"));
+        return Err(Error::new(
+            "input_readback_failed",
+            "The designer did not close",
+        ));
     }
     Ok(())
 }
@@ -878,12 +915,16 @@ pub(super) fn leave(process: &dyn Process, keys: &MacKeys) {
                 let _ = untick_outdated(process, keys);
             }
             let _ = keys.press(Key::Escape);
-            let _ = wait(process, "close selection", |r, i| Ok(!selection_open(r, i)?));
+            let _ = wait(process, "close selection", |r, i| {
+                Ok(!selection_open(r, i)?)
+            });
         }
     }
     if read(process, super::production::open).unwrap_or(false) {
         let _ = keys.press(Key::Escape);
-        let _ = wait(process, "close production", |r, i| Ok(!super::production::open(r, i)?));
+        let _ = wait(process, "close production", |r, i| {
+            Ok(!super::production::open(r, i)?)
+        });
     }
 }
 

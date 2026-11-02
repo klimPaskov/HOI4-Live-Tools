@@ -187,7 +187,10 @@ pub(super) fn province_supply(
 ) -> Result<ProvinceSupply> {
     let (_, data, count) = r.array_header(sys.supply + SYS_PROVINCES)?;
     if province < 0 || province as usize >= count {
-        return Err(Error::new("invalid_index", "Province outside the supply map"));
+        return Err(Error::new(
+            "invalid_index",
+            "Province outside the supply map",
+        ));
     }
     let element = data + PROVINCE_STRIDE * province as u64;
     let b = r.read(element, PROVINCE_STRIDE as usize)?;
@@ -197,7 +200,10 @@ pub(super) fn province_supply(
     let cap = le_u32(&b, PROVINCE_FLOWS as usize + 8);
     let size = le_u32(&b, PROVINCE_FLOWS as usize + 12);
     if size > cap || size > 64 || (size > 0 && !is_ptr(ptr)) || demand < 0.0 || supply < 0.0 {
-        return Err(Error::new("invalid_array", "Province supply record invalid"));
+        return Err(Error::new(
+            "invalid_array",
+            "Province supply record invalid",
+        ));
     }
     let mut flows = Vec::new();
     if size > 0 {
@@ -248,7 +254,10 @@ pub(super) fn province_rail(
 ) -> Result<Option<ProvinceRail>> {
     let (_, data, count) = r.array_header(sys.railway + RAIL_PROVINCES)?;
     if province < 0 || province as usize >= count {
-        return Err(Error::new("invalid_index", "Province outside the railway map"));
+        return Err(Error::new(
+            "invalid_index",
+            "Province outside the railway map",
+        ));
     }
     let info = r.u64(data + 8 * province as u64)?;
     if info == 0 {
@@ -307,7 +316,10 @@ pub(super) fn country_nodes(
 ) -> Result<Vec<Node>> {
     let (_, data, count) = r.array_header(sys.supply + SYS_COUNTRIES)?;
     if index >= count {
-        return Err(Error::new("invalid_index", "Country outside the supply map"));
+        return Err(Error::new(
+            "invalid_index",
+            "Country outside the supply map",
+        ));
     }
     let cs = r.u64(data + 8 * index as u64)?;
     typed(r, image, cs, COUNTRY_SYSTEM_VTABLE, "country supply system")?;
@@ -350,7 +362,11 @@ pub(super) fn country_nodes(
             nodes.push(Node {
                 id,
                 province: province as i32,
-                kind: if kind == 2 { NodeKind::Hub } else { NodeKind::Port },
+                kind: if kind == 2 {
+                    NodeKind::Hub
+                } else {
+                    NodeKind::Port
+                },
             });
         }
     }
@@ -497,14 +513,26 @@ mod tests {
         assert_eq!(
             p.flows,
             vec![
-                Flow { node: 43, flow: 8.455 },
-                Flow { node: 45, flow: 5.25 }
+                Flow {
+                    node: 43,
+                    flow: 8.455
+                },
+                Flow {
+                    node: 45,
+                    flow: 5.25
+                }
             ]
         );
         let empty = province_supply(&r, &sys, 1).unwrap();
         assert!(empty.flows.is_empty() && empty.demand == 0.0);
-        assert_eq!(province_supply(&r, &sys, 8).unwrap_err().code, "invalid_index");
-        assert_eq!(province_supply(&r, &sys, -1).unwrap_err().code, "invalid_index");
+        assert_eq!(
+            province_supply(&r, &sys, 8).unwrap_err().code,
+            "invalid_index"
+        );
+        assert_eq!(
+            province_supply(&r, &sys, -1).unwrap_err().code,
+            "invalid_index"
+        );
     }
     #[test]
     fn province_flow_array_must_be_sane() {
@@ -513,7 +541,10 @@ mod tests {
         let r = Reader::new(&mem);
         let data = r.u64(sys.supply + SYS_PROVINCES).unwrap();
         mem.i32(data + 5 * PROVINCE_STRIDE + PROVINCE_FLOWS + 12, 9);
-        assert_eq!(province_supply(&r, &sys, 5).unwrap_err().code, "invalid_array");
+        assert_eq!(
+            province_supply(&r, &sys, 5).unwrap_err().code,
+            "invalid_array"
+        );
     }
     #[test]
     fn reads_state_supply() {
@@ -566,7 +597,10 @@ mod tests {
         assert_eq!(division_supply(&r, d).unwrap_err().code, "invalid_supply");
         let over = division(&mem, 0.8, 1.0);
         mem.u64(over + DIVISION_RATIO, fx(1.5));
-        assert_eq!(division_supply(&r, over).unwrap_err().code, "invalid_supply");
+        assert_eq!(
+            division_supply(&r, over).unwrap_err().code,
+            "invalid_supply"
+        );
     }
     /// Country supply system with a sparse pool: used 4 of cap 6, one record
     /// sits in slot 7, past the header capacity.
@@ -625,14 +659,32 @@ mod tests {
         assert_eq!(
             nodes,
             vec![
-                Node { id: 24, province: 241, kind: NodeKind::Port },
-                Node { id: 27, province: 6282, kind: NodeKind::Port },
-                Node { id: 31, province: 11372, kind: NodeKind::Port },
-                Node { id: 43, province: 6521, kind: NodeKind::Hub },
+                Node {
+                    id: 24,
+                    province: 241,
+                    kind: NodeKind::Port
+                },
+                Node {
+                    id: 27,
+                    province: 6282,
+                    kind: NodeKind::Port
+                },
+                Node {
+                    id: 31,
+                    province: 11372,
+                    kind: NodeKind::Port
+                },
+                Node {
+                    id: 43,
+                    province: 6521,
+                    kind: NodeKind::Hub
+                },
             ]
         );
         assert_eq!(
-            country_nodes(&r, IMAGE, &sys, owner + 8, 1).unwrap_err().code,
+            country_nodes(&r, IMAGE, &sys, owner + 8, 1)
+                .unwrap_err()
+                .code,
             "invalid_supply"
         );
         assert_eq!(

@@ -110,7 +110,10 @@ pub(super) fn icon_at(icons: &[BaseIcon], pos: (f64, f64)) -> Option<&BaseIcon> 
 /// Whether a base circle at `p` is a safe click point: on the map, clear of the toolbars and the
 /// left panels and of the right-hand controls.
 pub(super) fn clickable(p: (f64, f64)) -> bool {
-    p.0 > 660.0 && p.0 < 1740.0 && p.1 > 160.0 && p.1 < 960.0
+    p.0 > 660.0
+        && p.0 < 1740.0
+        && p.1 > 160.0
+        && p.1 < 960.0
         && !(p.0 > 1380.0 && p.1 < 330.0)
         && !(p.0 > 1000.0 && p.0 < 1300.0 && p.1 > 960.0)
 }
@@ -189,7 +192,12 @@ pub(super) fn reorg_confirm(r: &Reader<'_>, image: u64) -> Result<(Rect, i32)> {
 }
 pub(super) fn reorg_close(r: &Reader<'_>, image: u64) -> Result<Rect> {
     let root = reorg(r, image)?;
-    gui_tree::rect(r, image, nui::child_of(r, image, root, "close_button")?, GAME)
+    gui_tree::rect(
+        r,
+        image,
+        nui::child_of(r, image, root, "close_button")?,
+        GAME,
+    )
 }
 /// Planes now in the wing being formed (the window's own counter).
 pub(super) fn reorg_planes(r: &Reader<'_>, image: u64) -> Result<i32> {
@@ -207,7 +215,11 @@ pub(super) struct StackItem {
 }
 /// The wing stack of the base icon at `pos`, in the game's order. A click on an item selects its
 /// wing, Shift adds it (mapped live 26 October 2026: Brandenburg's three wings listed 80/80/80).
-pub(super) fn stack_at(r: &Reader<'_>, image: u64, pos: (f64, f64)) -> Result<Option<Vec<StackItem>>> {
+pub(super) fn stack_at(
+    r: &Reader<'_>,
+    image: u64,
+    pos: (f64, f64),
+) -> Result<Option<Vec<StackItem>>> {
     nui::libcxx(r)?;
     let manager = r.u64(image + ICON_GLOBAL)?;
     for k in 0..ICON_TYPES {
@@ -226,7 +238,8 @@ pub(super) fn stack_at(r: &Reader<'_>, image: u64, pos: (f64, f64)) -> Result<Op
             if (x - pos.0).abs() >= 0.06 || (z - pos.1).abs() >= 0.06 {
                 continue;
             }
-            let Some(container) = gui_tree::container(r, r.u64(icon + ICON_CONTAINER)?, image)? else {
+            let Some(container) = gui_tree::container(r, r.u64(icon + ICON_CONTAINER)?, image)?
+            else {
                 return Ok(None);
             };
             let Some(grid) = gui_tree::child(r, image, container, "wings_box")? else {
@@ -242,7 +255,10 @@ pub(super) fn stack_at(r: &Reader<'_>, image: u64, pos: (f64, f64)) -> Result<Op
                 out.push(StackItem {
                     planes: planes.trim().replace(',', "").parse().unwrap_or(0),
                     rect: gui_tree::rect_unclipped(r, image, bg, GAME)?,
-                    selected: gui_tree::shown(r, nui::child_of(r, image, frame, "count_selected")?)?,
+                    selected: gui_tree::shown(
+                        r,
+                        nui::child_of(r, image, frame, "count_selected")?,
+                    )?,
                 });
             }
             return Ok(Some(out));
@@ -309,12 +325,18 @@ pub(super) fn region_view(r: &Reader<'_>, image: u64) -> Result<Option<RegionVie
         return Ok(None);
     };
     let text = |name: &str| -> Result<String> {
-        Ok(nui::text_at(r, nui::child_of(r, image, root, name)?)?.trim().to_string())
+        Ok(nui::text_at(r, nui::child_of(r, image, root, name)?)?
+            .trim()
+            .to_string())
     };
-    let number = |name: &str| -> Result<i32> {
-        Ok(text(name)?.replace(',', "").parse().unwrap_or(0))
-    };
-    let close = gui_tree::rect(r, image, nui::child_of(r, image, root, "close_button")?, GAME)?;
+    let number =
+        |name: &str| -> Result<i32> { Ok(text(name)?.replace(',', "").parse().unwrap_or(0)) };
+    let close = gui_tree::rect(
+        r,
+        image,
+        nui::child_of(r, image, root, "close_button")?,
+        GAME,
+    )?;
     let name = text("region_name")?;
     if name.is_empty() {
         return Ok(None);
@@ -348,8 +370,26 @@ mod tests {
     #[test]
     fn icon_matching_and_click_points() {
         let icons = vec![
-            BaseIcon { x: 3024.78, z: 1565.10, rect: Rect { x: 1397, y: 603, w: 189, h: 30 } },
-            BaseIcon { x: 2975.56, z: 1479.55, rect: Rect { x: 100, y: 100, w: 189, h: 30 } },
+            BaseIcon {
+                x: 3024.78,
+                z: 1565.10,
+                rect: Rect {
+                    x: 1397,
+                    y: 603,
+                    w: 189,
+                    h: 30,
+                },
+            },
+            BaseIcon {
+                x: 2975.56,
+                z: 1479.55,
+                rect: Rect {
+                    x: 100,
+                    y: 100,
+                    w: 189,
+                    h: 30,
+                },
+            },
         ];
         let hit = icon_at(&icons, (3024.78, 1565.1)).unwrap();
         // The point clicked live on 26 October 2026 (game pixels).

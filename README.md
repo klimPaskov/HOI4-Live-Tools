@@ -22,8 +22,9 @@ builds and previews mod content.
 
 | You want to… | Use | Platform | Maturity |
 | --- | --- | --- | --- |
-| Test mods and try agent play today | **[1.1.0 release](https://github.com/klimPaskov/HOI4-Live-Tools/releases/latest)** (Python) | Windows 10/11 | Stable release |
-| Help build the fast native runtime | **Rust preview** (build from source, [`native/`](native/README.md)) | Linux x86_64 (1.19.3), macOS (Steam 1.19.4.1 x86_64 under Rosetta) | Developer preview |
+| Test mods and try agent play today | **`hoi4-live-tools-1.2.0.zip`** from the [1.2.0 release](https://github.com/klimPaskov/HOI4-Live-Tools/releases/latest) (Python) | Windows 10/11 | Stable release |
+| Agent play with the full management toolset | **`hoi4-live-native-1.2.0-macos-arm64.tar.gz`** ([native downloads](#native-downloads)) | macOS on Apple silicon, Steam HOI4 1.19.4.1 | Experimental |
+| The native runtime on Linux | **`hoi4-live-native-1.2.0-linux-x86_64.tar.gz`** ([native downloads](#native-downloads)) | Linux x86_64, HOI4 **1.19.3 only** | Experimental |
 
 The Windows native game adapter is unfinished. An internal read-only foundation
 is available for development; see [the Windows port](docs/WINDOWS_HANDOFF.md).
@@ -36,7 +37,7 @@ are below.
 You need Windows 10 or 11, HOI4 from Steam (windowed or borderless, UI scale 1),
 Python 3.9 or newer, and the Windows English OCR component. FFmpeg is optional.
 
-1. Download `hoi4-live-tools-1.1.0.zip` from the
+1. Download `hoi4-live-tools-1.2.0.zip` from the
    [latest release](https://github.com/klimPaskov/HOI4-Live-Tools/releases/latest)
    and unpack it anywhere.
 2. In that folder, run:
@@ -74,8 +75,34 @@ cargo build --manifest-path native/Cargo.toml --release --locked
 cargo test --manifest-path native/Cargo.toml --locked
 ```
 
-Follow [native setup](native/README.md) and the platform notes below. This branch
-is a developer preview, not a replacement release for the Windows package.
+Follow [native setup](native/README.md) and the platform notes below. The native
+runtime is experimental, not a replacement for the Windows package.
+
+### Native downloads
+
+Each release carries prebuilt `hoi4-live-native` archives, `SHA256SUMS.txt` and
+GitHub build attestations, so nothing needs to be built from source:
+
+```sh
+sha256sum -c SHA256SUMS.txt --ignore-missing      # macOS: shasum -a 256 -c
+gh attestation verify hoi4-live-native-1.2.0-linux-x86_64.tar.gz --repo klimPaskov/HOI4-Live-Tools
+tar -xzf hoi4-live-native-1.2.0-linux-x86_64.tar.gz
+```
+
+The macOS binary is ad-hoc signed with `debugger.entitlements` (included). Memory
+access still needs Developer Tools access for the running user; see
+[native setup](native/README.md).
+
+Steam never sees a run: every launcher refuses to start the game while a Steam
+client, `steamwebhelper` or `steamcmd` runs (on WSL the Windows host is checked too),
+and no Steam variable or overlay reaches the game. The native Linux launcher also
+gives the game an empty private `HOME`.
+
+The macOS and Linux builds do not have the same tools. macOS has the full management
+toolset (about 120 tools: armies, fronts and encirclement planning, air, navy and
+naval invasions, designers, doctrine, intelligence, peace conferences, decisions,
+events and the plan runner; see [the macOS tool index](docs/TOOLS_MACOS.md)).
+Linux has about 30 tools for telemetry, focus, research, production and construction.
 
 ### Linux
 
@@ -142,8 +169,9 @@ placement took 2.326 seconds with zero cursor displacement or observation pauses
 The source port remains a qualification preview; construction worker integration
 and advancing-time acceptance remain unfinished. The Find action requires an
 already-open focused empty box and explicit qualification permission. Peace
-conferences, naval invasions, the clean two-year acceptance run and full campaigns
-remain open. Broader legacy adapters remain separate from the durable worker. The [controller contract](docs/MAC_CONTROLLER.md) describes current
+conferences and naval invasions have since been added and live-tested on 1.19.4.1
+([live verification](docs/LIVE_VERIFICATION_1_19_4.md)); the clean two-year acceptance
+run and full campaigns remain open. Broader legacy adapters remain separate from the durable worker. The [controller contract](docs/MAC_CONTROLLER.md) describes current
 permissions, receipts and recovery.
 
 The default-off [`hoi4_construction_clear_selection` qualification](docs/MAC_CONTROLLER.md#construction-cancellation-qualification)
@@ -200,10 +228,10 @@ and cannot be reached by campaign automation.
 
 | Runtime | Verified so far | Still required |
 | --- | --- | --- |
-| Python / Windows (1.1.0) | Mod-testing tools and recorded play attempts | Clean campaign acceptance |
+| Python / Windows (1.2.0) | Mod-testing tools and recorded play attempts | Clean campaign acceptance |
 | Python / macOS | Platform work and limited diagnostic play | Reliable live acceptance |
 | Rust / Linux | Owned launch, fast state reads, time, research, Focus, daily plans, one-factory production changes, construction panel, map search and state-building placement | Provincial placement, economy, army and naval control; campaign acceptance |
-| Rust / macOS | Owned 1080p runs: structured reads, Research/Focus/clock, factory changes, recording and durable-plan component checks | Mixed-plan acceptance, wider automation, peace conferences, naval invasions and campaigns |
+| Rust / macOS | Owned 1080p runs on 1.19.4.1: about 120 live-tested tools (economy, armies and fronts, air, navy, invasions, designers, doctrine, intelligence, peace conferences, plan runner) and short training wars | Open defects in [live verification](docs/LIVE_VERIFICATION_1_19_4.md), the two-year acceptance run and campaigns |
 | Rust / Windows | Portable protocol and dormant owned-reader fixtures | Native game adapter, input and live tests |
 
 Passing tests or listing a tool does not mean live play works. Only recorded live

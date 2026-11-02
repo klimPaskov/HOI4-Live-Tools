@@ -51,7 +51,12 @@ pub(super) fn unit_key(v: &Value) -> Result<String> {
     let s = v
         .as_str()
         .ok_or_else(|| Error::new("invalid_arguments", "Unit keys must be strings"))?;
-    if s.is_empty() || s.len() > 64 || !s.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_') {
+    if s.is_empty()
+        || s.len() > 64
+        || !s
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
+    {
         return Err(Error::new(
             "invalid_arguments",
             format!("Invalid unit key {s:?} (lowercase letters, digits and underscore)"),
@@ -68,10 +73,9 @@ pub(super) fn parse_regiments(v: &Value) -> Result<Vec<Vec<String>>> {
         .ok_or_else(|| Error::new("invalid_arguments", "regiments must be at most 5 columns"))?;
     let mut out: Vec<Vec<String>> = Vec::new();
     for col in cols {
-        let rows = col
-            .as_array()
-            .filter(|r| r.len() <= 5)
-            .ok_or_else(|| Error::new("invalid_arguments", "a column holds at most 5 battalions"))?;
+        let rows = col.as_array().filter(|r| r.len() <= 5).ok_or_else(|| {
+            Error::new("invalid_arguments", "a column holds at most 5 battalions")
+        })?;
         out.push(rows.iter().map(unit_key).collect::<Result<Vec<_>>>()?);
     }
     while out.last().is_some_and(Vec::is_empty) {
@@ -112,7 +116,9 @@ pub(super) fn check_name(s: &str) -> Result<()> {
     if s.trim() != s || s.is_empty() || s.chars().count() > MAX_NAME {
         return Err(Error::new(
             "invalid_arguments",
-            format!("Template names are 1..{MAX_NAME} characters without leading or trailing space"),
+            format!(
+                "Template names are 1..{MAX_NAME} characters without leading or trailing space"
+            ),
         ));
     }
     if !designer::typable(s) {
@@ -130,7 +136,9 @@ pub(super) fn priority_arg(v: Option<&Value>) -> Result<Option<i32>> {
             .as_str()
             .and_then(units::priority_value)
             .map(Some)
-            .ok_or_else(|| Error::new("invalid_arguments", "priority is reserve, regular or elite")),
+            .ok_or_else(|| {
+                Error::new("invalid_arguments", "priority is reserve, regular or elite")
+            }),
     }
 }
 
@@ -149,12 +157,14 @@ impl Desired {
     }
 }
 fn closest(keys: &[&str], want: &str) -> Vec<String> {
-    let mut scored: Vec<(usize, &str)> = keys
-        .iter()
-        .map(|k| (edit_distance(k, want), *k))
-        .collect();
+    let mut scored: Vec<(usize, &str)> =
+        keys.iter().map(|k| (edit_distance(k, want), *k)).collect();
     scored.sort();
-    scored.into_iter().take(5).map(|(_, k)| k.to_string()).collect()
+    scored
+        .into_iter()
+        .take(5)
+        .map(|(_, k)| k.to_string())
+        .collect()
 }
 fn edit_distance(a: &str, b: &str) -> usize {
     let a: Vec<char> = a.chars().collect();
@@ -313,7 +323,11 @@ pub(super) fn plan(cur: &Desired, want: &Desired) -> Vec<Op> {
 /// Settlement of a template save. Saving is atomic: either the template with the wanted
 /// layout is in the own list under its final name, or it is as before. Only the template
 /// being edited is compared (other templates and the date are never read).
-pub(super) fn settle_layout(before: Option<&Layout5>, now: Option<&Layout5>, want: &Layout5) -> Verdict {
+pub(super) fn settle_layout(
+    before: Option<&Layout5>,
+    now: Option<&Layout5>,
+    want: &Layout5,
+) -> Verdict {
     if now == Some(want) {
         Verdict::Reached
     } else if now == before {
@@ -339,10 +353,12 @@ pub(super) struct Usage {
 pub(super) fn usage(process: &dyn Process, name: &str) -> Result<Usage> {
     read(process, |r, image| {
         let templates = units::templates(r, image)?;
-        let t = templates
-            .iter()
-            .find(|t| t.name == name)
-            .ok_or_else(|| template_unknown(&templates.iter().map(|t| t.name.clone()).collect::<Vec<_>>(), name))?;
+        let t = templates.iter().find(|t| t.name == name).ok_or_else(|| {
+            template_unknown(
+                &templates.iter().map(|t| t.name.clone()).collect::<Vec<_>>(),
+                name,
+            )
+        })?;
         let divisions = units::divisions(r, image)?
             .iter()
             .filter(|d| d.template == t.address)
@@ -356,7 +372,10 @@ pub(super) fn usage(process: &dyn Process, name: &str) -> Result<Usage> {
 pub(super) fn template_unknown(names: &[String], name: &str) -> Error {
     Error::new(
         "template_unknown",
-        format!("No own division template named {name:?}. Templates: {}.", names.join(", ")),
+        format!(
+            "No own division template named {name:?}. Templates: {}.",
+            names.join(", ")
+        ),
     )
 }
 pub(super) fn layouts(process: &dyn Process) -> Result<Vec<Layout5>> {
@@ -399,13 +418,21 @@ pub(super) struct Input<'a> {
 }
 /// The layout the own list must hold afterwards, and the template as it is now (None = create).
 /// No refusals: a retried request uses this alone to settle.
-pub(super) fn build_want(input: &Input<'_>, list: &[Layout5]) -> Result<(Layout5, Option<Layout5>, Vec<&'static str>)> {
+pub(super) fn build_want(
+    input: &Input<'_>,
+    list: &[Layout5],
+) -> Result<(Layout5, Option<Layout5>, Vec<&'static str>)> {
     let before = match input.existing {
         Some(name) => Some(
             list.iter()
                 .find(|l| l.name == name)
                 .cloned()
-                .ok_or_else(|| template_unknown(&list.iter().map(|l| l.name.clone()).collect::<Vec<_>>(), name))?,
+                .ok_or_else(|| {
+                    template_unknown(
+                        &list.iter().map(|l| l.name.clone()).collect::<Vec<_>>(),
+                        name,
+                    )
+                })?,
         ),
         None => None,
     };
@@ -457,7 +484,10 @@ pub(super) fn plan_request(
         name_taken(list, n, input.existing)?;
     }
     if want.name.is_empty() {
-        return Err(Error::new("invalid_arguments", "A new template needs a name"));
+        return Err(Error::new(
+            "invalid_arguments",
+            "A new template needs a name",
+        ));
     }
     if before.is_some() && changes.is_empty() {
         return Err(Error::new(
@@ -466,7 +496,10 @@ pub(super) fn plan_request(
         ));
     }
     let width = check_units(defs, &Desired::of(&want))?;
-    if let (Some(u), true) = (usage, changes.contains(&"regiments") || changes.contains(&"support")) {
+    if let (Some(u), true) = (
+        usage,
+        changes.contains(&"regiments") || changes.contains(&"support"),
+    ) {
         if (u.divisions > 0 || u.training_lines > 0) && !input.allow_in_use {
             return Err(Error::new(
                 "template_in_use",
@@ -599,7 +632,10 @@ pub(super) fn min_experience(ops: &[Op]) -> i64 {
     ops.iter()
         .map(|o| match o {
             Op::Remove { .. } => 5,
-            Op::Choose { grid: Grid::Support, .. } => 10,
+            Op::Choose {
+                grid: Grid::Support,
+                ..
+            } => 10,
             Op::Choose { .. } => 5,
         })
         .sum()
@@ -619,7 +655,12 @@ pub(super) fn plan_delete(process: &dyn Process, name: &str) -> Result<(Layout5,
         .iter()
         .find(|l| l.name == name)
         .cloned()
-        .ok_or_else(|| template_unknown(&list.iter().map(|l| l.name.clone()).collect::<Vec<_>>(), name))?;
+        .ok_or_else(|| {
+            template_unknown(
+                &list.iter().map(|l| l.name.clone()).collect::<Vec<_>>(),
+                name,
+            )
+        })?;
     let u = usage(process, name)?;
     if u.divisions > 0 || u.training_lines > 0 {
         return Err(Error::new(
@@ -658,7 +699,9 @@ fn delete_inner(process: &dyn Process, keys: &MacKeys, name: &str) -> Result<()>
         ));
     }
     ui::wait(process, "template deleted", |r, i| {
-        Ok(!units::template_layouts(r, i)?.iter().any(|l| l.name == name))
+        Ok(!units::template_layouts(r, i)?
+            .iter()
+            .any(|l| l.name == name))
     })
 }
 
@@ -743,7 +786,10 @@ mod tests {
     #[test]
     fn regiments_parse_and_gaps_are_typed() {
         let v = json!([["infantry", "infantry"], [], []]);
-        assert_eq!(parse_regiments(&v).unwrap(), vec![s(&["infantry", "infantry"])]);
+        assert_eq!(
+            parse_regiments(&v).unwrap(),
+            vec![s(&["infantry", "infantry"])]
+        );
         let e = parse_regiments(&json!([[], ["infantry"]])).unwrap_err();
         assert_eq!(e.code, "regiments_gap");
         assert!(parse_regiments(&json!([[1]])).is_err());
@@ -753,9 +799,14 @@ mod tests {
     }
     #[test]
     fn support_duplicates_are_typed() {
-        assert_eq!(parse_support(&json!(["engineer"])).unwrap(), s(&["engineer"]));
         assert_eq!(
-            parse_support(&json!(["engineer", "engineer"])).unwrap_err().code,
+            parse_support(&json!(["engineer"])).unwrap(),
+            s(&["engineer"])
+        );
+        assert_eq!(
+            parse_support(&json!(["engineer", "engineer"]))
+                .unwrap_err()
+                .code,
             "support_duplicate"
         );
     }
@@ -772,26 +823,37 @@ mod tests {
     #[test]
     fn units_are_checked_against_the_catalog() {
         let d = defs();
-        let ok = desired(&[&["infantry", "infantry"], &["artillery_brigade"]], &["engineer"]);
+        let ok = desired(
+            &[&["infantry", "infantry"], &["artillery_brigade"]],
+            &["engineer"],
+        );
         assert_eq!(check_units(&d, &ok).unwrap(), 7.0);
         let e = check_units(&d, &desired(&[&["infantri"]], &[])).unwrap_err();
         assert_eq!(e.code, "unit_unknown");
         assert!(e.message.contains("infantry"));
         assert_eq!(
-            check_units(&d, &desired(&[&["engineer"]], &[])).unwrap_err().code,
+            check_units(&d, &desired(&[&["engineer"]], &[]))
+                .unwrap_err()
+                .code,
             "unit_wrong_slot"
         );
         assert_eq!(
-            check_units(&d, &desired(&[&["infantry"]], &["infantry"])).unwrap_err().code,
+            check_units(&d, &desired(&[&["infantry"]], &["infantry"]))
+                .unwrap_err()
+                .code,
             "unit_wrong_slot"
         );
         assert_eq!(
-            check_units(&d, &desired(&[], &["engineer"])).unwrap_err().code,
+            check_units(&d, &desired(&[], &["engineer"]))
+                .unwrap_err()
+                .code,
             "empty_template"
         );
         assert!(check_units(&d, &desired(&[&["infantry", "mountaineers"]], &[])).is_ok());
         assert_eq!(
-            check_units(&d, &desired(&[&["infantry", "artillery_brigade"]], &[])).unwrap_err().code,
+            check_units(&d, &desired(&[&["infantry", "artillery_brigade"]], &[]))
+                .unwrap_err()
+                .code,
             "column_mixed_groups"
         );
         let wide: Vec<&str> = vec!["infantry"; 5];
@@ -806,29 +868,68 @@ mod tests {
         let keyed: Vec<(usize, usize)> = ops
             .iter()
             .filter_map(|o| match o {
-                Op::Choose { grid: Grid::Regiments, col, row, .. } => Some((*col, *row)),
+                Op::Choose {
+                    grid: Grid::Regiments,
+                    col,
+                    row,
+                    ..
+                } => Some((*col, *row)),
                 _ => None,
             })
             .collect();
         assert_eq!(keyed, vec![(0, 0), (0, 1), (1, 0)]);
-        assert!(matches!(ops.last(), Some(Op::Choose { grid: Grid::Support, row: 0, .. })));
+        assert!(matches!(
+            ops.last(),
+            Some(Op::Choose {
+                grid: Grid::Support,
+                row: 0,
+                ..
+            })
+        ));
         assert_eq!(ops.len(), 4);
     }
     #[test]
     fn plan_removes_bottom_up_then_changes_then_adds() {
         let cur = desired(
-            &[&["infantry", "infantry", "infantry"], &["infantry", "infantry"]],
+            &[
+                &["infantry", "infantry", "infantry"],
+                &["infantry", "infantry"],
+            ],
             &["engineer", "recon"],
         );
-        let want = desired(&[&["infantry", "light_armor"], &["infantry", "infantry", "infantry"]], &["engineer"]);
+        let want = desired(
+            &[
+                &["infantry", "light_armor"],
+                &["infantry", "infantry", "infantry"],
+            ],
+            &["engineer"],
+        );
         let ops = plan(&cur, &want);
         assert_eq!(
             ops,
             vec![
-                Op::Remove { grid: Grid::Regiments, col: 0, row: 2 },
-                Op::Remove { grid: Grid::Support, col: 0, row: 1 },
-                Op::Choose { grid: Grid::Regiments, col: 0, row: 1, key: "light_armor".into() },
-                Op::Choose { grid: Grid::Regiments, col: 1, row: 2, key: "infantry".into() },
+                Op::Remove {
+                    grid: Grid::Regiments,
+                    col: 0,
+                    row: 2
+                },
+                Op::Remove {
+                    grid: Grid::Support,
+                    col: 0,
+                    row: 1
+                },
+                Op::Choose {
+                    grid: Grid::Regiments,
+                    col: 0,
+                    row: 1,
+                    key: "light_armor".into()
+                },
+                Op::Choose {
+                    grid: Grid::Regiments,
+                    col: 1,
+                    row: 2,
+                    key: "infantry".into()
+                },
             ]
         );
     }
@@ -845,7 +946,10 @@ mod tests {
     }
     #[test]
     fn right_columns_go_before_left_ones() {
-        let cur = desired(&[&["infantry"], &["infantry"], &["infantry", "infantry"]], &[]);
+        let cur = desired(
+            &[&["infantry"], &["infantry"], &["infantry", "infantry"]],
+            &[],
+        );
         let want = desired(&[&["infantry"]], &[]);
         let rows: Vec<(usize, usize)> = plan(&cur, &want)
             .iter()
@@ -886,9 +990,16 @@ mod tests {
                 None,
             )
         };
-        assert_eq!(create("alpha", vec![s(&["infantry"])]).unwrap_err().code, "name_taken");
+        assert_eq!(
+            create("alpha", vec![s(&["infantry"])]).unwrap_err().code,
+            "name_taken"
+        );
         assert!(create("Gamma", vec![s(&["infantry"])]).is_ok());
-        let edit = |existing: &str, new_name: Option<&str>, regs: Option<Vec<Vec<String>>>, usage: Option<Usage>, allow: bool| {
+        let edit = |existing: &str,
+                    new_name: Option<&str>,
+                    regs: Option<Vec<Vec<String>>>,
+                    usage: Option<Usage>,
+                    allow: bool| {
             plan_request(
                 &Input {
                     existing: Some(existing),
@@ -903,16 +1014,54 @@ mod tests {
                 usage.as_ref(),
             )
         };
-        assert_eq!(edit("Nope", None, None, None, false).unwrap_err().code, "template_unknown");
-        assert_eq!(edit("Alpha", None, None, None, false).unwrap_err().code, "nothing_to_change");
-        assert_eq!(edit("Alpha", Some("Beta"), None, None, false).unwrap_err().code, "name_taken");
-        assert!(edit("Alpha", Some("Alpha"), Some(vec![s(&["infantry", "infantry"])]), None, false).is_ok());
-        let used = || Some(Usage { divisions: 3, training_lines: 0 });
         assert_eq!(
-            edit("Alpha", None, Some(vec![s(&["infantry", "infantry"])]), used(), false).unwrap_err().code,
+            edit("Nope", None, None, None, false).unwrap_err().code,
+            "template_unknown"
+        );
+        assert_eq!(
+            edit("Alpha", None, None, None, false).unwrap_err().code,
+            "nothing_to_change"
+        );
+        assert_eq!(
+            edit("Alpha", Some("Beta"), None, None, false)
+                .unwrap_err()
+                .code,
+            "name_taken"
+        );
+        assert!(edit(
+            "Alpha",
+            Some("Alpha"),
+            Some(vec![s(&["infantry", "infantry"])]),
+            None,
+            false
+        )
+        .is_ok());
+        let used = || {
+            Some(Usage {
+                divisions: 3,
+                training_lines: 0,
+            })
+        };
+        assert_eq!(
+            edit(
+                "Alpha",
+                None,
+                Some(vec![s(&["infantry", "infantry"])]),
+                used(),
+                false
+            )
+            .unwrap_err()
+            .code,
             "template_in_use"
         );
-        assert!(edit("Alpha", None, Some(vec![s(&["infantry", "infantry"])]), used(), true).is_ok());
+        assert!(edit(
+            "Alpha",
+            None,
+            Some(vec![s(&["infantry", "infantry"])]),
+            used(),
+            true
+        )
+        .is_ok());
         // A rename of a used template is not a composition change.
         assert!(edit("Alpha", Some("Alpha 2"), None, used(), false).is_ok());
     }
@@ -920,11 +1069,20 @@ mod tests {
     fn save_settlement_compares_only_the_edited_template() {
         let before = layout("A", &[&["infantry"]], &[], 1);
         let want = layout("A2", &[&["infantry", "infantry"]], &[], 2);
-        assert_eq!(settle_layout(Some(&before), Some(&want), &want), Verdict::Reached);
-        assert_eq!(settle_layout(Some(&before), Some(&before), &want), Verdict::Unchanged);
+        assert_eq!(
+            settle_layout(Some(&before), Some(&want), &want),
+            Verdict::Reached
+        );
+        assert_eq!(
+            settle_layout(Some(&before), Some(&before), &want),
+            Verdict::Unchanged
+        );
         assert_eq!(settle_layout(None, None, &want), Verdict::Unchanged);
         let other = layout("A2", &[&["infantry", "light_armor"]], &[], 2);
-        assert_eq!(settle_layout(Some(&before), Some(&other), &want), Verdict::Diverged);
+        assert_eq!(
+            settle_layout(Some(&before), Some(&other), &want),
+            Verdict::Diverged
+        );
         assert_eq!(settle_delete(&before, None), Verdict::Reached);
         assert_eq!(settle_delete(&before, Some(&before)), Verdict::Unchanged);
     }

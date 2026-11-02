@@ -633,7 +633,11 @@ mod tests {
                 json!(2),
                 &mut |b| {
                     seen = Some(b.clone());
-                    Ok(if b == &json!(1) { Outcome::Reached(json!(2)) } else { Outcome::Unchanged(json!(2)) })
+                    Ok(if b == &json!(1) {
+                        Outcome::Reached(json!(2))
+                    } else {
+                        Outcome::Unchanged(json!(2))
+                    })
                 },
                 &mut || panic!("a retry never dispatches"),
             )
@@ -656,7 +660,14 @@ mod tests {
             &mut || Err(Error::new("input_readback_failed", "x")),
         );
         let r = j
-            .execute_baselined("c2", &e, action, json!(3), &mut |_| Ok(Outcome::Unchanged(json!(3))), &mut || panic!("no dispatch"))
+            .execute_baselined(
+                "c2",
+                &e,
+                action,
+                json!(3),
+                &mut |_| Ok(Outcome::Unchanged(json!(3))),
+                &mut || panic!("no dispatch"),
+            )
             .unwrap();
         assert_eq!(r.status, Status::NotApplied);
     }
@@ -674,7 +685,14 @@ mod tests {
             &mut || Err(Error::new("input_readback_failed", "x")),
         );
         let err = j
-            .execute_baselined("c3", &e, action, json!(0), &mut |_| Ok(Outcome::Unchanged(json!(0))), &mut || panic!("no dispatch"))
+            .execute_baselined(
+                "c3",
+                &e,
+                action,
+                json!(0),
+                &mut |_| Ok(Outcome::Unchanged(json!(0))),
+                &mut || panic!("no dispatch"),
+            )
             .unwrap_err();
         assert_eq!(err.code, "action_uncertain");
     }

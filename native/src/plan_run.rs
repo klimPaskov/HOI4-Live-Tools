@@ -428,7 +428,10 @@ pub fn tick(
             .iter()
             .filter(|t| !done.contains(*t) && !busy.contains(*t))
             .collect();
-        let waiting = open.iter().filter(|t| state.skipped(now, "tech", t)).count();
+        let waiting = open
+            .iter()
+            .filter(|t| state.skipped(now, "tech", t))
+            .count();
         let candidates: Vec<String> = open
             .into_iter()
             .filter(|t| !state.skipped(now, "tech", t))
@@ -446,7 +449,9 @@ pub fn tick(
             )?;
             if ok {
                 state.stages.research = Some((
-                    format!("research: started {tech} slot {empty} ({idle_slots} slot(s) were idle)"),
+                    format!(
+                        "research: started {tech} slot {empty} ({idle_slots} slot(s) were idle)"
+                    ),
                     false,
                 ));
                 return Ok(Tick::Acted(format!("research {tech} slot {empty}")));
@@ -534,7 +539,8 @@ pub fn tick(
             true,
         ));
     } else if !slots.is_empty() {
-        state.stages.research = Some((format!("research: all {} slot(s) busy", slots.len()), false));
+        state.stages.research =
+            Some((format!("research: all {} slot(s) busy", slots.len()), false));
     }
     // 3. focus
     let focus = tools.call("hoi4_focus_completed", &json!({"limit": 100}))?;
@@ -586,7 +592,10 @@ pub fn tick(
             let line = if all_done {
                 "focus: none active, focus_path and focus_fallback are all completed".to_string()
             } else {
-                format!("focus: none active, nothing started; blocked [{}]", blocked.join(", "))
+                format!(
+                    "focus: none active, nothing started; blocked [{}]",
+                    blocked.join(", ")
+                )
             };
             state.stages.focus = Some((line, left == 0));
         }
@@ -609,7 +618,10 @@ pub fn tick(
         // pick's own "cost" when the plan names it.
         if let Some(pp) = political_power {
             let need = pick["cost"].as_f64().unwrap_or(0.0);
-            let since = state.pol_pp_at_fail.get(&index).map_or(f64::MIN, |p| p + 15.0);
+            let since = state
+                .pol_pp_at_fail
+                .get(&index)
+                .map_or(f64::MIN, |p| p + 15.0);
             if pp < need || pp < since {
                 continue;
             }
@@ -758,7 +770,9 @@ pub fn tick(
             continue;
         }
         if existing.is_none() {
-            let read = tools.call("hoi4_production_lines", &json!({"limit": 200})).unwrap_or(Value::Null);
+            let read = tools
+                .call("hoi4_production_lines", &json!({"limit": 200}))
+                .unwrap_or(Value::Null);
             existing = Some(
                 list(&read, "lines")
                     .iter()
@@ -828,7 +842,18 @@ pub fn tick(
                 None
             };
             if let Some((ok, why)) = assigned {
-                state.skip(now, "armycreate", &key, if ok { DAY } else if why.contains("selection_mismatch") { 20 * DAY } else { 2 * DAY });
+                state.skip(
+                    now,
+                    "armycreate",
+                    &key,
+                    if ok {
+                        DAY
+                    } else if why.contains("selection_mismatch") {
+                        20 * DAY
+                    } else {
+                        2 * DAY
+                    },
+                );
                 return Ok(Tick::Acted(format!("army_assign state {id}: {ok} {why}")));
             }
             let (ok, why) = state.act(
@@ -854,7 +879,18 @@ pub fn tick(
             };
             // Whether or not it worked, give the game time before trying the
             // same state again (a box selection can miss stacked divisions).
-            state.skip(now, "armycreate", &key, if ok { DAY } else if why.contains("selection_mismatch") { 20 * DAY } else { 2 * DAY });
+            state.skip(
+                now,
+                "armycreate",
+                &key,
+                if ok {
+                    DAY
+                } else if why.contains("selection_mismatch") {
+                    20 * DAY
+                } else {
+                    2 * DAY
+                },
+            );
             return Ok(Tick::Acted(format!("army_create state {id}: {ok} {why}")));
         }
         for army in list(&roster, "armies") {
@@ -895,7 +931,9 @@ pub fn tick(
             sizes.sort_by_key(|(_, n, _)| *n);
             let source = sizes
                 .iter()
-                .find(|(name, n, orders)| *n < min_general && !orders && !state.skipped(now, "armymerge", name))
+                .find(|(name, n, orders)| {
+                    *n < min_general && !orders && !state.skipped(now, "armymerge", name)
+                })
                 .cloned();
             if let Some((source, n, _)) = source {
                 let target = sizes
@@ -914,7 +952,9 @@ pub fn tick(
                     if !ok {
                         state.skip(now, "armymerge", &source, 2 * DAY);
                     }
-                    return Ok(Tick::Acted(format!("army_merge {source} -> {target}: {ok} {why}")));
+                    return Ok(Tick::Acted(format!(
+                        "army_merge {source} -> {target}: {ok} {why}"
+                    )));
                 }
             }
         }
@@ -1023,7 +1063,11 @@ fn plain(s: &str) -> String {
 
 /// A listed state as an id: a number, a numeric string, or an exact state name
 /// resolved (and remembered) with `hoi4_states`.
-fn resolve_state(state: &mut State, tools: &dyn Tools, item: &Value) -> std::result::Result<i64, String> {
+fn resolve_state(
+    state: &mut State,
+    tools: &dyn Tools,
+    item: &Value,
+) -> std::result::Result<i64, String> {
     if let Some(id) = item.as_i64() {
         return Ok(id);
     }
@@ -1114,20 +1158,39 @@ fn construction_step(
         )
     };
     if idle < min_idle {
-        state.con.digest = Some(line(state, "(not enough idle civilian factories)", &queued, &skipped));
+        state.con.digest = Some(line(
+            state,
+            "(not enough idle civilian factories)",
+            &queued,
+            &skipped,
+        ));
         return Ok(None);
     }
     if state.con.yield_next {
         state.con.yield_next = false;
-        state.con.digest = Some(line(state, "(yielded this tick to armies and war)", &queued, &skipped));
+        state.con.digest = Some(line(
+            state,
+            "(yielded this tick to armies and war)",
+            &queued,
+            &skipped,
+        ));
         return Ok(None);
     }
     if now < state.con.pause_until {
-        state.con.digest = Some(line(state, "(paused: input was blocked by a pop-up or event)", &queued, &skipped));
+        state.con.digest = Some(line(
+            state,
+            "(paused: input was blocked by a pop-up or event)",
+            &queued,
+            &skipped,
+        ));
         return Ok(None);
     }
-    let full_days = plan["construction_full_days"].as_i64().unwrap_or(14).clamp(1, 365);
-    let probe = plan["construction_probe_slots"] != json!(false) && now >= state.con.probe_off_until;
+    let full_days = plan["construction_full_days"]
+        .as_i64()
+        .unwrap_or(14)
+        .clamp(1, 365);
+    let probe =
+        plan["construction_probe_slots"] != json!(false) && now >= state.con.probe_off_until;
     let fallback_all = plan["construction_fallback_any_own_state"] == json!(true);
     let tag = text(&economy["player"]).to_string();
 
@@ -1161,8 +1224,15 @@ fn construction_step(
             !state.skipped(now, "confull", &full_key(&building, id))
                 && !state.skipped(now, "con", &format!("{building}:{id}"))
         };
-        let mut eligible: Vec<i64> = ids.iter().copied().filter(|id| usable(state, *id)).collect();
-        if eligible.is_empty() && (fallback_all || job["fallback_any_own_state"] == json!(true)) && !tag.is_empty() {
+        let mut eligible: Vec<i64> = ids
+            .iter()
+            .copied()
+            .filter(|id| usable(state, *id))
+            .collect();
+        if eligible.is_empty()
+            && (fallback_all || job["fallback_any_own_state"] == json!(true))
+            && !tag.is_empty()
+        {
             for id in own_states(state, tools, &tag, now) {
                 if !ids.contains(&id) && usable(state, id) {
                     eligible.push(id);
@@ -1206,12 +1276,19 @@ fn construction_step(
                 ) {
                     Ok(read) => {
                         for row in list(&read, "states") {
-                            let Some(id) = row["state_id"].as_i64() else { continue };
+                            let Some(id) = row["state_id"].as_i64() else {
+                                continue;
+                            };
                             match row["free_slots"].as_u64() {
                                 Some(free) => {
                                     state.con.free.insert(id, (free as u32, now));
                                     if free == 0 {
-                                        state.skip(now, "confull", &full_key(&building, id), full_days * DAY);
+                                        state.skip(
+                                            now,
+                                            "confull",
+                                            &full_key(&building, id),
+                                            full_days * DAY,
+                                        );
                                     }
                                 }
                                 None => {
@@ -1305,7 +1382,9 @@ fn construction_step(
         }
         let note = format!("{ok} {why}");
         state.con.digest = Some(line(state, &note, &queued, &skipped));
-        return Ok(Some(format!("construct {building} {id}: {ok} {why} x{count}")));
+        return Ok(Some(format!(
+            "construct {building} {id}: {ok} {why} x{count}"
+        )));
     }
     let why = if jobs.iter().all(|j| list(j, "states").is_empty()) {
         "(no states listed)"
@@ -1354,7 +1433,9 @@ fn extras_step(
             .map(|p| text(&p["key"]).to_string())
             .collect();
         for facility in list(&sp, "facilities") {
-            let Some(id) = facility["facility_id"].as_i64() else { continue };
+            let Some(id) = facility["facility_id"].as_i64() else {
+                continue;
+            };
             if !facility["project"].is_null() || state.skipped(now, "spfac", &id.to_string()) {
                 continue;
             }
@@ -1362,12 +1443,17 @@ fn extras_step(
             let scientist = list(&sp, "scientists")
                 .iter()
                 .filter(|c| c["assigned_facility_id"].is_null())
-                .find(|c| text(&c["specialization"]) == spec || c["skills"][&spec].as_i64().unwrap_or(0) > 0)
+                .find(|c| {
+                    text(&c["specialization"]) == spec
+                        || c["skills"][&spec].as_i64().unwrap_or(0) > 0
+                })
                 .map(|c| text(&c["name"]).to_string());
             let Some(scientist) = scientist else { continue };
             let pool: Vec<String> = list(&sp, "projects")
                 .iter()
-                .filter(|p| text(&p["specialization"]) == spec && p["running_in_facility_id"].is_null())
+                .filter(|p| {
+                    text(&p["specialization"]) == spec && p["running_in_facility_id"].is_null()
+                })
                 .map(|p| text(&p["key"]).to_string())
                 .filter(|k| !running.contains(k))
                 .collect();
@@ -1387,7 +1473,9 @@ fn extras_step(
             if !ok {
                 state.skip(now, "spfac", &id.to_string(), 30 * DAY);
             }
-            return Ok(Some(format!("special project {project} in facility {id} by {scientist}: {ok} {why}")));
+            return Ok(Some(format!(
+                "special project {project} in facility {id} by {scientist}: {ok} {why}"
+            )));
         }
     }
     let doctrines = list(plan, "doctrines");
@@ -1403,7 +1491,11 @@ fn extras_step(
                 break;
             }
             let folder = entry["folder"].as_str().unwrap_or("land");
-            let kind = match folder { "air" => "air", "naval" | "navy" => "navy", _ => "army" };
+            let kind = match folder {
+                "air" => "air",
+                "naval" | "navy" => "navy",
+                _ => "army",
+            };
             let xp = read["experience"][kind]["value"].as_f64().unwrap_or(0.0);
             if xp < entry["xp"].as_f64().unwrap_or(100.0) {
                 break;
@@ -1418,7 +1510,10 @@ fn extras_step(
             } else {
                 state.skip(now, "doc", &key, 15 * DAY);
             }
-            return Ok(Some(format!("doctrine {}: {ok} {why}", text(&entry["doctrine"]))));
+            return Ok(Some(format!(
+                "doctrine {}: {ok} {why}",
+                text(&entry["doctrine"])
+            )));
         }
     }
     if plan["air"]["war_missions"] == json!(true) && !state.skipped(now, "aircheck", "x") {
@@ -1427,7 +1522,12 @@ fn extras_step(
         let front = list(&wars, "borders")
             .iter()
             .find(|b| b["hostile"] == json!(true))
-            .and_then(|b| b["own_border_states"].as_array().and_then(|a| a.first()).and_then(Value::as_i64));
+            .and_then(|b| {
+                b["own_border_states"]
+                    .as_array()
+                    .and_then(|a| a.first())
+                    .and_then(Value::as_i64)
+            });
         if let Some(state_id) = front {
             let air = tools.call("hoi4_air", &json!({}))?;
             for wing in list(&air, "wings") {
@@ -1446,7 +1546,9 @@ fn extras_step(
                     "am",
                 )?;
                 state.skip(now, "airwing", &name, if ok { 30 * DAY } else { 7 * DAY });
-                return Ok(Some(format!("air {name} {mission} over state {state_id}: {ok} {why}")));
+                return Ok(Some(format!(
+                    "air {name} {mission} over state {state_id}: {ok} {why}"
+                )));
             }
         }
     }
@@ -1655,7 +1757,10 @@ fn date_stop_pause(state: &mut State, tools: &dyn Tools, lease: &str, pause: boo
         Ok((true, _)) => "paused".into(),
         Ok((false, why)) => format!("pause refused ({why}); not retried"),
         Err(e) if e.code == "action_uncertain" => {
-            format!("pause uncertain ({}); not retried, settle by hand", e.message)
+            format!(
+                "pause uncertain ({}); not retried, settle by hand",
+                e.message
+            )
         }
         Err(e) => format!("pause failed ({}: {}); not retried", e.code, e.message),
     }
@@ -1668,7 +1773,13 @@ fn focus_blocked(state: &State, plan: &Value, now: GameHour) -> Vec<String> {
     keys.extend(strings(plan, "focus_fallback"));
     keys.iter()
         .filter(|k| state.skipped(now, "focus", k))
-        .filter_map(|k| state.stages.focus_why.get(k).map(|why| format!("{k}:{why}")))
+        .filter_map(|k| {
+            state
+                .stages
+                .focus_why
+                .get(k)
+                .map(|why| format!("{k}:{why}"))
+        })
         .collect()
 }
 
@@ -1744,9 +1855,8 @@ pub fn run(
         match state.con.digest.take() {
             Some(digest) => construction = Some(digest),
             None if construction.is_none() && !list(&plan, "construction").is_empty() => {
-                construction = Some(
-                    "construction: not reached this tick (an earlier step acted)".into(),
-                )
+                construction =
+                    Some("construction: not reached this tick (an earlier step acted)".into())
             }
             None => {}
         }
@@ -1836,7 +1946,8 @@ pub fn run(
     }
     if stopped_on_date {
         result["stopped_on_date"] = json!(true);
-        result["stop_on_date_pause"] = json!(state.date_stop.as_ref().map_or("", |(_, o)| o.as_str()));
+        result["stop_on_date_pause"] =
+            json!(state.date_stop.as_ref().map_or("", |(_, o)| o.as_str()));
     }
     Ok(result)
 }
@@ -1849,10 +1960,14 @@ fn construction_alarm(
     plan: &Value,
     digest: Option<&str>,
 ) -> Option<Value> {
-    if list(plan, "construction").is_empty() || plan["alarms"]["construction_stalled"] == json!(false) {
+    if list(plan, "construction").is_empty()
+        || plan["alarms"]["construction_stalled"] == json!(false)
+    {
         return None;
     }
-    let days = plan["alarms"]["construction_stall_days"].as_i64().unwrap_or(5);
+    let days = plan["alarms"]["construction_stall_days"]
+        .as_i64()
+        .unwrap_or(5);
     let economy = tools.call("hoi4_economy", &json!({})).ok()?;
     let idle = economy["civilian_factories_idle"]
         .as_i64()
@@ -1919,8 +2034,14 @@ mod tests {
     #[test]
     fn war_mission_covers_designer_airframes() {
         assert_eq!(war_mission("fighter_equipment_1"), Some("air_superiority"));
-        assert_eq!(war_mission("small_plane_airframe_1"), Some("air_superiority"));
-        assert_eq!(war_mission("cv_small_plane_airframe_1"), Some("air_superiority"));
+        assert_eq!(
+            war_mission("small_plane_airframe_1"),
+            Some("air_superiority")
+        );
+        assert_eq!(
+            war_mission("cv_small_plane_airframe_1"),
+            Some("air_superiority")
+        );
         assert_eq!(war_mission("small_plane_cas_airframe_1"), Some("cas"));
         assert_eq!(war_mission("CAS_equipment_1"), Some("cas"));
         assert_eq!(war_mission("medium_plane_airframe_1"), None);
@@ -2454,7 +2575,10 @@ mod tests {
         let plan = json!({"construction": [{"building": "industrial_complex", "states": [51, 55, 60], "count": 3}]});
         let mut state = State::default();
         let first = acted(tick(&mut state, &b, &plan, "l", START).unwrap());
-        assert!(first.starts_with("construct industrial_complex 60: true"), "{first}");
+        assert!(
+            first.starts_with("construct industrial_complex 60: true"),
+            "{first}"
+        );
         // the full state was never tried; three slots were free, three asked
         assert_eq!(*b.added.borrow(), vec![(60, 3)]);
         let digest = state.con.digest.clone().unwrap();
@@ -2462,12 +2586,21 @@ mod tests {
             digest.contains("idle=20") && digest.contains("queued=[industrial_complex@60x3]"),
             "{digest}"
         );
-        assert!(!digest.contains("55:"), "probing marks 55 full silently: {digest}");
+        assert!(
+            !digest.contains("55:"),
+            "probing marks 55 full silently: {digest}"
+        );
         // the next tick yields to armies and war, the one after builds in state 51 (1 free)
-        assert_eq!(tick(&mut state, &b, &plan, "l", START + 1).unwrap(), Tick::Nothing);
+        assert_eq!(
+            tick(&mut state, &b, &plan, "l", START + 1).unwrap(),
+            Tick::Nothing
+        );
         assert!(state.con.digest.clone().unwrap().contains("yielded"));
         let third = acted(tick(&mut state, &b, &plan, "l", START + 2).unwrap());
-        assert!(third.starts_with("construct industrial_complex 51"), "{third}");
+        assert!(
+            third.starts_with("construct industrial_complex 51"),
+            "{third}"
+        );
         assert_eq!(b.added.borrow()[1], (51, 1));
         assert!(state.con.digest.clone().unwrap().contains("55:full"));
     }
@@ -2500,7 +2633,10 @@ mod tests {
         assert!(first.contains("construct arms_factory 4: false"), "{first}");
         // A refused batch is retried one building at a time before the state counts as full.
         let single = acted(tick(&mut state, &b, &plan, "l", START + 1).unwrap());
-        assert!(single.contains("construct arms_factory 4: false") && single.ends_with("x1"), "{single}");
+        assert!(
+            single.contains("construct arms_factory 4: false") && single.ends_with("x1"),
+            "{single}"
+        );
         assert_eq!(
             tick(&mut state, &b, &plan, "l", START + 9 * DAY).unwrap(),
             Tick::Nothing
@@ -2512,7 +2648,10 @@ mod tests {
         );
         b.full.clear();
         let again = acted(tick(&mut state, &b, &plan, "l", START + 10 * DAY + 1).unwrap());
-        assert!(again.starts_with("construct arms_factory 4: true"), "{again}");
+        assert!(
+            again.starts_with("construct arms_factory 4: true"),
+            "{again}"
+        );
     }
 
     #[test]
@@ -2523,12 +2662,18 @@ mod tests {
         let plan = json!({"construction": [{"building": "industrial_complex", "states": [51]}]});
         let mut state = State::default();
         // without the opt-in nothing else is touched
-        assert_eq!(tick(&mut state, &b, &plan, "l", START).unwrap(), Tick::Nothing);
+        assert_eq!(
+            tick(&mut state, &b, &plan, "l", START).unwrap(),
+            Tick::Nothing
+        );
         assert!(b.added.borrow().is_empty());
         let plan = json!({"construction": [{"building": "industrial_complex", "states": [51]}],
             "construction_fallback_any_own_state": true});
         let step = acted(tick(&mut state, &b, &plan, "l", START).unwrap());
-        assert!(step.starts_with("construct industrial_complex 70: true"), "{step}");
+        assert!(
+            step.starts_with("construct industrial_complex 70: true"),
+            "{step}"
+        );
     }
 
     #[test]
@@ -2536,9 +2681,15 @@ mod tests {
         let b = Builder::new();
         let plan = json!({"construction": [{"building": "arms_factory", "states": [4]}], "construction_min_idle": 30});
         let mut state = State::default();
-        assert_eq!(tick(&mut state, &b, &plan, "l", START).unwrap(), Tick::Nothing);
+        assert_eq!(
+            tick(&mut state, &b, &plan, "l", START).unwrap(),
+            Tick::Nothing
+        );
         let digest = state.con.digest.clone().unwrap();
-        assert!(digest.starts_with("construction: idle=20 min=30"), "{digest}");
+        assert!(
+            digest.starts_with("construction: idle=20 min=30"),
+            "{digest}"
+        );
         assert!(b.added.borrow().is_empty());
     }
 
@@ -2563,9 +2714,7 @@ mod tests {
                 match name {
                     "hoi4_research" => Ok(json!({"slots": [{"researching": "a"}]})),
                     "hoi4_focus_completed" => Ok(json!({"active_key": "f"})),
-                    "hoi4_economy" => {
-                        Ok(json!({"civilian_factories_available_for_projects": 9}))
-                    }
+                    "hoi4_economy" => Ok(json!({"civilian_factories_available_for_projects": 9})),
                     "hoi4_construction_add" => Err(Error::new("ui_blocked", "event open")),
                     _ => Ok(json!({})),
                 }
@@ -2713,7 +2862,10 @@ mod tests {
         let tools = Assigning(RefCell::new(vec![]), false);
         let mut state = State::default();
         let step = acted(tick(&mut state, &tools, &plan, "l", START).unwrap());
-        assert!(step.starts_with("army_assign state 56: false capability_unavailable"), "{step}");
+        assert!(
+            step.starts_with("army_assign state 56: false capability_unavailable"),
+            "{step}"
+        );
         assert!(!tools.0.borrow().contains(&"hoi4_army_create".to_string()));
         assert!(state.skipped(START + DAY, "armycreate", "56"));
     }
@@ -2746,7 +2898,7 @@ mod tests {
         assert!(matches!(&step, Tick::Acted(s) if s.starts_with("general B -> Army 3: true")));
     }
 
-    struct Extras(std::cell::RefCell<Vec<(String, Value)>>, bool);
+    struct Extras(std::cell::RefCell<Vec<(String, Value)>>);
     impl Tools for Extras {
         fn call(&self, name: &str, args: &Value) -> Result<Value> {
             self.0.borrow_mut().push((name.to_string(), args.clone()));
@@ -2775,27 +2927,40 @@ mod tests {
 
     #[test]
     fn an_empty_facility_gets_a_matching_scientist_and_the_priority_project() {
-        let tools = Extras(Default::default(), false);
+        let tools = Extras(Default::default());
         let plan = json!({"special_projects": {"priority": ["sp_land_b"]}});
         let mut state = State::default();
         let step = acted(tick(&mut state, &tools, &plan, "l", START).unwrap());
-        assert!(step.starts_with("special project sp_land_b in facility 7 by Land Person: true"), "{step}");
+        assert!(
+            step.starts_with("special project sp_land_b in facility 7 by Land Person: true"),
+            "{step}"
+        );
     }
 
     #[test]
     fn in_war_standing_by_fighters_fly_air_superiority_over_the_enemy_border() {
-        let tools = Extras(Default::default(), false);
+        let tools = Extras(Default::default());
         let plan = json!({"air": {"war_missions": true}});
         let mut state = State::default();
         let step = acted(tick(&mut state, &tools, &plan, "l", START).unwrap());
-        assert!(step.starts_with("air JG 1 air_superiority over state 64: true"), "{step}");
+        assert!(
+            step.starts_with("air JG 1 air_superiority over state 64: true"),
+            "{step}"
+        );
     }
 
     #[test]
     fn a_dated_production_line_waits_for_its_date() {
-        let line = json!({"equipment": "medium_tank_equipment_1", "factories": 4, "from": "1938.06.01"});
-        let early = crate::alarms::stop_on_date(&json!({"stop_on_date": "1938.05.31"})).unwrap().unwrap().0;
-        let late = crate::alarms::stop_on_date(&json!({"stop_on_date": "1938.06.02"})).unwrap().unwrap().0;
+        let line =
+            json!({"equipment": "medium_tank_equipment_1", "factories": 4, "from": "1938.06.01"});
+        let early = crate::alarms::stop_on_date(&json!({"stop_on_date": "1938.05.31"}))
+            .unwrap()
+            .unwrap()
+            .0;
+        let late = crate::alarms::stop_on_date(&json!({"stop_on_date": "1938.06.02"}))
+            .unwrap()
+            .unwrap()
+            .0;
         assert!(!reached(&line, early));
         assert!(reached(&line, late));
         assert!(reached(&json!({"equipment": "x"}), early));
@@ -2828,7 +2993,10 @@ mod tests {
         let plan = json!({"armies": {"generals": ["C"]}});
         let mut state = State::default();
         let step = tick(&mut state, &Roster, &plan, "l", START).unwrap();
-        assert!(matches!(&step, Tick::Acted(s) if s.starts_with("army_merge Army 1 -> Army 3: true")), "{step:?}");
+        assert!(
+            matches!(&step, Tick::Acted(s) if s.starts_with("army_merge Army 1 -> Army 3: true")),
+            "{step:?}"
+        );
     }
 
     struct War {
@@ -3003,8 +3171,18 @@ mod tests {
 
     #[test]
     fn before_the_stop_date_the_runner_works_normally() {
-        let tools = fake(vec![("hoi4_research", json!({"slots": [{"researching": null}]}))]);
-        let step = tick(&mut State::default(), &tools, &date_plan(), "l", target() - 1).unwrap();
+        let tools = fake(vec![(
+            "hoi4_research",
+            json!({"slots": [{"researching": null}]}),
+        )]);
+        let step = tick(
+            &mut State::default(),
+            &tools,
+            &date_plan(),
+            "l",
+            target() - 1,
+        )
+        .unwrap();
         assert_eq!(step, Tick::Acted("research radio slot 0".into()));
         assert!(time_calls(&tools).is_empty());
     }
@@ -3013,17 +3191,28 @@ mod tests {
     fn on_the_stop_date_the_game_is_paused_once_and_nothing_else_is_done() {
         let tools = fake(vec![
             ("hoi4_research", json!({"slots": [{"researching": null}]})),
-            ("hoi4_events", json!({"events": [{"event": "news.1", "options": ["a"]}]})),
+            (
+                "hoi4_events",
+                json!({"events": [{"event": "news.1", "options": ["a"]}]}),
+            ),
         ]);
         let mut state = State::default();
         let step = tick(&mut state, &tools, &date_plan(), "lease", target()).unwrap();
-        assert!(matches!(&step, Tick::DateStop(s) if s.contains("1939.09.01") && s.ends_with("pause: paused")), "{step:?}");
+        assert!(
+            matches!(&step, Tick::DateStop(s) if s.contains("1939.09.01") && s.ends_with("pause: paused")),
+            "{step:?}"
+        );
         let pauses = time_calls(&tools);
         assert_eq!(pauses.len(), 1);
         assert_eq!(pauses[0]["paused"], json!(true));
         assert_eq!(pauses[0]["lease_token"], json!("lease"));
-        assert!(pauses[0]["request_id"].as_str().unwrap().starts_with("plan-sd-"));
-        assert!(names(&tools).iter().all(|n| matches!(n.as_str(), "hoi4_overview" | "hoi4_time" | "hoi4_date_stop")));
+        assert!(pauses[0]["request_id"]
+            .as_str()
+            .unwrap()
+            .starts_with("plan-sd-"));
+        assert!(names(&tools)
+            .iter()
+            .all(|n| matches!(n.as_str(), "hoi4_overview" | "hoi4_time" | "hoi4_date_stop")));
         // later ticks (and a later date) never pause again nor act
         for hour in [target(), target() + 5 * DAY] {
             let step = tick(&mut state, &tools, &date_plan(), "lease", hour).unwrap();
@@ -3036,7 +3225,14 @@ mod tests {
     #[test]
     fn a_runner_started_after_the_date_stops_at_once() {
         let tools = fake(vec![]);
-        let step = tick(&mut State::default(), &tools, &date_plan(), "l", target() + 40 * DAY).unwrap();
+        let step = tick(
+            &mut State::default(),
+            &tools,
+            &date_plan(),
+            "l",
+            target() + 40 * DAY,
+        )
+        .unwrap();
         assert!(matches!(step, Tick::DateStop(_)));
         assert_eq!(time_calls(&tools).len(), 1);
     }
@@ -3062,13 +3258,29 @@ mod tests {
     #[test]
     fn a_pause_the_server_watcher_fired_or_is_sending_is_not_repeated() {
         for (watcher, expect) in [
-            (json!({"fired": true, "outcome": "paused"}), "paused (server date watcher)"),
-            (json!({"in_flight": true}), "pause in flight (server date watcher); not re-issued"),
+            (
+                json!({"fired": true, "outcome": "paused"}),
+                "paused (server date watcher)",
+            ),
+            (
+                json!({"in_flight": true}),
+                "pause in flight (server date watcher); not re-issued",
+            ),
         ] {
             let reads = fake(vec![]);
             let tools = WithWatcher(&reads, watcher);
-            let step = tick(&mut State::default(), &tools, &date_plan(), "l", target() + 9 * DAY).unwrap();
-            assert!(matches!(&step, Tick::DateStop(s) if s.ends_with(expect)), "{step:?}");
+            let step = tick(
+                &mut State::default(),
+                &tools,
+                &date_plan(),
+                "l",
+                target() + 9 * DAY,
+            )
+            .unwrap();
+            assert!(
+                matches!(&step, Tick::DateStop(s) if s.ends_with(expect)),
+                "{step:?}"
+            );
             assert!(time_calls(&reads).is_empty());
         }
     }
@@ -3094,7 +3306,10 @@ mod tests {
         };
         let mut state = State::default();
         let step = tick(&mut state, &tools, &date_plan(), "l", target()).unwrap();
-        assert!(matches!(&step, Tick::DateStop(s) if s.contains("pause refused") && s.contains("not retried")), "{step:?}");
+        assert!(
+            matches!(&step, Tick::DateStop(s) if s.contains("pause refused") && s.contains("not retried")),
+            "{step:?}"
+        );
         for _ in 0..3 {
             assert!(matches!(
                 tick(&mut state, &tools, &date_plan(), "l", target() + DAY).unwrap(),
@@ -3114,14 +3329,20 @@ mod tests {
         };
         let mut state = State::default();
         let step = tick(&mut state, &tools, &date_plan(), "l", target()).unwrap();
-        assert!(matches!(&step, Tick::DateStop(s) if s.contains("pause uncertain")), "{step:?}");
+        assert!(
+            matches!(&step, Tick::DateStop(s) if s.contains("pause uncertain")),
+            "{step:?}"
+        );
         assert!(matches!(
             tick(&mut state, &tools, &date_plan(), "l", target() + 1).unwrap(),
             Tick::DateStop(_)
         ));
         let calls = tools.actions.borrow();
         assert_eq!(calls.len(), 2);
-        assert_eq!(calls[0], calls[1], "only the same request id may be settled");
+        assert_eq!(
+            calls[0], calls[1],
+            "only the same request id may be settled"
+        );
     }
 
     #[test]
@@ -3133,7 +3354,12 @@ mod tests {
         ] {
             let tools = fake(vec![]);
             let at = target();
-            assert_eq!(tick(&mut State::default(), &tools, &plan, "l", at).unwrap_err().code, "invalid_plan");
+            assert_eq!(
+                tick(&mut State::default(), &tools, &plan, "l", at)
+                    .unwrap_err()
+                    .code,
+                "invalid_plan"
+            );
             assert!(names(&tools).is_empty());
         }
     }
@@ -3150,11 +3376,17 @@ mod tests {
 
     #[test]
     fn run_reports_stopped_on_date_and_the_alarm_names_it() {
-        let tools = fake(vec![("hoi4_overview", json!({"date": {"raw": target() + 30}}))]);
+        let tools = fake(vec![(
+            "hoi4_overview",
+            json!({"date": {"raw": target() + 30}}),
+        )]);
         let path = plan_file(&date_plan());
         let result = run(&mut State::default(), &tools, &path, "l", 1).unwrap();
         assert_eq!(result["stopped_on_date"], json!(true));
-        assert!(result["reason"].as_str().unwrap().contains("stop_on_date 1939.09.01"));
+        assert!(result["reason"]
+            .as_str()
+            .unwrap()
+            .contains("stop_on_date 1939.09.01"));
         assert_eq!(result["stop_on_date_pause"], json!("paused"));
         assert!(result["actions"].as_array().unwrap().is_empty());
         let codes: Vec<&str> = result["alarms"]
@@ -3188,43 +3420,80 @@ mod tests {
 
     #[test]
     fn the_default_fallback_still_takes_the_first_catalogue_tech_and_is_recorded() {
-        let tools = fake(vec![("hoi4_research", idle_research()), ("hoi4_technology_list", catalogue())]);
+        let tools = fake(vec![
+            ("hoi4_research", idle_research()),
+            ("hoi4_technology_list", catalogue()),
+        ]);
         let mut state = State::default();
-        let step = tick(&mut state, &tools, &json!({"research_priority": ["radio"]}), "l", START).unwrap();
-        assert_eq!(step, Tick::Acted("research naval_hull1 slot 0 (fallback)".into()));
+        let step = tick(
+            &mut state,
+            &tools,
+            &json!({"research_priority": ["radio"]}),
+            "l",
+            START,
+        )
+        .unwrap();
+        assert_eq!(
+            step,
+            Tick::Acted("research naval_hull1 slot 0 (fallback)".into())
+        );
         assert_eq!(state.stages.fallback_used, ["naval_hull1"]);
-        assert!(state.stages.research.as_ref().unwrap().0.contains("catalogue fallback"));
+        assert!(state
+            .stages
+            .research
+            .as_ref()
+            .unwrap()
+            .0
+            .contains("catalogue fallback"));
     }
 
     #[test]
     fn priority_only_or_false_never_touches_the_catalogue_and_flags_the_idle_slot() {
         for mode in [json!("priority_only"), json!(false)] {
-            let tools = fake(vec![("hoi4_research", idle_research()), ("hoi4_technology_list", catalogue())]);
+            let tools = fake(vec![
+                ("hoi4_research", idle_research()),
+                ("hoi4_technology_list", catalogue()),
+            ]);
             let mut state = State::default();
             let plan = json!({"research_priority": ["radio"], "research_fallback": mode});
             let step = tick(&mut state, &tools, &plan, "l", START).unwrap();
             assert_eq!(step, Tick::Nothing);
             assert!(!names(&tools).contains(&"hoi4_technology_list".to_string()));
             let (line, idle) = state.stages.research.clone().unwrap();
-            assert!(idle && line.contains("plan exhausted") && line.contains("fallback off"), "{line}");
+            assert!(
+                idle && line.contains("plan exhausted") && line.contains("fallback off"),
+                "{line}"
+            );
         }
     }
 
     #[test]
     fn fallback_prefixes_and_categories_restrict_the_catalogue_pick() {
-        let tools = fake(vec![("hoi4_research", idle_research()), ("hoi4_technology_list", catalogue())]);
+        let tools = fake(vec![
+            ("hoi4_research", idle_research()),
+            ("hoi4_technology_list", catalogue()),
+        ]);
         let plan = json!({"research_fallback_prefixes": ["infantry"]});
         tick(&mut State::default(), &tools, &plan, "l", START).unwrap();
         assert_eq!(started(&tools), ["infantry_weapons1"]);
-        let tools = fake(vec![("hoi4_research", idle_research()), ("hoi4_technology_list", catalogue())]);
+        let tools = fake(vec![
+            ("hoi4_research", idle_research()),
+            ("hoi4_technology_list", catalogue()),
+        ]);
         let plan = json!({"research_fallback_categories": ["armor"]});
         tick(&mut State::default(), &tools, &plan, "l", START).unwrap();
         assert_eq!(started(&tools), ["armor_basic"]);
         // nothing in the catalogue matches: nothing is started and the plan is exhausted
-        let tools = fake(vec![("hoi4_research", idle_research()), ("hoi4_technology_list", catalogue())]);
+        let tools = fake(vec![
+            ("hoi4_research", idle_research()),
+            ("hoi4_technology_list", catalogue()),
+        ]);
         let mut state = State::default();
         let plan = json!({"research_fallback_prefixes": ["air_"]});
-        assert_eq!(tick(&mut state, &tools, &plan, "l", START).unwrap(), Tick::Nothing);
+        assert_eq!(
+            tick(&mut state, &tools, &plan, "l", START).unwrap(),
+            Tick::Nothing
+        );
         assert!(started(&tools).is_empty());
         assert!(state.stages.research.unwrap().1);
     }
@@ -3247,7 +3516,10 @@ mod tests {
     fn focus_reads() -> Fake {
         fake(vec![
             ("hoi4_research", json!({"slots": [{"researching": "x"}]})),
-            ("hoi4_focus_completed", json!({"active_key": null, "completed": ["Done"]})),
+            (
+                "hoi4_focus_completed",
+                json!({"active_key": null, "completed": ["Done"]}),
+            ),
         ])
     }
     fn blocked() -> Result<Value> {
@@ -3260,17 +3532,30 @@ mod tests {
         let tools = ActionReplies {
             reads: &reads,
             actions: RefCell::new(vec![]),
-            replies: RefCell::new([blocked(), Ok(json!({"receipt": {"status": "Verified"}}))].into()),
+            replies: RefCell::new(
+                [blocked(), Ok(json!({"receipt": {"status": "Verified"}}))].into(),
+            ),
         };
         let mut state = State::default();
         let plan = json!({"focus_path": ["Done", "A", "B"]});
         let step = tick(&mut state, &tools, &plan, "l", START).unwrap();
         assert_eq!(step, Tick::Acted("focus B".into()));
-        let tried: Vec<String> = tools.actions.borrow().iter().map(|a| a.1["focus"].as_str().unwrap().into()).collect();
+        let tried: Vec<String> = tools
+            .actions
+            .borrow()
+            .iter()
+            .map(|a| a.1["focus"].as_str().unwrap().into())
+            .collect();
         assert_eq!(tried, ["A", "B"]);
         assert!(state.skipped(START + 5, "focus", "A"));
-        assert!(!state.skipped(START + 6, "focus", "A"), "default blocked window is 6 game hours, not a day");
-        assert_eq!(focus_blocked(&state, &plan, START + 1), ["A:focus_not_available"]);
+        assert!(
+            !state.skipped(START + 6, "focus", "A"),
+            "default blocked window is 6 game hours, not a day"
+        );
+        assert_eq!(
+            focus_blocked(&state, &plan, START + 1),
+            ["A:focus_not_available"]
+        );
         assert!(focus_blocked(&state, &plan, START + 6).is_empty());
     }
 
@@ -3280,7 +3565,9 @@ mod tests {
         let tools = ActionReplies {
             reads: &reads,
             actions: RefCell::new(vec![]),
-            replies: RefCell::new([blocked(), Ok(json!({"receipt": {"status": "Verified"}}))].into()),
+            replies: RefCell::new(
+                [blocked(), Ok(json!({"receipt": {"status": "Verified"}}))].into(),
+            ),
         };
         let mut state = State::default();
         let plan = json!({"focus_path": ["A"], "focus_fallback": ["Z"], "skip_hours": {"focus_blocked": 30}});
@@ -3299,7 +3586,14 @@ mod tests {
             replies: RefCell::new([Err(Error::new("ui_blocked", "popup"))].into()),
         };
         let mut state = State::default();
-        tick(&mut state, &tools, &json!({"focus_path": ["A"]}), "l", START).unwrap();
+        tick(
+            &mut state,
+            &tools,
+            &json!({"focus_path": ["A"]}),
+            "l",
+            START,
+        )
+        .unwrap();
         assert!(state.skipped(START + DAY - 1, "focus", "A"));
         assert!(!state.skipped(START + DAY, "focus", "A"));
     }
@@ -3309,7 +3603,10 @@ mod tests {
         let reads = focus_reads();
         let mut state = State::default();
         let plan = json!({"focus_path": ["Done"], "focus_fallback": ["Done"]});
-        assert_eq!(tick(&mut state, &reads, &plan, "l", START).unwrap(), Tick::Nothing);
+        assert_eq!(
+            tick(&mut state, &reads, &plan, "l", START).unwrap(),
+            Tick::Nothing
+        );
         let (line, idle) = state.stages.focus.clone().unwrap();
         assert!(idle && line.contains("all completed"), "{line}");
         // everything left is on a skip timer
@@ -3320,7 +3617,10 @@ mod tests {
         };
         let mut state = State::default();
         let plan = json!({"focus_path": ["Done", "A"]});
-        assert_eq!(tick(&mut state, &tools, &plan, "l", START).unwrap(), Tick::Nothing);
+        assert_eq!(
+            tick(&mut state, &tools, &plan, "l", START).unwrap(),
+            Tick::Nothing
+        );
         let (line, idle) = state.stages.focus.clone().unwrap();
         assert!(idle && line.contains("A:focus_not_available"), "{line}");
         // a plan with no focus keys at all says nothing
@@ -3333,24 +3633,56 @@ mod tests {
     fn run_digest_has_research_and_focus_lines_and_the_exhaustion_alarms() {
         let tools = fake(vec![
             ("hoi4_research", idle_research()),
-            ("hoi4_focus_completed", json!({"active_key": null, "completed": ["Done"]})),
+            (
+                "hoi4_focus_completed",
+                json!({"active_key": null, "completed": ["Done"]}),
+            ),
             ("hoi4_overview", json!({"date": {"raw": START}})),
         ]);
-        let path = plan_file(&json!({"research_priority": ["radio"], "research_fallback": "priority_only",
-            "focus_path": ["Done"]}));
+        let path = plan_file(
+            &json!({"research_priority": ["radio"], "research_fallback": "priority_only",
+            "focus_path": ["Done"]}),
+        );
         let result = run(&mut State::default(), &tools, &path, "l", 1).unwrap();
-        assert!(result["research"].as_str().unwrap().contains("plan exhausted"));
-        assert!(result["focus"].as_str().unwrap().starts_with("focus: none active"));
-        let codes: Vec<&str> = result["alarms"].as_array().unwrap().iter().map(|a| a["code"].as_str().unwrap()).collect();
-        assert!(codes.contains(&"research_slot_idle_plan_exhausted"), "{codes:?}");
-        assert!(codes.contains(&"no_active_focus_plan_exhausted"), "{codes:?}");
+        assert!(result["research"]
+            .as_str()
+            .unwrap()
+            .contains("plan exhausted"));
+        assert!(result["focus"]
+            .as_str()
+            .unwrap()
+            .starts_with("focus: none active"));
+        let codes: Vec<&str> = result["alarms"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|a| a["code"].as_str().unwrap())
+            .collect();
+        assert!(
+            codes.contains(&"research_slot_idle_plan_exhausted"),
+            "{codes:?}"
+        );
+        assert!(
+            codes.contains(&"no_active_focus_plan_exhausted"),
+            "{codes:?}"
+        );
         assert!(!codes.contains(&"research_fallback_used"));
         // silenced by the plan's alarms section
-        let path2 = plan_file(&json!({"research_priority": ["radio"], "research_fallback": false,
-            "focus_path": ["Done"], "alarms": {"research_slot_idle_plan_exhausted": false, "no_active_focus_plan_exhausted": false}}));
+        let path2 = plan_file(
+            &json!({"research_priority": ["radio"], "research_fallback": false,
+            "focus_path": ["Done"], "alarms": {"research_slot_idle_plan_exhausted": false, "no_active_focus_plan_exhausted": false}}),
+        );
         let result = run(&mut State::default(), &tools, &path2, "l", 1).unwrap();
-        let codes: Vec<&str> = result["alarms"].as_array().unwrap().iter().map(|a| a["code"].as_str().unwrap()).collect();
-        assert!(!codes.iter().any(|c| c.ends_with("plan_exhausted")), "{codes:?}");
+        let codes: Vec<&str> = result["alarms"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|a| a["code"].as_str().unwrap())
+            .collect();
+        assert!(
+            !codes.iter().any(|c| c.ends_with("plan_exhausted")),
+            "{codes:?}"
+        );
         let _ = std::fs::remove_file(path);
         let _ = std::fs::remove_file(path2);
     }
@@ -3365,15 +3697,39 @@ mod tests {
         let path = plan_file(&json!({"research_priority": ["radio"]}));
         let mut state = State::default();
         let result = run(&mut state, &tools, &path, "l", 1).unwrap();
-        let alarm = result["alarms"].as_array().unwrap().iter().find(|a| a["code"] == "research_fallback_used").cloned();
-        assert!(alarm.unwrap()["message"].as_str().unwrap().contains("naval_hull1"));
-        assert!(result["research"].as_str().unwrap().contains("catalogue fallback"));
+        let alarm = result["alarms"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|a| a["code"] == "research_fallback_used")
+            .cloned();
+        assert!(alarm.unwrap()["message"]
+            .as_str()
+            .unwrap()
+            .contains("naval_hull1"));
+        assert!(result["research"]
+            .as_str()
+            .unwrap()
+            .contains("catalogue fallback"));
         // focus_blocked comes from skip timers still running
         state.skip(START, "focus", "A", 6);
-        state.stages.focus_why.insert("A".into(), "focus_not_available".into());
+        state
+            .stages
+            .focus_why
+            .insert("A".into(), "focus_not_available".into());
         state.last_hour = START;
         let path2 = plan_file(&json!({"focus_path": ["A"]}));
-        let result = run(&mut state, &fake(vec![("hoi4_focus_completed", json!({"active_key": "Busy"}))]), &path2, "l", 1).unwrap();
+        let result = run(
+            &mut state,
+            &fake(vec![(
+                "hoi4_focus_completed",
+                json!({"active_key": "Busy"}),
+            )]),
+            &path2,
+            "l",
+            1,
+        )
+        .unwrap();
         assert_eq!(result["focus_blocked"], json!(["A:focus_not_available"]));
         assert_eq!(result["focus"], json!("focus: active Busy"));
         let _ = std::fs::remove_file(path);

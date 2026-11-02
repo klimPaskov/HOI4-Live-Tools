@@ -100,7 +100,10 @@ fn read_agency(r: &Reader<'_>, i: u64) -> Result<AgencyGui> {
 /// Refusal for `hoi4_agency_create`, from the window.
 pub(super) fn create_refusal(g: &AgencyGui) -> Option<(&'static str, String)> {
     if g.created {
-        return Some(("agency_exists", "The intelligence agency already exists".into()));
+        return Some((
+            "agency_exists",
+            "The intelligence agency already exists".into(),
+        ));
     }
     if g.creating {
         return Some((
@@ -192,14 +195,18 @@ fn close_with(process: &dyn Process, keys: &MacKeys<'_>, class: &pk::Class, butt
         pk::rect_of(r, i, root, button, 4)
     });
     if clicked.is_ok() {
-        let _ = wait(process, "window closed", |r, i| Ok(!pk::is_open(r, i, class)?));
+        let _ = wait(process, "window closed", |r, i| {
+            Ok(!pk::is_open(r, i, class)?)
+        });
     }
 }
 fn leave(process: &dyn Process, keys: &MacKeys<'_>) {
     close_with(process, keys, &pk::AGENCY_LOGO, "btn_close");
     close_with(process, keys, &pk::AGENCY_UPGRADES, "btn_close");
     if pk::open_now(process, &pk::OPERATIVE_RECRUIT) {
-        super::ui::dismiss(process, keys, |r, i| Ok(!pk::is_open(r, i, &pk::OPERATIVE_RECRUIT)?));
+        super::ui::dismiss(process, keys, |r, i| {
+            Ok(!pk::is_open(r, i, &pk::OPERATIVE_RECRUIT)?)
+        });
     }
     pk::dismiss_window(process, keys, &pk::AGENCY_VIEW);
 }
@@ -241,10 +248,9 @@ fn create(process: &dyn Process, keys: &MacKeys<'_>) -> Driven {
             pk::click(process, keys, "agency logo", |r, i| {
                 let root = pk::open_root(r, i, &pk::AGENCY_LOGO)?;
                 let grid = pk::need(r, i, root, "item_grid", 4)?;
-                let item = pk::items(r, i, grid)?
-                    .into_iter()
-                    .next()
-                    .ok_or_else(|| Error::new("gui_target_unavailable", "No agency logos offered"))?;
+                let item = pk::items(r, i, grid)?.into_iter().next().ok_or_else(|| {
+                    Error::new("gui_target_unavailable", "No agency logos offered")
+                })?;
                 pk::rect_of(r, i, item.frame, "button", 2)
             })?;
             picked_logo = true;
@@ -266,7 +272,9 @@ fn create(process: &dyn Process, keys: &MacKeys<'_>) -> Driven {
             Ok(g.creating || g.created)
         })
         .is_ok();
-        Ok(json!({"creation_started": started, "picked_logo": picked_logo, "verification": "gui_only"}))
+        Ok(
+            json!({"creation_started": started, "picked_logo": picked_logo, "verification": "gui_only"}),
+        )
     })();
     leave(process, keys);
     result
@@ -322,7 +330,8 @@ fn upgrade(process: &dyn Process, keys: &MacKeys<'_>, names: &Names) -> Driven {
             let root = pk::open_root(r, i, &pk::AGENCY_VIEW)?;
             let grid = pk::need(r, i, root, "upgrades_list", 4)?;
             for item in pk::items(r, i, grid)? {
-                let title = pk::text(r, i, item.frame, "agency_branches_title", 2)?.unwrap_or_default();
+                let title =
+                    pk::text(r, i, item.frame, "agency_branches_title", 2)?.unwrap_or_default();
                 if loc::same(&title, &branch) {
                     return pk::rect_of(r, i, item.frame, "background_button", 2);
                 }
@@ -343,7 +352,8 @@ fn upgrade(process: &dyn Process, keys: &MacKeys<'_>, names: &Names) -> Driven {
             let root = pk::open_root(r, i, &pk::AGENCY_UPGRADES)?;
             let grid = pk::need(r, i, root, "branches_grid", 4)?;
             for entry in pk::items(r, i, grid)? {
-                let title = pk::text(r, i, entry.frame, "upgrade_branch_name", 2)?.unwrap_or_default();
+                let title =
+                    pk::text(r, i, entry.frame, "upgrade_branch_name", 2)?.unwrap_or_default();
                 if !loc::same(&title, &branch) {
                     continue;
                 }
@@ -394,7 +404,9 @@ fn upgrade(process: &dyn Process, keys: &MacKeys<'_>, names: &Names) -> Driven {
         close_with(process, keys, &pk::AGENCY_UPGRADES, "btn_close");
         let after = read(process, read_agency)?;
         let matches = match (&names.upgrade, &after.upgrading) {
-            (Some(u), Some(text)) => Some(loc::same(text, u) || text.to_lowercase().contains(&u.to_lowercase())),
+            (Some(u), Some(text)) => {
+                Some(loc::same(text, u) || text.to_lowercase().contains(&u.to_lowercase()))
+            }
             _ => None,
         };
         Ok(json!({
@@ -568,7 +580,10 @@ pub(super) fn plan_assign(
     country: Option<&str>,
 ) -> Result<AssignPlan> {
     if !(0..=31).contains(&operative) {
-        return Err(Error::new("invalid_arguments", "operative must be a bar position 0..31"));
+        return Err(Error::new(
+            "invalid_arguments",
+            "operative must be a bar position 0..31",
+        ));
     }
     let Some(&(key, button, kind)) = MISSIONS.iter().find(|m| m.0 == mission) else {
         return Err(Error::new(
@@ -580,35 +595,53 @@ pub(super) fn plan_assign(
         ));
     };
     let aim = match kind {
-        Target::Ideology => {
-            return Err(Error::new(
-                "mission_not_built",
-                "boost_ideology needs the ideology choice window, which this tool does not drive yet",
-            ))
-        }
+        Target::Ideology => return Err(Error::new(
+            "mission_not_built",
+            "boost_ideology needs the ideology choice window, which this tool does not drive yet",
+        )),
         Target::State => {
-            let state = state_id
-                .filter(|s| (1..=4095).contains(s))
-                .ok_or_else(|| {
-                    Error::new("target_required", format!("{key} needs state_id (a state of the target network)"))
-                })?;
+            let state = state_id.filter(|s| (1..=4095).contains(s)).ok_or_else(|| {
+                Error::new(
+                    "target_required",
+                    format!("{key} needs state_id (a state of the target network)"),
+                )
+            })?;
             if country.is_some() {
-                return Err(Error::new("invalid_arguments", format!("{key} takes state_id, not country")));
+                return Err(Error::new(
+                    "invalid_arguments",
+                    format!("{key} takes state_id, not country"),
+                ));
             }
             Aim::State(state as i32)
         }
         Target::Country => {
             if state_id.is_some() {
-                return Err(Error::new("invalid_arguments", format!("{key} takes country, not state_id")));
+                return Err(Error::new(
+                    "invalid_arguments",
+                    format!("{key} takes country, not state_id"),
+                ));
             }
             match country {
-                Some(tag) if tag.len() == 3 && tag.bytes().all(|b| b.is_ascii_uppercase() || b.is_ascii_digit()) => {
+                Some(tag)
+                    if tag.len() == 3
+                        && tag
+                            .bytes()
+                            .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit()) =>
+                {
                     Aim::Country(tag.to_string())
                 }
-                Some(_) => return Err(Error::new("invalid_arguments", "country must be a three-letter tag")),
+                Some(_) => {
+                    return Err(Error::new(
+                        "invalid_arguments",
+                        "country must be a three-letter tag",
+                    ))
+                }
                 None if key == "counter_intelligence" => Aim::Home,
                 None => {
-                    return Err(Error::new("target_required", format!("{key} needs country (a tag such as ITA)")))
+                    return Err(Error::new(
+                        "target_required",
+                        format!("{key} needs country (a tag such as ITA)"),
+                    ))
                 }
             }
         }
@@ -623,13 +656,23 @@ pub(super) fn plan_assign(
 
 /// A state of the target country to centre the camera on (lowest id).
 fn target_state(process: &dyn Process, tag: &str) -> Result<i32> {
-    let states = read(process, |r, i| diplomacy_state::states_owned_by(r, i, tag, 4))?;
+    let states = read(process, |r, i| {
+        diplomacy_state::states_owned_by(r, i, tag, 4)
+    })?;
     states.first().copied().ok_or_else(|| {
-        Error::new("country_has_no_states", format!("{tag} owns no state to click on"))
+        Error::new(
+            "country_has_no_states",
+            format!("{tag} owns no state to click on"),
+        )
     })
 }
 
-fn assign(process: &dyn Process, keys: &MacKeys<'_>, plan: &AssignPlan, state: Option<i32>) -> Driven {
+fn assign(
+    process: &dyn Process,
+    keys: &MacKeys<'_>,
+    plan: &AssignPlan,
+    state: Option<i32>,
+) -> Driven {
     clear_notices(process, keys)?;
     let result: Driven = (|| {
         if let Some(state) = state {
@@ -684,7 +727,10 @@ fn assign(process: &dyn Process, keys: &MacKeys<'_>, plan: &AssignPlan, state: O
         if !enabled {
             return Err(refuse(
                 "mission_unavailable",
-                format!("The game disables the {} button for this operative", plan.mission),
+                format!(
+                    "The game disables the {} button for this operative",
+                    plan.mission
+                ),
             ));
         }
         pk::click(process, keys, "mission button", |r, i| {
@@ -749,7 +795,11 @@ pub(super) fn call(
                 }),
                 dispatch: Box::new(|process, keys| create(process, keys)),
                 settle: Box::new(|_, seen| {
-                    Ok(ui_action::effect(seen, "creation_started", json!({"tool":"agency_create"})))
+                    Ok(ui_action::effect(
+                        seen,
+                        "creation_started",
+                        json!({"tool":"agency_create"}),
+                    ))
                 }),
             };
             ui_action::run(job, id, token, process, keys, guard, authority, actions)
@@ -757,16 +807,22 @@ pub(super) fn call(
         "hoi4_agency_upgrade" => {
             super::allowed(args, &["branch", "upgrade", "request_id", "lease_token"])?;
             let branch = super::string(args, "branch")?;
-            let upgrade_key = match args.get("upgrade") {
-                None => None,
-                Some(v) => Some(
-                    v.as_str()
-                        .ok_or_else(|| Error::new("invalid_arguments", "upgrade must be a string"))?,
-                ),
-            };
+            let upgrade_key =
+                match args.get("upgrade") {
+                    None => None,
+                    Some(v) => Some(v.as_str().ok_or_else(|| {
+                        Error::new("invalid_arguments", "upgrade must be a string")
+                    })?),
+                };
             for key in std::iter::once(branch).chain(upgrade_key) {
-                if key.is_empty() || key.len() > 96 || !key.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_') {
-                    return Err(Error::new("invalid_arguments", "Invalid branch or upgrade key"));
+                if key.is_empty()
+                    || key.len() > 96
+                    || !key.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
+                {
+                    return Err(Error::new(
+                        "invalid_arguments",
+                        "Invalid branch or upgrade key",
+                    ));
                 }
             }
             let names: RefCell<Option<Names>> = RefCell::new(None);
@@ -781,7 +837,10 @@ pub(super) fn call(
                     keys_wanted.extend(upgrade_key);
                     let names_map = loc::lookup(&dir, &keys_wanted);
                     let branch_name = names_map.get(branch).cloned().ok_or_else(|| {
-                        Error::new("display_name_unknown", format!("No English name for {branch}"))
+                        Error::new(
+                            "display_name_unknown",
+                            format!("No English name for {branch}"),
+                        )
                     })?;
                     let upgrade_name = match upgrade_key {
                         Some(u) => Some(names_map.get(u).cloned().ok_or_else(|| {
@@ -797,13 +856,17 @@ pub(super) fn call(
                 }),
                 dispatch: Box::new(|process, keys| {
                     let held = names.borrow();
-                    let n = held
-                        .as_ref()
-                        .ok_or_else(|| Error::new("action_uncertain", "Plan missing at dispatch"))?;
+                    let n = held.as_ref().ok_or_else(|| {
+                        Error::new("action_uncertain", "Plan missing at dispatch")
+                    })?;
                     upgrade(process, keys, n)
                 }),
                 settle: Box::new(|_, seen| {
-                    Ok(ui_action::effect(seen, "upgrade_started", json!({"tool":"agency_upgrade","branch":branch,"upgrade":upgrade_key})))
+                    Ok(ui_action::effect(
+                        seen,
+                        "upgrade_started",
+                        json!({"tool":"agency_upgrade","branch":branch,"upgrade":upgrade_key}),
+                    ))
                 }),
             };
             ui_action::run(job, id, token, process, keys, guard, authority, actions)
@@ -815,7 +878,8 @@ pub(super) fn call(
                 Some(v) => v
                     .as_u64()
                     .filter(|n| *n <= 31)
-                    .ok_or_else(|| Error::new("invalid_arguments", "candidate must be 0..31"))? as usize,
+                    .ok_or_else(|| Error::new("invalid_arguments", "candidate must be 0..31"))?
+                    as usize,
             };
             let job = Job {
                 kind: "operative_recruit",
@@ -823,7 +887,11 @@ pub(super) fn call(
                 plan: Box::new(|_| Ok(())),
                 dispatch: Box::new(|process, keys| recruit(process, keys, index)),
                 settle: Box::new(|_, seen| {
-                    Ok(ui_action::effect(seen, "recruit_started", json!({"tool":"operative_recruit"})))
+                    Ok(ui_action::effect(
+                        seen,
+                        "recruit_started",
+                        json!({"tool":"operative_recruit"}),
+                    ))
                 }),
             };
             ui_action::run(job, id, token, process, keys, guard, authority, actions)
@@ -831,7 +899,15 @@ pub(super) fn call(
         "hoi4_operative_assign" => {
             super::allowed(
                 args,
-                &["operative", "mission", "operation", "state_id", "country", "request_id", "lease_token"],
+                &[
+                    "operative",
+                    "mission",
+                    "operation",
+                    "state_id",
+                    "country",
+                    "request_id",
+                    "lease_token",
+                ],
             )?;
             if args.contains_key("operation") {
                 return Err(Error::new(
@@ -842,22 +918,26 @@ pub(super) fn call(
             let operative = args
                 .get("operative")
                 .and_then(Value::as_i64)
-                .ok_or_else(|| Error::new("invalid_arguments", "operative must be an integer bar position"))?;
+                .ok_or_else(|| {
+                    Error::new(
+                        "invalid_arguments",
+                        "operative must be an integer bar position",
+                    )
+                })?;
             let mission = super::string(args, "mission")?;
             let state_id = match args.get("state_id") {
                 None => None,
-                Some(v) => Some(
-                    v.as_i64()
-                        .ok_or_else(|| Error::new("invalid_arguments", "state_id must be an integer"))?,
-                ),
+                Some(v) => Some(v.as_i64().ok_or_else(|| {
+                    Error::new("invalid_arguments", "state_id must be an integer")
+                })?),
             };
-            let country = match args.get("country") {
-                None => None,
-                Some(v) => Some(
-                    v.as_str()
-                        .ok_or_else(|| Error::new("invalid_arguments", "country must be a string"))?,
-                ),
-            };
+            let country =
+                match args.get("country") {
+                    None => None,
+                    Some(v) => Some(v.as_str().ok_or_else(|| {
+                        Error::new("invalid_arguments", "country must be a string")
+                    })?),
+                };
             let plan = plan_assign(operative, mission, state_id, country)?;
             let chosen: RefCell<Option<i32>> = RefCell::new(None);
             let job = Job {
@@ -874,7 +954,11 @@ pub(super) fn call(
                 }),
                 dispatch: Box::new(|process, keys| assign(process, keys, &plan, *chosen.borrow())),
                 settle: Box::new(|_, seen| {
-                    Ok(ui_action::effect(seen, "on_mission", json!({"tool":"operative_assign","mission":plan.mission})))
+                    Ok(ui_action::effect(
+                        seen,
+                        "on_mission",
+                        json!({"tool":"operative_assign","mission":plan.mission}),
+                    ))
                 }),
             };
             ui_action::run(job, id, token, process, keys, guard, authority, actions)
@@ -915,7 +999,10 @@ mod tests {
 
     #[test]
     fn create_refuses_from_the_window_state() {
-        assert_eq!(create_refusal(&gui(true, false, false, None)).unwrap().0, "agency_exists");
+        assert_eq!(
+            create_refusal(&gui(true, false, false, None)).unwrap().0,
+            "agency_exists"
+        );
         assert_eq!(
             create_refusal(&gui(false, true, false, None)).unwrap().0,
             "agency_creation_in_progress"
@@ -929,9 +1016,14 @@ mod tests {
 
     #[test]
     fn upgrade_needs_an_agency_and_no_running_upgrade() {
-        assert_eq!(upgrade_refusal(&gui(false, false, true, None)).unwrap().0, "agency_not_created");
         assert_eq!(
-            upgrade_refusal(&gui(true, false, false, Some("Army department"))).unwrap().0,
+            upgrade_refusal(&gui(false, false, true, None)).unwrap().0,
+            "agency_not_created"
+        );
+        assert_eq!(
+            upgrade_refusal(&gui(true, false, false, Some("Army department")))
+                .unwrap()
+                .0,
             "upgrade_in_progress"
         );
         assert!(upgrade_refusal(&gui(true, false, false, None)).is_none());
@@ -943,14 +1035,27 @@ mod tests {
             agency_name: Some("Abwehr".into()),
             branches: vec![(
                 "branch_intelligence".into(),
-                vec!["upgrade_economy_civilian".into(), "upgrade_army_department".into()],
+                vec![
+                    "upgrade_economy_civilian".into(),
+                    "upgrade_army_department".into(),
+                ],
             )],
         };
         assert!(plan_upgrade(&live, "branch_intelligence", None).is_ok());
-        assert!(plan_upgrade(&live, "branch_intelligence", Some("upgrade_army_department")).is_ok());
-        assert_eq!(plan_upgrade(&live, "branch_x", None).unwrap_err().code, "branch_unknown");
+        assert!(plan_upgrade(
+            &live,
+            "branch_intelligence",
+            Some("upgrade_army_department")
+        )
+        .is_ok());
         assert_eq!(
-            plan_upgrade(&live, "branch_intelligence", Some("nope")).unwrap_err().code,
+            plan_upgrade(&live, "branch_x", None).unwrap_err().code,
+            "branch_unknown"
+        );
+        assert_eq!(
+            plan_upgrade(&live, "branch_intelligence", Some("nope"))
+                .unwrap_err()
+                .code,
             "upgrade_unknown"
         );
     }
@@ -960,15 +1065,56 @@ mod tests {
         let p = plan_assign(0, "build_intel_network", Some(64), None).unwrap();
         assert_eq!((p.button, p.aim), (1, Aim::State(64)));
         let p = plan_assign(2, "propaganda", None, Some("ITA")).unwrap();
-        assert_eq!((p.button, p.aim, p.operative), (8, Aim::Country("ITA".into()), 2));
-        assert_eq!(plan_assign(0, "counter_intelligence", None, None).unwrap().aim, Aim::Home);
-        assert_eq!(plan_assign(0, "root_out_resistance", None, None).unwrap_err().code, "target_required");
-        assert_eq!(plan_assign(0, "control_trade", None, None).unwrap_err().code, "target_required");
-        assert_eq!(plan_assign(0, "control_trade", Some(3), Some("ITA")).unwrap_err().code, "invalid_arguments");
-        assert_eq!(plan_assign(0, "propaganda", None, Some("it")).unwrap_err().code, "invalid_arguments");
-        assert_eq!(plan_assign(0, "boost_ideology", None, Some("ITA")).unwrap_err().code, "mission_not_built");
-        assert_eq!(plan_assign(0, "sabotage", None, None).unwrap_err().code, "invalid_arguments");
-        assert_eq!(plan_assign(99, "propaganda", None, Some("ITA")).unwrap_err().code, "invalid_arguments");
+        assert_eq!(
+            (p.button, p.aim, p.operative),
+            (8, Aim::Country("ITA".into()), 2)
+        );
+        assert_eq!(
+            plan_assign(0, "counter_intelligence", None, None)
+                .unwrap()
+                .aim,
+            Aim::Home
+        );
+        assert_eq!(
+            plan_assign(0, "root_out_resistance", None, None)
+                .unwrap_err()
+                .code,
+            "target_required"
+        );
+        assert_eq!(
+            plan_assign(0, "control_trade", None, None)
+                .unwrap_err()
+                .code,
+            "target_required"
+        );
+        assert_eq!(
+            plan_assign(0, "control_trade", Some(3), Some("ITA"))
+                .unwrap_err()
+                .code,
+            "invalid_arguments"
+        );
+        assert_eq!(
+            plan_assign(0, "propaganda", None, Some("it"))
+                .unwrap_err()
+                .code,
+            "invalid_arguments"
+        );
+        assert_eq!(
+            plan_assign(0, "boost_ideology", None, Some("ITA"))
+                .unwrap_err()
+                .code,
+            "mission_not_built"
+        );
+        assert_eq!(
+            plan_assign(0, "sabotage", None, None).unwrap_err().code,
+            "invalid_arguments"
+        );
+        assert_eq!(
+            plan_assign(99, "propaganda", None, Some("ITA"))
+                .unwrap_err()
+                .code,
+            "invalid_arguments"
+        );
         // The table covers the eight mission classes of hoi4_intelligence.
         for key in intelligence::MISSIONS {
             assert!(MISSIONS.iter().any(|m| m.0 == *key), "{key}");
@@ -977,8 +1123,15 @@ mod tests {
 
     #[test]
     fn recruit_needs_a_free_slot() {
-        let slot = |recruited| Slot { frame: 1, recruited, on_mission: false };
-        assert_eq!(recruit_refusal(&[slot(true), slot(true)]).unwrap().0, "no_free_operative_slot");
+        let slot = |recruited| Slot {
+            frame: 1,
+            recruited,
+            on_mission: false,
+        };
+        assert_eq!(
+            recruit_refusal(&[slot(true), slot(true)]).unwrap().0,
+            "no_free_operative_slot"
+        );
         assert!(recruit_refusal(&[slot(true), slot(false)]).is_none());
         assert_eq!(recruited(&[slot(true), slot(false), slot(true)]), 2);
     }
@@ -988,8 +1141,15 @@ mod tests {
         for t in tools() {
             let d = t["description"].as_str().unwrap();
             // Validated live tools drop the marker (agency_upgrade, 1 November 2026).
-            assert_eq!(d.starts_with("UNVALIDATED (no live test yet):"), t["name"] != "hoi4_agency_upgrade");
-            assert!(t["inputSchema"]["required"].as_array().unwrap().iter().any(|v| v == "lease_token"));
+            assert_eq!(
+                d.starts_with("UNVALIDATED (no live test yet):"),
+                t["name"] != "hoi4_agency_upgrade"
+            );
+            assert!(t["inputSchema"]["required"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|v| v == "lease_token"));
             assert!(TOOLS.contains(&t["name"].as_str().unwrap()));
         }
         assert_eq!(tools().len(), TOOLS.len());

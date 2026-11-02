@@ -284,13 +284,19 @@ pub(super) fn own_strategic(
     let tag = r.i32(gs + g.player_tag)?;
     let (_, index_data, index_count) = r.array_header(gs + g.tag_country_index)?;
     if tag < 1 || tag as usize >= index_count {
-        return Err(Error::new("player_unavailable", "Own tag outside the table"));
+        return Err(Error::new(
+            "player_unavailable",
+            "Own tag outside the table",
+        ));
     }
     let index = r.i32(index_data + 4 * tag as u64)?;
     let manager = r.u64(gs + manager_field)?;
     let (_, table, count) = r.array_header(manager + table_field)?;
     if index < 0 || index as usize >= count {
-        return Err(Error::new("player_unavailable", "Own strategic slot absent"));
+        return Err(Error::new(
+            "player_unavailable",
+            "Own strategic slot absent",
+        ));
     }
     let own = r.u64(table + 8 * index as u64)?;
     if own == 0 {
@@ -313,7 +319,10 @@ pub(super) fn type_slots(r: &Reader<'_>, variant: u64) -> Result<Vec<(i32, Strin
     let mut out = Vec::new();
     for index in 0..count as u64 {
         let slot = slots + index * SLOT_STRIDE;
-        out.push((r.i32(slot + SLOT_ID)?, r.string_bounded(slot + SLOT_NAME, 128)?));
+        out.push((
+            r.i32(slot + SLOT_ID)?,
+            r.string_bounded(slot + SLOT_NAME, 128)?,
+        ));
     }
     Ok(out)
 }

@@ -278,7 +278,11 @@ fn lines(r: &Reader<'_>, image: u64) -> Result<Vec<Line>> {
     if count > LINE_LIMIT {
         return Err(Error::new("invalid_array", "Production line count"));
     }
-    let table = if count == 0 { vec![] } else { r.read(data, count * 8)? };
+    let table = if count == 0 {
+        vec![]
+    } else {
+        r.read(data, count * 8)?
+    };
     let mut out = Vec::new();
     for chunk in table.chunks_exact(8) {
         let line = u64::from_le_bytes(chunk.try_into().unwrap());
@@ -458,7 +462,11 @@ mod tests {
 
     #[test]
     fn pool_parse_finds_embedded_pool_and_entries() {
-        let buf = object_with_pool(0x5000, 0x1000, [0, 400_000, 15_300_000, 0, 0, 0, 0, -100_000]);
+        let buf = object_with_pool(
+            0x5000,
+            0x1000,
+            [0, 400_000, 15_300_000, 0, 0, 0, 0, -100_000],
+        );
         let pools = parse_pools(&buf, 0x5000, 0x1000);
         assert_eq!(pools.len(), 1);
         assert_eq!(pools[0].offset, 0x10);
@@ -525,7 +533,10 @@ mod tests {
     #[test]
     fn tools_are_parameterless_reads() {
         for t in tools() {
-            assert!(t["inputSchema"]["properties"].as_object().unwrap().is_empty());
+            assert!(t["inputSchema"]["properties"]
+                .as_object()
+                .unwrap()
+                .is_empty());
         }
     }
 }

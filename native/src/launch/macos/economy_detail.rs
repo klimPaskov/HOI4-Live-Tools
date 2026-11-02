@@ -26,13 +26,13 @@
 //! and equal the game file (see `MODIFIER_NAMES`). Unnamed ids are returned
 //! raw.
 use super::ui::read;
+use crate::platform::Process;
 use crate::{
     economy,
     error::{Error, Result},
     game,
     memory::Reader,
 };
-use crate::platform::Process;
 use serde_json::{json, Map, Value};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
@@ -64,18 +64,58 @@ const MODIFIER_ENTRY: usize = 16;
 /// Modifier ids named by correlation with the active ideas (value equal to
 /// the game file entry). `(id, name, how)`.
 const MODIFIER_NAMES: [(i32, &str, &str); 12] = [
-    (73, "conscription", "extensive_conscription idea 0.05 == total 0.05"),
-    (103, "consumer_goods_expected_value", "partial_economic_mobilisation idea 0.25 (total 0.35: other sources add 0.10)"),
-    (159, "conversion_cost_civ_to_mil_factor", "partial_economic_mobilisation -0.1 == total"),
-    (160, "conversion_cost_mil_to_civ_factor", "partial_economic_mobilisation -0.1 == total"),
+    (
+        73,
+        "conscription",
+        "extensive_conscription idea 0.05 == total 0.05",
+    ),
+    (
+        103,
+        "consumer_goods_expected_value",
+        "partial_economic_mobilisation idea 0.25 (total 0.35: other sources add 0.10)",
+    ),
+    (
+        159,
+        "conversion_cost_civ_to_mil_factor",
+        "partial_economic_mobilisation -0.1 == total",
+    ),
+    (
+        160,
+        "conversion_cost_mil_to_civ_factor",
+        "partial_economic_mobilisation -0.1 == total",
+    ),
     (205, "research_speed_factor", "free_trade 0.10 (total 0.13)"),
-    (223, "training_time_factor", "extensive_conscription 0.1 == total"),
+    (
+        223,
+        "training_time_factor",
+        "extensive_conscription 0.1 == total",
+    ),
     (224, "min_export", "free_trade 0.8 == total"),
-    (252, "drift_defence_factor", "sour_loser idea 0.5 (total 0.75)"),
-    (401, "fuel_gain_factor", "partial_economic_mobilisation -0.1 (total 0.3)"),
-    (625, "cic_construction_boost_factor", "free_trade 0.05 == total"),
-    (2066, "production_speed_arms_factory_factor", "partial_economic_mobilisation 0.1 (total 0.35)"),
-    (2311, "production_speed_coastal_bunker_factor", "GER_fortify_the_vaterland_idea 0.2 (total 0.2)"),
+    (
+        252,
+        "drift_defence_factor",
+        "sour_loser idea 0.5 (total 0.75)",
+    ),
+    (
+        401,
+        "fuel_gain_factor",
+        "partial_economic_mobilisation -0.1 (total 0.3)",
+    ),
+    (
+        625,
+        "cic_construction_boost_factor",
+        "free_trade 0.05 == total",
+    ),
+    (
+        2066,
+        "production_speed_arms_factory_factor",
+        "partial_economic_mobilisation 0.1 (total 0.35)",
+    ),
+    (
+        2311,
+        "production_speed_coastal_bunker_factor",
+        "GER_fortify_the_vaterland_idea 0.2 (total 0.2)",
+    ),
 ];
 
 const ECONOMY_LAWS: [&str; 10] = [
@@ -140,7 +180,10 @@ pub(super) fn parse_entries(buf: &[u8]) -> Vec<(i32, i64)> {
 }
 
 fn value_of(entries: &[(i32, i64)], id: i32) -> Option<f64> {
-    entries.iter().find(|e| e.0 == id).map(|e| e.1 as f64 / FIXED)
+    entries
+        .iter()
+        .find(|e| e.0 == id)
+        .map(|e| e.1 as f64 / FIXED)
 }
 
 /// Consumer goods share arithmetic: factories taken out of `total` and what
@@ -177,7 +220,9 @@ fn entries_at(r: &Reader<'_>, array: u64, count_at: u64, limit: usize) -> Result
     if !(0x10000..=0x7fff_ffff_0000).contains(&ptr) {
         return Err(Error::new("invalid_array", "Modifier entry pointer"));
     }
-    Ok(parse_entries(&r.read(ptr, count as usize * MODIFIER_ENTRY)?))
+    Ok(parse_entries(
+        &r.read(ptr, count as usize * MODIFIER_ENTRY)?,
+    ))
 }
 
 struct Detail {
@@ -234,7 +279,13 @@ fn snapshot(r: &Reader<'_>, image: u64) -> Result<Detail> {
         r.read(production + 0x388, 0x58)?,
     ];
     let manpower_object = country + COUNTRY_MANPOWER;
-    object_vtable(r, manpower_object, image, MANPOWER_VTABLE, "country manpower")?;
+    object_vtable(
+        r,
+        manpower_object,
+        image,
+        MANPOWER_VTABLE,
+        "country manpower",
+    )?;
     let manpower = r.read(manpower_object, 0x28)?;
     let fuel_object = r.u64(country + COUNTRY_FUEL)?;
     object_vtable(r, fuel_object, image, FUEL_VTABLE, "country fuel")?;
@@ -280,7 +331,9 @@ fn laws_json(ideas: &[(String, Vec<(i32, i64)>)]) -> Value {
     for (name, mods) in ideas {
         let entries: Vec<Value> = mods
             .iter()
-            .map(|(id, v)| json!({"id": id, "name": modifier_name(*id), "value": *v as f64 / FIXED}))
+            .map(
+                |(id, v)| json!({"id": id, "name": modifier_name(*id), "value": *v as f64 / FIXED}),
+            )
             .collect();
         match law_kind(name) {
             Some(kind) => {
@@ -388,11 +441,14 @@ pub(super) fn detail(process: &dyn Process) -> Result<Value> {
         },
         "validated": false,
     }));
-    o.insert("conscription".into(), json!({
-        "law": o_law(&out_law(&d.ideas, "conscription")),
-        "share_of_population": conscription,
-        "share_validated": "equals the extensive_conscription idea value (0.05)",
-    }));
+    o.insert(
+        "conscription".into(),
+        json!({
+            "law": o_law(&out_law(&d.ideas, "conscription")),
+            "share_of_population": conscription,
+            "share_validated": "equals the extensive_conscription idea value (0.05)",
+        }),
+    );
     o.insert("fuel".into(), json!({
         "stock": stock, "capacity": capacity,
         "ratio": if capacity > 0.0 { json!(stock / capacity) } else { Value::Null },
@@ -408,7 +464,10 @@ pub(super) fn detail(process: &dyn Process) -> Result<Value> {
         "validated": false,
     }));
     o.insert("stability".into(), json!({"value": null, "reason": "not stored: computed on demand from DEFAULT_STABILITY 0.5, stability_factor and party popularity; use hoi4_country_status (top bar text)"}));
-    o.insert("war_support".into(), json!({"value": null, "reason": "same as stability"}));
+    o.insert(
+        "war_support".into(),
+        json!({"value": null, "reason": "same as stability"}),
+    );
     o.insert("political_power_daily_gain".into(), json!({"value": null, "reason": "political_power_gain modifier id not identified; sample hoi4_economy twice"}));
     o.insert("freshness".into(), json!({
         "observed_unix_ms": SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),
@@ -499,12 +558,18 @@ mod tests {
         ];
         let v = laws_json(&ideas);
         assert_eq!(v["laws"]["trade"]["id"], json!("free_trade"));
-        assert_eq!(v["laws"]["trade"]["modifiers"][0]["name"], json!("min_export"));
+        assert_eq!(
+            v["laws"]["trade"]["modifiers"][0]["name"],
+            json!("min_export")
+        );
         assert_eq!(v["other_ideas"][0]["id"], json!("GER_daimler_benz"));
     }
 
     #[test]
     fn tool_is_parameterless() {
-        assert!(tool()["inputSchema"]["properties"].as_object().unwrap().is_empty());
+        assert!(tool()["inputSchema"]["properties"]
+            .as_object()
+            .unwrap()
+            .is_empty());
     }
 }

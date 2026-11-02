@@ -164,9 +164,18 @@ mod tests {
     fn effect_maps_the_observed_flag() {
         let yes = json!({"started": true});
         let no = json!({"started": false});
-        assert!(matches!(effect(Some(&yes), "started", json!({})), Outcome::Reached(_)));
-        assert!(matches!(effect(Some(&no), "started", json!({})), Outcome::Unchanged(_)));
-        assert!(matches!(effect(None, "started", json!({})), Outcome::Diverged(_)));
+        assert!(matches!(
+            effect(Some(&yes), "started", json!({})),
+            Outcome::Reached(_)
+        ));
+        assert!(matches!(
+            effect(Some(&no), "started", json!({})),
+            Outcome::Unchanged(_)
+        ));
+        assert!(matches!(
+            effect(None, "started", json!({})),
+            Outcome::Diverged(_)
+        ));
         assert!(matches!(
             effect(Some(&json!({"started": "yes"})), "started", json!({})),
             Outcome::Diverged(_)

@@ -151,7 +151,9 @@ fn ints(items: &[Item]) -> BTreeMap<String, i64> {
     items
         .iter()
         .filter_map(|i| match i {
-            Item::Pair(k, Node::Atom(v)) => v.parse().ok().map(|n| (strip("specialization_", k), n)),
+            Item::Pair(k, Node::Atom(v)) => {
+                v.parse().ok().map(|n| (strip("specialization_", k), n))
+            }
             _ => None,
         })
         .collect()
@@ -280,7 +282,9 @@ not_a_project = { x = 1 }
         assert_eq!(r.resources["aluminium"], 6);
         assert_eq!(r.time.as_deref(), Some("medium"));
         assert_eq!(r.complexity.as_deref(), Some("medium"));
-        assert!(r.available.contains("has_tech = electronic_mechanical_engineering"));
+        assert!(r
+            .available
+            .contains("has_tech = electronic_mechanical_engineering"));
         assert!(!rules.contains_key("not_a_project"));
     }
     #[test]

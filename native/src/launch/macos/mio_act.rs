@@ -20,7 +20,7 @@
 //! `queue_number` text). Nothing about an organisation is readable from memory,
 //! so successes are read back from the windows (verification `gui_only`).
 use super::{
-    country_status, loc, mios, mgmt, panelkit as pk, script,
+    country_status, loc, mgmt, mios, panelkit as pk, script,
     ui::{accept_command, clear_notices, open_politics, read, settled, wait},
     ui_action::{self, refuse, Driven, Fail, Job},
     Guard, InputAuthority,
@@ -104,7 +104,16 @@ pub(super) fn plan_policy(policies: &[String], key: &str) -> Result<()> {
         format!(
             "No organisation policy {key:?}{}",
             if near.is_empty() {
-                format!("; {} policies exist, e.g. {}", policies.len(), policies.iter().take(6).cloned().collect::<Vec<_>>().join(", "))
+                format!(
+                    "; {} policies exist, e.g. {}",
+                    policies.len(),
+                    policies
+                        .iter()
+                        .take(6)
+                        .cloned()
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
             } else {
                 format!("; similar: {}", near.join(", "))
             }
@@ -122,7 +131,10 @@ fn names(process: &dyn Process, organization: &str, policy: Option<&str>) -> Res
         ));
     }
     let tag = read(process, |r, i| {
-        Ok(mgmt::clock(r, i)?["player"].as_str().unwrap_or("").to_string())
+        Ok(mgmt::clock(r, i)?["player"]
+            .as_str()
+            .unwrap_or("")
+            .to_string())
     })?;
     plan_org(&catalog, organization, &tag)?;
     let mut keys = vec![organization];
@@ -244,7 +256,11 @@ fn refusal(r: Option<(&'static str, String)>) -> std::result::Result<(), Fail> {
     }
 }
 
-fn open_system(process: &dyn Process, keys: &MacKeys<'_>, slot: usize) -> std::result::Result<(), Fail> {
+fn open_system(
+    process: &dyn Process,
+    keys: &MacKeys<'_>,
+    slot: usize,
+) -> std::result::Result<(), Fail> {
     clear_notices(process, keys)?;
     if !pk::open_now(process, &pk::POLITICS_VIEW) {
         open_politics(process, keys, |r, i| pk::is_open(r, i, &pk::POLITICS_VIEW))?;
@@ -255,7 +271,11 @@ fn open_system(process: &dyn Process, keys: &MacKeys<'_>, slot: usize) -> std::r
     if slot >= entries.len() {
         return Err(refuse(
             "slot_unknown",
-            format!("The politics view shows {} organisation slots, not {}", entries.len(), slot + 1),
+            format!(
+                "The politics view shows {} organisation slots, not {}",
+                entries.len(),
+                slot + 1
+            ),
         ));
     }
     Ok(())
@@ -263,12 +283,14 @@ fn open_system(process: &dyn Process, keys: &MacKeys<'_>, slot: usize) -> std::r
 
 fn open_roster(process: &dyn Process, keys: &MacKeys<'_>, slot: usize) -> Result<()> {
     pk::click(process, keys, "organisation slot", |r, i| {
-        let entry = *org_entries(r, i)?
-            .get(slot)
-            .ok_or_else(|| Error::new("slot_unknown", "Organisation slot left the politics view"))?;
+        let entry = *org_entries(r, i)?.get(slot).ok_or_else(|| {
+            Error::new("slot_unknown", "Organisation slot left the politics view")
+        })?;
         pk::rect_of(r, i, entry, "open_roster_button", 2)
     })?;
-    wait(process, "open organisation list", |r, i| pk::is_open(r, i, &pk::MIO_LIST))?;
+    wait(process, "open organisation list", |r, i| {
+        pk::is_open(r, i, &pk::MIO_LIST)
+    })?;
     pause(400);
     Ok(())
 }
@@ -307,7 +329,8 @@ fn find_row(r: &Reader<'_>, i: u64, display: &str) -> Result<(Vec<String>, Optio
 }
 fn row_rect(r: &Reader<'_>, i: u64, display: &str, button: &str) -> Result<gui_tree::Rect> {
     let (_, found) = find_row(r, i, display)?;
-    let index = found.ok_or_else(|| Error::new("gui_target_unavailable", "Organisation row not found"))?;
+    let index =
+        found.ok_or_else(|| Error::new("gui_target_unavailable", "Organisation row not found"))?;
     let frame = list_frames(r, i)?[index];
     pk::rect_of(r, i, frame, button, 2)
 }
@@ -318,17 +341,29 @@ fn require_row(process: &dyn Process, display: &str) -> std::result::Result<(), 
             "organization_not_offered",
             format!(
                 "The organisation list shows {} but not {display:?}; nothing was changed",
-                if seen.is_empty() { "no rows".to_string() } else { seen.join(" | ") }
+                if seen.is_empty() {
+                    "no rows".to_string()
+                } else {
+                    seen.join(" | ")
+                }
             ),
         ));
     }
     Ok(())
 }
 
-fn open_detail(process: &dyn Process, keys: &MacKeys<'_>, display: &str) -> std::result::Result<(), Fail> {
+fn open_detail(
+    process: &dyn Process,
+    keys: &MacKeys<'_>,
+    display: &str,
+) -> std::result::Result<(), Fail> {
     require_row(process, display)?;
-    pk::click(process, keys, "organisation details", |r, i| row_rect(r, i, display, "details_button"))?;
-    wait(process, "open organisation detail window", |r, i| pk::is_open(r, i, &pk::MIO_DETAIL))?;
+    pk::click(process, keys, "organisation details", |r, i| {
+        row_rect(r, i, display, "details_button")
+    })?;
+    wait(process, "open organisation detail window", |r, i| {
+        pk::is_open(r, i, &pk::MIO_DETAIL)
+    })?;
     pause(400);
     Ok(())
 }
@@ -343,7 +378,9 @@ fn leave(process: &dyn Process, keys: &MacKeys<'_>) {
             if clicked.is_err() {
                 pk::dismiss_window(process, keys, class);
             } else {
-                let _ = wait(process, "window closed", |r, i| Ok(!pk::is_open(r, i, class)?));
+                let _ = wait(process, "window closed", |r, i| {
+                    Ok(!pk::is_open(r, i, class)?)
+                });
             }
         }
     }
@@ -364,7 +401,9 @@ fn design_team(process: &dyn Process, keys: &MacKeys<'_>, display: &str, slot: u
         open_roster(process, keys, slot)?;
         require_row(process, display)?;
         let before = political_power(process);
-        pk::click(process, keys, "organisation row", |r, i| row_rect(r, i, display, "background_button"))?;
+        pk::click(process, keys, "organisation row", |r, i| {
+            row_rect(r, i, display, "background_button")
+        })?;
         let confirmed = accept_command(process, keys)?;
         pause(600);
         let closed = !pk::open_now(process, &pk::MIO_LIST);
@@ -384,7 +423,13 @@ fn design_team(process: &dyn Process, keys: &MacKeys<'_>, display: &str, slot: u
 
 // ------------------------------------------------------------------ policy
 
-fn policy(process: &dyn Process, keys: &MacKeys<'_>, display: &str, slot: usize, policy_name: &str) -> Driven {
+fn policy(
+    process: &dyn Process,
+    keys: &MacKeys<'_>,
+    display: &str,
+    slot: usize,
+    policy_name: &str,
+) -> Driven {
     let result: Driven = (|| {
         open_system(process, keys, slot)?;
         open_roster(process, keys, slot)?;
@@ -393,7 +438,9 @@ fn policy(process: &dyn Process, keys: &MacKeys<'_>, display: &str, slot: usize,
             let root = pk::open_root(r, i, &pk::MIO_DETAIL)?;
             pk::rect_of(r, i, root, "open_policies", 4)
         })?;
-        wait(process, "open policy window", |r, i| pk::is_open(r, i, &pk::MIO_POLICY))?;
+        wait(process, "open policy window", |r, i| {
+            pk::is_open(r, i, &pk::MIO_POLICY)
+        })?;
         pause(400);
         let wanted = policy_name.to_string();
         let rows = |r: &Reader<'_>, i: u64| -> Result<(Vec<String>, Option<gui_tree::Rect>)> {
@@ -489,11 +536,18 @@ fn trait_entries(r: &Reader<'_>, i: u64) -> Result<Vec<TraitEntry>> {
     Ok(out)
 }
 /// Refusal for a trait click, from the entries on screen; pure.
-pub(super) fn trait_refusal(entries: &[TraitEntry], index: usize) -> Option<(&'static str, String)> {
+pub(super) fn trait_refusal(
+    entries: &[TraitEntry],
+    index: usize,
+) -> Option<(&'static str, String)> {
     let Some(e) = entries.get(index) else {
         return Some((
             "trait_unknown",
-            format!("The trait tree shows {} entries, not {}", entries.len(), index + 1),
+            format!(
+                "The trait tree shows {} entries, not {}",
+                entries.len(),
+                index + 1
+            ),
         ));
     };
     if !e.queue.is_empty() {
@@ -505,7 +559,9 @@ pub(super) fn trait_refusal(entries: &[TraitEntry], index: usize) -> Option<(&'s
     if !e.enabled {
         return Some((
             "trait_unavailable",
-            format!("The game disables trait {index} (prerequisites, funds or an excluded sibling)"),
+            format!(
+                "The game disables trait {index} (prerequisites, funds or an excluded sibling)"
+            ),
         ));
     }
     if e.rect.is_none() {
@@ -517,7 +573,13 @@ pub(super) fn trait_refusal(entries: &[TraitEntry], index: usize) -> Option<(&'s
     None
 }
 
-fn mio_trait(process: &dyn Process, keys: &MacKeys<'_>, display: &str, slot: usize, index: Option<usize>) -> Driven {
+fn mio_trait(
+    process: &dyn Process,
+    keys: &MacKeys<'_>,
+    display: &str,
+    slot: usize,
+    index: Option<usize>,
+) -> Driven {
     let result: Driven = (|| {
         open_system(process, keys, slot)?;
         open_roster(process, keys, slot)?;
@@ -530,7 +592,9 @@ fn mio_trait(process: &dyn Process, keys: &MacKeys<'_>, display: &str, slot: usi
                 .collect()
         };
         let Some(index) = index else {
-            return Ok(json!({"listed": summary(&entries), "trait_queued": false, "listing_only": true, "verification": "gui_only"}));
+            return Ok(
+                json!({"listed": summary(&entries), "trait_queued": false, "listing_only": true, "verification": "gui_only"}),
+            );
         };
         refusal(trait_refusal(&entries, index))?;
         pk::click(process, keys, "trait icon", |r, i| {
@@ -570,7 +634,10 @@ fn slot_arg(args: &serde_json::Map<String, Value>) -> Result<usize> {
 fn key_arg<'a>(args: &'a serde_json::Map<String, Value>, name: &str) -> Result<&'a str> {
     let v = super::string(args, name)?;
     if v.is_empty() || v.len() > 128 || !v.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_') {
-        return Err(Error::new("invalid_arguments", format!("Invalid {name} key")));
+        return Err(Error::new(
+            "invalid_arguments",
+            format!("Invalid {name} key"),
+        ));
     }
     Ok(v)
 }
@@ -610,13 +677,26 @@ pub(super) fn call(
                     design_team(process, keys, &n.org_display, slot)
                 }),
                 settle: Box::new(|_, seen| {
-                    Ok(ui_action::effect(seen, "assigned", json!({"tool":"mio_design_team","organization":organization})))
+                    Ok(ui_action::effect(
+                        seen,
+                        "assigned",
+                        json!({"tool":"mio_design_team","organization":organization}),
+                    ))
                 }),
             };
             ui_action::run(job, id, token, process, keys, guard, authority, actions)
         }
         "hoi4_mio_policy" => {
-            super::allowed(args, &["organization", "policy", "slot", "request_id", "lease_token"])?;
+            super::allowed(
+                args,
+                &[
+                    "organization",
+                    "policy",
+                    "slot",
+                    "request_id",
+                    "lease_token",
+                ],
+            )?;
             let organization = key_arg(args, "organization")?;
             let policy_key = key_arg(args, "policy")?;
             let slot = slot_arg(args)?;
@@ -633,24 +713,37 @@ pub(super) fn call(
                     policy(process, keys, &n.org_display, slot, &shown)
                 }),
                 settle: Box::new(|_, seen| {
-                    Ok(ui_action::effect(seen, "policy_attached", json!({"tool":"mio_policy","organization":organization,"policy":policy_key})))
+                    Ok(ui_action::effect(
+                        seen,
+                        "policy_attached",
+                        json!({"tool":"mio_policy","organization":organization,"policy":policy_key}),
+                    ))
                 }),
             };
             ui_action::run(job, id, token, process, keys, guard, authority, actions)
         }
         "hoi4_mio_trait" => {
-            super::allowed(args, &["organization", "trait_index", "list", "slot", "request_id", "lease_token"])?;
+            super::allowed(
+                args,
+                &[
+                    "organization",
+                    "trait_index",
+                    "list",
+                    "slot",
+                    "request_id",
+                    "lease_token",
+                ],
+            )?;
             let organization = key_arg(args, "organization")?;
             let slot = slot_arg(args)?;
             let list_only = mgmt::flag(args, "list")?;
-            let index = match args.get("trait_index") {
-                None => None,
-                Some(v) => Some(
-                    v.as_u64()
-                        .filter(|n| *n <= 63)
-                        .ok_or_else(|| Error::new("invalid_arguments", "trait_index must be 0..63"))? as usize,
-                ),
-            };
+            let index =
+                match args.get("trait_index") {
+                    None => None,
+                    Some(v) => Some(v.as_u64().filter(|n| *n <= 63).ok_or_else(|| {
+                        Error::new("invalid_arguments", "trait_index must be 0..63")
+                    })? as usize),
+                };
             if list_only == index.is_some() {
                 return Err(Error::new(
                     "invalid_arguments",
@@ -669,16 +762,30 @@ pub(super) fn call(
                     mio_trait(process, keys, &n.org_display, slot, index)
                 }),
                 settle: Box::new(|_, seen| {
-                    Ok(match seen.and_then(|v| v.get("listing_only")).and_then(Value::as_bool) {
-                        // Listing changes nothing: whatever it saw is its result.
-                        Some(true) => super::journal::Outcome::Reached(json!({"tool":"mio_trait","listing":true})),
-                        _ => ui_action::effect(seen, "trait_queued", json!({"tool":"mio_trait","organization":organization,"trait_index":index})),
-                    })
+                    Ok(
+                        match seen
+                            .and_then(|v| v.get("listing_only"))
+                            .and_then(Value::as_bool)
+                        {
+                            // Listing changes nothing: whatever it saw is its result.
+                            Some(true) => super::journal::Outcome::Reached(
+                                json!({"tool":"mio_trait","listing":true}),
+                            ),
+                            _ => ui_action::effect(
+                                seen,
+                                "trait_queued",
+                                json!({"tool":"mio_trait","organization":organization,"trait_index":index}),
+                            ),
+                        },
+                    )
                 }),
             };
             ui_action::run(job, id, token, process, keys, guard, authority, actions)
         }
-        _ => Err(Error::new("capability_unavailable", "Unknown organisation tool")),
+        _ => Err(Error::new(
+            "capability_unavailable",
+            "Unknown organisation tool",
+        )),
     }
 }
 
@@ -692,9 +799,9 @@ pub(super) fn tools() -> Vec<Value> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::mios::{Catalog, Org};
     use super::super::script;
+    use super::*;
 
     fn catalog() -> Catalog {
         let entries = script::parse(
@@ -714,11 +821,15 @@ mod tests {
         let c = catalog();
         assert!(plan_org(&c, "GER_porsche_organization", "GER").is_ok());
         assert_eq!(
-            plan_org(&c, "GER_porsche_organization", "ENG").unwrap_err().code,
+            plan_org(&c, "GER_porsche_organization", "ENG")
+                .unwrap_err()
+                .code,
             "organization_not_allowed"
         );
         assert_eq!(
-            plan_org(&c, "generic_tank_organization", "GER").unwrap_err().code,
+            plan_org(&c, "generic_tank_organization", "GER")
+                .unwrap_err()
+                .code,
             "organization_not_allowed"
         );
         let e = plan_org(&c, "porsche", "GER").unwrap_err();
@@ -749,7 +860,12 @@ mod tests {
 
     #[test]
     fn trait_clicks_are_refused_from_the_entries_on_screen() {
-        let rect = Some(gui_tree::Rect { x: 1, y: 2, w: 3, h: 4 });
+        let rect = Some(gui_tree::Rect {
+            x: 1,
+            y: 2,
+            w: 3,
+            h: 4,
+        });
         let entry = |index, enabled, queue: &str, rect| TraitEntry {
             index,
             enabled,
@@ -763,7 +879,10 @@ mod tests {
             entry(3, true, "", None),
         ];
         assert!(trait_refusal(&entries, 0).is_none());
-        assert_eq!(trait_refusal(&entries, 1).unwrap().0, "trait_already_queued");
+        assert_eq!(
+            trait_refusal(&entries, 1).unwrap().0,
+            "trait_already_queued"
+        );
         assert_eq!(trait_refusal(&entries, 2).unwrap().0, "trait_unavailable");
         assert_eq!(trait_refusal(&entries, 3).unwrap().0, "trait_not_visible");
         assert_eq!(trait_refusal(&entries, 9).unwrap().0, "trait_unknown");
@@ -772,8 +891,15 @@ mod tests {
     #[test]
     fn descriptors_are_unvalidated_and_lease_gated() {
         for t in tools() {
-            assert!(t["description"].as_str().unwrap().starts_with("UNVALIDATED (no live test yet):"));
-            assert!(t["inputSchema"]["required"].as_array().unwrap().iter().any(|v| v == "lease_token"));
+            assert!(t["description"]
+                .as_str()
+                .unwrap()
+                .starts_with("UNVALIDATED (no live test yet):"));
+            assert!(t["inputSchema"]["required"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|v| v == "lease_token"));
             assert!(TOOLS.contains(&t["name"].as_str().unwrap()));
         }
         assert_eq!(tools().len(), TOOLS.len());

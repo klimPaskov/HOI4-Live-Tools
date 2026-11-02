@@ -40,14 +40,20 @@ const F3: u16 = 99;
 pub(super) fn own(process: &dyn Process) -> Result<(Vec<Base>, Vec<Wing>)> {
     read(process, |r, image| {
         fleetmem::require_libcxx(r)?;
-        let own = fleetmem::own_strategic(r, image, fleetmem::GS_AIR_MANAGER, fleetmem::AIR_BY_COUNTRY)?;
+        let own =
+            fleetmem::own_strategic(r, image, fleetmem::GS_AIR_MANAGER, fleetmem::AIR_BY_COUNTRY)?;
         airread::bases_and_wings(r, image, own)
     })
 }
 /// One own wing by exact name, straight from memory.
-pub(super) fn own_wing(r: &crate::memory::Reader<'_>, image: u64, name: &str) -> Result<Option<Wing>> {
+pub(super) fn own_wing(
+    r: &crate::memory::Reader<'_>,
+    image: u64,
+    name: &str,
+) -> Result<Option<Wing>> {
     fleetmem::require_libcxx(r)?;
-    let own = fleetmem::own_strategic(r, image, fleetmem::GS_AIR_MANAGER, fleetmem::AIR_BY_COUNTRY)?;
+    let own =
+        fleetmem::own_strategic(r, image, fleetmem::GS_AIR_MANAGER, fleetmem::AIR_BY_COUNTRY)?;
     Ok(airread::bases_and_wings(r, image, own)?
         .1
         .into_iter()
@@ -63,7 +69,11 @@ fn find_wing<'a>(wings: &'a [Wing], name: &str) -> Result<&'a Wing> {
             "wing_unknown",
             format!(
                 "No own air wing named {name:?}; own wings: {}",
-                wings.iter().map(|w| w.name.as_str()).collect::<Vec<_>>().join(" | ")
+                wings
+                    .iter()
+                    .map(|w| w.name.as_str())
+                    .collect::<Vec<_>>()
+                    .join(" | ")
             ),
         )),
         1 => Ok(hits[0]),
@@ -74,20 +84,23 @@ fn find_wing<'a>(wings: &'a [Wing], name: &str) -> Result<&'a Wing> {
     }
 }
 fn base_for_state(bases: &[Base], state: i32) -> Result<&Base> {
-    bases.iter().find(|b| b.state == Some(state)).ok_or_else(|| {
-        Error::new(
-            "air_base_unknown",
-            format!(
-                "No own air base in state {state}; own air base states: {}",
-                bases
-                    .iter()
-                    .filter_map(|b| b.state)
-                    .map(|s| s.to_string())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            ),
-        )
-    })
+    bases
+        .iter()
+        .find(|b| b.state == Some(state))
+        .ok_or_else(|| {
+            Error::new(
+                "air_base_unknown",
+                format!(
+                    "No own air base in state {state}; own air base states: {}",
+                    bases
+                        .iter()
+                        .filter_map(|b| b.state)
+                        .map(|s| s.to_string())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
+            )
+        })
 }
 /// Aircraft in the base plus wings flying to it.
 fn base_load(base: &Base, wings: &[Wing]) -> i32 {
@@ -190,7 +203,12 @@ pub(super) struct CreatePlan {
     pub aircraft: String,
     pub names_before: Vec<String>,
 }
-pub(super) fn plan_create(bases: &[Base], wings: &[Wing], state: i32, aircraft: &str) -> Result<CreatePlan> {
+pub(super) fn plan_create(
+    bases: &[Base],
+    wings: &[Wing],
+    state: i32,
+    aircraft: &str,
+) -> Result<CreatePlan> {
     let base = base_for_state(bases, state)?;
     if base.capacity - base_load(base, wings) <= 0 {
         return Err(Error::new(
@@ -231,7 +249,10 @@ pub(super) fn settle_create(plan: &CreatePlan, wings: &[Wing]) -> (Verdict, Vec<
     (verdict, added)
 }
 /// The reserve row asked for: variant name or class name, case-insensitive; one row only.
-pub(super) fn pick_entry<'a>(entries: &'a [airui::Entry], aircraft: &str) -> Result<&'a airui::Entry> {
+pub(super) fn pick_entry<'a>(
+    entries: &'a [airui::Entry],
+    aircraft: &str,
+) -> Result<&'a airui::Entry> {
     let exact: Vec<&airui::Entry> = entries
         .iter()
         .filter(|e| same(&e.variant, aircraft) || same(&e.class, aircraft))
@@ -240,7 +261,9 @@ pub(super) fn pick_entry<'a>(entries: &'a [airui::Entry], aircraft: &str) -> Res
         let want = aircraft.trim().to_lowercase();
         entries
             .iter()
-            .filter(|e| e.variant.to_lowercase().contains(&want) || e.class.to_lowercase().contains(&want))
+            .filter(|e| {
+                e.variant.to_lowercase().contains(&want) || e.class.to_lowercase().contains(&want)
+            })
             .collect()
     } else {
         exact
@@ -289,16 +312,26 @@ pub(super) struct SplitPlan {
 pub(super) fn plan_split(wings: &[Wing], name: &str) -> Result<SplitPlan> {
     let w = find_wing(wings, name)?;
     if w.transfer_base_id != 0 {
-        return Err(Error::new("wing_in_transfer", format!("{} is flying a transfer", w.name)));
+        return Err(Error::new(
+            "wing_in_transfer",
+            format!("{} is flying a transfer", w.name),
+        ));
     }
     if w.planes < 2 {
-        return Err(Error::new("nothing_to_change", format!("{} has too few aircraft to split", w.name)));
+        return Err(Error::new(
+            "nothing_to_change",
+            format!("{} has too few aircraft to split", w.name),
+        ));
     }
     Ok(SplitPlan {
         wing: w.name.clone(),
         planes: w.planes,
         base_id: w.base_id,
-        names_before: wings.iter().filter(|o| o.base_id == w.base_id).map(|o| o.name.clone()).collect(),
+        names_before: wings
+            .iter()
+            .filter(|o| o.base_id == w.base_id)
+            .map(|o| o.name.clone())
+            .collect(),
     })
 }
 /// A split adds exactly one wing at the base and takes planes from the original.
@@ -309,7 +342,10 @@ pub(super) fn settle_split(plan: &SplitPlan, wings: &[Wing]) -> (Verdict, Vec<St
         .filter(|w| !plan.names_before.contains(&w.name))
         .map(|w| w.name.clone())
         .collect();
-    let original = at_base.iter().find(|w| w.name == plan.wing).map(|w| w.planes);
+    let original = at_base
+        .iter()
+        .find(|w| w.name == plan.wing)
+        .map(|w| w.planes);
     let verdict = match (added.len(), original) {
         (1, Some(p)) if p < plan.planes => Verdict::Reached,
         (0, Some(p)) if p == plan.planes => Verdict::Unchanged,
@@ -357,18 +393,31 @@ pub(super) fn plan_merge(wings: &[Wing], a: &str, with: Option<&str>) -> Result<
         if archetype(&wa.equipment) != archetype(&wb.equipment) {
             return Err(Error::new(
                 "merge_different_type",
-                format!("{} flies {} and {} flies {}; only wings of one aircraft type merge", wa.name, archetype(&wa.equipment), wb.name, archetype(&wb.equipment)),
+                format!(
+                    "{} flies {} and {} flies {}; only wings of one aircraft type merge",
+                    wa.name,
+                    archetype(&wa.equipment),
+                    wb.name,
+                    archetype(&wb.equipment)
+                ),
             ));
         }
     }
     if group.len() < 2 {
         return Err(Error::new(
             "no_merge_partner",
-            format!("{} is the only {} wing at its air base", wa.name, archetype(&wa.equipment)),
+            format!(
+                "{} is the only {} wing at its air base",
+                wa.name,
+                archetype(&wa.equipment)
+            ),
         ));
     }
     if group.iter().any(|w| w.transfer_base_id != 0) {
-        return Err(Error::new("wing_in_transfer", "A wing in transfer cannot be merged"));
+        return Err(Error::new(
+            "wing_in_transfer",
+            "A wing in transfer cannot be merged",
+        ));
     }
     if let Some(b) = with {
         if group.len() != 2 {
@@ -396,10 +445,16 @@ pub(super) fn plan_merge(wings: &[Wing], a: &str, with: Option<&str>) -> Result<
 /// Fewer wings of the group are left and together they hold all the aircraft. A wing holds at most
 /// 100 aircraft: merging 40 + 80 + 40 bombers left wings of 100 and 60 (seen live).
 pub(super) fn settle_merge(plan: &MergePlan, wings: &[Wing]) -> Verdict {
-    let left: Vec<&Wing> = wings.iter().filter(|w| plan.group.contains(&w.name)).collect();
+    let left: Vec<&Wing> = wings
+        .iter()
+        .filter(|w| plan.group.contains(&w.name))
+        .collect();
     let held: i32 = left.iter().map(|w| w.planes).sum();
     let unchanged = plan.group.iter().zip(&plan.planes).all(|(n, p)| {
-        wings.iter().find(|w| w.name == *n).is_some_and(|w| w.planes == *p)
+        wings
+            .iter()
+            .find(|w| w.name == *n)
+            .is_some_and(|w| w.planes == *p)
     });
     if !left.is_empty() && left.len() < plan.group.len() && held == plan.total {
         Verdict::Reached
@@ -428,25 +483,42 @@ pub(super) fn settle_hold(before: &WingSnap, now: Option<&WingSnap>) -> Verdict 
     }
 }
 /// A wing's mission and region change only by this action.
-pub(super) fn settle_mission(before: &WingSnap, now: Option<&WingSnap>, mask: i32, region: Option<i32>) -> Verdict {
+pub(super) fn settle_mission(
+    before: &WingSnap,
+    now: Option<&WingSnap>,
+    mask: i32,
+    region: Option<i32>,
+) -> Verdict {
     match now {
-        Some(n) if n.mission_mask & mask == mask && region.is_none_or(|r| n.region_id == r) => Verdict::Reached,
-        Some(n) if n.mission_mask == before.mission_mask && n.region_id == before.region_id => Verdict::Unchanged,
+        Some(n) if n.mission_mask & mask == mask && region.is_none_or(|r| n.region_id == r) => {
+            Verdict::Reached
+        }
+        Some(n) if n.mission_mask == before.mission_mask && n.region_id == before.region_id => {
+            Verdict::Unchanged
+        }
         Some(_) => Verdict::Diverged,
         None => Verdict::Unknown,
     }
 }
 // ---- geometry and ranges -----------------------------------------------------------------------
 fn game_dir(process: &dyn Process) -> Option<std::path::PathBuf> {
-    process.identity().and_then(|i| mapdata::game_dir(&i.exe).ok())
+    process
+        .identity()
+        .and_then(|i| mapdata::game_dir(&i.exe).ok())
 }
 /// Base position (x, z) of a state from the game's building positions.
 pub(super) fn base_position(process: &dyn Process, state: i32) -> Result<(f64, f64)> {
-    let dir = game_dir(process).ok_or_else(|| Error::new("map_data_unavailable", "Game install not found"))?;
+    let dir = game_dir(process)
+        .ok_or_else(|| Error::new("map_data_unavailable", "Game install not found"))?;
     mapdata::air_base_positions(&dir)?
         .get(&state)
         .copied()
-        .ok_or_else(|| Error::new("air_base_unknown", format!("No air base position for state {state}")))
+        .ok_or_else(|| {
+            Error::new(
+                "air_base_unknown",
+                format!("No air base position for state {state}"),
+            )
+        })
 }
 // ---- driving the air UI -------------------------------------------------------------------------
 fn click(keys: &MacKeys, x: f64, y: f64) -> Result<()> {
@@ -480,7 +552,9 @@ fn release(process: &dyn Process, keys: &MacKeys, entered: bool) {
         if let Ok(rect) = settled(process, "wing window close", airui::reorg_close) {
             let (x, y) = rect.center();
             let _ = click(keys, x, y);
-            let _ = wait(process, "wing window closed", |r, i| Ok(!airui::reorg_open(r, i)?));
+            let _ = wait(process, "wing window closed", |r, i| {
+                Ok(!airui::reorg_open(r, i)?)
+            });
         }
     }
     let _ = air::deselect(process, keys);
@@ -544,14 +618,20 @@ pub(super) fn rebase(process: &dyn Process, keys: &MacKeys, plan: &RebasePlan) -
                 "The wing did not start a transfer (the game refused the base: it is full or the wing cannot move)",
             )
         })?;
-        Ok(json!({"wing":plan.wing,"to_state":plan.state,"planes":plan.planes,"from_state":plan.from_state}))
+        Ok(
+            json!({"wing":plan.wing,"to_state":plan.state,"planes":plan.planes,"from_state":plan.from_state}),
+        )
     })();
     release(process, keys, entered);
     result
 }
 
 /// Select the base (left click on its circle), N, pick the reserve row, Ok.
-pub(super) fn create_wing(process: &dyn Process, keys: &MacKeys, plan: &CreatePlan) -> Result<Value> {
+pub(super) fn create_wing(
+    process: &dyn Process,
+    keys: &MacKeys,
+    plan: &CreatePlan,
+) -> Result<Value> {
     clear_notices(process, keys)?;
     let entered = enter_air_mode(process, keys)?;
     let result = (|| -> Result<Value> {
@@ -568,28 +648,45 @@ pub(super) fn create_wing(process: &dyn Process, keys: &MacKeys, plan: &CreatePl
             ));
         }
         pause(300);
-        let reserve = settled(process, "reserve rows", |r, i| airui::reorg_entries(r, i, "list_left"))?;
+        let reserve = settled(process, "reserve rows", |r, i| {
+            airui::reorg_entries(r, i, "list_left")
+        })?;
         let entry = pick_entry(&reserve, &plan.aircraft)?.clone();
         let (cx, cy) = entry.bg.center();
         click(keys, cx, cy)?;
-        wait(process, "planes moved into the wing", |r, i| Ok(airui::reorg_planes(r, i)? > 0))?;
+        wait(process, "planes moved into the wing", |r, i| {
+            Ok(airui::reorg_planes(r, i)? > 0)
+        })?;
         let planes = read(process, airui::reorg_planes)?;
         let (rect, state) = settled(process, "wing ok", airui::reorg_confirm)?;
         if state == 3 {
-            return Err(Error::new("create_unavailable", "The game disables Ok for this wing (manpower?)"));
+            return Err(Error::new(
+                "create_unavailable",
+                "The game disables Ok for this wing (manpower?)",
+            ));
         }
         let (ox, oy) = rect.center();
         click(keys, ox, oy)?;
-        wait(process, "wing founded", |r, i| Ok(!airui::reorg_open(r, i)?))?;
-        Ok(json!({"state":plan.state,"variant":entry.variant,"class":entry.class,"planes_moved":planes,
-            "reserve_before":entry.count}))
+        wait(process, "wing founded", |r, i| {
+            Ok(!airui::reorg_open(r, i)?)
+        })?;
+        Ok(
+            json!({"state":plan.state,"variant":entry.variant,"class":entry.class,"planes_moved":planes,
+            "reserve_before":entry.count}),
+        )
     })();
     release(process, keys, entered);
     result
 }
 
 /// `air::assign` inside the strategic air map (switched on and back when it was off).
-pub(super) fn mission(process: &dyn Process, keys: &MacKeys, wing: &str, mission: &str, state: i32) -> Result<()> {
+pub(super) fn mission(
+    process: &dyn Process,
+    keys: &MacKeys,
+    wing: &str,
+    mission: &str,
+    state: i32,
+) -> Result<()> {
     clear_notices(process, keys)?;
     let entered = enter_air_mode(process, keys)?;
     let result = air::assign(process, keys, wing, mission, state);
@@ -604,21 +701,33 @@ pub(super) fn disband(process: &dyn Process, keys: &MacKeys, wing: &str) -> Resu
     let result = (|| -> Result<Value> {
         air::select_wing(process, keys, wing)?;
         if !only_selected(process, wing)? {
-            return Err(Error::new("selection_lost", "The selection is not exactly this wing; nothing was disbanded"));
+            return Err(Error::new(
+                "selection_lost",
+                "The selection is not exactly this wing; nothing was disbanded",
+            ));
         }
-        let (rect, state) = settled(process, "disband button", |r, i| airui::toolbar(r, i, "btn_delete"))?;
+        let (rect, state) = settled(process, "disband button", |r, i| {
+            airui::toolbar(r, i, "btn_delete")
+        })?;
         if state == 3 {
-            return Err(Error::new("disband_unavailable", "The game disables Disband for this wing"));
+            return Err(Error::new(
+                "disband_unavailable",
+                "The game disables Disband for this wing",
+            ));
         }
         let (x, y) = rect.center();
         click(keys, x, y)?;
         if !accept_command(process, keys)? {
-            return Err(Error::new("input_readback_failed", "The disband confirmation did not appear"));
+            return Err(Error::new(
+                "input_readback_failed",
+                "The disband confirmation did not appear",
+            ));
         }
         let name = wing.to_string();
         wait(process, "wing disbanded", move |r, i| {
             fleetmem::require_libcxx(r)?;
-            let own = fleetmem::own_strategic(r, i, fleetmem::GS_AIR_MANAGER, fleetmem::AIR_BY_COUNTRY)?;
+            let own =
+                fleetmem::own_strategic(r, i, fleetmem::GS_AIR_MANAGER, fleetmem::AIR_BY_COUNTRY)?;
             let (_, wings) = airread::bases_and_wings(r, i, own)?;
             Ok(!wings.iter().any(|w| w.name == name))
         })?;
@@ -635,18 +744,27 @@ pub(super) fn split(process: &dyn Process, keys: &MacKeys, plan: &SplitPlan) -> 
     let result = (|| -> Result<Value> {
         air::select_wing(process, keys, &plan.wing)?;
         if !only_selected(process, &plan.wing)? {
-            return Err(Error::new("selection_lost", "The selection is not exactly this wing; nothing was split"));
+            return Err(Error::new(
+                "selection_lost",
+                "The selection is not exactly this wing; nothing was split",
+            ));
         }
-        let (rect, state) = settled(process, "split button", |r, i| airui::toolbar(r, i, "split_wing_btn"))?;
+        let (rect, state) = settled(process, "split button", |r, i| {
+            airui::toolbar(r, i, "split_wing_btn")
+        })?;
         if state == 3 {
-            return Err(Error::new("split_unavailable", "The game disables Split for this wing"));
+            return Err(Error::new(
+                "split_unavailable",
+                "The game disables Split for this wing",
+            ));
         }
         let (x, y) = rect.center();
         click(keys, x, y)?;
         let (name, base, before) = (plan.wing.clone(), plan.base_id, plan.planes);
         wait(process, "wing split", move |r, i| {
             fleetmem::require_libcxx(r)?;
-            let own = fleetmem::own_strategic(r, i, fleetmem::GS_AIR_MANAGER, fleetmem::AIR_BY_COUNTRY)?;
+            let own =
+                fleetmem::own_strategic(r, i, fleetmem::GS_AIR_MANAGER, fleetmem::AIR_BY_COUNTRY)?;
             let (_, wings) = airread::bases_and_wings(r, i, own)?;
             Ok(wings.iter().any(|w| w.name == name && w.planes < before)
                 && wings.iter().filter(|w| w.base_id == base).count() > 1)
@@ -664,7 +782,9 @@ pub(super) fn merge(process: &dyn Process, keys: &MacKeys, plan: &MergePlan) -> 
     clear_notices(process, keys)?;
     let entered = enter_air_mode(process, keys)?;
     let result = (|| -> Result<Value> {
-        let state = plan.state.ok_or_else(|| Error::new("air_base_unknown", "The wings' air base has no state"))?;
+        let state = plan
+            .state
+            .ok_or_else(|| Error::new("air_base_unknown", "The wings' air base has no state"))?;
         let pos = base_position(process, state)?;
         let mut group = plan.group.clone();
         group.sort();
@@ -675,15 +795,24 @@ pub(super) fn merge(process: &dyn Process, keys: &MacKeys, plan: &MergePlan) -> 
         };
         air::select_wing(process, keys, &plan.wing)?;
         if !only_selected(process, &plan.wing)? {
-            return Err(Error::new("selection_lost", "The selection is not exactly the first wing; nothing was merged"));
+            return Err(Error::new(
+                "selection_lost",
+                "The selection is not exactly the first wing; nothing was merged",
+            ));
         }
         base_point(process, keys, state)?;
         let items = settled(process, "wing stack", |r, i| {
-            airui::stack_at(r, i, pos)?
-                .ok_or_else(|| Error::new("gui_target_unavailable", "The base's wing stack is not shown"))
+            airui::stack_at(r, i, pos)?.ok_or_else(|| {
+                Error::new(
+                    "gui_target_unavailable",
+                    "The base's wing stack is not shown",
+                )
+            })
         })?;
         // The stack item showing the group's aircraft total is the likely one.
-        let mut tries: Vec<usize> = (0..items.len()).filter(|i| items[*i].planes == plan.total).collect();
+        let mut tries: Vec<usize> = (0..items.len())
+            .filter(|i| items[*i].planes == plan.total)
+            .collect();
         tries.extend((0..items.len()).filter(|i| items[*i].planes != plan.total));
         let mut joined = false;
         for index in tries {
@@ -708,16 +837,22 @@ pub(super) fn merge(process: &dyn Process, keys: &MacKeys, plan: &MergePlan) -> 
                 "The wings of this type could not be selected together; nothing was merged",
             ));
         }
-        let (rect, state_code) = settled(process, "merge button", |r, i| airui::toolbar(r, i, "merge_wings_btn"))?;
+        let (rect, state_code) = settled(process, "merge button", |r, i| {
+            airui::toolbar(r, i, "merge_wings_btn")
+        })?;
         if state_code == 3 {
-            return Err(Error::new("merge_unavailable", "The game disables Merge for these wings"));
+            return Err(Error::new(
+                "merge_unavailable",
+                "The game disables Merge for these wings",
+            ));
         }
         let (x, y) = rect.center();
         click(keys, x, y)?;
         let (names, total) = (plan.group.clone(), plan.total);
         wait(process, "wings merged", move |r, i| {
             fleetmem::require_libcxx(r)?;
-            let own = fleetmem::own_strategic(r, i, fleetmem::GS_AIR_MANAGER, fleetmem::AIR_BY_COUNTRY)?;
+            let own =
+                fleetmem::own_strategic(r, i, fleetmem::GS_AIR_MANAGER, fleetmem::AIR_BY_COUNTRY)?;
             let (_, wings) = airread::bases_and_wings(r, i, own)?;
             let kept: Vec<&Wing> = wings.iter().filter(|w| names.contains(&w.name)).collect();
             Ok(!kept.is_empty()
@@ -737,18 +872,27 @@ pub(super) fn hold(process: &dyn Process, keys: &MacKeys, wing: &str) -> Result<
     let result = (|| -> Result<Value> {
         air::select_wing(process, keys, wing)?;
         if !only_selected(process, wing)? {
-            return Err(Error::new("selection_lost", "The selection is not exactly this wing; nothing was held"));
+            return Err(Error::new(
+                "selection_lost",
+                "The selection is not exactly this wing; nothing was held",
+            ));
         }
-        let (rect, state) = settled(process, "hold button", |r, i| airui::toolbar(r, i, "btn_hold"))?;
+        let (rect, state) = settled(process, "hold button", |r, i| {
+            airui::toolbar(r, i, "btn_hold")
+        })?;
         if state == 3 {
-            return Err(Error::new("hold_unavailable", "The game disables Hold for this wing"));
+            return Err(Error::new(
+                "hold_unavailable",
+                "The game disables Hold for this wing",
+            ));
         }
         let (x, y) = rect.center();
         click(keys, x, y)?;
         let name = wing.to_string();
         wait(process, "wing held", move |r, i| {
             fleetmem::require_libcxx(r)?;
-            let own = fleetmem::own_strategic(r, i, fleetmem::GS_AIR_MANAGER, fleetmem::AIR_BY_COUNTRY)?;
+            let own =
+                fleetmem::own_strategic(r, i, fleetmem::GS_AIR_MANAGER, fleetmem::AIR_BY_COUNTRY)?;
             let (_, wings) = airread::bases_and_wings(r, i, own)?;
             Ok(wings.iter().any(|w| w.name == name && w.region_id <= 0))
         })?;
@@ -768,7 +912,9 @@ pub(super) fn probe_region(process: &dyn Process, keys: &MacKeys, state: i32) ->
         pause(300);
         click(keys, 960.0, 540.0)?;
         let view = {
-            wait(process, "air region window", |r, i| Ok(airui::region_view(r, i)?.is_some()))?;
+            wait(process, "air region window", |r, i| {
+                Ok(airui::region_view(r, i)?.is_some())
+            })?;
             pause(300);
             settled(process, "air region window", |r, i| {
                 airui::region_view(r, i)?
@@ -783,7 +929,9 @@ pub(super) fn probe_region(process: &dyn Process, keys: &MacKeys, state: i32) ->
         }) {
             let (x, y) = rect.center();
             let _ = click(keys, x, y);
-            let _ = wait(process, "region window closed", |r, i| Ok(airui::region_view(r, i)?.is_none()));
+            let _ = wait(process, "region window closed", |r, i| {
+                Ok(airui::region_view(r, i)?.is_none())
+            });
         }
         Ok(json)
     })();
@@ -810,17 +958,26 @@ pub(super) fn region_json(v: &airui::RegionView) -> Value {
 pub(super) fn regions(process: &dyn Process) -> Result<Value> {
     use std::collections::BTreeMap;
     let (bases, wings) = own(process)?;
-    let names = game_dir(process).map(|d| airread::region_names(&d)).unwrap_or_default();
+    let names = game_dir(process)
+        .map(|d| airread::region_names(&d))
+        .unwrap_or_default();
     let mut rows: BTreeMap<i32, (Vec<Value>, Vec<Value>)> = BTreeMap::new();
     for w in &wings {
         if w.region_id > 0 {
-            rows.entry(w.region_id).or_default().0.push(json!({"wing":w.name,"aircraft":w.planes,
+            rows.entry(w.region_id)
+                .or_default()
+                .0
+                .push(json!({"wing":w.name,"aircraft":w.planes,
                 "aircraft_type":w.equipment,"missions":airread::missions_in(w.mission_mask),
                 "air_base_state":w.base_state}));
         }
     }
     for b in &bases {
-        let used: i32 = wings.iter().filter(|w| w.base_id == b.id).map(|w| w.planes).sum();
+        let used: i32 = wings
+            .iter()
+            .filter(|w| w.base_id == b.id)
+            .map(|w| w.planes)
+            .sum();
         let region = b.region_id;
         if let Some(region) = region {
             rows.entry(region).or_default().1.push(json!({"state_id":b.state,"capacity":b.capacity,
@@ -828,7 +985,11 @@ pub(super) fn regions(process: &dyn Process) -> Result<Value> {
                 "wings":wings.iter().filter(|w| w.base_id == b.id).map(|w| w.name.as_str()).collect::<Vec<_>>()}));
         }
     }
-    let idle: Vec<&str> = wings.iter().filter(|w| w.region_id <= 0).map(|w| w.name.as_str()).collect();
+    let idle: Vec<&str> = wings
+        .iter()
+        .filter(|w| w.region_id <= 0)
+        .map(|w| w.name.as_str())
+        .collect();
     Ok(json!({
         "regions":rows.into_iter().map(|(id, (w, b))| json!({"region_id":id,"name":names.get(&id),
             "wings_assigned":w.len(),"aircraft_assigned":w.iter().map(|x| x["aircraft"].as_i64().unwrap_or(0)).sum::<i64>(),
@@ -841,14 +1002,21 @@ pub(super) fn regions(process: &dyn Process) -> Result<Value> {
 
 // ---- region arguments ---------------------------------------------------------------------------
 /// A region id or display name (case-insensitive, unique substring allowed) -> region id.
-pub(super) fn pick_region(names: &std::collections::BTreeMap<i32, String>, wanted: &str) -> Result<i32> {
+pub(super) fn pick_region(
+    names: &std::collections::BTreeMap<i32, String>,
+    wanted: &str,
+) -> Result<i32> {
     let wanted = wanted.trim();
     if let Ok(id) = wanted.parse::<i32>() {
         if names.is_empty() || names.contains_key(&id) {
             return Ok(id);
         }
     } else {
-        let exact: Vec<i32> = names.iter().filter(|(_, n)| same(n, wanted)).map(|(i, _)| *i).collect();
+        let exact: Vec<i32> = names
+            .iter()
+            .filter(|(_, n)| same(n, wanted))
+            .map(|(i, _)| *i)
+            .collect();
         if exact.len() == 1 {
             return Ok(exact[0]);
         }
@@ -866,7 +1034,12 @@ pub(super) fn pick_region(names: &std::collections::BTreeMap<i32, String>, wante
         "region_unknown",
         format!(
             "No unique strategic air region {wanted:?}; examples: {}",
-            names.values().take(8).cloned().collect::<Vec<_>>().join(" | ")
+            names
+                .values()
+                .take(8)
+                .cloned()
+                .collect::<Vec<_>>()
+                .join(" | ")
         ),
     ))
 }
@@ -896,8 +1069,12 @@ pub(super) fn resolve_region(
             .map(|s| (s, None))
             .ok_or_else(|| Error::new("invalid_arguments", "Give state_id or region"));
     };
-    let dir = game_dir(process)
-        .ok_or_else(|| Error::new("map_data_unavailable", "Game install not found; give state_id only"))?;
+    let dir = game_dir(process).ok_or_else(|| {
+        Error::new(
+            "map_data_unavailable",
+            "Game install not found; give state_id only",
+        )
+    })?;
     let id = pick_region(&airread::region_names(&dir), &text)?;
     let states = mapdata::state_regions(&dir)?;
     match state {
@@ -910,12 +1087,21 @@ pub(super) fn resolve_region(
         },
         None => best_state(&states, id)
             .map(|s| (s, Some(id)))
-            .ok_or_else(|| Error::new("region_unknown", format!("No state lies in region {text:?}"))),
+            .ok_or_else(|| {
+                Error::new(
+                    "region_unknown",
+                    format!("No state lies in region {text:?}"),
+                )
+            }),
     }
 }
 
 // ---- arguments ----------------------------------------------------------------------------------
-pub(super) fn text_arg(args: &serde_json::Map<String, Value>, key: &str, max: usize) -> Result<String> {
+pub(super) fn text_arg(
+    args: &serde_json::Map<String, Value>,
+    key: &str,
+    max: usize,
+) -> Result<String> {
     let v = args
         .get(key)
         .and_then(Value::as_str)
@@ -938,7 +1124,13 @@ mod tests {
     use super::*;
 
     fn base(id: i32, state: i32, capacity: i32) -> Base {
-        Base { id, state: Some(state), province: 1, capacity, region_id: None }
+        Base {
+            id,
+            state: Some(state),
+            province: 1,
+            capacity,
+            region_id: None,
+        }
     }
     fn wing(name: &str, planes: i32, base_id: i32, state: i32) -> Wing {
         Wing {
@@ -976,20 +1168,48 @@ mod tests {
         let (b, w) = fixture();
         let p = plan_rebase(&b, &w, "jagdgeschwader 132", 66).unwrap();
         assert_eq!((p.to_base_id, p.planes, p.from_state), (10, 80, Some(64)));
-        assert_eq!(plan_rebase(&b, &w, "Nope", 66).unwrap_err().code, "wing_unknown");
-        assert_eq!(plan_rebase(&b, &w, "Jagdgeschwader 132", 99).unwrap_err().code, "air_base_unknown");
-        assert_eq!(plan_rebase(&b, &w, "Jagdgeschwader 132", 64).unwrap_err().code, "nothing_to_change");
+        assert_eq!(
+            plan_rebase(&b, &w, "Nope", 66).unwrap_err().code,
+            "wing_unknown"
+        );
+        assert_eq!(
+            plan_rebase(&b, &w, "Jagdgeschwader 132", 99)
+                .unwrap_err()
+                .code,
+            "air_base_unknown"
+        );
+        assert_eq!(
+            plan_rebase(&b, &w, "Jagdgeschwader 132", 64)
+                .unwrap_err()
+                .code,
+            "nothing_to_change"
+        );
         // 80 aircraft do not fit the 400-capacity base that already holds 40 and gets 300 incoming.
         let mut w2 = w.clone();
         w2.push(wing("Incoming", 300, 10, 66));
         w2.last_mut().unwrap().transfer_base_id = 3;
-        assert_eq!(plan_rebase(&b, &w2, "Jagdgeschwader 132", 52).unwrap_err().code, "air_base_full");
+        assert_eq!(
+            plan_rebase(&b, &w2, "Jagdgeschwader 132", 52)
+                .unwrap_err()
+                .code,
+            "air_base_full"
+        );
         let mut flying = w.clone();
         flying[0].transfer_base_id = 10;
-        assert_eq!(plan_rebase(&b, &flying, "Jagdgeschwader 132", 66).unwrap_err().code, "nothing_to_change");
+        assert_eq!(
+            plan_rebase(&b, &flying, "Jagdgeschwader 132", 66)
+                .unwrap_err()
+                .code,
+            "nothing_to_change"
+        );
         let mut dup = w.clone();
         dup.push(wing("Jagdgeschwader 132", 1, 9, 64));
-        assert_eq!(plan_rebase(&b, &dup, "Jagdgeschwader 132", 66).unwrap_err().code, "wing_ambiguous");
+        assert_eq!(
+            plan_rebase(&b, &dup, "Jagdgeschwader 132", 66)
+                .unwrap_err()
+                .code,
+            "wing_ambiguous"
+        );
     }
     #[test]
     fn rebase_settlement_compares_only_base_and_destination() {
@@ -1014,26 +1234,54 @@ mod tests {
         let (b, w) = fixture();
         let p = plan_create(&b, &w, 64, "Ju 86").unwrap();
         assert_eq!((p.base_id, p.names_before.len()), (9, 2));
-        assert_eq!(plan_create(&b, &w, 99, "x").unwrap_err().code, "air_base_unknown");
+        assert_eq!(
+            plan_create(&b, &w, 99, "x").unwrap_err().code,
+            "air_base_unknown"
+        );
         let mut full = w.clone();
         full.push(wing("Fill", 1040, 3, 52));
-        assert_eq!(plan_create(&b, &full, 52, "x").unwrap_err().code, "air_base_full");
+        assert_eq!(
+            plan_create(&b, &full, 52, "x").unwrap_err().code,
+            "air_base_full"
+        );
         let mut after = w.clone();
         assert_eq!(settle_create(&p, &after), (Verdict::Unchanged, vec![]));
         after.push(wing("KG 3 'Blitz'", 40, 9, 64));
-        assert_eq!(settle_create(&p, &after), (Verdict::Reached, vec!["KG 3 'Blitz'".to_string()]));
+        assert_eq!(
+            settle_create(&p, &after),
+            (Verdict::Reached, vec!["KG 3 'Blitz'".to_string()])
+        );
         after.push(wing("Another", 40, 9, 64));
         assert_eq!(settle_create(&p, &after).0, Verdict::Diverged);
     }
     #[test]
     fn reserve_rows_are_matched_by_variant_or_class() {
-        let rect = crate::gui_tree::Rect { x: 0, y: 0, w: 10, h: 10 };
-        let e = |v: &str, c: &str, n: i32| airui::Entry { variant: v.into(), class: c.into(), count: n, bg: rect };
-        let rows = vec![e("Ju 86", "Inter-War Bomber", 40), e("He 51", "Inter-War Fighter", 120)];
+        let rect = crate::gui_tree::Rect {
+            x: 0,
+            y: 0,
+            w: 10,
+            h: 10,
+        };
+        let e = |v: &str, c: &str, n: i32| airui::Entry {
+            variant: v.into(),
+            class: c.into(),
+            count: n,
+            bg: rect,
+        };
+        let rows = vec![
+            e("Ju 86", "Inter-War Bomber", 40),
+            e("He 51", "Inter-War Fighter", 120),
+        ];
         assert_eq!(pick_entry(&rows, "ju 86").unwrap().count, 40);
-        assert_eq!(pick_entry(&rows, "Inter-War Fighter").unwrap().variant, "He 51");
+        assert_eq!(
+            pick_entry(&rows, "Inter-War Fighter").unwrap().variant,
+            "He 51"
+        );
         assert_eq!(pick_entry(&rows, "fighter").unwrap().variant, "He 51");
-        assert_eq!(pick_entry(&rows, "Inter-War").unwrap_err().code, "aircraft_ambiguous");
+        assert_eq!(
+            pick_entry(&rows, "Inter-War").unwrap_err().code,
+            "aircraft_ambiguous"
+        );
         let err = pick_entry(&rows, "Bf 109").unwrap_err();
         assert_eq!(err.code, "aircraft_not_in_reserve");
         assert!(err.message.contains("Ju 86"));
@@ -1048,33 +1296,83 @@ mod tests {
         assert_eq!(plan_split(&w, "Nope").unwrap_err().code, "wing_unknown");
         let mut flying = w.clone();
         flying[0].transfer_base_id = 10;
-        assert_eq!(plan_split(&flying, "Jagdgeschwader 132").unwrap_err().code, "wing_in_transfer");
+        assert_eq!(
+            plan_split(&flying, "Jagdgeschwader 132").unwrap_err().code,
+            "wing_in_transfer"
+        );
         let mut tiny = w.clone();
         tiny[0].planes = 1;
-        assert_eq!(plan_split(&tiny, "Jagdgeschwader 132").unwrap_err().code, "nothing_to_change");
+        assert_eq!(
+            plan_split(&tiny, "Jagdgeschwader 132").unwrap_err().code,
+            "nothing_to_change"
+        );
         let mut after = w.clone();
         assert_eq!(settle_split(&p, &after), (Verdict::Unchanged, vec![]));
         after[0].planes = 40;
         after.push(wing("Jagdgeschwader 134", 40, 9, 64));
-        assert_eq!(settle_split(&p, &after), (Verdict::Reached, vec!["Jagdgeschwader 134".to_string()]));
+        assert_eq!(
+            settle_split(&p, &after),
+            (Verdict::Reached, vec!["Jagdgeschwader 134".to_string()])
+        );
         // Merge: the game joins every wing of one type at a base.
         let m = plan_merge(&w, "Jagdgeschwader 132", Some("Jagdgeschwader 133")).unwrap();
         assert_eq!((m.total, m.group.len()), (120, 2));
-        assert_eq!(plan_merge(&w, "Jagdgeschwader 132", None).unwrap().group.len(), 2);
-        assert_eq!(plan_merge(&w, "Jagdgeschwader 132", Some("Jagdgeschwader 132")).unwrap_err().code, "invalid_arguments");
-        assert_eq!(plan_merge(&w, "Jagdgeschwader 132", Some("Kampfgeschwader 253")).unwrap_err().code, "merge_different_base");
-        assert_eq!(plan_merge(&w, "Kampfgeschwader 253", None).unwrap_err().code, "no_merge_partner");
+        assert_eq!(
+            plan_merge(&w, "Jagdgeschwader 132", None)
+                .unwrap()
+                .group
+                .len(),
+            2
+        );
+        assert_eq!(
+            plan_merge(&w, "Jagdgeschwader 132", Some("Jagdgeschwader 132"))
+                .unwrap_err()
+                .code,
+            "invalid_arguments"
+        );
+        assert_eq!(
+            plan_merge(&w, "Jagdgeschwader 132", Some("Kampfgeschwader 253"))
+                .unwrap_err()
+                .code,
+            "merge_different_base"
+        );
+        assert_eq!(
+            plan_merge(&w, "Kampfgeschwader 253", None)
+                .unwrap_err()
+                .code,
+            "no_merge_partner"
+        );
         let other = w.clone();
-        assert_eq!(plan_merge(&other, "Jagdgeschwader 132", Some("KG 1 'Hindenburg'")).unwrap_err().code, "merge_different_type");
+        assert_eq!(
+            plan_merge(&other, "Jagdgeschwader 132", Some("KG 1 'Hindenburg'"))
+                .unwrap_err()
+                .code,
+            "merge_different_type"
+        );
         assert_eq!(archetype("tac_bomber_equipment_1"), "tac_bomber");
         assert_eq!(archetype("CAS_equipment_1"), "CAS");
         let mut three = w.clone();
         three.push(wing("Jagdgeschwader 135", 20, 9, 64));
-        assert_eq!(plan_merge(&three, "Jagdgeschwader 132", Some("Jagdgeschwader 133")).unwrap_err().code, "merge_group_larger");
-        assert_eq!(plan_merge(&three, "Jagdgeschwader 132", None).unwrap().total, 140);
+        assert_eq!(
+            plan_merge(&three, "Jagdgeschwader 132", Some("Jagdgeschwader 133"))
+                .unwrap_err()
+                .code,
+            "merge_group_larger"
+        );
+        assert_eq!(
+            plan_merge(&three, "Jagdgeschwader 132", None)
+                .unwrap()
+                .total,
+            140
+        );
         let mut flying = w.clone();
         flying[4].transfer_base_id = 3;
-        assert_eq!(plan_merge(&flying, "Jagdgeschwader 132", None).unwrap_err().code, "wing_in_transfer");
+        assert_eq!(
+            plan_merge(&flying, "Jagdgeschwader 132", None)
+                .unwrap_err()
+                .code,
+            "wing_in_transfer"
+        );
         let mut merged = w.clone();
         merged.retain(|x| x.name != "Jagdgeschwader 133");
         merged[0].planes = 120;
@@ -1091,8 +1389,14 @@ mod tests {
         let three_plan = plan_merge(&cap, "Jagdgeschwader 132", None).unwrap();
         assert_eq!(three_plan.total, 160);
         cap.retain(|x| x.name != "KG 3 'Blitz'");
-        cap.iter_mut().find(|x| x.name == "Jagdgeschwader 132").unwrap().planes = 100;
-        cap.iter_mut().find(|x| x.name == "Kampfgeschwader 155").unwrap().planes = 60;
+        cap.iter_mut()
+            .find(|x| x.name == "Jagdgeschwader 132")
+            .unwrap()
+            .planes = 100;
+        cap.iter_mut()
+            .find(|x| x.name == "Kampfgeschwader 155")
+            .unwrap()
+            .planes = 60;
         assert_eq!(settle_merge(&three_plan, &cap), Verdict::Reached);
     }
     #[test]
@@ -1104,8 +1408,14 @@ mod tests {
         assert_eq!(pick_region(&names, "7").unwrap(), 7);
         assert_eq!(pick_region(&names, "eastern germany").unwrap(), 7);
         assert_eq!(pick_region(&names, "Baltic").unwrap(), 9);
-        assert_eq!(pick_region(&names, "Germany").unwrap_err().code, "region_unknown");
-        assert_eq!(pick_region(&names, "99").unwrap_err().code, "region_unknown");
+        assert_eq!(
+            pick_region(&names, "Germany").unwrap_err().code,
+            "region_unknown"
+        );
+        assert_eq!(
+            pick_region(&names, "99").unwrap_err().code,
+            "region_unknown"
+        );
         let mut map = std::collections::HashMap::new();
         map.insert(64, (7, 5, 5));
         map.insert(65, (7, 2, 4));
@@ -1123,7 +1433,10 @@ mod tests {
         w.retain(|x| x.name != "Kampfgeschwader 253");
         assert_eq!(settle_disband(&before, &w), Verdict::Reached);
         let (_, mut w) = fixture();
-        assert_eq!(plan_hold(&w, "Jagdgeschwader 132").unwrap_err().code, "nothing_to_change");
+        assert_eq!(
+            plan_hold(&w, "Jagdgeschwader 132").unwrap_err().code,
+            "nothing_to_change"
+        );
         w[0].mission_mask = 1;
         w[0].region_id = 7;
         let b = plan_hold(&w, "Jagdgeschwader 132").unwrap();
@@ -1133,9 +1446,18 @@ mod tests {
         held.region_id = 0;
         assert_eq!(settle_hold(&b, Some(&held)), Verdict::Reached);
         let nothing = snap(&fixture().1[0]);
-        assert_eq!(settle_mission(&nothing, Some(&b), 1, Some(7)), Verdict::Reached);
-        assert_eq!(settle_mission(&nothing, Some(&b), 1, Some(8)), Verdict::Diverged);
-        assert_eq!(settle_mission(&nothing, Some(&nothing), 1, None), Verdict::Unchanged);
+        assert_eq!(
+            settle_mission(&nothing, Some(&b), 1, Some(7)),
+            Verdict::Reached
+        );
+        assert_eq!(
+            settle_mission(&nothing, Some(&b), 1, Some(8)),
+            Verdict::Diverged
+        );
+        assert_eq!(
+            settle_mission(&nothing, Some(&nothing), 1, None),
+            Verdict::Unchanged
+        );
         assert_eq!(settle_mission(&nothing, None, 1, None), Verdict::Unknown);
     }
 }

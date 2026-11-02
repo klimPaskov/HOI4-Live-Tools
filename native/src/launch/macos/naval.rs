@@ -6,9 +6,7 @@
 //! ship names, hulls, locations (provinces 241, 6332, 6389 and their states
 //! 56, 763, 58) and naval base levels (241 = 8, 6332 = 5) all matched.
 //! Fields marked `validated:false` in the output have no independent check.
-use super::fleetmem::{
-    self, expect, fixed_at, is_object, pointers, require_libcxx, round3, Place,
-};
+use super::fleetmem::{self, expect, fixed_at, is_object, pointers, require_libcxx, round3, Place};
 use crate::{
     economy,
     error::{Error, Result},
@@ -296,7 +294,12 @@ pub(super) struct NavalBase {
 }
 /// Own naval bases from the strategic navy of the own country index.
 fn naval_bases(r: &Reader<'_>, image: u64) -> Result<Vec<NavalBase>> {
-    let navy = fleetmem::own_strategic(r, image, fleetmem::GS_NAVY_MANAGER, fleetmem::NAVY_BY_COUNTRY)?;
+    let navy = fleetmem::own_strategic(
+        r,
+        image,
+        fleetmem::GS_NAVY_MANAGER,
+        fleetmem::NAVY_BY_COUNTRY,
+    )?;
     let mut out = Vec::new();
     for base in pointers(r, navy + STRATEGIC_NAVY_BASES, 64)? {
         if !is_object(r, base, NAVAL_BASE_VTABLE, image)? {
@@ -333,10 +336,15 @@ pub(super) fn convoys_tool(process: &dyn Process, args: &Map<String, Value>) -> 
     let convoy_lines: Vec<Value> = lines
         .iter()
         .filter(|l| l.key.as_deref().is_some_and(|k| k.starts_with("convoy")))
-        .map(|l| json!({"line_handle":l.handle,"equipment":l.key,"requested_factories":l.requested}))
+        .map(
+            |l| json!({"line_handle":l.handle,"equipment":l.key,"requested_factories":l.requested}),
+        )
         .collect();
     let mut v = convoys_json(total, &bases, convoy_lines);
-    v["naval_lines_other"] = json!(lines.iter().filter(|l| l.naval && !l.key.as_deref().is_some_and(|k| k.starts_with("convoy"))).count());
+    v["naval_lines_other"] = json!(lines
+        .iter()
+        .filter(|l| l.naval && !l.key.as_deref().is_some_and(|k| k.starts_with("convoy")))
+        .count());
     Ok(v)
 }
 fn convoys_json(total: i32, bases: &[NavalBase], lines: Vec<Value>) -> Value {
@@ -436,9 +444,11 @@ mod tests {
         assert_eq!(v["totals"]["ships"], 2);
         let none = fleets_json(&found, false, Some("zzz"));
         assert!(none["fleets"].as_array().unwrap().is_empty());
-        assert!(fleets_json(&found, false, Some("hochsee"))["fleets"][0]["task_forces"][0]
-            .get("ships")
-            .is_none());
+        assert!(
+            fleets_json(&found, false, Some("hochsee"))["fleets"][0]["task_forces"][0]
+                .get("ships")
+                .is_none()
+        );
     }
     #[test]
     fn refuses_wrong_object_types() {
@@ -447,7 +457,10 @@ mod tests {
         let fleet = mem.alloc(0x300);
         mem.pointer_array(country + COUNTRY_FLEETS, &[fleet]);
         let r = Reader::new(&mem);
-        assert_eq!(fleets(&r, IMAGE, country).unwrap_err().code, "invalid_object");
+        assert_eq!(
+            fleets(&r, IMAGE, country).unwrap_err().code,
+            "invalid_object"
+        );
     }
     #[test]
     fn convoy_json_reports_count_and_gaps() {

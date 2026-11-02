@@ -922,7 +922,10 @@ impl<'p> MacKeys<'p> {
             let modifier = |down: bool| -> Result<()> {
                 let event = CGEventCreateKeyboardEvent(std::ptr::null(), modifier_key, down);
                 if event.is_null() {
-                    return Err(Error::new("input_unavailable", "Modifier event unavailable"));
+                    return Err(Error::new(
+                        "input_unavailable",
+                        "Modifier event unavailable",
+                    ));
                 }
                 CGEventSetType(event, FLAGS_CHANGED);
                 CGEventSetFlags(event, if down { modifier_flags } else { 0 });

@@ -75,7 +75,10 @@ fn parse_definition(text: &str) -> HashMap<u32, (i32, bool)> {
 }
 
 /// Pairs of touching land provinces (4-neighbourhood) in a 24 bpp BMP.
-pub(super) fn land_edges(bmp: &[u8], defs: &HashMap<u32, (i32, bool)>) -> Result<BTreeSet<(i32, i32)>> {
+pub(super) fn land_edges(
+    bmp: &[u8],
+    defs: &HashMap<u32, (i32, bool)>,
+) -> Result<BTreeSet<(i32, i32)>> {
     let bad = |m: &'static str| Error::new("map_data_unavailable", m);
     if bmp.len() < 54 || &bmp[..2] != b"BM" {
         return Err(bad("provinces.bmp is not a BMP"));
@@ -321,10 +324,7 @@ fn analyse(input: &Input<'_>) -> Value {
     }
     for tag in input.war_enemies.into_iter().flatten() {
         if tag != player {
-            hostile
-                .entry(tag.clone())
-                .or_default()
-                .push("war_relation");
+            hostile.entry(tag.clone()).or_default().push("war_relation");
         }
     }
     for tag in input.caller_enemies {

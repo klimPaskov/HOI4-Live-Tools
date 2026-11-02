@@ -132,7 +132,10 @@ pub(super) fn draft(r: &Reader<'_>, image: u64) -> Result<Layout5> {
     let view = view(r, image)?;
     let holder = r.u64(view + DRAFT_HOLDER)?;
     if !(0x10000..=0x7fff_ffff_0000).contains(&holder) {
-        return Err(Error::new("invalid_gui", "Designer working copy unavailable"));
+        return Err(Error::new(
+            "invalid_gui",
+            "Designer working copy unavailable",
+        ));
     }
     units::template_data(r, image, r.u64(holder + DRAFT_DATA)?)
 }
@@ -195,7 +198,10 @@ pub(super) fn slots(r: &Reader<'_>, image: u64, grid: Grid, draft: &Layout5) -> 
                 ((pos.x - x0 + REGIMENT_PITCH.0 / 2) / REGIMENT_PITCH.0) as usize,
                 ((pos.y - y0 + REGIMENT_PITCH.1 / 2) / REGIMENT_PITCH.1) as usize,
             ),
-            Grid::Support => (0, ((pos.y - y0 + SUPPORT_PITCH / 2) / SUPPORT_PITCH) as usize),
+            Grid::Support => (
+                0,
+                ((pos.y - y0 + SUPPORT_PITCH / 2) / SUPPORT_PITCH) as usize,
+            ),
         };
         let filled = match grid {
             Grid::Regiments => draft.columns.get(col).is_some_and(|c| row < c.len()),
@@ -447,7 +453,9 @@ pub(super) fn select_template(process: &dyn Process, keys: &MacKeys, name: &str)
     let dd = read(process, dropdown)?;
     if !dd.expanded {
         click(keys, dd.expand)?;
-        wait(process, "template list open", |r, i| Ok(dropdown(r, i)?.expanded))?;
+        wait(process, "template list open", |r, i| {
+            Ok(dropdown(r, i)?.expanded)
+        })?;
     }
     let target = settled(process, "template list", |r, i| {
         let d = dropdown(r, i)?;
@@ -478,12 +486,16 @@ pub(super) fn close(process: &dyn Process, keys: &MacKeys) -> Result<()> {
     }
     if read(process, selection_open)? {
         keys.press(Key::Return)?;
-        let _ = wait(process, "selection closes", |r, i| Ok(!selection_open(r, i)?));
+        let _ = wait(process, "selection closes", |r, i| {
+            Ok(!selection_open(r, i)?)
+        });
     }
     // The two-level selection may need a second Back.
     if read(process, selection_open)? {
         keys.press(Key::Return)?;
-        wait(process, "selection closes", |r, i| Ok(!selection_open(r, i)?))?;
+        wait(process, "selection closes", |r, i| {
+            Ok(!selection_open(r, i)?)
+        })?;
     }
     let b = settled(process, "close button", |r, i| Ok(close_button(r, i)?.rect))?;
     click(keys, b)?;
@@ -531,9 +543,15 @@ fn wait_selection(process: &dyn Process, units_level: bool) -> Result<Selection>
 /// Which group title a battalion key is listed under first (a hint only; the window decides).
 pub(super) fn group_hint(key: &str) -> &'static str {
     match key {
-        "infantry" | "mountaineers" | "marine" | "paratrooper" | "bicycle_battalion" | "camelry"
-        | "cavalry_infantry" | "special_forces" | "gurkha" | "militia" => "Infantry Battalions",
-        "cavalry" | "motorized" | "mechanized" | "armored_car" | "amphibious_mechanized"
+        "infantry" | "mountaineers" | "marine" | "paratrooper" | "bicycle_battalion"
+        | "camelry" | "cavalry_infantry" | "special_forces" | "gurkha" | "militia" => {
+            "Infantry Battalions"
+        }
+        "cavalry"
+        | "motorized"
+        | "mechanized"
+        | "armored_car"
+        | "amphibious_mechanized"
         | "bus" => "Mobile Battalions",
         k if k.ends_with("_armor") || k == "amphibious_armor" => "Armored Battalions",
         k if k.starts_with("mot_") => "Mobile Combat Support Battalions",
@@ -582,13 +600,19 @@ pub(super) fn choose(
     let mut sel = wait_selection_any(process)?;
     let close_window = |keys: &MacKeys| {
         let _ = keys.press(Key::Return);
-        let _ = wait(process, "selection closes", |r, i| Ok(!selection_open(r, i)?));
+        let _ = wait(process, "selection closes", |r, i| {
+            Ok(!selection_open(r, i)?)
+        });
     };
     let wanted = EntryKind::Unit(key.to_string());
     if units_listed(&sel) && !sel.entries.iter().any(|e| e.kind == wanted) {
         // A filled regiment slot whose list holds only its own group.
         if slot.state == SlotState::Filled && grid == Grid::Regiments {
-            let remove = sel.entries.iter().find(|e| e.kind == EntryKind::Remove).cloned();
+            let remove = sel
+                .entries
+                .iter()
+                .find(|e| e.kind == EntryKind::Remove)
+                .cloned();
             if let Some(entry) = remove {
                 click(keys, entry.rect)?;
                 wait(process, "unit removed", |r, i| {
@@ -792,7 +816,10 @@ pub(super) fn save(process: &dyn Process, keys: &MacKeys, expect: &Layout5) -> R
             return Ok(());
         }
         if ui::decline_stale(process, keys).is_err() {
-            return Err(Error::new("input_readback_failed", "Save left a dialog open"));
+            return Err(Error::new(
+                "input_readback_failed",
+                "Save left a dialog open",
+            ));
         }
         if Instant::now() >= deadline {
             return Err(Error::new(
@@ -820,7 +847,11 @@ pub(super) struct Listing {
 }
 /// Open the first empty slot of a grid and read what its selection window offers; closes the
 /// window again without choosing.
-pub(super) fn list_group_units(process: &dyn Process, keys: &MacKeys, grid: Grid) -> Result<Listing> {
+pub(super) fn list_group_units(
+    process: &dyn Process,
+    keys: &MacKeys,
+    grid: Grid,
+) -> Result<Listing> {
     let slot = settled(process, "empty slot", |r, i| {
         let d = draft(r, i)?;
         slots(r, i, grid, &d)?
@@ -868,6 +899,8 @@ pub(super) fn list_group_units(process: &dyn Process, keys: &MacKeys, grid: Grid
         let _ = &sel;
     }
     keys.press(Key::Return)?;
-    wait(process, "selection closes", |r, i| Ok(!selection_open(r, i)?))?;
+    wait(process, "selection closes", |r, i| {
+        Ok(!selection_open(r, i)?)
+    })?;
     Ok(out)
 }
