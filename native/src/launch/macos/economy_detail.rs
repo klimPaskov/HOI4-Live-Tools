@@ -32,6 +32,7 @@ use crate::{
     error::{Error, Result},
     game,
     memory::Reader,
+    xlayout::{fld, img, Class},
 };
 use serde_json::{json, Map, Value};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
@@ -57,6 +58,17 @@ const CONSUMER_KINDS: [(&str, u64, u64); 5] = [
     ("trade", 0x48, 0x358d640),
     ("contract_payment", 0x60, 0x358d680),
 ];
+/// Owners of the fields above (macOS 1.19.4.1 RTTI names and vtables).
+const COUNTRY: Class = Class::new("CCountry", 0x357e388);
+const MODIFIER: Class = Class::new("CModifier", MODIFIER_VTABLE);
+const POLITICS: Class = Class::new("CPoliticalStatus", 0x3589e48);
+const IDEA: Class = Class::new("CIdea", IDEA_VTABLE);
+const PRODUCTION: Class = Class::new("CProductionStatus", 0x358e0c8);
+/// Fields shared by the five civilian consumer classes (their base class).
+const CONSUMER: Class = Class::new("civilian.consumer", 0);
+const CONSUMER_GOODS: Class = Class::new("CConsumerGoodsConsumer", 0x358d580);
+const FUEL: Class = Class::new("CCountryFuelStatus", FUEL_VTABLE);
+const MODIFIER_ENTRY_SIZE: Class = Class::new("modifier.entry.size", 0);
 const ENTRY_LIMIT: usize = 400;
 const IDEA_LIMIT: usize = 200;
 const MODIFIER_ENTRY: usize = 16;
@@ -199,7 +211,7 @@ pub(super) fn civilian_split(total: i64, taken: i64) -> Value {
 }
 
 fn object_vtable(r: &Reader<'_>, a: u64, image: u64, vtable: u64, what: &str) -> Result<()> {
-    if r.u64(a)? != image + vtable {
+    if r.u64(a)? != image + img(r.string_abi(), vtable)? {
         return Err(Error::new(
             "invalid_type",
             format!("{what}: unexpected object type"),
@@ -220,9 +232,13 @@ fn entries_at(r: &Reader<'_>, array: u64, count_at: u64, limit: usize) -> Result
     if !(0x10000..=0x7fff_ffff_0000).contains(&ptr) {
         return Err(Error::new("invalid_array", "Modifier entry pointer"));
     }
-    Ok(parse_entries(
-        &r.read(ptr, count as usize * MODIFIER_ENTRY)?,
-    ))
+    let size = fld(r.string_abi(), &MODIFIER_ENTRY_SIZE, MODIFIER_ENTRY as u64)? as usize;
+    let buf = r.read(ptr, count as usize * size)?;
+    // `{i32 id, i32 flag, i64 value}`: plain data, packed the same way on every build.
+    Ok(buf
+        .chunks_exact(size)
+        .flat_map(|c| parse_entries(&c[..MODIFIER_ENTRY]))
+        .collect())
 }
 
 struct Detail {
@@ -241,13 +257,18 @@ fn snapshot(r: &Reader<'_>, image: u64) -> Result<Detail> {
     let (country, production) = economy::own_production(r, image)?;
     let context = game::context_from_reader(r, image)?;
     let g = game::layout(r);
+    let abi = r.string_abi();
     // aggregated country modifier
-    let m = country + COUNTRY_MODIFIER;
+    let m = country + fld(abi, &COUNTRY, COUNTRY_MODIFIER)?;
     object_vtable(r, m, image, MODIFIER_VTABLE, "country modifier")?;
-    let modifiers = entries_at(r, m + 0x10, m + 0x1c, ENTRY_LIMIT)?;
+    let (m_entries, m_count) = (fld(abi, &MODIFIER, 0x10)?, fld(abi, &MODIFIER, 0x1c)?);
+    let modifiers = entries_at(r, m + m_entries, m + m_count, ENTRY_LIMIT)?;
     // active ideas
     let politics = r.u64(country + g.country_politics)?;
-    let list = r.pointer_array(politics + POLITICS_IDEAS)?;
+    let list = r.pointer_array(politics + fld(abi, &POLITICS, POLITICS_IDEAS)?)?;
+    let idea_name = fld(abi, &IDEA, IDEA_NAME)?;
+    let idea_modifiers = fld(abi, &IDEA, IDEA_MODIFIERS)?;
+    let idea_modifier_count = fld(abi, &IDEA, IDEA_MODIFIER_COUNT)?;
     if list.len() > IDEA_LIMIT {
         return Err(Error::new("invalid_array", "Idea count"));
     }
@@ -257,28 +278,30 @@ fn snapshot(r: &Reader<'_>, image: u64) -> Result<Detail> {
             continue;
         }
         object_vtable(r, idea, image, IDEA_VTABLE, "idea")?;
-        let name = r.string_bounded(idea + IDEA_NAME, 128)?;
-        let mods = if r.u64(idea + IDEA_MODIFIERS)? < 0x10000 {
+        let name = r.string_bounded(idea + idea_name, 128)?;
+        let mods = if r.u64(idea + idea_modifiers)? < 0x10000 {
             vec![]
         } else {
-            entries_at(r, idea + IDEA_MODIFIERS, idea + IDEA_MODIFIER_COUNT, 64)?
+            entries_at(r, idea + idea_modifiers, idea + idea_modifier_count, 64)?
         };
         ideas.push((name, mods));
     }
     // civilian factory consumers
     let mut consumers = Vec::new();
+    let (first, second) = (fld(abi, &CONSUMER, 8)?, fld(abi, &CONSUMER, 12)?);
     for (label, off, vt) in CONSUMER_KINDS {
-        let a = production + CONSUMERS + off;
+        let a = production + fld(abi, &PRODUCTION, CONSUMERS + off)?;
         object_vtable(r, a, image, vt, label)?;
-        consumers.push((label, r.i32(a + 8)?, r.i32(a + 12)?));
+        consumers.push((label, r.i32(a + first)?, r.i32(a + second)?));
     }
-    let consumer_goods_taken = r.i32(production + CONSUMERS + 0x10)?;
+    let consumer_goods = production + fld(abi, &PRODUCTION, CONSUMERS)?;
+    let consumer_goods_taken = r.i32(consumer_goods + fld(abi, &CONSUMER_GOODS, 0x10)?)?;
     let blocks = [
-        r.read(production + 0x2c8, 0x58)?,
-        r.read(production + 0x328, 0x58)?,
-        r.read(production + 0x388, 0x58)?,
+        r.read(production + fld(abi, &PRODUCTION, 0x2c8)?, 0x58)?,
+        r.read(production + fld(abi, &PRODUCTION, 0x328)?, 0x58)?,
+        r.read(production + fld(abi, &PRODUCTION, 0x388)?, 0x58)?,
     ];
-    let manpower_object = country + COUNTRY_MANPOWER;
+    let manpower_object = country + fld(abi, &COUNTRY, COUNTRY_MANPOWER)?;
     object_vtable(
         r,
         manpower_object,
@@ -287,11 +310,16 @@ fn snapshot(r: &Reader<'_>, image: u64) -> Result<Detail> {
         "country manpower",
     )?;
     let manpower = r.read(manpower_object, 0x28)?;
-    let fuel_object = r.u64(country + COUNTRY_FUEL)?;
+    let fuel_object = r.u64(country + fld(abi, &COUNTRY, COUNTRY_FUEL)?)?;
     object_vtable(r, fuel_object, image, FUEL_VTABLE, "country fuel")?;
-    let fuel = r.read(fuel_object + 8, 16)?;
+    // stock at +8, capacity at +0x10
+    let fuel = [
+        r.read(fuel_object + fld(abi, &FUEL, 8)?, 8)?,
+        r.read(fuel_object + fld(abi, &FUEL, 0x10)?, 8)?,
+    ]
+    .concat();
     // Torn-read guard: the aggregated table must not have moved.
-    if entries_at(r, m + 0x10, m + 0x1c, ENTRY_LIMIT)? != modifiers {
+    if entries_at(r, m + m_entries, m + m_count, ENTRY_LIMIT)? != modifiers {
         return Err(Error::new("torn_read", "Country modifiers changed"));
     }
     Ok(Detail {

@@ -9,8 +9,9 @@ use crate::{
     economy,
     error::{Error, Result},
     game,
-    memory::{Reader, StringAbi},
+    memory::Reader,
     platform::Process,
+    xlayout::{fld, Class},
 };
 use serde_json::{json, Value};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
@@ -79,15 +80,10 @@ pub(super) fn expect_type(r: &Reader<'_>, object: u64, mangled: &str) -> Result<
     }
 }
 
-/// libc++ string at `address`: a torn read is transient; anything else that
-/// fails the bounded checks is not a string.
+/// String of the build's ABI at `address` (callers resolve `address` through
+/// `xlayout`): a torn read is transient; anything else that fails the bounded
+/// checks is not a string.
 pub(super) fn text(r: &Reader<'_>, address: u64, limit: usize) -> Result<Option<String>> {
-    if r.string_abi() != StringAbi::LibCxx {
-        return Err(Error::new(
-            "capability_unavailable",
-            "This read is only reviewed for the macOS build",
-        ));
-    }
     match r.string_bounded(address, limit) {
         Ok(s) => Ok(Some(s)),
         Err(e) if e.code == "torn_read" => Err(e),
@@ -107,7 +103,7 @@ pub(super) fn own(r: &Reader<'_>, image: u64) -> Result<Own> {
     let (country, _) = economy::own_production(r, image)?;
     let g = game::layout(r);
     let gs = r.u64(image + g.gs_global)?;
-    let tag = r.i32(country + 8)?;
+    let tag = r.i32(country + fld(r.string_abi(), &COUNTRY, 8)?)?;
     let index_bytes = r.array_entry(gs + g.tag_country_index, tag as usize, 4)?;
     let index = i32::from_le_bytes(index_bytes.try_into().unwrap());
     if index < 0 {
@@ -115,6 +111,8 @@ pub(super) fn own(r: &Reader<'_>, image: u64) -> Result<Own> {
     }
     Ok(Own { country, index, gs })
 }
+
+const COUNTRY: Class = Class::new("CCountry", 0x357e388);
 
 /// Game clock block shared by every read result.
 pub(super) fn clock(r: &Reader<'_>, image: u64) -> Result<Value> {

@@ -7,12 +7,13 @@
 //! matched the vanilla history (Deutschland, Type 24, Zerstoerer 1934, Type II,
 //! Type VII, Koenigsberg, Emden, Bremse, Leipzig, Admiral Hipper, Scharnhorst,
 //! Ju 86, Do 17); stat offsets matched 168 vanilla default-variant values.
-use super::fleetmem::{self, pointers, require_libcxx, Variant};
+use super::fleetmem::{self, pointers, Variant};
 use crate::{
     economy,
     error::{Error, Result},
     memory::Reader,
     platform::Process,
+    xlayout::{fld, Class},
 };
 use serde_json::{json, Map, Value};
 
@@ -22,6 +23,10 @@ const LINE_HANDLE: u64 = 0x8;
 const LINE_VARIANT: u64 = 0x88;
 const LINE_REQUESTED: u64 = 0xe8;
 const VARIANT_LIMIT: usize = 512;
+/// Owners of the fields above (macOS 1.19.4.1 RTTI names and vtables); line
+/// fields are shared by the military and naval production lines.
+const PRODUCTION: Class = Class::new("CProductionStatus", 0x358e0c8);
+const LINE: Class = Class::new("CMilitaryProductionLine", 0x358ca80);
 
 #[derive(Clone, Debug, PartialEq)]
 pub(super) struct Design {
@@ -53,19 +58,30 @@ pub(super) fn kind_of(key: &str) -> &'static str {
 }
 
 pub(super) fn designs(r: &Reader<'_>, image: u64, production: u64) -> Result<Vec<Design>> {
+    let abi = r.string_abi();
+    let (line_variant, line_handle) = (
+        fld(abi, &LINE, LINE_VARIANT)?,
+        fld(abi, &LINE, LINE_HANDLE)?,
+    );
+    let line_requested = fld(abi, &LINE, LINE_REQUESTED)?;
     let mut lines: Vec<(u64, u64, i32)> = Vec::new();
-    for line in pointers(r, production + PRODUCTION_LINES, 2048)? {
-        let variant = r.u64(line + LINE_VARIANT)?;
+    for line in pointers(
+        r,
+        production + fld(abi, &PRODUCTION, PRODUCTION_LINES)?,
+        2048,
+    )? {
+        let variant = r.u64(line + line_variant)?;
         if variant != 0 {
             lines.push((
                 variant,
-                r.u64(line + LINE_HANDLE)?,
-                r.i32(line + LINE_REQUESTED)?,
+                r.u64(line + line_handle)?,
+                r.i32(line + line_requested)?,
             ));
         }
     }
     let mut out = Vec::new();
-    for address in pointers(r, production + PRODUCTION_VARIANTS, VARIANT_LIMIT)? {
+    let variants = production + fld(abi, &PRODUCTION, PRODUCTION_VARIANTS)?;
+    for address in pointers(r, variants, VARIANT_LIMIT)? {
         let variant = fleetmem::variant(r, image, address)?;
         out.push(Design {
             stats: fleetmem::stats(r, address)?,
@@ -165,7 +181,6 @@ pub(super) fn display(v: &Variant) -> String {
 /// Every own design (fresh read bracket); the shared source of `hoi4_designs` and the designer tools.
 pub(super) fn read_all(process: &dyn Process) -> Result<Vec<Design>> {
     super::ui::read(process, |r, image| {
-        require_libcxx(r)?;
         let (_, production) = economy::own_production(r, image)?;
         designs(r, image, production)
     })
@@ -199,7 +214,6 @@ pub(super) fn tool(process: &dyn Process, args: &Map<String, Value>) -> Result<V
         .unwrap_or(false);
     let detail = args.get("detail").and_then(Value::as_bool).unwrap_or(false);
     let all = super::ui::read(process, |r, image| {
-        require_libcxx(r)?;
         let (_, production) = economy::own_production(r, image)?;
         designs(r, image, production)
     })?;

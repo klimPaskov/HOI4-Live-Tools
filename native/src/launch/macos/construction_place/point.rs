@@ -10,7 +10,19 @@ use crate::{
     memory::{ReadMemory, Reader, StringAbi},
     platform::{Identity, Process},
     research_ui::Witnesses,
+    xlayout::{fld, img, Class},
 };
+
+/// Owners of the game-object fields read below (macOS 1.19.4.1 RTTI names and
+/// vtables; 0 where none was reviewed). The SDL/Cocoa backend checks in
+/// `single_window` and `geometry_edges` are macOS-only and stay macOS values.
+const IDLER: Class = Class::new("CInGameIdler", 0x35089d8);
+const GAME_GUI: Class = Class::new("idler.gui", 0);
+const MANAGER_CLASS: Class = Class::new("idler.manager", 0);
+const FIND_VIEW: Class = Class::new("CFindView", FIND_VTABLE);
+const WINDOW_CLASS: Class = Class::new("CContainerWindow", 0x36ba978);
+const GFX: Class = Class::new("gui.gfx", 0);
+const FIND_VTABLE: u64 = 0x3665308;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::cell::RefCell;
@@ -87,10 +99,11 @@ fn geometry_edges(r: &Reader<'_>, base: u64, g: &macos::Geometry) -> Result<Vec<
     {
         return Err(changed("Bounded original Cocoa ivar offsets required"));
     }
+    let abi = r.string_abi();
     Ok(vec![
-        (base + 0x372afc0, i),
-        (i + 0x4c0, gui),
-        (gui + 0x98, gfx),
+        (base + game::layout(r).idler_global, i),
+        (i + fld(abi, &IDLER, 0x4c0)?, gui),
+        (gui + fld(abi, &GAME_GUI, 0x98)?, gfx),
         (base + 0x384b480, video),
         (video + 0x5a8, backend),
         (video + 0x2c8, window),
@@ -179,14 +192,16 @@ impl Ui {
                 .ok_or_else(|| changed("Missing typed panel binding"))
         };
         let idler = context.anchors[1];
-        if value(base + game::MACOS.gs_global)? != context.anchors[0]
-            || value(base + game::MACOS.idler_global)? != idler
-            || value(base + game::MACOS.technology_db_global)? != context.anchors[2]
+        let abi = p.string_abi();
+        let g = game::layout(&Reader::new(p));
+        if value(base + g.gs_global)? != context.anchors[0]
+            || value(base + g.idler_global)? != idler
+            || value(base + g.technology_db_global)? != context.anchors[2]
         {
             return Err(changed("Panel and point roots differ"));
         }
-        let manager = value(idler + 0x670)?;
-        let registry = value(idler + 0x4c0)?;
+        let manager = value(idler + fld(abi, &IDLER, 0x670)?)?;
+        let registry = value(idler + fld(abi, &IDLER, 0x4c0)?)?;
         let panel = observation
             .placement_window_object()
             .ok_or_else(|| changed("Materialized panel required"))?;
@@ -194,16 +209,20 @@ impl Ui {
         let w = Witnesses::new(p);
         let r = Reader::new(&w);
         edges(&r, &e)?;
-        let find = source_pointer(r.u64(manager + 0x190)?)?;
-        if r.u64(find)? != base + 0x3665308 || r.u64(find + 0xd50)? != idler {
+        let find_at = manager + fld(abi, &MANAGER_CLASS, 0x190)?;
+        let find_vtable = base + img(abi, FIND_VTABLE)?;
+        let (find_idler, find_root_at) =
+            (fld(abi, &FIND_VIEW, 0xd50)?, fld(abi, &FIND_VIEW, 0xd58)?);
+        let find = source_pointer(r.u64(find_at)?)?;
+        if r.u64(find)? != find_vtable || r.u64(find + find_idler)? != idler {
             return Err(changed("Own exact Find required before root payload"));
         }
-        let find_root = r.u64(find + 0xd58)?;
+        let find_root = r.u64(find + find_root_at)?;
         e.extend([
-            (manager + 0x190, find),
-            (find + 0xd50, idler),
-            (find + 0xd58, find_root),
-            (find, base + 0x3665308),
+            (find_at, find),
+            (find + find_idler, idler),
+            (find + find_root_at, find_root),
+            (find, find_vtable),
         ]);
         let ui = Self {
             manager,
@@ -219,11 +238,13 @@ impl Ui {
     }
     fn check(&self, r: &Reader<'_>, base: u64) -> Result<()> {
         edges(r, &self.edges)?;
-        if r.i32(self.manager + 0x3a8)? != 17
-            || r.i32(self.manager + 0x3c0)? != 1
-            || r.byte(self.panel + 0x95)? & 8 == 0
-            || r.i32(self.panel + 0x13d8)? != 0
-            || r.i32(self.panel + 0x1390)? != 0
+        let abi = r.string_abi();
+        let w = |offset: u64| fld(abi, &WINDOW_CLASS, offset);
+        if r.i32(self.manager + fld(abi, &MANAGER_CLASS, 0x3a8)?)? != 17
+            || r.i32(self.manager + fld(abi, &MANAGER_CLASS, 0x3c0)?)? != 1
+            || r.byte(self.panel + w(0x95)?)? & 8 == 0
+            || r.i32(self.panel + w(0x13d8)?)? != 0
+            || r.i32(self.panel + w(0x1390)?)? != 0
         {
             return Err(changed(
                 "Current selected construction panel must remain open and idle",
@@ -234,10 +255,10 @@ impl Ui {
             source_pointer(self.find_root)?;
             let root = gui_tree::container(r, self.find_root, base)?
                 .ok_or_else(|| changed("Exact Find root required"))?;
-            if r.u64(root + 0x88)? != self.registry
-                || r.byte(root + 0x95)? & 8 != 0
-                || r.i32(root + 0x13d8)? != 0
-                || r.i32(root + 0x1390)? != 0
+            if r.u64(root + w(0x88)?)? != self.registry
+                || r.byte(root + w(0x95)?)? & 8 != 0
+                || r.i32(root + w(0x13d8)?)? != 0
+                || r.i32(root + w(0x1390)?)? != 0
             {
                 return Err(changed(
                     "Find must remain hidden and idle before map placement",
@@ -369,7 +390,8 @@ impl Anchor {
         edges(&r, &self.pins)?;
         let gui = self.geometry.objects[1];
         let gfx = self.geometry.objects[2];
-        let observation = macos::direct_route::observe(&r, self.base, gui, gfx, gfx + 0x1e0)?;
+        let state = gfx + fld(r.string_abi(), &GFX, 0x1e0)?;
+        let observation = macos::direct_route::observe(&r, self.base, gui, gfx, state)?;
         w.finish()?;
         let after = game::clock_context(p)?;
         scope(&before, &after)?;

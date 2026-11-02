@@ -19,8 +19,9 @@ use crate::{
     economy,
     error::{Error, Result},
     game, gui_tree,
-    memory::{Reader, StringAbi},
+    memory::Reader,
     platform::Process,
+    xlayout::{fld, Class},
 };
 use serde_json::{json, Map, Value};
 use std::{
@@ -35,6 +36,12 @@ const TOPBAR: u64 = 0x188;
 const TOPBAR_ROOT: u64 = 0x68;
 /// libc++ string of a text box (unvalidated on the top bar, see module docs).
 const TEXT: u64 = 0x100;
+/// Owners of the fields above (macOS 1.19.4.1 RTTI names and vtables; 0 where
+/// none was reviewed).
+const IDLER: Class = Class::new("CInGameIdler", 0x35089d8);
+const INTERFACE_MANAGER: Class = Class::new("idler.manager", 0);
+const TOPBAR_VIEW: Class = Class::new("topbar.view", 0);
+const TEXT_BOX: Class = Class::new("gui.text", 0);
 const TEXT_LIMIT: usize = 128;
 const NODE_BUDGET: usize = 4096;
 const DEPTH_LIMIT: u32 = 8;
@@ -354,7 +361,7 @@ fn locate(
 /// Text of one text box; only a torn read is transient. Anything else that
 /// stops the bounded string checks means this widget is not a readable text.
 fn text_of(r: &Reader<'_>, widget: u64) -> Result<Source> {
-    match r.string_bounded(widget + TEXT, TEXT_LIMIT) {
+    match r.string_bounded(widget + fld(r.string_abi(), &TEXT_BOX, TEXT)?, TEXT_LIMIT) {
         Ok(text) => Ok(Source::Text(text)),
         Err(e) if e.code == "torn_read" => Err(e),
         Err(_) => Ok(Source::Unreadable),
@@ -362,23 +369,21 @@ fn text_of(r: &Reader<'_>, widget: u64) -> Result<Source> {
 }
 
 fn topbar_root(r: &Reader<'_>, image: u64) -> Result<u64> {
-    if r.string_abi() != StringAbi::LibCxx {
-        return Err(Error::new(
-            "capability_unavailable",
-            "Top bar text is not reviewed for this build",
-        ));
-    }
+    let abi = r.string_abi();
+    let manager_at = fld(abi, &IDLER, MANAGER)?;
+    let topbar_at = fld(abi, &INTERFACE_MANAGER, TOPBAR)?;
+    let root_at = fld(abi, &TOPBAR_VIEW, TOPBAR_ROOT)?;
     let idler = r.u64(image + game::layout(r).idler_global)?;
-    let manager = r.u64(idler + MANAGER)?;
+    let manager = r.u64(idler + manager_at)?;
     let topbar = if manager == 0 {
         0
     } else {
-        r.u64(manager + TOPBAR)?
+        r.u64(manager + topbar_at)?
     };
     let root = if topbar == 0 {
         0
     } else {
-        r.u64(topbar + TOPBAR_ROOT)?
+        r.u64(topbar + root_at)?
     };
     if root == 0 {
         return Err(Error::new(
