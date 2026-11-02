@@ -38,7 +38,8 @@ def close_all():
 def resolve_save(saves_dir, name):
     """'latest' | name | name.hoi4 | absolute path -> existing file path."""
     if name == "latest":
-        files = [os.path.join(saves_dir, f) for f in os.listdir(saves_dir) if f.lower().endswith(".hoi4")]
+        names = os.listdir(saves_dir) if os.path.isdir(saves_dir) else []
+        files = [os.path.join(saves_dir, f) for f in names if f.lower().endswith(".hoi4")]
         if not files:
             raise ToolError("no saves found")
         return max(files, key=os.path.getmtime)

@@ -189,7 +189,8 @@ def classify(img, ocr, game_log_idle=None):
         out["screen"] = "load_screen"
     elif "date" in out:
         out["screen"] = "map"
-    elif has(r"single\s*player") and has(r"multi\s*player"):
+    elif has(r"single\s*player") and (has(r"multi\s*player") or has(r"career\s*profile") or has(r"^\W*credits\W*$")):
+        # 1.19.4.1's animated menu background garbles one button now and then ("Yu ur IPLAYER")
         out["screen"] = "main_menu"
     elif has(r"^\W*continue\W*$") or (has(r"new\s*game") and has(r"tutorial")):
         out["screen"] = "single_player_menu"

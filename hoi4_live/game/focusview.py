@@ -266,7 +266,7 @@ def placeholder_pattern(name):
         return name, None
     parts = [p.strip() for p in re.split(r"\[[^\]]*\]", name)]
     query = max(parts, key=len) or name
-    rx = re.compile("^\s*" + ".+".join(re.escape(p) for p in parts) + "\s*$", re.I)
+    rx = re.compile(r"^\s*" + ".+".join(re.escape(p) for p in parts) + r"\s*$", re.I)
     return query, rx
 
 

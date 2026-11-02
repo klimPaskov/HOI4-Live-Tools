@@ -56,16 +56,23 @@ def console_region(img):
     return [x0 + 9, y0 + 7, x1 - x0 - 18, y1 - y0 - 12]
 
 
-def read_output(session, img=None):
-    """OCR the console log. Its text is white; the map shows through the translucent panel in dimmer
-    colours, so only near-white pixels are kept (black text on white) before OCR."""
+def _bright_text(crop, low=90, gain=1.6):
+    """Black text on white from bright text of any hue: replies are white, but 1.19.4.1 prints errors such as
+    'Unknown command' in red, which a near-white filter drops. The panel darkens the map behind it."""
     import numpy as np
+    mx = crop.astype(np.int16).max(2)
+    g = np.clip(255 - (mx - low) * gain, 0, 255).astype(np.uint8)
+    return np.stack([g, g, g], 2)
+
+
+def read_output(session, img=None):
+    """OCR the console log. The map shows through the translucent panel in dim colours, so only bright
+    pixels are kept (black text on white) before OCR."""
     from ..desktop import images
-    from ..perception.topbar import _whiteness
     img = session.grab() if img is None else img
     region = console_region(img)
     crop = images.crop(img, region)
-    res = session.ocr.recognize(_whiteness(crop, low=130, gain=2.6), scale=2.5, pad=16)
+    res = session.ocr.recognize(_bright_text(crop), scale=2.5, pad=16)
     return [l.text for l in res.lines], img
 
 
@@ -109,13 +116,17 @@ def run(session, commands, keep_open=False, read=True):
 
 def _new_lines(before, after, cmd):
     """Console lines that appeared after the command (best effort: OCR text is compared loosely)."""
+    from difflib import SequenceMatcher
     norm = lambda s: re.sub(r"\W+", "", s.lower())
+    same = lambda x, y: x == y or SequenceMatcher(None, x, y).ratio() >= 0.75
     b = [norm(x) for x in before]
+    a = [norm(x) for x in after]
     out = []
-    # find the longest suffix of `before` that is a prefix-aligned part of `after`
+    # find the longest suffix of `before` that is a prefix-aligned part of `after`; red error lines OCR a little
+    # differently on every read ("Unknown command", "I-Inknown conunand"), so lines are compared loosely
     start = 0
-    for k in range(min(len(b), len(after)), 0, -1):
-        if [norm(x) for x in after[:k]] == b[-k:]:
+    for k in range(min(len(b), len(a)), 0, -1):
+        if all(same(x, y) for x, y in zip(a[:k], b[-k:])):
             start = k
             break
     for line in after[start:]:

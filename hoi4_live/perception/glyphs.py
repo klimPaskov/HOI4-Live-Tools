@@ -106,12 +106,14 @@ def read(crop, fnt, threshold=0.62, charset=CHARSET):
     for h in big:
         if free(h[1], h[4]):
             taken.append(h)
-    # glyph rows: keep hits on the main text line (big glyphs define it)
+    # glyph rows: keep hits on the main text line (big glyphs define it); with no big glyph there is no line,
+    # and every small glyph is kept (a crop of only small glyphs used to raise UnboundLocalError on `base`)
+    base = None
     if taken:
         base = np.median([h[2] + h[5] for h in taken])
         taken = [h for h in taken if abs(h[2] + h[5] - base) <= 4]
     for h in small:
-        if free(h[1], h[4]) and (not taken or abs(h[2] + h[5] - base) <= 5 or h[3] == "-"):
+        if free(h[1], h[4]) and (base is None or abs(h[2] + h[5] - base) <= 5 or h[3] == "-"):
             taken.append(h)
     taken.sort(key=lambda h: h[1])
     clusters, cur = [], []
