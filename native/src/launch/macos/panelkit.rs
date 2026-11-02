@@ -21,8 +21,9 @@ use crate::{
     error::{Error, Result},
     game,
     gui_tree::{self, Rect},
-    memory::{Reader, StringAbi},
+    memory::Reader,
     platform::{game_input::GameInput, Process},
+    xlayout::{self, fld, img},
 };
 
 pub(super) const GAME: (u32, u32) = (1920, 1080);
@@ -42,6 +43,15 @@ const GRID_ITEMS: u64 = 0x190;
 const ITEM_CONTAINER: u64 = 0x10;
 const TEXT: u64 = 0x100;
 const GRID_LIMIT: usize = 256;
+/// Owners of the fields above (macOS 1.19.4.1 RTTI names and vtables). The
+/// GUI object at idler+0x4c0, grid items and text widgets have no reviewed
+/// class yet; their Linux offsets need an anchor function.
+const IDLER: xlayout::Class = xlayout::Class::new("CInGameIdler", 0x35089d8);
+const GAME_GUI: xlayout::Class = xlayout::Class::new("idler.gui", 0);
+const CONTAINER: xlayout::Class = xlayout::Class::new("CContainerWindow", 0x36ba978);
+const GRID: xlayout::Class = xlayout::Class::new("CStandardGridBox", 0x36cca80);
+const GRID_ITEM: xlayout::Class = xlayout::Class::new("grid.item", 0);
+const TEXT_BOX: xlayout::Class = xlayout::Class::new("gui.text", 0);
 
 /// A window class and the root GUI name its `.gui` file defines.
 #[derive(Clone, Copy, Debug)]
@@ -125,13 +135,9 @@ pub(super) const MIO_POLICY: Class = Class {
     root_name: "industrial_organisation_policy_window",
 };
 
-fn libcxx(r: &Reader<'_>) -> Result<()> {
-    match r.string_abi() {
-        StringAbi::LibCxx => Ok(()),
-        StringAbi::LibStdCxx => Err(Error::new(
-            "capability_unavailable",
-            "These windows are not reviewed for this build",
-        )),
+impl Class {
+    fn owner(&self) -> xlayout::Class {
+        xlayout::Class::new(self.name, self.vtable)
     }
 }
 fn plausible(p: u64) -> bool {
@@ -140,11 +146,17 @@ fn plausible(p: u64) -> bool {
 
 /// GUI name of a container object.
 pub(super) fn container_name(r: &Reader<'_>, image: u64, object: u64) -> Result<Option<String>> {
-    gui_tree::name(r, object + CONTAINER_BASE, image)
+    gui_tree::name(
+        r,
+        object + fld(r.string_abi(), &CONTAINER, CONTAINER_BASE)?,
+        image,
+    )
 }
 
 fn root_of(r: &Reader<'_>, image: u64, object: u64, class: &Class) -> Option<u64> {
+    let owner = class.owner();
     let pick = |offset: u64, need_name: bool| -> Option<u64> {
+        let offset = fld(r.string_abi(), &owner, offset).ok()?;
         let p = r.u64(object + offset).ok()?;
         if !plausible(p) {
             return None;
@@ -164,12 +176,12 @@ fn root_of(r: &Reader<'_>, image: u64, object: u64, class: &Class) -> Option<u64
 /// Root container of the live window of `class`, or None when the game holds no
 /// such window object.
 pub(super) fn locate(r: &Reader<'_>, image: u64, class: &Class) -> Result<Option<u64>> {
-    libcxx(r)?;
+    let abi = r.string_abi();
     let idler = r.u64(image + game::layout(r).idler_global)?;
-    let want = image + class.vtable;
-    let gui = r.u64(idler + GUI_FROM_IDLER)?;
+    let want = image + img(abi, class.vtable)?;
+    let gui = r.u64(idler + fld(abi, &IDLER, GUI_FROM_IDLER)?)?;
     if plausible(gui) {
-        if let Ok((_, data, count)) = r.array_header(gui + POPUP_LIST) {
+        if let Ok((_, data, count)) = r.array_header(gui + fld(abi, &GAME_GUI, POPUP_LIST)?) {
             for index in 0..count.min(64) as u64 {
                 let Ok(window) = r.u64(data + index * 8) else {
                     continue;
@@ -182,7 +194,7 @@ pub(super) fn locate(r: &Reader<'_>, image: u64, class: &Class) -> Result<Option
             }
         }
     }
-    let manager = r.u64(idler + MANAGER)?;
+    let manager = r.u64(idler + fld(abi, &IDLER, MANAGER)?)?;
     if !plausible(manager) {
         return Err(Error::new("invalid_gui", "Interface manager unavailable"));
     }
@@ -196,10 +208,13 @@ pub(super) fn locate(r: &Reader<'_>, image: u64, class: &Class) -> Result<Option
         }
     }
     // Windows owned by another view rather than the manager.
-    for (child, owner, offset, root_at) in CHILD_WINDOWS {
-        if *child != class.vtable {
+    for (child, owner_class, offset, root_at) in CHILD_WINDOWS {
+        if child.vtable != class.vtable {
             continue;
         }
+        let owner = img(abi, owner_class.vtable)?;
+        let offset = fld(abi, &owner_class.owner(), *offset)?;
+        let root_at = fld(abi, &child.owner(), *root_at)?;
         for chunk in bytes.chunks_exact(8) {
             let p = u64::from_le_bytes(chunk.try_into().unwrap());
             if plausible(p) && r.u64(p).ok() == Some(image + owner) {
@@ -228,9 +243,9 @@ pub(super) fn locate(r: &Reader<'_>, image: u64, class: &Class) -> Result<Option
 /// at +0x4a8 with its root at +0x50 (mapped live 1 November 2026).
 /// The organisation list hangs off the politics view at +0x3958 (also referenced from each
 /// later organisation slot record, stride 0x470) with its root at +0xf0.
-const CHILD_WINDOWS: &[(u64, u64, u64, u64)] = &[
-    (AGENCY_UPGRADES.vtable, AGENCY_VIEW.vtable, 0x4a8, 0x50),
-    (MIO_LIST.vtable, POLITICS_VIEW.vtable, 0x3958, 0xf0),
+const CHILD_WINDOWS: &[(Class, Class, u64, u64)] = &[
+    (AGENCY_UPGRADES, AGENCY_VIEW, 0x4a8, 0x50),
+    (MIO_LIST, POLITICS_VIEW, 0x3958, 0xf0),
 ];
 
 /// The window exists and is shown.
@@ -331,7 +346,8 @@ pub(super) struct Item {
     pub frame: u64,
 }
 pub(super) fn items(r: &Reader<'_>, image: u64, grid: u64) -> Result<Vec<Item>> {
-    let (_, data, count) = r.array_header(grid + GRID_ITEMS)?;
+    let abi = r.string_abi();
+    let (_, data, count) = r.array_header(grid + fld(abi, &GRID, GRID_ITEMS)?)?;
     if count > GRID_LIMIT {
         return Err(Error::new("invalid_gui", "Grid item list exceeds bound"));
     }
@@ -346,7 +362,8 @@ pub(super) fn items(r: &Reader<'_>, image: u64, grid: u64) -> Result<Vec<Item>> 
         if !plausible(object) {
             return Err(Error::new("invalid_gui", "Stale grid item"));
         }
-        let frame = gui_tree::container(r, r.u64(object + ITEM_CONTAINER)?, image)?
+        let item = r.u64(object + fld(abi, &GRID_ITEM, ITEM_CONTAINER)?)?;
+        let frame = gui_tree::container(r, item, image)?
             .ok_or_else(|| Error::new("invalid_gui", "Grid item window required"))?;
         out.push(Item { frame });
     }
@@ -363,8 +380,9 @@ pub(super) fn grids(
     depth: u32,
     out: &mut Vec<u64>,
 ) -> Result<()> {
+    let grid = image + img(r.string_abi(), GRID_VTABLE)?;
     for child in gui_tree::children(r, object)? {
-        if r.u64(child)? == image + GRID_VTABLE {
+        if r.u64(child)? == grid {
             out.push(child);
         } else if depth > 0 {
             if let Some(inner) = gui_tree::container(r, child, image)? {
@@ -384,7 +402,7 @@ pub(super) fn text(
 ) -> Result<Option<String>> {
     match find(r, image, parent, wanted, depth)? {
         Some(t) => Ok(Some(super::special_projects::plain(
-            &r.string_bounded(t + TEXT, 256)?,
+            &r.string_bounded(t + fld(r.string_abi(), &TEXT_BOX, TEXT)?, 256)?,
         ))),
         None => Ok(None),
     }

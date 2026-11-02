@@ -23,6 +23,8 @@ pub mod research_folders;
 pub mod research_ui;
 mod target_node;
 pub mod technology;
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+pub(crate) mod xlayout;
 
 pub(crate) mod technology_nodes;
 
