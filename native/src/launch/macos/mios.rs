@@ -34,6 +34,7 @@ use crate::{
     game,
     memory::Reader,
     platform::Process,
+    xlayout::{fld, img, Class},
 };
 use serde_json::{json, Value};
 use std::{
@@ -49,6 +50,11 @@ const ACTIVE_IDEAS: u64 = 0x50;
 const IDEA_TYPE: &str = "5CIdea";
 const IDEA_KEY: u64 = 0x18;
 const IDEA_LIMIT: usize = 128;
+/// Owners of the fields above (macOS 1.19.4.1 RTTI names and vtables).
+const ORGANISATIONS: Class =
+    Class::new("NIndustrialOrganisation::COrganisationDatabase", 0x358c220);
+const POLITICS: Class = Class::new("CPoliticalStatus", 0x3589e48);
+const IDEA: Class = Class::new("CIdea", 0x35882b8);
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub(super) struct Org {
@@ -297,10 +303,12 @@ pub(super) struct Live {
 }
 
 pub(super) fn read_live(r: &Reader<'_>, image: u64, politics: u64) -> Result<Live> {
-    let db = mgmt::pointer(r, image + ORGANISATION_DB)?;
-    let (_, _, template_count) = r.array_header(db + DB_TEMPLATES)?;
+    let abi = r.string_abi();
+    let db = mgmt::pointer(r, image + img(abi, ORGANISATION_DB)?)?;
+    let (_, _, template_count) = r.array_header(db + fld(abi, &ORGANISATIONS, DB_TEMPLATES)?)?;
     mgmt::expect_type(r, politics, POLITICS_TYPE)?;
-    let ideas = r.pointer_array(politics + ACTIVE_IDEAS)?;
+    let ideas = r.pointer_array(politics + fld(abi, &POLITICS, ACTIVE_IDEAS)?)?;
+    let key_at = fld(abi, &IDEA, IDEA_KEY)?;
     if ideas.len() > IDEA_LIMIT {
         return Err(Error::new("invalid_array", "Implausible active idea count"));
     }
@@ -310,7 +318,7 @@ pub(super) fn read_live(r: &Reader<'_>, image: u64, politics: u64) -> Result<Liv
             return Err(Error::new("invalid_pointer", "Stale active idea"));
         }
         mgmt::expect_type(r, idea, IDEA_TYPE)?;
-        keys.push(mgmt::text(r, idea + IDEA_KEY, 128)?.unwrap_or_default());
+        keys.push(mgmt::text(r, idea + key_at, 128)?.unwrap_or_default());
     }
     Ok(Live {
         template_count,

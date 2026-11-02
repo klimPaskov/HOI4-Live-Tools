@@ -27,11 +27,12 @@ use crate::{
     error::{Error, Result},
     game,
     gui_tree::{self, Rect},
-    memory::{Reader, StringAbi},
+    memory::Reader,
     platform::{
         game_input::{GameInput, Key},
         Process,
     },
+    xlayout::{fld, Class},
 };
 use serde_json::{json, Map, Value};
 use std::time::{Duration, Instant};
@@ -74,7 +75,8 @@ const EDV_EDIT_TEXT: u64 = 0x3c8;
 /// box's state: text at +0x3c8 (tank), +0x3d8 (plane) and +0x3e8 (ship), mapped live on
 /// 1 November 2026; extra fields such as the screen size (1920, 1080) come before it.
 fn edit_text(r: &Reader<'_>, edit_box: u64) -> Result<String> {
-    for text in (EDV_EDIT_TEXT..=EDV_EDIT_TEXT + 0x30).step_by(8) {
+    let first = fld(r.string_abi(), &EDIT_BOX, EDV_EDIT_TEXT)?;
+    for text in (first..=first + 0x30).step_by(8) {
         if r.u64(edit_box + text - 8)? == 0xffff_ffff {
             return r.string_bounded(edit_box + text, 160);
         }
@@ -99,24 +101,34 @@ const TEXT: u64 = 0x100;
 // 1.19.4: CButtonStandard text 0x158 -> 0x160 (same move as navalui BUTTON_TEXT).
 const BUTTON_TEXT: u64 = 0x160;
 const VT_ENTRY_REMOVAL: u64 = 0x0;
+/// Owners of the fields above (macOS 1.19.4.1 RTTI names and vtables). The interface manager,
+/// the production view, selection rows, grid items and text widgets have no reviewed class
+/// yet; their Linux offsets need an anchor function.
+const IDLER: Class = Class::new("CInGameIdler", 0x35089d8);
+const MANAGER_OBJ: Class = Class::new("idler.manager", 0);
+const PRODUCTION: Class = Class::new("production.view", 0);
+const SELECTION: Class = Class::new("CProductionEquipmentWindow", 0x3685b58);
+const SELECTION_ROW: Class = Class::new("production.selection_row", 0);
+const UDW: Class = Class::new("CEquipmentUpgradeDesignerWindow", 0x3663518);
+const UDV: Class = Class::new("CEquipmentUpgradeDesignerView", 0x36634f0);
+const EDV: Class = Class::new("CEquipmentDesignerView", 0x360b818);
+const EDIT_BOX: Class = Class::new("CEditBox", 0x36bc6a0);
+const SLOT_VIEW: Class = Class::new("CEquipmentModuleSlotView", 0x360b170);
+const MODULE_SLOT: Class = Class::new("CEquipmentModuleSlot", 0x357ce80);
+const MODULE_ENTRY: Class = Class::new("CEquipmentModuleEntry", 0x360db18);
+const MODULE: Class = Class::new("CEquipmentModule", 0x357ccd8);
+const GRID: Class = Class::new("CStandardGridBox", 0x36cca80);
+const GRID_ITEM: Class = Class::new("grid.item", 0);
+const TEXT_BOX: Class = Class::new("gui.text", 0);
+const BUTTON: Class = Class::new("gui.button", 0);
 
 /// Variant stat scale and the fleetmem decoders are shared with `hoi4_designs`.
-fn libcxx(r: &Reader<'_>) -> Result<()> {
-    match r.string_abi() {
-        StringAbi::LibCxx => Ok(()),
-        StringAbi::LibStdCxx => Err(Error::new(
-            "capability_unavailable",
-            "The equipment designers are reviewed for the macOS build only",
-        )),
-    }
-}
 fn manager(r: &Reader<'_>, image: u64) -> Result<u64> {
-    libcxx(r)?;
     let idler = r.u64(image + game::layout(r).idler_global)?;
-    r.u64(idler + MANAGER)
+    r.u64(idler + fld(r.string_abi(), &IDLER, MANAGER)?)
 }
 fn production_view(r: &Reader<'_>, image: u64) -> Result<u64> {
-    r.u64(manager(r, image)? + PRODUCTION_VIEW)
+    r.u64(manager(r, image)? + fld(r.string_abi(), &MANAGER_OBJ, PRODUCTION_VIEW)?)
 }
 fn named(r: &Reader<'_>, image: u64, parent: u64, name: &str) -> Result<u64> {
     gui_tree::child(r, image, parent, name)?
@@ -128,20 +140,22 @@ fn named_frame(r: &Reader<'_>, image: u64, parent: u64, name: &str) -> Result<u6
         .ok_or_else(|| Error::new("invalid_gui", format!("{name} is not a window")))
 }
 fn text_at(r: &Reader<'_>, widget: u64) -> Result<String> {
-    Ok(special_projects::plain(
-        &r.string_bounded(widget + TEXT, 256)?,
-    ))
+    Ok(special_projects::plain(&r.string_bounded(
+        widget + fld(r.string_abi(), &TEXT_BOX, TEXT)?,
+        256,
+    )?))
 }
 fn text_of(r: &Reader<'_>, image: u64, parent: u64, name: &str) -> Result<String> {
     text_at(r, named(r, image, parent, name)?)
 }
 fn label_of(r: &Reader<'_>, button: u64) -> Result<String> {
-    Ok(special_projects::plain(
-        &r.string_bounded(button + BUTTON_TEXT, 160)?,
-    ))
+    Ok(special_projects::plain(&r.string_bounded(
+        button + fld(r.string_abi(), &BUTTON, BUTTON_TEXT)?,
+        160,
+    )?))
 }
 fn items(r: &Reader<'_>, grid: u64) -> Result<Vec<u64>> {
-    let (_, data, count) = r.array_header(grid + GRID_ITEMS)?;
+    let (_, data, count) = r.array_header(grid + fld(r.string_abi(), &GRID, GRID_ITEMS)?)?;
     if count > 128 {
         return Err(Error::new("invalid_gui", "Grid item list exceeds bound"));
     }
@@ -189,13 +203,15 @@ pub(super) struct Row {
 }
 /// The selection window (army/air or ship) whose root is shown, with its rows.
 pub(super) fn selection_window(r: &Reader<'_>, image: u64) -> Result<Option<u64>> {
+    let abi = r.string_abi();
     let view = production_view(r, image)?;
     for offset in [SELECTION_ARMY, SELECTION_NAVY] {
-        let window = r.u64(view + offset)?;
+        let window = r.u64(view + fld(abi, &PRODUCTION, offset)?)?;
         if window == 0 {
             continue;
         }
-        let Some(root) = gui_tree::container(r, r.u64(window + SEL_ROOT)?, image)? else {
+        let root = r.u64(window + fld(abi, &SELECTION, SEL_ROOT)?)?;
+        let Some(root) = gui_tree::container(r, root, image)? else {
             continue;
         };
         if gui_tree::visible(r, root)? {
@@ -224,18 +240,21 @@ pub(super) fn rows(r: &Reader<'_>, image: u64) -> Result<Vec<Row>> {
     let Some(window) = selection_window(r, image)? else {
         return Ok(Vec::new());
     };
-    let root = gui_tree::container(r, r.u64(window + SEL_ROOT)?, image)?
+    let abi = r.string_abi();
+    let root = r.u64(window + fld(abi, &SELECTION, SEL_ROOT)?)?;
+    let root = gui_tree::container(r, root, image)?
         .ok_or_else(|| Error::new("invalid_gui", "Selection window root unavailable"))?;
     let list = named_frame(r, image, root, "equipments")?;
     let grid = named(r, image, list, "equipments_grid")?;
     let mut out = Vec::new();
     for row in items(r, grid)? {
-        let variant = r.u64(row + ROW_VARIANT)?;
+        let variant = r.u64(row + fld(abi, &SELECTION_ROW, ROW_VARIANT)?)?;
         if variant == 0 || !fleetmem::is_object(r, variant, fleetmem::VARIANT_VTABLE, image)? {
             continue;
         }
         let v = fleetmem::variant(r, image, variant)?;
-        let Some(frame) = gui_tree::container(r, r.u64(row + ROW_CONTAINER)?, image)? else {
+        let frame = r.u64(row + fld(abi, &SELECTION_ROW, ROW_CONTAINER)?)?;
+        let Some(frame) = gui_tree::container(r, frame, image)? else {
             continue;
         };
         let shown = gui_tree::visible(r, frame)?;
@@ -282,27 +301,31 @@ impl Kind {
     }
 }
 fn udw_roots(r: &Reader<'_>, image: u64) -> Result<Vec<(u64, u64)>> {
+    let abi = r.string_abi();
     let view = production_view(r, image)?;
     let mut out = Vec::new();
     for offset in [SELECTION_ARMY, SELECTION_NAVY] {
-        let window = r.u64(view + offset)?;
+        let window = r.u64(view + fld(abi, &PRODUCTION, offset)?)?;
         if window == 0 {
             continue;
         }
-        let udw = r.u64(window + SEL_UDW)?;
+        let udw = r.u64(window + fld(abi, &SELECTION, SEL_UDW)?)?;
         if udw == 0 {
             continue;
         }
-        if let Some(root) = gui_tree::container(r, r.u64(udw + UDW_ROOT)?, image)? {
+        let root = r.u64(udw + fld(abi, &UDW, UDW_ROOT)?)?;
+        if let Some(root) = gui_tree::container(r, root, image)? {
             out.push((udw, root));
         }
     }
     Ok(out)
 }
 fn edv(r: &Reader<'_>, image: u64, slot: u64) -> Result<(u64, u64)> {
-    let view = r.u64(manager(r, image)? + slot)?;
+    let abi = r.string_abi();
+    let view = r.u64(manager(r, image)? + fld(abi, &MANAGER_OBJ, slot)?)?;
     r.object_type(view, "CEquipmentDesignerView")?;
-    let root = gui_tree::container(r, r.u64(view + EDV_ROOT)?, image)?
+    let root = r.u64(view + fld(abi, &EDV, EDV_ROOT)?)?;
+    let root = gui_tree::container(r, root, image)?
         .ok_or_else(|| Error::new("invalid_gui", "Equipment designer window unavailable"))?;
     Ok((view, root))
 }
@@ -403,15 +426,16 @@ pub(super) fn upgrade_state(r: &Reader<'_>, image: u64) -> Result<UpgradeState> 
     let save = named(r, image, root, "save_button")?;
     let save_label = label_of(r, save)?;
     let edit = named(r, image, root, "variant_name")?;
-    let view = r.u64(udw + UDW_VIEW)?;
-    let draft = r.u64(view + UDV_DRAFT)?;
-    let base = r.u64(view + UDV_BASE)?;
+    let abi = r.string_abi();
+    let view = r.u64(udw + fld(abi, &UDW, UDW_VIEW)?)?;
+    let draft = r.u64(view + fld(abi, &UDV, UDV_DRAFT)?)?;
+    let base = r.u64(view + fld(abi, &UDV, UDV_BASE)?)?;
     fleetmem::expect(r, draft, fleetmem::VARIANT_VTABLE, image, "Draft variant")?;
     fleetmem::expect(r, base, fleetmem::VARIANT_VTABLE, image, "Base variant")?;
     let _ = UDV_COST;
     Ok(UpgradeState {
         title: text_of(r, image, root, "equipment_variant_label").unwrap_or_default(),
-        name: r.string_bounded(edit + UDW_EDIT_TEXT, 160)?,
+        name: r.string_bounded(edit + fld(abi, &EDIT_BOX, UDW_EDIT_TEXT)?, 160)?,
         experience: first_number(&text_of(r, image, root, "experience")?),
         save_cost: first_number(save_label.trim_start_matches(|c: char| !c.is_ascii_digit())),
         save_label,
@@ -512,13 +536,15 @@ fn selector(r: &Reader<'_>, image: u64, root: u64) -> Result<Option<SelectorView
     if !gui_tree::visible(r, window)? {
         return Ok(None);
     }
+    let abi = r.string_abi();
     let grid = named(r, image, window, "gb_modules")?;
     let mut entries = Vec::new();
     for item in items(r, grid)? {
         let Some(kind) = entry_kind(r, image, item)? else {
             continue;
         };
-        let Some(frame) = gui_tree::container(r, r.u64(item + ITEM_CONTAINER)?, image)? else {
+        let frame = r.u64(item + fld(abi, &GRID_ITEM, ITEM_CONTAINER)?)?;
+        let Some(frame) = gui_tree::container(r, frame, image)? else {
             continue;
         };
         if !gui_tree::visible(r, frame)? {
@@ -530,11 +556,11 @@ fn selector(r: &Reader<'_>, image: u64, root: u64) -> Result<Option<SelectorView
             .transpose()?
             .unwrap_or_default();
         let module = if kind == EntryKind::Module {
-            let m = r.u64(item + ENTRY_MODULE)?;
+            let m = r.u64(item + fld(abi, &MODULE_ENTRY, ENTRY_MODULE)?)?;
             if m == 0 {
                 None
             } else {
-                Some(r.string_bounded(m + MODULE_KEY, 128)?)
+                Some(r.string_bounded(m + fld(abi, &MODULE, MODULE_KEY)?, 128)?)
             }
         } else {
             None
@@ -558,7 +584,8 @@ pub(super) fn module_state(r: &Reader<'_>, image: u64) -> Result<ModuleState> {
         Some((k @ (Kind::Ship | Kind::Tank | Kind::Plane), v, root)) => (k, v, root),
         _ => return Err(Error::new("designer_closed", "No module designer is open")),
     };
-    let draft = r.u64(view + EDV_DRAFT)?;
+    let abi = r.string_abi();
+    let draft = r.u64(view + fld(abi, &EDV, EDV_DRAFT)?)?;
     fleetmem::expect(r, draft, fleetmem::VARIANT_VTABLE, image, "Draft variant")?;
     let v = fleetmem::variant(r, image, draft)?;
     // Slot views of a previous hull can linger in the arrays until the window is rebuilt; only
@@ -566,19 +593,19 @@ pub(super) fn module_state(r: &Reader<'_>, image: u64) -> Result<ModuleState> {
     let table = fleetmem::type_slots(r, draft)?;
     let mut slots = Vec::new();
     for (array, fixed) in [(EDV_SLOTS_CUSTOM, false), (EDV_SLOTS_FIXED, true)] {
-        let (_, data, count) = r.array_header(view + array)?;
+        let (_, data, count) = r.array_header(view + fld(abi, &EDV, array)?)?;
         for index in 0..count.min(16) as u64 {
             let slot_view = r.u64(data + index * 8)?;
-            let def = r.u64(slot_view + SLOT_DEF)?;
-            let button = r.u64(slot_view + SLOT_BUTTON)?;
+            let def = r.u64(slot_view + fld(abi, &SLOT_VIEW, SLOT_DEF)?)?;
+            let button = r.u64(slot_view + fld(abi, &SLOT_VIEW, SLOT_BUTTON)?)?;
             let (name, id) = if def == 0 {
                 (None, 0)
             } else {
-                let name = r.string_bounded(def + SLOT_NAME, 128)?;
+                let name = r.string_bounded(def + fld(abi, &MODULE_SLOT, SLOT_NAME)?, 128)?;
                 if !table.iter().any(|(_, n)| *n == name) {
                     continue;
                 }
-                (Some(name), r.i32(def + SLOT_ID)?)
+                (Some(name), r.i32(def + fld(abi, &MODULE_SLOT, SLOT_ID)?)?)
             };
             let rect = if name.is_some() && button != 0 && gui_tree::shown(r, button)? {
                 gui_tree::rect(r, image, button, GAME).ok()
@@ -598,7 +625,7 @@ pub(super) fn module_state(r: &Reader<'_>, image: u64) -> Result<ModuleState> {
     let dup = named(r, image, root, "duplicate_button")?;
     // `equipment_names` exists only in the ship designer; the tank and plane designers
     // (tank_designer_view.gui, plane_designer_view.gui) share the other controls.
-    let edit_box = r.u64(view + EDV_EDIT_BOX)?;
+    let edit_box = r.u64(view + fld(abi, &EDV, EDV_EDIT_BOX)?)?;
     Ok(ModuleState {
         kind,
         name: edit_text(r, edit_box)?,
@@ -679,7 +706,8 @@ fn outdated_checkbox_button(r: &Reader<'_>, image: u64) -> Result<u64> {
             "No selection list is open",
         ));
     };
-    let root = gui_tree::container(r, r.u64(window + SEL_ROOT)?, image)?
+    let root = r.u64(window + fld(r.string_abi(), &SELECTION, SEL_ROOT)?)?;
+    let root = gui_tree::container(r, root, image)?
         .ok_or_else(|| Error::new("invalid_gui", "Selection window root unavailable"))?;
     named(r, image, root, "checkbox")
 }
@@ -688,7 +716,8 @@ fn outdated_checkbox(r: &Reader<'_>, image: u64) -> Result<Rect> {
 }
 /// The filter's checked state (button +0x1b8: 2 ticked, 1 empty; flipped by clicks on 26 Oct 2026).
 pub(super) fn outdated_ticked(r: &Reader<'_>, image: u64) -> Result<bool> {
-    Ok(r.i32(outdated_checkbox_button(r, image)? + CHECKBOX_STATE)? == 2)
+    let state = fld(r.string_abi(), &BUTTON, CHECKBOX_STATE)?;
+    Ok(r.i32(outdated_checkbox_button(r, image)? + state)? == 2)
 }
 fn set_outdated(process: &dyn Process, keys: &dyn GameInput, want: bool) -> Result<()> {
     if read(process, outdated_ticked)? == want {

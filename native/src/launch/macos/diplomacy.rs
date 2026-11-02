@@ -10,11 +10,12 @@ use crate::{
     error::{Error, Result},
     game,
     gui_tree::{self, Rect},
-    memory::{Reader, StringAbi},
+    memory::Reader,
     platform::{
         game_input::{GameInput, Key},
         Process,
     },
+    xlayout::{fld, img, Class},
 };
 use serde_json::{json, Value};
 
@@ -59,15 +60,40 @@ const MACOS: Ui = Ui {
 const GAME: (u32, u32) = (1920, 1080);
 /// Frame number of the diplomacy rows' `accept_icon` (1 decline, 2 accept).
 const ICON_FRAME: u64 = 0x184;
+/// Owners of the fields above (macOS 1.19.4.1 RTTI names and vtables). The
+/// interface manager, the action controller, grid items and text widgets have
+/// no reviewed class yet; their Linux offsets need an anchor function. The
+/// view class is named after the diplomacy view the comments describe.
+const IDLER: Class = Class::new("CInGameIdler", 0x35089d8);
+const MANAGER: Class = Class::new("idler.manager", 0);
+const VIEW: Class = Class::new("CCountryDiplomacyView", 0x364aa18);
+const ACTION_GLUE: Class = Class::new("diplomacy.action_controller", 0);
+const CONTAINER: Class = Class::new("CContainerWindow", 0x36ba978);
+const GRID: Class = Class::new("CStandardGridBox", 0x36cca80);
+const GRID_ITEM: Class = Class::new("grid.item", 0);
+const TEXT_BOX: Class = Class::new("gui.text", 0);
+const ICON: Class = Class::new("CIcon", 0x36b6880);
 
-fn ui(r: &Reader<'_>) -> Result<&'static Ui> {
-    match r.string_abi() {
-        StringAbi::LibCxx => Ok(&MACOS),
-        StringAbi::LibStdCxx => Err(Error::new(
-            "capability_unavailable",
-            "Diplomacy input is not reviewed for this build",
-        )),
-    }
+/// The layout for this build (macOS values translated through xlayout).
+fn ui(r: &Reader<'_>) -> Result<Ui> {
+    let abi = r.string_abi();
+    let m = &MACOS;
+    Ok(Ui {
+        manager: fld(abi, &IDLER, m.manager)?,
+        view: fld(abi, &MANAGER, m.view)?,
+        view_root: fld(abi, &VIEW, m.view_root)?,
+        shown_tag: fld(abi, &VIEW, m.shown_tag)?,
+        action_glue: fld(abi, &VIEW, m.action_glue)?,
+        info_window: fld(abi, &ACTION_GLUE, m.info_window)?,
+        grid_items: fld(abi, &GRID, m.grid_items)?,
+        item_container: fld(abi, &GRID_ITEM, m.item_container)?,
+        text: fld(abi, &TEXT_BOX, m.text)?,
+        container_vtable: img(abi, m.container_vtable)?,
+        container_base: fld(abi, &CONTAINER, m.container_base)?,
+        type_row: m.type_row,
+        state_row: m.state_row,
+        visible_state_rows: m.visible_state_rows,
+    })
 }
 fn view(r: &Reader<'_>, image: u64) -> Result<u64> {
     let u = ui(r)?;
@@ -209,10 +235,12 @@ fn rows(r: &Reader<'_>, image: u64) -> Result<Vec<Row>> {
         // 2 is the green check on Italy's non-aggression pact, 1 the red
         // cross on Poland's and on Italy's invitation to a faction).
         let (ai_refuses, ai_accepts) = match gui_tree::child(r, image, frame, "accept_icon")? {
-            Some(icon) if gui_tree::shown(r, icon)? => match r.i32(icon + ICON_FRAME)? {
-                2 => (false, true),
-                _ => (true, false),
-            },
+            Some(icon) if gui_tree::shown(r, icon)? => {
+                match r.i32(icon + fld(r.string_abi(), &ICON, ICON_FRAME)?)? {
+                    2 => (false, true),
+                    _ => (true, false),
+                }
+            }
             _ => (false, false),
         };
         out.push(Row {
@@ -291,7 +319,8 @@ fn grid_scroll(r: &Reader<'_>, image: u64, grid: &str) -> Result<f64> {
         dialog(r, image)?.ok_or_else(|| Error::new("input_readback_failed", "Dialog closed"))?;
     let g = find(r, image, window, grid, 0)?
         .ok_or_else(|| Error::new("gui_target_unavailable", "Dialog list not found"))?;
-    let value = f32::from_bits(r.i32(g + GRID_SCROLL)? as u32);
+    let scroll = fld(r.string_abi(), &GRID, GRID_SCROLL)?;
+    let value = f32::from_bits(r.i32(g + scroll)? as u32);
     if !value.is_finite() || value.abs() > 100_000.0 {
         return Err(Error::new("invalid_gui", "List scroll position unreadable"));
     }

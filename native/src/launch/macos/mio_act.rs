@@ -30,6 +30,7 @@ use crate::{
     gui_tree,
     memory::Reader,
     platform::{game_input::GameInput, Process},
+    xlayout::{fld, img, Class},
 };
 use serde_json::{json, Value};
 use std::{cell::RefCell, thread, time::Duration};
@@ -200,7 +201,7 @@ fn deep_all(
             deep_all(r, image, inner, wanted, depth - 1, budget, out)?;
         } else {
             let mut grids = Vec::new();
-            if r.u64(child)? == image + 0x36cca80 {
+            if r.u64(child)? == image + img(r.string_abi(), 0x36cca80)? {
                 grids.push(child);
             }
             for grid in grids {
@@ -208,7 +209,8 @@ fn deep_all(
                     // A grid item's own window carries the template name (the politics view's
                     // research_production slots are industrial_org_entry items, 1.19.4.1).
                     if pk::container_name(r, image, item.frame)?.as_deref() == Some(wanted) {
-                        out.push(item.frame + 0x30);
+                        const CONTAINER: Class = Class::new("CContainerWindow", 0x36ba978);
+                        out.push(item.frame + fld(r.string_abi(), &CONTAINER, 0x30)?);
                         continue;
                     }
                     deep_all(r, image, item.frame, wanted, depth - 1, budget, out)?;

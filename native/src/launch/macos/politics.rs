@@ -7,8 +7,9 @@ use crate::{
     error::{Error, Result},
     game,
     gui_tree::{self, Rect},
-    memory::{Reader, StringAbi},
+    memory::Reader,
     platform::{game_input::GameInput, Process},
+    xlayout::{fld, img, Class},
 };
 use serde_json::{json, Value};
 
@@ -34,10 +35,13 @@ struct Ui {
     advisor_slot_vtable: u64,
     advisor_button: u64,
     advisor_character: u64,
+    entry_advisor_button: u64,
+    entry_advisor_character: u64,
     character_key: u64,
     gui_from_idler: u64,
     root_windows: u64,
     character_entry_vtable: u64,
+    container_base: u64,
 }
 /// macOS Mach-O 089EA519, mapped live on 18 October 2026 (Germany test run):
 /// category entries and their slots (group, current idea, button), the
@@ -66,25 +70,73 @@ const MACOS: Ui = Ui {
     advisor_slot_vtable: 0x36a4d00,
     advisor_button: 0x28,
     advisor_character: 0x490,
+    entry_advisor_button: 0x28,
+    entry_advisor_character: 0x490,
     character_key: 0x38,
     gui_from_idler: 0x4c0,
     root_windows: 0x140,
     character_entry_vtable: 0x36a40e8,
+    container_base: 0x30,
 };
+/// Owners of the fields above (macOS 1.19.4.1 RTTI names and vtables). The
+/// interface manager, the selection window object and the idea-group record
+/// have no reviewed class; their Linux offsets need an anchor function.
+const IDLER: Class = Class::new("CInGameIdler", 0x35089d8);
+const MANAGER: Class = Class::new("idler.manager", 0);
+const GAME_GUI: Class = Class::new("idler.gui", 0);
+const VIEW: Class = Class::new("CCountryPoliticsView", 0x36511f0);
+const SELECTION: Class = Class::new("politics.selection_window", 0);
+const GRID: Class = Class::new("CStandardGridBox", 0x36cca80);
+const CATEGORY: Class = Class::new("CPoliticsIdeaCategoryEntry", 0x367f210);
+const KIND: Class = Class::new("idea.category", 0);
+const SLOT: Class = Class::new("CPoliticalIdeaItem", 0x367efa0);
+const IDEA: Class = Class::new("CIdea", 0x35882b8);
+const ENTRY: Class = Class::new("CPoliticalSelectableIdeaItem", 0x367f050);
+const ADVISOR_SLOT: Class = Class::new("CCommandStructureLeaderView", 0x36a4d00);
+const CHARACTER_ENTRY: Class = Class::new("CCountryCharacterSelectionItem", 0x36a40e8);
+const CHARACTER: Class = Class::new("CCharacter", 0x3530150);
+const CONTAINER: Class = Class::new("CContainerWindow", 0x36ba978);
 const GAME: (u32, u32) = (1920, 1080);
 
-fn ui(r: &Reader<'_>) -> Result<&'static Ui> {
-    match r.string_abi() {
-        StringAbi::LibCxx => Ok(&MACOS),
-        StringAbi::LibStdCxx => Err(Error::new(
-            "capability_unavailable",
-            "Politics input is not reviewed for this build",
-        )),
-    }
+/// The layout for this build (macOS values translated through xlayout).
+fn ui(r: &Reader<'_>) -> Result<Ui> {
+    let abi = r.string_abi();
+    let m = &MACOS;
+    Ok(Ui {
+        manager: fld(abi, &IDLER, m.manager)?,
+        view: fld(abi, &MANAGER, m.view)?,
+        view_root: fld(abi, &VIEW, m.view_root)?,
+        grid_items: fld(abi, &GRID, m.grid_items)?,
+        grid_vtable: img(abi, m.grid_vtable)?,
+        category_vtable: img(abi, m.category_vtable)?,
+        category_container: fld(abi, &CATEGORY, m.category_container)?,
+        category_kind: fld(abi, &CATEGORY, m.category_kind)?,
+        kind_key: fld(abi, &KIND, m.kind_key)?,
+        slot_vtable: img(abi, m.slot_vtable)?,
+        slot_idea: fld(abi, &SLOT, m.slot_idea)?,
+        slot_button: fld(abi, &SLOT, m.slot_button)?,
+        idea_key: fld(abi, &IDEA, m.idea_key)?,
+        window: fld(abi, &VIEW, m.window)?,
+        window_root: fld(abi, &SELECTION, m.window_root)?,
+        entry_vtable: img(abi, m.entry_vtable)?,
+        entry_container: fld(abi, &ENTRY, m.entry_container)?,
+        entry_idea: fld(abi, &ENTRY, m.entry_idea)?,
+        advisor_slot_vtable: img(abi, m.advisor_slot_vtable)?,
+        advisor_button: fld(abi, &ADVISOR_SLOT, m.advisor_button)?,
+        advisor_character: fld(abi, &ADVISOR_SLOT, m.advisor_character)?,
+        entry_advisor_button: fld(abi, &CHARACTER_ENTRY, m.entry_advisor_button)?,
+        entry_advisor_character: fld(abi, &CHARACTER_ENTRY, m.entry_advisor_character)?,
+        character_key: fld(abi, &CHARACTER, m.character_key)?,
+        gui_from_idler: fld(abi, &IDLER, m.gui_from_idler)?,
+        root_windows: fld(abi, &GAME_GUI, m.root_windows)?,
+        character_entry_vtable: img(abi, m.character_entry_vtable)?,
+        container_base: fld(abi, &CONTAINER, m.container_base)?,
+    })
 }
 fn view(r: &Reader<'_>, image: u64) -> Result<u64> {
     let idler = r.u64(image + game::layout(r).idler_global)?;
-    r.u64(r.u64(idler + ui(r)?.manager)? + ui(r)?.view)
+    let u = ui(r)?;
+    r.u64(r.u64(idler + u.manager)? + u.view)
 }
 fn open(r: &Reader<'_>, image: u64) -> Result<bool> {
     let u = ui(r)?;
@@ -106,8 +158,9 @@ fn items(r: &Reader<'_>, grid: u64) -> Result<Vec<u64>> {
 }
 /// Every grid box (depth-first) under a container.
 fn grids(r: &Reader<'_>, image: u64, object: u64, depth: u32, out: &mut Vec<u64>) -> Result<()> {
+    let grid = image + ui(r)?.grid_vtable;
     for child in gui_tree::children(r, object)? {
-        if r.u64(child)? == image + ui(r)?.grid_vtable {
+        if r.u64(child)? == grid {
             out.push(child);
         } else if depth < 6 {
             if let Some(inner) = gui_tree::container(r, child, image)? {
@@ -219,7 +272,7 @@ fn character_window(r: &Reader<'_>, image: u64) -> Result<Option<u64>> {
         let Some(window) = gui_tree::container(r, object, image)? else {
             continue;
         };
-        if gui_tree::name(r, window + 0x30, image)?.as_deref()
+        if gui_tree::name(r, window + u.container_base, image)?.as_deref()
             != Some("command_character_view_window")
         {
             continue;
@@ -252,10 +305,10 @@ fn advisor_options(r: &Reader<'_>, image: u64) -> Result<Vec<(String, bool, Rect
         if r.u64(entry)? != image + u.character_entry_vtable {
             continue;
         }
-        let Some(key) = character_key(r, r.u64(entry + u.advisor_character)?)? else {
+        let Some(key) = character_key(r, r.u64(entry + u.entry_advisor_character)?)? else {
             continue;
         };
-        let button = r.u64(entry + u.advisor_button)?;
+        let button = r.u64(entry + u.entry_advisor_button)?;
         if let Ok(rect) = gui_tree::rect(r, image, button, GAME) {
             out.push((key, !gui_tree::disabled(r, button)?, rect));
         }
