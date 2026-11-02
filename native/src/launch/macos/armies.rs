@@ -749,7 +749,20 @@ pub(super) fn create(
                     break;
                 }
             }
-            let held = read(process, selection_size)? as usize;
+            let mut held = read(process, selection_size)? as usize;
+            if held != expected && !(armies_here == 0 && held > 0 && held <= expected) {
+                // A box around the projected positions of the state's unassigned divisions.
+                if let Some(view) = view_before.as_ref() {
+                    let ids = unassigned_ids(view, state);
+                    find_state(process, keys, state)?;
+                    std::thread::sleep(std::time::Duration::from_millis(400));
+                    if let Some((from, to)) = projected_box(process, &ids)? {
+                        keys.drag(GAME, from, to)?;
+                        std::thread::sleep(std::time::Duration::from_millis(400));
+                        held = read(process, selection_size)? as usize;
+                    }
+                }
+            }
             // A part of a large state's unassigned divisions is fine when no army stands
             // there (seen live: a box held 5 of Eritrea's 18 with no army in the state).
             let partial_ok = armies_here == 0 && held > 0 && held <= expected;
