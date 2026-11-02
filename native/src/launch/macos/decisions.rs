@@ -8,8 +8,9 @@ use crate::{
     error::{Error, Result},
     game,
     gui_tree::{self, Rect},
-    memory::{Reader, StringAbi},
+    memory::Reader,
     platform::{game_input::GameInput, Process},
+    xlayout::{self, fld},
 };
 use serde_json::{json, Value};
 
@@ -45,14 +46,38 @@ const MACOS: Ui = Ui {
 const GAME: (u32, u32) = (1920, 1080);
 const LIST: (i32, i32) = (140, 1040);
 
-fn ui(r: &Reader<'_>) -> Result<&'static Ui> {
-    match r.string_abi() {
-        StringAbi::LibCxx => Ok(&MACOS),
-        StringAbi::LibStdCxx => Err(Error::new(
-            "capability_unavailable",
-            "Decision input is not reviewed for this build",
-        )),
-    }
+/// Owners of the [`MACOS`] fields (macOS 1.19.4.1 RTTI names and vtables; 0
+/// when no vtable is reviewed).
+const IDLER: xlayout::Class = xlayout::Class::new("CInGameIdler", 0x35089d8);
+const MANAGER: xlayout::Class = xlayout::Class::new("idler.manager", 0);
+const VIEW: xlayout::Class = xlayout::Class::new("decision.view", 0);
+const TOPBAR: xlayout::Class = xlayout::Class::new("topbar", 0);
+const GRID: xlayout::Class = xlayout::Class::new("CStandardGridBox", 0x36cca80);
+const GRID_ITEM: xlayout::Class = xlayout::Class::new("grid.item", 0);
+const ITEM: xlayout::Class = xlayout::Class::new("CDecisionViewDecisionItem", 0);
+const TARGETED_ITEM: xlayout::Class = xlayout::Class::new("CDecisionViewTargetedDecisionItem", 0);
+const TIMED_ITEM: xlayout::Class = xlayout::Class::new("CDecisionViewTimedDecisionItem", 0);
+const INSTANCE: xlayout::Class = xlayout::Class::new("decision.instance", 0);
+const DECISION: xlayout::Class = xlayout::Class::new("CDecision", 0);
+
+/// The decision joins of the running build ([`MACOS`] translated by `xlayout`).
+fn ui(r: &Reader<'_>) -> Result<Ui> {
+    let abi = r.string_abi();
+    let m = &MACOS;
+    Ok(Ui {
+        manager: fld(abi, &IDLER, m.manager)?,
+        view: fld(abi, &MANAGER, m.view)?,
+        view_root: fld(abi, &VIEW, m.view_root)?,
+        topbar: fld(abi, &MANAGER, m.topbar)?,
+        topbar_root: fld(abi, &TOPBAR, m.topbar_root)?,
+        grid_items: fld(abi, &GRID, m.grid_items)?,
+        item_container: fld(abi, &GRID_ITEM, m.item_container)?,
+        item_decision: fld(abi, &ITEM, m.item_decision)?,
+        targeted_decision: fld(abi, &TARGETED_ITEM, m.targeted_decision)?,
+        timed_decision: fld(abi, &TIMED_ITEM, m.timed_decision)?,
+        inner_decision: fld(abi, &INSTANCE, m.inner_decision)?,
+        decision_key: fld(abi, &DECISION, m.decision_key)?,
+    })
 }
 fn manager(r: &Reader<'_>, image: u64) -> Result<u64> {
     let idler = r.u64(image + game::layout(r).idler_global)?;

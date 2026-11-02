@@ -7,8 +7,9 @@ use super::ui::{clear_notices, dismiss, find_state, read, wait};
 use crate::{
     error::{Error, Result},
     game, gui_tree,
-    memory::{Reader, StringAbi},
+    memory::Reader,
     platform::{game_input::GameInput, Process},
+    xlayout::{self, fld},
 };
 use serde_json::{json, Value};
 
@@ -33,14 +34,27 @@ const MACOS: Ui = Ui {
 };
 const GAME: (u32, u32) = (1920, 1080);
 
-fn ui(r: &Reader<'_>) -> Result<&'static Ui> {
-    match r.string_abi() {
-        StringAbi::LibCxx => Ok(&MACOS),
-        StringAbi::LibStdCxx => Err(Error::new(
-            "capability_unavailable",
-            "State slot reads are not reviewed for this build",
-        )),
-    }
+/// Owners of the [`MACOS`] fields (macOS 1.19.4.1 RTTI names and vtables; 0
+/// when no vtable is reviewed).
+const IDLER: xlayout::Class = xlayout::Class::new("CInGameIdler", 0x35089d8);
+const MANAGER: xlayout::Class = xlayout::Class::new("idler.manager", 0);
+const VIEW: xlayout::Class = xlayout::Class::new("state.view", 0);
+const GRID: xlayout::Class = xlayout::Class::new("CStandardGridBox", 0x36cca80);
+const SLOT_ITEM: xlayout::Class = xlayout::Class::new("state.slot_item", 0);
+const TEXT_BOX: xlayout::Class = xlayout::Class::new("gui.text", 0);
+
+/// The state view joins of the running build ([`MACOS`] translated by `xlayout`).
+fn ui(r: &Reader<'_>) -> Result<Ui> {
+    let abi = r.string_abi();
+    let m = &MACOS;
+    Ok(Ui {
+        manager: fld(abi, &IDLER, m.manager)?,
+        view: fld(abi, &MANAGER, m.view)?,
+        view_root: fld(abi, &VIEW, m.view_root)?,
+        grid_items: fld(abi, &GRID, m.grid_items)?,
+        item_template: fld(abi, &SLOT_ITEM, m.item_template)?,
+        text: fld(abi, &TEXT_BOX, m.text)?,
+    })
 }
 fn root(r: &Reader<'_>, image: u64) -> Result<u64> {
     let u = ui(r)?;

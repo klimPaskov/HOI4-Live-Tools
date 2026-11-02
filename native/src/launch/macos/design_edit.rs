@@ -1333,7 +1333,12 @@ pub(super) fn obsolete_apply(
         let located = dui::locate(process, keys, id, kind, !want)?;
         dui::click_obsolete(process, keys, id, want)?;
         wait(process, "obsolete flag", |r, _| {
-            Ok((r.i32(d.variant.address + fleetmem::VARIANT_OBSOLETE)? & 0xff != 0) == want)
+            let obsolete = crate::xlayout::fld(
+                r.string_abi(),
+                &fleetmem::VARIANT,
+                fleetmem::VARIANT_OBSOLETE,
+            )?;
+            Ok((r.i32(d.variant.address + obsolete)? & 0xff != 0) == want)
         })?;
         if located.outdated_ticked {
             dui::untick_outdated(process, keys)?;

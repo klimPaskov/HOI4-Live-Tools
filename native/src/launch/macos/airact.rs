@@ -39,7 +39,6 @@ const F3: u16 = 99;
 // ---- memory ------------------------------------------------------------------------------------
 pub(super) fn own(process: &dyn Process) -> Result<(Vec<Base>, Vec<Wing>)> {
     read(process, |r, image| {
-        fleetmem::require_libcxx(r)?;
         let own =
             fleetmem::own_strategic(r, image, fleetmem::GS_AIR_MANAGER, fleetmem::AIR_BY_COUNTRY)?;
         airread::bases_and_wings(r, image, own)
@@ -51,7 +50,6 @@ pub(super) fn own_wing(
     image: u64,
     name: &str,
 ) -> Result<Option<Wing>> {
-    fleetmem::require_libcxx(r)?;
     let own =
         fleetmem::own_strategic(r, image, fleetmem::GS_AIR_MANAGER, fleetmem::AIR_BY_COUNTRY)?;
     Ok(airread::bases_and_wings(r, image, own)?
@@ -609,7 +607,6 @@ pub(super) fn rebase(
         keys.right_click(GAME, x, y)?;
         let (name, to) = (plan.wing.clone(), plan.to_base_id);
         wait(process, "rebase accepted", move |r, i| {
-            fleetmem::require_libcxx(r)?;
             let own = fleetmem::own_strategic(r, i, fleetmem::GS_AIR_MANAGER, fleetmem::AIR_BY_COUNTRY)?;
             let (_, wings) = airread::bases_and_wings(r, i, own)?;
             Ok(wings
@@ -729,7 +726,6 @@ pub(super) fn disband(process: &dyn Process, keys: &dyn GameInput, wing: &str) -
         }
         let name = wing.to_string();
         wait(process, "wing disbanded", move |r, i| {
-            fleetmem::require_libcxx(r)?;
             let own =
                 fleetmem::own_strategic(r, i, fleetmem::GS_AIR_MANAGER, fleetmem::AIR_BY_COUNTRY)?;
             let (_, wings) = airread::bases_and_wings(r, i, own)?;
@@ -770,7 +766,6 @@ pub(super) fn split(
         click(keys, x, y)?;
         let (name, base, before) = (plan.wing.clone(), plan.base_id, plan.planes);
         wait(process, "wing split", move |r, i| {
-            fleetmem::require_libcxx(r)?;
             let own =
                 fleetmem::own_strategic(r, i, fleetmem::GS_AIR_MANAGER, fleetmem::AIR_BY_COUNTRY)?;
             let (_, wings) = airread::bases_and_wings(r, i, own)?;
@@ -862,7 +857,6 @@ pub(super) fn merge(
         click(keys, x, y)?;
         let (names, total) = (plan.group.clone(), plan.total);
         wait(process, "wings merged", move |r, i| {
-            fleetmem::require_libcxx(r)?;
             let own =
                 fleetmem::own_strategic(r, i, fleetmem::GS_AIR_MANAGER, fleetmem::AIR_BY_COUNTRY)?;
             let (_, wings) = airread::bases_and_wings(r, i, own)?;
@@ -902,7 +896,6 @@ pub(super) fn hold(process: &dyn Process, keys: &dyn GameInput, wing: &str) -> R
         click(keys, x, y)?;
         let name = wing.to_string();
         wait(process, "wing held", move |r, i| {
-            fleetmem::require_libcxx(r)?;
             let own =
                 fleetmem::own_strategic(r, i, fleetmem::GS_AIR_MANAGER, fleetmem::AIR_BY_COUNTRY)?;
             let (_, wings) = airread::bases_and_wings(r, i, own)?;

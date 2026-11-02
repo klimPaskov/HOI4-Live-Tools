@@ -48,8 +48,9 @@ use super::ui::read;
 use crate::{
     error::{Error, Result},
     game,
-    memory::Reader,
+    memory::{Reader, StringAbi},
     platform::Process,
+    xlayout::{self, fld, img},
 };
 use serde_json::{json, Value};
 use std::{
@@ -84,6 +85,21 @@ const WG_TARGET: u64 = 0x3c;
 const WG_TYPE: u64 = 0x40;
 const WG_TYPE_VTABLE: u64 = 0x3587fd0;
 const WG_TYPE_KEY: u64 = 0x10;
+/// Owners of the fields above (macOS 1.19.4.1 RTTI names and vtables; the
+/// relation fields belong to the common base of the relation classes, whose
+/// vtable is not reviewed).
+const COUNTRY: xlayout::Class = xlayout::Class::new("CCountry", 0x357e388);
+const DIPLOMACY_STATUS: xlayout::Class = xlayout::Class::new("CDiplomacyStatus", DIPLOMACY_VTABLE);
+const RELATION: xlayout::Class = xlayout::Class::new("diplomacy.relation", 0);
+const SUBJECT: xlayout::Class = xlayout::Class::new("CSubjectRelation", 0x354aa60);
+const AUTONOMY: xlayout::Class = xlayout::Class::new("CAutonomousState", AUTONOMY_VTABLE);
+const GAME_STATE: xlayout::Class = xlayout::Class::new("CCurrentGameState", 0x35044e8);
+const FACTION_SYSTEM: xlayout::Class =
+    xlayout::Class::new("NFactions::CFactionSystem", FACTION_SYSTEM_VTABLE);
+const FACTION_CLASS: xlayout::Class = xlayout::Class::new("NFactions::CFaction", FACTION_VTABLE);
+const THREAT: xlayout::Class = xlayout::Class::new("CWorldThreat", THREAT_VTABLE);
+const WARGOAL: xlayout::Class = xlayout::Class::new("CWarGoal", WARGOAL_VTABLE);
+const WG_TYPE_CLASS: xlayout::Class = xlayout::Class::new("CWarGoalType", WG_TYPE_VTABLE);
 const START_DATE_RAW: i32 = 60_759_371;
 const TAG_BUDGET: usize = 1024;
 const RELATION_BUDGET: usize = 512;
@@ -120,6 +136,22 @@ fn classify(vtable: u64) -> Option<Kind> {
         0x354abc0 => Kind::Other("embargo"),
         _ => return None,
     })
+}
+/// The relation vtables [`classify`] knows (macOS keys).
+const RELATION_VTABLES: [u64; 17] = [
+    0x354a170, 0x354a720, 0x354aa60, 0x354a7f0, 0x354a310, 0x35438d8, 0x35439a8, 0x3543b30,
+    0x3543c00, 0x3543d00, 0x354a240, 0x354a3e0, 0x354a4b0, 0x354a580, 0x354a650, 0x354a8c0,
+    0x354abc0,
+];
+const WAR_VTABLE: u64 = 0x354a170;
+/// [`classify`] for an image-relative vtable of the running build.
+fn classify_in(abi: StringAbi, vtable: u64) -> Result<Option<Kind>> {
+    for mac in RELATION_VTABLES {
+        if img(abi, mac)? == vtable {
+            return Ok(classify(mac));
+        }
+    }
+    Ok(None)
 }
 
 // ---------------------------------------------------------------------------
@@ -285,8 +317,9 @@ fn world(r: &Reader<'_>, image: u64) -> Result<World> {
 }
 
 fn diplomacy_status(r: &Reader<'_>, image: u64, country: u64) -> Result<u64> {
-    let ds = r.u64(country + DIPLOMACY)?;
-    if ds == 0 || r.u64(ds)? != image + DIPLOMACY_VTABLE {
+    let abi = r.string_abi();
+    let ds = r.u64(country + fld(abi, &COUNTRY, DIPLOMACY)?)?;
+    if ds == 0 || r.u64(ds)? != image + img(abi, DIPLOMACY_VTABLE)? {
         return Err(Error::new(
             "invalid_type",
             "Country has no CDiplomacyStatus at the expected offset",
@@ -307,18 +340,22 @@ fn tag_index(value: i32) -> Result<i32> {
 }
 
 fn read_relation(r: &Reader<'_>, image: u64, ptr: u64) -> Result<Option<Rel>> {
+    let abi = r.string_abi();
     let vtable = r.u64(ptr)?;
-    let Some(kind) = vtable.checked_sub(image).and_then(classify) else {
+    let Some(kind) = (match vtable.checked_sub(image) {
+        Some(v) => classify_in(abi, v)?,
+        None => None,
+    }) else {
         return Ok(None);
     };
-    let a = tag_index(r.i32(ptr + REL_A)?)?;
-    let b = tag_index(r.i32(ptr + REL_B)?)?;
-    let start = r.i32(ptr + REL_START)?;
-    let end = r.i32(ptr + REL_END)?;
+    let a = tag_index(r.i32(ptr + fld(abi, &RELATION, REL_A)?)?)?;
+    let b = tag_index(r.i32(ptr + fld(abi, &RELATION, REL_B)?)?)?;
+    let start = r.i32(ptr + fld(abi, &RELATION, REL_START)?)?;
+    let end = r.i32(ptr + fld(abi, &RELATION, REL_END)?)?;
     let autonomy = if kind == Kind::Subject {
-        let state = r.u64(ptr + REL_AUTONOMY)?;
-        if state != 0 && r.u64(state)? == image + AUTONOMY_VTABLE {
-            r.string_bounded(state + 8, 96).ok()
+        let state = r.u64(ptr + fld(abi, &SUBJECT, REL_AUTONOMY)?)?;
+        if state != 0 && r.u64(state)? == image + img(abi, AUTONOMY_VTABLE)? {
+            r.string_bounded(state + fld(abi, &AUTONOMY, 8)?, 96).ok()
         } else {
             None
         }
@@ -339,7 +376,7 @@ fn read_relation(r: &Reader<'_>, image: u64, ptr: u64) -> Result<Option<Rel>> {
 /// Relations of one country plus how many entries had an unknown class.
 fn relations_of(r: &Reader<'_>, image: u64, country: u64) -> Result<(Vec<Rel>, usize)> {
     let ds = diplomacy_status(r, image, country)?;
-    let list = r.pointer_array(ds + DS_RELATIONS)?;
+    let list = r.pointer_array(ds + fld(r.string_abi(), &DIPLOMACY_STATUS, DS_RELATIONS)?)?;
     if list.len() > RELATION_BUDGET {
         return Err(Error::new("invalid_array", "Relation list too long"));
     }
@@ -358,10 +395,13 @@ fn relations_of(r: &Reader<'_>, image: u64, country: u64) -> Result<(Vec<Rel>, u
 }
 
 fn goals_of(r: &Reader<'_>, image: u64, country: u64) -> Result<Vec<Goal>> {
+    let abi = r.string_abi();
     let ds = diplomacy_status(r, image, country)?;
+    let wargoal = image + img(abi, WARGOAL_VTABLE)?;
+    let goal_type = image + img(abi, WG_TYPE_VTABLE)?;
     let mut out = Vec::new();
     for array in DS_GOAL_ARRAYS {
-        for ptr in r.pointer_array(ds + array)? {
+        for ptr in r.pointer_array(ds + fld(abi, &DIPLOMACY_STATUS, array)?)? {
             // One of these arrays holds plain tag indexes once a war is on
             // (value 6 seen live on 20 Dec 1936 with Luxembourg as the
             // target): anything that is not a heap pointer is skipped.
@@ -373,19 +413,20 @@ fn goals_of(r: &Reader<'_>, image: u64, country: u64) -> Result<Vec<Goal>> {
                 Err(e) if e.code == "read_bound" => continue,
                 Err(e) => return Err(e),
             };
-            if vtable != image + WARGOAL_VTABLE {
+            if vtable != wargoal {
                 continue;
             }
-            let ty = r.u64(ptr + WG_TYPE)?;
-            let kind = if ty != 0 && r.u64(ty)? == image + WG_TYPE_VTABLE {
-                r.string_bounded(ty + WG_TYPE_KEY, 96).ok()
+            let ty = r.u64(ptr + fld(abi, &WARGOAL, WG_TYPE)?)?;
+            let kind = if ty != 0 && r.u64(ty)? == goal_type {
+                r.string_bounded(ty + fld(abi, &WG_TYPE_CLASS, WG_TYPE_KEY)?, 96)
+                    .ok()
             } else {
                 None
             };
             out.push(Goal {
                 array,
-                attacker: r.i32(ptr + WG_ATTACKER)?,
-                target: r.i32(ptr + WG_TARGET)?,
+                attacker: r.i32(ptr + fld(abi, &WARGOAL, WG_ATTACKER)?)?,
+                target: r.i32(ptr + fld(abi, &WARGOAL, WG_TARGET)?)?,
                 kind,
             });
         }
@@ -401,19 +442,21 @@ struct Faction {
 }
 
 fn factions(r: &Reader<'_>, image: u64, w: &World) -> Result<Vec<Faction>> {
-    let system = r.u64(w.gs + GS_FACTIONS)?;
-    if system == 0 || r.u64(system)? != image + FACTION_SYSTEM_VTABLE {
+    let abi = r.string_abi();
+    let system = r.u64(w.gs + fld(abi, &GAME_STATE, GS_FACTIONS)?)?;
+    if system == 0 || r.u64(system)? != image + img(abi, FACTION_SYSTEM_VTABLE)? {
         return Err(Error::new("invalid_type", "No CFactionSystem at GS+0x3b8"));
     }
+    let faction = image + img(abi, FACTION_VTABLE)?;
     let mut out = Vec::new();
-    for ptr in r.pointer_array(system + FS_LIST)? {
-        if ptr == 0 || r.u64(ptr)? != image + FACTION_VTABLE {
+    for ptr in r.pointer_array(system + fld(abi, &FACTION_SYSTEM, FS_LIST)?)? {
+        if ptr == 0 || r.u64(ptr)? != faction {
             continue;
         }
-        let name = r.string_bounded(ptr + FACTION_NAME, 96)?;
+        let name = r.string_bounded(ptr + fld(abi, &FACTION_CLASS, FACTION_NAME)?, 96)?;
         let mut members = Vec::new();
         let mut unresolved = 0;
-        for member in r.pointer_array(ptr + FACTION_MEMBERS)? {
+        for member in r.pointer_array(ptr + fld(abi, &FACTION_CLASS, FACTION_MEMBERS)?)? {
             if member == 0 {
                 continue;
             }
@@ -432,20 +475,24 @@ fn factions(r: &Reader<'_>, image: u64, w: &World) -> Result<Vec<Faction>> {
 }
 
 fn world_tension(r: &Reader<'_>, image: u64, w: &World) -> Result<f64> {
-    let t = r.u64(w.gs + GS_THREAT)?;
-    if t == 0 || r.u64(t)? != image + THREAT_VTABLE {
+    let abi = r.string_abi();
+    let t = r.u64(w.gs + fld(abi, &GAME_STATE, GS_THREAT)?)?;
+    if t == 0 || r.u64(t)? != image + img(abi, THREAT_VTABLE)? {
         return Err(Error::new("invalid_type", "No CWorldThreat at GS+0x650"));
     }
-    Ok(f64::from(r.i32(t + THREAT_VALUE)?) / 100_000.0)
+    Ok(f64::from(r.i32(t + fld(abi, &THREAT, THREAT_VALUE)?)?) / 100_000.0)
 }
 
 /// Every war relation of every country, grouped by pointer identity.
 fn all_war_holders(r: &Reader<'_>, image: u64, w: &World) -> Result<Holders> {
+    let abi = r.string_abi();
+    let relations = fld(abi, &DIPLOMACY_STATUS, DS_RELATIONS)?;
+    let war = image + img(abi, WAR_VTABLE)?;
     let mut out: Holders = BTreeMap::new();
     for (tag, country) in &w.country_of {
         let ds = diplomacy_status(r, image, *country)?;
-        for ptr in r.pointer_array(ds + DS_RELATIONS)? {
-            if ptr != 0 && r.u64(ptr)? == image + 0x354a170 {
+        for ptr in r.pointer_array(ds + relations)? {
+            if ptr != 0 && r.u64(ptr)? == war {
                 let holders = out.entry(ptr).or_default();
                 if !holders.contains(tag) {
                     holders.push(*tag);
@@ -478,11 +525,10 @@ impl<'a> Names<'a> {
         }
         let code =
             super::states::tag_name(self.r, self.image, tag).unwrap_or_else(|_| format!("#{tag}"));
-        let name = self
-            .w
-            .country_of
-            .get(&tag)
-            .and_then(|c| self.r.string_bounded(c + 0x10, 96).ok());
+        let name = self.w.country_of.get(&tag).and_then(|c| {
+            let name = fld(self.r.string_abi(), &COUNTRY, 0x10).ok()?;
+            self.r.string_bounded(c + name, 96).ok()
+        });
         self.cache.insert(tag, (code.clone(), name.clone()));
         (code, name)
     }
@@ -769,7 +815,10 @@ pub(super) fn snapshot(
         .get(&target)
         .ok_or_else(|| Error::new("unknown_country", "Country not in the game"))?;
     let theirs: BTreeSet<u64> = r
-        .pointer_array(diplomacy_status(r, image, target_country)? + DS_RELATIONS)?
+        .pointer_array(
+            diplomacy_status(r, image, target_country)?
+                + fld(r.string_abi(), &DIPLOMACY_STATUS, DS_RELATIONS)?,
+        )?
         .into_iter()
         .collect();
     let (mine, _) = relations_of(r, image, w.player_country)?;
@@ -940,7 +989,10 @@ pub(super) fn countries(
                     continue;
                 }
             }
-            let ptrs = r.pointer_array(diplomacy_status(r, image, *country)? + DS_RELATIONS)?;
+            let ptrs = r.pointer_array(
+                diplomacy_status(r, image, *country)?
+                    + fld(r.string_abi(), &DIPLOMACY_STATUS, DS_RELATIONS)?,
+            )?;
             let mut overlord = None;
             let mut with_me: Vec<Value> = Vec::new();
             for ptr in ptrs {

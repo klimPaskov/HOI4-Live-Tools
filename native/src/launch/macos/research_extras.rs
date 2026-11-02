@@ -32,6 +32,7 @@ use crate::{
     game,
     memory::Reader,
     platform::Process,
+    xlayout::{self, fld},
 };
 use serde_json::{json, Value};
 use std::time::Instant;
@@ -43,6 +44,15 @@ const IDEA_BONUS_TYPE: &str = "18CIdeaResearchBonus";
 const SHARING_TYPE: &str = "N9NFactions25CTechnologySharingFactionE";
 const ARRAY_LIMIT: usize = 64;
 const CATEGORY_LIMIT: usize = 32;
+/// Owners of the fields read below (macOS 1.19.4.1 RTTI names; vtables not
+/// reviewed, so their Linux offsets need an anchor function).
+const STATUS: xlayout::Class = xlayout::Class::new("CTechnologyStatus", 0);
+const BONUS: xlayout::Class = xlayout::Class::new("CLimitedUseTechBonus", 0);
+const REDUCTION: xlayout::Class = xlayout::Class::new("CLimitedUseTechCostReduction", 0);
+const IDEA_BONUS: xlayout::Class = xlayout::Class::new("CIdeaResearchBonus", 0);
+const IDEA: xlayout::Class = xlayout::Class::new("CIdea", 0);
+const SHARING: xlayout::Class = xlayout::Class::new("NFactions::CTechnologySharingFaction", 0);
+const FACTION: xlayout::Class = xlayout::Class::new("NFactions::CFaction", 0x353e188);
 
 #[derive(Clone, Debug, PartialEq)]
 pub(super) struct TechBonus {
@@ -88,10 +98,15 @@ fn pointers(r: &Reader<'_>, array: u64, mangled: &str) -> Result<Vec<u64>> {
 
 pub(super) fn read_extras(r: &Reader<'_>, status: u64) -> Result<Extras> {
     mgmt::expect_type(r, status, STATUS_TYPE)?;
+    let abi = r.string_abi();
+    let f = |class: &xlayout::Class, offset: u64| fld(abi, class, offset);
+    // Fixed-size heads are read once; their length covers the last field read.
+    let span = |offsets: &[u64]| offsets.iter().max().map_or(8, |o| *o as usize + 8);
+    let (uses, bonus, instance) = (f(&BONUS, 8)?, f(&BONUS, 0x68)?, f(&BONUS, 0x28)?);
     let mut bonuses = Vec::new();
-    for b in pointers(r, status + 0xe8, BONUS_TYPE)? {
-        let head = r.read(b, 0x70)?;
-        let categories = r.pointer_array(b + 0x48)?;
+    for b in pointers(r, status + f(&STATUS, 0xe8)?, BONUS_TYPE)? {
+        let head = r.read(b, span(&[uses, bonus, instance]))?;
+        let categories = r.pointer_array(b + f(&BONUS, 0x48)?)?;
         if categories.len() > CATEGORY_LIMIT {
             return Err(Error::new("invalid_array", "Implausible bonus categories"));
         }
@@ -104,41 +119,43 @@ pub(super) fn read_extras(r: &Reader<'_>, status: u64) -> Result<Extras> {
             }
         }
         bonuses.push(TechBonus {
-            name: mgmt::text(r, b + 0x10, 128)?.unwrap_or_default(),
-            uses_left: mgmt::i32_at(&head, 8),
-            bonus: mgmt::i64_at(&head, 0x68) as f64 / FIXED_SCALE,
+            name: mgmt::text(r, b + f(&BONUS, 0x10)?, 128)?.unwrap_or_default(),
+            uses_left: mgmt::i32_at(&head, uses as usize),
+            bonus: mgmt::i64_at(&head, bonus as usize) as f64 / FIXED_SCALE,
             categories: names,
-            instance: mgmt::i32_at(&head, 0x28),
+            instance: mgmt::i32_at(&head, instance as usize),
         });
     }
     let mut reductions = Vec::new();
-    for c in pointers(r, status + 0x100, REDUCTION_TYPE)? {
-        let head = r.read(c, 0x30)?;
+    let (reduction, uses) = (f(&REDUCTION, 8)?, f(&REDUCTION, 0x28)?);
+    for c in pointers(r, status + f(&STATUS, 0x100)?, REDUCTION_TYPE)? {
+        let head = r.read(c, span(&[reduction, uses]))?;
         reductions.push(CostReduction {
-            name: mgmt::text(r, c + 0x30, 128)?.unwrap_or_default(),
-            uses_left: mgmt::i32_at(&head, 0x28),
-            reduction: mgmt::i64_at(&head, 8) as f64 / FIXED_SCALE,
+            name: mgmt::text(r, c + f(&REDUCTION, 0x30)?, 128)?.unwrap_or_default(),
+            uses_left: mgmt::i32_at(&head, uses as usize),
+            reduction: mgmt::i64_at(&head, reduction as usize) as f64 / FIXED_SCALE,
         });
     }
     let mut idea_bonuses = Vec::new();
-    for i in pointers(r, status + 0xb8, IDEA_BONUS_TYPE)? {
-        let head = r.read(i, 0x40)?;
-        let idea_ptr = mgmt::u64_at(&head, 0x38);
+    let (bonus, idea_at) = (f(&IDEA_BONUS, 0x30)?, f(&IDEA_BONUS, 0x38)?);
+    for i in pointers(r, status + f(&STATUS, 0xb8)?, IDEA_BONUS_TYPE)? {
+        let head = r.read(i, span(&[bonus, idea_at]))?;
+        let idea_ptr = mgmt::u64_at(&head, idea_at as usize);
         let idea = if mgmt::is_pointer(idea_ptr) {
-            mgmt::text(r, idea_ptr + 0x18, 128)?.unwrap_or_default()
+            mgmt::text(r, idea_ptr + f(&IDEA, 0x18)?, 128)?.unwrap_or_default()
         } else {
             String::new()
         };
         idea_bonuses.push(IdeaBonus {
             idea,
-            category: mgmt::text(r, i + 0x10, 64)?.unwrap_or_default(),
-            bonus: mgmt::i64_at(&head, 0x30) as f64 / FIXED_SCALE,
+            category: mgmt::text(r, i + f(&IDEA_BONUS, 0x10)?, 64)?.unwrap_or_default(),
+            bonus: mgmt::i64_at(&head, bonus as usize) as f64 / FIXED_SCALE,
         });
     }
     let mut sharing = Vec::new();
-    for s in pointers(r, status + 0x118, SHARING_TYPE)? {
-        let faction = mgmt::pointer(r, s + 0x48)?;
-        sharing.push(mgmt::text(r, faction + 0x18, 64)?.unwrap_or_default());
+    for s in pointers(r, status + f(&STATUS, 0x118)?, SHARING_TYPE)? {
+        let faction = mgmt::pointer(r, s + f(&SHARING, 0x48)?)?;
+        sharing.push(mgmt::text(r, faction + f(&FACTION, 0x18)?, 64)?.unwrap_or_default());
     }
     Ok(Extras {
         bonuses,
@@ -151,7 +168,7 @@ pub(super) fn read_extras(r: &Reader<'_>, status: u64) -> Result<Extras> {
 fn snapshot(r: &Reader<'_>, image: u64) -> Result<Extras> {
     let own = mgmt::own(r, image)?;
     let status = mgmt::pointer(r, own.country + game::layout(r).country_technology_status)?;
-    if r.u64(status + 0x130)? != own.country {
+    if r.u64(status + fld(r.string_abi(), &STATUS, 0x130)?)? != own.country {
         return Err(Error::new(
             "invalid_research_owner",
             "Own research status country join required",
