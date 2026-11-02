@@ -236,9 +236,19 @@ def close_esc_menu_if_open(session):
 CONFIRM_RX = r"^\W*(yes|[o0]k|confirm|exit|quit|exit\s*game|exit\s*to\s*menu)\W*$"
 
 
+def _rest_cursor_above_dialog(session):
+    """Move the cursor off a centred dialog before reading it. With -debug the GUI inspector shows a tooltip for
+    the element under the cursor, and after an Exit Game click that tooltip covered the confirmation's OK button
+    (seen live on 1.19.4.1: hoi4_shutdown then waited without confirming)."""
+    w, h = session.window.size()
+    session.input.move(int(w * 0.5), int(h * 0.12))
+    session.sleep(0.4)
+
+
 def _confirm_if_asked(session, before_texts):
     """Click the confirmation button of a dialog that appeared after an exit button, if any."""
     session.sleep(1.2)
+    _rest_cursor_above_dialog(session)
     img, res = ui.ocr_screen(session, scale=1.5)
     new = [l for l in res.lines if l.text not in before_texts and re.search(CONFIRM_RX, l.text, re.I)]
     if not new:
@@ -280,6 +290,7 @@ def quit_to_main_menu(session, timeout=240):
 
 def _click_ok(session):
     """Click the OK / Yes button of a modal dialog in the centre of the screen. Returns its label or None."""
+    _rest_cursor_above_dialog(session)
     img = session.grab()
     h, w = img.shape[:2]
     region = [int(w * 0.25), int(h * 0.2), int(w * 0.5), int(h * 0.6)]
@@ -376,6 +387,12 @@ def new_game(session, country=None, bookmark=None, timeout=600, start=True):
         return state["screen"]
 
     st = stage()
+    for _ in range(4):
+        # the menu fades in after hoi4_launch reports it, and a half-drawn frame reads as unknown
+        if st not in ("unknown", "loading"):
+            break
+        session.sleep(2.0)
+        st = stage()
     steps.append({"stage": st})
     if st == "main_menu":
         steps.append(ui.click_text(session, r"single\s*player"))
