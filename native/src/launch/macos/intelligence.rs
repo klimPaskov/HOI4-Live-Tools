@@ -34,6 +34,7 @@ use crate::{
     game,
     memory::Reader,
     platform::Process,
+    xlayout::{self, fld, img},
 };
 use serde_json::{json, Value};
 use std::{path::Path, time::Instant};
@@ -52,6 +53,16 @@ const UPGRADE_TYPE: &str = "14CAgencyUpgrade";
 const UPGRADE_KEY: u64 = 0x10;
 const NULL_BRANCH_TYPE: &str = "11TNullObjectI20CAgencyUpgradeBranchS0_E";
 const LIMIT: usize = 64;
+/// Owners of the fields above (macOS 1.19.4.1 RTTI names; the objects are
+/// checked by type name, their vtables are not reviewed).
+const COUNTRY: xlayout::Class = xlayout::Class::new("CCountry", 0x357e388);
+const AGENCY_CLASS: xlayout::Class = xlayout::Class::new("CIntelligenceAgency", 0);
+const DB_CLASS: xlayout::Class = xlayout::Class::new("CAgencyUpgradeDatabase", 0);
+const BRANCH_CLASS: xlayout::Class = xlayout::Class::new("CAgencyUpgradeBranch", 0);
+const UPGRADE_CLASS: xlayout::Class = xlayout::Class::new("CAgencyUpgrade", 0);
+fn at(r: &Reader<'_>, class: &xlayout::Class, mac: u64) -> Result<u64> {
+    fld(r.string_abi(), class, mac)
+}
 
 /// Mission classes of the game binary (`NOperativeMissions::*`), as keys.
 pub(super) const MISSIONS: &[&str] = &[
@@ -72,22 +83,23 @@ pub(super) struct Live {
 }
 
 fn branch_name(r: &Reader<'_>, branch: u64) -> Result<String> {
-    Ok(mgmt::text(r, branch + BRANCH_KEY, 64)?.unwrap_or_default())
+    Ok(mgmt::text(r, branch + at(r, &BRANCH_CLASS, BRANCH_KEY)?, 64)?.unwrap_or_default())
 }
 
 pub(super) fn read_live(r: &Reader<'_>, image: u64, country: u64) -> Result<Live> {
-    let agency = mgmt::pointer(r, country + AGENCY)?;
+    let agency = mgmt::pointer(r, country + at(r, &COUNTRY, AGENCY)?)?;
     mgmt::expect_type(r, agency, AGENCY_TYPE)?;
-    if r.u64(agency + AGENCY_OWNER)? != country {
+    if r.u64(agency + at(r, &AGENCY_CLASS, AGENCY_OWNER)?)? != country {
         return Err(Error::new(
             "invalid_owner",
             "Own intelligence agency country join required",
         ));
     }
-    let agency_name = mgmt::text(r, agency + AGENCY_NAME, 96)?.filter(|n| !n.is_empty());
-    let db = mgmt::pointer(r, image + UPGRADE_DB)?;
+    let agency_name =
+        mgmt::text(r, agency + at(r, &AGENCY_CLASS, AGENCY_NAME)?, 96)?.filter(|n| !n.is_empty());
+    let db = mgmt::pointer(r, image + img(r.string_abi(), UPGRADE_DB)?)?;
     mgmt::expect_type(r, db, UPGRADE_DB_TYPE)?;
-    let items = r.pointer_array(db + DB_BRANCHES)?;
+    let items = r.pointer_array(db + at(r, &DB_CLASS, DB_BRANCHES)?)?;
     if items.len() > LIMIT {
         return Err(Error::new("invalid_array", "Implausible agency branches"));
     }
@@ -101,7 +113,7 @@ pub(super) fn read_live(r: &Reader<'_>, image: u64, country: u64) -> Result<Live
             continue;
         }
         mgmt::expect_type(r, item, BRANCH_TYPE)?;
-        let upgrades = r.pointer_array(item + BRANCH_UPGRADES)?;
+        let upgrades = r.pointer_array(item + at(r, &BRANCH_CLASS, BRANCH_UPGRADES)?)?;
         if upgrades.len() > LIMIT {
             return Err(Error::new("invalid_array", "Implausible branch upgrades"));
         }
@@ -111,7 +123,8 @@ pub(super) fn read_live(r: &Reader<'_>, image: u64, country: u64) -> Result<Live
                 return Err(Error::new("invalid_pointer", "Stale agency upgrade"));
             }
             mgmt::expect_type(r, upgrade, UPGRADE_TYPE)?;
-            keys.push(mgmt::text(r, upgrade + UPGRADE_KEY, 96)?.unwrap_or_default());
+            let key = upgrade + at(r, &UPGRADE_CLASS, UPGRADE_KEY)?;
+            keys.push(mgmt::text(r, key, 96)?.unwrap_or_default());
         }
         branches.push((branch_name(r, item)?, keys));
     }

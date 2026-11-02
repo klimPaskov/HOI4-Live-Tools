@@ -17,11 +17,12 @@ use super::ui::{accept_command, clear_notices, read, settled, wait};
 use crate::{
     error::{Error, Result},
     gui_tree::{self, Rect},
-    memory::{Reader, StringAbi},
+    memory::Reader,
     platform::{
         game_input::{GameInput, Key},
         Process,
     },
+    xlayout::{self, fld, img},
 };
 use serde_json::{json, Value};
 
@@ -37,6 +38,16 @@ const ITEM_CONTAINER: u64 = 0x10;
 const CONTAINER_VTABLE: u64 = 0x36ba978;
 const CONTAINER_BASE: u64 = 0x30;
 const TEXT: u64 = 0x100;
+/// Owners of the fields above (macOS 1.19.4.1 RTTI names and vtables; 0 where
+/// the owning class has no reviewed vtable).
+const IDLER: xlayout::Class = xlayout::Class::new("CInGameIdler", 0x35089d8);
+const IFACE_MANAGER: xlayout::Class = xlayout::Class::new("idler.manager", 0);
+const TRADE_VIEW: xlayout::Class = xlayout::Class::new("CCountryTradeView", 0);
+const OFFER: xlayout::Class = xlayout::Class::new("CTradeOfferWindow", OFFER_VTABLE);
+const GRID: xlayout::Class = xlayout::Class::new("CStandardGridBox", 0x36cca80);
+const GRID_ITEM: xlayout::Class = xlayout::Class::new("grid.item", 0);
+const CONTAINER: xlayout::Class = xlayout::Class::new("CContainerWindow", CONTAINER_VTABLE);
+const TEXT_BOX: xlayout::Class = xlayout::Class::new("gui.text", 0);
 const GAME: (u32, u32) = (1920, 1080);
 const RESOURCES: [&str; 7] = [
     "oil",
@@ -54,43 +65,45 @@ const SLIDER_ABOVE_SEND: f64 = 53.0;
 const SLIDER_LENGTH: f64 = 300.0;
 const SLIDER_ARROW: f64 = 14.0;
 
-fn view_root(r: &Reader<'_>, image: u64) -> Result<u64> {
-    if r.string_abi() != StringAbi::LibCxx {
-        return Err(Error::new(
-            "capability_unavailable",
-            "The trade view is not reviewed for this build",
-        ));
-    }
+/// The CCountryTradeView object (interface manager slot).
+fn trade_view(r: &Reader<'_>, image: u64) -> Result<u64> {
+    let abi = r.string_abi();
     let idler = r.u64(image + crate::game::layout(r).idler_global)?;
-    let view = r.u64(r.u64(idler + MANAGER)? + VIEW)?;
-    gui_tree::container(r, r.u64(view + ROOT)?, image)?
+    let manager = r.u64(idler + fld(abi, &IDLER, MANAGER)?)?;
+    r.u64(manager + fld(abi, &IFACE_MANAGER, VIEW)?)
+}
+fn view_root(r: &Reader<'_>, image: u64) -> Result<u64> {
+    let view = trade_view(r, image)?;
+    let root = r.u64(view + fld(r.string_abi(), &TRADE_VIEW, ROOT)?)?;
+    gui_tree::container(r, root, image)?
         .ok_or_else(|| Error::new("invalid_gui", "Trade view root unavailable"))
 }
 fn open(r: &Reader<'_>, image: u64) -> Result<bool> {
     gui_tree::visible(r, view_root(r, image)?)
 }
 fn offer_root(r: &Reader<'_>, image: u64) -> Result<u64> {
-    let idler = r.u64(image + crate::game::layout(r).idler_global)?;
-    let view = r.u64(r.u64(idler + MANAGER)? + VIEW)?;
+    let abi = r.string_abi();
+    let view = trade_view(r, image)?;
     // 1.19.4: the view points at its CTradeOfferWindow (+0x1ac8), whose root container is at
     // +0xd60 (named `tradeoffer_window`). Both are checked before the root is trusted.
-    let offer = r.u64(view + OFFER_WINDOW)?;
+    let offer = r.u64(view + fld(abi, &TRADE_VIEW, OFFER_WINDOW)?)?;
     if !(0x10000..=0x7fff_ffff_0000).contains(&offer) || offer % 8 != 0 {
         return Err(Error::new(
             "invalid_gui",
             "Trade offer window not created yet",
         ));
     }
-    if r.u64(offer)? != image + OFFER_VTABLE {
+    if r.u64(offer)? != image + img(abi, OFFER_VTABLE)? {
         return Err(Error::new(
             "invalid_gui",
             "Trade offer window class unexpected",
         ));
     }
-    let root = r.u64(offer + OFFER_ROOT)?;
+    let root = r.u64(offer + fld(abi, &OFFER, OFFER_ROOT)?)?;
     if root == 0
-        || r.u64(root)? != image + CONTAINER_VTABLE
-        || gui_tree::name(r, root + CONTAINER_BASE, image)?.as_deref() != Some("tradeoffer_window")
+        || r.u64(root)? != image + img(abi, CONTAINER_VTABLE)?
+        || gui_tree::name(r, root + fld(abi, &CONTAINER, CONTAINER_BASE)?, image)?.as_deref()
+            != Some("tradeoffer_window")
     {
         return Err(Error::new(
             "invalid_gui",
@@ -108,7 +121,7 @@ fn offer_open(r: &Reader<'_>, image: u64) -> Result<bool> {
 }
 fn text_of(r: &Reader<'_>, image: u64, parent: u64, name: &str) -> Result<String> {
     Ok(match find(r, image, parent, name, 0)? {
-        Some(t) => clean(&r.string_bounded(t + TEXT, 512)?),
+        Some(t) => clean(&r.string_bounded(t + fld(r.string_abi(), &TEXT_BOX, TEXT)?, 512)?),
         None => String::new(),
     })
 }
@@ -133,13 +146,16 @@ fn grid_entries(r: &Reader<'_>, image: u64, window: &str, grid: &str) -> Result<
             format!("Trade list {grid} not found"),
         )
     })?;
-    let (_, data, count) = r.array_header(grid + GRID_ITEMS)?;
+    let abi = r.string_abi();
+    let (_, data, count) = r.array_header(grid + fld(abi, &GRID, GRID_ITEMS)?)?;
+    let container = image + img(abi, CONTAINER_VTABLE)?;
+    let container_base = fld(abi, &CONTAINER, CONTAINER_BASE)?;
     let mut out = Vec::new();
     for index in 0..count.min(128) as u64 {
         let item = r.u64(data + index * 8)?;
-        let entry = r.u64(item + ITEM_CONTAINER)?;
-        let base = if r.u64(entry)? == image + CONTAINER_VTABLE {
-            entry + CONTAINER_BASE
+        let entry = r.u64(item + fld(abi, &GRID_ITEM, ITEM_CONTAINER)?)?;
+        let base = if r.u64(entry)? == container {
+            entry + container_base
         } else {
             entry
         };

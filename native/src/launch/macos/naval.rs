@@ -6,13 +6,14 @@
 //! ship names, hulls, locations (provinces 241, 6332, 6389 and their states
 //! 56, 763, 58) and naval base levels (241 = 8, 6332 = 5) all matched.
 //! Fields marked `validated:false` in the output have no independent check.
-use super::fleetmem::{self, expect, fixed_at, is_object, pointers, require_libcxx, round3, Place};
+use super::fleetmem::{self, expect, fixed_at, is_object, pointers, round3, Place};
 use crate::{
     economy,
     error::{Error, Result},
     memory::Reader,
     platform::Process,
     production_lines,
+    xlayout::{self, fld},
 };
 use serde_json::{json, Map, Value};
 use std::collections::BTreeMap;
@@ -54,11 +55,27 @@ const SHIP_XP_FACTOR: u64 = 0x6e8;
 const SHIP_NAME: u64 = 0x7d0;
 /// Own convoy count: the embedded CConvoys at country+0xf88, field +0x88
 /// (194 in memory and on the top bar on 10 April 1938).
-const COUNTRY_CONVOYS: u64 = 0xf88 + 0x88;
+const COUNTRY_CONVOYS: u64 = 0xf88;
+const CONVOYS_COUNT: u64 = 0x88;
 const STRATEGIC_NAVY_BASES: u64 = 0x18;
 const NAVAL_BASE_VTABLE: u64 = 0x351cf18;
 const NAVAL_BASE_PROVINCE: u64 = 0x10;
 const NAVAL_BASE_LEVEL: u64 = 0x14;
+/// Owners of the fields above (macOS 1.19.4.1 RTTI names and vtables; 0 where
+/// the owning class has no reviewed vtable). Vtables are passed to fleetmem's
+/// checks as macOS keys.
+const COUNTRY: xlayout::Class = xlayout::Class::new("CCountry", 0x357e388);
+const FLEET: xlayout::Class = xlayout::Class::new("CFleet", FLEET_VTABLE);
+const TASK_FORCE: xlayout::Class = xlayout::Class::new("CTaskForce", TASK_FORCE_VTABLE);
+const SHIP: xlayout::Class = xlayout::Class::new("CShip", SHIP_VTABLE);
+const CHARACTERS: xlayout::Class = xlayout::Class::new("CCountryCharacters", 0x3530728);
+const NAVY_LEADER: xlayout::Class = xlayout::Class::new("CNavyLeader", 0);
+const CONVOYS: xlayout::Class = xlayout::Class::new("CConvoys", 0);
+const STRATEGIC_NAVY: xlayout::Class = xlayout::Class::new("strategic.navy", 0);
+const NAVAL_BASE: xlayout::Class = xlayout::Class::new("CNavalBase", NAVAL_BASE_VTABLE);
+fn at(r: &Reader<'_>, class: &xlayout::Class, mac: u64) -> Result<u64> {
+    fld(r.string_abi(), class, mac)
+}
 const FLEET_LIMIT: usize = 64;
 const TF_LIMIT: usize = 64;
 const SHIP_LIMIT: usize = 512;
@@ -121,7 +138,7 @@ pub(super) struct Fleet {
 
 fn ship(r: &Reader<'_>, image: u64, address: u64) -> Result<Ship> {
     expect(r, address, SHIP_VTABLE, image, "Ship")?;
-    let variants = pointers(r, address + SHIP_VARIANTS, 8)?;
+    let variants = pointers(r, address + at(r, &SHIP, SHIP_VARIANTS)?, 8)?;
     let (variant, hull, max_strength) = match variants.first() {
         Some(v) if *v != 0 => {
             let v = fleetmem::variant(r, image, *v)?;
@@ -130,43 +147,44 @@ fn ship(r: &Reader<'_>, image: u64, address: u64) -> Result<Ship> {
         _ => (String::new(), String::new(), 0.0),
     };
     Ok(Ship {
-        id: r.i32(address + SHIP_ID)?,
-        name: r.string_bounded(address + SHIP_NAME, 128)?,
-        unit_type: r.string_bounded(address + SHIP_TYPE, 64)?,
+        id: r.i32(address + at(r, &SHIP, SHIP_ID)?)?,
+        name: r.string_bounded(address + at(r, &SHIP, SHIP_NAME)?, 128)?,
+        unit_type: r.string_bounded(address + at(r, &SHIP, SHIP_TYPE)?, 64)?,
         hull,
         variant,
-        strength: fixed_at(r, address + SHIP_HP)?,
+        strength: fixed_at(r, address + at(r, &SHIP, SHIP_HP)?)?,
         max_strength,
-        max_organisation: fixed_at(r, address + SHIP_MAX_ORG)?,
-        experience_points: fixed_at(r, address + SHIP_XP)?,
-        experience_factor: fixed_at(r, address + SHIP_XP_FACTOR)?,
-        morale: fixed_at(r, address + SHIP_MORALE)?,
+        max_organisation: fixed_at(r, address + at(r, &SHIP, SHIP_MAX_ORG)?)?,
+        experience_points: fixed_at(r, address + at(r, &SHIP, SHIP_XP)?)?,
+        experience_factor: fixed_at(r, address + at(r, &SHIP, SHIP_XP_FACTOR)?)?,
+        morale: fixed_at(r, address + at(r, &SHIP, SHIP_MORALE)?)?,
     })
 }
 fn task_force(r: &Reader<'_>, image: u64, address: u64) -> Result<TaskForce> {
     expect(r, address, TASK_FORCE_VTABLE, image, "Task force")?;
     let mut ships = Vec::new();
-    for s in pointers(r, address + TF_SHIPS, SHIP_LIMIT)? {
+    for s in pointers(r, address + at(r, &TASK_FORCE, TF_SHIPS)?, SHIP_LIMIT)? {
         if s != 0 {
             ships.push(ship(r, image, s)?);
         }
     }
     Ok(TaskForce {
-        name: r.string_bounded(address + TF_NAME, 128)?,
-        place: fleetmem::place(r, r.u64(address + TF_PROVINCE)?)?,
-        mission_code: r.i32(address + TF_MISSION_CODE)?,
+        name: r.string_bounded(address + at(r, &TASK_FORCE, TF_NAME)?, 128)?,
+        place: fleetmem::place(r, r.u64(address + at(r, &TASK_FORCE, TF_PROVINCE)?)?)?,
+        mission_code: r.i32(address + at(r, &TASK_FORCE, TF_MISSION_CODE)?)?,
         ships,
     })
 }
 /// Name of the navy leader whose handle equals `handle` (`unknown` when none matches).
 fn admiral_name(r: &Reader<'_>, country: u64, handle: &[u8]) -> Result<String> {
-    let characters = r.u64(country + COUNTRY_CHARACTERS)?;
+    let characters = r.u64(country + at(r, &COUNTRY, COUNTRY_CHARACTERS)?)?;
     if characters == 0 {
         return Ok("unknown".to_string());
     }
-    for leader in pointers(r, characters + CHARACTERS_NAVY_LEADERS, 64)? {
-        if leader != 0 && r.read(leader + LEADER_HANDLE, 8)? == handle {
-            return r.string_bounded(leader + LEADER_NAME, 128);
+    let leaders = characters + at(r, &CHARACTERS, CHARACTERS_NAVY_LEADERS)?;
+    for leader in pointers(r, leaders, 64)? {
+        if leader != 0 && r.read(leader + at(r, &NAVY_LEADER, LEADER_HANDLE)?, 8)? == handle {
+            return r.string_bounded(leader + at(r, &NAVY_LEADER, LEADER_NAME)?, 128);
         }
     }
     Ok("unknown".to_string())
@@ -174,14 +192,14 @@ fn admiral_name(r: &Reader<'_>, country: u64, handle: &[u8]) -> Result<String> {
 /// Own fleets of `country` with their task forces and ships.
 pub(super) fn fleets(r: &Reader<'_>, image: u64, country: u64) -> Result<Vec<Fleet>> {
     let mut out = Vec::new();
-    for f in pointers(r, country + COUNTRY_FLEETS, FLEET_LIMIT)? {
+    for f in pointers(r, country + at(r, &COUNTRY, COUNTRY_FLEETS)?, FLEET_LIMIT)? {
         expect(r, f, FLEET_VTABLE, image, "Fleet")?;
         let mut task_forces = Vec::new();
-        for tf in pointers(r, f + FLEET_TASK_FORCES, TF_LIMIT)? {
+        for tf in pointers(r, f + at(r, &FLEET, FLEET_TASK_FORCES)?, TF_LIMIT)? {
             task_forces.push(task_force(r, image, tf)?);
         }
         let mut regions = Vec::new();
-        for region in pointers(r, f + FLEET_REGIONS, REGION_LIMIT)? {
+        for region in pointers(r, f + at(r, &FLEET, FLEET_REGIONS)?, REGION_LIMIT)? {
             if region == 0 {
                 continue;
             }
@@ -194,16 +212,16 @@ pub(super) fn fleets(r: &Reader<'_>, image: u64, country: u64) -> Result<Vec<Fle
                 r.string_bounded(template + fleetmem::TEMPLATE_NAME, 128)?,
             ));
         }
-        let handle = r.read(f + FLEET_LEADER, 8)?;
+        let handle = r.read(f + at(r, &FLEET, FLEET_LEADER)?, 8)?;
         let admiral = if handle.iter().all(|b| *b == 0) {
             None
         } else {
             Some(admiral_name(r, country, &handle)?)
         };
         out.push(Fleet {
-            name: r.string_bounded(f + FLEET_NAME, 128)?,
+            name: r.string_bounded(f + at(r, &FLEET, FLEET_NAME)?, 128)?,
             admiral,
-            home_port: fleetmem::place(r, r.u64(f + FLEET_HOME_PORT)?)?,
+            home_port: fleetmem::place(r, r.u64(f + at(r, &FLEET, FLEET_HOME_PORT)?)?)?,
             regions,
             task_forces,
         });
@@ -280,7 +298,6 @@ pub(super) fn fleets_tool(process: &dyn Process, args: &Map<String, Value>) -> R
         return Err(Error::new("invalid_arguments", "Invalid fleet filter"));
     }
     let found = super::ui::read(process, |r, image| {
-        require_libcxx(r)?;
         let (country, _) = economy::own_production(r, image)?;
         fleets(r, image, country)
     })?;
@@ -301,12 +318,15 @@ fn naval_bases(r: &Reader<'_>, image: u64) -> Result<Vec<NavalBase>> {
         fleetmem::NAVY_BY_COUNTRY,
     )?;
     let mut out = Vec::new();
-    for base in pointers(r, navy + STRATEGIC_NAVY_BASES, 64)? {
+    for base in pointers(r, navy + at(r, &STRATEGIC_NAVY, STRATEGIC_NAVY_BASES)?, 64)? {
         if !is_object(r, base, NAVAL_BASE_VTABLE, image)? {
             continue;
         }
-        let province = r.i32(base + NAVAL_BASE_PROVINCE)?;
-        out.push((province, r.i32(base + NAVAL_BASE_LEVEL)?));
+        let province = r.i32(base + at(r, &NAVAL_BASE, NAVAL_BASE_PROVINCE)?)?;
+        out.push((
+            province,
+            r.i32(base + at(r, &NAVAL_BASE, NAVAL_BASE_LEVEL)?)?,
+        ));
     }
     Ok(out
         .into_iter()
@@ -326,9 +346,9 @@ pub(super) fn convoys_tool(process: &dyn Process, args: &Map<String, Value>) -> 
         return Err(Error::new("invalid_arguments", "Unexpected argument"));
     }
     let (total, bases, lines) = super::ui::read(process, |r, image| {
-        require_libcxx(r)?;
         let (country, _) = economy::own_production(r, image)?;
-        let total = r.i32(country + COUNTRY_CONVOYS)?;
+        let convoys = country + at(r, &COUNTRY, COUNTRY_CONVOYS)? + at(r, &CONVOYS, CONVOYS_COUNT)?;
+        let total = r.i32(convoys)?;
         let bases = naval_bases(r, image)?;
         let lines = production_lines::own_lines(r, image)?;
         Ok((total, bases, lines))

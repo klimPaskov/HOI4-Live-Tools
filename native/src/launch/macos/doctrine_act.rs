@@ -29,6 +29,7 @@ use crate::{
     error::{Error, Result},
     gui_tree,
     platform::{game_input::GameInput, Process},
+    xlayout::{self, fld, img},
 };
 use serde_json::{json, Value};
 use std::{cell::RefCell, thread, time::Duration};
@@ -367,20 +368,30 @@ fn embedded_selection_root(r: &crate::memory::Reader<'_>, i: u64) -> Result<Opti
     const FOLDER_VIEW: u64 = 0x498;
     const SELECTION: u64 = 0x4f0;
     const SELECTION_ROOT: u64 = 0x20;
+    const MANAGER: u64 = 0x670;
+    const IDLER: xlayout::Class = xlayout::Class::new("CInGameIdler", 0x35089d8);
+    const IFACE_MANAGER: xlayout::Class = xlayout::Class::new("idler.manager", 0);
+    const VIEW: xlayout::Class =
+        xlayout::Class::new(pk::DOCTRINE_VIEW.name, pk::DOCTRINE_VIEW.vtable);
+    const FOLDER: xlayout::Class = xlayout::Class::new("CFolderView", 0);
+    const LIST: xlayout::Class =
+        xlayout::Class::new(pk::DOCTRINE_SELECTION.name, pk::DOCTRINE_SELECTION.vtable);
+    let abi = r.string_abi();
     let idler = r.u64(i + crate::game::layout(r).idler_global)?;
-    let view = r.u64(r.u64(idler + 0x670)? + MANAGER_SLOT)?;
-    if view == 0 || r.u64(view)? != i + pk::DOCTRINE_VIEW.vtable {
+    let manager = r.u64(idler + fld(abi, &IDLER, MANAGER)?)?;
+    let view = r.u64(manager + fld(abi, &IFACE_MANAGER, MANAGER_SLOT)?)?;
+    if view == 0 || r.u64(view)? != i + img(abi, pk::DOCTRINE_VIEW.vtable)? {
         return Ok(None);
     }
-    let folder = r.u64(view + FOLDER_VIEW)?;
+    let folder = r.u64(view + fld(abi, &VIEW, FOLDER_VIEW)?)?;
     if folder == 0 {
         return Ok(None);
     }
-    let list = r.u64(folder + SELECTION)?;
-    if list == 0 || r.u64(list)? != i + pk::DOCTRINE_SELECTION.vtable {
+    let list = r.u64(folder + fld(abi, &FOLDER, SELECTION)?)?;
+    if list == 0 || r.u64(list)? != i + img(abi, pk::DOCTRINE_SELECTION.vtable)? {
         return Ok(None);
     }
-    match gui_tree::container(r, r.u64(list + SELECTION_ROOT)?, i)? {
+    match gui_tree::container(r, r.u64(list + fld(abi, &LIST, SELECTION_ROOT)?)?, i)? {
         Some(root) if gui_tree::visible(r, root)? => Ok(Some(root)),
         _ => Ok(None),
     }

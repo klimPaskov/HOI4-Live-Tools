@@ -22,12 +22,15 @@ use crate::{
     gui_tree::{self, Rect},
     memory::Reader,
     platform::{game_input::GameInput, Process},
+    xlayout::{self, fld},
 };
 use serde_json::{json, Map, Value};
 use std::time::{Duration, Instant};
 
 const GAME: (u32, u32) = (1920, 1080);
 const TEXT: u64 = 0x100;
+/// Owner of the text field (no reviewed text-box vtable).
+const TEXT_BOX: xlayout::Class = xlayout::Class::new("gui.text", 0);
 /// Texts of the window's header (current_participant_window, bidphase_panel).
 const HEADER: [&str; 6] = [
     "current_player",
@@ -197,7 +200,8 @@ pub(super) fn submit_settle(before: &str, now: Option<&str>, sent: bool) -> Sett
 }
 
 fn text_at(r: &Reader<'_>, node: u64) -> Option<String> {
-    r.string_bounded(node + TEXT, 256).ok().map(|t| clean(&t))
+    let text = fld(r.string_abi(), &TEXT_BOX, TEXT).ok()?;
+    r.string_bounded(node + text, 256).ok().map(|t| clean(&t))
 }
 fn flat_texts(
     r: &Reader<'_>,

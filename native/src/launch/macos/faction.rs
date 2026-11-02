@@ -31,6 +31,7 @@ use crate::{
     gui_tree::{self, Rect},
     memory::Reader,
     platform::{game_input::GameInput, Process},
+    xlayout::{self, fld},
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
@@ -53,6 +54,11 @@ pub(super) fn handles(name: &str) -> bool {
 /// `CCountryFactionView` and `CFactionSetupWindow` (RTTI map) and their interface manager slots.
 const FACTION_VIEW: (u64, u64) = (0x3536180, 0x168);
 const SETUP_VIEW: (u64, u64) = (0x353a060, 0x170);
+/// Owners of the fields used here (macOS 1.19.4.1; 0 where the owning class
+/// has no reviewed vtable).
+const IFACE_MANAGER: xlayout::Class = xlayout::Class::new("idler.manager", 0);
+const GRID_ITEM: xlayout::Class = xlayout::Class::new("grid.item", 0);
+const ITEM_CONTAINER: u64 = 0x10;
 const NAME_BOX_FROM_ICON: (f64, f64) = (222.0, 1.0);
 
 fn pause(ms: u64) {
@@ -64,6 +70,7 @@ fn view_of(r: &Reader<'_>, image: u64, (vtable, slot): (u64, u64)) -> Result<u64
     if let Some(view) = kit::find_view(r, image, vtable)? {
         return Ok(view);
     }
+    let slot = fld(r.string_abi(), &IFACE_MANAGER, slot)?;
     let view = r.u64(kit::manager(r, image)? + slot)?;
     if view == 0 {
         return Err(Error::new("invalid_gui", "Faction view unavailable"));
@@ -144,7 +151,8 @@ fn templates(r: &Reader<'_>, image: u64) -> Result<Vec<Template>> {
         .ok_or_else(|| Error::new("gui_target_unavailable", "faction_template_grid not found"))?;
     let mut out = Vec::new();
     for item in nui::grid_items(r, grid)?.into_iter().take(24) {
-        let Some(frame) = gui_tree::container(r, r.u64(item + 0x10)?, image)? else {
+        let entry = r.u64(item + fld(r.string_abi(), &GRID_ITEM, ITEM_CONTAINER)?)?;
+        let Some(frame) = gui_tree::container(r, entry, image)? else {
             continue;
         };
         let text = |name: &str| -> Result<String> {
@@ -266,7 +274,8 @@ fn invite_rows(r: &Reader<'_>, image: u64) -> Result<Vec<(String, Rect, bool)>> 
         .ok_or_else(|| Error::new("gui_target_unavailable", "countries_grid not found"))?;
     let mut out = Vec::new();
     for item in nui::grid_items(r, grid)?.into_iter().take(120) {
-        let Some(frame) = gui_tree::container(r, r.u64(item + 0x10)?, image)? else {
+        let entry = r.u64(item + fld(r.string_abi(), &GRID_ITEM, ITEM_CONTAINER)?)?;
+        let Some(frame) = gui_tree::container(r, entry, image)? else {
             continue;
         };
         let (Some(name), Some(select)) = (
