@@ -970,6 +970,18 @@ fn highlighted(
     skip: &dyn Fn(f64, f64) -> bool,
     count: usize,
 ) -> Vec<(f64, f64)> {
+    highlighted_near(plain, drawing, skip, count, (960.0, 540.0), 7)
+}
+/// Like `highlighted`, nearest `anchor`, with `patch`x`patch` solid patches (3 finds the
+/// thin dashed front lines drawn along borders).
+fn highlighted_near(
+    plain: &Capture,
+    drawing: &Capture,
+    skip: &dyn Fn(f64, f64) -> bool,
+    count: usize,
+    anchor: (f64, f64),
+    patch: i32,
+) -> Vec<(f64, f64)> {
     let changed = |x: f64, y: f64| match (plain.rgb(x, y), drawing.rgb(x, y)) {
         (Some(a), Some(b)) => {
             let d = |p: u8, q: u8| (i32::from(p) - i32::from(q)).abs();
@@ -985,10 +997,11 @@ fn highlighted(
             if !covered(x, y)
                 && !skip(x, y)
                 && changed(x, y)
-                && (0..7).all(|dy| (0..7).all(|dx| changed(x + f64::from(dx), y + f64::from(dy))))
+                && (0..patch).all(|dy| (0..patch).all(|dx| changed(x + f64::from(dx), y + f64::from(dy))))
             {
-                let d = (x - 960.0).powi(2) + (y - 540.0).powi(2);
-                found.push((d, x + 3.0, y + 3.0));
+                let d = (x - anchor.0).powi(2) + (y - anchor.1).powi(2);
+                let h = f64::from(patch / 2);
+                found.push((d, x + h, y + h));
             }
             x += 3.0;
         }
@@ -1031,6 +1044,86 @@ fn own_states(r: &Reader<'_>, image: u64) -> Result<Vec<i32>> {
     }
     Ok(out)
 }
+/// Map position of the target state's province nearest the army's divisions.
+/// Own-controlled state ids (controller is the player, whoever owns them).
+fn controlled_states(r: &Reader<'_>, image: u64) -> Result<Vec<i32>> {
+    let g = game::layout(r);
+    let l = crate::construction::layout(r);
+    let gs = r.u64(image + g.gs_global)?;
+    let tag = r.i32(gs + g.player_tag)?;
+    let (_, data, count) = r.array_header(gs + l.gs_states)?;
+    let mut out = Vec::new();
+    for index in 1..count.min(4096) as u64 {
+        let state = r.u64(data + index * 8)?;
+        if state != 0 && r.u64(state)? == image + l.state_vtable && r.i32(state + l.state_controller)? == tag {
+            out.push(r.i32(state + l.state_id)?);
+        }
+    }
+    Ok(out)
+}
+/// Map point on the border between an own-controlled state and the target state, nearest the
+/// army: midpoint of the closest province pair across that border (fronts can only be drawn on
+/// the highlighted borders, 1.19.4.1).
+fn front_border_point(process: &dyn Process, army: &str, state: i32) -> Result<Option<(f64, f64)>> {
+    let exe = &process
+        .identity()
+        .ok_or_else(|| Error::new("map_data_unavailable", "Game identity unavailable"))?
+        .exe;
+    let dir = super::mapdata::game_dir(exe)?;
+    let positions = super::mapdata::positions(&dir)?;
+    let map = super::front_plan::static_map(&dir)?;
+    let mine = read(process, controlled_states)?;
+    let army_at = read(process, |r, i| army_provinces(r, i, army))?;
+    let pts: Vec<(f64, f64)> = army_at.iter().filter_map(|p| positions.get(p).copied()).collect();
+    let centre = if pts.is_empty() {
+        None
+    } else {
+        Some((pts.iter().map(|p| p.0).sum::<f64>() / pts.len() as f64, pts.iter().map(|p| p.1).sum::<f64>() / pts.len() as f64))
+    };
+    let target: Vec<(f64, f64)> = super::mapdata::state_provinces(&dir, state)?
+        .iter()
+        .filter_map(|p| positions.get(p).copied())
+        .collect();
+    let neighbours = map.adj.get(&state).cloned().unwrap_or_default();
+    let mut best: Option<(f64, (f64, f64))> = None;
+    for n in neighbours.iter().filter(|n| mine.contains(n)) {
+        for p in super::mapdata::state_provinces(&dir, *n)?.iter().filter_map(|p| positions.get(p).copied()) {
+            for q in &target {
+                let gap = (p.0 - q.0).hypot(p.1 - q.1);
+                let near_army = centre.map(|c| (q.0 - c.0).hypot(q.1 - c.1)).unwrap_or(0.0);
+                let score = gap + 0.3 * near_army;
+                if best.is_none_or(|b| score < b.0) {
+                    best = Some((score, ((p.0 + q.0) / 2.0, (p.1 + q.1) / 2.0)));
+                }
+            }
+        }
+    }
+    Ok(best.map(|b| b.1))
+}
+#[allow(dead_code)]
+fn front_point_province(process: &dyn Process, army: &str, state: i32) -> Result<Option<(f64, f64)>> {
+    let exe = &process
+        .identity()
+        .ok_or_else(|| Error::new("map_data_unavailable", "Game identity unavailable"))?
+        .exe;
+    let dir = super::mapdata::game_dir(exe)?;
+    let positions = super::mapdata::positions(&dir)?;
+    let mine = read(process, |r, i| army_provinces(r, i, army))?;
+    let pts: Vec<(f64, f64)> = mine.iter().filter_map(|p| positions.get(p).copied()).collect();
+    if pts.is_empty() {
+        return Ok(None);
+    }
+    let cx = pts.iter().map(|p| p.0).sum::<f64>() / pts.len() as f64;
+    let cz = pts.iter().map(|p| p.1).sum::<f64>() / pts.len() as f64;
+    Ok(super::mapdata::state_provinces(&dir, state)?
+        .iter()
+        .filter_map(|p| positions.get(p).copied())
+        .min_by(|a, b| {
+            let da = (a.0 - cx).powi(2) + (a.1 - cz).powi(2);
+            let db = (b.0 - cx).powi(2) + (b.1 - cz).powi(2);
+            da.total_cmp(&db)
+        }))
+}
 pub(super) fn front(process: &dyn Process, keys: &MacKeys, army: &str, state: i32) -> Result<()> {
     clear_notices(process, keys)?;
     let own = read(process, own_states)?;
@@ -1042,8 +1135,26 @@ pub(super) fn front(process: &dyn Process, keys: &MacKeys, army: &str, state: i3
     }
     let before = read(process, |r, i| orders(r, i, army))?;
     let card = select_army(process, keys, army)?;
+    // Centre on the target state's province nearest the army: valid fronts are highlighted
+    // only along the army's own line, which the state's centre can be far from (seen live:
+    // an army in Bale facing Hararghe).
+    let near = front_border_point(process, army, state)
+        .ok()
+        .flatten()
+        .or_else(|| front_point_province(process, army, state).ok().flatten());
     find_state(process, keys, state)?;
     std::thread::sleep(std::time::Duration::from_millis(500));
+    if let Some((x, z)) = near {
+        for _ in 0..4 {
+            match read(process, |r, i| super::screenmap::to_screen(r, i, x, z))? {
+                Some((sx, sy)) if (520.0..1500.0).contains(&sx) && (160.0..800.0).contains(&sy) => break,
+                _ => {
+                    keys.scroll(GAME, (960.0, 540.0), -240)?;
+                    std::thread::sleep(std::time::Duration::from_millis(400));
+                }
+            }
+        }
+    }
     // The fronts this army can take are highlighted only in front-line
     // drawing, in a colour that varies by army and lighting; compare one
     // capture before Z with one after it, at the same camera position.
@@ -1054,7 +1165,18 @@ pub(super) fn front(process: &dyn Process, keys: &MacKeys, army: &str, state: i3
     // The card's tooltip may change under the resting cursor.
     let tooltip =
         |x: f64, y: f64| x > f64::from(card.x) - 60.0 && x < f64::from(card.x) + 460.0 && y > 680.0;
-    let candidates = highlighted(&plain, &drawing, &tooltip, 4);
+    let mut candidates = highlighted(&plain, &drawing, &tooltip, 4);
+    // Highlighted border pixels nearest the projected border point first (thin dashed lines).
+    if let Some((x, z)) = near {
+        if let Some((sx, sy)) = read(process, |r, i| super::screenmap::to_screen(r, i, x, z))? {
+            let mut nearby: Vec<(f64, f64)> = highlighted_near(&plain, &drawing, &tooltip, 3, (sx, sy), 3)
+                .into_iter()
+                .filter(|(x, y)| (x - sx).hypot(y - sy) < 120.0)
+                .collect();
+            nearby.append(&mut candidates);
+            candidates = nearby;
+        }
+    }
     for (x, y) in candidates {
         keys.click(GAME, x, y)?;
         let deadline = std::time::Instant::now() + std::time::Duration::from_millis(600);
