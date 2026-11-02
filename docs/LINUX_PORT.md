@@ -20,7 +20,7 @@ notch per 120 pixels; this needs live calibration on Linux.
 `MacClock::bind_with_input` builds the full tool server from any `GameInput`, so the
 Linux server can host the same tools.
 
-## 2. Memory layout (open)
+## 2. Memory layout (code done, table pending)
 
 The tools hard-code about 340 Mach-O image addresses (vtables, globals) and many
 struct field offsets for the macOS 1.19.4.1 build (Mach-O UUID DFA875A5). The Linux
@@ -34,8 +34,26 @@ Plan:
    displacements. Validated on 1.19.3, where both platforms' values are known.
 2. Every Mach-O constant in the tools moves into a per-build table selected by the
    process string ABI, as `game::Layout` already does for the core reads.
-3. The Linux server registers a tool only when every table entry it uses is mapped
-   for the running build. Unmapped tools stay unlisted, never guessed.
+3. The Linux server binds the tools only when a table for exactly the running build
+   ships (`xlayout::require_linux`); an entry missing from it fails that read with
+   `layout_unmapped`, never a guess.
+
+Status (2 November 2026): every tool module reads through `xlayout`
+(`img` for image addresses, `fld` with an owning `Class` for field offsets); the
+GUI widget tree (`gui_tree`) translates its layout the same way. About 200 owner
+classes are tagged, 73 with a macOS vtable (mapped automatically by RTTI and
+matched code) and about 127 without one (records, strides and owners named from
+code comments; these need an anchor function or a live check on Linux).
+
+Known ABI-specific spots needing a live check: the special-projects breakthrough
+map walks a libc++ tree node (libstdc++ nodes keep colour, parent, left, right,
+then the value); `construction_place` reads SDL/Cocoa window internals and stays
+macOS-only.
+
+Core modules (`game`, `research`, `own_focus`, `production_lines`, `construction`,
+`army`, `gui_registry`, `research_ui`) keep their own verified Linux 1.19.3 layouts.
+They move to 1.19.4.1 by a same-platform migration (as macOS did from 1.19.3),
+not through the cross-platform table.
 
 ## 3. Live verification (blocked)
 
@@ -44,6 +62,10 @@ data can come from the macOS install. Each tool is then verified live on Linux, 
 on macOS (`docs/LIVE_VERIFICATION_1_19_4.md`).
 
 ## Launch rules
+
+Binding: `hoi4-live-native --bind-management RUN_DIRECTORY BINDING` with
+`{"window": <X11 id>, "window_class": "<exact WM_CLASS bytes>", "client": [1920, 1080]}`
+and the run directory's `input.json` (controller, player) as on macOS.
 
 Unchanged: never start the game while Steam or steamcmd runs, no Steam variables,
 private `HOME`, owned display, owned process identity.
