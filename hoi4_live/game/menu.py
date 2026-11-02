@@ -234,11 +234,22 @@ def close_esc_menu_if_open(session):
 
 
 CONFIRM_RX = r"^\W*(yes|[o0]k|confirm|exit|quit|exit\s*game|exit\s*to\s*menu)\W*$"
+START_RETRY_SECONDS = 30   # new_game clicks START again when the ready screen is still up after this long
+
+
+def _rest_cursor_above_dialog(session):
+    """Move the cursor off a centred dialog before reading it. With -debug the GUI inspector shows a tooltip for
+    the element under the cursor, and after an Exit Game click that tooltip covered the confirmation's OK button
+    (seen live on 1.19.4.1: hoi4_shutdown then waited without confirming)."""
+    w, h = session.window.size()
+    session.input.move(int(w * 0.5), int(h * 0.12))
+    session.sleep(0.4)
 
 
 def _confirm_if_asked(session, before_texts):
     """Click the confirmation button of a dialog that appeared after an exit button, if any."""
     session.sleep(1.2)
+    _rest_cursor_above_dialog(session)
     img, res = ui.ocr_screen(session, scale=1.5)
     new = [l for l in res.lines if l.text not in before_texts and re.search(CONFIRM_RX, l.text, re.I)]
     if not new:
@@ -280,6 +291,7 @@ def quit_to_main_menu(session, timeout=240):
 
 def _click_ok(session):
     """Click the OK / Yes button of a modal dialog in the centre of the screen. Returns its label or None."""
+    _rest_cursor_above_dialog(session)
     img = session.grab()
     h, w = img.shape[:2]
     region = [int(w * 0.25), int(h * 0.2), int(w * 0.5), int(h * 0.6)]
@@ -376,6 +388,12 @@ def new_game(session, country=None, bookmark=None, timeout=600, start=True):
         return state["screen"]
 
     st = stage()
+    for _ in range(4):
+        # the menu fades in after hoi4_launch reports it, and a half-drawn frame reads as unknown
+        if st not in ("unknown", "loading"):
+            break
+        session.sleep(2.0)
+        st = stage()
     steps.append({"stage": st})
     if st == "main_menu":
         steps.append(ui.click_text(session, r"single\s*player"))
@@ -394,7 +412,7 @@ def new_game(session, country=None, bookmark=None, timeout=600, start=True):
         st = "select_country"
     if st == "select_country":
         if country:
-            rx = re.escape(country) if not any(c in country for c in "\^$[]()|*+?") else country
+            rx = re.escape(country) if not any(c in country for c in r"\^$[]()|*+?") else country
             steps.append(ui.click_text(session, rx, retries=3))
             session.sleep(1.0)
         steps.append(ui.click_text(session, r"select\s*country", prefer="bottom"))
@@ -407,12 +425,16 @@ def new_game(session, country=None, bookmark=None, timeout=600, start=True):
     from . import gamemode
     gamemode.begin_run(session)
     steps.append(ui.click_text(session, r"start", exact=True, prefer="bottom"))
-    t0 = time.time()
+    t0 = last_click = time.time()
     while time.time() - t0 < timeout:
         session.check_cancel()
         d = topbar.read_date(session.grab(), session.ocr)
         if "error" not in d:
             return {"steps": steps, "date": d["hoi4"], "seconds": round(time.time() - t0)}
+        if time.time() - last_click > START_RETRY_SECONDS and stage() == "ready":
+            # on 1.19.4.1 about one START click in five did not register and the ready screen stayed up
+            steps.append(ui.click_text(session, r"start", exact=True, prefer="bottom"))
+            last_click = time.time()
         session.report(f"starting the game ({int(time.time() - t0)} s)")
         session.sleep(3)
     raise ToolError("the new game did not reach the map", {"steps": steps})

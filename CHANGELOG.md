@@ -1,5 +1,38 @@
 # Changelog
 
+## Unreleased Windows runtime
+
+- Live session on HOI4 1.19.4.1 (2 November 2026, Windows 11, `-debug`, 1920x1080
+  borderless, three launches). Launch to the main menu took 81 to 139 s. A new 1936 game, the
+  top bar, the console and `eval_effect`, popups, events, politics, the focus
+  tree, production lines with an MIO choice and `hoi4_shutdown` worked after
+  these fixes:
+  - Console replies printed in red ("Unknown command", wrong arguments) are read.
+  - The main menu is recognized when OCR garbles one of its buttons.
+  - A server whose game exited can launch a new one: an exited bound process has
+    no window and its binding is dropped.
+  - A user folder without `save games/` reads as having no saves.
+  - The game-font reader no longer fails on a crop with only small glyphs.
+  - Auto capture retries PrintWindow every 15 s after a blank frame instead of
+    staying on ffmpeg ddagrab, which timed out after a relaunch.
+- Later fixes from the same session:
+  - `hoi4_shutdown` confirms the exit dialog when a `-debug` GUI-inspector tooltip
+    covers its OK button (#5).
+  - `hoi4_new_game` waits for a fading-in main menu (#5) and clicks START again
+    when the ready screen stays up for 30 s (#6). About one START click in five
+    did not register.
+- Seen on 1.19.4.1 and not fixed yet:
+  - The `hoi4_diplomacy` view of a country whose state name differs from the
+    country name did not open Find.
+  - The console did not open over an open sea-region panel or over a total
+    conversion's custom interface (ZIN). Pressing the console key by hand worked.
+  - Custom country-select screens stop `hoi4_new_game` at Select Country.
+  - With `-debug`, a MAP_ERROR opens error.log in Notepad and an OK dialog over
+    the main menu, and `hoi4_launch` waits for the menu until its timeout.
+  - Without the Steam client the game finds no DLC in a fresh user folder unless
+    `launcher-v2.sqlite` and `dlc_signature` from the real one are copied in, and
+    Career Profile is unavailable.
+
 ## Unreleased native preview
 
 - Add a dormant read-only Linux animation probe for the retained own Research

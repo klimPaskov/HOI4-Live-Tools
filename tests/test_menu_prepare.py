@@ -38,6 +38,20 @@ class MenuPreparationTests(unittest.TestCase):
         click.assert_called_once_with(session, "start", exact=True, prefer="bottom")
         self.assertEqual(result["date"], "1936.1.1.12")
 
+    def test_start_is_clicked_again_while_the_ready_screen_stays(self):
+        # seen live on 1.19.4.1: a START click sometimes did not register and the game waited on the ready screen
+        session = mock.Mock()
+        lines = SimpleNamespace(lines=[SimpleNamespace(text="START"), SimpleNamespace(text="Back to menu")])
+        dates = [{"error": "no date"}, {"error": "no date"}, {"hoi4": "1936.1.1.12"}]
+        with mock.patch.object(menu.ui, "classify", return_value=({"screen": "unknown"}, None)), \
+                mock.patch.object(menu.ui, "ocr_screen", return_value=(None, lines)), \
+                mock.patch.object(menu.ui, "click_text") as click, \
+                mock.patch.object(menu, "START_RETRY_SECONDS", -1), \
+                mock.patch("hoi4_live.perception.topbar.read_date", side_effect=dates):
+            result = menu.new_game(session)
+        self.assertEqual(click.call_count, 3)
+        self.assertEqual(result["date"], "1936.1.1.12")
+
     def test_rules_review_requires_ready_and_never_starts(self):
         session = mock.Mock()
         with mock.patch.object(menu.ui, "find_text", return_value=(None, [], None)), \
@@ -77,6 +91,24 @@ class MenuPreparationTests(unittest.TestCase):
         self.assertTrue(result["exit_requested"])
         click.assert_called_once_with(session, "quit", exact=True)
         escape.assert_not_called()
+
+    def test_exit_confirmation_is_read_with_the_cursor_above_the_dialog(self):
+        # -debug shows a GUI-inspector tooltip under the cursor; on 1.19.4.1 it covered the exit dialog's OK button
+        session = mock.Mock()
+        session.window.size.return_value = (1920, 1080)
+        events = []
+        session.input.move.side_effect = lambda x, y: events.append(("move", x, y))
+        ok = SimpleNamespace(text="OK", center=(1052, 677))
+
+        def read(*args, **kwargs):
+            events.append(("read",))
+            return None, SimpleNamespace(lines=[ok])
+        session.grab.return_value = mock.Mock(shape=(1080, 1920, 3))
+        with mock.patch.object(menu.ui, "ocr_screen", side_effect=read):
+            self.assertEqual(menu._click_ok(session), "OK")
+        self.assertEqual(events[0], ("move", 960, 129))
+        self.assertEqual(events[1], ("read",))
+        session.input.click.assert_called_once_with(1052, 677)
 
     def test_prepared_tool_does_not_read_map_or_telemetry(self):
         session = mock.Mock(mode="campaign")
