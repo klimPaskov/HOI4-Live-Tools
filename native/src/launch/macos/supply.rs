@@ -100,7 +100,9 @@ fn collect(
     }
     let country = units::own_country(r, image)?;
     let index = supplymem::own_country_index(r, image)?;
-    out.nodes = supplymem::country_nodes(r, image, &sys, country, index)?;
+    // The hub/port list is optional: its pool shape did not match on a 1936 Italy game
+    // (colonial hubs); division supply does not depend on it.
+    out.nodes = supplymem::country_nodes(r, image, &sys, country, index).unwrap_or_default();
     for n in &out.nodes {
         if let Entry::Vacant(v) = out.rails.entry(n.province) {
             v.insert(supplymem::province_rail(r, image, &sys, n.province)?);
