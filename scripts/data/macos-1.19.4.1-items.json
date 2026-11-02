@@ -1,0 +1,6041 @@
+{
+ "macho": {
+  "path": "hoi4",
+  "uuid": "DFA875A5-25BA-35E0-9736-627F8A5C4396"
+ },
+ "image_range": [
+  "0x8dd0",
+  "0x39d4db0"
+ ],
+ "small_literals": {
+  "production": 182,
+  "tests_only": 47
+ },
+ "items": [
+  {
+   "name": "function_70000",
+   "kind": "function",
+   "address": "0x70000",
+   "classified": {
+    "kind": "function",
+    "section": "__TEXT,__text"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/daily/production.rs:836",
+    "native/src/launch/macos/daily/research.rs:183"
+   ]
+  },
+  {
+   "name": "code_100000",
+   "kind": "function",
+   "address": "0x100000",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/controller_epoch.rs:459",
+    "native/src/launch/macos/controller_epoch.rs:653",
+    "native/src/launch/macos/doctrines.rs:868",
+    "native/src/launch/macos/doctrines.rs:878",
+    "native/src/launch/macos/focus/binding/tests.rs:57",
+    "native/src/launch/macos/intelligence.rs:448",
+    "native/src/launch/macos/intelligence.rs:460",
+    "native/src/launch/macos/intelligence.rs:462"
+   ]
+  },
+  {
+   "name": "code_100001",
+   "kind": "function",
+   "address": "0x100001",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/controller_epoch.rs:652"
+   ]
+  },
+  {
+   "name": "code_100008",
+   "kind": "function",
+   "address": "0x100008",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/doctrines.rs:879"
+   ]
+  },
+  {
+   "name": "code_100010",
+   "kind": "function",
+   "address": "0x100010",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/doctrines.rs:880"
+   ]
+  },
+  {
+   "name": "code_100014",
+   "kind": "function",
+   "address": "0x100014",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/doctrines.rs:881"
+   ]
+  },
+  {
+   "name": "code_1000b8",
+   "kind": "function",
+   "address": "0x1000b8",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/research_extras.rs:294"
+   ]
+  },
+  {
+   "name": "code_1000e8",
+   "kind": "function",
+   "address": "0x1000e8",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/research_extras.rs:272"
+   ]
+  },
+  {
+   "name": "code_100100",
+   "kind": "function",
+   "address": "0x100100",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/research_extras.rs:288"
+   ]
+  },
+  {
+   "name": "code_100118",
+   "kind": "function",
+   "address": "0x100118",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/research_extras.rs:301"
+   ]
+  },
+  {
+   "name": "code_1004c0",
+   "kind": "function",
+   "address": "0x1004c0",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/events.rs:474"
+   ]
+  },
+  {
+   "name": "code_110000",
+   "kind": "function",
+   "address": "0x110000",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/controller_epoch.rs:459",
+    "native/src/launch/macos/controller_epoch.rs:651",
+    "native/src/launch/macos/controller_epoch.rs:652",
+    "native/src/launch/macos/doctrines.rs:869",
+    "native/src/launch/macos/doctrines.rs:877",
+    "native/src/launch/macos/doctrines.rs:879",
+    "native/src/launch/macos/focus/binding/tests.rs:58",
+    "native/src/launch/macos/intelligence.rs:449"
+   ]
+  },
+  {
+   "name": "code_110008",
+   "kind": "function",
+   "address": "0x110008",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/research_extras.rs:352"
+   ]
+  },
+  {
+   "name": "code_110040",
+   "kind": "function",
+   "address": "0x110040",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/research_extras.rs:277"
+   ]
+  },
+  {
+   "name": "code_110080",
+   "kind": "function",
+   "address": "0x110080",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/research_extras.rs:284"
+   ]
+  },
+  {
+   "name": "code_1100c0",
+   "kind": "function",
+   "address": "0x1100c0",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/research_extras.rs:288"
+   ]
+  },
+  {
+   "name": "code_110a70",
+   "kind": "function",
+   "address": "0x110a70",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/events.rs:475"
+   ]
+  },
+  {
+   "name": "code_120000",
+   "kind": "function",
+   "address": "0x120000",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/controller_epoch.rs:459",
+    "native/src/launch/macos/controller_epoch.rs:651",
+    "native/src/launch/macos/controller_epoch.rs:652",
+    "native/src/launch/macos/controller_epoch.rs:653",
+    "native/src/launch/macos/doctrines.rs:870",
+    "native/src/launch/macos/doctrines.rs:884",
+    "native/src/launch/macos/doctrines.rs:891",
+    "native/src/launch/macos/doctrines.rs:892"
+   ]
+  },
+  {
+   "name": "code_120008",
+   "kind": "function",
+   "address": "0x120008",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/research_extras.rs:274"
+   ]
+  },
+  {
+   "name": "code_120010",
+   "kind": "function",
+   "address": "0x120010",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/research_extras.rs:275"
+   ]
+  },
+  {
+   "name": "code_120028",
+   "kind": "function",
+   "address": "0x120028",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/research_extras.rs:276"
+   ]
+  },
+  {
+   "name": "code_120048",
+   "kind": "function",
+   "address": "0x120048",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/research_extras.rs:277"
+   ]
+  },
+  {
+   "name": "code_120050",
+   "kind": "function",
+   "address": "0x120050",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/doctrines.rs:898",
+    "native/src/launch/macos/doctrines.rs:899",
+    "native/src/launch/macos/doctrines.rs:900",
+    "native/src/launch/macos/doctrines.rs:901",
+    "native/src/launch/macos/doctrines.rs:902"
+   ]
+  },
+  {
+   "name": "code_120068",
+   "kind": "function",
+   "address": "0x120068",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/research_extras.rs:278"
+   ]
+  },
+  {
+   "name": "function_121000",
+   "kind": "function",
+   "address": "0x121000",
+   "classified": {
+    "kind": "function",
+    "section": "__TEXT,__text"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/research_extras.rs:263",
+    "native/src/launch/macos/research_extras.rs:272",
+    "native/src/launch/macos/research_extras.rs:280",
+    "native/src/launch/macos/research_extras.rs:342"
+   ]
+  },
+  {
+   "name": "code_121008",
+   "kind": "function",
+   "address": "0x121008",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/research_extras.rs:281"
+   ]
+  },
+  {
+   "name": "code_121010",
+   "kind": "function",
+   "address": "0x121010",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/research_extras.rs:282"
+   ]
+  },
+  {
+   "name": "code_121028",
+   "kind": "function",
+   "address": "0x121028",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/research_extras.rs:283"
+   ]
+  },
+  {
+   "name": "code_121048",
+   "kind": "function",
+   "address": "0x121048",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/research_extras.rs:284"
+   ]
+  },
+  {
+   "name": "code_121068",
+   "kind": "function",
+   "address": "0x121068",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/research_extras.rs:285"
+   ]
+  },
+  {
+   "name": "code_130000",
+   "kind": "function",
+   "address": "0x130000",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/doctrines.rs:871",
+    "native/src/launch/macos/doctrines.rs:893",
+    "native/src/launch/macos/doctrines.rs:902",
+    "native/src/launch/macos/doctrines.rs:911",
+    "native/src/launch/macos/doctrines.rs:912",
+    "native/src/launch/macos/doctrines.rs:913",
+    "native/src/launch/macos/doctrines.rs:914",
+    "native/src/launch/macos/doctrines.rs:915"
+   ]
+  },
+  {
+   "name": "code_130040",
+   "kind": "function",
+   "address": "0x130040",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/research_extras.rs:284",
+    "native/src/launch/macos/research_extras.rs:286"
+   ]
+  },
+  {
+   "name": "code_140000",
+   "kind": "function",
+   "address": "0x140000",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/doctrines.rs:872",
+    "native/src/launch/macos/doctrines.rs:892",
+    "native/src/launch/macos/doctrines.rs:903",
+    "native/src/launch/macos/focus/binding/tests.rs:63",
+    "native/src/launch/macos/intelligence.rs:453",
+    "native/src/launch/macos/intelligence.rs:470",
+    "native/src/launch/macos/intelligence.rs:472",
+    "native/src/launch/macos/research_extras.rs:265"
+   ]
+  },
+  {
+   "name": "code_140008",
+   "kind": "function",
+   "address": "0x140008",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/research_extras.rs:290"
+   ]
+  },
+  {
+   "name": "code_140018",
+   "kind": "function",
+   "address": "0x140018",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/doctrines.rs:904"
+   ]
+  },
+  {
+   "name": "code_14001c",
+   "kind": "function",
+   "address": "0x14001c",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/doctrines.rs:905"
+   ]
+  },
+  {
+   "name": "code_140020",
+   "kind": "function",
+   "address": "0x140020",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/doctrines.rs:906"
+   ]
+  },
+  {
+   "name": "code_140028",
+   "kind": "function",
+   "address": "0x140028",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/research_extras.rs:291"
+   ]
+  },
+  {
+   "name": "code_140030",
+   "kind": "function",
+   "address": "0x140030",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/research_extras.rs:292"
+   ]
+  },
+  {
+   "name": "code_150000",
+   "kind": "function",
+   "address": "0x150000",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/doctrines.rs:873",
+    "native/src/launch/macos/doctrines.rs:907",
+    "native/src/launch/macos/doctrines.rs:911",
+    "native/src/launch/macos/focus/binding/tests.rs:64",
+    "native/src/launch/macos/intelligence.rs:454",
+    "native/src/launch/macos/intelligence.rs:470",
+    "native/src/launch/macos/intelligence.rs:473",
+    "native/src/launch/macos/intelligence.rs:474"
+   ]
+  },
+  {
+   "name": "code_150010",
+   "kind": "function",
+   "address": "0x150010",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/research_extras.rs:296"
+   ]
+  },
+  {
+   "name": "code_150018",
+   "kind": "function",
+   "address": "0x150018",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/doctrines.rs:908"
+   ]
+  },
+  {
+   "name": "code_15001c",
+   "kind": "function",
+   "address": "0x15001c",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/doctrines.rs:909"
+   ]
+  },
+  {
+   "name": "function_150020",
+   "kind": "function",
+   "address": "0x150020",
+   "classified": {
+    "kind": "function",
+    "section": "__TEXT,__text"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/doctrines.rs:910"
+   ]
+  },
+  {
+   "name": "code_150030",
+   "kind": "function",
+   "address": "0x150030",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/research_extras.rs:297"
+   ]
+  },
+  {
+   "name": "code_150038",
+   "kind": "function",
+   "address": "0x150038",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/research_extras.rs:298"
+   ]
+  },
+  {
+   "name": "code_160000",
+   "kind": "function",
+   "address": "0x160000",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/doctrines.rs:874",
+    "native/src/launch/macos/doctrines.rs:887",
+    "native/src/launch/macos/doctrines.rs:917",
+    "native/src/launch/macos/doctrines.rs:918",
+    "native/src/launch/macos/doctrines.rs:919",
+    "native/src/launch/macos/doctrines.rs:920",
+    "native/src/launch/macos/focus/binding/tests.rs:65",
+    "native/src/launch/macos/intelligence.rs:455"
+   ]
+  },
+  {
+   "name": "code_160018",
+   "kind": "function",
+   "address": "0x160018",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/research_extras.rs:299"
+   ]
+  },
+  {
+   "name": "code_170000",
+   "kind": "function",
+   "address": "0x170000",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/doctrines.rs:875",
+    "native/src/launch/macos/doctrines.rs:922",
+    "native/src/launch/macos/doctrines.rs:923",
+    "native/src/launch/macos/doctrines.rs:924",
+    "native/src/launch/macos/doctrines.rs:925",
+    "native/src/launch/macos/doctrines.rs:930",
+    "native/src/launch/macos/doctrines.rs:946",
+    "native/src/launch/macos/focus/binding/tests.rs:66"
+   ]
+  },
+  {
+   "name": "code_170020",
+   "kind": "function",
+   "address": "0x170020",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/intelligence.rs:483"
+   ]
+  },
+  {
+   "name": "code_170048",
+   "kind": "function",
+   "address": "0x170048",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/research_extras.rs:303"
+   ]
+  },
+  {
+   "name": "code_180000",
+   "kind": "function",
+   "address": "0x180000",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/focus/binding/tests.rs:67",
+    "native/src/launch/macos/intelligence.rs:457",
+    "native/src/launch/macos/intelligence.rs:479",
+    "native/src/launch/macos/research_extras.rs:269",
+    "native/src/launch/macos/research_extras.rs:303"
+   ]
+  },
+  {
+   "name": "code_180018",
+   "kind": "function",
+   "address": "0x180018",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/research_extras.rs:304"
+   ]
+  },
+  {
+   "name": "code_181000",
+   "kind": "function",
+   "address": "0x181000",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/intelligence.rs:458",
+    "native/src/launch/macos/intelligence.rs:479",
+    "native/src/launch/macos/intelligence.rs:486",
+    "native/src/launch/macos/intelligence.rs:517"
+   ]
+  },
+  {
+   "name": "code_182000",
+   "kind": "function",
+   "address": "0x182000",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/intelligence.rs:459",
+    "native/src/launch/macos/intelligence.rs:483",
+    "native/src/launch/macos/intelligence.rs:487"
+   ]
+  },
+  {
+   "name": "code_190000",
+   "kind": "function",
+   "address": "0x190000",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/focus/binding/tests.rs:68"
+   ]
+  },
+  {
+   "name": "code_1a0000",
+   "kind": "function",
+   "address": "0x1a0000",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/focus/binding/tests.rs:60"
+   ]
+  },
+  {
+   "name": "code_1b0000",
+   "kind": "function",
+   "address": "0x1b0000",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/focus/binding/tests.rs:61"
+   ]
+  },
+  {
+   "name": "code_200000",
+   "kind": "function",
+   "address": "0x200000",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/focus/binding/tests.rs:69",
+    "native/src/launch/macos/mios.rs:591",
+    "native/src/launch/macos/mios.rs:592",
+    "native/src/launch/macos/mios.rs:593",
+    "native/src/launch/macos/mios.rs:594",
+    "native/src/launch/macos/mios.rs:595",
+    "native/src/launch/macos/panelkit.rs:450"
+   ]
+  },
+  {
+   "name": "code_210000",
+   "kind": "function",
+   "address": "0x210000",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/focus/binding/tests.rs:70",
+    "native/src/launch/macos/mios.rs:593",
+    "native/src/launch/macos/mios.rs:596"
+   ]
+  },
+  {
+   "name": "code_220000",
+   "kind": "function",
+   "address": "0x220000",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/focus/binding/tests.rs:71"
+   ]
+  },
+  {
+   "name": "code_230000",
+   "kind": "function",
+   "address": "0x230000",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/focus/binding/tests.rs:72"
+   ]
+  },
+  {
+   "name": "code_240000",
+   "kind": "function",
+   "address": "0x240000",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/focus/binding/tests.rs:73"
+   ]
+  },
+  {
+   "name": "code_250000",
+   "kind": "function",
+   "address": "0x250000",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/focus/binding/tests.rs:74"
+   ]
+  },
+  {
+   "name": "code_300000",
+   "kind": "function",
+   "address": "0x300000",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/focus/binding/tests.rs:75",
+    "native/src/launch/macos/mios.rs:597",
+    "native/src/launch/macos/mios.rs:598",
+    "native/src/launch/macos/mios.rs:606",
+    "native/src/launch/macos/mios.rs:607",
+    "native/src/launch/macos/mios.rs:608",
+    "native/src/launch/macos/mios.rs:612",
+    "native/src/launch/macos/mios.rs:619"
+   ]
+  },
+  {
+   "name": "code_310000",
+   "kind": "function",
+   "address": "0x310000",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/focus/binding/tests.rs:76",
+    "native/src/launch/macos/mios.rs:599",
+    "native/src/launch/macos/mios.rs:606",
+    "native/src/launch/macos/mios.rs:609"
+   ]
+  },
+  {
+   "name": "code_310008",
+   "kind": "function",
+   "address": "0x310008",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/mios.rs:610",
+    "native/src/launch/macos/mios.rs:616"
+   ]
+  },
+  {
+   "name": "code_320000",
+   "kind": "function",
+   "address": "0x320000",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/focus/binding/tests.rs:77",
+    "native/src/launch/macos/mios.rs:600",
+    "native/src/launch/macos/mios.rs:602",
+    "native/src/launch/macos/mios.rs:603",
+    "native/src/launch/macos/mios.rs:609"
+   ]
+  },
+  {
+   "name": "code_330000",
+   "kind": "function",
+   "address": "0x330000",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/mios.rs:601",
+    "native/src/launch/macos/mios.rs:604",
+    "native/src/launch/macos/mios.rs:605",
+    "native/src/launch/macos/mios.rs:610"
+   ]
+  },
+  {
+   "name": "code_340000",
+   "kind": "function",
+   "address": "0x340000",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/focus/binding/tests.rs:78"
+   ]
+  },
+  {
+   "name": "code_350000",
+   "kind": "function",
+   "address": "0x350000",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/focus/binding/tests.rs:79"
+   ]
+  },
+  {
+   "name": "code_360000",
+   "kind": "function",
+   "address": "0x360000",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/focus/binding/tests.rs:80"
+   ]
+  },
+  {
+   "name": "code_370000",
+   "kind": "function",
+   "address": "0x370000",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/focus/binding/tests.rs:81"
+   ]
+  },
+  {
+   "name": "code_380000",
+   "kind": "function",
+   "address": "0x380000",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/focus/binding/tests.rs:82"
+   ]
+  },
+  {
+   "name": "code_390000",
+   "kind": "function",
+   "address": "0x390000",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/focus/binding/tests.rs:83"
+   ]
+  },
+  {
+   "name": "code_400000",
+   "kind": "function",
+   "address": "0x400000",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/focus/binding/tests.rs:84"
+   ]
+  },
+  {
+   "name": "code_410000",
+   "kind": "function",
+   "address": "0x410000",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/focus/binding/tests.rs:85"
+   ]
+  },
+  {
+   "name": "code_420000",
+   "kind": "function",
+   "address": "0x420000",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/focus/binding/tests.rs:86"
+   ]
+  },
+  {
+   "name": "code_440000",
+   "kind": "function",
+   "address": "0x440000",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/focus/binding/tests.rs:87"
+   ]
+  },
+  {
+   "name": "code_450000",
+   "kind": "function",
+   "address": "0x450000",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/focus/binding/tests.rs:88"
+   ]
+  },
+  {
+   "name": "code_460000",
+   "kind": "function",
+   "address": "0x460000",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/focus/binding/tests.rs:89"
+   ]
+  },
+  {
+   "name": "code_600000",
+   "kind": "function",
+   "address": "0x600000",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/focus/binding/tests.rs:107"
+   ]
+  },
+  {
+   "name": "code_900000",
+   "kind": "function",
+   "address": "0x900000",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/construction_place/tests/fixture.rs:8"
+   ]
+  },
+  {
+   "name": "code_910000",
+   "kind": "function",
+   "address": "0x910000",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/construction_place/tests/fixture.rs:9"
+   ]
+  },
+  {
+   "name": "code_920000",
+   "kind": "function",
+   "address": "0x920000",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/construction_place/tests/fixture.rs:10"
+   ]
+  },
+  {
+   "name": "code_921000",
+   "kind": "function",
+   "address": "0x921000",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/construction_place/tests/fixture.rs:30"
+   ]
+  },
+  {
+   "name": "code_922000",
+   "kind": "function",
+   "address": "0x922000",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/construction_place/tests/fixture.rs:31"
+   ]
+  },
+  {
+   "name": "code_930000",
+   "kind": "function",
+   "address": "0x930000",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/construction_place/tests/fixture.rs:11"
+   ]
+  },
+  {
+   "name": "function_950000",
+   "kind": "function",
+   "address": "0x950000",
+   "classified": {
+    "kind": "function",
+    "section": "__TEXT,__text"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/construction_place/tests/fixture.rs:32"
+   ]
+  },
+  {
+   "name": "function_951000",
+   "kind": "function",
+   "address": "0x951000",
+   "classified": {
+    "kind": "function",
+    "section": "__TEXT,__text"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/construction_place/tests/fixture.rs:33"
+   ]
+  },
+  {
+   "name": "code_960000",
+   "kind": "function",
+   "address": "0x960000",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/construction_place/tests/fixture.rs:12"
+   ]
+  },
+  {
+   "name": "code_961000",
+   "kind": "function",
+   "address": "0x961000",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/construction_place/tests/fixture.rs:13"
+   ]
+  },
+  {
+   "name": "code_962000",
+   "kind": "function",
+   "address": "0x962000",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/construction_place/tests/fixture.rs:14"
+   ]
+  },
+  {
+   "name": "code_999000",
+   "kind": "function",
+   "address": "0x999000",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/intelligence.rs:510"
+   ]
+  },
+  {
+   "name": "code_1000000",
+   "kind": "function",
+   "address": "0x1000000",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/construction_place/tests/fixture.rs:15",
+    "native/src/launch/macos/designs.rs:244"
+   ]
+  },
+  {
+   "name": "code_1010000",
+   "kind": "function",
+   "address": "0x1010000",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/construction_place/tests/fixture.rs:16"
+   ]
+  },
+  {
+   "name": "code_1020000",
+   "kind": "function",
+   "address": "0x1020000",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/construction_place/tests/fixture.rs:17"
+   ]
+  },
+  {
+   "name": "code_1030000",
+   "kind": "function",
+   "address": "0x1030000",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/construction_place/tests/fixture.rs:18"
+   ]
+  },
+  {
+   "name": "function_1040000",
+   "kind": "function",
+   "address": "0x1040000",
+   "classified": {
+    "kind": "function",
+    "section": "__TEXT,__text"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/construction_place/tests/fixture.rs:19"
+   ]
+  },
+  {
+   "name": "code_1050000",
+   "kind": "function",
+   "address": "0x1050000",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/construction_place/tests/fixture.rs:20"
+   ]
+  },
+  {
+   "name": "code_2000000",
+   "kind": "function",
+   "address": "0x2000000",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/construction_place/tests/fixture.rs:21"
+   ]
+  },
+  {
+   "name": "code_2200000",
+   "kind": "function",
+   "address": "0x2200000",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/construction_place/tests/fixture.rs:137"
+   ]
+  },
+  {
+   "name": "code_2300000",
+   "kind": "function",
+   "address": "0x2300000",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/construction_place/tests/fixture.rs:138"
+   ]
+  },
+  {
+   "name": "code_2400000",
+   "kind": "function",
+   "address": "0x2400000",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/construction_place/tests/fixture.rs:26"
+   ]
+  },
+  {
+   "name": "code_2500000",
+   "kind": "function",
+   "address": "0x2500000",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/construction_place/tests/fixture.rs:27"
+   ]
+  },
+  {
+   "name": "code_2600000",
+   "kind": "function",
+   "address": "0x2600000",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/construction_place/tests/fixture.rs:139"
+   ]
+  },
+  {
+   "name": "function_26e9f50",
+   "kind": "function",
+   "address": "0x26e9f50",
+   "classified": {
+    "kind": "function",
+    "section": "__TEXT,__text"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/construction_place/tests/fixture.rs:194"
+   ]
+  },
+  {
+   "name": "code_2700000",
+   "kind": "function",
+   "address": "0x2700000",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/construction_place/tests/fixture.rs:140"
+   ]
+  },
+  {
+   "name": "function_27b8910",
+   "kind": "function",
+   "address": "0x27b8910",
+   "classified": {
+    "kind": "function",
+    "section": "__TEXT,__text"
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/construction_place/point.rs:65"
+   ]
+  },
+  {
+   "name": "function_27bc4c0",
+   "kind": "function",
+   "address": "0x27bc4c0",
+   "classified": {
+    "kind": "function",
+    "section": "__TEXT,__text"
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/construction_place/point.rs:65"
+   ]
+  },
+  {
+   "name": "function_27bcdc0",
+   "kind": "function",
+   "address": "0x27bcdc0",
+   "classified": {
+    "kind": "function",
+    "section": "__TEXT,__text"
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/construction_place/point.rs:65"
+   ]
+  },
+  {
+   "name": "code_2800000",
+   "kind": "function",
+   "address": "0x2800000",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/construction_place/tests/fixture.rs:141"
+   ]
+  },
+  {
+   "name": "function_2834a90",
+   "kind": "function",
+   "address": "0x2834a90",
+   "classified": {
+    "kind": "function",
+    "section": "__TEXT,__text"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/construction_place/tests/fixture.rs:193"
+   ]
+  },
+  {
+   "name": "code_2900000",
+   "kind": "function",
+   "address": "0x2900000",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/construction_place/tests/fixture.rs:28"
+   ]
+  },
+  {
+   "name": "code_2a00000",
+   "kind": "function",
+   "address": "0x2a00000",
+   "classified": {
+    "kind": "code",
+    "section": "__TEXT,__text",
+    "note": "inside a function, not a function start"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/construction_place/tests/fixture.rs:142"
+   ]
+  },
+  {
+   "name": "function_2c5ddc0",
+   "kind": "function",
+   "address": "0x2c5ddc0",
+   "classified": {
+    "kind": "function",
+    "section": "__TEXT,__text"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/construction_place/tests/fixture.rs:165"
+   ]
+  },
+  {
+   "name": "global_3000000",
+   "kind": "global",
+   "address": "0x3000000",
+   "classified": {
+    "kind": "global",
+    "section": "__TEXT,__const"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/construction_place/tests/fixture.rs:22"
+   ]
+  },
+  {
+   "name": "global_3010000",
+   "kind": "global",
+   "address": "0x3010000",
+   "classified": {
+    "kind": "global",
+    "section": "__TEXT,__const"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/construction_place/tests/fixture.rs:143"
+   ]
+  },
+  {
+   "name": "global_3020000",
+   "kind": "global",
+   "address": "0x3020000",
+   "classified": {
+    "kind": "global",
+    "section": "__TEXT,__const"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/construction_place/tests/fixture.rs:23"
+   ]
+  },
+  {
+   "name": "global_3030000",
+   "kind": "global",
+   "address": "0x3030000",
+   "classified": {
+    "kind": "global",
+    "section": "__TEXT,__const"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/construction_place/tests/fixture.rs:24"
+   ]
+  },
+  {
+   "name": "global_3040000",
+   "kind": "global",
+   "address": "0x3040000",
+   "classified": {
+    "kind": "global",
+    "section": "__TEXT,__const"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/construction_place/tests/fixture.rs:144"
+   ]
+  },
+  {
+   "name": "global_3050000",
+   "kind": "global",
+   "address": "0x3050000",
+   "classified": {
+    "kind": "global",
+    "section": "__TEXT,__const"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/construction_place/tests/fixture.rs:25"
+   ]
+  },
+  {
+   "name": "global_3060000",
+   "kind": "global",
+   "address": "0x3060000",
+   "classified": {
+    "kind": "global",
+    "section": "__TEXT,__const"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/construction_place/tests/fixture.rs:145"
+   ]
+  },
+  {
+   "name": "global_3070000",
+   "kind": "global",
+   "address": "0x3070000",
+   "classified": {
+    "kind": "global",
+    "section": "__TEXT,__const"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/construction_place/tests/fixture.rs:146"
+   ]
+  },
+  {
+   "name": "global_3480000",
+   "kind": "global",
+   "address": "0x3480000",
+   "classified": {
+    "kind": "global",
+    "section": "__DATA,__got"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/panelkit.rs:702"
+   ]
+  },
+  {
+   "name": "global_349f108",
+   "kind": "global",
+   "address": "0x349f108",
+   "classified": {
+    "kind": "global",
+    "section": "__DATA,__la_symbol_ptr"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/construction_place/tests/fixture.rs:165"
+   ]
+  },
+  {
+   "name": "global_34a0000",
+   "kind": "global",
+   "address": "0x34a0000",
+   "classified": {
+    "kind": "global",
+    "section": "__DATA,__mod_init_func"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/focus/binding/tests.rs:172"
+   ]
+  },
+  {
+   "name": "CAirWing",
+   "kind": "vtable",
+   "address": "0x34ac5f8",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "8CAirWing",
+    "readable": "CAirWing",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/airread.rs:34"
+   ]
+  },
+  {
+   "name": "CAirWingPool",
+   "kind": "vtable",
+   "address": "0x34ac6c0",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "12CAirWingPool",
+    "readable": "CAirWingPool",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/airread.rs:32"
+   ]
+  },
+  {
+   "name": "CArmy",
+   "kind": "vtable",
+   "address": "0x34ace60",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "5CArmy",
+    "readable": "CArmy",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/armies.rs:55",
+    "native/src/launch/macos/units.rs:89"
+   ]
+  },
+  {
+   "name": "CCountryFuelStatus",
+   "kind": "vtable",
+   "address": "0x34b2928",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "18CCountryFuelStatus",
+    "readable": "CCountryFuelStatus",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/economy_detail.rs:45",
+    "native/src/launch/macos/resources.rs:42"
+   ]
+  },
+  {
+   "name": "CDivisionTemplateData",
+   "kind": "vtable",
+   "address": "0x34fb310",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "21CDivisionTemplateData",
+    "readable": "CDivisionTemplateData",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/units.rs:104"
+   ]
+  },
+  {
+   "name": "CReferencedDivisionTemplate",
+   "kind": "vtable",
+   "address": "0x34fb370",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "27CReferencedDivisionTemplate",
+    "readable": "CReferencedDivisionTemplate",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/units.rs:100"
+   ]
+  },
+  {
+   "name": "CFleet",
+   "kind": "vtable",
+   "address": "0x34fc2e8",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "6CFleet",
+    "readable": "CFleet",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/naval.rs:21"
+   ]
+  },
+  {
+   "name": "CCurrentGameState",
+   "kind": "vtable",
+   "address": "0x35044e8",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "17CCurrentGameState",
+    "readable": "CCurrentGameState",
+    "ordinal": 0
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/focus/binding/tests.rs:250"
+   ]
+  },
+  {
+   "name": "CInGameIdler",
+   "kind": "vtable",
+   "address": "0x35089d8",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "12CInGameIdler",
+    "readable": "CInGameIdler",
+    "ordinal": 0
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/focus/binding/tests.rs:251"
+   ]
+  },
+  {
+   "name": "CCountryManpower",
+   "kind": "vtable",
+   "address": "0x350ad90",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "16CCountryManpower",
+    "readable": "CCountryManpower",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/economy_detail.rs:43"
+   ]
+  },
+  {
+   "name": "CMap",
+   "kind": "vtable",
+   "address": "0x350ae90",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "4CMap",
+    "readable": "CMap",
+    "ordinal": 0
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/construction_place/tests/fixture.rs:161"
+   ]
+  },
+  {
+   "name": "CModifier",
+   "kind": "vtable",
+   "address": "0x350cdc0",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "9CModifier",
+    "readable": "CModifier",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/economy_detail.rs:41"
+   ]
+  },
+  {
+   "name": "COrderInstance",
+   "kind": "vtable",
+   "address": "0x3512bf0",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "14COrderInstance",
+    "readable": "COrderInstance",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/armies.rs:70"
+   ]
+  },
+  {
+   "name": "CShip",
+   "kind": "vtable",
+   "address": "0x3519a20",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "5CShip",
+    "readable": "CShip",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/naval.rs:45"
+   ]
+  },
+  {
+   "name": "CCountryAirContainer",
+   "kind": "vtable",
+   "address": "0x3519c88",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "20CCountryAirContainer",
+    "readable": "CCountryAirContainer",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/airread.rs:30"
+   ]
+  },
+  {
+   "name": "CAirBase",
+   "kind": "vtable",
+   "address": "0x3519d08",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "8CAirBase",
+    "readable": "CAirBase",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/airread.rs:24"
+   ]
+  },
+  {
+   "name": "CStrategicAir",
+   "kind": "vtable",
+   "address": "0x3519d70",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "13CStrategicAir",
+    "readable": "CStrategicAir",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/airread.rs:22"
+   ]
+  },
+  {
+   "name": "CNavalBase",
+   "kind": "vtable",
+   "address": "0x351cf18",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "10CNavalBase",
+    "readable": "CNavalBase",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/naval.rs:59"
+   ]
+  },
+  {
+   "name": "CStrategicResource",
+   "kind": "vtable",
+   "address": "0x351e438",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "18CStrategicResource",
+    "readable": "CStrategicResource",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/resources.rs:44"
+   ]
+  },
+  {
+   "name": "CStrategicResourcePool",
+   "kind": "vtable",
+   "address": "0x351e498",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "22CStrategicResourcePool",
+    "readable": "CStrategicResourcePool",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/resources.rs:43"
+   ]
+  },
+  {
+   "name": "CStrategicResourceDatabase",
+   "kind": "vtable",
+   "address": "0x351e5e0",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "26CStrategicResourceDatabase",
+    "readable": "CStrategicResourceDatabase",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/resources.rs:46"
+   ]
+  },
+  {
+   "name": "CSubUnitDefinition",
+   "kind": "vtable",
+   "address": "0x351e958",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "18CSubUnitDefinition",
+    "readable": "CSubUnitDefinition",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/units.rs:112"
+   ]
+  },
+  {
+   "name": "CTaskForce",
+   "kind": "vtable",
+   "address": "0x351f208",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "10CTaskForce",
+    "readable": "CTaskForce",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/naval.rs:40"
+   ]
+  },
+  {
+   "name": "CWarGoal",
+   "kind": "vtable",
+   "address": "0x3525bf8",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "8CWarGoal",
+    "readable": "CWarGoal",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/diplomacy_state.rs:81"
+   ]
+  },
+  {
+   "name": "CBuilding",
+   "kind": "vtable",
+   "address": "0x352ee30",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "9CBuilding",
+    "readable": "CBuilding",
+    "ordinal": 0
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/construction_place/tests/fixture.rs:82",
+    "native/src/launch/macos/construction_place/tests/fixture.rs:85"
+   ]
+  },
+  {
+   "name": "CBuildingDatabase",
+   "kind": "vtable",
+   "address": "0x352eea8",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "17CBuildingDatabase",
+    "readable": "CBuildingDatabase",
+    "ordinal": 0
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/construction_place/tests/fixture.rs:72"
+   ]
+  },
+  {
+   "name": "TNullObject<...>",
+   "kind": "vtable",
+   "address": "0x352f078",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "11TNullObjectI17CBuildingTemplateS0_E",
+    "readable": "TNullObject<...>",
+    "ordinal": 0
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/construction_place/tests/fixture.rs:73"
+   ]
+  },
+  {
+   "name": "CBuildingStatus",
+   "kind": "vtable",
+   "address": "0x352f828",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "15CBuildingStatus",
+    "readable": "CBuildingStatus",
+    "ordinal": 0
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/construction_place/tests/fixture.rs:81"
+   ]
+  },
+  {
+   "name": "CBuildingTemplate",
+   "kind": "vtable",
+   "address": "0x352fa88",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "17CBuildingTemplate",
+    "readable": "CBuildingTemplate",
+    "ordinal": 0
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/construction_place/tests/fixture.rs:35"
+   ]
+  },
+  {
+   "name": "CCharacter",
+   "kind": "vtable",
+   "address": "0x3530150",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "10CCharacter",
+    "readable": "CCharacter",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/special_projects.rs:70"
+   ]
+  },
+  {
+   "name": "CCountryCharacters",
+   "kind": "vtable",
+   "address": "0x3530728",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "18CCountryCharacters",
+    "readable": "CCountryCharacters",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/special_projects.rs:68"
+   ]
+  },
+  {
+   "name": "CScientist",
+   "kind": "vtable",
+   "address": "0x3530f20",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "10CScientist",
+    "readable": "CScientist",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/special_projects.rs:69"
+   ]
+  },
+  {
+   "name": "CScientistTrait",
+   "kind": "vtable",
+   "address": "0x3531290",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "15CScientistTrait",
+    "readable": "CScientistTrait",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/special_projects.rs:71"
+   ]
+  },
+  {
+   "name": "NFactions::NUi::CCountryFactionView",
+   "kind": "vtable",
+   "address": "0x3536180",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "N9NFactions3NUi19CCountryFactionViewE",
+    "readable": "NFactions::NUi::CCountryFactionView",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/faction.rs:54"
+   ]
+  },
+  {
+   "name": "NFactions::NUi::CFactionSetupWindow",
+   "kind": "vtable",
+   "address": "0x353a060",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "N9NFactions3NUi19CFactionSetupWindowE",
+    "readable": "NFactions::NUi::CFactionSetupWindow",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/faction.rs:55"
+   ]
+  },
+  {
+   "name": "NFactions::CFaction",
+   "kind": "vtable",
+   "address": "0x353e188",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "N9NFactions8CFactionE",
+    "readable": "NFactions::CFaction",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/diplomacy_state.rs:75"
+   ]
+  },
+  {
+   "name": "NFactions::CFactionSystem",
+   "kind": "vtable",
+   "address": "0x3540478",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "N9NFactions14CFactionSystemE",
+    "readable": "NFactions::CFactionSystem",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/diplomacy_state.rs:73"
+   ]
+  },
+  {
+   "name": "CAirBaseAccessRelation",
+   "kind": "vtable",
+   "address": "0x35438d8",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "22CAirBaseAccessRelation",
+    "readable": "CAirBaseAccessRelation",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/diplomacy_state.rs:109"
+   ]
+  },
+  {
+   "name": "COfferAirBaseAccessRelation",
+   "kind": "vtable",
+   "address": "0x35439a8",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "27COfferAirBaseAccessRelation",
+    "readable": "COfferAirBaseAccessRelation",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/diplomacy_state.rs:110"
+   ]
+  },
+  {
+   "name": "CDockingRightsRelation",
+   "kind": "vtable",
+   "address": "0x3543b30",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "22CDockingRightsRelation",
+    "readable": "CDockingRightsRelation",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/diplomacy_state.rs:111"
+   ]
+  },
+  {
+   "name": "COfferDockingRightsRelation",
+   "kind": "vtable",
+   "address": "0x3543c00",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "27COfferDockingRightsRelation",
+    "readable": "COfferDockingRightsRelation",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/diplomacy_state.rs:112"
+   ]
+  },
+  {
+   "name": "CNavalBlockadeRelation",
+   "kind": "vtable",
+   "address": "0x3543d00",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "22CNavalBlockadeRelation",
+    "readable": "CNavalBlockadeRelation",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/diplomacy_state.rs:113"
+   ]
+  },
+  {
+   "name": "CAutonomousState",
+   "kind": "vtable",
+   "address": "0x3544048",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "16CAutonomousState",
+    "readable": "CAutonomousState",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/diplomacy_state.rs:71"
+   ]
+  },
+  {
+   "name": "CDiplomacyStatus",
+   "kind": "vtable",
+   "address": "0x3544268",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "16CDiplomacyStatus",
+    "readable": "CDiplomacyStatus",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/diplomacy_state.rs:61"
+   ]
+  },
+  {
+   "name": "CWarRelation",
+   "kind": "vtable",
+   "address": "0x354a170",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "12CWarRelation",
+    "readable": "CWarRelation",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/diplomacy_state.rs:104",
+    "native/src/launch/macos/diplomacy_state.rs:448"
+   ]
+  },
+  {
+   "name": "CLicenceProductionAccessRelation",
+   "kind": "vtable",
+   "address": "0x354a240",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "32CLicenceProductionAccessRelation",
+    "readable": "CLicenceProductionAccessRelation",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/diplomacy_state.rs:114"
+   ]
+  },
+  {
+   "name": "CMilitaryAccessRelation",
+   "kind": "vtable",
+   "address": "0x354a310",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "23CMilitaryAccessRelation",
+    "readable": "CMilitaryAccessRelation",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/diplomacy_state.rs:108"
+   ]
+  },
+  {
+   "name": "COfferMilitaryAccessRelation",
+   "kind": "vtable",
+   "address": "0x354a3e0",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "28COfferMilitaryAccessRelation",
+    "readable": "COfferMilitaryAccessRelation",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/diplomacy_state.rs:115"
+   ]
+  },
+  {
+   "name": "CImproveRelationsRelation",
+   "kind": "vtable",
+   "address": "0x354a4b0",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "25CImproveRelationsRelation",
+    "readable": "CImproveRelationsRelation",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/diplomacy_state.rs:116"
+   ]
+  },
+  {
+   "name": "CAttacheRelation",
+   "kind": "vtable",
+   "address": "0x354a580",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "16CAttacheRelation",
+    "readable": "CAttacheRelation",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/diplomacy_state.rs:117"
+   ]
+  },
+  {
+   "name": "CBoostPartyPopularityRelation",
+   "kind": "vtable",
+   "address": "0x354a650",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "29CBoostPartyPopularityRelation",
+    "readable": "CBoostPartyPopularityRelation",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/diplomacy_state.rs:118"
+   ]
+  },
+  {
+   "name": "CGuaranteeRelation",
+   "kind": "vtable",
+   "address": "0x354a720",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "18CGuaranteeRelation",
+    "readable": "CGuaranteeRelation",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/diplomacy_state.rs:105"
+   ]
+  },
+  {
+   "name": "CNonAggressionPactRelation",
+   "kind": "vtable",
+   "address": "0x354a7f0",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "26CNonAggressionPactRelation",
+    "readable": "CNonAggressionPactRelation",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/diplomacy_state.rs:107"
+   ]
+  },
+  {
+   "name": "CLendLeaseRelation",
+   "kind": "vtable",
+   "address": "0x354a8c0",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "18CLendLeaseRelation",
+    "readable": "CLendLeaseRelation",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/diplomacy_state.rs:119"
+   ]
+  },
+  {
+   "name": "CSubjectRelation",
+   "kind": "vtable",
+   "address": "0x354aa60",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "16CSubjectRelation",
+    "readable": "CSubjectRelation",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/diplomacy_state.rs:106"
+   ]
+  },
+  {
+   "name": "CEmbargoRelation",
+   "kind": "vtable",
+   "address": "0x354abc0",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "16CEmbargoRelation",
+    "readable": "CEmbargoRelation",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/diplomacy_state.rs:120"
+   ]
+  },
+  {
+   "name": "CWorldThreat",
+   "kind": "vtable",
+   "address": "0x354b628",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "12CWorldThreat",
+    "readable": "CWorldThreat",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/diplomacy_state.rs:79"
+   ]
+  },
+  {
+   "name": "NDoctrines::CCountryDoctrineView",
+   "kind": "vtable",
+   "address": "0x354e610",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "N10NDoctrines20CCountryDoctrineViewE",
+    "readable": "NDoctrines::CCountryDoctrineView",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/panelkit.rs:57"
+   ]
+  },
+  {
+   "name": "NDoctrines::CDoctrineSelectionList",
+   "kind": "vtable",
+   "address": "0x354e920",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "N10NDoctrines22CDoctrineSelectionListE",
+    "readable": "NDoctrines::CDoctrineSelectionList",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/panelkit.rs:62"
+   ]
+  },
+  {
+   "name": "CEquipmentType",
+   "kind": "vtable",
+   "address": "0x357bad8",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "14CEquipmentType",
+    "readable": "CEquipmentType",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/units.rs:114"
+   ]
+  },
+  {
+   "name": "CEquipmentVariant",
+   "kind": "vtable",
+   "address": "0x357d1b8",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "17CEquipmentVariant",
+    "readable": "CEquipmentVariant",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/fleetmem.rs:14",
+    "native/src/launch/macos/units.rs:116"
+   ]
+  },
+  {
+   "name": "CCountry",
+   "kind": "vtable",
+   "address": "0x357e388",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "8CCountry",
+    "readable": "CCountry",
+    "ordinal": 0
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/focus/binding/tests.rs:252"
+   ]
+  },
+  {
+   "name": "CProvince",
+   "kind": "vtable",
+   "address": "0x357f020",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "9CProvince",
+    "readable": "CProvince",
+    "ordinal": 0
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/construction_place/tests/fixture.rs:170"
+   ]
+  },
+  {
+   "name": "CState",
+   "kind": "vtable",
+   "address": "0x357f410",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "6CState",
+    "readable": "CState",
+    "ordinal": 0
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/construction_place/tests/fixture.rs:74"
+   ]
+  },
+  {
+   "name": "CWarGoalType",
+   "kind": "vtable",
+   "address": "0x3587fd0",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "12CWarGoalType",
+    "readable": "CWarGoalType",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/diplomacy_state.rs:85"
+   ]
+  },
+  {
+   "name": "CIdea",
+   "kind": "vtable",
+   "address": "0x35882b8",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "5CIdea",
+    "readable": "CIdea",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/economy_detail.rs:47"
+   ]
+  },
+  {
+   "name": "CNationalFocusTree",
+   "kind": "vtable",
+   "address": "0x3589048",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "18CNationalFocusTree",
+    "readable": "CNationalFocusTree",
+    "ordinal": 0
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/focus/binding/tests.rs:255"
+   ]
+  },
+  {
+   "name": "CNationalFocus",
+   "kind": "vtable",
+   "address": "0x3589108",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "14CNationalFocus",
+    "readable": "CNationalFocus",
+    "ordinal": 0
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/focus/binding/tests.rs:160"
+   ]
+  },
+  {
+   "name": "CNationalFocusDatabase",
+   "kind": "vtable",
+   "address": "0x35891c8",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "22CNationalFocusDatabase",
+    "readable": "CNationalFocusDatabase",
+    "ordinal": 0
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/focus/binding/tests.rs:257"
+   ]
+  },
+  {
+   "name": "CNationalFocusProgress",
+   "kind": "vtable",
+   "address": "0x3589270",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "22CNationalFocusProgress",
+    "readable": "CNationalFocusProgress",
+    "ordinal": 0
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/focus/binding/tests.rs:258"
+   ]
+  },
+  {
+   "name": "CBuildingProductionLine",
+   "kind": "vtable",
+   "address": "0x358c690",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "23CBuildingProductionLine",
+    "readable": "CBuildingProductionLine",
+    "ordinal": 0
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/construction_place/tests/fixture.rs:42"
+   ]
+  },
+  {
+   "name": "CMilitaryProductionLine",
+   "kind": "vtable",
+   "address": "0x358ca80",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "23CMilitaryProductionLine",
+    "readable": "CMilitaryProductionLine",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/resources.rs:48"
+   ]
+  },
+  {
+   "name": "CNavalProductionLine",
+   "kind": "vtable",
+   "address": "0x358cc00",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "20CNavalProductionLine",
+    "readable": "CNavalProductionLine",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/resources.rs:49"
+   ]
+  },
+  {
+   "name": "CConsumerGoodsConsumer",
+   "kind": "vtable",
+   "address": "0x358d580",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "22CConsumerGoodsConsumer",
+    "readable": "CConsumerGoodsConsumer",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/economy_detail.rs:54"
+   ]
+  },
+  {
+   "name": "CSpecialProjectsConsumer",
+   "kind": "vtable",
+   "address": "0x358d5c0",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "24CSpecialProjectsConsumer",
+    "readable": "CSpecialProjectsConsumer",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/economy_detail.rs:55"
+   ]
+  },
+  {
+   "name": "CLicensedProductionConsumer",
+   "kind": "vtable",
+   "address": "0x358d600",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "27CLicensedProductionConsumer",
+    "readable": "CLicensedProductionConsumer",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/economy_detail.rs:56"
+   ]
+  },
+  {
+   "name": "CTradeConsumer",
+   "kind": "vtable",
+   "address": "0x358d640",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "14CTradeConsumer",
+    "readable": "CTradeConsumer",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/economy_detail.rs:57"
+   ]
+  },
+  {
+   "name": "CContractPaymentConsumer",
+   "kind": "vtable",
+   "address": "0x358d680",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "24CContractPaymentConsumer",
+    "readable": "CContractPaymentConsumer",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/economy_detail.rs:58"
+   ]
+  },
+  {
+   "name": "CProductionStatus",
+   "kind": "vtable",
+   "address": "0x358e0c8",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "17CProductionStatus",
+    "readable": "CProductionStatus",
+    "ordinal": 0
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/construction_place/tests/fixture.rs:69"
+   ]
+  },
+  {
+   "name": "CProductionResourceCost",
+   "kind": "vtable",
+   "address": "0x358e878",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "23CProductionResourceCost",
+    "readable": "CProductionResourceCost",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/resources.rs:47"
+   ]
+  },
+  {
+   "name": "CGenericDefaultConfirmationPopUpWindow",
+   "kind": "vtable",
+   "address": "0x358ff80",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "38CGenericDefaultConfirmationPopUpWindow",
+    "readable": "CGenericDefaultConfirmationPopUpWindow",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/kit.rs:334",
+    "native/src/launch/macos/special_projects.rs:1571"
+   ]
+  },
+  {
+   "name": "NProject::CProgram",
+   "kind": "vtable",
+   "address": "0x359c918",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "N8NProject8CProgramE",
+    "readable": "NProject::CProgram",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/special_projects.rs:61"
+   ]
+  },
+  {
+   "name": "NProject::CProject",
+   "kind": "vtable",
+   "address": "0x359ca08",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "N8NProject8CProjectE",
+    "readable": "NProject::CProject",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/special_projects.rs:63"
+   ]
+  },
+  {
+   "name": "NProject::CProjectTemplate",
+   "kind": "vtable",
+   "address": "0x359d7f8",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "N8NProject16CProjectTemplateE",
+    "readable": "NProject::CProjectTemplate",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/special_projects.rs:65"
+   ]
+  },
+  {
+   "name": "NProject::SProjectHistory",
+   "kind": "vtable",
+   "address": "0x359f820",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "N8NProject15SProjectHistoryE",
+    "readable": "NProject::SProjectHistory",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/special_projects.rs:64"
+   ]
+  },
+  {
+   "name": "NProject::CProjectPool",
+   "kind": "vtable",
+   "address": "0x359f8b0",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "N8NProject12CProjectPoolE",
+    "readable": "NProject::CProjectPool",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/special_projects.rs:62"
+   ]
+  },
+  {
+   "name": "NProject::CSimpleProjectState",
+   "kind": "vtable",
+   "address": "0x359f990",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "N8NProject19CSimpleProjectStateE",
+    "readable": "NProject::CSimpleProjectState",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/special_projects.rs:67"
+   ]
+  },
+  {
+   "name": "NProject::CProjectStateMachine",
+   "kind": "vtable",
+   "address": "0x359fa60",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "N8NProject20CProjectStateMachineE",
+    "readable": "NProject::CProjectStateMachine",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/special_projects.rs:66"
+   ]
+  },
+  {
+   "name": "NProject::CProgramStatus",
+   "kind": "vtable",
+   "address": "0x359fdb0",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "N8NProject14CProgramStatusE",
+    "readable": "NProject::CProgramStatus",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/special_projects.rs:60"
+   ]
+  },
+  {
+   "name": "NProject::NUi::CFacilitiesTabView",
+   "kind": "vtable",
+   "address": "0x35a0300",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "N8NProject3NUi18CFacilitiesTabViewE",
+    "readable": "NProject::NUi::CFacilitiesTabView",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/special_projects.rs:45"
+   ]
+  },
+  {
+   "name": "NProject::NUi::CProgramItem",
+   "kind": "vtable",
+   "address": "0x35a1018",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "N8NProject3NUi12CProgramItemE",
+    "readable": "NProject::NUi::CProgramItem",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/special_projects.rs:85"
+   ]
+  },
+  {
+   "name": "NProject::NUi::CScientistItem",
+   "kind": "vtable",
+   "address": "0x35a1970",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "N8NProject3NUi14CScientistItemE",
+    "readable": "NProject::NUi::CScientistItem",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/special_projects.rs:86"
+   ]
+  },
+  {
+   "name": "NProject::NUi::CScientistRoster",
+   "kind": "vtable",
+   "address": "0x35a1b08",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "N8NProject3NUi16CScientistRosterE",
+    "readable": "NProject::NUi::CScientistRoster",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/special_projects.rs:55"
+   ]
+  },
+  {
+   "name": "NProject::NUi::CProgramView",
+   "kind": "vtable",
+   "address": "0x35a1cb8",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "N8NProject3NUi12CProgramViewE",
+    "readable": "NProject::NUi::CProgramView",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/special_projects.rs:54"
+   ]
+  },
+  {
+   "name": "NProject::NUi::CProjectItem",
+   "kind": "vtable",
+   "address": "0x35a2910",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "N8NProject3NUi12CProjectItemE",
+    "readable": "NProject::NUi::CProjectItem",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/special_projects.rs:87"
+   ]
+  },
+  {
+   "name": "NProject::NUi::CRecruitScientistWindow",
+   "kind": "vtable",
+   "address": "0x35a3908",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "N8NProject3NUi23CRecruitScientistWindowE",
+    "readable": "NProject::NUi::CRecruitScientistWindow",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/special_projects.rs:51"
+   ]
+  },
+  {
+   "name": "CCountrySupplySystem",
+   "kind": "vtable",
+   "address": "0x35a4000",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "20CCountrySupplySystem",
+    "readable": "CCountrySupplySystem",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/supplymem.rs:59"
+   ]
+  },
+  {
+   "name": "CProvinceRailwayInfo",
+   "kind": "vtable",
+   "address": "0x35a4748",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "20CProvinceRailwayInfo",
+    "readable": "CProvinceRailwayInfo",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/supplymem.rs:80"
+   ]
+  },
+  {
+   "name": "CRailwayManager",
+   "kind": "vtable",
+   "address": "0x35a47a8",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "15CRailwayManager",
+    "readable": "CRailwayManager",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/supplymem.rs:58"
+   ]
+  },
+  {
+   "name": "CSupplySystem",
+   "kind": "vtable",
+   "address": "0x35a4838",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "13CSupplySystem",
+    "readable": "CSupplySystem",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/supplymem.rs:57"
+   ]
+  },
+  {
+   "name": "CCountryResources",
+   "kind": "vtable",
+   "address": "0x35a8b50",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "17CCountryResources",
+    "readable": "CCountryResources",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/resources.rs:41"
+   ]
+  },
+  {
+   "name": "CArmyLeader",
+   "kind": "vtable",
+   "address": "0x35d8db0",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "11CArmyLeader",
+    "readable": "CArmyLeader",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/units.rs:123"
+   ]
+  },
+  {
+   "name": "CGraphicalMap",
+   "kind": "vtable",
+   "address": "0x35e5478",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "13CGraphicalMap",
+    "readable": "CGraphicalMap",
+    "ordinal": 0
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/construction_place/tests/fixture.rs:154"
+   ]
+  },
+  {
+   "name": "CGraphicalMap",
+   "kind": "vtable",
+   "address": "0x35e54b0",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "13CGraphicalMap",
+    "readable": "CGraphicalMap",
+    "ordinal": 1
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/construction_place/tests/fixture.rs:155"
+   ]
+  },
+  {
+   "name": "CGameGraphics",
+   "kind": "vtable",
+   "address": "0x35e5b58",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "13CGameGraphics",
+    "readable": "CGameGraphics",
+    "ordinal": 0
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/construction_place/tests/fixture.rs:149"
+   ]
+  },
+  {
+   "name": "CEventWindow",
+   "kind": "vtable",
+   "address": "0x35e5c88",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "12CEventWindow",
+    "readable": "CEventWindow",
+    "ordinal": 1
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/events.rs:44"
+   ]
+  },
+  {
+   "name": "CAirBaseMapIcon",
+   "kind": "vtable",
+   "address": "0x35e77d8",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "15CAirBaseMapIcon",
+    "readable": "CAirBaseMapIcon",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/airui.rs:29"
+   ]
+  },
+  {
+   "name": "CNationalFocusInfoWindow",
+   "kind": "vtable",
+   "address": "0x36106d8",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "24CNationalFocusInfoWindow",
+    "readable": "CNationalFocusInfoWindow",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/focus.rs:63"
+   ]
+  },
+  {
+   "name": "CNationalFocusTreeItem",
+   "kind": "vtable",
+   "address": "0x3611108",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "22CNationalFocusTreeItem",
+    "readable": "CNationalFocusTreeItem",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/focus.rs:58"
+   ]
+  },
+  {
+   "name": "CNationalFocusTreeItem",
+   "kind": "global",
+   "address": "0x3611110",
+   "classified": {
+    "kind": "vtable-entry",
+    "rtti": "22CNationalFocusTreeItem",
+    "readable": "CNationalFocusTreeItem",
+    "slot": 1,
+    "section": "__DATA,__const"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/focus/binding/tests.rs:1034"
+   ]
+  },
+  {
+   "name": "CNationalFocusView",
+   "kind": "vtable",
+   "address": "0x3611298",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "18CNationalFocusView",
+    "readable": "CNationalFocusView",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/focus.rs:54"
+   ]
+  },
+  {
+   "name": "NInternationalMarket::CCountryInternationalMarketView",
+   "kind": "vtable",
+   "address": "0x3613100",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "N20NInternationalMarket31CCountryInternationalMarketViewE",
+    "readable": "NInternationalMarket::CCountryInternationalMarketView",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/panelkit.rs:84"
+   ]
+  },
+  {
+   "name": "CAgencyLogoSelectionWindow",
+   "kind": "vtable",
+   "address": "0x3621f70",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "26CAgencyLogoSelectionWindow",
+    "readable": "CAgencyLogoSelectionWindow",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/panelkit.rs:94"
+   ]
+  },
+  {
+   "name": "CAgencyUpgradesWindow",
+   "kind": "vtable",
+   "address": "0x3622a70",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "21CAgencyUpgradesWindow",
+    "readable": "CAgencyUpgradesWindow",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/panelkit.rs:89"
+   ]
+  },
+  {
+   "name": "CCountryIntelligenceAgencyView",
+   "kind": "vtable",
+   "address": "0x36249c0",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "30CCountryIntelligenceAgencyView",
+    "readable": "CCountryIntelligenceAgencyView",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/panelkit.rs:77"
+   ]
+  },
+  {
+   "name": "COperativeBottomBar",
+   "kind": "vtable",
+   "address": "0x36257e8",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "19COperativeBottomBar",
+    "readable": "COperativeBottomBar",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/panelkit.rs:99"
+   ]
+  },
+  {
+   "name": "COperativeOrderBar",
+   "kind": "vtable",
+   "address": "0x3626830",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "18COperativeOrderBar",
+    "readable": "COperativeOrderBar",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/panelkit.rs:104"
+   ]
+  },
+  {
+   "name": "NIndustrialOrganisation::COrganisationDetailWindow",
+   "kind": "vtable",
+   "address": "0x362c958",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "N23NIndustrialOrganisation25COrganisationDetailWindowE",
+    "readable": "NIndustrialOrganisation::COrganisationDetailWindow",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/panelkit.rs:119"
+   ]
+  },
+  {
+   "name": "NIndustrialOrganisation::COrganisationListWindow",
+   "kind": "vtable",
+   "address": "0x362d5b0",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "N23NIndustrialOrganisation23COrganisationListWindowE",
+    "readable": "NIndustrialOrganisation::COrganisationListWindow",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/panelkit.rs:114"
+   ]
+  },
+  {
+   "name": "NIndustrialOrganisation::CPolicyWindow",
+   "kind": "vtable",
+   "address": "0x362de58",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "N23NIndustrialOrganisation13CPolicyWindowE",
+    "readable": "NIndustrialOrganisation::CPolicyWindow",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/panelkit.rs:124"
+   ]
+  },
+  {
+   "name": "CTechnologyInfoWindow",
+   "kind": "vtable",
+   "address": "0x3632080",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "21CTechnologyInfoWindow",
+    "readable": "CTechnologyInfoWindow",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/research.rs:58"
+   ]
+  },
+  {
+   "name": "CTechnologyTreeTechItem",
+   "kind": "vtable",
+   "address": "0x3633588",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "23CTechnologyTreeTechItem",
+    "readable": "CTechnologyTreeTechItem",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/research.rs:53"
+   ]
+  },
+  {
+   "name": "CResearchSlotItem",
+   "kind": "vtable",
+   "address": "0x3633a80",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "17CResearchSlotItem",
+    "readable": "CResearchSlotItem",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/research.rs:51"
+   ]
+  },
+  {
+   "name": "CAcceptCommandDialog",
+   "kind": "vtable",
+   "address": "0x363b690",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "20CAcceptCommandDialog",
+    "readable": "CAcceptCommandDialog",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/kit.rs:334",
+    "native/src/launch/macos/ui.rs:476"
+   ]
+  },
+  {
+   "name": "CConfirmCancelNavyActivityDialog",
+   "kind": "vtable",
+   "address": "0x363b9d8",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "32CConfirmCancelNavyActivityDialog",
+    "readable": "CConfirmCancelNavyActivityDialog",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/kit.rs:334"
+   ]
+  },
+  {
+   "name": "CBattlePlansTools",
+   "kind": "vtable",
+   "address": "0x36424c8",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "17CBattlePlansTools",
+    "readable": "CBattlePlansTools",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/invasion.rs:45"
+   ]
+  },
+  {
+   "name": "CChangeGroupLeaderDialog",
+   "kind": "vtable",
+   "address": "0x3643990",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "24CChangeGroupLeaderDialog",
+    "readable": "CChangeGroupLeaderDialog",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/ui.rs:479"
+   ]
+  },
+  {
+   "name": "CChangeNavyLeaderDialog",
+   "kind": "vtable",
+   "address": "0x3643ac0",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "23CChangeNavyLeaderDialog",
+    "readable": "CChangeNavyLeaderDialog",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/ui.rs:482"
+   ]
+  },
+  {
+   "name": "CCountryConstructionViewBuildingItem",
+   "kind": "vtable",
+   "address": "0x3647398",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "36CCountryConstructionViewBuildingItem",
+    "readable": "CCountryConstructionViewBuildingItem",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/construction.rs:41"
+   ]
+  },
+  {
+   "name": "CCountryConstructionsView",
+   "kind": "vtable",
+   "address": "0x3647478",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "25CCountryConstructionsView",
+    "readable": "CCountryConstructionsView",
+    "ordinal": 0
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/construction_place/tests/fixture.rs:197"
+   ]
+  },
+  {
+   "name": "CCountryPoliticsView",
+   "kind": "vtable",
+   "address": "0x36511f0",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "20CCountryPoliticsView",
+    "readable": "CCountryPoliticsView",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/panelkit.rs:67"
+   ]
+  },
+  {
+   "name": "CDiplomacyPopupWindowBase",
+   "kind": "vtable",
+   "address": "0x365b4d0",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "25CDiplomacyPopupWindowBase",
+    "readable": "CDiplomacyPopupWindowBase",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/kit.rs:337"
+   ]
+  },
+  {
+   "name": "CStandardDiplomacyPopup",
+   "kind": "vtable",
+   "address": "0x365b5f8",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "23CStandardDiplomacyPopup",
+    "readable": "CStandardDiplomacyPopup",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/faction.rs:492",
+    "native/src/launch/macos/kit.rs:337"
+   ]
+  },
+  {
+   "name": "CScriptedGUIDiplomacyPopup",
+   "kind": "vtable",
+   "address": "0x365b720",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "26CScriptedGUIDiplomacyPopup",
+    "readable": "CScriptedGUIDiplomacyPopup",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/faction.rs:493",
+    "native/src/launch/macos/kit.rs:337"
+   ]
+  },
+  {
+   "name": "CIncomingLendLeaseDiplomacyPopup",
+   "kind": "vtable",
+   "address": "0x365b848",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "32CIncomingLendLeaseDiplomacyPopup",
+    "readable": "CIncomingLendLeaseDiplomacyPopup",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/faction.rs:494",
+    "native/src/launch/macos/kit.rs:337"
+   ]
+  },
+  {
+   "name": "CForeignManpowerDiplomacyPopup",
+   "kind": "vtable",
+   "address": "0x365b970",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "30CForeignManpowerDiplomacyPopup",
+    "readable": "CForeignManpowerDiplomacyPopup",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/faction.rs:495",
+    "native/src/launch/macos/kit.rs:337"
+   ]
+  },
+  {
+   "name": "CDismantleFactionDialog",
+   "kind": "vtable",
+   "address": "0x3661350",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "23CDismantleFactionDialog",
+    "readable": "CDismantleFactionDialog",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/kit.rs:334"
+   ]
+  },
+  {
+   "name": "CFindView",
+   "kind": "vtable",
+   "address": "0x3665308",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "9CFindView",
+    "readable": "CFindView",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/construction_place/point.rs:198",
+    "native/src/launch/macos/construction_place/point.rs:206"
+   ]
+  },
+  {
+   "name": "CLeaderGroupView",
+   "kind": "vtable",
+   "address": "0x3670a20",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "16CLeaderGroupView",
+    "readable": "CLeaderGroupView",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/armies.rs:61"
+   ]
+  },
+  {
+   "name": "CPoliticalIdeaItem",
+   "kind": "vtable",
+   "address": "0x367efa0",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "18CPoliticalIdeaItem",
+    "readable": "CPoliticalIdeaItem",
+    "ordinal": 1
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/politics.rs:57"
+   ]
+  },
+  {
+   "name": "CPoliticalSelectableIdeaItem",
+   "kind": "vtable",
+   "address": "0x367f050",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "28CPoliticalSelectableIdeaItem",
+    "readable": "CPoliticalSelectableIdeaItem",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/politics.rs:63"
+   ]
+  },
+  {
+   "name": "CPoliticsIdeaCategoryEntry",
+   "kind": "vtable",
+   "address": "0x367f210",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "26CPoliticsIdeaCategoryEntry",
+    "readable": "CPoliticsIdeaCategoryEntry",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/politics.rs:52"
+   ]
+  },
+  {
+   "name": "CDefaultConfirmationPopUpWindow",
+   "kind": "vtable",
+   "address": "0x367fd40",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "31CDefaultConfirmationPopUpWindow",
+    "readable": "CDefaultConfirmationPopUpWindow",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/kit.rs:334"
+   ]
+  },
+  {
+   "name": "CResearchFinishedPopUpWindow",
+   "kind": "vtable",
+   "address": "0x3680170",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "28CResearchFinishedPopUpWindow",
+    "readable": "CResearchFinishedPopUpWindow",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/ui.rs:75"
+   ]
+  },
+  {
+   "name": "CSpecialProjectFinishedPopUpWindow",
+   "kind": "vtable",
+   "address": "0x36803a0",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "34CSpecialProjectFinishedPopUpWindow",
+    "readable": "CSpecialProjectFinishedPopUpWindow",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/ui.rs:126",
+    "native/src/launch/macos/ui.rs:75"
+   ]
+  },
+  {
+   "name": "CSpecialProjectCapturedPopUpWindow",
+   "kind": "vtable",
+   "address": "0x36804b8",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "34CSpecialProjectCapturedPopUpWindow",
+    "readable": "CSpecialProjectCapturedPopUpWindow",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/ui.rs:127",
+    "native/src/launch/macos/ui.rs:75"
+   ]
+  },
+  {
+   "name": "CConfirmationPopUpWindow",
+   "kind": "vtable",
+   "address": "0x36805d0",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "24CConfirmationPopUpWindow",
+    "readable": "CConfirmationPopUpWindow",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/ui.rs:124",
+    "native/src/launch/macos/ui.rs:75"
+   ]
+  },
+  {
+   "name": "CFocusFinishedPopUpWindow",
+   "kind": "vtable",
+   "address": "0x36806e8",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "25CFocusFinishedPopUpWindow",
+    "readable": "CFocusFinishedPopUpWindow",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/ui.rs:75"
+   ]
+  },
+  {
+   "name": "CPeaceSummaryPopUpWindow",
+   "kind": "vtable",
+   "address": "0x3680800",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "24CPeaceSummaryPopUpWindow",
+    "readable": "CPeaceSummaryPopUpWindow",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/ui.rs:75"
+   ]
+  },
+  {
+   "name": "CProductionLineMilitaryItem",
+   "kind": "vtable",
+   "address": "0x3686b08",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "27CProductionLineMilitaryItem",
+    "readable": "CProductionLineMilitaryItem",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/production.rs:42"
+   ]
+  },
+  {
+   "name": "CProductionLineNavalItem",
+   "kind": "vtable",
+   "address": "0x3686c50",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "24CProductionLineNavalItem",
+    "readable": "CProductionLineNavalItem",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/production.rs:43"
+   ]
+  },
+  {
+   "name": "CReassignFullOrdersGroupDialog",
+   "kind": "vtable",
+   "address": "0x368b8a8",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "30CReassignFullOrdersGroupDialog",
+    "readable": "CReassignFullOrdersGroupDialog",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/ui.rs:485"
+   ]
+  },
+  {
+   "name": "CSurrenderedPopupWindow",
+   "kind": "vtable",
+   "address": "0x3695460",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "23CSurrenderedPopupWindow",
+    "readable": "CSurrenderedPopupWindow",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/ui.rs:125",
+    "native/src/launch/macos/ui.rs:75"
+   ]
+  },
+  {
+   "name": "CTradeOfferWindow",
+   "kind": "vtable",
+   "address": "0x3698030",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "17CTradeOfferWindow",
+    "readable": "CTradeOfferWindow",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/trade.rs:33"
+   ]
+  },
+  {
+   "name": "COperativeLeaderRecruitmentWindow",
+   "kind": "vtable",
+   "address": "0x369bd60",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "33COperativeLeaderRecruitmentWindow",
+    "readable": "COperativeLeaderRecruitmentWindow",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/panelkit.rs:109"
+   ]
+  },
+  {
+   "name": "CWorldTensionPopUpWindow",
+   "kind": "vtable",
+   "address": "0x36a1f88",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "24CWorldTensionPopUpWindow",
+    "readable": "CWorldTensionPopUpWindow",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/ui.rs:75"
+   ]
+  },
+  {
+   "name": "CCountryArmyOfficerCorpView",
+   "kind": "vtable",
+   "address": "0x36a2a78",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "27CCountryArmyOfficerCorpView",
+    "readable": "CCountryArmyOfficerCorpView",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/panelkit.rs:72"
+   ]
+  },
+  {
+   "name": "CCountryCharacterSelectionItem",
+   "kind": "vtable",
+   "address": "0x36a40e8",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "30CCountryCharacterSelectionItem",
+    "readable": "CCountryCharacterSelectionItem",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/politics.rs:72"
+   ]
+  },
+  {
+   "name": "CCommandStructureLeaderView",
+   "kind": "vtable",
+   "address": "0x36a4d00",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "27CCommandStructureLeaderView",
+    "readable": "CCommandStructureLeaderView",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/politics.rs:66"
+   ]
+  },
+  {
+   "name": "CGameGui",
+   "kind": "vtable",
+   "address": "0x36a5810",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "8CGameGui",
+    "readable": "CGameGui",
+    "ordinal": 0
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/construction_place/tests/fixture.rs:76"
+   ]
+  },
+  {
+   "name": "CPdxMouse",
+   "kind": "vtable",
+   "address": "0x36b5388",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "9CPdxMouse",
+    "readable": "CPdxMouse",
+    "ordinal": 0
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/construction_place/tests/fixture.rs:192",
+    "native/src/launch/macos/construction_place/tests/fixture.rs:193"
+   ]
+  },
+  {
+   "name": "CIcon",
+   "kind": "vtable",
+   "address": "0x36b6880",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "5CIcon",
+    "readable": "CIcon",
+    "ordinal": 0
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/focus/binding/tests.rs:176",
+    "native/src/launch/macos/focus/binding/tests.rs:891"
+   ]
+  },
+  {
+   "name": "CButtonStandard",
+   "kind": "vtable",
+   "address": "0x36b9738",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "15CButtonStandard",
+    "readable": "CButtonStandard",
+    "ordinal": 0
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/focus/binding.rs:401",
+    "native/src/launch/macos/focus/binding/tests.rs:176",
+    "native/src/launch/macos/panelkit.rs:436"
+   ]
+  },
+  {
+   "name": "CContainerWindow",
+   "kind": "vtable",
+   "address": "0x36ba978",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "16CContainerWindow",
+    "readable": "CContainerWindow",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/air.rs:45",
+    "native/src/launch/macos/armies.rs:84",
+    "native/src/launch/macos/diplomacy.rs:53",
+    "native/src/launch/macos/events.rs:48",
+    "native/src/launch/macos/trade.rs:37"
+   ]
+  },
+  {
+   "name": "CContainerWindow",
+   "kind": "global",
+   "address": "0x36ba9c8",
+   "classified": {
+    "kind": "vtable-entry",
+    "rtti": "16CContainerWindow",
+    "readable": "CContainerWindow",
+    "slot": 10,
+    "section": "__DATA,__const"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/focus/binding/tests.rs:297"
+   ]
+  },
+  {
+   "name": "CInstantTextObject",
+   "kind": "vtable",
+   "address": "0x36c04b8",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "18CInstantTextObject",
+    "readable": "CInstantTextObject",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/navalui.rs:153"
+   ]
+  },
+  {
+   "name": "CSprite",
+   "kind": "vtable",
+   "address": "0x36cc528",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "7CSprite",
+    "readable": "CSprite",
+    "ordinal": 0
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/focus/binding/tests.rs:185",
+    "native/src/launch/macos/panelkit.rs:437"
+   ]
+  },
+  {
+   "name": "CSprite",
+   "kind": "global",
+   "address": "0x36cc530",
+   "classified": {
+    "kind": "vtable-entry",
+    "rtti": "7CSprite",
+    "readable": "CSprite",
+    "slot": 1,
+    "section": "__DATA,__const"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/focus/binding/tests.rs:906"
+   ]
+  },
+  {
+   "name": "CStandardGridBox",
+   "kind": "vtable",
+   "address": "0x36cca80",
+   "classified": {
+    "kind": "vtable",
+    "rtti": "16CStandardGridBox",
+    "readable": "CStandardGridBox",
+    "ordinal": 0
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/mio_act.rs:203",
+    "native/src/launch/macos/politics.rs:51",
+    "native/src/launch/macos/research.rs:49"
+   ]
+  },
+  {
+   "name": "objc_36dcd98",
+   "kind": "unsupported",
+   "address": "0x36dcd98",
+   "classified": {
+    "kind": "objc",
+    "section": "__DATA,__objc_ivar",
+    "note": "Objective-C runtime data; the Linux build has no counterpart"
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/construction_place/point.rs:105",
+    "native/src/launch/macos/construction_place/point.rs:83"
+   ]
+  },
+  {
+   "name": "objc_36dcdf8",
+   "kind": "unsupported",
+   "address": "0x36dcdf8",
+   "classified": {
+    "kind": "objc",
+    "section": "__DATA,__objc_ivar",
+    "note": "Objective-C runtime data; the Linux build has no counterpart"
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/construction_place/point.rs:104",
+    "native/src/launch/macos/construction_place/point.rs:82"
+   ]
+  },
+  {
+   "name": "__ZN17TGameItemDatabaseI17CBuildingDatabaseE10_pInstanceE",
+   "kind": "global",
+   "address": "0x3703ad0",
+   "classified": {
+    "kind": "global",
+    "section": "__DATA,__data",
+    "symbol": "__ZN17TGameItemDatabaseI17CBuildingDatabaseE10_pInstanceE"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/construction_place/tests/fixture.rs:71"
+   ]
+  },
+  {
+   "name": "__ZN17TGameItemDatabaseI22CNationalFocusDatabaseE10_pInstanceE",
+   "kind": "global",
+   "address": "0x3704440",
+   "classified": {
+    "kind": "global",
+    "section": "__DATA,__data",
+    "symbol": "__ZN17TGameItemDatabaseI22CNationalFocusDatabaseE10_pInstanceE"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/focus/binding/tests.rs:256"
+   ]
+  },
+  {
+   "name": "__ZN17TGameItemDatabaseI22CAgencyUpgradeDatabaseE10_pInstanceE",
+   "kind": "global",
+   "address": "0x3704b10",
+   "classified": {
+    "kind": "global",
+    "section": "__DATA,__data",
+    "symbol": "__ZN17TGameItemDatabaseI22CAgencyUpgradeDatabaseE10_pInstanceE"
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/intelligence.rs:45"
+   ]
+  },
+  {
+   "name": "__ZN17TGameItemDatabaseIN23NIndustrialOrganisation21COrganisationDatabaseEE10_pInstanceE",
+   "kind": "global",
+   "address": "0x3705890",
+   "classified": {
+    "kind": "global",
+    "section": "__DATA,__data",
+    "symbol": "__ZN17TGameItemDatabaseIN23NIndustrialOrganisation21COrganisationDatabaseEE10_pInstanceE"
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/mios.rs:45"
+   ]
+  },
+  {
+   "name": "__ZN17TGameItemDatabaseI26CStrategicResourceDatabaseE10_pInstanceE",
+   "kind": "global",
+   "address": "0x37058c0",
+   "classified": {
+    "kind": "global",
+    "section": "__DATA,__data",
+    "symbol": "__ZN17TGameItemDatabaseI26CStrategicResourceDatabaseE10_pInstanceE"
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/resources.rs:45"
+   ]
+  },
+  {
+   "name": "__ZN17TGameItemDatabaseIN8NProject23CSpecializationDatabaseEE10_pInstanceE",
+   "kind": "global",
+   "address": "0x3705fe0",
+   "classified": {
+    "kind": "global",
+    "section": "__DATA,__data",
+    "symbol": "__ZN17TGameItemDatabaseIN8NProject23CSpecializationDatabaseEE10_pInstanceE"
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/special_projects.rs:73"
+   ]
+  },
+  {
+   "name": "global_3708e00",
+   "kind": "global",
+   "address": "0x3708e00",
+   "classified": {
+    "kind": "global",
+    "section": "__DATA,__data"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/construction_place/tests/fixture.rs:194"
+   ]
+  },
+  {
+   "name": "global_372afc0",
+   "kind": "global",
+   "address": "0x372afc0",
+   "classified": {
+    "kind": "global",
+    "section": "__DATA,__common"
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/construction_place/point.rs:91"
+   ]
+  },
+  {
+   "name": "global_372b040",
+   "kind": "global",
+   "address": "0x372b040",
+   "classified": {
+    "kind": "global",
+    "section": "__DATA,__common"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/focus/binding/tests.rs:1066",
+    "native/src/launch/macos/focus/binding/tests.rs:248",
+    "native/src/launch/macos/focus/binding/tests.rs:665",
+    "native/src/launch/macos/focus/binding/tests.rs:838"
+   ]
+  },
+  {
+   "name": "global_372b328",
+   "kind": "global",
+   "address": "0x372b328",
+   "classified": {
+    "kind": "global",
+    "section": "__DATA,__common"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/construction_place/tests/fixture.rs:160"
+   ]
+  },
+  {
+   "name": "global_372c530",
+   "kind": "global",
+   "address": "0x372c530",
+   "classified": {
+    "kind": "global",
+    "section": "__DATA,__common"
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/airui.rs:28"
+   ]
+  },
+  {
+   "name": "global_37ed9d8",
+   "kind": "global",
+   "address": "0x37ed9d8",
+   "classified": {
+    "kind": "global",
+    "section": "__DATA,__common"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/construction_place/tests/fixture.rs:164"
+   ]
+  },
+  {
+   "name": "global_3800000",
+   "kind": "global",
+   "address": "0x3800000",
+   "classified": {
+    "kind": "global",
+    "section": "__DATA,__bss"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/panelkit.rs:702"
+   ]
+  },
+  {
+   "name": "global_3844d08",
+   "kind": "global",
+   "address": "0x3844d08",
+   "classified": {
+    "kind": "global",
+    "section": "__DATA,__bss"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/construction_place/tests/fixture.rs:162"
+   ]
+  },
+  {
+   "name": "global_384b168",
+   "kind": "global",
+   "address": "0x384b168",
+   "classified": {
+    "kind": "global",
+    "section": "__DATA,__bss"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/construction_place/point/tests.rs:95",
+    "native/src/launch/macos/construction_place/tests/fixture.rs:195"
+   ]
+  },
+  {
+   "name": "global_384b170",
+   "kind": "global",
+   "address": "0x384b170",
+   "classified": {
+    "kind": "global",
+    "section": "__DATA,__bss"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/construction_place/point/tests.rs:138",
+    "native/src/launch/macos/construction_place/point/tests.rs:9",
+    "native/src/launch/macos/construction_place/tests/fixture.rs:223"
+   ]
+  },
+  {
+   "name": "global_384b174",
+   "kind": "global",
+   "address": "0x384b174",
+   "classified": {
+    "kind": "global",
+    "section": "__DATA,__bss"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/construction_place/point/tests.rs:10",
+    "native/src/launch/macos/construction_place/tests/fixture.rs:224"
+   ]
+  },
+  {
+   "name": "global_384b190",
+   "kind": "global",
+   "address": "0x384b190",
+   "classified": {
+    "kind": "global",
+    "section": "__DATA,__bss"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/construction_place/tests/fixture.rs:220"
+   ]
+  },
+  {
+   "name": "global_384b194",
+   "kind": "global",
+   "address": "0x384b194",
+   "classified": {
+    "kind": "global",
+    "section": "__DATA,__bss"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/construction_place/tests/fixture.rs:221"
+   ]
+  },
+  {
+   "name": "global_384b198",
+   "kind": "global",
+   "address": "0x384b198",
+   "classified": {
+    "kind": "global",
+    "section": "__DATA,__bss"
+   },
+   "tests_only": true,
+   "sources": [
+    "native/src/launch/macos/construction_place/tests/fixture.rs:222"
+   ]
+  },
+  {
+   "name": "global_384b480",
+   "kind": "global",
+   "address": "0x384b480",
+   "classified": {
+    "kind": "global",
+    "section": "__DATA,__bss"
+   },
+   "tests_only": false,
+   "sources": [
+    "native/src/launch/macos/construction_place/point.rs:64",
+    "native/src/launch/macos/construction_place/point.rs:94"
+   ]
+  }
+ ],
+ "fields_needing_owner": {
+  "note": "Literals below the image range in production code: struct offsets, sizes, flags or plain numbers. A field offset can only be mapped once its owning class (vtable) or an anchor function is attached; add it as {\"kind\": \"field\", \"offset\", \"vtable\"|\"anchor\"}.",
+  "values": [
+   {
+    "offset": "0x100",
+    "sources": [
+     "native/src/launch/macos/air.rs:49",
+     "native/src/launch/macos/armies.rs:81",
+     "native/src/launch/macos/country_status.rs:37",
+     "native/src/launch/macos/deployment.rs:165",
+     "native/src/launch/macos/design_ui.rs:98",
+     "native/src/launch/macos/designer.rs:45",
+     "native/src/launch/macos/diplomacy.rs:52",
+     "native/src/launch/macos/events.rs:57",
+     "native/src/launch/macos/fleetmem.rs:47",
+     "native/src/launch/macos/kit.rs:321",
+     "native/src/launch/macos/navalui.rs:51",
+     "native/src/launch/macos/panelkit.rs:43"
+    ]
+   },
+   {
+    "offset": "0x108",
+    "sources": [
+     "native/src/launch/macos/decisions.rs:43",
+     "native/src/launch/macos/doctrine_act.rs:366",
+     "native/src/launch/macos/fleetmem.rs:48",
+     "native/src/launch/macos/units.rs:188"
+    ]
+   },
+   {
+    "offset": "0x110",
+    "sources": [
+     "native/src/launch/macos/diplomacy.rs:45",
+     "native/src/launch/macos/fleetmem.rs:49",
+     "native/src/launch/macos/screenmap.rs:36",
+     "native/src/launch/macos/ui.rs:432",
+     "native/src/launch/macos/units.rs:133",
+     "native/src/launch/macos/units.rs:189"
+    ]
+   },
+   {
+    "offset": "0x118",
+    "sources": [
+     "native/src/launch/macos/fleetmem.rs:50",
+     "native/src/launch/macos/research_extras.rs:139",
+     "native/src/launch/macos/units.rs:190"
+    ]
+   },
+   {
+    "offset": "0x128",
+    "sources": [
+     "native/src/launch/macos/construction_place/point.rs:65",
+     "native/src/launch/macos/focus.rs:52",
+     "native/src/launch/macos/politics.rs:48"
+    ]
+   },
+   {
+    "offset": "0x130",
+    "sources": [
+     "native/src/launch/macos/focus.rs:53",
+     "native/src/launch/macos/research_extras.rs:154",
+     "native/src/launch/macos/supplymem.rs:63"
+    ]
+   },
+   {
+    "offset": "0x138",
+    "sources": [
+     "native/src/launch/macos/deployment.rs:38",
+     "native/src/launch/macos/live_designer.rs:96"
+    ]
+   },
+   {
+    "offset": "0x140",
+    "sources": [
+     "native/src/launch/macos/politics.rs:71",
+     "native/src/launch/macos/trade.rs:29"
+    ]
+   },
+   {
+    "offset": "0x150",
+    "sources": [
+     "native/src/launch/macos/construction.rs:38"
+    ]
+   },
+   {
+    "offset": "0x158",
+    "sources": [
+     "native/src/launch/macos/air.rs:41"
+    ]
+   },
+   {
+    "offset": "0x160",
+    "sources": [
+     "native/src/launch/macos/armies.rs:58",
+     "native/src/launch/macos/deployment.rs:50",
+     "native/src/launch/macos/design_ui.rs:100",
+     "native/src/launch/macos/designer.rs:46",
+     "native/src/launch/macos/navalui.rs:52",
+     "native/src/launch/macos/research.rs:55",
+     "native/src/launch/macos/units.rs:92"
+    ]
+   },
+   {
+    "offset": "0x168",
+    "sources": [
+     "native/src/launch/macos/faction.rs:54"
+    ]
+   },
+   {
+    "offset": "0x170",
+    "sources": [
+     "native/src/launch/macos/faction.rs:55",
+     "native/src/launch/macos/special_projects.rs:251"
+    ]
+   },
+   {
+    "offset": "0x178",
+    "sources": [
+     "native/src/launch/macos/design_ui.rs:64",
+     "native/src/launch/macos/navalui.rs:154"
+    ]
+   },
+   {
+    "offset": "0x17c",
+    "sources": [
+     "native/src/launch/macos/units.rs:108"
+    ]
+   },
+   {
+    "offset": "0x180",
+    "sources": [
+     "native/src/launch/macos/deployment.rs:43",
+     "native/src/launch/macos/units.rs:88"
+    ]
+   },
+   {
+    "offset": "0x184",
+    "sources": [
+     "native/src/launch/macos/diplomacy.rs:61"
+    ]
+   },
+   {
+    "offset": "0x188",
+    "sources": [
+     "native/src/launch/macos/agency_act.rs:160",
+     "native/src/launch/macos/country_status.rs:34",
+     "native/src/launch/macos/decisions.rs:35",
+     "native/src/launch/macos/fleetmem.rs:51",
+     "native/src/launch/macos/kit.rs:301",
+     "native/src/launch/macos/ui.rs:396"
+    ]
+   },
+   {
+    "offset": "0x190",
+    "sources": [
+     "native/src/launch/macos/air.rs:47",
+     "native/src/launch/macos/armies.rs:79",
+     "native/src/launch/macos/construction.rs:40",
+     "native/src/launch/macos/construction_place/point.rs:197",
+     "native/src/launch/macos/construction_place/point.rs:203",
+     "native/src/launch/macos/decisions.rs:37",
+     "native/src/launch/macos/deployment.rs:51",
+     "native/src/launch/macos/design_ui.rs:96",
+     "native/src/launch/macos/designer.rs:43",
+     "native/src/launch/macos/diplomacy.rs:50",
+     "native/src/launch/macos/events.rs:50",
+     "native/src/launch/macos/fleetmem.rs:52"
+    ]
+   },
+   {
+    "offset": "0x198",
+    "sources": [
+     "native/src/launch/macos/airui.rs:41",
+     "native/src/launch/macos/fleetmem.rs:53",
+     "native/src/launch/macos/ui.rs:437"
+    ]
+   },
+   {
+    "offset": "0x1a0",
+    "sources": [
+     "native/src/launch/macos/fleetmem.rs:54"
+    ]
+   },
+   {
+    "offset": "0x1b0",
+    "sources": [
+     "native/src/launch/macos/armies.rs:88",
+     "native/src/launch/macos/supplymem.rs:83",
+     "native/src/launch/macos/units.rs:137"
+    ]
+   },
+   {
+    "offset": "0x1b8",
+    "sources": [
+     "native/src/launch/macos/fleetmem.rs:55",
+     "native/src/launch/macos/special_projects.rs:75"
+    ]
+   },
+   {
+    "offset": "0x1c0",
+    "sources": [
+     "native/src/launch/macos/armies.rs:62",
+     "native/src/launch/macos/design_ui.rs:674",
+     "native/src/launch/macos/fleetmem.rs:56"
+    ]
+   },
+   {
+    "offset": "0x1c8",
+    "sources": [
+     "native/src/launch/macos/armies.rs:72",
+     "native/src/launch/macos/fleetmem.rs:57",
+     "native/src/launch/macos/navalui.rs:31"
+    ]
+   },
+   {
+    "offset": "0x1d0",
+    "sources": [
+     "native/src/launch/macos/fleetmem.rs:58"
+    ]
+   },
+   {
+    "offset": "0x1d8",
+    "sources": [
+     "native/src/launch/macos/armies.rs:76",
+     "native/src/launch/macos/fleetmem.rs:59"
+    ]
+   },
+   {
+    "offset": "0x1e0",
+    "sources": [
+     "native/src/launch/macos/construction_place/point.rs:372",
+     "native/src/launch/macos/fleetmem.rs:60",
+     "native/src/launch/macos/navalui.rs:32"
+    ]
+   },
+   {
+    "offset": "0x1e8",
+    "sources": [
+     "native/src/launch/macos/airread.rs:40",
+     "native/src/launch/macos/fleetmem.rs:61"
+    ]
+   },
+   {
+    "offset": "0x1f0",
+    "sources": [
+     "native/src/launch/macos/armies.rs:68",
+     "native/src/launch/macos/naval.rs:42",
+     "native/src/launch/macos/units.rs:93"
+    ]
+   },
+   {
+    "offset": "0x1f8",
+    "sources": [
+     "native/src/launch/macos/fleetmem.rs:62"
+    ]
+   },
+   {
+    "offset": "0x200",
+    "sources": [
+     "native/src/launch/macos/air.rs:43",
+     "native/src/launch/macos/airui.rs:42",
+     "native/src/launch/macos/fleetmem.rs:63"
+    ]
+   },
+   {
+    "offset": "0x208",
+    "sources": [
+     "native/src/launch/macos/special_projects.rs:1099",
+     "native/src/launch/macos/special_projects.rs:265",
+     "native/src/launch/macos/units.rs:175"
+    ]
+   },
+   {
+    "offset": "0x218",
+    "sources": [
+     "native/src/launch/macos/ui.rs:239"
+    ]
+   },
+   {
+    "offset": "0x228",
+    "sources": [
+     "native/src/launch/macos/construction.rs:44",
+     "native/src/launch/macos/supplymem.rs:85"
+    ]
+   },
+   {
+    "offset": "0x238",
+    "sources": [
+     "native/src/launch/macos/naval.rs:20"
+    ]
+   },
+   {
+    "offset": "0x250",
+    "sources": [
+     "native/src/launch/macos/armies.rs:54",
+     "native/src/launch/macos/designer.rs:39",
+     "native/src/launch/macos/units.rs:87"
+    ]
+   },
+   {
+    "offset": "0x258",
+    "sources": [
+     "native/src/launch/macos/design_ui.rs:58",
+     "native/src/launch/macos/naval.rs:41",
+     "native/src/launch/macos/navalui.rs:47"
+    ]
+   },
+   {
+    "offset": "0x260",
+    "sources": [
+     "native/src/launch/macos/design_ui.rs:59",
+     "native/src/launch/macos/fleetmem.rs:64"
+    ]
+   },
+   {
+    "offset": "0x268",
+    "sources": [
+     "native/src/launch/macos/design_ui.rs:60",
+     "native/src/launch/macos/fleetmem.rs:65",
+     "native/src/launch/macos/units.rs:164"
+    ]
+   },
+   {
+    "offset": "0x270",
+    "sources": [
+     "native/src/launch/macos/fleetmem.rs:66",
+     "native/src/launch/macos/units.rs:163",
+     "native/src/launch/macos/units.rs:191"
+    ]
+   },
+   {
+    "offset": "0x278",
+    "sources": [
+     "native/src/launch/macos/fleetmem.rs:67"
+    ]
+   },
+   {
+    "offset": "0x280",
+    "sources": [
+     "native/src/launch/macos/fleetmem.rs:68",
+     "native/src/launch/macos/units.rs:173"
+    ]
+   },
+   {
+    "offset": "0x288",
+    "sources": [
+     "native/src/launch/macos/units.rs:174"
+    ]
+   },
+   {
+    "offset": "0x290",
+    "sources": [
+     "native/src/launch/macos/fleetmem.rs:69"
+    ]
+   },
+   {
+    "offset": "0x298",
+    "sources": [
+     "native/src/launch/macos/fleetmem.rs:70"
+    ]
+   },
+   {
+    "offset": "0x2a0",
+    "sources": [
+     "native/src/launch/macos/armies.rs:72",
+     "native/src/launch/macos/fleetmem.rs:71",
+     "native/src/launch/macos/units.rs:168"
+    ]
+   },
+   {
+    "offset": "0x2ac",
+    "sources": [
+     "native/src/launch/macos/armies.rs:1406",
+     "native/src/launch/macos/armies.rs:1436"
+    ]
+   },
+   {
+    "offset": "0x2c8",
+    "sources": [
+     "native/src/launch/macos/construction_place/point.rs:72",
+     "native/src/launch/macos/construction_place/point.rs:96",
+     "native/src/launch/macos/economy_detail.rs:277"
+    ]
+   },
+   {
+    "offset": "0x2d8",
+    "sources": [
+     "native/src/launch/macos/construction_place/point.rs:73",
+     "native/src/launch/macos/fleetmem.rs:23",
+     "native/src/launch/macos/fleetmem.rs:72"
+    ]
+   },
+   {
+    "offset": "0x2e0",
+    "sources": [
+     "native/src/launch/macos/fleetmem.rs:73",
+     "native/src/launch/macos/units.rs:192"
+    ]
+   },
+   {
+    "offset": "0x2e8",
+    "sources": [
+     "native/src/launch/macos/economy_detail.rs:42",
+     "native/src/launch/macos/fleetmem.rs:74",
+     "native/src/launch/macos/units.rs:193"
+    ]
+   },
+   {
+    "offset": "0x2f0",
+    "sources": [
+     "native/src/launch/macos/fleetmem.rs:75",
+     "native/src/launch/macos/units.rs:194"
+    ]
+   },
+   {
+    "offset": "0x2f8",
+    "sources": [
+     "native/src/launch/macos/fleetmem.rs:76",
+     "native/src/launch/macos/units.rs:195"
+    ]
+   },
+   {
+    "offset": "0x300",
+    "sources": [
+     "native/src/launch/macos/units.rs:179"
+    ]
+   },
+   {
+    "offset": "0x318",
+    "sources": [
+     "native/src/launch/macos/fleetmem.rs:77",
+     "native/src/launch/macos/units.rs:196"
+    ]
+   },
+   {
+    "offset": "0x320",
+    "sources": [
+     "native/src/launch/macos/airread.rs:36",
+     "native/src/launch/macos/units.rs:110"
+    ]
+   },
+   {
+    "offset": "0x328",
+    "sources": [
+     "native/src/launch/macos/economy_detail.rs:278"
+    ]
+   },
+   {
+    "offset": "0x334",
+    "sources": [
+     "native/src/launch/macos/diplomacy.rs:288"
+    ]
+   },
+   {
+    "offset": "0x340",
+    "sources": [
+     "native/src/launch/macos/naval.rs:43"
+    ]
+   },
+   {
+    "offset": "0x348",
+    "sources": [
+     "native/src/launch/macos/units.rs:98"
+    ]
+   },
+   {
+    "offset": "0x358",
+    "sources": [
+     "native/src/launch/macos/fleetmem.rs:78"
+    ]
+   },
+   {
+    "offset": "0x360",
+    "sources": [
+     "native/src/launch/macos/units.rs:99"
+    ]
+   },
+   {
+    "offset": "0x36c",
+    "sources": [
+     "native/src/launch/macos/naval.rs:44"
+    ]
+   },
+   {
+    "offset": "0x370",
+    "sources": [
+     "native/src/launch/macos/economy_detail.rs:422"
+    ]
+   },
+   {
+    "offset": "0x388",
+    "sources": [
+     "native/src/launch/macos/economy_detail.rs:279"
+    ]
+   },
+   {
+    "offset": "0x398",
+    "sources": [
+     "native/src/launch/macos/supplymem.rs:55"
+    ]
+   },
+   {
+    "offset": "0x3a0",
+    "sources": [
+     "native/src/launch/macos/supplymem.rs:56"
+    ]
+   },
+   {
+    "offset": "0x3a8",
+    "sources": [
+     "native/src/launch/macos/construction_place/point.rs:222"
+    ]
+   },
+   {
+    "offset": "0x3b0",
+    "sources": [
+     "native/src/launch/macos/units.rs:97"
+    ]
+   },
+   {
+    "offset": "0x3b8",
+    "sources": [
+     "native/src/launch/macos/construction.rs:45",
+     "native/src/launch/macos/diplomacy_state.rs:406",
+     "native/src/launch/macos/diplomacy_state.rs:72"
+    ]
+   },
+   {
+    "offset": "0x3c0",
+    "sources": [
+     "native/src/launch/macos/construction.rs:46",
+     "native/src/launch/macos/construction_place/point.rs:223",
+     "native/src/launch/macos/doctrines.rs:50",
+     "native/src/launch/macos/units.rs:197"
+    ]
+   },
+   {
+    "offset": "0x3c8",
+    "sources": [
+     "native/src/launch/macos/design_ui.rs:57",
+     "native/src/launch/macos/design_ui.rs:72",
+     "native/src/launch/macos/navalui.rs:148"
+    ]
+   },
+   {
+    "offset": "0x3e0",
+    "sources": [
+     "native/src/launch/macos/fleetmem.rs:19",
+     "native/src/launch/macos/production.rs:50",
+     "native/src/launch/macos/resources.rs:50",
+     "native/src/launch/macos/units.rs:117"
+    ]
+   },
+   {
+    "offset": "0x3e8",
+    "sources": [
+     "native/src/launch/macos/fleetmem.rs:20"
+    ]
+   },
+   {
+    "offset": "0x400",
+    "sources": [
+     "native/src/launch/macos/kit.rs:214",
+     "native/src/launch/macos/panelkit.rs:38"
+    ]
+   },
+   {
+    "offset": "0x410",
+    "sources": [
+     "native/src/launch/macos/fleetmem.rs:21"
+    ]
+   },
+   {
+    "offset": "0x414",
+    "sources": [
+     "native/src/launch/macos/designs.rs:154",
+     "native/src/launch/macos/fleetmem.rs:22"
+    ]
+   },
+   {
+    "offset": "0x418",
+    "sources": [
+     "native/src/launch/macos/units.rs:94"
+    ]
+   },
+   {
+    "offset": "0x420",
+    "sources": [
+     "native/src/launch/macos/units.rs:95"
+    ]
+   },
+   {
+    "offset": "0x448",
+    "sources": [
+     "native/src/launch/macos/economy_detail.rs:51"
+    ]
+   },
+   {
+    "offset": "0x458",
+    "sources": [
+     "native/src/launch/macos/designer.rs:47",
+     "native/src/launch/macos/ui.rs:581"
+    ]
+   },
+   {
+    "offset": "0x480",
+    "sources": [
+     "native/src/launch/macos/armies.rs:77"
+    ]
+   },
+   {
+    "offset": "0x490",
+    "sources": [
+     "native/src/launch/macos/air.rs:42",
+     "native/src/launch/macos/airui.rs:39",
+     "native/src/launch/macos/airui.rs:44",
+     "native/src/launch/macos/construction.rs:39",
+     "native/src/launch/macos/decisions.rs:34",
+     "native/src/launch/macos/deployment.rs:39",
+     "native/src/launch/macos/diplomacy.rs:46",
+     "native/src/launch/macos/focus.rs:55",
+     "native/src/launch/macos/kit.rs:41",
+     "native/src/launch/macos/live_designer.rs:97",
+     "native/src/launch/macos/navalui.rs:145",
+     "native/src/launch/macos/panelkit.rs:33"
+    ]
+   },
+   {
+    "offset": "0x498",
+    "sources": [
+     "native/src/launch/macos/deployment.rs:40",
+     "native/src/launch/macos/doctrine_act.rs:367"
+    ]
+   },
+   {
+    "offset": "0x4a8",
+    "sources": [
+     "native/src/launch/macos/panelkit.rs:232"
+    ]
+   },
+   {
+    "offset": "0x4c0",
+    "sources": [
+     "native/src/launch/macos/airui.rs:37",
+     "native/src/launch/macos/construction_place/point.rs:189",
+     "native/src/launch/macos/construction_place/point.rs:92",
+     "native/src/launch/macos/events.rs:42",
+     "native/src/launch/macos/kit.rs:39",
+     "native/src/launch/macos/panelkit.rs:31",
+     "native/src/launch/macos/politics.rs:70",
+     "native/src/launch/macos/special_projects.rs:1572",
+     "native/src/launch/macos/ui.rs:77"
+    ]
+   },
+   {
+    "offset": "0x4e8",
+    "sources": [
+     "native/src/launch/macos/units.rs:96"
+    ]
+   },
+   {
+    "offset": "0x4f0",
+    "sources": [
+     "native/src/launch/macos/doctrine_act.rs:368"
+    ]
+   },
+   {
+    "offset": "0x500",
+    "sources": [
+     "native/src/launch/macos/design_ui.rs:89",
+     "native/src/launch/macos/live_designs.rs:77",
+     "native/src/launch/macos/live_designs.rs:80"
+    ]
+   },
+   {
+    "offset": "0x518",
+    "sources": [
+     "native/src/launch/macos/armies.rs:78",
+     "native/src/launch/macos/navalui.rs:38"
+    ]
+   },
+   {
+    "offset": "0x540",
+    "sources": [
+     "native/src/launch/macos/armies.rs:59"
+    ]
+   },
+   {
+    "offset": "0x550",
+    "sources": [
+     "native/src/launch/macos/economy_detail.rs:394",
+     "native/src/launch/macos/economy_detail.rs:40"
+    ]
+   },
+   {
+    "offset": "0x558",
+    "sources": [
+     "native/src/launch/macos/units.rs:177"
+    ]
+   },
+   {
+    "offset": "0x568",
+    "sources": [
+     "native/src/launch/macos/units.rs:178"
+    ]
+   },
+   {
+    "offset": "0x56c",
+    "sources": [
+     "native/src/launch/macos/units.rs:111"
+    ]
+   },
+   {
+    "offset": "0x5a8",
+    "sources": [
+     "native/src/launch/macos/construction_place/point.rs:95"
+    ]
+   },
+   {
+    "offset": "0x630",
+    "sources": [
+     "native/src/launch/macos/fleetmem.rs:269"
+    ]
+   },
+   {
+    "offset": "0x638",
+    "sources": [
+     "native/src/launch/macos/fleetmem.rs:270"
+    ]
+   },
+   {
+    "offset": "0x650",
+    "sources": [
+     "native/src/launch/macos/diplomacy_state.rs:437",
+     "native/src/launch/macos/diplomacy_state.rs:78"
+    ]
+   },
+   {
+    "offset": "0x670",
+    "sources": [
+     "native/src/launch/macos/agency_act.rs:160",
+     "native/src/launch/macos/air.rs:40",
+     "native/src/launch/macos/armies.rs:60",
+     "native/src/launch/macos/construction.rs:37",
+     "native/src/launch/macos/construction_place/point.rs:188",
+     "native/src/launch/macos/country_status.rs:33",
+     "native/src/launch/macos/decisions.rs:32",
+     "native/src/launch/macos/deployment.rs:37",
+     "native/src/launch/macos/design_ui.rs:40",
+     "native/src/launch/macos/designer.rs:38",
+     "native/src/launch/macos/diplomacy.rs:44",
+     "native/src/launch/macos/doctrine_act.rs:371"
+    ]
+   },
+   {
+    "offset": "0x6c0",
+    "sources": [
+     "native/src/launch/macos/naval.rs:49"
+    ]
+   },
+   {
+    "offset": "0x6c8",
+    "sources": [
+     "native/src/launch/macos/naval.rs:50"
+    ]
+   },
+   {
+    "offset": "0x6d0",
+    "sources": [
+     "native/src/launch/macos/naval.rs:51"
+    ]
+   },
+   {
+    "offset": "0x6d8",
+    "sources": [
+     "native/src/launch/macos/naval.rs:52"
+    ]
+   },
+   {
+    "offset": "0x6e8",
+    "sources": [
+     "native/src/launch/macos/naval.rs:53"
+    ]
+   },
+   {
+    "offset": "0x718",
+    "sources": [
+     "native/src/launch/macos/screenmap.rs:35"
+    ]
+   },
+   {
+    "offset": "0x7d0",
+    "sources": [
+     "native/src/launch/macos/naval.rs:54"
+    ]
+   },
+   {
+    "offset": "0x800",
+    "sources": [
+     "native/src/launch/macos/resources.rs:52"
+    ]
+   },
+   {
+    "offset": "0x898",
+    "sources": [
+     "native/src/launch/macos/production.rs:44"
+    ]
+   },
+   {
+    "offset": "0x8a0",
+    "sources": [
+     "native/src/launch/macos/design_ui.rs:52"
+    ]
+   },
+   {
+    "offset": "0x8a8",
+    "sources": [
+     "native/src/launch/macos/design_ui.rs:53"
+    ]
+   },
+   {
+    "offset": "0x8b0",
+    "sources": [
+     "native/src/launch/macos/design_ui.rs:54"
+    ]
+   },
+   {
+    "offset": "0x8d8",
+    "sources": [
+     "native/src/launch/macos/design_ui.rs:94",
+     "native/src/launch/macos/diplomacy.rs:49"
+    ]
+   },
+   {
+    "offset": "0x908",
+    "sources": [
+     "native/src/launch/macos/decisions.rs:41"
+    ]
+   },
+   {
+    "offset": "0x910",
+    "sources": [
+     "native/src/launch/macos/navalui.rs:33"
+    ]
+   },
+   {
+    "offset": "0x938",
+    "sources": [
+     "native/src/launch/macos/airread.rs:35"
+    ]
+   },
+   {
+    "offset": "0x940",
+    "sources": [
+     "native/src/launch/macos/designer.rs:49"
+    ]
+   },
+   {
+    "offset": "0x948",
+    "sources": [
+     "native/src/launch/macos/designer.rs:50"
+    ]
+   },
+   {
+    "offset": "0x970",
+    "sources": [
+     "native/src/launch/macos/special_projects.rs:47"
+    ]
+   },
+   {
+    "offset": "0xa40",
+    "sources": [
+     "native/src/launch/macos/special_projects.rs:52"
+    ]
+   },
+   {
+    "offset": "0xa70",
+    "sources": [
+     "native/src/launch/macos/airui.rs:38",
+     "native/src/launch/macos/events.rs:43",
+     "native/src/launch/macos/kit.rs:40",
+     "native/src/launch/macos/panelkit.rs:32",
+     "native/src/launch/macos/special_projects.rs:1573",
+     "native/src/launch/macos/ui.rs:78"
+    ]
+   },
+   {
+    "offset": "0xb00",
+    "sources": [
+     "native/src/launch/macos/ui.rs:271"
+    ]
+   },
+   {
+    "offset": "0xcb0",
+    "sources": [
+     "native/src/launch/macos/deployment.rs:41"
+    ]
+   },
+   {
+    "offset": "0xcc0",
+    "sources": [
+     "native/src/launch/macos/focus.rs:64"
+    ]
+   },
+   {
+    "offset": "0xcc8",
+    "sources": [
+     "native/src/launch/macos/focus.rs:65"
+    ]
+   },
+   {
+    "offset": "0xcf8",
+    "sources": [
+     "native/src/launch/macos/design_ui.rs:44",
+     "native/src/launch/macos/production.rs:48"
+    ]
+   },
+   {
+    "offset": "0xd00",
+    "sources": [
+     "native/src/launch/macos/design_ui.rs:45"
+    ]
+   },
+   {
+    "offset": "0xd08",
+    "sources": [
+     "native/src/launch/macos/units.rs:317"
+    ]
+   },
+   {
+    "offset": "0xd18",
+    "sources": [
+     "native/src/launch/macos/deployment.rs:45"
+    ]
+   },
+   {
+    "offset": "0xd20",
+    "sources": [
+     "native/src/launch/macos/deployment.rs:200"
+    ]
+   },
+   {
+    "offset": "0xd30",
+    "sources": [
+     "native/src/launch/macos/diplomacy_state.rs:60",
+     "native/src/launch/macos/diplomacy_state.rs:680"
+    ]
+   },
+   {
+    "offset": "0xd38",
+    "sources": [
+     "native/src/launch/macos/decisions.rs:39"
+    ]
+   },
+   {
+    "offset": "0xd40",
+    "sources": [
+     "native/src/launch/macos/decisions.rs:40"
+    ]
+   },
+   {
+    "offset": "0xd50",
+    "sources": [
+     "native/src/launch/macos/construction_place/point.rs:198",
+     "native/src/launch/macos/construction_place/point.rs:204",
+     "native/src/launch/macos/design_ui.rs:47",
+     "native/src/launch/macos/production.rs:49",
+     "native/src/launch/macos/special_projects.rs:58",
+     "native/src/launch/macos/ui.rs:577"
+    ]
+   },
+   {
+    "offset": "0xd58",
+    "sources": [
+     "native/src/launch/macos/construction_place/point.rs:201",
+     "native/src/launch/macos/construction_place/point.rs:205",
+     "native/src/launch/macos/ui.rs:578"
+    ]
+   },
+   {
+    "offset": "0xd60",
+    "sources": [
+     "native/src/launch/macos/trade.rs:34"
+    ]
+   },
+   {
+    "offset": "0xd68",
+    "sources": [
+     "native/src/launch/macos/intelligence.rs:41",
+     "native/src/launch/macos/ui.rs:579"
+    ]
+   },
+   {
+    "offset": "0xd98",
+    "sources": [
+     "native/src/launch/macos/naval.rs:35",
+     "native/src/launch/macos/special_projects.rs:59",
+     "native/src/launch/macos/units.rs:121"
+    ]
+   },
+   {
+    "offset": "0xda8",
+    "sources": [
+     "native/src/launch/macos/ui.rs:580"
+    ]
+   },
+   {
+    "offset": "0xe10",
+    "sources": [
+     "native/src/launch/macos/special_projects.rs:44"
+    ]
+   },
+   {
+    "offset": "0xe88",
+    "sources": [
+     "native/src/launch/macos/special_projects.rs:50"
+    ]
+   },
+   {
+    "offset": "0xf80",
+    "sources": [
+     "native/src/launch/macos/resources.rs:39"
+    ]
+   },
+   {
+    "offset": "0xf88",
+    "sources": [
+     "native/src/launch/macos/naval.rs:351",
+     "native/src/launch/macos/naval.rs:57"
+    ]
+   },
+   {
+    "offset": "0x1000",
+    "sources": [
+     "native/src/launch/macos/kit.rs:233"
+    ]
+   },
+   {
+    "offset": "0x1128",
+    "sources": [
+     "native/src/launch/macos/research.rs:59"
+    ]
+   },
+   {
+    "offset": "0x1138",
+    "sources": [
+     "native/src/launch/macos/research.rs:60"
+    ]
+   },
+   {
+    "offset": "0x1150",
+    "sources": [
+     "native/src/launch/macos/research.rs:61"
+    ]
+   },
+   {
+    "offset": "0x12e0",
+    "sources": [
+     "native/src/launch/macos/economy_detail.rs:44",
+     "native/src/launch/macos/resources.rs:40"
+    ]
+   },
+   {
+    "offset": "0x12e8",
+    "sources": [
+     "native/src/launch/macos/doctrines.rs:55"
+    ]
+   },
+   {
+    "offset": "0x1390",
+    "sources": [
+     "native/src/launch/macos/construction_place/point.rs:226",
+     "native/src/launch/macos/construction_place/point.rs:240"
+    ]
+   },
+   {
+    "offset": "0x13d8",
+    "sources": [
+     "native/src/launch/macos/construction_place/point.rs:225",
+     "native/src/launch/macos/construction_place/point.rs:239"
+    ]
+   },
+   {
+    "offset": "0x1608",
+    "sources": [
+     "native/src/launch/macos/diplomacy.rs:47"
+    ]
+   },
+   {
+    "offset": "0x1720",
+    "sources": [
+     "native/src/launch/macos/design_ui.rs:48"
+    ]
+   },
+   {
+    "offset": "0x1728",
+    "sources": [
+     "native/src/launch/macos/design_ui.rs:49"
+    ]
+   },
+   {
+    "offset": "0x1ac8",
+    "sources": [
+     "native/src/launch/macos/trade.rs:32"
+    ]
+   },
+   {
+    "offset": "0x1e58",
+    "sources": [
+     "native/src/launch/macos/research.rs:57"
+    ]
+   },
+   {
+    "offset": "0x1f10",
+    "sources": [
+     "native/src/launch/macos/design_ui.rs:42",
+     "native/src/launch/macos/production.rs:47"
+    ]
+   },
+   {
+    "offset": "0x1f18",
+    "sources": [
+     "native/src/launch/macos/design_ui.rs:43"
+    ]
+   },
+   {
+    "offset": "0x2410",
+    "sources": [
+     "native/src/launch/macos/designer.rs:41"
+    ]
+   },
+   {
+    "offset": "0x26f0",
+    "sources": [
+     "native/src/launch/macos/navalui.rs:42"
+    ]
+   },
+   {
+    "offset": "0x2a38",
+    "sources": [
+     "native/src/launch/macos/ui.rs:240"
+    ]
+   },
+   {
+    "offset": "0x2a48",
+    "sources": [
+     "native/src/launch/macos/ui.rs:254"
+    ]
+   },
+   {
+    "offset": "0x2d70",
+    "sources": [
+     "native/src/launch/macos/focus.rs:57"
+    ]
+   },
+   {
+    "offset": "0x2db8",
+    "sources": [
+     "native/src/launch/macos/focus.rs:62"
+    ]
+   },
+   {
+    "offset": "0x2e10",
+    "sources": [
+     "native/src/launch/macos/focus.rs:56"
+    ]
+   },
+   {
+    "offset": "0x2e34",
+    "sources": [
+     "native/src/launch/macos/focus.rs:61"
+    ]
+   },
+   {
+    "offset": "0x35e8",
+    "sources": [
+     "native/src/launch/macos/diplomacy.rs:48"
+    ]
+   },
+   {
+    "offset": "0x3958",
+    "sources": [
+     "native/src/launch/macos/panelkit.rs:233"
+    ]
+   },
+   {
+    "offset": "0x4ca8",
+    "sources": [
+     "native/src/launch/macos/navalui.rs:37"
+    ]
+   },
+   {
+    "offset": "0x6630",
+    "sources": [
+     "native/src/launch/macos/politics.rs:61"
+    ]
+   },
+   {
+    "offset": "0x7b00",
+    "sources": [
+     "native/src/launch/macos/navalui.rs:34"
+    ]
+   },
+   {
+    "offset": "0x7b10",
+    "sources": [
+     "native/src/launch/macos/navalui.rs:35"
+    ]
+   },
+   {
+    "offset": "0x7b18",
+    "sources": [
+     "native/src/launch/macos/navalui.rs:39"
+    ]
+   },
+   {
+    "offset": "0x7cb8",
+    "sources": [
+     "native/src/launch/macos/navalui.rs:46"
+    ]
+   },
+   {
+    "offset": "0x7cd0",
+    "sources": [
+     "native/src/launch/macos/navalui.rs:40"
+    ]
+   },
+   {
+    "offset": "0x8000",
+    "sources": [
+     "native/src/launch/macos/kit.rs:232"
+    ]
+   },
+   {
+    "offset": "0xc730",
+    "sources": [
+     "native/src/launch/macos/design_ui.rs:62"
+    ]
+   },
+   {
+    "offset": "0xd478",
+    "sources": [
+     "native/src/launch/macos/design_ui.rs:71"
+    ]
+   },
+   {
+    "offset": "0xfcb0",
+    "sources": [
+     "native/src/launch/macos/design_ui.rs:67"
+    ]
+   },
+   {
+    "offset": "0xfcc8",
+    "sources": [
+     "native/src/launch/macos/design_ui.rs:68"
+    ]
+   },
+   {
+    "offset": "0x10000",
+    "sources": [
+     "native/src/launch/macos/construction_place/point.rs:22",
+     "native/src/launch/macos/controller_epoch.rs:125",
+     "native/src/launch/macos/daily/research.rs:48",
+     "native/src/launch/macos/designer.rs:134",
+     "native/src/launch/macos/diplomacy_state.rs:368",
+     "native/src/launch/macos/economy_detail.rs:220",
+     "native/src/launch/macos/economy_detail.rs:256",
+     "native/src/launch/macos/economy_detail.rs:261",
+     "native/src/launch/macos/kit.rs:202",
+     "native/src/launch/macos/mgmt.rs:32",
+     "native/src/launch/macos/panelkit.rs:138",
+     "native/src/launch/macos/politics.rs:216"
+    ]
+   }
+  ]
+ },
+ "counts": {
+  "code (tests only)": 104,
+  "function": 3,
+  "function (tests only)": 9,
+  "global": 7,
+  "global (tests only)": 25,
+  "objc": 2,
+  "vtable": 140,
+  "vtable (tests only)": 26,
+  "vtable-entry (tests only)": 3
+ }
+}

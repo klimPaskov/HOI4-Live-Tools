@@ -1,0 +1,574 @@
+{
+ "description": "Ground truth for HOI4 1.19.3: macOS Mach-O 089EA519 constants (native/src at 2e61a70^) paired by Layout field name with the Linux ELF a4971c9e constants. Fields name their owning class by its macOS vtable.",
+ "macho_uuid": "089EA519-6780-353B-8E39-4E9309B444D4",
+ "elf_build_id": "a4971c9e8ac9a6f2487dea109e01f9839ee59db7",
+ "items": [
+  {
+   "name": "game.gs_global",
+   "kind": "global",
+   "address": "0x3519740",
+   "expect": "0x44086a8"
+  },
+  {
+   "name": "game.idler_global",
+   "kind": "global",
+   "address": "0x35196c0",
+   "expect": "0x44085f8"
+  },
+  {
+   "name": "game.technology_db_global",
+   "kind": "global",
+   "address": "0x34d0de0",
+   "expect": "0x439f450"
+  },
+  {
+   "name": "game.tag_db_global",
+   "kind": "global",
+   "address": "0x3506580",
+   "expect": "0x43f3eb8"
+  },
+  {
+   "name": "game.gs_vtable",
+   "kind": "vtable",
+   "address": "0x3306260",
+   "expect": "0x42c7598"
+  },
+  {
+   "name": "game.idler_vtable",
+   "kind": "vtable",
+   "address": "0x3308f90",
+   "expect": "0x42c9a88"
+  },
+  {
+   "name": "game.playthrough",
+   "kind": "field",
+   "vtable": "0x3306260",
+   "offset": "0x6c8",
+   "expect": "0x718",
+   "owner": "gs",
+   "context": [
+    "0x3519740"
+   ]
+  },
+  {
+   "name": "game.date",
+   "kind": "field",
+   "vtable": "0x3306260",
+   "offset": "0x428",
+   "expect": "0x460",
+   "owner": "gs",
+   "context": [
+    "0x3519740"
+   ]
+  },
+  {
+   "name": "game.speed",
+   "kind": "field",
+   "vtable": "0x3306260",
+   "offset": "0x47c",
+   "expect": "0x4b4",
+   "owner": "gs",
+   "context": [
+    "0x3519740"
+   ]
+  },
+  {
+   "name": "game.paused",
+   "kind": "field",
+   "vtable": "0x3308f90",
+   "offset": "0x679",
+   "expect": "0x6c1",
+   "owner": "idler",
+   "context": [
+    "0x35196c0"
+   ]
+  },
+  {
+   "name": "game.player_tag",
+   "kind": "field",
+   "vtable": "0x3306260",
+   "offset": "0x4d8",
+   "expect": "0x518",
+   "owner": "gs",
+   "context": [
+    "0x3519740"
+   ]
+  },
+  {
+   "name": "game.tag_country_index",
+   "kind": "field",
+   "vtable": "0x3306260",
+   "offset": "0x308",
+   "expect": "0x340",
+   "owner": "gs",
+   "context": [
+    "0x3519740"
+   ]
+  },
+  {
+   "name": "game.countries",
+   "kind": "field",
+   "vtable": "0x3306260",
+   "offset": "0x2d8",
+   "expect": "0x310",
+   "owner": "gs",
+   "context": [
+    "0x3519740"
+   ]
+  },
+  {
+   "name": "game.difficulty",
+   "kind": "field",
+   "vtable": "0x3306260",
+   "offset": "0x5d0",
+   "expect": "0x620",
+   "owner": "gs",
+   "context": [
+    "0x3519740"
+   ]
+  },
+  {
+   "name": "game.historical",
+   "kind": "field",
+   "vtable": "0x3306260",
+   "offset": "0x5d8",
+   "expect": "0x628",
+   "owner": "gs",
+   "context": [
+    "0x3519740"
+   ]
+  },
+  {
+   "name": "game.country_focus_progress",
+   "kind": "field",
+   "vtable": "0x337bc38",
+   "offset": "0x1108",
+   "expect": "0x1348",
+   "owner": "country"
+  },
+  {
+   "name": "game.country_technology_status",
+   "kind": "field",
+   "vtable": "0x337bc38",
+   "offset": "0xd08",
+   "expect": "0xf38",
+   "owner": "country"
+  },
+  {
+   "name": "game.country_vtable",
+   "kind": "vtable",
+   "address": "0x337bc38",
+   "expect": "0x41fafb0"
+  },
+  {
+   "name": "game.country_production",
+   "kind": "field",
+   "vtable": "0x337bc38",
+   "offset": "0xd10",
+   "expect": "0xf40",
+   "owner": "country"
+  },
+  {
+   "name": "game.country_politics",
+   "kind": "field",
+   "vtable": "0x337bc38",
+   "offset": "0xd38",
+   "expect": "0xf68",
+   "owner": "country"
+  },
+  {
+   "name": "game.country_focus_tree",
+   "kind": "field",
+   "vtable": "0x337bc38",
+   "offset": "0x10f8",
+   "expect": "0x1338",
+   "owner": "country"
+  },
+  {
+   "name": "game.production_vtable",
+   "kind": "vtable",
+   "address": "0x338b678",
+   "expect": "0x42066f8"
+  },
+  {
+   "name": "game.politics_vtable",
+   "kind": "vtable",
+   "address": "0x3387148",
+   "expect": "0x4202e30"
+  },
+  {
+   "name": "game.focus_name",
+   "kind": "field",
+   "vtable": "0x3386468",
+   "offset": "0x50",
+   "expect": "0x60",
+   "owner": "focus"
+  },
+  {
+   "name": "own_focus.progress_vtable",
+   "kind": "vtable",
+   "address": "0x33865d0",
+   "expect": "0x4202638"
+  },
+  {
+   "name": "own_focus.tree_vtable",
+   "kind": "vtable",
+   "address": "0x33863a8",
+   "expect": "0x4202410"
+  },
+  {
+   "name": "own_focus.database_global",
+   "kind": "global",
+   "address": "0x34d0a10",
+   "expect": "0x439faf0"
+  },
+  {
+   "name": "own_focus.database_vtable",
+   "kind": "vtable",
+   "address": "0x3386528",
+   "expect": "0x4202590"
+  },
+  {
+   "name": "own_focus.focus_vtable",
+   "kind": "vtable",
+   "address": "0x3386468",
+   "expect": "0x42024d0"
+  },
+  {
+   "name": "own_focus.tree_focuses",
+   "kind": "field",
+   "vtable": "0x33863a8",
+   "offset": "0x28",
+   "expect": "0x30",
+   "owner": "tree"
+  },
+  {
+   "name": "own_focus.focus_tree",
+   "kind": "field",
+   "vtable": "0x3386468",
+   "offset": "0x130",
+   "expect": "0x160",
+   "owner": "focus"
+  },
+  {
+   "name": "research.database_vtable",
+   "kind": "vtable",
+   "address": "0x339eda0",
+   "expect": "0x42110c8"
+  },
+  {
+   "name": "research.template_vtable",
+   "kind": "vtable",
+   "address": "0x339ed10",
+   "expect": "0x4211038"
+  },
+  {
+   "name": "research.database_templates",
+   "kind": "field",
+   "vtable": "0x339eda0",
+   "offset": "0x40",
+   "expect": "0x48",
+   "owner": "rdb",
+   "context": [
+    "0x34d0de0"
+   ]
+  },
+  {
+   "name": "research.template_index",
+   "kind": "field",
+   "vtable": "0x339ed10",
+   "offset": "0x28",
+   "expect": "0x30",
+   "owner": "rtemplate"
+  },
+  {
+   "name": "research.template_threshold",
+   "kind": "field",
+   "vtable": "0x339ed10",
+   "offset": "0x39c",
+   "expect": "0x3cc",
+   "owner": "rtemplate"
+  },
+  {
+   "name": "research.technology_vtable",
+   "kind": "vtable",
+   "address": "0x339e3e8",
+   "expect": "0x42107f8"
+  },
+  {
+   "name": "research.status_vtable",
+   "kind": "vtable",
+   "address": "0x339e4e8",
+   "expect": "0x42108f8"
+  },
+  {
+   "name": "research.slot_vtable",
+   "kind": "vtable",
+   "address": "0x339e488",
+   "expect": "0x4210898"
+  },
+  {
+   "name": "army.country_divisions",
+   "kind": "field",
+   "vtable": "0x337bc38",
+   "offset": "0x250",
+   "expect": "0x290",
+   "owner": "country"
+  },
+  {
+   "name": "army.division_vtable",
+   "kind": "vtable",
+   "address": "0x32af5a8",
+   "expect": "0x4277fe8"
+  },
+  {
+   "name": "army.strength",
+   "kind": "field",
+   "vtable": "0x32af5a8",
+   "offset": "0x418",
+   "expect": "0x420",
+   "owner": "division"
+  },
+  {
+   "name": "army.organisation",
+   "kind": "field",
+   "vtable": "0x32af5a8",
+   "offset": "0x420",
+   "expect": "0x428",
+   "owner": "division"
+  },
+  {
+   "name": "army.province_id",
+   "kind": "field",
+   "vtable": "0x337c7e8",
+   "offset": "0x9c",
+   "expect": "0xa4",
+   "owner": "province"
+  },
+  {
+   "name": "production_lines.military_line_vtable",
+   "kind": "vtable",
+   "address": "0x338a030",
+   "expect": "0x42ede08"
+  },
+  {
+   "name": "production_lines.naval_line_vtable",
+   "kind": "vtable",
+   "address": "0x338a1b0",
+   "expect": "0x42edf88"
+  },
+  {
+   "name": "production_lines.equipment_db_global",
+   "kind": "global",
+   "address": "0x34d0be0",
+   "expect": "0x439f440"
+  },
+  {
+   "name": "production_lines.equipment_db_vtable",
+   "kind": "vtable",
+   "address": "0x3377a90",
+   "expect": "0x41f72d8"
+  },
+  {
+   "name": "production_lines.equipment_catalog",
+   "kind": "field",
+   "vtable": "0x3377a90",
+   "offset": "0x50",
+   "expect": "0x60",
+   "owner": "edb",
+   "context": [
+    "0x34d0be0"
+   ]
+  },
+  {
+   "name": "production_lines.variant_vtable",
+   "kind": "vtable",
+   "address": "0x337aac8",
+   "expect": "0x41fa1a0"
+  },
+  {
+   "name": "production_lines.variant_type",
+   "kind": "field",
+   "vtable": "0x337aac8",
+   "offset": "0x3e0",
+   "expect": "0x3f0",
+   "owner": "variant"
+  },
+  {
+   "name": "production_lines.equipment_type_vtable",
+   "kind": "vtable",
+   "address": "0x3379328",
+   "expect": "0x41f8810"
+  },
+  {
+   "name": "construction.building_line_vtable",
+   "kind": "vtable",
+   "address": "0x3389c40",
+   "expect": "0x4205680"
+  },
+  {
+   "name": "construction.railway_line_vtable",
+   "kind": "vtable",
+   "address": "0x338a7a8",
+   "expect": "0x42ee398"
+  },
+  {
+   "name": "construction.building_vtable",
+   "kind": "vtable",
+   "address": "0x332dcb0",
+   "expect": "0x41b3e60"
+  },
+  {
+   "name": "construction.building_status",
+   "kind": "field",
+   "vtable": "0x332dcb0",
+   "offset": "0x1a8",
+   "expect": "0x1b8",
+   "owner": "building"
+  },
+  {
+   "name": "construction.building_template",
+   "kind": "field",
+   "vtable": "0x332dcb0",
+   "offset": "0x1b0",
+   "expect": "0x1c0",
+   "owner": "building"
+  },
+  {
+   "name": "construction.database_global",
+   "kind": "global",
+   "address": "0x34d0ac0",
+   "expect": "0x439f400"
+  },
+  {
+   "name": "construction.database_vtable",
+   "kind": "vtable",
+   "address": "0x332dd28",
+   "expect": "0x41b3ed8"
+  },
+  {
+   "name": "construction.template_vtable",
+   "kind": "vtable",
+   "address": "0x332e908",
+   "expect": "0x41b49c8"
+  },
+  {
+   "name": "construction.null_template_vtable",
+   "kind": "vtable",
+   "address": "0x332def8",
+   "expect": "0x41b40a8"
+  },
+  {
+   "name": "construction.template_key",
+   "kind": "field",
+   "vtable": "0x332e908",
+   "offset": "0x228",
+   "expect": "0x248",
+   "owner": "ctemplate"
+  },
+  {
+   "name": "construction.template_ordinal",
+   "kind": "field",
+   "vtable": "0x332e908",
+   "offset": "0x290",
+   "expect": "0x2b8",
+   "owner": "ctemplate"
+  },
+  {
+   "name": "construction.status_vtable",
+   "kind": "vtable",
+   "address": "0x332e6a8",
+   "expect": "0x41b4768"
+  },
+  {
+   "name": "construction.state_vtable",
+   "kind": "vtable",
+   "address": "0x337caf0",
+   "expect": "0x41fba98"
+  },
+  {
+   "name": "construction.state_owner",
+   "kind": "field",
+   "vtable": "0x337caf0",
+   "offset": "0xc0",
+   "expect": "0xc8",
+   "owner": "state"
+  },
+  {
+   "name": "construction.state_controller",
+   "kind": "field",
+   "vtable": "0x337caf0",
+   "offset": "0xc4",
+   "expect": "0xcc",
+   "owner": "state"
+  },
+  {
+   "name": "construction.state_id",
+   "kind": "field",
+   "vtable": "0x337caf0",
+   "offset": "0x40",
+   "expect": "0x48",
+   "owner": "state"
+  },
+  {
+   "name": "construction.state_status",
+   "kind": "field",
+   "vtable": "0x337caf0",
+   "offset": "0x110",
+   "expect": "0x120",
+   "owner": "state"
+  },
+  {
+   "name": "construction.province_vtable",
+   "kind": "vtable",
+   "address": "0x337c7e8",
+   "expect": "0x41fb728"
+  },
+  {
+   "name": "construction.province_owner",
+   "kind": "field",
+   "vtable": "0x337c7e8",
+   "offset": "0x188",
+   "expect": "0x1a8",
+   "owner": "province"
+  },
+  {
+   "name": "construction.province_state",
+   "kind": "field",
+   "vtable": "0x337c7e8",
+   "offset": "0xc0",
+   "expect": "0xe0",
+   "owner": "province"
+  },
+  {
+   "name": "construction.province_status",
+   "kind": "field",
+   "vtable": "0x337c7e8",
+   "offset": "0x190",
+   "expect": "0x1b0",
+   "owner": "province"
+  },
+  {
+   "name": "construction.gs_provinces",
+   "kind": "field",
+   "vtable": "0x3306260",
+   "offset": "0x278",
+   "expect": "0x2b0",
+   "owner": "gs",
+   "context": [
+    "0x3519740"
+   ]
+  },
+  {
+   "name": "construction.gs_states",
+   "kind": "field",
+   "vtable": "0x3306260",
+   "offset": "0x290",
+   "expect": "0x2c8",
+   "owner": "gs",
+   "context": [
+    "0x3519740"
+   ]
+  }
+ ]
+}
