@@ -23,6 +23,7 @@ use crate::{
     game,
     memory::{Reader, StringAbi},
     platform::Process,
+    xlayout::{fld, img, Class},
 };
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
@@ -30,6 +31,7 @@ use std::collections::BTreeMap;
 /// Fixed point scale of every stored quantity.
 const FIXED: f64 = 100_000.0;
 
+#[derive(Clone, Copy)]
 pub(super) struct Layout {
     country_divisions: u64,
     country_templates: u64,
@@ -197,14 +199,113 @@ const VARIANT_STATS: &[(&str, u64)] = &[
     ("build_cost_ic", 0x3c0),
 ];
 
-pub(super) fn layout(r: &Reader<'_>) -> Result<&'static Layout> {
-    match r.string_abi() {
-        StringAbi::LibCxx => Ok(&MACOS),
-        StringAbi::LibStdCxx => Err(Error::new(
-            "capability_unavailable",
-            "Unit reads are not reviewed for this build",
-        )),
+/// Owners of the fields above (macOS 1.19.4.1 RTTI names and vtables). Classes
+/// without a reviewed vtable carry 0; their Linux offsets need an anchor.
+const COUNTRY: Class = Class::new("CCountry", 0x357e388);
+const ARMY: Class = Class::new("CArmy", 0x34ace60);
+const ORDERS_GROUP: Class = Class::new("orders.group", 0);
+const TEMPLATE: Class = Class::new("CReferencedDivisionTemplate", 0x34fb370);
+const TEMPLATE_DATA: Class = Class::new("CDivisionTemplateData", 0x34fb310);
+const TECHNOLOGY_STATUS: Class = Class::new("CTechnologyStatus", 0);
+const SUBUNIT: Class = Class::new("CSubUnitDefinition", 0x351e958);
+const EQUIPMENT_TYPE: Class = Class::new("CEquipmentType", 0x357bad8);
+const VARIANT: Class = Class::new("CEquipmentVariant", 0x357d1b8);
+const CHARACTERS: Class = Class::new("CCountryCharacters", 0x3530728);
+const LEADER: Class = Class::new("CArmyLeader", 0x35d8db0);
+const LEADER_TEMPLATE: Class = Class::new("CUnitLeaderTemplate", 0);
+const STATE: Class = Class::new("CState", 0x357f410);
+const BUILDING_STATUS: Class = Class::new("CBuildingStatus", 0x352f828);
+const BUILDING: Class = Class::new("CBuilding", 0x352ee30);
+/// Records of the arrays read below (`{type*, i64 amount}`,
+/// `{type*, u32 slot, u32 flag, i64 amount}`, `{variant*, i64 amount}`) and
+/// their sizes.
+const NEED: Class = Class::new("subunit.need", 0);
+const NEED_SIZE: Class = Class::new("subunit.need.size", 0);
+const POOL: Class = Class::new("division.pool", 0);
+const POOL_SIZE: Class = Class::new("division.pool.size", 0);
+const HELD_VARIANT: Class = Class::new("division.variant", 0);
+const HELD_VARIANT_SIZE: Class = Class::new("division.variant.size", 0);
+const TRAIT_SIZE: Class = Class::new("leader.trait.size", 0);
+
+impl Layout {
+    /// The macOS keys translated for this build (identity on macOS).
+    fn resolve(&self, abi: StringAbi) -> Result<Self> {
+        let f = |class: &Class, offset: u64| fld(abi, class, offset);
+        Ok(Self {
+            country_divisions: f(&COUNTRY, self.country_divisions)?,
+            country_templates: f(&COUNTRY, self.country_templates)?,
+            division_vtable: img(abi, self.division_vtable)?,
+            division_handle: f(&ARMY, self.division_handle)?,
+            division_group: f(&ARMY, self.division_group)?,
+            group_name: f(&ORDERS_GROUP, self.group_name)?,
+            division_location: f(&ARMY, self.division_location)?,
+            division_strength: f(&ARMY, self.division_strength)?,
+            division_organisation: f(&ARMY, self.division_organisation)?,
+            division_manpower: f(&ARMY, self.division_manpower)?,
+            division_template: f(&ARMY, self.division_template)?,
+            division_pool: f(&ARMY, self.division_pool)?,
+            division_variants: f(&ARMY, self.division_variants)?,
+            template_vtable: img(abi, self.template_vtable)?,
+            template_name: f(&TEMPLATE, self.template_name)?,
+            template_grid: f(&TEMPLATE, self.template_grid)?,
+            template_support: f(&TEMPLATE, self.template_support)?,
+            data_vtable: img(abi, self.data_vtable)?,
+            data_name: f(&TEMPLATE_DATA, self.data_name)?,
+            data_grid: f(&TEMPLATE_DATA, self.data_grid)?,
+            data_support: f(&TEMPLATE_DATA, self.data_support)?,
+            data_priority: f(&TEMPLATE_DATA, self.data_priority)?,
+            data_in_template: f(&TEMPLATE, self.data_in_template)?,
+            subunit_catalog: f(&TECHNOLOGY_STATUS, self.subunit_catalog)?,
+            subunit_group: f(&SUBUNIT, self.subunit_group)?,
+            subunit_vtable: img(abi, self.subunit_vtable)?,
+            subunit_key: f(&SUBUNIT, self.subunit_key)?,
+            equipment_type_vtable: img(abi, self.equipment_type_vtable)?,
+            equipment_key: f(&EQUIPMENT_TYPE, self.equipment_key)?,
+            variant_vtable: img(abi, self.variant_vtable)?,
+            variant_type: f(&VARIANT, self.variant_type)?,
+            country_characters: f(&COUNTRY, self.country_characters)?,
+            characters_army_leaders: f(&CHARACTERS, self.characters_army_leaders)?,
+            leader_vtable: img(abi, self.leader_vtable)?,
+            leader_id: f(&LEADER, self.leader_id)?,
+            leader_name: f(&LEADER, self.leader_name)?,
+            leader_template: f(&LEADER, self.leader_template)?,
+            leader_template_stats: f(&LEADER_TEMPLATE, self.leader_template_stats)?,
+            leader_template_traits: f(&LEADER_TEMPLATE, self.leader_template_traits)?,
+            status_offset: f(&STATE, self.status_offset)?,
+            status_buildings: f(&BUILDING_STATUS, self.status_buildings)?,
+            building_template: f(&BUILDING, self.building_template)?,
+            building_level: f(&BUILDING, self.building_level)?,
+        })
     }
+}
+impl SubOffsets {
+    fn resolve(&self, abi: StringAbi) -> Result<Self> {
+        let f = |offset: u64| fld(abi, &SUBUNIT, offset);
+        Ok(Self {
+            width: f(self.width)?,
+            hp: f(self.hp)?,
+            org: f(self.org)?,
+            morale: f(self.morale)?,
+            supply: f(self.supply)?,
+            suppression: f(self.suppression)?,
+            weight: f(self.weight)?,
+            soft: f(self.soft)?,
+            hard: f(self.hard)?,
+            defense: f(self.defense)?,
+            breakthrough: f(self.breakthrough)?,
+            armor: f(self.armor)?,
+            piercing: f(self.piercing)?,
+            air: f(self.air)?,
+            recon: f(self.recon)?,
+            manpower: f(self.manpower)?,
+            training: f(self.training)?,
+            need: f(self.need)?,
+        })
+    }
+}
+
+pub(super) fn layout(r: &Reader<'_>) -> Result<Layout> {
+    MACOS.resolve(r.string_abi())
 }
 fn fixed(r: &Reader<'_>, a: u64) -> Result<f64> {
     Ok(i64::from_le_bytes(r.read(a, 8)?.try_into().unwrap()) as f64 / FIXED)
@@ -314,7 +415,7 @@ pub(super) struct Def {
 pub(super) fn catalog(r: &Reader<'_>, image: u64) -> Result<Vec<Def>> {
     let l = layout(r)?;
     let country = own_country(r, image)?;
-    let status = r.u64(country + 0xd08)?;
+    let status = r.u64(country + game::layout(r).country_technology_status)?;
     let list = r.pointer_array(status + l.subunit_catalog)?;
     if list.len() > 400 {
         return Err(Error::new("invalid_array", "Too many sub-unit definitions"));
@@ -328,7 +429,7 @@ pub(super) fn catalog(r: &Reader<'_>, image: u64) -> Result<Vec<Def>> {
             address: p,
             key: r.string_bounded(p + l.subunit_key, 64)?,
             group: r.i32(p + l.subunit_group)?,
-            width: fixed(r, p + SUB.width)?,
+            width: fixed(r, p + fld(r.string_abi(), &SUBUNIT, SUB.width)?)?,
         });
     }
     Ok(out)
@@ -394,7 +495,9 @@ pub(super) fn template_layouts(r: &Reader<'_>, image: u64) -> Result<Vec<Layout5
 pub(super) fn read_subunit(r: &Reader<'_>, image: u64, p: u64) -> Result<SubUnit> {
     let l = layout(r)?;
     exact(r, image, p, l.subunit_vtable, "sub-unit definition")?;
-    let o = &SUB;
+    let abi = r.string_abi();
+    let o = &SUB.resolve(abi)?;
+    let need_stride = fld(abi, &NEED_SIZE, 16)?;
     let (header, data, count) = r.array_header(p + o.need)?;
     let _ = header;
     if count > 8 {
@@ -402,11 +505,11 @@ pub(super) fn read_subunit(r: &Reader<'_>, image: u64, p: u64) -> Result<SubUnit
     }
     let mut need = Vec::new();
     for i in 0..count as u64 {
-        let ty = r.u64(data + i * 16)?;
+        let ty = r.u64(data + i * need_stride)?;
         exact(r, image, ty, l.equipment_type_vtable, "equipment type")?;
         need.push((
             r.string_bounded(ty + l.equipment_key, 128)?,
-            fixed(r, data + i * 16 + 8)?,
+            fixed(r, data + i * need_stride + fld(abi, &NEED, 8)?)?,
         ));
     }
     let mut unit_stats = BTreeMap::new();
@@ -622,6 +725,7 @@ fn read_variant(r: &Reader<'_>, image: u64, v: u64) -> Result<Variant> {
     exact(r, image, ty, l.equipment_type_vtable, "equipment type")?;
     let mut stats = BTreeMap::new();
     for (name, off) in VARIANT_STATS {
+        let off = fld(r.string_abi(), &VARIANT, *off)?;
         stats.insert(*name, round(fixed(r, v + off)?, 3));
     }
     Ok(Variant {
@@ -683,17 +787,23 @@ pub(super) fn divisions(r: &Reader<'_>, image: u64) -> Result<Vec<DivisionRead>>
 type Pool = (BTreeMap<String, f64>, Vec<(String, f64)>);
 fn read_pool(r: &Reader<'_>, image: u64, division: u64) -> Result<Pool> {
     let l = layout(r)?;
+    let abi = r.string_abi();
+    let (pool_size, pool_amount) = (fld(abi, &POOL_SIZE, 24)?, fld(abi, &POOL, 16)?);
+    let (variant_size, variant_amount) = (
+        fld(abi, &HELD_VARIANT_SIZE, 16)?,
+        fld(abi, &HELD_VARIANT, 8)?,
+    );
     let (_, data, count) = r.array_header(division + l.division_pool)?;
     if count > 32 {
         return Err(Error::new("invalid_array", "Equipment pool too long"));
     }
     let mut held = BTreeMap::new();
     for i in 0..count as u64 {
-        let ty = r.u64(data + i * 24)?;
+        let ty = r.u64(data + i * pool_size)?;
         exact(r, image, ty, l.equipment_type_vtable, "equipment type")?;
         held.insert(
             r.string_bounded(ty + l.equipment_key, 128)?,
-            fixed(r, data + i * 24 + 16)?,
+            fixed(r, data + i * pool_size + pool_amount)?,
         );
     }
     let (_, vdata, vcount) = r.array_header(division + l.division_variants)?;
@@ -702,12 +812,12 @@ fn read_pool(r: &Reader<'_>, image: u64, division: u64) -> Result<Pool> {
     }
     let mut variants = Vec::new();
     for i in 0..vcount as u64 {
-        let v = r.u64(vdata + i * 16)?;
+        let v = r.u64(vdata + i * variant_size)?;
         let ty = r.u64(v + l.variant_type)?;
         exact(r, image, ty, l.equipment_type_vtable, "equipment type")?;
         variants.push((
             r.string_bounded(ty + l.equipment_key, 128)?,
-            fixed(r, vdata + i * 16 + 8)?,
+            fixed(r, vdata + i * variant_size + variant_amount)?,
         ));
     }
     Ok((held, variants))
@@ -719,16 +829,18 @@ pub(super) fn sample_variants(
     division: u64,
 ) -> Result<BTreeMap<String, Variant>> {
     let l = layout(r)?;
+    let abi = r.string_abi();
+    let (pool_size, variant_size) = (fld(abi, &POOL_SIZE, 24)?, fld(abi, &HELD_VARIANT_SIZE, 16)?);
     let (_, data, count) = r.array_header(division + l.division_pool)?;
     let (_, vdata, vcount) = r.array_header(division + l.division_variants)?;
     let mut archetypes = Vec::new();
     for i in 0..count.min(32) as u64 {
-        let ty = r.u64(data + i * 24)?;
+        let ty = r.u64(data + i * pool_size)?;
         archetypes.push(r.string_bounded(ty + l.equipment_key, 128)?);
     }
     let mut out = BTreeMap::new();
     for i in 0..vcount.min(32) as u64 {
-        let v = r.u64(vdata + i * 16)?;
+        let v = r.u64(vdata + i * variant_size)?;
         let variant = read_variant(r, image, v)?;
         // The pool lists archetypes and variants in different orders; a
         // variant belongs to the archetype its name starts with.
@@ -831,8 +943,9 @@ pub(super) fn leaders(r: &Reader<'_>, image: u64) -> Result<Vec<Leader>> {
         let n = |i: usize| i32::from_le_bytes(stats[i * 4..i * 4 + 4].try_into().unwrap());
         let (_, tdata, tcount) = r.array_header(template + l.leader_template_traits)?;
         let mut traits = Vec::new();
+        let trait_size = fld(r.string_abi(), &TRAIT_SIZE, 32)?;
         for t in 0..tcount.min(16) as u64 {
-            traits.push(r.string_bounded(tdata + t * 32, 64)?);
+            traits.push(r.string_bounded(tdata + t * trait_size, 64)?);
         }
         out.push(Leader {
             id: r.string_bounded(leader + l.leader_id, 128)?,
