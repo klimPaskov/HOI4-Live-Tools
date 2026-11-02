@@ -28,7 +28,7 @@ use crate::{
     gui_tree::{self, Rect},
     memory::{Reader, StringAbi},
     platform::{
-        macos_input::{Key, MacKeys},
+        game_input::{GameInput, Key},
         Process,
     },
 };
@@ -401,12 +401,12 @@ pub(super) fn texts(r: &Reader<'_>, image: u64) -> Result<Texts> {
 }
 
 // ---- opening and closing -----------------------------------------------------------
-fn click(keys: &MacKeys, rect: Rect) -> Result<()> {
+fn click(keys: &dyn GameInput, rect: Rect) -> Result<()> {
     let (x, y) = rect.center();
     keys.click(GAME, x, y)?;
     Ok(())
 }
-fn open_settled(process: &dyn Process, keys: &MacKeys) -> Result<()> {
+fn open_settled(process: &dyn Process, keys: &dyn GameInput) -> Result<()> {
     wait(process, "designer window", is_open)?;
     // The window fades in; wait for its working copy and dropdown to answer.
     settled(process, "designer geometry", |r, i| {
@@ -416,7 +416,7 @@ fn open_settled(process: &dyn Process, keys: &MacKeys) -> Result<()> {
     Ok(())
 }
 /// Open the designer with the panel's Division Designer button (the first template shown).
-pub(super) fn open_new_designer(process: &dyn Process, keys: &MacKeys) -> Result<()> {
+pub(super) fn open_new_designer(process: &dyn Process, keys: &dyn GameInput) -> Result<()> {
     ui::clear_notices(process, keys)?;
     if read(process, is_open)? {
         return Ok(());
@@ -427,7 +427,7 @@ pub(super) fn open_new_designer(process: &dyn Process, keys: &MacKeys) -> Result
     open_settled(process, keys)
 }
 /// Open the designer on an existing template with its Edit button.
-pub(super) fn open_template(process: &dyn Process, keys: &MacKeys, name: &str) -> Result<()> {
+pub(super) fn open_template(process: &dyn Process, keys: &dyn GameInput, name: &str) -> Result<()> {
     ui::clear_notices(process, keys)?;
     if read(process, is_open)? {
         select_template(process, keys, name)?;
@@ -444,7 +444,11 @@ pub(super) fn open_template(process: &dyn Process, keys: &MacKeys, name: &str) -
     })
 }
 /// Pick a template (or "Create Empty") in the designer's dropdown.
-pub(super) fn select_template(process: &dyn Process, keys: &MacKeys, name: &str) -> Result<()> {
+pub(super) fn select_template(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    name: &str,
+) -> Result<()> {
     let create = name.is_empty();
     let current = read(process, draft)?;
     if !create && current.name == name {
@@ -476,11 +480,11 @@ pub(super) fn select_template(process: &dyn Process, keys: &MacKeys, name: &str)
     })
 }
 /// A fresh empty draft ("Create Empty").
-pub(super) fn create_empty(process: &dyn Process, keys: &MacKeys) -> Result<()> {
+pub(super) fn create_empty(process: &dyn Process, keys: &dyn GameInput) -> Result<()> {
     select_template(process, keys, "")
 }
 /// Close the designer (its close button); unsaved changes are discarded by the game.
-pub(super) fn close(process: &dyn Process, keys: &MacKeys) -> Result<()> {
+pub(super) fn close(process: &dyn Process, keys: &dyn GameInput) -> Result<()> {
     if !read(process, is_open)? {
         return Ok(());
     }
@@ -502,7 +506,7 @@ pub(super) fn close(process: &dyn Process, keys: &MacKeys) -> Result<()> {
     wait(process, "designer closes", |r, i| Ok(!is_open(r, i)?))
 }
 /// Close the designer if it was left open, then the Recruit & Deploy panel.
-pub(super) fn leave(process: &dyn Process, keys: &MacKeys) {
+pub(super) fn leave(process: &dyn Process, keys: &dyn GameInput) {
     let _ = close(process, keys);
     deployment::leave(process, keys);
 }
@@ -513,7 +517,7 @@ fn selection_state(process: &dyn Process) -> Result<Option<Selection>> {
     read(process, selection)
 }
 /// Go back one level in the selection window.
-fn back(keys: &MacKeys, sel: &Selection) -> Result<()> {
+fn back(keys: &dyn GameInput, sel: &Selection) -> Result<()> {
     click(keys, sel.back)
 }
 fn units_listed(sel: &Selection) -> bool {
@@ -569,7 +573,7 @@ pub(super) fn group_hint(key: &str) -> &'static str {
 /// another group replaces the old one in two steps (Remove, then add).
 pub(super) fn choose(
     process: &dyn Process,
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     grid: Grid,
     col: usize,
     row: usize,
@@ -598,7 +602,7 @@ pub(super) fn choose(
     click(keys, slot.rect)?;
     wait(process, "selection window", selection_open)?;
     let mut sel = wait_selection_any(process)?;
-    let close_window = |keys: &MacKeys| {
+    let close_window = |keys: &dyn GameInput| {
         let _ = keys.press(Key::Return);
         let _ = wait(process, "selection closes", |r, i| {
             Ok(!selection_open(r, i)?)
@@ -690,7 +694,7 @@ fn wait_selection_any(process: &dyn Process) -> Result<Selection> {
 /// Shift+click a filled slot: the game removes the unit and closes the column up.
 pub(super) fn remove(
     process: &dyn Process,
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     grid: Grid,
     col: usize,
     row: usize,
@@ -740,7 +744,7 @@ pub(super) fn typable(name: &str) -> bool {
 /// Backspace proves the box has the keyboard focus), then type the new name one key at a time,
 /// each verified against the working copy. A space is typed only after focus is proven, since
 /// a stray Space would toggle the game's pause.
-pub(super) fn set_name(process: &dyn Process, keys: &MacKeys, name: &str) -> Result<()> {
+pub(super) fn set_name(process: &dyn Process, keys: &dyn GameInput, name: &str) -> Result<()> {
     if !typable(name) {
         return Err(Error::new(
             "name_not_typable",
@@ -756,10 +760,10 @@ pub(super) fn set_name(process: &dyn Process, keys: &MacKeys, name: &str) -> Res
     // The name box is the left part of the dropdown; the expand arrow sits at its right end.
     keys.click(GAME, x - 110.0, y)?;
     std::thread::sleep(Duration::from_millis(250));
-    keys.press_code(119)?; // End
+    keys.press_code(crate::platform::game_input::vk::END)?; // End
     let mut length = current.chars().count();
     if length > 0 {
-        keys.press_code(51)?;
+        keys.press_code(crate::platform::game_input::vk::DELETE)?;
         length -= 1;
         wait(process, "name box focused", |r, i| {
             Ok(draft(r, i)?.name.chars().count() == length)
@@ -772,7 +776,7 @@ pub(super) fn set_name(process: &dyn Process, keys: &MacKeys, name: &str) -> Res
         })?;
     }
     while length > 0 {
-        keys.press_code(51)?;
+        keys.press_code(crate::platform::game_input::vk::DELETE)?;
         length -= 1;
         wait(process, "name erased", |r, i| {
             Ok(draft(r, i)?.name.chars().count() == length)
@@ -791,7 +795,11 @@ pub(super) fn set_name(process: &dyn Process, keys: &MacKeys, name: &str) -> Res
     }
     Ok(())
 }
-pub(super) fn set_priority(process: &dyn Process, keys: &MacKeys, priority: i32) -> Result<()> {
+pub(super) fn set_priority(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    priority: i32,
+) -> Result<()> {
     if read(process, draft)?.priority == priority {
         return Ok(());
     }
@@ -806,7 +814,7 @@ pub(super) fn set_priority(process: &dyn Process, keys: &MacKeys, priority: i32)
 
 // ---- save and reset ------------------------------------------------------------------------
 /// Click Save/Update once and wait for the own template list to hold the draft's layout.
-pub(super) fn save(process: &dyn Process, keys: &MacKeys, expect: &Layout5) -> Result<()> {
+pub(super) fn save(process: &dyn Process, keys: &dyn GameInput, expect: &Layout5) -> Result<()> {
     let b = settled(process, "save button", |r, i| Ok(save_button(r, i)?.rect))?;
     click(keys, b)?;
     let deadline = Instant::now() + Duration::from_secs(4);
@@ -849,7 +857,7 @@ pub(super) struct Listing {
 /// window again without choosing.
 pub(super) fn list_group_units(
     process: &dyn Process,
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     grid: Grid,
 ) -> Result<Listing> {
     let slot = settled(process, "empty slot", |r, i| {

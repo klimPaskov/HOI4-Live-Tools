@@ -10,7 +10,7 @@ use crate::{
     gui_tree::{self, Rect},
     memory::{Reader, StringAbi},
     platform::{
-        macos_input::{Key, MacKeys},
+        game_input::{GameInput, Key},
         Process,
     },
     production_lines::{self, OwnLine},
@@ -231,27 +231,27 @@ pub(super) fn lines(process: &dyn Process) -> Result<Vec<OwnLine>> {
     read(process, production_lines::own_lines)
 }
 
-pub(super) fn ensure_open(process: &dyn Process, keys: &MacKeys) -> Result<()> {
+pub(super) fn ensure_open(process: &dyn Process, keys: &dyn GameInput) -> Result<()> {
     if !read(process, open)? {
         keys.press(Key::letter('y')?)?;
         wait(process, "open production", open)?;
     }
     Ok(())
 }
-fn click(process: &dyn Process, keys: &MacKeys, rect: Rect) -> Result<()> {
+fn click(process: &dyn Process, keys: &dyn GameInput, rect: Rect) -> Result<()> {
     clear_notices(process, keys)?;
     let (x, y) = rect.center();
     keys.click(GAME, x, y).map(|_| ())
 }
 
 /// Bring the row's +/- buttons inside the list area by scrolling the list.
-pub(super) fn reveal(process: &dyn Process, keys: &MacKeys, handle: u64) -> Result<()> {
+pub(super) fn reveal(process: &dyn Process, keys: &dyn GameInput, handle: u64) -> Result<()> {
     reveal_named(process, keys, handle, "factories_add_1x", i32::MAX)
 }
 /// Bring the named row button of the line inside the list area and return its rectangle.
 pub(super) fn reveal_named(
     process: &dyn Process,
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     handle: u64,
     name: &str,
     min_visible: i32,
@@ -281,7 +281,7 @@ pub(super) fn reveal_named(
 }
 
 /// Adjust the line's requested factories to `target` with single +/- clicks.
-fn adjust(process: &dyn Process, keys: &MacKeys, handle: u64, target: i32) -> Result<()> {
+fn adjust(process: &dyn Process, keys: &dyn GameInput, handle: u64, target: i32) -> Result<()> {
     for _ in 0..120 {
         let current = lines(process)?
             .into_iter()
@@ -318,7 +318,7 @@ fn adjust(process: &dyn Process, keys: &MacKeys, handle: u64, target: i32) -> Re
 /// Add one line for base equipment `key` and set it to `factories`.
 pub(super) fn add(
     process: &dyn Process,
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     key: &str,
     factories: i32,
     design: Option<i32>,
@@ -441,7 +441,7 @@ pub(super) fn add(
 /// Set an existing line (by collection index and its equipment key) to `factories`.
 pub(super) fn set(
     process: &dyn Process,
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     index: usize,
     key: &str,
     factories: i32,

@@ -11,7 +11,7 @@ use crate::{
     memory::{Reader, StringAbi},
     own_focus,
     platform::{
-        macos_input::{Key, MacKeys},
+        game_input::{GameInput, Key},
         Process,
     },
 };
@@ -297,7 +297,7 @@ fn detail_not_opened(error: Error) -> Error {
 }
 fn click(
     process: &(dyn Process + Send + Sync),
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     candidate: &Control,
     until: Instant,
     probe: impl Fn() -> Result<Control> + Send + Sync,
@@ -321,7 +321,7 @@ fn click(
 /// original Fence. New stages cannot extend that deadline.
 pub(super) fn start(
     process: &(dyn Process + Send + Sync),
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     key: &str,
     until: Instant,
 ) -> Result<()> {
@@ -330,7 +330,7 @@ pub(super) fn start(
 }
 pub(super) fn start_bound(
     process: &(dyn Process + Send + Sync),
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     key: &str,
     until: Instant,
     expected: &own_focus::AssignmentSnapshot,
@@ -341,7 +341,7 @@ pub(super) fn start_bound(
 }
 fn start_inner(
     process: &(dyn Process + Send + Sync),
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     key: &str,
     until: Instant,
     trace: &mut Trace,

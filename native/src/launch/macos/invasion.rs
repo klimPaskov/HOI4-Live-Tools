@@ -32,7 +32,7 @@ use crate::{
     gui_tree::{self, Rect},
     memory::Reader,
     platform::{
-        macos_input::{Key, MacKeys},
+        game_input::{GameInput, Key},
         Process,
     },
 };
@@ -367,7 +367,7 @@ fn aim(centre: (f64, f64), offset: (i32, i32)) -> (f64, f64) {
 }
 /// Cancel the drawing mode (Escape deletes a drawn order) and close the game menu a stray Escape
 /// may have opened.
-fn cancel_drawing(process: &dyn Process, keys: &MacKeys<'_>) {
+fn cancel_drawing(process: &dyn Process, keys: &dyn GameInput) {
     let _ = keys.press(Key::Escape);
     pause(300);
     let _ = super::ui::close_menu(process, keys);
@@ -430,7 +430,7 @@ fn nearest_cyan(c: &crate::platform::macos_input::Capture) -> Option<(f64, f64)>
     }
     best.map(|b| (b.1, b.2))
 }
-pub(super) fn drive(process: &dyn Process, keys: &MacKeys<'_>, plan: &Plan) -> Result<Value> {
+pub(super) fn drive(process: &dyn Process, keys: &dyn GameInput, plan: &Plan) -> Result<Value> {
     clear_notices(process, keys)?;
     match &plan.selector {
         Selector::Army(name) => {

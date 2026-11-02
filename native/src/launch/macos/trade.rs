@@ -19,7 +19,7 @@ use crate::{
     gui_tree::{self, Rect},
     memory::{Reader, StringAbi},
     platform::{
-        macos_input::{Key, MacKeys},
+        game_input::{GameInput, Key},
         Process,
     },
 };
@@ -236,7 +236,7 @@ fn civilian_factories(r: &Reader<'_>, image: u64) -> Result<Value> {
     )
 }
 
-fn ensure_open(process: &dyn Process, keys: &MacKeys) -> Result<()> {
+fn ensure_open(process: &dyn Process, keys: &dyn GameInput) -> Result<()> {
     if !read(process, open)? {
         keys.press(Key::letter('r')?)?;
         wait(process, "open trade view", open)?;
@@ -248,7 +248,7 @@ fn ensure_open(process: &dyn Process, keys: &MacKeys) -> Result<()> {
 /// resource is always shown); the toggled look is not readable from the
 /// button state (hover also sets it), so the choice is confirmed from the
 /// offer window's own text ("units of Rubber") before anything is sent.
-fn select_resource(process: &dyn Process, keys: &MacKeys, index: usize) -> Result<()> {
+fn select_resource(process: &dyn Process, keys: &dyn GameInput, index: usize) -> Result<()> {
     let rect = settled(process, "resource filter", |r, i| filter_rect(r, i, index))?;
     let (x, y) = rect.center();
     keys.click(GAME, x, y)?;
@@ -286,7 +286,7 @@ pub(super) fn set_tool() -> Value {
 /// The Trade view's tables (the caller has checked the lease).
 pub(super) fn view(
     process: &dyn Process,
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     resource: Option<&str>,
     limit: usize,
 ) -> Result<Value> {
@@ -374,7 +374,7 @@ pub(super) struct Plan {
 /// Select the resource, find the partner; refusals need no more input.
 pub(super) fn plan(
     process: &dyn Process,
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     resource: &str,
     country: &str,
 ) -> Result<Plan> {
@@ -418,7 +418,7 @@ pub(super) fn plan(
     })
 }
 
-fn close_offer(process: &dyn Process, keys: &MacKeys) {
+fn close_offer(process: &dyn Process, keys: &dyn GameInput) {
     if let Ok(rect) = read(process, |r, i| offer_button(r, i, "cancel_button")) {
         let (x, y) = rect.center();
         let _ = keys.click(GAME, x, y);
@@ -430,7 +430,7 @@ fn close_offer(process: &dyn Process, keys: &MacKeys) {
 /// just before the Send click.
 pub(super) fn execute(
     process: &dyn Process,
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     plan: &Plan,
     amount: &Amount,
     sent: &std::cell::Cell<bool>,
@@ -708,7 +708,7 @@ impl AutoImport {
     }
 }
 /// Open the Trade view and read the Automatic Importing state (changes nothing).
-pub(super) fn auto_import_read(process: &dyn Process, keys: &MacKeys) -> Result<AutoImport> {
+pub(super) fn auto_import_read(process: &dyn Process, keys: &dyn GameInput) -> Result<AutoImport> {
     clear_notices(process, keys)?;
     ensure_open(process, keys)?;
     settled(process, "automatic importing", auto_state)
@@ -717,7 +717,7 @@ pub(super) fn auto_import_read(process: &dyn Process, keys: &MacKeys) -> Result<
 /// the checkbox, then clicks on the slider track until the view's own budget text reads `budget`.
 pub(super) fn auto_import_set(
     process: &dyn Process,
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     enabled: Option<bool>,
     budget: Option<i64>,
 ) -> Result<AutoImport> {

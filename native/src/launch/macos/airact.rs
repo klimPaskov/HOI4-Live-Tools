@@ -25,7 +25,7 @@ use super::{
 use crate::{
     error::{Error, Result},
     platform::{
-        macos_input::{Key, MacKeys},
+        game_input::{GameInput, Key},
         Process,
     },
 };
@@ -521,7 +521,7 @@ pub(super) fn base_position(process: &dyn Process, state: i32) -> Result<(f64, f
         })
 }
 // ---- driving the air UI -------------------------------------------------------------------------
-fn click(keys: &MacKeys, x: f64, y: f64) -> Result<()> {
+fn click(keys: &dyn GameInput, x: f64, y: f64) -> Result<()> {
     keys.click(GAME, x, y).map(|_| ())
 }
 fn pause(ms: u64) {
@@ -531,7 +531,7 @@ fn icons_shown(r: &crate::memory::Reader<'_>, image: u64) -> Result<bool> {
     Ok(!airui::base_icons(r, image)?.is_empty())
 }
 /// Make sure the strategic air map (F3) is on; returns whether it was switched on here.
-fn enter_air_mode(process: &dyn Process, keys: &MacKeys) -> Result<bool> {
+fn enter_air_mode(process: &dyn Process, keys: &dyn GameInput) -> Result<bool> {
     if read(process, icons_shown)? {
         return Ok(false);
     }
@@ -540,14 +540,14 @@ fn enter_air_mode(process: &dyn Process, keys: &MacKeys) -> Result<bool> {
     pause(300);
     Ok(true)
 }
-fn leave_air_mode(process: &dyn Process, keys: &MacKeys, entered: bool) {
+fn leave_air_mode(process: &dyn Process, keys: &dyn GameInput, entered: bool) {
     if entered {
         let _ = keys.press_code(F1);
         let _ = wait(process, "default map mode", |r, i| Ok(!icons_shown(r, i)?));
     }
 }
 /// Tidy: close the wing window and the selection toolbar (best effort).
-fn release(process: &dyn Process, keys: &MacKeys, entered: bool) {
+fn release(process: &dyn Process, keys: &dyn GameInput, entered: bool) {
     if read(process, airui::reorg_open).unwrap_or(false) {
         if let Ok(rect) = settled(process, "wing window close", airui::reorg_close) {
             let (x, y) = rect.center();
@@ -561,7 +561,7 @@ fn release(process: &dyn Process, keys: &MacKeys, entered: bool) {
     leave_air_mode(process, keys, entered);
 }
 /// Centre the camera on `state` and return the screen point of its air base circle.
-fn base_point(process: &dyn Process, keys: &MacKeys, state: i32) -> Result<(f64, f64)> {
+fn base_point(process: &dyn Process, keys: &dyn GameInput, state: i32) -> Result<(f64, f64)> {
     let pos = base_position(process, state)?;
     find_state(process, keys, state)?;
     for step in 0..8 {
@@ -590,7 +590,11 @@ fn only_selected(process: &dyn Process, name: &str) -> Result<bool> {
 }
 
 /// Rebase one wing: select it, right click the target base's circle.
-pub(super) fn rebase(process: &dyn Process, keys: &MacKeys, plan: &RebasePlan) -> Result<Value> {
+pub(super) fn rebase(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    plan: &RebasePlan,
+) -> Result<Value> {
     clear_notices(process, keys)?;
     let entered = enter_air_mode(process, keys)?;
     let result = (|| -> Result<Value> {
@@ -629,7 +633,7 @@ pub(super) fn rebase(process: &dyn Process, keys: &MacKeys, plan: &RebasePlan) -
 /// Select the base (left click on its circle), N, pick the reserve row, Ok.
 pub(super) fn create_wing(
     process: &dyn Process,
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     plan: &CreatePlan,
 ) -> Result<Value> {
     clear_notices(process, keys)?;
@@ -682,7 +686,7 @@ pub(super) fn create_wing(
 /// `air::assign` inside the strategic air map (switched on and back when it was off).
 pub(super) fn mission(
     process: &dyn Process,
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     wing: &str,
     mission: &str,
     state: i32,
@@ -695,7 +699,7 @@ pub(super) fn mission(
 }
 
 /// Select the wing, toolbar delete, confirm.
-pub(super) fn disband(process: &dyn Process, keys: &MacKeys, wing: &str) -> Result<Value> {
+pub(super) fn disband(process: &dyn Process, keys: &dyn GameInput, wing: &str) -> Result<Value> {
     clear_notices(process, keys)?;
     let entered = enter_air_mode(process, keys)?;
     let result = (|| -> Result<Value> {
@@ -738,7 +742,11 @@ pub(super) fn disband(process: &dyn Process, keys: &MacKeys, wing: &str) -> Resu
 }
 
 /// Select the wing, toolbar split (halves it; the game keeps both halves selected).
-pub(super) fn split(process: &dyn Process, keys: &MacKeys, plan: &SplitPlan) -> Result<Value> {
+pub(super) fn split(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    plan: &SplitPlan,
+) -> Result<Value> {
     clear_notices(process, keys)?;
     let entered = enter_air_mode(process, keys)?;
     let result = (|| -> Result<Value> {
@@ -778,7 +786,11 @@ pub(super) fn split(process: &dyn Process, keys: &MacKeys, plan: &SplitPlan) -> 
 /// Select `wing` through the overview, then the base's map stack item of its aircraft type (a Shift
 /// click adds the whole type group, which includes the wing), check with the selection array that
 /// exactly the group is selected and press Merge.
-pub(super) fn merge(process: &dyn Process, keys: &MacKeys, plan: &MergePlan) -> Result<Value> {
+pub(super) fn merge(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    plan: &MergePlan,
+) -> Result<Value> {
     clear_notices(process, keys)?;
     let entered = enter_air_mode(process, keys)?;
     let result = (|| -> Result<Value> {
@@ -866,7 +878,7 @@ pub(super) fn merge(process: &dyn Process, keys: &MacKeys, plan: &MergePlan) -> 
 }
 
 /// Select the wing, toolbar hold (stops its missions; the wing stays at its base).
-pub(super) fn hold(process: &dyn Process, keys: &MacKeys, wing: &str) -> Result<Value> {
+pub(super) fn hold(process: &dyn Process, keys: &dyn GameInput, wing: &str) -> Result<Value> {
     clear_notices(process, keys)?;
     let entered = enter_air_mode(process, keys)?;
     let result = (|| -> Result<Value> {
@@ -903,7 +915,11 @@ pub(super) fn hold(process: &dyn Process, keys: &MacKeys, wing: &str) -> Result<
 }
 
 /// Open the strategic air region window of the region around `state` and read it (orders nothing).
-pub(super) fn probe_region(process: &dyn Process, keys: &MacKeys, state: i32) -> Result<Value> {
+pub(super) fn probe_region(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    state: i32,
+) -> Result<Value> {
     clear_notices(process, keys)?;
     let entered = enter_air_mode(process, keys)?;
     let result = (|| -> Result<Value> {

@@ -11,7 +11,7 @@ use crate::{
     gui_tree::{self, Rect},
     memory::{Reader, StringAbi},
     platform::{
-        macos_input::{Key, MacKeys},
+        game_input::{GameInput, Key},
         Process,
     },
 };
@@ -234,7 +234,7 @@ pub(super) fn mission_buttons(r: &Reader<'_>, image: u64) -> Result<Vec<(i32, Re
     }
     Ok(out)
 }
-pub(super) fn deselect(process: &dyn Process, keys: &MacKeys) -> Result<()> {
+pub(super) fn deselect(process: &dyn Process, keys: &dyn GameInput) -> Result<()> {
     if read(process, selection_open)? {
         let rect = settled(process, "air toolbar", |r, i| {
             toolbar_button(r, i, "btn_close")
@@ -247,7 +247,7 @@ pub(super) fn deselect(process: &dyn Process, keys: &MacKeys) -> Result<()> {
     }
     Ok(())
 }
-pub(super) fn open_overview(process: &dyn Process, keys: &MacKeys) -> Result<()> {
+pub(super) fn open_overview(process: &dyn Process, keys: &dyn GameInput) -> Result<()> {
     clear_notices(process, keys)?;
     deselect(process, keys)?;
     if !read(process, overview_open)? {
@@ -265,7 +265,7 @@ fn wing_json(w: &Wing) -> Value {
 }
 
 /// Own air wings with base, region and missions (opens the air overview).
-pub(super) fn list(process: &dyn Process, keys: &MacKeys) -> Result<Value> {
+pub(super) fn list(process: &dyn Process, keys: &dyn GameInput) -> Result<Value> {
     open_overview(process, keys)?;
     let found = settled(process, "air wings", wings)?;
     Ok(
@@ -277,7 +277,7 @@ pub(super) fn list(process: &dyn Process, keys: &MacKeys) -> Result<Value> {
 /// view, one click); returns the row as it was before the click.
 pub(super) fn select_wing(
     process: &dyn Process,
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     name: &str,
 ) -> Result<Option<Wing>> {
     open_overview(process, keys)?;
@@ -322,7 +322,7 @@ pub(super) fn select_wing(
 /// Give wing `name` mission `mission` over the region containing `state`.
 pub(super) fn assign(
     process: &dyn Process,
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     name: &str,
     mission: &str,
     state: i32,

@@ -11,8 +11,8 @@ use crate::{
     construction::{mac_find::navigation, mac_ui},
     error::{Error, Result},
     platform::{
+        game_input::{GameInput, Key},
         key_once::Dispatch,
-        macos_input::{Key, MacKeys},
     },
 };
 use serde_json::{json, Value};
@@ -112,7 +112,7 @@ struct Live<'a, 'b> {
     nav: &'a navigation::NavigationAnchor,
     selection: &'a mac_ui::SelectionAnchor,
     fence: &'a Fence<'b>,
-    keys: &'a MacKeys<'b>,
+    keys: &'a dyn GameInput,
 }
 impl Live<'_, '_> {
     fn queue_unchanged(&self) -> Result<()> {
@@ -246,7 +246,7 @@ pub(super) fn run(
     epoch: &Epoch,
     journal: &mut GameJournal,
     fence: &Fence<'_>,
-    keys: &MacKeys<'_>,
+    keys: &dyn GameInput,
 ) -> Result<Value> {
     let action = request.action();
     if let Some(receipt) = journal.strict_receipt(request.id, epoch, &action)? {

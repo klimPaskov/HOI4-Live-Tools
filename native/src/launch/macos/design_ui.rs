@@ -29,7 +29,7 @@ use crate::{
     gui_tree::{self, Rect},
     memory::{Reader, StringAbi},
     platform::{
-        macos_input::{Key, MacKeys},
+        game_input::{GameInput, Key},
         Process,
     },
 };
@@ -634,11 +634,11 @@ pub(super) fn module_state(r: &Reader<'_>, image: u64) -> Result<ModuleState> {
 }
 
 // ---- driving the panel -------------------------------------------------------------------------
-fn click(keys: &MacKeys, rect: Rect) -> Result<()> {
+fn click(keys: &dyn GameInput, rect: Rect) -> Result<()> {
     let (x, y) = rect.center();
     keys.click(GAME, x, y).map(|_| ())
 }
-pub(super) fn click_rect(keys: &MacKeys, rect: Rect) -> Result<()> {
+pub(super) fn click_rect(keys: &dyn GameInput, rect: Rect) -> Result<()> {
     click(keys, rect)
 }
 /// Rows fully inside the visible list (the ship list sits below a class filter header).
@@ -690,7 +690,7 @@ fn outdated_checkbox(r: &Reader<'_>, image: u64) -> Result<Rect> {
 pub(super) fn outdated_ticked(r: &Reader<'_>, image: u64) -> Result<bool> {
     Ok(r.i32(outdated_checkbox_button(r, image)? + CHECKBOX_STATE)? == 2)
 }
-fn set_outdated(process: &dyn Process, keys: &MacKeys, want: bool) -> Result<()> {
+fn set_outdated(process: &dyn Process, keys: &dyn GameInput, want: bool) -> Result<()> {
     if read(process, outdated_ticked)? == want {
         return Ok(());
     }
@@ -709,7 +709,7 @@ fn set_outdated(process: &dyn Process, keys: &MacKeys, want: bool) -> Result<()>
     Ok(())
 }
 /// Untick "Show outdated equipment" again (the open list must be the one it was ticked in).
-pub(super) fn untick_outdated(process: &dyn Process, keys: &MacKeys) -> Result<()> {
+pub(super) fn untick_outdated(process: &dyn Process, keys: &dyn GameInput) -> Result<()> {
     set_outdated(process, keys, false)
 }
 /// Open the Production panel's equipment list that shows the design with this id and scroll
@@ -717,7 +717,7 @@ pub(super) fn untick_outdated(process: &dyn Process, keys: &MacKeys) -> Result<(
 /// ticked; `show_outdated` allows the call to tick it (reported in the result).
 pub(super) fn locate(
     process: &dyn Process,
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     id: i32,
     kind: &str,
     show_outdated: bool,
@@ -812,7 +812,12 @@ pub(super) fn locate(
     ))
 }
 /// Open the designer of the design with this id: `locate`, then the row's Create variant button.
-pub(super) fn open_for(process: &dyn Process, keys: &MacKeys, id: i32, kind: &str) -> Result<Kind> {
+pub(super) fn open_for(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    id: i32,
+    kind: &str,
+) -> Result<Kind> {
     // A base that became outdated (older version of a newer design) is only listed when the
     // outdated filter is ticked; `leave` puts the filter back.
     locate(process, keys, id, kind, true)?;
@@ -840,7 +845,7 @@ pub(super) fn open_for(process: &dyn Process, keys: &MacKeys, id: i32, kind: &st
 /// flags of every other listed design must be unchanged afterwards.
 pub(super) fn click_obsolete(
     process: &dyn Process,
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     id: i32,
     want: bool,
 ) -> Result<()> {
@@ -886,7 +891,7 @@ pub(super) fn row_equipment_button(r: &Reader<'_>, image: u64, id: i32) -> Resul
 }
 
 /// Close the designer (Escape drops the draft, nothing is saved), then the selection list.
-pub(super) fn close(process: &dyn Process, keys: &MacKeys) -> Result<()> {
+pub(super) fn close(process: &dyn Process, keys: &dyn GameInput) -> Result<()> {
     for _ in 0..4 {
         if !read(process, designer_open)? {
             break;
@@ -907,7 +912,7 @@ pub(super) fn close(process: &dyn Process, keys: &MacKeys) -> Result<()> {
     Ok(())
 }
 /// Close the designer, the selection list and the Production panel if they are open.
-pub(super) fn leave(process: &dyn Process, keys: &MacKeys) {
+pub(super) fn leave(process: &dyn Process, keys: &dyn GameInput) {
     let _ = close(process, keys);
     for _ in 0..2 {
         if read(process, selection_open).unwrap_or(false) {

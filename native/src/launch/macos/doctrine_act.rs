@@ -28,7 +28,7 @@ use super::{
 use crate::{
     error::{Error, Result},
     gui_tree,
-    platform::{macos_input::MacKeys, Process},
+    platform::{game_input::GameInput, Process},
 };
 use serde_json::{json, Value};
 use std::{cell::RefCell, thread, time::Duration};
@@ -389,7 +389,7 @@ fn selection_open(r: &crate::memory::Reader<'_>, i: u64) -> Result<bool> {
     Ok(selection_root(r, i)?.is_some())
 }
 
-fn open_view(process: &dyn Process, keys: &MacKeys<'_>, t: &Target) -> Result<()> {
+fn open_view(process: &dyn Process, keys: &dyn GameInput, t: &Target) -> Result<()> {
     if pk::open_now(process, &pk::DOCTRINE_VIEW) {
         return Ok(());
     }
@@ -413,7 +413,7 @@ fn open_view(process: &dyn Process, keys: &MacKeys<'_>, t: &Target) -> Result<()
     Ok(())
 }
 
-fn select_folder_tab(process: &dyn Process, keys: &MacKeys<'_>, t: &Target) -> Result<()> {
+fn select_folder_tab(process: &dyn Process, keys: &dyn GameInput, t: &Target) -> Result<()> {
     pk::click(process, keys, "folder tab", |r, i| {
         let root = pk::open_root(r, i, &pk::DOCTRINE_VIEW)?;
         let grid = pk::need(r, i, root, "folders_grid", 4)?;
@@ -434,7 +434,7 @@ fn select_folder_tab(process: &dyn Process, keys: &MacKeys<'_>, t: &Target) -> R
     Ok(())
 }
 
-fn open_selection(process: &dyn Process, keys: &MacKeys<'_>, t: &Target) -> Result<()> {
+fn open_selection(process: &dyn Process, keys: &dyn GameInput, t: &Target) -> Result<()> {
     if read(process, selection_open)? {
         return Ok(());
     }
@@ -499,7 +499,7 @@ fn rows(
     Ok((names, found, rect))
 }
 
-fn adopt(process: &dyn Process, keys: &MacKeys<'_>, t: &Target, display: &str) -> Driven {
+fn adopt(process: &dyn Process, keys: &dyn GameInput, t: &Target, display: &str) -> Driven {
     clear_notices(process, keys)?;
     let result: Driven = (|| {
         open_view(process, keys, t)?;
@@ -546,7 +546,7 @@ fn adopt(process: &dyn Process, keys: &MacKeys<'_>, t: &Target, display: &str) -
     result
 }
 
-fn leave(process: &dyn Process, keys: &MacKeys<'_>) {
+fn leave(process: &dyn Process, keys: &dyn GameInput) {
     if read(process, selection_open).unwrap_or(false) {
         super::ui::dismiss(process, keys, |r, i| Ok(!selection_open(r, i)?));
     }
@@ -586,7 +586,7 @@ fn live(process: &dyn Process, doctrine: &str, track: Option<&str>) -> Result<Li
 pub(super) fn call(
     args: &serde_json::Map<String, Value>,
     process: &(dyn Process + Send + Sync),
-    keys: &MacKeys<'static>,
+    keys: &dyn GameInput,
     guard: &mut Guard,
     authority: &InputAuthority,
     actions: &mut super::journal::GameJournal,

@@ -22,7 +22,7 @@ use crate::{
     game,
     gui_tree::{self, Rect},
     memory::{Reader, StringAbi},
-    platform::{macos_input::MacKeys, Process},
+    platform::{game_input::GameInput, Process},
 };
 
 pub(super) const GAME: (u32, u32) = (1920, 1080);
@@ -406,7 +406,7 @@ pub(super) fn rect_of(
 /// Click the centre of a rectangle once it has come to rest.
 pub(super) fn click(
     process: &dyn Process,
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     stage: &str,
     target: impl Fn(&Reader<'_>, u64) -> Result<Rect>,
 ) -> Result<Rect> {
@@ -416,7 +416,7 @@ pub(super) fn click(
     Ok(rect)
 }
 /// A window that is not shown yet is closed by Escape (their `.gui` shortcut).
-pub(super) fn dismiss_window(process: &dyn Process, keys: &MacKeys, class: &'static Class) {
+pub(super) fn dismiss_window(process: &dyn Process, keys: &dyn GameInput, class: &'static Class) {
     super::ui::dismiss(process, keys, |r, i| Ok(!is_open(r, i, class)?));
 }
 pub(super) fn open_now(process: &dyn Process, class: &Class) -> bool {

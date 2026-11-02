@@ -10,7 +10,7 @@ use crate::{
     gui_tree::{self, Rect},
     memory::{Reader, StringAbi},
     platform::{
-        macos_input::{Key, MacKeys},
+        game_input::{GameInput, Key},
         Process,
     },
     research,
@@ -295,7 +295,12 @@ pub(super) fn check(before: &Assignments, key: &str, slot: usize) -> Result<()> 
 }
 
 /// Ordinary input sequence. The caller has journaled intent and holds the lease.
-pub(super) fn start(process: &dyn Process, keys: &MacKeys, key: &str, slot: usize) -> Result<()> {
+pub(super) fn start(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    key: &str,
+    slot: usize,
+) -> Result<()> {
     let image = process.image_base();
     let u = &MACOS;
     let click = |rect: Rect| {

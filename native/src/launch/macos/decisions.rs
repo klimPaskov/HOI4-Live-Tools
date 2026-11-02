@@ -9,7 +9,7 @@ use crate::{
     game,
     gui_tree::{self, Rect},
     memory::{Reader, StringAbi},
-    platform::{macos_input::MacKeys, Process},
+    platform::{game_input::GameInput, Process},
 };
 use serde_json::{json, Value};
 
@@ -158,7 +158,7 @@ fn rows(r: &Reader<'_>, image: u64) -> Result<Vec<Row>> {
     }
     Ok(out)
 }
-fn ensure_open(process: &dyn Process, keys: &MacKeys) -> Result<()> {
+fn ensure_open(process: &dyn Process, keys: &dyn GameInput) -> Result<()> {
     if !read(process, open)? {
         let rect = settled(process, "decisions button", topbar_button)?;
         let (x, y) = rect.center();
@@ -177,7 +177,7 @@ pub(super) fn political_power(process: &dyn Process) -> Result<i64> {
 }
 
 /// Offered decisions (opens the panel; changes nothing).
-pub(super) fn list(process: &dyn Process, keys: &MacKeys) -> Result<Value> {
+pub(super) fn list(process: &dyn Process, keys: &dyn GameInput) -> Result<Value> {
     clear_notices(process, keys)?;
     ensure_open(process, keys)?;
     let found = settled(process, "decisions", rows)?;
@@ -216,7 +216,7 @@ pub(super) fn state(process: &dyn Process) -> Result<Vec<Value>> {
 /// Take decision `key`; the caller has journaled intent.
 pub(super) fn take(
     process: &dyn Process,
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     key: &str,
     target: Option<&str>,
 ) -> Result<()> {

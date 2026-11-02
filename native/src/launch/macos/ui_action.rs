@@ -17,7 +17,7 @@ use super::{
 };
 use crate::{
     error::{Error, Result},
-    platform::{macos_input::MacKeys, Process},
+    platform::{game_input::GameInput, Process},
 };
 use serde_json::{json, Value};
 use std::{
@@ -42,7 +42,7 @@ pub(super) fn refuse(code: &'static str, message: impl Into<String>) -> Fail {
 }
 pub(super) type Driven = std::result::Result<Value, Fail>;
 type PlanFn<'j> = Box<dyn Fn(&dyn Process) -> Result<()> + 'j>;
-type DispatchFn<'j> = Box<dyn Fn(&dyn Process, &MacKeys<'_>) -> Driven + 'j>;
+type DispatchFn<'j> = Box<dyn Fn(&dyn Process, &dyn GameInput) -> Driven + 'j>;
 type SettleFn<'j> = Box<dyn Fn(&dyn Process, Option<&Value>) -> Result<Outcome> + 'j>;
 
 pub(super) struct Job<'j> {
@@ -76,7 +76,7 @@ pub(super) fn run(
     id: &str,
     token: &str,
     process: &(dyn Process + Send + Sync),
-    keys: &MacKeys<'static>,
+    keys: &dyn GameInput,
     guard: &mut Guard,
     authority: &InputAuthority,
     actions: &mut GameJournal,

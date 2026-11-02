@@ -11,7 +11,7 @@ use crate::{
     gui_tree::{self, Rect},
     memory::{Reader, StringAbi},
     platform::{
-        macos_input::{Capture, MacKeys},
+        game_input::{Capture, GameInput},
         Process,
     },
 };
@@ -392,7 +392,12 @@ pub(super) fn is_open(process: &dyn Process, id: &str) -> Result<bool> {
 }
 
 /// Choose option `option` (0-based) of the open event `id`.
-pub(super) fn choose(process: &dyn Process, keys: &MacKeys, id: &str, option: usize) -> Result<()> {
+pub(super) fn choose(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    id: &str,
+    option: usize,
+) -> Result<()> {
     close_menu(process, keys)?;
     // A notice (a finished focus) can be drawn over the event window.
     let _ = super::ui::dismiss_notices(process, keys);

@@ -21,7 +21,7 @@ use crate::{
     game,
     gui_tree::{self, Rect},
     memory::Reader,
-    platform::{macos_input::MacKeys, Process},
+    platform::{game_input::GameInput, Process},
 };
 use serde_json::{json, Map, Value};
 use std::time::{Duration, Instant};
@@ -481,7 +481,7 @@ pub(super) fn plan_take(
 /// a second click could toggle the demand off).
 pub(super) fn take(
     process: &dyn Process,
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     plan: &Plan,
     sent: &std::cell::Cell<bool>,
 ) -> Result<Value> {
@@ -605,7 +605,7 @@ fn list_rows(
     Ok((countries, states))
 }
 /// Click the state row named `name` in the conference list, expanding country rows first.
-fn click_state_row(process: &dyn Process, keys: &MacKeys, name: &str) -> Result<()> {
+fn click_state_row(process: &dyn Process, keys: &dyn GameInput, name: &str) -> Result<()> {
     if name.is_empty() {
         return Err(Error::new("state_row_missing", "No state name"));
     }
@@ -677,7 +677,7 @@ pub(super) fn header_snapshot(process: &dyn Process) -> Result<Option<String>> {
     read(process, header_key)
 }
 
-fn click_button(process: &dyn Process, keys: &MacKeys, name: &str) -> Result<()> {
+fn click_button(process: &dyn Process, keys: &dyn GameInput, name: &str) -> Result<()> {
     let rect = read(process, |r, image| {
         let root = root(r, image)?;
         let b = need_button(r, image, root, name)?;
@@ -704,7 +704,7 @@ fn click_button(process: &dyn Process, keys: &MacKeys, name: &str) -> Result<()>
 /// window closes. A wait window ("waiting for players") also changes them.
 pub(super) fn submit(
     process: &dyn Process,
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     before: &str,
     sent: &std::cell::Cell<bool>,
 ) -> Result<Value> {
@@ -723,7 +723,7 @@ pub(super) fn submit(
 /// for hoi4_events / the plan runner.
 pub(super) fn exit(
     process: &dyn Process,
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     sent: &std::cell::Cell<bool>,
 ) -> Result<Value> {
     sent.set(true);
@@ -748,7 +748,7 @@ pub(super) fn exit(
         // Return accepts it (verified live 1 November 2026). Pressed once.
         if !accepted && !returned {
             std::thread::sleep(Duration::from_millis(300));
-            keys.press_code(36)?;
+            keys.press_code(crate::platform::game_input::vk::RETURN)?;
             returned = true;
         }
         std::thread::sleep(Duration::from_millis(200));

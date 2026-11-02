@@ -8,7 +8,7 @@ use crate::{
     game,
     gui_tree::{self, Rect},
     memory::{Reader, StringAbi},
-    platform::{macos_input::MacKeys, Process},
+    platform::{game_input::GameInput, Process},
 };
 use serde_json::{json, Value};
 
@@ -318,7 +318,12 @@ pub(super) fn holder(process: &dyn Process, category: &str, idea: &str) -> Resul
     })
 }
 
-fn open_slot(process: &dyn Process, keys: &MacKeys, category: &str, index: usize) -> Result<()> {
+fn open_slot(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    category: &str,
+    index: usize,
+) -> Result<()> {
     decline_stale(process, keys)?;
     clear_notices(process, keys)?;
     if !read(process, open)? {
@@ -336,7 +341,7 @@ fn open_slot(process: &dyn Process, keys: &MacKeys, category: &str, index: usize
 /// Options offered for a slot (opens and closes the selection window).
 pub(super) fn list(
     process: &dyn Process,
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     category: &str,
     index: usize,
 ) -> Result<Value> {
@@ -357,7 +362,7 @@ pub(super) fn list(
 /// Choose `idea` for the slot; the caller has journaled intent.
 pub(super) fn choose(
     process: &dyn Process,
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     category: &str,
     index: usize,
     idea: &str,

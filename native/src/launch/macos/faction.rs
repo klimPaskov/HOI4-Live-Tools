@@ -30,7 +30,7 @@ use crate::{
     error::{Error, Result},
     gui_tree::{self, Rect},
     memory::Reader,
-    platform::{macos_input::MacKeys, Process},
+    platform::{game_input::GameInput, Process},
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
@@ -95,7 +95,7 @@ fn button(r: &Reader<'_>, image: u64, window: &str, widget: &str) -> Result<(Rec
     kit::rect_deep(r, image, need(r, image, window)?, widget)
 }
 /// Close whichever faction windows are open through their own close buttons (best effort).
-fn close_windows(process: &dyn Process, keys: &MacKeys<'_>) {
+fn close_windows(process: &dyn Process, keys: &dyn GameInput) {
     for name in [
         "invite_countries_window",
         "faction_setup_window",
@@ -112,7 +112,7 @@ fn close_windows(process: &dyn Process, keys: &MacKeys<'_>) {
         }
     }
 }
-fn open_from_topbar(process: &dyn Process, keys: &MacKeys<'_>, window_name: &str) -> Result<()> {
+fn open_from_topbar(process: &dyn Process, keys: &dyn GameInput, window_name: &str) -> Result<()> {
     let rect = settled(process, "faction button", |r, i| kit::topbar_button(r, i, "faction_button")).map_err(|e| {
         Error::new(
             "capability_unavailable",
@@ -287,7 +287,7 @@ fn invite_rows(r: &Reader<'_>, image: u64) -> Result<Vec<(String, Rect, bool)>> 
     }
     Ok(out)
 }
-fn drive_create(process: &dyn Process, keys: &MacKeys<'_>, plan: &CreatePlan) -> Result<Value> {
+fn drive_create(process: &dyn Process, keys: &dyn GameInput, plan: &CreatePlan) -> Result<Value> {
     clear_notices(process, keys)?;
     let result = (|| -> Result<Value> {
         open_from_topbar(process, keys, "new_faction_window")?;
@@ -438,7 +438,7 @@ pub(super) fn settle_leave(before: Option<&str>, now: Option<&(String, Vec<Strin
         (Some(_), Some(_)) => Verdict::Diverged,
     }
 }
-fn drive_leave(process: &dyn Process, keys: &MacKeys<'_>, before: &str) -> Result<Value> {
+fn drive_leave(process: &dyn Process, keys: &dyn GameInput, before: &str) -> Result<Value> {
     clear_notices(process, keys)?;
     let result = (|| -> Result<Value> {
         open_from_topbar(process, keys, "countryfactionview")?;
@@ -655,7 +655,7 @@ pub(super) fn settle_answer(plan: &AnswerPlan, list: &[Proposal], in_faction_now
     }
     Verdict::Reached
 }
-fn drive_answer(process: &dyn Process, keys: &MacKeys<'_>, plan: &AnswerPlan) -> Result<Value> {
+fn drive_answer(process: &dyn Process, keys: &dyn GameInput, plan: &AnswerPlan) -> Result<Value> {
     // Notices may sit on top of the proposal, but nothing here may touch a diplomacy pop-up:
     // only the OK-only notice classes are dismissed.
     clear_notices(process, keys)?;

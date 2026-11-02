@@ -10,8 +10,8 @@ use crate::{
     construction::mac_panel::{self, Observation},
     error::{Error, Result},
     platform::{
+        game_input::{GameInput, Key},
         key_once::Dispatch as KeyDispatch,
-        macos_input::{Key, MacKeys},
     },
 };
 use serde_json::{json, Value};
@@ -100,7 +100,7 @@ fn dispatch(attempt: &mut impl Attempt, mode: Mode) -> StrictOutcome {
 struct Live<'a, 'b> {
     before: &'a Observation,
     fence: &'a Fence<'b>,
-    keys: &'a MacKeys<'b>,
+    keys: &'a dyn GameInput,
 }
 impl Live<'_, '_> {
     fn same_before(&self) -> Result<()> {
@@ -192,7 +192,7 @@ pub(super) fn run(
     epoch: &Epoch,
     journal: &mut GameJournal,
     fence: &Fence<'_>,
-    keys: &MacKeys<'_>,
+    keys: &dyn GameInput,
 ) -> Result<Value> {
     let action = mode.action();
     if let Some(receipt) = journal.strict_receipt(id, epoch, &action)? {

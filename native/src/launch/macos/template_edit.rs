@@ -19,7 +19,7 @@ use super::{
 use crate::{
     error::{Error, Result},
     game,
-    platform::{macos_input::MacKeys, Process},
+    platform::{game_input::GameInput, Process},
 };
 use serde_json::{json, Value};
 
@@ -530,12 +530,12 @@ fn mismatch(what: &str, want: &Layout5, got: &Layout5) -> Error {
     )
 }
 /// Drive the designer to the planned layout and Save. Cleans the screen up on every path.
-pub(super) fn apply(process: &dyn Process, keys: &MacKeys, plan: &Planned) -> Result<Value> {
+pub(super) fn apply(process: &dyn Process, keys: &dyn GameInput, plan: &Planned) -> Result<Value> {
     let result = apply_inner(process, keys, plan);
     designer::leave(process, keys);
     result
 }
-fn apply_inner(process: &dyn Process, keys: &MacKeys, plan: &Planned) -> Result<Value> {
+fn apply_inner(process: &dyn Process, keys: &dyn GameInput, plan: &Planned) -> Result<Value> {
     let paused = game::clock_context(process)?.paused;
     match &plan.existing {
         Some(name) => designer::open_template(process, keys, name)?,
@@ -673,12 +673,12 @@ pub(super) fn plan_delete(process: &dyn Process, name: &str) -> Result<(Layout5,
     }
     Ok((before, u))
 }
-pub(super) fn delete(process: &dyn Process, keys: &MacKeys, name: &str) -> Result<()> {
+pub(super) fn delete(process: &dyn Process, keys: &dyn GameInput, name: &str) -> Result<()> {
     let result = delete_inner(process, keys, name);
     deployment::leave(process, keys);
     result
 }
-fn delete_inner(process: &dyn Process, keys: &MacKeys, name: &str) -> Result<()> {
+fn delete_inner(process: &dyn Process, keys: &dyn GameInput, name: &str) -> Result<()> {
     ui::clear_notices(process, keys)?;
     deployment::ensure_open(process, keys)?;
     let (rect, disabled) = ui::settled(process, "delete button", |r, i| {
@@ -707,12 +707,12 @@ fn delete_inner(process: &dyn Process, keys: &MacKeys, name: &str) -> Result<()>
 
 // ---- options ---------------------------------------------------------------------------------------
 /// What the designer offers: opens it on an empty draft, reads both selection levels, closes.
-pub(super) fn options(process: &dyn Process, keys: &MacKeys) -> Result<Value> {
+pub(super) fn options(process: &dyn Process, keys: &dyn GameInput) -> Result<Value> {
     let result = options_inner(process, keys);
     designer::leave(process, keys);
     result
 }
-fn options_inner(process: &dyn Process, keys: &MacKeys) -> Result<Value> {
+fn options_inner(process: &dyn Process, keys: &dyn GameInput) -> Result<Value> {
     designer::open_new_designer(process, keys)?;
     designer::create_empty(process, keys)?;
     let defs = catalog(process)?;

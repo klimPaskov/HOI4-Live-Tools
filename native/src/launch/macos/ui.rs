@@ -1,4 +1,5 @@
 //! Shared fresh-read helpers for ordinary macOS UI actions.
+use crate::platform::game_input::GameInput;
 use crate::{
     error::{Error, Result},
     game, gui_tree,
@@ -159,10 +160,7 @@ fn blocked_error(count: usize, shown: &[u64], events: &[String]) -> Error {
 /// Stacking order is not in the list, so candidates are tried from the end;
 /// a click counts when any notice closes (a covered OK lands harmlessly on the
 /// covering pop-up's body).
-pub(super) fn clear_notices(
-    process: &dyn Process,
-    keys: &crate::platform::macos_input::MacKeys,
-) -> Result<usize> {
+pub(super) fn clear_notices(process: &dyn Process, keys: &dyn GameInput) -> Result<usize> {
     close_menu(process, keys)?;
     close_state_view(process, keys)?;
     // A construction panel left open turns later map clicks into placements.
@@ -196,10 +194,7 @@ pub(super) fn clear_notices(
     Ok(cleared)
 }
 /// Click away every notice pop-up (they can sit on top of an event window).
-pub(super) fn dismiss_notices(
-    process: &dyn Process,
-    keys: &crate::platform::macos_input::MacKeys,
-) -> Result<usize> {
+pub(super) fn dismiss_notices(process: &dyn Process, keys: &dyn GameInput) -> Result<usize> {
     let mut cleared = 0;
     let mut misses = 0;
     loop {
@@ -287,7 +282,7 @@ fn save_root(r: &Reader<'_>, image: u64) -> Result<Option<u64>> {
 /// Used at the end of a campaign segment so the next segment continues exactly where it stopped.
 pub(super) fn save_game(
     process: &dyn Process,
-    keys: &crate::platform::macos_input::MacKeys,
+    keys: &dyn GameInput,
     saves: &std::path::Path,
 ) -> Result<serde_json::Value> {
     use crate::platform::macos_input::Key;
@@ -359,10 +354,7 @@ pub(super) fn save_game(
     Ok(serde_json::json!({"saved":written,"directory":saves.display().to_string()}))
 }
 /// Close the game menu if an earlier input left it open (Escape closes it).
-pub(super) fn close_menu(
-    process: &dyn Process,
-    keys: &crate::platform::macos_input::MacKeys,
-) -> Result<()> {
+pub(super) fn close_menu(process: &dyn Process, keys: &dyn GameInput) -> Result<()> {
     if read(process, menu_open)? {
         keys.press(crate::platform::macos_input::Key::Escape)?;
         wait(process, "game menu closed", |r, i| Ok(!menu_open(r, i)?))?;
@@ -405,7 +397,7 @@ fn topbar_rect(r: &Reader<'_>, image: u64, name: &str) -> Result<gui_tree::Rect>
 /// which is the button that owns that shortcut.
 pub(super) fn open_politics(
     process: &dyn Process,
-    keys: &crate::platform::macos_input::MacKeys,
+    keys: &dyn GameInput,
     open: impl Fn(&Reader<'_>, u64) -> Result<bool>,
 ) -> Result<()> {
     use crate::platform::macos_input::Key;
@@ -454,10 +446,7 @@ fn view_close(r: &Reader<'_>, image: u64, slot: u64) -> Result<Option<gui_tree::
     }
 }
 /// Close the state view and the air region window if they are open.
-pub(super) fn close_state_view(
-    process: &dyn Process,
-    keys: &crate::platform::macos_input::MacKeys,
-) -> Result<()> {
+pub(super) fn close_state_view(process: &dyn Process, keys: &dyn GameInput) -> Result<()> {
     for (what, probe) in [
         ("state view closed", state_view_close as ViewClose),
         ("air region window closed", air_region_close as ViewClose),
@@ -529,10 +518,7 @@ pub(super) fn reassign_open(r: &Reader<'_>, image: u64) -> Result<bool> {
     Ok(false)
 }
 /// Decline a command dialog left open by an earlier, interrupted action.
-pub(super) fn decline_stale(
-    process: &dyn Process,
-    keys: &crate::platform::macos_input::MacKeys,
-) -> Result<()> {
+pub(super) fn decline_stale(process: &dyn Process, keys: &dyn GameInput) -> Result<()> {
     if let Some(rect) = read(process, |r, i| command_dialog(r, i, "decline_button"))? {
         let (x, y) = rect.center();
         keys.click((1920, 1080), x, y)?;
@@ -544,10 +530,7 @@ pub(super) fn decline_stale(
 }
 /// After the requested click: accept the game's confirmation of exactly that
 /// command if it appears within a short bound. Returns whether one was accepted.
-pub(super) fn accept_command(
-    process: &dyn Process,
-    keys: &crate::platform::macos_input::MacKeys,
-) -> Result<bool> {
+pub(super) fn accept_command(process: &dyn Process, keys: &dyn GameInput) -> Result<bool> {
     let deadline = Instant::now() + Duration::from_millis(1200);
     loop {
         if let Some(rect) = read(process, |r, i| command_dialog(r, i, "accept_button"))? {
@@ -619,11 +602,7 @@ fn find_result(r: &Reader<'_>, image: u64) -> Result<(String, Option<i32>)> {
 /// Centre the camera on own or foreign state `state` with the game's Find
 /// view; Return is pressed only when the query and the highlighted state both
 /// match, otherwise Find is closed and the step refused.
-pub(super) fn find_state(
-    process: &dyn Process,
-    keys: &crate::platform::macos_input::MacKeys,
-    state: i32,
-) -> Result<()> {
+pub(super) fn find_state(process: &dyn Process, keys: &dyn GameInput, state: i32) -> Result<()> {
     use crate::platform::macos_input::Key;
     // The Recruit & Deploy panel covers the left half of the map, where the
     // box selections and map clicks that follow a Find would otherwise land.
@@ -666,7 +645,7 @@ pub(super) fn find_state(
 /// to leave the UI tidy after the game refuses a target.
 pub(super) fn dismiss(
     process: &dyn Process,
-    keys: &crate::platform::macos_input::MacKeys,
+    keys: &dyn GameInput,
     closed: impl Fn(&Reader<'_>, u64) -> Result<bool>,
 ) {
     for _ in 0..3 {

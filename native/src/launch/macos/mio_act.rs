@@ -29,7 +29,7 @@ use crate::{
     error::{Error, Result},
     gui_tree,
     memory::Reader,
-    platform::{macos_input::MacKeys, Process},
+    platform::{game_input::GameInput, Process},
 };
 use serde_json::{json, Value};
 use std::{cell::RefCell, thread, time::Duration};
@@ -258,7 +258,7 @@ fn refusal(r: Option<(&'static str, String)>) -> std::result::Result<(), Fail> {
 
 fn open_system(
     process: &dyn Process,
-    keys: &MacKeys<'_>,
+    keys: &dyn GameInput,
     slot: usize,
 ) -> std::result::Result<(), Fail> {
     clear_notices(process, keys)?;
@@ -281,7 +281,7 @@ fn open_system(
     Ok(())
 }
 
-fn open_roster(process: &dyn Process, keys: &MacKeys<'_>, slot: usize) -> Result<()> {
+fn open_roster(process: &dyn Process, keys: &dyn GameInput, slot: usize) -> Result<()> {
     pk::click(process, keys, "organisation slot", |r, i| {
         let entry = *org_entries(r, i)?.get(slot).ok_or_else(|| {
             Error::new("slot_unknown", "Organisation slot left the politics view")
@@ -354,7 +354,7 @@ fn require_row(process: &dyn Process, display: &str) -> std::result::Result<(), 
 
 fn open_detail(
     process: &dyn Process,
-    keys: &MacKeys<'_>,
+    keys: &dyn GameInput,
     display: &str,
 ) -> std::result::Result<(), Fail> {
     require_row(process, display)?;
@@ -368,7 +368,7 @@ fn open_detail(
     Ok(())
 }
 
-fn leave(process: &dyn Process, keys: &MacKeys<'_>) {
+fn leave(process: &dyn Process, keys: &dyn GameInput) {
     for class in [&pk::MIO_POLICY, &pk::MIO_DETAIL, &pk::MIO_LIST] {
         if pk::open_now(process, class) {
             let clicked = pk::click(process, keys, "close window", |r, i| {
@@ -395,7 +395,7 @@ fn political_power(process: &dyn Process) -> Option<f64> {
 
 // ------------------------------------------------------------- design team
 
-fn design_team(process: &dyn Process, keys: &MacKeys<'_>, display: &str, slot: usize) -> Driven {
+fn design_team(process: &dyn Process, keys: &dyn GameInput, display: &str, slot: usize) -> Driven {
     let result: Driven = (|| {
         open_system(process, keys, slot)?;
         open_roster(process, keys, slot)?;
@@ -425,7 +425,7 @@ fn design_team(process: &dyn Process, keys: &MacKeys<'_>, display: &str, slot: u
 
 fn policy(
     process: &dyn Process,
-    keys: &MacKeys<'_>,
+    keys: &dyn GameInput,
     display: &str,
     slot: usize,
     policy_name: &str,
@@ -575,7 +575,7 @@ pub(super) fn trait_refusal(
 
 fn mio_trait(
     process: &dyn Process,
-    keys: &MacKeys<'_>,
+    keys: &dyn GameInput,
     display: &str,
     slot: usize,
     index: Option<usize>,
@@ -646,7 +646,7 @@ pub(super) fn call(
     name: &str,
     args: &serde_json::Map<String, Value>,
     process: &(dyn Process + Send + Sync),
-    keys: &MacKeys<'static>,
+    keys: &dyn GameInput,
     guard: &mut Guard,
     authority: &InputAuthority,
     actions: &mut super::journal::GameJournal,

@@ -9,7 +9,7 @@ use crate::{
     gui_tree::{self, Rect},
     memory::{Reader, StringAbi},
     platform::{
-        macos_input::{Capture, Key, MacKeys},
+        game_input::{Capture, GameInput, Key},
         Process,
     },
 };
@@ -525,7 +525,7 @@ const ASSIGN_BOXES: [((f64, f64), (f64, f64)); 7] = [
     ((420.0, 190.0), (1640.0, 980.0)),
     ((640.0, 300.0), (1300.0, 980.0)),
 ];
-pub(super) fn assign(process: &dyn Process, keys: &MacKeys, plan: &AssignPlan) -> Result<()> {
+pub(super) fn assign(process: &dyn Process, keys: &dyn GameInput, plan: &AssignPlan) -> Result<()> {
     let army = match &plan.mode {
         AssignMode::CreateNew => return create(process, keys, plan.state, false),
         AssignMode::Absorb { army } => army,
@@ -727,7 +727,7 @@ fn new_card(r: &Reader<'_>, image: u64, leftmost: bool) -> Result<Rect> {
 /// Create an army from own divisions around state `state`.
 pub(super) fn create(
     process: &dyn Process,
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     state: i32,
     absorb: bool,
 ) -> Result<()> {
@@ -914,7 +914,7 @@ fn card_rect(r: &Reader<'_>, image: u64, army: &str, name: &str) -> Result<Rect>
 
 /// Select exactly `army` with its card: the selection must hold all of its
 /// divisions, not a selection left over from before.
-pub(super) fn select_army(process: &dyn Process, keys: &MacKeys, army: &str) -> Result<Rect> {
+pub(super) fn select_army(process: &dyn Process, keys: &dyn GameInput, army: &str) -> Result<Rect> {
     let size = read(process, |r, i| {
         let group = group_named(r, i, army)?;
         Ok(membership(r, i)?.values().filter(|g| **g == group).count() as u64)
@@ -934,7 +934,7 @@ pub(super) fn select_army(process: &dyn Process, keys: &MacKeys, army: &str) -> 
 /// divisions now belong to the target's group.
 pub(super) fn merge(
     process: &dyn Process,
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     source: &str,
     target: &str,
 ) -> Result<()> {
@@ -1183,7 +1183,12 @@ fn front_point_province(
             da.total_cmp(&db)
         }))
 }
-pub(super) fn front(process: &dyn Process, keys: &MacKeys, army: &str, state: i32) -> Result<()> {
+pub(super) fn front(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    army: &str,
+    state: i32,
+) -> Result<()> {
     clear_notices(process, keys)?;
     let own = read(process, own_states)?;
     if own.contains(&state) {
@@ -1264,7 +1269,12 @@ pub(super) fn executing(r: &Reader<'_>, image: u64, army: &str) -> Result<bool> 
 }
 /// Execute (`run`) or stop the battle plan of `army` with the card's play or
 /// stop button. Verified by the card's execute animation turning on or off.
-pub(super) fn execute(process: &dyn Process, keys: &MacKeys, army: &str, run: bool) -> Result<()> {
+pub(super) fn execute(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    army: &str,
+    run: bool,
+) -> Result<()> {
     clear_notices(process, keys)?;
     if read(process, |r, i| orders(r, i, army))? == 0 {
         return Err(Error::new(
@@ -1353,7 +1363,7 @@ pub(super) fn plan_nodes(r: &Reader<'_>, image: u64, army: &str) -> Result<usize
 /// Verified by new battle-plan order nodes on the army.
 pub(super) fn offensive(
     process: &dyn Process,
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     game_dir: &std::path::Path,
     army: &str,
     state: i32,
@@ -1443,14 +1453,14 @@ pub(super) fn divisions_heading_for(
 /// selection holds exactly `expected` divisions; refuses with `selection_mismatch` otherwise.
 /// Back to the default map mode (F1, mapmodes_interface.gui): in the air map mode left by the
 /// air tools the division counters are hidden and a box selection picks nothing.
-fn default_map_mode(keys: &MacKeys) -> Result<()> {
-    keys.press_code(122)?;
+fn default_map_mode(keys: &dyn GameInput) -> Result<()> {
+    keys.press_code(crate::platform::game_input::vk::F1)?;
     std::thread::sleep(std::time::Duration::from_millis(250));
     Ok(())
 }
 pub(super) fn box_select_exact(
     process: &dyn Process,
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     state: i32,
     expected: usize,
 ) -> Result<()> {
@@ -1475,7 +1485,12 @@ pub(super) fn box_select_exact(
 /// its card, Find view centres the state, one right click). A plain move order
 /// attacks whatever stands in the target province; battle plans are replaced
 /// by manual control for these divisions.
-pub(super) fn move_to(process: &dyn Process, keys: &MacKeys, army: &str, state: i32) -> Result<()> {
+pub(super) fn move_to(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    army: &str,
+    state: i32,
+) -> Result<()> {
     clear_notices(process, keys)?;
     let card = read(process, |r, i| card_rect(r, i, army, "portrait_btn"))?;
     let (x, y) = card.center();
@@ -1638,7 +1653,7 @@ pub(super) fn promote_enabled(r: &Reader<'_>, image: u64, general: &str) -> Resu
 /// Verified when the army's commander is that general.
 pub(super) fn assign_commander(
     process: &dyn Process,
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     army: &str,
     general: &str,
 ) -> Result<()> {
@@ -1661,7 +1676,7 @@ pub(super) fn assign_commander(
 }
 fn assign_commander_once(
     process: &dyn Process,
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     army: &str,
     general: &str,
     allow_promote: bool,
@@ -1830,7 +1845,11 @@ fn assign_commander_once(
 /// Group own armies `names` into a new army group: the first army's card,
 /// the others' cards with Shift, then the new-army-group card. Verified when
 /// all of them belong to one army group that did not exist before.
-pub(super) fn create_group(process: &dyn Process, keys: &MacKeys, names: &[String]) -> Result<()> {
+pub(super) fn create_group(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    names: &[String],
+) -> Result<()> {
     clear_notices(process, keys)?;
     let u = &MACOS;
     let before = read(process, army_groups)?;
@@ -1875,7 +1894,12 @@ const PANEL_ROWS: usize = 19;
 /// Split the first `count` divisions of `army` (list order) into a new army:
 /// the army's card, the first row, Shift on row `count`, then the new-army
 /// card. Verified by a new army holding exactly those divisions.
-pub(super) fn split(process: &dyn Process, keys: &MacKeys, army: &str, count: usize) -> Result<()> {
+pub(super) fn split(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    army: &str,
+    count: usize,
+) -> Result<()> {
     if count == 0 || count > PANEL_ROWS {
         return Err(Error::new(
             "invalid_arguments",

@@ -10,7 +10,7 @@ use crate::{
     daily_observation::{self, Producer},
     daily_worker::{self, Lifecycle},
     error::{Error, Result},
-    platform::{macos_input::MacKeys, Process},
+    platform::{game_input::GameInput, Process},
     protocol::worker_events::{Disposition, Events, Terminal},
 };
 use serde::Deserialize;
@@ -520,7 +520,7 @@ fn retain_terminal(mut terminal: Terminal, blocked: &AtomicBool, retained: Resul
 }
 struct Worker {
     process: Arc<dyn Process + Send + Sync>,
-    keys: Arc<MacKeys<'static>>,
+    keys: Arc<dyn GameInput>,
     control: Arc<Mutex<Control>>,
     retained: Arc<Mutex<Retained>>,
     producer: Arc<Producer>,
@@ -735,7 +735,7 @@ impl Worker {
 }
 struct DailyBackend<'a> {
     process: &'a (dyn Process + Send + Sync),
-    keys: &'a MacKeys<'a>,
+    keys: &'a dyn GameInput,
     control: &'a mut Control,
     producer: &'a Producer,
     production: &'a mut production::Journals,

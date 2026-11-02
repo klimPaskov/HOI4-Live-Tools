@@ -26,7 +26,7 @@ use crate::{
     gui_tree::{self, Rect},
     memory::{Reader, StringAbi},
     platform::{
-        macos_input::{Key, MacKeys},
+        game_input::{GameInput, Key},
         Process,
     },
 };
@@ -938,7 +938,7 @@ fn card_of(r: &Reader<'_>, image: u64, handle: u64) -> Result<Card> {
 }
 
 /// Bring the research panel's Experimental Facilities tab up.
-fn open_tab(process: &dyn Process, keys: &MacKeys) -> Result<()> {
+fn open_tab(process: &dyn Process, keys: &dyn GameInput) -> Result<()> {
     // A technology tree left open by an earlier input hides the panel.
     super::ui::dismiss(process, keys, |r, i| Ok(!tree_open(r, i)?));
     if read(process, tree_open)? {
@@ -965,7 +965,7 @@ fn open_tab(process: &dyn Process, keys: &MacKeys) -> Result<()> {
     Ok(())
 }
 /// Escape the open sub-windows, then the research panel itself.
-fn leave(process: &dyn Process, keys: &MacKeys) {
+fn leave(process: &dyn Process, keys: &dyn GameInput) {
     super::ui::dismiss(process, keys, |r, i| {
         Ok(!program_view_open(r, i).unwrap_or(false)
             && !roster_open(r, i).unwrap_or(false)
@@ -1264,7 +1264,7 @@ fn handle_of(snap: &Snapshot, facility: i32) -> Result<u64> {
 /// that facility's project list. Opens the Research panel; closes it again.
 pub(super) fn panel(
     process: &dyn Process,
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     facility: Option<i32>,
     with_rules: bool,
 ) -> Result<Value> {
@@ -1392,7 +1392,7 @@ fn unknown_facility(snap: &Snapshot, id: i32) -> Error {
 }
 
 /// Ordinary input sequence for one assign. The caller has journaled intent.
-pub(super) fn assign(process: &dyn Process, keys: &MacKeys, plan: &Plan) -> Result<()> {
+pub(super) fn assign(process: &dyn Process, keys: &dyn GameInput, plan: &Plan) -> Result<()> {
     let snap = snapshot(process)?;
     let handle = handle_of(&snap, plan.facility)?;
     clear_notices(process, keys)?;
@@ -1522,7 +1522,7 @@ pub(super) fn assign(process: &dyn Process, keys: &MacKeys, plan: &Plan) -> Resu
     result
 }
 /// Click the roster row of `name`, scrolling it into the list band.
-fn pick_scientist(process: &dyn Process, keys: &MacKeys, name: &str) -> Result<()> {
+fn pick_scientist(process: &dyn Process, keys: &dyn GameInput, name: &str) -> Result<()> {
     let wanted = name.to_lowercase();
     let find = |r: &Reader<'_>, i: u64| -> Result<Option<Rect>> {
         Ok(roster_rows(r, i)?
@@ -1618,7 +1618,7 @@ fn confirm(r: &Reader<'_>, image: u64) -> Result<Option<(String, Rect, Rect)>> {
     Ok(None)
 }
 /// Accept the confirmation whose title contains `title` (case-insensitive).
-fn accept_confirm(process: &dyn Process, keys: &MacKeys, title: &str) -> Result<()> {
+fn accept_confirm(process: &dyn Process, keys: &dyn GameInput, title: &str) -> Result<()> {
     let wanted = title.to_lowercase();
     wait(process, "confirmation dialog", |r, i| {
         Ok(confirm(r, i)?.is_some())
@@ -1775,7 +1775,7 @@ fn stop_button(r: &Reader<'_>, image: u64) -> Result<Option<Rect>> {
     }
     Ok(Some(gui_tree::rect(r, image, button, GAME)?))
 }
-fn open_card_window(process: &dyn Process, keys: &MacKeys, handle: u64) -> Result<()> {
+fn open_card_window(process: &dyn Process, keys: &dyn GameInput, handle: u64) -> Result<()> {
     let card = settled(process, "facility card", |r, i| card_of(r, i, handle))?;
     let (x, y) = card.open.center();
     keys.click(GAME, x, y)?;
@@ -1786,7 +1786,7 @@ fn open_card_window(process: &dyn Process, keys: &MacKeys, handle: u64) -> Resul
 /// Stop the project of one facility: facility window, the stop button and
 /// the game's confirmation. Verified when the project enters its stopping
 /// state or the facility shows no project.
-pub(super) fn stop(process: &dyn Process, keys: &MacKeys, facility: i32) -> Result<()> {
+pub(super) fn stop(process: &dyn Process, keys: &dyn GameInput, facility: i32) -> Result<()> {
     let snap = snapshot(process)?;
     let handle = handle_of(&snap, facility)?;
     clear_notices(process, keys)?;
@@ -1821,7 +1821,7 @@ pub(super) fn stop(process: &dyn Process, keys: &MacKeys, facility: i32) -> Resu
     result
 }
 /// Take the scientist out of a facility (the small button on the portrait).
-pub(super) fn unassign(process: &dyn Process, keys: &MacKeys, facility: i32) -> Result<()> {
+pub(super) fn unassign(process: &dyn Process, keys: &dyn GameInput, facility: i32) -> Result<()> {
     let snap = snapshot(process)?;
     let handle = handle_of(&snap, facility)?;
     clear_notices(process, keys)?;
@@ -1918,7 +1918,7 @@ fn recruit_rows(r: &Reader<'_>, image: u64) -> Result<Vec<(String, String, Rect)
     Ok(out)
 }
 /// Recruit one candidate of the Recruit Scientist window by name.
-pub(super) fn recruit(process: &dyn Process, keys: &MacKeys, name: &str) -> Result<()> {
+pub(super) fn recruit(process: &dyn Process, keys: &dyn GameInput, name: &str) -> Result<()> {
     let wanted = name.to_lowercase();
     clear_notices(process, keys)?;
     let result: Result<()> = (|| {

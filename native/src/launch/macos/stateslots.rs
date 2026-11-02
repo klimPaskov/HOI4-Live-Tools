@@ -8,7 +8,7 @@ use crate::{
     error::{Error, Result},
     game, gui_tree,
     memory::{Reader, StringAbi},
-    platform::{macos_input::MacKeys, Process},
+    platform::{game_input::GameInput, Process},
 };
 use serde_json::{json, Value};
 
@@ -134,11 +134,15 @@ fn slots(r: &Reader<'_>, image: u64) -> Result<Option<Slots>> {
 }
 
 /// Free building slots of own states `ids` (opens each state's view).
-pub(super) fn read_states(process: &dyn Process, keys: &MacKeys, ids: &[i32]) -> Result<Value> {
+pub(super) fn read_states(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    ids: &[i32],
+) -> Result<Value> {
     clear_notices(process, keys)?;
     // F1 returns the map to its plain mode (an air or construction map mode
     // would turn the click on a state into a different action).
-    keys.press_code(122)?;
+    keys.press_code(crate::platform::game_input::vk::F1)?;
     std::thread::sleep(std::time::Duration::from_millis(500));
     let mut rows = Vec::new();
     // One queue read for every state: queued shared-slot buildings hold their slots.

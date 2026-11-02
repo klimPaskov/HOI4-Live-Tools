@@ -361,7 +361,7 @@ impl MacClock {
 
 struct ClockBackend<'a> {
     process: &'a dyn Process,
-    keys: &'a MacKeys<'a>,
+    keys: &'a dyn crate::platform::game_input::GameInput,
     guard: &'a mut Guard,
     authority: &'a InputAuthority,
     token: &'a str,

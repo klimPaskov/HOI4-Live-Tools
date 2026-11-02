@@ -11,7 +11,7 @@ use crate::{
     gui_tree::{self, Rect},
     memory::{Reader, StringAbi},
     platform::{
-        macos_input::{Key, MacKeys},
+        game_input::{GameInput, Key},
         Process,
     },
 };
@@ -146,7 +146,7 @@ pub(super) fn queued(process: &dyn Process, key: &str, state: i32) -> Result<i64
     }
     Ok(observed.summary.in_state)
 }
-pub(super) fn leave(process: &dyn Process, keys: &MacKeys) {
+pub(super) fn leave(process: &dyn Process, keys: &dyn GameInput) {
     // Switch placement mode off: Escape closes the selection, then the
     // panel; each Escape is given time to act so none reaches the game menu.
     super::ui::dismiss(process, keys, |r, i| {
@@ -188,7 +188,7 @@ fn no_slot_or_not_allowed(key: &str, state: i32) -> Error {
 /// Queue `count` more of building `key` in own state `state`.
 pub(super) fn add(
     process: &dyn Process,
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     key: &str,
     state: i32,
     count: i64,

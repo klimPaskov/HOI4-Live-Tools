@@ -23,7 +23,7 @@ use crate::{
     gui_tree::{self, Rect},
     input_lease::InputAuthority,
     memory::Reader,
-    platform::{macos_input::MacKeys, Process},
+    platform::{game_input::GameInput, Process},
 };
 use serde::{de::DeserializeOwned, Serialize};
 use serde_json::{json, Value};
@@ -46,7 +46,7 @@ pub(super) const UNVALIDATED: &str = "UNVALIDATED (no live test yet): ";
 /// What every dispatcher needs; borrowed from the controller state in `MacClock::call`.
 pub(super) struct Env<'a> {
     pub process: &'a (dyn Process + Send + Sync),
-    pub keys: &'a MacKeys<'static>,
+    pub keys: &'a dyn GameInput,
     pub guard: &'a mut super::Guard,
     pub authority: &'a InputAuthority,
     pub actions: &'a mut GameJournal,
@@ -61,7 +61,7 @@ pub(super) struct Request<'a> {
 }
 pub(super) type PlanFn<'a, P> = &'a dyn Fn(&dyn Process) -> Result<P>;
 pub(super) type SettleFn<'a, P> = &'a dyn Fn(&dyn Process, Option<&P>) -> Result<Outcome>;
-pub(super) type DispatchFn<'a, P> = &'a dyn Fn(&dyn Process, &MacKeys<'_>, &P) -> Result<Value>;
+pub(super) type DispatchFn<'a, P> = &'a dyn Fn(&dyn Process, &dyn GameInput, &P) -> Result<Value>;
 /// Run one journaled action. `plan` reads the world and refuses before any input; on a retry of
 /// an unresolved request id no plan exists (`None`) and nothing is ever dispatched again.
 /// `settle` is a pure rule over fresh reads; `dispatch` drives the ordinary UI once.
@@ -321,7 +321,7 @@ pub(super) fn long_text(r: &Reader<'_>, widget: u64) -> Result<String> {
         &r.string_bounded(widget + 0x100, 2000)?,
     ))
 }
-pub(super) fn click(keys: &MacKeys<'_>, rect: Rect) -> Result<()> {
+pub(super) fn click(keys: &dyn GameInput, rect: Rect) -> Result<()> {
     let (x, y) = rect.center();
     keys.click(GAME, x, y).map(|_| ())
 }
@@ -372,7 +372,7 @@ pub(super) fn popups(r: &Reader<'_>, image: u64, kinds: &[u64]) -> Result<Vec<Po
 /// are ever answered, so a diplomacy proposal can never be accepted by accident.
 pub(super) fn answer_confirmation(
     process: &dyn Process,
-    keys: &MacKeys<'_>,
+    keys: &dyn GameInput,
     accept: bool,
 ) -> Result<bool> {
     let button = if accept {

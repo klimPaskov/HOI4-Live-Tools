@@ -12,7 +12,7 @@ use crate::{
     gui_tree::{self, Rect},
     memory::{Reader, StringAbi},
     platform::{
-        macos_input::{Key, MacKeys},
+        game_input::{GameInput, Key},
         Process,
     },
 };
@@ -298,7 +298,7 @@ fn grid_scroll(r: &Reader<'_>, image: u64, grid: &str) -> Result<f64> {
     Ok(f64::from(value))
 }
 
-fn cancel_dialog(process: &dyn Process, keys: &MacKeys) {
+fn cancel_dialog(process: &dyn Process, keys: &dyn GameInput) {
     if let Ok((rect, true)) = read(process, |r, i| dialog_button(r, i, "cancel_button")) {
         let (x, y) = rect.center();
         let _ = keys.click(GAME, x, y);
@@ -307,7 +307,7 @@ fn cancel_dialog(process: &dyn Process, keys: &MacKeys) {
 }
 
 /// Point the diplomacy view at the owner of state `state`.
-fn show(process: &dyn Process, keys: &MacKeys, state: i32) -> Result<i32> {
+fn show(process: &dyn Process, keys: &dyn GameInput, state: i32) -> Result<i32> {
     let (owner, own) = read(process, |r, i| {
         Ok((state_owner(r, i, state)?, player_tag(r, i)?))
     })?;
@@ -364,7 +364,7 @@ pub(super) fn target_tag(process: &dyn Process, target: &Target) -> Result<Strin
 /// Point the diplomacy view at the target; returns its tag text. A country
 /// is reached through one of its states (the first ones by id); the next
 /// state is tried when the map click lands on another owner.
-fn show_target(process: &dyn Process, keys: &MacKeys, target: &Target) -> Result<String> {
+fn show_target(process: &dyn Process, keys: &dyn GameInput, target: &Target) -> Result<String> {
     match target {
         Target::State(state) => {
             let owner = show(process, keys, *state)?;
@@ -411,7 +411,11 @@ fn row_json(row: &Row) -> Value {
 }
 
 /// Diplomatic actions offered toward the target.
-pub(super) fn actions(process: &dyn Process, keys: &MacKeys, target: &Target) -> Result<Value> {
+pub(super) fn actions(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    target: &Target,
+) -> Result<Value> {
     clear_notices(process, keys)?;
     let tag = show_target(process, keys, target)?;
     let found = settled(process, "diplomatic actions", rows)?;
@@ -423,7 +427,7 @@ pub(super) fn actions(process: &dyn Process, keys: &MacKeys, target: &Target) ->
 }
 fn click_and_check(
     process: &dyn Process,
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     at: (f64, f64),
     stage: &str,
     check: impl Fn(&Reader<'_>, u64) -> Result<bool>,
@@ -432,7 +436,12 @@ fn click_and_check(
     wait(process, stage, check)
 }
 /// War-goal dialog: choose the type, then the states, by their rows.
-fn war_goal(process: &dyn Process, keys: &MacKeys, kind: &str, states: &[String]) -> Result<()> {
+fn war_goal(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    kind: &str,
+    states: &[String],
+) -> Result<()> {
     let mut info = json!({});
     war_goal_choose(process, keys, kind, states, &mut info)
 }
@@ -440,7 +449,7 @@ fn war_goal(process: &dyn Process, keys: &MacKeys, kind: &str, states: &[String]
 /// `info["states_offered"]`.
 fn war_goal_choose(
     process: &dyn Process,
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     kind: &str,
     states: &[String],
     info: &mut Value,
@@ -610,7 +619,7 @@ fn disabled_hint(key: Option<&str>) -> &'static str {
 /// Open the view on the target and choose the row `action` names.
 fn locate(
     process: &dyn Process,
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     target: &Target,
     action: &str,
 ) -> Result<(
@@ -638,7 +647,7 @@ fn locate(
 /// All typed refusals that need no input beyond opening the view.
 pub(super) fn plan(
     process: &dyn Process,
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     target: &Target,
     action: &str,
     try_anyway: bool,
@@ -716,7 +725,7 @@ fn rows_differ(a: &[Row], b: &[Row]) -> bool {
 /// game (the Send click, or the row click of an action without a dialog).
 pub(super) fn execute(
     process: &dyn Process,
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     plan: &Plan,
     kind: Option<&str>,
     states: &[String],
@@ -852,7 +861,7 @@ pub(super) fn execute(
 /// when given; the dialog is always cancelled.
 pub(super) fn preview(
     process: &dyn Process,
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     target: &Target,
     action: &str,
     kind: Option<&str>,

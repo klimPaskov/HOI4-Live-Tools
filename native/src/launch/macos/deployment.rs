@@ -8,7 +8,7 @@ use crate::{
     gui_tree::{self, Rect},
     memory::{Reader, StringAbi},
     platform::{
-        macos_input::{Key, MacKeys},
+        game_input::{GameInput, Key},
         Process,
     },
 };
@@ -208,7 +208,7 @@ pub(super) fn designer_button(r: &Reader<'_>, image: u64) -> Result<Rect> {
     gui_tree::rect(r, image, button, GAME)
 }
 /// Open the Recruit & Deploy panel (U) if it is closed.
-pub(super) fn ensure_open(process: &dyn Process, keys: &MacKeys) -> Result<()> {
+pub(super) fn ensure_open(process: &dyn Process, keys: &dyn GameInput) -> Result<()> {
     if !read(process, open)? {
         keys.press(Key::letter('u')?)?;
         wait(process, "open deployment", open)?;
@@ -222,7 +222,7 @@ pub(super) fn ensure_open(process: &dyn Process, keys: &MacKeys) -> Result<()> {
 /// Close the Recruit & Deploy panel when an earlier action left it open: it covers
 /// the left half of the map, so a later box selection or map click would miss.
 /// Best effort (the panel toggles with the same ordinary key that opened it).
-pub(super) fn leave(process: &dyn Process, keys: &MacKeys) {
+pub(super) fn leave(process: &dyn Process, keys: &dyn GameInput) {
     if !read(process, open).unwrap_or(false) {
         return;
     }
@@ -287,7 +287,12 @@ fn conveyor_button(r: &Reader<'_>, image: u64, index: usize, name: &str) -> Resu
     Ok(None)
 }
 /// Click button `name` of conveyor `index` once it rests inside the list area (scrolling it there).
-fn click_conveyor(process: &dyn Process, keys: &MacKeys, index: usize, name: &str) -> Result<()> {
+fn click_conveyor(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    index: usize,
+    name: &str,
+) -> Result<()> {
     for _ in 0..80 {
         match read(process, |r, i| conveyor_button(r, i, index, name))? {
             Some(r) if r.y >= LIST.0 && r.y + r.h.min(40) <= LIST.1 => break,
@@ -334,7 +339,12 @@ fn click_conveyor(process: &dyn Process, keys: &MacKeys, index: usize, name: &st
 /// button creates the queue (one line, series amount infinite), its + sets the amount to one
 /// division per line (an infinite line trains forever), then Add Unit adds the other lines.
 /// Each step is verified on the queue's own fields. The caller has journaled intent.
-pub(super) fn train(process: &dyn Process, keys: &MacKeys, name: &str, count: usize) -> Result<()> {
+pub(super) fn train(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    name: &str,
+    count: usize,
+) -> Result<()> {
     clear_notices(process, keys)?;
     if !read(process, open)? {
         keys.press(Key::letter('u')?)?;
@@ -445,7 +455,11 @@ fn find(r: &Reader<'_>, image: u64, object: u64, name: &str, depth: u32) -> Resu
 /// Give every training line without a location the own state `state`: the
 /// Find view centres the state, then each line's location button and one
 /// click on the state. Verified by one fewer unlocated line per step.
-pub(super) fn set_locations(process: &dyn Process, keys: &MacKeys, state: i32) -> Result<usize> {
+pub(super) fn set_locations(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    state: i32,
+) -> Result<usize> {
     clear_notices(process, keys)?;
     let total = read(process, unlocated)?;
     if total == 0 {
