@@ -406,7 +406,7 @@ fn landing_point(process: &dyn Process, plan: &Plan) -> Result<Option<(f64, f64)
 }
 /// Centre of the solid cyan patch (invasion highlight, about R<90, G>170, B>170) nearest the
 /// screen centre, outside the panels; None when the screen shows none.
-fn nearest_cyan(c: &crate::platform::macos_input::Capture) -> Option<(f64, f64)> {
+fn nearest_cyan(c: &crate::platform::game_input::Capture) -> Option<(f64, f64)> {
     let cyan = |x: f64, y: f64| {
         c.rgb(x, y).is_some_and(|(r, g, b)| {
             r < 90 && g > 170 && b > 170 && (i32::from(g) - i32::from(b)).abs() < 70

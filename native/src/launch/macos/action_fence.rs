@@ -364,8 +364,12 @@ mod tests {
     fn worker_fences_and_owned_input_bindings_are_send_and_sync() {
         fn require_send_sync<T: Send + Sync>() {}
         require_send_sync::<Fence<'static>>();
+        #[cfg(target_os = "macos")]
         require_send_sync::<crate::platform::macos_input::MacKeys<'static>>();
+        #[cfg(target_os = "macos")]
         require_send_sync::<crate::platform::macos::MacProcess>();
+        #[cfg(target_os = "linux")]
+        require_send_sync::<crate::platform::x11::X11Input<'static>>();
     }
 
     #[test]

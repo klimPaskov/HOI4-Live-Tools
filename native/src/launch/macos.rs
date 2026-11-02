@@ -2,6 +2,9 @@
 //! journals, CGEvent keys and clicks only while the owned window is front-most,
 //! and fresh memory readback for every step. The clock keeps the Linux tool
 //! contract; research starts are driven by live GUI geometry.
+// Linux reuses these tools once a verified build layout binds them (see
+// docs/LINUX_PORT.md); until then parts are unused there.
+#![cfg_attr(target_os = "linux", allow(dead_code, unused_imports))]
 mod action_fence;
 mod agency_act;
 mod air;
@@ -42,6 +45,7 @@ mod focus;
 mod front_plan;
 mod peace;
 mod trade;
+#[cfg(target_os = "macos")]
 pub(crate) use focus::input_probe as focus_input_probe;
 mod economy_detail;
 mod input_gate;
@@ -96,7 +100,7 @@ use crate::{
     game,
     input_lease::InputAuthority,
     platform::{
-        macos_input::{Key, MacKeys},
+        game_input::{GameInput, Key},
         Process,
     },
     protocol::Commands,
@@ -261,13 +265,25 @@ pub struct MacClock {
     find_open_until: Option<Instant>,
     directory: std::path::PathBuf,
     daily: daily::Controller,
-    keys: Arc<MacKeys<'static>>,
+    keys: Arc<dyn GameInput>,
     state: Arc<Mutex<Control>>,
     process: Arc<dyn Process + Send + Sync>,
 }
 impl MacClock {
     /// Bind to the owned process already opened from the session manifest.
+    #[cfg(target_os = "macos")]
     pub fn bind(process: Arc<dyn Process + Send + Sync>, directory: &Path) -> Result<Self> {
+        let keys = Arc::new(crate::platform::macos_input::MacKeys::bind_owned(
+            process.clone(),
+        )?);
+        Self::bind_with_input(process, directory, keys)
+    }
+    /// Bind with an already-verified platform input binding for the same process.
+    pub(crate) fn bind_with_input(
+        process: Arc<dyn Process + Send + Sync>,
+        directory: &Path,
+        keys: Arc<dyn GameInput>,
+    ) -> Result<Self> {
         let config: Config = serde_json::from_slice(&std::fs::read(directory.join("input.json"))?)
             .map_err(|e| Error::new("invalid_input_binding", e.to_string()))?;
         let qualification_clock_origin = Instant::now();
@@ -309,7 +325,6 @@ impl MacClock {
             campaign: format!("{}:{}", nonce()?, context.playthrough_id),
             player: config.player.clone(),
         };
-        let keys = Arc::new(MacKeys::bind_owned(process.clone())?);
         let mut persisted = controller_epoch::ControllerEpoch::open(
             &directory.join("controller-epoch.json"),
             proposed,

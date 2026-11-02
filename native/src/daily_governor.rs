@@ -370,7 +370,7 @@ impl Governor {
     /// Load the original private plan before any owner input is enabled.
     /// Existing bytes, quarantine and unresolved intents are never rewritten.
     /// A present result retains the same exclusive Store lock as `open`.
-    #[cfg(any(target_os = "macos", all(test, unix)))]
+    #[cfg(any(target_os = "macos", target_os = "linux", all(test, unix)))]
     pub(crate) fn load_existing(path: &Path) -> Result<Option<Self>> {
         let (store, bytes) = store::Store::open(path)?;
         let Some(bytes) = bytes else {
@@ -505,7 +505,7 @@ impl Governor {
     pub(crate) fn preparation_check(&mut self) -> Result<()> {
         self.check()
     }
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     pub(crate) fn verify_live_scope(&mut self, scope: &Scope, date_raw: i32) -> Result<()> {
         self.check()?;
         crate::calendar::decode(date_raw)?;
@@ -941,7 +941,7 @@ impl Governor {
     /// Waiting/deferred heads do not consume this admission; after an actual
     /// attempt, later entries retain their existing Pending state. Same-day
     /// runnable work may use continue_entry with its own original deadline.
-    #[cfg(any(target_os = "macos", all(test, unix)))]
+    #[cfg(any(target_os = "macos", target_os = "linux", all(test, unix)))]
     pub(crate) fn run_next(
         &mut self,
         backend: &mut dyn Backend,

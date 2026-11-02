@@ -285,7 +285,7 @@ pub(super) fn save_game(
     keys: &dyn GameInput,
     saves: &std::path::Path,
 ) -> Result<serde_json::Value> {
-    use crate::platform::macos_input::Key;
+    use crate::platform::game_input::Key;
     let newest = || -> Option<(std::time::SystemTime, String)> {
         std::fs::read_dir(saves)
             .ok()?
@@ -356,7 +356,7 @@ pub(super) fn save_game(
 /// Close the game menu if an earlier input left it open (Escape closes it).
 pub(super) fn close_menu(process: &dyn Process, keys: &dyn GameInput) -> Result<()> {
     if read(process, menu_open)? {
-        keys.press(crate::platform::macos_input::Key::Escape)?;
+        keys.press(crate::platform::game_input::Key::Escape)?;
         wait(process, "game menu closed", |r, i| Ok(!menu_open(r, i)?))?;
     }
     Ok(())
@@ -400,7 +400,7 @@ pub(super) fn open_politics(
     keys: &dyn GameInput,
     open: impl Fn(&Reader<'_>, u64) -> Result<bool>,
 ) -> Result<()> {
-    use crate::platform::macos_input::Key;
+    use crate::platform::game_input::Key;
     keys.press(Key::letter('q')?)?;
     if wait(process, "open politics", &open).is_ok() {
         return Ok(());
@@ -603,7 +603,7 @@ fn find_result(r: &Reader<'_>, image: u64) -> Result<(String, Option<i32>)> {
 /// view; Return is pressed only when the query and the highlighted state both
 /// match, otherwise Find is closed and the step refused.
 pub(super) fn find_state(process: &dyn Process, keys: &dyn GameInput, state: i32) -> Result<()> {
-    use crate::platform::macos_input::Key;
+    use crate::platform::game_input::Key;
     // The Recruit & Deploy panel covers the left half of the map, where the
     // box selections and map clicks that follow a Find would otherwise land.
     super::deployment::leave(process, keys);
@@ -653,7 +653,7 @@ pub(super) fn dismiss(
             return;
         }
         if keys
-            .press(crate::platform::macos_input::Key::Escape)
+            .press(crate::platform::game_input::Key::Escape)
             .is_err()
         {
             return;

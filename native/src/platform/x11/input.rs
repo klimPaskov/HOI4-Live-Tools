@@ -723,8 +723,7 @@ impl GameInput for X11Input<'_> {
                 "Guarded input reader differs from its binding",
             ));
         }
-        let mut guards: Vec<&'a (dyn Fn() -> Result<()> + Send + Sync)> =
-            self.guards.iter().copied().collect();
+        let mut guards: Vec<&'a (dyn Fn() -> Result<()> + Send + Sync)> = self.guards.to_vec();
         guards.push(check);
         Ok(Box::new(X11Input {
             shared: self.shared.clone(),

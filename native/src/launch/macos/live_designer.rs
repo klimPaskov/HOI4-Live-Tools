@@ -71,6 +71,7 @@ fn live_designer() {
 
 /// One-off cleanup helper: click the cancel button of the LAST conveyor card in the Recruit &
 /// Deploy list with ordinary clicks. Sends input; only run by the exclusive input owner.
+#[cfg(target_os = "macos")]
 #[test]
 #[ignore = "sends input"]
 fn live_cancel_last_conveyor() {
@@ -120,6 +121,7 @@ fn live_cancel_last_conveyor() {
 }
 
 /// Owner-only manual helper: HOI4_X/HOI4_Y game coordinates to click (HOI4_KEY=letter to press).
+#[cfg(target_os = "macos")]
 #[test]
 #[ignore = "sends input"]
 fn live_click() {
