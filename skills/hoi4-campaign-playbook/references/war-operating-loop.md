@@ -87,3 +87,26 @@ No pocket available: attack the top `hoi4_front_plan` axis with the strike armie
   `landing_verified:false`, so check the map/army after it starts.
 - Peace: `hoi4_peace_options`, `hoi4_peace_take {"states":[ids]}`, `hoi4_peace_submit`,
   `hoi4_peace_exit`.
+
+## 6. Principles learned in live play (apply to any war)
+
+These came from failed training wars; they are general, not tied to one country.
+
+- **Supply caps a front.** Every front has a supply ceiling. More divisions than it carries starve all of them
+  (seen: 18 divisions at 14-27% supply, organisation ~12, no progress). Read `hoi4_supply` every war tick; when an
+  army is below 50% supply, thin it (split and move part elsewhere) rather than adding more.
+- **Organisation decides attacks.** Attack with organisation above ~50%; below that, stop the plan, recover, then
+  attack again all at once on the same axis. Continuous weak attacks lose.
+- **Exploit what the enemy lacks.** No air force: every fighter and CAS wing over the attack. No anti-tank: armour
+  and fast divisions lead breakthroughs and pincers. Weak defence in open terrain: encircle there.
+- **Aim at victory points.** Capitulation comes from lost victory points; the capital and big cities end wars, so
+  operations point at them, and defence protects one's own.
+- **Reinforcements take time.** Moving divisions by sea or across a continent takes weeks to months; decide in the
+  first days of a war, not when the front stalls.
+- **Construction is slow.** Buildings finish long after a short war; in a war of months spend factories on the
+  economy and production, not on front-line infrastructure or supply hubs.
+- **Never idle.** Every army has an order every tick; every stalled offensive is re-planned, every idle army gets a
+  task (hold a border, reserve, or attack).
+- **Adapt.** When the situation changes (new enemy, counter-offensive, an ally collapsing, a pocket against you),
+  stop, re-read `hoi4_wars`, `hoi4_front_plan` and `hoi4_encirclement_candidates`, and re-plan from section 1. No
+  scenario plan survives contact; these principles do.
