@@ -457,5 +457,23 @@ pub(super) fn set(
         })?;
         ensure_open(process, keys)?;
     }
+    if factories == 0 {
+        // Zero factories removes the line with its close_production_line button
+        // (countryproductionlineview.gui); verified when the line handle is gone.
+        reveal_named(process, keys, line.handle, "close_production_line", i32::MAX)?;
+        let rect = settled(process, "remove button", |r, i| {
+            button(r, i, line.handle, "close_production_line")?
+                .ok_or_else(|| Error::new("gui_target_unavailable", "Remove button not found"))
+        })?;
+        click(process, keys, rect)?;
+        // "Cancel Production Line" asks for confirmation; Return accepts it (1.19.4.1).
+        if !super::ui::accept_command(process, keys)? {
+            std::thread::sleep(std::time::Duration::from_millis(300));
+            keys.press(Key::Return)?;
+        }
+        return wait(process, "line removed", |r, base| {
+            Ok(!production_lines::own_lines(r, base)?.iter().any(|l| l.handle == line.handle))
+        });
+    }
     adjust(process, keys, line.handle, factories)
 }

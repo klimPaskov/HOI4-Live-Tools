@@ -28,7 +28,7 @@ Descriptions are the tools' own text; see `PLAYBOOK_TOOL_GAPS.md` for validation
 - `hoi4_industry` (R): Own civilian, military and dockyard factory counts (validated against the top bar total) and political power;
 - `hoi4_naval_production_options` (R): Read-only (memory, no input):
 - `hoi4_production_add` (A): Add one own military or naval production line for a base equipment type (e.g.
-- `hoi4_production_set` (A): Set the requested factories of an own production line, addressed by its entry_index and equipment_id from hoi4_production_lines, with the line's ordinary +/- buttons;
+- `hoi4_production_set` (A): factories 0 removes the line (its close button).
 - `hoi4_production_shortages` (R): Per production line (military and naval) the resources it was allocated per day and which of them are in deficit for the whole country.
 - `hoi4_resources` (R): Own strategic resources per day from memory:
 - `hoi4_state_slots` (A): Free building slots of own states (unlocked, max, used, free) read from each state's view (Find view centres the state, one click opens it).
