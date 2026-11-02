@@ -28,7 +28,8 @@ jobs:
           # 22.04 keeps the glibc floor at 2.35 for older WSL and desktop distributions.
           - os: ubuntu-22.04
             platform: linux-x86_64
-          - os: macos-14
+          # The ScreenCaptureKit recorder needs the macOS 15 SDK.
+          - os: macos-15
             platform: macos-arm64
     runs-on: ${{ matrix.os }}
     steps:
