@@ -307,15 +307,15 @@ struct View {
     country_override: Option<u64>,
 }
 fn view(r: &Reader<'_>, image: u64, own: &Owner, slot: u64) -> Result<View> {
-    let manager = r.u64(own.idler + MACOS.manager)?;
+    let manager = r.u64(own.idler + super::ui(r)?.manager)?;
     let object = r.u64(manager + slot)?;
-    let country_override = if slot == MACOS.focus_view {
-        exact(r, object, image + MACOS.focus_view_vtable)?;
+    let country_override = if slot == super::ui(r)?.focus_view {
+        exact(r, object, image + super::ui(r)?.focus_view_vtable)?;
         Some(own_override(r, object, own)?)
     } else {
         None
     };
-    let root = gui_tree::container(r, r.u64(object + MACOS.view_root)?, image)?
+    let root = gui_tree::container(r, r.u64(object + super::ui(r)?.view_root)?, image)?
         .ok_or_else(|| Error::new("invalid_gui", "Exact Focus view root required"))?;
     Ok(View {
         manager,
@@ -338,7 +338,7 @@ pub(crate) enum FocusViewState {
 /// own status/tree under this same witness bracket; the observer path is never
 /// admitted. Preserve the raw override in View for final control equality.
 fn own_override(r: &Reader<'_>, object: u64, own: &Owner) -> Result<u64> {
-    let country_override = r.u64(object + MACOS.country_override)?;
+    let country_override = r.u64(object + super::ui(r)?.country_override)?;
     let resolved = if country_override == 0 {
         own.country
     } else {
@@ -355,7 +355,7 @@ fn own_override(r: &Reader<'_>, object: u64, own: &Owner) -> Result<u64> {
 /// Used only within the caller's complete ownership/witness bracket. Do not
 /// follow an override pointer or inspect item, panel, or renderer payloads.
 pub(super) fn view_state(r: &Reader<'_>, image: u64, own: &Owner) -> Result<FocusViewState> {
-    let v = view(r, image, own, MACOS.focus_view)?;
+    let v = view(r, image, own, super::ui(r)?.focus_view)?;
     if !gui_tree::visible(r, v.root)? {
         Ok(FocusViewState::Hidden)
     } else {
@@ -363,7 +363,7 @@ pub(super) fn view_state(r: &Reader<'_>, image: u64, own: &Owner) -> Result<Focu
     }
 }
 fn own_view(r: &Reader<'_>, image: u64, own: &Owner) -> Result<View> {
-    let v = view(r, image, own, MACOS.focus_view)?;
+    let v = view(r, image, own, super::ui(r)?.focus_view)?;
     if !gui_tree::visible(r, v.root)? {
         return Err(Error::new(
             "focus_state_changed",
@@ -398,7 +398,11 @@ pub(super) struct Control {
     pub disabled: bool,
 }
 fn button(r: &Reader<'_>, image: u64, widget: u64) -> Result<(Rect, bool)> {
-    exact(r, widget, image + 0x36b9738)?; // already reviewed CButtonStandard
+    exact(
+        r,
+        widget,
+        image + crate::xlayout::img(r.string_abi(), 0x36b9738)?,
+    )?; // already reviewed CButtonStandard
     if !gui_tree::shown(r, widget)? {
         return Err(Error::new(
             "gui_target_unavailable",
@@ -419,7 +423,7 @@ fn button(r: &Reader<'_>, image: u64, widget: u64) -> Result<(Rect, bool)> {
     Ok((rect, state == 3))
 }
 pub(super) fn focus_button(r: &Reader<'_>, image: u64, own: &Owner) -> Result<Control> {
-    let v = view(r, image, own, MACOS.politics_view)?;
+    let v = view(r, image, own, super::ui(r)?.politics_view)?;
     let goal = named(r, image, v.root, "active_goal")?
         .ok_or_else(|| Error::new("gui_target_unavailable", "Focus area missing"))?;
     let frame = window(r, image, goal)?;
@@ -461,14 +465,18 @@ struct Items {
 /// payload, including items following the target and off-screen own members.
 fn tree_items(r: &Reader<'_>, image: u64, own: &Owner) -> Result<Items> {
     let v = own_view(r, image, own)?;
-    let zoom = f32::from_le_bytes(r.read(v.object + MACOS.zoom, 4)?.try_into().unwrap());
+    let zoom = f32::from_le_bytes(
+        r.read(v.object + super::ui(r)?.zoom, 4)?
+            .try_into()
+            .unwrap(),
+    );
     if !zoom.is_finite() || !(0.1..=4.0).contains(&zoom) {
         return Err(Error::new(
             "invalid_gui_geometry",
             "Bounded Focus zoom required",
         ));
     }
-    let items = pointers(r, v.object + MACOS.items, 4096)?;
+    let items = pointers(r, v.object + super::ui(r)?.items, 4096)?;
     let mut seen = BTreeSet::new();
     let mut values = Vec::with_capacity(items.len());
     let mut matches = 0;
@@ -476,8 +484,8 @@ fn tree_items(r: &Reader<'_>, image: u64, own: &Owner) -> Result<Items> {
         if !seen.insert(item) {
             return Err(Error::new("invalid_gui", "Duplicate Focus item"));
         }
-        exact(r, item, image + MACOS.item_vtable)?;
-        let focus = r.u64(item + MACOS.item_focus)?;
+        exact(r, item, image + super::ui(r)?.item_vtable)?;
+        let focus = r.u64(item + super::ui(r)?.item_focus)?;
         if focus != 0 && !own.members.contains(&focus) {
             return Err(Error::new(
                 "foreign_focus_scope",
@@ -498,7 +506,7 @@ fn tree_items(r: &Reader<'_>, image: u64, own: &Owner) -> Result<Items> {
     })
 }
 fn item_frame(r: &Reader<'_>, image: u64, item: u64) -> Result<Option<u64>> {
-    let frame = window(r, image, r.u64(item + MACOS.item_container)?)?;
+    let frame = window(r, image, r.u64(item + super::ui(r)?.item_container)?)?;
     Ok(gui_tree::visible(r, frame)?.then_some(frame))
 }
 fn node_control(view: &View, item: u64, frame: u64, symbol: (u64, Rect), zoom: f32) -> Control {
@@ -579,15 +587,15 @@ pub(super) fn symbols(r: &Reader<'_>, image: u64, own: &Owner) -> Result<Tree> {
 }
 pub(super) fn detail(r: &Reader<'_>, image: u64, own: &Owner) -> Result<Option<Control>> {
     let v = own_view(r, image, own)?;
-    let panels = pointers(r, v.object + MACOS.panels, 8)?;
+    let panels = pointers(r, v.object + super::ui(r)?.panels, 8)?;
     let mut found = None;
     let mut seen = BTreeSet::new();
     for panel in panels {
         if !seen.insert(panel) {
             return Err(Error::new("invalid_gui", "Duplicate Focus panel"));
         }
-        exact(r, panel, image + MACOS.panel_vtable)?;
-        let selected = r.u64(panel + MACOS.panel_selected)?;
+        exact(r, panel, image + super::ui(r)?.panel_vtable)?;
+        let selected = r.u64(panel + super::ui(r)?.panel_selected)?;
         if selected != 0 && !own.members.contains(&selected) {
             return Err(Error::new(
                 "foreign_focus_scope",
@@ -597,7 +605,7 @@ pub(super) fn detail(r: &Reader<'_>, image: u64, own: &Owner) -> Result<Option<C
         if selected != own.target {
             continue;
         }
-        let frame = window(r, image, r.u64(panel + MACOS.panel_window)?)?;
+        let frame = window(r, image, r.u64(panel + super::ui(r)?.panel_window)?)?;
         if !gui_tree::visible(r, frame)? {
             continue;
         }

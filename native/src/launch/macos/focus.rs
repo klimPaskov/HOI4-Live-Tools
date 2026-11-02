@@ -8,7 +8,7 @@ use crate::{
     error::{Error, Result},
     game,
     gui_tree::{self, Rect},
-    memory::{Reader, StringAbi},
+    memory::Reader,
     own_focus,
     platform::{
         game_input::{GameInput, Key},
@@ -83,16 +83,8 @@ pub(crate) use probe::snapshot as input_probe;
 const SAFE: (f64, f64, f64, f64) = (260.0, 200.0, 1860.0, 1000.0);
 
 /// The layout for this build (macOS values translated through xlayout).
-/// `focus/binding.rs` still reads the macOS values directly, so other builds
-/// stay refused until it uses this table.
 fn ui(r: &Reader<'_>) -> Result<Ui> {
     let abi = r.string_abi();
-    if abi == StringAbi::LibStdCxx {
-        return Err(Error::new(
-            "capability_unavailable",
-            "Focus input is not reviewed for this build",
-        ));
-    }
     let m = &MACOS;
     Ok(Ui {
         manager: fld(abi, &IDLER, m.manager)?,

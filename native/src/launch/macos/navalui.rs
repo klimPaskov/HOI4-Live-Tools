@@ -21,7 +21,7 @@ use crate::{
     error::{Error, Result},
     game,
     gui_tree::{self, Rect},
-    memory::{Reader, StringAbi},
+    memory::Reader,
     platform::Process,
     xlayout::{self, fld, img},
 };
@@ -79,18 +79,6 @@ fn view_class(slot: u64) -> xlayout::Class {
 }
 fn item_window(r: &Reader<'_>, item: u64) -> Result<u64> {
     r.u64(item + fld(r.string_abi(), &GRID_ITEM, ITEM_CONTAINER)?)
-}
-
-/// Refusal kept for the air and kit modules that still read macOS-only offsets;
-/// the reads in this module go through `xlayout`.
-pub(super) fn libcxx(r: &Reader<'_>) -> Result<()> {
-    match r.string_abi() {
-        StringAbi::LibCxx => Ok(()),
-        StringAbi::LibStdCxx => Err(Error::new(
-            "capability_unavailable",
-            "Naval input is reviewed for the macOS build only",
-        )),
-    }
 }
 pub(super) fn view(r: &Reader<'_>, image: u64, slot: u64) -> Result<u64> {
     let abi = r.string_abi();
