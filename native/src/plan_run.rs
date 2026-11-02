@@ -828,7 +828,7 @@ pub fn tick(
                 None
             };
             if let Some((ok, why)) = assigned {
-                state.skip(now, "armycreate", &key, if ok { DAY } else { 2 * DAY });
+                state.skip(now, "armycreate", &key, if ok { DAY } else if why.contains("selection_mismatch") { 20 * DAY } else { 2 * DAY });
                 return Ok(Tick::Acted(format!("army_assign state {id}: {ok} {why}")));
             }
             let (ok, why) = state.act(
@@ -854,7 +854,7 @@ pub fn tick(
             };
             // Whether or not it worked, give the game time before trying the
             // same state again (a box selection can miss stacked divisions).
-            state.skip(now, "armycreate", &key, if ok { DAY } else { 2 * DAY });
+            state.skip(now, "armycreate", &key, if ok { DAY } else if why.contains("selection_mismatch") { 20 * DAY } else { 2 * DAY });
             return Ok(Tick::Acted(format!("army_create state {id}: {ok} {why}")));
         }
         for army in list(&roster, "armies") {
