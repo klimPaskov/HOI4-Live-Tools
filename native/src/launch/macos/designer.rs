@@ -26,11 +26,12 @@ use crate::{
     error::{Error, Result},
     game,
     gui_tree::{self, Rect},
-    memory::{Reader, StringAbi},
+    memory::Reader,
     platform::{
         game_input::{GameInput, Key},
         Process,
     },
+    xlayout::{self, fld},
 };
 use std::time::{Duration, Instant};
 
@@ -52,25 +53,31 @@ const DD_WINDOW: u64 = 0x948;
 const REGIMENT_PITCH: (i32, i32) = (102, 46);
 const SUPPORT_PITCH: i32 = 35;
 
-fn libcxx(r: &Reader<'_>) -> Result<()> {
-    match r.string_abi() {
-        StringAbi::LibCxx => Ok(()),
-        StringAbi::LibStdCxx => Err(Error::new(
-            "capability_unavailable",
-            "The Division Designer is not reviewed for this build",
-        )),
-    }
-}
+/// Owners of the fields above (macOS 1.19.4.1 RTTI names and vtables; 0 when
+/// no vtable is reviewed).
+const IDLER: xlayout::Class = xlayout::Class::new("CInGameIdler", 0x35089d8);
+const MANAGER_CLASS: xlayout::Class = xlayout::Class::new("idler.manager", 0);
+const DESIGNER_VIEW: xlayout::Class = xlayout::Class::new("CDivisionDesignerView", 0);
+const DRAFT_HOLDER_CLASS: xlayout::Class = xlayout::Class::new("designer.draft_holder", 0);
+const GRID: xlayout::Class = xlayout::Class::new("CStandardGridBox", 0x36cca80);
+const GRID_ITEM: xlayout::Class = xlayout::Class::new("grid.item", 0);
+const TEXT_BOX: xlayout::Class = xlayout::Class::new("gui.text", 0);
+const BUTTON: xlayout::Class = xlayout::Class::new("gui.button", 0);
+const UNIT_ITEM: xlayout::Class = xlayout::Class::new("CDesignerSubUnitItem", 0);
+const DROPDOWN: xlayout::Class = xlayout::Class::new("CDropDownBox", 0);
+
 fn view(r: &Reader<'_>, image: u64) -> Result<u64> {
-    libcxx(r)?;
+    let abi = r.string_abi();
     let idler = r.u64(image + game::layout(r).idler_global)?;
-    let view = r.u64(r.u64(idler + MANAGER)? + VIEW)?;
+    let manager = r.u64(idler + fld(abi, &IDLER, MANAGER)?)?;
+    let view = r.u64(manager + fld(abi, &MANAGER_CLASS, VIEW)?)?;
     r.object_type(view, "CDivisionDesignerView")?;
     Ok(view)
 }
 fn root(r: &Reader<'_>, image: u64) -> Result<u64> {
     let view = view(r, image)?;
-    gui_tree::container(r, r.u64(view + VIEW_ROOT)?, image)?
+    let field = fld(r.string_abi(), &DESIGNER_VIEW, VIEW_ROOT)?;
+    gui_tree::container(r, r.u64(view + field)?, image)?
         .ok_or_else(|| Error::new("invalid_gui", "Division Designer window unavailable"))
 }
 fn named(r: &Reader<'_>, image: u64, parent: u64, name: &str) -> Result<u64> {
@@ -83,7 +90,7 @@ fn named_frame(r: &Reader<'_>, image: u64, parent: u64, name: &str) -> Result<u6
         .ok_or_else(|| Error::new("invalid_gui", format!("{name} is not a window")))
 }
 fn items(r: &Reader<'_>, grid: u64) -> Result<Vec<u64>> {
-    let (_, data, count) = r.array_header(grid + GRID_ITEMS)?;
+    let (_, data, count) = r.array_header(grid + fld(r.string_abi(), &GRID, GRID_ITEMS)?)?;
     if count > 256 {
         return Err(Error::new("invalid_gui", "Grid item list exceeds bound"));
     }
@@ -98,17 +105,20 @@ fn items(r: &Reader<'_>, grid: u64) -> Result<Vec<u64>> {
         .collect())
 }
 fn item_frame(r: &Reader<'_>, image: u64, item: u64) -> Result<u64> {
-    gui_tree::container(r, r.u64(item + ITEM_CONTAINER)?, image)?
+    let window = r.u64(item + fld(r.string_abi(), &GRID_ITEM, ITEM_CONTAINER)?)?;
+    gui_tree::container(r, window, image)?
         .ok_or_else(|| Error::new("invalid_gui", "Grid item window required"))
 }
 fn text_of(r: &Reader<'_>, image: u64, parent: u64, name: &str) -> Result<String> {
     let t = named(r, image, parent, name)?;
-    Ok(special_projects::plain(&r.string_bounded(t + TEXT, 256)?))
+    let text = fld(r.string_abi(), &TEXT_BOX, TEXT)?;
+    Ok(special_projects::plain(&r.string_bounded(t + text, 256)?))
 }
 fn button_label(r: &Reader<'_>, button: u64) -> Result<String> {
-    Ok(special_projects::plain(
-        &r.string_bounded(button + BUTTON_TEXT, 128)?,
-    ))
+    Ok(special_projects::plain(&r.string_bounded(
+        button + fld(r.string_abi(), &BUTTON, BUTTON_TEXT)?,
+        128,
+    )?))
 }
 
 /// The designer window is shown.
@@ -130,14 +140,19 @@ fn non_hq_view(r: &Reader<'_>, image: u64) -> Result<u64> {
 /// The designer's working copy of the template.
 pub(super) fn draft(r: &Reader<'_>, image: u64) -> Result<Layout5> {
     let view = view(r, image)?;
-    let holder = r.u64(view + DRAFT_HOLDER)?;
+    let abi = r.string_abi();
+    let holder = r.u64(view + fld(abi, &DESIGNER_VIEW, DRAFT_HOLDER)?)?;
     if !(0x10000..=0x7fff_ffff_0000).contains(&holder) {
         return Err(Error::new(
             "invalid_gui",
             "Designer working copy unavailable",
         ));
     }
-    units::template_data(r, image, r.u64(holder + DRAFT_DATA)?)
+    units::template_data(
+        r,
+        image,
+        r.u64(holder + fld(abi, &DRAFT_HOLDER_CLASS, DRAFT_DATA)?)?,
+    )
 }
 
 // ---- slots -----------------------------------------------------------------------
@@ -282,7 +297,7 @@ pub(super) fn selection(r: &Reader<'_>, image: u64) -> Result<Option<Selection>>
         let icon = named(r, image, frame, "subunit_icon")?;
         let rect = gui_tree::rect(r, image, icon, GAME)?;
         let kind = if r.object_type(item, "CDesignerSubUnitItem").is_ok() {
-            let def = r.u64(item + UNIT_ITEM_DEFINITION)?;
+            let def = r.u64(item + fld(r.string_abi(), &UNIT_ITEM, UNIT_ITEM_DEFINITION)?)?;
             match units::key_at(r, image, def)? {
                 Some(key) => EntryKind::Unit(key),
                 None => EntryKind::Remove,
@@ -323,8 +338,9 @@ fn dropdown_widget(r: &Reader<'_>, image: u64) -> Result<u64> {
 }
 pub(super) fn dropdown(r: &Reader<'_>, image: u64) -> Result<Dropdown> {
     let dd = dropdown_widget(r, image)?;
-    let expand = gui_tree::rect(r, image, r.u64(dd + DD_EXPAND)?, GAME)?;
-    let window = gui_tree::container(r, r.u64(dd + DD_WINDOW)?, image)?
+    let abi = r.string_abi();
+    let expand = gui_tree::rect(r, image, r.u64(dd + fld(abi, &DROPDOWN, DD_EXPAND)?)?, GAME)?;
+    let window = gui_tree::container(r, r.u64(dd + fld(abi, &DROPDOWN, DD_WINDOW)?)?, image)?
         .ok_or_else(|| Error::new("invalid_gui", "Template list window unavailable"))?;
     let expanded = gui_tree::visible(r, window)?;
     let grid = named(r, image, window, "divisions_grid")?;
