@@ -63,8 +63,8 @@ const CONTAINER: Class = Class::new("CContainerWindow", 0x36ba978);
 const GRID: Class = Class::new("CStandardGridBox", 0x36cca80);
 const GRID_ITEM: Class = Class::new("grid.item", 0);
 const TEXT_BOX: Class = Class::new("gui.text", 0);
-const ICON: Class = Class::new("CIcon", 0);
-const SPRITE: Class = Class::new("CSprite", 0);
+const ICON: Class = Class::new("CIcon", 0x36b6880);
+const SPRITE: Class = Class::new("CSprite", 0x36cc528);
 impl Ui {
     /// The macOS keys translated for this build (identity on macOS).
     fn resolve(&self, abi: crate::memory::StringAbi) -> Result<Self> {

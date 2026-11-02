@@ -47,7 +47,7 @@ pub(super) const EQUIPMENT_TYPE: xlayout::Class = xlayout::Class::new("CEquipmen
 pub(super) const TYPE_SLOT: xlayout::Class = xlayout::Class::new("CEquipmentType.slot", 0);
 pub(super) const TYPE_SLOT_SIZE: xlayout::Class =
     xlayout::Class::new("CEquipmentType.slot.size", 0);
-pub(super) const MODULE: xlayout::Class = xlayout::Class::new("CEquipmentModule", 0);
+pub(super) const MODULE: xlayout::Class = xlayout::Class::new("CEquipmentModule", 0x357ccd8);
 pub(super) const UPGRADE: xlayout::Class = xlayout::Class::new("CEquipmentUpgrade", 0);
 pub(super) const PROVINCE: xlayout::Class = xlayout::Class::new("CProvince", 0x357f020);
 pub(super) const STATE: xlayout::Class = xlayout::Class::new("CState", 0x357f410);

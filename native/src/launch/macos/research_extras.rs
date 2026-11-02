@@ -50,7 +50,7 @@ const STATUS: xlayout::Class = xlayout::Class::new("CTechnologyStatus", 0);
 const BONUS: xlayout::Class = xlayout::Class::new("CLimitedUseTechBonus", 0);
 const REDUCTION: xlayout::Class = xlayout::Class::new("CLimitedUseTechCostReduction", 0);
 const IDEA_BONUS: xlayout::Class = xlayout::Class::new("CIdeaResearchBonus", 0);
-const IDEA: xlayout::Class = xlayout::Class::new("CIdea", 0);
+const IDEA: xlayout::Class = xlayout::Class::new("CIdea", 0x35882b8);
 const SHARING: xlayout::Class = xlayout::Class::new("NFactions::CTechnologySharingFaction", 0);
 const FACTION: xlayout::Class = xlayout::Class::new("NFactions::CFaction", 0x353e188);
 
