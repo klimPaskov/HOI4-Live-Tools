@@ -153,6 +153,70 @@ The 6 that did not resolve:
   layers) do not line up slot for slot. Their vtables still map by name, but
   their functions do not.
 
+## Generating the Linux table for `xlayout`
+
+`scripts/gen_linux_layout.py` builds the file that `native/src/xlayout.rs`
+reads on Linux. It has three commands.
+
+**`keys`** scans `native/src` and lists every key the tools use. It reads:
+
+- class tags, including multi-line `Class::new(` calls, inline tags and
+  registry structs such as `panelkit::Class`;
+- every `img()` address;
+- every `fld()` key it can resolve from source.
+
+The scan follows these forms to find a concrete offset:
+
+- literals and constant expressions;
+- constants reached through a module path or a `use .. as` alias;
+- `m.field`, `self.field` and `m.field[i]` read from the macOS struct-literal
+  tables in the same file;
+- closures and helper functions that pass their arguments on to `fld` or `img`;
+- parent links: when code reads `let v = r.u64(x + fld(.., &P, OFF)?)?` and
+  then uses `v + fld(.., &C, ..)`, the scan records that `C` objects are
+  reached through field `P+OFF`.
+
+Calls whose class or offset is only known at run time are listed as
+unresolved, with a reason.
+
+**`generate MACHO ELF [--hints H]`** maps those keys and writes two files:
+
+- the table, `native/layouts/linux-<gnu-build-id>.json`, in the
+  `Table::parse` format;
+- a coverage report next to it.
+
+Image keys are:
+
+- the `img()` arguments,
+- every class vtable,
+- every image literal in files that use `xlayout`.
+
+Fields are mapped class by class in a class-wide mode. Every offset that has
+evidence gets an entry, so keys the static scan missed are covered too. A class
+gets its evidence from one of these sources:
+
+- its vtable (virtual functions and constructors);
+- its RTTI name, which is tried automatically for vtable-0 tags that are real
+  C++ class names;
+- a hint (`anchors`, or `context` pointer globals);
+- `via`: the parent object and the field that holds it. These links come from
+  hints or from the parent links the scan found.
+
+Context, anchor and `via` functions also pass their object to callees in `rdi`.
+Those direct callees are inspected as well, one level deep.
+
+Only high- and medium-confidence values are written. Add `--include-low` to
+also write single-vote results. Negative displacements are dropped.
+`scripts/data/xlayout-hints-1.19.4.1.json` is the starter hint set.
+
+**`--check-table T [--keys K]`** checks a table against the `xlayout` parser
+rules. With a keys file it also reports coverage.
+
+The smoke run mapped the macOS 1.19.4.1 binary against the 1.19.3 ELF. It is
+cross-version, so its values are not valid and its numbers only show that the
+pipeline runs end to end. On a same-version pair, expect field coverage nearer
+the 1.19.3 validation above.
+
 ## Running
 
 Install capstone in a private venv, then:

@@ -109,6 +109,13 @@ class PureHelpers(unittest.TestCase):
         self.assertEqual(s[2], {'rax'})
         self.assertEqual(s[4], set())
         self.assertEqual(s[5], {'rcx'})
+        child = [(0x10, 7, 'mov', 'rax, qword ptr [rdi + 0x670]'),   # rax = idler->manager
+                 (0x17, 7, 'mov', 'rcx, qword ptr [rdi + 0x678]'),   # other field: not the child
+                 (0x1e, 7, 'mov', 'rdx, qword ptr [rax + 0x188]')]
+        parent = xmap.object_regs(child)
+        c = xmap.object_regs(child, (), (), via=(parent, 0x670))
+        self.assertEqual(c[1], {'rax'})
+        self.assertEqual(c[2], {'rax'})
         self.assertEqual(xmap.canon('r12d'), 'r12')
         self.assertEqual(xmap.canon('dil'), 'rdi')
 

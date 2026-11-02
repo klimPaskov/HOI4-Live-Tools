@@ -213,17 +213,18 @@ def canon(reg):
     return _CANON.get(reg)
 
 
-def object_regs(insns, seeds=('rdi',), globals_=()):
+def object_regs(insns, seeds=('rdi',), globals_=(), via=None):
     """Linear (flow-insensitive) tracking of registers holding the object pointer.
     insns: [(address, size, mnemonic, op_str)]. Seeds: registers holding it at entry; globals_: absolute
-    addresses of pointer variables whose loaded value is the object. Returns, per instruction, the set of
-    64-bit register names holding the object before that instruction executes."""
+    addresses of pointer variables whose loaded value is the object; via: (parent register sets per
+    instruction, field offset) when the object is the pointer stored in a parent object's field.
+    Returns, per instruction, the set of 64-bit register names holding the object before it executes."""
     held = set(seeds)   # registers holding the object pointer
     addr = set()        # registers holding the address of a context pointer variable (lea rX, [rip + G])
     slots = set()       # frame slots ([rbp - 0x48]) holding the object pointer
     out = []
     gl = set(globals_)
-    for address, size, mn, ops in insns:
+    for k, (address, size, mn, ops) in enumerate(insns):
         out.append(frozenset(held))
         if mn == 'call':
             held -= CALL_CLOBBERED
@@ -253,6 +254,10 @@ def object_regs(insns, seeds=('rdi',), globals_=()):
                     obj = True
                 elif inner in addr or inner in slots:
                     obj = True
+                elif via is not None:
+                    d = mem_disps(src)
+                    if d and d[0][1] == via[1] and canon(d[0][0]) in via[0][k] and '*' not in inner:
+                        obj = True
             elif mn == 'lea' and gl and src.startswith('[rip') and rip_target(address, size, src) in gl:
                 ptr = True
         held.discard(dst)
@@ -1123,35 +1128,66 @@ class Matcher:
             return self.elf.relative[t]
         return t
 
-    def map_field(self, offset, cls=None, anchors=(), context=()):
-        """Votes from class functions (object in rdi), anchors (rdi) and functions that load a context
-        global holding the object pointer. Only displacements on registers that hold the object count."""
+    def field_jobs(self, cls=None, anchors=(), context=(), via=None, callees=True):
+        """Mach-O functions to inspect and how the object pointer enters each:
+        {f: (mac seed regs, mac context slots, elf seed regs, elf context globals or None, via)}.
+        via = (parent jobs spec dict(cls, anchors, context), parent field mac offset, ELF offset): the object
+        is the pointer stored at that field of the parent; the parent's functions are inspected."""
+        if via is not None:
+            parent, moff, eoff = via
+            base = self.field_jobs(parent.get('cls'), parent.get('anchors', ()), parent.get('context', ()),
+                                   callees=False)
+            jobs = {f: j[:4] + ((moff, eoff),) for f, j in base.items()}
+            return self._with_callees(jobs) if callees else jobs
         jobs = {}
         for x in anchors:
-            jobs[self.mac.absolute(x)] = (('rdi',), (), ('rdi',), ())
+            jobs[self.mac.absolute(x)] = (('rdi',), (), ('rdi',), (), None)
         if cls:
             for f in self.class_functions(cls):
-                jobs[f] = (('rdi',), (), ('rdi',), ())
+                jobs[f] = (('rdi',), (), ('rdi',), (), None)
         for c in context:
-            ca = self.mac.absolute(c)
-            users, slots = self.global_users(ca)
+            users, slots = self.global_users(self.mac.absolute(c))
             for f in users:
                 if f in self.fmap:
-                    jobs.setdefault(f, ((), tuple(slots), (), None))
-        votes = collections.Counter()
-        seen = matched = 0
+                    jobs.setdefault(f, ((), tuple(slots), (), None, None))
+        return self._with_callees(jobs) if callees and (context or anchors) else jobs
+
+    def _with_callees(self, jobs):
+        """Add direct callees that receive the object in rdi (one level) as rdi-seeded jobs.
+        Only context/anchor/via jobs are expanded: there the object usually reaches its own
+        methods as an argument instead of being dereferenced in place."""
+        out = dict(jobs)
+        for f, (ms, mg, es, eg, via) in jobs.items():
+            if f not in self.fmap or (ms == ('rdi',) and via is None):
+                continue
+            ia = self.mdis(f)
+            oa = object_regs(ia, ms, mg)
+            if via is not None:
+                oa = object_regs(ia, (), (), via=(oa, via[0]))
+            for k, (_, _, mn, ops) in enumerate(ia):
+                if mn == 'call' and 'rdi' in oa[k]:
+                    t = branch_target(ops)
+                    if t is not None and t in self.fmap and t not in out:
+                        out[t] = (('rdi',), (), ('rdi',), (), None)
+        return out
+
+    def field_votes(self, jobs, offsets=None):
+        """({mac offset: Counter(elf offset)}, Counter(mac offset: pairs using it)), one vote per function
+        pair. offsets=None collects every displacement taken on the object register (class-wide mode)."""
+        votes = collections.defaultdict(collections.Counter)
+        seen = collections.Counter()
         for f in sorted(jobs):
             g = self.fmap.get(f)
             if g is None:
                 continue
             ia = self.mdis(f)
-            if not any(d == offset for _, _, _, ops in ia if '[' in ops for _, d in mem_disps(ops)):
+            if offsets is not None and not any(d in offsets for _, _, _, ops in ia if '[' in ops
+                                               for _, d in mem_disps(ops)):
                 continue
-            seen += 1
             ia, ib, pairs = self.aligned(f, g)
-            mseeds, mglobals, eseeds, eglobals = jobs[f]
+            mseeds, mglobals, eseeds, eglobals, via = jobs[f]
             if eglobals is None:
-                # the ELF twin's context global: whatever its aligned instructions load where the Mach-O loads it
+                # the ELF twin's context global: whatever its aligned instruction loads where the Mach-O loads it
                 eglobals = set()
                 for i, j in pairs:
                     ad, sz, mn, ops = ia[i]
@@ -1161,27 +1197,58 @@ class Matcher:
                             eglobals.add(rip_target(bd, bs, bo))
             oa = object_regs(ia, mseeds, mglobals)
             ob = object_regs(ib, eseeds, eglobals)
-            got = collections.Counter()
+            if via is not None:
+                oa = object_regs(ia, (), (), via=(oa, via[0]))
+                ob = object_regs(ib, (), (), via=(ob, via[1]))
+            used = {d for k, (_, _, _, ops) in enumerate(ia) if '[' in ops
+                    for b, d in mem_disps(ops) if canon(b) in oa[k]}
+            for x in used:
+                if offsets is None or x in offsets:
+                    seen[x] += 1
+            got = set()
             for i, j in pairs:
                 da = mem_disps(ia[i][3]) if '[' in ia[i][3] else ()
-                if not da or not any(d == offset and canon(b) in oa[i] for b, d in da):
+                if not da:
                     continue
                 db = mem_disps(ib[j][3]) if '[' in ib[j][3] else ()
                 if len(da) != len(db):
                     continue
                 for (bx, x), (by, y) in zip(da, db):
-                    if x == offset and canon(bx) in oa[i] and canon(by) in ob[j]:
-                        got[y] += 1
-            if got:
-                matched += 1
-                for y, n in got.items():
-                    votes[y] += 1
+                    if (offsets is None or x in offsets) and canon(bx) in oa[i] and canon(by) in ob[j]:
+                        got.add((x, y))
+            for x, y in got:
+                votes[x][y] += 1
+        return votes, seen
+
+    def map_field(self, offset, cls=None, anchors=(), context=(), via=None):
+        """Votes from class functions (object in rdi), anchors (rdi) and functions that load a context
+        global holding the object pointer. Only displacements on registers that hold the object count."""
+        jobs = self.field_jobs(cls, anchors, context, via)
+        allv, seen = self.field_votes(jobs, {offset})
+        votes = allv.get(offset, collections.Counter())
         value, conf, note = decide(votes, self.min_votes)
-        notes = [f'{len(jobs)} class/anchor/context functions, {seen} matched pairs use +{offset:#x}, '
-                 f'{matched} gave aligned votes on the object register', note]
+        notes = [f'{len(jobs)} class/anchor/context functions, {seen[offset]} matched pairs use +{offset:#x} '
+                 f'on the object register, {sum(votes.values())} aligned votes', note]
         if value is None:
             return dict(status='unresolved', notes=notes, candidates={fmt(k): v for k, v in votes.most_common(4)})
         return dict(status='mapped', elf=value, method='aligned-displacements', confidence=conf, notes=notes)
+
+    def map_class(self, cls=None, anchors=(), context=(), via=None):
+        """Class-wide mode: ({mac offset: result dict}, number of functions inspected) for every offset
+        taken on the object register in the class's functions. Same vote rule as map_field."""
+        jobs = self.field_jobs(cls, anchors, context, via)
+        votes, seen = self.field_votes(jobs)
+        out = {}
+        for x in sorted(set(votes) | set(seen)):
+            c = votes.get(x, collections.Counter())
+            value, conf, note = decide(c, self.min_votes)
+            notes = [f'{seen[x]} matched pairs use it on the object register', note]
+            if value is None:
+                out[x] = dict(status='unresolved', notes=notes, candidates={fmt(k): v for k, v in c.most_common(4)})
+            else:
+                out[x] = dict(status='mapped', elf=value, method='aligned-displacements', confidence=conf,
+                              notes=notes)
+        return out, len(jobs)
 
 
 # ---------------------------------------------------------------------------
