@@ -4,7 +4,7 @@ use crate::{
     construction::controls as observation,
     construction_stage as stage,
     platform::x11::{PointerDelivery, PointerDisplay},
-    research_candidate_observation::OwnedClientProfile,
+    research_candidate_observation::{BuiltinClient, OwnedClientProfile},
 };
 mod state;
 
@@ -12,6 +12,16 @@ mod state;
 pub(super) enum Profile {
     #[serde(rename = "linux_builtin_absolute_512x288_v1")]
     LinuxBuiltinAbsolute512x288V1,
+    #[serde(rename = "linux_builtin_absolute_1920x1080_v1")]
+    LinuxBuiltinAbsolute1920x1080V1,
+}
+impl Profile {
+    pub(super) const fn client(self) -> BuiltinClient {
+        match self {
+            Self::LinuxBuiltinAbsolute512x288V1 => BuiltinClient::Absolute512x288,
+            Self::LinuxBuiltinAbsolute1920x1080V1 => BuiltinClient::Absolute1920x1080,
+        }
+    }
 }
 pub(super) struct Service {
     pub(super) journal: stage::Journal,
@@ -21,20 +31,14 @@ pub(super) struct Service {
 }
 impl Service {
     pub(super) fn bind(
-        _profile: Profile,
+        profile: Profile,
         window: u32,
         display: &Display,
         directory: &Path,
     ) -> Result<Self> {
         Ok(Self {
             journal: stage::Journal::open(&directory.join("construction-actions.jsonl"))?,
-            profile: OwnedClientProfile {
-                window,
-                client: [512, 288],
-                logical: [2560, 1440],
-                os_binding_verified: true,
-                reviewed_builtin_client_origin: true,
-            },
+            profile: profile.client().owned(window),
             display: display.number,
             xauthority: display.xauthority.clone(),
         })
@@ -192,17 +196,21 @@ pub(super) fn call(
         guard,
         authority,
         journal,
+        research_transits,
         research,
         focus,
         construction,
+        production,
     } = &mut *controller;
     let service = construction
         .as_mut()
         .ok_or_else(|| Error::new("capability_unavailable", "Construction profile unavailable"))?;
     let domains = Domains {
         clock: journal,
+        transits: research_transits,
         research: research.as_ref(),
         focus: focus.as_ref(),
+        production: production.as_ref(),
     };
     let mut backend = ConstructionBackend {
         process,
@@ -241,15 +249,24 @@ pub(super) fn call(
 }
 struct Domains<'a> {
     clock: &'a Journal,
+    transits: &'a transit_stage::Journal,
     research: Option<&'a research::Service>,
     focus: Option<&'a focus::Service>,
+    production: Option<&'a production::Service>,
 }
 impl stage::UnresolvedInputs for Domains<'_> {
     fn observe(&self, game: &Identity) -> Result<stage::DomainBlocks> {
+        if self.transits.blocks_game(game) {
+            return Err(Error::new(
+                "action_uncertain",
+                "Unresolved Research transit blocks construction",
+            ));
+        }
         Ok(stage::DomainBlocks {
             clock: self.clock.blocks_game(game),
             research: self.research.is_some_and(|v| v.journal.blocks_game(game)),
             focus: self.focus.is_some_and(|v| v.journal.blocks_game(game)),
+            production: self.production.is_some_and(|v| v.journal.blocks_game(game)),
             construction: false, // This service has the sole construction journal, checked by execute.
         })
     }
@@ -577,6 +594,41 @@ impl stage::Backend for ConstructionBackend<'_> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn transit_quarantine_blocks_internal_construction_without_other_profiles() {
+        use super::*;
+        use crate::construction_stage::UnresolvedInputs;
+        use std::os::unix::fs::PermissionsExt;
+        let directory = std::env::temp_dir().join(format!(
+            "construction-transit-domain-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir(&directory).unwrap();
+        std::fs::set_permissions(&directory, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let (transits, game) = transit_stage::fixture_intent(&directory.join("transits.json"));
+        let clock = Journal::open(&directory.join("clock.jsonl")).unwrap();
+        let domains = Domains {
+            clock: &clock,
+            transits: &transits,
+            research: None,
+            focus: None,
+            production: None,
+        };
+        assert_eq!(domains.observe(&game).unwrap_err().code, "action_uncertain");
+        let mut other = game;
+        other.start_ticks.push('1');
+        let clear = domains.observe(&other).unwrap();
+        assert!(
+            !clear.clock
+                && !clear.research
+                && !clear.focus
+                && !clear.construction
+                && !clear.production
+        );
+        drop(transits);
+        drop(clock);
+        std::fs::remove_dir_all(directory).unwrap();
+    }
     use super::*;
     #[test]
     fn action_shapes_never_accept_coordinates_raw_keys_or_railway() {
@@ -658,6 +710,12 @@ mod tests {
         assert_eq!(
             (args.stage, args.building, args.state, args.amount),
             (stage::Stage::Place, Some("arms_factory"), Some(64), Some(6))
+        );
+        let coastal = json!({"stage":"place","building_id":"dockyard","state_id":63,"amount":1,"request_id":"d","lease_token":"t"});
+        let args = parse(coastal.as_object().unwrap()).unwrap();
+        assert_eq!(
+            (args.stage, args.building, args.state, args.amount),
+            (stage::Stage::Place, Some("dockyard"), Some(63), Some(1))
         );
         for (key, bad) in [
             ("amount", json!(0)),

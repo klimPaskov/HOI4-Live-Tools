@@ -9,6 +9,11 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
     Weak,
 };
+mod panel_plan;
+mod production_plan;
+use crate::protocol::worker_events::{Disposition as TerminalDisposition, Terminal};
+use panel_plan::PanelPlan;
+use production_plan::{ProductionAttempt, ProductionPlan};
 
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -21,11 +26,33 @@ struct Spec {
     review_day: Option<i64>,
     #[serde(default, skip_serializing_if = "is_false")]
     focus_permission: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    production_permission: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    max_production_steps_per_day: Option<u8>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    max_panel_navigation_steps_per_day: Option<u8>,
 }
 fn is_false(value: &bool) -> bool {
     !*value
 }
 impl Spec {
+    fn reject_unimplemented_queue(&self) -> Result<()> {
+        if self.entries.iter().any(|entry| {
+            matches!(
+                entry.intent,
+                core::Intent::Economy {
+                    target: core::EconomyTarget::ConstructionQueue { .. }
+                }
+            )
+        }) {
+            return Err(Error::new(
+                "capability_unavailable",
+                "ConstructionQueue has no verified Linux daily composite adapter",
+            ));
+        }
+        Ok(())
+    }
     fn plan(&self, scope: core::Scope) -> core::Plan {
         core::Plan {
             version: self.version,
@@ -44,33 +71,63 @@ struct Active {
     report: Arc<Mutex<Value>>,
     governor: Arc<Mutex<core::Governor>>,
     focus_permission: bool,
+    production_permission: bool,
+    max_production_steps_per_day: Option<u8>,
+    max_panel_navigation_steps_per_day: Option<u8>,
     details: Mutex<crate::daily_digest::Details>,
 }
 pub(super) struct Controller {
     enabled: bool,
     research_enabled: bool,
     focus_enabled: bool,
+    production_enabled: bool,
     owner: Weak<Shared>,
     directory: PathBuf,
     active: Mutex<Option<Active>>,
     blocked: Arc<AtomicBool>,
+    events: Arc<crate::protocol::worker_events::Events>,
+}
+fn stopped_panel_read_history(report: &Value) -> Option<Value> {
+    report
+        .get("panel_navigation")
+        .filter(|panel| panel["read_history"].is_object())
+        .cloned()
 }
 impl Controller {
     pub(super) fn new(
         research_enabled: bool,
         focus_enabled: bool,
+        production_enabled: bool,
         owner: Weak<Shared>,
         directory: &Path,
     ) -> Self {
         Self {
-            enabled: research_enabled || focus_enabled,
+            enabled: research_enabled || focus_enabled || production_enabled,
             research_enabled,
             focus_enabled,
+            production_enabled,
             owner,
             directory: directory.to_owned(),
             active: Mutex::new(None),
             blocked: Arc::new(AtomicBool::new(false)),
+            events: Arc::new(Default::default()),
         }
+    }
+    pub(super) fn wait_events(&self) -> Arc<crate::protocol::worker_events::Events> {
+        self.events.clone()
+    }
+    /// Load before any lease or manual input, regardless of worker permissions.
+    pub(super) fn check_panel_journal(directory: &Path) -> Result<()> {
+        let journal = crate::daily_panel_navigation::Navigator::open(
+            &directory.join("daily-panel-navigation.json"),
+        )?;
+        if journal.blocked() {
+            return Err(Error::new(
+                "action_uncertain",
+                "Persisted mixed-panel departure blocks controller binding",
+            ));
+        }
+        Ok(())
     }
     pub(super) fn input_check(&self) -> Result<()> {
         if self.blocked.load(Ordering::Acquire) {
@@ -91,8 +148,11 @@ impl Controller {
     pub(super) fn research_enabled(&self) -> bool {
         self.research_enabled
     }
+    pub(super) fn production_enabled(&self) -> bool {
+        self.production_enabled
+    }
     pub(super) fn tool() -> Value {
-        json!({"name":"hoi4_daily_governor","description":"Optional owned daily automatic research refill worker and fresh compact digest. Start requires the existing exclusive lease and explicit typed plan. Navigation uses separately journaled verified stages; only fresh Research or separately opted-in Focus Start completes an assignment. Focus requires default-off owner daily_focus plus plan.focus_permission and existing profile. With both domain permissions, one journaled ClosePolitics stage can bridge a completed Focus to an empty research slot; a separately typed research-to-Politics shortcut requires both permissions and positive own panel/tree facts. Both routes passed bounded run049; later runs verified research completion/refill and actual Rhineland completion. An optional Focus entry focus_search string uses the verified manual search stages with one durable bounded match chain; existing entries retain direct node navigation. Query replacement and worker search live validation are pending. Successive Focus automation and full campaigns remain unverified. Economy, army and naval domains remain unavailable. Unknown/uncertain input is never replayed. Stop does not pause the game. Compacted history includes a snapshot_id; details retrieves an exact historical section without game reads or input. The Focus section reports latest-per-kind history, not the full navigation ledger.","inputSchema":{"type":"object","oneOf":[{"properties":{"op":{"enum":["start","update"]},"lease_token":{"type":"string"},"plan":{"type":"object"}},"required":["op","lease_token","plan"],"additionalProperties":false},{"properties":{"op":{"enum":["digest","stop"]}},"required":["op"],"additionalProperties":false},{"properties":{"op":{"enum":["details"]},"snapshot_id":{"type":"string","minLength":64,"maxLength":64},"section":{"enum":crate::daily_digest::SECTIONS}},"required":["op","snapshot_id","section"],"additionalProperties":false}]}})
+        json!({"name":"hoi4_daily_governor","description":"Optional owned daily automatic research refill worker and fresh compact digest. Start requires the existing exclusive lease and explicit typed plan. Navigation uses separately journaled verified stages; only fresh Research or separately opted-in Focus Start completes an assignment. Focus requires default-off owner daily_focus plus plan.focus_permission and existing profile. With both domain permissions, one journaled ClosePolitics stage can bridge a completed Focus to an empty research slot; a separately typed research-to-Politics shortcut requires both permissions and positive own panel/tree facts. Both routes passed bounded run049; later runs verified research completion/refill and actual Rhineland completion. An optional Focus entry focus_search string uses the verified manual search stages with one durable bounded match chain; existing entries retain direct node navigation. Query replacement and worker search live validation are pending. Successive Focus automation and full campaigns remain unverified. Production allocation has a default-off preview requiring owner daily_production, plan production_permission and max_production_steps_per_day (1..16); durable one-factory steps precede exact goal completion. Production006 passed the bounded advancing-time production worker gate; mixed Research/production handoffs have a default-off preview requiring max_panel_navigation_steps_per_day (1..16), both domain permissions and no Focus plan permission. The selected destination persists through its goal; mixed live validation is pending. Other economy, army and naval domains remain unavailable. Unknown/uncertain input is never replayed. Stop does not pause the game. Compacted history includes a snapshot_id; details retrieves an exact historical section without game reads or input. The Focus section reports latest-per-kind history, not the full navigation ledger.","inputSchema":{"type":"object","oneOf":[{"properties":{"op":{"enum":["start","update"]},"lease_token":{"type":"string"},"plan":{"type":"object"}},"required":["op","lease_token","plan"],"additionalProperties":false},{"properties":{"op":{"enum":["digest","stop"]}},"required":["op"],"additionalProperties":false},{"properties":{"op":{"enum":["details"]},"snapshot_id":{"type":"string","minLength":64,"maxLength":64},"section":{"enum":crate::daily_digest::SECTIONS}},"required":["op","snapshot_id","section"],"additionalProperties":false}]}})
     }
     pub(super) fn call(
         &self,
@@ -116,6 +176,7 @@ impl Controller {
                         Error::new("invalid_arguments", "Explicit plan required")
                     })?)
                     .map_err(|e| Error::new("invalid_arguments", e.to_string()))?;
+                spec.reject_unimplemented_queue()?;
                 self.input_check()?;
                 drop(input_permit(&owner.input_gate)?);
                 let mut active = try_state(&self.active)?;
@@ -132,6 +193,21 @@ impl Controller {
                     self.focus_enabled,
                     spec.focus_permission,
                     state.focus.is_some(),
+                )?;
+                production_plan::permission(
+                    self.production_enabled,
+                    spec.production_permission,
+                    state.production.is_some(),
+                    spec.max_production_steps_per_day,
+                )?;
+                panel_plan::permission(
+                    self.research_enabled,
+                    self.production_enabled,
+                    spec.production_permission,
+                    spec.focus_permission,
+                    state.research.is_some(),
+                    state.production.is_some(),
+                    spec.max_panel_navigation_steps_per_day,
                 )?;
                 let epoch = state.guard.epoch.clone();
                 let lease_end = state.authority.authorize(&token, &epoch)?;
@@ -194,6 +270,54 @@ impl Controller {
                     ));
                 }
                 let focus_initial = focus_navigation.latest();
+                // Always load durable uncertainty, even when opt-in is absent.
+                let production_plan = ProductionPlan {
+                    progress: crate::production_progress::Progress::open(
+                        &self.directory.join("daily-production.json"),
+                        governor.plan().scope.clone(),
+                        &governor.plan().entries,
+                    )
+                    .inspect_err(|_| self.blocked.store(true, Ordering::Release))?,
+                    limit: spec.max_production_steps_per_day,
+                };
+                if production_plan.progress.blocked() {
+                    self.blocked.store(true, Ordering::Release);
+                    return Err(Error::new(
+                        "action_uncertain",
+                        "Unresolved production preparation cannot restart",
+                    ));
+                }
+                let mut panel_navigation = crate::daily_panel_navigation::Navigator::open(
+                    &self.directory.join("daily-panel-navigation.json"),
+                )
+                .inspect_err(|_| self.blocked.store(true, Ordering::Release))?;
+                if panel_navigation.blocked() {
+                    self.blocked.store(true, Ordering::Release);
+                    return Err(Error::new(
+                        "action_uncertain",
+                        "Unresolved mixed-panel departure cannot restart",
+                    ));
+                }
+                let configured = panel_navigation
+                    .configure(&governor.plan(), spec.max_panel_navigation_steps_per_day);
+                if panel_navigation.blocked() {
+                    self.blocked.store(true, Ordering::Release);
+                }
+                configured?;
+                let panel_plan = PanelPlan {
+                    navigation: panel_navigation,
+                    limit: spec.max_panel_navigation_steps_per_day,
+                    read_history: Default::default(),
+                };
+                let panel_initial = if panel_plan.limit.is_some() {
+                    panel_plan.summary(
+                        (i64::from(first.observation.date_raw) - 43_800_000).div_euclid(24),
+                    )
+                } else {
+                    Value::Null
+                };
+                let production_initial = production_plan
+                    .summary((i64::from(first.observation.date_raw) - 43_800_000).div_euclid(24));
                 let focus_permission = spec.focus_permission;
                 let research_permission = self.research_enabled;
                 let governor = Arc::new(Mutex::new(governor));
@@ -201,7 +325,7 @@ impl Controller {
                 let stop = Arc::new(AtomicBool::new(false));
                 let wake = Arc::new(core::Wakeup::default());
                 let report = Arc::new(Mutex::new(
-                    json!({"running":true,"last_batch":null,"last_error":navigation.latest_refusal(),"last_preparation_refusal":navigation.latest_refusal(),"last_stage_failure":navigation.latest_stage_failure(),"focus":focus_initial,"focus_wait":focus_initial["wait"],"focus_permission":focus_permission}),
+                    json!({"running":true,"last_batch":null,"last_error":navigation.latest_refusal(),"last_preparation_refusal":navigation.latest_refusal(),"last_stage_failure":navigation.latest_stage_failure(),"focus":focus_initial,"focus_wait":focus_initial["wait"],"focus_permission":focus_permission,"production":production_initial,"panel_navigation":panel_initial}),
                 ));
                 let control = owner.state.clone();
                 let gate = owner.input_gate.clone();
@@ -212,21 +336,94 @@ impl Controller {
                 let w = wake.clone();
                 let r = report.clone();
                 let g = governor.clone();
-                let handle=thread::Builder::new().name("owned-daily-governor".into()).spawn(move||{
- let outcome=std::panic::catch_unwind(std::panic::AssertUnwindSafe(||worker(&g,navigation,focus_navigation,focus_permission,research_permission,&p,&control,&gate,&weak,&token,&s,&w,&r,&blocked)));
- if outcome.is_err(){blocked.store(true,Ordering::Release);if let Ok(mut report)=r.lock(){report["last_error"]=json!({"code":"daily_quarantined","reason":"Worker panic; durable intent requires review"});}}
- if crate::daily_worker::retained_quarantine(&g,|gov|gov.blocks_work()){blocked.store(true,Ordering::Release);}s.store(true,Ordering::Release);if let Ok(mut report)=r.lock(){report["running"]=json!(false);}
- })?;
+                let events = self.events.clone();
+                let revision = spec.revision;
+                let instance = events.start(revision)?;
+                let spawned = thread::Builder::new()
+                    .name("owned-daily-governor".into())
+                    .spawn(move || {
+                        let outcome =
+                            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                                worker(
+                                    &g,
+                                    navigation,
+                                    focus_navigation,
+                                    production_plan,
+                                    panel_plan,
+                                    focus_permission,
+                                    research_permission,
+                                    &p,
+                                    &control,
+                                    &gate,
+                                    &weak,
+                                    &token,
+                                    &s,
+                                    &w,
+                                    &r,
+                                    &blocked,
+                                )
+                            }));
+                        let publication =
+                            crate::daily_worker::publish_terminal(&events, instance, || {
+                                let mut terminal = outcome.unwrap_or_else(|_| {
+                                    blocked.store(true, Ordering::Release);
+                                    let terminal = Terminal::new(
+                                        TerminalDisposition::Quarantined,
+                                        "daily_quarantined",
+                                        "Worker panic; durable intent requires review",
+                                    );
+                                    if let Ok(mut report) = r.lock() {
+                                        report["last_error"] =
+                                            json!({"code":terminal.code,"reason":terminal.reason});
+                                    }
+                                    terminal
+                                });
+                                if crate::daily_worker::retained_quarantine(&g, |gov| {
+                                    gov.blocks_work()
+                                }) {
+                                    blocked.store(true, Ordering::Release);
+                                    terminal.disposition = TerminalDisposition::Quarantined;
+                                }
+                                s.store(true, Ordering::Release);
+                                if let Ok(mut report) = r.lock() {
+                                    report["running"] = json!(false);
+                                }
+                                let revision =
+                                    g.lock().map(|gov| gov.plan().revision).unwrap_or(revision);
+                                (revision, terminal)
+                            });
+                        if publication.is_err() {
+                            blocked.store(true, Ordering::Release);
+                        }
+                    });
+                let handle = match spawned {
+                    Ok(handle) => handle,
+                    Err(error) => {
+                        self.events.finish(
+                            instance,
+                            revision,
+                            Terminal::new(
+                                TerminalDisposition::Stopped,
+                                "daily_worker_start_failed",
+                                "Owned worker thread could not start",
+                            ),
+                        )?;
+                        return Err(error.into());
+                    }
+                };
                 *active = Some(Active {
                     life: crate::daily_worker::Lifecycle::new(stop, wake, handle),
                     producer,
                     report,
                     governor,
                     focus_permission,
+                    production_permission: spec.production_permission,
+                    max_production_steps_per_day: spec.max_production_steps_per_day,
+                    max_panel_navigation_steps_per_day: spec.max_panel_navigation_steps_per_day,
                     details: Mutex::new(crate::daily_digest::Details::default()),
                 });
                 Ok(
-                    json!({"started":true,"scope":"owned assignments within durable shared daily budget","focus_implemented":focus_permission,"navigation_implemented":true,"other_action_domains_implemented":false,"full_campaign_acceptance":false}),
+                    json!({"started":true,"scope":"owned assignments within durable shared daily budget","focus_implemented":focus_permission,"navigation_implemented":true,"production_implemented":spec.production_permission,"mixed_panel_worker_preview":spec.max_panel_navigation_steps_per_day.is_some(),"mixed_panel_worker_live_validation":false,"production_worker_live_validation":true,"production_validated_run":"Production006","other_action_domains_implemented":false,"full_campaign_acceptance":false}),
                 )
             }
             "update" => {
@@ -238,12 +435,21 @@ impl Controller {
                         Error::new("invalid_arguments", "Explicit plan required")
                     })?)
                     .map_err(|e| Error::new("invalid_arguments", e.to_string()))?;
+                spec.reject_unimplemented_queue()?;
                 let active = try_state(&self.active)?;
                 let active = active
                     .as_ref()
                     .ok_or_else(|| Error::new("capability_unavailable", "No started plan"))?;
                 if spec.focus_permission != active.focus_permission {
                     return Err(Error::new("plan_conflict","Focus permission is fixed for this worker; stop/restart requires explicit reviewed capability"));
+                }
+                if spec.production_permission != active.production_permission
+                    || spec.max_production_steps_per_day != active.max_production_steps_per_day
+                {
+                    return Err(Error::new(
+                        "plan_conflict",
+                        "Production permission and step limit are fixed for this worker",
+                    ));
                 }
                 let mut state = try_state(&owner.state)?;
                 self.input_check()?;
@@ -252,6 +458,13 @@ impl Controller {
                     return Err(Error::new("action_uncertain", "Shared input unresolved"));
                 }
                 let mut governor = try_state(&active.governor)?;
+                if spec.max_panel_navigation_steps_per_day
+                    != active.max_panel_navigation_steps_per_day
+                    || (active.max_panel_navigation_steps_per_day.is_some()
+                        && spec.plan(governor.plan().scope.clone()) != governor.plan())
+                {
+                    return Err(Error::new("plan_conflict","Mixed-panel plans are immutable while this worker exists; stop and restart a settled plan"));
+                }
                 let until = Instant::now() + Duration::from_secs(2);
                 prevalidate_navigation(process, &mut state.guard, &spec.entries, until)?;
                 let fresh = active.producer.observe(process, until)?;
@@ -275,18 +488,20 @@ impl Controller {
                 if let Some(a) = active.as_mut() {
                     a.life.stop()?;
                 }
-                let (last_error, last_preparation_refusal, last_stage_failure) = active
-                    .as_ref()
-                    .and_then(|a| {
-                        a.report.try_lock().ok().map(|r| {
-                            (
-                                r["last_error"].clone(),
-                                r["last_preparation_refusal"].clone(),
-                                r["last_stage_failure"].clone(),
-                            )
+                let (last_error, last_preparation_refusal, last_stage_failure, clock_probe) =
+                    active
+                        .as_ref()
+                        .and_then(|a| {
+                            a.report.try_lock().ok().map(|r| {
+                                (
+                                    r["last_error"].clone(),
+                                    r["last_preparation_refusal"].clone(),
+                                    r["last_stage_failure"].clone(),
+                                    r["clock_probe_historical"].clone(),
+                                )
+                            })
                         })
-                    })
-                    .unwrap_or((Value::Null, Value::Null, Value::Null));
+                        .unwrap_or((Value::Null, Value::Null, Value::Null, Value::Null));
                 let focus_wait = active
                     .as_ref()
                     .and_then(|a| a.report.try_lock().ok().map(|r| r["focus_wait"].clone()))
@@ -295,6 +510,16 @@ impl Controller {
                     .as_ref()
                     .and_then(|a| a.report.try_lock().ok().map(|r| r["focus"].clone()))
                     .unwrap_or(Value::Null);
+                let production = active
+                    .as_ref()
+                    .and_then(|a| a.report.try_lock().ok().map(|r| r["production"].clone()))
+                    .unwrap_or(Value::Null);
+                let panel_read_history = active.as_ref().and_then(|a| {
+                    a.report
+                        .try_lock()
+                        .ok()
+                        .and_then(|r| stopped_panel_read_history(&r))
+                });
                 let focus_readiness = active
                     .as_ref()
                     .and_then(|a| {
@@ -338,9 +563,11 @@ impl Controller {
                     })
                     .transpose()?
                     .unwrap_or((Value::Null, Value::Null));
-                Ok(
-                    json!({"assignments":assignments,"daily_budget":budget,"core_pending_historical":core_state,"focus":focus,"latest_focus_wait_historical":focus_wait,"focus_readiness_historical":focus_readiness,"worker_stopped":true,"game_time_changed":false,"uncertainty_retained":self.blocked.load(Ordering::Acquire),"last_error":last_error,"last_preparation_refusal":last_preparation_refusal,"last_stage_failure":last_stage_failure}),
-                )
+                let mut result = json!({"assignments":assignments,"daily_budget":budget,"production":production,"core_pending_historical":core_state,"focus":focus,"latest_focus_wait_historical":focus_wait,"focus_readiness_historical":focus_readiness,"worker_stopped":true,"game_time_changed":false,"uncertainty_retained":self.blocked.load(Ordering::Acquire),"last_error":last_error,"last_preparation_refusal":last_preparation_refusal,"last_stage_failure":last_stage_failure,"clock_probe_historical":clock_probe});
+                if let Some(panel) = panel_read_history {
+                    result["panel_navigation"] = panel;
+                }
+                Ok(result)
             }
             "details" => {
                 allowed(args, &["op", "snapshot_id", "section"])?;
@@ -447,7 +674,12 @@ fn validate_navigation_keys(
     Ok(())
 }
 fn unresolved(state: &ControlState) -> bool {
-    state.journal.blocks_game(&state.guard.epoch.game)
+    state
+        .production
+        .as_ref()
+        .is_some_and(|p| p.journal.blocks_game(&state.guard.epoch.game))
+        || state.journal.blocks_game(&state.guard.epoch.game)
+        || state.research_transits.blocks_game(&state.guard.epoch.game)
         || state
             .construction
             .as_ref()
@@ -466,6 +698,8 @@ fn worker(
     governor: &Mutex<core::Governor>,
     mut navigation: crate::daily_navigation::Navigator,
     mut focus_navigation: crate::daily_focus_navigation::Navigator,
+    mut production_plan: ProductionPlan,
+    mut panel_plan: PanelPlan,
     focus_permission: bool,
     research_permission: bool,
     producer: &Producer,
@@ -477,17 +711,49 @@ fn worker(
     wake: &core::Wakeup,
     report: &Mutex<Value>,
     blocked: &AtomicBool,
-) {
+) -> Terminal {
+    // Every new journal error publishes quarantine before dropping the shared
+    // controller lock, including storage failures after adapter success.
+    macro_rules! panel_call {
+        ($call:expr) => {{
+            let result = $call;
+            if panel_plan.blocked() {
+                blocked.store(true, Ordering::Release);
+            }
+            result
+        }};
+    }
+    let mut panel_day = None;
     let mut generation = 0;
+    let mut clock_probe = crate::daily_worker::ClockProbeHistory::default();
+    let mut terminal = Terminal::new(
+        TerminalDisposition::RequestedStop,
+        "daily_worker_requested_stop",
+        "Worker stop requested; no completion proved",
+    );
     while !stop.load(Ordering::Acquire) {
-        let Some(shared) = owner.upgrade() else { break };
+        let Some(shared) = owner.upgrade() else {
+            return Terminal::new(
+                TerminalDisposition::Stopped,
+                "session_closed",
+                "Owned worker owner retired",
+            );
+        };
         if !shared.alive.load(Ordering::Acquire)
             || !shared.accepting_reads.load(Ordering::Acquire)
             || gate.try_read().map_or(true, |g| !*g)
         {
+            terminal = Terminal::new(
+                TerminalDisposition::Stopped,
+                "session_closed",
+                "Owned worker read/input gate retired",
+            );
             break;
         }
         let mut refusal_entry = None;
+        let mut production_failed = false;
+        let mut panel_failed = false;
+        let mut at_clock_probe = false;
         let run = (|| -> Result<Option<core::DailyResult>> {
             let _read = shared
                 .reads
@@ -510,6 +776,8 @@ fn worker(
                     || unresolved(&state)
                     || navigation.blocked()
                     || focus_navigation.blocked()
+                    || production_plan.progress.blocked()
+                    || panel_plan.blocked()
                 {
                     blocked.store(true, Ordering::Release);
                     return Err(Error::new(
@@ -519,14 +787,40 @@ fn worker(
                 }
                 state.authority.authorize(token, &state.guard.epoch)?;
             }
+            at_clock_probe = true;
             let raw = producer.probe_clock(process, Instant::now() + Duration::from_secs(1))?;
+            at_clock_probe = false;
+            clock_probe.verified(raw);
+            panel_day = Some((i64::from(raw) - 43_800_000).div_euclid(24));
             let mut governor = try_state(governor)?;
             let day = (i64::from(raw) - 43_800_000).div_euclid(24);
+            if let Some(entry) = panel_plan.active() {
+                if matches!(
+                    governor.entry_state(&entry.id),
+                    Some(core::EntryState::Complete { .. })
+                ) {
+                    let mut state = try_state(state)?;
+                    let until = (Instant::now() + Duration::from_secs(5))
+                        .min(state.authority.authorize(token, &state.guard.epoch)?);
+                    panel_failed = true;
+                    panel_call!(panel_plan.finish_selected(
+                        &mut governor,
+                        &mut state,
+                        process,
+                        until
+                    ))?;
+                    panel_failed = false;
+                }
+            }
+            let selected = panel_plan.active();
             let heads: Vec<_> = if research_permission {
                 governor
                     .pending_research(day)
                     .into_iter()
-                    .filter(|e| !navigation.refused_today(&e.id, day))
+                    .filter(|e| {
+                        !navigation.refused_today(&e.id, day)
+                            && selected.as_ref().is_none_or(|s| s.id == e.id)
+                    })
                     .collect()
             } else {
                 vec![]
@@ -538,7 +832,15 @@ fn worker(
             } else {
                 None
             };
-            if heads.is_empty() && focus_entry.is_none() {
+            let production_heads: Vec<_> = governor
+                .pending_production(day)
+                .into_iter()
+                .filter(|entry| {
+                    production_plan.eligible(entry, day)
+                        && selected.as_ref().is_none_or(|s| s.id == entry.id)
+                })
+                .collect();
+            if heads.is_empty() && focus_entry.is_none() && production_heads.is_empty() {
                 return Ok(None);
             }
             let mut state = try_state(state)?;
@@ -548,7 +850,11 @@ fn worker(
             let batch_started = Instant::now();
             let until = (batch_started + Duration::from_secs(5)).min(lease_end);
             let focus_until = (batch_started + Duration::from_secs(10)).min(lease_end);
-            if unresolved(&state) || navigation.blocked() || focus_navigation.blocked() {
+            if unresolved(&state)
+                || navigation.blocked()
+                || focus_navigation.blocked()
+                || production_plan.progress.blocked()
+            {
                 blocked.store(true, Ordering::Release);
                 return Err(Error::new(
                     "action_uncertain",
@@ -606,6 +912,90 @@ fn worker(
                 return Ok(None);
             }
             let mut focus_waited = false;
+            // At most one production step per batch, bounded across all entries
+            // and restarts by the separate durable daily step budget. Existing
+            // Research/Focus ordering is unchanged when production is disabled.
+            for entry in &production_heads {
+                panel_failed = true;
+                match panel_call!(panel_plan.run_to_production(
+                    &mut governor,
+                    &mut state,
+                    process,
+                    gate,
+                    token,
+                    focus_until,
+                    stop,
+                    day,
+                    entry
+                ))? {
+                    panel_plan::Run::Departed => {
+                        panel_failed = false;
+                        return Ok(None);
+                    }
+                    panel_plan::Run::Deferred => {
+                        panel_failed = false;
+                        if panel_plan.active().is_some() {
+                            return Ok(None);
+                        }
+                        continue;
+                    }
+                    panel_plan::Run::Unchanged => {}
+                }
+                panel_call!(panel_plan.verify_selected(
+                    &mut governor,
+                    &mut state,
+                    process,
+                    focus_until,
+                    entry
+                ))?;
+                panel_failed = false;
+                let result = production_plan::run(
+                    &mut production_plan,
+                    &mut governor,
+                    producer,
+                    &mut state,
+                    process,
+                    gate,
+                    token,
+                    focus_until,
+                    stop,
+                    day,
+                    entry,
+                );
+                if production_plan.progress.blocked() || governor.blocks_work() {
+                    blocked.store(true, Ordering::Release);
+                }
+                if let Err(e) = &result {
+                    production_failed = true;
+                    refusal_entry = Some(entry.id.clone());
+                    if e.code == "action_uncertain" {
+                        blocked.store(true, Ordering::Release);
+                    }
+                }
+                if let Ok(mut r) = report.lock() {
+                    r["production"] = production_plan.summary(day);
+                }
+                match result? {
+                    production_plan::Run::Advanced(value) => {
+                        if matches!(
+                            governor.entry_state(&entry.id),
+                            Some(core::EntryState::Complete { .. })
+                        ) && panel_plan.active().is_some()
+                        {
+                            panel_failed = true;
+                            panel_call!(panel_plan.finish_selected(
+                                &mut governor,
+                                &mut state,
+                                process,
+                                focus_until
+                            ))?;
+                            panel_failed = false;
+                        }
+                        return Ok(value);
+                    }
+                    production_plan::Run::Deferred => {}
+                }
+            }
             if focus_precedes(
                 &governor.plan().entries,
                 focus_entry.as_ref(),
@@ -686,6 +1076,32 @@ fn worker(
                 return Ok(None);
             }
             if let Some(entry) = &entry {
+                panel_failed = true;
+                match panel_call!(panel_plan.run_to_research(
+                    &mut governor,
+                    &mut state,
+                    process,
+                    gate,
+                    token,
+                    until,
+                    stop,
+                    day,
+                    entry
+                ))? {
+                    panel_plan::Run::Departed | panel_plan::Run::Deferred => {
+                        panel_failed = false;
+                        return Ok(None);
+                    }
+                    panel_plan::Run::Unchanged => {}
+                }
+                panel_call!(panel_plan.verify_selected(
+                    &mut governor,
+                    &mut state,
+                    process,
+                    until,
+                    entry
+                ))?;
+                panel_failed = false;
                 let retry_target =
                     navigation.retry_target(entry, day, crate::daily_observation::unix_ms()?)?;
                 if crate::daily_focus_navigation::needs_research_handoff(
@@ -857,6 +1273,7 @@ fn worker(
                 until,
                 last: None,
                 focus: None,
+                production: None,
             };
             let result = governor.continue_entry(
                 &mut backend,
@@ -870,16 +1287,48 @@ fn worker(
             if governor.blocks_work() {
                 blocked.store(true, Ordering::Release);
             }
+            if result.is_ok()
+                && panel_plan.active().is_some()
+                && matches!(
+                    governor.entry_state(&entry.as_ref().expect("selected").id),
+                    Some(core::EntryState::Complete { .. })
+                )
+            {
+                panel_failed = true;
+                panel_call!(panel_plan.finish_selected(&mut governor, &mut state, process, until))?;
+                panel_failed = false;
+            }
             result.map(Some)
         })();
         if let Ok(mut r) = report.lock() {
             r["focus"] = focus_navigation.latest();
+            panel_plan.refresh_report(&mut r, panel_day);
+            // History only; digest dates do not turn this into a fresh factory read.
+            r["production"]["progress"] = production_plan.progress.summary();
         }
         let possible_input = blocked.load(Ordering::Acquire)
             || navigation.blocked()
             || focus_navigation.blocked()
+            || production_plan.progress.blocked()
+            || panel_plan.blocked()
             || crate::daily_worker::retained_quarantine(governor, |g| g.blocks_work());
-        let disposition = crate::daily_worker::disposition(run.as_ref().err(), possible_input);
+        let mut disposition = crate::daily_worker::disposition(run.as_ref().err(), possible_input);
+        if (production_failed || panel_failed)
+            && disposition == crate::daily_worker::Disposition::Continue
+        {
+            disposition = crate::daily_worker::Disposition::Stop;
+        }
+        if let Some(event) = crate::daily_worker::terminal_event(disposition, run.as_ref().err()) {
+            terminal = event;
+            terminal.entry_id = refusal_entry
+                .as_ref()
+                .map(|id: &String| id.chars().take(128).collect());
+            terminal.phase = Some(if at_clock_probe {
+                "clock_probe"
+            } else {
+                "worker_batch"
+            });
+        }
         if let Ok(mut report) = report.lock() {
             if disposition != crate::daily_worker::Disposition::Continue {
                 report["stop_reason"] = json!(run
@@ -896,9 +1345,13 @@ fn worker(
                 }
                 Ok(None) => {}
                 Err(e) => {
-                    report["last_error"] = json!({"code":e.code,"entry_id":refusal_entry,"reason":crate::daily_navigation::bounded_reason(&e.message),"historical":true});
+                    if !clock_probe.rejected(&e, at_clock_probe, disposition) {
+                        report["last_error"] = json!({"code":e.code,"entry_id":refusal_entry,"reason":crate::daily_navigation::bounded_reason(&e.message),"historical":true,
+                            "phase":if at_clock_probe {"clock_probe"} else {"worker_batch"}});
+                    }
                 }
             }
+            report["clock_probe_historical"] = clock_probe.summary();
         }
         match disposition {
             crate::daily_worker::Disposition::Quarantine => {
@@ -911,12 +1364,13 @@ fn worker(
         drop(shared);
         match wake.wait_after(generation, Duration::from_millis(250)) {
             Ok(n) => generation = n.generation,
-            Err(_) => {
-                blocked.store(true, Ordering::Release);
+            Err(error) => {
+                terminal = crate::daily_worker::scheduling_failure(&error, blocked, report);
                 break;
             }
         }
     }
+    terminal
 }
 struct DailyBackend<'a> {
     process: &'a dyn Process,
@@ -927,6 +1381,7 @@ struct DailyBackend<'a> {
     until: Instant,
     last: Option<Produced>,
     focus: Option<FocusAttempt<'a>>,
+    production: Option<ProductionAttempt<'a>>,
 }
 struct FocusAttempt<'a> {
     navigation: &'a mut crate::daily_focus_navigation::Navigator,
@@ -934,7 +1389,11 @@ struct FocusAttempt<'a> {
 }
 impl core::Backend for DailyBackend<'_> {
     fn unresolved_input(&mut self) -> Result<bool> {
-        Ok(unresolved(self.state))
+        Ok(unresolved(self.state)
+            || self
+                .production
+                .as_ref()
+                .is_some_and(|p| p.plan.progress.blocked()))
     }
     fn observe(&mut self) -> Result<core::Observation> {
         let p = self.producer.observe(self.process, self.until)?;
@@ -945,7 +1404,29 @@ impl core::Backend for DailyBackend<'_> {
         self.last = Some(p);
         Ok(observation)
     }
-    fn readiness(&mut self, entry: &core::Entry, _: &core::Observation) -> Result<core::Readiness> {
+    fn readiness(
+        &mut self,
+        entry: &core::Entry,
+        observed: &core::Observation,
+    ) -> Result<core::Readiness> {
+        if matches!(
+            entry.intent,
+            core::Intent::Economy {
+                target: core::EconomyTarget::ConstructionQueue { .. }
+            }
+        ) {
+            return Ok(core::Readiness::Unavailable(
+                "ConstructionQueue has no verified Linux daily composite adapter".into(),
+            ));
+        }
+        if matches!(
+            entry.intent,
+            core::Intent::Economy {
+                target: core::EconomyTarget::Production { .. }
+            }
+        ) {
+            return self.production_ready(entry, observed);
+        }
         if let core::Intent::Focus { focus_id } = &entry.intent {
             if self.focus.is_none() {
                 return Ok(core::Readiness::Unavailable(
@@ -1020,9 +1501,27 @@ impl core::Backend for DailyBackend<'_> {
     fn attempt(
         &mut self,
         attempt: &core::Attempt,
-        _: &core::Observation,
+        before: &core::Observation,
         until: Instant,
     ) -> Result<core::Outcome> {
+        if matches!(
+            attempt.entry.intent,
+            core::Intent::Economy {
+                target: core::EconomyTarget::ConstructionQueue { .. }
+            }
+        ) {
+            return Ok(core::Outcome::NotQueued(
+                "ConstructionQueue has no verified Linux daily composite adapter".into(),
+            ));
+        }
+        if matches!(
+            attempt.entry.intent,
+            core::Intent::Economy {
+                target: core::EconomyTarget::Production { .. }
+            }
+        ) {
+            return self.attempt_production(attempt, before, until.min(self.until));
+        }
         if matches!(attempt.entry.intent, core::Intent::Focus { .. }) {
             return self.attempt_focus(attempt, until.min(self.until));
         }
@@ -1424,6 +1923,7 @@ fn run_focus(
                     navigation,
                     revision,
                 }),
+                production: None,
             };
             governor
                 .continue_entry(
@@ -1712,10 +2212,17 @@ fn compact_observation_with_details(
     digest["running_is_input_authority"] = json!(false);
     digest["stop_reason"] = report["stop_reason"].clone();
     digest["last_error"] = report["last_error"].clone();
+    if report["clock_probe_historical"].is_object() {
+        digest["clock_probe_historical"] = report["clock_probe_historical"].clone();
+    }
     digest["last_preparation_refusal"] = report["last_preparation_refusal"].clone();
     digest["last_stage_failure"] = report["last_stage_failure"].clone();
     digest["focus"] = report["focus"].clone();
     digest["focus_permission"] = report["focus_permission"].clone();
+    digest["production"] = report["production"].clone();
+    if let Some(panel) = report.get("panel_navigation").filter(|v| v.is_object()) {
+        digest["panel_navigation"] = panel.clone();
+    }
     digest["latest_focus_wait_historical"] = report["focus_wait"].clone();
     digest["focus_readiness_historical"] = report["focus_readiness_historical"].clone();
     digest["quarantined"] = json!(blocked);
@@ -2116,6 +2623,25 @@ mod tests {
         );
     }
     #[test]
+    fn construction_queue_schema_refuses_linux_start_update_before_preparation() {
+        let mut value = json!({"version":1,"revision":1,"entries":[{"id":"queued","intent":{
+            "kind":"Economy","target":{"kind":"ConstructionQueue","building":"arms_factory","state_id":64,"minimum_queued":2}
+        }}],"max_actions_per_day":1,"max_observation_age_ms":1000,"review_day":null});
+        for grant in [false, true] {
+            value["focus_permission"] = json!(grant);
+            value["production_permission"] = json!(grant);
+            let spec: Spec = serde_json::from_value(value.clone()).unwrap();
+            let error = spec.reject_unimplemented_queue().unwrap_err();
+            assert_eq!(error.code, "capability_unavailable");
+            assert!(error.message.contains("ConstructionQueue"));
+        }
+        value["entries"][0]["intent"] = json!({"kind":"Research","technology_id":"radio","slot":0});
+        serde_json::from_value::<Spec>(value)
+            .unwrap()
+            .reject_unimplemented_queue()
+            .unwrap();
+    }
+    #[test]
     fn player_json_cannot_supply_trusted_scope_or_process_pointers() {
         let value = json!({"version":1,"revision":1,"entries":[],"max_actions_per_day":1,"max_observation_age_ms":1000,"review_day":null,"scope":{"own_country":123}});
         assert!(serde_json::from_value::<Spec>(value).is_err());
@@ -2207,9 +2733,104 @@ mod tests {
         };
         assert!(focus_precedes(&[f.clone(), r.clone()], Some(&f), Some(&r)));
         assert!(!focus_precedes(&[r.clone(), f.clone()], Some(&f), Some(&r)));
-        let controller = Controller::new(false, true, Weak::new(), Path::new("/generated"));
+        let controller = Controller::new(false, true, false, Weak::new(), Path::new("/generated"));
         assert!(controller.enabled());
         assert!(!controller.research_enabled);
         assert!(controller.focus_enabled());
+    }
+    #[test]
+    fn malformed_panel_history_refuses_controller_binding_before_any_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+        let path =
+            std::env::temp_dir().join(format!("mixed-controller-bind-{}", std::process::id()));
+        std::fs::create_dir(&path).unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o700)).unwrap();
+        Controller::check_panel_journal(&path).unwrap();
+        let file = path.join("daily-panel-navigation.json");
+        std::fs::write(&file, b"{}").unwrap();
+        std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o600)).unwrap();
+        assert_eq!(
+            Controller::check_panel_journal(&path).unwrap_err().code,
+            "invalid_panel_navigation"
+        );
+        assert_eq!(std::fs::read(file).unwrap(), b"{}");
+        std::fs::remove_dir_all(path).unwrap();
+    }
+    #[test]
+    fn production_spec_defaults_off_and_requires_an_explicit_bounded_budget() {
+        let mut value = json!({"version":1,"revision":1,"entries":[],"max_actions_per_day":1,"max_observation_age_ms":5000,"review_day":null});
+        let spec: Spec = serde_json::from_value(value.clone()).unwrap();
+        assert!(!spec.production_permission);
+        assert_eq!(spec.max_production_steps_per_day, None);
+        assert_eq!(spec.max_panel_navigation_steps_per_day, None);
+        assert_eq!(serde_json::to_value(&spec).unwrap(), value);
+        value["production_permission"] = json!(true);
+        let spec: Spec = serde_json::from_value(value.clone()).unwrap();
+        assert!(production_plan::permission(
+            true,
+            spec.production_permission,
+            true,
+            spec.max_production_steps_per_day
+        )
+        .is_err());
+        value["max_production_steps_per_day"] = json!(2);
+        let spec: Spec = serde_json::from_value(value.clone()).unwrap();
+        assert!(production_plan::permission(
+            true,
+            spec.production_permission,
+            true,
+            spec.max_production_steps_per_day
+        )
+        .is_ok());
+        assert_eq!(serde_json::to_value(&spec).unwrap(), value);
+        let controller = Controller::new(false, false, true, Weak::new(), Path::new("/generated"));
+        assert!(controller.enabled() && controller.production_enabled());
+        assert!(!controller.focus_enabled() && !controller.research_enabled());
+    }
+    #[test]
+    fn production_progress_is_historical_in_digest_and_exact_details() {
+        let production = json!({"permission":true,"budget":{"day":706640,"used_steps":2,"limit":2,"historical":true},"progress":{"blocked":true,"latest":{"entry_id":"allocation","failure":{"cause":{"code":"action_uncertain","message":"original failure"}}}}});
+        let mut details = crate::daily_digest::Details::default();
+        let out = compact_observation_with_details(
+            &mut details,
+            digest_sample(),
+            &json!({"production":production,"running":false}),
+            true,
+            1,
+        )
+        .unwrap();
+        assert_eq!(out["production"], production);
+        assert_eq!(out["input_authorized"], false);
+        assert_eq!(out["quarantined"], true);
+        let full = json!({"production":production});
+        let id = details.retain(&full).unwrap();
+        let overflow = crate::daily_digest::overflow(&full, &id).unwrap();
+        assert_eq!(overflow["production"]["budget"]["used_steps"], 2);
+        assert_eq!(overflow["production"]["blocked"], true);
+        assert_eq!(details.get(&id, "production").unwrap()["value"], production);
+    }
+    #[test]
+    fn clock_probe_recovery_is_separate_from_action_failures_in_digest() {
+        let mut history = crate::daily_worker::ClockProbeHistory::default();
+        assert!(history.rejected(
+            &Error::new("torn_read", "rejected scheduling witness"),
+            true,
+            crate::daily_worker::Disposition::Continue,
+        ));
+        history.verified(60759371);
+        let original = json!({"code":"production_precondition","reason":"original action failure","historical":true});
+        let mut details = crate::daily_digest::Details::default();
+        let out = compact_observation_with_details(
+            &mut details, digest_sample(),
+            &json!({"clock_probe_historical":history.summary(),"last_error":original,"running":true}),
+            false, 1,
+        ).unwrap();
+        assert_eq!(out["last_error"], original);
+        assert_eq!(out["clock_probe_historical"]["recovered"], true);
+        assert_eq!(
+            out["clock_probe_historical"]["last_failure"]["reason"],
+            "rejected scheduling witness"
+        );
+        assert_eq!(out["clock_probe_historical"]["input_authorized"], false);
     }
 }

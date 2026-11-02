@@ -1,0 +1,283 @@
+{
+  "_comment": "Poland META 1936-01-01 -> 1938-01-01 standing plan for the ACTIVE DLC set of 1 Nov 2026 (10 installed DLCs active, No Step Back and By Blood Alone among them, plus the 4 integrated ones). Route: Regency Council -> Fifth of November -> Wettin king (Friedrich Christian) -> Lithuanian personal union -> Commonwealth, economy focuses first, Intermarium when the 700k gate opens. Explained in poland-meta-1936-1938.md. Keys starting with _ are ignored by the runner. Validate with scripts/validate_plan.py --strict.",
+  "_validator": {
+    "tag": "POL",
+    "start_date": "1936.1.1",
+    "stop_date": "1938.1.1",
+    "history_file": "history/countries/POL - Poland.txt",
+    "dlcs": [
+      "Anniversary Pack",
+      "Arms Against Tyranny",
+      "By Blood Alone",
+      "Gotterdammerung",
+      "Historical German Portraits",
+      "La Resistance",
+      "No Compromise, No Surrender",
+      "No Step Back",
+      "Poland: United and Ready",
+      "Rocket Launcher Unit Pack"
+    ]
+  },
+  "active": true,
+  "stop_on_failure": false,
+  "stop_on_date": "1938.01.01",
+  "auto_events": true,
+  "wait_events_days": 3,
+  "event_options": {
+    "NSB_poland_royal_election.1": 0
+  },
+  "alarms": {
+    "political_power": 200,
+    "consumer_goods_ratio": 0.4,
+    "idle_civilian_factories": 3,
+    "idle_military_factories": 2,
+    "unassigned_divisions": 2
+  },
+  "research_fallback": true,
+  "research_priority": [
+    "basic_machine_tools",
+    "construction1",
+    "electronic_mechanical_engineering",
+    "support_weapons",
+    "construction2",
+    "concentrated_industry",
+    "improved_machine_tools",
+    "interwar_artillery",
+    "interwar_antitank",
+    "radio",
+    "excavation1",
+    "concentrated_industry2",
+    "mechanical_computing",
+    "infantry_weapons2",
+    "support_weapons2",
+    "motorised_infantry",
+    "tech_logistics_company",
+    "basic_fortification_tech",
+    "improved_equipment_conversion",
+    "excavation2",
+    "tech_field_hospital",
+    "tech_signal_company",
+    "improved_radio",
+    "computing_machine",
+    "fuel_refining",
+    "rubber_processing",
+    "engines_2",
+    "aircraft_construction",
+    "land_fort_tech_1",
+    "basic_encryption",
+    "basic_decryption",
+    "construction3",
+    "advanced_machine_tools",
+    "concentrated_industry3",
+    "artillery1",
+    "antitank1",
+    "antiair1",
+    "aa_hmg",
+    "improved_infantry_weapons",
+    "tech_engineers2",
+    "tech_recon2",
+    "advanced_equipment_conversion",
+    "excavation3",
+    "tech_logistics_company2",
+    "tech_field_hospital2",
+    "tech_signal_company2",
+    "tech_mountaineers2",
+    "wartime_train",
+    "improved_infantry_weapons_2",
+    "support_weapons3",
+    "artillery2",
+    "antitank2",
+    "antiair2"
+  ],
+  "focus_path": [
+    "POL_the_four_year_plan",
+    "POL_assemble_the_regency_council",
+    "POL_central_region_strategy",
+    "POL_fulfil_fifth_of_november",
+    "POL_fill_the_railways_gaps",
+    "POL_agrarian_reform",
+    "POL_the_between_the_seas_concept",
+    "POL_the_mediterranean",
+    "POL_coerce_czechoslovakia",
+    "POL_austro_hungarian_alliance",
+    "POL_expansion_of_new_towns",
+    "POL_invest_in_the_old_polish_region",
+    "POL_additional_research_slot1",
+    "POL_start_central_industrial_region",
+    "POL_modernize_congressional_factories",
+    "POL_national_defence_fund",
+    "POL_prepare_for_the_next_war",
+    "POL_claiming_lithuania",
+    "POL_restoration_of_the_royal_sejm",
+    "POL_institute_royal_guards",
+    "POL_support_monarchism_in_LIT",
+    "POL_king_of_lithuania",
+    "POL_LIT_union",
+    "POL_additional_research_slot2",
+    "POL_plan_west",
+    "POL_local_western_plans",
+    "POL_silesia_fortified_area",
+    "POL_the_prusya_line",
+    "POL_expand_poznan_forts",
+    "POL_hel_fortified_area"
+  ],
+  "focus_fallback": [
+    "POL_expand_central_industrial_region",
+    "POL_expand_katowice_mines",
+    "POL_central_defence_of_poland",
+    "POL_develop_upper_silesia",
+    "POL_invest_in_eastern_poland",
+    "POL_new_military_academy",
+    "POL_standardisation_of_equipment",
+    "POL_army_modernisation",
+    "POL_anti_tank_guns",
+    "POL_artillery_modernisation",
+    "POL_invest_anti_air",
+    "POL_air_base_expansion",
+    "POL_fighter_modernisation",
+    "POL_warsaw_main_railway_station"
+  ],
+  "politics": [
+    {
+      "category": "government",
+      "slot": 2,
+      "idea": "partial_economic_mobilisation",
+      "cost": 173
+    },
+    {
+      "category": "government",
+      "slot": 3,
+      "idea": "POL_stanislaw_wojciechowski",
+      "cost": 173
+    },
+    {
+      "category": "government",
+      "slot": 4,
+      "idea": "POL_eugeniusz_kwiatkowiski",
+      "cost": 150
+    },
+    {
+      "category": "government",
+      "slot": 5,
+      "idea": "POL_zdzislaw_lubomirski",
+      "cost": 150
+    },
+    {
+      "category": "government",
+      "slot": 0,
+      "idea": "limited_conscription",
+      "cost": 150
+    }
+  ],
+  "decisions": [
+    "POL_diplomatic_mission_to_CZE",
+    "POL_diplomatic_mission_to_AUS",
+    "POL_diplomatic_mission_to_HUN"
+  ],
+  "training": {
+    "template": "Dywizja Piechoty",
+    "queue": 6,
+    "batch": 2,
+    "deploy_state": 10
+  },
+  "production_min_idle": 8,
+  "production_priority": [
+    "infantry_equipment",
+    "artillery_equipment",
+    "support_equipment"
+  ],
+  "production": [
+    {
+      "equipment": "artillery_equipment_1",
+      "factories": 4
+    },
+    {
+      "equipment": "anti_air_equipment_1",
+      "factories": 2
+    },
+    {
+      "equipment": "anti_tank_equipment_1",
+      "factories": 2,
+      "from": "1936.11.15"
+    }
+  ],
+  "construction_min_idle": 3,
+  "construction_full_days": 14,
+  "construction": [
+    {
+      "building": "industrial_complex",
+      "count": 2,
+      "states": [
+        90,
+        88,
+        92,
+        87,
+        89,
+        91,
+        93
+      ]
+    },
+    {
+      "building": "arms_factory",
+      "count": 2,
+      "fallback_any_own_state": true,
+      "states": [
+        90,
+        88,
+        92,
+        89,
+        91,
+        87,
+        93
+      ]
+    },
+    {
+      "building": "infrastructure",
+      "count": 1,
+      "states": [
+        94,
+        96,
+        95,
+        93,
+        90,
+        89,
+        92,
+        98,
+        97
+      ]
+    }
+  ],
+  "armies": {
+    "max": 24,
+    "min_for_general": 8,
+    "absorb": true,
+    "generals": [
+      "Edward Rydz-Śmigły",
+      "Władysław Sikorski",
+      "Tadeusz Kutrzeba",
+      "Roman Abraham",
+      "Władysław Anders",
+      "Kazimierz Sosnkowski"
+    ]
+  },
+  "doctrines": [
+    {
+      "doctrine": "defensive_postures",
+      "track": "infantry",
+      "xp": 50,
+      "folder": "land"
+    },
+    {
+      "doctrine": "fire_concentration",
+      "track": "combat_support",
+      "xp": 100,
+      "folder": "land"
+    }
+  ],
+  "special_projects": {
+    "priority": []
+  },
+  "air": {
+    "war_missions": true
+  }
+}

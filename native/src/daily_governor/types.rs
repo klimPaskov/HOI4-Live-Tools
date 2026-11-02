@@ -27,13 +27,32 @@ pub struct Scope {
     pub own_country: u64,
     pub own_status: u64,
 }
+fn valid_start_identity(value: &str) -> bool {
+    if value.is_empty() || value.len() > 32 {
+        return false;
+    }
+    // Preserve the existing Linux tick representation verbatim. The macOS
+    // identity is the canonical unsigned seconds plus six microsecond digits
+    // emitted by capture_identity; neither form is parsed back or normalized
+    // for process, scope, journal or restart equality.
+    if value.bytes().all(|b| b.is_ascii_digit()) {
+        return true;
+    }
+    let Some((seconds, micros)) = value.split_once('.') else {
+        return false;
+    };
+    !seconds.is_empty()
+        && seconds.bytes().all(|b| b.is_ascii_digit())
+        && (seconds.len() == 1 || !seconds.starts_with('0'))
+        && seconds.parse::<u64>().is_ok()
+        && micros.len() == 6
+        && micros.bytes().all(|b| b.is_ascii_digit())
+}
 impl Scope {
-    pub(super) fn validate(&self) -> Result<()> {
+    pub(crate) fn validate(&self) -> Result<()> {
         let e = &self.epoch;
         if e.game.pid <= 0
-            || e.game.start_ticks.is_empty()
-            || e.game.start_ticks.len() > 32
-            || !e.game.start_ticks.bytes().all(|b| b.is_ascii_digit())
+            || !valid_start_identity(&e.game.start_ticks)
             || e.game.exe.is_empty()
             || e.game.exe.len() > 4096
             || e.campaign.is_empty()
@@ -60,6 +79,13 @@ pub enum EconomyTarget {
         building: String,
         state_id: u32,
         total_levels: u16,
+    },
+    /// Ensure a queued minimum once, not built levels or a recurring refill.
+    /// A runtime must separately opt in a verified composite adapter.
+    ConstructionQueue {
+        building: String,
+        state_id: u32,
+        minimum_queued: u16,
     },
     Production {
         line_id: String,
@@ -127,6 +153,20 @@ impl Intent {
                     key(building)?;
                     if *state_id == 0 || !(1..=200).contains(total_levels) {
                         return Err(invalid("Explicit bounded construction target required"));
+                    }
+                }
+                EconomyTarget::ConstructionQueue {
+                    building,
+                    state_id,
+                    minimum_queued,
+                } => {
+                    crate::construction::controls::validate_key(building)
+                        .map_err(|_| invalid("Canonical queued building ID required"))?;
+                    if !(1..=4095).contains(state_id)
+                        || !(1..=200).contains(minimum_queued)
+                        || building == "rail_way"
+                    {
+                        return Err(invalid("Bounded ordinary building queue target required"));
                     }
                 }
                 EconomyTarget::Production {
@@ -242,7 +282,7 @@ pub struct Plan {
     pub review_day: Option<i64>,
 }
 impl Plan {
-    pub(super) fn validate(&self) -> Result<()> {
+    pub(crate) fn validate(&self) -> Result<()> {
         self.scope.validate()?;
         if self.version != 1
             || self.revision == 0
@@ -477,3 +517,7 @@ pub enum Readiness {
     Unavailable(String),
     BlockingDecision(String),
 }
+
+#[cfg(test)]
+#[path = "construction_queue_schema.rs"]
+mod construction_queue_schema;

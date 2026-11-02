@@ -67,6 +67,52 @@ fn names(r: &Reader<'_>, p: u64, pointers: u64, strings: u64) -> Result<Vec<(Str
 fn lookup(values: &[(String, u64)], key: &str) -> Option<u64> {
     values.iter().find(|(k, _)| k == key).map(|(_, v)| *v)
 }
+
+/// Preserve the selected folder while closing the panel, including a tree that
+/// has never been opened. No slot selection, geometry or input is implied.
+pub(crate) fn closing_selection(
+    r: &Reader<'_>,
+    base: u64,
+    tree: u64,
+    root: u64,
+    registry: u64,
+) -> Result<(i32, Vec<u64>, Option<String>)> {
+    let windows = array(r, tree + 0xd78, 128)?;
+    let controls = array(r, tree + 0xd90, 128)?;
+    let index = r.i32(tree + 0xe10)?;
+    if windows.len() != controls.len() {
+        return Err(refuse("Closing category arrays differ"));
+    }
+    if windows.is_empty() {
+        // Exact Linux tree constructor1598af0 initializes the index to0.
+        if index != 0 {
+            return Err(refuse("Unmaterialized category selection changed"));
+        }
+        return Ok((index, windows, None));
+    }
+    if index < 0 || index as usize >= windows.len() {
+        return Err(refuse("Closing category index outside complete own array"));
+    }
+    let mut unique = std::collections::BTreeSet::new();
+    for window in &windows {
+        container(r, base, *window, registry)?;
+        if !unique.insert(*window) {
+            return Err(refuse("Duplicate closing category window"));
+        }
+    }
+    let canonical = canonical_folders(r, base)?.ids;
+    let roots = names(r, root, 0xbb0, 0xbc8)?;
+    let selected: Vec<_> = roots
+        .iter()
+        .filter(|(key, p)| canonical.contains(key) && *p == windows[index as usize])
+        .collect();
+    if selected.len() != 1 {
+        return Err(refuse(
+            "Closing selected category has no unique canonical name",
+        ));
+    }
+    Ok((index, windows, Some(selected[0].0.clone())))
+}
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn observe(
     r: &Reader<'_>,

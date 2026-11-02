@@ -61,6 +61,9 @@ impl Action {
 pub enum Status {
     Dispatching,
     Verified,
+    /// A retried uncertain dispatch whose target fresh state does not show;
+    /// settled by reading only, never by sending the key again.
+    NotApplied,
 }
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -186,16 +189,24 @@ impl Journal {
                     "Verified receipt has no target witness",
                 ));
             }
+            if record.status == Status::NotApplied && record.action.reached(&record.observed) {
+                return Err(Error::new(
+                    "invalid_journal",
+                    "Not-applied receipt shows its target",
+                ));
+            }
             if let Some(previous) = receipts.get(&record.id) {
                 if previous.status != Status::Dispatching
-                    || record.status != Status::Verified
-                    || previous.epoch != record.epoch
+                    || record.status == Status::Dispatching
+                    || !same_campaign(&previous.epoch, &record.epoch)
                     || previous.action != record.action
                     || previous.dispatched != record.dispatched
                 {
                     return Err(Error::new("invalid_journal", "Invalid receipt transition"));
                 }
-            } else if record.status == Status::Verified && record.dispatched {
+            } else if (record.status == Status::Verified && record.dispatched)
+                || record.status == Status::NotApplied
+            {
                 return Err(Error::new("invalid_journal", "Dispatch witness missing"));
             }
             receipts.insert(record.id.clone(), record);
@@ -261,18 +272,42 @@ impl Journal {
             return Err(Error::new("journal_failed", "Journal requires recovery"));
         }
         if let Some(previous) = self.receipts.get(id) {
-            if previous.epoch != *epoch || previous.action != action {
+            if !same_campaign(&previous.epoch, epoch) || previous.action != action {
                 return Err(Error::new(
                     "idempotency_conflict",
                     "Request ID is already bound to a different action or epoch",
                 ));
             }
             return match previous.status {
-                Status::Verified => Ok(previous.clone()),
-                Status::Dispatching => Err(Error::new(
-                    "action_uncertain",
-                    "Previous dispatch has no durable verification; never replay automatically",
-                )),
+                Status::Verified | Status::NotApplied => Ok(previous.clone()),
+                Status::Dispatching => {
+                    // Settle from fresh state without sending anything again.
+                    let mut settled = previous.clone();
+                    let current = backend.observe().map_err(|error| {
+                        Error::after_possible_input("Clock settlement readback failed", error)
+                    })?;
+                    check_state(epoch, &current).map_err(|error| {
+                        Error::after_possible_input("Clock settlement ownership changed", error)
+                    })?;
+                    // The game (or player) may have changed the clock again
+                    // since delivery. A missing target does not prove that the
+                    // original key was never applied.
+                    if !settled.action.reached(&current) {
+                        return Err(Error::new(
+                            "action_uncertain",
+                            "Clock target is not observed; original dispatch remains unresolved",
+                        ));
+                    }
+                    settled.status = Status::Verified;
+                    settled.observed = current;
+                    settled.epoch = epoch.clone();
+                    self.append(settled).map_err(|error| {
+                        Error::after_possible_input(
+                            "Clock settlement could not be committed",
+                            error,
+                        )
+                    })
+                }
             };
         }
         // An uncertain command blocks new IDs too; otherwise callers could
@@ -362,6 +397,16 @@ fn validate_id(id: &str) -> Result<()> {
         ));
     }
     Ok(())
+}
+/// The same owned process, player and playthrough; the campaign prefix is
+/// recomputed by each server start, so a restarted server can still settle
+/// its own earlier receipt.
+fn same_campaign(a: &Epoch, b: &Epoch) -> bool {
+    let playthrough = |e: &Epoch| match e.campaign.split_once(':') {
+        Some((_, p)) => p.to_string(),
+        None => e.campaign.clone(),
+    };
+    a.game == b.game && a.player == b.player && playthrough(a) == playthrough(b)
 }
 fn check_state(epoch: &Epoch, state: &State) -> Result<()> {
     if state.epoch != *epoch || state.speed > 4 {

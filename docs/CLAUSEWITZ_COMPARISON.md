@@ -1,6 +1,37 @@
 # Clausewitz-MCP comparison checkpoint
 
-Latest checkpoint, 16 October 2026: Run071 verified one manually queued dockyard
+Latest FEX checkpoint, 24 October: the frontend-only sample on the four-CPU,
+8 GB VM showed zero process swap, but the same Rust
+retained-goal Research action still failed at five seconds. Complete baseline
+reads took 22–50 ms; the first transition result returned at 2.110 seconds, with
+no settled Research proof. Both measured attempts and the intervening pre-input
+lease refusal are retained. These are single diagnostic trials, with no matched
+upstream test or general superiority claim. All owned game authority closed
+normally. See the
+[capacity comparison](CLAUSEWITZ_VALIDATION.md#fex-transition-origins-and-capacity-comparison--24-october-2026).
+
+Earlier checkpoint, 22 October 2026: Production006 passed the bounded daily
+production worker with budgeted 10→14 allocation across three days and completed-
+plan restart without repeated input. Worker starts took 125–146 ms, digests
+60–80 ms and STOP 8–17 ms; final lines took 44 ms and overview 16 ms. The game
+advanced 97 hours over 73.639 seconds between the unpause response and final
+overview at speed 3 under x86 CPU emulation. No pause action was sent. Two
+read-only clock tears recovered in separate worker lifetimes; 20 player RPCs
+had no errors. These are short-run samples, not an annual throughput benchmark,
+a matched upstream comparison or proof of general superiority.
+See [the Production006 evidence](CLAUSEWITZ_VALIDATION.md#production006-daily-worker-passed--22-october-2026).
+
+Previous checkpoint, 21 October 2026: Production004 passed ordinary Linux production
+opening and one-factory changes with one Luna medium player. The persistent
+MCP/SSH bridge measured 2,080 ms for opening, 765/773 ms for increase/decrease,
+76 ms for the exact control observation, 43 ms for final lines and 16 ms for an
+overview. Historical replays took 6–8 ms; no-op checks took 37–39 ms. The journal
+confirmed three input intents and no clock actions. Recording and normal close
+passed. These are single paused samples under x86 CPU emulation, not a matched
+upstream comparison, a general speedup claim or continuous campaign throughput.
+See [the recorded production gate](CLAUSEWITZ_VALIDATION.md#production004-ordinary-factory-changes-passed--21-october-2026).
+
+Earlier checkpoint, 16 October 2026: Run071 verified one manually queued dockyard
 across advancing days. Its two Luna construction reads took 31.375/39.373 ms RPC
 (25.017/32.912 ms producer). The original line identity remained stable and
 produced work increased; 14 player RPCs had no errors. A single target wait
@@ -46,8 +77,9 @@ and run052's Focus completion evidence are recorded below.
 See [the complete run049 evidence](CLAUSEWITZ_VALIDATION.md#recorded-reverse-worker-run049--15-october-2026).
 
 This is a development comparison, not proof of overall superiority. Required
-targets are Linux, Windows and macOS; native Windows/macOS live adapters remain
-unavailable. The dated sections below preserve earlier measurement conditions
+targets are Linux, Windows and macOS; the native Windows adapter remains
+unfinished and the separate macOS preview has no accepted campaign. The dated
+sections below preserve earlier measurement conditions
 and limitations rather than current setup instructions.
 
 Reference: [smerss/Clausewitz-MCP](https://github.com/smerss/Clausewitz-MCP), commit

@@ -1,18 +1,33 @@
-//! Read-only own construction queue for the exact verified Linux ELF.
+//! Read-only own construction queue for the inspected Linux and Mac builds.
 //! Semantics consulted: smerss/Clausewitz-MCP calling/game.py (MIT).
 //! Layout/field names independently recovered from constructors, serializers,
 //! keyword initializers and arithmetic; see PROVENANCE.md. No engine calls.
 mod buildings;
+mod catalog;
 pub mod controls;
 pub mod find_view;
 mod location;
+pub(crate) mod mac_find;
+mod mac_find_focus;
+// Passive center-terrain diagnostic; not an input or full-picker proof.
+#[allow(dead_code)]
+pub(crate) mod mac_map_point;
+pub mod mac_panel;
+// Pure ray/terrain arithmetic for the typed center-terrain reader.
+#[allow(dead_code)]
+pub(crate) mod mac_projection;
+// Own scene membership only; model intersection and the map adapter are pending.
+#[allow(dead_code)]
+pub(crate) mod mac_scene_scope;
+pub mod mac_ui;
 mod selection;
+pub mod target_snapshot;
 mod ui;
 use crate::{
     economy,
     error::{Error, Result},
     game,
-    memory::Reader,
+    memory::{Reader, StringAbi},
     platform::Process,
     research_ui::{primary_type_encoding, Witnesses},
 };
@@ -29,6 +44,17 @@ const COUNTER_LIMIT: i32 = 1_000_000;
 
 fn invalid(message: &str) -> Error {
     Error::new("invalid_construction", message)
+}
+/// UI layouts are independent of the portable queue/location readers. Refuse
+/// unported layouts before starting a snapshot or touching any process data.
+fn require_linux_ui(abi: StringAbi) -> Result<()> {
+    if abi != StringAbi::LibStdCxx {
+        return Err(Error::new(
+            "unsupported_platform",
+            "Construction UI observation requires the verified Linux layout; native macOS UI is unported",
+        ));
+    }
+    Ok(())
 }
 fn pointer(p: u64) -> Result<()> {
     if !(0x10000..=0x7fff_ffff_0000).contains(&p) || p % 8 != 0 {
@@ -81,6 +107,116 @@ pub(crate) struct Lines {
     pub(crate) unavailable_buildings: usize,
     pub(crate) anomalous: usize,
     pub(crate) locations: usize,
+    /// Facts constructed directly from witnessed bytes, before JSON or paging.
+    known: Vec<QueueLine>,
+    members: Vec<u64>,
+}
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct QueueLine {
+    address: u64,
+    handle: u64,
+    building: bool,
+    key: Option<String>,
+    building_identity: Option<(u64, u64, usize)>,
+    location: Option<location::Identity>,
+    amount: i32,
+}
+/// Construction queue, building and location layout of one inspected build.
+/// Queued-line fields (+0x28..+0x99) are shared with the Linux line layout;
+/// the macOS base fields through +0x88 were matched live on equipment lines.
+#[derive(Debug)]
+pub(crate) struct Layout {
+    building_line_vtable: u64,
+    railway_line_vtable: u64,
+    pub(crate) building_vtable: u64,
+    pub(crate) building_status: u64,
+    pub(crate) building_template: u64,
+    pub(crate) database_global: u64,
+    pub(crate) database_vtable: u64,
+    pub(crate) template_vtable: u64,
+    pub(crate) null_template_vtable: u64,
+    pub(crate) template_key: u64,
+    pub(crate) template_ordinal: u64,
+    pub(crate) status_vtable: u64,
+    pub(crate) state_vtable: u64,
+    pub(crate) state_owner: u64,
+    pub(crate) state_controller: u64,
+    pub(crate) state_id: u64,
+    pub(crate) state_status: u64,
+    pub(crate) province_vtable: u64,
+    pub(crate) province_owner: u64,
+    pub(crate) province_state: u64,
+    pub(crate) province_id: u64,
+    pub(crate) province_status: u64,
+    pub(crate) gs_provinces: u64,
+    pub(crate) gs_states: u64,
+    /// CBuildingProductionLine fields from +0x70 (building, repairs, conversion, allied)
+    /// moved by this many bytes; 1.19.4 (macOS) inserted 8 bytes before them.
+    pub(crate) line_tail_shift: u64,
+}
+/// Linux ELF a4971c9e (libstdc++).
+const LINUX: Layout = Layout {
+    building_line_vtable: 0x4205680,
+    railway_line_vtable: 0x42ee398,
+    building_vtable: 0x41b3e60,
+    building_status: 0x1b8,
+    building_template: 0x1c0,
+    database_global: 0x439f400,
+    database_vtable: 0x41b3ed8,
+    template_vtable: 0x41b49c8,
+    null_template_vtable: 0x41b40a8,
+    template_key: 0x248,
+    template_ordinal: 0x2b8,
+    status_vtable: 0x41b4768,
+    state_vtable: 0x41fba98,
+    state_owner: 0xc8,
+    state_controller: 0xcc,
+    state_id: 0x48,
+    state_status: 0x120,
+    province_vtable: 0x41fb728,
+    province_owner: 0x1a8,
+    province_state: 0xe0,
+    province_id: 0xa4,
+    province_status: 0x1b0,
+    gs_provinces: 0x2b0,
+    gs_states: 0x2c8,
+    line_tail_shift: 0,
+};
+/// macOS Mach-O 089EA519 (libc++), mapped live on 18 October 2026: vtables by
+/// RTTI name, the database by its sole global, keys/ordinals by catalog
+/// contents, state/province IDs by catalog index and owners by own tag.
+const MACOS: Layout = Layout {
+    building_line_vtable: 0x358c690,
+    railway_line_vtable: 0x358d1f8,
+    building_vtable: 0x352ee30,
+    building_status: 0x1a8,
+    building_template: 0x1b0,
+    database_global: 0x3703ad0,
+    database_vtable: 0x352eea8,
+    template_vtable: 0x352fa88,
+    null_template_vtable: 0x352f078,
+    template_key: 0x228,
+    template_ordinal: 0x290,
+    status_vtable: 0x352f828,
+    state_vtable: 0x357f410,
+    state_owner: 0xc0,
+    state_controller: 0xc4,
+    state_id: 0x40,
+    state_status: 0x110,
+    province_vtable: 0x357f020,
+    province_owner: 0x188,
+    province_state: 0xc0,
+    province_id: 0x9c,
+    province_status: 0x190,
+    gs_provinces: 0x278,
+    gs_states: 0x290,
+    line_tail_shift: 8,
+};
+pub(crate) fn layout(r: &Reader<'_>) -> &'static Layout {
+    match r.string_abi() {
+        crate::memory::StringAbi::LibStdCxx => &LINUX,
+        crate::memory::StringAbi::LibCxx => &MACOS,
+    }
 }
 pub(crate) fn lines_in(
     r: &Reader<'_>,
@@ -89,8 +225,10 @@ pub(crate) fn lines_in(
     own_tag: i32,
     include_location: bool,
 ) -> Result<Lines> {
+    let l = layout(r);
     let entries = members(r, production + 0x70, LINE_LIMIT)?;
     let mut rows = Vec::new();
+    let mut known = Vec::new();
     let mut unsupported = Vec::new();
     let mut handles = BTreeSet::new();
     let mut catalog = None;
@@ -100,8 +238,8 @@ pub(crate) fn lines_in(
     let mut locations = 0;
     for (index, &line) in entries.iter().enumerate() {
         let primary = r.u64(line)?;
-        let is_building = primary == base + 0x4205680;
-        if !is_building && primary != base + 0x42ee398 {
+        let is_building = primary == base + l.building_line_vtable;
+        if !is_building && primary != base + l.railway_line_vtable {
             let name = match primary_type_encoding(r, base, primary) {
                 Ok(name) => Some(name),
                 Err(error) if error.code == "invalid_gui_type" => None,
@@ -142,13 +280,17 @@ pub(crate) fn lines_in(
         } else {
             "not_requested"
         });
+        let mut canonical = None;
+        let mut building_identity = None;
         let details = if is_building {
             building_count += 1;
-            let repairs = r.i32(line + 0x78)?;
-            let conversion = boolean(r, line + 0x8c)?;
-            let allied = boolean(r, line + 0x99)?;
+            let repairs = r.i32(line + 0x78 + l.line_tail_shift)?;
+            let conversion = boolean(r, line + 0x8c + l.line_tail_shift)?;
+            let allied = boolean(r, line + 0x99 + l.line_tail_shift)?;
             numeric_policy &= (0..=COUNTER_LIMIT).contains(&repairs);
             let building = buildings::observe(r, base, line, &mut catalog)?;
+            canonical = building.key.clone();
+            building_identity = building.identity;
             unavailable_buildings += usize::from(building.key.is_none());
             if include_location {
                 location = match building.identity {
@@ -157,7 +299,7 @@ pub(crate) fn lines_in(
                     }
                     None => location::unavailable("building_identity_unavailable"),
                 };
-                locations += usize::from(location["available"] == true);
+                locations += usize::from(location.identity.is_some());
             }
             json!({"building_id":building.key,"building_id_unavailable_reason":building.unavailable,
                 "to_repair_raw_signed":repairs,"conversion":conversion,"allied_build":allied})
@@ -165,6 +307,16 @@ pub(crate) fn lines_in(
             Value::Null
         };
         anomalous += usize::from(!numeric_policy);
+        known.push(QueueLine {
+            address: line,
+            handle,
+            building: is_building,
+            key: canonical,
+            building_identity,
+            location: location.identity,
+            amount,
+        });
+        let location = location.value;
         let fraction = if numeric_policy && cost > 0 {
             json!({"numerator":produced.to_string(),"denominator":cost.to_string()})
         } else {
@@ -190,6 +342,8 @@ pub(crate) fn lines_in(
         unavailable_buildings,
         anomalous,
         locations,
+        known,
+        members: entries,
     })
 }
 /// Queued amount of one canonical building in one own state versus elsewhere.
@@ -200,22 +354,63 @@ pub(crate) struct QueueSummary {
     pub(crate) elsewhere: i64,
     pub(crate) complete: bool,
 }
+/// Buildings that take a shared state building slot while they are queued.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+pub(crate) const SHARED_SLOT_BUILDINGS: [&str; 7] = [
+    "arms_factory",
+    "industrial_complex",
+    "dockyard",
+    "synthetic_refinery",
+    "fuel_silo",
+    "rocket_site",
+    "nuclear_reactor",
+];
+/// Queued amount of shared-slot buildings per own state (state id -> amount). A queued
+/// project holds its slot, so the slots a state can still take are `free - queued`.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+pub(crate) fn queued_shared_by_state(
+    r: &Reader<'_>,
+    base: u64,
+) -> Result<std::collections::BTreeMap<i32, i64>> {
+    let (country, production) = economy::own_production(r, base)?;
+    let own_tag = r.i32(country + 8)?;
+    let lines = lines_in(r, base, production, own_tag, true)?;
+    let mut out = std::collections::BTreeMap::new();
+    for row in &lines.known {
+        let (Some(key), Some(location)) = (row.key.as_deref(), row.location.as_ref()) else {
+            continue;
+        };
+        if row.building
+            && SHARED_SLOT_BUILDINGS.contains(&key)
+            && (0..=COUNTER_LIMIT).contains(&row.amount)
+        {
+            *out.entry(location.state_id).or_insert(0) += i64::from(row.amount);
+        }
+    }
+    Ok(out)
+}
 pub(crate) fn queue_summary(lines: &Lines, building: &str, state_id: i32) -> QueueSummary {
     let mut summary = QueueSummary {
         in_state: 0,
         elsewhere: 0,
-        complete: lines.unsupported.is_empty() && lines.anomalous == 0,
+        complete: lines.unsupported.is_empty()
+            && lines.anomalous == 0
+            && lines.unavailable_buildings == 0,
     };
-    for row in &lines.rows {
-        if row["line_kind"] != "building" || row["building"]["building_id"] != building {
+    for row in &lines.known {
+        if !row.building || row.key.as_deref() != Some(building) {
             continue;
         }
-        let amount = row["amount_raw_signed"].as_i64().unwrap_or(-1);
-        if amount < 0 || row["location_available"] != true {
+        let amount = i64::from(row.amount);
+        if !(0..=COUNTER_LIMIT).contains(&row.amount) || row.location.is_none() {
             summary.complete = false;
             continue;
         }
-        if row["location"]["state_id"].as_i64() == Some(i64::from(state_id)) {
+        if row
+            .location
+            .as_ref()
+            .is_some_and(|location| location.state_id == state_id)
+        {
             summary.in_state += amount;
         } else {
             summary.elsewhere += amount;
@@ -252,6 +447,9 @@ pub fn page_with_options(
             "Construction page exceeds bounds",
         ));
     }
+    if include_ui {
+        require_linux_ui(process.string_abi())?;
+    }
     let start = Instant::now();
     process.begin_snapshot()?;
     let witnesses = Witnesses::new(process);
@@ -272,6 +470,7 @@ pub fn page_with_options(
         unavailable_buildings,
         anomalous,
         locations,
+        ..
     } = lines_in(&r, base, production, own_tag, include_location)?;
     let mut rows = mut_rows;
     let mut unsupported = mut_unsupported;
@@ -301,7 +500,7 @@ pub fn page_with_options(
         });
     }
     Ok(
-        json!({"source":"native own construction queue","build_id":game::BUILD_ID,
+        json!({"source":"native own construction queue","build_id":game::layout(&r).build_id,
         "scope":"own_production_construction_collection_only","player":context.player,
         "handle_scope":{"kind":"own_current_snapshot_collection","player":context.player,
             "playthrough_id":context.playthrough_id,"date_raw":context.date_raw,
@@ -333,29 +532,42 @@ pub fn page_with_options(
 #[cfg(test)]
 mod queue_summary_tests {
     use super::*;
-    fn line(building: &str, state: Option<i64>, amount: i64) -> Value {
-        json!({"line_kind":"building","building":{"building_id":building},"amount_raw_signed":amount,
-            "location_available":state.is_some(),"location":{"state_id":state}})
+    fn line(key: Option<&str>, state: Option<i32>, amount: i32) -> QueueLine {
+        QueueLine {
+            address: 0x10000,
+            handle: 0x10000003b,
+            building: true,
+            key: key.map(str::to_owned),
+            building_identity: Some((1, 2, 3)),
+            location: state.map(|state_id| location::Identity {
+                state: 4,
+                state_id,
+                province: None,
+                status: 5,
+            }),
+            amount,
+        }
     }
-    fn lines(rows: Vec<Value>) -> Lines {
+    fn lines(known: Vec<QueueLine>) -> Lines {
         Lines {
-            total: rows.len(),
-            rows,
+            total: known.len(),
+            rows: Vec::new(),
             unsupported: Vec::new(),
-            building_count: 0,
-            unavailable_buildings: 0,
+            building_count: known.len(),
+            unavailable_buildings: known.iter().filter(|x| x.key.is_none()).count(),
             anomalous: 0,
             locations: 0,
+            members: Vec::new(),
+            known,
         }
     }
     #[test]
-    fn sums_only_the_requested_building_and_needs_every_location() {
+    fn sums_only_requested_typed_building_and_requires_every_location() {
         let l = lines(vec![
-            line("arms_factory", Some(64), 2),
-            line("arms_factory", Some(64), 1),
-            line("arms_factory", Some(65), 4),
-            line("dockyard", Some(64), 7),
-            json!({"line_kind":"railway"}),
+            line(Some("arms_factory"), Some(64), 2),
+            line(Some("arms_factory"), Some(64), 1),
+            line(Some("arms_factory"), Some(65), 4),
+            line(Some("dockyard"), None, 7),
         ]);
         assert_eq!(
             queue_summary(&l, "arms_factory", 64),
@@ -365,12 +577,48 @@ mod queue_summary_tests {
                 complete: true
             }
         );
-        let l = lines(vec![line("arms_factory", None, 1)]);
+        assert!(!queue_summary(&l, "dockyard", 64).complete);
+        let l = lines(vec![line(Some("arms_factory"), Some(64), -1)]);
         assert!(!queue_summary(&l, "arms_factory", 64).complete);
-        let l = lines(vec![line("arms_factory", Some(64), -1)]);
+    }
+    #[test]
+    fn unknown_buildings_cannot_prove_absent_or_complete_target_amounts() {
+        let mut l = lines(vec![line(None, None, 1)]);
         assert!(!queue_summary(&l, "arms_factory", 64).complete);
-        let mut l = lines(vec![line("arms_factory", Some(64), 1)]);
+        l.unavailable_buildings = 0;
         l.unsupported.push(json!({"entry_index":1}));
         assert!(!queue_summary(&l, "arms_factory", 64).complete);
+        l.unsupported.clear();
+        l.anomalous = 1;
+        assert!(!queue_summary(&l, "arms_factory", 64).complete);
+    }
+    #[test]
+    fn provincial_lines_count_toward_proven_own_state_and_ignore_unrelated_locations() {
+        let mut naval = line(Some("naval_base"), Some(63), 1);
+        naval.location.as_mut().unwrap().province = Some((0x20000, 9361));
+        let mut l = lines(vec![
+            line(Some("dockyard"), Some(63), 1),
+            line(Some("dockyard"), Some(62), 2),
+            naval,
+        ]);
+        assert_eq!(
+            queue_summary(&l, "dockyard", 63),
+            QueueSummary {
+                in_state: 1,
+                elsewhere: 2,
+                complete: true
+            }
+        );
+        assert_eq!(
+            queue_summary(&l, "naval_base", 63),
+            QueueSummary {
+                in_state: 1,
+                elsewhere: 0,
+                complete: true
+            }
+        );
+        l.known[2].location = None;
+        assert!(queue_summary(&l, "dockyard", 63).complete);
+        assert!(!queue_summary(&l, "naval_base", 63).complete);
     }
 }

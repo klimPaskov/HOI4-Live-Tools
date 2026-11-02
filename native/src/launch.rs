@@ -6,6 +6,8 @@ use crate::error::Result;
 use std::path::Path;
 #[cfg(target_os = "linux")]
 mod linux;
+#[cfg(target_os = "macos")]
+pub mod macos;
 pub fn serve(config: &Path) -> Result<()> {
     #[cfg(target_os = "linux")]
     {

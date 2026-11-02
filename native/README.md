@@ -8,6 +8,88 @@ The primary path uses fresh process state and compact stdio MCP JSON. Reads and
 server waits never pause the game. No screenshots, save parsing, raw memory
 addresses, arbitrary process writes or injected engine calls are exposed as tools.
 
+The Linux production profile also exposes `hoi4_production_close` as a manual
+preview. It uses the ordinary production button only from settled shown production;
+already-hidden idle state is a no-op and other active panels refuse. The request
+uses the shared lease/journal, preserves the original panel identity and never
+replays uncertain input. Production008 passed manual production closing and
+Mixed002 verified production progress, one departure and a Research assignment
+on the corrected continuation readback. Its private harness then refused a
+historical detail read because its required list differed from native discovery.
+Mixed003 stopped before selection/departure on a torn retained destination
+snapshot. The earlier Mixed001 uncertain opening remains preserved.
+Mixed004 completed both background goals over three days, but a player path error
+prevented its final restart checks. Mixed005's faster driver exposed a direct-close
+refusal while the just-verified opening still animated. These runs do not complete
+the mixed-plan acceptance gate.
+
+Linux OpenPanel verification now requires its own literal Research root to be
+settled and shown. Known pending animations after the single dispatch use the
+existing bounded readback loop and original deadline/lease. The first complete
+root binding is retained across pending reads; changed ownership, unknown states
+and pre-input failures remain strict. Stable reads add no wait. Timeout diagnostics
+retain the rejected count and named root/state cause. This does not broaden close
+permissions or require unrelated facilities roots for opening. Fresh live validation
+of this opening-readiness correction remains pending. The later 1080p FEX Rust
+adapter attempt failed its first Research opener at the original five-second
+deadline. Its single uncertain Intent remains quarantined despite a later visible
+panel. A separate no-recorder comparison also timed out with its shown root still
+in transition state [0, 1]; encoding load alone does not explain the failure.
+Error-only diagnostics now preserve a bounded transport-delivery label;
+delivery never establishes the game effect or permits a retry. See
+[the latest failed component](../docs/CLAUSEWITZ_VALIDATION.md#fex-no-recorder-research-comparison--24-october-2026).
+
+A later lower-decoration 1080p diagnostic stopped at a pre-input menu refusal,
+before campaign Start or Research. It adds no action-latency evidence; its
+ordinary close and separate exit-time cleanup failure are retained in
+[the setup record](../docs/CLAUSEWITZ_VALIDATION.md#fex-reduced-decoration-setup-refusal-and-cleanup--24-october-2026).
+
+An internal read-only construction anchor retains the original own scope,
+requested state, complete canonical catalog and ordered full queue. Fresh reads
+reject changed original edges before following replacement payload and use the
+caller's original deadline. An internal opt-in Linux reader additionally joins
+inactive or exactly requested selection to that same queue snapshot, retaining
+the original manager before reading its payload. Thirty-two synthetic fixtures
+cover the both-ABI queue and Linux selection boundaries. Default queue and legacy
+JSON reads are unchanged. These are read-only facts, with no selection input,
+placement, exact +1, action receipt or worker permission; cross-call chronology
+and deadline ownership remain the caller's job.
+
+An internal Linux Research transit retains the original Focus or production goal,
+exact own scope, ordered slot/root identities and one absolute deadline. Busy
+slots and natural completion do not require a fabricated Research assignment.
+The retained reader checks original owner, root, slot and catalog edges before
+replacement payloads, through final batched witnesses and process checks.
+
+A separate bounded private journal and ordinary W adapter now implement the
+transaction internally. Intent is durable before input; the adapter sends at most
+one stationary W, checks the reviewed game/X11 keyboard gates, then observes the
+original scope again after input-idle acknowledgement. Uncertain input cannot be
+retried or settled by a late panel. Historical receipts cannot reconstruct a
+current proof or complete the retained final goal. Late terminal persistence
+provides no admission; reopening an input-bearing journal conservatively requires
+separately qualified recovery. Stdio reconnects keep the existing controller.
+The journal loads and blocks other actuators independently of profile/worker flags.
+
+Actual ARM Linux passed 56 targeted synthetic fixtures covering the transaction,
+retained reader and construction/production blockers. These are offline checks;
+no new tool, flag, mixed-worker route or campaign permission is enabled. The
+existing assignment opener still requires a genuine empty requested slot. Legacy
+journals are neither migrated nor reinterpreted. Live qualification remains open.
+
+ResearchClose002 passed direct Research closing, including historical replays and
+no-ops. Mixed Research/production worker routing has an explicit opt-in preview;
+its recorded live gate remains pending.
+
+Future campaign tests and recordings require native 1920×1080 or higher with
+readable UI. Research, Focus, construction and production now accept the explicit
+`linux_builtin_absolute_1920x1080_v1` profile: both physical and logical dimensions
+must be exactly 1920×1080. All enabled domains must use the same profile. Fresh
+renderer geometry supplies coordinates; old client points are never scaled.
+The owner pins the X11 client size and refuses resized windows before input,
+including stationary keys. This profile awaits installed-game and recording
+qualification. Previous 512×288 runs remain diagnostic evidence.
+
 ## Build
 
 Use Rust 1.86 or newer:
@@ -24,13 +106,210 @@ return a capability error. Logs and setup errors go to stderr.
 
 | Platform | Current native support |
 | --- | --- |
-| Linux x86_64 | Owned launch/reconnects, exact-build reads, waits, clock keys, research, and opt-in focus/daily previews |
-| Windows / macOS | Portable protocol and fixtures; native live adapters return explicit unavailable errors |
+| Linux x86_64 | Owned launch/reconnects, exact-build reads, waits, clock keys, research, Focus/daily plans, construction and one-factory production previews |
+| Linux ARM64 with FEX | Pinned translator and x86 guest reader; own-state and stationary XTest key qualification passed at 1080p; explicit Rust input validation opt-in, live adapter acceptance pending |
+| macOS | Separate owned task-port and ordinary-input preview on one Steam 1.19.3 Rosetta build; see the [platform status](../README.md#macos) |
+| Windows | Dormant owned read-only foundation and portable fixtures; game attachment, input and live acceptance remain unavailable |
 
-Three-OS CI validates shared code. It does not establish Windows/macOS live
-compatibility. Layouts must be recovered and verified separately for each build.
+Three-OS CI validates shared code. It does not establish live compatibility.
+Layouts must be recovered and verified separately for each platform and build.
+
+The internal [Windows reader](src/platform/windows/README.md) retains exact
+process/file ownership and checks batches without repeating full metadata
+censuses for each field. Its production build allowlist is empty; it implements
+no game adapter and registers no tools. The Windows synthetic-child fixture is
+separate from HOI4 acceptance. See [remaining port work](../docs/WINDOWS_HANDOFF.md).
+
+The [Mac window recorder](../docs/MAC_RECORDING.md) is a separate `--record`
+command for macOS 15+. Rust supervises a bundled ScreenCaptureKit bridge, with
+owned-window capture, detailed failure witnesses and explicit clean stopping.
+It sends no game input. Client geometry and gameplay acceptance remain separate.
+
+The Mac controller also exposes a default-off `hoi4_construction_open`
+qualification tool. It checks the current ordinary T shortcut, persists the
+original intent and sends at most one keypress without moving the cursor.
+Already-selected panels receive no toggle; uncertain input cannot be replayed or
+settled from later UI. Recorded tests verified one ordinary T opener, historical
+receipt replay and an already-open check with zero new keys. See the
+[permission and receipt contract](../docs/MAC_CONTROLLER.md#construction-opener-qualification).
+Use `already_open_only: true` for an open-panel verification that cannot send a
+keypress if the panel changes. It requires an initially open panel and uses a
+separate durable action identity; historical ordinary-T requests omit the option.
+
+The separate default-off `hoi4_construction_select` selects one ordinary building
+on the open construction panel. It retains the original scope and queue, performs
+at most one unmodified move/click and verifies the exact template from game state.
+A recorded Luna-medium test passed at native 1920×1080 in 240 ms. It does not
+select a state or place construction. See the [selection contract](../docs/MAC_CONTROLLER.md#construction-selection-qualification).
+
+`hoi4_construction_find_view` uses separate Linux and Mac layouts. Mac stationary
+reads passed at 0.48 ms median RPC. Optional `include_focus: true` verifies the
+visible Mac box's exact name/type, own registry and both focused receivers in the
+same witness. Default reads skip that payload; Linux refuses this optional flag.
+A recorded one-F Luna test verified visible Mac focus with sub-millisecond reads,
+without cursor movement, screenshots, pauses or campaign changes. The separate
+default-off `hoi4_construction_find_state` then passed a recorded owned-state
+query/Return test in 549 ms, with a zero-input historical replay. It requires an
+already-open idle focused empty Find and `construction_navigation: true`.
+Original typed identity and complete queue/selection are checked throughout;
+possible partial input stays quarantined. It grants no placement or worker
+permission. See the [Find contract](../docs/MAC_CONTROLLER.md#construction-find-qualification).
+
+`hoi4_input_geometry` accepts Mac-only `include_source_point: true`. Omission or
+false adds no source reads. The optional output reports cached ordinary SDL
+coordinates joined to the original owned window, with complete final witnesses.
+Its stationary MCP test measured 0.257 ms median RPC; the cached point differed
+from the OS cursor. Current-event/frame, routing, delivery and input authority
+remain false. This is a diagnostic, not a click point.
+
+`hoi4_construction_target` accepts Mac-only `include_map_point: true`. Omission or
+false preserves the original read path. The option derives the fixed 1920×1080
+center terrain point and joins its canonical province to the requested owned and
+controlled state within the complete target/queue witness bracket. Reviewed map
+modes are 0/27 and camera wrap is 1; other cases refuse. Twenty samples per mode
+measured median RPC times of 2.360 ms with it and 1.996 ms without it. Complete
+own state, camera, cursor and 18 controller files stayed unchanged with zero input,
+screenshots or observation pauses. The output explicitly denies full-picker,
+model intersection, GUI routing, current-event, eligibility and input authority.
+See the
+[resident observer evidence](../docs/CLAUSEWITZ_VALIDATION.md#mac-resident-center-terrain-mcp--24-october-2026).
+
+Internal ray/terrain arithmetic reproduces a captured center-point calculation
+bit-for-bit. The private terrain/bitmap prototype joined it to own Brandenburg.
+The internal scene reader matched all 35 live candidates to own divisions/task
+forces with exact types and owners; unknown candidates refuse before payload.
+The default-off `hoi4_construction_place` qualification adapter now composes
+these original bindings with complete typed GUI rejection and separate dispatch
+guards. It sends at most one ordinary center move/down/up and requires exact
+complete-queue +1 readback. A recorded private Rust component passed in a
+4.661-second 17-call driver; placement took 2.326 seconds including platform
+guards, with no cursor displacement or observation pause. The earlier point test
+and failed mode-0 harness remain preserved. The port adds a generic, fixed
+qualification deadline and compact pointer-free route diagnostics; it is not a
+construction worker or advancing-time/full-picker acceptance. See the
+[placement contract](../docs/MAC_CONTROLLER.md#construction-placement-qualification)
+and [component evidence](../docs/CLAUSEWITZ_VALIDATION.md#mac-strict-rust-placement-component--24-october-2026).
+
+The default-off `hoi4_construction_clear_selection` qualification sends at most
+one ordinary Escape from a retained selected own template, then requires canonical
+inactive selection and the unchanged complete queue twice. An originally inactive
+selection needs no key. Recorded native 1080p components verified the action in
+686 ms and a separate historical-only replay in 76 ms with cancellation disabled.
+The preceding harness timestamp-comparison failure is preserved. There is no
+construction worker permission. See the
+[cancellation contract](../docs/MAC_CONTROLLER.md#construction-cancellation-qualification).
+
+The internal Mac hit-envelope foundation now models separate sprite, cornered,
+InstantText and position-object rejection branches, with 32 arithmetic fixtures.
+Unknown resources and unsupported transforms remain explicit. A private read-only
+metadata census covered 44,186 graphical objects in 912 ms with stable final
+field witnesses and no input or screenshots. This census and the pure calculations
+do not establish full GUI routing or enable placement. See
+[graphical evidence](../docs/CLAUSEWITZ_VALIDATION.md#mac-graphical-metadata-and-pure-envelopes--24-october-2026).
+
+The pure foundation also covers exact animated-frame, masked-shield and
+progress-bar variants, with 36 additional fixtures. Their size/hit roles and
+edge rules remain separate; progress bars require an explicit standard zero-angle
+math contract. These internal functions add no live read or action permission.
+
+The Mac durable worker has passed recorded Research, Focus and production
+component tests, including plan revisions and reconnects. Canonical Mac process
+timestamps retain byte-exact scope and restart equality. The separate legacy
+standing-plan runner remains synchronous. Wider durable domains, the clean
+two-year run and full campaign acceptance remain unfinished.
+
+The optional [FEX launch configuration](../docs/OWNED_LINUX_LAUNCHER.md#arm64-linux-with-fex)
+keeps kernel process identity separate from the mapped x86 game. Both binaries
+are hash-pinned. Complete observations check the guest mappings and original
+kernel execution witness; individual field reads retain the fast native path.
+Only incomplete initial load coverage can wait under the original launch deadline.
+Changing a bound image refuses without rebinding. Translated input is off by default;
+the explicit 1080p validation profile retains the ordinary-input guards. This is
+a development preview, not mixed-plan or campaign acceptance.
 
 ## Standing plans and observations
+
+Mixed Research/production plans may set `max_panel_navigation_steps_per_day` to
+1–16 in addition to `production_permission` and `max_production_steps_per_day`.
+Both owner daily domains and their existing profiles must be enabled; Focus
+permission must be off. Omitting the new option preserves the previous routes.
+A separate private journal retains the chosen destination, original object
+identities and consumed close attempts across restarts. Opening or closing a
+panel never completes an assignment or allocation goal. The selected task keeps
+priority until its governor goal completes; a selected production goal waits for
+its next daily budget before another domain can take over. Plan changes require
+stopping and restarting a settled plan. Uncertain input blocks controller binding
+even if worker permissions are later removed. Known departure refusals are kept
+and are not automatically retried. `panel_navigation` in the daily digest/details
+is historical accounting, never fresh input authority.
+
+This routing is not live accepted yet. It uses bounded native observations and
+ordinary verified controls, with no screenshots, cursor scans or pause commands.
+Initial retained-destination, post-departure destination and selected-identity
+reads may discard at most four torn snapshots, with 25 ms intervals and a
+one-second recovery window inside the original deadline. Stable reads add no
+wait. Ownership checks, original bindings, persistence and input are outside
+recovery; other errors still refuse. `panel_navigation.read_history` retains
+bounded first/latest causes and counts for this worker lifetime. The compact
+digest keeps counts/outcome; exact causes use its historical details lookup.
+Failed-observation counts refer to observations with rejected torn reads that
+did not recover, not every permanent refusal. Existing action uncertainty and
+budgets are unchanged. Fresh live validation of this recovery remains pending.
+
+
+`hoi4_construction_target({"building_id":"arms_factory","state_id":64})`
+returns compact queued amounts in one own-owned-and-controlled state and elsewhere.
+It uses the inspected Linux or Mac layout, validates the complete bounded queue
+and public template catalog, and checks all read bytes in one witness bracket.
+An empty queue returns zero only with a verified target; unknown building identities,
+unsupported lines, invalid counters or missing target locations make `queued` null.
+It reads no GUI and sends no input. These amounts do not prove capacity, eligibility,
+built levels or an assignment receipt. The legacy Mac construction adapter now uses
+this full-queue readback rather than summing the first page; durable Mac placement
+and its before/after identity proof remain unfinished.
+
+`hoi4_construction_ui_probe({"building_id":"arms_factory","state_id":64})`
+adds a separate read-only Mac observation. Own campaign/production/state,
+the complete public catalog and queue, panel owner links, ordinary selection
+and building-choice membership share one witness bracket. Hidden panels omit
+choice reads. A visible panel must pass all four bounded grids before the
+requested button state is exposed; there is no 64-item prefix limit. Missing
+paths return incomplete membership with no control, while malformed types,
+duplicates, ownership changes and torn reads refuse. Only mode 1 has a canonical
+selected key; modes 2/3 remain explicitly unverified. Local visibility and
+button state grant no input, geometry, settled-frame or placement
+authority. Linux refuses this Mac-specific probe before process access.
+The root, named containers, grids and requested button must also retain the
+own GUI-registry link. Root transition states are exposed separately: engine
+visibility allows state 1 while it can animate, and state 2 skips choice reads.
+Even both local states being zero does not prove settled renderer geometry.
+The all-grid backlink flag stays false until all four grids validate.
+A separately typed conversion item is allowed only once in the shared grid and
+must match the own view's cached pointer. Its payload is not read as a building
+or callback. Counts distinguish ordinary buildings from this conversion item;
+unknown types and duplicate or foreign items still refuse.
+
+Adding `"include_callback": true` verifies the requested choice's exact single
+observer and item capture inside that same snapshot. It rejects overrides,
+additional callbacks and a changed member/receiver; it never invokes them.
+The callback summary retains the byte-wide `disable_requested` flag separately
+from `disabled` (visual state 3). The flag can be set while that visual state
+differs. Neither is a fresh prerequisite evaluation: eligibility, routing,
+geometry, delivery and placement still need independent qualification.
+Omitting the option adds no callback reads. Three stationary live samples verified
+all four visible grids, 22 ordinary building choices, one conversion item and the
+requested callback at 2.290 ms median RPC time, without input, screenshots or
+cursor movement. Ordinary selection and placement remain unqualified.
+
+Independent `"include_geometry": true` observes only the requested button's
+renderer, fully contained client rectangle and visible idle ancestor chain on
+the own 1920×1080 canvas at scale 1. It checks ordinary UI gates and the exact
+graphical-parent association. Hidden, animating, disabled or offscreen controls
+return unavailable geometry; malformed bindings and torn reads fail explicitly.
+`"include_routing": true` requires geometry and adds complete bounded mouse-route
+and cursor-cache correlation. Neither option moves the cursor, evaluates fresh
+prerequisites or grants input. Route stamps do not prove atomic cache completion
+or delivery. Omitted options preserve the default memory-read path.
 
 `hoi4_construction_queue` is a read-only preview (`offset` 0–2048, `limit` 1–128,
 default 32). It validates the entire own collection before paging, recognizes
@@ -59,7 +338,9 @@ geography; the default remains fast and avoids these additional reads.
 top-level `location_available` means at least one location was proved. Each row
 has its own availability and reason. Neither IDs nor availability authorize input.
 
-Optional `include_ui: true` also enables the location checks, then joins the
+Optional `include_ui: true` requires the verified Linux layout. Native macOS
+returns `unsupported_platform` before any process access; ordinary queue and
+location reads remain available there. On Linux it also enables the location checks, then joins the
 construction panel's exact building rows to those same full own-line handles.
 It returns stored `displayed_location_text` from the named text control only
 for own-owned-and-controlled locations. The text names the state even for a
@@ -81,8 +362,9 @@ relationship. Run074 observed an ordinary dockyard selection; railway mode remai
 neither placement eligibility nor effective map routing or delivered input.
 
 `hoi4_construction_controls({"building_id":"dockyard","include_geometry":true})`
-is a read-only preview for inspecting the topbar opener and one building choice
-together. It checks exact named controls, own registry links, callback captures,
+is a read-only Linux preview for inspecting the topbar opener and one building choice
+together. Native macOS returns `unsupported_platform` before any process access.
+It checks exact named controls, own registry links, callback captures,
 fresh catalog identity and scoped politics/Focus/research blockers in one witnessed
 snapshot. Geometry is optional and defaults off. Hidden construction panels omit
 choice enumeration; unknown concrete controls or renderers remain unavailable.
@@ -99,12 +381,12 @@ diagnostic locations within the snapshot, not addresses or memory contents;
 checks still fail without retry.
 This tool cannot open the panel, select a building or place construction.
 
-An owned Linux session can opt into `construction_profile` using
-`linux_builtin_absolute_512x288_v1`. This exposes `hoi4_construction_attempt`
+An owned Linux session can opt into `construction_profile` using the reviewed
+client profile described above. This exposes `hoi4_construction_attempt`
 with `ensure_open` and `select_building` stages; selection requires a canonical
 `building_id`. Both require an exclusive `lease_token` and stable `request_id`.
-The profile supports only the owned 512×288 client and exact Standard/Sprite
-controls. Run075 and Run076 refused changing snapshots before durable intent or
+The adapter supports exact Standard/Sprite controls. Historical 512×288 runs
+Run075 and Run076 refused changing snapshots before durable intent or
 input. Run076's initial controls read passed in 72 ms; its opening request refused
 in 114 ms with `section=opener; read=171; size=4; changed_byte=1`. The semantic
 field remains unproved. Run077 on the recovery commit then passed the bounded
@@ -136,15 +418,22 @@ replays and a zero-input no-op.
 that building queued in that own state. With the building selected and the
 camera centred on the state, it clicks the owned client centre once and verifies
 the new total from the same-snapshot construction queue. Run091 accepted it live for
-one arms_factory in state 64; provincial buildings are not yet live-tested.
+one arms_factory in state 64, and Run092 for one dockyard in coastal state 63.
+In this game data a dockyard is a coastal-only state building (shared slots,
+`state_max`), so any click inside the state queues it there. True provincial
+buildings (naval bases, bunkers, coastal bunkers) need a province target and
+are not yet live-tested.
 
-`hoi4_construction_find_view({"state_id":64})` is a read-only preview for future
-map placement. It reports the game's own Find view (visibility flags, query, the
-first result row joined to the state catalog), the camera look-at point and the
-requested own state's template map position, including whether the camera is
-centred on it. It types, clicks and moves nothing. Run082 confirmed the camera,
-state-template position and unopened Find view live; opened-view results are
-not yet exercised.
+`hoi4_construction_find_view({"state_id":64})` is read-only on the reviewed Linux
+and Mac layouts. It reports own Find visibility/query, the first result joined
+to its current state catalog, camera coordinates and the requested own state's
+map anchor. Hidden Mac queries/results are skipped. Optional `include_focus: true`
+is Mac-only and also checks the exact focused edit control; the default keeps
+`text_box_focused: null` on Mac. The Mac empty visible query/focus and one original owned-state navigation have
+component evidence, as does Linux state search. General Mac modal routing and
+campaign integration remain unqualified.
+It types, clicks and moves nothing, and a centered camera does not prove a valid
+placement point.
 
 Each stage permits at most one ordinary click, with private identities and the
 original point checked again immediately before input. Already-matching state
@@ -152,7 +441,7 @@ produces a durable no-op. Identical successful requests return historical
 receipts without further input. Uncertain delivery blocks construction, clock,
 research, Focus and background plans; terminal refusals retain their bounded
 cause. Selection verifies the requested building type, not placement or a queue
-change. Railway selection and map placement are unavailable.
+change. Railway selection and true provincial placement remain unavailable.
 
 An owned session can enable prepared research, Focus and durable daily plans.
 Recorded run030 verified four-slot worker assignment, idempotent updates,
@@ -246,6 +535,16 @@ Timeouts return only the last timely accepted sample, marked
 discarded; ownership/scope errors propagate. A wait with no timely stable sample
 refuses. Reads and waits never pause or confer input authority.
 
+Date, assignment and general-change waits also subscribe to the currently owned
+background worker. A stop or quarantine wakes the wait promptly with its original
+bounded cause; an already terminal worker requires no game read. Any retained
+snapshot is explicitly historical and does not prove completion. Explicit STOP
+has its own non-error reason. The wait pins one worker instance, never follows a
+replacement or starts work, and keeps its original deadline. Owner retirement
+wakes it before read-gate drainage. Research UI-only waits keep their separate
+predicate path. This notification path has offline fixture coverage; recorded
+mixed-plan acceptance remains pending.
+
 The independent `graph_kernel` library provides bounded components and
 multi-source breadth-first search over public/generated topology. It has no
 live army integration and supplies no movement or supply authority.
@@ -295,11 +594,19 @@ anchors do not establish a load-generation token.
 | --- | --- |
 | `hoi4_capabilities` | Platform, owned-session binding and explicit missing features |
 | `hoi4_overview` | Own focus/research IDs and clock, freshness and unavailable fields |
+| `hoi4_research_close` | Opt-in Linux preview: close settled own Research tab with one stationary W; preserves original slots, assignments and panel identities, requires no Focus permission; ResearchClose002 passed bounded closing/replay/no-op validation |
 | `hoi4_research` | Own completed technologies and active signed counters; normalized progress remains unavailable |
 | `hoi4_army` | Own divisions with full snapshot-scoped handles, selected province joins and lossless raw status; recorded structural reads, units unverified |
 | `hoi4_economy` | Own named factory trigger counts, civilian project capacity and exact signed political-power units; live comparison pending |
-| `hoi4_production_lines` | Paged own line handles, separate signed factory counters and optional base equipment keys; key joins have fixture evidence, live comparison and allocation remain pending |
+| `hoi4_production_lines` | Paged own line handles, separate signed factory counters and optional base equipment keys; selected infantry allocation passed Production004; wider comparison and management remain pending |
+| `hoi4_production_controls` | Linux preview: exact own line's named factory +/- controls, callback bindings, local blockers and optional renderer geometry; read-only; selected infantry line passed Production004 |
+| `hoi4_production_open` | Opt-in Linux preview: ensure the production panel is open through its named topbar control; an already-open panel is a no-op; bounded Production004 gate passed |
+| `hoi4_production_close` | Opt-in Linux preview: close settled production or no-op when already closed in the idle view; Production008 passed manual closing, replay/no-op and Research/Focus handoff; mixed-worker live validation pending |
+| `hoi4_production_attempt` | Opt-in Linux preview: one ordinary factory step in an already-open panel, durable original identity/count and canonical readback; selected 10→11→10 gate passed |
 | `hoi4_construction_queue` | Own building/railway lines, canonical keys and signed cost/work counters; one dockyard observed in run071. Run072 observed one state/label with a late-lease deviation; selection and province/railway coverage remain unverified |
+| `hoi4_construction_target` | Complete witnessed queued amounts for one public building and own state; incomplete evidence returns null amounts. Mac-only `include_map_point` defaults false and adds a witnessed 1080p center-terrain candidate with no input authority |
+| `hoi4_construction_ui_probe` | Mac-only own panel/selection/full-choice observation; optional callback, requested-button geometry and complete mouse-route correlation; no input, settled-frame or placement authority |
+| `hoi4_construction_panel_probe` | Mac-only panel mode and named topbar opener/callback binding. Optional `include_geometry` verifies a 1920×1080 canvas; `include_routing` also requires geometry. Independent `include_shortcut` checks current T and preceding supported keyboard receivers. No input or atomic delivery authority |
 | `hoi4_technology_list` | Canonical loaded technology IDs with filtering/pagination; no eligibility inference |
 | `hoi4_input_geometry` | GUI dimensions, scale, pointer and conditional source-window diagnostics; no click authority |
 | `hoi4_research_folders` | Exact loaded public folder IDs, independent of open GUI; no technology mapping or eligibility authority |
@@ -337,9 +644,122 @@ An unresolved supported line has a null key and `equipment_unavailable_reason`;
 unknown line subtypes stay metadata-only. `equipment_ids_available` describes
 all scoped lines, not just the returned page; `equipment_id_unavailable_count`
 includes unsupported lines. Other equipment databases remain unreviewed. These
-joins have generated host/Linux fixture evidence only; a live UI comparison is
-pending. Custom variant identity, general production and allocation controls
-remain unavailable. No production action is authorized by this read-only tool.
+joins have generated host/Linux fixture coverage and recorded own-line reads;
+Production004 additionally verified the selected infantry line through its exact
+GUI control and canonical allocation changes. Wider UI comparison remains pending.
+Custom variant design details and general production management remain
+unavailable. No production action is authorized by this read-only tool.
+
+`hoi4_production_controls` accepts the exact `line_handle` and `equipment_id`
+from that collection, plus optional `include_geometry` (default false).
+It validates the full current collection, then joins the selected line to the
+current Linux production row. Names and constructor aliases must agree, and
+each one-factory button must differ from the other factory-button aliases.
+The result reports the ordinary callback, local enabled/visibility gates and
+the two equipment-selection dialogs. An absent dialog root is unknown; it
+cannot establish clearance. Geometry uses the existing exact Sprite/Text/Frame
+readers and remains diagnostic. Reads do not open panels or move the pointer.
+
+The separate `hoi4_production_attempt` preview requires an explicit reviewed
+`production_profile` in the owned input
+binding and an exclusive lease. It accepts `line_handle`, `equipment_id`,
+`factories`, `request_id` and `lease_token`. The target must match the current
+requested count (a no-op) or differ by exactly one; the minimum target is one.
+The production panel must already be open with the exact row materialized.
+Scrolling, line creation and bulk allocation are not implemented.
+
+With the same profile and lease, `hoi4_production_open` accepts only `request_id`
+and `lease_token`. It opens a positively hidden production panel from idle
+manager mode 23 through the named topbar button, then verifies the original
+own panel is shown in production mode 2. An already-open panel is a no-op,
+so repeating an opening request cannot toggle it closed. Other active panels
+are refused. Opening and allocation share one journal and uncertainty lock;
+the original factory journal format remains readable.
+
+Before a click, the private journal durably records the original campaign,
+line/variant identity and requested count. The adapter rechecks canonical state,
+callback bindings, local blockers, renderer identity/geometry and the owned
+window. Both production routes also check the settings, menu and overview
+blockers. An unmapped auxiliary manager object refuses input. Held keys/modifiers and window state are checked again after that refresh,
+before any pointer bytes are sent. One ordinary click is followed by canonical
+own-line readback and an idle-input check; the game is never paused by the action.
+
+An uncertain result blocks clock, research, Focus, construction and daily input.
+The same request ID can only settle by observing its original target on its
+original line or panel; it never sends another click or adopts a new baseline. Historical
+success is marked historical, not fresh state. The journal preserves uncertainty
+when reopened, but supervisor restart/adoption of a surviving game is unsupported.
+Production004 passed the bounded ordinary production gate on `df474ca`: one panel
+opening, 10→11→10 requested infantry-equipment factories, historical replays and
+new-ID no-ops. Final state had 10 requested and active factories. Opening took
+2.080 seconds; each count change took about 0.77 seconds. Recording and normal
+close passed. The game remained paused and the clock journal was empty, so this
+is not continuous-play or campaign acceptance. The current runtime reports
+bounded live validation with its run IDs; this covers only the recorded exact
+build, profile and line. Scoped UI checks and a reached count do not prove
+universal event routing or that this particular click caused the change.
+
+Production008 on `c2d07c6` verified manual opening/closing, two historical close
+replays and two fresh no-ops, then a production → Research → Focus → production
+round trip. Final reads preserved all 21 production lines and four empty
+research slots. The grant included one ordinary canonical Rhineland assignment;
+this is not a generic route for production/research plans. Closing took
+1.255–1.394 seconds; replays took 6–8 ms. All 18 steps, stopped journals,
+recording and normal exit passed. Production007's wrong builder-supplied Focus
+ID remains a separate incomplete gate. See [the validation record](../docs/CLAUSEWITZ_VALIDATION.md).
+
+The standing-plan core can now convert a fresh typed production journal proof
+into completion of the exact requested allocation, with original line/variant
+and campaign binding, canonical readback and a later daily sequence. Public JSON
+receipts expose no private proof and cannot be reused as completion authority.
+Targets are ordered per full line ID; a refused head blocks later targets on
+that line. Generated durable-journal tests cover completion, daily budget and
+restart without replay. The Linux background worker now has a default-off
+production allocation preview. Enable `daily_production: true` in the owned
+binding alongside the existing `production_profile`; the plan must separately
+set `production_permission: true` and `max_production_steps_per_day` (1–16).
+These settings are fixed until STOP/restart. A target entry uses:
+
+```json
+{"id":"infantry-allocation","intent":{"kind":"Economy","target":{"kind":"Production","line_id":"<exact full handle from hoi4_production_lines>","equipment_id":"infantry_equipment_1","total_factories":14}}}
+```
+
+The handle must identify the current own line; the example placeholder is not
+an accepted handle. A private progress file binds its full original identity.
+Opening and one-factory intermediate steps spend the production step budget;
+only the verified final allocation spends/completes a governor goal attempt.
+Known no-input attempts also consume their reserved budget. Larger allocations
+can span days; restart cannot reset that day's usage. Uncertain delivery blocks
+shared input, and changes to the original line or allocation refuse rebasing.
+
+At most one production step runs per worker batch, before Research/Focus, while
+both the production step and shared goal budgets permit work. Existing same-line
+goals retain their order through plan updates. Opening requires the idle view
+or already-open production panel; cross-panel handoffs remain unavailable.
+Preparation errors stop this preview. The `production` digest/details and STOP
+fields retain historical progress, failures and a dated step budget. They do not
+claim fresh factory state. Manual production tools keep their existing API.
+
+Production006 passed the bounded advancing-time worker gate on `c7d1b1c`:
+five verified steps reached 14 requested and active factories across three days,
+with 2/2/1 daily step usage and one completed goal. STOP/restart of the completed
+plan added no input through 5 January. Recording, exact-process cleanup and all
+nine CI jobs passed. Production005 remains incomplete; later success does not
+repair its missing final checks. Mixed-panel planning, larger-scale production
+management and full campaign acceptance remain unfinished.
+
+`clock_probe_historical` separates rejected read-only scheduling clock probes
+from action failures. It retains first/latest causes, total/consecutive rejected
+reads and recovery after a later successful probe for the current worker lifetime
+in digest/details and STOP. A rejected probe schedules no work; the next probe
+uses the ordinary 250 ms worker wake interval. Only `torn_read` before scheduling,
+without retained uncertainty, uses this channel. Action errors, other reader
+errors and quarantine remain in `last_error`; a successful probe cannot clear
+them. Probe history is neither fresh state nor input authority. Compact overflow
+may omit the optional section-name list; documented detail sections remain
+available under the exact snapshot ID. Production006 observed recovery from two
+read-only clock tears in separate worker lifetimes. These diagnostics do not
+weaken action failure or quarantine handling.
 
 The current game uses a 365-day calendar, including February 28 in 1936. Its raw
 clock includes a 5000-year epoch and displays hours as 1–24. Raw research counters
@@ -466,6 +886,16 @@ and counter advancement. The preparer verifies renderer, callback, hierarchy and
 SDL/X11 associations before deriving an ordinary point. The owner supplies the
 reviewed origin profile; player arguments cannot supply coordinates.
 
+The separate `hoi4_research_close` preview accepts only `request_id` and
+`lease_token`, using the same owned Research profile. It requires the research
+tab, hidden tree/facilities/Info and clear input gates. Original physical panel
+and slot identities, canonical assignments and selected folder remain bound
+through readback. These private addresses are excluded from public receipts.
+Already-closed requests verify without input; a successful historical replay
+never toggles a later-opened panel. Uncertain closing remains quarantined and
+cannot be settled or replayed automatically. Generic tree/Info exits and mixed
+worker routing are unavailable. This new close route has no live acceptance yet.
+
 Clock and pointer operations share one controller lock, lease and shutdown gate.
 Intent persists before input. Canonical readback and clear input are required for
 success; replayed receipts are explicitly historical. Unknown delivery blocks
@@ -550,7 +980,9 @@ Owned installed-game closes returned actual exit code 0; earlier exit-code-6
 incidents remain unresolved.
 
 On Linux, the separate opt-in transport fixture owns its Xvfb/authentication and
-never uses the normal desktop or HOI4 display:
+never uses the normal desktop or HOI4 display. Its keyboard fixture uses a native
+1920×1080 window on a 2560×1440 display and checks resize refusals before and
+after final state verification, with no input sent on those refusals:
 
 ```sh
 python3 native/tests/run_x11_fixture.py
@@ -610,6 +1042,16 @@ View still validates its exact node and callback. Start keeps the own-country,
 canonical selection, window, named Start button, callback, visibility, geometry
 and final stability checks. A narrower read does not authorize retrying an old
 refused or uncertain action.
+
+The default-off `hoi4_construction_find_open` qualification opens the exact own
+Find button with at most one move/click, preserving the complete construction
+queue. Its native 1080p component took 603 ms; historical replay was input-free.
+Mac pointer transport checks the first window covering the intended point across
+all onscreen layers. A narrow verified system-cursor exception is separate from
+foreign-window occlusion. Reads do not activate, pause or move the game.
+Printable-character admission and typed construction handoffs remain distinct
+from full campaign acceptance. `ConstructionQueue` plan entries express a queued
+minimum; execution is explicitly unsupported until the composite adapter passes.
 
 ## Provenance and acknowledgements
 

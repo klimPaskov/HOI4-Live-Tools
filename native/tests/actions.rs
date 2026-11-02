@@ -40,6 +40,7 @@ struct Fake {
     dispatch_error: bool,
     no_change: bool,
     flip_pause_preflight: bool,
+    observe_error: Option<&'static str>,
 }
 impl Fake {
     fn new() -> Self {
@@ -64,11 +65,15 @@ impl Fake {
             dispatch_error: false,
             no_change: false,
             flip_pause_preflight: false,
+            observe_error: None,
         }
     }
 }
 impl Backend for Fake {
     fn observe(&mut self) -> Result<State> {
+        if let Some(code) = self.observe_error {
+            return Err(Error::new(code, "Clock not observable"));
+        }
         Ok(self.state.clone())
     }
     fn preflight(&mut self, _: &Action, _: &State) -> Result<()> {
@@ -173,7 +178,7 @@ fn verified_receipt_survives_restart_without_second_dispatch() {
     );
 }
 #[test]
-fn crash_after_dispatch_cannot_be_replayed_or_bypassed_with_new_id() {
+fn crash_after_dispatch_cannot_be_replayed_or_bypassed_but_settles_by_reading() {
     let temp = Temp::new("crash");
     let mut backend = Fake::new();
     backend.dispatch_error = true;
@@ -197,15 +202,19 @@ fn crash_after_dispatch_cannot_be_replayed_or_bypassed_with_new_id() {
     drop(journal);
     backend.dispatch_error = false;
     let mut reopened = Journal::open(&temp.path()).unwrap();
-    for id in ["pause", "new-id"] {
-        assert_eq!(
-            reopened
-                .execute(id, &epoch, Action::SetPaused(true), &mut backend, TIMEOUT)
-                .unwrap_err()
-                .code,
-            "action_uncertain"
-        );
-    }
+    assert_eq!(
+        reopened
+            .execute(
+                "new-id",
+                &epoch,
+                Action::SetPaused(true),
+                &mut backend,
+                TIMEOUT
+            )
+            .unwrap_err()
+            .code,
+        "action_uncertain"
+    );
     // A changed campaign identifier cannot evade quarantine for the same PID.
     backend.state.epoch.campaign = "new-campaign".into();
     let changed = backend.state.epoch.clone();
@@ -223,6 +232,145 @@ fn crash_after_dispatch_cannot_be_replayed_or_bypassed_with_new_id() {
         "action_uncertain"
     );
     assert_eq!(backend.dispatches, 1);
+    // Retrying the uncertain request itself settles it from fresh state,
+    // without sending the key again, and lifts the quarantine.
+    backend.state.epoch = epoch.clone();
+    let settled = reopened
+        .execute(
+            "pause",
+            &epoch,
+            Action::SetPaused(true),
+            &mut backend,
+            TIMEOUT,
+        )
+        .unwrap();
+    assert_eq!(settled.status, Status::Verified);
+    assert_eq!(backend.dispatches, 1);
+    backend.state.paused = false;
+    assert_eq!(
+        reopened
+            .execute(
+                "pause-2",
+                &epoch,
+                Action::SetPaused(true),
+                &mut backend,
+                TIMEOUT
+            )
+            .unwrap()
+            .status,
+        Status::Verified
+    );
+    assert_eq!(backend.dispatches, 2);
+}
+#[test]
+fn a_target_that_disappeared_cannot_clear_uncertainty_even_after_restart() {
+    let temp = Temp::new("notapplied");
+    let mut backend = Fake::new();
+    backend.dispatch_error = true;
+    let epoch = backend.state.epoch.clone();
+    let mut journal = Journal::open(&temp.path()).unwrap();
+    assert_eq!(
+        journal
+            .execute(
+                "pause",
+                &epoch,
+                Action::SetPaused(true),
+                &mut backend,
+                TIMEOUT
+            )
+            .unwrap_err()
+            .code,
+        "action_uncertain"
+    );
+    assert!(backend.state.paused, "The first key actually applied");
+    backend.state.paused = false; // The game or user changes it again.
+    backend.dispatch_error = false;
+    let error = journal
+        .execute(
+            "pause",
+            &epoch,
+            Action::SetPaused(true),
+            &mut backend,
+            TIMEOUT,
+        )
+        .unwrap_err();
+    assert_eq!(error.code, "action_uncertain");
+    assert_eq!(
+        journal.receipt("pause").unwrap().status,
+        Status::Dispatching
+    );
+    assert_eq!(backend.dispatches, 1);
+    // Restart preserves the unresolved outcome and blocks replacement IDs.
+    drop(journal);
+    let mut reopened = Journal::open(&temp.path()).unwrap();
+    for id in ["pause", "replacement"] {
+        assert_eq!(
+            reopened
+                .execute(id, &epoch, Action::SetPaused(true), &mut backend, TIMEOUT)
+                .unwrap_err()
+                .code,
+            "action_uncertain"
+        );
+    }
+    assert_eq!(backend.dispatches, 1);
+    assert_eq!(
+        reopened.receipt("pause").unwrap().status,
+        Status::Dispatching
+    );
+}
+#[test]
+fn failed_clock_settlement_preserves_uncertainty_and_original_cause() {
+    for code in [
+        "invalid_target",
+        "permission_denied",
+        "ownership_changed",
+        "torn_read",
+    ] {
+        let temp = Temp::new(code);
+        let mut backend = Fake::new();
+        backend.dispatch_error = true;
+        let epoch = backend.state.epoch.clone();
+        let mut journal = Journal::open(&temp.path()).unwrap();
+        journal
+            .execute(
+                "pause",
+                &epoch,
+                Action::SetPaused(true),
+                &mut backend,
+                TIMEOUT,
+            )
+            .unwrap_err();
+        drop(journal);
+        let mut journal = Journal::open(&temp.path()).unwrap();
+        backend.observe_error = Some(code);
+        let error = journal
+            .execute(
+                "pause",
+                &epoch,
+                Action::SetPaused(true),
+                &mut backend,
+                TIMEOUT,
+            )
+            .unwrap_err();
+        assert_eq!(error.code, "action_uncertain");
+        assert!(error.message.contains(code));
+        assert_eq!(
+            journal.receipt("pause").unwrap().status,
+            Status::Dispatching
+        );
+        backend.observe_error = None;
+        let settled = journal
+            .execute(
+                "pause",
+                &epoch,
+                Action::SetPaused(true),
+                &mut backend,
+                TIMEOUT,
+            )
+            .unwrap();
+        assert_eq!(settled.status, Status::Verified);
+        assert_eq!(backend.dispatches, 1);
+    }
 }
 #[test]
 fn failed_preflight_leaves_plan_entry_retryable_and_target_noop_is_recorded() {

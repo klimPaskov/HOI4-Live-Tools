@@ -6,6 +6,7 @@ use crate::{
     game,
     memory::Reader,
     platform::Process,
+    research,
 };
 use serde_json::{json, Value};
 use std::{
@@ -34,16 +35,18 @@ pub fn catalog(process: &dyn Process, filter: &str, offset: usize, limit: usize)
     process.begin_snapshot()?;
     let r = Reader::new(process);
     let base = process.image_base();
-    let gs = r.u64(base + 0x44086a8)?;
-    let idler = r.u64(base + 0x44085f8)?;
-    if r.u64(gs)? != base + 0x42c7598 || r.u64(idler)? != base + 0x42c9a88 {
+    let g = game::layout(&r);
+    let l = research::layout(&r);
+    let gs = r.u64(base + g.gs_global)?;
+    let idler = r.u64(base + g.idler_global)?;
+    if r.u64(gs)? != base + g.gs_vtable || r.u64(idler)? != base + g.idler_vtable {
         return Err(Error::new(
             "campaign_unavailable",
             "In-game catalog required",
         ));
     }
-    let db = r.u64(base + 0x439f450)?;
-    if r.u64(db)? != base + 0x42110c8 {
+    let db = r.u64(base + g.technology_db_global)?;
+    if r.u64(db)? != base + l.database_vtable {
         return Err(Error::new(
             "invalid_type",
             "Current technology database required",
@@ -58,8 +61,8 @@ pub fn catalog(process: &dyn Process, filter: &str, offset: usize, limit: usize)
     // database arrays contain folders, not technologies, and are never followed.
     for (index, template) in entries.pointers.iter().copied().enumerate().skip(1) {
         if template % 8 != 0
-            || r.u64(template)? != base + 0x4211038
-            || r.i32(template + 0x30)? != index as i32
+            || r.u64(template)? != base + l.template_vtable
+            || r.i32(template + l.template_index)? != index as i32
         {
             return Err(Error::new(
                 "invalid_catalog",
@@ -85,19 +88,19 @@ pub fn catalog(process: &dyn Process, filter: &str, offset: usize, limit: usize)
     // Stable list headers alone do not detect changed template fields or heap
     // string contents. Keep a local field witness, never a persistent cache.
     for (index, (template, name)) in witnesses.iter().enumerate() {
-        if r.u64(*template)? != base + 0x4211038
-            || r.i32(*template + 0x30)? != index as i32 + 1
+        if r.u64(*template)? != base + l.template_vtable
+            || r.i32(*template + l.template_index)? != index as i32 + 1
             || r.string_bounded(*template + 8, 256)? != *name
         {
             return Err(Error::new("torn_read", "Technology definition changed"));
         }
     }
-    if r.u64(base + 0x44086a8)? != gs
-        || r.u64(base + 0x44085f8)? != idler
-        || r.u64(base + 0x439f450)? != db
-        || r.u64(gs)? != base + 0x42c7598
-        || r.u64(idler)? != base + 0x42c9a88
-        || r.u64(db)? != base + 0x42110c8
+    if r.u64(base + g.gs_global)? != gs
+        || r.u64(base + g.idler_global)? != idler
+        || r.u64(base + g.technology_db_global)? != db
+        || r.u64(gs)? != base + g.gs_vtable
+        || r.u64(idler)? != base + g.idler_vtable
+        || r.u64(db)? != base + l.database_vtable
         || templates(&r, db)? != entries
     {
         return Err(Error::new("torn_read", "Loaded catalog anchors changed"));
@@ -107,7 +110,7 @@ pub fn catalog(process: &dyn Process, filter: &str, offset: usize, limit: usize)
     let next = offset.saturating_add(page.len());
     Ok(json!({
         "source":"native loaded technology definitions",
-        "build_id":game::BUILD_ID,
+        "build_id":g.build_id,
         "definition_count":entries.pointers.len()-1,
         "count":matches.len(),
         "offset":offset,
@@ -124,7 +127,8 @@ pub fn catalog(process: &dyn Process, filter: &str, offset: usize, limit: usize)
 }
 
 fn templates(r: &Reader<'_>, db: u64) -> Result<Templates> {
-    let (header, data, count) = r.array_header(db + 0x48)?;
+    let offset = research::layout(r).database_templates;
+    let (header, data, count) = r.array_header(db + offset)?;
     let capacity = i32::from_le_bytes(header[8..12].try_into().unwrap()) as usize;
     if count == 0 || capacity > MAX_TEMPLATES {
         return Err(Error::new(
@@ -133,7 +137,7 @@ fn templates(r: &Reader<'_>, db: u64) -> Result<Templates> {
         ));
     }
     let bytes = r.read(data, count * 8)?;
-    if r.read(db + 0x48, 16)? != header {
+    if r.read(db + offset, 16)? != header {
         return Err(Error::new("torn_read", "Technology catalog header changed"));
     }
     Ok(Templates {

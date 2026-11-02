@@ -16,3 +16,4 @@ docs/evidence/*
 
 # Rust build products; keep lockfile for the MCP executable
 native/target/
+build/

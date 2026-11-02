@@ -1,11 +1,12 @@
 //! Loaded public research-folder keys, independent of open research GUI.
 //! Layout/type/key traversal is reused from the independently recovered
-//! current-build category_ui reader; no new offsets or input authority.
+//! Linux category_ui reader; the Mac catalog is unported and refuses before
+//! process access. No new offsets or input authority.
 use crate::{
     category_ui,
     error::{Error, Result},
     game,
-    memory::Reader,
+    memory::{Reader, StringAbi},
     platform::Process,
     research_ui::Witnesses,
 };
@@ -52,6 +53,12 @@ pub fn snapshot(process: &dyn Process) -> Result<Value> {
 }
 
 fn observe(process: &dyn Process) -> Result<(FolderCatalog, game::ClockContext, Value)> {
+    if process.string_abi() == StringAbi::LibCxx {
+        return Err(Error::new(
+            "unsupported_platform",
+            "Public research-folder catalog is not verified for native macOS",
+        ));
+    }
     let start = Instant::now();
     process.begin_snapshot()?;
     let witnesses = Witnesses::new(process);

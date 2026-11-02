@@ -3,6 +3,16 @@
 //! used: the current engine predicate scans progress+0x40, count+0x4c.
 use super::*;
 
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+mod assignment;
+#[cfg(test)]
+#[allow(unused_imports)]
+pub(crate) use assignment::fixture as assignment_fixture;
+#[allow(unused_imports)]
+pub(crate) use assignment::{
+    snapshot as assignment_snapshot, AssignmentBinding, AssignmentSnapshot,
+};
+
 /// Pure observed membership, not an assertion about completion cause or time.
 /// Repeat counts, bypass causes, changed/shared trees and eligibility are not
 /// inferred. All members are validated before returning a bounded sorted page.
@@ -13,6 +23,44 @@ pub fn snapshot(process: &dyn Process, offset: usize, limit: usize) -> Result<Va
             "Completed focus pagination exceeds bounds",
         ));
     }
+    let observed = observe(process)?;
+    let count = observed.completed.len();
+    let page: Vec<_> = observed
+        .completed
+        .into_iter()
+        .skip(offset)
+        .take(limit)
+        .collect();
+    let next = (offset.saturating_add(page.len()) < count).then_some(offset + page.len());
+    let mut output = observed.metadata;
+    output["active_key"] = json!(observed.active);
+    output["completed"] = json!(page);
+    output["completed_count"] = json!(count);
+    output["offset"] = json!(offset);
+    output["limit"] = json!(limit);
+    output["next_offset"] = json!(next);
+    Ok(output)
+}
+
+/// One coherent own observation, never an assignment receipt or input authority.
+/// All completed members and the active focus share the same bounded witnesses;
+/// callers must not assemble this state from independent public JSON pages.
+#[derive(Debug)]
+pub struct ProgressSnapshot {
+    pub(crate) active: Option<String>,
+    pub(crate) completed: BTreeSet<String>,
+    metadata: Value,
+}
+impl ProgressSnapshot {
+    pub fn active_key(&self) -> Option<&str> {
+        self.active.as_deref()
+    }
+    pub fn completed(&self) -> &BTreeSet<String> {
+        &self.completed
+    }
+}
+
+pub fn observe(process: &dyn Process) -> Result<ProgressSnapshot> {
     let started = Instant::now();
     process.begin_snapshot()?;
     let w = Witnesses {
@@ -23,13 +71,15 @@ pub fn snapshot(process: &dyn Process, offset: usize, limit: usize) -> Result<Va
     };
     let r = Reader::new(&w);
     let base = process.image_base();
-    let gs = r.u64(base + 0x44086a8)?;
-    let idler = r.u64(base + 0x44085f8)?;
-    exact(&r, gs, base + 0x42c7598)?;
-    exact(&r, idler, base + 0x42c9a88)?;
+    let g = game::layout(&r);
+    let l = layout(&r);
+    let gs = r.u64(base + g.gs_global)?;
+    let idler = r.u64(base + g.idler_global)?;
+    exact(&r, gs, base + g.gs_vtable)?;
+    exact(&r, idler, base + g.idler_vtable)?;
     w.region(gs, 0x520, "game_state");
-    let date = crate::calendar::decode(r.i32(gs + 0x460)?)?;
-    let tag = r.i32(gs + 0x518)?;
+    let date = crate::calendar::decode(r.i32(gs + g.date)?)?;
+    let tag = r.i32(gs + g.player_tag)?;
     if !(1..4096).contains(&tag) {
         return Err(Error::new(
             "player_unavailable",
@@ -37,7 +87,7 @@ pub fn snapshot(process: &dyn Process, offset: usize, limit: usize) -> Result<Va
         ));
     }
     let index = i32::from_le_bytes(
-        r.array_entry(gs + 0x340, tag as usize, 4)?
+        r.array_entry(gs + g.tag_country_index, tag as usize, 4)?
             .try_into()
             .unwrap(),
     );
@@ -45,7 +95,7 @@ pub fn snapshot(process: &dyn Process, offset: usize, limit: usize) -> Result<Va
         return Err(Error::new("player_unavailable", "Own country index absent"));
     }
     let country = u64::from_le_bytes(
-        r.array_entry(gs + 0x310, index as usize, 8)?
+        r.array_entry(gs + g.countries, index as usize, 8)?
             .try_into()
             .unwrap(),
     );
@@ -57,8 +107,8 @@ pub fn snapshot(process: &dyn Process, offset: usize, limit: usize) -> Result<Va
             "Own country tag required",
         ));
     }
-    let progress = r.u64(country + 0x1348)?;
-    exact(&r, progress, base + 0x4202638)?;
+    let progress = r.u64(country + g.country_focus_progress)?;
+    exact(&r, progress, base + l.progress_vtable)?;
     w.region(progress, 0x50, "own_progress");
     if r.u64(progress + 8)? != country {
         return Err(Error::new(
@@ -66,12 +116,12 @@ pub fn snapshot(process: &dyn Process, offset: usize, limit: usize) -> Result<Va
             "Own progress required before membership payload",
         ));
     }
-    let tree = r.u64(country + 0x1338)?;
-    exact(&r, tree, base + 0x4202410)?;
+    let tree = r.u64(country + g.country_focus_tree)?;
+    exact(&r, tree, base + l.tree_vtable)?;
     w.region(tree, 0x40, "own_tree");
-    let own = unique(&pointers(&r, tree + 0x30, 4096)?)?;
-    let db = r.u64(base + 0x439faf0)?;
-    exact(&r, db, base + 0x4202590)?;
+    let own = unique(&pointers(&r, tree + l.tree_focuses, 4096)?)?;
+    let db = r.u64(base + l.database_global)?;
+    exact(&r, db, base + l.database_vtable)?;
     // As in the catalog observer, registry duplicates/nulls confer no ownership.
     let canonical: BTreeSet<_> = pointers(&r, db + 0x58, 20000)?
         .into_iter()
@@ -102,8 +152,8 @@ pub fn snapshot(process: &dyn Process, offset: usize, limit: usize) -> Result<Va
     let mut keys = BTreeMap::new();
     let mut distinct_keys = BTreeSet::new();
     for pointer in selected {
-        exact(&r, pointer, base + 0x42024d0)?;
-        if r.u64(pointer + 0x160)? != tree {
+        exact(&r, pointer, base + l.focus_vtable)?;
+        if r.u64(pointer + l.focus_tree)? != tree {
             return Err(Error::new(
                 "invalid_focus_owner",
                 "Shared/null/foreign focus tree ownership is unverified",
@@ -121,26 +171,24 @@ pub fn snapshot(process: &dyn Process, offset: usize, limit: usize) -> Result<Va
         }
         keys.insert(pointer, key);
     }
-    let mut finished: Vec<_> = completed.iter().map(|p| keys[p].clone()).collect();
-    finished.sort();
-    let count = finished.len();
-    let page: Vec<_> = finished.into_iter().skip(offset).take(limit).collect();
-    let next = (offset.saturating_add(page.len()) < count).then_some(offset + page.len());
+    let finished = completed.iter().map(|p| keys[p].clone()).collect();
     let (end_calls, end_bytes) = w.finish()?;
     process.check()?;
-    Ok(json!({
-        "source":"native own focus completion membership",
-        "build_id":game::BUILD_ID,"owned":true,"date":date,
-        "active_key":keys.get(&active),"completed":page,
-        "completed_count":count,"membership_entries":members.len(),
-        "offset":offset,"limit":limit,"next_offset":next,
-        "completion_meaning":"engine has-completed-focus membership; cause and repeat count unavailable",
-        "eligibility_available":false,"input_authorized":false,
-        "observation_paused_game":false,
-        "freshness":{
-            "observed_unix_ms":SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),
-            "elapsed_ms":started.elapsed().as_secs_f64()*1000.0,
-            "read_calls":r.calls.get()+end_calls as u64,"read_bytes":r.bytes.get()+end_bytes
-        }
-    }))
+    Ok(ProgressSnapshot {
+        active: keys.get(&active).cloned(),
+        completed: finished,
+        metadata: json!({
+            "source":"native own focus completion membership",
+            "build_id":g.build_id,"owned":true,"date":date,
+            "membership_entries":members.len(),
+            "completion_meaning":"engine has-completed-focus membership; cause and repeat count unavailable",
+            "eligibility_available":false,"input_authorized":false,
+            "observation_paused_game":false,
+            "freshness":{
+                "observed_unix_ms":SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),
+                "elapsed_ms":started.elapsed().as_secs_f64()*1000.0,
+                "read_calls":r.calls.get()+end_calls as u64,"read_bytes":r.bytes.get()+end_bytes
+            }
+        }),
+    })
 }

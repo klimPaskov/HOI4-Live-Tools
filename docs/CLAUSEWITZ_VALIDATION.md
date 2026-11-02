@@ -1,4 +1,2490 @@
-# Clausewitz-MCP Linux validation
+# Clausewitz-MCP validation
+
+## FEX bounded animation diagnostic — 24 October 2026
+
+A fresh owned, unrecorded 1920×1080 game used the same pinned unified GL1
+profile on four vCPUs and 8 GiB. The frontend arrived in 35.931 seconds. One
+Luna player at medium reasoning completed six ordinary setup clicks; fresh
+visual review and structured reads confirmed 1936 Germany, Normal difficulty,
+historical AI and no mods under FAIR policy. Complete baseline reads took
+49.409/40.107 ms before/after binding. These are single component observations,
+not an annual throughput or controlled rendering comparison.
+
+The sole retained-goal Research call again failed with `action_uncertain` and
+`panel_transit_deadline`: 5,022.065 ms request-to-response, 5,003.550 ms after
+forwarding, 29 ms before dispatch, 21 ms dispatch and 4,951 ms readback. Its
+170 observer invocations returned 18 complete Idle results and 152 transition
+errors, all classified as Research-panel pair `[0,1]`, with zero classified pair
+changes, zero torn errors and no accepted Research result. First/last Idle
+returns were 65/701 ms; first/last transition returns were 735/4,998 ms.
+Those partial errors precede full Snapshot witnesses and do not themselves
+establish coherent rejected snapshots.
+
+A private opt-in collector admitted at most three read-only probes under that
+same original action deadline, with no new admission in its last 500 ms.
+It added no waits or input. Each probe retained the original process, image,
+own-country model memberships, GUI owners and root, with bounded reads and
+final witnesses. It exported scalar values and pointer-only update membership,
+without following other registry entries. All three probes completed:
+
+| Collector admission ms | Return ms | Read ms | Position elapsed | Active duration | State | Completed |
+| ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| 729 | 735 | 6 | 0.1 | 0.3 | 1 | false |
+| 2,254 | 2,264 | 9 | 0.2 | 0.3 | 1 | false |
+| 4,234 | 4,244 | 10 | 0.3 | 0.3 | 1 | false |
+
+Float decimals are shortened; the third elapsed value equals the duration's
+raw f32 value. All samples reported own Research mode 5, flags 8 and literal
+shown true. Scalar state stayed 0. Each current update vector had 258 entries
+and contained the original root's secondary address exactly once. This proves
+those diagnostic values and membership at three witnessed returns. Membership
+does not prove that a particular updater executed. Raw time units, exact cadence,
+higher float source and the cause of the timeout remain unknown. Equality,
+literal shown and these historical reports cannot replace the unchanged
+two-zero settled predicate. Generic observer-return times include admitted
+diagnostic work; they are not engine-onset times or an uninstrumented speedup.
+
+The journal retains one Intent and no Verified receipt. After the error, only
+lease release/status and MCP EOF ran; release, zero remaining lease and EOF zero
+passed. No retry, replay, Research-close, later settlement, clock action, worker,
+action-phase screenshot or cursor movement followed. Physical key delivery is
+unknown. No final current game state, recording, campaign or real-time-per-year
+result is accepted; observations issued zero pauses.
+
+The original supervisor closed the owned game ordinarily with exit zero. The
+independent audit retained 145 private JSON/log files, found owned game, server,
+supervisor and display processes absent, both grants retired and no lease or
+recorder. Global FEX files and RootFS bytes/metadata stayed unchanged. Descendant
+sampling is bounded rather than atomic; the exit metadata gap and independent
+empty census remain recorded. An initial retirement wrapper omitted its required
+JSON argument and refused before any write; the separately recorded corrected
+call issued the sole stop. No failed result was overwritten or promoted.
+
+The public dormant producer and its fixtures passed 2,310 host Rust tests,
+four-target strict checks, release, unchanged 28-tool unbound stdio and 956 Python
+tests (37 skips). Actual ARM Linux passed 98 targeted tests on the same producer
+source. The private collector/qualification integration separately passed 2,313
+host Rust tests and 130 targeted tests on actual ARM Linux, plus the four-target,
+release and protocol checks. Its helper gate passed 150 applicable mocked
+fixtures and all 11 inert checks; obsolete preparation-premise cases and their
+initial failures remain explicit. Only the dormant producer enters public
+source: no diagnostic tool, collector, qualification route or worker permission
+is enabled. Offline checks do not qualify a live action or mixed plans.
+
+## FEX unified-profile installed-game check — 24 October 2026
+
+A fresh owned, unrecorded game used the explicit unified GL1 profile on the
+four-vCPU, 8 GiB ARM Linux VM. It reached the actual frontend in 40.236 seconds;
+mapped libraries included ARM Mesa and both guest and host GL thunks. The client
+was 1920×1080. One Luna player at medium reasoning completed six once-only
+ordinary setup clicks under FAIR mode. Fresh visual review and native reads
+confirmed 1936 Germany, Normal difficulty, historical AI and no enabled mods.
+Complete baseline reads before/after binding took 318.749/63.124 ms.
+
+The one retained-goal Research request failed with `action_uncertain` and
+`panel_transit_deadline`. Request-to-response time was 5,021.085 ms, including
+5,001.571 ms after forwarding. Native diagnostics reported 29 ms before dispatch,
+19 ms dispatch, 4,970 ms remaining at dispatch and 4,950 ms readback. There were
+173 observer invocations: seven complete Idle returns and 166 transition errors
+tagged `research_panel`, zero torn errors and no accepted Research result.
+First Idle/transition returns occurred at 65/321 ms relative to attempt start.
+Only the last pair `[0,1]` was recorded; these errors precede the literal-visible
+read and final witnesses. Zero torn errors therefore does not establish coherent
+rejected samples, and the result does not prove all pairs were identical.
+Earlier first-transition returns of 2,110 ms and 3,622 ms remain separate single
+trials. These are reader-return times, not engine onset or a controlled speedup.
+
+The durable journal retains exactly one Intent and no Verified receipt. No retry,
+historical replay, Research-close, later settlement, clock action, worker,
+action-phase screenshot or cursor movement followed. Physical key delivery is
+unknown; server-confirmed transport is not a verified game effect. Lease release,
+zero remaining lease and MCP EOF zero passed. Pre-attempt baselines were paused
+at the initial date. There were zero observation-pause/clock calls, no accepted
+final game state and no annual throughput measurement. This is a failed
+component check, not a campaign.
+
+The original supervisor closed the owned game ordinarily with exit zero before
+its fixed lifetime ended. Independent ownership/census checks found all game,
+server, supervisor and display processes absent, both grants retired and no
+lease or recorder. All 147 private JSON/log artifacts were retained outside Git.
+Original user/system FEX files and RootFS bytes and metadata matched; the global
+per-game configuration remained absent. The separate unified profile stayed
+private. Earlier startup failures and timeouts are not reclassified.
+
+The next failure-only diagnostic retains counts in the fixed pair order
+`01, 02, 10, 11, 12, 20, 21, 22`, plus last Idle/transition result-return times.
+`research_panel_pair_changes` counts changes between classified panel pairs;
+intervening Idle, torn, other-root or unknown results are not interpolated.
+It consumes existing errors, adds no game read and grants no proof, retry or
+deadline extension. The original Research readiness predicate stays unchanged.
+
+The diagnostic delta passed 2,294 host Rust tests, strict all-target checks for
+four compilation targets, release build, the unchanged 28-tool unbound stdio
+check and 956 workspace Python tests (37 skips), including the Python protocol
+smoke. Actual ARM Linux passed 82 optimized targeted tests with no game or input.
+Its wrapper then failed a mistaken expected-count assertion of 81; the original
+exit-one wrapper receipt is preserved separately from the successful test child,
+with no rerun or changed test result. These are source checks, not live evidence
+for the new pair history or mixed-plan acceptance.
+
+## FEX mixed-loader graphics controls — 24 October 2026
+
+No-game 1920×1080 probes isolated a split/legacy OpenGL dispatch mismatch.
+Separate legacy and split-loader paths passed all 18 controls. A later mixed
+path retained split ELF dependencies and opened legacy `libGL.so.1` globally,
+matching bounded static observations from the installed executable. Stock GL1
+then returned null GL identity through direct/global lookup despite a matching
+current GLX context and valid procedure lookup. These synthetic associations
+do not establish the game's exact lazy-PLT binding or the cause of its failure.
+
+A fresh comparison used direct imported GL identity functions, the same x86
+probe bytes across FEX controls and private configuration directories. The
+candidate added split OpenGL/GLX aliases to the existing GL thunk definition.
+Native ARM, guest GL0 and unified GL1 each passed both legacy and explicit 2.1
+context methods: 120 measured frames after eight warmups, matching current
+context/display/drawable and zero GL/X errors. Unified GL1 mapped ARM Mesa and
+the x86 guest thunk; imported, global and procedure GL identities agreed.
+The two stock GL1 controls still refused before workload admission. Their
+pre-ready failures have no complete mapping census. The aggregate exit remains
+1 and `all_contexts_succeeded` remains false: six successes and two negatives.
+
+The earlier private-profile setup attempt refused because FEX created a missing
+empty `AppConfig/` and changed the pinned parent directory. That failure is
+preserved. The fresh comparison pre-staged the directory and retained its
+original identity. All eight children and the isolated display closed; original
+user/system configuration remained unchanged. There was no game, input, cursor
+movement, screenshot or recording. Synthetic frame timing proves neither game
+throughput nor presentation.
+
+The Rust launcher now has an explicit optional private-profile selector,
+[documented here](OWNED_LINUX_LAUNCHER.md#arm64-linux-with-fex). It passes only
+the selected path to the owned child and validates pinned files before launch
+and endpoint publication. Its later installed-game check is recorded above;
+earlier failed games are not reclassified.
+
+Launcher source checks passed 2,292 host Rust tests, four-target strict Clippy,
+release builds and the 28-tool unbound stdio check. Actual ARM Linux executed
+all 12 optimized private-profile fixtures without game or input. The full
+workspace Python suite passed 956 tests with 37 skips. Independent source
+review found no blocker; original ownership, input permissions and readiness
+deadlines remain unchanged. These checks validate the selector, not HOI4.
+
+The first Linux CI run failed in an existing Research-opening timeout fixture:
+its 200 ms test budget expired while committing Intent, correctly producing
+`input_not_queued` before dispatch rather than the asserted `action_uncertain`.
+The retained failure is followed by a test-only correction that consumes the
+captured original deadline during a known post-input pending read. It verifies
+pending diagnostics, quarantine and no replay without timing journal setup.
+No production code, live deadline or delivery classification changed.
+The next ARM check passed that corrected timeout case but exposed a separate
+fixture assumption: two rapid writes could restore bytes within one cached
+Linux timestamp. The metadata-change control now sets an explicit different
+modification time. The guard checks current bytes and original observed metadata;
+it cannot prove the absence of unobserved writes that leave both identical.
+Both original failed checks remain preserved.
+
+## FEX transition origins and capacity comparison — 24 October 2026
+
+Two fresh, unrecorded 1920×1080 trials used the same private Rust binary,
+installed game/FEX hashes, reduced decorative graphics and original five-second
+action bound. Luna medium completed the finite setup sequence under logged FAIR
+mode in each; fresh visual review and structured reads confirmed historical
+Normal vanilla Germany and the initial paused date.
+
+| Measurement | Origin trial, 2 vCPUs / 4 GiB | Capacity trial, 4 vCPUs / 8 GiB |
+| --- | ---: | ---: |
+| Frontend ready | 44.906 s | 35.183 s |
+| Complete baseline before/after binding | 49.892 / 38.485 ms | 21.969 / 49.975 ms |
+| Sole Research RPC | 5,001.482 ms | 5,004.075 ms |
+| Pre-dispatch / dispatch / readback | 24 / 15 / 4,960 ms | 44 / 24 / 4,931 ms |
+| Observer invocations started | 154 | 146 |
+| Complete Idle results | 103 | 48 |
+| Transition rejections naming `research_panel` | 50 | 98 |
+| First Idle / transition result returned | 48 / 3,622 ms | 92 / 2,110 ms |
+| Accepted Research / torn results | 0 / 0 | 0 / 0 |
+
+Both attempts failed with `action_uncertain` and `panel_transit_deadline`.
+Only the last rejected pair, `[0,1]`, is retained; there is no pair histogram
+or complete timeline. The first-result times measure reader returns, not engine
+onset. The origin trial's 154 started invocations include one result outside the
+Idle/transition/torn/Research counters; the capacity trial's 146 equal 48+98.
+Dispatch duration measures server transport, and readback includes waits.
+Neither attempt proves a final/current panel state or a rendering cause.
+
+Passive ten-second samples taken **during frontend setup, not Research readback**
+showed 192.50% aggregate process CPU, about 2.93 GiB RSS and 1.51 GiB process swap
+on the smaller VM; the capacity trial showed 377.73% CPU, about 4.53 GiB RSS and
+zero process swap. CPU percentages use 100% per vCPU.
+The original owned VM shut down normally before the new capacity was started;
+its disk and exact exit evidence were retained. CPU, RAM and cache history differ,
+so these single trials neither isolate causation nor establish a general speedup.
+The trial with zero observed process swap still did not produce a successful
+Research action.
+
+An intervening four-CPU session reached positively reviewed setup and complete
+reads in 55.039/62.624 ms, but its player driver refused before action MCP startup,
+lease, Intent or key: model handoff had consumed the fixed lease admission margin.
+Its original 175-second qualification was preserved without renewal or retry.
+The fresh capacity trial instead used a fixed 60-second lease, repeated the full
+30-second margin check immediately before acquisition, and restricted forwarding
+to exact initial status/acquire and exact cleanup release/status; renewal refused.
+The original qualification and five-second native action bounds stayed unchanged.
+The helper delta passed 126 existing and ten new mocked fixtures, 11 helper
+checks, seven namespace checks and six VM-wrapper fixtures; review found no
+remaining issue before live use. These private harness checks are not public
+MCP functionality or campaign evidence.
+
+Each measured attempt retained exactly one unresolved Intent and sent no retry,
+historical replay, Research-close request, clock action, worker, action-phase
+screenshot or cursor movement. Lease release, zero remaining lease, terminal
+audit and MCP EOF 0 passed. Both owned games closed ordinarily with exit 0;
+independent identity/census checks found game, server, supervisor and display
+absent, temporary configuration/socket/lock removed, and no active authority.
+The origin trial retained 143 private files, the pre-input refusal 139, and the
+capacity trial 141. Two copied descriptive labels in the last harness remained
+stale; raw receipts and explicit errata were preserved. Actual ownership paths,
+action IDs, original pins and cleanup assertions matched that fresh session.
+
+A bounded static slice of the exact Linux ELF independently tied the container's
+position-state setter and update virtuals to the reviewed primary vtable.
+Position completion can snap to its target before a later update clears the
+state; literal visibility is separate. This supports retaining the two-zero
+settled check. The incoming delta's timebase, caller cadence and live progress
+remain unknown. No readiness predicate, deadline or uncertainty quarantine was
+relaxed. A bulk disassembler import did not finish and supplied no function
+evidence; it was closed before the capacity trial, whose static slice used
+bounded ELF/Capstone decoding.
+
+The unchanged private caller passed 2,293 host Rust tests, four-target strict
+checks, release and 74 optimized fixtures on actual ARM Linux, repeated on the
+resized boot. Its public basis `35745b1` passed all nine CI jobs; public-source
+checks were 2,292 host tests and 63 ARM fixtures. The unchanged workspace Python
+suite passed 956 tests with 37 skips. These source checks and paused component
+failures do not qualify mixed workers, a two-year run or any full campaign.
+
+## FEX in-attempt transit timing — 24 October 2026
+
+A fresh unrecorded GL0 diagnostic reached the frontend in **43.470 seconds**
+at **1920×1080**. Luna medium completed the five setup events, then returned
+ownership. Root reviewed fresh complete controls before the sixth, once-only
+Start. Structured reads independently confirmed vanilla Germany, Normal
+difficulty, historical AI and the initial paused date. Complete pre/post-binding
+reads took **46.415/36.711 ms**. The first menu wrapper request refused before
+input because pins were a path rather than an object; that refusal is preserved.
+A validated wrapper used the actual original pins for the released events.
+
+The sole retained-Focus Research request took **5,002.655 ms** and failed with
+`action_uncertain` at its original five-second deadline. In-attempt diagnostics
+reported **26 ms before dispatch**, **16 ms in dispatch**, **4,973 ms remaining
+at dispatch** and **4,958 ms in readback**, including waits. There were **153**
+observer invocations: **94** accepted Idle results, **59** rejected transition
+results, zero torn results and zero accepted Research results. These are typed
+observer results, not kernel-read or frame counts. Aggregate counts establish
+neither their order nor which container rejected the read. Dispatch duration
+measures server transport, not game processing; readback duration does not prove
+a rendering cause. The final root state remains unknown.
+
+Exactly one unresolved Intent remains, with no Verified record, retry,
+historical replay, Research-close request, clock action, worker, action-phase
+screenshot or cursor movement. Lease release, zero remaining lease, terminal
+controller audit and MCP EOF 0 passed. One ordinary lifecycle close exited 0;
+the corrected census again handled the executable-metadata exit gap without a
+forced game signal. Independent checks found the exact game, server, supervisor
+and display absent, temporary config/socket/lock removed, and no active grant,
+lease or recorder. All **144** collected diagnostic files remain private.
+No game-year throughput or campaign acceptance follows from this paused test.
+
+The private instrumented caller passed **2,290 host Rust tests**, four-target
+strict checks, release and **70 targeted optimized fixtures on actual ARM
+Linux** before this attempt. Its public basis passed all nine CI jobs. These
+private checks remain separate from the unchanged **956 Python tests (37
+skips)** and the public runtime's local tests.
+
+The next diagnostic revision names the five existing container-read sites and
+the mode/visibility mismatch using fixed whitelisted labels, with an explicit
+unknown bucket. It records first Idle/transition result-return times relative
+to attempt start; these are not engine-onset times. It adds no memory read or
+retry. Review caught the ordinary 512-byte transport formatter truncating the
+expanded report. A dedicated retained-transit formatter now allows a bounded
+1,024 bytes; ordinary Research errors retain their 512-byte limit. A Linux
+transaction-to-formatter regression requires the complete diagnostic to survive.
+This revision is offline evidence until a fresh live attempt qualifies it.
+It passed **2,292 host Rust tests**, strict checks on four targets, release,
+**63 targeted optimized fixtures on actual ARM Linux**, the full **956-test
+Python suite (37 skips)** and unchanged **28-tool unbound stdio** with empty
+stderr and EOF 0. Reader fixtures cover each named container; transaction
+fixtures preserve one dispatch, its uncertain Intent, unknown-message redaction
+and first-result timing. The formatter regression ran on actual ARM Linux.
+Independent review confirmed the truncation finding closed. No game or input
+was used by these fixtures, and the earlier candidate and review remain retained.
+
+## Bounded transit failure diagnostics — 24 October 2026
+
+The internal ordinary Research transaction now reports historical failure-only
+counters for started readback observations, settled Idle/Research snapshots and
+rejected transition/torn samples. It retains only fixed retryable error codes,
+plus monotonic time before dispatch, inside dispatch and in readback, and the
+remaining original budget at dispatch. These are observer invocations and phase
+timings, not kernel-read counts or a current root-state assertion. No later game
+read, raw pointer/error text, journal migration, input retry, deadline renewal or
+new action permission is added. Successful proof and input ordering stay unchanged.
+
+The source passed **2,289 host Rust tests**, four-target strict checks, release,
+**59 targeted optimized fixtures on actual ARM Linux**, the workspace's **956
+Python tests (37 skips)** and identical **28-tool unbound stdio** with empty stderr
+and EOF 0.
+Three new behavioral fixtures distinguish a slow dispatch, repeated rejected
+samples and a still-idle readback while preserving exactly one input attempt
+and its unresolved Intent. Independent review found no actionable defect.
+
+The first full suite failed an existing production-history fixture's final
+reopen assertion. That exact fixture passed alone without a source change;
+the complete rerun also passed. Its assertion now reports the case and actual
+error, without changing expectations, adding a retry or relaxing storage.
+The first failure remains preserved and unexplained. These checks add no new
+live evidence; the preceding retained-goal action remains failed.
+
+## FEX retained-goal transit qualification — 24 October 2026
+
+A fresh owned, unrecorded GL0 session reached the frontend in **42.785 seconds**
+at **1920×1080**. Luna medium completed five released setup clicks. The first
+country-setup frame clipped Historical AI and Start; one bounded later still,
+**43.463 seconds** afterward, showed the complete controls, selected Germany,
+1936, Normal/Regular difficulty and the checked global Historical AI setting.
+Root reviewed that current evidence before authorizing the sixth, once-only
+Start click. No Rules workaround, scrolling or guessed clipped input was used.
+Structured own-country reads independently confirmed those campaign settings,
+the initial date and paused speed zero. Complete pre/post-binding baseline reads
+took **29.368/41.397 ms** without input or screenshots.
+
+The separate private qualification retained an actual own canonical Focus goal;
+it did not fabricate a Research assignment. Its sole stationary W request failed
+after a **5,002.175 ms** server round trip at the original five-second deadline.
+Delivery was server-confirmed, but the action was unverified, leaving exactly
+one Intent and no Verified record. There was no retry, historical replay, close
+key, clock action, worker, action-phase screenshot or cursor movement. Lease
+release, zero remaining lease and MCP EOF 0 passed. The failure records no final
+root state or internal phase timings; this trial does **not** prove that an
+animation caused the timeout or that the panel appeared later. No late result
+was used to settle it. Advancing-time and campaign acceptance remain open.
+
+The corrected lifecycle helper then completed one ordinary window close with
+exit 0. Its retained census encountered the executable-metadata exit gap that
+broke the preceding session and correctly waited for the original process exit;
+there were no census faults or forced game signals. Independent final checks
+found the owned game, server, supervisor and display processes absent, the
+created config/socket/lock removed, and no active grant, lease or recorder.
+All **147** diagnostic artifact files remain private, including the failed
+action and earlier zero-input wrapper/readiness refusals.
+
+The private qualification source passed **2,287 host Rust tests**, strict checks
+on four targets, release, **67 targeted optimized fixtures on actual ARM Linux**,
+the workspace's **956 Python tests (37 skips)** and unchanged **28-tool unbound
+stdio**. Its helper
+package passed **126 mocked fixtures** and 11 helper checks. Public-basis `09ca2bf`
+CI is distinct from this private delta's local checks. No public qualification
+tool, mixed-worker permission or successful live transit is implied.
+
+## Durable ordinary Research transit — 24 October 2026
+
+The internal Linux adapter now retains the selected original Focus/production
+entry while navigating from settled Idle to ordinary Research, including fully
+busy slots and natural completion. A separate versioned, bounded, single-writer
+private journal persists Intent before at most one stationary W. The reviewed
+engine/window/GUI and X11 keyboard predicates must pass. Readback retains the
+original scope and absolute caller/lease/five-second deadline; its final game
+observation follows platform input-idle acknowledgement. Known animation/torn
+samples permit read-only waiting, never another key.
+
+Possible input without a timely verified result stays quarantined across IDs and
+controller generations for that exact game. Historical receipts cannot construct
+current proof or complete the retained final goal. Even successful terminal
+persistence that finishes late gives no current admission. Reopening an
+input-bearing Verified record is conservatively quarantined until a separate
+restart-recovery admission is qualified; ordinary stdio reconnects retain the
+same controller and its timely in-process admission. No legacy journal is migrated.
+The new journal loads before X11 regardless of profiles/worker permissions, and
+clock, Research, Focus, production, construction and daily paths all check it.
+Lease release, STOP and status remain available.
+
+The final source passed **2,286 host Rust tests**, strict all-target checks for
+macOS, Windows GNU, x86 Linux musl and ARM Linux musl, release and identical
+**28-tool unbound stdio** with empty stderr and clean EOF. The workspace Python
+suite passed **956 tests (37 skips)**. Actual owned ARM Linux executed **56 targeted
+optimized synthetic fixtures**, including 21 new transaction cases, 33 retained
+reader cases and two internal production/construction quarantine cases, with no
+game or input. Initial compilation exposed two missing serialization-error
+conversions; strict lint then required boxing the historical result. Both failures
+are retained and the final checks passed. Independent review found no actionable
+transaction or wiring issue.
+
+These checks do not qualify a live W, restart recovery, mixed worker or campaign.
+No public command, profile flag or worker permission was added. The final Focus
+or production action still needs its own independent current canonical proof.
+
+## Retained typed Research transit reader — 24 October 2026
+
+An internal Linux reader now produces typed navigation snapshots under one
+retained process, original own scope and absolute caller deadline. It checks
+original UI links, complete slot/catalog membership and current own technology
+joins before following substituted payloads. Busy slots, natural completion and
+advancing dates are supported. Changed owners, rebuilt roots, unsupported sources,
+torn reads, regressed dates and late positive reads refuse. The deadline also
+covers final batched witnesses and process checks; observations never renew it.
+
+This reader accepts already-materialized ordinary Idle/Research roots only. It
+does not prove keyboard admission, send input, persist a navigation transaction
+or complete the retained Focus/production goal. Existing assignment opening,
+closing, actors, journals, worker exclusions and tool descriptors are unchanged.
+The shared canonical helper returns typed assignment keys directly; legacy JSON
+retains its existing fields and meaning.
+
+The final source passed **2,262 host Rust tests**, strict all-target checks on
+macOS, Windows GNU, x86 Linux musl and ARM Linux musl, release and identical
+**28-tool unbound stdio**. Actual owned ARM Linux ran all **30 new optimized
+sparse fixtures**, with no game or input. The first test run correctly refused
+one fixture's noncanonical production handle; only that fixture was corrected,
+and the failed log remains preserved. These results qualify a read-only source
+component, not executable navigation, mixed-worker or campaign acceptance.
+
+## FEX reduced-decoration setup refusal and cleanup — 24 October 2026
+
+A fresh owned GL0/software session used the `cadc620` public binary, all nine
+successful exact-source CI jobs, a **1920×1080** client and no recorder. Only
+decorative graphics were reduced; units, borders and tooltips stayed enabled.
+Frontend startup took **46.592 seconds**. Luna medium completed **five** ordinary
+menu clicks, all released. A proposed Custom Game Rules click was rejected by
+the helper's broad bottom-right Start-region predicate before creating a request
+file or Intent. The next sequential request would also have been number six,
+not seven. The original player report counted six events; the independent raw
+journal corrected that count. Both the report and refusal remain preserved.
+
+The setup frame showed Germany and Regular difficulty, but Historical AI was
+not verified. The session stopped before campaign Start, binding, lease or
+Research action. This trial therefore gives **no Research-latency comparison**,
+advancing-time result or campaign evidence. The game-action deadline was not
+extended. There were no workers, clock actions or observation pauses.
+
+Compact original window/session metadata now separates lifecycle authority from
+bulky diagnostic telemetry. One ordinary window close returned 0 and exited both
+game and owner despite the actual **84,757-byte** frontend diagnostic. Full
+helper cleanup nevertheless failed: the game's `/proc` executable link disappeared
+just before its retained pidfd became readable, leaving a sticky census fault.
+Root separately proved game/owner exit and closed only the exact owned orphan
+display processes. Final independent census was clear; grants were retired and
+the created config, display socket and lock were absent. No game signal or
+repeated close was sent. The original full-cleanup failure remains failed.
+
+A separate offline candidate keeps that missing-metadata interval unresolved
+until the original retained pidfd proves exit. It continues tracking children
+during the interval; live pending metadata blocks restoration, while resumed-live
+metadata and concrete ownership errors remain sticky. Review caught and corrected
+a missing pending-parent ancestry scan. **111 mocked helper fixtures**, eleven
+source checks and the unchanged **956-test Python suite (37 skips)** passed.
+The polling census still has no atomic fork coverage. This candidate is neither
+installed into the closed session nor live-qualified.
+
+## Navigation-only Research transit foundation — 24 October 2026
+
+An internal volatile transit now retains the complete original Focus or production
+entry, own scope, Research roots/ordered slot pointers and fixed caller deadline.
+It requires no Research technology/slot target and permits busy slots, natural
+completion and advancing dates. Changed original identities, unknown panels,
+regressing chronology and late positive observations refuse. Concrete callback
+errors remain concrete even when late; no read loop, retry or deadline renewal is
+introduced. Callers still own fresh process/memory witnesses and canonical final
+target proof: these types are trusted internal data, not sealed reader authority.
+
+Panel readiness cannot become a goal receipt. Existing ordinary assignment opening
+still requires an actual empty slot, and existing worker permission exclusions,
+persisted journal schemas and uncertainty rules remain unchanged. A future ordinary
+navigation adapter needs its own stage semantics, current-effect receipt and
+durable reconnect design. This foundation is not an executable busy-slot route.
+
+The byte-identical source passed **2,232 host Rust tests**, strict all-target
+checks on macOS, Windows GNU, x86 Linux musl and ARM64 Linux musl, release and
+unchanged **28-tool unbound stdio**. Actual owned ARM Linux executed all **18 new
+optimized transit fixtures**, without a game or input. Independent source review
+found no actionable issue within this scope. These checks do not establish live
+mixed-plan, advancing-time, two-year or campaign acceptance.
+
+The first CI run exposed an unchanged Python standing-order fixture race on
+macOS 3.9: several 20 ms feeder ticks could arrive in one poll, while the rule
+intentionally fires once per batch. The fixture now publishes one day per poll
+and checks both firings and the four-day boundary. It passed 100 isolated
+deterministic runs. Runtime scheduling and game-action deadlines are unchanged;
+the original failed CI log is retained separately.
+
+## FEX no-recorder Research comparison — 24 October 2026
+
+A fresh owned GL0/software session used the `9837e98` Rust runtime, with all
+nine exact-source CI jobs passed, original graphical settings, no recorder and
+a **1920×1080** client. Luna medium reached vanilla FAIR Germany with Normal
+difficulty and historical AI. Frontend startup took **47.191 seconds**; the
+fresh paused overview/complete Research/geometry baseline took **50.870 ms**.
+The earlier recorded startup took 169.759 seconds, but cache and environment
+differences prevent attributing that difference solely to recording load.
+
+The one Research opener still failed: **5,023.810 ms** from driver request to
+response, including **5,011.339 ms** after forwarding. Delivery was
+`server_confirmed`, while `game_action_verified=false`. The original five-second
+deadline ended after **46 rejected opening reads**; the last retained root was
+literally shown with transition states **[0, 1]**. There is **one Intent and no
+Verified receipt**, no retry, historical replay or close action. Omitting the
+recorder therefore did not make this action meet its deadline. It does not
+identify the underlying update/rendering bottleneck.
+
+Independent later reads showed the panel visible and the complete baseline
+unchanged; they do not settle the uncertain attempt. Lease release and MCP EOF
+passed. The MCP gate used no screenshots, cursor movement, worker, clock or
+observation-pause command. The game remained paused, so there is no
+real-time-per-game-year measurement or advancing-time acceptance.
+
+The frozen lifecycle helper then refused before any close intent because its
+**84,756-byte** diagnostic frontend record exceeded its **65,536-byte** reader
+bound. Root retained this failure and sent one separately scoped ordinary
+window-close request, which returned 0 and exited the game. An immediate
+owner-absence assertion also failed; a subsequent independent audit proved its
+exit without a signal. Only the exact owned display processes needed SIGTERM.
+Final process census was clear, both grants retired, and the created FEX config
+and display socket were absent. No game signal or repeated close was sent.
+The cleanup and action failures remain failures; no campaign is accepted.
+
+## FEX GL context and frontend diagnostics — 24 October 2026
+
+A bounded no-game test passed six 1920×1080 rendering workloads: native ARM,
+FEX guest GL0 and FEX GL1, each with legacy and explicit OpenGL 2.1 contexts.
+All cases reported zero X errors. Median measured start intervals were
+2.26–2.32 ms native, 2.93–2.96 ms GL0 and 2.37–2.38 ms GL1. These measure a
+synthetic rendering-call workload, not display presentation or game input.
+Different Mesa versions also prevent treating the difference as an isolated
+architecture effect. Original probe processes and temporary configs closed.
+
+A separate fresh GL1/software game attempt then failed before the frontend.
+At 1920×1080 client geometry, the game logged `glewInit failed: Missing GL version`
+and SIGSEGV during graphics initialization; its setup log remained empty.
+There were no menu actions, gameplay input, screenshots, recorder or player grant.
+The synthetic context result therefore does not qualify the game's GL1 path.
+
+One ordinary window-close request was confirmed by the X server, but the game
+did not exit. Resource cleanup required SIGKILL after the exact owned game
+ignored SIGTERM. A forked crash process also outlived it, exposing a diagnostic
+helper's descendant-tracking defect: the temporary config had been removed
+before that descendant exited. Root separately verified and closed this own
+isolated-run process. Final census found no game/server/display/recorder,
+and the created config and display socket were absent. Original frontend and
+ordinary-close failures remain failed; cleanup does not turn them into passes.
+
+The next Linux mixed-plan foundation adds only an internal typed selection
+observation joined to the original own scope, catalog and complete ordered queue.
+Inactive mode skips the old selection pointer; requested mode must match the
+original ordinary template, including when another valid template is present.
+Changed managers refuse before replacement payload. Default both-ABI queue and
+legacy JSON readers stay unchanged. This is not input, exact +1, cancellation,
+worker or campaign qualification.
+
+This candidate passed **2,214 host Rust tests**, strict all-target checks on
+macOS, Windows GNU, x86 Linux musl and ARM64 Linux musl, release and unchanged
+**28-tool unbound stdio**. Actual owned ARM Linux executed all **32 optimized
+retained-queue/selection fixtures**. These are synthetic fixtures, without a
+game or input. The workspace Python suite passed **956 tests (37 skips)** and
+all 38 unrelated legacy WIP paths stayed byte-identical. An initial check command
+requested an uninstalled GNU Linux target; the corrected installed musl check
+passed. No native Windows game or new Mac live acceptance follows from this.
+
+## FEX Rust adapter attempt — 24 October 2026
+
+One fresh owned ARM64 Linux/FEX session reached historical Normal vanilla Germany
+at **1920×1080, UI scale 1**, in FAIR mode. Frontend startup took **169.759 seconds**.
+Structured own-state reads passed; a fresh three-domain baseline took **163.447 ms**,
+including **21.4 ms** for the overview. The game remained paused on 1 January 1936.
+
+The Luna-medium player made one Research-open request through the Rust adapter.
+It failed in **5,031.143 ms** with `action_uncertain` / `research_deadline`.
+The durable journal contains **one Intent and no Verified receipt**. There was
+no retry, Research-close request, worker or clock command. The attempted-request
+counter does not independently prove physical key delivery. The lease released
+and MCP EOF exited cleanly. Later read-only evidence showed the panel visible;
+recorded-frame analysis placed a broad panel change around **16 seconds after the
+request (±1 second)**. Neither observation settles the original uncertain action.
+Fast state reads do not establish where input/update/rendering delay occurred.
+
+Earlier harness refusals occurred before lease or input: one confused decorated
+window geometry with the absolute client origin, and another exhausted its
+minimum remaining authorization window. Their failures and the corrected fresh
+pre-input authorization are retained separately. No possible-input request was
+replayed. One ordinary window-close request returned 0; the owned game, server,
+display and recording processes are gone, and the created GL config was removed.
+
+The recorder ended with **19,883 encoded frames**, but its original full decode
+audit exceeded **25 seconds** and remains failed. A separate host audit later
+decoded **19,883 frames and packets**, matching progress, at **1920×1080 H.264**
+over **1,325.534 seconds**. This recovers diagnostic evidence without passing the
+original recording or live-action gate. It is not a native Mac showcase video.
+
+Follow-up source changes retain bounded delivery diagnostics on Research errors
+without changing error categories or uncertain-intent quarantine. A separate
+internal read-only construction anchor retains own scope, catalog and full queue
+identity; it grants no action authority. The byte-identical candidate passed
+**2,203 host Rust tests**, **21 optimized queue fixtures**, strict all-target
+checks for four targets, release and unchanged **28-tool unbound stdio**. Actual
+ARM Linux executed **11 Research and 21 queue fixtures**. A host-only Linux test
+filter matched zero tests and was not counted as coverage. The workspace Python
+suite passed **956 tests (37 skips)**; all 38 unrelated WIP paths are unchanged.
+
+Both owned games are now closed. The subsequent bounded context and frontend
+diagnostics above preserve those separate outcomes. Earlier explicit GL1 context
+and virpipe startup failures remain retained. No single rendering bottleneck has
+been established.
+No advancing-time, clean two-year or full campaign success is claimed.
+
+## Native Mac ordinary Find click — 24 October 2026
+
+One Luna-medium test in paused historical Normal vanilla Germany at native
+1920×1080 verified the exact named Find button with one ordinary move/click.
+The **22-tool-call driver took 5.150 seconds**, with zero errors; the action took
+**603.114 ms** and its same-ID historical replay **144.838 ms**. Find became
+visible, empty and focused. Complete own queue, Research/Focus/production and
+clock/setup projections stayed unchanged. There were no keys, screenshots,
+activation, workers, clock commands or observation pauses. The journal retained
+exactly Dispatching → Verified; replay appended nothing. Lease release and MCP
+EOF passed. The recording explicitly stopped and exited 0 at **1920×1108 H.264,
+54.763333 seconds, 1,609 encoded/decoded frames and 1,609 complete callbacks**.
+
+Earlier menu attempts sent possible input before losing foreground. Private
+onscreen metadata and system logs identified an overlapping floating Docker
+window above the intended New Game point. Their original failures are preserved;
+they are not pre-input refusals. The new platform guard checks every onscreen
+layer at the intended point and rejects occluders. Its separate read-only native
+qualification passed without input. A narrow verified system-cursor exception
+uses current bounded process identity rather than a fixed PID. The successful
+menu setup and Find test followed reversible environment preparation.
+
+One Find harness stopped before identity checks/MCP/input because its manifest
+omitted an evidence pin; the corrected fresh test requires complete pins. The
+next decimal qualification then stopped during pregrant startup with macOS
+task-access status **-60007**, before any lease, action or input. The OS also
+stopped that recording with ScreenCaptureKit **-3821**; it is a failed recording,
+not a successful gate. Their causal relationship is unknown. A separate read-only
+check of the previously successful helper confirmed the task-access refusal.
+
+The exact code/configuration/fixture source passed **2,158 Rust tests**, **327
+optimized checks**, **956 Python tests (37 skips)**, formatting, strict all-target
+checks on macOS/Windows GNU/x86 Linux musl/ARM64 Linux musl, release and unchanged
+**28-tool unbound stdio**. All 317 code/configuration/fixture files match that
+validated private source; the two public documentation files retain newer
+cancellation documentation. All 38 unrelated legacy WIP paths remain unchanged.
+
+Printable-character forwarding, opaque construction handoffs and distinct
+`ConstructionQueue` syntax/scheduling are foundations. Queue execution still
+explicitly refuses on Mac/Linux; the composite actor remains private and
+unqualified. No advancing-time, two-year or full campaign acceptance is claimed.
+The paused game provides no real-time-per-game-year result.
+
+## Native Mac ordinary cancellation and historical replay — 24 October 2026
+
+The default-off `hoi4_construction_clear_selection` qualification retains the
+original own template/state, complete queue, close target/callback and typed
+keyboard admission. It sends at most one ordinary Escape. Canonical inactive
+selection and exact full-queue preservation must both verify twice within that
+same attempt, including after platform checks. Originally inactive selection
+uses no key. Fresh complete keyboard sources may change between coherent reads;
+the original requested target and its owner/renderer/parent identities cannot.
+The known hidden plane-selection lifetime object and ordinary HotkeyManager
+Escape forwarding have separate typed predicates. Unknowns refuse.
+
+One Luna-medium action in paused historical Normal vanilla Germany at native
+1920×1080 received a Verified receipt in **686.065 ms**. The 12 tool RPCs had zero
+errors, one Escape, no cursor movement, activation, screenshot, worker, clock
+command or observation pause. The journal contains exactly Dispatching → Verified.
+The harness then stopped because it compared raw queue observations including
+volatile `freshness`; the complete typed queue projections were equal and that
+was the only differing top-level field. Its raw failed status is preserved; no
+key or action retry was sent. The first recording finalized at **1920×1108 H.264,
+64.770 seconds, 1,906 encoded/decoded frames and 1,906 complete callbacks**.
+
+A separate zero-input continuation narrowed cancellation permission to false,
+preserved the original absolute deadline, and looked up only that exact Verified
+request. The **19-RPC, 2.417-second** driver passed with zero errors; historical
+replay took **76.368 ms**, returned the same receipt and appended nothing. Full
+Research/Focus/production/queue/clock/setup projections matched the original
+baseline. Inactive selection, native geometry, the stationary cursor and all six
+controller files, including journal bytes and mtime, stayed unchanged. Both queue
+comparisons retain the complete raw mapping except freshness, alongside typed
+queue validation. Its recording finalized at **1920×1108 H.264, 33.881667 seconds,
+993 encoded/decoded frames and 993 complete callbacks**. Both recordings stopped
+explicitly and exited 0; recorder owners are absent. Grants, leases and MCP
+servers are closed. Four earlier controllers and 38 unrelated legacy WIP paths
+remain unchanged. These RPC timings include the driver's identity/window/recording
+guards; they are not resident-reader-only benchmarks.
+
+Earlier failures remain preserved: holder mismatch before opener input; one
+verified T followed by a nullable-field harness failure; selected cancellation
+refusal on a nonempty lifetime collection (with storage-budget recording failure);
+and outer receiver refusal before intent/Escape. A later read-only source-membership
+refusal led to immutable-target/fresh-prefix separation. Initial ordering fixtures
+caught a regression, fixed by owner → target → callback checks. A diagnostic build
+first reused a cached artifact with no private CLI and refused before platform
+open; a forced diagnostic rebuild and bounded torn-only read recovery passed.
+Private diagnostic CLI exports are excluded from normal/public source.
+
+The source passed **2,015 Rust tests**, **130 optimized fixtures**, **956 workspace
+Python tests (37 skips)**, formatting, strict all-target checks on macOS/Windows
+GNU/x86 Linux musl/ARM64 Linux musl, release and unchanged **28-tool unbound stdio**.
+The 38 legacy WIP paths are excluded from the publication. These are offline
+checks, separate from the two recorded components. The preceding placement
+checkpoint `0b963fb` passed all nine CI jobs.
+
+The generic qualification deadline is finite, future and within 180 seconds at
+binding; each action retains its original minimum with the lease and 12 seconds.
+Possible-input failures cannot retry or settle from later state. Historical replay
+is served before new action binding and claims no current selection verification.
+The game remained paused, so no real time per game year is measured. This does
+not qualify advancing-time construction, standing plans, the full picker, two-year
+acceptance or any completed campaign. Printable F and decimal text have a separate
+Hotkey character-route gap; Escape's control-character proof does not qualify them.
+See [the contract](MAC_CONTROLLER.md#construction-cancellation-qualification).
+
+## Default-off Mac strict placement port — 24 October 2026
+
+The native Mac controller now registers `hoi4_construction_place` for explicit
+manual qualification. Other flags and the default observation server do not
+enable it. The actor, point/queue anchors and strict journal compose the recorded
+private component below with the public typed GUI/math foundation. It preserves
+one ordinary move/down/up, original-lease/deadline checks, exact +1 queue readback
+and no later settlement or retry after possible input.
+
+The port removes the private qualification's fixed expiry. Its caller-supplied
+absolute deadline must be finite, future and within 180 seconds at binding;
+monotonic origin precedes wall capture. Each action retains the minimum of that
+bound, lease and 12 seconds. The driver still owns original session/grant limits.
+An unused duplicate Find field was removed after strict Clippy caught it; its
+pointer remains in the complete retained edge witnesses. The initial failure
+and corrected checks are preserved privately.
+
+Tool-facing route diagnostics now render only numeric counts and booleans.
+Internal anchors and cache-discrepancy pointer examples remain private. Typed
+admission and final witnesses are unchanged; diagnostic JSON is never parsed
+back into authority. The generic-bound and output changes are source validation,
+not new live evidence. The tool remains default-off and outside the daily worker;
+full picker, advancing-time and campaign acceptance remain incomplete.
+
+Full public-source validation passed 1,941 Rust tests, 956 Python tests (37 skips),
+formatting, strict host macOS / Windows GNU / x86 Linux musl / ARM64 Linux musl
+checks, release build and unchanged 28-tool unbound stdio checks. On the private
+port, 27 placement, 120 GUI and two deadline fixtures passed optimized; all 296
+code/configuration/fixture files matched public source byte-for-byte, excluding
+only the two updated documentation files. All 38 unrelated legacy WIP paths
+remained unchanged. These checks are separate from the recorded live component.
+
+## Internal typed Mac GUI foundation — 24 October 2026
+
+The internal `gui/macos/direct_route` modules retain a complete bounded graphical
+tree with exact class/parent checks before payload, ordered child membership and
+typed resource identities. Transform/clip reduction and conservative InstantText
+union reuse the existing public hit-envelope math; no duplicate math or its 68
+fixtures was added. Unknown types refuse and unsupported geometry cannot count
+as a miss. Captured-cache comparison and unqualified-trig results remain separate
+from the explicit standard zero-angle calculation.
+
+The caller supplies original exact build/process/campaign/root bindings, a fixed
+deadline and final witness/context checks. The request-local witness rechecks all
+consumed fields and complete membership while excluding unused node padding.
+Its narrow no-direct-recipient condition does not establish cache completion,
+absence of GUI effects, full picker semantics or input/delivery authority. No
+default observation, MCP tool, input adapter, permission or release pin changed.
+
+Twenty-six focused fixtures cover transform/clip behavior, type-before-payload,
+conservative refusal and late/changed/short/identity-lost witnesses. This source
+adaptation adds no new live measurement. The separately recorded private strict
+placement component and its exact scope are documented below.
+
+Full source validation passed 1,912 Rust tests, 956 Python tests (37 skipped),
+120 optimized GUI tests, formatting, strict host macOS / Windows GNU / x86 Linux
+musl / ARM64 Linux musl checks, release build and unchanged 28-tool unbound stdio
+checks. All 38 unrelated legacy WIP paths stayed byte-identical. The small source
+adaptation introduces no new live qualification or public placement action.
+
+## Mac resident center-terrain MCP — 24 October 2026
+
+The resident Rust Mac center-terrain observer passed stationary qualification
+through the public MCP. `hoi4_construction_target` now accepts
+`include_map_point: true`; omission or false preserves the existing read path.
+Twenty samples per mode measured median RPC times of 2.360 ms with the option
+and 1.996 ms without it. The option adds 155 logical read requests / 1,132 bytes
+to the complete target snapshot, with the same final witnesses.
+
+At native 1920×1080, the center joined own province 6521 to requested Brandenburg
+(state 64), reproducing the captured world point bit-for-bit in construction map
+mode 27. Only independently reviewed modes 0/27 and camera wrap 1 are supported;
+unknown cases refuse. Full scene-model intersection, GUI routing, current-event,
+eligibility and input authority remain explicitly false.
+
+The 52 observation calls left complete Research, Focus, production, queue,
+clock, setup, camera, OS cursor and all 18 files across three controllers unchanged.
+It used zero input, activation, screenshots, workers or observation pauses; MCP EOF
+exited 0. No grant, lease or recorder was opened. The game remained paused on
+1 January 1936, so this provides no advancing-time or real-time-per-year result.
+
+All 1,818 Rust tests and 956 Python tests (37 skips), formatting, strict host /
+Windows GNU / x86 Linux musl / ARM64 Linux musl checks, release build and 28-tool
+stdio smoke pass. The preceding `bfdcc34` checkpoint passed all nine CI jobs.
+The first source check's Windows unused-function failure is preserved; routing
+default calls through the existing function fixed it before this complete rerun.
+
+An internal typed clear-selection reader also retains the original scope and
+complete queue, distinguishing Pending from canonical inactive selection. Its
+eight memory fixtures pass; no Escape input or live cancellation is qualified.
+The recorded ordinary one-point placement component remains passed separately.
+A strict public placement adapter, construction worker integration, the clean
+two-year Luna run and full campaign recordings remain unfinished.
+
+## Mac ordinary map placement — 24 October 2026
+
+The recorded Luna-medium ordinary map-placement component passed on native Mac
+HOI4 at a 1920×1080 client size. From an already-selected military-factory
+template, one map move and one ordinary down/up produced exactly one new
+`arms_factory` queue line of amount 1 in own Brandenburg (state 64). A real Rust
+`PlacementAnchor` retained before input verified `new_line_added` on its first
+observation. Complete Research, Focus, production, clock and setup stayed unchanged.
+
+The private 22-RPC driver took 8.438 seconds including process startup, platform
+guards and separate terrain/scene probes; median RPC was 1.161 ms, maximum
+4.465 ms. It used no opener, reselection, activation, screenshot, worker or clock
+command, and zero observation pauses. The game started and remained paused;
+no game year advanced, so no real-time-per-year result is available. The native
+1920×1108 H.264 recording finalized at 69.591667 seconds with 2,051 encoded frames
+and 2,050 complete capture callbacks, clean explicit stop and recorder exit 0.
+
+The preceding attempt is preserved as failed: its one opener and one template
+selection verified, then its mode-0 harness condition rejected construction map
+mode 27 before any map movement or down. Static analysis distinguishes decimal
+27 (`0x1b`) from region mode `0x27` (39); the fresh own-province branch proof still
+returned the canonical province. The separate successful phase did not repeat
+those verified actions or retry a map input.
+
+This qualifies one ordinary point and its exact queue effect, through a private
+diagnostic harness. Complete model intersection, a resident Rust map observer,
+a public strict placement adapter and construction worker integration remain
+unfinished. Cached-coordinate diagnostics retain their explicit false event/frame/
+delivery authority flags. Both grants, leases, servers and recorders are closed;
+the clean two-year Luna run and full campaign recordings remain unfinished.
+The public runtime source is unchanged from `71e0075`, whose nine CI jobs passed
+across Windows, Linux and macOS. The private harness passed 13 Python fixtures
+and three Rust actor fixtures; these are separate from the 1,780 Rust / 956 Python
+workspace checks (37 skips) for that source checkpoint.
+
+## Mac own scene membership — 24 October 2026
+
+The internal Mac scene-scope reader passed stationary live qualification: all
+35 picker entries joined fresh own-country sources (30 divisions and five task
+forces), with exact type/owner checks and retained original identities. Unknown
+entries refuse before candidate payload. The exact public source ran through a
+private read-only diagnostic export; there is no added MCP tool or input permission.
+
+The observation took 19.882 ms; the separate process took 3.710 seconds including
+startup. Its two retained reads plus final witnesses used 386 logical requests /
+4,052 bytes, excluding the separate clock-context request counts. The complete
+own-country baseline, camera, OS pointer and six controller files stayed unchanged.
+There was no input, activation, screenshot, observation pause, grant or recorder.
+
+A separate own-province definition/catalog check established the canonical province
+bitmap-return branch at the fixed center. Scene model intersection still precedes
+that fallback and remains unverified; this does not establish the complete picker,
+placement or worker integration. All 1,780 Rust / 956 Python tests (37 skipped),
+strict checks on four compilation targets, release build and 28-tool stdio smoke
+pass. The preceding `c295d57` checkpoint passed all nine CI jobs. The failed cursor
+calibration remains preserved. The clean two-year run and full campaigns remain
+unfinished.
+
+
+
+## Mac typed keyboard receiver support — 23 October 2026
+
+Bounded own-GUI observations and exact-build static analysis resolved every
+receiver through the named construction T button: Icon, Drag, Track,
+InstantTextBox and Standard, plus their seven known renderer families. The last
+diagnostic census retained 14,672 stable read witnesses for 1,293 receivers. It
+found one unmodified T binding, on the named button; 144 attached Standard parents
+had the exact known type and enabled byte, and 13 disabled predecessors had zero
+consuming control. The named parent also matched its own direct container.
+
+The Rust observer now implements those independently verified cases. It validates
+class-specific own GUI/graphics/renderer links before handler payload, keeps
+Standard's parent attachment and disabled-state branch separate, and does not
+borrow Standard fields for other classes. Unknown types, competing shortcuts,
+consuming controls and changed witnesses still refuse. Physical input, atomic
+cache completion and construction placement are not established by this census.
+
+All 45 focused panel fixtures and 1,528 Rust tests pass, along with 956 Python
+tests (37 skipped), formatting, strict host/Windows GNU/Linux musl/ARM64 Linux
+musl Clippy, release build and 28-tool offline stdio smoke. Independent source
+review found no actionable mismatch against the sealed static evidence.
+
+The retained owned game reached its original six-hour supervisor deadline before
+the new runtime's live qualification. It exited with code 0; the temporary display
+holder was released and default settings hashes were unchanged. Its controller
+and twelve completed receipts are preserved. No input grant, clock action,
+screenshot or cursor movement accompanied this implementation. Start a fresh
+owned qualification session for the stationary observer, then one bounded Luna
+medium opener gate. The two-year run and full recorded campaigns remain incomplete.
+
+## Mac live construction alias and keyboard capacity — 23 October 2026
+
+The single normal macOS task-port authorization request completed successfully.
+Fresh own-country memory reads confirmed the retained paused Germany campaign on
+22 May 1936 at speed 3, Normal difficulty and historical AI. Construction was
+still empty. No OS security policy changed, and no game input was issued.
+
+The first opener probe refused because it compared the raw named child with the
+topbar country-menu alias. Independent exact-file lookup/constructor analysis and
+196 stable live read witnesses established that the alias is the canonical
+TWindow, while named child membership stores its CGuiObject at +0x30. The reader
+now validates the exact container and own GUI registry before comparing canonical
+objects. Its regression rejects raw, neighboring, foreign and null aliases before
+descendant payload. Complete named membership and final witnesses remain required.
+
+The corrected ordinary opener binding succeeded in 2.94 ms for one local RPC.
+The opt-in shortcut read then refused because the keyboard cache had 10,368
+reserved slots and 1,897 active entries. Active membership is now independently
+bounded at 4,096; reserved capacity retains the shared 20,000 ceiling. Spare slots
+are never read, and per-button shortcut limits stay 128. Regression checks cover
+large spare capacity, excessive active count and final-header changes.
+
+The next live shortcut probe reached an earlier eligible CIcon and refused its
+unmapped handler. A separate bounded prefix observation confirmed several icons,
+another widget type and an unsupported renderer before reaching the named button.
+These are not silently skipped. Keyboard routing and physical delivery therefore
+remain unqualified. No Luna input grant was opened. The original refusals and a
+private diagnostic helper's corrected array-header mistake are retained separately;
+none are counted as successful campaign play. Controller files stayed unchanged,
+with zero input calls, observation pauses, screenshots or cursor movements.
+
+All 36 focused panel fixtures and the full 1,519 Rust / 956 Python tests
+(37 Python skips) pass, along with formatting, strict host/Windows GNU/Linux
+musl/ARM64 Linux musl Clippy, the release build and a 28-tool offline stdio smoke.
+These checks establish the two corrections, not the unresolved receiver routing.
+
+## Mac construction-choice callback observation — 23 October 2026
+
+The existing Mac construction UI probe now accepts optional `include_callback`.
+It keeps the full own-state/catalog/four-grid proof before the requested control,
+then validates one active observer, the exact embedded Legacy glue and callable,
+its member, zero adjustment and capture of that same canonical item. All nineteen
+other callable slots must be empty. The complete observation shares the original
+final witness checks. Default and explicit-false calls retain the same read
+sequence and never access callback fields.
+
+Independent exact-file analysis grounded the constructor, registration, invocation
+and current-byte contract without copying Linux offsets. Items can be reused with
+a different template, so retaining addresses alone cannot establish target
+identity. The member has conditional prerequisite and alternate-global branches;
+binding it is not proof that a click will select a building.
+
+The reader also reports `disable_requested` from the separate byte flag. The
+game's update wrapper can temporarily enter visual state 3 and restore its prior
+state, so visual state alone is not a complete disable-request observation.
+Neither the stored byte nor callback identity evaluates current prerequisites.
+Input, delivery, placement, geometry and settled-frame authority stay false.
+
+Ten new fixtures exercise the actual reader: unchanged default reads, seventy
+choices, exact receiver/type/member capture, complete single-node membership,
+every competing callback slot, byte/visual-state distinctions, final witness
+changes, hidden/incomplete paths, strict argument handling and platform refusal.
+All 29 focused Mac UI fixtures and the full 1,517 Rust / 956 Python tests
+(37 Python skips) pass. Formatting, strict host/Windows/Linux-musl/ARM64-Linux-musl
+Clippy, release build and 28-tool offline protocol smoke also pass. Independent
+source review found no actionable issue.
+The preceding `64e075b` checkpoint passed all nine CI jobs.
+
+The single normal macOS task-access request remains pending. No live-memory read
+was retried, no input or cursor movement occurred, and the controller is unchanged.
+The prepared stationary check precedes a separately granted Luna-medium opener
+and visible-choice observation. No visible choice, building selection or placement
+is live-qualified by these fixtures; the two-year run and full campaigns remain
+unfinished.
+
+## Mac positive key refusals and unconditional release — 23 October 2026
+
+The strict ordinary-key transport now reports positive `NotQueued` from its own
+pre-down checks and event-allocation path. The original adapter conservatively
+quarantined every transport error, including these known zero-input failures.
+A refused attempt now retains its reason and can be followed by a fresh request
+after repair; it never automatically repeats input or erases the old receipt.
+
+The portable sequence arms release before entering down. Down/up errors remain
+unknown, and even successful CGEvent posting provides no delivery acknowledgement.
+Only same-attempt fresh panel readback can verify the action. Release requires no
+renewed lease/foreground check after a possible down and also runs during unwind.
+Unused and partially allocated event pairs are freed without posting an up.
+Neither error codes nor later game state can establish a positive refusal.
+Older uncertain records remain permanently blocked under the unchanged journal.
+
+Nine sequence tests cover prechecks, allocation, final pre-down refusal, possible
+down failure, release failure, first-error preservation, unacknowledged posting,
+expiry and unwind cleanup. Two tests pass the actual producer through the action
+classifier and durable journal, checking refusal retention/reopen/fresh requests
+and permanent uncertainty for identical error codes after possible delivery.
+The existing no-toggle matrix also covers the new typed refusal path.
+
+All 1,507 Rust tests and 956 Python tests (37 skipped) pass, alongside formatting,
+strict host/Windows/Linux-musl/ARM64-Linux-musl Clippy, release build and an offline
+stdio smoke. Independent source/test review found no actionable defect. These
+are generated-transport checks, not native OS or game delivery qualification.
+All nine CI jobs passed for the preceding `734b5d8` checkpoint.
+
+The exact owned game/supervisor remain present, with controller files unchanged.
+The existing single normal OS authorization request is still pending; no denied
+memory probe was retried and no game input, pause, cursor movement or screenshot
+occurred. The next live prerequisite remains stationary current-shortcut
+qualification after authorization. Construction placement, clean two-year
+acceptance and the full recorded campaigns remain unfinished.
+
+## Mac ordinary T opener and strict receipts — 23 October 2026
+
+The independent `include_shortcut` option checks the named construction button's
+actual plain-T descriptor and complete reverse keyboard-source membership. It
+admits only supported own predecessors with proved no-match/non-consumption
+behavior. Focused text, competing matches, unknown receivers, foreign owners and
+changed final witnesses refuse. Later receiver payloads are not followed. The
+observer grants no physical-delivery or atomic cache-completion authority.
+
+A separate manual `hoi4_construction_open` qualification tool is default-off via
+private owner permission `construction_panel`. It retains the original typed
+binding and scope under one lease-bounded five-second deadline. Before input,
+it persists a version-2 intent with the original binding digest and checks fresh
+state against that original. It sends at most one ordinary T down/up, with a
+preallocated release, explicit unmodified flags and idle-input checks. Already-
+selected panels wait read-only for visibility and never receive a toggle. There
+is no screenshot, cursor movement, menu dismissal, placement or pause operation.
+
+Only the original attempt's fresh reached-panel readback may verify its receipt.
+Any uncertainty after entering the transport leaves the original intent unresolved
+and blocks shared input permanently. Reopen, new IDs and legacy settlement cannot
+clear it. Historical verified replays explicitly do not certify current state.
+Positive pre-input refusals remain recorded and allow only a fresh request after
+repair. The existing version-1 adapters and old failed controllers are preserved.
+
+Ten new observer fixtures, six strict-journal tests and an action failure matrix
+bring validation to 34 focused panel tests and 1,496 Rust tests. The full Python
+suite passes 956 tests with 37 skipped, alongside formatting, strict host/Windows/
+Linux-musl/ARM64-Linux-musl Clippy, release build and the offline stdio smoke.
+Independent static/source review found no actionable issue; it does not qualify
+physical delivery. The preceding `8cd42d1` passed all nine CI jobs.
+The offline smoke initially expected different English wording for the missing-
+session error; that harness failure is retained. The corrected assertion checks
+the structured `capability_unavailable` code and passes without runtime changes.
+
+No live probe or input was executed for this checkpoint. The single separate
+normal Security.framework task-port authorization request remains pending;
+routine MCP access remains noninteractive and no security policy was changed.
+The exact owned game and supervisor remained present and controller files were
+unchanged. First qualify the current shortcut route stationarily after OS access
+returns, then use one Luna-medium player for a bounded recorded opener gate.
+Construction placement, the two-year acceptance run and full campaigns remain
+incomplete.
+
+## Mac opener mouse-route observation — 23 October 2026
+
+The panel probe now accepts `include_routing=true` together with
+`include_geometry=true`. It joins the exact named button's graphics and renderer
+to the own GUI canvas, retains complete bounded source and delivery arrays,
+validates persistent collision-entry types, and reports source-tail/first-target
+and GUI-route correlations. Only the bound button and renderer payloads are
+inspected. Cursor conversions use the independently recovered factors and engine
+truncation; duplicate selected entries, mismatched cursor stamps and unsupported
+handler presence remain explicit. The default probe adds no routing reads.
+
+The processed cursor stamp precedes route rebuilding. Consequently,
+`cache_completion_verified`, `os_cursor_verified`, `input_authorized` and
+`delivery_verified` remain false, even when every reported correlation matches.
+This change enables stationary inspection for a future journaled opener; it
+does not enable clicking, select a building or qualify construction placement.
+
+Ten new focused fixtures cover complete vectors beyond an early prefix, changed
+late entries, malformed headers, foreign targets without payload reads, exact
+renderer ownership, temporary/persistent type confusion, cursor truncation and
+nonfinite values, wrapper gates and full final-witness changes. All 24 focused
+tests pass, together with all 1,479 Rust tests, 956 Python tests (37 skipped),
+formatting, strict host/Windows/Linux-musl/ARM64-Linux-musl Clippy and the release
+build. The signed private binary passes a 28-tool offline stdio smoke, including
+strict routing-option refusal before session access. The preceding `82d061a`
+passed all nine CI jobs.
+No live probe was retried while task-port authorization remained denied; no
+input, pause, screenshot or cursor movement occurred during this work. The
+clean two-year run and complete campaigns remain outstanding.
+
+## Mac opener canvas binding — 23 October 2026
+
+Review found that the optional opener rectangle used the 1920×1080 transform
+without checking the running graphics canvas. The probe now binds the same own
+GUI to the independently recovered Mac graphics type and requires physical and
+logical 1920×1080 at scale 1 before reading the renderer. Other supported-size
+canvases return `gui_geometry_unavailable`; malformed or foreign graphics refuse
+explicitly. Ordinary opener observation still works without requesting geometry.
+The shared typed canvas reader preserves the existing SDL/Cocoa geometry checks.
+Every canvas field is included in the final witness.
+
+Two new fixtures and expanded torn-read checks pass, bringing the full Rust
+suite to 1,469 tests. The full Python suite also passes: 956 tests, 37 skipped.
+Formatting, strict host/Windows/Linux-musl/ARM64-Linux-musl Clippy, the release
+build and a 28-tool offline stdio smoke pass. The latter used no game session.
+The preceding opener commit `0a688c5` passed all nine CI jobs. There is no new
+live geometry evidence: the macOS authorization refusal below is unresolved,
+and the unchanged denied probe was not retried. Input remains disabled.
+
+The next offline routing design is pinned separately: mouse-hit/capture nodes
+belong to the already-bound graphics object and feed a reversed delivery list.
+The processed mouse stamp is written before rebuilding, so it is not a commit
+marker. Current route instances, optional Standard-button gates and hover effects
+still need qualification. A correlated route snapshot must not be advertised as
+atomic delivery proof or used to settle an old uncertain input.
+
+## Mac construction opener prerequisite and authorization refusal — 23 October 2026
+
+`hoi4_construction_panel_probe` adds a separate read-only Mac topbar observer.
+It binds the own campaign, registry, manager and construction view; distinguishes
+managed-panel mode from building selection; and validates complete named child
+membership, cached aliases, exact button ownership and the ordinary opener's
+callback capture. The full observer list, override, optional early handler and
+seven competing click-pair/precondition callback slots are checked. Every field
+participates in final read witnesses. An already-selected construction panel
+skips the toggle control even while its visibility is pending.
+
+Geometry is opt-in and comes from the same bound button renderer only when its
+local ancestors are visible with idle transitions. This is not settled-frame,
+global input-routing or placement proof. No input stage is enabled. Static
+analysis recovered additional menu, popup and GUI dispatch paths, but complete
+mouse routing/capture and other Standard-button gates remain under investigation.
+
+Twelve focused fixtures and the full 1,467 Rust tests pass, together with 956
+Python tests (37 skipped), formatting, strict host/Windows/Linux-musl/ARM64-
+Linux-musl Clippy and the release build. The stdio listing exposes 28 tools.
+The first live probe failed before any game-memory observation: noninteractive
+task-port authorization returned `-60007`. Its harness then raised `KeyError`
+because it expected an overview; both the original MCP refusal and harness
+failure are preserved. A separate capability call through the previously
+working `05c50fd` binary confirmed the same denial. Developer Tools remains
+enabled and the account retains developer-group membership; the cause of the
+required renewed authentication is not established. No security policy changed.
+
+This checkpoint therefore supplies no live opener latency or alias/callback
+qualification. The probe sent no input, obtained no lease and preserved all
+controller file bytes, sizes and timestamps plus all 248 native source/config
+files. Process identities and the 1920×1080 client remained unchanged. The last
+successful game-state observation remains the preceding paused 22 May checkpoint.
+Local task-port reauthorization is required before another memory-based gate;
+offline implementation continues. The preceding `05c50fd` passed all nine CI jobs.
+
+## Mac construction GUI ownership and local transitions — 23 October 2026
+
+The typed probe now verifies the own GUI-registry backlink of its root, named
+containers, all admitted grids and requested button before dependent payload.
+These Mac fields came from independent constructor chains, including the
+standard button's common GUI-object base. The all-grid backlink flag is true
+only after every grid validates. Hidden or partial paths keep it false.
+
+The root's exact engine visibility predicate is now reported separately from its
+local visible flag and two transition states. State 2 suppresses choice reads;
+state 1 can still animate while engine visibility is true. Unknown states refuse,
+and all new fields participate in final read witnesses. Even two zero states do
+not establish settled renderer geometry. Input, geometry, callbacks, global modal
+clearance and placement remain unavailable.
+
+Thirteen new stationary Mac samples passed at 1.428 ms median. The hidden root
+retained the own GUI registry and both local transition states were zero. The
+25-call probe preserved paused 22 May 1936 01:00, all controller file bytes,
+sizes and timestamps, and all 246 native sources/config files. It acquired no
+lease and sent no input, cursor movement or pause. Actual visible grids and
+controls still require a live panel-opening gate.
+
+Four new transition/ownership fixtures and expanded torn-read checks pass.
+Full validation passed 1,455 Rust tests, 956 Python tests (37 skipped), formatting,
+strict host/Windows/Linux-musl/ARM64-Linux-musl Clippy and the release build.
+The preceding `f30e55d` passed all three native CI jobs and five Python jobs;
+Mac Python 3.13 failed an existing standing-order fixture that races a 20 ms
+feeder against the observer. That failure is preserved. The fixture now delivers
+the two completion observations separately, proving empty-queue stopping on the
+fourth simulated day without a scheduling assumption. All 23 standing-order tests
+and the full Python suite pass locally; corrected-head CI is tracked separately.
+
+## Typed Mac construction UI observation — 23 October 2026
+
+`hoi4_construction_ui_probe` now binds the own campaign, production, target state,
+complete public building catalog and queue, Mac panel ownership, ordinary
+selection and bounded choice membership in one witnessed read. The exact Mac
+layout is independent of the Linux controls/Find readers. Every choice across all
+four grids must validate before the requested button payload is read. Hidden or
+missing paths return incomplete evidence; malformed types, duplicate identities,
+foreign owners and changed read witnesses refuse explicitly.
+
+Thirteen successful stationary RPC samples on the healthy owned Mac game had a
+median of 1.405 ms. The materialized construction panel was hidden, so these
+samples qualify its owner links and inactive selection, not visible grids or
+button geometry. The 25-call probe also checked five target/argument refusals,
+three retained Linux-UI platform refusals, ordinary queue/target reads and the
+unchanged clock. Germany remained paused at 22 May 1936 01:00, speed 3. All 246
+native source/config files and controller files retained their exact contents;
+controller size and timestamps also remained unchanged. There were no input
+calls, leases, cursor movements or observation pauses. Stdio exposes 27 tools.
+
+Fifteen new Mac observer fixtures cover hidden panels, a target after item 64,
+malformed later items, absent later grids, duplicate names, owner/process changes,
+unsupported selection modes and torn reads. A portable fixture also verifies
+zero process access on Linux refusal. Full validation passed 1,451 Rust tests,
+956 Python tests (37 skipped), formatting, strict host/Windows/Linux-musl/
+ARM64-Linux-musl Clippy and the release build. The initial full run found the
+stdio golden tool list still expected 26 tools; its corrected expectation passed.
+Earlier fixture setup failures and that failed run remain preserved privately.
+
+This observer grants no input. Actual visible grid instances, registry backlinks,
+callbacks, current geometry, modal clearance and placement eligibility still need
+qualification. Independent static analysis recovered common Mac GUI-owner fields
+and the root visibility predicate for the next stage; that predicate permits a
+transition state and does not prove settled geometry. The preceding `9d88d3d`
+passed all nine CI jobs. CI for this observer is tracked separately.
+
+## Construction UI platform boundary — 23 October 2026
+
+Review found three public construction routes still entering Linux-only UI
+layouts on Mac: controls, Find/camera and queue `include_ui`. Each now returns
+`unsupported_platform` before snapshot startup, process identity access or
+memory reads. Argument validation remains first. Linux UI observations and Mac
+queue, optional location and complete target observations remain available.
+
+A fresh read-only probe on the same owned Mac game passed all six valid UI
+refusals, three malformed-argument refusals, two ordinary queue reads and three
+canonical target reads. Median RPC times were 0.029 ms for the platform refusal
+and 1.410 ms for target reads; these are small paused-game samples. Germany
+remained paused at 22 May 1936 01:00. All 243 native source/config files and all
+controller files stayed unchanged through the probe. There were no input calls,
+leases, cursor movements or observation pauses. Stdio still exposes 26 tools.
+
+Six new portable fixtures cover direct and protocol entry points, optional
+geometry, empty-page requests, argument precedence and zero process access.
+Full validation passed 1,435 Rust tests, 956 Python tests (37 skipped), formatting,
+strict host/Windows/Linux-musl/ARM64-Linux-musl Clippy and the release build.
+The preceding `70062ce` passed all nine cross-platform CI jobs; CI for this
+correction is tracked separately. Independently bound Mac UI observation and
+durable construction placement remain unfinished.
+
+## Mac next-day known-refusal retry — 23 October 2026
+
+Luna medium continued the same revision-3 plan on runtime `3b84ebc` after the
+previous support factory request had returned positively `NotQueued`. The next
+game day used a fresh request ID and increased Support Equipment from 2 to 3
+factories. All twelve plan entries are Complete. The original refusal, eleven
+completed receipts, production bindings and ordinary journal prefixes remain
+unchanged. Exactly one new Intent/Verified pair appears in each relevant journal;
+no input record was attached to the prior refused request. The fresh daily budget
+is one used, two remaining. There is no quarantine or uncertain delivery.
+
+Independent read-only audit confirmed paused 22 May 1936 01:00, speed 3,
+infantry factories 12, support 3, unchanged other allocations and exact line
+membership. Eastern Autobahn remains active; all four Research slots are occupied.
+The audit did not change controller file bytes, size or timestamps. STOP joined,
+lease release and broker EOF completed, and the input grant is closed.
+
+The native client remained 1920×1080. The recording finalized cleanly at
+1920×1108, 17.931667 seconds and 526 frames; the final recorded frame shows
+readable Production UI and the matching date/allocations. One bounded calendar
+advance took 2.800–3.043 seconds. There were two clock requests, zero observation
+pauses and one planned test-ending pause. The worker step ran while paused;
+this does not establish continuous-play or two-year campaign acceptance.
+
+Twenty-five RPCs included three read-only `input_busy` retries. Successful-call
+medians were 0.370 ms for overview, 1.798 ms for Research and 10.910 ms for the
+governor. All 239 frozen native files and pinned helpers remained unchanged.
+The healthy game stays open without a worker, lease or recorder. Earlier failed
+controllers and the preceding foreground-check failure remain preserved.
+
+## Complete construction target readback — 23 October 2026
+
+The new `hoi4_construction_target` observes one canonical public building and one
+own-owned-and-controlled state. Public catalog membership, own target identity,
+all bounded queue entries and reciprocal state/province locations share a single
+witness bracket. The summary uses typed facts created from those reads rather
+than parsed JSON rows. Unknown building identities, unsupported line types,
+anomalous counters or unproved locations for the requested key make the amount
+unavailable. The public result exposes null counts, never a partial zero. The Mac
+legacy adapter now requires this complete total instead of summing only 128 rows.
+
+The first read-only Mac probe refused a type check; a second diagnostic build
+localized it to public catalog slot zero. Both failures sent no input and left
+all controller files unchanged. The retained independent RTTI inventory identifies
+a distinct null-template primary on each platform. The correction recognizes
+only that exact inactive null type at slot zero, without reading its key or ordinal.
+Unknown primaries, active null objects and null objects in other slots still refuse.
+The final live observation confirmed that precise Mac sentinel path.
+
+The corrected probe passed thirteen target reads on paused 22 May 1936. Three
+public building keys in own state 64 returned complete empty-queue totals; the
+median RPC was 1.378 ms. A foreign state, unknown building, invalid state ID and
+railway request each returned its expected refusal. All 242 native files stayed
+unchanged during the probe, as did all controller files. There were zero leases,
+input calls, cursor movements or observation pauses. Stdio exposed 26 tools.
+This is empty-queue read-path evidence; a nonempty Mac construction queue and
+durable placement have not been qualified by this test.
+
+Generated Linux/Mac fixtures cover the full queue beyond row 128, unavailable
+building identities, absent/foreign state targets, duplicate public keys,
+misjoined ordinals, exact null sentinels and torn owner/catalog/queue witnesses.
+No screenshot, save, debugger or game-memory write is part of this path.
+Final validation passed 1,429 Rust tests, 956 Python tests (37 skipped), formatting,
+strict host/Windows/Linux-musl/ARM64-Linux-musl Clippy, the release build and
+26-tool stdio smoke. All nine exact-head CI jobs passed on `70062ce` across
+Linux, macOS and Windows.
+The legacy Mac input adapter still returns an aggregate and discards the private
+typed scope. Its UI stages and before/after identity preservation must be bound
+before durable construction assignment receipts can be added.
+
+
+## Mac controller restart and action bounds — 22 October 2026
+
+The controller now retains its exact epoch in a private, locked and pinned state
+file. Reopening validates process creation, own player, playthrough, roots, game
+setup and date chronology without generating a replacement campaign identity.
+Same-date reads do not rewrite the file. Old nonempty action/daily histories
+without this record refuse automatic migration. The controller and server share
+one opened process handle; no background worker is introduced by this change.
+
+Clock and gameplay journals now share input quarantine. A different domain, new
+request ID or input-producing query cannot proceed around an unresolved action;
+only its journal's recorded request can take read-only settlement. Failed writes
+remain blocked, and partial or oversized journal records refuse on reopen.
+Research/production calls carry one original five-second deadline through reads,
+geometry checks and ordinary input. Nested guards preserve the original deadline.
+Every drag step rechecks, and cancellation/failure attempts release at the last
+posted position. Generated fixtures cover these failures without live input.
+
+One Luna medium player qualified read-only controller startup and reconnect on
+the existing owned native 1080p game. Twenty status calls had a 0.257 ms median
+(0.249–0.312 ms), including retained-state validation and MCP round trip. The state
+file's inode, timestamp and content stayed unchanged; a competing writer refused,
+and closing/reopening preserved the epoch. These are small paused-game status
+samples, not full observation or action timings. There were zero input calls,
+lease acquisitions and observation pauses. Germany stayed paused at 12 January
+1936 01:00, speed 1, Normal/historical, with existing Research and Focus unchanged.
+All 218 frozen native source/config inputs matched the tested staged source.
+
+Preserve two earlier private harness failures. Ambiguous activation-path wording
+caused the first check to stay out of focus; binding correctly refused before its
+first RPC. The second initialized but its test incorrectly expected an absent
+holder. Lease status reports the configured controller even when no lease exists;
+zero remaining time was the correct result. The corrected harness required no
+activation and passed. Neither failure sent gameplay input or acquired a lease.
+
+Validation passed 1,253 host Rust tests, 956 workspace Python tests (37 skipped),
+809 clean-staged Python tests (29 skipped), formatting, Clippy, Windows all-target
+compilation and a 24-tool stdio smoke. The first staged-archive helper used a
+Python-version-incompatible extraction option; that private harness failure was
+preserved before the corrected clean extraction/test run. Durable Mac worker
+execution, typed action proofs, mixed-plan restart, the two-year Luna run and full
+recorded campaigns remain unfinished. No release or downstream pin moved.
+
+See [the Mac controller contract](MAC_CONTROLLER.md).
+
+## Mac recorder lifecycle and durable observations — 22 October 2026
+
+The new Rust `--record` command passed a bounded native Mac window qualification:
+the 120-second request produced a finalized 119.36-second MP4 at 1920×1108,
+3,485 encoded frames and approximately 29.2 FPS. The window includes decoration
+around the previously verified native 1920×1080 client. Capture ran while the
+game stayed paused; this was a recorder qualification, not gameplay. No input,
+cursor movement, observation pause or game-date advance occurred.
+
+An explicit stop finalized in 0.31 seconds. Terminating only the test's Rust
+recorder owner caused its child to detect ownership loss and finalize a failed
+partial video in 0.32 seconds, retaining `recorder_owner_lost`, the missing
+process-info witness and reparenting to PID 1. The game and its supervisor were
+untouched. A one-point geometry mismatch refused with zero frames and a detailed
+`window_changed` witness. Reusing an existing output refused without replacing
+the video. Frozen native sources and video hashes were audited privately.
+
+Preserve the first integration failure: a function-local callback observer was
+released after setup. Video was created, but callbacks stopped and the startup
+then finalization deadline expired. A retained observer corrected that separate
+lifetime defect. Review also corrected blank/suspended/unknown active frame
+statuses being counted as ordinary idle; the bridge now fails those statuses,
+with a pure native status-policy regression. None of these results establishes
+the cause of gate007's older aggregate guard failure. Long recording reliability
+and successful campaign filming remain open.
+
+The Mac process reader now checks both exact recorded process identities and the
+game's supervisor relationship. Ownership checks do not need a task port. The
+daily observation producer uses the independently verified Mac game and Research
+layouts, retains final witnesses and persists canonical creation timestamps
+without changing scope equality. Eleven generated Mac fixtures passed, including
+foreign/torn ownership, malformed timestamps and chronology/restart refusals.
+
+A live read-only probe produced 20 complete observations with median 12.97 ms
+(11.15–15.95 ms), resumed at sequence 21 after reopen and rejected a different
+campaign epoch without changing persisted state. The paused Germany game stayed
+at 12 January 1936 with its existing Research assignments. A first probe correctly
+refused a non-private output parent; the corrected private directory passed.
+These timings include durable sequence persistence and are limited paused-game
+samples. The Mac durable action worker, typed completion proofs, original action
+deadlines and worker lifetime/restart integration are still unfinished.
+
+See [the recording command](MAC_RECORDING.md). No release or downstream pin moved.
+Local checks passed 1,224 Rust tests, 956 workspace Python tests (37 skipped),
+Clippy, formatting, stdio protocol smoke and Windows all-target compilation.
+
+## Mac native geometry and catalog qualification — 22 October 2026
+
+The fresh owned Mac game now has an independent geometry path for Mach-O
+089EA519. Live reads found matching render/logical 1920×1080, GUI scale 1,
+SDL Cocoa content `(0,81,1920,1080)` and owned CG frame `(0,53,1920,1108)`.
+The reader checks native types, constructor-proved Cocoa callbacks, bounded
+window membership and reciprocal driver/view/listener links. ObjC ivar offsets
+are resolved at runtime; on-disk offsets differ on this host. Every dependency
+has a final read witness. See [the geometry contract](MAC_INPUT_GEOMETRY.md).
+
+A signed rebuilt adapter bound successfully with continuous window recording
+active. Its geometry observation used 464 bytes across 56 logical requests and
+took 0.13 ms in one producer sample; own overview took 0.16 ms. These are narrow
+paused-game samples, not campaign throughput. The command binding separately
+checks OS ownership/geometry and rechecks before input. The public geometry
+read remains a non-authorizing memory diagnostic by design.
+
+The first recorder-on binding attempt (gate004) refused before a player, lease
+or action because macOS added a same-owner title-region sharing indicator ahead
+of the main window. The correction permits only same-owner rectangles entirely
+inside the title decoration. Foreign windows, client overlap, displaced frames,
+ambiguous matches and lost SDL focus still refuse. Its 89-second recording and
+zero-input failure are preserved. A review also found and fixed the Shift-click
+check-to-press delay, keeping modifier release on refusal.
+
+Gate005 then bound correctly, but Luna stopped before acquiring a lease when
+`hoi4_focus_list` used hardcoded Linux roots and returned `read_bound`. Its
+175-second recording and handback are preserved. Mac catalog reads now use the
+existing independent Mac country/focus layouts and validate all own canonical
+members and keys before pagination. The live catalog contained 438 own entries;
+one filtered producer read took 18.56 ms. Completion membership also passed.
+Mac node/search/selected-detail diagnostics that remain unported explicitly
+refuse before memory reads. Their absence is distinct from the ordinary Mac
+focus action adapter and does not authorize a Linux-layout fallback.
+
+Gate006 verified Basic Machine Tools in slot 0 and the economic-growth Focus
+through ordinary inputs, then advanced time. The research RPC took 1,965 ms and
+the Focus RPC 3,974 ms. All 18 player RPCs succeeded, with five verified journal
+pairs and no unresolved input. There were zero observation pauses and one
+explicit end-of-test pause. The recording finalized at 284.76 seconds,
+1920×1108, 8,381 frames (about 29.4 FPS); all 214 native inputs and six frozen
+private files matched their hashes.
+
+The date limit failed: the wait returned at 8 January 1936 01:00, but an
+approximately 8.2-second model gap before the pause advanced the game to
+11 January 01:00. Actual advancement was 229 game hours. The interval between
+verified unpause and pause responses was approximately 27 seconds; it is not
+an end-to-end campaign-year timing. No rewind occurred. Preserve this as verified
+actions with a failed bounded-date test, not a clean campaign gate.
+
+Read-only preparation for the next mixed test passed events, economy, all 21
+own production lines, the empty construction collection, research and Focus
+completion. Review then found that the Mac event list suppressed a failed peace
+window read; it now propagates the error. A fault fixture checks that missing
+peace state cannot appear safely closed. The legacy plan runner also accepts
+`stop_on_failure: true`: a refused, NotApplied or Diverged action stops before
+another candidate/domain. Uncertain dispatches retain their same-ID settlement
+and never gain a new action ID. The legacy default remains unchanged.
+
+This Mac runner is synchronous and keeps scheduling state in memory. Its
+`seconds` deadline is checked between complete actions. It is not the Linux
+durable daily worker. The following fixed-plan test used a single local sequence for
+unpause, plan execution, bounded wait and explicit test-ending pause, with no
+model gap and no observation pause. Empty production entries alone do not disable
+its default rebalance; the test explicitly declares the permitted infantry-line
+target. Broader durable mixed plans and a clean two-year run remain unfinished.
+
+Gate007's gameplay portion passed with one Luna medium player: 20 RPCs, zero
+errors, six verified journal pairs and no unresolved input. The manual infantry
+line change from 10 to 11 factories took 823 ms. A fixed standing plan then
+started Construction I in slot 1 and assigned the remaining seven idle military
+factories to that line, reaching 18. The synchronous plan call returned after
+11.59 seconds. Final reads preserved Basic Machine Tools in slot 0, the active
+economic-growth Focus and every other production line. All 214 native inputs
+and eight private frozen files matched their hashes.
+
+The test advanced from 11 January 1936 01:00 to 12 January 01:00. Its wait and
+explicit final pause ran consecutively in one local driver, eliminating the
+model gap; the final paused date matched the target. There were zero observation
+pauses and one explicit end-test pause. The verified unpause-to-pause response
+interval was 12.22 seconds for that one game day at internal speed 1. This short
+qualification is not a campaign-year throughput measurement or durable restart
+acceptance.
+
+The recorder did not have a clean lifecycle: approximately 41 seconds after the
+driver completed, and after player handback, its process/window/session guard
+stopped capture. The aggregate failure did not retain which witness failed;
+subsequent process identities and window geometry matched, which does not explain
+or erase the original failure. The finalized 101.36-second video contains the
+whole gameplay sequence at 1920×1108, 2,985 frames and about 29.4 FPS. One extracted
+post-test frame visibly confirms the paused date, 18 factories and readable UI.
+The failure remains recorded separately from the passed gameplay checks. Recorder
+integration must retain exact failure witnesses and qualify reliable termination
+before campaign-video acceptance.
+
+Validation after these changes passed 1,208 host Rust tests, 956 Python tests
+with 37 skips, Clippy, formatting and Windows all-target checks. The staged Python
+baseline separately passed 809 tests with 29 skips. These counts distinguish the
+preserved local Python WIP from the published tree. Offline checks do not replace
+live acceptance.
+
+## Mac switch and Linux FEX002 checkpoint — 22 October 2026
+
+The user explicitly authorized switching back to macOS. FEX002 had reached a
+fresh 1080p historical Normal Germany game through Luna's ordinary menu actions.
+The new Rust binding correctly refused missing opt-in and 512×288 profiles,
+then accepted the pinned FEX 1080p profile. The interruption occurred before
+any adapter action intent or lease acquisition. Fresh pre-close reads confirmed
+the initial paused date and no active input lease. Rust gameplay validation and the
+mixed-plan gate remain incomplete; accepting a binding is not action acceptance.
+
+The owned Linux game then closed with exit code 0. Its completed 1080p diagnostic
+recording was probed, archived privately and hash-verified. Owner, recorder,
+temporary display and created FEX app configuration were cleaned up. The Linux
+VMs, installations and unfinished gate remain preserved.
+
+The fresh Mac probe used the unchanged supported executable and isolated vanilla
+userdata at requested 1920×1080. It reached the frontend in 22.27 seconds, but the
+read-only MCP process exceeded its 25-second allowance while system authorization
+was pending. This is distinct from the preceding explicit task-access denial.
+The exact owned game subsequently exited with code 0 after the supervisor's
+SIGTERM; default settings were unchanged and no campaign began. Developer mode
+was disabled at that checkpoint; local administrator authorization subsequently
+completed.
+
+A noninteractive Security.framework task-port policy check returned
+`errAuthorizationInteractionNotAllowed` in 10.74 ms. The Rust adapter now performs
+that check after ownership/build verification and before requesting the task port.
+It disallows authorization UI and preauthorization, returns no authorization
+handle and preserves no newly obtained shared rights. Missing approval returns
+`task_access_denied` so MCP initialization and capability discovery can continue.
+It does not change system security policy, sign the game, or replace live-memory
+acceptance. A client can select its separate telemetry/UI fallback from that error.
+
+Local authorization subsequently enabled Developer Tools. The next fresh Mac
+frontend reached readiness in about 22 seconds. Its capabilities, geometry and
+technology-list probe completed in 0.543 seconds with `owned_session_bound=true`.
+The campaign-only reads remained unavailable at the frontend; that is not an
+in-game geometry or gameplay pass. The game binary was unchanged, the agent
+remained unprivileged and no SIP or game-signature change occurred.
+
+The existing decorated-window diagnostic recorder wrote six frames, then stopped
+with a changed-frame witness. That diagnostic path omitted the structured
+`capture_frame_changed` code used by the recorder's bounded recovery. The code
+now matches normal capture; an identity-change regression confirms ownership
+loss remains a separate, nonretryable error. The full Python suite passed 954
+tests with 37 skips. The task authorization change separately passed 1,195 host
+Rust tests, Clippy, formatting, Windows target checks and protocol smoke.
+
+A private native ScreenCaptureKit prototype records only the exact owned window
+through `SCRecordingOutput`, avoiding per-frame Python screenshot calls. Its first
+run reached an outer deadline because an ARC timer was not retained; preserve
+that failure. With the timer retained, the next 20-second run finalized cleanly:
+589 complete frames, 1920×1108 H.264, approximately 29.4 FPS and 45.4 ms maximum
+complete-frame interval. It validates game and supervisor identity, parentage,
+window bounds and the unlocked desktop, without focus or input changes. The
+full-window frame includes decoration; it grants no client-coordinate authority.
+This is a short frontend capture diagnostic, not an integrated public recorder
+or campaign recording acceptance. A bounded single-Luna Mac gate follows.
+
+The first Luna setup gate sent one Single Player click, but the next image still
+showed the main menu. It stopped without retry or campaign Start. The private
+menu helper lacked the target move event used by the existing Rust click
+sequence; that setup helper was corrected separately. The second gate refused
+before input because its focus check used the all-windows snapshot's ordering.
+Read-only comparison found the visible window-server stack, Process Manager
+and AX focus agreed on the owned game, while the all-windows ordering differed
+during sharing. Focus now requests the on-screen stack directly, retaining the
+same owner and exact focused-window checks. The full suite passed 956 tests with
+37 skips; the two failed setup gates and their recordings remain separate.
+
+The third gate passed menu setup through six ordinary clicks. One Luna medium
+player entered fresh historical Regular Germany on 1 January 1936 at 12:00;
+the own-country overview returned in 1.404 ms through a persistent local MCP
+connection, including 0.297 ms producer time. No input lease was acquired, no
+gameplay command was attempted and no observation paused the game. Luna released
+the broker and handed back. The recording finalized cleanly at 264.522 seconds,
+1920×1108 H.264, 7,798 frames and about 29.5 FPS; an extracted game frame was
+visually checked and all frozen inputs matched. The video includes its titlebar.
+The initial game remains owned and paused by the game's startup behavior.
+
+Source inspection found that the generic `hoi4_input_geometry` tool dispatched
+Linux-only offsets on Mac. The player was stopped before calling it or acquiring
+an input lease. The diagnostic now rejects the Mac ABI before any layout read;
+an offline test panics on any attempted memory read. The rebuilt signed private
+CLI returned `input_geometry_unavailable` on the actual game, followed by a valid
+unchanged GER overview. This proves refusal and own-state access, not Mac geometry.
+Independent client/input-profile validation remains the next live gate.
+
+Final checks passed 1,196 host Rust tests, host Clippy, formatting and Windows
+all-target compilation. The workspace Python suite passed 956 tests with 37
+skips; a clean staged-tree archive, excluding unrelated Python WIP, passed 809
+tests with 29 skips. Recordings, helpers and artifacts remain private. No two-year
+or full campaign acceptance, public recorder integration or release is claimed.
+
+## FEX own-state and stationary input qualification — 22 October 2026
+
+One existing Luna player at medium reasoning entered a fresh vanilla, historical,
+Normal Germany game through seven ordinary menu clicks at native 1920×1080.
+The frozen Rust runtime was `b924ec4`; the reviewed FEX/game hashes, ordinary
+UID 1000 and Yama scope 1 remained unchanged. Software rendering used guest
+llvmpipe with GL forwarding disabled and temporary swap.
+
+The Rust MCP read the own-country overview, four empty research slots with 47
+researched technologies, and all 21 own production lines. The visible German
+map/date and initial setup corroborated the player and campaign. Geometry reads
+confirmed physical/logical 1920×1080, scale 1 and the reciprocal SDL/X11 window
+association. This does not qualify every pointer target or hit-routing branch.
+
+A separate bounded ordinary-key qualification then sent one W to open Research
+and one W to close it. Fresh canonical panel reads verified both transitions;
+the date, four assignments, focus and cursor position remained unchanged. This
+used an owned XTest helper, not the Rust campaign input adapter. There was no
+clock input, map movement, engine command, game injection or observation pause.
+The game remained at its initial paused 1 January 1936 12:00 state; no advancing
+campaign, mixed-plan or two-year acceptance is claimed.
+
+A persistent local MCP client made 20 successful observations, five per tool,
+after one capabilities warm-up. Round trips include stdio and owner transport,
+exclude SSH/model latency, and were measured with the 1080p recorder active:
+
+| Tool | Median round trip | Observed range | Median server time |
+| --- | ---: | ---: | ---: |
+| Own overview | 4.18 ms | 2.21–7.22 ms | 2.22 ms |
+| Research | 2.86 ms | 2.70–10.51 ms | 2.63 ms |
+| Production | 6.06 ms | 5.84–30.09 ms | 5.75 ms |
+| Input geometry | 12.14 ms | 5.30–23.18 ms | 10.38 ms |
+
+These small paused-game samples establish complete local MCP latency in this
+fixture, not campaign throughput or a comparison against upstream performance.
+The 15 FPS H.264 diagnostic recording began before Start. Three completed
+1920×1080 segments were probed and their downloaded hashes verified. They remain
+private and do not satisfy the native macOS campaign-video requirement.
+
+The player retained three setup handbacks: a provisional dispatch receipt was
+mistaken for failure; one malformed request ID was rejected before intent/input;
+and a screenshot caught a menu transition before it settled. Read-only checks
+resolved them without replaying input. The first cleanup configuration had
+incorrect file permissions and was rejected before window close; after correcting
+its mode, ordinary window close completed with exit code 0. Recorder, game, owner
+and temporary display exited; the created FEX app configuration was removed.
+
+The subsequent Rust source adds an explicit owner-only
+`fex_2610_x11_1920x1080_validation_v1` input opt-in. It requires the reviewed
+translator and game builds and pins 1080p even for clock-only binding. Every
+enabled domain must use the matching 1080p profile. Default translated binding
+still refuses; existing window, campaign, lease, journal and fresh readback checks
+remain in force. Actual Rust-adapter and mixed-plan acceptance are the next gates.
+
+Validation of this opt-in passed 1,193 host Rust tests, 778 ARM Linux library
+tests and both separately selected real FEX fixtures, plus 953 Python tests with
+37 skips and the stdio protocol smoke. Six ARM tests remain ignored by default;
+the two FEX fixtures were run explicitly. Formatting, host/ARM/x86 Linux Clippy
+and Windows all-target compilation passed. These checks do not replace live
+Rust-adapter acceptance.
+
+## FullHD-FEX003 frontend qualification — 22 October 2026
+
+With GL forwarding disabled, guest llvmpipe created HOI4's graphics device. The
+first such run (FullHD-FEX002) then exceeded the four-GiB VM's memory capacity:
+the kernel explicitly recorded an OOM kill of the exact owned FEX child. It was
+not a successful shutdown or a repeat of the previous GL initialization crash.
+The retained owner was closed separately after the child had exited.
+
+Adding four GiB of temporary guest swap allowed FullHD-FEX003 to reach the
+frontend: HOI4 reported 50,733 ms startup; the external harness observed it at
+51.15 seconds. X11 verified an actual 1920x1080 game client within the owned
+2560x1440 display, at UI scale 1. One ordinary window-close request completed
+with exit code 0, no signal and no core dump. Owner, game and temporary display
+instances exited; the created per-app FEX setting was removed. The unchanged
+settings seed and isolated vanilla userdata were retained as evidence.
+
+This used the previously CI-qualified `d07d2cb` owner. It proves this environment's
+frontend startup and clean lifecycle, not in-game memory observations, input,
+campaign performance or recording. No campaign, menu input, screenshot or video
+was started. Temporary swap is test infrastructure, not a new runtime requirement.
+
+FullHD-FEX004 compared guest virpipe GPU offloading without GL forwarding, using
+the CI-qualified `b924ec4` source. A separate GL utility passed, but HOI4 remained
+in graphics setup for over four minutes without beginning data loading. The test
+was explicitly stopped early; it did not reach its original 600-second deadline.
+The ordinary window-close delivery was server-confirmed but timed out after
+20 seconds. A separate owned SIGTERM request ended the game with exit code 6,
+no signal and no core dump. This was not a clean window-close result. The owner,
+temporary display, dedicated renderer/tunnel and per-app setting were cleaned up;
+the original VM's renderer/tunnel were preserved. An MCP client connected during
+loading and confirmed a bound reader; the GUI tool returned `read_bound`, not
+valid geometry. Software rendering remains the demonstrated startup path.
+
+FullHD-FEX005 repeated software startup with the `b924ec4` runtime: HOI4 reported
+43,163 ms; the harness observed the frontend at 43.56 seconds. X11 again verified
+1920x1080 and ordinary window close exited with code 0. Nine structured requests
+used one persistent MCP client. Capabilities confirmed the bound process; five
+GUI checks, folder/catalog checks and overview all correctly returned
+`campaign_unavailable` in the menu. Those eight refusal round trips took
+1.31–2.61 ms, including local client/owner transport. These are explicit negative
+state checks, not successful in-game reads or a full-observation latency benchmark.
+The game remained unpaused by observations, with no menu input, screenshots,
+cursor movement or campaign. Own-country reads and translated ordinary input
+still require a separate qualification before Luna gameplay.
+
+## FEX context isolation and deadline fixture — 22 October 2026
+
+Fresh isolated X11 displays compared the same OpenGL utility natively on ARM and
+as an x86 process through the pinned FEX build. Native ARM succeeded with both
+virpipe and llvmpipe. FEX with GL forwarding enabled failed with `GLXBadFBConfig`
+and signal 11 on both renderers. This reproduces a forwarding compatibility
+failure independently of the host GPU transport; its exact cause is unproven.
+Disabling GL forwarding let the x86 utility finish successfully under FEX using
+guest llvmpipe, reporting OpenGL 4.6 in 2.16 seconds. This is context creation
+evidence, not game performance or campaign acceptance. Each generated client and
+temporary display exited; per-client forwarding settings were removed. No game
+input, screenshot or recording was used in these comparisons.
+
+CI for `88f6f5d` passed native Linux/macOS and all six Python jobs but failed one
+Windows construction deadline fixture. Its 200 ms budget expired during durable
+journal setup, before the intended simulated input phase. The fixture now uses
+the existing two-second test budget. The fake backend still consumes the original
+remaining deadline during dispatch or idle verification, and assertions require
+exactly one possible input, the expected idle phase and deadline expiry. No
+production timeout or action behavior changed. All 43 construction-stage tests,
+953 Python tests (37 skipped), formatting, Clippy and Windows all-target
+compilation passed locally. All nine exact-source CI jobs subsequently passed for
+`b924ec4`, including the Windows execution that previously failed.
+
+## Indexed Linux read bounds — 22 October 2026
+
+Scalar reads and both bounds checks around vectored reads now search the ordered
+mapping table instead of scanning every mapping. The parser rejects overlapping,
+duplicate or out-of-order ranges. Reads still fit wholly within one readable
+region; adjacent regions, guard pages and gaps do not grant extra access. Process
+ownership, execution witnesses, refreshed maps and final read brackets are unchanged.
+
+A generated benchmark extracted the exact production lookup and ran on the ARM64
+Linux VM. Across five runs of 200,000 queries over 4,096 sparse mappings, median
+lookup time fell from 346.31 ms to 8.07 ms, about 43x. Both methods returned identical
+acceptance counts. This measures bounds lookup only, not memory syscalls, full MCP
+latency, game speed or campaign performance.
+
+Validation passed 1,193 host Rust tests, all 776 non-ignored ARM Linux library tests,
+the two separately selected real FEX child-reader/launcher tests, 37 x86 Linux
+reader tests (including 19 real child-process tests), ARM/x86 Linux all-target
+Clippy and 953 Python tests with 37 skips. The Python suite used the
+project environment; an initial system-Python invocation failed on missing NumPy
+and remains in the private evidence. Boundary and sparse-address-space tests cover
+the indexed lookup. Live campaign acceptance remains outstanding.
+
+## FullHD-FEX001 startup failure — 22 October 2026
+
+The licensed Linux installation was transferred to the ARM VM with matching archive
+and executable hashes, excluding Workshop content. The Rust `d07d2cb` owner launched
+the pinned game through the reviewed FEX build with isolated vanilla userdata,
+1920x1080 settings and native OpenGL forwarding. The endpoint was created, but
+that alone does not prove usable game observations.
+
+HOI4 reported `glewInit failed: Missing GL version` and then recorded SIGSEGV before
+the frontend. Its graphics log reported zero adapter capabilities. No campaign,
+input binding, player lease, screenshot or recording started. Missing Steam-client
+messages also remain in the logs; their causal role is unproven. Earlier successful
+generated GL rendering did not establish this game's context compatibility.
+
+The crash handler stayed alive and ignored the owner's bounded SIGTERM request.
+After its 20-second timeout, a separate exact PID/start/executable/UID/parent check
+and pidfd were used to kill this failed pre-campaign test. The owner recorded signal
+9, not a normal game exit. A subsequent explicit close retired the already reaped
+owner. Temporary display processes, graphics forwarding and the created FEX app
+setting were cleaned up. A surviving FEX crash subprocess was separately tied to
+the original game process group, owner session, exact private userdata argument
+and inherited run log descriptors. Its pinned instance also required SIGKILL
+after a 20-second SIGTERM timeout. Final checks found no remaining game or test
+client on either VM. The original failure, shutdown timeouts and forced cleanup
+remain distinct evidence. A native GL diagnostic also encountered a rendering
+connection failure. Isolate context/forwarding compatibility before another game
+attempt; do not enable translated campaign input on this evidence.
+
+## Mixed005 immediate-close readiness failure — 22 October 2026
+
+Mixed005 used the same `81a3e41` source with a frozen self-relative step driver.
+Its 53 offline checks cover exact ordered steps, original-snapshot detail batches,
+bounded date waits, local failures, cleanup and final release. Native predicates,
+permissions and daily budgets stayed unchanged; all nine exact-source CI jobs
+had passed.
+
+The faster sequence exposed a readiness gap. Research OpenPanel verified in
+450.812 ms, then the immediate ClosePanel refused in 26.908 ms with
+`research_panel_transition`: the root still had a known animation transition.
+No close Intent or close input occurred. Opening's visibility predicate could
+accept a shown root in animation state 1; closing correctly required state 0.
+The specific closing root and numeric transition values were not retained in
+this failure, so the correction does not claim to recover those missing facts.
+The player stopped without a retry. The worker had never started, so cleanup
+released the lease and verified zero remaining seconds without an extra STOP.
+
+Independent audit retained one completed step, six player RPCs, one native
+refusal and one verified Research input pair. There was no production, clock,
+worker, uncertain input or pause command. All 197 native inputs and 22 helpers
+matched their frozen hashes. The 202.333-second recording passed integrity;
+normal exit was 0 in 2.256 seconds, and all exact owned game/server/recorder/bridge
+instances were absent. Recorder exit 255 remains separate. Startup took 349.619
+seconds; setup used two screenshots and eight clicks, Luna no screenshots.
+
+The correction targets OpenPanel readiness: verify that the same own shown root
+has settled before confirming the action, inside its original deadline and lease.
+Known opening transitions may be observed again after the single dispatch;
+pre-input refusals, unknown transitions and ownership mismatches remain strict.
+No fixed client delay, input retry or broader closing permission is introduced.
+Fresh live validation remains required; this run provides no mixed-gate acceptance.
+
+The readiness correction passed 1,171 host Rust tests, 142 targeted Linux test
+executions, 953 Python tests (37 skips), formatting, host/Linux Clippy and Windows
+all-target cross-compilation. These checks do not establish live readiness recovery.
+The next live run must first satisfy the new native 1080p campaign requirement.
+
+## Mixed004 completed background goals, incomplete test — 22 October 2026
+
+Mixed004 used `81a3e41`, one Luna medium player, vanilla FAIR Germany, Normal
+and historical AI, with all nine exact-source CI jobs passing. The paused
+assignment completed in 12.276 seconds (12.284 seconds including transport).
+Its corrected detail batch accepted all 11 required sections once, taking
+5.302–6.796 ms per native call and 64.423 ms total. Speed 3, unpause and restart
+of the unchanged plan then passed.
+
+The player used a nonexistent local helper path for step 10, before any wait RPC
+was sent. It stopped instead of retrying. The first cleanup STOP was rejected
+before native dispatch because the broker was still expecting the ordered wait;
+that rejection entered cleanup state. A separate cleanup-only continuation sent
+the one permitted canonical STOP, then released the lease and verified zero
+remaining seconds. The original failure and continuation remain separate.
+
+Independent stopped journals show both goals complete: production used two steps
+each on January 1, 2 and 3, reaching 14 factories, and Basic Machine Tools was
+assigned. Two panel departures preserved their original typed identities.
+Seven production pairs, eight Research pairs and two clock pairs verified with
+no unresolved input. One historical clock-probe torn read recovered; the newly
+added mixed-read recovery had no rejected reads and was not exercised.
+
+The run completed nine of twenty granted steps. It retained 26 player RPCs,
+one broker rejection and zero native errors. The final catalog comparison and
+completed-plan restart were not reached, so the full mixed gate remains pending.
+There were zero pause commands, two setup screenshots, eight menu clicks and no
+Luna screenshots. Startup took 352 seconds in the emulated VM. The 297.666-second
+recording passed integrity; one ordinary close exited 0 in 2.632 seconds.
+Recorder exit 255 is retained separately. All exact owned game, server, recorder
+and bridge instances were absent; all 197 native inputs and 20 helpers matched
+frozen hashes. This is background mixed-plan evidence, not complete gate,
+two-year or full-campaign acceptance.
+
+## Mixed002 and Mixed003 incomplete mixed gates — 22 October 2026
+
+Both runs used source `fa2fab8`, one Luna medium player, vanilla FAIR Germany,
+Normal difficulty and historical AI. All nine exact-source CI jobs had passed.
+
+Mixed002 verified production opening, allocation from 10 to 11, the separate
+Production-to-Research departure and Basic Machine Tools assignment. The paused
+assignment wait reached its target in 10.995 seconds. The durable plan contains
+one complete and one pending goal; the destination selection completed with its
+original identities. Three production and seven Research Intent/Verified pairs
+have no unresolved input.
+
+The private broker then rejected `clock_probe_historical` before native dispatch.
+Luna followed the native digest's eight advertised non-null sections; the broker
+had silently added nullable failure proofs and expected `last_error` first.
+Five steps and the sixth digest's native call passed, but that digest's required
+history was incomplete. The player's initial six-step count is not full step-six
+acceptance. This was a test-contract mismatch, not a native action failure.
+The five accepted detail reads took 5.631–9.040 ms each, 34.302 ms total.
+
+Mixed002 retained 15 player RPCs and one broker error. STOP/release/status,
+258.333-second recording integrity, normal exit 0 in 2.196 seconds, exact-process
+absence and all 195 native inputs/18 helper hashes passed independent audit.
+
+Mixed003 used the same Rust build and a revised private contract: explicit
+pending detail sections, each accepted once in any order for its original
+snapshot, plus one bounded host batch reader. Twenty-nine offline broker/client
+checks include the real sparse discovery order and nullable evidence. The first
+installer invocation expected the older test-receipt schema and stopped before
+installation; the schema check was corrected and the failure retained.
+
+Mixed003 stopped earlier, at the single paused assignment wait after 50.002
+seconds. Its original worker error was `torn_read` in `mixed_destination_engine`,
+read 681, size 1, changed byte 0. The exact engine field remains unidentified.
+Independent journals prove zero selections, zero departures and no governor
+assignment attempt. Production reached 11 in two steps; two production and two
+warmup Research pairs verified. Both goals stayed pending, with no uncertainty.
+The timeout sample is explicitly historical and does not prove current state.
+
+Mixed003 retained eight player RPCs and one deadline rejection. STOP/release/status,
+252.333-second recording integrity, normal exit 0 in 2.206 seconds, exact-process
+absence and all 195 native inputs/20 helper hashes passed independent audit.
+The revised detail batch was not reached and has no live acceptance yet.
+
+Each run used two setup screenshots and eight ordinary menu clicks. Luna used no
+screenshots; no clock or pause command ran. Recorder exit 255 is retained separately
+from each game's exit 0. These results do not establish multi-day mixed-plan,
+annual-throughput, two-year or full-campaign acceptance. Mixed001 remains failed.
+
+The follow-up source applies bounded whole-snapshot recovery only to the initial
+combined destination, its post-departure readback and selected Research identity.
+It reuses the existing four-read/one-second/25-ms primitive under the unchanged
+deadline. Original bindings, guards, scope comparisons, persistence and input are
+outside the retry closure. Other error categories remain strict. Worker-lifetime
+history stores exact counts and bounded first/latest rejected causes, including
+failed recovery, and survives report refresh and STOP. Compact digests preserve
+counts/outcome and expose full causes through the original snapshot's details.
+This source change does not repair the failed runs or establish live recovery.
+
+Validation passed 1,162 host Rust tests, 131 targeted Linux test executions,
+953 Python tests (37 skips), formatting, host/Linux Clippy and Windows all-target
+cross-compilation. The new Linux worker-report test confirms recovered-read
+history survives report refresh and STOP without becoming a terminal error.
+These are offline checks; the recorded mixed gate still needs to pass.
+
+## Mixed001 retained animation failure — 22 October 2026
+
+Mixed001 on `8859719` stopped at the paused assignment wait. The worker verified
+production opening, allocation from 10 to 11 factories and one separate departure
+to Research. It then retained an unresolved Research OpenPanel Intent: the selected
+identity reader reported a known root animation, which that stage's readback
+loop treated as fatal. No Research assignment or governor goal completed. The
+single 50-second wait returned a historical timeout snapshot with empty slots;
+its broker error must not be described as a fresh assignment result.
+
+Independent stopped audit verified eight player RPCs, three production
+Intent/Verified pairs, two warmup Research pairs and one unresolved OpenPanel.
+The departure preserved its original source and destination identities and its
+separate consumed budget. Both goals remain pending; no action was retried.
+STOP retained uncertainty, lease release/status passed, the 430.333-second
+recording passed integrity and one normal close exited 0 in 2.301 seconds.
+All exact game/server/recorder/bridge instances were absent, and all 195 native
+inputs and 18 helpers matched their frozen hashes. Recorder exit 255 remains
+separate. All nine exact-source CI jobs passed before launch. Setup used two
+screenshots and eight menu clicks; Luna used no screenshots. No clock or pause
+commands ran. This failed gate provides no advancing-time or campaign acceptance.
+
+The builder's pregrant catalog RPC was rejected by its fixed allowlist before
+dispatch. That refusal is retained. Canonical IDs were independently verified
+in installed vanilla definitions; no live helper was changed. Public definition
+membership does not establish Research eligibility.
+
+The correction gives known continuation-root animation a distinct read error.
+After possible input, the journal may wait for a complete original-identity
+readback under the existing absolute deadline and lease, without another input.
+Pre-input checks, unknown animations and ownership errors remain strict; direct
+closing keeps its previous semantics. Timeout diagnostics retain the count and
+last original continuation-animation cause. Successful receipts still require
+complete final proof but do not retain recovered-read counts. Fresh mixed live
+validation remains pending; Mixed001's uncertainty is not repaired by this fix.
+
+The correction passed 1,154 host Rust tests, 117 targeted Linux test executions,
+953 Python tests (37 skips), formatting, host/Linux Clippy and Windows all-target
+cross-compilation. The first Python invocation used the system interpreter and
+failed on missing dependencies; the project environment passed. Offline checks
+do not establish live recovery or mixed-plan acceptance.
+
+## ResearchClose002 direct closing passed — 22 October 2026
+
+ResearchClose002 passed all 14 granted steps on `8d12301` with one Luna medium
+player in recorded vanilla FAIR Germany, Normal difficulty and historical AI.
+Both Research closes, historical replay while closed and reopened, fresh no-ops,
+and production round trips verified. All 21 production lines and four empty
+research slots stayed unchanged; no Focus assignment or clock action occurred.
+
+Independent stopped audit verified 19 player RPCs with zero errors, four Research
+Intent/Verified pairs plus two no-ops, four production pairs and no unresolved
+input. Both closes retained their original private identities and assignments.
+One discarded pre-queue producer read and one discarded candidate read recovered
+inside the original bounds, each `torn_read` in `close_engine`, byte 0 of read
+668. Neither retried input; the precise engine field remains unidentified.
+
+Research closing took 0.947–1.017 seconds, historical replay 5–7 ms, production
+reads 58 ms and overview 18 ms over the persistent bridge. The 212.333-second
+recording passed integrity; normal game exit was 0 in 2.093 seconds. All exact
+owned game/server/recorder/bridge instances were absent. All 189 native inputs
+and 18 installed helpers matched their frozen hashes. All nine exact-commit CI
+jobs had passed. Recorder exit 255 is retained separately. Setup used two menu
+captures and 11 clicks; Luna used only structured calls, with no screenshots or
+cursor movement. The initially paused gate issued no pause commands and proves
+no annual throughput or full campaign acceptance.
+
+
+## ResearchClose001 and bounded read recovery — 22 October 2026
+
+ResearchClose001 on `083b835f` stopped at step 4: production open/close and
+Research opening verified, then the first Research close refused before Intent
+with `torn_read` in `close_gates` (one byte, read 668). The precise field and
+initial/candidate/final phase were not retained. No close input, retry, later
+readback or remaining test step occurred. Luna released control immediately.
+
+Independent stopped audit found nine player RPCs, one error, two production
+Intent/Verified pairs, one Research pair, no clock action and no unresolved
+input. The 181.333-second recording passed integrity; normal game exit was 0 in
+2.163 seconds. All exact owned game/server/recorder/bridge instances were absent.
+All 188 native inputs and 18 final helpers matched their frozen hashes. All nine
+exact-commit CI jobs passed before launch. Recorder exit 255 is retained separately.
+
+Before menu input, two harness helpers were corrected to expect idle Focus as
+literal null; originals and final installed hashes are retained. Setup required
+11 ordinary menu clicks, including clicks that left the current menu unchanged.
+The first recording clock bound failed before recorder launch; verified absence
+preceded a successful fresh timing check. First-packet proof preceded Start.
+No gameplay screenshot or cursor movement was used by Luna.
+
+The correction permits at most four wholly discarded producer snapshots per
+initial, candidate, final and pre-queue close-read phase. Only `torn_read` retries,
+with 25 ms between rejected reads, a one-second recovery ceiling and the original
+lease/action deadline. Ownership acceptance, original identity pinning, predicates,
+journal execution and input remain outside recovery. Successful first reads add
+no delay. Rejections retain phase and cause in response diagnostics; exhausted
+reads still refuse. Post-input quarantine/replay behavior is unchanged. More
+specific gate sections improve future diagnostics without identifying the old tear.
+
+Validation passed 1,118 host Rust tests, 26 targeted Linux checks, formatting,
+host/Linux Clippy and Windows all-target cross-compilation. Python passed all
+953 tests (37 skips) on an unchanged rerun; the first run's generated clipboard
+fixture timed out at three seconds and its failure is retained.
+
+ResearchClose002 subsequently passed the bounded closing gate above. Mixed-worker
+live validation and full campaign acceptance remain incomplete.
+
+## Direct Research closing preview — 22 October 2026
+
+The new Research-only close route uses ordinary W on the exact research tab.
+It retains original panel/facilities identities, own slots and assignments,
+selected folder and tab through canonical readback. Same-ID verified replay is
+historical; uncertain Intent remains quarantined without input replay or late
+settlement. Public Execution receipts omit the private binding. Known window
+animations may settle after the single input within its original deadline.
+
+Validation passed 1,113 host Rust tests, 953 Python tests (37 skips), 71 targeted
+Linux test executions, formatting, host/Linux Clippy and Windows all-target
+cross-compilation. The first Clippy pass rejected a test closure type; a local
+alias corrected it, with the original log preserved. Direct closing has not yet
+passed its recorded Luna gate. Mixed-worker navigation and full campaigns remain
+incomplete. All nine CI jobs for the prior `b2ae720` checkpoint passed.
+
+## Production008 manual panel handoff passed — 22 October 2026
+
+Production008 passed all 18 granted steps on `c2d07c6` with one Luna medium
+player in recorded vanilla FAIR Germany, Normal difficulty and historical AI.
+Production open/close/reopen, two historical close replays (including while
+reopened) and two fresh no-ops verified. The route then opened Research,
+switched to Politics, opened and started the exact canonical Rhineland Focus,
+closed Politics and reopened/closed production. Final fresh reads confirmed all
+21 production lines unchanged, four empty research slots, Rhineland active and
+Germany still paused at 1936.01.01.12, speed 0. No clock or worker action ran.
+
+Independent stopped audit verified 23 player RPCs without errors, six production
+Intent/Verified pairs, two production no-ops, one Research pair and five Focus
+pairs. All seven original production-panel identities stayed unchanged; no
+unresolved input remained. The 202-second recording passed integrity, ordinary
+close returned game exit 0 in 2.253 seconds and every exact owned game, server,
+recorder and bridge instance was absent. Recorder exit 255 is retained separately.
+All 184 native inputs and 18 helpers stayed unchanged; all nine exact-commit CI
+jobs had passed before launch.
+
+Production closing took 1.255–1.394 seconds, historical replays 5.699/7.853 ms,
+no-ops 37–44 ms, final lines 44 ms and overview 18 ms. These include the
+persistent MCP/SSH bridge. Research opening took 457 ms; Focus stages took
+1.132–4.431 seconds. This initially paused test issued zero pause commands;
+it provides no annual throughput or matched upstream performance comparison.
+The emulated VM's separate front-end startup took 358 seconds.
+
+The first recording timing preflight rejected its 0.163–2.823-second offset
+bound before launching a recorder. Launch-artifact absence was verified; a fresh
+0.163–0.875-second bound passed. Both readings are retained. First-packet proof
+preceded campaign Start. Setup used menu captures; all player calls used
+structured MCP results. No source or helper changed during the run.
+
+This passes bounded manual panel navigation. It does not establish mixed-plan
+worker routing, generic Research/Focus closing, research or Focus completion,
+a two-year campaign, full campaigns or cross-platform live acceptance. The
+ordinary Rhineland assignment was explicitly part of this grant; production
+and research must not depend on assigning a Focus merely to switch panels.
+
+## Production007: invalid test Focus ID — 22 October 2026
+
+Production007 stopped at step 10 because the builder supplied the obsolete
+`GER_rhineland` key. The native adapter refused it before Intent with
+`focus_unavailable`; the current canonical ID is
+`GER_remilitarize_the_rhineland`. This was a test specification error, not a
+Luna failure or evidence that the native Focus route was broken.
+
+The preceding nine steps verified production open/close/reopen, two historical
+close replays (including while reopened), two fresh no-ops and Research opening.
+The stopped audit found four production Intent/Verified pairs, two production
+no-op records, one Research pair and no Focus or clock entries. No unresolved
+input remained. Final allocation and the full panel route were not reached.
+
+All 184 native inputs and 18 helpers stayed unchanged. The 255.666-second
+recording passed integrity; recorder exit 255 is preserved separately. One
+ordinary close exited the game with code 0 in 2.227 seconds, and all exact owned
+game/server/recorder/bridge instances were absent. The failed gate remains
+incomplete. Future grants must verify current canonical IDs before player input.
+
+## Production006 daily worker passed — 22 October 2026
+
+Production006 passed all 16 granted steps on `c7d1b1c` with one Luna medium
+player. The recorded vanilla FAIR Germany start used Normal difficulty and
+historical AI. The worker opened production and changed the exact infantry
+line from 10→11 while paused, then reached 12→13→14 across advancing days.
+The separate daily production budget was 2/2/1 steps across three days; the
+opening and intermediate changes did not complete the allocation prematurely.
+
+After completing the goal, STOP and restart of the same plan through 5 January
+produced no additional production steps. Final fresh reads confirmed 14 requested
+and active factories on the original line and an unpaused speed-3 game at
+1936.01.05.13. The three worker lifetimes reported 0/1/1 rejected clock probes;
+both torn reads were explicitly read-only and recovered. Historical `input_busy`
+contention remained visible and did not imply delivery. No pause action was sent.
+
+Independent stopped audit verified 20 player RPCs with zero RPC/broker errors,
+five production Intent/Verified pairs, one completed governor goal, two verified
+clock actions and no unresolved input. All 184 native inputs/18 helpers remained
+unchanged. Canonical STOP/release/status, the 280-second recording, normal game
+exit 0 in 2.346 seconds and exact game/owner/recorder/bridge absence passed.
+Recorder exit 255 is retained separately. All nine exact-commit CI jobs passed.
+
+The initial recording preflight refused before launching a recorder because its
+clock-timing bound failed; the original bound was not retained. A fresh absence
+and timing check preceded the successful retry. The first-packet SSH observation
+timed out, but the guest's canonical packet proof and verifier absence were
+reconciled without replay. That packet preceded campaign Start. These setup
+rough edges and Production005's incomplete gate remain preserved privately.
+
+Worker starts took 125–146 ms, digests 60–80 ms, STOP 8–17 ms, final lines 44 ms
+and overview 16 ms over the persistent MCP/SSH bridge. The unpause response to
+final overview covered 97 game hours in 73.639 wall seconds in the emulated VM.
+This short interval is not an annual throughput or matched upstream benchmark.
+Menu setup and the recording are separate from the structured gameplay calls.
+This passes the bounded production-worker gate, not a two-year/full campaign,
+universal panel routing, platform-wide live compatibility or release acceptance.
+
+Next: enable verified ordinary panel handoffs between production, Research and
+Focus so mixed standing plans can progress without incompatible-panel refusals.
+Preserve budgets, original target identities, durable receipts and uncertainty
+exclusion. Then expand construction/economy and army/air/naval automation and
+run the required clean two-year and full campaign gates. Do not repeat the
+already-passed production-only gate as a substitute for this wider work.
+
+## Production005 worker gate — 22 October 2026
+
+Production005 on `b15f189` reached the requested 14 factories through the daily
+worker while game time advanced, but the gate remains incomplete. One Luna
+medium player used a recorded vanilla FAIR Germany start on Normal/historical.
+The paused phase spent two production steps (panel opening, 10→11). After
+setting speed 3, unpausing and restarting the worker, it reached 12, 13 and 14.
+Durable step usage was 2/2/1 across three days. The final goal completed with
+canonical readback and a later daily witness on 3 January 1936; the wait reached
+4 January 01:00. No pause action was issued.
+
+The second digest caused the predeclared broker to stop because `last_error`
+contained a historical `torn_read` ("Snapshot witness changed"). The original
+report did not identify its phase; the stopped evidence cannot prove where it
+occurred. Luna issued only STOP, lease release/status after that refusal.
+The completed-plan restart, no-replay check and final fresh production/overview
+reads were not reached. Do not relabel this gate as passed.
+
+Independent stopped audit found five production Intent/Verified pairs, one
+completed governor goal and two verified clock actions, with no unresolved
+input. Recording integrity passed (233.666 seconds; recorder exit 255 retained
+separately). Ordinary close returned game exit 0 in 2.454 seconds. Exact game,
+owner, recorder and bridge absence, canonical lease release and unchanged 183
+native inputs/19 helpers were verified. All nine exact-commit CI jobs passed.
+Private recordings, calls and journals remain outside Git.
+
+The next source separates rejected scheduling clock probes from action failures.
+Only `torn_read` from the initial read-only clock probe, with no retained
+uncertainty and a Continue disposition, enters `clock_probe_historical`.
+The batch ends without scheduling work and the existing 250 ms wake interval
+applies. First/latest causes, total/consecutive rejections and recovery after a
+successful probe remain visible for that worker lifetime through digest/details
+and STOP. This history never grants input or freshness. Other read errors,
+action-phase errors, ownership loss and quarantine keep their existing behavior;
+probe recovery cannot clear an action failure. This prospective change does not
+identify or repair Production005's missing phase evidence.
+
+Validation passed 1,091 host Rust tests, 953 Python tests (37 skips), formatting,
+host/Linux Clippy and Windows cross-compilation. All 34 targeted tests passed
+inside the Linux VM. The first Linux fixture run exposed an empty-field digest
+size regression; its failed log is retained and the corrected run passed. These
+are offline checks, not fresh live acceptance.
+
+Next: require exact-commit CI, then run a fresh bounded
+recorded Luna medium production-worker gate through final allocation, completed-
+plan restart, STOP and no replay. Require explicit clock-probe history in the new
+grant; preserve all action failures. Broader panel routing, two-year/full
+campaigns and Windows/macOS native live adapters remain incomplete.
+
+## Durable production worker preview — 22 October 2026
+
+The Linux daily worker now has an explicit production allocation preview.
+It requires the existing owned production profile, owner `daily_production: true`,
+plan `production_permission: true` and `max_production_steps_per_day` from 1 to 16.
+Defaults preserve the previous Research/Focus worker. The production permission
+and step limit cannot change during a worker lifetime.
+
+A private durable progress file binds the original full own line/variant,
+equipment, campaign, roots and starting count. Opening and intermediate one-click
+steps consume the separate production step budget, never goal completion.
+The final step or matching-count no-op uses the governor's request and completion
+budget, with typed ordinary-journal proof, canonical readback and a later daily
+observation. Larger changes can span days. Reopen preserves counts, budgets,
+original failures and the date of late read-only settlement. Changed identities,
+external allocation changes and uncertain delivery cannot establish a new baseline.
+Plan updates preserve the existing target order for each full line ID.
+
+The worker executes at most one production step per batch under the existing
+shared controller, lease, input gate and absolute deadline. Production runs before
+Research/Focus when opted in, bounded by its separate daily step limit and the
+remaining shared goal budget. Cross-panel handoffs are not implemented: an
+incompatible active panel refuses safely. A preparation error stops this preview;
+a known no-input final refusal retains the goal for a later day. Unresolved
+progress blocks all shared input, including restart with production permission off.
+STOP and compact digests retain production history and its dated budget; historical
+progress is not a fresh factory observation or input authority.
+
+Local validation passed 1,089 Rust tests, 953 Python tests (37 skips), formatting,
+host/Linux Clippy and Windows cross-compilation. All 34 targeted offline tests
+also passed inside the owned Linux VM, including the Linux-only worker permission
+and digest tests. No game input was used. Tests cover multi-day increases,
+decreases, no-ops, retained budgets, invalid jumps, changed identities, no-input
+refusals, uncertainty, stale receipts, chronology and failed durable writes.
+These are offline results. Production004 remains the latest live production gate;
+no new game was launched. The previous foundation commit passed Linux/Windows
+native CI and all six Python jobs; its macOS native job was still queued at the
+last check, so a complete CI pass is not claimed.
+
+Next: require exact-commit CI and run a bounded recorded advancing-time production
+worker gate with one Luna medium player, including multiple daily steps, final
+allocation, restart/STOP and no-replay evidence. Do not repeat manual Production004
+alone. Worker live acceptance, broader panel routing, two-year/full campaigns,
+and Windows/macOS native live adapters remain incomplete.
+
+## Standing-production foundation — 22 October 2026
+
+Standing-production foundation, 22 October 2026: factory executions now retain
+an internal typed journal proof, excluded from public JSON. The plan converter
+requires the exact original own line/variant, request, campaign, equipment and
+final count, a fresh canonical line read and a later daily observation sequence.
+Panel opening, intermediate targets and historical replays cannot complete the
+allocation. Mutating a public summary cannot retarget its private proof or turn
+a historical receipt into fresh evidence. Public receipt and journal formats
+remain unchanged.
+
+Production targets are ordered per full line ID. A refused head blocks later
+targets on that line while unrelated lines can proceed. Tests use the real
+durable production journal and governor with a generated backend: completion
+consumes budget once and survives reopen without replay. The existing manual
+Linux route was factored into a shared owner-held executor with the same lease,
+input gate, deadline, journal and scoped checks. No new MCP action or worker
+permission is enabled by this foundation.
+
+Local validation passed 1,077 Rust tests, 953 Python tests (37 skips), formatting
+and warning-free host/Linux Clippy. This is offline evidence, not a new live
+run. Production004 remains the latest successful bounded live production test.
+Its three previously queued macOS CI jobs were later cancelled with no test
+steps; Linux/Windows jobs passed. It does not have a complete CI pass.
+
+Next: wire an explicit default-off production permission into the daily worker,
+with durable original-line preparation, bounded one-click progress toward the
+full requested count, daily budgets, shared uncertainty exclusion and compact
+fresh digests. Opening and intermediate steps must not complete the goal; errors
+must retain unfinished work and its original identity. Then use one Luna medium
+player for a recorded advancing-time worker gate, including restart/STOP and
+no-replay evidence. Do not repeat the passed manual production gate alone.
+
+## Production004 ordinary factory changes passed — 21 October 2026
+
+Production004, 21 October 2026 (`df474ca`), passed all ten bounded production
+steps with one Luna player at medium reasoning. The recorded fresh start was
+vanilla FAIR Germany, Normal difficulty, historical AI, paused at 1 January 1936.
+One ordinary topbar click opened production in 2.080 seconds. The exact infantry
+equipment line then changed 10→11 and 11→10 requested factories in 765/773 ms,
+with canonical readback after each ordinary click. Final state had 10 requested
+and 10 active factories. Same-ID opening/increase replays were historical and
+sent no new input; new-ID already-open and matching-count requests were no-ops.
+The control observation took 76 ms, line read 43 ms and overview 16 ms over the
+persistent MCP/SSH bridge. These few samples are not a matched upstream benchmark.
+
+The stopped journal contains exactly three intents, five verified terminal
+requests, no unresolved action and no clock entries. Luna released its lease and
+status confirmed zero remaining time. The 259.333-second recording passed
+integrity checks; recorder exit 255 remains separate from normal game exit 0.
+Exact game, supervisor, recorder and bridge absence was verified. Private evidence
+and prior failed gates are retained. No screenshots drove the campaign tool steps;
+menu setup and the recording are separate. This paused diagnostic does not
+establish continuous-play throughput, universal routing or event causality.
+
+Local checks passed 1,070 Rust tests, 953 Python tests (37 skips), formatting and
+warning-free host/Linux Clippy. Linux/Windows CI passed on the tested commit;
+three macOS jobs were queued at the grant, with local macOS checks passed. This
+is not release acceptance. Next: extend standing economy plans and the remaining
+ordinary Linux adapters. Scrolling, new production lines, provincial placement,
+army/air/naval control and clean two-year/full campaigns remain open. Do not
+repeat the passed bounded production gate alone.
+
+## Production003 opening and factory refusal — 21 October 2026
+
+Production003, 21 October 2026 (`855d5fb`): one Luna medium player opened
+production through one ordinary topbar click in 2.18 seconds. Canonical state
+verified the shown panel. Same-ID historical replay took 6 ms; a new-ID
+already-open no-op took 35 ms and delivered no input. The recorded fresh start
+was vanilla FAIR Germany, Normal difficulty and historical AI. No clock action
+was issued; this paused diagnostic does not measure continuous-play performance.
+
+The first factory increment refused before intent or input in 85 ms. Captured
+controls showed both named buttons enabled, but their nonnull optional parent
+gates failed the reader's null-only predicate. Those gate identities and payloads
+were not captured, so the failed run cannot establish their type or clearance.
+The corrected observer now reuses the opener's independently mapped exact
+own-container position join, with the same snapshot witnesses and dispatch
+identity scope. Foreign pointers, unknown types, false/nonboolean flags and
+other blockers still refuse. Factory dispatch remains unverified live.
+
+Luna stopped immediately, released its lease and confirmed zero remaining time.
+The journal contains a verified opening and no-op, no factory intent and no
+unresolved action. The 482.333-second recording passed integrity checks; recorder
+exit 255 was retained separately from game exit 0 after ordinary window close.
+Exact game, supervisor, recorder and bridge absence was verified; evidence stays
+private. Linux and Windows native CI and all six Python jobs passed on `855d5fb`;
+the macOS native job was cancelled, so this was not a complete CI pass. Local
+macOS checks passed before the gate. Two-year and full-campaign acceptance remain
+open. Next: validate the parent-gate correction and run a fresh bounded recorded
+Luna medium factory gate.
+Local correction checks passed 1,070 Rust tests, 953 Python tests (37 skips),
+formatting and warning-free host/Linux Clippy. These are offline results.
+
+## Production002 diagnostic and phase correction — 21 October 2026
+
+Production002, 21 October 2026: all nine CI jobs passed on `28afe8f`, including
+19 Linux parent-reader and five Xvfb fixtures. Its rebuilt release binary was
+byte-identical to `2ad13d0`, already launched before the test-only correction;
+both source identities and binary hashes were retained in private evidence.
+The fresh recorded vanilla FAIR Germany start was Normal/historical. An early
+loading read reported speed zero and the initial date with `paused=false`; a
+later read confirmed the settled paused start without any clock input.
+
+Luna medium held exclusive input and stopped at the first production-open
+refusal in 82 ms. The diagnostic isolated `idler_can_update_raw=0`; the other
+reported blockers and named opener were clear. Geometry was not collected
+because this prerequisite failed. Both action journals were empty. Luna released
+the lease, the 304.666-second recording finalized, and ordinary window close
+produced game exit 0; exact game/supervisor/recorder absence was verified.
+No factory change, final count/date read or campaign acceptance occurred.
+
+Static setter/caller evidence now classifies `CanUpdateGui` as the engine's
+internal update phase. It is diagnostic-only for ordinary X11 actions; the
+actual transition, ownership, own-dialog and callback guards remain enforced.
+See `native/PROVENANCE.md`. No flag write, engine call or pause was added.
+Local validation passed 1,067 Rust tests, 953 Python tests (37 platform skips),
+formatting and warning-free host/Linux Clippy. This correction still requires
+exact-commit CI and a fresh recorded Luna gate.
+
+## Recorded production refusal — 21 October 2026
+
+The diagnostic checkpoint `2ad13d0` then failed ten Windows CI fixtures: nine
+production cases used a 50 ms budget and one construction terminal-tear case
+used 300 ms, including durable journal writes. They expired before dispatch,
+returning `input_not_queued` instead of reaching the intended post-input checks.
+Both production fixture helpers and the construction case now use the existing
+two-second test allowance. Runtime deadlines, durable writes and assertions
+about dispatch counts, uncertainty and no replay are unchanged. Preserve the
+failed run and require fresh exact-commit CI before the next input gate.
+
+Recorded Linux production gate, 21 October 2026 (`87fc595`, all nine exact-commit
+CI jobs passed): one Luna player at medium reasoning held exclusive input in a
+vanilla FAIR Germany start, Normal difficulty with historical AI. The first
+`hoi4_production_open` refused with `production_precondition` in 78 ms. Its
+message combined several checks, so the specific failing predicate is unknown.
+Luna stopped immediately; both production and clock action journals were empty.
+No factory allocation, replay, final count or date check was attempted.
+
+Luna released the lease and status confirmed zero remaining seconds. The private
+recording finalized as two valid 512×288 segments (740 seconds total); recorder
+exit 255 was retained separately from the game's normal exit 0. Exact game,
+supervisor and recorder absence was verified, and evidence was archived privately.
+The game started paused; no clock action was issued. This is a failed bounded
+input gate, not continuous-play performance or campaign acceptance.
+
+Opening refusals now report bounded, typed checks from the same captured
+observation: manager mode, engine blockers, own panels/dialogs, opener callback
+and local state, and geometry presence. Unknown values remain null. This adds
+no memory reads or input and preserves every existing authorization predicate.
+The first run cannot retroactively establish those missing diagnostics. Next:
+run a fresh bounded recorded Luna gate after exact-commit CI. Local validation
+passed 1,066 Rust tests, 953 Python tests (37 platform skips), formatting and
+warning-free host/Linux Clippy. The initial Python command used the system
+interpreter and failed imports due to missing dependencies; the repository
+virtual environment passed the complete suite.
+
+## Offline production opening preview — 21 October 2026
+
+The first published opening checkpoint (`69d77ce`) exposed a test deadline
+problem on macOS CI: the transition-recovery fixture combined durable fsyncs
+and a real 20 ms backoff within a 50 ms test budget. It correctly returned
+`action_uncertain` when that budget expired. The recovery fixture now allows
+two seconds of scheduling headroom; runtime deadlines and uncertainty behavior
+are unchanged. Preserve this failed run; verify the correction on fresh CI.
+
+Linux production panel opening preview, 21 October 2026: `hoi4_production_open`
+now uses the exact own named topbar button, with the same opt-in 512×288 profile
+and exclusive lease as factory allocation. It opens only from idle manager mode
+23 with a positively hidden, settled root. Mode 2 with the original shown root
+is a no-op. Original panel identity is durable; uncertain opening and factory
+changes block each other and all shared input domains. Same-ID recovery is
+read-only, and old factory v1 journal records retain their format.
+
+Focused static evidence exposed a readiness error: production uses manager
+mode 2, while the previously assumed 5 is an unrelated constructor update flag.
+The predicate and fixture are corrected before live production acceptance.
+Both opening and factory clicks now check typed settings/menu/overview blockers.
+A nonnull unmapped auxiliary manager object refuses input. No native function
+calls or additional game pauses were introduced.
+
+Local validation passed 1,063 Rust tests, 953 Python tests with 37 platform skips,
+formatting and warning-free host/Linux Clippy. The first Clippy run caught a
+range-style issue; the corrected runs passed. Rust stdio smoke passed in the
+suite. The previous published checkpoint passed all three native and five Python
+CI jobs; macOS Python 3.9 was cancelled without a runner or test steps. Fresh
+exact-commit CI is required for this checkpoint.
+
+No game or VM was launched. These are static/fixture results, not a successful
+production gate or campaign. Next: a bounded recorded opening and one-factory
+gate with one Luna medium player and exclusive input. The 1080p QEMU performance
+limit, two-year acceptance and full campaigns remain unresolved. Scrolling,
+line creation and wider economy/warfare adapters remain unfinished.
+
+## Offline production action preview — 21 October 2026
+
+The opt-in Linux adapter now attempts one ordinary factory +/- click for an
+exact own line in an already-open production panel. A separate durable journal
+stores original campaign, full line/variant identity and requested count before
+input. Reopening the journal preserves uncertainty; recovery only checks the
+original reached target. Unchanged or divergent counts, replaced identities,
+lost replies and failed reads never justify replay or clearing an intent.
+Unresolved production blocks the shared clock/research/Focus/construction
+controller and daily workers. Supervisor adoption after restart is unsupported.
+
+Before dispatch, the adapter compares canonical state and the selected
+renderer/geometry transcript with the original candidate. Review identified
+a modifier-state race during that final memory refresh. The X11 transport now
+rechecks idle input and the original owned window after the callback, before
+sending any buffered pointer bytes. The isolated Xvfb regression changes Ctrl
+lock and window position inside that callback and requires no motion/clicks.
+
+Local validation passed 1,047 Rust tests (including stdio smoke), formatting,
+host/Linux warning-free Clippy, and 953 Python tests with 37 platform skips.
+Linux Xvfb execution and all platform CI are checked separately on the published
+commit. No installed game was launched for this checkpoint. Production opening,
+new-line creation, a live one-factory gate and campaign acceptance remain pending.
+Scoped UI predicates and canonical reached-state verification do not prove
+universal event routing or event causality. The native posting path is unchanged
+and disabled.
+
+## Earlier live evidence
 
 Updated 16 October 2026. This records preflight and partial licensed-game evidence for
 the [Linux-first migration](LINUX_RUST_HANDOFF.md). One **gpt-6-luna player at
@@ -4673,3 +7159,1711 @@ were absent. The first host closure receipt used shortened socket names; an
 amendment checked the actual protocol socket paths absent. Yama remained 1.
 The cleanup deviations do not erase the successful read or establish action or
 campaign acceptance.
+
+
+## Native 1080p profile and transport checks — 22 October 2026
+
+All future campaign runs and recordings require native 1920×1080 or higher with
+readable UI. Earlier 512×288 runs remain diagnostic evidence. The new explicit
+`linux_builtin_absolute_1920x1080_v1` profile is available for Research, Focus,
+construction and production, with matching physical and logical dimensions.
+Enabled domains must agree on one profile. Points derive from fresh named
+renderer geometry, not resized historical coordinates. Unknown dimensions or
+scaling refuse explicitly.
+
+The owner pins the X11 client dimensions. Ordinary keys recheck size both before
+and after the typed final reader; query/Tab and pointer paths enforce that same
+pin. Isolated Linux X11 execution used a 1920×1080 generated client on its own
+2560×1440 display. Resize-before-input and resize-during-final-reader cases
+refused without sending key events; accepted ordinary keys, query and Tab kept
+the pointer still. All five generated transport fixtures passed. No HOI4 process
+was opened by this fixture suite.
+
+Full validation passed 1,176 host Rust tests, 189 targeted Linux executions,
+953 Python tests (37 skips), formatting, host/Linux Clippy and Windows all-target
+cross-compilation. The 189 executions include the five X11 fixtures. These checks
+do not establish installed-game readiness, filmable recording performance,
+mixed-plan acceptance or a completed campaign. A bounded 1080p startup/render
+benchmark remains necessary: the earlier slow full-HD calibration already used
+virpipe GPU offloading.
+
+
+## FullHD001 startup deadline — 22 October 2026
+
+The first fresh full-HD benchmark on `89160d7` used the owned Linux x86_64
+QEMU TCG guest, existing virpipe GPU offload, a 2560×1440 isolated display and
+1920×1080 game settings with GUI scale 1.0. All nine exact-source CI jobs passed
+before launch. Setup-log events supplied readiness; bounded ten-second process
+metrics required no game-memory reads, cursor movement or screenshots.
+
+The frontend did not become ready within the original 600-second deadline.
+One final diagnostic image and X11 geometry confirmed an actual 1920×1080 client
+still showing “Loading GUI.” No campaign Start, menu input, player lease, input
+binding, gameplay command or pause command occurred. The optional 60-second
+1080p30 menu recording was never reached, so no recording cadence, readable
+campaign UI or annual gameplay throughput is established.
+
+The helper sent one ordinary WM close. Delivery was `server_confirmed`, but its
+20-second exit deadline expired with `shutdown_pending`; the exact game and
+owner remained. The failed benchmark and pending close were retained unchanged.
+The builder subsequently made one separate explicit owned shutdown request using
+the owner's pidfd SIGTERM path. The reaper recorded **exit code 6**, `signal: null`
+and no core dump. This is a failed normal-close test followed by separate cleanup,
+not an exit-code-0 success or signal-6 termination. No WM request was replayed
+and no force-kill occurred.
+
+Independent stopped audit verified both exact game/owner instances absent,
+200 native source inputs and seven installed files unchanged, and no input
+binding. The private archive retains metrics, the final image, original failure,
+close receipt and separate shutdown result. Full-HD startup performance on this
+emulated environment remains unresolved. The earlier slow full-HD calibration
+already used GPU offloading; no improvement from merely enabling offload is
+claimed. The mixed-plan gate, two-year Luna acceptance, filmable recordings and
+full campaigns remain pending; the 1080p requirement is unchanged.
+
+
+## Full-HD graphics transport diagnostics — 22 October 2026
+
+No HOI4 process ran during these private diagnostics. Two 12-second generated
+GL windows used the existing virpipe renderer and SSH transport: the 512×288
+fixture measured 43.2–45.1 FPS, while native 1920×1080 measured 2.9–3.2 FPS.
+The small window was solely a synthetic comparison, not a campaign or recording.
+Both exact owned clients received intentional SIGTERM after measurement.
+
+A separate checksum-verified transport probe transferred one 8,294,400-byte
+RGBA frame per sample. Its payload came from FullHD001's loading-screen diagnostic,
+not gameplay. Two samples each used receive chunks of 7,680, 65,536 and 1,048,576
+bytes. All 18 samples matched the original payload hash.
+
+| Transport | Per-frame receive time across six samples |
+| --- | --- |
+| Separate SSH forwarding connection, compression disabled | 258–305 ms |
+| Separate SSH forwarding connection, compression enabled | 634–921 ms |
+| Direct TCP through the local QEMU network, host bound to loopback | 67–101 ms |
+
+Increasing receive chunks reduced read calls but did not materially improve SSH
+wall time. Compression was slower on this environment and payload. These short
+sequential samples do not establish general network throughput or game performance.
+
+A temporary direct TCP bridge then connected one generated native 1080p GL client
+to the existing renderer, without changing the original GPU tunnel. It measured
+5.0–5.1 FPS over two five-second reporting intervals. Intentional client SIGTERM
+ended it with return code -15; the guest bridge recorded a broken pipe and the
+host bridge a connection reset. Both relay threads finished, but their strict
+no-error assertions failed. Preserve those failures rather than calling this
+a clean transport acceptance. A fresh check found no game, recorder or generated
+GL process and confirmed the temporary guest socket absent. An earlier host helper
+failed before launching its guest because a function shadowed a source-string
+variable; its error is retained separately.
+
+The direct route is a promising performance experiment, not a production change.
+The remaining graphics readback/emulation cost is unresolved; approximately 5 FPS
+is still insufficient for filmable gameplay. No native MCP source, installed game
+file, gameplay state or original graphics connection changed. Campaigns remain
+at a native 1080p minimum, and the mixed-plan/Luna/campaign gates remain pending.
+
+### Presentation timing and native relay follow-up
+
+Generated-client-only GLX/syscall instrumentation measured 55 completed swaps
+through the temporary direct bridge: mean presentation time was 207 ms, including
+138 ms in intercepted reads and exactly 8,294,424 received bytes per swap.
+These counters include frame data and protocol replies; they do not independently
+measure GPU execution. Disabling TCP packet buffering produced approximately the
+same result (210 ms presentation, 142 ms reads, 4.7–4.9 FPS). Instrumentation and
+short sequential samples can affect timing; no campaign preload was introduced.
+
+Replacing the guest Python relay with a private native C relay reduced measured
+presentation time to 176 ms, including 94 ms in reads, with 5.4–6.5 FPS reports.
+Using Linux `splice` through a pipe in that relay reduced it further to 127 ms,
+including 56 ms in reads; both five-second reports measured 7.9 FPS. The latter
+probe recorded 92 completed swaps. These experiments changed no installed Mesa
+library or original graphics connection and establish neither HOI4 startup nor
+filmable gameplay. A substantial presentation cost remains outside intercepted
+reads; its cause is not yet isolated.
+
+The original instrumented direct probe retained reset/broken-pipe shutdown
+failures. The TCP-buffering variant exited its relay checks cleanly. Both native
+relay variants retained a relay write failure (exit 10) and host broken pipe after
+intentional generated-client SIGTERM; the outer no-host-error assertion failed.
+Do not treat their performance measurements as clean transport acceptance.
+All relay threads finished, and a subsequent guest process inspection found no
+game, recorder, generated GL client or native test relay remaining. Full-HD
+startup and campaign acceptance remain unfinished.
+
+
+## Owned worker terminal-event waits — 22 October 2026
+
+Date, assignment and general-change waits now subscribe to an owner-scoped
+worker lifecycle cell. They pin the initial worker instance before the first
+game read. An already terminal worker returns without a game read; a terminal
+notification wakes a pending wait instead of consuming its remaining 50-second
+allowance. Explicit STOP has a separate non-error disposition. A replacement
+cannot silently become the waited worker, and a wait started without a worker
+never attaches to one later.
+
+Worker completion publishes only after the worker body returns and quarantine
+and report flags are retained. Actual stop/quarantine causes remain bounded and
+explicit, including scheduling-lock failures. Review found and corrected a path
+that discarded that scheduling cause and left the report stale. Owner retirement
+notifies waiters before read-gate drainage; an in-flight bounded read can finish,
+but the wait does not begin another. Counter exhaustion and poisoned event state
+refuse explicitly. UI-only waits retain their separate predicate path.
+
+Interrupted waits return null state or an explicitly historical prior snapshot,
+never fresh assignment success or input authority. The original deadline remains
+absolute. Late notifications may accompany a historical timeout only as late
+diagnostics. Actual identity/context failures remain strict. No worker, plan,
+lease or game input starts as a side effect of waiting.
+
+Validation passed 1,192 host Rust tests, 228 targeted Linux executions, 953 Python
+tests (37 skips), formatting, host/Linux Clippy and Windows all-target checks.
+The Linux executions include two real `service_client`/MCP tests with synthetic
+owned readers, terminal-before-first-read and retirement-before-read-drain,
+plus five isolated X11 transport fixtures at native 1920×1080. No Linux fixtures
+reported skips. Tests also exercise a 50-second wait interrupted promptly after
+one accepted sample, original failure retention, deadline races and no lost wakeup.
+No game was used for these tests.
+
+The final full host suite passed before a test-only Clippy cleanup removed an
+unnecessary literal unwrap; all seven affected lifecycle tests passed again
+after that cleanup, followed by final lint, target checks and Linux executions.
+All 205 native input files matched their frozen hashes after validation. Recorded
+mixed-plan, two-year Luna and full campaign acceptance remain pending.
+
+The first exact-source CI on `914b5f3` passed all Python jobs and the Linux/Windows
+Rust jobs, but macOS exposed a test scheduling assumption: a 280 ms deadline
+allowed only 30 ms after the normal 250 ms polling interval for a second read.
+The scheduler legitimately expired the wait after one read, contradicting the
+fixture's two-read assertion. The correction changes only the test: terminal
+publication is synchronized and historical-timeout composition is checked
+directly; separate coverage still checks delayed-read classification. Production
+deadlines and behavior are unchanged. All 30 protocol tests, formatting and
+host Clippy passed after the correction. Preserve the failed initial CI run.
+
+All nine exact-source CI jobs passed on the test correction `b1ab89c`: three
+Rust platform jobs and six Python jobs. This does not establish live acceptance.
+
+
+## ARM Linux and FEX feasibility — 22 October 2026
+
+A separate owned ARM64 Ubuntu 24.04 VM now uses hardware virtualization, two
+vCPUs, 4 GiB RAM and a 4 KiB kernel page size. The original x86 VM, licensed game
+installation and renderer infrastructure remain preserved. No game or campaign
+was launched in the new VM.
+
+The native ARM generated graphics client measured 36.7 FPS at a requested
+1920×1080 through the existing virgl renderer and a separate SSH connection.
+FEX 2610 then ran ordinary x86 programs successfully. The exact x86 graphics
+binary used in the earlier VM measured 36.2–36.7 FPS with native OpenGL forwarding.
+A follow-up measured 36.5–36.7 FPS and independently verified one actual
+1920×1080 X11 client, the mapped FEX host/guest OpenGL bridge libraries and native
+ARM Mesa 25.2.8. All generated graphics clients and their Xvfb instances exited.
+These are short synthetic tests, not HOI4 frame rates or recording acceptance.
+
+A native ARM parent also read the exact 24-byte marker from its own generated
+x86 child under FEX using `process_vm_readv`, ordinary UID 1000 and unchanged
+Yama scope 1. The read took approximately 6.5 microseconds; this tiny fixture
+does not establish game snapshot throughput. PID creation, user, parent,
+executable identity and the mapped fixture range were checked. The fixture exited
+normally with code 0. The first helper used an incorrect expected marker length;
+that assertion failure is retained separately from the corrected result.
+
+The kernel identifies the translated process executable as FEX, while the x86
+fixture appears separately in its memory maps. Existing native game ownership
+checks must not be bypassed to admit this environment. Before a campaign, verify
+an explicit translated-launch identity, exact game ELF/layout and own-state reads,
+then actual HOI4 startup, ordinary commands and filmable recording. No campaign
+adapter is accepted by these experiments. FEX rootfs setup also retained a silent
+headless selection failure and a selection abort before the corrected lowercase
+distro selection succeeded.
+
+The forwarding approach follows the [FEX project's documentation](https://github.com/FEX-Emu/FEX)
+and [library-forwarding guide](https://wiki.fex-emu.com/index.php/Development:Setting_up_Thunks).
+
+## Rust FEX reader and launch qualification — 22 October 2026
+
+The native Rust reader now distinguishes its exact owned kernel FEX process from
+the separate mapped x86 guest ELF. The reviewed translator hash and existing game
+hash/build are both required. Guest file identity, load coverage, offsets, mapped
+headers and original permission ceiling remain bound across observations. Normal
+loader splitting and permission tightening preserve that binding. Only missing
+initial load coverage can wait within the original launch deadline; conflicts,
+wrong hashes, identity changes and later lost coverage refuse without rebinding.
+Scalar reads keep the native cached-bound fast path; complete observations and
+vector reads retain their ownership/witness brackets.
+
+Actual generated-child tests ran with a native ARM parent, the installed pinned
+FEX binary, an x86 fixture and unchanged Yama scope 1. Scalar/vector nonce reads
+passed. Both guest `execve` and FD-based `execveat` preserved PID creation and
+kernel executable identity while the old reader rejected its stale observation.
+Explicit new fixture binding read the new nonce. Owned launcher readiness,
+duplicate detection and coexistence with a different unmapped file also passed.
+The generated children exited normally. No game, graphics or gameplay input was
+used for these tests.
+
+The first restart test failed because FD-based `execveat` restarted the fixture
+with `argc=0`, contrary to its original strict `argc=1` assertion. Bounded stderr
+confirmed valid random bytes and the missing argument vector. The original
+failure is retained. A revised generated fixture marks its own FD-exec generation,
+reports `argc=0` explicitly and permits that generation only to report a nonce and
+quit. This verifies stale-reader rejection, not correct FEX guest argument
+semantics. Ordinary `execve` retained `argc=1`. No game workaround was applied.
+
+Validation passed 1,193 host Rust tests, 774 ARM Linux library tests after the
+missing-CLI harness correction, two explicitly selected real FEX fixtures,
+35 x86 Linux reader checks and 953 Python tests with 37 skips. The six default
+ARM ignored entries include the two separately executed FEX fixtures; the four
+X11 close fixtures were not rerun in this scope. Final missing-gap conflict
+correction was followed by the eight translated reader cases on both Linux
+architectures and both real FEX fixtures again. Formatting, host/ARM/x86 Linux
+Clippy and Windows all-target checks passed. ARM compilation is now checked in CI;
+CI alone does not execute the installed FEX qualification fixtures.
+
+The initial ARM library batch passed 773 tests and failed one reconnect test
+because the private harness had not installed its required CLI. Installing the
+built ARM CLI and rerunning that test passed; the final rebuilt CLI passed again.
+An initial x86 regression batch exceeded its 180-second SSH observation allowance.
+The original process was confirmed absent before a new run. Removing debug
+sections from the generated test copy, retaining its GNU build ID, and granting
+a sufficient observation allowance completed all 19 selected parent-reader
+checks. Original timeout and harness failures remain preserved.
+
+Translated gameplay input binding is explicitly unavailable. Actual licensed
+HOI4 startup, own-state snapshots, ordinary UI actions and native 1080p recording
+on this environment are the next gates. Mixed plans, the two-year Luna run and
+full campaigns remain incomplete. No release or downstream pin changed.
+
+## Mac durable worker — 23 October 2026
+
+The default-off Mac worker now binds the portable durable governor to the
+independently validated Mac input/reader layouts. It implements ordered Research
+refill and an existing military line's single factory step, with intent persisted
+before panel preparation. Retained core, progress and typed journals gate manual
+input even after reconnect or removal of worker permissions. Stop/EOF cancels,
+wakes and joins; terminal events retain uncertainty before notifying waiters.
+
+The implementation passed 1,294 host Rust tests, 956 workspace Python tests
+(37 skipped), 809 clean staged Python tests (29 skipped), formatting, host and
+Windows all-target Clippy, and a 24-tool stdio smoke without a game connection.
+A frozen 224-file native source manifest matches the staged archive. Tests cover
+undated slot-wait reopen, current Research transitions, complete own allocation
+scope, replaced journals, original-line binding before preparation, cancellation
+and notification failure during shutdown. Offline results are not live acceptance.
+
+Preserve the first live harness failure: owned process/supervisor identities and
+the 1920×1108 OS window matched, but the private recorder config had a literal
+backslash-n after its JSON value. Strict parsing refused it. No MCP client,
+lease, gameplay input or pause occurred. The invalid config and handback remain
+in private evidence. This was a harness formatting failure, not a recorder or
+worker gameplay result.
+
+The corrected driver then stopped during read-only preflight: the public
+research-folder catalog used its Linux-only layout and returned
+`invalid_gui_type` on Mac. Six tool calls completed before handback, with no
+lease, recorder or gameplay input. Binding created a retained controller epoch
+and empty journals; preserve them rather than describing the directory as
+untouched. The Mac action adapter uses its own independently validated GUI
+lookup, so the next bounded test omitted this unsupported optional diagnostic
+while retaining exact technology IDs and all native action checks.
+
+That recorded Luna medium gate used FAIR Germany, Normal difficulty, historical
+AI and the native 1920×1080 client. It verified Electronic Mechanical Engineering
+in slot 2. The following infantry allocation attempt (18→19) stopped with
+`production_state_changed`: the complete factory-control witness changed before
+mouse-down. Canonical allocation checks had passed; the original diagnostic
+does not distinguish rectangle movement from row/widget reconstruction. Preserve
+the production Intent/Uncertain journal and shared quarantine. No retry, clock
+action, observation pause or date advancement followed. The worker stopped and
+joined; lease release correctly refused the quarantine, and stdio closure ended
+the remaining in-memory lease. No worker, MCP client or recorder remained.
+
+Independent read-only follow-up confirmed the Research assignment, all 21 line
+identities and factory counters unchanged, and 12 January 1936 01:00 still paused
+at speed 1. This readback does not resolve the uncertain production journal.
+The explicit-stop video finalized cleanly: 1920×1108, 30.75 seconds and about
+29.5 FPS, including the titlebar around the native 1080p client. A post-run frame
+check confirmed readable UI and the unchanged allocation. The 11 tool calls
+included the expected refused lease release. Preflight overview, Research and
+production reads took 0.274, 1.595 and 1.329 ms respectively; these single paused
+samples are not advancing-campaign throughput. Real time per game year is not
+applicable to a test with no date advancement.
+
+The correction now settles the complete factory-control witness before dispatch,
+retains its exact identity and geometry through the final guard, and distinguishes
+allocation from row/widget/rectangle mismatches. Generated checks cover movement,
+widget replacement, torn-read stability resets and late/expired samples. The
+unported Mac folder catalog now refuses before process access. A read-only live
+check confirmed its explicit `unsupported_platform` result and unchanged paused
+date, without input configuration or a lease. The corrected source passed 1,299
+host Rust tests, 956 workspace Python tests (37 skipped), formatting, host and
+Windows all-target Clippy, release build and the 24-tool stdio smoke. All 225
+native source files match the clean staged archive; its Python source is unchanged
+from the preceding 809-test staged check (29 skipped). The production correction
+has not been requalified through a fresh live mixed-plan run. Same-plan worker
+restart, natural Research refill, the two-year gate and full campaigns remain open.
+
+Preserve the first publication's Linux CI failure: Clippy rejected the Mac-only
+`load_existing` helper as unused in the Linux library. Its configuration now
+includes Mac production and Unix tests, rather than Linux production. This
+changes compilation scope, not Mac worker behavior; no live result is implied.
+The follow-up passed all-target Clippy for x86_64 and ARM64 Linux and all 67
+governor tests on Mac, with formatting unchanged.
+
+
+## Mac mixed worker restart and refill — 23 October 2026
+
+The corrected source (`f328b39`) passed all nine exact-head CI jobs on Linux,
+Windows and macOS. Luna medium used a fresh owned native Mac instance with
+vanilla FAIR Germany, Normal difficulty, historical AI and a 1920×1080 client.
+The preceding quarantined controller and campaign were preserved separately;
+this was a new technical qualification, not a reload to reverse an outcome.
+Startup readiness took 20.36 seconds. No system power setting or game binary
+was changed.
+
+Preserve the first private-driver failure: menu setup completed, then a missing
+MCP helper method stopped read-only preflight before a lease or worker action.
+Its setup video finalized cleanly at 100 seconds. Resumption reused that exact
+campaign and retained controller identity, with empty action journals.
+
+The mixed worker then verified Electronic Mechanical Engineering in slot 2 and
+infantry allocation 10→11. Immediate readback preserved all 21 line identities
+and every other requested allocation. Stop/join, lease release, MCP reconnect
+and restart of the identical retained plan passed without duplicate input.
+The controller epoch and plan payload stayed unchanged. Five seconds of same-day
+idle observation rewrote no durable plan, sequence or journal file.
+
+At speed 3 the game advanced to 27 March 1936 01:00 in 230.772 unpaused seconds.
+A fresh digest returned `torn_read: Snapshot witness changed`; the private driver
+stopped instead of retrying this read. It joined the worker, issued one verified
+end-test pause, released the lease and cleanly finalized the recording. There
+were two completed entries, Radio pending and no quarantine. Preserve this
+failed run. Its 126 calls included eight transient `input_busy` digest refusals
+and the final torn read. Overview, Research, production and digest medians were
+0.323, 1.737, 1.307 and 10.587 ms respectively; ten-second event waits are excluded
+from these read figures.
+
+A bounded continuation reused the same game, controller and exact plan. The
+private driver now retries only bounded, read-only `torn_read`/`input_busy`
+responses; fixtures rejected retries for mutations and ownership loss. It made
+one worker start and two clock calls. EM Engineering finished naturally and the
+worker assigned Radio, completing all three durable entries. After 65.343 more
+unpaused seconds the game stopped at 19 April 1936 20:00. All 38 RPCs succeeded.
+
+The continuation nevertheless retains its `failed-preserved` driver result:
+the final assertion required an unchanged full production collection, but one
+naval panzerschiff line had disappeared (21 rows became 20). Independent fresh
+read-only verification confirmed all military requested allocations unchanged,
+all surviving requested allocations unchanged, EM completed, Radio active in
+slot 2, all three typed plan completions and no quarantine. No naval input was
+authorized or logged. The missing line's cause was not independently proven;
+do not silently classify it as a completed ship or erase the assertion failure.
+
+Both advancing segments used zero observation pauses and one explicit end-test
+pause each. Together they advanced 108⅓ game days in 296.115 unpaused seconds,
+about 16.6 minutes per game year when normalized. This is a short peaceful test
+at speed 3, excluding setup, harness-repair time and paused intervals; it is not
+a full-year, wartime or campaign throughput benchmark.
+
+The two recordings finalized by explicit stop at 1920×1108, including the
+28-point titlebar around the native 1080p client: 254.37 seconds/7,493 frames and
+78.81 seconds/2,322 frames, both about 29.5 FPS. Post-run frame checks confirmed
+readable UI and the factory allocation of 11. The continuation's final frame is
+within a Research-panel animation; the settled final assignment proof comes
+from independent structured reads, not that transitional frame. Keep the setup
+and advancing segments separate; they are not one continuous showcase video.
+All 225 native input hashes and each frozen driver/binary hash matched. The
+owned game remains paused with no worker, broker, lease or recorder active.
+
+These results establish the listed component behaviors across a resumed test.
+They do not establish a clean end-to-end qualification, the two-year Luna run,
+full campaigns, durable Focus support or long campaign recording reliability.
+
+
+## Coherent Mac Focus progress prerequisite — 23 October 2026
+
+The Mac Focus action's progress reader no longer merges separately witnessed
+JSON pages or takes its active focus from the final page. The canonical completion
+reader now returns an opaque typed active/completed model from one complete
+observation. The public completion tool renders its existing bounded sorted pages
+from that model; pagination shape, membership deduplication, type/backlink checks,
+own canonical membership, final process ownership and torn-read refusal remain.
+This is observation evidence, not an assignment receipt or durable Focus support.
+
+A generated Linux fixture returns 104 completed focuses plus a distinct active
+focus in one begin/final ownership bracket, exceeding the public 100-entry page.
+Linux and sparse Mac fixtures cover torn active/member state, foreign progress,
+final ownership loss and Mac ABI/RTTI without Linux or GUI payload. Review caught
+an obsolete Mac test constructing the new opaque type; the refusal test now uses
+a private borrowed-state predicate without opening the snapshot constructor.
+
+Validation passed 1,303 host Rust tests, 956 workspace Python tests (37 skipped),
+formatting, host/Windows/Linux/ARM64 Linux all-target Clippy and the release build.
+A separate read-only native Mac check used the same paused 19 April campaign,
+with no input configuration, lease, worker, screenshot or cursor action. Twenty
+completion reads agreed on no active/completed national Focus at a 0.276 ms
+median inside the reader. The own date and retained input files were unchanged,
+all 225 source hashes matched, and the stdio server exposed its expected 24
+observation tools. The game continued to retain the previously verified Research
+and production plan. No new Focus gameplay action is claimed; final target
+binding and bounded ordinary input remain the next prerequisites.
+
+
+## Mac Focus input binding and deadline refusal — 23 October 2026
+
+The manual Mac Focus path now pins the original own country, progress, tree,
+canonical database and exact Focus pointer. Node and detail selection must match
+that pointer; a same-name foreign or replacement object cannot substitute. Each
+candidate uses one final-witness observation and keeps its manager/view/container/
+widget identities, visibility, enabled state, zoom and rectangle. Named controls
+must be unique, displayed-country binding must be positively own, and oversized
+panel lists refuse instead of truncating.
+
+A click rechecks the original candidate after cursor settling. Panning requires
+complete visible symbol/background geometry and rechecks the whole drag origin
+before mouse-down; subsequent motion retains own-view, lease and deadline checks
+while allowing the intended rectangle movement. Failed/cancelled drags attempt
+release. Unknown sprite geometry, zero-size zoom results and extreme finite
+translations refuse. Politics opening uses its ordinary Q shortcut with no fixed
+coordinate fallback. One original five-second fence covers all reads and input;
+new stages cannot renew it. Durable daily Focus is still unavailable.
+
+Validation passed 1,323 host Rust tests, 956 workspace Python tests (37 skipped),
+formatting, strict host/Windows/Linux/ARM64 Linux Clippy and the release build.
+Fifteen sparse Mac fixtures exercise real canonical and GUI readers, including
+foreign payload avoidance, replacement pointers, duplicates, torn witnesses,
+oversized collections, hidden/disabled Start and changed final controls. Transport
+fixtures cover final drag-origin refusal, cancellation and cleanup after failed
+down. Independent review also found a private qualification-driver cleanup gap:
+preflight was outside its failure handler. It was moved under cleanup and a fault
+injection verified saved failure, recorder shutdown, zero input and no repeated
+execution claim. A read-only stdio smoke exposed 24 observation tools and retained
+the paused campaign before the player grant.
+
+One Luna medium player then ran one recorded `GER_prioritize_economic_growth`
+attempt on the retained Normal historical vanilla FAIR Germany campaign. There
+were nine RPCs and one error; no clock change, worker start or screenshot-driven
+control. The Focus call returned `action_uncertain` after 5,083.801 ms, retaining
+an original-deadline dispatch failure and an expired readback fence. Its durable
+Intent remains unresolved. No retry, settlement or recovery input followed.
+The lease released and broker closed normally. The recorder finalized explicitly:
+1920×1108 around the native 1080p client, 376 frames, 12.736667 seconds, about
+29.5 FPS. All 227 native source files and the reviewed helpers remained unchanged.
+
+After handback, independent read-only checks retained the paused 19 April 1936
+20:00 date, no active/completed Focus, Radio in slot 2 and the three completed
+Research/production plan entries. Controller files and the unresolved Intent
+were unchanged. A post-run video frame shows the Focus tree open, but the runtime
+did not retain the exact stage that timed out. Do not infer a particular pan,
+control click or performance cause from the aggregate deadline. Preserve this
+failure and blocked controller; add stage diagnostics and bounded navigation
+qualification before another separately owned technical input test. This does
+not establish a successful Focus action, durable Focus, the clean two-year run
+or a completed campaign.
+
+## Mac target-only Focus read cost — 23 October 2026
+
+Subsequent code adds bounded stage/time diagnostics and separates node checks
+from full drag-obstacle geometry. Both paths validate the entire item collection
+for exact types, own membership and duplicate targets before reading target
+payload. The node path reads the requested control's geometry only. A drag still
+requires a complete settled Tree and its unchanged before-down witness; a node
+result cannot authorize a drag origin.
+
+The new read-only `hoi4_focus_input_probe` was exercised without `--mac-input`
+against the same paused owned Mac game and unresolved controller. Ten alternating
+samples per mode returned identical economic-growth node geometry. Target-only
+observations measured 8.656 ms median (8.404–8.959 ms), versus 63.986 ms
+(62.973–64.369 ms) for complete obstacle observations: about 7.4× faster for this
+read path. Logical payload requests fell from 28,039 to 2,675 and payload bytes
+from 515,220 to 135,792. Those counts exclude final witness rereads and process
+identity checks; elapsed time includes them. They are not kernel-call counts or
+end-to-end action latency. The complete path validated 524 symbol/background
+obstacles.
+
+The read-only process finished normally. Own date remained paused at 19 April
+1936 20:00 with no active/completed Focus. Exact controller file hashes, sizes and
+modification times stayed unchanged. There were no input calls, leases, screenshots,
+cursor movements or observation pauses. All 228 native source hashes matched the
+tested build throughout. This does not resolve the earlier Intent or identify
+the earlier gate's unknown timed-out stage.
+
+Validation passed 1,336 host Rust tests, 956 Python tests (37 skipped), formatting,
+strict host/Windows/Linux-musl/ARM64-Linux-musl Clippy and the release build.
+Twenty-four binding fixtures include complete-vs-target equality, omitted unrelated
+geometry, foreign/duplicate items after the target, torn target fields and public
+probe projection. The initial full run caught the protocol inventory's old
+24-tool expectation; updating it to include the new 25th observation tool passed.
+An initial cross-check selected an uninstalled GNU target; the installed musl
+targets passed. Native platform CI remains separate from cross-compilation.
+Fresh recorded input qualification and durable Focus are still required.
+
+## Mac Focus pan-budget refusal — 23 October 2026
+
+After closing the preceding failed technical session through its owned supervisor,
+one Luna medium player started a separate fresh vanilla Normal historical FAIR
+Germany game at native 1920×1080. The original controller and userdata remained
+preserved. The new recorder covered menu setup and the single economic-growth
+Focus attempt. The baseline was paused on 1 January 1936 12:00, speed 0, with idle
+Focus and four empty research slots.
+
+The request again returned `action_uncertain`: the original five-second deadline
+expired at `pan_transport`, 743.166 ms into that stage and 5,070.396 ms into the
+Focus sequence, after four requested pan segments. The count records requested
+transports, not proof that each mouse-down or complete drag was delivered. There
+was no clock action, worker start, gameplay screenshot, retry or settlement.
+The lease released, broker closed and recording finalized explicitly: 2,173
+frames, 73.718333 seconds, 1920×1108 around the native 1080p client.
+
+Independent read-only checks retained the paused date, idle Focus and unchanged
+controller files. The target node was then inside the safe area at rectangle
+(447,164,100,88); complete geometry covered 524 obstacles. All 228 native source
+hashes remained unchanged through the run. This controller's original intent is
+unresolved and blocks further input. The recorded build passed all nine exact-head
+Windows/macOS/Linux CI jobs. Faster node reads are verified; successful bounded
+navigation, durable Focus and campaign acceptance are not. Next, reduce unnecessary
+centering and short drags while retaining complete drag-origin witnesses.
+
+The next implementation replaces fixed 700/350-pixel pan caps and centering
+with a pure bounded planner. It considers 1,232 clear origins, keeps the original
+24-pixel obstacle margin, and moves only axes that need displacement into the
+safe area. Full-tree settlement and final mouse-down witnesses remain required;
+the original five-second action deadline is unchanged. Optional read-only probes
+report the predicted endpoints and explicitly grant no input authority. Geometry
+fixtures and review are not proof that the new route works in the game.
+Validation passed 1,350 Rust tests, 956 Python tests (37 skipped), formatting,
+strict host/Windows/Linux-musl/ARM64-Linux-musl Clippy and a release build. The 14
+new tests cover directional travel, blocked origins, boundaries, overflow,
+determinism and read-only prediction. Fresh recorded input remains pending.
+
+## Mac bounded Focus navigation passed — 23 October 2026
+
+On immutable `d11c3c3`, a fresh owned Mac session passed one Luna medium Focus
+attempt. The native 1920×1080 Germany campaign used vanilla Normal difficulty,
+historical AI and FAIR rules. The recording began before menu setup. Economic
+Growth started through ordinary UI input in 3,650.525 ms, within the unchanged
+five-second deadline. The journal retained one Dispatching/Verified pair and
+no unresolved input. All 13 player RPCs succeeded; no retry, clock change, worker
+start or gameplay screenshot occurred.
+
+After explicit player handback, four independent read-only calls confirmed the
+active target, unchanged paused 1 January 1936 12:00 and empty research slots.
+The player's after-read also retained all production allocations. Controller
+file hashes, sizes and modification times stayed unchanged through the audit;
+all 229 native source hashes matched the frozen manifest. The lease released,
+broker closed and recording finalized explicitly. The video is 109.781667 seconds
+at 1920×1108 including the window title bar: 3,235 encoded frames, while the
+recorder's final progress count reports 3,234. Final-frame inspection confirms
+readable active Economic Growth and the paused date; no live capture was added.
+
+This verifies one bounded paused Focus assignment. It does not prove completed
+Focus membership, durable worker execution, successive assignments or a campaign.
+Both earlier uncertain controllers remain preserved and blocked. The next work
+is coherent typed assignment evidence and mixed standing-plan qualification.
+
+## Mac durable Focus preview — implementation checkpoint
+
+The default-off worker preview now uses one witnessed own-target observation
+covering the campaign, country/status, Focus database/tree/progress, all canonical
+member keys and the exact target. Status and target links remain bound through
+ordinary UI preparation. A current idle-to-active transition with unchanged
+binding, monotonic membership and a newer durable observation supplies the Start
+receipt. The next idle Focus head requires fresh completed membership for the
+previous assignment. Missing completion is a decision, not permission to restart.
+Historical keys after reconnect do not prove historical pointer continuity.
+
+Busy same-day Focus probes allocate no sequence and rewrite no plan file.
+Generated tests cover both supported string ABIs, full membership beyond one
+public page, torn reads and early ownership refusals, replacement before UI
+preparation, stale transition evidence, natural-completion queue progression and
+reopen. Validation passed 1,373 Rust tests, 956 Python tests (37 skipped), formatting,
+strict host/Windows/Linux-musl/ARM64-Linux-musl Clippy and a release build. These
+checks do not establish durable live Focus acceptance; the next recorded gate
+combines Focus, Research and one existing-line production allocation.
+
+## Mac mixed Focus worker ownership refusal — 23 October 2026
+
+One Luna player at medium reasoning ran immutable `b31e10b` against the healthy
+owned 1080p Mac Germany session in FAIR mode. Economic Growth was already active
+from the preceding verified manual gate. The plan queued Autobahn then KdF,
+EM Engineering then Radio in slot 2, and one infantry-equipment factory step.
+
+The paused worker verified EM Engineering and the 10→11 factory change. All 21
+production allocations were checked; only the requested line changed, and the
+other Research slots remained empty. Both completed entries and the plan survived
+STOP/release/EOF and a new broker/worker. Two 3.2-second idle windows preserved
+controller-file bytes, sizes and modification times. The second worker then ran
+at speed 3 without observation pauses.
+
+After natural Economic Growth completion, Autobahn preparation failed with
+`foreign_focus_scope` at `tree_layout`: stage 3.895 ms, total 1,028.562 ms, zero
+requested pans. The exact displayed-country value was not retained; the error
+merged unset and different-country cases. Existing video frames show the
+completion popup followed by Politics. They do not establish a foreign tree or a
+successful tree opening. No node/Start stage was reached, no retry occurred, and
+the original durable Autobahn intent remains unresolved. Radio and KdF stayed
+pending. This is a failed mixed gate, not durable Focus acceptance.
+
+STOP joined the worker. Lease release returned `action_uncertain` because the
+controller was quarantined; broker EOF ended its live ownership. The recorder
+stopped explicitly and finalized 120.293333 seconds, 3,544 encoded frames at
+1920×1108. All 235 native source files and pinned helpers stayed unchanged. The
+69 player RPCs included 15 bounded read-only `input_busy` digest retries and the
+refused release. Successful overview and governor-call medians were 0.346 ms and
+10.666 ms respectively; the latter mixes start, stop and digest operations and is
+not a pure digest benchmark.
+
+The last actual driver overview was 4 February 1936 15:00, unpaused at speed 3;
+the handback's 3 February date came from the preceding persisted progress sample.
+No end-test pause or recovery input was issued. After explicit handback, a separate
+broker without input access read 8 March 21:00, completed Economic Growth, idle
+Focus, EM Engineering still active and infantry allocation 11. The reads did not
+change any controller files. The exact owned supervisor then closed the game;
+its return code was 0 and default settings were unchanged. This was supervisor
+cleanup, not a verified ordinary UI exit. No complete unpaused interval or
+per-year campaign throughput is claimed.
+
+The subsequent readiness correction distinguishes Hidden, Opening (visible but
+country unset), and Ready (visible and positively own-bound). Only Ready ends the
+bounded observation wait. A nonzero foreign country still refuses immediately,
+without following its pointer or reading item/panel arrays. Strict node, pan and
+Start checks continue to reject unset ownership. The opener is never clicked
+again during this wait, and the original action deadline is retained. Sparse
+fixtures exercise these states and final witnesses; a fresh live gate must
+establish whether the correction resolves the observed failure.
+
+Validation of the correction passed 1,381 Rust tests, 956 Python tests (37
+skipped), formatting, strict host/Windows/Linux-musl/ARM64-Linux-musl Clippy and
+the release build. These checks do not establish live readiness or campaign
+acceptance.
+
+## Mac mixed Focus pre-input torn read — 23 October 2026
+
+A fresh native 1080p Mac Germany session ran immutable `6713553`, whose nine
+exact-head CI jobs passed. One Luna medium player verified Economic Growth in
+3,669.741 ms while paused at 1 January 1936 12:00. Independent read-only checks
+confirmed the active target and unchanged Research/production. Its recording
+finalized at 1920×1108 and 157.255 seconds: 4,635 encoded frames versus 4,634 in
+the recorder's progress count. That discrepancy remains recorded.
+
+The following mixed worker repeated the preceding plan: Autobahn then KdF,
+EM Engineering then Radio in slot 2, and infantry factories 10→11. Research and
+the factory step verified while paused. The exact plan and completed entries
+survived a new broker/worker; two 3.2-second idle windows preserved controller
+bytes, sizes and modification times. All other allocations and Research slots
+were unchanged. Speed 3 and unpause verified separately; observations never paused.
+
+After natural Economic Growth completion, notice dismissal quarantined a
+`torn_read`: `stage=clear_notices`, stage 144.658 ms, total 151.183 ms, zero
+requested pans. The generic “Campaign anchors changed during observation” message
+covers several snapshot fields; it does not identify which field changed.
+This happened before Focus-view readiness, so this gate establishes neither
+success nor failure of that correction at natural completion. The Autobahn intent
+remains unresolved, KdF and Radio pending. No action was retried or settled.
+
+STOP joined the worker; quarantine refused lease release, and broker EOF ended
+live ownership. All 235 native sources and pinned helpers remained unchanged.
+The 68 player RPCs included 14 bounded read-only `input_busy` digest retries and
+the refused release. Explicit recording stop finalized 123.111667 seconds,
+3,629 frames at 1920×1108. The existing final frame shows the completion notice,
+with Production behind it and the cursor over OK. No gameplay screenshot or
+end-test pause was added.
+
+The last actual driver overview was 4 February 1936 05:00, unpaused at speed 3;
+the handback's earlier date came from persisted progress. Independent reads after
+handback observed 12 March 06:00, completed Economic Growth, idle Focus,
+EM Engineering still active and infantry allocation 11. All other military and
+surviving naval allocations were unchanged, with no missing or new lines.
+Controller files stayed unchanged. Exact owned-supervisor cleanup closed the
+game with return code 0 and default settings unchanged; this was not a verified
+ordinary UI exit. The unpaused interval has no verified ending pause, so no
+per-year throughput is claimed.
+
+The next correction retries only a discarded complete pre-input clock observation
+on `torn_read`, at most three times with 2 ms waits clipped to the original action
+deadline. Stop, lease and process identity are checked around each attempt/wait;
+a coherent campaign-scope failure still refuses immediately. No input is retried.
+Fresh live qualification, a clean two-year run and full campaigns remain required.
+
+The pre-input recovery correction passed 1,390 Rust tests, 956 Python tests
+(37 skipped), formatting, strict host/Windows/Linux-musl/ARM64-Linux-musl
+Clippy and the release build. These checks are offline evidence; fresh live
+qualification remains required.
+
+## Mac visible Focus tree readiness timeout — 23 October 2026
+
+A fresh recorded Luna medium run used immutable `538e2b8`, with all nine
+exact-head CI jobs passing. Manual Economic Growth verified in 3,746.890 ms;
+independent reads retained the paused 1 January 12:00, empty Research and all
+allocations. The manual recording finalized at 1920×1108, 199.268333 seconds
+and 5,871 frames. All 236 native source files and pinned helpers stayed frozen.
+
+The next mixed plan again verified EM Engineering and infantry factories 10→11,
+same-plan reconnect and unchanged idle files. After natural Economic Growth
+completion it passed notice dismissal but quarantined at `open_tree_readback`:
+`input_readback_failed`, stage 3,005.760 ms, total 3,952.118 ms, zero requested
+pans. The original Autobahn intent remains unresolved; no retry, settlement or
+reset occurred. STOP joined; lease release refused quarantine; broker EOF ended
+ownership. There were two clock requests, zero observation pauses and no end pause.
+
+The mixed recording finalized explicitly at 1920×1108, 134.373333 seconds and
+3,960 frames. Its final frame shows the German Focus tree open, Economic Growth
+completed and Autobahn visible. This differs from the preceding runs' sampled
+final views. The 69 player RPCs included 15 bounded read-only busy retries and
+the refused release. The last actual driver overview was 5 February 14:00;
+the handback's earlier date was a persisted progress sample.
+
+Independent reads after handback observed 8 March 17:00, completed Economic
+Growth, idle Focus, EM Engineering still active and infantry allocation 11.
+Other military/surviving naval allocations and non-target Research were unchanged.
+A later bounded read-only GUI inspection found a visible root (flag 8) and zero
+at the field previously treated as displayed country. Exact own process/root
+witnesses and controller files stayed unchanged; no country pointer was followed.
+This later snapshot does not recover the exact values during the timed-out wait.
+The field's semantics need verification before relaxing ownership checks.
+
+Exact owned-supervisor cleanup closed the game with return code 0 and default
+settings unchanged. This is another preserved failed mixed gate, not campaign
+acceptance or proof of complete torn-read recovery. The clock-retry path was not
+instrumented, so passing notice dismissal does not prove a retry occurred.
+
+Offline inspection of the matching Mach-O identifies `CNationalFocusView`'s
+country getter at image-relative `0x1be2620`. It uses the nonzero `+0x1990` field
+as an override; otherwise it resolves the game state's positive player tag
+through the country map. Its fallback to an observer tag is outside campaign
+scope and must remain unavailable. This proves the field's nullable-override
+semantics; it does not prove exact values during earlier failed waits. The Mac
+reader already requires a positive player tag and exact own country/status/tree
+backlinks. The correction can therefore resolve zero through that same witnessed
+own binding, while rejecting a different nonzero override before payload reads.
+
+The nullable-override correction passed 1,394 Rust tests, 956 Python tests
+(37 skipped), formatting, strict host/Windows/Linux-musl/ARM64-Linux-musl
+Clippy and the release build. Exact view-primary and positive own-player checks
+precede payload reads; raw override changes invalidate captured controls.
+Fresh recorded input qualification remains required.
+
+## Mac mixed production torn-read quarantine — 23 October 2026
+
+Fresh immutable `039c00d` passed all nine exact-head CI jobs, 1,394 Rust tests
+and 956 workspace Python tests (37 skipped). Luna medium's manual Economic
+Growth assignment verified in 3,733.412 ms. Independent read-only checks retained
+paused 1 January 1936 12:00, speed 0, active Growth, empty Research and all original
+production allocations. Its recording finalized at 1920×1108, 249.021667 seconds
+and 7,336 frames. The client was native 1920×1080. All 236 native source files and
+pinned helpers stayed unchanged.
+
+The fourth fresh mixed gate stopped during paused setup. EM Engineering verified
+in slot 2; the infantry factory attempt retained an unresolved Intent followed
+by Uncertain/Unknown, with `torn_read: Snapshot witness changed`. The outer worker
+reported shared uncertainty. The exact failing observation stage was not retained;
+neither pre-click refusal nor post-click readback failure can be established from
+this cause alone. There was one worker start, no reconnect, zero clock requests,
+zero observation pauses and no end pause. Autobahn, Kdf and Radio remained pending.
+The natural-completion Focus path was not reached, so the nullable-override fix
+still lacks that live acceptance.
+
+STOP joined, lease release refused quarantine, and broker EOF ended ownership.
+The 24 player RPCs included 12 bounded read-only input-busy retries and the refused
+release. The recording finalized explicitly at 1920×1108, 35.133333 seconds and
+1,034 frames. Its final frame shows Production open, infantry allocation 10 and
+the pointer over the plus-button tooltip; it does not establish input delivery.
+
+Independent reads after explicit handback confirmed unchanged paused 1 January
+12:00, active Economic Growth, EM Engineering active in slot 2, other Research
+slots empty and all 21 production allocations unchanged. Infantry remained at 10.
+Controller bytes, size and modification time stayed unchanged, as did all pinned
+sources/helpers. Exact owned-supervisor cleanup closed the game with return code
+0 and default settings unchanged. The failed controller remains blocked; never
+retry, settle or reset its production intent.
+
+The next correction belongs in the typed Mac daily-production adapter: complete
+canonical and GUI observations need bounded read-only recovery and stage-aware
+failure diagnostics under the original action deadline. It must never repeat
+movement/clicks or accept a coherent changed owner, line, control or allocation.
+No clean two-year run or full campaign acceptance has been achieved.
+
+The typed adapter now retries only complete discarded canonical/dispatch-guard
+observations, at most four attempts with 2 ms gaps within the original deadline.
+It retains fixed target equality, immediate coherent refusal and one transport
+call. Static phase/stage labels distinguish canonical reads, fixed-control checks
+and transport failures. The separate Mac window-geometry observer is unchanged;
+these diagnostics cannot retroactively identify or prove a fix for the earlier
+unknown-stage failure. Validation passed 1,405 Rust tests, 956 Python tests
+(37 skipped), formatting, strict host/Windows/Linux-musl/ARM64-Linux-musl Clippy
+and the release build. Fresh live qualification remains required.
+
+## Mac mixed standing plan passes — 23 October 2026
+
+Fresh immutable `7cde19f` passed all nine exact-head CI jobs, 1,405 Rust tests
+and 956 workspace Python tests (37 skipped). Luna medium's manual Economic
+Growth assignment verified in 3,756.633 ms. Independent reads confirmed the
+fresh paused 1 January 12:00 baseline, unchanged Research and allocations, and
+active Growth. Its recording finalized at 1920×1108, 102.555 seconds and 3,021
+frames. Native client geometry was 1920×1080 throughout.
+
+The subsequent mixed gate passed all five assignments: EM Engineering in slot 2,
+infantry factories 10→11, Autobahn after natural Economic Growth completion,
+Kdf after natural Autobahn completion, and Radio after EM Engineering completed.
+The stopped/reopened controller retained the same plan and completed receipts.
+Two 3.2-second idle windows retained identical controller bytes, sizes and
+modification times. The test used two worker starts and three clock requests:
+speed 3, unpause and one explicit end-test pause. It used no gameplay screenshots.
+
+Germany advanced from 1 January 12:00 to 20 April 07:00: 2,611 game hours, or
+108.791667 game days, in 290.219–290.428 seconds. There were zero observation
+pauses and zero paused seconds inside that advancing interval. The single
+end-test pause remains for audit/continuation. This normalizes to
+973.70–974.40 seconds per 365 game days (about 16.2 minutes); it is a measured
+rate from a shorter test, not a completed game year. Neither soft wall nor date
+bounds were exceeded.
+
+The 131 player RPCs included 14 bounded read-only input-busy retries. Median
+successful overview, Research and governor-call latencies were 0.370, 1.704 and
+10.919 ms respectively; the governor sample includes start/stop calls. The 29
+server-side waits had a roughly ten-second median by design. No observer call
+paused the game. Passing production does not establish whether the bounded
+read-recovery branch was exercised; successful retries were not instrumented.
+
+The worker stopped and joined, the lease released, and the broker closed cleanly.
+The mixed recording finalized explicitly at 1920×1108, 312.488333 seconds and
+9,214 frames. Independent reads after explicit handback confirmed the exact
+paused date/speed, all three Focuses completed, EM Engineering researched,
+Radio active in slot 2, other Research slots empty and infantry factories at 11.
+All other allocations in the 21-line collection were unchanged; no line disappeared or
+appeared. Controller files and all 238 native sources/pinned helpers stayed
+unchanged. The game remains paused and healthy with no worker, lease or recorder.
+
+This is the first clean recorded mixed Focus/Research/production component gate
+on Mac, not the clean two-year acceptance run or a complete campaign. It follows
+four preserved mixed failures, whose unresolved controllers remain blocked.
+The next test should exercise a higher plan revision on this healthy controller,
+retaining completed work while adding owned Focus/Research assignments. The
+broader campaign domains, two-year run and full showcases remain required.
+
+## Mac higher-revision standing plan passes — 23 October 2026
+
+The healthy controller from the preceding mixed gate continued on the same
+`7cde19f` runtime, with the documentation-only `8a2c968` checkpoint. All nine CI
+jobs passed on both heads. Luna medium ran the recorded continuation at native
+1920×1080. It used `update` to retain the original five entries and receipts while
+adding two ordered infrastructure Focuses and Research in the three empty slots.
+Revision 2 used a one-action-per-day limit to isolate update/reconnect behavior
+from the existing shared five-second cycle deadline.
+
+The update started the southern Autobahn Focus. STOP, release, broker EOF,
+reconnect and identical-plan start retained the revision, every completed receipt,
+the journal prefix and consumed daily budget. Two 3.2-second idle windows left
+controller bytes, sizes and modification times unchanged. The advancing worker
+assigned Basic Machine Tools in slot 0, Construction I in slot 1 and Support
+Weapons in slot 3, then started the eastern Autobahn Focus after the southern
+Focus completed naturally. All ten retained plan entries were Complete; that
+state denotes verified assignment, not natural completion of every technology.
+
+Germany advanced from 20 April 07:00 to 20 May 20:00: 733 game hours in
+81.826–82.077 seconds. There were zero observation pauses or paused seconds
+inside the advancing interval, and one explicit end-test pause. The test used
+one update and one restart, two clock requests, and no gameplay screenshots.
+No wall or date cap was exceeded. Its 76 RPCs included 23 bounded read-only
+input-busy retries; no other RPC error occurred. Median successful overview,
+Research and governor calls were 0.529, 2.484 and 11.738 ms respectively.
+
+The worker stopped and joined, the lease released and the broker closed. The
+recording finalized at 1920×1108, 102.021667 encoded seconds and 3,007 frames;
+its recorded UI was readable. Independent read-only checks confirmed the paused
+20 May 20:00 state, speed 3, the four expected active technologies, southern
+Autobahn completion and eastern Autobahn activation. All previous Focus and
+Research completions and original plan receipts remained intact. Military line
+membership and requested allocations were unchanged. One naval queue line
+disappeared during advancement; all surviving allocations were unchanged, and no
+new line appeared. All five new attempts had distinct IDs and different game days. Controller
+files and all 238 native sources/pinned helpers stayed unchanged during the audit.
+The game remains healthy and paused, with all grants closed and no worker, lease
+or recorder.
+
+This passes same-controller higher-revision component qualification. It does not
+qualify multi-action admission within a Mac worker cycle, the clean two-year run,
+or a full campaign. Earlier failed controllers remain preserved and blocked.
+
+## Mac worker admits one attempt per cycle — 23 October 2026
+
+Source review found an admission defect in the shared five-second worker cycle:
+a later ready entry could persist Intent with only the remainder of an earlier
+UI action's budget. Expiry then correctly quarantined possible input, but the
+scheduler had admitted work with an unnecessarily depleted bound.
+
+Mac new-day cycles now use a bounded one-attempt scan. Waiting/deferred entries
+still yield to ready work, and blocking or foreign/missing evidence still stops
+the scan. After one persisted Intent, including a zero-input refusal, later
+entries retain their Pending state. Existing same-day continuation uses remaining
+daily budget under a subsequent cycle's original bound. No action deadline is
+renewed, no intent is replayed, and persistence formats, lease/cancellation checks,
+idle probes and Linux's multi-action `run_day` path are unchanged. A single action
+can still exhaust its own original deadline; this removes budget consumption by
+an earlier action in the same cycle.
+
+Ten new tests exercise the real persisted governor at Intent admission, readiness
+starvation across advancing days, same-day continuation, NotQueued consumption,
+restart exhaustion, expired deadlines, foreign/late/uncertain quarantine and
+unchanged multi-action `run_day`. All 199 daily-related regressions and the full
+1,415 Rust tests passed, together with 956 Python tests (37 skipped), formatting,
+strict host/Windows/Linux-musl/ARM64-Linux-musl Clippy and the release build.
+An offline stdio smoke returned protocol JSON only and all 25 existing tools.
+The smoke's initial 24-tool assertion was a stale harness expectation that omitted
+the existing Focus-input probe; that failed assertion is retained separately.
+
+These are offline correction results. Qualify normal daily-budget live admission
+on the healthy retained Mac controller before claiming live acceptance of this
+scheduler change. The two-year run and full campaigns remain incomplete.
+
+## Mac cycle admission and production cap pass — 23 October 2026
+
+Runtime `3b84ebc` passed all nine exact-head CI jobs. The first recorded attempt
+stopped at the owned-game foreground check before opening MCP, acquiring a lease,
+starting a worker or sending input. Its 1920×1108 recording finalized at 11.973333
+seconds and 351 frames. Independent reads and file hashes confirmed the unchanged
+paused 20 May 20:00 controller. That attempt remains preserved.
+
+A new grant explicitly permitted one activation of the exact owned application
+before recording. Luna medium then advanced to 21 May 01:00 and paused for this
+bounded component test. Revision 3 retained all ten completed entries and added
+an infantry factory target of 12 and a support-equipment target of 3, under the
+normal core daily budget of three attempts. The separate production cap remains
+one step per game day; the reviewed expected outcome included its refusal.
+
+The fresh-day batch verified infantry 11→12. A separate `advanced: false`
+same-day batch retained support at 2 and recorded its explicit `NotQueued` cap
+refusal. The final core budget showed two attempts used and one remaining.
+Exactly eleven entries were Complete; support remained Pending with one attempt,
+the exact cap reason and current day. Both intent records were retained, with one
+verified terminal and one refused terminal. Support had no production binding or
+ordinary input record. There was no quarantine or uncertain delivery.
+
+The run used one worker start and two clock calls, zero observation pauses and
+one planned test pause. Its brief advancing interval was 0.763–1.000 seconds;
+the production assertions ran paused. This is not continuous-play or full-plan
+completion evidence. The 29 RPCs included four bounded read-only input-busy
+retries; median successful overview, Research and governor calls were 0.344,
+1.780 and 11.588 ms. No gameplay screenshot or unnecessary cursor movement occurred.
+
+STOP joined the worker, release ended the lease and broker EOF closed cleanly.
+The recording finalized at 1920×1108, 15.671667 seconds and 461 frames, with a
+readable UI. Independent reads confirmed paused 21 May 01:00, speed 3, infantry
+12, support 2, all other allocations unchanged, the same four active technologies
+and active eastern Autobahn Focus. All old receipts and the journal prefix remained
+intact. Controller files and 239 native sources/pinned helpers were unchanged.
+All grants are closed; the healthy game remains paused without a worker, lease
+or recorder.
+
+Next, continue this same plan/controller across another game day to qualify the
+known zero-input refusal's ordinary retry while retaining its history. Never
+reset the Pending entry or replay any older uncertain controller. The two-year
+run, wider durable domains and full recorded campaigns remain outstanding.
+
+## Mac construction opener torn-read recovery — 23 October 2026
+
+A fresh owned vanilla Germany campaign started at paused 1 January 1936 12:00,
+Normal difficulty, historical AI and a native 1920×1080 client. Six ordinary panel
+and six shortcut observations passed without input, screenshots, cursor movement
+or observation pauses. Median ordinary/shortcut reads were 1.605/36.668 ms.
+A read-only controller bind created fresh local storage and closed cleanly with
+empty action journals and no lease or worker.
+
+The first Luna-medium opener gate on `c4a0c9c` stopped before key-down. The native
+error identified a torn topbar-opener witness at read 431, size 16, byte 12. The
+strict journal contains Dispatching followed by NotApplied with positive delivery
+NotQueued. The harness retained its failed outcome, including a success-only
+terminal-audit record-count failure. There was no retry, clock request, worker,
+cursor movement or observation pause. Lease release and MCP EOF succeeded; the
+owned recording finalized at 1920×1108, 57.991667 seconds and 1,706 frames.
+
+Independent readback confirmed the original paused date/speed, full Research,
+Focus and production membership, empty construction queue, canonical own target
+and closed panel. Controller bytes and metadata stayed unchanged during that
+readback. A separate read-only tracing adapter mapped ordinal 431 to the own
+keyboard-cache array header. Two of twelve stationary samples reproduced the
+same active-count tear; these traced timings are not a performance benchmark.
+Neither observation was used to reclassify the original delivery receipt.
+
+The correction retries only a wholly discarded complete opener observation,
+up to four attempts with 2 ms waits clipped to the original action deadline.
+The original process, lease, campaign and cancellation checks surround reads and
+waits. Boundary failures cannot become retryable UI reads. A coherent binding
+change or other read error fails immediately, even if a later UI might restore.
+The original binding survives prepare, final key checks and same-attempt readback;
+key dispatch, journal writes and input-idle checks remain outside recovery.
+Errors retain phase, attempts and elapsed time. No deadline is renewed, uncertain
+input is never replayed, and a new request must preserve the known-refusal prefix.
+
+Fourteen focused recovery fixtures and all 1,542 Rust tests passed, together with
+956 Python tests (37 skipped), formatting, strict host/Windows-GNU/Linux-musl/
+ARM64-Linux-musl Clippy, release build and the 28-tool offline stdio smoke. These
+checks do not establish live delivery. A new recorded same-controller Luna gate
+remains required; construction placement, wider durable domains, the clean
+two-year run and full campaign recordings are unfinished.
+
+## Mac opener delivery and mixed choice grid — 23 October 2026
+
+Runtime `1a96309` passed all nine exact-head CI jobs. On the retained fresh
+Germany 1936 controller, one recorded Luna-medium request then verified the
+ordinary T opener. The action RPC took 1,300.804 ms and retained a same-attempt
+Verified receipt with one keypress. The earlier NotApplied/NotQueued refusal
+remained byte-for-byte intact. No activation, cursor movement, screenshot, clock
+call, worker or observation pause occurred. The broader gate stopped at the
+following read-only choice probe; historical replay and already-open checks did
+not run. Lease release and MCP EOF succeeded. The owned recording finalized at
+1920×1108, 50.558333 seconds and 1,484 frames, for the native 1920×1080 client.
+
+The failure expected ordinary building-item primary RVA `343a9b0` but encountered
+`343aca0`. Independent analysis of the exact Mac binary identifies the latter as
+`CConversionConstructionViewItem`, a separate `CStandardGridBoxItem`. Its `+0x20`
+is an embedded button callback, not a building-template pointer. The own view
+constructor initializes its cached pointer at `+0x470`; the population path
+creates or reuses that item and inserts it once into the shared grid. Capacity
+can suppress insertion, so the supported count is zero or one.
+
+The corrected reader retains this variant only when the exact primary, shared
+grid and own cached pointer all match. It reads no conversion payload or callback.
+All ordered grid membership, complete bounds, duplicate rejection, final witnesses
+and ordinary building/template/target joins remain mandatory. Public counts now
+distinguish conversion items from ordinary building items. Seven new fixtures
+cover unmapped conversion payloads, absent requested targets, wrong caches/grids,
+duplicates, unknown tail items and final witness tears, including callback reads.
+An independent review found no actionable issues in the three-file correction.
+
+Three subsequent stationary read-only samples passed against the already-open
+panel: four complete grids, 22 ordinary choices, one conversion item and the
+requested military-factory callback. The median reader time was 2.100 ms and
+median full RPC time 2.290 ms. Complete own-country before/after observations
+confirmed the unchanged paused 1 January 1936 12:00 campaign, Research, Focus,
+production, empty construction queue and target. All six controller files,
+including the four durable action records, retained their bytes and metadata.
+The observation process had no input adapter or lease and exited cleanly on EOF;
+there were zero input calls, screenshots, cursor movements or observation pauses.
+
+All 1,549 Rust tests and 956 Python tests (37 skipped) pass, together with
+formatting, strict host/Windows-GNU/Linux-musl/ARM64-Linux-musl Clippy, release
+build and 28-tool offline stdio smoke. These results establish the visible reader
+and one original opener, not the entire failed gate or construction placement.
+Keep the controller and verified request ID for a reviewed zero-key historical
+replay/already-open continuation. Selection, placement, worker integration, the
+clean two-year run and full recorded campaigns remain unfinished.
+
+## Mac zero-key opener continuation — 23 October 2026
+
+The published mixed-grid reader correction `dc27a65` passed all nine exact-head
+CI jobs. Review of the next recorded gate identified a gap in its intended
+zero-input scope: a harness preflight could observe an open panel, but a later
+native initial observation could find it closed and correctly choose the normal
+T path. A post-hoc key-count assertion would not prevent that input.
+
+The optional strict boolean `already_open_only` closes this gap inside the native
+adapter. True requires an initially selected, visible and locally idle panel;
+the dispatcher independently refuses any preparation result that would request
+a key. Ordinary input is unreachable in that mode. Its durable action records
+transport `none` and the true option; the omitted/false ordinary-T identity is
+unchanged for old receipts. Reusing an ID across modes conflicts. Invalid option
+types refuse. The original deadline, lease, campaign and final-readback checks
+remain unchanged, and read-only recovery cannot enter the key producer.
+
+Seven new tests cover strict parsing, initial open-state admission, all prepared
+state/error paths with zero producer calls, schema compatibility, durable
+NotQueued refusal, reopen/replay and action conflicts. Independent source review
+found no actionable issue. All 1,556 Rust tests and 956 Python tests (37 skipped)
+passed, together with formatting, strict host/Windows-GNU/Linux-musl/ARM64-Linux-musl
+Clippy, release build and 28-tool offline protocol smoke. The private once-only
+Luna harness also passed 26 mocked tests, including changed ownership/deadlines,
+late receipts, closed panels, unexpected keys and post-EOF journal mutation.
+
+The live Luna-medium continuation then passed on the same owned Germany session.
+It first returned the exact original opener receipt as historical, explicitly
+without verifying current UI or adding any journal row. Its reported one keypress
+belongs only to that earlier attempt. A separate new already-open-only request
+verified the current panel with zero keypresses. All four original rows survived
+byte-for-byte; only the new Dispatching/Verified pair was appended. The two action
+RPCs took 0.560 and 19.925 ms, and the complete 21-call driver run took 0.665 seconds.
+There were no retries, activations, cursor movements, screenshots, clock calls,
+workers or observation pauses. Callback binding was observed; this does not prove
+placement eligibility.
+
+Lease release, successful MCP EOF, terminal controller audit and the same owned
+recorder shutdown completed. The H.264 recording finalized at 1920×1108,
+44.468333 seconds and 1,305 frames, with a native 1920×1080 game client. Runtime
+sources and helpers stayed frozen during the gate. Independent read-only checks
+then confirmed paused 1 January 1936 12:00, speed 0, unchanged complete own
+Research/Focus/production state and empty construction queue, the open inactive
+construction panel, complete visible grid and requested callback binding. All
+six controller files retained their post-gate bytes and metadata during readback.
+All grants are closed, and there is no lease, worker or active recording.
+
+This completes the bounded opener/replay/visible-reader component qualification.
+It does not retroactively change the earlier failed gates. Typed selection,
+placement, worker integration, the clean two-year run and full recorded campaigns
+remain unfinished; real time per campaign year is not established by this paused
+test.
+
+## Mac requested construction geometry — 23 October 2026
+
+The UI probe now accepts independent strict-boolean `include_geometry` and
+`include_callback`, plus `include_routing` when geometry is true. Invalid types
+and routing without geometry fail before process binding. The portable target
+probe rejects these UI-only options. Omitted flags retain the previous memory
+access path; hidden or missing targets still skip their geometry payload.
+
+All four ordered grids and the public catalog must validate before the requested
+control is inspected. Geometry retains the exact own root, possible-constructions
+container, requested section and item frame, requiring shown flags and idle
+transition states. The ordinary button must retain its own graphics and exact
+sprite backlink; a nonnull graphical parent must join the same frame and renderer.
+Null parents need no attachment reads. Ordinary local input gates and the normal
+callback branch are observed without executing the prerequisite predicate. Only
+a fully contained rectangle on the own native/logical 1920×1080 canvas at scale 1
+is available. Coherent hidden, animating, disabled, offscreen or unsupported-profile
+states return unavailable geometry; malformed bindings and torn reads remain errors.
+
+The shared routing observer retains complete ordered source/hit lists, exact
+entry types and cursor conversions without following unrelated targets. It now
+bounds active membership at 4,096 entries, independently of the reader's validated
+20,000 reserved-capacity bound. Spare allocation payload is never read. A verified
+item graphical parent is distinguished from the opener's unqualified optional
+gate. Route timestamps and aliases remain correlations, not atomic completion or
+input-delivery proof; every public authority flag remains false.
+
+Twenty new geometry fixtures and three protocol/routing tests cover sparse
+requested-only payload, opaque conversion membership, callback independence,
+null parents, every target ancestor, owner/renderer/parent changes, unsupported
+profiles, full containment, malformed geometry, complete route tails and final
+witness tears. Focused UI/panel groups pass 58/46 tests. All 1,579 Rust and 956
+Python tests (37 skipped) pass, with formatting, strict host/Windows-GNU/Linux-musl/
+ARM64-Linux-musl Clippy, release build and 28-tool offline protocol smoke. An
+initial full-suite compile identified an older test's incomplete options literal;
+that fixture was updated to preserve defaults before the successful full run.
+
+Stationary live qualification then passed on the same owned paused Germany
+campaign at 1 January 1936 12:00. A geometry-only sample and three geometry/routing
+samples found the requested military-factory button at client rectangle
+(452, 268, 46, 46), center (475, 291). Median reader time was 2.291 ms and median
+RPC time 2.459 ms. The complete 17-call read-only driver took 0.226 seconds.
+Both geometry-only and callback-enabled paths passed. Four grids still contained
+22 ordinary choices and one opaque conversion item.
+
+The actual cursor cache remained at (1775, 1037), away from the target, and both
+route lists were empty. This qualifies stationary geometry and empty-cache reads,
+not target hover, an ordinary click or placement. Complete before/after own
+Research, Focus, production, target and queue observations were unchanged. All
+six controller files and their six journal rows retained bytes and metadata.
+The candidate had no input adapter or lease; it exited successfully on EOF.
+There were zero cursor movements, screenshots, input calls or observation pauses.
+The original owned process identities, window and six-hour supervisor limit were
+preserved. No new campaign footage was recorded by this read-only test.
+
+Next implement typed original selection and full-queue readback, then a separately
+bounded ordinary selection attempt. Placement, daily-worker integration, the
+clean two-year run and full recorded Germany/China campaigns remain unfinished.
+
+## Mac ordinary construction selection — 23 October 2026
+
+The separate default-off `hoi4_construction_select` retains immutable typed
+process/campaign/own-state, public catalog, ordinary target and complete ordered
+queue facts. Readback validates original pointer edges before replacement payload
+and needs no old panel, callback, renderer or route. Inactive mode never follows
+the old template pointer; unsupported modes and incomplete queue facts refuse.
+A compact private fingerprint records the original evidence, but cannot authorize
+later settlement or replace the typed in-memory binding.
+
+One strict durable intent precedes all cursor input. An already-selected target
+requires fresh evidence and no input. Otherwise the original callback, control,
+rectangle and own graphics stay fixed through one ordinary unmodified move/click.
+After settling, the OS cursor and complete observed route must match the target
+and ordinary gates. Canonical same-attempt mode-1 selection and the unchanged
+full queue decide success. Route caches do not themselves prove delivery.
+The five-second deadline is never renewed; possible-input failures remain
+uncertain and cannot be retried. Move/down/up allocation now precedes movement,
+so the final guard follows allocation and release needs no later allocation.
+
+Thirty-two added tests cover typed scope/readback, stale replacement edges,
+unsupported selection/queue facts, durable intent/replay/quarantine, default-off
+configuration, route predicates and the final down guard. All 1,611 Rust tests
+and 956 Python tests (37 skipped) pass, as do formatting, strict host/Windows-GNU/
+Linux-musl/ARM64-Linux-musl Clippy, release build and 28-tool offline protocol smoke.
+A read-only review caught the mouse allocation issue before the final checks;
+the corrected path had no subsequent actionable finding.
+
+One Luna-medium player then passed the bounded recorded test in the retained
+Normal/historical Germany session. One cursor move and click at the original
+military-factory button selected `arms_factory`. `state_id: 64` bound own scope;
+no state was selected and no construction was placed. The selection RPC took
+240.087 ms; the full 18-call driver took 1.503 seconds, including one owned-app
+activation. Fresh complete before/after player reads confirmed unchanged paused
+1 January 1936 12:00, speed 0, Research, Focus, production, target and empty queue.
+There were zero screenshots, clock calls, worker starts, observation pauses or
+input retries. No real time per game year is established by this paused test.
+
+The original six journal rows remained byte-exact; the selection intent and
+Verified receipt brought the total to eight. The five other controller files
+were unchanged. All 270 pinned source/binary/helper files remained frozen, and
+38 unrelated work-in-progress files retained their hashes. Lease release and
+successful MCP EOF completed. The grant closed and the recorder finalized at
+1920×1108 H.264, 67.938333 seconds and 1,999 frames, with native 1920×1080 client
+geometry independently established. Video stream metadata passed; this checkpoint
+does not claim an additional visual review. A further root-only fresh memory
+read was not performed because the user requested stopping.
+
+After the user resumed, frozen files and unrelated work still matched. The old
+game and supervisor had exited after their original bounded lifetime; the close
+report records game return code 0 and unchanged default settings. No lifetime was
+renewed, replacement process adopted or input replayed. All old evidence remains.
+Typed placement, construction worker integration, the clean two-year Luna run
+and full recorded campaigns remain unfinished.
+
+## Mac Find/camera and placement-readback foundation — 23 October 2026
+
+The existing read-only Find tool now dispatches to independently recovered Mac
+and Linux layouts. Mac constructor/RTTI and decoded ordinary paths establish its
+Find/window/query, result header and 0x40-byte entries, canonical state row,
+own camera getter and state-template map position. Ghidra pseudocode corroborated
+the exact file-backed instruction evidence. These are static facts, not engine
+execution. No callbacks or game functions are invoked.
+
+The Mac snapshot verifies own scope and interface links in a full witness bracket
+and repeats exact process checks. Hidden Find windows skip stale query/row data.
+Visible first-state rows must match the first entry and fresh state catalog;
+other result-kind objects are not followed. Review caught a valid zero-result
+case that retains the old row. The corrected reader skips that pointer/payload
+and reports no current first result. A regression covers this state; the initial
+candidate was never used live. Camera coordinates must be finite and bounded;
+foreign requested states do not expose anchor payload. Exact horizontal position
+comparison does not establish wrapped-map equivalence or current screen routing.
+
+Separately, the typed placement-readback foundation retains the original selected
+ordinary target, own scope, full catalog and complete ordered queue. Replacement
+queue reads follow original non-queue edges and exact selection. It accepts one
+matching existing-line increment or one matching inserted amount-one row while
+preserving every old row/order. An unchanged queue is Pending. It creates no
+input, retry, deadline or worker capability; ordinary state targeting and durable
+placement input remain unfinished.
+
+All 1,642 Rust and 956 Python tests (37 skipped) passed, plus strict Clippy on
+host, Windows GNU and Linux x86_64/ARM64 musl, release build and offline protocol
+checks. The additions include 22 placement and nine Mac Find fixtures. Original
+selection tests still pass. The prior selection commit `acd6f6e` passed all nine
+CI jobs after its full reachable-history audit.
+
+A new task-owned native Mac 1920×1080 instance replaced the expired prior session.
+One Luna-medium player started fresh vanilla Germany 1936 on Normal/historical
+settings. The menu capture subsequently failed with ScreenCaptureKit -3821,
+"Stream was stopped by the system"; it is preserved as failed, not accepted
+campaign footage. All grants closed. A read-only task-access check then refused
+without prompting. Normal OS authorization restored access after a temporary
+helper's discard-rights flag was corrected; no system security policy changed.
+
+Stationary qualification of the corrected reader passed on the fresh paused
+Germany campaign at 1 January 1936 12:00, speed 0. A target-free sample and three
+Brandenburg samples verified a materialized hidden idle own Find root, camera
+coordinates and canonical own state-64 anchor (3008, 1569). The camera was not at
+that exact anchor. Query/results remained unavailable because the view was hidden.
+Median native/RPC time was 0.442/0.484 ms; the complete 16-call driver took
+0.546 seconds. Complete before/after Research (47 researched), Focus, production
+(21 lines), target and empty construction queue were unchanged.
+
+There were zero input/lease calls, cursor movements, screenshots or observation
+pauses; no input controller was configured. Source/binary/helper pins were
+unchanged and MCP exited successfully on EOF. This qualifies hidden-view/camera/
+own-anchor observations only. Visible results, text-focus, ordinary Find input,
+map targeting and placement, worker integration, the clean two-year run and full
+recorded campaigns remain unfinished. Real time per campaign year is not measured
+by this paused component test.
+
+
+## Mac retained Find and visible-focus qualification — 23 October 2026
+
+The existing Find observation now renders typed facts and supports optional Mac
+`include_focus` observation. Default reads remain unchanged and skip all new edit
+payloads. The optional path verifies a canonical visible own Find root, the own
+GUI singleton, exact CEditBox and embedded text receiver, own registry, complete
+unique named child membership and both keyboard/text focus aliases. Hidden or
+unmaterialized views skip retained edit pointers; an absent box stays unknown.
+Unrelated focused objects are not followed. All facts share the original witness
+and final process checks. A separate internal FindAnchor pins original campaign,
+ownership, object and requested own-state/template/map identities before
+replacement payload, while current window reconstruction is explicitly modeled.
+No public JSON is parsed back into that typed retained identity.
+
+All 1,668 Rust / 956 Python tests (37 skipped), strict Clippy on host Mac,
+Windows GNU and Linux x86_64/ARM64 musl, release build and 28-tool stdio smoke
+passed. The Find/focus group contains 34 fixtures, including 14 new retained
+identity/lifecycle tests, six focused-control tests and five integration tests.
+The opt-in Linux refusal occurs before process access. Independent review found
+no actionable typed-observer issues. The preceding `6082277` passed all nine
+GitHub CI jobs.
+
+Stationary qualification of the new candidate passed on the retained owned native
+Mac 1920×1080 Normal/historical vanilla Germany session. The complete 16-call
+driver took 0.313 seconds; opt-in hidden Find RPC median was 0.497 ms. The hidden
+view skipped query/result/edit/focus payload. Own Research, Focus, all 21 production
+lines and the empty queue stayed unchanged. There was no input, screenshot,
+cursor movement, observation pause or input-controller directory.
+
+A separate bounded qualification harness then gave one Luna-medium player
+exclusive input. Before input, review corrected acceptance of an unmaterialized
+Find baseline, final original deadline/grant/recorder checks, and reader startup
+using a renewed deadline or leaking its child on constructor failure. Offline
+lifecycle checks proved original deadline use, failed-initialize EOF/reaping and
+no child creation after expiry. These corrections happened before any live key.
+
+The player activated the exact owned game once and sent exactly one preallocated
+ordinary F down/up pair. Typed MCP readback found a visible idle Find window,
+empty query/count zero, exact named edit and both focused receivers. Visible Find
+RPCs were 0.692–0.889 ms; the complete 15-call driver took 2.091 seconds. There
+were zero cursor movements, screenshots, clock calls, observation pauses, workers
+or campaign commands. Full own baseline and the paused 1936.01.01.12, speed-zero
+clock stayed unchanged. MCP EOF returned zero; the input grant closed.
+
+Window recording completed with explicit stop: H.264, 1920×1108 around the native
+1920×1080 client, 105.206667 seconds, 3,091 frames. An initial stop-marker filename
+had no effect; the bridge's correct `stop.request` finalized the owned recorder.
+The earlier menu ScreenCaptureKit -3821 failure remains preserved. This short
+successful recording does not establish campaign-duration reliability.
+
+This qualifies visible empty-query Find/focus observation and one ordinary F UI
+primitive through a private harness with MCP readback. It does not introduce a
+released Find action adapter, prove current F/Return routing, exercise state-ID
+typing/results/activation or grant map placement/worker authority. The Find view
+is left open with an empty focused query for the next original-scope typing gate.
+The clean two-year Luna run and full recorded campaigns remain unfinished;
+real time per game year is not measured by this paused component test.
+
+## Mac ordinary Find navigation — 23 October 2026
+
+The separate default-off native `hoi4_construction_find_state` now types one owned
+state ID into an already-open, idle, exact focused empty Find box, followed by
+Return once. The original typed Find/control/state binding and complete own
+construction queue/selection survive the attempt. Every digit checks the exact
+prefix and both focus aliases; Return checks the original first state object and
+ID. Final readback requires original Find closed and exact original horizontal
+map coordinates. Queue and selection checks bracket every Find proof, including
+pending and final reads. No serialized evidence becomes fresh input authority.
+
+Its strict qualification boolean defaults off. The original five-second Fence,
+exclusive lease, exact native window/geometry, physical input checks and
+preallocated unconditional-release transport apply throughout. Once any key may
+have been posted, later failure preserves uncertainty across reconnects. No
+keypress retry, replacement control adoption or late reached-target settlement
+is permitted. Same-ID successful receipts are historical and do not verify the
+current camera. No worker permission or placement action is enabled.
+
+All 1,706 Rust tests and 956 Python tests (37 skipped) passed. Strict Clippy passed
+on host Mac, Windows GNU, x86_64 Linux musl and ARM64 Linux musl; release build and
+the unbound 28-tool stdio smoke passed. The candidate passed a separate read-only
+preflight. New fixtures include 21 typed navigation cases, 12 adapter/journal
+cases, three inactive-selection cases, a permission-default case and an exact
+ASCII-digit transport case. The late-queue-change fixture was corrected to expect
+the established single Dispatching row; no journal semantics were relaxed.
+The 38 unrelated Python/package/test work-in-progress files remained byte-exact.
+
+Luna medium exclusively executed the frozen native candidate on the same owned
+Mac 1.19.3 Rosetta game, with a 1920×1080 client and UI scale 1. The native MCP
+action typed `64` and Return, then verified the original own Brandenburg anchor
+`[3008, 1569]` after Find closed. It took 549.335 ms. A same-ID historical replay
+returned the identical Verified receipt without input or new journal rows.
+All 17 driver calls took 2.172 seconds. There were zero activations, cursor moves,
+screenshots, observation pauses, input retries or campaign commands. The complete
+own clock, Research, Focus, production and construction queue remained unchanged
+at paused Germany 1 January 1936 12:00, Normal, historical AI and no mods.
+
+The owned 1920×1108 H.264 recording finalized by explicit stop at 69.101667 seconds
+with 2,012 encoded frames. The independent screen-output complete-callback counter
+was 2,011. A private summary initially assumed exact equality; that assertion was
+preserved and corrected to retain both distinct observations. The recording
+result was not rewritten. The recorder exited, Luna returned input ownership,
+the lease/server ended cleanly and the grant closed. The private controller has
+two action rows, Dispatching and Verified; no clock action or worker was started.
+
+This qualifies one ordinary owned-state Find query/Return through the native MCP.
+It does not qualify a point for placement, atomic/general modal routing,
+construction worker integration, continuous play or long campaign recording.
+The game remains paused with Find hidden and the requested camera centered.
+The clean two-year Luna run and all full campaign recordings remain unfinished.
+
+## Mac passive map owners and ray arithmetic — 23 October 2026
+
+Exact current-file analysis recovered the graphical-map object through the own
+idler resources, its primary/secondary RTTI, original GUI graphics, map-global
+and camera-setter joins. A fixed read-only metadata probe verified every owner
+join twice under the retained owned process, original supervisor deadline and
+paused own Germany scope. It read 304 bytes in 38 Reader calls and took
+0.626 seconds including process startup. Its mouse-provider observation was
+limited to the rooted type header.
+
+A second probe verified that the projection's global graphics equals the own
+Canvas and both dimension pairs are 1920×1080. It captured and repeated the
+complete finite projection/affine blocks, actual origin, wrap/alternate flags
+and current normalization/SDL dispatch targets. Complete original owner and
+own clock-scope joins were retained. It read 670 bytes in 56 Reader calls and
+took 0.573 seconds including startup. Both probes used zero input, cursor moves,
+screenshots, observation pauses, engine calls or memory writes. No input grant,
+lease or recorder was opened. Their bound narrowed the original six-hour expiry
+to two seconds; it did not renew or replace that ownership window.
+
+The actual rendered origin differs from Find's desired eye/look fields, so Find
+centering alone cannot supply a ray. The new internal pure calculation truncates
+client pixels, applies the recovered column-major projection and affine fields,
+performs homogeneous division and normalizes with separate scalar f32 operations.
+It preserves explicit operation grouping without fused arithmetic. Finite inputs,
+intermediates, bounded canvas and a nondegenerate direction are required. These
+are observer refusals where stricter than the engine, not new engine claims.
+
+All 18 new fixtures pass in debug and release, covering transform composition,
+orientation, pixel truncation, homogeneous division, rounding and invalid inputs.
+An offline runner using the captured own matrices produced a downward center ray
+and consistent adjacent-pixel directions. That runner made no process reads;
+its result is not a current picked-province proof or observation of the game
+executing its projection. All 1,724 Rust tests and 956 Python tests (37 skipped),
+strict Clippy on Mac, Windows GNU and both Linux musl targets, release build and
+default 28-tool stdio smoke passed. All 38 unrelated WIP files stayed byte-exact.
+
+The source is internal arithmetic only, with no new MCP tool, memory reader,
+input or worker permission. Static terrain traversal and bitmap lookup are
+recovered but not yet ported or live qualified. SDL window association, complete
+scene/GUI picking precedence, eligibility and ordinary placement input remain
+unqualified. No map click occurred. The clean two-year run and full recorded
+campaigns remain unfinished; paused component tests measure no game-year rate.
+
+## Mac cached coordinates and terrain — 24 October 2026
+
+The optional Mac `hoi4_input_geometry` argument `include_source_point` defaults
+off. Omission and explicit false preserve the original output and read counts.
+The source observer requires the current exact mouse getter/dynapi target,
+original owned SDL window, matching dimensions and initialized ordinary absolute
+coordinates before reading X/Y. Focus changes can retain old X/Y while resetting
+initialization, so initialization 1, relative 0 and warp 0 are required. Original
+typed provider/Geometry retention is available internally; no serialized output
+is parsed back into input authority. Linux opt-in refuses before snapshot reads.
+
+All 1,761 Rust tests and 956 Python tests (37 skipped), strict Clippy on Mac,
+Windows GNU and x86_64/ARM64 Linux musl, release build and default 28-tool stdio
+smoke passed. The additions include 15 terrain, 17 typed source-point, three Mac
+observer integration, one no-access platform and one strict protocol fixture.
+All 38 unrelated WIP files stayed byte-exact. The preceding `4a23636` passed all
+nine GitHub CI jobs. This source adds no construction action or worker permission.
+
+Stationary native MCP qualification passed on the original owned native 1920×1080
+Mac Germany session: 17 tool calls, median optional RPC 0.257 ms and reader
+0.206 ms. The five optional reads each retained 78 logical read requests and
+632 bytes, including final witnesses. Complete own clock, Research, Focus,
+production and queue remained unchanged, as did all six controller files.
+There were zero input calls, activations, cursor movements, screenshots or
+observation pauses. No input binding, lease, grant, recorder or worker was opened;
+the read-only server ended with EOF exit 0 under the original supervisor expiry.
+
+The cached SDL point was `[62, 10]`; the stationary OS cursor converted to client
+`[1045, 742]`. Their mismatch is preserved. This qualifies the cached observer,
+not current cursor mapping: initialization/focus and identical repeated reads
+are insufficient event/frame proof. All freshness, delivery and input-authority
+flags stay false. A first copied candidate lacked executable permission and
+failed before child creation or game reads; correcting only that artifact's mode
+allowed the read-only test. Its original failure remains preserved.
+
+A separate private prototype verified exact rooted CMap RTTI and repeated terrain,
+height-grid and bitmap headers, all 5632×2048 with contiguous height-byte strides.
+One fixed requested center pixel used fresh rendered matrices and one active
+projection, with no plane substitution. Ninety terrain nodes, 39 sampler calls
+over 20 unique bytes and 18 candidates produced world point
+`[3008.0068359375, 9.699999809265137, 1568.7242431640625]`. One bounded bitmap entry
+joined to province 6521 and requested own-owned-and-controlled Brandenburg 64;
+own authorization preceded location payload. Samples, headers, catalog entries,
+owners and own clock/process scope were repeated. The probe took 0.471 seconds
+including startup, with 144 Reader calls/1,330 bytes excluding its separate
+clock-context readers. It sent no input and did not verify the actual mouse.
+
+Public pure Rust ray/terrain sources reproduced that captured case bit-for-bit,
+including all candidate/traversal/sample counts, with zero process reads. This
+is captured-data equivalence; a public map memory reader is not yet connected.
+Terrain/bitmap lookup does not establish the full scene picker, strategic-region
+preference, ordinary mouse phase, GUI interception, eligibility or map placement.
+No map button was pressed. The clean two-year run and full recorded campaigns
+remain unfinished, and paused component tests establish no game-year rate.
+
+A later separate cursor-only harness gave one Luna-medium player exclusive input.
+It issued one ordinary cursor-moved event and one owned activation, then failed
+an immediate exact OS-position assertion before any post-event source read.
+The first actual post-event OS value was not retained, so the failure cause is
+not established. No corrective movement, buttons, keys, screenshot or game pause
+followed. The read-only MCP server ended with EOF exit 0; input ownership returned
+and the grant closed. Its private once-only execution claim prevents replay.
+
+After handback, a separate builder observation found OS global `[960, 621]` and
+cached client `[960, 540]`, with unchanged own camera, complete baseline and all
+six controller files. This later state does not certify the failed attempt.
+The harness's unconditional immediate assertion is replaced in a private pure
+wait helper by bounded pending observations that record actual OS positions,
+require OS/source/OS agreement and reject late samples without repeating input.
+Six offline cases pass; no additional live input or successful cursor gate is
+claimed. The next grant must use the reviewed bounded wait.
+
+The failed gate's owned native Mac window recording finalized by explicit stop:
+H.264, 1920×1108 around the 1920×1080 client, 94.620 seconds and 2,780 encoded/
+decoded frames. Its independent complete-callback counter also reported 2,780;
+those are separate observations, not an imposed equality invariant. The recorder
+exited normally. No map button was pressed, no construction was placed and no
+campaign acceptance or full campaign recording was achieved.
+
+
+## Mac graphical metadata and pure envelopes — 24 October 2026
+
+A private read-only native helper completed a stationary census of all 44,186
+engine-traversed graphical objects on the owned 1920×1080 Mac Germany session.
+Ten exact independently recovered classes were admitted only after primary and
+reciprocal-parent checks. Unknown classes stopped before payload; two chart
+families were added only after separate exact-file constructor/RTTI review.
+Traversal followed the engine's byte-128 child gate independently of self-144.
+No widget target, model, texture or unknown resource payload was followed.
+
+The complete observation and final original-field witnesses took 912.332 ms,
+using 142,904 initial logical requests / 16,437,256 bytes, plus final witnesses.
+Batched known-object transport compares every consumed field while excluding
+unused padding/counters. Seventeen predecessor fixtures and an added chart
+fixture passed; private fixture counts are separate from public native tests.
+Earlier count/read-budget and broad-prefix consistency refusals remain preserved.
+
+Complete own Research, Focus, production, queue, clock/setup, camera, OS cursor
+and all 18 files across three controllers stayed unchanged. There was no input,
+activation, screenshot, worker, grant, recorder or observation pause. MCP EOF
+exited 0. Germany remained paused on 1 January 1936; no advancing-time or
+real-time-per-year result follows. A subsequent resource-prefix census refused
+a changed reciprocal parent before payload. A separate follow-up completed in
+1.180 seconds, following active resource type pointers only. Unknown resource
+payload stayed untouched; neither attempt qualifies resource geometry.
+
+The public change adds only internal pure class-specific outer-rejection math,
+with 32 generated arithmetic fixtures. It distinguishes Rejected, Possible and
+Unsupported, retaining the exact f32/truncation/edge behavior for known SpriteType,
+CorneredTile, alignment-zero InstantText and C2dPositionObject branches. Separate
+size/hit resources and loaded-resource guards are required. Callers still need
+current original class/resource bindings, independently prepared transforms,
+complete GUI source/route and focus/global guards, final witnesses and ordinary
+input qualification. Neither this census nor the arithmetic establishes cache
+completion, full GUI routing, delivery, eligibility or input authority. The
+private strict placement scaffold remains unregistered and refuses its unresolved
+route gate. Construction worker integration, the clean two-year Luna run and
+full recorded campaigns remain unfinished.
+
+
+## Mac resource variants and dispatch guards — 24 October 2026
+
+The internal public pure envelopes add exact FrameAnimated, Masked/Shield and
+Progressbar renderer/resource pairs. Constructor/dispatch recovery precedes
+payload interpretation; no base layout is inferred solely from a type name.
+The 36 new arithmetic fixtures retain separate size/hit resources, loaded Frame
+no-write guards, unscaled unsigned Masked hit edges and Progress top-excluded /
+integer-bottom-included bounds. Progress accepts an explicit standard sincos-zero
+contract; an unqualified contract remains Unsupported. The 32 original fixtures
+are unchanged. No live reader, default observation, command registration or
+permission is added. Provenance is recorded in `native/PROVENANCE.md`.
+
+A private complete geometry census observed all 44,186 objects at native
+1920×1080 in 1,170.564 ms, with 155,887 initial logical requests / 16,525,372 bytes
+plus original-field final witnesses. Known resource geometry was followed only
+after exact current primaries. All 1,488 active target candidates had the expected
+canvas, and all Sprite/Frame assets satisfied the conservative loaded gate.
+Complete own Research, Focus, production, queue, clock/setup, camera, OS cursor
+and 18 controller files stayed unchanged. MCP EOF exited 0, with zero input,
+activation, screenshot, worker, grant, recorder or observation pause.
+
+An independently reviewed offline evaluator reconstructs transforms and clips
+from this sealed capture. It uses the exact epsilon and scalar grouping,
+independent child/self clip behavior and a conservative nine-box union for known
+InstantText alignments. Of 1,488 targets, 1,247 are clip-rejected; under the explicit
+normal-zero math contract all remaining 241 are outer-rejected. Without that
+contract, four Progress cases remain Unsupported. A stricter optional comparison
+against captured scale caches adds one Unsupported: all 1,626 self XY caches
+match, while one scale differs. Its cause remains unproved. Fresh-rebuild math
+uses the branch's independently reconstructed scale, never the captured scale.
+The private 87 normal/optimized fixtures and captured evaluation are separate
+from public tests and do not prove live freshness, positive texture hits,
+cache completion, GUI routing, delivery or input authority.
+
+A separate read-only live guard observation used 25 initial logical requests /
+188 bytes plus final witnesses and took 0.462 ms. It observed current/processed
+point 960,540, unit conversion factors, the expected canvas and empty source/
+route lists. GUI focus, post-route mouse-up object and post-click hook were null.
+An initial strict-zero policy refused global mouse-up flag 1; this refusal is
+preserved. Exact-file follow-up identified the getter's original singleton and
+final `CLegacyButtonObserverGlue<CButtonMenu>` primary. The later typed probe
+observed that nonnull object before its flag byte. Ordinary mouse-up writes its
+refresh byte to 1; this is an accepted ordinary GUI effect, not a claim of no
+GUI effects. No getter, constructor or engine function was invoked by the tool.
+The typed probe retained the full unchanged baseline/camera/cursor/controller
+checks and clean EOF. It still grants no input or cache-completion authority.
+
+A combined typed fresh graph/geometry/guard reader, strict placement integration,
+construction worker, clean two-year Luna run and full campaign recordings remain
+unfinished. The game stayed paused on 1 January 1936; no advancing-time or
+real-time-per-game-year result follows from these diagnostics.
+
+The exact public source passed all 1,886 Rust tests, 956 Python tests (37 skips),
+formatting, strict host / Windows GNU / x86 Linux musl / ARM64 Linux musl checks,
+release build and the unchanged 28-tool unbound stdio smoke. All 38 unrelated
+legacy WIP files were preserved byte-for-byte. These checks are separate from
+live behavior and campaign acceptance.
+
+
+## Mac strict Rust placement component — 24 October 2026
+
+A recorded Luna-medium gate passed through a private Rust MCP placement adapter
+on the owned native 1920×1080 Mac Germany session. The requested ordinary
+`arms_factory` was already selected and own Brandenburg (state 64) centered.
+One ordinary move/down/up increased the original queue line from amount 1 to 2.
+A real retained typed anchor verified the exact complete-queue delta, then
+verified it again after platform checks. No opener, reselection, Find, Escape,
+keyboard, clock or worker operation occurred.
+
+Before dispatch and again before down, the adapter required a complete immutable
+typed graph, independently rebuilt transforms/clips/class bounds, separately
+observed source/route and global guards, original roots and consumed-field final
+witnesses. All 44,186 objects were covered; 1,247 candidates were clip-rejected
+and the remaining 241 outer-rejected under the explicit standard C99 zero-angle
+contract. The final before-down snapshot reported no cache discrepancy. The
+older captured scale discrepancy and its unknown cause remain preserved.
+Neither the narrow condition nor cached source stamps claim atomic delivery,
+full model intersection, positive texture hits or complete picker eligibility.
+Only the original attempt's complete queue readback certified this placement.
+
+The new controller journal contains exactly one version-2 Dispatching / Verified
+pair, with the exact requested action, original campaign identity and returned
+receipt. One identical replay returned that historical receipt without appending;
+the stopped journal remained byte-identical after EOF. No unresolved intent or
+clock record remained. Complete own Research, Focus, production, clock/setup,
+camera, cursor and all 18 earlier controller files stayed unchanged. All 316
+frozen gate files and 38 unrelated legacy WIP paths matched after execution.
+
+The 17-call private driver took 4.661429 seconds, with zero RPC errors, activation
+or cursor displacement. Placement took 2,326.360 ms and historical replay
+72.178 ms; median call time was 77.203 ms. These are driver measurements including
+its per-call OS-window and recording guards, not resident server-only latency.
+The move event stayed at the same fixed center. There were zero screenshots or
+observation pauses. The game remained paused on 1 January 1936, so this gate
+provides no advancing-time or real-time-per-game-year result.
+
+The native desktop-independent owned-window recording finalized as H.264 at
+1920×1108, 93.211667 seconds and 2,737 decoded/encoded frames. Its independently
+counted complete capture callbacks also totaled 2,737. Explicit stop, recorder
+exit 0, lease release and MCP EOF 0 passed. Final raster verification used the
+encoded file; requested geometry was not substituted for encoded evidence.
+
+The private candidate passed all 2,002 Rust tests, strict checks on four targets,
+release/signature and unchanged default 28-tool protocol checks. Its Python
+forwarding boundary passed six no-process regressions and independent review.
+Initial visibility/import/Sync and non-Mac unused-export compile failures are
+preserved; corrections passed before grant. Review also caught and corrected
+late forwarding-pin checks, immutable deadline clipping and durable replay/EOF
+audits before any input. These private counts are separate from the public
+`ea2e43e` checkpoint's 1,886 Rust / 956 Python tests and nine green CI jobs.
+
+All grants, leases, servers and recorders are closed. The private adapter has not
+enabled public input or construction-worker execution. Ordinary cancellation,
+wider standing plans, a clean two-year Luna run and full campaign recordings
+remain unfinished. Before the original six-hour expiry, the identity-checking
+supervisor closed its owned game using SIGTERM. The game exited 0; the temporary
+display holder exited and all five default settings hashes stayed unchanged.
+This does not establish a normal UI close or completed campaign. A new live gate
+requires a fresh owned session, without extending or adopting this one.

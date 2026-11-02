@@ -1,10 +1,12 @@
 # Codex instructions
 
 The latest user direction is [docs/LINUX_RUST_HANDOFF.md](docs/LINUX_RUST_HANDOFF.md).
-It supersedes the Mac live-testing order: stop those tests, verify Clausewitz-MCP
-on Linux with one Luna player at medium reasoning, then build the native Rust
-runtime and expand it for Linux, Windows and macOS. Preserve the legacy Python
-package while migrating. Do not resume the old Mac campaign objective.
+Latest steering (22 October): the user has explicitly authorized switching back
+to macOS. Preserve the Linux validation and continue native Mac testing. Final
+campaign videos must be filmed from native macOS HOI4 at 1920x1080 or higher.
+Use one Luna player at medium reasoning for live gates. Expand the Clausewitz-based
+Rust runtime across Linux, Windows and macOS, preserving the legacy Python
+package and earlier failed campaigns while migrating.
 
 For the preserved Mac history, read [docs/HANDOFF_MAC.md](docs/HANDOFF_MAC.md).
 It records setup, status, ordered work, acceptance and the first prompt for that
@@ -40,6 +42,10 @@ For campaign strategy and FAIR/META rules, read
   Cheating is forbidden in both. Showcases run in FAIR mode.
 - Reference: https://github.com/smerss/Clausewitz-MCP (MIT): memory reads,
   command-queue posting, wait_for, micro engine, encirclement search.
+- All showcase videos must be filmed from the macOS game. Future campaigns and
+  campaign recordings must use native 1920x1080 or higher resolution with readable
+  UI. Verify input profiles at that geometry;
+  old 512x288 diagnostic profiles are not campaign acceptance.
 - Campaigns use Normal difficulty, vanilla rules, historical AI and observational
   telemetry only. No console/debug/eval/fire_event, save editing, hidden enemy
   intelligence or reload-to-undo. Test-mode features are for separate mod QA and
@@ -52,6 +58,12 @@ For campaign strategy and FAIR/META rules, read
   against own-country telemetry/screen; unknown builds and stale/torn reads fail
   explicitly. Native command posting is unproven; only verified ordinary player
   actions may ever enter a campaign command adapter.
+- Game updates: a new HOI4 build is refused (`unsupported_build`) until migrated.
+  macOS: `scripts/macos_build_migrate.py` (vtables, globals, functions),
+  `scripts/macos_field_migrate.py` / `scripts/macos_disp_match.py` (struct field
+  offsets by matched functions), then live class/value checks and real tool runs;
+  record results in `docs/HOI4_<version>_UPDATE.md`. Re-check hotkeys against
+  `keybinds/00_keybinds.txt` and `interface/*.gui` (1.19.4 moved Find to Ctrl+F).
 - Run `python -m unittest discover -s tests -v` after meaningful changes, plus
   targeted protocol/import/backend checks. Offline tests are not live evidence.
   Acceptance is a clean two-year Luna run, then the full recorded Germany and

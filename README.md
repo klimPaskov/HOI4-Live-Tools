@@ -22,18 +22,22 @@ builds and previews mod content.
 
 | You want to… | Use | Platform | Maturity |
 | --- | --- | --- | --- |
-| Test mods and try agent play today | **[1.1.0 release](https://github.com/klimPaskov/HOI4-Live-Tools/releases/latest)** (Python) | Windows 10/11 | Stable release |
-| Help build the fast native runtime | **Rust preview** (build from source, [`native/`](native/README.md)) | Linux x86_64 | Developer preview |
+| Test mods and try agent play today | **`hoi4-live-tools-1.2.0.zip`** from the [1.2.0 release](https://github.com/klimPaskov/HOI4-Live-Tools/releases/latest) (Python) | Windows 10/11 | Stable release |
+| Agent play with the full management toolset | **`hoi4-live-native-1.2.0-macos-arm64.tar.gz`** ([native downloads](#native-downloads)) | macOS on Apple silicon, Steam HOI4 1.19.4.1 | Experimental |
+| The native runtime on Linux | **`hoi4-live-native-1.2.0-linux-x86_64.tar.gz`** ([native downloads](#native-downloads)) | Linux x86_64, HOI4 **1.19.3 only** | Experimental |
 
-Windows and macOS native adapters are planned but not yet live-tested. No full
-campaign has been accepted on either runtime yet. Status details are below.
+The Windows native game adapter is unfinished. An internal read-only foundation
+is available for development; see [the Windows port](docs/WINDOWS_HANDOFF.md).
+No full campaign has been accepted on any runtime yet. Earlier Mac campaign
+defeats remain preserved alongside the later qualification tests. Status details
+are below.
 
 ## Quick start: Windows release
 
 You need Windows 10 or 11, HOI4 from Steam (windowed or borderless, UI scale 1),
 Python 3.9 or newer, and the Windows English OCR component. FFmpeg is optional.
 
-1. Download `hoi4-live-tools-1.1.0.zip` from the
+1. Download `hoi4-live-tools-1.2.0.zip` from the
    [latest release](https://github.com/klimPaskov/HOI4-Live-Tools/releases/latest)
    and unpack it anywhere.
 2. In that folder, run:
@@ -56,54 +60,155 @@ To uninstall, run `python install.py uninstall`. See
 configuration and the command line, and [the tool reference](docs/tools.md) for
 every tool and argument.
 
-## Native Rust preview (Linux)
+## Native Rust preview
 
-The preview is a new runtime built on [Clausewitz-MCP](https://github.com/smerss/Clausewitz-MCP).
-It reads the game's own state directly instead of using screenshots and OCR, so
-reads take tens of milliseconds and never pause the game. Every input it sends
-is an ordinary player action, checked against fresh game state before and after.
+The native runtime builds on [Clausewitz-MCP](https://github.com/smerss/Clausewitz-MCP).
+It reads structured state directly from the owned game process. Reads do not
+pause, take screenshots or move the cursor. Inputs use ordinary player controls
+and fresh state checks; unknown builds and unsupported operations refuse explicitly.
+The primary live path does not depend on save parsing or screenshot polling.
 
-Build it with Rust 1.86 or newer:
+Build with Rust 1.86 or newer:
 
 ```sh
 cargo build --manifest-path native/Cargo.toml --release --locked
 cargo test --manifest-path native/Cargo.toml --locked
 ```
 
-Then follow [the native setup guide](native/README.md) and
-[the owned Linux launch instructions](docs/OWNED_LINUX_LAUNCHER.md). Only the
-documented Linux x86_64 game build (1.19.3) has been tested. Unknown builds,
-platforms and capabilities refuse explicitly, and the launcher never takes over a
-game it did not start.
+Follow [native setup](native/README.md) and the platform notes below. The native
+runtime is experimental, not a replacement for the Windows package.
 
-### What works today (recorded live tests on Linux)
+### Native downloads
 
-- **Observation:** country overview, research, Focus, production lines and
-  construction, returned as compact digests (under 2 KB) in about 15–80 ms.
-- **Time:** pause, resume, speed and day advancement with verified readback.
-- **Research and Focus:** exact-ID assignments in all four research slots,
-  automatic refill when research completes, Focus search and start, and durable
-  daily plans that survive restarts without repeating input.
-- **Construction:** opening the construction panel and selecting a building type
-  (dockyard), with replay-safe receipts. Run077 passed this gate on 17 October 2026.
-- **Map search:** opening the game's own Find view, typing a state ID and jumping
-  the camera to that state, verified from game memory (Run086, 17 October 2026).
-- **Building placement:** with a building selected and the camera on an own
-  state, one map click queues it there. The result is verified as the exact
-  queued amount of that building in that state. Run091 placed an arms factory in
-  Brandenburg on 18 October 2026.
+Each release carries prebuilt `hoi4-live-native` archives, `SHA256SUMS.txt` and
+GitHub build attestations, so nothing needs to be built from source:
 
-### Not done yet
+```sh
+sha256sum -c SHA256SUMS.txt --ignore-missing      # macOS: shasum -a 256 -c
+gh attestation verify hoi4-live-native-1.2.0-linux-x86_64.tar.gz --repo klimPaskov/HOI4-Live-Tools
+tar -xzf hoi4-live-native-1.2.0-linux-x86_64.tar.gz
+```
 
-- Provincial buildings (dockyards, forts), production changes, army, air and naval control.
-- Economy and warfare automation (standing plans, shortage repair, invasions).
-- Native Windows and macOS adapters.
-- The clean two-year run and the recorded FAIR Germany and China campaigns.
+The macOS binary is ad-hoc signed with `debugger.entitlements` (included). Memory
+access still needs Developer Tools access for the running user; see
+[native setup](native/README.md).
 
-Measurements, failed runs and open limits are recorded in
-[the measured comparison](docs/CLAUSEWITZ_COMPARISON.md),
-[the validation record](docs/CLAUSEWITZ_VALIDATION.md) and
-[the current acceptance plan](docs/LINUX_RUST_HANDOFF.md).
+Steam never sees a run: every launcher refuses to start the game while a Steam
+client, `steamwebhelper` or `steamcmd` runs (on WSL the Windows host is checked too),
+and no Steam variable or overlay reaches the game. The native Linux launcher also
+gives the game an empty private `HOME`.
+
+The macOS and Linux builds do not have the same tools. macOS has the full management
+toolset (about 120 tools: armies, fronts and encirclement planning, air, navy and
+naval invasions, designers, doctrine, intelligence, peace conferences, decisions,
+events and the plan runner; see [the macOS tool index](docs/TOOLS_MACOS.md)).
+Linux has about 30 tools for telemetry, focus, research, production and construction.
+
+### Linux
+
+The tested native Linux game is HOI4 1.19.3 x86_64 (1.19.4 is not yet validated on Linux;
+the build gate refuses an unknown build). The
+[owned launcher](docs/OWNED_LINUX_LAUNCHER.md) verifies process ownership and never
+takes over an unrelated game. Recorded tests cover:
+
+- Structured country, Research, Focus, production and construction reads.
+- Verified clock control, Research and Focus assignments, natural Research
+  refill, and durable daily plans that preserve completed work across restart.
+- One-factory changes on an existing own production line, panel transitions,
+  per-day budgets and completed-plan restart without repeated input.
+- Construction-panel selection, state search, and verified arms-factory and
+  dockyard placement in owned states.
+
+The combined production/Research worker remains an opt-in preview with an
+unfinished advancing-time acceptance gate. Provincial buildings, new production
+lines, bulk allocation and combat control remain open. An internal durable
+Research-navigation adapter now passes offline Linux fixtures; it has no public
+command or mixed-worker permission and still needs its own live qualification.
+
+ARM64 Linux through FEX has verified own-state reads and lower-level stationary
+Research keys at 1080p. Its pinned Rust input adapter remains disabled by default:
+the latest retained-goal Research action still timed out at five seconds. The
+explicitly pinned unified GL profile reached the actual 1920×1080 game and
+own-country reads passed, but Research readiness did not verify. The latest
+private diagnostic captured changing animation values under the original bound;
+they do not establish readiness or update cadence. The uncertain Intent remains
+preserved without retry or later settlement, and ordinary closure passed.
+No campaign or annual throughput result is accepted. See
+[FEX setup](docs/OWNED_LINUX_LAUNCHER.md#arm64-linux-with-fex) and
+[the bounded animation check](docs/CLAUSEWITZ_VALIDATION.md#fex-bounded-animation-diagnostic--24-october-2026).
+
+### macOS
+
+The native preview supports one Steam **HOI4 1.19.4.1 (checksum f584) x86_64 build under Rosetta**
+(see [the 1.19.4 update notes](docs/HOI4_1_19_4_UPDATE.md); the 1.19.3 build is no longer accepted on macOS)
+with a verified **1920×1080, UI scale 1** input profile. It checks the owned game
+and window before input. [Window recording](docs/MAC_RECORDING.md) captures
+1920×1108, including the titlebar around the game client.
+
+Recorded Luna-medium component tests passed Research refill, Focus handoffs,
+one-factory production changes, durable plan revisions/reconnects, construction
+opening and ordinary building-template selection. The selection call took
+240 ms. A recorded one-F Find-focus test also passed, with visible Find reads
+below 1 ms. The native Find action then typed an owned state ID and Return in
+549 ms, with a zero-input historical replay. Stationary Find/camera reads measured
+0.48 ms per RPC with zero input. These are measurements of specific tested paths. See [the validation record](docs/CLAUSEWITZ_VALIDATION.md) for scope and
+preserved failures.
+
+The read-only construction target tool now offers a Mac center-terrain candidate
+with `include_map_point: true`. Stationary native 1080p testing measured 2.36 ms
+median RPC, compared with 2.00 ms without the option. It leaves the game and
+cursor unchanged and supplies no placement permission; see the
+[resident observer evidence](docs/CLAUSEWITZ_VALIDATION.md#mac-resident-center-terrain-mcp--24-october-2026).
+
+The default-off [`hoi4_construction_place` qualification](docs/MAC_CONTROLLER.md#construction-placement-qualification)
+uses one ordinary click with the exact template already selected and an owned
+state centered. It verifies an exact +1 queue change, retains durable once-only
+receipts and returns compact route diagnostics. A recorded private Rust component
+passed at native 1080p: its 17-call driver took 4.661 seconds, including guards;
+placement took 2.326 seconds with zero cursor displacement or observation pauses.
+The source port remains a qualification preview; construction worker integration
+and advancing-time acceptance remain unfinished. The Find action requires an
+already-open focused empty box and explicit qualification permission. Peace
+conferences and naval invasions have since been added and live-tested on 1.19.4.1
+([live verification](docs/LIVE_VERIFICATION_1_19_4.md)); the clean two-year acceptance
+run and full campaigns remain open. Broader legacy adapters remain separate from the durable worker. The [controller contract](docs/MAC_CONTROLLER.md) describes current
+permissions, receipts and recovery.
+
+The default-off [`hoi4_construction_clear_selection` qualification](docs/MAC_CONTROLLER.md#construction-cancellation-qualification)
+now verifies ordinary Escape cancellation with the complete own queue unchanged.
+A native 1080p action took 686 ms; a separate historical-only replay took 76 ms,
+sent no input and left the original journal unchanged. The failed raw-timestamp
+comparison between those phases is retained. This does not enable construction
+standing plans or establish campaign acceptance.
+
+The default-off `hoi4_construction_find_open` qualification now opens the exact
+named Find button with one ordinary click. A recorded native 1080p test verified
+it in 603 ms, preserving the full queue; historical replay sent no input.
+Pointer actions also reject windows covering the intended point, including
+floating panels. Decimal character admission has separate checks; mixed
+construction plans remain under development. See [current evidence](docs/CLAUSEWITZ_VALIDATION.md).
+
+Mac memory access requires Developer Tools authorization and a signed tool with
+`native/macos/debugger.entitlements`; the game is never re-signed. Missing access
+returns a capability error for telemetry/UI fallback. Screenshots and saves are
+not the primary native observation path. The public Research-folder diagnostic
+remains Linux-only.
+
+### Remaining acceptance work
+
+- Qualify broader routine action batches and expand economy, shortage repair
+  and warfare.
+- Implement and live-test the native Windows adapter.
+- Complete a clean two-year Luna run, then the recorded FAIR Germany and China
+  campaigns. Final showcase videos must come from macOS at 1080p or higher.
+- Validate long campaign recording and publish only after release acceptance.
+
+All nine CI jobs passed on the preceding placement checkpoint (`0b963fb`) across
+Linux, Windows and macOS. Offline tests do not prove native game behavior.
+For measurements, retained failures and the next gate, use
+[the comparison](docs/CLAUSEWITZ_COMPARISON.md),
+[validation record](docs/CLAUSEWITZ_VALIDATION.md) and
+[current handoff](docs/LINUX_RUST_HANDOFF.md).
 
 ## Campaign rules
 
@@ -111,8 +216,8 @@ Campaigns run on Normal difficulty with vanilla rules and historical AI. There a
 no cheats, console commands, save editing, hidden enemy information or
 reload-to-undo.
 
-- **FAIR** (default) follows common multiplayer house rules but still plays well:
-  encirclements, concentrated attacks and supported invasions.
+- **FAIR** (default) follows the reviewed multiplayer-style house policy and
+  permits normal tactical play, including encirclements and concentrated attacks.
 - **META** allows single-player metas and UI tricks a human could use.
 
 The [campaign playbook](skills/hoi4-campaign-playbook/SKILL.md) defines both modes.
@@ -123,10 +228,11 @@ and cannot be reached by campaign automation.
 
 | Runtime | Verified so far | Still required |
 | --- | --- | --- |
-| Python / Windows (1.1.0) | Mod-testing tools and recorded play attempts | Clean campaign acceptance |
+| Python / Windows (1.2.0) | Mod-testing tools and recorded play attempts | Clean campaign acceptance |
 | Python / macOS | Platform work and limited diagnostic play | Reliable live acceptance |
-| Rust / Linux | Owned launch, fast state reads, time, research, Focus, daily plans, construction panel, map search and state-building placement | Provincial placement, economy, army and naval control; campaign acceptance |
-| Rust / Windows and macOS | Portable protocol and fixture tests in CI | Native adapters and live tests |
+| Rust / Linux | Owned launch, fast state reads, time, research, Focus, daily plans, one-factory production changes, construction panel, map search and state-building placement | Provincial placement, economy, army and naval control; campaign acceptance |
+| Rust / macOS | Owned 1080p runs on 1.19.4.1: about 120 live-tested tools (economy, armies and fronts, air, navy, invasions, designers, doctrine, intelligence, peace conferences, plan runner) and short training wars | Open defects in [live verification](docs/LIVE_VERIFICATION_1_19_4.md), the two-year acceptance run and campaigns |
+| Rust / Windows | Portable protocol and dormant owned-reader fixtures | Native game adapter, input and live tests |
 
 Passing tests or listing a tool does not mean live play works. Only recorded live
 runs count, and failures are kept in the record. See the [changelog](CHANGELOG.md)

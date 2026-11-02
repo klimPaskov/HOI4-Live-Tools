@@ -1,6 +1,27 @@
 # Changelog
 
-## Unreleased Windows runtime
+## 1.2.0 - 2026-11-02
+
+HOI4 1.19.4.1. The Windows runtime gets the 1.19.4.1 fixes below. The native runtime ships for the
+first time as experimental downloadable builds:
+
+- `hoi4-live-native` for macOS (Apple silicon, ad-hoc signed with the debugger entitlement): the
+  full management toolset on HOI4 1.19.4.1 macOS (Mach-O UUID DFA875A5), about 120 tools.
+- `hoi4-live-native` for Linux x86_64: the narrower Linux toolset (telemetry, focus, research,
+  production and construction). It accepts only HOI4 1.19.3 (GNU build ID a4971c9e...); 1.19.4.1
+  Linux builds are refused until their offsets are mapped and verified.
+
+Steam rules for every launcher (Python `hoi4_launch` and the native Linux launcher):
+
+- The game is never started while a Steam client, `steamwebhelper` or `steamcmd` runs
+  (`steam_running`). Under WSL the Windows host is checked too through `tasklist.exe`
+  (`steam_check_unavailable` when interop is off; `HOI4_LIVE_WINDOWS_STEAM_CHECK=skip` only when the
+  harness checks the Windows host itself).
+- No Steam variable (`SteamAppId`, `SteamGameId`, `STEAM_COMPAT_*` ...) or Steam overlay preload
+  reaches the game. The native Linux launcher also gives the game an empty private `HOME` inside the
+  run directory.
+
+### Windows runtime
 
 - Live session on HOI4 1.19.4.1 (2 November 2026, Windows 11, `-debug`, 1920x1080
   borderless, three launches). Launch to the main menu took 81 to 139 s. A new 1936 game, the
@@ -33,8 +54,625 @@
     `launcher-v2.sqlite` and `dlc_signature` from the real one are copied in, and
     Career Profile is unavailable.
 
-## Unreleased native preview
+### Native runtime (macOS and Linux)
 
+- Add a dormant read-only Linux animation probe for the retained own Research
+  root, with original ownership, membership, witnesses and expiry guards.
+  A private three-sample gate observed changing values but still timed out at
+  five seconds; preserve its uncertain Intent and clean closure. No public
+  diagnostic tool, action permission or readiness change is enabled.
+
+- Record the unified FEX profile's actual 1080p startup and own-state reads.
+  The sole retained-goal Research action still timed out at five seconds;
+  preserve its Intent, zero retries and clean ordinary closure. Add bounded
+  Research-panel pair counts and last-result timestamps using already consumed
+  errors, without new game reads, input, proof or deadline changes.
+
+- Make the Research opening timeout fixture consume its captured original
+  deadline after a known post-input pending read. Preserve the Linux CI failure
+  where journal setup exhausted its former 200 ms test budget before input.
+  Production deadlines, delivery classification and retry rules are unchanged.
+  Make the FEX metadata-change fixture set an explicit timestamp after restoring
+  bytes; rapid Linux writes can share a cached timestamp.
+
+- Add an explicit hash-pinned private FEX configuration option to the Linux
+  launcher, retaining cleared environment, ordinary ownership and unchanged
+  input permissions. Preserve original file/directory identities through startup;
+  refuse per-app overrides, duplicate fields, symlinks and replacements.
+  Record the isolated mixed-loader comparison: unified forwarding passed both
+  context methods while two stock GL1 negatives remain failures. This is not
+  installed-game compatibility or campaign acceptance.
+
+- Record the same-binary FEX capacity comparison at 1080p: the four-CPU, 8 GB
+  trial still left one uncertain Research Intent at five seconds, with no retry
+  or later settlement. Distinguish panel transition evidence from visibility,
+  preserve the separate lease-startup refusal and verify ordinary closure.
+  The fresh private harness uses a shorter lease with a repeated final margin
+  check; no public permission, native deadline or readiness predicate changed.
+
+- Distinguish fixed container-transition origins and first-result times in
+  failure-only Research navigation diagnostics, without additional game reads.
+  Preserve the complete report through a dedicated bounded 1 KB transport
+  formatter. Record the fresh 1080p timeout: 16 ms dispatch, 4,958 ms readback,
+  no accepted Research state, no retry and clean ordinary closure. The rendering
+  cause and final panel state remain unknown.
+
+- Add bounded in-attempt timing and readback counters to uncertain ordinary
+  Research transit errors. Retain only fixed retryable codes; diagnostics grant
+  no current proof, later settlement or input retry and leave journals and the
+  original deadline unchanged. Record fresh 1080p setup verification, the retained
+  transit timeout and successful ordinary cleanup through the exit-metadata gap.
+
+- Add an internal durable ordinary Research transit and Linux W adapter, retaining
+  the original Focus/production goal through busy slots. Persist Intent before
+  once-only input; require a fresh retained-scope read after input idle, preserve
+  uncertainty across reconnects, and quarantine input-bearing records on controller
+  restart until recovery is qualified. Load its separate journal independently of
+  permissions and block all other action domains. Twenty-six additional fixtures
+  cover transaction, reader and internal cross-domain boundaries; no public tool
+  or worker route is enabled. Legacy journal formats remain unchanged.
+
+- Add an internal retained Linux Research transit reader that produces typed
+  snapshots under original ownership, membership and deadline witnesses. Thirty
+  sparse fixtures cover busy slots, natural completion and refused replacements.
+  Legacy JSON, executable stages, journals and worker permissions stay unchanged.
+- Record the lower-decoration 1080p Linux setup refusal before campaign Start
+  or Research input. Compact lifecycle metadata allowed ordinary close despite
+  oversized telemetry; retain the separate exit-time census cleanup failure
+  and independent owned resource closure. No latency or campaign result is claimed.
+- Make the standing-order idle-Research test publish one simulated day per clock
+  poll, removing a CI feeder-thread race while preserving exact firing checks.
+- Add an internal navigation-only Research transit identity that retains the
+  original Focus/production goal and fixed deadline without an empty-slot or
+  fabricated Research-assignment dependency. Eighteen fixtures cover busy slots,
+  natural completion, identity changes and deadline handling. This does not add
+  an executable route, worker permission or journal migration.
+- Record the fresh 1080p no-recorder FEX comparison: structured reads passed,
+  but the one Research opener remained uncertain at its original five-second
+  deadline. Preserve the separate bounded-diagnostic cleanup failure and later
+  exact owned resource cleanup. No retry or campaign acceptance is claimed.
+- Join optional typed Linux construction selection to the retained complete
+  queue in one witnessed read, preserving the original manager and catalog.
+  Eleven additional fixtures cover inactive/requested transitions, replacement
+  pointers, other valid templates and unchanged default reads. This grants no
+  action or worker permission. Preserve the separate GL1 game-startup failure.
+- Add an internal read-only retained construction-queue anchor with complete
+  own-country, catalog and ordered queue identity checks under the caller's
+  original deadline. Twenty-one synthetic fixtures cover both supported string
+  ABIs. This does not enable placement or construction workers.
+- Preserve bounded transport-delivery diagnostics on Linux Research errors,
+  without changing error categories, action verification or uncertain-intent
+  quarantine. Record the failed 1080p FEX adapter attempt separately from earlier
+  lower-level input qualification; both owned diagnostic games are now closed.
+
+- Add a dormant Windows read-only foundation with exact process/SID/file
+  ownership, bounded PE identity and whole-batch failure handling. Portable
+  fixtures check that full ownership inspection happens twice per batch.
+  Include a Windows-only owned synthetic-child fixture; production build
+  profiles remain empty, with no game adapter, input or tool registration.
+  Replace the outdated Windows port guide with current support and acceptance.
+
+- Add default-off Mac ordinary Find-button opening with retained target/queue
+  identity, bounded route waits and strict historical replay. A recorded native
+  1080p component verified one click in 603 ms without screenshots or pauses.
+- Reject pointer actions when another window covers the intended point,
+  including floating panels. Add independently checked printable-character
+  admission and opaque construction handoffs. Introduce distinct queued-minimum
+  plan syntax and scheduling; its native worker adapters explicitly refuse
+  until the composite implementation is qualified.
+
+- Add default-off Mac ordinary construction cancellation with immutable target
+  ownership, fresh complete keyboard admission, exact inactive/full-queue
+  readback and strict historical-only replay. Recorded native 1080p components
+  verified one Escape in 686 ms and a separate zero-input replay in 76 ms.
+  Preserve the intervening harness freshness-comparison failure and earlier
+  refusals. Construction workers and campaign acceptance remain unfinished.
+- Shorten the current Mac/Linux handoffs and retain their previous contents
+  byte-for-byte in dated checkpoint archives.
+
+- Extend internal pure Mac hit envelopes to exact animated-frame, masked-shield
+  and progress-bar resources, with 36 additional fixtures. Preserve separate
+  size/hit roles, unsigned masked edges, progress-bar bottom inclusivity and an
+  explicit zero-angle trigonometric contract. No new reader, action or permission.
+
+- Add internal pure Mac class-specific hit-envelope calculations with 32
+  fixtures for scalar rounding, edge inclusivity, orientation and separate
+  size/hit resources. Unknown or unsupported cases cannot become a miss.
+  Record a private stationary 44,186-object graphical metadata census with
+  complete field witnesses in 912 ms. Full GUI routing and placement remain
+  unfinished; no MCP registration, input permission or release pin changes.
+
+- Add optional resident Mac center-terrain evidence to `hoi4_construction_target`.
+  Default reads stay unchanged; strict opt-in joins the fixed 1080p center to the
+  requested own state within the complete snapshot. Native stationary MCP tests
+  measured 2.360 ms median RPC versus 1.996 ms without the option, with no input,
+  cursor movement, screenshots or pauses. Full-picker and placement authority
+  remain false. Add retained clear-selection readback with eight offline fixtures;
+  no Escape input or cancellation adapter is enabled.
+
+- Record a native Mac Luna-medium ordinary placement component: one map move
+  and one click, with a retained typed anchor proving exactly one military factory
+  queued in own Brandenburg. Preserve the earlier mode-0 harness failure; the
+  successful phase sends no repeated opener or selection. This private gate adds
+  no public placement permission or worker action; full picker and campaigns
+  remain unfinished.
+
+- Add an internal Mac own-scene scope reader. Require complete ordered scene
+  membership in fresh own division/fleet/task-force lists, exact types and owner
+  tags; unknown entries refuse before candidate payload. Retained reads reject
+  replacement country and membership before replacement object payload. Model
+  intersection, map routing, placement and worker integration remain unfinished.
+
+- Add optional Mac cached SDL source-point diagnostics with exact owned-window,
+  getter and initialized absolute-mode checks. Default geometry reads stay
+  unchanged. Stationary native MCP qualification measured 0.257 ms median RPC;
+  the cached point differed from the OS pointer and grants no click authority.
+  Add internal bounded one-projection terrain arithmetic; the captured center
+  point reproduces bit-for-bit and joins own Brandenburg in a private prototype.
+  Full picking, placement and worker integration remain unfinished.
+
+- Add internal Mac ray arithmetic from independently recovered current-build
+  projection, affine and normalization procedures, with bounded finite inputs
+  and explicit scalar rounding. Eighteen debug/release fixtures and captured
+  own-camera calculations pass. Rooted live map/camera metadata is verified;
+  terrain picking, map placement and worker integration remain unfinished.
+
+- Add default-off Mac `hoi4_construction_find_state`: an already-open verified
+  box receives one owned decimal state ID and Return. Retain original typed
+  control/state, complete queue and inactive selection throughout; quarantine
+  possible partial input without retry or later settlement. A recorded Luna-medium
+  native 1080p gate passed in 549 ms with a zero-input historical replay and no
+  cursor moves, screenshots or observation pauses. Placement and worker integration
+  remain unfinished.
+
+- Support independently verified Mac keyboard receiver families and Standard
+  parent/disabled gates. Keep exact ownership, complete ordered membership and
+  final read witnesses; unknown handlers still refuse. Live delivery is pending.
+
+- Fix Mac construction-opener canonical window comparison and distinguish active
+  keyboard membership from reserved cache capacity. Preserve strict receiver
+  checks; live shortcut delivery remains unqualified.
+
+- Add optional Mac construction-choice callback observation: exact requested-item
+  capture, complete single-observer membership and the separately observed
+  disable-request flag. Default reads stay unchanged; this grants no input.
+
+- Preserve positive Mac key-transport refusals before down without quarantining
+  the controller. Keep ambiguous delivery blocked across reconnects; use the
+  actual producer stage, never an error code or later UI, to distinguish them.
+
+- Add opt-in current Mac construction-shortcut observation and a default-off
+  `hoi4_construction_open` qualification tool. It sends at most one ordinary T,
+  never toggles an already-selected panel, and keeps unknown delivery quarantined
+  across reconnects. Strict receipts cannot use legacy reached-target settlement.
+  No cursor movement or extra modifier-repair input; live qualification is pending.
+
+- Validate independently recovered Mac GUI-registry backlinks before construction
+  widget payload. Expose local root transition states and engine visibility
+  separately; neither grants settled geometry or input authority.
+
+- Add a separate typed Mac construction UI probe with independent panel owner
+  links, canonical ordinary selection and complete choice validation before
+  requested-control reads. Share the complete building catalog with target
+  observations; retain explicit limits on visibility, special modes and input.
+
+- Refuse unported Mac construction controls, Find/camera observations and queue
+  UI labels before any process access. Keep the verified Mac queue, location
+  and target readers available; preserve Linux UI behavior.
+
+- Complete the retained Mac support-production request on the next game day with
+  a fresh verified attempt, preserving its prior zero-input refusal and all
+  eleven earlier receipts. The recorded Luna gate leaves all twelve entries complete.
+- Add compact witnessed construction-target reads for Linux and macOS. Count
+  the entire queue, bind the public template and own state, and expose incomplete
+  evidence instead of zero. Replace the Mac adapter's first-page aggregate.
+
+- Qualify Mac cycle admission with a verified factory step followed by a separate
+  same-day production-cap refusal. Preserve the Pending entry, budget and full
+  history; retain the preceding no-input foreground-check failure.
+
+- Limit each Mac worker cycle to one input attempt so later actions cannot inherit
+  an earlier action's nearly exhausted deadline. Preserve same-day continuation,
+  daily budgets, readiness checks and Linux batch behavior.
+
+- Qualify a same-controller Mac plan revision with Luna medium: preserve five
+  completed receipts, add five assignments, fill all Research slots, and retain
+  daily budget across reconnect. The 733-hour advance had zero observation pauses.
+
+- Qualify the recorded Mac mixed standing plan with Luna medium at native 1080p:
+  successive Focus handoffs, Research refill, a factory increase, reconnect and
+  unchanged idle files. All five assignments verified with zero observation
+  pauses. Preserve four earlier failed controllers; the two-year run and full
+  campaigns remain outstanding.
+
+- Bound discarded-read recovery in the typed Mac production path while retaining
+  its original target, deadline and single input attempt. Add phase/stage failure
+  diagnostics and preserve the fourth mixed gate's unresolved production intent.
+  That gate stopped before any clock request; natural Focus completion remains
+  unqualified.
+
+- Correct the Mac Focus view's country field: exact-build code shows that zero
+  selects the current player, while nonzero overrides that choice. Resolve only
+  the positively verified own-player case and retain foreign-country refusal.
+  Preserve the third mixed gate's visible-tree readiness timeout and unresolved
+  intent; fresh input qualification remains required.
+
+- Preserve the second mixed Mac gate: manual Focus, Research, factory allocation,
+  reconnect and idle-file checks passed, but an inconsistent pre-input clock read
+  quarantined notice dismissal before Focus navigation. Retain the unresolved
+  intent. Bound read-only clock recovery to three retries within the original
+  action deadline; never retry input or coherent scope failures.
+
+- Preserve the first Mac Focus/Research/production worker gate: Research and the
+  factory step survived reconnect with unchanged idle files, but Focus navigation
+  quarantined an ownership mismatch after natural completion. Wait for positive
+  own-tree readiness within the original deadline; visibility alone is no longer
+  enough. Keep foreign-country refusal and the unresolved controller. This
+  correction requires fresh live qualification.
+
+- Add a default-off Mac daily Focus preview with coherent typed own-target
+  evidence, retained target/status guards, and a fresh activation receipt.
+  Queued Focus entries require natural completed membership before advancing.
+  Busy same-day probes do not allocate sequences or rewrite plan files.
+  Manual navigation passed a recorded 3.65-second gate; durable mixed-plan live
+  qualification remains pending.
+
+- Plan Mac Focus pans across a bounded grid of clear origins, using only the
+  displacement needed to reveal the target. Preserve full-tree checks before
+  mouse-down and the original five-second deadline. Optional read-only probes
+  expose the predicted pan without granting input authority. Live qualification
+  remains required; earlier uncertain attempts stay blocked.
+
+- Avoid unrelated Focus renderer reads when checking or clicking one Mac node.
+  Retain full item ownership/ambiguity checks and complete obstacle witnesses for
+  actual panning. Add a stationary read-only `hoi4_focus_input_probe` with optional
+  complete-pan diagnostics and explicitly scoped read counts.
+
+- Include the current stage, elapsed time and requested pan count in Mac Focus
+  failures. Distinguish a stage observation timeout from the original action
+  deadline, retain native ownership refusals, and bound polling to both limits.
+  This adds diagnostics for future attempts; the recorded timeout's stage
+  remains unknown and its controller remains blocked.
+
+- Bind Mac Focus clicks to the original own canonical objects and complete GUI
+  witnesses, with a final check after cursor settlement and one original action
+  deadline. Require complete drag-origin geometry and preserve mouse release on
+  failures. The recorded single-attempt gate timed out with an unresolved intent;
+  durable Focus and long campaign acceptance remain unavailable.
+
+- Read Mac Focus progress as one complete typed, witnessed snapshot rather than
+  merging independently paginated JSON results. Keep public completion pagination
+  unchanged and preserve ownership, canonical membership and torn-read refusal.
+  This is a read prerequisite; durable Mac Focus input remains unavailable.
+
+- Record Mac component qualification for the corrected factory step, retained
+  mixed-plan restart, idle-file stability and natural Research refill. Preserve
+  the transient-read interruption and final naval-collection assertion failure;
+  all three assignments verified, but a clean long campaign remains pending.
+
+- Add the default-off Mac daily worker: durable ordered Research queues, an
+  existing military line's single factory step, fresh digests, terminal events,
+  explicit stop/join and retained-plan reconnect. Persist intent before panel
+  preparation and require current typed assignment/allocation evidence.
+- Load daily quarantine even with worker permissions disabled. Reject replaced
+  production journals/progress and foreign owner history. Retain slot-wait state
+  across reopen; join even when shutdown notification fails. Idle probes do not
+  allocate sequences or sync the plan. The first live gate verified Research,
+  then quarantined a production control change; mixed-plan qualification remains
+  open. Settle the complete factory-button witness before dispatch and retain
+  exact final guards, original deadlines and separate mismatch diagnostics.
+- Refuse the unported public research-folder catalog on Mac before process
+  access instead of reading Linux offsets and reporting a misleading GUI error.
+- Recheck click cancellation after cursor settling and always attempt release
+  after possible dispatch, preserving the original failure.
+
+- Retain the Mac controller epoch across reconnects with exact campaign and
+  chronology checks, a pinned private state file and single-writer exclusion.
+  Reopening creates no lease; older nonempty journals require explicit migration.
+- Share clock/gameplay input quarantine and retain failed journal writes. Bound
+  research/production reads and input to the original action deadline; preserve
+  nested guards and attempt drag release after cancellation or motion failure.
+  Share the opened process handle across the server and controller.
+
+- Add a Rust-managed native Mac window recorder with private output, bounded
+  startup/finalization, explicit stopping, owner-loss handling and exact failure
+  witnesses. Distinguish unchanged-display idle frames from capture loss. Preserve
+  the first integration's observer-lifetime failure and its corrected live checks.
+- Enforce the Mac game's exact recorded supervisor and parent relationship on
+  reads and recording, without requiring a task port for ownership validation.
+- Port the durable observation producer's own-country guards to the independently
+  verified Mac layouts and canonical process timestamp. Generated Mac fixtures
+  and a live read-only sequence/reopen check pass; Mac daily-worker input and
+  full campaign acceptance remain unfinished.
+
+- Refuse the Linux-only input-geometry diagnostic on macOS before reading any
+  layout offsets. Verify the explicit refusal and own-country read on native Mac.
+- Query the visible macOS window stack for focus checks during window sharing,
+  preserving exact process and focused-window checks.
+- Give discarded decorated-window diagnostic frames the recorder's structured
+  transient error code. Process identity loss remains nonretryable. Record the
+  successful Mac task-port binding and short continuous-window capture diagnostic;
+  campaign acceptance remains unfinished.
+- Preflight macOS task-port authorization without OS dialogs before requesting
+  the owned task port. Missing approval returns a capability error instead of
+  blocking MCP startup; no system policy or game binary changes. Record the
+  user-authorized Mac switch and preserve the interrupted Linux qualification.
+
+- Add an explicit pinned-build FEX 1080p input-validation profile, disabled by
+  default. Require matching domain dimensions and retain existing ownership,
+  lease, journal and readback guards. Rust-adapter live acceptance is pending.
+- Record Luna medium entering vanilla historical Normal Germany at 1080p,
+  successful own-state reads and stationary Research open/close qualification.
+  Local MCP medians were 2.9–6.1 ms for overview/research/production in small
+  paused-game samples. Retain private diagnostic video and setup failures;
+  mixed-plan, two-year and full campaign acceptance remain incomplete.
+
+- Record two actual ARM Linux/FEX 1080p frontend startups in 43–51 seconds,
+  clean ordinary window closes and explicit MCP menu-state refusals. Guest
+  software rendering with temporary swap passed; preserve the prior graphics
+  crash, OOM kill and slower GPU-offload comparison. In-game reads and translated
+  gameplay input remain unqualified.
+
+- Give the construction deadline fixture time for durable journal setup on
+  Windows CI while preserving its original-deadline and one-input assertions.
+  Record isolated FEX GL-forwarding failures and successful guest software GL
+  context creation; neither is campaign acceptance.
+
+- Use indexed Linux memory-map bounds checks for scalar and vectored reads.
+  Reject unordered or overlapping mappings before indexing; retain guard-page,
+  single-region, ownership, exec and final snapshot verification. A 4,096-region
+  ARM Linux microbenchmark measured about 43x faster bounds lookup, not full MCP
+  latency. Preserve the first actual FEX game's OpenGL initialization failure
+  and pre-menu crash; translated campaign input remains unavailable.
+
+- Add an explicit ARM64 Linux/FEX startup and reader preview. Pin the translator
+  separately from the exact x86 game, retain original kernel ownership/witness
+  checks, and validate complete guest load mappings at observation boundaries.
+  Missing initial load coverage may wait within one deadline; conflicting or
+  changed mappings refuse. Preserve fast scalar reads and unchanged native mode.
+  Generated-child exec/restart and duplicate checks passed; translated gameplay
+  input remains blocked pending actual HOI4 and native 1080p qualification.
+  Retain the observed FEX FD-exec argument limitation and original test failures.
+
+- Require the owned Research root to settle before Linux OpenPanel verification.
+  Known post-input opening animations wait inside the original deadline and
+  lease; changed identity, unknown states and pre-input errors stay strict.
+  Keep the initial root binding and bounded timeout diagnostics without repeating
+  input or broadening closing permissions. Fresh live validation is pending.
+
+- Preserve Mixed004's background completion across three days and its separate
+  local player-path failure. Mixed005's immediate close exposed the opening
+  readiness gap before any close input; both runs were cleaned up and audited.
+  The full mixed gate, completed restart and campaign acceptance remain pending.
+
+- Bound replacement of torn mixed-destination/selected-identity snapshots to
+  four whole reads, 25 ms intervals and one second within the original deadline.
+  Keep guards, journal reservations and input outside recovery. Preserve bounded
+  first/latest/recovered diagnostics in worker history, STOP and compact digest
+  details without changing clean legacy shapes or retrying an action. Live
+  validation remains pending.
+
+- Preserve Mixed002's successful paused mixed assignment and subsequent private
+  detail-contract failure. Mixed003 stopped before panel selection on a torn
+  destination snapshot; neither run passed the full advancing-time gate. Both
+  stopped audits found no unresolved input, no clock/pause actions and clean
+  owned-process exit. The corrected private detail batch has offline coverage;
+  it was not reached in Mixed003.
+
+- Preserve Mixed001: production reached 11 and its departure to Research verified,
+  then Research opening retained uncertainty during a known animation. Add a
+  distinct continuation-animation readback wait under the original deadline;
+  retain strict pre-input/identity checks and never retry input. Timeout errors
+  retain rejected-read diagnostics. Mixed live acceptance remains pending.
+
+- Pass ResearchClose002 with one Luna medium player: all 14 steps, 19 RPCs with
+  zero errors, unchanged production/research, exact replay/no-op behavior and
+  independent stopped recording/ownership audit. Two discarded producer tears
+  recovered without repeating input. Retain ResearchClose001's earlier failure.
+- Add default-off mixed Research/production worker routing with durable task
+  selection, original destination/source pins, separate daily navigation budgets
+  and shared restart quarantine. Both domain permissions are required; Focus
+  combinations remain unavailable. Mixed-worker live validation is pending.
+
+- Preserve ResearchClose001's pre-Intent torn-read failure and stopped audit.
+  Recover only wholly rejected Research-close snapshots within bounded initial,
+  candidate, final and pre-queue phases. Keep original state, lease/deadline,
+  private journal proofs and input quarantine; never retry commands. Retain
+  rejected read phases/causes and distinguish engine/window/GUI witness sections.
+  ResearchClose002 subsequently passed closing; mixed live validation is pending.
+
+- Add `hoi4_research_close`, a Linux ordinary-W preview requiring only Research
+  permission. Preserve original own roots, slots, assignments, selected folder
+  and tab across dispatch and readback; redact private bindings from public
+  receipts. Already-closed requests are no-ops and verified replays stay
+  historical. Uncertain attempts remain quarantined across restart. Known
+  animations may settle within the original deadline without another input.
+  ResearchClose002 subsequently passed direct closing; mixed live validation is pending.
+
+- Pass Production008 with one Luna medium player: manual production closing,
+  historical replays and no-ops, then a Research/Focus round trip with all 21
+  production lines unchanged. All 18 steps, stopped journals, recording and
+  normal exit passed. Report bounded validation in production capabilities and
+  tool results; mixed-worker routing and full campaigns remain unavailable.
+- Preserve Production007's incomplete gate: the builder supplied an obsolete
+  Focus ID. Verify grant IDs against the live own canonical catalog before play.
+
+- Add `hoi4_production_close`, an ordinary Linux panel-closing preview with an
+  explicit `ensure_closed` target. Require settled shown production or an idle
+  already-closed no-op; retain exact original identity, shared uncertainty
+  exclusion and restart-safe receipts. Closing cannot count as allocation
+  preparation or completion. Production008 verified bounded manual closing;
+  mixed-worker routing remains pending.
+
+- Pass Production006 with one Luna medium player: daily production allocation
+  reached 14 factories across three days, respected the 2-step daily limit, and
+  survived completed-plan restart without repeated input. Fresh final reads,
+  stopped journals, recording, release and exact-process cleanup passed. Two
+  read-only clock tears recovered in separate worker lifetimes. This is bounded
+  Linux worker evidence, not campaign, universal routing or release acceptance.
+
+- Preserve the incomplete Production005 gate: five verified production steps
+  reached 14 factories across three days, then a historical `torn_read` ended
+  the gate before completed-plan restart/no-replay checks. Stopped journals,
+  recording, release and normal close passed independent audit.
+- Separate known read-only scheduling clock tears from action failures in daily
+  digest/details and STOP. Retain first/latest causes and recovery history for
+  the worker lifetime; use the existing wake interval without retrying input.
+  Other errors and uncertainty retain their behavior. Keep combined domain
+  histories within the 2 KB summary limit with exact detail retrieval. Fresh
+  live validation remains pending.
+
+- Add an explicit default-off Linux daily production worker preview with durable
+  original-line preparation, bounded one-factory steps across days, separate
+  daily step/goal budgets, exact final allocation proof and shared uncertainty
+  exclusion. Preserve progress, original failures and chronology through reopen;
+  prohibit target reordering within an existing line queue. STOP and compact
+  digests retain dated production history. Offline validation passed; recorded
+  advancing-time worker acceptance and cross-panel handoffs remain pending.
+
+- Add the standing-production completion foundation: private typed journal proof,
+  exact original line/count binding, fresh canonical evidence and per-line target
+  ordering. Historical replay and panel opening cannot complete an allocation.
+  Durable fixtures preserve completion and budget through restart without input
+  replay. This foundation preceded the worker preview above; neither replaces
+  the pending advancing-time worker gate.
+
+- Pass the recorded Linux Production004 gate with Luna medium: one ordinary
+  panel opening, 10→11→10 factory counts, historical replays and no-input no-ops.
+  Factory changes took 765/773 ms including readback. Recording, journal audit,
+  lease release and normal close passed. This paused diagnostic is not campaign
+  or release acceptance; macOS CI was queued when the Linux gate started.
+
+- Verify Linux production opening with one recorded Luna medium ordinary click,
+  historical replay and an already-open no-op. The factory increment refused
+  before input; reuse the exact owned parent-position gate already supported by
+  the opener instead of requiring null. Factory input and campaigns remain
+  unverified; unknown gates and all existing blockers still refuse.
+
+- Correct production input eligibility: the engine’s transient GUI-update phase
+  is diagnostic-only for ordinary X11 input. A recorded Luna refusal exposed
+  the incorrect prerequisite; static setter/caller evidence established its
+  phase lifetime. Actual blockers and ownership checks remain enforced.
+- Report specific observed production-opening gates on refusal without extra
+  reads or input. Unknown fields remain explicit; authorization is unchanged.
+  The first recorded Luna gate refused before input in 78 ms, so production
+  live acceptance remains pending.
+- Add opt-in Linux `hoi4_production_open`: an ordinary named topbar click with
+  durable original panel identity and canonical readback. Already-open panels
+  are no-ops. Opening and factory allocation share uncertainty exclusion, and
+  existing factory journal records keep their format. Live validation is pending.
+- Correct Linux production readiness to manager mode 2. The earlier value 5
+  came from unrelated constructor update flags; static callback evidence exposed
+  this error before live production acceptance. Require typed settings, menu and
+  overview blocker checks for both opening and factory clicks; an unknown
+  auxiliary manager object refuses input.
+
+- Add opt-in Linux `hoi4_production_attempt` for one factory increment/decrement
+  on an exact current own line in an already-open panel. Persist original
+  identity/count before input, recheck the same callback/geometry and verify
+  canonical own-line state. Uncertain results block every shared input domain;
+  retries only observe the original target, including after journal reopen.
+  Targets below one, bulk allocation and line creation are unavailable. This
+  preview is fixture-tested; live production acceptance is still pending.
+- Recheck X11 input state and window geometry after the final domain callback,
+  before transmitting any buffered pointer input. A modifier or window change
+  during a slow refresh now refuses without moving the cursor.
+- Add `hoi4_production_controls`, a Linux read-only observation of an exact own
+  equipment line's factory +/- buttons. Full handles and canonical equipment
+  keys join the production row in one witnessed snapshot; named aliases,
+  callback captures, local gates and equipment-selection dialogs are checked.
+  Optional geometry reuses the existing typed renderer reader. It never opens
+  the panel, moves the cursor or enables input. Line creation and live
+  validation remain pending; the separate action preview is opt-in.
+- Batch Linux GUI registry name reads shared by research, politics and
+  construction. A fixture with 256 inline names now needs four name-lookup
+  reads, plus the caller's pointer collection and final snapshot checks.
+  External strings remain bounded and witnessed; ambiguous requested names,
+  malformed collections and changed metadata refuse. The separate button,
+  child-container and text registries retain their existing ownership checks.
+  This is an offline-tested read optimization, not new live input acceptance.
+- Apply the same recovery rule to the shared clock journal: seeing a different
+  pause/speed state on retry does not prove the original key never applied.
+  Keep the intent unresolved across restart until the target is observed, and
+  retain readback/ownership failures as `action_uncertain`. Linux CI exposed
+  this defect in the delayed-key regression; retries remain read-only.
+- Preserve uncertain macOS action intents when dispatch or readback fails,
+  including missing targets and unavailable UI. Restarted retries cannot clear
+  an intent from a newly captured before-state: only an observed reached target
+  can settle it. Diplomacy, air assignment, army splits and group creation no
+  longer treat a missing dispatch verification as proof of unchanged state.
+  The standing-plan runner returns unresolved actions to its caller after one
+  same-ID settlement attempt, without trying another research choice or army
+  move. Missing/nonterminal receipts also stop the runner; refusal diagnostics
+  truncate safely at UTF-8 boundaries. These recovery changes have offline
+  regression coverage and still need a recorded live recovery gate.
+- Campaign actions on macOS (native MCP, Steam 1.19.3 x86_64 under Rosetta,
+  Mach-O 089EA519), each driven by ordinary CGEvent input to the owned,
+  front-most window, targeted from the live GUI tree and verified by fresh
+  memory readback, with an idempotent action journal: time, research (with
+  tree scrolling), national focus (tree panning), production lines (add/set,
+  offered designs listed on refusal), construction, laws, designers and
+  advisors, decisions, division training with deployment locations, army
+  creation, army groups and field marshals, front and offensive lines
+  (found by comparing captures before and after front-line mode),
+  battle-plan execute/stop, event answers (including newspaper-style news
+  windows), diplomacy (list, Justify War goal, sent actions), and air wings
+  and missions. Reads add armies by group, unassigned divisions by state,
+  states by name or country tag, open events and an open peace conference.
+  Army groups, field marshals and army splitting (Shift range selection in the
+  division list needs a real modifier event). Not yet supported: the peace
+  conference itself and naval and invasion actions.
+- Standing plans on macOS: `hoi4_plan` reads or merges the run directory's
+  `plan.json` and `hoi4_plan_run` carries it out for a bounded time through the
+  server's own verified tools under the caller's lease (events, research,
+  focus, politics, decisions, training, production balancing, construction),
+  returning early when a choice event needs the model.
+- Army groups need field marshals: `hoi4_army_commander` now promotes a plain
+  general (command-power cost, confirmation dialog) before leading a group.
+  The construction panel and the strategic air region window are closed before
+  every action, and training finds a template row by its drawn name when the
+  game hides decommissioned templates.
+- `docs/WINDOWS_HANDOFF.md`: what the Windows port needs and what the macOS runs
+  taught.
+- A country-agnostic campaign playbook (`skills/hoi4-campaign-playbook/
+  references/generic-playbook.md`): army caps, army groups and field marshals,
+  templates, build-up, planning and encirclement, the peace conference and
+  common mistakes, from a cited research run checked against the 1.19.3 files.
+
+- First native macOS read. `hoi4_overview` now selects a per-build layout:
+  Linux ELF a4971c9e or macOS Mach-O 089EA519 (1.19.3.0 c01a under Rosetta).
+  On the owned 1920x1080 game on 18 October 2026 it returned the player, date,
+  speed, pause, difficulty, historical AI, Focus and research slots in about
+  0.4 ms (99 reads). The Mac offsets were mapped live from RTTI roots and value
+  changes across unpause, speed and player switches, and kept in a private
+  evidence table. The image search now reads the declared Mach-O load commands
+  in full. Other macOS tools and all macOS input remain unported.
+- Start the native macOS adapter. `platform::macos` attaches read-only to one
+  owned game process (the x86_64 Mach-O build 1.19.3.0 under Rosetta) through
+  its task port. It verifies the executable SHA-256 and LC_UUID, the process
+  start time, path and non-root uid on every check, and finds the image by its
+  Mach-O header and UUID. The reader decodes libc++ strings for this build. The
+  binary must be ad-hoc signed with `native/macos/debugger.entitlements`, and
+  the user must hold Developer Tools task access. No game layout is wired yet,
+  so macOS tools still refuse.
+- Run092 (18 October 2026, `b0b9b35`, package v87, Haiku 5.5 player, 512x288)
+  passed the map placement gate for a coastal building. The server selected a
+  dockyard, used the Find view to centre the camera on West Prussia (state 63)
+  and queued one dockyard with one map click. place verified in 1.7 s with
+  `{in_state 1, elsewhere 0, complete true}`. The open, select and place replays
+  returned identical historical receipts, and a second place ID was a zero-input
+  no-op. The final queue held exactly one dockyard of amount 1 in state 63
+  (location kind state). In this game data a dockyard is a coastal-only state
+  building, so the client-centre click needed no province target. The state's
+  Find anchor was predicted offline at map position (3059, 1599): the rounded
+  bounding-box centre of its provinces, which also reproduces Brandenburg's live
+  anchor. That point is inside coastal province 9361, 8 map pixels from the
+  nearest outside pixel, which is sea. The live anchor matched exactly, and the
+  private broker required that match before any Find key or map click. Lease
+  release, exit 0, recording and instance absence passed. True provincial
+  buildings (naval bases, bunkers) remain untested.
+- New fixtures: placement summaries count dockyard lines by state and
+  province-located lines by the state their province joins.
 - Run091 (18 October 2026, `7f0728c`, Haiku 5.5 player, 512x288) passed the
   map placement gate. ensure_open, select_building(arms_factory), find_open,
   find_query(64), find_activate(64) and place(arms_factory, state 64, amount 1)
@@ -500,7 +1138,6 @@
 - Simplify README and preserve the existing Windows reference in a separate doc.
   Strategic commands, governor and Windows/macOS native adapters remain unfinished.
 
-The Python release version and downstream release pins remain unchanged.
 
 ## 1.1.0 - 2026-10-11
 

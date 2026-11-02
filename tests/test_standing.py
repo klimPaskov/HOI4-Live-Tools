@@ -9,6 +9,7 @@ from hoi4_live.errors import ToolError
 from hoi4_live.game import clock as clock_mod
 from hoi4_live.state import standing
 from hoi4_live.tools import campaign_loop_tools as loop
+from test_campaign_loop import day
 from test_clock import ClockCase
 
 
@@ -142,9 +143,19 @@ class ClockWithOrdersTests(ClockCase):
 
     def test_an_empty_queue_stops_the_run(self):
         self.session.standing.set("r", ["tech_done"], queue=[call(tech="a")])
-        self.feed(script={102: {"techs": 11}, 104: {"techs": 12}})
-        run, res = self.run_with_orders(budget_days=30)
+        # Deliver both completion observations separately. A real-time feeder
+        # can publish both before a busy CI runner polls, merging their change
+        # into one firing and never exercising the empty queue.
+        counter = [100]
+        def publish(_seconds):
+            if self.state["running"]:
+                counter[0] += 1
+                techs = 12 if counter[0] >= 104 else 11 if counter[0] >= 102 else 10
+                self.store.add(day(counter[0], "1936.1.5.24", techs=techs))
+        with mock.patch.object(clock_mod.time, "sleep", side_effect=publish):
+            run, res = self.run_with_orders(budget_days=30)
         self.assertEqual(res["reasons"][0]["code"], "standing_queue_empty")
+        self.assertEqual(res["days"], 4)
         self.assertEqual(len(self.calls), 1)
 
     def test_a_failed_call_stops_the_run_and_keeps_the_entry(self):
@@ -275,14 +286,23 @@ class ClockWithOrdersTests(ClockCase):
             self.store.add({"k": "rs", "t": "USA", "n": n, "tid": 0, "_date": "1936.1.1.24", "_wall": 1.0})
         self.store.add({"k": "day", "t": "USA", "n": 100, "_date": "1936.1.1.24", "_wall": 1.0, "rslots": 4})
         self.session.standing.set("r", ["research_idle"], queue=[call(tech="a"), call(tech="b")])
-        self.feed(script={}, tick=0.02)
-        self.feeder.fields["rslots"] = 4
-
-        class Day(dict):
-            pass
-        run, res = self.run_with_orders(budget_days=4)
+        # Several feeder ticks may arrive in one batch on a busy CI runner.
+        # A rule intentionally fires once per batch, so publish one day per
+        # poll to verify the every-other-day policy without a scheduler race.
+        counter = [100]
+        def publish(_seconds):
+            if self.state["running"]:
+                counter[0] += 1
+                elapsed = counter[0] - 100
+                self.store.add({"k": "day", "t": "USA", "n": counter[0],
+                                "_date": f"1936.1.{1 + elapsed}.24", "_wall": 1.0, "rslots": 4})
+        with mock.patch.object(clock_mod.time, "sleep", side_effect=publish):
+            run, res = self.run_with_orders(budget_days=4)
         # three idle slots: it fires on the first day and again every other day while they stay idle
         self.assertEqual([c[1]["tech"] for c in self.calls], ["a", "b"])
+        self.assertEqual(self.session.standing.rules["r"]["fired"], 2)
+        self.assertEqual(res["reasons"][0]["code"], "done")
+        self.assertEqual(res["days"], 4)
 
     def test_an_empty_queue_tells_the_agent_once_per_refill(self):
         for n in range(100, 140):

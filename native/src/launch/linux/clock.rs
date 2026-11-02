@@ -3,6 +3,7 @@
 use super::*;
 use crate::{
     actions::{Action, Backend, Epoch, Journal, State},
+    daily_panel_navigation::transit::attempt as transit_stage,
     game::{self, ClockContext},
     input_lease::InputAuthority,
     platform::{
@@ -16,6 +17,7 @@ use std::sync::{Arc, Mutex, MutexGuard, RwLock, RwLockReadGuard, TryLockError};
 mod construction;
 mod daily;
 mod focus;
+mod production;
 mod readback;
 mod research;
 
@@ -30,6 +32,9 @@ pub(super) struct Binding {
     /// IDs of the owned recording/journal's ordinary singleplayer setup evidence.
     /// This is operator evidence, not a native proof of multiplayer flags.
     menu_evidence_ids: Vec<String>,
+    /// Explicit translated-runtime validation opt-in; never inferred from a launch.
+    #[serde(default)]
+    translated_input_profile: Option<translated::InputProfile>,
     /// Owner-only opt-in for the narrow recorded client/origin profile.
     #[serde(default)]
     research_profile: Option<research::Profile>,
@@ -40,9 +45,13 @@ pub(super) struct Binding {
     #[serde(default)]
     construction_profile: Option<construction::Profile>,
     #[serde(default)]
+    production_profile: Option<production::Profile>,
+    #[serde(default)]
     daily_prepared_research: bool,
     #[serde(default)]
     daily_focus: bool,
+    #[serde(default)]
+    daily_production: bool,
 }
 impl Binding {
     fn validate_daily_focus(&self) -> Result<()> {
@@ -52,7 +61,45 @@ impl Binding {
                 "daily_focus requires the existing owned Focus profile",
             ));
         }
+        if self.daily_production && self.production_profile.is_none() {
+            return Err(Error::new(
+                "invalid_input_binding",
+                "daily_production requires the existing owned production profile",
+            ));
+        }
         Ok(())
+    }
+    /// Optional domains share one immutable owned window and coordinate profile.
+    fn validate_client_profiles(
+        &self,
+    ) -> Result<Option<crate::research_candidate_observation::BuiltinClient>> {
+        let mut clients = [
+            self.research_profile.map(research::Profile::client),
+            self.focus_profile.map(focus::Profile::client),
+            self.construction_profile.map(construction::Profile::client),
+            self.production_profile.map(production::Profile::client),
+        ]
+        .into_iter()
+        .flatten();
+        let first = clients.next();
+        if clients.any(|client| Some(client) != first) {
+            return Err(Error::new(
+                "invalid_input_binding",
+                "All owned input profiles must name one client size",
+            ));
+        }
+        if self.translated_input_profile.is_some() {
+            let required = crate::research_candidate_observation::BuiltinClient::Absolute1920x1080;
+            if first.is_some_and(|client| client != required) {
+                return Err(Error::new(
+                    "invalid_input_binding",
+                    "Translated validation requires every enabled domain at 1920x1080",
+                ));
+            }
+            // Clock-only binding must also pin the qualified window dimensions.
+            return Ok(Some(required));
+        }
+        Ok(first)
     }
 }
 struct Guard {
@@ -61,6 +108,7 @@ struct Guard {
     playthrough: String,
     latest_date: i32,
     invalidated: bool,
+    selected_target: Option<crate::daily_panel_navigation::Destination>,
 }
 impl Guard {
     fn observe(&mut self, process: &dyn Process) -> Result<State> {
@@ -140,9 +188,11 @@ struct ControlState {
     guard: Guard,
     authority: InputAuthority,
     journal: Journal,
+    research_transits: transit_stage::Journal,
     research: Option<research::Service>,
     focus: Option<focus::Service>,
     construction: Option<construction::Service>,
+    production: Option<production::Service>,
 }
 pub(super) struct ClockService {
     state: Arc<Mutex<ControlState>>,
@@ -150,6 +200,7 @@ pub(super) struct ClockService {
     research_enabled: bool,
     focus_enabled: bool,
     construction_enabled: bool,
+    production_enabled: bool,
     daily: daily::Controller,
 }
 impl ClockService {
@@ -182,6 +233,7 @@ impl ClockService {
             ));
         }
         binding.validate_daily_focus()?;
+        let client_profile = binding.validate_client_profiles()?;
         let observed: ClockContext = game::clock_context(process)?;
         if observed.player != binding.player
             || observed.difficulty != 2
@@ -192,7 +244,17 @@ impl ClockService {
                 "Normal historical own-player context required",
             ));
         }
-        let controls = X11Controls::open(
+        daily::Controller::check_panel_journal(directory)?;
+        // Load independently of every profile/worker flag, before opening X11.
+        let research_transits =
+            transit_stage::Journal::open(&directory.join("research-transits.json"))?;
+        if research_transits.blocks_game(&binding.game) {
+            return Err(Error::new(
+                "action_uncertain",
+                "Original-game Research transit requires qualified recovery",
+            ));
+        }
+        let mut controls = X11Controls::open(
             process,
             display.number,
             &display.server,
@@ -200,6 +262,9 @@ impl ClockService {
             binding.window,
             &binding.window_class,
         )?;
+        if let Some(client) = client_profile {
+            controls.bind_client_dimensions(process, client.client())?;
+        }
         let epoch = Epoch {
             game: binding.game.clone(),
             campaign: format!("{}:{}", nonce()?, observed.playthrough_id),
@@ -219,14 +284,19 @@ impl ClockService {
             .construction_profile
             .map(|profile| construction::Service::bind(profile, binding.window, display, directory))
             .transpose()?;
+        let production = binding
+            .production_profile
+            .map(|profile| production::Service::bind(profile, binding.window, display, directory))
+            .transpose()?;
         json_new(
             &directory.join("input-binding.json"),
-            json!({"version":1,"game":binding.game,"controller":binding.controller,"player":binding.player,"window":binding.window,"menu_evidence_ids":binding.menu_evidence_ids,"epoch":epoch,"scope":"ordinary clock keys; optional ID research/focus/construction previews","research_profile":binding.research_profile,"focus_profile":binding.focus_profile,"construction_profile":binding.construction_profile,"daily_prepared_research":binding.daily_prepared_research,"daily_focus":binding.daily_focus,"load_generation":"unverified: persisted identity, anchor and timeline checks only"}),
+            json!({"version":1,"game":binding.game,"controller":binding.controller,"player":binding.player,"window":binding.window,"menu_evidence_ids":binding.menu_evidence_ids,"translated_input_profile":binding.translated_input_profile,"epoch":epoch,"scope":"ordinary clock keys; optional ID research/focus/construction/production previews","research_profile":binding.research_profile,"focus_profile":binding.focus_profile,"construction_profile":binding.construction_profile,"production_profile":binding.production_profile,"daily_prepared_research":binding.daily_prepared_research,"daily_focus":binding.daily_focus,"daily_production":binding.daily_production,"load_generation":"unverified: persisted identity, anchor and timeline checks only"}),
         )?;
         Ok(Self {
             daily: daily::Controller::new(
                 binding.daily_prepared_research,
                 binding.daily_focus,
+                binding.daily_production,
                 owner,
                 directory,
             ),
@@ -234,6 +304,7 @@ impl ClockService {
             research_enabled: research.is_some(),
             focus_enabled: focus.is_some(),
             construction_enabled: construction.is_some(),
+            production_enabled: production.is_some(),
             state: Arc::new(Mutex::new(ControlState {
                 controls,
                 guard: Guard {
@@ -242,12 +313,15 @@ impl ClockService {
                     playthrough: observed.playthrough_id,
                     latest_date: observed.date_raw,
                     invalidated: false,
+                    selected_target: None,
                 },
                 authority,
                 journal,
+                research_transits,
                 research,
                 focus,
                 construction,
+                production,
             })),
         })
     }
@@ -296,6 +370,9 @@ fn allowed(args: &serde_json::Map<String, Value>, keys: &[&str]) -> Result<()> {
     Ok(())
 }
 impl Commands for ClockService {
+    fn wait_events(&self) -> Option<Arc<crate::protocol::worker_events::Events>> {
+        Some(self.daily.wait_events())
+    }
     fn tools(&self) -> Vec<Value> {
         let mut tools = vec![
             json!({
@@ -315,6 +392,7 @@ impl Commands for ClockService {
         ];
         if self.research_enabled {
             tools.push(research::tool());
+            tools.push(research::close_tool());
         }
         if self.focus_enabled {
             tools.push(focus::tool());
@@ -323,6 +401,11 @@ impl Commands for ClockService {
         if self.construction_enabled {
             tools.push(construction::tool());
         }
+        if self.production_enabled {
+            tools.push(production::tool());
+            tools.push(production::open_tool());
+            tools.push(production::close_tool());
+        }
         if self.daily.enabled() {
             tools.push(daily::Controller::tool());
         }
@@ -330,13 +413,18 @@ impl Commands for ClockService {
     }
     fn supports(&self, name: &str) -> bool {
         matches!(name, "hoi4_input_lease" | "hoi4_time")
-            || (name == "hoi4_research_attempt" && self.research_enabled)
+            || (matches!(name, "hoi4_research_attempt" | "hoi4_research_close")
+                && self.research_enabled)
             || (matches!(name, "hoi4_focus_attempt" | "hoi4_focus_ui") && self.focus_enabled)
             || (name == "hoi4_construction_attempt" && self.construction_enabled)
+            || (matches!(
+                name,
+                "hoi4_production_attempt" | "hoi4_production_open" | "hoi4_production_close"
+            ) && self.production_enabled)
             || (name == "hoi4_daily_governor" && self.daily.enabled())
     }
     fn capabilities(&self) -> Value {
-        json!({"transport":"ordinary authenticated X11 input","actions":["set_paused","set_speed"],"research_preview":{"enabled":self.research_enabled,"scope":"one OpenPanel, SelectSlot, SelectCategory, View or Research stage for own empty slot","installed_game_validation":"Clock cycles, four assignments and advancement to 5 January passed bounded run025; run024 uncertainty unexplained; full campaign acceptance pending"},"focus_preview":{"enabled":self.focus_enabled,"scope":"one own OpenPolitics/OpenPoliticsFromResearch/ClosePolitics/OpenFocus/SearchField/SearchQuery/SearchText/SearchNext/View/Start ordinary stage; exact Sprite/zero-angle Text/InstantText/unmasked Frame branches; run068 verified SearchText, three ordinary Tab steps, identical historical replays and View; strict SearchQuery remains unaccepted","installed_game_validation":"Run049 verified research-Focus-research and target waits; run052 verified actual Rhineland completion; run068 verified bounded manual search-to-View; successive worker Focus assignment and full campaigns pending"},"focus_ui":{"enabled":self.focus_enabled,"read_only":true,"lease_required":false,"installed_game_validation":"Run042 verified pre-lease and post-Start observations; complete own local flags only"},"daily_focus":{"owner_enabled":self.daily.focus_enabled(),"plan_opt_in_required":true,"search_navigation":{"implemented":true,"entry_hint":"focus_search: explicit bounded localized lowercase query","manual_stages_validated_run":"068","worker_live_validation":false,"query_replacement_available":false},"research_handoff":{"implemented":true,"direction":"Focus to research only","requires":"Focus and research owner permissions, plan Focus opt-in, remaining assignment budget, fresh own UI and completed Focus key hint","live_validation":true,"validated_run":"047: paused vanilla Normal/historical Germany; two assignments and adjacent restart/STOP"},"research_to_focus":{"implemented":true,"requires":"Both worker domain permissions, both owned profiles, settled own research panel, hidden tree and clear local blockers","live_validation":true,"validated_run":"049: paused vanilla Normal/historical Germany; research-Focus-research and target waits; same-plan restart/STOP in a separate supplement"},"full_campaign_acceptance":false},"daily_prepared_research":{"enabled":self.daily.research_enabled(),"navigation_implemented":true,"scope":"Run030 verified four-slot assignment and restart; run050 verified actual research completion and same-slot refill; full campaigns pending"},"lease":"exclusive configured controller","native_posting":false,"construction_preview":{"enabled":self.construction_enabled,"stages":["ensure_open","select_building"],"map_placement_available":false,"live_action_validation":false},"cursor_movement":self.research_enabled||self.focus_enabled||self.construction_enabled,"load_generation":"unverified; campaign identity, anchors and observed timeline checked","full_campaign_acceptance":false})
+        json!({"transport":"ordinary authenticated X11 input","actions":["set_paused","set_speed"],"research_preview":{"enabled":self.research_enabled,"scope":"one OpenPanel, SelectSlot, SelectCategory, View or Research stage for own empty slot; separate original-state-preserving Research close preview","panel_closing_preview":true,"panel_closing_live_validation":true,"panel_closing_validated_run":"ResearchClose002: bounded Research-only closing, no-ops, historical replays and production roundtrip","uncertain_closing":"quarantined; no automatic settlement or replay","installed_game_validation":"Clock cycles, four assignments and advancement to 5 January passed bounded run025; run024 uncertainty unexplained; full campaign acceptance pending"},"focus_preview":{"enabled":self.focus_enabled,"scope":"one own OpenPolitics/OpenPoliticsFromResearch/ClosePolitics/OpenFocus/SearchField/SearchQuery/SearchText/SearchNext/View/Start ordinary stage; exact Sprite/zero-angle Text/InstantText/unmasked Frame branches; run068 verified SearchText, three ordinary Tab steps, identical historical replays and View; strict SearchQuery remains unaccepted","installed_game_validation":"Run049 verified research-Focus-research and target waits; run052 verified actual Rhineland completion; run068 verified bounded manual search-to-View; successive worker Focus assignment and full campaigns pending"},"focus_ui":{"enabled":self.focus_enabled,"read_only":true,"lease_required":false,"installed_game_validation":"Run042 verified pre-lease and post-Start observations; complete own local flags only"},"daily_focus":{"owner_enabled":self.daily.focus_enabled(),"plan_opt_in_required":true,"search_navigation":{"implemented":true,"entry_hint":"focus_search: explicit bounded localized lowercase query","manual_stages_validated_run":"068","worker_live_validation":false,"query_replacement_available":false},"research_handoff":{"implemented":true,"direction":"Focus to research only","requires":"Focus and research owner permissions, plan Focus opt-in, remaining assignment budget, fresh own UI and completed Focus key hint","live_validation":true,"validated_run":"047: paused vanilla Normal/historical Germany; two assignments and adjacent restart/STOP"},"research_to_focus":{"implemented":true,"requires":"Both worker domain permissions, both owned profiles, settled own research panel, hidden tree and clear local blockers","live_validation":true,"validated_run":"049: paused vanilla Normal/historical Germany; research-Focus-research and target waits; same-plan restart/STOP in a separate supplement"},"full_campaign_acceptance":false},"mixed_panel_navigation":{"preview":true,"owner_enabled":self.daily.research_enabled()&&self.daily.production_enabled(),"plan_opt_in":"max_panel_navigation_steps_per_day: 1..16","requires":"Both domain profiles and permissions; production_permission; no Focus opt-in","live_validation":false,"selection":"Original destination persists through its goal; no yield on exhausted production budget","uncertainty":"Durable departure blocks controller binding even with worker opt-in removed"},"daily_production":{"owner_enabled":self.daily.production_enabled(),"plan_opt_in_required":true,"step_budget_required":true,"live_validation":true,"validated_run":"Production006: bounded exact-line allocation, daily budgets and completed-plan restart","cross_panel_handoffs":false},"daily_prepared_research":{"enabled":self.daily.research_enabled(),"navigation_implemented":true,"scope":"Run030 verified four-slot assignment and restart; run050 verified actual research completion and same-slot refill; full campaigns pending"},"lease":"exclusive configured controller","native_posting":false,"construction_preview":{"enabled":self.construction_enabled,"stages":["ensure_open","select_building"],"map_placement_available":false,"live_action_validation":false},"production_preview":{"enabled":self.production_enabled,"scope":"ensure production panel open/closed or one factory step for an own current line","panel_opening_available":true,"panel_closing_preview":true,"panel_closing_live_validation":true,"panel_closing_validated_run":"Production008: bounded manual open/close, historical replays, no-ops and Research/Focus handoff","live_validation":true,"validation_scope":"Production004/008: exact Linux build/profile, selected infantry line and manual navigation only","minimum_target":1,"unresolved_retries":"read-only original-target settlement"},"cursor_movement":self.research_enabled||self.focus_enabled||self.construction_enabled||self.production_enabled,"load_generation":"unverified; campaign identity, anchors and observed timeline checked","full_campaign_acceptance":false})
     }
     fn call(&self, process: &dyn Process, name: &str, arguments: &Value) -> Result<Value> {
         let call_started = Instant::now();
@@ -346,11 +434,25 @@ impl Commands for ClockService {
         if name == "hoi4_daily_governor" {
             return self.daily.call(self, process, args);
         }
+        if name == "hoi4_research_close" {
+            return research::close_call(self, process, args);
+        }
         if name == "hoi4_research_attempt" {
             return research::call(self, process, args);
         }
         if name == "hoi4_focus_attempt" {
             return focus::call(self, process, args);
+        }
+        if matches!(
+            name,
+            "hoi4_production_attempt" | "hoi4_production_open" | "hoi4_production_close"
+        ) {
+            let stage = match name {
+                "hoi4_production_open" => Some(crate::production_step::PanelStage::EnsureOpen),
+                "hoi4_production_close" => Some(crate::production_step::PanelStage::EnsureClosed),
+                _ => None,
+            };
+            return production::call(self, process, args, stage);
         }
         if name == "hoi4_construction_attempt" {
             return construction::call(self, process, args);
@@ -456,10 +558,15 @@ impl Commands for ClockService {
         self.daily.input_check()?;
         drop(input_permit(&self.input_gate)?);
         let mut state = self.input_state()?;
-        if state
-            .construction
-            .as_ref()
-            .is_some_and(|c| c.journal.blocks_game(&state.guard.epoch.game))
+        if state.research_transits.blocks_game(&state.guard.epoch.game)
+            || state
+                .production
+                .as_ref()
+                .is_some_and(|p| p.journal.blocks_game(&state.guard.epoch.game))
+            || state
+                .construction
+                .as_ref()
+                .is_some_and(|c| c.journal.blocks_game(&state.guard.epoch.game))
             || state
                 .focus
                 .as_ref()
@@ -471,7 +578,7 @@ impl Commands for ClockService {
         {
             return Err(Error::new(
                 "action_uncertain",
-                "Unresolved research/focus/construction attempt blocks clock input",
+                "Unresolved research/focus/construction/production attempt blocks clock input",
             ));
         }
         let epoch = state.guard.epoch.clone();
@@ -933,5 +1040,134 @@ mod tests {
         let mut invalid = value;
         invalid["daily_focus"] = json!(1);
         assert!(serde_json::from_value::<Binding>(invalid).is_err());
+    }
+    #[test]
+    fn daily_production_binding_requires_its_independent_owned_profile() {
+        let mut value = json!({"game":{"pid":123,"start_ticks":"456","exe":"/generated/game","uid":1000},"controller":"generated","player":"GER","window":1,"window_class":[],"menu_evidence_ids":["setup"]});
+        let b: Binding = serde_json::from_value(value.clone()).unwrap();
+        assert!(!b.daily_production);
+        value["daily_production"] = json!(true);
+        let b: Binding = serde_json::from_value(value.clone()).unwrap();
+        assert!(b.validate_daily_focus().is_err());
+        value["production_profile"] = json!("linux_builtin_absolute_512x288_v1");
+        let b: Binding = serde_json::from_value(value.clone()).unwrap();
+        assert!(b.validate_daily_focus().is_ok());
+        assert!(!b.daily_focus && !b.daily_prepared_research);
+        value["daily_production"] = json!(1);
+        assert!(serde_json::from_value::<Binding>(value).is_err());
+    }
+    #[test]
+    fn translated_validation_pins_fullhd_even_without_optional_domains() {
+        let base = json!({"game":{"pid":123,"start_ticks":"456","exe":"/fixture/FEX","uid":1000},"controller":"fixture","player":"GER","window":42,"window_class":[],"menu_evidence_ids":["setup"],"translated_input_profile":"fex_2610_x11_1920x1080_validation_v1"});
+        let binding: Binding = serde_json::from_value(base.clone()).unwrap();
+        assert_eq!(
+            binding
+                .validate_client_profiles()
+                .unwrap()
+                .unwrap()
+                .client(),
+            [1920, 1080]
+        );
+        for field in [
+            "research_profile",
+            "focus_profile",
+            "construction_profile",
+            "production_profile",
+        ] {
+            let mut value = base.clone();
+            value[field] = json!("linux_builtin_absolute_1920x1080_v1");
+            let binding: Binding = serde_json::from_value(value.clone()).unwrap();
+            assert_eq!(
+                binding
+                    .validate_client_profiles()
+                    .unwrap()
+                    .unwrap()
+                    .logical(),
+                [1920, 1080]
+            );
+            value[field] = json!("linux_builtin_absolute_512x288_v1");
+            let binding: Binding = serde_json::from_value(value).unwrap();
+            assert_eq!(
+                binding.validate_client_profiles().unwrap_err().code,
+                "invalid_input_binding"
+            );
+        }
+    }
+
+    #[test]
+    fn all_four_domain_profiles_require_one_exact_reviewed_client() {
+        let base = json!({"game":{"pid":123,"start_ticks":"456","exe":"/fixture/game","uid":1000},"controller":"fixture","player":"GER","window":42,"window_class":[],"menu_evidence_ids":["setup"]});
+        let profiles = [
+            None,
+            Some("linux_builtin_absolute_512x288_v1"),
+            Some("linux_builtin_absolute_1920x1080_v1"),
+        ];
+        for research in profiles {
+            for focus in profiles {
+                for construction in profiles {
+                    for production in profiles {
+                        let chosen = [research, focus, construction, production];
+                        let mut value = base.clone();
+                        for (field, profile) in [
+                            "research_profile",
+                            "focus_profile",
+                            "construction_profile",
+                            "production_profile",
+                        ]
+                        .into_iter()
+                        .zip(chosen)
+                        {
+                            if let Some(profile) = profile {
+                                value[field] = json!(profile);
+                            }
+                        }
+                        let binding: Binding = serde_json::from_value(value).unwrap();
+                        let first = chosen.into_iter().flatten().next();
+                        let result = binding.validate_client_profiles();
+                        if chosen.into_iter().flatten().all(|p| Some(p) == first) {
+                            let client = result.unwrap();
+                            assert_eq!(
+                                client.map(|c| c.client()),
+                                first.map(|p| if p.ends_with("1920x1080_v1") {
+                                    [1920, 1080]
+                                } else {
+                                    [512, 288]
+                                })
+                            );
+                            assert_eq!(
+                                client.map(|c| c.logical()),
+                                first.map(|p| if p.ends_with("1920x1080_v1") {
+                                    [1920, 1080]
+                                } else {
+                                    [2560, 1440]
+                                })
+                            );
+                        } else {
+                            assert_eq!(result.unwrap_err().code, "invalid_input_binding");
+                        }
+                    }
+                }
+            }
+        }
+        for field in [
+            "research_profile",
+            "focus_profile",
+            "construction_profile",
+            "production_profile",
+        ] {
+            for unsupported in [
+                "generic",
+                "linux_builtin_absolute_1280x720_v1",
+                "linux_builtin_absolute_3840x2160_v1",
+                "linux_builtin_scaled_1920x1080_v1",
+            ] {
+                let mut value = base.clone();
+                value[field] = json!(unsupported);
+                assert!(
+                    serde_json::from_value::<Binding>(value).is_err(),
+                    "{field}/{unsupported}"
+                );
+            }
+        }
     }
 }

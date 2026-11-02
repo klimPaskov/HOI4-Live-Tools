@@ -105,11 +105,13 @@ fn repeated_unrelated_name_bytes_remain_in_final_witnesses() {
         };
         let baseline = build();
         observe(&baseline).unwrap();
-        let address = window + 0x4000 + 64;
-        let mut bytes = (0..32)
+        // Mutate the third name in the coalesced header block at final witness
+        // time. The first matching name must not hide unrelated-name changes.
+        let address = window + 0x4000;
+        let mut bytes = (0..96)
             .map(|i| baseline.data[&(address + i)])
             .collect::<Vec<_>>();
-        bytes[0] ^= 1;
+        bytes[64] ^= 1;
         let mut f = build();
         f.fault = Some((
             address,

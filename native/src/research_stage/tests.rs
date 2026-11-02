@@ -61,8 +61,12 @@ fn state() -> OwnState {
         active_mode: Some(6),
         researching: vec![None, None, None, None],
         visible_info: vec![Some("support_weapons".into())],
+        panel_binding: None,
     }
 }
+
+mod close;
+mod open_settlement;
 fn reached() -> OwnState {
     let mut s = state();
     s.researching[0] = Some("support_weapons".into());

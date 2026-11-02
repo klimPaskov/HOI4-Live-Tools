@@ -16,6 +16,17 @@ HOI4 Live Tools reads and drives Hearts of Iron IV, a trademark of Paradox Inter
 tool: no game file is copied or redistributed, and it is not affiliated with or endorsed by Paradox Interactive.
 Windows.Media.Ocr, used for screen text, is part of Windows.
 
+FEX translation research:
+  FEX-Emu/FEX — https://github.com/FEX-Emu/FEX (MIT), tag FEX-2610.
+  LinuxSyscalls/Syscalls.cpp, LinuxSyscalls/x64/Thread.cpp and
+  FEXInterpreter/ELFCodeLoader.h were consulted for guest exec and auxiliary
+  vector semantics. The explicit translated-process ownership checks are new
+  project code. No FEX source, binary or root filesystem is redistributed.
+  Common/Config.cpp, FEXCore configuration loading, the stock ThunksDB.json
+  interface and LinuxSyscalls/FileManagement.cpp were also consulted for an
+  isolated, explicitly pinned local graphics profile. Its Rust validation and
+  immutable-file guards are independent project code.
+
 Upstream foundation and attribution:
   smerss/Clausewitz-MCP — https://github.com/smerss/Clausewitz-MCP
   Copyright (c) 2026 smerss. Licensed under MIT.
@@ -58,6 +69,10 @@ Upstream foundation and attribution:
   nested topbar path, canonical choice items, exact ordinary callback captures
   and scoped local gates. Existing typed geometry is reused within one witnessed
   read; these associations execute no callback and authorize no construction input.
+  production_lines/control_snapshot.rs and production_lines/controls.rs add
+  independently recovered Linux production-row and ordinary factory-button
+  observations, reusing the attributed own-line semantics and GNU name reader.
+  These modules execute no engine callback and enable no production input.
   native/src/graph_kernel.rs independently implements bounded components and
   multi-source breadth-first search, consulting calling/doctrine.py and
   calling/ragemicro.py. It operates on caller-supplied public/generated topology;
@@ -65,6 +80,122 @@ Upstream foundation and attribution:
   The node_binding module independently observes ordinary control/callback data
   associations; it grants no input authority and executes no engine callback.
 
+  native/src/gui/macos.rs independently recovers this build's graphics and
+  SDL Cocoa geometry, runtime ObjC offsets and reciprocal window associations.
+  native/src/own_focus/catalog.rs reuses the attributed own-focus semantics
+  and the independently verified Mac layouts without Linux UI traversal.
+  Neither path executes a game callback or writes game memory.
+
+  native/src/construction/mac_ui.rs and construction/mac_panel.rs independently
+  recover the current Mac construction view, own GUI ownership, named topbar
+  opener and callback data. construction/mac_panel/routing.rs independently
+  maps the own renderer, complete mouse-route arrays and cursor conversions.
+  construction/mac_panel/shortcut.rs independently maps the current ordinary
+  T shortcut and preceding supported keyboard receivers. The default-off
+  launch/macos/construction_open.rs adapter uses ordinary macOS key events,
+  typed original bindings and strict durable receipts; it executes no engine
+  callback or memory write. One ordinary opener has a recorded live receipt;
+  broader construction input remains subject to live qualification.
+  native/src/platform/key_once.rs independently implements ordinary key-pair
+  sequencing, positive pre-down refusals and unconditional release cleanup.
+  construction/mac_ui/callback.rs independently maps the requested Mac building
+  choice's embedded observer, member capture and disable-request byte.
+  The Mac choice reader independently distinguishes the conversion grid item
+  by its own view cache; it does not interpret its callback as a building template.
+  construction/mac_ui/geometry.rs independently joins the requested button's
+  own ancestor chain, graphical parent and renderer, reusing the witnessed Mac
+  canvas and routing readers without executing engine predicates or callbacks.
+  construction/mac_ui/selection_state.rs independently retains the original
+  own construction scope, canonical template and full queue across an attempt.
+  launch/macos/construction_select.rs combines those facts with ordinary macOS
+  cursor input and strict durable receipts, without game callbacks or memory
+  writes. This extends the attributed own-state/action-readback approach;
+  no upstream UI code or foreign-platform offsets were copied.
+  construction/mac_find.rs independently maps the Mac Find/result/camera path
+  from its own constructors, RTTI and ordinary centring code. The separate
+  construction/mac_ui/placement_state.rs extends original-scope readback to one
+  exact queue delta. Both reuse the attributed own-state observation approach;
+  neither invokes game functions or grants placement input authority.
+  construction/mac_find/retained.rs separates original ownership from changing
+  window lifetime and observed results. construction/mac_find_focus.rs
+  independently maps the Mac edit box and its two focused-receiver joins;
+  optional witnessed observation never authorizes typing or engine calls.
+  They reuse the attributed construction semantics
+  without copying upstream UI code or another platform's offsets. These readers
+  execute no callback and grant no placement or input authority.
+
+  The durable observation producer extends that own-state model to the separately
+  verified Mac layouts with exact process/scope persistence. The Mac recording
+  bridge is an independent ScreenCaptureKit integration; it has no game-input
+  or engine-call path.
+
   Private Linux validation proved selected ordinary actions, but a running-game
   pause timed out. External engine posting remains quarantined. Source
   inclusion alone does not enable upstream commands in campaign dispatch.
+
+  The Mac typed construction/mac_find/navigation.rs and ordinary
+  launch/macos/construction_find.rs adapter extend the attributed Find approach
+  with independently recovered Mac control/state identities, complete queue
+  guards and strict once-only journal semantics. They use ordinary player keys;
+  no upstream engine posting code or cross-platform offsets are copied.
+
+  construction/mac_projection.rs independently recovers scalar ray arithmetic
+  from the current Mac executable. It extends the attributed map-observation
+  approach without copying upstream projection code or foreign offsets.
+  The internal pure calculation has no memory, input or placement authority.
+
+  construction/mac_projection/terrain.rs independently follows the current Mac
+  terrain/slab/height procedures. gui/macos/source_point.rs independently maps
+  the shipped mouse getter, SDL focus/initialization and ordinary coordinate
+  cache. No game bytes, SDL source or upstream UI code were copied. These extend
+  the attributed map-observation approach and supply no current-event, routing,
+  engine-call or placement authority.
+
+  construction/mac_scene_scope.rs independently recovers the current Mac
+  scene-list producers and own division/fleet/task-force joins. It extends the
+  attributed own-map observation approach; no upstream scene code or foreign
+  offsets were copied. Membership is distinct from model intersection, routing
+  and ordinary input qualification.
+
+  construction/mac_map_point.rs independently joins current Mac map/camera/grid
+  roots and canonical own province/definition identities around the recovered
+  terrain fallback. It extends the attributed structured map-observation approach
+  without copying upstream projection/UI code or foreign offsets. The optional
+  resident observation adds no routing, full-picker or input authority.
+
+  construction/mac_ui/selection_state/clearing_state.rs extends original typed
+  selection and complete-queue readback to canonical inactive mode. It uses no
+  upstream command implementation, invokes no engine function and grants no
+  ordinary Escape or panel-navigation permission.
+
+  gui/macos/hit_envelope.rs independently recovers a restricted set of current
+  Mac class-specific geometric rejection branches. This extends the attributed
+  observation approach without upstream hit-testing code, game bytes or foreign
+  offsets. Pure arithmetic establishes no GUI-route or input authority.
+
+  gui/macos/hit_envelope/variants.rs independently extends those pure branches
+  to exact FrameAnimated, Masked/Shield and Progressbar resources. It retains
+  their separate size/hit and edge rules; no upstream resource code, game bytes
+  or foreign-platform offsets were copied. No reader or input adapter is added.
+
+  gui/macos/direct_route.rs and its typed/model/witness modules independently
+  compose the current Mac graphical membership, exact types, transform/clip
+  reduction and consumed-field checks using those public envelope functions.
+  They extend the attributed structured observation approach without upstream
+  GUI code, game bytes or foreign offsets. The internal reader adds no default
+  observation, input registration, full-picker or atomic-delivery authority.
+
+  launch/macos/construction_place.rs and its point module extend the attributed
+  own-target/readback approach using independently recovered Mac bindings and
+  ordinary operating-system input. They execute no game callback or memory
+  write. Default-off qualification retains exact queue deltas and strict receipts;
+  it does not enable construction workers or establish campaign acceptance.
+
+  construction/mac_panel/cancel.rs, mac_panel/shortcut/escape.rs and
+  launch/macos/construction_cancel.rs extend the attributed own-target/readback
+  approach with independently recovered Mac ordinary Escape routing, retained
+  target/callback ownership, fresh complete keyboard-prefix checks and exact
+  inactive-selection/full-queue readback. No upstream cancellation code, game
+  bytes or foreign offsets are copied. Inputs use ordinary operating-system
+  events; engine calls and memory writes remain excluded. Default-off component
+  qualification does not establish standing-plan or campaign acceptance.

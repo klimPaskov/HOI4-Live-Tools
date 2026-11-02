@@ -1,268 +1,243 @@
-# Mac continuation checkpoint — 11 October 2026
+# Mac continuation checkpoint — 24 October 2026
 
-**Superseded by the [Linux-first objective](LINUX_RUST_HANDOFF.md) and
-[Linux validation checkpoint](CLAUSEWITZ_VALIDATION.md).** The licensed Linux
-game has since launched and process reads passed; ordinary commands, Luna play
-and the Rust runtime remain unaccepted. Statements below describe the earlier
-Mac checkpoint.
+The public Rust preview has recorded native 1080p component evidence for structured
+own-country reads, Research/Focus handoffs, production changes, durable daily
+plans, construction opening, template selection, Find navigation and one-point
+placement. No clean two-year Luna run or complete Germany, China or Poland
+campaign has been accepted. Mixed-plan and wider warfare automation remain open.
 
-This development checkpoint continues `wip/governor-memory` on
-`feat/macos-governor`. It is **not a release or campaign acceptance**. The original
-WIP is preserved; the published version and downstream Windows release pins have
-not moved.
+The latest Linux check reached the actual 1920×1080 game using the pinned
+unified GL profile, but its one Research transit still timed out at five seconds.
+Three bounded historical samples showed changing own-root animation values;
+all remained in transition. Dispatch took 21 ms and readback 4,951 ms. No retry,
+Research-close, replay or late settlement followed. Ordinary closure and the
+independent audit passed, with no owned game, grant or lease remaining and
+unchanged global FEX inputs. No video was recorded. This does not change the
+native Mac campaign requirement. See [the animation check](CLAUSEWITZ_VALIDATION.md#fex-bounded-animation-diagnostic--24-october-2026).
 
-Read this status before the older implementation-status paragraphs in
-[HANDOFF_MAC.md](HANDOFF_MAC.md). Those paragraphs describe the starting point.
-The remaining campaign requirements still apply. The latest user steering adds
-**Linux as a required live target alongside Windows and macOS**, and prioritizes
-structured observations, event-driven execution and low screenshot/pause overhead.
-Linux live control is unfinished; adding Linux CI does not establish it. New
-delegation uses GPT-6.1 Sol or GPT-6 Luna at max reasoning, with minimal concurrency;
-no further Astra agents are to be spawned. The existing builder is finishing its
-current Mac checkpoint.
+A fresh noninteractive Mac task-port preflight still returned -60007. It
+launched no game, displayed no authorization UI and changed no shared policy.
+Native Mac memory access remains externally blocked pending local authorization.
 
-## Current live and Linux checkpoint
+Earlier Linux no-game controls isolated a mixed-loader GL mismatch and qualified
+a private unified GL definition in both tested context methods. Six controls
+succeeded and two stock GL1 controls remained typed failures. The new explicit
+Rust launcher profile is separately hash-pinned; broader gameplay and
+performance remain unqualified. See
+[the graphics controls](CLAUSEWITZ_VALIDATION.md#fex-mixed-loader-graphics-controls--24-october-2026).
 
-The latest Mac smoke uses **1.19.3**, after Steam updated the installed game from
-1.18 while it was closed. Exact executable checks refused the old checkpoint;
-its save remains preserved and was not loaded across builds. A fresh historical,
-Regular-difficulty Germany campaign reached 2 May 1936. The governor advanced
-76 days in 58.8 seconds, but research actions took 18–34 seconds and queues stayed
-idle. Basic Machine Tools and a later Construction I retry were verified through
-ordinary UI actions. This is diagnostic evidence, **not clean acceptance**.
+The preceding Linux diagnostic still failed on a four-CPU, 8 GB VM: its one Research
+request took 5,004 ms, including 24 ms dispatch and 4,931 ms readback. The observer
+returned 48 complete Idle results and 98 transition rejections naming the Research
+panel; only the last pair `[0,1]` is retained. No settled Research result, retry,
+replay or later settlement was accepted. The setup-only sample had zero process swap,
+but cause and final panel state remain unknown. The shorter private lease passed
+its live handoff after an earlier pre-input refusal. Ordinary closure and the
+independent exit census passed; all game processes and authority are closed.
+Linux component checks do not replace native Mac campaign recordings. See the
+[capacity comparison](CLAUSEWITZ_VALIDATION.md#fex-transition-origins-and-capacity-comparison--24-october-2026)
+and [current next work](LINUX_RUST_HANDOFF.md#next-work).
 
-The recording stopped after 904 frames on a changed-window capture witness.
-The recorder now retries that explicit discarded-frame condition within a
-bounded budget and records every gap; ownership and permission failures still
-stop capture. Startup telemetry can identify the player from its current
-handshake without inventing daily metrics, and generation changes clear old
-observations. Automatic cursor parking is disabled. Per-call Mac capture-stage
-timings were added to guide further latency work without weakening verification.
-The integrated suite passed 922 tests with 35 skips; the preceding telemetry,
-clock and recorder commits passed Windows/macOS/Linux CI. These checks do not
-establish a clean live recording or a successful campaign.
+## 25 October update
 
-Clausewitz-MCP's pinned MIT source and provenance are now included as the engine
-foundation; shared read primitives are active on all three operating systems.
-The broader structured-state and command integration remains unfinished. See
-[the foundation plan](CLAUSEWITZ_FOUNDATION.md). Linux X11 input/capture has passed
-generated-window tests in Docker, but **Linux HOI4 has not been launched**.
+A noninteractive `system.privilege.taskport` query (same flags as the Rust
+preflight) returned 0 from a normal user shell; Developer mode is enabled and the
+user is in `_developer`. This is a process-context observation, not live evidence:
+re-run the Rust preflight from the owning session before the decimal-character gate.
+Host checks: 2,310 Rust tests pass in release mode; the venv Python suite passes
+956 tests (37 skips). The system `python3` lacks numpy/cv2, so run the suite with
+`.venv/bin/python`. Private disk cleanup reclaimed about 74 GB of free space
+(Cargo `target` caches, duplicate screenshots, Codex/Docker caches). No campaign,
+two-year run or recording was produced in that session.
 
-### Earlier 1.18 smoke checkpoint
+Later on 25 October a private Haiku medium run (FAIR Germany, native 1920x1108, 68-tool
+native server) played 1 Jan 1936 to 2 Jan 1938 in two sessions, 415 calls, 31 errors, about
+17-26 real minutes per game year. It is **not** an acceptance pass: a tool restart killed the
+broker, recorder and display holder mid-run (game survived, resumed), the foreground was
+repeatedly taken, and play left political power, divisions, naval production, special projects
+and doctrines unmanaged. See the private OUTCOME note; fix tooling and the brief first.
 
-The Mac diagnostic campaign reached 22 June 1936 and has a recorded ordinary
-save for forward-only resume. It is **not clean acceptance**: earlier idle queues,
-failed actions and a recording gap remain in the incident record. A background
-SDL window can expose `AXFocusedWindow` while omitting `AXWindows`; the backend
-now uses its exact role/title/geometry without activating the game, deduplicates
-AX proxies and retains ambiguity refusal. The resumed run must validate the fix
-live. No successful campaign has been completed.
+**Update (late 25 October):** four more private Haiku runs of the same gate followed. Attempts 1-3 each ended in
+a frozen input journal (a 5 s focus deadline mid-pan; a research settle that required all other slots unchanged; an
+unresolved plan-runner focus intent that retries could not settle). Fixed: 12 s up-front action deadlines, scoped pure settle
+rules (`settle.rs`, `research::settle`), a baseline-free retry settle for focus/research and bounded `torn_read` retries
+in settlement (2,352 Rust tests pass). Attempt 4 then played 1 Jan 1936 to 3 Mar 1938 in about 39 minutes (about 18 real
+minutes per game year at speed 3) with 651 calls, no uncertain action, no freeze and one final pause, recorded at native
+1920x1108. It is a reliability result only: management quality was far below the playbook (idle factories, unassigned
+divisions, no generals, no navy/air/espionage/special projects). `hoi4_country_status` (top-bar text read) matched the screen
+for all eight fields in a live check. No acceptance, showcase or recording of a campaign is claimed.
 
-Linux now has native procfs identity/path discovery and bounded read-only memory
-foundations, with unsupported desktop capabilities reported explicitly. Linux
-CI was added alongside Windows and macOS. The local integrated Mac suite passed
-863 tests with 28 skips at this checkpoint; this does not establish Linux game
-control. The isolated Linux runtime and upstream reader were exercised against
-generated processes. See [the measured Clausewitz comparison](CLAUSEWITZ_COMPARISON.md)
-for latency, Rosetta limitations and outstanding live comparison gates. Linux
-HOI4 has not yet run. No native command adapter is validated on Mac or Linux.
+**Update (26 October, early hours):** new management tools were built and checked live at native 1080p:
+`hoi4_commanders` (names and assignments; skill/traits stay null), `hoi4_army_commander` typed pre-checks,
+`hoi4_wars` Stage A (borders, occupation, coverage heuristic; war participants not read), `hoi4_army_assign`
+(new army, or fold unassigned divisions into the standing army by RIGHT-clicking its card with exactly those
+divisions selected; refuses `selection_mismatch` before the click when the box also takes another army's
+divisions, tries up to seven boxes), standing-plan construction by state name (the old runner silently dropped
+names), `stop_on_date`, research/focus fallbacks and a validated Germany plan template
+(`skills/hoi4-campaign-playbook/plans/`, `scripts/validate_plan.py`). 2,417 Rust tests pass. A stricter two-year
+gate with these tools ran reliably (no freeze) but left alarms open; the final rerun is waiting on macOS
+task-port reauthorization (the right's 10-hour timeout expired: -60007; it needs a local password prompt).
 
-## Implemented and checked offline
+**Update (26 October, morning):** the macOS server now exposes 119 tools (`docs/TOOLS_MACOS.md`, generated), 2,641 Rust
+tests pass. Checked live at native 1080p: special projects (six tools), template editor, equipment/ship designs and production
+retargeting, naval missions/regions/admirals/fleets and naval production, air wings/rebase/missions, diplomacy by tag with trade,
+war goals and declare war, resources/shortages/industry/economy detail, supply (state side validated against the game's formula),
+templates and commander stats, front/encirclement planner, server-side date stop (offline-tested), reads of doctrines, MIOs,
+intelligence, fleets, convoys, air and designs. Not live-validated (19 tools marked UNVALIDATED, queue in
+`docs/LIVE_VALIDATION_QUEUE.md`): peace conference actions, doctrine adoption, agency/operatives, MIO actions, fleet merge/split/
+balance/reserve/delete/assign, naval invasion, faction create/leave, incoming proposals. Known gaps: per-division supply percentage
+unconfirmed on screen, trade deals/manpower/stability/war support exact values not in memory, per-wing air controls.
+The macOS task-port right expired at about 09:19; the next live session starts with `security authorize -u system.privilege.taskport`
+(the user approves the dialog), then the queue, then the strict gate and the recorded Germany FAIR campaign.
 
-- Portable platform factories and lazy Windows imports. Native Windows window,
-  capture, input, clipboard and OCR code remains behind `hoi4_live/platform/`.
-  macOS supplies owned-window discovery, Retina coordinate transforms, capture,
-  keyboard/mouse/clipboard and Vision OCR. Native permissions and locked desktops
-  produce explicit capability errors.
-- Exact macOS process identity from PID, creation timestamp and executable.
-  Desktop leases use distinct session tokens and an OS file gate; live owners do
-  not lose a lease merely because its heartbeat is old. Recycled PIDs and
-  competing stale-lease recovery are tested.
-- Python 3.9-compatible stdio startup, initialization, tool discovery and explicit
-  campaign refusal. A Windows/macOS CI matrix is provided; local Mac tests do not
-  establish Windows native regression success.
-- Campaign mode and FAIR are the defaults. Campaign-to-QA escape, debug arguments,
-  raw input escape routes and unfiltered enemy information are rejected.
-  Direct background handlers also enforce normalized arguments, policy,
-  own-country visibility and ownership. Ordinary prelaunch status remains usable.
-- One versioned [policy file](../hoi4_live/game/play_policy.json) defines FAIR and
-  META. Deterministic FAIR land-order review can bind a unique army name to its
-  stable owned ID, require public state IDs and complete templates, reject
-  leg-infantry/cavalry plus line-armor compositions, and bound target churn.
-  This reviewer needs a trusted fresh live observation adapter, which is not yet
-  wired into campaign execution. It does not claim to detect strategic intent or
-  every engine exploit. Sensitive unsupported operations still fail closed.
-- Routine fast-clock returns and declared popup choices leave the game running.
-  Unresolved decisions and explicit stop can pause with a reason. Blind pause
-  toggles on unknown clock state are refused. Standing-rule pause defaults to
-  false; campaign front observations cannot create a save. The old chunked
-  screen loop is unavailable for campaigns because it repeatedly pauses.
-- Campaign telemetry generation excludes foreign force/economy expressions,
-  inherited watches and private mod data. Configuration changes use durable
-  backups. Bounded completed-day equipment/resource histories carry schema and
-  generation identity and are invalidated on timeline changes.
-- Governor digests include fresh, scoped equipment/resource shortages and explicit
-  unknown sections, with daily observation coverage. Shortage alerts are
-  observations and inspection suggestions, **not automatic repair**. Live plan
-  execution supports research, focus preflight and declared events. Focus plans
-  require closed current-tree telemetry and exact UI selection/readback; their
-  recheck schedule never claims the focus remains active. Construction,
-  production and army execution remain unfinished.
-- Mac read-only task-access and Mach-O analysis infrastructure is bounded and
-  permission aware. No Mac build layout is registered as live validated. No
-  native command posting or memory-writing campaign adapter exists.
-- Mac recording has owned-window capture, process identity checks, first-frame
-  verification, bounded frame piping, segment/disk controls and graceful EOF
-  shutdown. Synthetic ffmpeg recording was checked. Live game recording
-  throughput has not been accepted.
+## Ordinary cancellation checkpoint
 
-## Playbook and campaign assignment
+The later ordinary Find-button component passed with one move/click in 603.114 ms;
+same-ID historical replay took 144.838 ms and appended no journal row. The complete
+baseline/queue stayed unchanged. Its 1920×1108 H.264 recording explicitly stopped
+and finalized with 1,609 matching encoded/decoded frames and capture callbacks.
+All leases, grants, servers and recorders are closed. The next decimal gate refused
+during startup on macOS task-port authorization (-60007), before any grant, lease
+or input. The system also stopped that recording (-3821); it remains failed.
+Offline source checks now pass 2,158 Rust tests, 327 optimized checks, the full
+Python suite, four-target strict checks, release and unchanged unbound stdio.
+The combined construction actor remains private and unqualified.
 
-Use [hoi4-campaign-playbook](../skills/hoi4-campaign-playbook/SKILL.md). Its seven
-references cover the explicit house rules, continuous operating loop, economy,
-research, logistics, army planning, encirclements, air/naval support, invasion
-readiness and country objectives. A dated source ledger distinguishes historical
-exploit claims from mechanics verified on the installed build.
+The default-off cancellation source passed 2,015 Rust tests, 130 optimized fixtures,
+956 workspace Python tests (37 skips), strict all-target checks on four platforms,
+release and unchanged 28-tool unbound stdio. Its recorded one-Escape action and
+separate zero-input replay are described below. These are component checks;
+construction standing plans and advancing-time acceptance remain unfinished.
 
-The requested sequence is:
+## Preceding published placement checkpoint
 
-1. Separate clean Germany acceptance, 1936-01-01 through 1938-01-01, one
-   `gpt-6-luna` player at medium reasoning, FAIR, exclusive input ownership.
-2. Full Germany FAIR showcase, including the original expansion, Sea Lion,
-   Greater German Reich, Soviet and Allied defeat requirements.
-3. Full Nationalist China FAIR showcase, including unification and actual
-   Japanese capitulation, with measurable power and territorial predicates.
-4. Full Poland META showcase. Interpret the follow-up's “third mode on Poland”
-   as the third showcase using the second play mode, not a third policy mode.
-   Record victory predicates and the consequential META tactic before play.
+`0b963fb` passed all nine CI jobs across macOS, Linux and Windows. Its default-off
+`hoi4_construction_place` qualification retains original point, target and full
+queue identities, checks the complete typed direct-GUI route and verifies one
+exact +1 effect after a single ordinary click. Replay returns a historical
+receipt without input. Unknown paths refuse; no possible-input retry is allowed.
 
-Both modes prohibit console/debug/eval/fire_event, save editing, memory writes,
-hidden intelligence and reload-to-undo. META permits normal-UI metas and exploits;
-it does not waive those prohibitions. The older `hoi4-live-campaign` skill's
-QA setup and repeated pause/save examples are not the procedure for these runs.
+The recorded private component increased an own Brandenburg military-factory
+queue from 1 to 2. Its 17-call driver took 4.661 seconds including guards;
+placement took 2.326 seconds and replay 72.178 ms. There was no activation,
+cursor displacement, keyboard input, clock action, worker, screenshot or
+observation pause. Native H.264 recording finalized at 1920×1108, 93.211667 seconds,
+with 2,737 encoded/decoded frames and 2,737 complete capture callbacks. The owned
+session later exited 0 before its original fixed expiry; default settings stayed
+unchanged. See [the placement contract](MAC_CONTROLLER.md#construction-placement-qualification).
 
-## Actual local evidence and current smoke testing
+Source checks passed 1,941 Rust tests and 956 workspace Python tests (37 skips),
+four-target strict checks, release build and unchanged 28-tool unbound stdio.
+Another 149 optimized fixtures passed on byte-identical private code. These are
+offline checks, separate from the recorded component. The 38 unrelated legacy
+Python/package/test WIP paths remain untouched.
 
-The installed Mac binary is x86_64 **Case Green 1.18.0.0.858d (3bae)** on Apple
-Silicon. It is not the 1.19.2 Windows/reference build. Independent on-disk Mach-O
-research found candidate roots and a date representation, but none was validated
-against live own-country telemetry. Never copy the historical offsets.
+## Private continuation and retained failures
 
-A builder smoke test launched one normal, owned Mac process with a backed-up,
-telemetry-only playset. No campaign began. The first window action failed;
-subsequent native diagnostics established a **locked macOS interactive session**.
-Display wake restored an active display but did not unlock the session. The
-agent did not attempt to unlock it or bypass that boundary. Window discovery and
-prelaunch checks were improved from this incident.
+A fresh owned native Mac session started at 1920×1080, Normal difficulty,
+historical AI and vanilla rules. It later closed with exit 0 through its verified
+supervisor's owned SIGTERM cleanup; default settings stayed unchanged. The
+conditional window-restore watcher detected a later change in the Docker window
+position and preserved it. No live grant, lease, game client or recorder remains.
+The last task-port check refused with -60007. Future gates need fresh ownership,
+authorization and an original lifetime; never reuse the closed session's bounds.
 
-Read-only task access to the exact owned process was also denied (`task_for_pid`,
-Mach status 5); zero game-memory bytes were read. The permitted fallback is
-telemetry/UI on an unlocked interactive desktop, without root, SIP changes or
-re-signing the game.
+- The first opener harness refused before input because its lease holder differed.
+- The corrected opener sent one verified ordinary T, then its harness mishandled
+  a nullable diagnostic field. A separate zero-key continuation verified both
+  historical replay and the already-open path without repeating T.
+- The first cancellation gate verified an inactive no-op, its historical replay
+  and one ordinary template-selection click. Selected cancellation then refused
+  before Escape because a GUI lifetime collection was nonempty. Its recording
+  hit the storage guard; the decodable video does not make that recording gate
+  successful.
+- A later cancellation gate refused before intent or Escape at the owned outer
+  event-receiver check. Its 11 RPCs included one error, zero game input and zero
+  journal rows; lease release and MCP EOF were clean. Its component recording
+  finalized at 1920×1108, 108.873333 seconds, 3,200 encoded/decoded frames and 3,199
+  independent complete callbacks. The counter difference is retained.
+- Read-only diagnosis identified one exact hidden plane-selection lifetime object
+  and the owned HotkeyManager forwarding path for ordinary Escape. A subsequent
+  read-only binding check refused because the renderer source list changed
+  between fresh snapshots. No key or intent was sent. The private fix retains
+  the original close target and callback while recomputing the complete current
+  keyboard predicate; the subsequent ordinary action result follows below.
 
-The builder verified the owned process identity, terminated only that smoke-test
-process and confirmed its exit. The original `dlc_load.json`, `pdx_settings.txt`
-and `settings.txt` were restored byte-for-byte and verified by SHA-256. A small
-settings rewrite by the game was preserved separately before restoring the
-baseline. No Windows game was launched or controlled.
+The next private gate sent one ordinary Escape and received a Verified receipt
+in 686.065 ms, with canonical inactive selection and exact complete-queue
+preservation checked within that attempt. The harness then compared raw queue
+observations, including their changing `freshness` metadata, and stopped. Both
+complete typed queue projections are equal; the raw failure remains preserved.
+There were 12 RPCs, zero RPC errors, one Escape, no historical replay, and exactly
+one Dispatching → Verified journal pair. Lease release and MCP EOF exited cleanly.
+The native recording finalized at 1920×1108, 64.770 seconds, 1,906 encoded/decoded
+frames and 1,906 independent complete callbacks, with explicit stop and exit 0.
 
-The MCP registration was added to the local Codex configuration with campaign,
-FAIR and owned-only settings, and external artifact/call-log paths. Existing
-configuration bytes were preserved with a private backup. The installed
-Homebrew CLI shim was broken; the working app-bundled CLI verified registration.
-The active chat may need a fresh server connection to expose newly registered
-tools. Do not publish the private config backup or raw smoke artifacts.
+A separate historical-only continuation passed with cancellation permission
+disabled and the old qualification deadline unchanged. Its 19 RPCs took 2.417
+seconds with zero errors; replay took 76.368 ms and sent no input. The complete
+baseline, inactive selection, cursor and original two-row journal bytes/mtime
+stayed unchanged. Native recording finalized at 1920×1108, 33.881667 seconds and
+993 encoded/decoded frames, matching all 993 complete callbacks. Both phases'
+grants, leases, MCP servers and recorders are closed. The game has not advanced;
+there is no real-time-per-game-year result.
 
-The desktop was subsequently unlocked and live work resumed. A temporary macOS
-power assertion prevents idle sleep while testing; saved power preferences were
-not changed. The user now permits mods that support live play, while campaign
-gameplay rules remain vanilla. The current run enables only observational
-telemetry. Additional helpers require review before entering the campaign playset.
+## Continue from here
 
-The resumed builder smoke tests found and corrected these failures:
+The separate Linux FEX Rust-adapter trial also closed. Its one Research opener
+timed out, leaving one uncertain Intent without a Verified receipt; a later
+visible panel was not promoted. Preserve that failure while investigating
+rendering/input delay. The internal retained queue foundation passed 21 fixtures
+on both the Mac host and actual ARM Linux, with no action or worker permission.
+The later GL1 frontend attempt failed during graphics initialization with Missing
+GL version and SIGSEGV; ordinary close also failed. Its exact owned processes,
+including a forked crash process missed by the helper, were separately closed.
+The fresh no-recorder GL0 trial also timed out at the original Research deadline,
+with a shown root still in transition [0, 1]. Its oversized frontend diagnostic
+blocked helper cleanup before a close intent; a separate ordinary close exited
+the game, and exact resource cleanup finished without a game signal. Both failures
+are retained. No game or input authority remains. The internal queue now also offers an opt-in
+typed Linux selection read in that same witness, with default readers unchanged.
+Current standalone checks pass 2,286 Rust tests, four-target strict checks,
+release and unchanged 28-tool unbound stdio; actual ARM Linux passed 32 optimized
+queue/selection fixtures. The workspace Python suite passed 956 tests (37 skips).
+Another 18 optimized fixtures passed on actual ARM Linux for the internal
+navigation-only Research transit. It retains the original Focus/production goal
+without an empty Research slot dependency; executable routing, worker permissions
+and persisted journals remain unchanged.
+These checks do not qualify the private composite worker or a live campaign.
 
-- Fullscreen window focus/discovery mishandled a same-process title overlay and
-  windows on another Space. Ownership remains tied to creation and executable.
-- ScreenCaptureKit applied the window origin twice, shifting captures by 68
-  physical pixels and causing a menu misclick. The multiplayer menu opened;
-  no lobby was joined. Comparison with Quartz now shows aligned captures.
-- A recording supervisor died with its spawning process group. Its zero-byte
-  output was rejected. The corrected supervisor produced six live segments,
-  1,039 decoded frames at 3420 × 2146, approximately 173.5 seconds, with all
-  ffprobe checks passing and graceful stop verified. This is recording smoke
-  evidence, not campaign-duration throughput acceptance.
-- A pre-campaign relaunch inherited the user's restored playset. No campaign
-  began in that process. It was closed and original configuration restored;
-  launch now validates the reviewed campaign playset before starting.
-- Owned child-process exit now reaps the child instead of treating a zombie as
-  a running game. Configuration restoration followed verified exit.
+A later lower-decoration 1080p Linux diagnostic stopped during menu setup before
+Start or Research input; it provides no new Research-latency result. Its compact
+metadata allowed ordinary close with oversized telemetry, but full cleanup hit
+an exit-time descendant census race. Independent cleanup closed the exact owned
+display resources without a game signal. No live authority remains. A separate
+offline correction passed 111 mocked helper fixtures; live qualification remains
+open. Preserve the menu refusal and original cleanup failure.
 
-Germany's 1936 setup visibly showed Regular (Normal) difficulty, historical AI
-on and Ironman off. The ordinary Custom Game Rules → Reset → Apply action was
-verified, with evidence retained; individual rule values were not exhaustively
-read. START was issued and an own-country GER telemetry handshake appeared.
-The map date was independently read from a logical-resolution frame. A transient
-display loss interrupted the original startup call; the game remained paused on
-day one. Session capture/input now share logical client coordinates, while
-recording retains native backing pixels. Daily telemetry and in-game action
-verification have now reached June 1936. This builder smoke run is not the clean
-Luna acceptance run; its initial empty queues and diagnostic pauses are recorded
-failures, not accepted play.
+The new retained Linux typed Research reader also passed 30 optimized sparse
+fixtures on actual ARM Linux without a game or input. It preserves original
+ownership, membership and caller deadlines; it grants no executable navigation
+or worker permission.
 
-Focus observation now has bounded, generation-matched, closed daily batches for
-the current tree's completed IDs and progress bounds. Progress never establishes
-which focus is active. Current focus identity requires unique screen evidence;
-unreadable state remains unknown. An actual 122-day sample contained 122 closed
-focus batches and no malformed records or generated-script errors; parsing its
-2,676 records took approximately 37 ms. This is a smoke sample, not a controlled
-measurement of game script overhead. Campaign selection requires an installed
-ID and verified Start requirements. Freshness checks reject unrelated stale
-save metadata.
+The internal Linux ordinary-navigation stage now has a separate durable journal,
+once-only stationary W adapter and post-idle original-scope readback. Actual ARM
+Linux passed 56 targeted synthetic fixtures, including transaction and cross-domain
+quarantine checks; there was no game or input. Historical receipts grant no current
+proof, and input-bearing controller restart recovery is still blocked. Public tools
+and mixed-worker permissions remain unchanged; this is not a new live acceptance.
 
-The UI selected `GER_the_four_year_plan`, and closed telemetry subsequently
-confirmed its completion on 8 June after 25 observed positive-progress days.
-Campaign clock completion now uses these actual ID transitions rather than an
-estimated duration or generic notice. A 37-day bounded advance took 29.3 seconds
-and left the game running with zero pauses inside that advance; a separate
-explicit diagnostic pause then stopped on 22 June. That distinction matters for
-whole-run pause accounting. Focus governor dispatch/retries and completion
-transitions pass offline tests but still need live integrated validation.
+Finish the new decimal-character gate when macOS authorization is available, then integrate
+construction into mixed standing plans. Continue with one Luna-medium player,
+fresh original scope, complete queue, native geometry and strict once-only
+receipts. Complete advancing-time acceptance, shortage repair and warfare
+automation before the full campaigns.
+All showcase recordings must come from native macOS at 1920×1080 or higher.
 
-The governor retains pending focus preferences after failed or ambiguous
-actions. Verified busy deferrals do not exhaust the retry budget. Progress can
-postpone ordinary UI rechecks; otherwise a seven-day recheck bounds stale
-selection evidence. Completion releases the next preference immediately. This
-schedule does not prove continuous focus occupancy or eliminate all idle time.
-
-Latest local validation passed **767 tests, 26 skipped**, plus compilation, stdio
-initialization/tool discovery/campaign refusal and a clean whitespace check. All
-four Windows/macOS × Python 3.9/3.13 jobs passed for `14135b7`; the new focus
-governor changes still need their own cross-platform CI run.
-Skips include platform-specific and unavailable private-fixture cases. Hosted
-runners cannot prove native game behavior. No clean two-year run, complete
-showcase, validated Mac memory layout or release acceptance has been achieved.
-
-## Resume from here
-
-1. Preserve exclusive game input ownership during the active builder smoke test.
-   Recheck session/display/permission capabilities at each owned launch.
-2. Complete the current normal smoke run's live daily telemetry, Retina/UI scale,
-   input, clipboard, OCR and action readback checks. Retain segmented recording
-   and incidents outside Git; restore configurations only after verified exit.
-3. Finish fresh ID-based focus/construction/production/army observations and
-   verified daily execution; connect the FAIR reviewer to trusted observations.
-   Prove shortages are repaired rather than merely reported. Preserve pending
-   plan entries through failed or ambiguous actions.
-4. Implement and validate war/invasion verbs, including assignment, fronts,
-   offensives, supplied staging, transport capacity, supremacy, escort/air
-   support, launch, landing and reinforcement. Pixel change alone is insufficient
-   action proof. Collect end-to-end pause/latency/coverage measurements; current
-   fast-clock pause metrics cover only their run scope.
-5. Only then give one Luna player exclusive input for the clean acceptance run.
-   Keep recording, calls, manifest, journal and incidents outside Git. A rescued
-   or failed run cannot be relabeled clean. Complete all three showcases after
-   acceptance, then validate Windows regressions before release/pin changes.
-
-The earlier locked-desktop prerequisite is resolved. The unfinished governor,
-FAIR observation adapter and war automation remain internal implementation gaps,
-not external blockers or completed work.
+Read [the current handoff](LINUX_RUST_HANDOFF.md),
+[controller contract](MAC_CONTROLLER.md),
+[validation record](CLAUSEWITZ_VALIDATION.md) and
+[playbook](../skills/hoi4-campaign-playbook/SKILL.md).
+The former long checkpoint is preserved byte-for-byte in
+[the 24 October Mac archive](MAC_CHECKPOINT_HISTORY_20261024.md).
+Earlier stop times and process identities in that archive are historical.

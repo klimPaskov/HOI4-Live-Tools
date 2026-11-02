@@ -49,10 +49,103 @@ Save a private JSON configuration with these fields:
 | `settings_seed` | Optional absolute regular settings file, bounded to 1 MiB |
 | `renderer` | Optional `default`, `llvm_pipe` or `virpipe` |
 | `gpu_transport` | Optional private owned Unix socket; required for `virpipe` |
+| `fex` | Optional explicit ARM64 translator configuration described below; omitted for native launch |
 
 The settings seed is copied into new isolated userdata. The only game launch
 argument is `-userdir=...`; the fresh playset enables no mods. Default user
 settings and playsets are never modified. Game output goes to a private file.
+
+### ARM64 Linux with FEX
+
+The experimental ARM64 runtime can launch the same verified x86 game through
+one reviewed FEX binary. Install and configure FEX and its x86 root filesystem
+separately; neither is bundled. Add this field to the private launch configuration:
+
+```json
+"fex": {
+  "executable": "/usr/bin/FEX",
+  "sha256": "bb7d1d4147e224ab83eef02c3fae59e86a297fa829c847a4afcc273f106f6057"
+}
+```
+
+This pin identifies the tested ARMv8.4 Ubuntu package `2610-1~n`. A caller-supplied
+hash cannot approve another translator. `executable` at the top level still
+identifies the licensed x86 game; its existing build ID and SHA-256 remain required.
+The kernel child identity names FEX, while the session's optional `translated`
+descriptor identifies the separate guest image. Omitting `fex` preserves native
+launching and the previous session format.
+
+For isolated graphics validation, `fex` also accepts an optional
+`config_directory` object with `directory`, `config_sha256` and
+`thunks_db_sha256`. The directory must be an absolute canonical private path,
+owned by the ordinary user, containing exactly `Config.json`, `ThunksDB.json`
+and a pre-existing empty `AppConfig/`. Pin the two files' actual lowercase
+SHA-256 values. Files are private regular files, bounded to 64 KiB each;
+symlinks, duplicate JSON fields, additional entries and changed identities are
+refused. The launcher never creates or repairs this profile.
+
+`Config.json` currently accepts only
+`{"Config":{"RootFS":"/absolute/rootfs.sqsh"},"ThunksDB":{"GL":1}}`,
+with `GL` either 0 or 1. `ThunksDB.json` uses FEX's `DB` definition format.
+The `GL` entry must name `libGL-guest.so`, retain the four stock legacy aliases
+and either omit or include all four reviewed split-library aliases:
+`libOpenGL.so.0`, `libOpenGL.so.0.0.0`, `libGLX.so.0` and `libGLX.so.0.0.0`,
+each under `@PREFIX_LIB@/`. Other database entries remain caller-reviewed,
+hash-pinned definitions; this option adds no local enable switches for them.
+The RootFS bytes and global FEX configuration remain separately provisioned
+inputs, not launcher-verified assets.
+
+The selected child alone receives `FEX_APP_CONFIG_LOCATION` with its required
+trailing slash. Inherited FEX environment variables are still cleared.
+Original directory/file metadata and hashes are rechecked before spawn and
+before endpoint publication; a replacement is never automatically rebound.
+Omitting this option preserves the existing FEX configuration lookup.
+FEX's global settings still load. See the
+[tagged configuration implementation](https://github.com/FEX-Emu/FEX/blob/FEX-2610/Source/Common/Config.cpp#L612)
+and [definition loader](https://github.com/FEX-Emu/FEX/blob/FEX-2610/Source/Tools/LinuxEmulation/LinuxSyscalls/FileManagement.cpp#L48).
+The unified GL profile passed isolated synthetic controls and a fresh actual-game
+startup at 1920×1080. Own-state reads passed, but the retained-goal Research
+action still timed out; gameplay performance and campaign acceptance remain
+unqualified. A later private bounded probe observed changing own animation
+values without a settled panel. Registration and raw values do not establish
+update cadence. See [the animation check](CLAUSEWITZ_VALIDATION.md#fex-bounded-animation-diagnostic--24-october-2026)
+and [the preceding installed-game check](CLAUSEWITZ_VALIDATION.md#fex-unified-profile-installed-game-check--24-october-2026).
+
+Readiness waits only for missing initial guest load coverage, within one ten-second
+deadline. Wrong hashes, ownership, offsets and permission errors do not retry.
+Snapshot checks pin guest file identity, load coverage and immutable headers;
+normal loader permission tightening is allowed. A changed bound image or kernel
+execution witness refuses without automatic rebinding. Duplicate detection covers
+native instances and mapped games under the reviewed FEX binary, including renamed
+copies, without inspecting every unrelated process's memory.
+
+Generated ARM-parent/x86-child tests verified scalar and batched reads, stale
+observation refusal after guest `execve` and FD-based `execveat`, duplicate
+detection, ordinary fixture exit and native CLI reconnects. The FD-based test
+also confirmed a FEX limitation: its restarted guest receives `argc=0`. The fixture
+records this explicitly and allows that marked generation only to report its
+nonce and quit; this is not evidence of correct guest argument handling.
+
+**The first actual HOI4/FEX launch failed before the menu**, reporting a missing
+OpenGL version and SIGSEGV. Its stuck crash handler required separately recorded
+forced cleanup after the owner's SIGTERM timeout. A later run with GL forwarding
+disabled and guest llvmpipe reached the native 1920x1080 frontend in 50.7 seconds
+and exited normally through ordinary window close. A prior attempt exhausted the
+four-GiB VM; temporary guest swap was present in the successful run. These startup checks
+were followed by own-country reads, ordinary menu navigation and stationary
+Research open/close qualification at 1080p with a diagnostic recording. See
+[the measured results](CLAUSEWITZ_VALIDATION.md#fex-own-state-and-stationary-input-qualification--22-october-2026).
+
+Translated input remains disabled by default. For controlled Rust-adapter validation,
+add `"translated_input_profile": "fex_2610_x11_1920x1080_validation_v1"` to the
+private **input binding**, not the launch configuration. It accepts only the
+reviewed translator/game builds and pins an actual 1920×1080 window even without
+optional domain profiles. Enabled domains must all use
+`linux_builtin_absolute_1920x1080_v1`. Native sessions reject this translated
+profile. This opt-in retains the existing exclusive lease, ordinary X11 controls,
+ID-derived previews, journaling and fresh readback; it does not approve a campaign
+or weaken ownership/guest-image checks. Live Rust-adapter acceptance is pending.
+Future campaigns must use native 1920×1080 or higher after independent validation.
 
 Build and start the supervisor in its own persistent terminal/service:
 
@@ -141,7 +234,9 @@ Normal difficulty, historical AI and the selected own-player tag.
 | `window` | Verified owned X11 window ID |
 | `window_class` | Exact complete `WM_CLASS` property as a byte array |
 | `menu_evidence_ids` | IDs in the private recording/journal proving ordinary singleplayer setup |
-| `research_profile` | Optional owner-reviewed `linux_builtin_absolute_512x288_v1`; omission keeps clock-only input |
+| `translated_input_profile` | FEX only: explicit 1080p validation opt-in described above; otherwise omit |
+| `research_profile` | Optional reviewed client profile below; enables ordinary Research controls |
+| `production_profile` | Optional matching client profile; enables ordinary production controls |
 
 ```sh
 native/target/release/hoi4-live-native --bind-input /absolute/private/run /absolute/private/input.json
@@ -150,6 +245,33 @@ native/target/release/hoi4-live-native --bind-input /absolute/private/run /absol
 The binding is immutable for that owner. Stop all builder input before binding.
 Menu evidence is an operator responsibility; the reader does not prove every
 multiplayer flag. The private binding records this limitation.
+
+Research, Focus, construction and production accept two exact builtin profiles:
+
+| Profile | Physical client | Logical graphics | Status |
+| --- | --- | --- | --- |
+| `linux_builtin_absolute_1920x1080_v1` | 1920×1080 | 1920×1080 | Own-state/XTest key/diagnostic recording verified on FEX; Rust adapter acceptance pending |
+| `linux_builtin_absolute_512x288_v1` | 512×288 | 2560×1440 | Preserved diagnostic profile; not for future campaign tests |
+
+All enabled domain profiles must agree. The owner pins the actual X11 client
+dimensions; resizing refuses subsequent keys and pointer actions before dispatch.
+Fresh engine graphics and SDL/X11 association must match the chosen profile.
+Coordinates come from named renderer geometry, never from scaled old pixels.
+Unknown sizes, logical scaling and mixed profiles refuse explicitly. Omitting all
+domain profiles preserves the legacy clock-only binding.
+
+Future campaigns and recordings require native 1920×1080 or higher and readable
+UI. The current profile does not yet support arbitrary larger sizes. Validate
+actual game geometry, UI and recording performance before campaign Start;
+selecting a profile alone is not live qualification.
+
+The production preview requires the chosen owned client and matching logical
+graphics. Its `production-actions.jsonl` keeps the original line identity and
+count before a click. An unresolved intent blocks all shared input domains;
+do not delete it, change request IDs or create a fresh binding to bypass it.
+See [the tool contract](../native/README.md#tools) for arguments and recovery
+limits. The separate opening tool can open production; equipment-line creation
+remains unavailable.
 
 The MCP then advertises `hoi4_input_lease` and `hoi4_time`. Acquire with
 `{"op":"acquire","holder":"luna-linux-player","seconds":300}`. Only the
@@ -183,11 +305,11 @@ it does not verify strategic actions or a complete campaign. See the
 
 ## Ordinary research preview
 
-The owner may add `"research_profile": "linux_builtin_absolute_512x288_v1"`
-to the private binding after corroborating its owned client. This narrow profile
-requires a 512×288 client, 2560×1440 logical graphics and the verified builtin
-absolute SDL/X11 association. Other profiles are unavailable. Omission preserves
-clock-only input. Recorded run 019 passed the assembled owner adapter with
+The owner may add `"research_profile": "linux_builtin_absolute_1920x1080_v1"`
+to the private binding after corroborating its owned client. This requires the
+exact physical/logical dimensions and builtin absolute SDL/X11 association listed
+above. Installed-game qualification of this resolution remains pending. Recorded
+run 019 used the older diagnostic profile and passed the assembled owner adapter with
 exclusive Luna medium input: exact-ID selection/assignment, independent canonical
 slot readback and counter advancement. Later runs verified panel opening and
 empty-slot navigation. Full campaign acceptance remains unfinished. See
@@ -232,11 +354,11 @@ or campaign acceptance.
 ## Focus and daily previews
 
 The private owned input binding can separately enable
-`"focus_profile": "linux_builtin_absolute_512x288_v1"` and
+`"focus_profile": "linux_builtin_absolute_1920x1080_v1"` and
 `"daily_prepared_research": true`. Both default off. The daily preview also
 requires the research profile. These are owner settings, not player-supplied
-geometry; they require the same reviewed 512×288 client and 2560×1440 logical
-profile used by research. Their installed-game acceptance is pending.
+geometry; they require the same reviewed client profile used by research.
+Installed-game acceptance at 1080p is pending.
 
 `hoi4_focus_attempt` accepts `stage`, `focus_id`, `request_id` and `lease_token`.
 Stages are `open_politics`, `close_politics`, `open_focus`, `view` and `start`. Each attempts at

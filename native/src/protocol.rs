@@ -8,6 +8,8 @@ use crate::{
 use serde_json::{json, Value};
 use std::time::{Duration, Instant};
 mod assignment_wait;
+pub mod worker_events;
+mod worker_wait;
 pub struct Server {
     pub process: Option<Box<dyn Process + Send + Sync>>,
     pub unavailable: Option<Error>,
@@ -19,31 +21,64 @@ pub trait Commands: Send + Sync {
     fn supports(&self, name: &str) -> bool;
     fn call(&self, process: &dyn Process, name: &str, args: &Value) -> Result<Value>;
     fn capabilities(&self) -> Value;
+    /// Where the standing plan lives (`hoi4_plan`, `hoi4_plan_run`), if this
+    /// adapter has a run directory.
+    fn plan_path(&self) -> Option<std::path::PathBuf> {
+        None
+    }
+    /// State of the server-side `stop_on_date` watcher, when this adapter has one.
+    fn date_stop_status(&self) -> Option<Value> {
+        None
+    }
+    /// Read-only lifecycle notification scoped to this exact owned controller.
+    /// Default readers have no worker and retain ordinary bounded polling.
+    fn wait_events(&self) -> Option<std::sync::Arc<worker_events::Events>> {
+        None
+    }
 }
+
+/// The server's own tools as the plan runner's tool set.
+struct Internal<'a> {
+    server: &'a Server,
+    commands: &'a dyn Commands,
+}
+impl crate::plan_run::Tools for Internal<'_> {
+    fn call(&self, name: &str, args: &Value) -> Result<Value> {
+        // Internal read for the runner (never a listed tool): the date watcher's state.
+        if name == "hoi4_date_stop" {
+            return self.commands.date_stop_status().ok_or_else(|| {
+                Error::new("capability_unavailable", "No server-side date watcher")
+            });
+        }
+        self.server.call(name, args, Some(self.commands))
+    }
+}
+static PLAN_STATE: std::sync::Mutex<Option<crate::plan_run::State>> = std::sync::Mutex::new(None);
 fn tools(commands: Option<&dyn Commands>) -> Value {
     let mut value = json!({"tools":[
         {"name":"hoi4_capabilities","description":"Verified runtime capabilities and explicit platform/build limitations.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}},
         {"name":"hoi4_overview","description":"Fresh owned-country process snapshot. Pure bounded reads; never pauses.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}},
         {"name":"hoi4_research","description":"Fresh own completed technology IDs with bounded pagination, and active raw research counters. Progress units, days remaining and eligibility remain unverified. Pure reads; never pauses.","inputSchema":{"type":"object","properties":{"offset":{"type":"integer","minimum":0,"maximum":8192},"limit":{"type":"integer","minimum":1,"maximum":100}},"additionalProperties":false}},
-        {"name":"hoi4_input_geometry","description":"Read-only own GUI pointer, dimensions and scale diagnostics. Does not prove client origin, control geometry or click authorization.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}},
+        {"name":"hoi4_input_geometry","description":"Read-only own GUI dimensions and scale diagnostics. Mac-only include_source_point adds witnessed cached ordinary SDL coordinates joined to the owned window; defaults off. No current event/frame, hit routing or input authorization.","inputSchema":{"type":"object","properties":{"include_source_point":{"type":"boolean","default":false}},"additionalProperties":false},"annotations":{"readOnlyHint":true}},
         {"name":"hoi4_research_slot_control","description":"One own research slot by current array index: conditional ordinary callback binding and raw typed renderer diagnostics. Optional include_geometry adds bounded Sprite cache and typed hierarchy observations. No guessed Background name, coordinates or input authorization.","inputSchema":{"type":"object","properties":{"slot":{"type":"integer","minimum":0,"maximum":31},"include_geometry":{"type":"boolean"}},"required":["slot"],"additionalProperties":false}},
         {"name":"hoi4_research_category","description":"Read-only exact public folder ID association with the current own research tree, named tab, dense selection index and ordinary callback. Optional raw Sprite diagnostics; no tab switch or input authorization.","inputSchema":{"type":"object","properties":{"folder_id":{"type":"string","minLength":1,"maxLength":256},"include_geometry":{"type":"boolean"}},"required":["folder_id"],"additionalProperties":false}},
-        {"name":"hoi4_research_folders","description":"Fresh sorted exact installed public research-folder IDs, independent of open GUI. Use these canonical keys rather than display labels; no aliases, eligibility, geometry or input authorization. Pure reads; never pauses.","inputSchema":{"type":"object","properties":{},"additionalProperties":false},"annotations":{"readOnlyHint":true}},
+        {"name":"hoi4_research_folders","description":"Fresh sorted exact installed public research-folder IDs for the verified Linux layout. Native macOS returns unsupported_platform before memory reads. Independent of open GUI; canonical keys only, with no aliases, eligibility, geometry or input authorization. Pure reads; never pauses.","inputSchema":{"type":"object","properties":{},"additionalProperties":false},"annotations":{"readOnlyHint":true}},
         {"name":"hoi4_research_ui","description":"Bounded own research slot widgets, selected slot, canonical technology Info windows, named ordinary research button state and exact render diagnostics. No eligibility, hit routing or input authorization.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}},
         {"name":"hoi4_army","description":"Bounded own-country divisions with observation-scoped full handles, selected own location joins and raw signed strength/organisation. No persistent IDs, normalized units, enemies or actions.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}},
         {"name":"hoi4_economy","description":"Own-country named factory trigger counts, civilian project capacity and signed fixed-point political power. Pure reads; UI totals, stability, war support and shortages unavailable.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}},
         {"name":"hoi4_production_lines","description":"Fresh own equipment-line collection only, validated in full before paging; default page 32. Exact Military/Naval snapshot-scoped opaque handles and signed active/damaged/requested factory counters. Unsupported types are metadata only, ownership unproved; completeness describes this collection's type coverage. Known owned lines can expose a base equipment type key after fresh canonical membership and variant/type checks; explicit unavailability covers unreviewed types. Custom variant identity, general production, allocation/idle capacity, eligibility and input authority unavailable. Pure reads; never pauses.","inputSchema":{"type":"object","properties":{"offset":{"type":"integer","minimum":0,"maximum":2048,"default":0},"limit":{"type":"integer","minimum":1,"maximum":128,"default":32}},"additionalProperties":false},"annotations":{"readOnlyHint":true}},
-        {"name":"hoi4_construction_queue","description":"Read-only preview of own construction collection, validated fully before paging. Exact Building/Railway types, reciprocal owner and snapshot-scoped full handles; named cost/produced/speed and factory counters. Building keys use fresh template catalog joins. Unknown types are metadata only. Progress ratio is unclamped produced/cost, not ETA or completion; optional include_location adds selected-building state/province IDs only for own-owned-and-controlled territory with reciprocal catalog/status joins. Default false avoids location reads. Optional include_ui implies location reads and joins visible-panel row text to exact own located building handles; displayed text may be stale and never authorizes input. It also reports owned construction selection modes 0/1/3 and canonical building key, independent of queued lines; selection does not prove placement eligibility or map routing. Railway paths, allocation and input remain unavailable. Run071 observed one advancing dockyard; Run072 observed its state/label with a late-lease protocol deviation. Selection, province and railway live validation pending. Never pauses.","inputSchema":{"type":"object","properties":{"include_location":{"type":"boolean","default":false},"include_ui":{"type":"boolean","default":false},"offset":{"type":"integer","minimum":0,"maximum":2048,"default":0},"limit":{"type":"integer","minimum":1,"maximum":128,"default":32}},"additionalProperties":false},"annotations":{"readOnlyHint":true}},
+        {"name":"hoi4_construction_queue","description":"Read-only preview of own construction collection, validated fully before paging. Exact Building/Railway types, reciprocal owner and snapshot-scoped full handles; named cost/produced/speed and factory counters. Building keys use fresh template catalog joins. Unknown types are metadata only. Progress ratio is unclamped produced/cost, not ETA or completion; optional include_location adds selected-building state/province IDs only for own-owned-and-controlled territory with reciprocal catalog/status joins. Default false avoids location reads. Optional include_ui requires the verified Linux layout and refuses native macOS before process reads; it implies location reads and joins visible-panel row text to exact own located building handles; displayed text may be stale and never authorizes input. It also reports owned construction selection modes 0/1/3 and canonical building key, independent of queued lines; selection does not prove placement eligibility or map routing. Railway paths, allocation and input remain unavailable. Run071 observed one advancing dockyard; Run072 observed its state/label with a late-lease protocol deviation. Selection, province and railway live validation pending. Never pauses.","inputSchema":{"type":"object","properties":{"include_location":{"type":"boolean","default":false},"include_ui":{"type":"boolean","default":false},"offset":{"type":"integer","minimum":0,"maximum":2048,"default":0},"limit":{"type":"integer","minimum":1,"maximum":128,"default":32}},"additionalProperties":false},"annotations":{"readOnlyHint":true}},
         {"name":"hoi4_research_node_detail","description":"One exact own current technology key: complete current-record ownership checks, target-only raw renderer/hierarchy and own detail-state diagnostics. Unrelated GUI is outside scope; no client rectangle or input authorization.","inputSchema":{"type":"object","properties":{"technology_id":{"type":"string","minLength":1,"maxLength":256}},"required":["technology_id"],"additionalProperties":false}},
         {"name":"hoi4_research_nodes","description":"Current own-tree nodes joined to public technology keys and conditional ordinary-control diagnostics. Full model validated before prefix filtering/pagination; default page 25. Visibility, eligibility and click routing unavailable. Pure reads; never pauses.","inputSchema":{"type":"object","properties":{"filter":{"type":"string","maxLength":128},"offset":{"type":"integer","minimum":0,"maximum":512},"limit":{"type":"integer","minimum":1,"maximum":100}},"additionalProperties":false}},
-        {"name":"hoi4_focus_list","description":"Bounded own canonical focus keys and own selected detail windows. All own memberships and keys validated before pagination; branch visibility, eligibility and input authorization unavailable. Pure reads; never pauses.","inputSchema":{"type":"object","properties":{"filter":{"type":"string","maxLength":128},"offset":{"type":"integer","minimum":0,"maximum":4096},"limit":{"type":"integer","minimum":1,"maximum":100}},"additionalProperties":false}},
+        {"name":"hoi4_focus_list","description":"Bounded own canonical focus keys; filter is a case-sensitive key prefix. Linux also reports own selected details; Mac reports catalog only. All own memberships and keys validated before pagination; branch visibility, eligibility and input authorization unavailable. Pure reads; never pauses.","inputSchema":{"type":"object","properties":{"filter":{"type":"string","maxLength":128},"offset":{"type":"integer","minimum":0,"maximum":4096},"limit":{"type":"integer","minimum":1,"maximum":100}},"additionalProperties":false}},
         {"name":"hoi4_focus_completed","description":"Preview: fresh own completed-focus membership from the current Linux engine predicate, with active key and bounded sorted pages. Independent of open GUI; all members validated before paging. Completion cause, repeat counts, changed/shared trees and eligibility unavailable. Bounded Linux Rhineland completion verified; other Focus trees and full campaigns unverified. Pure reads; never pauses.","inputSchema":{"type":"object","properties":{"offset":{"type":"integer","minimum":0,"maximum":4096},"limit":{"type":"integer","minimum":1,"maximum":100}},"additionalProperties":false},"annotations":{"readOnlyHint":true}},
         {"name":"hoi4_focus_search_state","description":"Read-only current own Focus search highlight and match counts for an exact canonical focus_id. Validates all search-cache/current-item joins before returning the selected key. A highlight is not an open detail, assignment or eligibility proof. Optional include_control adds exact own query text, listener and renderer diagnostics. Independent keyboard/text receiver identities are diagnostic; effective delivery and input authority remain unavailable.","inputSchema":{"type":"object","properties":{"focus_id":{"type":"string","minLength":1,"maxLength":128},"include_control":{"type":"boolean","default":false}},"required":["focus_id"],"additionalProperties":false},"annotations":{"readOnlyHint":true}},
         {"name":"hoi4_focus_node_detail","description":"Exact own focus key joined to complete current-item ownership and only the requested control/callback metadata. Optional raw Sprite/Text/Frame diagnostics; no input or eligibility authority.","inputSchema":{"type":"object","properties":{"focus_id":{"type":"string","minLength":1,"maxLength":128},"include_geometry":{"type":"boolean","default":false}},"required":["focus_id"],"additionalProperties":false}},
         {"name":"hoi4_focus_selected_detail","description":"Compact fresh exact own selected focus detail window. Start binding is window.start.ordinary_binding; the node symbol is a separate control. Refuses missing, different or multiple selected details. Optional existing raw renderer diagnostics; no client point, input or eligibility authority.","inputSchema":{"type":"object","properties":{"focus_id":{"type":"string","minLength":1,"maxLength":128},"include_geometry":{"type":"boolean","default":false}},"required":["focus_id"],"additionalProperties":false},"annotations":{"readOnlyHint":true}},
         {"name":"hoi4_technology_list","description":"Canonical loaded public technology IDs with bounded filtering/pagination. Catalog membership does not imply player research eligibility. Pure reads; never pauses.","inputSchema":{"type":"object","properties":{"filter":{"type":"string","maxLength":128},"offset":{"type":"integer","minimum":0,"maximum":8192},"limit":{"type":"integer","minimum":1,"maximum":100}},"additionalProperties":false}},
-        {"name":"hoi4_wait_for","description":"Bounded server wait for own focus/research change, game date, research UI, or all explicit until_assignments targets. Assignment targets check the first sample too and mean active focus/current slot assignment, not completion over game time or a durable plan receipt. Choose one target family. UI/assignment matches do not authorize input. Wall timeout returns only an explicitly historical earlier accepted sample; no late target is accepted. Never pauses.","inputSchema":{"type":"object","properties":{"timeout_seconds":{"type":"integer","minimum":1,"maximum":50},"until_date":{"type":"array","items":{"type":"integer"},"minItems":3,"maxItems":3},"until_assignments":{"type":"object","properties":{"focus_id":{"type":"string","minLength":1,"maxLength":128,"pattern":"^[A-Za-z0-9_]+$"},"research":{"type":"array","maxItems":32,"items":{"type":"object","properties":{"slot":{"type":"integer","minimum":0,"maximum":31},"technology_id":{"type":"string","minLength":1,"maxLength":256,"pattern":"^[A-Za-z0-9_]+$"}},"required":["slot","technology_id"],"additionalProperties":false}}},"anyOf":[{"required":["focus_id"]},{"required":["research"],"properties":{"research":{"minItems":1}}}],"additionalProperties":false},"until_research_ui":{"type":"object","properties":{"view":{"type":"string","enum":["panel","tree"]},"selected_slot":{"type":"integer","minimum":0,"maximum":31}},"required":["view"],"additionalProperties":false}},"additionalProperties":false}}
+        {"name":"hoi4_wait_for","description":"Bounded server wait for own focus/research change, game date, research UI, or all explicit until_assignments targets. Assignment targets check the first sample too and mean active focus/current slot assignment, not completion over game time or a durable plan receipt. Choose one target family. Date/assignment waits pin the current owned worker and wake on its terminal disposition or owner retirement; lifecycle evidence is historical and proves no completion. A wait begun without a worker does not attach to a later plan. UI/assignment matches do not authorize input. Wall timeout returns only an explicitly historical earlier accepted sample; no late target is accepted. Never pauses.","inputSchema":{"type":"object","properties":{"timeout_seconds":{"type":"integer","minimum":1,"maximum":50},"until_date":{"type":"array","items":{"type":"integer"},"minItems":3,"maxItems":3},"until_assignments":{"type":"object","properties":{"focus_id":{"type":"string","minLength":1,"maxLength":128,"pattern":"^[A-Za-z0-9_]+$"},"research":{"type":"array","maxItems":32,"items":{"type":"object","properties":{"slot":{"type":"integer","minimum":0,"maximum":31},"technology_id":{"type":"string","minLength":1,"maxLength":256,"pattern":"^[A-Za-z0-9_]+$"}},"required":["slot","technology_id"],"additionalProperties":false}}},"anyOf":[{"required":["focus_id"]},{"required":["research"],"properties":{"research":{"minItems":1}}}],"additionalProperties":false},"until_research_ui":{"type":"object","properties":{"view":{"type":"string","enum":["panel","tree"]},"selected_slot":{"type":"integer","minimum":0,"maximum":31}},"required":["view"],"additionalProperties":false}},"additionalProperties":false}}
     ]});
+    value["tools"].as_array_mut().unwrap().push(json!({"name":"hoi4_focus_input_probe","description":"Read-only Mac preview: witness the exact unfinished own Focus node in an already-open idle tree using the input binding. Optional include_pan also verifies complete obstacle geometry. Reports bounded logical payload-read counts and whole-observation time, with no controller, navigation, cursor movement, pause, eligibility or input authority. Other platforms explicitly refuse.","inputSchema":{"type":"object","properties":{"focus_id":{"type":"string","minLength":1,"maxLength":128,"pattern":"^[A-Za-z0-9_]+$"},"include_pan":{"type":"boolean","default":false}},"required":["focus_id"],"additionalProperties":false},"annotations":{"readOnlyHint":true}}));
     value["tools"]
         .as_array_mut()
         .unwrap()
@@ -52,6 +87,22 @@ fn tools(commands: Option<&dyn Commands>) -> Value {
         .as_array_mut()
         .unwrap()
         .push(construction::find_view::tool());
+    value["tools"]
+        .as_array_mut()
+        .unwrap()
+        .push(construction::target_snapshot::tool());
+    value["tools"]
+        .as_array_mut()
+        .unwrap()
+        .push(construction::mac_ui::tool());
+    value["tools"]
+        .as_array_mut()
+        .unwrap()
+        .push(construction::mac_panel::tool());
+    value["tools"]
+        .as_array_mut()
+        .unwrap()
+        .push(production_lines::control_snapshot::tool());
     if let Some(commands) = commands {
         value["tools"]
             .as_array_mut()
@@ -406,7 +457,7 @@ impl Server {
             .ok_or_else(|| Error::new("invalid_arguments", "Tool arguments must be an object"))?;
         match name {
             "hoi4_capabilities" if object.is_empty() => Ok(
-                json!({"runtime":"rust","platform":std::env::consts::OS,"owned_session_bound":self.process.is_some(),"unavailable":self.unavailable,"observations":["own_construction_controls","own_construction_queue","own_equipment_production_lines","public_research_folder_catalog","own_research_category_associations","own_research_slot_callback_diagnostics","own_division_snapshot_identifiers","own_economy_trigger_counts","own_focus","own_research","clock","bounded_wait","technology_definitions","gui_input_diagnostics","own_research_ui_diagnostics","own_current_research_nodes","own_research_node_detail_diagnostics","own_focus_catalog_ui","own_focus_selected_detail","own_focus_completion_membership","own_focus_search_selection"],"commands":commands.map(|c| c.capabilities()).unwrap_or_else(|| json!("unavailable: no verified input binding")),"unverified_observations":["own_construction_controls","own_construction_queue","own_equipment_production_lines","own_research_category_associations"],"bounded_observation_validation":{"own_construction_queue":"run071: one dockyard identity and produced-work advancement; run072: state56 and stored UI label, late-lease deviation. Selection, province, railway and precise numeric UI comparison unverified","own_focus_completion_membership":"run052: actual Rhineland completion on the supported Linux build","own_focus_search_selection":"run068: exact query, six canonical matches, three ordinary Tab steps and View"},"native_transactions":"unavailable: failed posting path quarantined","default_mode":"FAIR","mod_qa":"separate; unavailable in this runtime","windows_macos":"unverified native adapters"}),
+                json!({"runtime":"rust","platform":std::env::consts::OS,"owned_session_bound":self.process.is_some(),"unavailable":self.unavailable,"observations":["own_production_controls","own_construction_controls","own_construction_queue","own_equipment_production_lines","public_research_folder_catalog","own_research_category_associations","own_research_slot_callback_diagnostics","own_division_snapshot_identifiers","own_economy_trigger_counts","own_focus","own_research","clock","bounded_wait","technology_definitions","gui_input_diagnostics","own_research_ui_diagnostics","own_current_research_nodes","own_research_node_detail_diagnostics","own_focus_catalog_ui","own_focus_selected_detail","own_focus_completion_membership","own_focus_search_selection"],"commands":commands.map(|c| c.capabilities()).unwrap_or_else(|| json!("unavailable: no verified input binding")),"unverified_observations":["own_production_controls","own_construction_controls","own_construction_queue","own_equipment_production_lines","own_research_category_associations"],"bounded_observation_validation":{"own_construction_queue":"run071: one dockyard identity and produced-work advancement; run072: state56 and stored UI label, late-lease deviation. Selection, province, railway and precise numeric UI comparison unverified","own_focus_completion_membership":"run052: actual Rhineland completion on the supported Linux build","own_focus_search_selection":"run068: exact query, six canonical matches, three ordinary Tab steps and View"},"native_transactions":"unavailable: failed posting path quarantined","default_mode":"FAIR","mod_qa":"separate; unavailable in this runtime","windows_macos":"unverified native adapters"}),
             ),
             "hoi4_overview" if object.is_empty() => self.overview(),
             "hoi4_research" => {
@@ -447,7 +498,58 @@ impl Server {
                 }
                 own_focus::completion_snapshot(self.process()?, offset, limit)
             }
-            "hoi4_input_geometry" if object.is_empty() => gui::input_geometry(self.process()?),
+            "hoi4_focus_input_probe" => {
+                if !object.contains_key("focus_id")
+                    || object
+                        .keys()
+                        .any(|key| key != "focus_id" && key != "include_pan")
+                {
+                    return Err(Error::new(
+                        "invalid_arguments",
+                        "Canonical focus_id and optional include_pan required",
+                    ));
+                }
+                let key = object["focus_id"]
+                    .as_str()
+                    .ok_or_else(|| Error::new("invalid_arguments", "focus_id must be a string"))?;
+                own_focus::validate_key(key)
+                    .map_err(|e| Error::new("invalid_arguments", e.message))?;
+                let include_pan = match object.get("include_pan") {
+                    None => false,
+                    Some(Value::Bool(value)) => *value,
+                    _ => {
+                        return Err(Error::new(
+                            "invalid_arguments",
+                            "include_pan must be boolean",
+                        ))
+                    }
+                };
+                #[cfg(target_os = "macos")]
+                {
+                    crate::launch::macos::focus_input_probe(self.process()?, key, include_pan)
+                }
+                #[cfg(not(target_os = "macos"))]
+                {
+                    let _ = (key, include_pan);
+                    Err(Error::new(
+                        "unsupported_platform",
+                        "Focus input-binding probe is reviewed only for macOS",
+                    ))
+                }
+            }
+            "hoi4_input_geometry" => {
+                if object.keys().any(|key| key != "include_source_point") {
+                    return Err(Error::new("invalid_arguments", "Unknown geometry argument"));
+                }
+                let include = object
+                    .get("include_source_point")
+                    .unwrap_or(&Value::Bool(false))
+                    .as_bool()
+                    .ok_or_else(|| {
+                        Error::new("invalid_arguments", "include_source_point must be boolean")
+                    })?;
+                gui::input_geometry_with_source(self.process()?, include)
+            }
             "hoi4_research_slot_control" => {
                 if !object.contains_key("slot")
                     || object
@@ -530,6 +632,147 @@ impl Server {
                 }
                 economy::snapshot(self.process()?)
             }
+            "hoi4_production_controls" => {
+                if object.keys().any(|k| {
+                    !matches!(
+                        k.as_str(),
+                        "line_handle" | "equipment_id" | "include_geometry"
+                    )
+                }) {
+                    return Err(Error::new(
+                        "invalid_arguments",
+                        "Only line_handle, equipment_id and include_geometry accepted",
+                    ));
+                }
+                let handle = object
+                    .get("line_handle")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| Error::new("invalid_arguments", "line_handle required"))?;
+                let key = object
+                    .get("equipment_id")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| Error::new("invalid_arguments", "equipment_id required"))?;
+                production_lines::control_snapshot::validate_target(handle, key)?;
+                let geometry = object
+                    .get("include_geometry")
+                    .map(Value::as_bool)
+                    .unwrap_or(Some(false))
+                    .ok_or_else(|| {
+                        Error::new("invalid_arguments", "include_geometry must be boolean")
+                    })?;
+                let process = self.process()?;
+                read_only_recovered(|| {
+                    production_lines::control_snapshot::snapshot(process, handle, key, geometry)
+                })
+            }
+            "hoi4_construction_panel_probe" => {
+                if object.keys().any(|key| {
+                    !["include_geometry", "include_routing", "include_shortcut"]
+                        .contains(&key.as_str())
+                }) {
+                    return Err(Error::new(
+                        "invalid_arguments",
+                        "Only include_geometry, include_routing and include_shortcut accepted",
+                    ));
+                }
+                let geometry = object
+                    .get("include_geometry")
+                    .map(Value::as_bool)
+                    .unwrap_or(Some(false))
+                    .ok_or_else(|| {
+                        Error::new("invalid_arguments", "include_geometry must be boolean")
+                    })?;
+                let routing = object
+                    .get("include_routing")
+                    .map(Value::as_bool)
+                    .unwrap_or(Some(false))
+                    .ok_or_else(|| {
+                        Error::new("invalid_arguments", "include_routing must be boolean")
+                    })?;
+                construction::mac_panel::validate_options(geometry, routing)?;
+                let shortcut = object
+                    .get("include_shortcut")
+                    .map(Value::as_bool)
+                    .unwrap_or(Some(false))
+                    .ok_or_else(|| {
+                        Error::new("invalid_arguments", "include_shortcut must be boolean")
+                    })?;
+                let process = self.process()?;
+                read_only_recovered(|| {
+                    construction::mac_panel::snapshot_with_options(
+                        process,
+                        construction::mac_panel::Options {
+                            geometry,
+                            routing,
+                            shortcut,
+                        },
+                    )
+                })
+            }
+            "hoi4_construction_target" | "hoi4_construction_ui_probe" => {
+                let ui_probe = name == "hoi4_construction_ui_probe";
+                if object.keys().any(|k| {
+                    k != "building_id"
+                        && k != "state_id"
+                        && !(ui_probe
+                            && matches!(
+                                k.as_str(),
+                                "include_callback" | "include_geometry" | "include_routing"
+                            ))
+                        && (ui_probe || k != "include_map_point")
+                }) {
+                    return Err(Error::new(
+                        "invalid_arguments",
+                        "Only building_id, state_id and this observation's documented optional flags accepted",
+                    ));
+                }
+                let key = object
+                    .get("building_id")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| Error::new("invalid_arguments", "building_id required"))?;
+                construction::controls::validate_key(key)?;
+                let state = construction::find_view::validate_state_id(
+                    object
+                        .get("state_id")
+                        .and_then(Value::as_i64)
+                        .ok_or_else(|| {
+                            Error::new("invalid_arguments", "state_id must be an integer")
+                        })?,
+                )?;
+                let flag = |key| {
+                    object
+                        .get(key)
+                        .map(Value::as_bool)
+                        .unwrap_or(Some(false))
+                        .ok_or_else(|| {
+                            Error::new("invalid_arguments", format!("{key} must be boolean"))
+                        })
+                };
+                let callback = flag("include_callback")?;
+                let geometry = flag("include_geometry")?;
+                let routing = flag("include_routing")?;
+                let map_point = flag("include_map_point")?;
+                construction::mac_panel::validate_options(geometry, routing)?;
+                let process = self.process()?;
+                read_only_recovered(|| {
+                    if ui_probe {
+                        construction::mac_ui::snapshot_with_options(
+                            process,
+                            key,
+                            state,
+                            construction::mac_ui::Options {
+                                callback,
+                                geometry,
+                                routing,
+                            },
+                        )
+                    } else {
+                        construction::target_snapshot::snapshot_with_map_point(
+                            process, key, state, map_point,
+                        )
+                    }
+                })
+            }
             "hoi4_construction_controls" => {
                 if object
                     .keys()
@@ -556,8 +799,14 @@ impl Server {
                 read_only_recovered(|| construction::controls::snapshot(process, key, geometry))
             }
             "hoi4_construction_find_view" => {
-                if object.keys().any(|k| k != "state_id") {
-                    return Err(Error::new("invalid_arguments", "Only state_id accepted"));
+                if object
+                    .keys()
+                    .any(|k| k != "state_id" && k != "include_focus")
+                {
+                    return Err(Error::new(
+                        "invalid_arguments",
+                        "Only state_id and include_focus accepted",
+                    ));
                 }
                 let state = match object.get("state_id") {
                     None => None,
@@ -567,8 +816,17 @@ impl Server {
                         })?,
                     )?),
                 };
+                let focus = object
+                    .get("include_focus")
+                    .unwrap_or(&Value::Bool(false))
+                    .as_bool()
+                    .ok_or_else(|| {
+                        Error::new("invalid_arguments", "include_focus must be boolean")
+                    })?;
                 let process = self.process()?;
-                read_only_recovered(|| construction::find_view::snapshot(process, state))
+                read_only_recovered(|| {
+                    construction::find_view::snapshot_with_options(process, state, focus)
+                })
             }
             "hoi4_production_lines" | "hoi4_construction_queue" => {
                 if object.keys().any(|k| {
@@ -855,78 +1113,78 @@ impl Server {
                 } else {
                     None
                 };
-                let start = Instant::now();
-                let timeout = Duration::from_secs(timeout);
-                let mut rejected = 0;
-                let (before, baseline) = fresh_wait_read(start, timeout, &mut rejected, || {
-                    game::wait_snapshot(self.process()?)
-                })?;
-                let mut current = before.clone();
-                let mut last_date = baseline.date_raw;
-                let mut current_received = Instant::now();
-                loop {
-                    if start.elapsed() >= timeout {
-                        return Ok(historical_wait_timeout(
-                            current,
-                            start,
-                            current_received,
-                            rejected,
-                            None,
-                        ));
-                    }
-                    let mut reasons = Vec::new();
-                    if let Some(assignments) = &assignments {
-                        // Includes the first accepted sample: completion before
-                        // this RPC is not a missed edge requiring another event.
-                        if assignments.reached(&current) {
-                            reasons.push("assignments_reached".into());
-                        }
-                    } else {
-                        for field in ["focus", "research"] {
-                            if current[field] != before[field] {
-                                reasons.push(format!("{field}_changed"));
+                worker_wait::wait(
+                    commands,
+                    Duration::from_secs(timeout),
+                    target,
+                    assignments,
+                    || game::wait_snapshot(self.process()?),
+                )
+            }
+            "hoi4_plan" | "hoi4_plan_run" if commands.and_then(|c| c.plan_path()).is_some() => {
+                let commands = commands.unwrap();
+                let path = commands.plan_path().unwrap();
+                if name == "hoi4_plan" {
+                    return match object.get("op").and_then(Value::as_str) {
+                        Some("get") if object.len() == 1 => {
+                            let mut plan = crate::plan_run::read_plan(&path)?;
+                            // A pending date stop reports whether the server can act on it.
+                            if plan.get("stop_on_date").is_some_and(|v| !v.is_null()) {
+                                if let (Some(status), Some(object)) =
+                                    (commands.date_stop_status(), plan.as_object_mut())
+                                {
+                                    if status["armed"] != json!(true)
+                                        && status["fired"] != json!(true)
+                                    {
+                                        object.insert(
+                                            "stop_on_date_unarmed".into(),
+                                            json!(status["state"]),
+                                        );
+                                    }
+                                    object.insert("date_stop".into(), status);
+                                }
                             }
+                            Ok(plan)
                         }
-                    }
-                    if target.is_some_and(|v| {
-                        current["date"]["raw"]
-                            .as_i64()
-                            .is_some_and(|n| n >= i64::from(v))
-                    }) {
-                        reasons.push("date_reached".into());
-                    }
-                    if !reasons.is_empty() && start.elapsed() < timeout {
-                        return Ok(
-                            json!({"reasons":reasons,"state":current,"elapsed_seconds":start.elapsed().as_secs_f64(),"rejected_torn_reads":rejected,"state_age_ms":current_received.elapsed().as_millis()}),
-                        );
-                    }
-                    std::thread::sleep(
-                        Duration::from_millis(250).min(timeout.saturating_sub(start.elapsed())),
-                    );
-                    if start.elapsed() >= timeout {
-                        continue;
-                    }
-                    let outcome = bounded_wait_read(start, timeout, &mut rejected, || {
-                        let sample = game::wait_snapshot(self.process()?)?;
-                        same_wait_context(&baseline, &sample.1, last_date)?;
-                        Ok(sample)
-                    })?;
-                    let (observed, context) = match outcome {
-                        WaitRead::Fresh(sample) => sample,
-                        WaitRead::Deadline(refusal) => {
-                            return Ok(historical_wait_timeout(
-                                current,
-                                start,
-                                current_received,
-                                rejected,
-                                Some(refusal),
-                            ))
+                        Some("set") if object.len() == 2 => {
+                            let changes = object
+                                .get("plan")
+                                .and_then(Value::as_object)
+                                .ok_or_else(|| {
+                                    Error::new("invalid_arguments", "plan must be an object")
+                                })?;
+                            crate::plan_run::merge_plan(&path, changes)
                         }
+                        _ => Err(Error::new(
+                            "invalid_arguments",
+                            "Use {op:get} or {op:set, plan:{...}}",
+                        )),
                     };
-                    last_date = context.date_raw;
-                    current = observed;
-                    current_received = Instant::now();
                 }
+                if object
+                    .keys()
+                    .any(|k| !["seconds", "lease_token"].contains(&k.as_str()))
+                {
+                    return Err(Error::new(
+                        "invalid_arguments",
+                        "Only seconds and lease_token accepted",
+                    ));
+                }
+                let lease = object
+                    .get("lease_token")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| Error::new("invalid_arguments", "lease_token required"))?;
+                let seconds = object.get("seconds").and_then(Value::as_u64).unwrap_or(60);
+                if !(1..=300).contains(&seconds) {
+                    return Err(Error::new("invalid_arguments", "seconds must be 1..300"));
+                }
+                let tools = Internal {
+                    server: self,
+                    commands,
+                };
+                let mut guard = PLAN_STATE.lock().unwrap_or_else(|p| p.into_inner());
+                let state = guard.get_or_insert_with(Default::default);
+                crate::plan_run::run(state, &tools, &path, lease, seconds)
             }
             _ if commands.is_some_and(|c| c.supports(name)) => {
                 let process = self.process.as_ref().ok_or_else(|| {
@@ -994,6 +1252,48 @@ impl Server {
 mod tests {
     use super::*;
     use std::cell::Cell;
+
+    #[test]
+    fn focus_input_probe_is_read_only_and_validates_before_process_access() {
+        let server = Server {
+            process: None,
+            unavailable: None,
+        };
+        let listing = tools(None);
+        let tool = listing["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|tool| tool["name"] == "hoi4_focus_input_probe")
+            .unwrap();
+        assert_eq!(tool["annotations"]["readOnlyHint"], true);
+        for args in [
+            json!({}),
+            json!({"focus_id":0}),
+            json!({"focus_id":"GER space"}),
+            json!({"focus_id":"GER_rhineland","include_pan":1}),
+            json!({"focus_id":"GER_rhineland","lease_token":"not allowed"}),
+        ] {
+            assert_eq!(
+                server
+                    .call("hoi4_focus_input_probe", &args, None)
+                    .unwrap_err()
+                    .code,
+                "invalid_arguments"
+            );
+        }
+        let error = server
+            .call(
+                "hoi4_focus_input_probe",
+                &json!({"focus_id":"GER_rhineland"}),
+                None,
+            )
+            .unwrap_err();
+        #[cfg(not(target_os = "macos"))]
+        assert_eq!(error.code, "unsupported_platform");
+        #[cfg(target_os = "macos")]
+        assert_eq!(error.code, "capability_unavailable");
+    }
 
     #[test]
     fn late_followup_discards_target_and_reports_only_earlier_historical_state() {

@@ -16,6 +16,20 @@ use std::{
     time::{Instant, SystemTime, UNIX_EPOCH},
 };
 
+#[doc(hidden)]
+pub mod closing;
+
+#[doc(hidden)]
+pub mod mixed_destination;
+
+#[doc(hidden)]
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+pub mod opening;
+
+// Dormant retained read-only foundation; no input/tool/worker registration yet.
+#[allow(dead_code)]
+pub(crate) mod transit;
+
 /// Witness reads always reach the process. Request-local shared metadata/proofs
 /// may avoid duplicate reads, but their original bytes must pass finish below.
 pub(crate) struct Witnesses<'a> {
@@ -52,6 +66,9 @@ impl WitnessRead {
     }
 }
 impl ReadMemory for Witnesses<'_> {
+    fn string_abi(&self) -> crate::memory::StringAbi {
+        self.process.string_abi()
+    }
     fn read(&self, address: u64, size: usize) -> Result<Vec<u8>> {
         let bytes = self.process.read(address, size)?;
         let mut reads = self.reads.borrow_mut();
@@ -168,7 +185,8 @@ pub(crate) fn primary_type_encoding(r: &Reader<'_>, base: u64, table: u64) -> Re
     let in_section = |p: u64, size: u64, low: u64, high: u64| {
         p >= base + low && p.checked_add(size).is_some_and(|end| end <= base + high)
     };
-    let metadata = |p, size| in_section(p, size, 0x41adde0, 0x436d9f8);
+    let l = crate::game::layout(r);
+    let metadata = |p, size| in_section(p, size, l.type_metadata.0, l.type_metadata.1);
     if !metadata(table.saturating_sub(16), 24)
         || i64::from_le_bytes(r.read(table - 16, 8)?.try_into().unwrap()) != 0
     {
@@ -185,7 +203,7 @@ pub(crate) fn primary_type_encoding(r: &Reader<'_>, base: u64, table: u64) -> Re
         ));
     }
     let name = r.u64(info + 8)?;
-    if !in_section(name, 128, 0x3506000, 0x3975f39) {
+    if !in_section(name, 128, l.type_names.0, l.type_names.1) {
         return Err(Error::new(
             "invalid_gui_type",
             "GUI type name outside verified image",
@@ -250,28 +268,7 @@ pub(crate) fn render_details(r: &Reader<'_>, base: u64, object: u64) -> Result<V
 /// named registry at +a60/+a78 is a different operation and is not consulted.
 pub(crate) fn named_research_button(r: &Reader<'_>, container: u64) -> Result<u64> {
     let buttons = array(r, container + 0x9a0, 256)?;
-    let (header, names, count) = r.array_header(container + 0x9b8)?;
-    let capacity = i32::from_le_bytes(header[8..12].try_into().unwrap()) as usize;
-    if capacity > 256 || count != buttons.len() || (count > 0 && names % 8 != 0) {
-        return Err(Error::new(
-            "invalid_gui_registry",
-            "Bounded paired research button/name arrays required",
-        ));
-    }
-    if count > 0 {
-        r.read(names, count * 32)?;
-    }
-    let mut found = None;
-    for (index, button) in buttons.iter().enumerate() {
-        if r.string_bounded(names + index as u64 * 32, 256)? == "research"
-            && found.replace(*button).is_some()
-        {
-            return Err(Error::new(
-                "invalid_gui_registry",
-                "Unique ordinary research button name required",
-            ));
-        }
-    }
+    let found = crate::gui_registry::lookup(r, container + 0x9b8, &buttons, "research", 256)?;
     found.ok_or_else(|| {
         Error::new(
             "gui_unavailable",
@@ -483,6 +480,14 @@ fn observe(
     include_slot_geometry: bool,
     requested_category: Option<(&str, bool, bool)>,
 ) -> Result<(Value, Option<UiContext>)> {
+    // These offsets belong to the reviewed Linux build only; a macOS process
+    // uses the hoi4_research / hoi4_technology_list reads instead.
+    if process.string_abi() != crate::memory::StringAbi::LibStdCxx {
+        return Err(Error::new(
+            "capability_unavailable",
+            "Research tree node reads are reviewed for the Linux build only",
+        ));
+    }
     let start = Instant::now();
     process.begin_snapshot()?;
     let observed = Witnesses::new(process);
@@ -744,6 +749,14 @@ fn observe_target(
     key: &str,
     include_context: bool,
 ) -> Result<(Value, Option<UiContext>)> {
+    // These offsets belong to the reviewed Linux build only; a macOS process
+    // uses the hoi4_research / hoi4_technology_list reads instead.
+    if process.string_abi() != crate::memory::StringAbi::LibStdCxx {
+        return Err(Error::new(
+            "capability_unavailable",
+            "Research tree node reads are reviewed for the Linux build only",
+        ));
+    }
     let start = Instant::now();
     process.begin_snapshot()?;
     let observed = Witnesses::new(process);
@@ -1007,6 +1020,47 @@ pub fn category_command_owned(process: &dyn Process, key: &str) -> Result<(Value
         body,
         context.expect("Own category command context requested"),
     ))
+}
+
+#[cfg(test)]
+mod string_abi_tests {
+    use super::*;
+    use crate::memory::StringAbi;
+    struct LibCxxProcess;
+    impl ReadMemory for LibCxxProcess {
+        fn read(&self, _: u64, n: usize) -> Result<Vec<u8>> {
+            Ok(vec![0; n])
+        }
+        fn string_abi(&self) -> StringAbi {
+            StringAbi::LibCxx
+        }
+    }
+    impl Process for LibCxxProcess {
+        fn check(&self) -> Result<()> {
+            Ok(())
+        }
+        fn image_base(&self) -> u64 {
+            0
+        }
+    }
+    /// Wrapped readers select the per-build layout; a default ABI here would
+    /// silently apply the Linux layout to a macOS process.
+    #[test]
+    fn witnesses_keep_the_process_string_abi() {
+        let process = LibCxxProcess;
+        let witnesses = Witnesses::new(&process);
+        let reader = Reader::new(&witnesses);
+        assert_eq!(reader.string_abi(), StringAbi::LibCxx);
+        assert_eq!(
+            crate::game::layout(&reader).build_id,
+            "DFA875A5-25BA-35E0-9736-627F8A5C4396"
+        );
+    }
+    #[test]
+    fn macos_refuses_linux_research_layout_before_reading() {
+        let error = nodes(&LibCxxProcess).unwrap_err();
+        assert_eq!(error.code, "capability_unavailable");
+    }
 }
 
 #[cfg(test)]

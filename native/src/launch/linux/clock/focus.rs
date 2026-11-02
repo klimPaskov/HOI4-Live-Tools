@@ -4,7 +4,7 @@ use crate::{
     focus_candidate_observation as candidate, focus_stage as stage,
     platform::x11::{PointerDelivery, PointerDisplay},
     research_attempt::{self, PointCandidate},
-    research_candidate_observation::{codec, control_surface, OwnedClientProfile},
+    research_candidate_observation::{codec, control_surface, BuiltinClient, OwnedClientProfile},
 };
 mod state;
 
@@ -13,6 +13,16 @@ mod state;
 pub(super) enum Profile {
     #[serde(rename = "linux_builtin_absolute_512x288_v1")]
     LinuxBuiltinAbsolute512x288V1,
+    #[serde(rename = "linux_builtin_absolute_1920x1080_v1")]
+    LinuxBuiltinAbsolute1920x1080V1,
+}
+impl Profile {
+    pub(super) const fn client(self) -> BuiltinClient {
+        match self {
+            Self::LinuxBuiltinAbsolute512x288V1 => BuiltinClient::Absolute512x288,
+            Self::LinuxBuiltinAbsolute1920x1080V1 => BuiltinClient::Absolute1920x1080,
+        }
+    }
 }
 pub(super) struct Service {
     pub(super) journal: stage::Journal,
@@ -22,27 +32,21 @@ pub(super) struct Service {
 }
 impl Service {
     pub(super) fn bind(
-        _profile: Profile,
+        profile: Profile,
         window: u32,
         display: &Display,
         directory: &Path,
     ) -> Result<Self> {
         Ok(Self {
             journal: stage::Journal::open(&directory.join("focus-actions.jsonl"))?,
-            profile: OwnedClientProfile {
-                window,
-                client: [512, 288],
-                logical: [2560, 1440],
-                os_binding_verified: true,
-                reviewed_builtin_client_origin: true,
-            },
+            profile: profile.client().owned(window),
             display: display.number,
             authority: display.xauthority.clone(),
         })
     }
 }
 pub(super) fn tool() -> Value {
-    json!({"name":"hoi4_focus_attempt","description":"Preview: one ordinary OpenPolitics/ClosePolitics/OpenPoliticsFromResearch Q, OpenFocus named-button, SearchField empty-field click, SearchQuery bounded text, View or Start stage for an exact own canonical focus ID. ClosePolitics requires that exact focus active and preserves it through settled closed-root readback. OpenPoliticsFromResearch requires both profiles, an own settled research panel and hidden tree; its live gate is pending. Requires explicit owned profile, exclusive lease, settled own roots and complete own scoped blockers. SearchField preserves the active Focus and requires both keyboard/text receiver readback; SearchQuery requires an already focused empty field and explicit lowercase ASCII query; it verifies the exact text and selected canonical key. SearchText verifies exact text and complete bounded canonical matches without claiming the requested selection; SearchNext sends one Tab only when focus_id is the immediate next match, and verifies unchanged order and the expected selected key. All search stages preserve the active Focus and never press Enter. Supported exact Sprite, zero-angle Text, InstantText or unmasked Frame geometry; unknown branches refuse. Canonical readback verifies current state, not event causality or eligibility. Uncertain input is quarantined; no replay, coordinates, activation or engine calls.",
+    json!({"name":"hoi4_focus_attempt","description":"Preview: one ordinary OpenPolitics/ClosePolitics/OpenPoliticsFromResearch Q, OpenFocus named-button, SearchField empty-field click, SearchQuery bounded text, View or Start stage for an exact own canonical focus ID. ClosePolitics requires that exact focus active and preserves it through settled closed-root readback. OpenPoliticsFromResearch requires both profiles, an own settled research panel and hidden tree; bounded manual handoff passed Production008. Requires explicit owned profile, exclusive lease, settled own roots and complete own scoped blockers. SearchField preserves the active Focus and requires both keyboard/text receiver readback; SearchQuery requires an already focused empty field and explicit lowercase ASCII query; it verifies the exact text and selected canonical key. SearchText verifies exact text and complete bounded canonical matches without claiming the requested selection; SearchNext sends one Tab only when focus_id is the immediate next match, and verifies unchanged order and the expected selected key. All search stages preserve the active Focus and never press Enter. Supported exact Sprite, zero-angle Text, InstantText or unmasked Frame geometry; unknown branches refuse. Canonical readback verifies current state, not event causality or eligibility. Uncertain input is quarantined; no replay, coordinates, activation or engine calls.",
         "inputSchema":{"type":"object","properties":{"stage":{"enum":["open_politics","open_politics_from_research","close_politics","open_focus","search_field","search_query","search_text","search_next","view","start"]},"focus_id":{"type":"string","minLength":1,"maxLength":128},"query":{"type":"string","minLength":1,"maxLength":48,"description":"Required for search_query, search_text and search_next: lowercase ASCII letters and spaces, no surrounding spaces"},"request_id":{"type":"string","minLength":1,"maxLength":128},"lease_token":{"type":"string"}},"required":["stage","focus_id","request_id","lease_token"],"additionalProperties":false}})
 }
 pub(super) fn observe_ui(
@@ -204,7 +208,12 @@ pub(super) fn execute_internal(
             "Focus target epoch differs from controller",
         ));
     }
-    if state.journal.blocks_game(&target.epoch.game)
+    if state
+        .production
+        .as_ref()
+        .is_some_and(|p| p.journal.blocks_game(&target.epoch.game))
+        || state.journal.blocks_game(&target.epoch.game)
+        || state.research_transits.blocks_game(&target.epoch.game)
         || state
             .construction
             .as_ref()
@@ -398,7 +407,12 @@ pub(super) fn failure_evidence(
     target: &stage::Target,
     error: &Error,
 ) -> stage::FailureEvidence {
-    if state.journal.blocks_game(&target.epoch.game)
+    if state
+        .production
+        .as_ref()
+        .is_some_and(|p| p.journal.blocks_game(&target.epoch.game))
+        || state.journal.blocks_game(&target.epoch.game)
+        || state.research_transits.blocks_game(&target.epoch.game)
         || state
             .construction
             .as_ref()

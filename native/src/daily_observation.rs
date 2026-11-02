@@ -39,6 +39,9 @@ struct Timed<'a> {
     until: Instant,
 }
 impl ReadMemory for Timed<'_> {
+    fn string_abi(&self) -> crate::memory::StringAbi {
+        self.inner.string_abi()
+    }
     fn read(&self, a: u64, n: usize) -> Result<Vec<u8>> {
         deadline(self.until)?;
         let result = self.inner.read(a, n);
@@ -139,17 +142,23 @@ fn same(a: &ClockContext, b: &ClockContext) -> bool {
         && a.difficulty == b.difficulty
         && a.historical_raw == b.historical_raw
 }
-fn own_scope(r: &Reader<'_>, base: u64, scope: &Scope) -> Result<()> {
+pub(crate) fn own_scope(r: &Reader<'_>, base: u64, scope: &Scope) -> Result<()> {
+    // Both ABI layouts come from the independently reviewed canonical readers.
+    // The enclosing Witnesses retains every guard through the final readback;
+    // changed links must fail before a broader reader can follow a new owner.
+    let game = crate::game::layout(r);
+    let research = research::layout(r);
     let [gs, idler, db] = scope.anchors;
-    if r.u64(base + 0x44086a8)? != gs
-        || r.u64(base + 0x44085f8)? != idler
-        || r.u64(base + 0x439f450)? != db
-        || r.u64(gs)? != base + 0x42c7598
-        || r.u64(idler)? != base + 0x42c9a88
+    if r.u64(base + game.gs_global)? != gs
+        || r.u64(base + game.idler_global)? != idler
+        || r.u64(base + game.technology_db_global)? != db
+        || r.u64(gs)? != base + game.gs_vtable
+        || r.u64(idler)? != base + game.idler_vtable
+        || r.u64(db)? != base + research.database_vtable
     {
         return Err(Error::new("ownership_changed", "Daily clock roots changed"));
     }
-    let tag = r.i32(gs + 0x518)?;
+    let tag = r.i32(gs + game.player_tag)?;
     if !(1..4096).contains(&tag) {
         return Err(Error::new(
             "player_unavailable",
@@ -157,13 +166,13 @@ fn own_scope(r: &Reader<'_>, base: u64, scope: &Scope) -> Result<()> {
         ));
     }
     let index = i32::from_le_bytes(
-        r.array_entry(gs + 0x340, tag as usize, 4)?
+        r.array_entry(gs + game.tag_country_index, tag as usize, 4)?
             .try_into()
             .unwrap(),
     );
     if index < 0
         || u64::from_le_bytes(
-            r.array_entry(gs + 0x310, index as usize, 8)?
+            r.array_entry(gs + game.countries, index as usize, 8)?
                 .try_into()
                 .unwrap(),
         ) != scope.own_country
@@ -174,8 +183,8 @@ fn own_scope(r: &Reader<'_>, base: u64, scope: &Scope) -> Result<()> {
         ));
     }
     r.object_type(scope.own_country, "CCountry")?;
-    if r.u64(scope.own_country + 0xf38)? != scope.own_status
-        || r.u64(scope.own_status)? != base + 0x42108f8
+    if r.u64(scope.own_country + game.country_technology_status)? != scope.own_status
+        || r.u64(scope.own_status)? != base + research.status_vtable
         || r.u64(scope.own_status + 0x130)? != scope.own_country
         || r.i32(scope.own_status + 0x138)? != tag
     {
@@ -232,6 +241,57 @@ fn read(
     }
     Ok((body, context))
 }
+// Original own scope checked before replacement payload; no sequence, store or input.
+#[allow(dead_code)]
+pub(crate) fn scoped_clock(
+    process: &dyn Process,
+    scope: &Scope,
+    until: Instant,
+) -> Result<ClockContext> {
+    scope.validate()?;
+    deadline(until)?;
+    if process.identity() != Some(&scope.epoch.game) {
+        return Err(Error::new(
+            "ownership_changed",
+            "Scoped startup process differs",
+        ));
+    }
+    let timed = Timed {
+        inner: process,
+        until,
+    };
+    timed.begin_snapshot()?;
+    let w = Witnesses::new(&timed);
+    let r = Reader::new(&w);
+    own_scope(&r, process.image_base(), scope)?;
+    let context = crate::game::context_from_reader(&r, process.image_base())?;
+    if context.anchors != scope.anchors
+        || context.player != scope.epoch.player
+        || context.difficulty != 2
+        || context.historical_raw != 1
+        || context.playthrough_id.is_empty()
+        || !scope
+            .epoch
+            .campaign
+            .ends_with(&format!(":{}", context.playthrough_id))
+    {
+        return Err(Error::new(
+            "ownership_changed",
+            "Scoped startup campaign differs",
+        ));
+    }
+    w.finish()?;
+    timed.check()?;
+    deadline(until)?;
+    if process.identity() != Some(&scope.epoch.game) {
+        return Err(Error::new(
+            "ownership_changed",
+            "Scoped startup process changed during observation",
+        ));
+    }
+    Ok(context)
+}
+
 impl Producer {
     pub fn open(
         process: &dyn Process,
@@ -247,6 +307,7 @@ impl Producer {
             own_country: context.own[0],
             own_status: context.own[1],
         };
+        scope.validate()?;
         let (mut store, bytes) = crate::daily_governor::store::Store::open(path)?;
         deadline(until)?;
         let record = if let Some(bytes) = bytes {
@@ -399,6 +460,45 @@ impl Producer {
         counter.probe_latest_date = context.campaign.date_raw;
         Ok(ResearchProbe { context, slots })
     }
+    /// Current own Focus evidence without publication, sequence allocation or
+    /// fsync. The coherent observer checks scope before following own payload.
+    #[cfg(any(target_os = "macos", all(test, unix)))]
+    pub(crate) fn probe_focus(
+        &self,
+        process: &dyn Process,
+        key: &str,
+        until: Instant,
+    ) -> Result<crate::own_focus::AssignmentSnapshot> {
+        deadline(until)?;
+        let mut counter = crate::daily_digest_lock::acquire(&self.counter, None)?;
+        if counter.poisoned {
+            return Err(Error::new(
+                "daily_quarantined",
+                "Daily sequence uncertainty",
+            ));
+        }
+        let scope = &counter.record.scope;
+        let timed = Timed {
+            inner: process,
+            until,
+        };
+        let snapshot = crate::own_focus::assignment_snapshot(
+            &timed,
+            key,
+            &scope.epoch.game,
+            &self.expected,
+            [scope.own_country, scope.own_status],
+        )?;
+        if snapshot.context().date_raw < counter.record.last_date.max(counter.probe_latest_date) {
+            return Err(Error::new(
+                "ownership_changed",
+                "Daily Focus chronology regressed",
+            ));
+        }
+        deadline(until)?;
+        counter.probe_latest_date = snapshot.context().date_raw;
+        Ok(snapshot)
+    }
     pub fn observe(&self, process: &dyn Process, until: Instant) -> Result<Produced> {
         deadline(until)?;
         self.observe_locked(process, until, false)
@@ -496,3 +596,6 @@ impl Producer {
         })
     }
 }
+
+#[cfg(all(test, unix))]
+mod focus_tests;

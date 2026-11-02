@@ -282,3 +282,6 @@ fn longest_allowed_type_key_fits_full_mcp_page_and_external_bytes_are_witnessed(
         "torn_read"
     );
 }
+
+#[path = "equipment/controls.rs"]
+mod controls;

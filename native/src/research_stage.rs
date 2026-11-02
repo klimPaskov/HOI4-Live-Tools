@@ -20,9 +20,13 @@ use std::{
     time::{Duration, Instant},
 };
 
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+pub(crate) mod close_read_recovery;
+
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub enum Stage {
     OpenPanel,
+    ClosePanel,
     SelectSlot,
     SelectCategory,
     View,
@@ -62,6 +66,65 @@ pub struct OwnState {
     pub researching: Vec<Option<String>>,
     /// All locally visible own Info windows. Null means unknown selection.
     pub visible_info: Vec<Option<String>>,
+    /// Private original identity proof; omitted for legacy stage receipts.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub panel_binding: Option<PanelBinding>,
+}
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct PanelBinding {
+    pub anchors: [u64; 6],
+    pub slots: Vec<u64>,
+    /// Research root, tree root, facilities view and facilities root, in order.
+    pub roots: [u64; 4],
+    pub facilities_parent: u64,
+    pub selected_slot_pointer: u64,
+    /// The empty tree constructor uses zero; populated arrays require an in-bounds index.
+    pub folder_index: i32,
+    pub folder_windows: Vec<u64>,
+    pub tab: i32,
+}
+impl PanelBinding {
+    fn validate(&self, state: &OwnState) -> Result<()> {
+        fn pointer(p: u64) -> bool {
+            (0x10000..=0x7fff_ffff_0000).contains(&p) && p % 8 == 0
+        }
+        let mut slots = std::collections::BTreeSet::new();
+        let mut folders = std::collections::BTreeSet::new();
+        if !(1..=32).contains(&state.researching.len())
+            || self.slots.len() != state.researching.len()
+            || !self
+                .anchors
+                .iter()
+                .chain(self.roots.iter())
+                .all(|p| pointer(*p))
+            || !pointer(self.facilities_parent)
+            || !self.slots.iter().all(|p| pointer(*p) && slots.insert(*p))
+            || self.folder_windows.len() > 128
+            || !self
+                .folder_windows
+                .iter()
+                .all(|p| pointer(*p) && folders.insert(*p))
+            || !(0..=1).contains(&self.tab)
+            || match state.selected_slot {
+                Some(index) => self.slots.get(index as usize) != Some(&self.selected_slot_pointer),
+                None => self.selected_slot_pointer != 0,
+            }
+            || if self.folder_windows.is_empty() {
+                self.folder_index != 0 || state.selected_folder.is_some()
+            } else {
+                self.folder_index < 0
+                    || self.folder_index as usize >= self.folder_windows.len()
+                    || state.selected_folder.is_none()
+            }
+        {
+            return Err(error(
+                "research_precondition",
+                "Complete bounded own research panel binding required",
+            ));
+        }
+        Ok(())
+    }
 }
 fn error(code: &'static str, message: &str) -> Error {
     Error::new(code, message)
@@ -82,7 +145,14 @@ fn key(value: &str) -> Result<()> {
 }
 impl Target {
     pub(crate) fn validate_key(&self) -> Result<()> {
-        if self.stage == Stage::SelectCategory {
+        if self.stage == Stage::ClosePanel {
+            if !self.technology.is_empty() || self.folder_id.is_some() || self.slot != 0 {
+                return Err(error(
+                    "invalid_arguments",
+                    "ClosePanel requires empty technology, no folder and slot zero",
+                ));
+            }
+        } else if self.stage == Stage::SelectCategory {
             if !self.technology.is_empty() {
                 return Err(error(
                     "invalid_arguments",
@@ -122,6 +192,40 @@ impl OwnState {
             ));
         }
         target.validate_key()?;
+        self.validate_observed_panel()?;
+        if self.panel_binding.is_none() && target.stage == Stage::ClosePanel {
+            return Err(error(
+                "research_precondition",
+                "ClosePanel requires original panel identity proof",
+            ));
+        }
+        Ok(())
+    }
+    /// Navigation-only validation: no technology, requested slot or assignment
+    /// goal exists. Complete positive panel identity is still required.
+    pub(crate) fn validate_navigation(&self, epoch: &Epoch) -> Result<()> {
+        if &self.epoch != epoch
+            || !(1..=32).contains(&self.researching.len())
+            || self.visible_info.len() > 64
+            || self
+                .selected_slot
+                .is_some_and(|s| s as usize >= self.researching.len())
+        {
+            return Err(error(
+                "ownership_changed",
+                "Research navigation own context changed",
+            ));
+        }
+        self.validate_observed_panel()?;
+        if self.panel_binding.is_none() {
+            return Err(error(
+                "research_precondition",
+                "Research navigation requires original panel identity proof",
+            ));
+        }
+        Ok(())
+    }
+    fn validate_observed_panel(&self) -> Result<()> {
         if let Some(folder) = &self.selected_folder {
             key(folder)?;
         }
@@ -133,10 +237,23 @@ impl OwnState {
         {
             key(id)?;
         }
+        if let Some(binding) = &self.panel_binding {
+            binding.validate(self)?;
+        }
         Ok(())
     }
     pub(crate) fn reached(&self, target: &Target) -> bool {
         match target.stage {
+            Stage::ClosePanel => {
+                self.active_mode == Some(23)
+                    && self.panel_visible == Some(false)
+                    && !self.tree_visible
+                    && self.visible_info.is_empty()
+                    && self
+                        .panel_binding
+                        .as_ref()
+                        .is_some_and(|b| b.tab == 0 && b.validate(self).is_ok())
+            }
             Stage::OpenPanel => {
                 self.active_mode == Some(5)
                     && self.panel_visible == Some(true)
@@ -171,6 +288,20 @@ impl OwnState {
         }
     }
     pub(crate) fn preflight(&self, target: &Target) -> Result<()> {
+        if target.stage == Stage::ClosePanel {
+            if self.active_mode != Some(5)
+                || self.panel_visible != Some(true)
+                || self.tree_visible
+                || !self.visible_info.is_empty()
+                || !self
+                    .panel_binding
+                    .as_ref()
+                    .is_some_and(|b| b.tab == 0 && b.validate(self).is_ok())
+            {
+                return Err(error("research_precondition", "Shown own Research tab, no tree or Info and complete original panel proof required"));
+            }
+            return Ok(());
+        }
         if target.stage == Stage::OpenPanel {
             if self.active_mode != Some(23)
                 || self.panel_visible != Some(false)
@@ -224,7 +355,7 @@ impl OwnState {
             ));
         }
         let info_ok = match target.stage {
-            Stage::OpenPanel | Stage::SelectSlot | Stage::SelectCategory => {
+            Stage::OpenPanel | Stage::ClosePanel | Stage::SelectSlot | Stage::SelectCategory => {
                 unreachable!("Selection handled above")
             }
             Stage::View => self.visible_info.is_empty(),
@@ -234,6 +365,44 @@ impl OwnState {
             return Err(error(
                 "research_precondition",
                 "Own Info state differs from requested stage",
+            ));
+        }
+        Ok(())
+    }
+    /// Closing may change only the shown Research panel to the closed map mode.
+    /// An unchanged shown state remains possible while waiting for readback.
+    pub(crate) fn preserves_close(&self, original: &Self) -> Result<()> {
+        for state in [original, self] {
+            let binding = state.panel_binding.as_ref().ok_or_else(|| {
+                error(
+                    "research_precondition",
+                    "Original research panel binding missing",
+                )
+            })?;
+            binding.validate(state)?;
+            if binding.tab != 0
+                || state.tree_visible
+                || !state.visible_info.is_empty()
+                || !matches!(
+                    (state.active_mode, state.panel_visible),
+                    (Some(5), Some(true)) | (Some(23), Some(false))
+                )
+            {
+                return Err(error(
+                    "research_precondition",
+                    "Research close panel state changed outside permitted transition",
+                ));
+            }
+        }
+        let mut normalized = self.clone();
+        normalized.active_mode = original.active_mode;
+        normalized.panel_visible = original.panel_visible;
+        if normalized != *original
+            || (original.active_mode == Some(23) && self.active_mode != Some(23))
+        {
+            return Err(error(
+                "research_precondition",
+                "Original research panel identity or own state changed",
             ));
         }
         Ok(())
@@ -271,6 +440,7 @@ pub(crate) fn join_category_body(
 pub enum Candidate {
     /// Fixed ordinary shortcut; no coordinates or arbitrary key arguments.
     OpenPanel,
+    ClosePanel,
     Point(PointCandidate),
 }
 pub trait Backend {
@@ -299,10 +469,19 @@ pub struct Receipt {
 }
 #[derive(Debug, Serialize)]
 pub struct Execution {
+    #[serde(serialize_with = "serialize_public_receipt")]
     pub receipt: Receipt,
     pub historical: bool,
     pub current_state_verified: bool,
     pub event_causality_verified: bool,
+}
+fn serialize_public_receipt<S: serde::Serializer>(
+    receipt: &Receipt,
+    serializer: S,
+) -> std::result::Result<S::Ok, S::Error> {
+    let mut public = receipt.clone();
+    public.observed.panel_binding = None;
+    public.serialize(serializer)
 }
 #[cfg(any(target_os = "linux", test))]
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -452,6 +631,22 @@ impl Journal {
             {
                 return Err(error("invalid_journal", "Invalid research receipt witness"));
             }
+            if receipt.target.stage == Stage::ClosePanel {
+                receipt
+                    .observed
+                    .preserves_close(&receipt.observed)
+                    .map_err(|_| {
+                        error("invalid_journal", "Invalid original research close proof")
+                    })?;
+                if receipt.status == Status::Intent {
+                    receipt.observed.preflight(&receipt.target).map_err(|_| {
+                        error(
+                            "invalid_journal",
+                            "Research close intent requires shown original panel",
+                        )
+                    })?;
+                }
+            }
             if let Some(previous) = receipts.get(&receipt.request_id) {
                 if previous.status != Status::Intent
                     || receipt.status == Status::Intent
@@ -474,6 +669,17 @@ impl Journal {
                         "invalid_journal",
                         "Research terminal record contradicts durable intent",
                     ));
+                }
+                if receipt.target.stage == Stage::ClosePanel {
+                    receipt
+                        .observed
+                        .preserves_close(&previous.observed)
+                        .map_err(|_| {
+                            error(
+                                "invalid_journal",
+                                "Research close terminal contradicts original panel proof",
+                            )
+                        })?;
                 }
             } else if receipt.status == Status::NotQueued
                 || (receipt.status == Status::Verified && receipt.delivery.is_some())
@@ -628,7 +834,10 @@ impl Journal {
         let candidate = backend.candidate(&target)?;
         match &candidate {
             Candidate::OpenPanel if target.stage == Stage::OpenPanel => {}
-            Candidate::Point(point) if target.stage != Stage::OpenPanel => {
+            Candidate::ClosePanel if target.stage == Stage::ClosePanel => {}
+            Candidate::Point(point)
+                if !matches!(target.stage, Stage::OpenPanel | Stage::ClosePanel) =>
+            {
                 if point.input_authorized
                     || point.current_frame_verified
                     || point.effective_routing_verified
@@ -659,6 +868,9 @@ impl Journal {
         let fresh = backend.observe()?;
         fresh.validate(&target)?;
         fresh.preflight(&target)?;
+        if target.stage == Stage::ClosePanel {
+            fresh.preserves_close(&before)?;
+        }
         live(authority, token, &target, deadline, gate)?;
         if self
             .file
@@ -708,15 +920,60 @@ impl Journal {
                 "Ordinary attempt was refused before possible input; plan remains unfinished",
             ));
         }
+        // Timeout diagnostics only: successful recovered-read counts are not
+        // part of the existing Execution/Receipt schema. Success still needs
+        // the complete final own-state proof and input-idle confirmation.
+        let mut identity_rejections: usize = 0;
+        let mut last_identity_transition = String::new();
+        let mut open_rejections: usize = 0;
+        let mut last_open_transition = String::new();
         loop {
             live(authority, token, &target, deadline, gate).map_err(|cause| {
-                Error::after_possible_input(
+                let mut failure = Error::after_possible_input(
                     "Readback deadline/authority ended; never replay",
                     cause,
-                )
+                );
+                if identity_rejections != 0 {
+                    failure.message.push_str(&format!("; rejected_identity_reads={identity_rejections}; last_identity_transition={last_identity_transition}"));
+                }
+                if open_rejections != 0 {
+                    failure.message.push_str(&format!("; rejected_open_reads={open_rejections}; last_open_transition={last_open_transition}"));
+                }
+                if identity_rejections != 0 || open_rejections != 0 {
+                    let mut end = failure.message.len().min(512);
+                    while !failure.message.is_char_boundary(end) { end -= 1; }
+                    failure.message.truncate(end);
+                }
+                failure
             })?;
             match backend.observe() {
-                Err(e) if e.code == "torn_read" => {}
+                Err(cause)
+                    if target.stage == Stage::OpenPanel
+                        && cause.code == "research_open_transition" =>
+                {
+                    open_rejections = open_rejections.saturating_add(1);
+                    last_open_transition = cause
+                        .message
+                        .chars()
+                        .filter(|c| !c.is_control())
+                        .take(160)
+                        .collect();
+                }
+                Err(cause) if cause.code == "research_identity_transition" => {
+                    // Complete rejected reads only. The original authority and
+                    // absolute deadline above remain in force; no input repeats.
+                    identity_rejections = identity_rejections.saturating_add(1);
+                    last_identity_transition = cause
+                        .message
+                        .chars()
+                        .filter(|c| !c.is_control())
+                        .take(160)
+                        .collect();
+                }
+                Err(e)
+                    if e.code == "torn_read"
+                        || (target.stage == Stage::ClosePanel
+                            && e.code == "research_panel_transition") => {}
                 Err(cause) => {
                     return Err(Error::after_possible_input(
                         "Own readback unavailable; never replay",
@@ -730,6 +987,9 @@ impl Journal {
                             cause,
                         )
                     })?;
+                    if target.stage == Stage::ClosePanel {
+                        state.preserves_close(&intent.observed).map_err(|cause| Error::after_possible_input("Original research panel proof changed after possible close input; never replay", cause))?;
+                    }
                     if Instant::now() >= deadline {
                         return Err(error(
                             "action_uncertain",

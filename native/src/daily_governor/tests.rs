@@ -78,6 +78,150 @@ fn plan() -> Plan {
         review_day: Some(1936 * 365 + 30),
     }
 }
+
+#[test]
+#[cfg(unix)]
+fn production_plan_updates_preserve_each_existing_line_queue_prefix() {
+    let temp = Temp::new();
+    let make = |id: &str, line: &str, count| Entry {
+        id: id.into(),
+        navigation: None,
+        focus_search: None,
+        intent: Intent::Economy {
+            target: EconomyTarget::Production {
+                line_id: line.into(),
+                equipment_id: "infantry_equipment_1".into(),
+                total_factories: count,
+            },
+        },
+    };
+    let a = make("first", "0x0000000100000038", 14);
+    let b = make("second", "0x0000000100000038", 12);
+    let c = make("other", "0x0000000200000038", 6);
+    let mut initial = plan();
+    initial.entries = vec![a.clone(), b.clone(), c.clone()];
+    let mut governor = Governor::open(&temp.path(), initial.clone()).unwrap();
+    let mut updated = initial.clone();
+    updated.revision += 1;
+    updated.entries.swap(0, 1);
+    assert_eq!(
+        governor.update_plan(updated.clone()).unwrap_err().code,
+        "plan_conflict"
+    );
+    updated.entries = vec![
+        make("inserted", "0x0000000100000038", 18),
+        a.clone(),
+        b.clone(),
+        c.clone(),
+    ];
+    assert_eq!(
+        governor.update_plan(updated.clone()).unwrap_err().code,
+        "plan_conflict"
+    );
+    updated.entries = vec![c, a, b, make("appended", "0x0000000100000038", 10)];
+    assert!(governor.update_plan(updated.clone()).unwrap());
+    assert!(!governor.update_plan(updated).unwrap());
+}
+
+#[test]
+#[cfg(unix)]
+fn production_heads_preserve_line_order_and_refusals_across_restart() {
+    let t = Temp::new();
+    let mut p = plan();
+    p.entries = [
+        ("a-first", "0x0000000100000038", 11),
+        ("a-next", "0x0000000100000038", 10),
+        ("b-first", "0x0000000200000038", 3),
+    ]
+    .into_iter()
+    .map(|(id, line, count)| Entry {
+        id: id.into(),
+        intent: Intent::Economy {
+            target: EconomyTarget::Production {
+                line_id: line.into(),
+                equipment_id: "infantry_equipment_1".into(),
+                total_factories: count,
+            },
+        },
+        navigation: None,
+        focus_search: None,
+    })
+    .collect();
+    let mut b = Fake::new(&p);
+    let mut g = Governor::open(&t.path(), p.clone()).unwrap();
+    let day = 1936 * 365;
+    let ids = |g: &Governor, d| {
+        g.pending_production(d)
+            .into_iter()
+            .map(|e| e.id)
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(ids(&g, day), vec!["a-first", "b-first"]);
+    assert!(g
+        .continue_entry(
+            &mut b,
+            "a-next",
+            10000,
+            Instant::now() + Duration::from_secs(2)
+        )
+        .unwrap()
+        .verified
+        .is_empty());
+    assert_eq!(b.sends, 0);
+    b.mode = Mode::NotQueued;
+    g.continue_entry(
+        &mut b,
+        "a-first",
+        10000,
+        Instant::now() + Duration::from_secs(2),
+    )
+    .unwrap();
+    assert_eq!(ids(&g, day), vec!["b-first"]);
+    b.mode = Mode::Verified;
+    assert_eq!(
+        g.continue_entry(
+            &mut b,
+            "b-first",
+            10000,
+            Instant::now() + Duration::from_secs(2)
+        )
+        .unwrap()
+        .verified,
+        vec!["b-first"]
+    );
+    assert!(ids(&g, day).is_empty());
+    assert_eq!(g.used_actions(day), 2);
+    drop(g);
+    let mut g = Governor::open(&t.path(), p).unwrap();
+    assert!(ids(&g, day).is_empty());
+    assert_eq!(ids(&g, day + 1), vec!["a-first"]);
+    b.day(2);
+    assert_eq!(
+        g.continue_entry(
+            &mut b,
+            "a-first",
+            10000,
+            Instant::now() + Duration::from_secs(2)
+        )
+        .unwrap()
+        .verified,
+        vec!["a-first"]
+    );
+    assert_eq!(ids(&g, day + 1), vec!["a-next"]);
+    assert_eq!(
+        g.continue_entry(
+            &mut b,
+            "a-next",
+            10000,
+            Instant::now() + Duration::from_secs(2)
+        )
+        .unwrap()
+        .verified,
+        vec!["a-next"]
+    );
+    assert_eq!(g.used_actions(day + 1), 2);
+    assert!(ids(&g, day + 1).is_empty());
+}
 #[cfg(unix)]
 #[derive(Clone, Copy)]
 enum Mode {
@@ -850,6 +994,7 @@ fn existing_research_receipt_converter_never_consumes_view_or_historical_receipt
                 tree_visible: true,
                 panel_visible: Some(false),
                 active_mode: Some(6),
+                panel_binding: None,
                 researching: vec![Some("support_weapons".into())],
                 visible_info: vec![],
             },
@@ -2044,3 +2189,7 @@ fn explicit_focus_search_hint_preserves_legacy_serialization_and_rejects_other_d
     };
     assert_eq!(entry.validate().unwrap_err().code, "invalid_plan");
 }
+
+#[cfg(unix)]
+#[path = "construction_queue_tests.rs"]
+mod construction_queue;

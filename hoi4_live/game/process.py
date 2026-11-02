@@ -59,20 +59,59 @@ def crash_dirs(user_dir):
         return set()
 
 
+# Steam must never see or register a run: no launch while a Steam client or steamcmd runs, and no Steam variables
+# (SteamAppId, SteamGameId, STEAM_COMPAT_*, the overlay preload ...) reach the game.
+WINDOWS_STEAM = ("steam.exe", "steamcmd.exe", "steamwebhelper.exe")
+POSIX_STEAM = ("steam", "steamcmd", "steamwebhelper", "steam_osx", "steam.sh", "steamcmd.sh")
+
+
+def steam_processes(plat=None, windows=None):
+    """(name, pid) of every running Steam client, web helper or steamcmd process."""
+    plat = plat or platform.current()
+    windows = sys.platform == "win32" if windows is None else windows
+    return [(n, pid) for n in (WINDOWS_STEAM if windows else POSIX_STEAM) for pid in plat.find_processes(n)]
+
+
+def refuse_running_steam(plat=None, windows=None):
+    found = steam_processes(plat, windows)
+    if found:
+        names = ", ".join(sorted({n for n, _ in found}))
+        raise ToolError(f"Steam is running ({names}); close Steam and steamcmd before launching the game. "
+                        "The game is never started while Steam can see it.")
+
+
+def launch_env(base=None):
+    """The environment for the game: the caller's, without any Steam variable or Steam overlay preload."""
+    env = dict(os.environ if base is None else base)
+    for key in list(env):
+        if key.lower().startswith("steam") or key.upper().startswith("ENABLE_VK_LAYER_VALVE"):
+            del env[key]
+    for key in ("LD_PRELOAD", "DYLD_INSERT_LIBRARIES"):
+        if key in env:
+            kept = [p for p in env[key].replace(";", ":").split(":") if p and "gameoverlayrenderer" not in p]
+            if kept:
+                env[key] = ":".join(kept)
+            else:
+                del env[key]
+    return env
+
+
 def launch(game_dir, args):
     exe = platform.current().game_executable(game_dir) or os.path.join(game_dir, "hoi4.exe")
     if not os.path.exists(exe):
         raise ToolError(f"the game executable was not found in {game_dir}; set game_dir in config.json")
+    refuse_running_steam()
+    env = launch_env()
     if sys.platform != "win32":
         # Detached from this process on POSIX; a macOS launch through `open` or the Steam URL is a Mac task.
-        p = subprocess.Popen([exe] + list(args), cwd=game_dir, start_new_session=True, stdin=subprocess.DEVNULL,
+        p = subprocess.Popen([exe] + list(args), cwd=game_dir, start_new_session=True, stdin=subprocess.DEVNULL, env=env,
                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, close_fds=True)
         _LAUNCHES[p.pid] = p
         return p.pid
     flags = DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
     for extra in (CREATE_BREAKAWAY_FROM_JOB, 0):
         try:
-            p = subprocess.Popen([exe] + list(args), cwd=game_dir, creationflags=flags | extra,
+            p = subprocess.Popen([exe] + list(args), cwd=game_dir, creationflags=flags | extra, env=env,
                                  stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                  close_fds=True)
             _LAUNCHES[p.pid] = p

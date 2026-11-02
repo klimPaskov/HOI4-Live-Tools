@@ -174,3 +174,50 @@ fn completion_checks_final_process_ownership() {
     f.fail_final = true;
     assert_eq!(read(&f, 0, 1).unwrap_err().code, "ownership_changed");
 }
+
+#[test]
+fn coherent_progress_covers_more_than_one_public_page_in_one_observation() {
+    let mut f = fixture();
+    let mut members = vec![];
+    for index in 0..105u64 {
+        let pointer = 0x500000 + index * 0x200;
+        f.region(pointer, 0x168);
+        f.word(pointer, 0x42024d0);
+        f.word(pointer + 0x160, TREE);
+        f.string(pointer + 0x18, &format!("GER_f{index:03}"));
+        members.push(pointer);
+    }
+    f.array(TREE + 0x30, 0x400000, &members);
+    f.array(DB + 0x58, 0x410000, &members);
+    f.array(PROGRESS + 0x40, DATA, &members[..104]);
+    f.word(PROGRESS + 0x10, members[104]);
+    let value = own_focus::progress_snapshot(&f).unwrap();
+    assert_eq!(value.active_key(), Some("GER_f104"));
+    assert_eq!(value.completed().len(), 104);
+    assert!(value.completed().contains("GER_f103"));
+    assert!(!value.completed().contains("GER_f104"));
+    assert_eq!(
+        f.checks.get(),
+        2,
+        "One begin/final ownership check, no page loop"
+    );
+    assert!(f.untouched(VIEW, 0x1800));
+}
+
+#[test]
+fn coherent_progress_never_combines_changed_active_and_completed_membership() {
+    for address in [PROGRESS + 0x10, PROGRESS + 0x40, DATA, F + 0x18] {
+        let mut f = fixture();
+        f.torn = Some(address);
+        assert_eq!(
+            own_focus::progress_snapshot(&f).unwrap_err().code,
+            "torn_read"
+        );
+    }
+    let mut f = fixture();
+    f.fail_final = true;
+    assert_eq!(
+        own_focus::progress_snapshot(&f).unwrap_err().code,
+        "ownership_changed"
+    );
+}

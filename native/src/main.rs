@@ -3,6 +3,18 @@ use std::{io, path::PathBuf};
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = std::env::args().skip(1);
     let session = match args.next().as_deref() {
+        Some("--record") => {
+            let session = PathBuf::from(
+                args.next()
+                    .ok_or("--record requires an owned session manifest")?,
+            );
+            let config = PathBuf::from(args.next().ok_or("--record requires a recording config")?);
+            if args.next().is_some() {
+                return Err("Unexpected extra argument".into());
+            }
+            println!("{}", hoi4_live_native::recording::run(&session, &config)?);
+            return Ok(());
+        }
         None => None,
         Some("--session") => Some(PathBuf::from(
             args.next().ok_or("--session requires a manifest")?,
@@ -46,10 +58,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             return Ok(());
         }
         Some("--help") => {
-            eprintln!("hoi4-live-native [--session OWNED_RUN_MANIFEST]\nStdio MCP; observations by default.\nLinux: --serve PRIVATE_CONFIG / --connect RUN_DIRECTORY / --close RUN_DIRECTORY.\nOptional: --bind-input RUN_DIRECTORY PRIVATE_INPUT_CONFIG (ordinary clock keys; optional owned ID research preview).\nExplicit: --close-window RUN_DIRECTORY PRIVATE_WINDOW_CONFIG (one WM close attempt; no signal fallback).\nWindows/macOS launch/input adapters unverified.");
+            eprintln!("hoi4-live-native [--session OWNED_RUN_MANIFEST]\nStdio MCP; observations by default.\nmacOS 15+: --record OWNED_SESSION RECORDING_CONFIG (owned window only; no input).\nLinux: --serve PRIVATE_CONFIG / --connect RUN_DIRECTORY / --close RUN_DIRECTORY.\nOptional: --bind-input RUN_DIRECTORY PRIVATE_INPUT_CONFIG (ordinary clock keys; optional owned ID research preview).\nExplicit: --close-window RUN_DIRECTORY PRIVATE_WINDOW_CONFIG (one WM close attempt; no signal fallback).\nWindows/macOS launch/input adapters unverified.");
             return Ok(());
         }
         Some(_) => return Err("Unknown argument".into()),
+    };
+    // macOS: optional ordinary clock input bound to the owned session.
+    let mac_input = match args.next().as_deref() {
+        None => None,
+        Some("--mac-input") if cfg!(target_os = "macos") => Some(PathBuf::from(
+            args.next().ok_or("--mac-input requires a run directory")?,
+        )),
+        Some(_) => return Err("Unexpected extra argument".into()),
     };
     if args.next().is_some() {
         return Err("Unexpected extra argument".into());
@@ -64,6 +84,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
         None => (None, None),
     };
+    #[cfg(target_os = "macos")]
+    let process = process.map(std::sync::Arc::<dyn platform::Process + Send + Sync>::from);
+    #[cfg(target_os = "macos")]
+    let commands = match (&mac_input, &process) {
+        (Some(directory), Some(process)) => {
+            Some(launch::macos::MacClock::bind(process.clone(), directory)?)
+        }
+        (Some(_), None) => return Err("--mac-input requires an open owned session".into()),
+        _ => None,
+    };
+    #[cfg(not(target_os = "macos"))]
+    let _ = &mac_input;
+    #[cfg(target_os = "macos")]
+    let process = process.map(|p| Box::new(p) as Box<dyn platform::Process + Send + Sync>);
     let server = Server {
         process,
         unavailable,
@@ -71,6 +105,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let stdin = io::stdin();
     let stdout = io::stdout();
     hoi4_live_native::framing::serve(stdin.lock(), stdout.lock(), |message| {
+        #[cfg(target_os = "macos")]
+        if let Some(commands) = &commands {
+            return server.handle_with_commands(message, Some(commands));
+        }
         server.handle(message)
     })?;
     Ok(())

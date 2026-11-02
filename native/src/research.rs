@@ -14,6 +14,50 @@ use std::{
     time::{Instant, SystemTime, UNIX_EPOCH},
 };
 
+/// Technology/research layout of one inspected build; image values are
+/// relative to the verified image base, the rest are object field offsets.
+#[derive(Debug)]
+pub(crate) struct Layout {
+    pub(crate) database_vtable: u64,
+    pub(crate) template_vtable: u64,
+    pub(crate) database_templates: u64,
+    pub(crate) template_index: u64,
+    template_threshold: u64,
+    technology_vtable: u64,
+    pub(crate) status_vtable: u64,
+    slot_vtable: u64,
+}
+/// Linux ELF a4971c9e (libstdc++).
+const LINUX: Layout = Layout {
+    database_vtable: 0x42110c8,
+    template_vtable: 0x4211038,
+    database_templates: 0x48,
+    template_index: 0x30,
+    template_threshold: 0x3cc,
+    technology_vtable: 0x42107f8,
+    status_vtable: 0x42108f8,
+    slot_vtable: 0x4210898,
+};
+/// macOS Mach-O 089EA519 (libc++), mapped live on 18 October 2026: vtables by
+/// RTTI name, template index/array moved by the 24-byte key string, threshold
+/// from the level comparison shared by both builds' code.
+const MACOS: Layout = Layout {
+    database_vtable: 0x35a7d10,
+    template_vtable: 0x35a7c80,
+    database_templates: 0x40,
+    template_index: 0x28,
+    template_threshold: 0x39c,
+    technology_vtable: 0x35a7158,
+    status_vtable: 0x35a7258,
+    slot_vtable: 0x35a71f8,
+};
+pub(crate) fn layout(r: &Reader<'_>) -> &'static Layout {
+    match r.string_abi() {
+        crate::memory::StringAbi::LibStdCxx => &LINUX,
+        crate::memory::StringAbi::LibCxx => &MACOS,
+    }
+}
+
 #[derive(PartialEq, Eq)]
 struct Array {
     header: Vec<u8>,
@@ -93,7 +137,8 @@ struct Model<'a, 'b> {
 impl Model<'_, '_> {
     fn technology(&self, pointer: u64) -> Result<Technology> {
         let r = self.r;
-        exact(r, pointer, self.base + 0x42107f8)?;
+        let l = layout(r);
+        exact(r, pointer, self.base + l.technology_vtable)?;
         if r.u64(pointer + 0x158)? != self.status {
             return Err(Error::new(
                 "invalid_research_owner",
@@ -101,8 +146,8 @@ impl Model<'_, '_> {
             ));
         }
         let template = r.u64(pointer + 0x160)?;
-        exact(r, template, self.base + 0x4211038)?;
-        let id = r.i32(template + 0x30)?;
+        exact(r, template, self.base + l.template_vtable)?;
+        let id = r.i32(template + l.template_index)?;
         if id <= 0
             || self.templates.pointers.get(id as usize) != Some(&template)
             || self.own.pointers.get(id as usize - 1) != Some(&pointer)
@@ -124,7 +169,7 @@ impl Model<'_, '_> {
             template,
             key,
             level: r.i32(pointer + 0x174)?,
-            threshold: r.i32(template + 0x3cc)?,
+            threshold: r.i32(template + l.template_threshold)?,
             progress: i64::from_le_bytes(r.read(pointer + 0x198, 8)?.try_into().unwrap()),
         })
     }
@@ -189,6 +234,37 @@ fn observe(
     value["freshness"] = json!({"observed_unix_ms":SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),"elapsed_ms":start.elapsed().as_secs_f64()*1000.0,"read_calls":r.calls.get()+end_calls as u64,"read_bytes":r.bytes.get()+end_bytes});
     Ok((value, context))
 }
+#[cfg(target_os = "macos")]
+/// Own slot assignments (technology key per slot) and the complete researched
+/// set, validated page by page from one reader. Caller owns the process bracket.
+pub(crate) fn assignments(
+    r: &Reader<'_>,
+    base: u64,
+) -> Result<(Vec<Option<String>>, BTreeSet<String>)> {
+    let mut completed = BTreeSet::new();
+    let mut slots = Vec::new();
+    let mut offset = 0;
+    loop {
+        let (value, _) = observe_from_reader(r, base, offset, 100, false)?;
+        if offset == 0 {
+            slots = value["slots"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|s| s["researching"].as_str().map(String::from))
+                .collect();
+        }
+        for done in value["researched"].as_array().into_iter().flatten() {
+            if let Some(id) = done["id"].as_str() {
+                completed.insert(id.to_string());
+            }
+        }
+        match value["next_offset"].as_u64() {
+            Some(next) if next as usize > offset => offset = next as usize,
+            _ => return Ok((slots, completed)),
+        }
+    }
+}
 /// Unchanged canonical validation core; caller owns witnesses/process bracket.
 pub(crate) fn observe_from_reader(
     r: &Reader<'_>,
@@ -197,37 +273,71 @@ pub(crate) fn observe_from_reader(
     limit: usize,
     include_context: bool,
 ) -> Result<(Value, Option<ResearchContext>)> {
-    let gs = r.u64(base + 0x44086a8)?;
-    let idler = r.u64(base + 0x44085f8)?;
-    exact(r, gs, base + 0x42c7598)?;
-    exact(r, idler, base + 0x42c9a88)?;
-    let tag = r.i32(gs + 0x518)?;
+    let observed = observe_model_from_reader(r, base, offset, limit, include_context)?;
+    Ok((observed.body, observed.context))
+}
+
+/// Typed canonical Research facts for an enclosing retained navigation witness.
+/// This does not parse public JSON or authorize any ordinary action.
+pub(crate) fn navigation_from_reader(
+    r: &Reader<'_>,
+    base: u64,
+) -> Result<(ResearchContext, Vec<Option<String>>)> {
+    let observed = observe_model_from_reader(r, base, 0, 1, true)?;
+    let context = observed.context.ok_or_else(|| {
+        Error::new(
+            "research_unavailable",
+            "Typed own Research context unavailable",
+        )
+    })?;
+    Ok((context, observed.researching))
+}
+
+struct ObservedResearch {
+    body: Value,
+    context: Option<ResearchContext>,
+    researching: Vec<Option<String>>,
+}
+fn observe_model_from_reader(
+    r: &Reader<'_>,
+    base: u64,
+    offset: usize,
+    limit: usize,
+    include_context: bool,
+) -> Result<ObservedResearch> {
+    let g = game::layout(r);
+    let l = layout(r);
+    let gs = r.u64(base + g.gs_global)?;
+    let idler = r.u64(base + g.idler_global)?;
+    exact(r, gs, base + g.gs_vtable)?;
+    exact(r, idler, base + g.idler_vtable)?;
+    let tag = r.i32(gs + g.player_tag)?;
     if !(1..4096).contains(&tag) {
         return Err(Error::new(
             "player_unavailable",
             "Positive own country tag required",
         ));
     }
-    let index_witness = selected(r, gs + 0x340, tag as usize, 4)?;
+    let index_witness = selected(r, gs + g.tag_country_index, tag as usize, 4)?;
     let index = i32::from_le_bytes(index_witness.value[..].try_into().unwrap());
     if index < 0 {
         return Err(Error::new("player_unavailable", "Own country index absent"));
     }
-    let country_witness = selected(r, gs + 0x310, index as usize, 8)?;
+    let country_witness = selected(r, gs + g.countries, index as usize, 8)?;
     let country = u64::from_le_bytes(country_witness.value[..].try_into().unwrap());
     r.object_type(country, "CCountry")?;
     let country_vptr = r.u64(country)?;
-    let status = r.u64(country + 0xf38)?;
-    exact(r, status, base + 0x42108f8)?;
+    let status = r.u64(country + g.country_technology_status)?;
+    exact(r, status, base + l.status_vtable)?;
     if r.u64(status + 0x130)? != country || r.i32(status + 0x138)? != tag {
         return Err(Error::new(
             "invalid_research_owner",
             "Own country status link required",
         ));
     }
-    let db = r.u64(base + 0x439f450)?;
-    exact(r, db, base + 0x42110c8)?;
-    let templates = array(r, db + 0x48, 8192)?;
+    let db = r.u64(base + g.technology_db_global)?;
+    exact(r, db, base + l.database_vtable)?;
+    let templates = array(r, db + l.database_templates, 8192)?;
     let own = array(r, status + 0x88, 8192)?;
     let completed = array(r, status + 0x40, 8192)?;
     let slots = array(r, status + 0xa0, 32)?;
@@ -259,11 +369,12 @@ pub(crate) fn observe_from_reader(
         witnesses.insert(*pointer, tech);
     }
     let mut slot_output = Vec::new();
+    let mut researching = Vec::new();
     let mut slot_witnesses = Vec::new();
     let mut slot_ids = BTreeSet::new();
     let mut slot_pointers = BTreeSet::new();
     for (index, slot) in slots.pointers.iter().copied().enumerate() {
-        exact(r, slot, base + 0x4210898)?;
+        exact(r, slot, base + l.slot_vtable)?;
         if !slot_pointers.insert(slot) || r.u64(slot + 0x10)? != status {
             return Err(Error::new(
                 "invalid_research_owner",
@@ -273,6 +384,7 @@ pub(crate) fn observe_from_reader(
         let current = r.u64(slot + 0x18)?;
         slot_witnesses.push((slot, current));
         if current == 0 {
+            researching.push(None);
             slot_output.push(json!({"slot":index,"researching":null,"progress_raw":null,"progress":null,"days_remaining":null}));
         } else {
             let tech = model.technology(current)?;
@@ -282,6 +394,7 @@ pub(crate) fn observe_from_reader(
                     "Duplicate active technology",
                 ));
             }
+            researching.push(Some(tech.key.clone()));
             slot_output.push(json!({"slot":index,"researching":tech.key,"progress_raw":tech.progress,"progress":null,"days_remaining":null}));
             if let Some(prior) = witnesses.get(&current) {
                 if prior != &tech {
@@ -307,26 +420,26 @@ pub(crate) fn observe_from_reader(
         }
     }
     for (slot, current) in slot_witnesses {
-        exact(r, slot, base + 0x4210898)?;
+        exact(r, slot, base + l.slot_vtable)?;
         if r.u64(slot + 0x10)? != status || r.u64(slot + 0x18)? != current {
             return Err(Error::new("torn_read", "Own research slot changed"));
         }
     }
-    if r.u64(base + 0x44086a8)? != gs
-        || r.u64(base + 0x44085f8)? != idler
-        || r.u64(base + 0x439f450)? != db
-        || r.u64(gs)? != base + 0x42c7598
-        || r.u64(idler)? != base + 0x42c9a88
-        || r.i32(gs + 0x518)? != tag
-        || selected(r, gs + 0x340, tag as usize, 4)? != index_witness
-        || selected(r, gs + 0x310, index as usize, 8)? != country_witness
+    if r.u64(base + g.gs_global)? != gs
+        || r.u64(base + g.idler_global)? != idler
+        || r.u64(base + g.technology_db_global)? != db
+        || r.u64(gs)? != base + g.gs_vtable
+        || r.u64(idler)? != base + g.idler_vtable
+        || r.i32(gs + g.player_tag)? != tag
+        || selected(r, gs + g.tag_country_index, tag as usize, 4)? != index_witness
+        || selected(r, gs + g.countries, index as usize, 8)? != country_witness
         || r.u64(country)? != country_vptr
-        || r.u64(country + 0xf38)? != status
-        || r.u64(status)? != base + 0x42108f8
+        || r.u64(country + g.country_technology_status)? != status
+        || r.u64(status)? != base + l.status_vtable
         || r.u64(status + 0x130)? != country
         || r.i32(status + 0x138)? != tag
-        || r.u64(db)? != base + 0x42110c8
-        || array(r, db + 0x48, 8192)? != templates
+        || r.u64(db)? != base + l.database_vtable
+        || array(r, db + l.database_templates, 8192)? != templates
         || array(r, status + 0x88, 8192)? != own
         || array(r, status + 0x40, 8192)? != completed
         || array(r, status + 0xa0, 32)? != slots
@@ -360,9 +473,9 @@ pub(crate) fn observe_from_reader(
     let count = completed_output.len();
     let page: Vec<_> = completed_output.iter().skip(offset).take(limit).collect();
     let next = offset.saturating_add(page.len());
-    Ok((
-        json!({
-            "source":"native own research","build_id":game::BUILD_ID,"owned":true,
+    Ok(ObservedResearch {
+        body: json!({
+            "source":"native own research","build_id":g.build_id,"owned":true,
             "researched":page,"researched_count":count,"offset":offset,
             "next_offset":if next < count { Some(next) } else { None },"slots":slot_output,
             "completion_meaning":"engine completed-membership array",
@@ -370,5 +483,6 @@ pub(crate) fn observe_from_reader(
             "eligibility":"unavailable","observation_paused_game":false,
         }),
         context,
-    ))
+        researching,
+    })
 }

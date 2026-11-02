@@ -2,6 +2,8 @@
 //! Independently recovered constructors/save/handle/keyword witnesses:
 //! production-lines-v1, ELF a4971c9e8ac9a6f2487dea109e01f9839ee59db7.
 //! Base equipment type joins only; no design payload, allocation or input authority.
+pub mod control_snapshot;
+pub(crate) mod controls;
 mod equipment;
 use crate::{
     economy,
@@ -12,6 +14,100 @@ use crate::{
     research_ui::{primary_type_encoding, Witnesses},
 };
 use serde_json::{json, Value};
+/// Production-line and equipment layout of one inspected build.
+#[derive(Debug)]
+pub(crate) struct Layout {
+    military_line_vtable: u64,
+    naval_line_vtable: u64,
+    equipment_db_global: u64,
+    equipment_db_vtable: u64,
+    equipment_catalog: u64,
+    variant_vtable: u64,
+    variant_type: u64,
+    equipment_type_vtable: u64,
+}
+/// Linux ELF a4971c9e (libstdc++).
+const LINUX: Layout = Layout {
+    military_line_vtable: 0x42ede08,
+    naval_line_vtable: 0x42edf88,
+    equipment_db_global: 0x439f440,
+    equipment_db_vtable: 0x41f72d8,
+    equipment_catalog: 0x60,
+    variant_vtable: 0x41fa1a0,
+    variant_type: 0x3f0,
+    equipment_type_vtable: 0x41f8810,
+};
+/// macOS Mach-O 089EA519 (libc++), mapped live on 18 October 2026: vtables by
+/// RTTI name, database by its sole global, catalog from the shared accessors.
+const MACOS: Layout = Layout {
+    military_line_vtable: 0x358ca80,
+    naval_line_vtable: 0x358cc00,
+    equipment_db_global: 0x36e0210,
+    equipment_db_vtable: 0x357a240,
+    equipment_catalog: 0x50,
+    variant_vtable: 0x357d1b8,
+    variant_type: 0x3e0,
+    equipment_type_vtable: 0x357bad8,
+};
+#[cfg(target_os = "macos")]
+/// One own equipment line as the input adapters see it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct OwnLine {
+    pub handle: u64,
+    pub naval: bool,
+    pub key: Option<String>,
+    pub requested: i32,
+}
+#[cfg(target_os = "macos")]
+/// Own military/naval equipment lines in collection order, with base equipment
+/// keys where the variant has an exact base type. Caller owns the read bracket.
+pub(crate) fn own_lines(r: &Reader<'_>, base: u64) -> Result<Vec<OwnLine>> {
+    let l = layout(r);
+    let (_, production) = economy::own_production(r, base)?;
+    let (_, data, count) = r.array_header(production + 0x58)?;
+    if count > LINE_LIMIT {
+        return Err(Error::new(
+            "invalid_production_array",
+            "Line collection exceeds bound",
+        ));
+    }
+    let mut out = Vec::new();
+    for index in 0..count as u64 {
+        let line = r.u64(data + index * 8)?;
+        let primary = r.u64(line)?;
+        let naval = primary == base + l.naval_line_vtable;
+        if !naval && primary != base + l.military_line_vtable {
+            continue;
+        }
+        if r.u64(line + 0x20)? != production {
+            return Err(Error::new("invalid_production_owner", "Own line required"));
+        }
+        let variant = r.u64(line + 0x88)?;
+        let key = if variant != 0 && r.u64(variant)? == base + l.variant_vtable {
+            let kind = r.u64(variant + l.variant_type)?;
+            if kind != 0 && r.u64(kind)? == base + l.equipment_type_vtable {
+                Some(r.string_bounded(kind + 0x10, 128)?)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        out.push(OwnLine {
+            handle: r.u64(line + 8)?,
+            naval,
+            key,
+            requested: r.i32(line + 0xe8)?,
+        });
+    }
+    Ok(out)
+}
+pub(crate) fn layout(r: &Reader<'_>) -> &'static Layout {
+    match r.string_abi() {
+        crate::memory::StringAbi::LibStdCxx => &LINUX,
+        crate::memory::StringAbi::LibCxx => &MACOS,
+    }
+}
 use std::{
     collections::BTreeSet,
     time::{Instant, SystemTime, UNIX_EPOCH},
@@ -56,6 +152,93 @@ fn observe(
     let base = process.image_base();
     let (country, production) = economy::own_production(&reader, base)?;
     let campaign = game::context_from_reader(&reader, base)?;
+    let Collection {
+        entries,
+        mut lines,
+        mut unsupported,
+        anomalous,
+        equipment_unavailable,
+        ..
+    } = collection(&reader, base, production)?;
+    let count = entries.len();
+    let (end_calls, end_bytes) = witnesses.finish()?;
+    process.check()?;
+    let supported_count = lines.len();
+    let unsupported_count = unsupported.len();
+    let end = count.min(offset + limit);
+    // Page indices refer only to this fresh collection. Validate and witness the
+    // entire collection above before exposing any subset, including metadata.
+    for rows in [&mut lines, &mut unsupported] {
+        rows.retain(|row| {
+            row["entry_index"]
+                .as_u64()
+                .is_some_and(|index| (offset as u64..end as u64).contains(&index))
+        });
+    }
+    let context = ProductionContext {
+        campaign,
+        own: [country, production],
+        entries,
+    };
+    let mut value = json!({"source":"native own equipment production lines","build_id":game::layout(&reader).build_id,
+        "scope":"own_equipment_line_collection_only","owned":true,"player":context.campaign.player,
+        "handle_scope":{"kind":"own_current_snapshot_collection","player":context.campaign.player,
+            "playthrough_id":context.campaign.playthrough_id,"date_raw":context.campaign.date_raw,
+            "process_epoch":process.identity().map(|id|json!({"pid":id.pid,"start_ticks":id.start_ticks,"uid":id.uid})),
+            "cross_load_identity_available":false},
+        "collection_count":count,"total_count":count,"known_line_count":supported_count,"supported_count":supported_count,
+        "unsupported_count":unsupported_count,"complete_catalog":unsupported_count==0,
+        "catalog_coverage":"all_types_in_scoped_equipment_line_collection",
+        "offset":offset,"limit":limit,"page_count":lines.len()+unsupported.len(),
+        "next_offset":if end<count {Some(end)} else {None},
+        "page_index_scope":"fresh_snapshot_collection_only",
+        "anomalous_counter_count":anomalous,"counter_data_complete":unsupported_count==0&&anomalous==0,
+        "counter_policy":{"minimum":0,"maximum":COUNTER_LIMIT,"engine_invariant_claimed":false},
+        "lines":lines,"unsupported_type_metadata":unsupported,
+        "collection_policy":{"maximum_capacity":LINE_LIMIT,"engine_invariant_claimed":false},
+        "general_production_collection_available":false,
+        "equipment_ids_available":unsupported_count==0 && equipment_unavailable==0,
+        "ui_allocation_available":false,"idle_capacity_available":false,"eligibility_available":false,
+        "cross_load_identity_available":false,"input_authorized":false,"observation_paused_game":false,
+        "freshness":{"observed_unix_ms":SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),
+            "elapsed_ms":start.elapsed().as_secs_f64()*1000.0,"read_calls_kind":"logical_read_requests",
+            "read_calls":reader.calls.get()+end_calls as u64,"read_bytes":reader.bytes.get()+end_bytes}});
+    value["equipment_id_kind"] = json!("base_equipment_type_key");
+    value["equipment_id_unavailable_count"] = json!(unsupported_count + equipment_unavailable);
+    value["equipment_catalog_scope"] = json!("reviewed_base_equipment_types_only");
+    value["custom_variant_identity_available"] = json!(false);
+    Ok((value, context))
+}
+
+/// Same-witness own line identity for the Linux UI adapter. Never a caller address.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct TargetLine {
+    pub(super) address: u64,
+    pub(super) handle: u64,
+    pub(super) naval: bool,
+    pub(super) equipment_id: String,
+    pub(super) requested: i32,
+}
+struct KnownLine {
+    address: u64,
+    handle: u64,
+    naval: bool,
+    equipment_id: Option<String>,
+    equipment_identity: Option<[u64; 2]>,
+    requested: i32,
+    counters_valid: bool,
+}
+struct Collection {
+    entries: Vec<u64>,
+    lines: Vec<Value>,
+    unsupported: Vec<Value>,
+    anomalous: usize,
+    equipment_unavailable: usize,
+    known: Vec<KnownLine>,
+}
+/// Shared complete collection validation; callers own the encompassing witnesses.
+fn collection(reader: &Reader<'_>, base: u64, production: u64) -> Result<Collection> {
+    let l = layout(reader);
     let (header, data, count) = reader.array_header(production + 0x58)?;
     let capacity = i32::from_le_bytes(header[8..12].try_into().unwrap()) as usize;
     if capacity > LINE_LIMIT || (count > 0 && data % 8 != 0) {
@@ -84,6 +267,7 @@ fn observe(
         }
     }
     let mut lines = Vec::new();
+    let mut known = Vec::new();
     let mut unsupported = Vec::new();
     let mut handles = BTreeSet::new();
     let mut anomalous = 0;
@@ -91,12 +275,12 @@ fn observe(
     let mut equipment_unavailable = 0;
     for (index, &line) in entries.iter().enumerate() {
         let primary = reader.u64(line)?;
-        let (kind, expected_word) = if primary == base + 0x42ede08 {
+        let (kind, expected_word) = if primary == base + l.military_line_vtable {
             ("military", 0x38u32)
-        } else if primary == base + 0x42edf88 {
+        } else if primary == base + l.naval_line_vtable {
             ("naval", 0x39u32)
         } else {
-            let metadata = match primary_type_encoding(&reader, base, primary) {
+            let metadata = match primary_type_encoding(reader, base, primary) {
                 Ok(name) => Some(name),
                 Err(error) if error.code == "invalid_gui_type" => None,
                 Err(error) => return Err(error),
@@ -129,8 +313,17 @@ fn observe(
         if !within_policy {
             anomalous += 1;
         }
-        let equipment = equipment::observe(&reader, base, line, &mut equipment_catalog)?;
+        let equipment = equipment::observe(reader, base, line, &mut equipment_catalog)?;
         equipment_unavailable += usize::from(equipment.key.is_none());
+        known.push(KnownLine {
+            address: line,
+            handle,
+            naval: kind == "naval",
+            equipment_id: equipment.key.clone(),
+            equipment_identity: equipment.identity,
+            requested,
+            counters_valid: within_policy,
+        });
         lines.push(json!({"entry_index":index,"line_kind":kind,
             "line_handle":format!("0x{handle:016x}"),
             "handle_scope":"own_current_snapshot_collection",
@@ -140,51 +333,12 @@ fn observe(
                 "unavailable_reason":if within_policy {Value::Null} else {json!("anomalous_counter_policy")}},
             "input_authorized":false}));
     }
-    let (end_calls, end_bytes) = witnesses.finish()?;
-    process.check()?;
-    let supported_count = lines.len();
-    let unsupported_count = unsupported.len();
-    let end = count.min(offset + limit);
-    // Page indices refer only to this fresh collection. Validate and witness the
-    // entire collection above before exposing any subset, including metadata.
-    for rows in [&mut lines, &mut unsupported] {
-        rows.retain(|row| {
-            row["entry_index"]
-                .as_u64()
-                .is_some_and(|index| (offset as u64..end as u64).contains(&index))
-        });
-    }
-    let context = ProductionContext {
-        campaign,
-        own: [country, production],
+    Ok(Collection {
         entries,
-    };
-    let mut value = json!({"source":"native own equipment production lines","build_id":game::BUILD_ID,
-        "scope":"own_equipment_line_collection_only","owned":true,"player":context.campaign.player,
-        "handle_scope":{"kind":"own_current_snapshot_collection","player":context.campaign.player,
-            "playthrough_id":context.campaign.playthrough_id,"date_raw":context.campaign.date_raw,
-            "process_epoch":process.identity().map(|id|json!({"pid":id.pid,"start_ticks":id.start_ticks,"uid":id.uid})),
-            "cross_load_identity_available":false},
-        "collection_count":count,"total_count":count,"known_line_count":supported_count,"supported_count":supported_count,
-        "unsupported_count":unsupported_count,"complete_catalog":unsupported_count==0,
-        "catalog_coverage":"all_types_in_scoped_equipment_line_collection",
-        "offset":offset,"limit":limit,"page_count":lines.len()+unsupported.len(),
-        "next_offset":if end<count {Some(end)} else {None},
-        "page_index_scope":"fresh_snapshot_collection_only",
-        "anomalous_counter_count":anomalous,"counter_data_complete":unsupported_count==0&&anomalous==0,
-        "counter_policy":{"minimum":0,"maximum":COUNTER_LIMIT,"engine_invariant_claimed":false},
-        "lines":lines,"unsupported_type_metadata":unsupported,
-        "collection_policy":{"maximum_capacity":LINE_LIMIT,"engine_invariant_claimed":false},
-        "general_production_collection_available":false,
-        "equipment_ids_available":unsupported_count==0 && equipment_unavailable==0,
-        "ui_allocation_available":false,"idle_capacity_available":false,"eligibility_available":false,
-        "cross_load_identity_available":false,"input_authorized":false,"observation_paused_game":false,
-        "freshness":{"observed_unix_ms":SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),
-            "elapsed_ms":start.elapsed().as_secs_f64()*1000.0,"read_calls_kind":"logical_read_requests",
-            "read_calls":reader.calls.get()+end_calls as u64,"read_bytes":reader.bytes.get()+end_bytes}});
-    value["equipment_id_kind"] = json!("base_equipment_type_key");
-    value["equipment_id_unavailable_count"] = json!(unsupported_count + equipment_unavailable);
-    value["equipment_catalog_scope"] = json!("reviewed_base_equipment_types_only");
-    value["custom_variant_identity_available"] = json!(false);
-    Ok((value, context))
+        lines,
+        unsupported,
+        anomalous,
+        equipment_unavailable,
+        known,
+    })
 }

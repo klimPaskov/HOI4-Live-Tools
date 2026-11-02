@@ -7,6 +7,8 @@ mod controls;
 mod find_view;
 #[path = "construction/locations.rs"]
 mod locations;
+#[path = "construction/target.rs"]
+mod target;
 #[path = "construction/ui.rs"]
 mod ui;
 const BASE: u64 = 0x10000;

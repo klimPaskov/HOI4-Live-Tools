@@ -137,6 +137,13 @@ impl X11Controls {
                 "Owned window lost focus; no activation",
             ));
         }
+        if let Some(expected) = self.expected_client {
+            require_client_dimensions(
+                expected,
+                [geometry.width, geometry.height],
+                geometry.root == self.root,
+            )?;
+        }
         let translated = self
             .connection
             .translate_coordinates(self.window, self.root, 0, 0)
@@ -494,6 +501,11 @@ impl LeftClick<'_> {
             connection.flush().map_err(xerror)?;
             // Nothing above this point delivered pointer input.
             before_queue()?;
+            // A domain's final memory observation may take time. Recheck held
+            // keys/modifiers and the owned window AFTER it, before arming the
+            // queued bytes. In particular Ctrl/Shift changes factory increments.
+            self.controls
+                .pointer_check(self.process, self.until, Some(&self.witness), false)?;
             connection.stream().armed.set(true);
             let delivery = (|| -> Result<()> {
                 connection.stream().send_queue()?;

@@ -227,6 +227,15 @@ pub(crate) fn fixture_local_cookie(authority: &Path, display: u16) -> Result<(Ve
         xauthority::load_cookie(authority, &hostname, display)?,
     ))
 }
+fn require_client_dimensions(expected: [u16; 2], actual: [u16; 2], same_root: bool) -> Result<()> {
+    if !same_root || actual != expected {
+        return Err(Error::new(
+            "input_geometry_changed",
+            "Owned client dimensions differ from immutable profile",
+        ));
+    }
+    Ok(())
+}
 pub struct X11Controls {
     connection: RustConnection<BoundedStream>,
     root: u32,
@@ -235,6 +244,7 @@ pub struct X11Controls {
     class: Vec<u8>,
     pid_atom: u32,
     active_atom: u32,
+    expected_client: Option<[u16; 2]>,
 }
 impl X11Controls {
     /// Bind one already-focused, owned window. Never activates windows, moves
@@ -292,9 +302,44 @@ impl X11Controls {
             class: verified_class.to_vec(),
             pid_atom,
             active_atom,
+            expected_client: None,
         };
         controls.check(process, &ControlKey::Pause)?;
         Ok(controls)
+    }
+    /// Owner-only immutable client-size pin. No activation or pointer movement.
+    /// Clock-only bindings may omit this; opted-in domain profiles must supply it.
+    pub fn bind_client_dimensions(
+        &mut self,
+        process: &dyn Process,
+        expected: [u16; 2],
+    ) -> Result<()> {
+        if expected.iter().any(|n| !(1..=16384).contains(n))
+            || self.expected_client.is_some_and(|prior| prior != expected)
+        {
+            return Err(Error::new(
+                "invalid_input_binding",
+                "Immutable bounded owned client dimensions required",
+            ));
+        }
+        self.expected_client = Some(expected);
+        self.check(process, &ControlKey::Pause).map(|_| ())
+    }
+    fn check_client_dimensions(&self) -> Result<()> {
+        if let Some(expected) = self.expected_client {
+            let geometry = self
+                .connection
+                .get_geometry(self.window)
+                .map_err(xerror)?
+                .reply()
+                .map_err(xerror)?;
+            require_client_dimensions(
+                expected,
+                [geometry.width, geometry.height],
+                geometry.root == self.root,
+            )?;
+        }
+        Ok(())
     }
     fn begin(&self) -> Result<()> {
         self.connection.stream().verify_peer()?;
@@ -360,6 +405,7 @@ impl X11Controls {
                 "Owned window is not viewable",
             ));
         }
+        self.check_client_dimensions()?;
         let p = self.property(self.root, self.active_atom, AtomEnum::WINDOW, 1)?;
         if p.format != 32
             || p.value32().and_then(|mut v| v.next()) != Some(self.window)
@@ -473,6 +519,9 @@ impl X11Controls {
         }
         process.check()?;
         self.connection.stream().verify_peer()?;
+        // The typed final reader may block or the client may resize meanwhile.
+        // Refresh the immutable size after it, before either key is queued.
+        self.check_client_dimensions()?;
         if lease_deadline.saturating_duration_since(Instant::now()) < Duration::from_secs(2) {
             return Err(Error::new(
                 "input_lease_required",
@@ -504,6 +553,23 @@ impl X11Controls {
 mod tests {
     use super::*;
     use std::os::unix::net::UnixStream;
+    #[test]
+    fn immutable_owned_client_size_refuses_resize_or_another_root() {
+        require_client_dimensions([1920, 1080], [1920, 1080], true).unwrap();
+        for (size, same_root) in [
+            ([512, 288], true),
+            ([1921, 1080], true),
+            ([1920, 1079], true),
+            ([1920, 1080], false),
+        ] {
+            assert_eq!(
+                require_client_dimensions([1920, 1080], size, same_root)
+                    .unwrap_err()
+                    .code,
+                "input_geometry_changed"
+            );
+        }
+    }
     #[test]
     fn unresponsive_display_has_a_bounded_deadline() {
         let (socket, _peer) = UnixStream::pair().unwrap();

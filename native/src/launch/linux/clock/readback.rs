@@ -496,7 +496,13 @@ mod tests {
             );
         }
         assert_eq!(backend.dispatches, 1);
-        assert_eq!(backend.observations, reads);
+        // The original ID gets one read-only settlement attempt. The new ID
+        // stays blocked before observation, and neither sends another key.
+        assert_eq!(backend.observations, reads + 1);
+        assert_eq!(
+            reopened.receipt("one-delivery").unwrap().status,
+            Status::Dispatching
+        );
     }
     #[test]
     fn three_samples_verify_one_delivery_without_resetting_overall_budget() {

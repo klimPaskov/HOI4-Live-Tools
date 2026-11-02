@@ -1,8 +1,12 @@
 //! Join/stop ownership only; no game input, reader or strategy.
+#[cfg(any(target_os = "linux", all(test, unix)))]
+mod clock_probe;
 use crate::{
     daily_governor::{WakeReason, Wakeup},
     error::{Error, Result},
 };
+#[cfg(target_os = "linux")]
+pub(crate) use clock_probe::ClockProbeHistory;
 use std::{
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -46,7 +50,7 @@ impl Lifecycle {
     }
     pub(crate) fn stop(&mut self) -> Result<()> {
         self.stop.store(true, Ordering::Release);
-        self.wake.notify(WakeReason::Shutdown)?;
+        let notification = self.wake.notify(WakeReason::Shutdown);
         if let Some(h) = self.handle.take() {
             if h.thread().id() != thread::current().id() {
                 h.join().map_err(|_| {
@@ -57,7 +61,7 @@ impl Lifecycle {
                 })?;
             }
         }
-        Ok(())
+        notification.map(|_| ())
     }
 }
 impl Drop for Lifecycle {
@@ -168,9 +172,47 @@ mod tests {
         assert_eq!(life.stop().unwrap_err().code, "daily_quarantined");
         assert!(!life.running());
     }
+    #[test]
+    fn notification_poison_still_joins_the_worker_and_releases_its_owners() {
+        struct Ended(Arc<AtomicBool>);
+        impl Drop for Ended {
+            fn drop(&mut self) {
+                self.0.store(true, Ordering::Release);
+            }
+        }
+        let stop = Arc::new(AtomicBool::new(false));
+        let wake = Arc::new(Wakeup::default());
+        wake.poison_for_test();
+        let ended = Arc::new(AtomicBool::new(false));
+        let owned = Ended(ended.clone());
+        let worker_stop = stop.clone();
+        let handle = thread::spawn(move || {
+            let _owned = owned;
+            while !worker_stop.load(Ordering::Acquire) {
+                thread::park_timeout(Duration::from_millis(1));
+            }
+        });
+        let mut life = Lifecycle::new(stop.clone(), wake, handle);
+        assert_eq!(life.stop().unwrap_err().code, "worker_poisoned");
+        assert!(stop.load(Ordering::Acquire));
+        assert!(life.handle.is_none());
+        assert!(ended.load(Ordering::Acquire));
+        assert!(!life.running());
+    }
+    #[test]
+    fn notification_failure_does_not_hide_a_joined_worker_panic() {
+        let wake = Arc::new(Wakeup::default());
+        wake.poison_for_test();
+        let handle = thread::spawn(|| panic!("Generated worker panic after notification failure"));
+        let mut life = Lifecycle::new(Arc::new(AtomicBool::new(false)), wake, handle);
+        assert_eq!(life.stop().unwrap_err().code, "daily_quarantined");
+        assert!(life.handle.is_none());
+        assert!(!life.running());
+    }
 }
 
 /// Contention is a local busy state, not unresolved input. Poison is uncertain.
+#[cfg(any(target_os = "linux", test))]
 pub(crate) fn retained_quarantine<T>(
     state: &std::sync::Mutex<T>,
     check: impl FnOnce(&T) -> bool,
@@ -223,9 +265,159 @@ pub(crate) fn disposition(error: Option<&Error>, possible_input: bool) -> Dispos
         Disposition::Continue
     }
 }
+/// Translate the actual final batch disposition, never a historical report.
+pub(crate) fn terminal_event(
+    disposition: Disposition,
+    error: Option<&Error>,
+) -> Option<crate::protocol::worker_events::Terminal> {
+    use crate::protocol::worker_events::{Disposition as Kind, Terminal};
+    let kind = match disposition {
+        Disposition::Continue => return None,
+        Disposition::Stop => Kind::Stopped,
+        Disposition::Quarantine => Kind::Quarantined,
+    };
+    Some(
+        error
+            .map(|e| Terminal::new(kind, e.code, &e.message))
+            .unwrap_or_else(|| {
+                Terminal::new(
+                    kind,
+                    "action_uncertain",
+                    "Worker terminal disposition; durable state requires review",
+                )
+            }),
+    )
+}
+/// A failed scheduling wait is a real quarantine cause, not a batch diagnostic.
+/// Retain the same bounded original cause in the report before final publication.
+pub(crate) fn scheduling_failure(
+    error: &Error,
+    blocked: &AtomicBool,
+    report: &std::sync::Mutex<serde_json::Value>,
+) -> crate::protocol::worker_events::Terminal {
+    blocked.store(true, Ordering::Release);
+    let mut terminal = terminal_event(Disposition::Quarantine, Some(error)).expect("quarantine");
+    terminal.phase = Some("scheduling_wait");
+    if let Ok(mut report) = report.lock() {
+        report["last_error"] = serde_json::json!({"code":terminal.code,"reason":terminal.reason,
+            "phase":terminal.phase,"historical":true});
+        report["stop_reason"] = serde_json::json!(terminal.code);
+        report["running"] = serde_json::json!(false);
+    }
+    terminal
+}
+/// Retain quarantine/report state before notifying any read-only waiter.
+/// The callback runs after the worker body returns and holds no event-cell lock.
+pub(crate) fn publish_terminal(
+    events: &crate::protocol::worker_events::Events,
+    instance: u64,
+    retain: impl FnOnce() -> (u64, crate::protocol::worker_events::Terminal),
+) -> Result<()> {
+    let (revision, terminal) = retain();
+    events.finish(instance, revision, terminal)
+}
 #[cfg(test)]
 mod terminal_tests {
     use super::*;
+    #[test]
+    fn scheduling_poison_retains_same_original_cause_in_report_and_terminal_event() {
+        use crate::protocol::worker_events::{Disposition as Kind, Events};
+        let events = Events::default();
+        let instance = events.start(1).unwrap();
+        let blocked = AtomicBool::new(false);
+        let report = std::sync::Mutex::new(
+            serde_json::json!({"running":true,"last_error":{"code":"old_historical_refusal"}}),
+        );
+        // Synthetic result of Wakeup::wait_after's poisoned notification lock.
+        let scheduling = Error::new("worker_poisoned", "Notification lock poisoned");
+        publish_terminal(&events, instance, || {
+            let terminal = scheduling_failure(&scheduling, &blocked, &report);
+            assert!(events.snapshot().unwrap().terminal.is_none());
+            assert!(blocked.load(Ordering::Acquire));
+            let retained = report.lock().unwrap();
+            assert_eq!(retained["last_error"]["code"], terminal.code);
+            assert_eq!(retained["last_error"]["reason"], terminal.reason);
+            assert_eq!(retained["stop_reason"], terminal.code);
+            assert_eq!(retained["running"], false);
+            (1, terminal)
+        })
+        .unwrap();
+        let terminal = events.snapshot().unwrap().terminal.unwrap();
+        assert_eq!(terminal.disposition, Kind::Quarantined);
+        assert_eq!(terminal.code, "worker_poisoned");
+        assert_eq!(terminal.reason, "Notification lock poisoned");
+        let retained = report.lock().unwrap();
+        assert_eq!(retained["last_error"]["code"], terminal.code);
+        assert_eq!(retained["last_error"]["reason"], terminal.reason);
+        assert_eq!(retained["last_error"]["phase"], "scheduling_wait");
+    }
+    #[test]
+    fn worker_events_publish_only_after_quarantine_and_report_are_retained() {
+        use crate::protocol::worker_events::{Disposition as Kind, Events, Terminal};
+        use std::sync::mpsc;
+        let events = Arc::new(Events::default());
+        let instance = events.start(1).unwrap();
+        let blocked = Arc::new(AtomicBool::new(false));
+        let report = Arc::new(std::sync::Mutex::new(false));
+        let (entered_tx, entered_rx) = mpsc::channel();
+        let (release_tx, release_rx) = mpsc::channel();
+        let e = events.clone();
+        let b = blocked.clone();
+        let r = report.clone();
+        let worker = thread::spawn(move || {
+            publish_terminal(&e, instance, || {
+                entered_tx.send(()).unwrap();
+                release_rx.recv().unwrap();
+                b.store(true, Ordering::Release);
+                *r.lock().unwrap() = true;
+                (
+                    1,
+                    Terminal::new(
+                        Kind::Quarantined,
+                        "action_uncertain",
+                        "Original unresolved journal",
+                    ),
+                )
+            })
+            .unwrap()
+        });
+        entered_rx.recv().unwrap();
+        assert!(events.snapshot().unwrap().terminal.is_none());
+        let sequence = events.snapshot().unwrap().sequence;
+        release_tx.send(()).unwrap();
+        let snapshot = events
+            .wait_after(
+                sequence,
+                std::time::Instant::now() + std::time::Duration::from_secs(2),
+            )
+            .unwrap();
+        assert!(snapshot.terminal.is_some());
+        assert!(blocked.load(Ordering::Acquire));
+        assert!(*report.lock().unwrap());
+        worker.join().unwrap();
+    }
+    #[test]
+    fn worker_events_follow_final_disposition_not_continue_diagnostics() {
+        use crate::protocol::worker_events::Disposition as Kind;
+        for code in ["input_busy", "torn_read", "research_precondition"] {
+            let error = Error::new(code, "Historical or recoverable refusal");
+            assert!(terminal_event(disposition(Some(&error), false), Some(&error)).is_none());
+            // A real production/panel failure is explicitly promoted by owner.
+            let stopped = terminal_event(Disposition::Stop, Some(&error)).unwrap();
+            assert_eq!(stopped.disposition, Kind::Stopped);
+            assert_eq!(stopped.code, code);
+            let quarantine = terminal_event(disposition(Some(&error), true), Some(&error)).unwrap();
+            assert_eq!(quarantine.disposition, Kind::Quarantined);
+            assert_eq!(quarantine.code, code);
+        }
+        let error = Error::new("input_lease_required", "Original lease expired");
+        assert_eq!(
+            terminal_event(disposition(Some(&error), false), Some(&error))
+                .unwrap()
+                .reason,
+            "Original lease expired"
+        );
+    }
     #[test]
     fn terminal_preinput_loss_stops_without_false_quarantine() {
         for code in [

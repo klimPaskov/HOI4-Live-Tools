@@ -698,8 +698,8 @@ fn owned_xvfb_keyboard_controls() {
             root,
             10,
             10,
-            300,
-            200,
+            1920,
+            1080,
             0,
             WindowClass::INPUT_OUTPUT,
             0,
@@ -818,7 +818,76 @@ fn owned_xvfb_keyboard_controls() {
     while let Some(event) = connection.poll_for_event().unwrap() {
         assert!(!matches!(event, Event::KeyPress(_) | Event::KeyRelease(_)));
     }
-    let controls = X11Controls::open(&process, number, &server, &authority, window, class).unwrap();
+    let mut controls =
+        X11Controls::open(&process, number, &server, &authority, window, class).unwrap();
+    controls
+        .bind_client_dimensions(&process, [1920, 1080])
+        .unwrap();
+    assert_eq!(
+        controls
+            .bind_client_dimensions(&process, [1921, 1080])
+            .unwrap_err()
+            .code,
+        "invalid_input_binding"
+    );
+    // A resize invalidates stationary ordinary keys and query text without
+    // moving the pointer, including a resize during the typed final reader.
+    use x11rb::protocol::xproto::ConfigureWindowAux;
+    let resize = |width| {
+        connection
+            .configure_window(window, &ConfigureWindowAux::new().width(width))
+            .unwrap()
+            .check()
+            .unwrap();
+    };
+    resize(1921);
+    assert_eq!(
+        controls
+            .preflight(&process, &ControlKey::ResearchPanel)
+            .unwrap_err()
+            .code,
+        "input_geometry_changed"
+    );
+    assert_eq!(
+        controls
+            .preflight_query(&process, "four year plan")
+            .unwrap_err()
+            .code,
+        "input_geometry_changed"
+    );
+    resize(1920);
+    assert_eq!(
+        controls
+            .send_until_checked(
+                &process,
+                ControlKey::ResearchPanel,
+                Instant::now() + Duration::from_secs(5),
+                || {
+                    resize(1921);
+                    Ok(true)
+                }
+            )
+            .unwrap_err()
+            .code,
+        "input_geometry_changed"
+    );
+    resize(1920);
+    assert_eq!(
+        controls
+            .send_query_until_checked(
+                &process,
+                "four year plan",
+                Instant::now() + Duration::from_secs(5),
+                || {
+                    resize(1921);
+                    Ok(())
+                }
+            )
+            .unwrap_err()
+            .code,
+        "input_geometry_changed"
+    );
+    resize(1920);
     // A refreshed completed decision, refused decision or expired authority
     // must not send even the first key event to the owned fixture window.
     assert!(!controls

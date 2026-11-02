@@ -1,5 +1,668 @@
 # Rust foundation provenance
 
+## Mac Find opening and pointer occlusion
+
+The new `construction/mac_find/opener` and `characters` modules independently
+compose the same inspected Mac Mach-O build identified below. They retain own
+construction/Find/control identity and complete consumed-field witnesses; no
+engine callback, memory write or foreign platform offset is used. Character
+forwarding admission treats the original disabled path and exact owned empty
+HotkeyManager table separately. An unknown capture, sentinel or receiver refuses.
+Escape's control-byte predicate is not reused as printable-character evidence.
+
+The ordinary opener retains the exact named MapModes child, renderer, callback
+and target. After its single move it waits only for an explicit supported route
+correlation to become positive within the original bound; it never moves twice.
+The generic platform occlusion policy and Mac adapter use public window metadata
+in onscreen order. Another window covering the intended point refuses regardless
+of layer. A cursor-level exception requires narrow metadata and fresh bounded
+system-process identity checks; it is not a general overlay exception.
+
+These are extensions of the attributed Clausewitz own-target/readback approach;
+no upstream code was copied for these modules. Opaque selection/placement/clearing
+handoffs and queued-minimum plan syntax add no worker input authority. Component
+recordings and offline validation remain separate from campaign acceptance.
+
+## Default-off Mac ordinary cancellation
+
+`construction/mac_panel/cancel.rs`, `mac_panel/shortcut/escape.rs` and
+`launch/macos/construction_cancel.rs` independently compose the same verified Mac
+Mach-O UUID/SHA below. This extends the attributed Clausewitz own-target/readback
+approach; no upstream cancellation implementation, game bytes or foreign offsets
+are copied. The adapter uses ordinary operating-system Escape events, never an
+engine callback invocation or memory write.
+
+The original selection and complete queue remain typed through the attempt.
+Owner edges precede control metadata; the exact original target precedes callback
+payload. Current keyboard membership and predecessor gates are fully re-evaluated
+with encompassing final consumed-field witnesses. Incidental cache membership is
+not immutable target identity. The unchanged strict T predicate remains separate.
+Unknown types and unsupported routing cannot become an inert predecessor.
+
+The current CGameGui lifetime arrays have a distinct purpose from keyboard sources.
+Only the independently inspected hidden, idle plane-selection window is admitted;
+complete bounded membership and original object/root ownership remain retained.
+The independently inspected HotkeyManager wrapper forwards the normal Escape key
+path to the original idler. The shipped Cocoa text producer rejects control bytes
+before making text events; this is an Escape-specific basis, not a general typing
+or arbitrary external input-method claim. Capturing modes and unknown overrides
+refuse. The normal Escape prepass may invalidate existing GUI state.
+
+A generic immutable qualification deadline, durable once-only intent, canonical
+inactive/full-queue readback and historical-only replay bound ordinary input.
+Private read-only CLI exports used for diagnosis are excluded from public source.
+The source and recorded component checks remain distinct from construction-worker,
+advancing-time and campaign acceptance. Earlier failures are retained.
+
+## Default-off Mac placement qualification
+
+`launch/macos/construction_place.rs` and its `point` module compose the separately
+recovered Mac selection/queue, center-terrain, source-point, native Cocoa geometry,
+panel/Find, own-scene and typed GUI foundations below. No upstream placement/UI
+code, foreign offsets or game bytes are copied. This extends the attributed
+Clausewitz own-target/readback approach with ordinary OS move/down/up events;
+there is no engine call or memory write.
+
+Original identities and complete queue evidence remain typed in memory through
+the attempt. Exact edge interception protects internal geometry reads before
+replacement payload. Complete direct-recipient rejection and separate dispatch
+guards are checked with final consumed-field witnesses. The normal C99 zero-angle
+calculation is a restricted math basis, not dynamic import or atomic-route proof.
+Queue readback distinguishes unchanged pending state, one original-line increment
+and one new matching amount-one line, preserving every original row.
+
+The generic absolute qualification bound replaces a private diagnostic session's
+fixed expiry. Conversion captures monotonic origin before the wall clock; every
+action keeps the minimum of that original bound, its lease and 12 seconds. A
+redundant duplicate Find field was removed; its original pointer remains in the
+witnessed edge list. Compact returned diagnostics omit raw pointer identities
+and examples. Strict durable intent, no retry after possible motion and historical
+replay are unchanged. The private recorded component is distinct from source-port,
+advancing-time, worker and campaign acceptance.
+
+## Internal typed Mac direct-recipient foundation
+
+`gui/macos/direct_route.rs` and its `typed`, `model` and `witness` modules
+independently compose the same Mach-O UUID/SHA below. The complete graphical
+builder at `0x1027b05e0`, class/resource procedures documented below and separate
+dispatch guards establish the restricted center-point observation. The root is
+the graphics object's embedded `C2dPositionObject` at +0x1e0; exact primary and
+reciprocal parent checks precede each node's payload. Ordered bounded child
+membership is complete. Unknown classes refuse; unsupported resources cannot
+become geometric misses. No target widget payload or game callback is followed.
+
+The immutable typed graph retains original resource identities and uses the
+existing public hit-envelope functions. Scalar transform grouping, inherited
+clip behavior and conservative nine-box InstantText union are preserved. Child
+traversal is independent of self eligibility and clip rejection. Fresh rebuild,
+strict captured-cache comparison and unqualified-trig results remain distinct;
+the normal C99 zero-angle calculation is an explicit restricted math basis.
+Captured cache discrepancies are diagnostic, never adopted as fresh transforms.
+
+The caller owns original exact build/process/campaign/root bindings, a fixed
+deadline and encompassing final witness/context checks. Request-local witnesses
+recheck consumed fields and complete membership, excluding unused node padding.
+Twenty-six synthetic fixtures cover the transform/clip model, typed rejection,
+type-before-payload guards and late/changed/short witness failures. The internal
+predicate is a provisional complete-data condition for no direct GUI recipient;
+it does not prove cache completion, no GUI effects, full picker semantics or
+input/delivery authority. There is no default read, tool or action registration.
+This extends the attributed Clausewitz observation approach without copying
+upstream GUI code, game bytes or another platform's offsets. Private component
+measurements are documented separately and do not qualify a public adapter.
+
+## Pure Mac graphical hit envelopes
+
+`gui/macos/hit_envelope.rs` independently follows the same Mac UUID/SHA below.
+Complete procedures `0x1027ed5d0..0x1027ed670`, `0x1027ed3a0`, `0x1027ed3e0`,
+`0x1027ed6a0`, `0x10284b8d0`, `0x10284fb20`, `0x10284fe70`, `0x10278a150`,
+`0x10278a170` and `0x1027d2cd0` establish the separate class rejection branches.
+The internal pure functions cover C2dPositionObject, CorneredTileSprite,
+alignment-zero InstantText and sprite-like dispatch through exact CSpriteType
+RVA `0x34bde68`. They preserve scalar f32 grouping, truncation stages and each
+branch's distinct edge inclusivity. Size resource +0x168 is separate from the
+animated/Shield hit resource +0x1b0. Loaded resource index +0x188 must be
+nonnegative before using the known lazy size helper's no-write branch.
+
+Callers must establish exact current class/resource ownership, independently
+prepared inherited transforms and encompassing original read witnesses.
+Non-unit inherited scale, rotation, unknown/unloaded resources, unsupported
+alignment and zero-size fallback refuse to supply a geometric miss. Bounds
+are observer policy. Thirty-two generated fixtures cover rounding-sensitive
+pixel decisions, orientation, separate resources, edges and unsupported cases.
+These functions neither read memory nor establish a positive texture hit,
+complete GUI route, cache completion, input or placement authority. They extend
+the attributed Clausewitz observation approach; no upstream hit-testing source,
+game bytes or other platform's offsets were copied.
+
+`gui/macos/hit_envelope/variants.rs` extends this independently recovered math
+with exact renderer/resource pairs: FrameAnimated `0x34afed0` / `0x34b01c8`,
+Shield `0x33e2b28` / MaskedSpriteType `0x33e1c08`, and Progressbar `0x34ba6f0` /
+`0x34ba610`. Complete constructors and dispatch procedures `0x1027af5f0`,
+`0x1019d3800`, `0x102831e30`, `0x1019d3fd0`, `0x1019d4420`, `0x102833210`,
+`0x102833250` and `0x102832c10` establish their distinct size and hit paths.
+Frame resource dispatch is checked before reusing Sprite arithmetic. Masked hit
+bounds use unscaled strict unsigned comparisons while size remains tile/scale
+dependent. Progress hit bounds exclude the top and include the integer bottom.
+
+Progress requires an explicit standard sincos-zero arithmetic contract; the
+unqualified value stays Unsupported. Static analysis identifies the shipped
+`___sincosf_stret` stub, without observing its current dynamic binding or calling
+it. Thirty-six additional synthetic fixtures cover these branches, independent
+resources, edge/rounding counterexamples and refusal propagation. The existing
+32 fixtures remain unchanged. No reader, cache-generation claim, GUI-route or
+input capability is added; exact current bindings remain caller obligations.
+
+## Resident Mac center-terrain and selection clearing
+
+`construction/mac_map_point.rs` independently follows the Mach-O UUID/SHA below.
+It composes the recovered ray/terrain procedures with exact own GS/idler/country,
+GUI/graphics/resource, map/camera/data and grid joins. RVAs `0x192fc80`,
+`0x2762150`, `0x19302e0` and `0x1931270..0x19312f4` establish this fallback.
+The map-mode object at `0x36330a0` is nonpolymorphic: its enum is at zero and its
+own GS backlink is at +0x48. Decimal construction mode 27 (`0x1b`) is distinct
+from region mode `0x27` (39); only reviewed modes 0/27 are admitted here.
+
+The caller supplies exact process/build/campaign checks and encompassing final
+witnesses. The observer requires the qualified 1920×1080 physical/logical canvas,
+scale 1, captured camera wrap 1 and zero alternate projections. Bounded height
+samples use a request-local cache. The resulting province must have exact type,
+own control and reciprocal membership in the original requested own state.
+Its +0xb8 definition must match the original CMap +0x208 catalog slot and the
+same ID before +0xca fallback flags. Complete ordered scene/model intersection
+precedes this engine fallback and is not established by the terrain candidate.
+
+Retained roots, catalogs, grids, province and definition are checked before
+following replacements. Matrices may change within original camera identity;
+a different resulting province/definition refuses. Grid/catalog/traversal caps
+are observer policy, not engine maxima. Twenty-six synthetic fixtures cover
+captured arithmetic, other own state IDs, bounds, mode/wrap refusal and original
+edge rejection. The public optional target read shares the complete own queue's
+witness bracket; it grants no full-picker, routing, event, eligibility or input
+authority. Stationary exact-source MCP qualification is documented separately.
+No upstream projection or UI source, foreign offsets or game bytes were copied.
+
+`construction/mac_ui/selection_state/clearing_state.rs` independently extends
+retained canonical selection readback. An original inactive or exact requested
+ordinary template may become canonical inactive while retaining complete queue
+and scope. An unchanged requested selection is Pending; another target refuses.
+Eight synthetic memory fixtures exercise these transitions and replacement,
+queue, chronology and unsupported-mode failures. This reader sends no Escape,
+closes no panel and cannot settle historical uncertain input. Live ordinary
+cancellation and a command adapter remain unqualified.
+
+## Passive Mac own scene scope
+
+`construction/mac_scene_scope.rs` independently follows the same UUID/SHA below.
+GS setup `0x1006e4f00` populates picker membership from country arrays at +0x250,
++0x238 (nested fleet +0xb0) and +0x268. Insertion `0x1006e5700`, removal `0x1006e5620`
+and owner update `0x1017dd9f0` show that relationship-admitted objects can enter;
+this is not a blanket own-country list. Exact RTTI/constructors identify CArmy,
+CFleet and CTaskForce; the task-force constructor uses shared selectable kind 1.
+
+The internal reader admits only complete scene membership matched to fresh own
+division/fleet/task-force lists, then checks exact candidate types and own owner
+before kinds. Unknown entries refuse before any candidate payload. Retained
+observations require the original own country, ordered memberships and objects;
+vector buffer reallocation with identical membership is permitted. Callers must
+provide exact process/build/context and final read witnesses. This extends the
+attributed own-map observation approach without upstream scene code, foreign
+offsets, model intersection, GUI routing, input or placement authority.
+
+## Passive Mac cached source coordinates
+
+`gui/macos/source_point.rs` independently follows the same Mac UUID/SHA below.
+CPdxMouse virtual `+0xc8` (`0x1026bbf90`, helper `0x1026b5e60`) reaches the
+current SDL dynapi target `0x1025714e0`, which reads cached signed X/Y. Focus
+setter `0x10256fcb0` changes the window and resets initialization without clearing
+coordinates. Cocoa absolute path `0x102642d70` truncates window-relative X and
+window-height minus Y; the getter adds no scale/origin transformation.
+
+The reader binds the original owned Geometry/provider/window, exact getter and
+current dispatch target, requires initialization 1 and relative/warp modes 0
+before coordinates, and relies on the encompassing final witnesses. Public
+`include_source_point` defaults off and adds no reads when omitted. Live testing
+found that valid cached coordinates can differ from the OS pointer; no current
+event, frame, delivery or input authority is supplied. No SDL source was copied.
+
+## Passive Mac ray and terrain arithmetic
+
+`construction/mac_projection.rs` independently follows Mach-O UUID
+`089EA519-6780-353B-8E39-4E9309B444D4`, SHA-256
+`09419b087f8b4656c00df337bf838ff34c9b1d816b76cef5383ae6a4ac15b1fb`.
+Complete file-backed procedures `0x102762460`, `0x102762150` and `0x102ac6970`
+establish pixel truncation, column-major projection and affine transforms,
+homogeneous division and scalar normalization. The internal function preserves
+separate f32 operation grouping and refuses nonfinite or degenerate arithmetic.
+Its canvas limit is an observer policy, not an asserted engine limit.
+
+This extends the attributed map-observation approach; no upstream projection
+code, SDL source or foreign offsets were copied. Own rooted live metadata and
+captured-data calculations are separate evidence. The pure function supplies
+no process reads, terrain intersection, frame freshness, province identity,
+input, eligibility or placement authority.
+
+The child `construction/mac_projection/terrain.rs` separately follows complete
+procedures `0x1019302e0`, `0x102a9bc00`, `0x102a9bd80` and height sampling
+`0x1007c5240`. It preserves ordered quadrant traversal, the 256-candidate cap,
+byte-height floor, representative leaf distance and closest-candidate grouping.
+An unsupported or indeterminate case refuses. Node/sample bounds are observer
+policies. It supports one supplied typed ray and a caller-owned sample callback;
+there is no process reader, alternate-projection or plane-fallback substitution,
+full scene picker, GUI routing or placement permission. Captured-data equivalence
+is separate from the private prototype's live own-state join.
+
+## Retained Mac Find identity and optional edit focus
+
+`construction/mac_find/retained.rs` separates original process/campaign/country,
+production, registry, interface, Find, camera-object and optional own state/template
+identity from changing window, query, result and camera-coordinate facts. Original
+pointer joins are checked before following replacement payloads. A rebuilt window
+must independently be an exact own container; no old-window continuity is assumed.
+Complete witnesses and final process checks precede typed readback. Public JSON
+renders these facts and is never parsed back into action authority.
+
+`construction/mac_find_focus.rs` independently recovers the same Mac artifact's
+edit receiver from bounded file-backed decoding. Addresses are RVAs. Constructor
+`0x2792be0` writes CEditBox primary `0x34add98`, its `+0x70` base `0x34ae058`
+and embedded `+0x180` text receiver `0x34ae0c8`; RTTI confirms the secondary offsets.
+Find setup `0x207bc50` retains the named `to_find_text` box at `+0xc40`.
+GUI setter `0x27c86c0` stores keyboard focus at `+0x138` and invokes receiver
+virtual `+0xc0`. CEditBox's implementation `0x2794af0` passes `this+0x180`
+through `0x2863ee0` to `0x27c8f30`, which stores text focus at GUI `+0x210`.
+The Mac receiver offset must not be replaced with Linux's `+0x1a0`.
+
+Only opt-in observation reads the exact box, its own registry, complete unique
+named child membership, embedded receiver and both focus aliases within the same
+witness. Hidden/unmaterialized views skip retained edit payloads and aliases;
+an absent box stays unknown. Unrelated focused objects are never followed.
+The installed GUI's `f` and `RETURN` declarations are static interface evidence,
+not proof of current routing or delivery. These additions invoke no engine
+function, grant no input and create no action deadline or retry.
+
+## Mac Find/camera and exact placement delta
+
+`construction/mac_find.rs` independently recovers Mach-O UUID
+`089EA519-6780-353B-8E39-4E9309B444D4`, SHA256
+`09419b087f8b4656c00df337bf838ff34c9b1d816b76cef5383ae6a4ac15b1fb`.
+Addresses here are RVAs. Exact file bytes, RTTI, LC_FUNCTION_STARTS and decoded
+instructions were cross-checked with Ghidra pseudocode. No Linux offsets or
+upstream UI implementation were copied; decompiler output is private evidence,
+not original source or proof of execution.
+
+Constructor `0x207b1f0` installs CFindView primary `0x3457c38`, own idler `+0xc30`,
+window `+0xc38`, query string `+0xc48`, first-row cache `+0xc88` and result header
+`+0xc90`. Refresh `0x207c140` reads count `+0xc9c` and traverses 0x40-byte entries.
+It may retain an old first row when count is zero; the observer therefore skips
+that stale pointer and payload. Row constructor/refresh `0x207f360`/`0x207f6d0`
+uses CSearchableGridBoxItem primary `0x34580d8`, copies entry kind `+0x38` to
+row `+0x408`, and entry object `+0x30` to the kind's `+0x3f0/+0x3f8/+0x400`.
+State kind 2 must join the fresh state catalog. Other object kinds are not followed.
+Hidden Find windows skip query and row payload; root ownership and local states
+remain separately observed, without input or settled-frame authority.
+
+Ordinary selection `0x207f5d0` passes a kind-2 state to the own idler virtual
+`+0x1e0`, `0x75c000`. Its ordinary branch reads state `+0x20` template map position
+`+0x120`. CStateTemplate primary `0x337de78` is independently identified by RTTI.
+Both idler camera getters `+0x148/+0x150` resolve to `0x77bd30`, returning `+0x708`.
+Setter `0x1929770` writes eye `+0x698`, look-at `+0x6a4`, and look-at height 9.5;
+eye Z also depends on map settings. The reader reports finite bounded coordinates
+and exact horizontal anchor comparison. Wrapped-map equivalence, text-focus,
+map-hit routing and placement eligibility remain unqualified.
+
+`construction/mac_ui/placement_state.rs` separately retains the selected original
+canonical target, own scope, full catalog and ordered complete queue. Replacement
+queue payload follows original non-queue ownership checks. Verification permits
+one matching amount increment or one inserted amount-one line, with every old
+row and relative order intact. Zero delta is Pending. Existing selection proof
+still requires an entirely unchanged queue. Neither reader creates a deadline,
+authorizes input or invokes an engine function.
+
+## Typed Mac keyboard receiver prefix
+
+`construction/mac_panel/shortcut.rs` uses independently retained static evidence
+for Mach-O UUID `089EA519-6780-353B-8E39-4E9309B444D4`, SHA256
+`09419b087f8b4656c00df337bf838ff34c9b1d816b76cef5383ae6a4ac15b1fb`.
+All addresses below are RVAs. No upstream implementation or Linux layout was
+copied. Exact constructors, primary RTTI, event handlers and registration setters
+were reviewed against a bounded, stable own-GUI live census.
+
+The reverse keyboard collector `0x27b6dc0` reads graphics `+0x68`, follows each
+source's `+0x138` target and admits flags `& 0xc04 == 0x804`. Exact renderer
+primaries are Sprite `0x34bdb10`, FrameAnimatedSprite `0x34afed0`, CorneredTile
+`0x34acdc0`, Progressbar `0x34ba6f0`, InstantTextObject `0x34b1b30`, Shield
+`0x33e2b28` and TextSprite `0x34c0380`. Their primary constructors preserve the
+common `0x27afad0` base and registration `0x27b6c00` backlink. TextSprite's
+secondary base is not normalized. This establishes no geometry or renderer GUI
+owner field.
+
+Each target requires its exact primary, own GUI `+0x58`, own graphics and
+reciprocal renderer. The class-specific graphics/renderer offsets are Standard
+`+0xd0/+0xd8`, Icon (`0x34a81a8`) `+0xe0/+0xd0`, Drag (`0x34aa400`)
+`+0xd0/+0x100`, Track (`0x34c0918`) `+0xd0/+0xe8`, and InstantTextBox
+(`0x34b1768`) `+0x88/+0xb0`. Icon and Track use the direct CButton handler
+`0x27501b0`: state 0/2, absent custom handler, then disabled shortcuts or complete
+current nonmatching shortcuts with consuming flag bit 2 clear. They never read
+Standard-only fields. Drag handler `0x2752210` is passive for ordinary key kind 1
+only under state 0 and flags `& 0x6000 == 0`. InstantTextBox handler `0x27d0640`
+returns without effects for that key kind on every optional-pointer branch; it
+has no CButton payload.
+
+Standard wrapper `0x275a210` reads parent `+0x178`, its enabled byte `+0x128`,
+and wrapper byte `+0x1d1`. Nonnull parents require exact C2dPositionObject primary
+`0x34b0428` and renderer `+0x108` equality before gate payload. Setter `0x2759b00`
+and common attachment `0x27b00a0` establish that relationship. The named button's
+parent must also equal its already-owned direct CContainerWindow `+0x1238`,
+independently proved by constructor `0x2766490`. Preceding Standard state 3 is
+passive only with absent custom handler, full u32 `+0xc8 == 0` and flags bit 2
+clear. Named state 3 never authorizes a shortcut. Unknown states, inactive
+wrappers, changed links and unrecognized types still refuse.
+
+All fields share the enclosing final witness. The live census found one plain T
+binding among 1,293 receivers through the named construction target, but it was a
+diagnostic observation, not execution of this adapter. Physical delivery and
+atomic cache completion remain unqualified; input permission stays default-off.
+
+## Mac construction topbar opener observation
+
+`construction/mac_panel.rs` independently maps the same exact Mac build pinned
+below. Manager constructor `0x20e84a0` stores the topbar at `+0x188`; construction
+through `0x22f2c30` / `0x22f0840` installs primary `0x3489640`, own idler `+0x58`,
+manager `+0x60` and the common manager link `+0x30`. Root `+0x68` and the complete
+named path through `country_menu_window`, `after_faction_button` and
+`after_intel_agency_button` lead to `construction_button`. Setup `0x22f3410`
+caches the canonical country-menu window at `+0x88` and button at `+0x7428`.
+The container's virtual `+0x1f8` resolves to `0x27735b0`; its typed lookup returns
+the window itself. Recursive lookup `0x2775440` adds `+0x30` for GUI-object
+access. Raw child membership instead stores that GUI subobject, so the observer
+validates its exact container and own registry before comparing the canonical
+window with the alias. The button alias needs no container adjustment. A live
+stationary read on 23 October confirmed this distinction; the earlier raw-pointer
+comparison failure is preserved.
+
+The exact Standard button and its own GUI registry reuse independently recovered
+Mac types. Observer secondary primary `0x34ab360` at button `+0x70` owns head/tail
+`+0x78/+0x80`, signed count `+0x88` and one-byte notification state `+0x8c`.
+The complete reciprocal list must contain only topbar `+0x3290`, with zero node
+removal marks. Single-observer override `+0x90` and early handler `+0xc0` must be
+null. Exact glue primary `0x3489788` holds a function-storage pointer at `+0x30`:
+functor primary `0x3489818`, member `0x22f27d0`, zero adjustment and own topbar
+receiver. Ordinary down/release notifications can also invoke storage pointers
+`+0x150/+0x180/+0x2d0/+0x60/+0x1b0/+0x1e0`; precondition notification can invoke
+`+0x3c0`. The observer requires all seven absent, before dependent payload.
+These fields are final-witness checked; no function is executed.
+
+The member requests manager mode `0x11` through `0x20eef40`. Managed mode at
+`+0x3a8` is distinct from construction selection at `+0x3c0`. Selecting the
+already-selected managed mode toggles it closed, so mode `0x11` skips opener
+reads even while visibility is pending. The optional rectangle comes from the
+bound renderer only when local ancestors are visible with idle transitions.
+The optional rectangle also requires the independently bound own graphics canvas
+to have physical/logical 1920×1080 dimensions and scale 1. The shared typed canvas
+reader reuses the existing Mac geometry constructor evidence and bounds; it does
+not add OS-window or input authority. Other profiles explicitly refuse rectangle
+output while ordinary binding observation remains available.
+`construction/mac_panel/routing.rs` adds opt-in correlation on that same canvas.
+Standard constructor `0x2757be4` retains graphics at button `+0xd0`; its call to
+`0x27b6c00` links the unchanged `+0xd8` renderer primary back to the button at
+renderer `+0x138`. CSprite/animated constructors preserve the common graphical
+primary; the accepted types remain `0x34bdb10` and `0x34afed0`. Renderer `+0x120`
+contains packed canvas dimensions, not an owner pointer. Button `+0xd0` must
+equal the own GUI's graphics instance, and renderer `+0x138` the exact button.
+
+Graphics `+0x50` holds 8-byte source pointers; `+0x28` holds 16-byte persistent
+CCollisionObject entries with primary `0x34b0ab8` and target at `+8`, independently
+pinned by appender `0x27bd690` and RTTI. These differ from the temporary
+C2dCollisionObject primary `0x34ac070`. Both complete ordered vectors are bounded
+and final-witness checked; unrelated node/target payloads are never followed.
+Source-tail, first-target and GUI `+0x120/+0x128` matches are reported separately.
+
+Mouse conversion routines `0x27b6f50` / `0x27b6fb0` use factors `+0x1c0/+0x1c4`
+and `+0x1c8/+0x1cc`, truncating toward zero. Current/processed graphics points at
+`+0x40/+0x48` are correlated with the integer rectangle center. Routine
+`0x27b6e20` writes the processed stamp **before** rebuilding, so equality is not
+an atomic completion marker or an observation of the OS cursor. Dispatcher
+`0x27c6a50` uses GUI bytes `+0x130/+0x12`; conditional target virtual `+0x18`
+tests flags `+0x64 & 2`, while source admission uses `flags & 0xc00 == 0x800`.
+Standard wrapper `0x275a210` uses byte `+0x1d1` and optional graphical parent
+`+0x178`. Nonnull parent and global post-click hook at `0x35dbf60` remain
+unsupported and are never dereferenced. All fields share the enclosing witness.
+
+This establishes neither a settled frame nor atomic delivery. Current route and
+hover behavior still need live qualification; input remains disabled. Private
+static evidence retains exact-file bytes, constructor excerpts and RTTI with the
+independent menu/popup/routing investigation and its explicit gaps.
+
+## Typed Mac construction UI observation
+
+`construction/mac_ui.rs` independently uses Mach-O UUID
+`089EA519-6780-353B-8E39-4E9309B444D4`, SHA256
+`09419b087f8b4656c00df337bf838ff34c9b1d816b76cef5383ae6a4ac15b1fb`.
+The 23 October static review retained exact-file metadata, function bytes,
+instruction excerpts, RTTI and installed GUI names outside Git. Addresses here
+are image-relative RVAs; no Linux offsets or upstream UI code were copied.
+
+Manager constructor `0x20e84a0` stores the primary construction allocation at
+`+0x150`. Constructor `0x1ed6880` installs `CCountryConstructionsView` primary
+`0x343aa90`. Base `0x1fc88e0` writes the idler at `+0x428`; its call through
+`0x2388650` stores the manager at `+0x30`. Getter `0x1fc8f30` returns root
+`+0x430`. These owner links precede root payload. Visibility consumer
+`0x1fc8e30` also invokes root virtual `+0x308`. For the exact container primary,
+that slot resolves to `0x2781d30`: true when either signed state at `+0x12b8`
+or `+0x1270` equals 2. The probe reports raw local flags and bounded states,
+and mirrors this engine visibility predicate before choice reads. State 1 is
+still allowed by the predicate while the corresponding updates can animate;
+neither engine visibility nor both states being zero grants settled geometry.
+Unknown states refuse. The exact constructors initialize both states to zero;
+updaters `0x2779fc0` and `0x277a210` retain the transition interpretation.
+
+Setter `0x20f4760` writes manager mode `+0x3c0` before selected pointer `+0x3b8`.
+Mode zero retains a default pointer, which this reader does not follow. Selection
+routine `0x1ed6730` passes mode 1 only when the selected pointer differs from
+building database cache `+0x3a8`; equality passes mode 3. The probe joins mode 1
+to the fully validated public catalog; modes 2/3 and the special cache's key
+remain unverified. Both mode and active pointer are final-witness checked.
+
+Consumer `0x1edce50` resolves all four possible-construction sections/grids and
+uses their common pointer lists at `+0x190`, signed count `+0x19c`, stride 8.
+Factory `0x27c4600` calls `0x28522d0`, installing `CStandardGridBox` primary
+`0x34be068`. Only that exact type is admitted. Null grid `0x34b61f8`, base
+`0x34b0b70` and the separate template specialization `0x34be390` are not aliases.
+Full named-path membership and item/template joins precede requested-control
+payload. Choice item `0x343a9b0`, template `+0x20`, container `+0x10`, and generic
+Mac GUI/button fields reuse the independently mapped 18 October reader.
+Actual visible grid instances still require live qualification. Named parent
+membership alone does not establish registry backlinks. The probe additionally
+compares each admitted container/grid and requested button's owner with the own
+exact `CGameGui` primary `0x34974d0`. Mac `CGuiObject` constructor `0x27cab10`
+stores its GUI-owner argument at `+0x58`. Standard-grid factory `0x27c5c80`
+passes the same GUI receiver through `0x27c4600`, `0x28522d0` and `0x27c2b50`.
+
+The optional `construction/mac_ui/callback.rs` path uses independent current-file
+choice constructor `0x1ed5310`: template `+0x20`, embedded Legacy observer `+0x30`,
+registered on the named Start button's observer at `+0x70`. It admits exactly one
+active, complete list node targeting that own item. The glue primary is
+`0x343ade8`; its first callable pointer at `+0x30` has primary `0x343ae78`, member
+`0x1ed5640`, zero this-adjustment and receiver equal to the requested item.
+Helper `0x1ee0030` and fields copy `0x22988a0` establish twenty callable slots
+`+0x30` through `+0x3c0`; this constructor supplies only the first. Every other
+current slot must be null. Item `+0x8` is not used as an inferred owner or alias.
+
+The callback has an alternate global branch and a prerequisite-dependent path
+to `0x1ed6730`; capture identity does not prove that selection will occur.
+Item refresh `0x1ed56f0` calls Standard virtual `+0x2a0`, exact setter
+`0x27511b0`, with the inverted prerequisite result. That setter replaces bit
+`0x40` in the single byte at button `+0xcc`. Wrapper `0x2750c90` can temporarily
+enter state 3 then restore the earlier state, so the reader reports this flag
+separately from `+0x9c`. No engine predicate or callback is executed. The flag is
+stored UI state, not a fresh eligibility result. All requested callback bytes
+share the parent's final witnesses; defaults do not read them. Static evidence
+and generated fixtures do not qualify visible controls or physical input.
+Container constructor `0x2766490` passes the owner to `TWindow` at `0x2867fb0`,
+which invokes the common constructor on `this+0x30`, giving container `+0x88`.
+Standard-button constructor `0x2757b80` passes the owner through `0x27500b0`
+to the common constructor without adjusting `this`, giving button `+0x58`.
+These independently recovered Mac links precede dependent payload and are
+final-witness checked. The public all-grid flag is true only after all four
+grids validate. Callback delivery, current geometry, global modal absence and
+placement eligibility remain unavailable.
+
+## Typed construction target observation
+
+`construction/target_snapshot.rs` and the typed queue/location facts are
+independent project code. They reuse the separately recovered Linux and macOS
+queue, building, catalog and territorial layouts already documented here and in
+`construction.rs`; no platform offsets were copied from the other build. The
+public catalog, own target state, complete queue and reciprocal locations share
+one witnessed observation. No new engine command or placement authority is
+introduced. The shared summary now treats an unavailable building identity as
+incomplete evidence, since it cannot exclude that line from the requested total.
+
+The retained RTTI primary inventory independently identifies
+`TNullObject<CBuildingTemplate>` at Linux RVA `0x41b40a8` and Mac RVA `0x332def8`;
+ordinary primaries remain `0x41b49c8` and `0x332e908`. The first new Mac target
+probe refused catalog slot zero because it required the ordinary primary.
+The corrected live read confirmed the exact null primary at that slot with its
+inherited validity byte `+0x18` unset. Only this inactive slot-zero sentinel is
+skipped without key/ordinal payload; no other derived type is accepted. Generated
+fixtures cover both layouts, but this change adds live sentinel evidence only on
+Mac. Earlier failed probes are retained separately from the successful one.
+
+## Explicit FEX translated process identity
+
+`platform/linux/translated.rs` and `launch/linux/translated.rs` are independent
+project code. The [FEX-2610 exec handler](https://github.com/FEX-Emu/FEX/blob/FEX-2610/Source/Tools/LinuxEmulation/LinuxSyscalls/Syscalls.cpp)
+and [x64 syscall registrations](https://github.com/FEX-Emu/FEX/blob/FEX-2610/Source/Tools/LinuxEmulation/LinuxSyscalls/x64/Thread.cpp)
+were consulted to establish that successful guest exec paths use host `execveat`.
+[ELFCodeLoader](https://github.com/FEX-Emu/FEX/blob/FEX-2610/Source/Tools/FEXInterpreter/ELFCodeLoader.h)
+was consulted for auxiliary-vector and FD-exec argument handling. No FEX source
+was copied. Generated owned-child tests check the deployed binary's execution
+witness; they explicitly retain its FD-exec `argc=0` limitation.
+
+The game hash and x86 layout remain the existing pinned Linux ELF. This is not
+an ARM game-layout recovery or proof of actual HOI4 compatibility. Kernel ARM64
+address bounds apply only to the independently verified translator's witness.
+
+## Linux production opening and common engine blockers
+
+`production_panel.rs` is an independent, bounded Linux observer for the pinned
+ELF. Focused static ELF disassembly supplies this mapping; it is not a successful
+REA analysis or live input result. No game assets or disassembly are distributed.
+
+The own manager's `+0x188` topbar has primary `0x426c3d0`, idler `+0x68`, manager
+`+0x70` and root `+0x78`. Its named child chain is `country_menu_window` /
+`after_faction_button` / `after_intel_agency_button`; the first child must match
+alias `+0x98`. The final `production_button` must match alias `+0x4dc0`, distinct
+from the glow alias `+0x4dc8`. It is an exact Standard button with own registry.
+The sole active listener is topbar `+0xdb0`, primary `0x426c518`. Its FIRST VOID
+capture uses manager `0x1886560`, invoker `0x1886530` and member `0x186d0d0`,
+zero adjustment and the own topbar receiver. Alternate function bundles refuse.
+
+Member `0x186d0d0` supplies selector 2 to `0x1709c20`. That function selects
+manager `+0xd8` and writes mode 2 at `+0x3d8`; already-active mode 2 toggles to
+23. The opening adapter therefore clicks only from mode 23 with a positively
+hidden, settled production root. Mode 2 with the same shown root is a no-op.
+The separate closing preview uses this same exact named callback only from
+settled shown mode 2, and verifies mode 23 with the original root settled hidden.
+In the retained static listing, `0x1709cc0` selects the active view for its virtual
+`+0x40` call; `0x1709d76` compares the current selector and `0x1709d7f` writes 23
+on equality. This supports the close route but does not establish live success.
+An already-hidden idle panel is a no-op; any other active mode refuses. Closing
+retains the same engine/modal/geometry gates and original seven identities.
+Its distinct `ensure_closed` journal target cannot reuse an opening request ID,
+replay uncertain delivery or qualify as allocation preparation/completion.
+Constructor
+argument 5 goes through `0x1693450` / `0x18e7850` into update-interface flags,
+not manager mode. The prior fixture and readiness predicate copied the wrong
+interpretation; both are corrected before live production acceptance.
+
+Opening, closing and factory dispatch require manager transition bytes `+0x3e1/2`
+clear, game-state `+0xa59` nonzero and idler `+0x8f0` zero. The earlier
+`CanUpdateGui` byte `+0x5b2` prerequisite was incorrect for external ordinary
+input. Production002 observed zero between callbacks and refused before input.
+Focused static evidence shows setter `0x1fb8c00` writes one and clearer
+`0x1fb8c30` writes zero. Engine wrappers `0x2096250` and `0x2096280` bracket
+manager calls with that pair; `0x207d1a0`, `0x2084d50` and `0x2093d70` likewise
+set and clear it around their work. `0x1fc17a0` also sets one and occupies the
+in-game idler's virtual slot `+0x68`. In `0x1709c20`, the byte occurs in the
+conditional debug-assert path, before the actual transition/blocker checks.
+This establishes an internal update-phase flag, not persistent click readiness.
+It remains a witnessed diagnostic only. X11 input enters the engine's ordinary
+event path; the adapter neither sets this flag nor calls an engine function.
+The literal-displacement/call search is not exhaustive dataflow or live routing
+proof. Settings at idler `+0x7b0` have
+primary `0x431a2f0`, owner `+0x30` and root `+0x550`. Menu at manager `+0x218`
+has primary `0x425bf80`, idler `+0x19a0`, manager `+0x19a8`, root `+0x19b0` and
+overview `+0x19c8`. The overview has primary `0x4300540`, idler `+0x1078` and
+root `+0x1080`. The exact engine predicates return false for null roots; these
+are explicitly reported as `engine_false_by_null`, never a materialized hidden
+window. Nonnull roots require exact own registry and settled hidden state.
+Manager `+0x248` still lacks a proved auxiliary type/owner mapping; a nonnull
+value refuses without traversing its payload. Common focus/research/politics
+blockers and both positively hidden production selection dialogs also apply.
+
+The opener reuses exact renderer transcripts and the reviewed optional Standard
+position gate. Ordinary X11 input uses the existing owned-window/idle-input
+checks. The shared production journal persists the original seven panel
+identities before input; read-only recovery never toggles or rebases. Factory v1
+JSON records retain their shape. None of this establishes live production
+routing, command causality or campaign acceptance. No native function is called.
+
+## Linux production control observation
+
+The factory observer now reuses the production opener's optional Standard gate.
+The exact own-registry row Container and its named Standard are validated before
+joining button `+0x1a8` to that Container's `+0xe78`. The independent constructor,
+virtual setter and event-handler evidence is recorded under “Own optional parent
+gate and durable construction foundation” below. Only primary `0x43484f0` and a
+literal true byte `+0x128` permit this local check; unknown pointers/types are not
+traversed. The joined position enters the pre-dispatch identity scope and every
+read remains in the final snapshot witnesses. No memory write or engine call is
+introduced. Production003 exposed the null-only refusal but did not read these
+optional payloads; this correction's factory input branch still needs live proof.
+
+`production_lines/control_snapshot.rs` and `production_lines/controls.rs` are
+new project code for ELF build `a4971c9e8ac9a6f2487dea109e01f9839ee59db7`.
+The existing full own-line validator supplies the same-reader typed handle,
+reciprocal production owner, counters and canonical base-equipment key. No
+macOS field offset was reused for the Linux GUI layout.
+
+Static constructor `0x17037b0` installs the production view at manager `+0xd8`;
+`0x29dc040` supplies base-constructor argument 5 and primary `0x4314180`.
+That argument is **not** the manager's active mode. The production topbar
+member `0x186d0d0` passes 2 to `0x1709c20`; that routine selects the view at
+manager `+0xc8 + 2*8` (`+0xd8`) and writes 2 to active mode `+0x3d8` at
+`0x1709df9`. The earlier mode-5 readiness assumption was wrong and corrected
+from this independent callback evidence before live production acceptance.
+Shared base `0x1693450`
+retains the idler at `+0x2f0`, and `0x1693850` creates root `+0x2f8` through
+that idler's registry. `0x29e56c0` rebuilds current rows in `+0x14f0` from own
+production status. Military/naval constructors `0x17e5e20`/`0x17ea910` use
+shared constructor `0x17dfcb0`, which retains the view at row `+0x590`, registry
+at `+0x538` (base `0x17df520`) and full line handle at `+0xfd0`.
+
+The shared constructor resolves `factories_add_1x` and `factories_sub_1x` in
+the row's container and retains aliases `+0x1018`/`+0x1000`. Both register the
+ordinary listener at row `+0xaa8`, exact primary `0x4266748`. Constructor
+`0x180ba40` binds member `0x17e0c60`, zero adjustment and the exact row through
+the normal GUI-control capture (`+0x28`, manager `0x18157d0`, invoker
+`0x18157a0`). Unused callback bundles, including the kind-9 cancellation
+manager at `+0x278`, must be zero. The selected one-factory alias cannot equal
+any of the other five factory aliases. The member derives step and direction
+from control identity and modifiers, clamps requested factories to at least
+one and queues an ordinary production command. These functions are never
+called by this observer.
+
+Selection dialogs at view `+0x1530/+0x1538` are exact primary `0x4321298`;
+constructor `0x2ae9850` retains idler/view at `+0x7f0/+0x7f8`. Creation
+`0x2aec130` uses the same registry for root `+0x800`. Only materialized exact
+owned roots with a clear shown bit and both transition channels zero establish
+local hidden state. These checks do not prove global modal clearance or hit
+routing. Optional geometry reuses this project's typed renderer/hierarchy
+readers. Static analysis and generated fixtures are not live action evidence.
+
+## Upstream foundation
+
 This port derives typed process reads, the own-country tag-index chain, focus and
 research object semantics, and the 365-day calendar from smerss/Clausewitz-MCP
 commit `97c85437081904d5ad07bae1623ec58d1c0a5b9e`, specifically
@@ -75,6 +738,18 @@ and getter recovery for the current build. Technology Info windows require
 own-tree/status/catalog membership and a positively named ordinary research
 control from the exact container registry. Raw disabled/alias/visibility fields
 do not establish eligibility or input authorization.
+
+`gui_registry.rs` consolidates the existing Linux paired name lookups for
+research, politics and construction. Its GNU string semantics follow the
+derived `memory.rs` reader (the smerss MIT notice remains in the file); the
+batching and registry join are new project code. It batches the GNU string
+headers and inline bytes, reads bounded external payloads through the same
+witnessed reader, and rechecks the name metadata. Pointer-array ownership,
+membership and final snapshot validation remain with the original callers.
+The independently recovered button, child-container and instant-text registries
+remain distinct; the instant-text registry is not an all-widget traversal.
+This optimization adds no Linux sprite geometry or input capability. Read-count
+fixtures establish fewer logical reads, not a measured live speedup.
 
 Current technology-node and own-focus catalog/detail diagnostics use the same
 derived canonical own-country semantics. Their node vectors, focus database/tree
@@ -832,3 +1507,32 @@ Open `0x2a3ba80` clears the query and focuses the text box; `0x2a3c250` activate
 the first result row (`+0x8c0`) through `0x2a3f060`. Visibility uses the exact
 container's local bit 3; close `0x2a3bbe0` hides the window before setting bit
 `0x10`, which persists while hidden. No upstream code was copied.
+
+
+## Dormant Windows owned reader
+
+`platform/windows.rs` and its subordinate modules are new Rust implementations
+informed by this project's legacy `hoi4_live/memory/winproc.py`, `pe.py`,
+`reader.py`, `layout.py` and memory-reader tests. No upstream source or game
+binary data was copied. There are no Windows game offsets, MSVC string/RTTI
+assumptions, Process/ReadMemory implementation or production build profiles.
+Clausewitz-MCP's process-reader architecture remains acknowledged in NOTICE.
+
+Win32 contracts were checked against Microsoft Learn documentation for
+[process access rights](https://learn.microsoft.com/en-us/windows/win32/procthread/process-security-and-access-rights),
+[creation FILETIME](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-getprocesstimes),
+[token information](https://learn.microsoft.com/en-us/windows/win32/api/securitybaseapi/nf-securitybaseapi-gettokeninformation),
+[file identity](https://learn.microsoft.com/en-us/windows/win32/api/winbase/ns-winbase-file_id_info),
+[Toolhelp processes](https://learn.microsoft.com/en-us/windows/win32/api/tlhelp32/ns-tlhelp32-processentry32w)
+and [modules](https://learn.microsoft.com/en-us/windows/win32/api/tlhelp32/ns-tlhelp32-moduleentry32w),
+[region queries](https://learn.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualqueryex),
+[read-only transfers](https://learn.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-readprocessmemory)
+and [PE format](https://learn.microsoft.com/en-us/windows/win32/debug/pe-format).
+The optional IsWow64Process2 export is resolved from resident kernel32;
+unavailable architecture checks refuse. Handles use RAII, and the adapter
+requests no write/injection/control rights or privilege changes.
+
+Portable generated fixtures and a Windows-only owned synthetic-child endpoint
+are separate from game evidence. Production cannot select their generated
+profile. The empty production allowlist refuses before VM-read rights or remote
+payload; the module remains disconnected from all tools and input.

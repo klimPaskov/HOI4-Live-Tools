@@ -59,7 +59,7 @@ def main():
                         "MIT-MAGIC-COOKIE-1", secrets.token_hex(16)],
                        check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         with (Path(directory) / "xvfb.log").open("ab") as log:
-            server_command = [xvfb_exe, f":{display}", "-screen", "0", "640x480x24",
+            server_command = [xvfb_exe, f":{display}", "-screen", "0", "2560x1440x24",
                               "-nolisten", "tcp", "-auth", str(auth)]
             if close_mode:
                 server_command.extend(["-extension", "XTEST"])

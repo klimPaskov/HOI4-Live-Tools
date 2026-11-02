@@ -314,7 +314,7 @@ impl Navigator {
         }
         if self.data.steps.len() + self.data.refusals.len() >= 4096
             || target.epoch != self.data.epoch
-            || target.stage == Stage::Research
+            || matches!(target.stage, Stage::Research | Stage::ClosePanel)
         {
             return Err(Error::new(
                 "invalid_navigation",
@@ -451,7 +451,7 @@ fn validate_binding(entry: &Entry, target: &Target, day: i64) -> Result<()> {
     };
     if *slot > 31
         || target.slot != *slot
-        || target.stage == Stage::Research
+        || matches!(target.stage, Stage::Research | Stage::ClosePanel)
         || !(1936 * 365..2001 * 365).contains(&day)
     {
         return Err(invalid());
@@ -750,6 +750,7 @@ mod tests {
             tree_visible: false,
             panel_visible: Some(false),
             active_mode: Some(23),
+            panel_binding: None,
             researching: vec![None, None],
             visible_info: vec![],
         }

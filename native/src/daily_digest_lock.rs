@@ -5,7 +5,7 @@ use std::{
     time::{Duration, Instant},
 };
 /// The same gate used by the worker must be obtained before touching producer.
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 pub(crate) fn governed<T, R>(
     governor: &Mutex<T>,
     body: impl FnOnce(&mut T) -> Result<R>,

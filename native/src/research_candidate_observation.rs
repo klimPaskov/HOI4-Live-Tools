@@ -26,6 +26,43 @@ pub struct OwnedClientProfile {
     pub os_binding_verified: bool,
     pub reviewed_builtin_client_origin: bool,
 }
+/// Owner-reviewed builtin absolute client sizes. Each pins one exact client and
+/// logical pair; fresh graphics and source-window geometry must equal it before
+/// the codec admits any point. Points always come from named renderer geometry
+/// through that codec, never from coordinates rescaled from another profile.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BuiltinClient {
+    /// Recorded 512x288 client with 2560x1440 logical graphics (ratio 5).
+    Absolute512x288,
+    /// 1920x1080 client with equal logical graphics (ratio 1). The engine's
+    /// finalized logical size depends on settings, so a run whose fresh
+    /// geometry reports any other logical size refuses. Live use is pending.
+    Absolute1920x1080,
+}
+impl BuiltinClient {
+    pub const fn client(self) -> [u16; 2] {
+        match self {
+            Self::Absolute512x288 => [512, 288],
+            Self::Absolute1920x1080 => [1920, 1080],
+        }
+    }
+    pub const fn logical(self) -> [u16; 2] {
+        match self {
+            Self::Absolute512x288 => [2560, 1440],
+            Self::Absolute1920x1080 => [1920, 1080],
+        }
+    }
+    /// Only the immutable owner binding calls this, after its own OS checks.
+    pub fn owned(self, window: u32) -> OwnedClientProfile {
+        OwnedClientProfile {
+            window,
+            client: self.client(),
+            logical: self.logical(),
+            os_binding_verified: true,
+            reviewed_builtin_client_origin: true,
+        }
+    }
+}
 fn unavailable(message: &str) -> Error {
     Error::new("research_geometry_unavailable", message)
 }

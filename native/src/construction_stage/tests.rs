@@ -1044,7 +1044,7 @@ fn positive_not_queued_refusal_is_terminal_and_same_id_never_dispatches_again() 
 }
 #[test]
 fn all_unresolved_domains_and_unknown_domain_state_block_before_observation() {
-    for i in 0..5 {
+    for i in 0..6 {
         let s = Scratch::new();
         let mut j = Journal::open(&s.path()).unwrap();
         let mut f = Fake::success(Stage::EnsureOpen);
@@ -1054,6 +1054,7 @@ fn all_unresolved_domains_and_unknown_domain_state_block_before_observation() {
             1 => d.value.research = true,
             2 => d.value.focus = true,
             3 => d.value.construction = true,
+            4 => d.value.production = true,
             _ => d.unavailable = true,
         }
         assert!(execute(
@@ -1139,13 +1140,19 @@ fn original_deadline_is_not_extended_after_dispatch_or_input_idle() {
                 &RwLock::new(true),
                 &Domains::default(),
                 &mut f,
-                Duration::from_millis(200)
+                // Durable journal writes precede dispatch. Give those the
+                // normal fixture budget; the backend deliberately consumes the
+                // ORIGINAL remaining deadline in the selected input phase.
+                TIME
             )
             .unwrap_err()
             .code,
             "action_uncertain"
         );
+        assert_eq!(f.dispatches, 1);
         assert_eq!(f.possible_inputs, 1);
+        assert_eq!(f.idle_checks, usize::from(idle));
+        assert!(Instant::now() >= f.deadline.unwrap());
         assert_eq!(
             j.receipts["late"].uncertainty,
             Some(Uncertainty::DeadlineOrAuthority)
@@ -1223,7 +1230,9 @@ fn persistently_torn_terminal_witness_never_verifies() {
             &RwLock::new(true),
             &Domains::default(),
             &mut f,
-            Duration::from_millis(300)
+            // Allow the durable intent to reach dispatch on loaded runners;
+            // the persistent terminal tear must still exhaust this deadline.
+            TIME
         )
         .unwrap_err()
         .code,

@@ -305,6 +305,84 @@ fn owned_xvfb_pointer_transport_checks_stale_target_and_records_one_pair() {
             .code,
         "pointer_already_attempted"
     );
+    // A domain refresh can take time. Input/window changes during that callback
+    // must still refuse before the locally buffered motion/press/release goes
+    // onto the wire. Use only this fixture's private Xvfb state.
+    for modifier in [true, false] {
+        use x11rb::protocol::{
+            xkb::{ConnectionExt as _, ID},
+            xproto::ModMask,
+        };
+        connection.xkb_use_extension(1, 0).unwrap().reply().unwrap();
+        let mut attempt = controls
+            .prepare_left_click_until(
+                &process,
+                display.pointer_transport(),
+                [17, 19],
+                [160, 120],
+                Instant::now() + Duration::from_secs(2),
+            )
+            .unwrap();
+        let result = attempt.dispatch_once_checked(|| {
+            if modifier {
+                connection
+                    .xkb_latch_lock_state(
+                        ID::USE_CORE_KBD.into(),
+                        ModMask::CONTROL,
+                        ModMask::CONTROL,
+                        false,
+                        0u8.into(),
+                        ModMask::default(),
+                        false,
+                        0,
+                    )
+                    .unwrap()
+                    .check()
+                    .unwrap();
+            } else {
+                connection
+                    .configure_window(frame, &ConfigureWindowAux::new().x(101))
+                    .unwrap()
+                    .check()
+                    .unwrap();
+            }
+            Ok(())
+        });
+        assert_eq!(result.delivery, PointerDelivery::NotQueued);
+        assert!(result.error.is_some());
+        assert_eq!(child.events()["events"], serde_json::json!([]));
+        let state = connection
+            .xkb_get_state(ID::USE_CORE_KBD.into())
+            .unwrap()
+            .reply()
+            .unwrap();
+        if modifier {
+            assert_ne!(
+                u16::from(state.locked_mods) & u16::from(ModMask::CONTROL),
+                0
+            );
+            connection
+                .xkb_latch_lock_state(
+                    ID::USE_CORE_KBD.into(),
+                    ModMask::CONTROL,
+                    ModMask::default(),
+                    false,
+                    0u8.into(),
+                    ModMask::default(),
+                    false,
+                    0,
+                )
+                .unwrap()
+                .check()
+                .unwrap();
+        } else {
+            connection
+                .configure_window(frame, &ConfigureWindowAux::new().x(100))
+                .unwrap()
+                .check()
+                .unwrap();
+        }
+    }
     let before = child.events();
     assert_eq!(before["events"], serde_json::json!([]));
     assert_eq!(before["forbidden"], 0);

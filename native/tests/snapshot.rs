@@ -6190,3 +6190,5 @@ fn research_folders_identity_failure_does_not_publish_a_completed_catalog() {
 
 #[path = "support/assignment_wait_cases.rs"]
 mod assignment_wait_cases;
+
+include!("support/research_close_cases.rs");
