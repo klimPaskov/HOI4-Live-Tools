@@ -61,6 +61,7 @@ const VT_PROGRAM_STATUS: u64 = 0x359fdb0;
 const VT_PROGRAM: u64 = 0x359c918;
 const VT_PROJECT_POOL: u64 = 0x359f8b0;
 const VT_PROJECT: u64 = 0x359ca08;
+const VT_PROJECT_HISTORY: u64 = 0x359f820;
 const VT_PROJECT_TEMPLATE: u64 = 0x359d7f8;
 const VT_STATE_MACHINE: u64 = 0x359fa60;
 const VT_SIMPLE_STATE: u64 = 0x359f990;
@@ -273,6 +274,22 @@ fn snapshot_from(r: &Reader<'_>, image: u64) -> Result<Snapshot> {
                 r.i32(r.u64(project + 0x28)? + 0x90)?,
             ),
         });
+    }
+    // 1.19.4.1: a running project's facility link is its SProjectHistory at +0x68 (facility
+    // id at +0x18, scientist handle at +0x20); the program's own project field stays 0
+    // (read live 2 November 2026: Military Engineering Vehicles in facility 3499).
+    for index in 0..count.min(MAX_PROJECTS) as u64 {
+        let project = data + index * PROJECT_STRIDE;
+        let history = r.u64(project + 0x68)?;
+        if history == 0 || r.u64(history)? != image + VT_PROJECT_HISTORY {
+            continue;
+        }
+        let facility = r.i32(history + 0x18)?;
+        let template = r.u64(project + 0x20)?.wrapping_sub(0x10);
+        let id = r.i32(template + 8)? as u32;
+        if let Some(f) = out.facilities.iter_mut().find(|f| f.id == facility && f.project.is_none()) {
+            f.project = Some(id);
+        }
     }
     // breakthrough accounts: libc++ tree, root at +0x60, key high dword = spec id
     let mut stack = vec![r.u64(status + 0x60)?];
