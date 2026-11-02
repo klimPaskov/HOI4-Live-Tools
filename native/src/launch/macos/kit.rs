@@ -65,7 +65,7 @@ pub(super) type DispatchFn<'a, P> = &'a dyn Fn(&dyn Process, &MacKeys<'_>, &P) -
 /// Run one journaled action. `plan` reads the world and refuses before any input; on a retry of
 /// an unresolved request id no plan exists (`None`) and nothing is ever dispatched again.
 /// `settle` is a pure rule over fresh reads; `dispatch` drives the ordinary UI once.
-pub(super) fn run<P>(
+pub(super) fn run<P: Serialize + DeserializeOwned>(
     env: Env<'_>,
     request: Request<'_>,
     plan: PlanFn<'_, P>,
@@ -106,7 +106,20 @@ pub(super) fn run<P>(
         bounded.preflight()?;
     }
     let info = RefCell::new(Value::Null);
-    let mut settle_fn = || settle(fenced, planned.as_ref());
+    // The plan is stored as the intent's baseline, so a retry after a server restart can still
+    // settle against it (an in-memory-only plan left invasions unresolved forever).
+    let baseline = planned
+        .as_ref()
+        .and_then(|p| serde_json::to_value(p).ok())
+        .unwrap_or(Value::Null);
+    let mut settle_fn = |stored: &Value| {
+        let restored: Option<P> = if planned.is_none() {
+            serde_json::from_value(stored.clone()).ok()
+        } else {
+            None
+        };
+        settle(fenced, planned.as_ref().or(restored.as_ref()))
+    };
     let mut dispatch_fn = || {
         authority.authorize(token, &epoch)?;
         let Some(planned) = &planned else {
@@ -118,7 +131,7 @@ pub(super) fn run<P>(
         *info.borrow_mut() = dispatch(fenced, &bounded, planned)?;
         Ok(())
     };
-    let receipt = actions.execute_with(id, &epoch, action, &mut settle_fn, &mut dispatch_fn, true)?;
+    let receipt = actions.execute_baselined(id, &epoch, action, baseline, &mut settle_fn, &mut dispatch_fn)?;
     Ok(json!({"receipt":receipt,"result":*info.borrow(),"validated":false}))
 }
 

@@ -179,6 +179,60 @@ pub(super) fn division_states(r: &Reader<'_>, image: u64) -> Result<BTreeMap<Str
     }
     Ok(out)
 }
+/// division id -> province id where it stands (None while moving or unknown).
+pub(super) fn division_provinces(r: &Reader<'_>, image: u64) -> Result<BTreeMap<String, Option<i32>>> {
+    let u = ui(r)?;
+    let l = crate::construction::layout(r);
+    let country = own_country(r, image)?;
+    let (_, data, count) = r.array_header(country + u.country_divisions)?;
+    let mut out = BTreeMap::new();
+    for index in 0..count.min(4096) as u64 {
+        let division = r.u64(data + index * 8)?;
+        let handle = r.read(division + u.division_handle, 8)?;
+        let id = format!(
+            "{:08x}:{:08x}",
+            u32::from_le_bytes(handle[..4].try_into().unwrap()),
+            u32::from_le_bytes(handle[4..].try_into().unwrap())
+        );
+        let location = r.u64(division + u.division_location)?;
+        let province = if location != 0 && r.u64(location)? == image + l.province_vtable {
+            Some(r.i32(location + u.province_id)?)
+        } else {
+            None
+        };
+        out.insert(id, province);
+    }
+    Ok(out)
+}
+/// Screen box around the projected positions of `ids` (after the camera is placed), with a
+/// margin, when it fits the map area between the panels.
+fn projected_box(process: &dyn Process, ids: &[String]) -> Result<Option<((f64, f64), (f64, f64))>> {
+    let exe = &process
+        .identity()
+        .ok_or_else(|| Error::new("map_data_unavailable", "Game identity unavailable"))?
+        .exe;
+    let dir = super::mapdata::game_dir(exe)?;
+    let positions = super::mapdata::positions(&dir)?;
+    read(process, |r, i| {
+        let provinces = division_provinces(r, i)?;
+        let mut pts = Vec::new();
+        for id in ids {
+            let Some(Some(p)) = provinces.get(id) else { return Ok(None) };
+            let Some((x, z)) = positions.get(p).copied() else { return Ok(None) };
+            let Some(s) = super::screenmap::to_screen(r, i, x, z)? else { return Ok(None) };
+            pts.push(s);
+        }
+        if pts.is_empty() {
+            return Ok(None);
+        }
+        let (mut x0, mut y0, mut x1, mut y1) = (f64::MAX, f64::MAX, f64::MIN, f64::MIN);
+        for (x, y) in pts {
+            x0 = x0.min(x); y0 = y0.min(y); x1 = x1.max(x); y1 = y1.max(y);
+        }
+        let (x0, y0, x1, y1) = (x0 - 45.0, y0 - 45.0, x1 + 45.0, y1 + 30.0);
+        Ok((x0 > 460.0 && y0 > 110.0 && x1 < 1540.0 && y1 < 830.0).then_some(((x0, y0), (x1, y1))))
+    })
+}
 fn army_name(r: &Reader<'_>, group: u64) -> Result<String> {
     r.string_bounded(group + ui(r)?.group_name, 128)
 }
@@ -503,6 +557,30 @@ pub(super) fn assign(process: &dyn Process, keys: &MacKeys, plan: &AssignPlan) -
             break;
         }
     }
+    }
+    if !exact {
+        // Third pass: a box drawn around the projected positions of the pool and the target's
+        // divisions here (map positions through the live camera).
+        let view = armies(process)?;
+        let mut ids = unassigned_ids(&view, plan.state);
+        if let Some(a) = view["armies"].as_array().and_then(|a| a.iter().find(|x| x["army"] == json!(army))) {
+            let here = read(process, division_states)?;
+            for d in a["divisions"].as_array().into_iter().flatten().filter_map(|d| d.as_str()) {
+                if here.get(d).copied().flatten() == Some(plan.state) {
+                    ids.push(d.to_string());
+                }
+            }
+        }
+        find_state(process, keys, plan.state)?;
+        std::thread::sleep(std::time::Duration::from_millis(400));
+        if let Some((from, to)) = projected_box(process, &ids)? {
+            keys.drag(GAME, from, to)?;
+            std::thread::sleep(std::time::Duration::from_millis(400));
+            let size = read(process, selection_size)? as usize;
+            sizes.push(size);
+            exact = size == expected
+                || (plan.others_here == 0 && size > plan.target_here && size < expected);
+        }
     }
     if !exact {
         return Err(Error::new(

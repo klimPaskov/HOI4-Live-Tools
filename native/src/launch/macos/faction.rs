@@ -652,7 +652,10 @@ fn answer(args: &Map<String, Value>, env: Env<'_>, faction_only: bool) -> Result
         },
         &|p, planned| {
             let Some(plan) = planned.cloned().or_else(|| kit::recall::<AnswerPlan>(&id)) else {
-                return Ok(Outcome::Unknown);
+                // No stored or remembered plan (an intent from before plans were journaled):
+                // nothing can be settled, so the intent is closed as diverged instead of
+                // blocking every later action.
+                return Ok(Outcome::Diverged(json!({"reason":"no stored plan to settle against"})));
             };
             let list = read(p, proposals_in)?;
             let member = faction_now(p)?.is_some();

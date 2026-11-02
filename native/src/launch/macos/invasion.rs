@@ -211,13 +211,16 @@ pub(super) fn settle(plan: &Plan, nodes_now: Option<usize>, heading: Option<usiz
     let army = matches!(plan.selector, Selector::Army(_));
     match (army, nodes_now, heading) {
         (_, _, Some(h)) if h > 0 => Verdict::Reached,
-        // A new order alone does not show where it lands (its target province is not read):
-        // never claimed as reached (seen live: an order landing on an own port).
-        (true, Some(n), _) if n > plan.nodes_before => Verdict::Unknown,
+        // A new order proves the order was placed; its landing province is not read, so the
+        // receipt carries landing_verified:false (the landing is aimed at a projected coastal
+        // province of the target state). An unresolved verdict here blocked the whole journal.
+        (true, Some(n), _) if n > plan.nodes_before => Verdict::Reached,
         (true, Some(n), _) if n < plan.nodes_before => Verdict::Diverged,
         (true, Some(_), Some(0)) | (false, _, Some(0)) => Verdict::Unchanged,
         (true, Some(_), None) => Verdict::Unchanged,
-        _ => Verdict::Unknown,
+        // Nothing readable (e.g. the army's orders include an invasion order of another class):
+        // close the intent as diverged rather than leave the journal blocked.
+        _ => Verdict::Diverged,
     }
 }
 
@@ -509,10 +512,15 @@ pub(super) fn call(args: &Map<String, Value>, env: kit::Env<'_>) -> Result<Value
         },
         &|p, planned| {
             let Some(pl) = planned.cloned().or_else(|| kit::recall::<Plan>(&id)) else {
-                return Ok(Outcome::Unknown);
+                // No stored or remembered plan (an intent from before plans were journaled):
+                // nothing can be settled, so the intent is closed as diverged instead of
+                // blocking every later action.
+                return Ok(Outcome::Diverged(json!({"reason":"no stored plan to settle against"})));
             };
             let (nodes, heading) = progress(p, &pl)?;
-            Ok(settle(&pl, nodes, heading).outcome(json!({"nodes":nodes,"heading":heading})))
+            Ok(settle(&pl, nodes, heading).outcome(json!({"nodes":nodes,"heading":heading,
+                "landing_verified":heading.is_some_and(|h| h > 0),
+                "note":"The order's landing province is not read; it was aimed at the target state's coastal province nearest the screen centre"})))
         },
         &|p, keys, planned| drive(p, keys, planned),
     )
@@ -643,19 +651,19 @@ mod tests {
     #[test]
     fn settlement_reads_orders_and_heading() {
         let p = plan(&request(), &facts()).unwrap();
-        assert_eq!(settle(&p, Some(3), None), Verdict::Unknown);
+        assert_eq!(settle(&p, Some(3), None), Verdict::Reached);
         assert_eq!(settle(&p, Some(2), Some(0)), Verdict::Unchanged);
         assert_eq!(settle(&p, Some(2), None), Verdict::Unchanged);
         assert_eq!(settle(&p, Some(1), Some(0)), Verdict::Diverged);
         assert_eq!(settle(&p, Some(2), Some(4)), Verdict::Reached);
-        assert_eq!(settle(&p, None, None), Verdict::Unknown);
+        assert_eq!(settle(&p, None, None), Verdict::Diverged);
         let mut r = request();
         r.army = None;
         r.divisions = vec!["00000001:00000001".into(), "00000001:00000002".into()];
         let d = plan(&r, &facts()).unwrap();
         assert_eq!(settle(&d, None, Some(2)), Verdict::Reached);
         assert_eq!(settle(&d, None, Some(0)), Verdict::Unchanged);
-        assert_eq!(settle(&d, None, None), Verdict::Unknown);
+        assert_eq!(settle(&d, None, None), Verdict::Diverged);
     }
     #[test]
     fn offsets_are_bounded_pairs() {
