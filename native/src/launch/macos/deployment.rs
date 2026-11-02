@@ -116,7 +116,8 @@ pub(super) fn queued(r: &Reader<'_>, image: u64, name: &str) -> Result<usize> {
     for line in pointers(r, status + u.conveyors, 1024)? {
         let template = r.u64(line + u.conveyor_template)?;
         if template != 0 && r.string_bounded(template + u.template_name, 128)? == name {
-            count += 1;
+            // Parallel training lines of this queue (1.19.4.1 conveyor +0x70).
+            count += r.i32(line + 0x70)?.clamp(1, 1024) as usize;
         }
     }
     Ok(count)
@@ -227,22 +228,116 @@ pub(super) fn leave(process: &dyn Process, keys: &MacKeys) {
     let _ = wait(process, "close deployment", |r, i| Ok(!open(r, i)?));
 }
 
-/// Queue `count` divisions of template `name`; the caller has journaled intent.
+/// Conveyor fields (1.19.4.1, mapped live 2 November 2026): series amount per line at +0x38
+/// (0 = infinite: each line trains again forever), parallel lines at +0x70.
+const CONVEYOR_AMOUNT: u64 = 0x38;
+const CONVEYOR_LINES: u64 = 0x70;
+/// Own conveyors in list order: (pointer, template name, amount, lines).
+fn conveyors(r: &Reader<'_>, image: u64) -> Result<Vec<(u64, String, i32, i32)>> {
+    let u = ui(r)?;
+    let country = own_country(r, image)?;
+    let status = r.u64(country + u.country_deployment)?;
+    let mut out = Vec::new();
+    for line in pointers(r, status + u.conveyors, 1024)? {
+        let template = r.u64(line + u.conveyor_template)?;
+        let name = if template != 0 { r.string_bounded(template + u.template_name, 128)? } else { String::new() };
+        out.push((line, name, r.i32(line + CONVEYOR_AMOUNT)?, r.i32(line + CONVEYOR_LINES)?));
+    }
+    Ok(out)
+}
+/// Button `name` of the `index`-th conveyor view (same order as the conveyor list).
+fn conveyor_button(r: &Reader<'_>, image: u64, index: usize, name: &str) -> Result<Option<Rect>> {
+    let u = ui(r)?;
+    let root = gui_tree::container(r, r.u64(view(r, image)? + u.view_root)?, image)?
+        .ok_or_else(|| Error::new("invalid_gui", "Deployment view root unavailable"))?;
+    let grid = find(r, image, root, "deployments_list_gridbox", 0)?
+        .ok_or_else(|| Error::new("gui_target_unavailable", "Deployment list not found"))?;
+    let mut k = 0;
+    for item in pointers(r, grid + u.grid_items, 1024)? {
+        let kind = crate::research_ui::primary_type_encoding(r, image, r.u64(item)?).unwrap_or_default();
+        if kind != "31CMilitaryDeploymentConveyorView" {
+            continue;
+        }
+        if k == index {
+            let Some(frame) = gui_tree::container(r, r.u64(item + u.item_container)?, image)? else {
+                return Ok(None);
+            };
+            return Ok(match gui_tree::child(r, image, frame, name)? {
+                Some(b) => gui_tree::rect_unclipped(r, image, b, GAME).ok(),
+                None => None,
+            });
+        }
+        k += 1;
+    }
+    Ok(None)
+}
+/// Click button `name` of conveyor `index` once it rests inside the list area (scrolling it there).
+fn click_conveyor(process: &dyn Process, keys: &MacKeys, index: usize, name: &str) -> Result<()> {
+    for _ in 0..80 {
+        match read(process, |r, i| conveyor_button(r, i, index, name))? {
+            Some(r) if r.y >= LIST.0 && r.y + r.h.min(40) <= LIST.1 => break,
+            // Long queue lists (seen live: 15 queues) need big steps.
+            Some(r) => {
+                let far = (r.y - 700).abs() > 1500;
+                let step = if far { 720 } else { 240 };
+                keys.scroll(GAME, (180.0, 700.0), if r.y < LIST.0 { step } else { -step })?
+            }
+            None => return Err(Error::new("gui_target_unavailable", format!("Training queue {name} button not found"))),
+        }
+        std::thread::sleep(std::time::Duration::from_millis(150));
+    }
+    let rect = settled(process, "queue button", |r, i| {
+        conveyor_button(r, i, index, name)?
+            .filter(|r| r.y >= LIST.0 && r.y + r.h.min(40) <= LIST.1)
+            .ok_or_else(|| Error::new("gui_target_unavailable", "Training queue button not in view"))
+    })?;
+    clear_notices(process, keys)?;
+    let (mut x, y) = rect.center();
+    // Text buttons (Add Unit) report their wide text sprite; click near the left edge.
+    if rect.w > 150 {
+        x = f64::from(rect.x) + 40.0;
+    }
+    keys.click(GAME, x, y)?;
+    Ok(())
+}
+
+/// Queue `count` divisions of template `name` in ONE training queue: the template's Train
+/// button creates the queue (one line, series amount infinite), its + sets the amount to one
+/// division per line (an infinite line trains forever), then Add Unit adds the other lines.
+/// Each step is verified on the queue's own fields. The caller has journaled intent.
 pub(super) fn train(process: &dyn Process, keys: &MacKeys, name: &str, count: usize) -> Result<()> {
     clear_notices(process, keys)?;
     if !read(process, open)? {
         keys.press(Key::letter('u')?)?;
         wait(process, "open deployment", open)?;
+        std::thread::sleep(std::time::Duration::from_millis(1100));
     }
-    let start = read(process, |r, i| queued(r, i, name))?;
-    for done in 0..count {
-        let rect = settled(process, "train button", |r, i| train_button(r, i, name))?;
-        clear_notices(process, keys)?;
-        let (x, y) = rect.center();
-        keys.click(GAME, x, y)?;
-        wait(process, "training line added", |r, i| {
-            Ok(queued(r, i, name)? > start + done)
-        })?;
+    let before: Vec<u64> = read(process, conveyors)?.into_iter().map(|c| c.0).collect();
+    let rect = settled(process, "train button", |r, i| train_button(r, i, name))?;
+    clear_notices(process, keys)?;
+    let (x, y) = rect.center();
+    keys.click(GAME, x, y)?;
+    wait(process, "training queue added", |r, i| {
+        Ok(conveyors(r, i)?.iter().any(|c| !before.contains(&c.0) && c.1 == name))
+    })?;
+    let find_new = |r: &Reader<'_>, i: u64| -> Result<(usize, u64, i32, i32)> {
+        conveyors(r, i)?
+            .into_iter()
+            .enumerate()
+            .find(|(_, c)| !before.contains(&c.0) && c.1 == name)
+            .map(|(k, c)| (k, c.0, c.2, c.3))
+            .ok_or_else(|| Error::new("input_readback_failed", "New training queue left the list"))
+    };
+    let (index, line, amount, _) = read(process, find_new)?;
+    if amount == 0 {
+        click_conveyor(process, keys, index, "increase_amount")?;
+        wait(process, "series amount one", |r, i| Ok(r.i32(line + CONVEYOR_AMOUNT)? == 1 && find_new(r, i)?.0 == index))
+            .map_err(|_| Error::new("input_readback_failed", "The new training queue's amount stayed infinite; set it with its + button"))?;
+    }
+    for done in 1..count {
+        let (index, _, _, _) = read(process, find_new)?;
+        click_conveyor(process, keys, index, "add_button")?;
+        wait(process, "training line added", |r, i| Ok(find_new(r, i)?.3 as usize > done))?;
     }
     Ok(())
 }

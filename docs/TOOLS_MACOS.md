@@ -102,7 +102,7 @@ Descriptions are the tools' own text; see `PLAYBOOK_TOOL_GAPS.md` for validation
 - `hoi4_template_get` (R): Own division templates read from game memory (no input, no lease, no pause):
 - `hoi4_template_options` (A): Battalion and company types the Division Designer offers now (unlocked), read from its selection window (opens the designer on an empty draft and closes it again;
 - `hoi4_template_rename` (A): Rename an own division template (designer name box, Update).
-- `hoi4_train` (A): Queue divisions of an own template with ordinary input (deployment panel, the template's Train button once per division) and give every training line without a location the own state deploy_state_id, since a line without a location never deploys.
+- `hoi4_train` (A): Queue `count` divisions of an own template in ONE training queue with ordinary input:
 
 ## Navy and air
 
