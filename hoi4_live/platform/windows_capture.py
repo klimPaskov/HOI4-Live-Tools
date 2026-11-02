@@ -8,7 +8,9 @@ HOI4 renders through a DirectX 11 flip-model swap chain, so GDI/BitBlt capture r
   covering windows, but not every driver/compositor path returns the DirectX content. Each result is checked and
   a black frame falls back to ddagrab.
 
-"auto" tries printwindow first when it has worked in this session, otherwise ddagrab.
+"auto" tries printwindow first when it has worked in this session, otherwise ddagrab. After a blank frame it
+still retries printwindow every PRINTWINDOW_RETRY_SECONDS: a game that is still loading returns blank frames, and
+ddagrab can time out where printwindow works (seen live on 1.19.4.1 after a relaunch).
 """
 
 import ctypes
@@ -20,6 +22,8 @@ import numpy as np
 
 from ..errors import ToolError
 from . import win32
+
+PRINTWINDOW_RETRY_SECONDS = 15
 
 
 class BITMAPINFOHEADER(ctypes.Structure):
@@ -58,19 +62,22 @@ class Capturer:
         self.output_idx = output_idx
         self.timeout = timeout
         self.printwindow_ok = None         # learned per session
+        self.printwindow_retry_at = 0.0    # after a blank frame, when to try printwindow again
         self.last_method = None
 
     def grab(self, method=None):
         """RGB uint8 array of the client area, shape (h, w, 3)."""
         method = method or self.method
         hwnd = self.window.require()
-        if method == "printwindow" or (method == "auto" and self.printwindow_ok is not False):
+        retry = time.monotonic() >= self.printwindow_retry_at
+        if method == "printwindow" or (method == "auto" and (self.printwindow_ok is not False or retry)):
             img = self._printwindow(hwnd)
             if not is_blank(img):
                 self.printwindow_ok = True
                 self.last_method = "printwindow"
                 return img
             self.printwindow_ok = False
+            self.printwindow_retry_at = time.monotonic() + PRINTWINDOW_RETRY_SECONDS
             if method == "printwindow":
                 raise ToolError("PrintWindow returned a blank frame for the game window")
         img = self._ddagrab(hwnd)
