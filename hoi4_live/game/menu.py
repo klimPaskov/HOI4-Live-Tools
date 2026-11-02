@@ -234,6 +234,7 @@ def close_esc_menu_if_open(session):
 
 
 CONFIRM_RX = r"^\W*(yes|[o0]k|confirm|exit|quit|exit\s*game|exit\s*to\s*menu)\W*$"
+START_RETRY_SECONDS = 30   # new_game clicks START again when the ready screen is still up after this long
 
 
 def _rest_cursor_above_dialog(session):
@@ -424,12 +425,16 @@ def new_game(session, country=None, bookmark=None, timeout=600, start=True):
     from . import gamemode
     gamemode.begin_run(session)
     steps.append(ui.click_text(session, r"start", exact=True, prefer="bottom"))
-    t0 = time.time()
+    t0 = last_click = time.time()
     while time.time() - t0 < timeout:
         session.check_cancel()
         d = topbar.read_date(session.grab(), session.ocr)
         if "error" not in d:
             return {"steps": steps, "date": d["hoi4"], "seconds": round(time.time() - t0)}
+        if time.time() - last_click > START_RETRY_SECONDS and stage() == "ready":
+            # on 1.19.4.1 about one START click in five did not register and the ready screen stayed up
+            steps.append(ui.click_text(session, r"start", exact=True, prefer="bottom"))
+            last_click = time.time()
         session.report(f"starting the game ({int(time.time() - t0)} s)")
         session.sleep(3)
     raise ToolError("the new game did not reach the map", {"steps": steps})
