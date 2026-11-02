@@ -31,6 +31,7 @@ use crate::{
     game,
     memory::Reader,
     platform::Process,
+    xlayout::{fld, img, Class},
 };
 use serde_json::{json, Map, Value};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
@@ -62,6 +63,17 @@ const NAMES: [&str; 7] = [
     "coal",
 ];
 const LINE_LIMIT: usize = 256;
+/// Owners of the fields read here (macOS 1.19.4.1 RTTI names and vtables).
+const COUNTRY: Class = Class::new("CCountry", 0x357e388);
+const RESOURCE_DB: Class = Class::new("CStrategicResourceDatabase", RESOURCE_DB_VTABLE);
+const RESOURCE: Class = Class::new("CStrategicResource", RESOURCE_VTABLE);
+const FUEL: Class = Class::new("CCountryFuelStatus", FUEL_VTABLE);
+const PRODUCTION: Class = Class::new("CProductionStatus", 0x358e0c8);
+const LINE: Class = Class::new("CProductionLine", 0x358ce80);
+const VARIANT: Class = Class::new("CEquipmentVariant", 0x357d1b8);
+const EQUIPMENT_TYPE: Class = Class::new("CEquipmentType", 0x357bad8);
+const COST: Class = Class::new("CProductionResourceCost", COST_VTABLE);
+const COST_SIZE: Class = Class::new("CProductionResourceCost.size", 0);
 
 /// Pool slots by their order of appearance in the object.
 const SLOT_PRODUCED: usize = 0;
@@ -132,7 +144,10 @@ struct Resources {
 }
 
 fn rtti_vtable(r: &Reader<'_>, p: u64, image: u64, vtable: u64, what: &str) -> Result<()> {
-    if !(0x10000..=0x7fff_ffff_0000).contains(&p) || p % 8 != 0 || r.u64(p)? != image + vtable {
+    if !(0x10000..=0x7fff_ffff_0000).contains(&p)
+        || p % 8 != 0
+        || r.u64(p)? != image + img(r.string_abi(), vtable)?
+    {
         return Err(Error::new(
             "invalid_type",
             format!("{what}: unexpected object type"),
@@ -142,9 +157,10 @@ fn rtti_vtable(r: &Reader<'_>, p: u64, image: u64, vtable: u64, what: &str) -> R
 }
 
 fn resource_ids(r: &Reader<'_>, image: u64) -> Result<Vec<i32>> {
-    let db = r.u64(image + RESOURCE_DB_GLOBAL)?;
+    let abi = r.string_abi();
+    let db = r.u64(image + img(abi, RESOURCE_DB_GLOBAL)?)?;
     rtti_vtable(r, db, image, RESOURCE_DB_VTABLE, "resource database")?;
-    let header = r.read(db + 0x28, 16)?;
+    let header = r.read(db + fld(abi, &RESOURCE_DB, 0x28)?, 16)?;
     let ptr = u64::from_le_bytes(header[..8].try_into().unwrap());
     let count = i32::from_le_bytes(header[8..12].try_into().unwrap());
     if count != 9 || !(0x10000..=0x7fff_ffff_0000).contains(&ptr) {
@@ -158,7 +174,7 @@ fn resource_ids(r: &Reader<'_>, image: u64) -> Result<Vec<i32>> {
     for chunk in raw.chunks_exact(8).skip(1).take(NAMES.len()) {
         let p = u64::from_le_bytes(chunk.try_into().unwrap());
         rtti_vtable(r, p, image, RESOURCE_VTABLE, "strategic resource")?;
-        ids.push(r.i32(p + 8)?);
+        ids.push(r.i32(p + fld(abi, &RESOURCE, 8)?)?);
     }
     Ok(ids)
 }
@@ -167,19 +183,22 @@ fn snapshot(r: &Reader<'_>, image: u64) -> Result<Resources> {
     let (country, _) = economy::own_production(r, image)?;
     let context = game::context_from_reader(r, image)?;
     let ids = resource_ids(r, image)?;
-    let object = r.u64(country + COUNTRY_RESOURCES)?;
+    let abi = r.string_abi();
+    let object = r.u64(country + fld(abi, &COUNTRY, COUNTRY_RESOURCES)?)?;
     rtti_vtable(r, object, image, RESOURCES_VTABLE, "country resources")?;
     let buf = r.read(object, OBJECT_SCAN)?;
-    let pools = parse_pools(&buf, object, image + POOL_VTABLE);
+    let pools = parse_pools(&buf, object, image + img(abi, POOL_VTABLE)?);
     if pools.len() < 6 {
         return Err(Error::new(
             "invalid_type",
             "Country resource pools not found",
         ));
     }
-    let fuel_object = r.u64(country + COUNTRY_FUEL)?;
+    let fuel_object = r.u64(country + fld(abi, &COUNTRY, COUNTRY_FUEL)?)?;
     rtti_vtable(r, fuel_object, image, FUEL_VTABLE, "country fuel")?;
-    let fuel = r.read(fuel_object + 8, 16)?;
+    let stock_at = fld(abi, &FUEL, 0x8)?;
+    let capacity_at = (fld(abi, &FUEL, 0x10)? - stock_at) as usize;
+    let fuel = r.read(fuel_object + stock_at, capacity_at + 8)?;
     // Torn-read guard: the pool image must not have moved while reading.
     if r.read(object, OBJECT_SCAN)? != buf {
         return Err(Error::new("torn_read", "Country resources changed"));
@@ -189,7 +208,7 @@ fn snapshot(r: &Reader<'_>, image: u64) -> Result<Resources> {
         pools,
         fuel: (
             i64::from_le_bytes(fuel[..8].try_into().unwrap()),
-            i64::from_le_bytes(fuel[8..16].try_into().unwrap()),
+            i64::from_le_bytes(fuel[capacity_at..capacity_at + 8].try_into().unwrap()),
         ),
         date_raw: context.date_raw as i32,
         player: context.player,
@@ -274,7 +293,15 @@ struct Line {
 
 fn lines(r: &Reader<'_>, image: u64) -> Result<Vec<Line>> {
     let (_, production) = economy::own_production(r, image)?;
-    let (_, data, count) = r.array_header(production + 0x58)?;
+    let abi = r.string_abi();
+    let (_, data, count) = r.array_header(production + fld(abi, &PRODUCTION, 0x58)?)?;
+    let military = image + img(abi, MILITARY_LINE)?;
+    let naval = image + img(abi, NAVAL_LINE)?;
+    let cost_vtable = image + img(abi, COST_VTABLE)?;
+    let resource_vtable = image + img(abi, RESOURCE_VTABLE)?;
+    let cost_size = fld(abi, &COST_SIZE, 0x20)? as usize;
+    let cost_resource = fld(abi, &COST, 8)? as usize;
+    let cost_amount = fld(abi, &COST, 16)? as usize;
     if count > LINE_LIMIT {
         return Err(Error::new("invalid_array", "Production line count"));
     }
@@ -290,45 +317,50 @@ fn lines(r: &Reader<'_>, image: u64) -> Result<Vec<Line>> {
             continue;
         }
         let vt = r.u64(line)?;
-        let kind = if vt == image + MILITARY_LINE {
+        let kind = if vt == military {
             "military"
-        } else if vt == image + NAVAL_LINE {
+        } else if vt == naval {
             "naval"
         } else {
             continue;
         };
-        if r.u64(line + 0x20)? != production {
+        if r.u64(line + fld(abi, &LINE, 0x20)?)? != production {
             continue;
         }
-        let factories = r.i32(line + 0x14)?;
+        let factories = r.i32(line + fld(abi, &LINE, 0x14)?)?;
         let equipment = (|| -> Result<Option<String>> {
-            let variant = r.u64(line + 0x88)?;
+            let variant = r.u64(line + fld(abi, &LINE, 0x88)?)?;
             if variant < 0x10000 {
                 return Ok(None);
             }
-            let ty = r.u64(variant + EQUIPMENT_VARIANT_TYPE)?;
+            let ty = r.u64(variant + fld(abi, &VARIANT, EQUIPMENT_VARIANT_TYPE)?)?;
             if ty < 0x10000 {
                 return Ok(None);
             }
-            Ok(Some(r.string_bounded(ty + 0x10, 128)?))
+            Ok(Some(r.string_bounded(
+                ty + fld(abi, &EQUIPMENT_TYPE, 0x10)?,
+                128,
+            )?))
         })()?;
-        let cost = r.u64(line + 0x58)?;
+        let cost = r.u64(line + fld(abi, &LINE, 0x58)?)?;
         let mut allocation = Vec::new();
         if (0x10000..=0x7fff_ffff_0000).contains(&cost) {
-            let b = r.read(cost, 0x60)?;
+            let b = r.read(cost, 3 * cost_size)?;
             for k in 0..3 {
-                let o = k * 0x20;
+                let o = k * cost_size;
                 let vt = u64::from_le_bytes(b[o..o + 8].try_into().unwrap());
-                let res = u64::from_le_bytes(b[o + 8..o + 16].try_into().unwrap());
-                if vt != image + COST_VTABLE || res < 0x10000 {
+                let at = o + cost_resource;
+                let res = u64::from_le_bytes(b[at..at + 8].try_into().unwrap());
+                if vt != cost_vtable || res < 0x10000 {
                     continue;
                 }
-                if r.u64(res)? != image + RESOURCE_VTABLE {
+                if r.u64(res)? != resource_vtable {
                     continue; // null object: unused record
                 }
+                let at = o + cost_amount;
                 allocation.push((
-                    r.i32(res + 8)?,
-                    i64::from_le_bytes(b[o + 16..o + 24].try_into().unwrap()),
+                    r.i32(res + fld(abi, &RESOURCE, 8)?)?,
+                    i64::from_le_bytes(b[at..at + 8].try_into().unwrap()),
                 ));
             }
         }

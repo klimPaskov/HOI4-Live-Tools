@@ -47,6 +47,7 @@ use crate::{
     error::{Error, Result},
     game,
     memory::Reader,
+    xlayout::{fld, img, Class},
 };
 use std::collections::BTreeMap;
 
@@ -87,6 +88,24 @@ pub(super) const DIVISION_NEED: u64 = 0x30;
 pub(super) const DIVISION_RATIO: u64 = 0x40;
 pub(super) const DIVISION_RECEIVED: u64 = 0x50;
 pub(super) const DIVISION_COVERED: u64 = 0x78;
+/// Owners of the fields above (macOS 1.19.4.1 RTTI names and vtables). The
+/// records inside the supply arrays have no vtable; their sizes and fields are
+/// tagged with record names and need an anchor function on Linux.
+const GAME_STATE: Class = Class::new("CCurrentGameState", 0x35044e8);
+const SUPPLY_SYSTEM: Class = Class::new("CSupplySystem", SUPPLY_SYSTEM_VTABLE);
+const RAILWAY_MANAGER: Class = Class::new("CRailwayManager", RAILWAY_MANAGER_VTABLE);
+const COUNTRY_SYSTEM: Class = Class::new("CCountrySupplySystem", COUNTRY_SYSTEM_VTABLE);
+const RAIL_INFO: Class = Class::new("CProvinceRailwayInfo", RAIL_INFO_VTABLE);
+const BUILDING_STATUS: Class = Class::new("CBuildingStatus", 0x352f828);
+const BUILDING: Class = Class::new("CBuilding", 0x352ee30);
+const BUILDING_TEMPLATE_CLASS: Class = Class::new("CBuildingTemplate", 0x352fa88);
+const ARMY: Class = Class::new("CArmy", 0x34ace60);
+const STATE_RECORD_SIZE: Class = Class::new("supply_state.size", 0);
+const PROVINCE_RECORD: Class = Class::new("supply_province", 0);
+const PROVINCE_RECORD_SIZE: Class = Class::new("supply_province.size", 0);
+const FLOW_RECORD_SIZE: Class = Class::new("supply_flow.size", 0);
+const NODE_RECORD: Class = Class::new("supply_node", 0);
+const NODE_RECORD_SIZE: Class = Class::new("supply_node.size", 0);
 
 fn fixed(r: &Reader<'_>, a: u64) -> Result<f64> {
     Ok(i64::from_le_bytes(r.read(a, 8)?.try_into().unwrap()) as f64 / FIXED)
@@ -104,7 +123,7 @@ fn is_ptr(p: u64) -> bool {
     (0x10000..=0x7fff_ffff_0000).contains(&p) && p % 8 == 0
 }
 fn typed(r: &Reader<'_>, image: u64, p: u64, vtable: u64, what: &str) -> Result<()> {
-    if !is_ptr(p) || r.u64(p)? != image + vtable {
+    if !is_ptr(p) || r.u64(p)? != image + img(r.string_abi(), vtable)? {
         return Err(Error::new(
             "invalid_type",
             format!("Exact {what} object required"),
@@ -120,9 +139,10 @@ pub(super) struct Systems {
     pub railway: u64,
 }
 pub(super) fn systems(r: &Reader<'_>, image: u64, gs: u64) -> Result<Systems> {
-    let supply = r.u64(gs + GS_SUPPLY_SYSTEM)?;
+    let abi = r.string_abi();
+    let supply = r.u64(gs + fld(abi, &GAME_STATE, GS_SUPPLY_SYSTEM)?)?;
     typed(r, image, supply, SUPPLY_SYSTEM_VTABLE, "supply system")?;
-    let railway = r.u64(gs + GS_RAILWAY_MANAGER)?;
+    let railway = r.u64(gs + fld(abi, &GAME_STATE, GS_RAILWAY_MANAGER)?)?;
     typed(r, image, railway, RAILWAY_MANAGER_VTABLE, "railway manager")?;
     Ok(Systems { supply, railway })
 }
@@ -144,11 +164,15 @@ pub(super) struct DivisionSupply {
     pub covered: f64,
 }
 pub(super) fn division_supply(r: &Reader<'_>, division: u64) -> Result<DivisionSupply> {
-    let b = r.read(division + DIVISION_NEED, 0x58)?;
+    let abi = r.string_abi();
+    let at = fld(abi, &ARMY, DIVISION_NEED)?;
+    let ratio_at = (fld(abi, &ARMY, DIVISION_RATIO)? - at) as usize;
+    let received_at = (fld(abi, &ARMY, DIVISION_RECEIVED)? - at) as usize;
+    let b = r.read(division + at, 0x58usize.max(ratio_at.max(received_at) + 8))?;
     let need = le_i64(&b, 0);
-    let ratio = le_i64(&b, (DIVISION_RATIO - DIVISION_NEED) as usize);
-    let received = le_i64(&b, (DIVISION_RECEIVED - DIVISION_NEED) as usize);
-    let covered = fixed(r, division + DIVISION_COVERED)?;
+    let ratio = le_i64(&b, ratio_at);
+    let received = le_i64(&b, received_at);
+    let covered = fixed(r, division + fld(abi, &ARMY, DIVISION_COVERED)?)?;
     if !(0.0..=100.0).contains(&need)
         || !(0.0..=1.0 + 1e-9).contains(&ratio)
         || (received - need * ratio).abs() > 0.002
@@ -185,20 +209,24 @@ pub(super) fn province_supply(
     sys: &Systems,
     province: i32,
 ) -> Result<ProvinceSupply> {
-    let (_, data, count) = r.array_header(sys.supply + SYS_PROVINCES)?;
+    let abi = r.string_abi();
+    let stride = fld(abi, &PROVINCE_RECORD_SIZE, PROVINCE_STRIDE)?;
+    let flows_at = fld(abi, &PROVINCE_RECORD, PROVINCE_FLOWS)? as usize;
+    let flow_stride = fld(abi, &FLOW_RECORD_SIZE, FLOW_STRIDE)? as usize;
+    let (_, data, count) = r.array_header(sys.supply + fld(abi, &SUPPLY_SYSTEM, SYS_PROVINCES)?)?;
     if province < 0 || province as usize >= count {
         return Err(Error::new(
             "invalid_index",
             "Province outside the supply map",
         ));
     }
-    let element = data + PROVINCE_STRIDE * province as u64;
-    let b = r.read(element, PROVINCE_STRIDE as usize)?;
-    let demand = le_i64(&b, PROVINCE_DEMAND as usize);
-    let supply = le_i64(&b, PROVINCE_SUPPLY as usize);
-    let ptr = le_u64(&b, PROVINCE_FLOWS as usize);
-    let cap = le_u32(&b, PROVINCE_FLOWS as usize + 8);
-    let size = le_u32(&b, PROVINCE_FLOWS as usize + 12);
+    let element = data + stride * province as u64;
+    let b = r.read(element, stride as usize)?;
+    let demand = le_i64(&b, fld(abi, &PROVINCE_RECORD, PROVINCE_DEMAND)? as usize);
+    let supply = le_i64(&b, fld(abi, &PROVINCE_RECORD, PROVINCE_SUPPLY)? as usize);
+    let ptr = le_u64(&b, flows_at);
+    let cap = le_u32(&b, flows_at + 8);
+    let size = le_u32(&b, flows_at + 12);
     if size > cap || size > 64 || (size > 0 && !is_ptr(ptr)) || demand < 0.0 || supply < 0.0 {
         return Err(Error::new(
             "invalid_array",
@@ -207,15 +235,16 @@ pub(super) fn province_supply(
     }
     let mut flows = Vec::new();
     if size > 0 {
-        let f = r.read(ptr, size as usize * FLOW_STRIDE as usize)?;
+        let f = r.read(ptr, size as usize * flow_stride)?;
         for i in 0..size as usize {
+            let at = i * flow_stride;
             flows.push(Flow {
-                node: u16::from_le_bytes(f[i * 16..i * 16 + 2].try_into().unwrap()),
-                flow: le_i64(&f, i * 16 + 8),
+                node: u16::from_le_bytes(f[at..at + 2].try_into().unwrap()),
+                flow: le_i64(&f, at + 8),
             });
         }
     }
-    if r.read(element, PROVINCE_STRIDE as usize)? != b {
+    if r.read(element, stride as usize)? != b {
         return Err(Error::new("torn_read", "Province supply changed"));
     }
     Ok(ProvinceSupply {
@@ -227,11 +256,13 @@ pub(super) fn province_supply(
 
 /// Local (state) supply, the value the formula in the module notes gives.
 pub(super) fn state_supply(r: &Reader<'_>, sys: &Systems, state: i32) -> Result<f64> {
-    let (_, data, count) = r.array_header(sys.supply + SYS_STATES)?;
+    let abi = r.string_abi();
+    let (_, data, count) = r.array_header(sys.supply + fld(abi, &SUPPLY_SYSTEM, SYS_STATES)?)?;
     if state < 1 || state as usize >= count {
         return Err(Error::new("invalid_index", "State outside the supply map"));
     }
-    let v = fixed(r, data + STATE_STRIDE * state as u64)?;
+    let stride = fld(abi, &STATE_RECORD_SIZE, STATE_STRIDE)?;
+    let v = fixed(r, data + stride * state as u64)?;
     if !(0.0..=500.0).contains(&v) {
         return Err(Error::new("invalid_supply", "State supply out of range"));
     }
@@ -252,7 +283,9 @@ pub(super) fn province_rail(
     sys: &Systems,
     province: i32,
 ) -> Result<Option<ProvinceRail>> {
-    let (_, data, count) = r.array_header(sys.railway + RAIL_PROVINCES)?;
+    let abi = r.string_abi();
+    let (_, data, count) =
+        r.array_header(sys.railway + fld(abi, &RAILWAY_MANAGER, RAIL_PROVINCES)?)?;
     if province < 0 || province as usize >= count {
         return Err(Error::new(
             "invalid_index",
@@ -264,24 +297,28 @@ pub(super) fn province_rail(
         return Ok(None);
     }
     typed(r, image, info, RAIL_INFO_VTABLE, "province railway info")?;
-    let status = r.u64(info + RAIL_STATUS)?;
+    let status = r.u64(info + fld(abi, &RAIL_INFO, RAIL_STATUS)?)?;
     if !is_ptr(status) {
         return Ok(None);
     }
-    let (_, buildings, n) = r.array_header(status + STATUS_BUILDINGS)?;
+    let (_, buildings, n) =
+        r.array_header(status + fld(abi, &BUILDING_STATUS, STATUS_BUILDINGS)?)?;
+    let template_at = fld(abi, &BUILDING, BUILDING_TEMPLATE)?;
+    let level_at = fld(abi, &BUILDING, BUILDING_LEVEL)?;
+    let key_at = fld(abi, &BUILDING_TEMPLATE_CLASS, TEMPLATE_KEY)?;
     let mut out = ProvinceRail::default();
     for i in 0..n.min(32) as u64 {
         let building = r.u64(buildings + 8 * i)?;
         if !is_ptr(building) {
             continue;
         }
-        let template = r.u64(building + BUILDING_TEMPLATE)?;
+        let template = r.u64(building + template_at)?;
         if !is_ptr(template) {
             continue;
         }
-        let key = r.string_bounded(template + TEMPLATE_KEY, 64)?;
+        let key = r.string_bounded(template + key_at, 64)?;
         let level = u32::from(u16::from_le_bytes(
-            r.read(building + BUILDING_LEVEL, 2)?.try_into().unwrap(),
+            r.read(building + level_at, 2)?.try_into().unwrap(),
         ));
         match key.as_str() {
             "rail_way" => out.rail_level = level,
@@ -314,7 +351,8 @@ pub(super) fn country_nodes(
     country: u64,
     index: usize,
 ) -> Result<Vec<Node>> {
-    let (_, data, count) = r.array_header(sys.supply + SYS_COUNTRIES)?;
+    let abi = r.string_abi();
+    let (_, data, count) = r.array_header(sys.supply + fld(abi, &SUPPLY_SYSTEM, SYS_COUNTRIES)?)?;
     if index >= count {
         return Err(Error::new(
             "invalid_index",
@@ -323,15 +361,20 @@ pub(super) fn country_nodes(
     }
     let cs = r.u64(data + 8 * index as u64)?;
     typed(r, image, cs, COUNTRY_SYSTEM_VTABLE, "country supply system")?;
-    if r.u64(cs + COUNTRY_SYSTEM_OWNER)? != country {
+    if r.u64(cs + fld(abi, &COUNTRY_SYSTEM, COUNTRY_SYSTEM_OWNER)?)? != country {
         return Err(Error::new(
             "invalid_supply",
             "Country supply system belongs to another country",
         ));
     }
-    let pool = r.u64(cs + COUNTRY_NODES)?;
-    let used = r.i32(cs + COUNTRY_NODES + 8)?;
-    let cap = r.i32(cs + COUNTRY_NODES + 12)?;
+    let nodes_at = fld(abi, &COUNTRY_SYSTEM, COUNTRY_NODES)?;
+    let pool = r.u64(cs + nodes_at)?;
+    let used = r.i32(cs + nodes_at + 8)?;
+    let cap = r.i32(cs + nodes_at + 12)?;
+    let stride = fld(abi, &NODE_RECORD_SIZE, NODE_STRIDE)?;
+    let field = |offset: u64| -> Result<usize> { Ok(fld(abi, &NODE_RECORD, offset)? as usize) };
+    let (province_at, kind_at, id_at) = (field(NODE_PROVINCE)?, field(NODE_KIND)?, field(NODE_ID)?);
+    let (one_at, link_at, object_at) = (field(NODE_ONE)?, field(NODE_LINK)?, field(NODE_OBJECT)?);
     if !(0..=cap).contains(&used) || cap > 256 || (cap > 0 && !is_ptr(pool)) {
         return Err(Error::new("invalid_array", "Supply node pool invalid"));
     }
@@ -341,18 +384,17 @@ pub(super) fn country_nodes(
     let mut nodes: Vec<Node> = Vec::new();
     let mut slot = 0usize;
     while nodes.len() < used as usize && slot < NODE_SLOT_LIMIT {
-        let b = match r.read(pool + slot as u64 * NODE_STRIDE, NODE_STRIDE as usize) {
+        let b = match r.read(pool + slot as u64 * stride, stride as usize) {
             Ok(b) => b,
             Err(_) if slot >= cap as usize => break,
             Err(e) => return Err(e),
         };
         slot += 1;
-        let province = le_u32(&b, NODE_PROVINCE as usize);
-        let kind = le_u32(&b, NODE_KIND as usize);
-        let id = le_u32(&b, NODE_ID as usize);
-        let record = le_u32(&b, NODE_ONE as usize) == 1
-            && le_u32(&b, NODE_LINK as usize) == 1
-            && is_ptr(le_u64(&b, NODE_OBJECT as usize));
+        let province = le_u32(&b, province_at);
+        let kind = le_u32(&b, kind_at);
+        let id = le_u32(&b, id_at);
+        let record =
+            le_u32(&b, one_at) == 1 && le_u32(&b, link_at) == 1 && is_ptr(le_u64(&b, object_at));
         if record
             && (kind == 2 || kind == 3)
             && (1..20_000).contains(&province)

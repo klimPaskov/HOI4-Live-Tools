@@ -6,11 +6,12 @@ use crate::{
     error::{Error, Result},
     game,
     gui_tree::{self, Rect},
-    memory::{Reader, StringAbi},
+    memory::Reader,
     platform::{
         game_input::{GameInput, Key},
         Process,
     },
+    xlayout::{fld, Class},
 };
 
 struct Ui {
@@ -28,6 +29,10 @@ struct Ui {
     location_label: u64,
     grid_items: u64,
     item_container: u64,
+    template_root: u64,
+    text: u64,
+    conveyor_amount: u64,
+    conveyor_lines: u64,
 }
 /// macOS Mach-O 089EA519, mapped live on 18 October 2026 (Germany test run):
 /// the template window's rows (+0xb90) follow the country's template list
@@ -50,19 +55,57 @@ const MACOS: Ui = Ui {
     location_label: 0x160, // 1.19.4: CButtonStandard text +8 (was 0x158)
     grid_items: 0x190,
     item_container: 0x10,
+    template_root: 0xd20,
+    text: 0x100,
+    conveyor_amount: CONVEYOR_AMOUNT,
+    conveyor_lines: CONVEYOR_LINES,
 };
+/// Owners of the fields above (macOS 1.19.4.1 RTTI names and vtables). The
+/// interface manager, the template window and its rows, division templates,
+/// grid items and text widgets have no reviewed class yet; their Linux offsets
+/// need an anchor function. The deployment view, status and conveyor classes
+/// are named after the objects the comments describe.
+const IDLER: Class = Class::new("CInGameIdler", 0x35089d8);
+const MANAGER: Class = Class::new("idler.manager", 0);
+const VIEW: Class = Class::new("CCountryDeploymentView", 0x364a878);
+const TEMPLATE_WINDOW: Class = Class::new("deployment.template_window", 0);
+const TEMPLATE_ROW: Class = Class::new("deployment.template_row", 0);
+const COUNTRY: Class = Class::new("CCountry", 0x357e388);
+const TEMPLATE: Class = Class::new("division_template", 0);
+const STATUS: Class = Class::new("CDeploymentStatus", 0x358d850);
+const CONVEYOR: Class = Class::new("CMilitaryDeploymentConveyor", 0x358dff8);
+const BUTTON: Class = Class::new("gui.button", 0);
+const GRID: Class = Class::new("CStandardGridBox", 0x36cca80);
+const GRID_ITEM: Class = Class::new("grid.item", 0);
+const TEXT_BOX: Class = Class::new("gui.text", 0);
 /// Visible band of the deployment list.
 const LIST: (i32, i32) = (360, 1050);
 const GAME: (u32, u32) = (1920, 1080);
 
-fn ui(r: &Reader<'_>) -> Result<&'static Ui> {
-    match r.string_abi() {
-        StringAbi::LibCxx => Ok(&MACOS),
-        StringAbi::LibStdCxx => Err(Error::new(
-            "capability_unavailable",
-            "Deployment input is not reviewed for this build",
-        )),
-    }
+/// The layout for this build (macOS values translated through xlayout).
+fn ui(r: &Reader<'_>) -> Result<Ui> {
+    let abi = r.string_abi();
+    let m = &MACOS;
+    Ok(Ui {
+        manager: fld(abi, &IDLER, m.manager)?,
+        view: fld(abi, &MANAGER, m.view)?,
+        view_root: fld(abi, &VIEW, m.view_root)?,
+        template_window: fld(abi, &VIEW, m.template_window)?,
+        window_rows: fld(abi, &TEMPLATE_WINDOW, m.window_rows)?,
+        row_container: fld(abi, &TEMPLATE_ROW, m.row_container)?,
+        country_templates: fld(abi, &COUNTRY, m.country_templates)?,
+        template_name: fld(abi, &TEMPLATE, m.template_name)?,
+        country_deployment: fld(abi, &COUNTRY, m.country_deployment)?,
+        conveyors: fld(abi, &STATUS, m.conveyors)?,
+        conveyor_template: fld(abi, &CONVEYOR, m.conveyor_template)?,
+        location_label: fld(abi, &BUTTON, m.location_label)?,
+        grid_items: fld(abi, &GRID, m.grid_items)?,
+        item_container: fld(abi, &GRID_ITEM, m.item_container)?,
+        template_root: fld(abi, &TEMPLATE_WINDOW, m.template_root)?,
+        text: fld(abi, &TEXT_BOX, m.text)?,
+        conveyor_amount: fld(abi, &CONVEYOR, m.conveyor_amount)?,
+        conveyor_lines: fld(abi, &CONVEYOR, m.conveyor_lines)?,
+    })
 }
 fn own_country(r: &Reader<'_>, image: u64) -> Result<u64> {
     let g = game::layout(r);
@@ -117,14 +160,15 @@ pub(super) fn queued(r: &Reader<'_>, image: u64, name: &str) -> Result<usize> {
         let template = r.u64(line + u.conveyor_template)?;
         if template != 0 && r.string_bounded(template + u.template_name, 128)? == name {
             // Parallel training lines of this queue (1.19.4.1 conveyor +0x70).
-            count += r.i32(line + 0x70)?.clamp(1, 1024) as usize;
+            count += r.i32(line + u.conveyor_lines)?.clamp(1, 1024) as usize;
         }
     }
     Ok(count)
 }
 fn view(r: &Reader<'_>, image: u64) -> Result<u64> {
     let idler = r.u64(image + game::layout(r).idler_global)?;
-    r.u64(r.u64(idler + ui(r)?.manager)? + ui(r)?.view)
+    let u = ui(r)?;
+    r.u64(r.u64(idler + u.manager)? + u.view)
 }
 fn open(r: &Reader<'_>, image: u64) -> Result<bool> {
     let root = gui_tree::container(r, r.u64(view(r, image)? + ui(r)?.view_root)?, image)?
@@ -162,7 +206,7 @@ pub(super) fn row_button(
             let Some(label) = gui_tree::child(r, image, frame, "name")? else {
                 continue;
             };
-            if r.string_bounded(label + 0x100, 128)?.trim() == name {
+            if r.string_bounded(label + u.text, 128)?.trim() == name {
                 found = Some(candidate);
                 break;
             }
@@ -196,8 +240,9 @@ fn train_button(r: &Reader<'_>, image: u64, name: &str) -> Result<Rect> {
 }
 /// The panel's own Division Designer button (container +0xc00 of the template window).
 pub(super) fn designer_button(r: &Reader<'_>, image: u64) -> Result<Rect> {
-    let window = r.u64(view(r, image)? + MACOS.template_window)?;
-    let root = gui_tree::container(r, r.u64(window + 0xd20)?, image)?
+    let u = ui(r)?;
+    let window = r.u64(view(r, image)? + u.template_window)?;
+    let root = gui_tree::container(r, r.u64(window + u.template_root)?, image)?
         .ok_or_else(|| Error::new("invalid_gui", "Template window root unavailable"))?;
     let button = gui_tree::child(r, image, root, "open_designer_button")?.ok_or_else(|| {
         Error::new(
@@ -252,8 +297,8 @@ fn conveyors(r: &Reader<'_>, image: u64) -> Result<Vec<(u64, String, i32, i32)>>
         out.push((
             line,
             name,
-            r.i32(line + CONVEYOR_AMOUNT)?,
-            r.i32(line + CONVEYOR_LINES)?,
+            r.i32(line + u.conveyor_amount)?,
+            r.i32(line + u.conveyor_lines)?,
         ));
     }
     Ok(out)
@@ -373,7 +418,7 @@ pub(super) fn train(
     if amount == 0 {
         click_conveyor(process, keys, index, "increase_amount")?;
         wait(process, "series amount one", |r, i| {
-            Ok(r.i32(line + CONVEYOR_AMOUNT)? == 1 && find_new(r, i)?.0 == index)
+            Ok(r.i32(line + ui(r)?.conveyor_amount)? == 1 && find_new(r, i)?.0 == index)
         })
         .map_err(|_| {
             Error::new(

@@ -14,6 +14,7 @@ use crate::{
         game_input::{GameInput, Key},
         Process,
     },
+    xlayout::{fld, img, Class},
 };
 use std::{
     collections::BTreeSet,
@@ -64,6 +65,14 @@ const MACOS: Ui = Ui {
     panel_window: 0xcc0,
     panel_selected: 0xcc8,
 };
+/// Owners of the fields above (macOS 1.19.4.1 RTTI names and vtables). The
+/// interface manager has no reviewed class; its Linux offsets need an anchor
+/// function.
+const IDLER: Class = Class::new("CInGameIdler", 0x35089d8);
+const MANAGER: Class = Class::new("idler.manager", 0);
+const VIEW: Class = Class::new("CNationalFocusView", 0x3611298);
+const ITEM: Class = Class::new("CNationalFocusTreeItem", 0x3611108);
+const PANEL: Class = Class::new("CNationalFocusInfoWindow", 0x36106d8);
 const GAME: (u32, u32) = (1920, 1080);
 mod binding;
 mod pan;
@@ -73,14 +82,35 @@ pub(crate) use probe::snapshot as input_probe;
 /// Tree area clear of the title bar, filter buttons and the bottom scrollbar.
 const SAFE: (f64, f64, f64, f64) = (260.0, 200.0, 1860.0, 1000.0);
 
-fn ui(r: &Reader<'_>) -> Result<&'static Ui> {
-    match r.string_abi() {
-        StringAbi::LibCxx => Ok(&MACOS),
-        StringAbi::LibStdCxx => Err(Error::new(
+/// The layout for this build (macOS values translated through xlayout).
+/// `focus/binding.rs` still reads the macOS values directly, so other builds
+/// stay refused until it uses this table.
+fn ui(r: &Reader<'_>) -> Result<Ui> {
+    let abi = r.string_abi();
+    if abi == StringAbi::LibStdCxx {
+        return Err(Error::new(
             "capability_unavailable",
             "Focus input is not reviewed for this build",
-        )),
+        ));
     }
+    let m = &MACOS;
+    Ok(Ui {
+        manager: fld(abi, &IDLER, m.manager)?,
+        politics_view: fld(abi, &MANAGER, m.politics_view)?,
+        focus_view: fld(abi, &MANAGER, m.focus_view)?,
+        focus_view_vtable: img(abi, m.focus_view_vtable)?,
+        view_root: fld(abi, &VIEW, m.view_root)?,
+        country_override: fld(abi, &VIEW, m.country_override)?,
+        items: fld(abi, &VIEW, m.items)?,
+        item_vtable: img(abi, m.item_vtable)?,
+        item_focus: fld(abi, &ITEM, m.item_focus)?,
+        item_container: fld(abi, &ITEM, m.item_container)?,
+        zoom: fld(abi, &VIEW, m.zoom)?,
+        panels: fld(abi, &VIEW, m.panels)?,
+        panel_vtable: img(abi, m.panel_vtable)?,
+        panel_window: fld(abi, &PANEL, m.panel_window)?,
+        panel_selected: fld(abi, &PANEL, m.panel_selected)?,
+    })
 }
 fn inside(rect: &Rect) -> bool {
     let (x, y) = rect.center();

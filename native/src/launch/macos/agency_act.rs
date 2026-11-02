@@ -33,6 +33,7 @@ use crate::{
     gui_tree,
     memory::Reader,
     platform::{game_input::GameInput, Process},
+    xlayout::{fld, Class},
 };
 use serde_json::{json, Value};
 use std::{cell::RefCell, thread, time::Duration};
@@ -156,9 +157,15 @@ fn refusal(r: Option<(&'static str, String)>) -> std::result::Result<(), Fail> {
 /// +0x188, root +0x68). The game hides it when the agency feature is not active (La Resistance
 /// not enabled: seen live on 1.19.4.1, 31 October 2026, where Shift+W then opens nothing).
 fn agency_button_shown(r: &Reader<'_>, i: u64) -> Result<Option<bool>> {
+    const IDLER: Class = Class::new("CInGameIdler", 0x35089d8);
+    const MANAGER: Class = Class::new("idler.manager", 0);
+    const TOP_BAR: Class = Class::new("CTopBar", 0x3697918);
+    let abi = r.string_abi();
     let idler = r.u64(i + crate::game::layout(r).idler_global)?;
-    let topbar = r.u64(r.u64(idler + 0x670)? + 0x188)?;
-    let Some(root) = gui_tree::container(r, r.u64(topbar + 0x68)?, i)? else {
+    let manager = r.u64(idler + fld(abi, &IDLER, 0x670)?)?;
+    let topbar = r.u64(manager + fld(abi, &MANAGER, 0x188)?)?;
+    let root = r.u64(topbar + fld(abi, &TOP_BAR, 0x68)?)?;
+    let Some(root) = gui_tree::container(r, root, i)? else {
         return Ok(None);
     };
     match pk::find(r, i, root, "intel_agency_button", 4)? {
