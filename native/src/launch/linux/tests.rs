@@ -64,6 +64,7 @@ impl Fixture {
         json_new(&directory.join("endpoint.json"), &endpoint).unwrap();
         let (closing, receiver) = mpsc::sync_channel(8);
         let shared = Arc::new(Shared {
+            managed: None,
             server,
             endpoint: json_read(&directory.join("endpoint.json")).unwrap(),
             reads: RwLock::new(()),

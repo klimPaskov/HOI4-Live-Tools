@@ -19,6 +19,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some("--session") => Some(PathBuf::from(
             args.next().ok_or("--session requires a manifest")?,
         )),
+        Some("--bind-management") => {
+            let directory = PathBuf::from(
+                args.next()
+                    .ok_or("--bind-management requires run directory")?,
+            );
+            let config = PathBuf::from(
+                args.next()
+                    .ok_or("--bind-management requires private management binding")?,
+            );
+            if args.next().is_some() {
+                return Err("Unexpected extra argument".into());
+            }
+            launch::bind_management(&directory, &config)?;
+            return Ok(());
+        }
         Some("--bind-input") => {
             let directory =
                 PathBuf::from(args.next().ok_or("--bind-input requires run directory")?);
@@ -58,7 +73,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             return Ok(());
         }
         Some("--help") => {
-            eprintln!("hoi4-live-native [--session OWNED_RUN_MANIFEST]\nStdio MCP; observations by default.\nmacOS 15+: --record OWNED_SESSION RECORDING_CONFIG (owned window only; no input).\nLinux: --serve PRIVATE_CONFIG / --connect RUN_DIRECTORY / --close RUN_DIRECTORY.\nOptional: --bind-input RUN_DIRECTORY PRIVATE_INPUT_CONFIG (ordinary clock keys; optional owned ID research preview).\nExplicit: --close-window RUN_DIRECTORY PRIVATE_WINDOW_CONFIG (one WM close attempt; no signal fallback).\nWindows/macOS launch/input adapters unverified.");
+            eprintln!("hoi4-live-native [--session OWNED_RUN_MANIFEST]\nStdio MCP; observations by default.\nmacOS 15+: --record OWNED_SESSION RECORDING_CONFIG (owned window only; no input).\nLinux: --serve PRIVATE_CONFIG / --connect RUN_DIRECTORY / --close RUN_DIRECTORY.\nOptional: --bind-input RUN_DIRECTORY PRIVATE_INPUT_CONFIG (ordinary clock keys; optional owned ID research preview).\nLinux: --bind-management RUN_DIRECTORY BINDING (full management tools; needs a verified layout for the running build).\nExplicit: --close-window RUN_DIRECTORY PRIVATE_WINDOW_CONFIG (one WM close attempt; no signal fallback).\nWindows/macOS launch/input adapters unverified.");
             return Ok(());
         }
         Some(_) => return Err("Unknown argument".into()),

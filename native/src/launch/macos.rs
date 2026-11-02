@@ -2,9 +2,6 @@
 //! journals, CGEvent keys and clicks only while the owned window is front-most,
 //! and fresh memory readback for every step. The clock keeps the Linux tool
 //! contract; research starts are driven by live GUI geometry.
-// Linux reuses these tools once a verified build layout binds them (see
-// docs/LINUX_PORT.md); until then parts are unused there.
-#![cfg_attr(target_os = "linux", allow(dead_code, unused_imports))]
 mod action_fence;
 mod agency_act;
 mod air;
@@ -41,6 +38,8 @@ mod events;
 mod faction;
 mod fleetmem;
 mod fleetops;
+// The input probe is used by the macOS main loop only.
+#[cfg_attr(target_os = "linux", allow(dead_code, unused_imports))]
 mod focus;
 mod front_plan;
 mod peace;

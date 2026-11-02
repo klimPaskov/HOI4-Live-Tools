@@ -32,7 +32,7 @@ impl Class {
 pub(crate) struct Table {
     /// GNU build ID of the ELF the table was generated for; the Linux server
     /// compares it with the running game before registering tools.
-    #[allow(dead_code)]
+    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
     pub build_id: String,
     image: HashMap<u64, u64>,
     fields: HashMap<(String, u64), u64>,
@@ -107,6 +107,23 @@ fn linux() -> Result<&'static Table> {
         })
         .as_ref()
         .map_err(|m| Error::new("layout_unmapped", m.clone()))
+}
+
+/// The management tools may bind on Linux: a generated table ships and was
+/// made for exactly the running build.
+#[cfg(target_os = "linux")]
+pub(crate) fn require_linux(build_id: &str) -> Result<()> {
+    let table = linux()?;
+    if table.build_id != build_id {
+        return Err(Error::new(
+            "layout_unmapped",
+            format!(
+                "The Linux layout is for build {}, the game is {build_id}",
+                table.build_id
+            ),
+        ));
+    }
+    Ok(())
 }
 
 /// Image-relative address (vtable, global) for this build.

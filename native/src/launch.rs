@@ -65,6 +65,20 @@ pub fn close_window(directory: &Path, config: &Path) -> Result<()> {
         ))
     }
 }
+pub fn bind_management(directory: &Path, config: &Path) -> Result<()> {
+    #[cfg(target_os = "linux")]
+    {
+        linux::bind_management(directory, config)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = (directory, config);
+        Err(Error::new(
+            "platform_unavailable",
+            "The management binding is Linux-only; macOS uses --mac-input",
+        ))
+    }
+}
 pub fn bind_input(directory: &Path, config: &Path) -> Result<()> {
     #[cfg(target_os = "linux")]
     {
