@@ -15,12 +15,23 @@
   - The game-font reader no longer fails on a crop with only small glyphs.
   - Auto capture retries PrintWindow every 15 s after a blank frame instead of
     staying on ffmpeg ddagrab, which timed out after a relaunch.
-- Seen on 1.19.4.1 and not fixed yet: one of three `hoi4_new_game` START clicks
-  did not register (clicking START again worked). The `hoi4_diplomacy` view of a
-  country whose state name differs from the country name did not open Find.
-  Without the Steam client the game finds no DLC in a fresh user folder unless
-  `launcher-v2.sqlite` and `dlc_signature` from the real one are copied in, and
-  Career Profile is unavailable.
+- Later fixes from the same session:
+  - `hoi4_shutdown` confirms the exit dialog when a `-debug` GUI-inspector tooltip
+    covers its OK button (#5).
+  - `hoi4_new_game` waits for a fading-in main menu (#5) and clicks START again
+    when the ready screen stays up for 30 s (#6). About one START click in five
+    did not register.
+- Seen on 1.19.4.1 and not fixed yet:
+  - The `hoi4_diplomacy` view of a country whose state name differs from the
+    country name did not open Find.
+  - The console did not open over an open sea-region panel or over a total
+    conversion's custom interface (ZIN). Pressing the console key by hand worked.
+  - Custom country-select screens stop `hoi4_new_game` at Select Country.
+  - With `-debug`, a MAP_ERROR opens error.log in Notepad and an OK dialog over
+    the main menu, and `hoi4_launch` waits for the menu until its timeout.
+  - Without the Steam client the game finds no DLC in a fresh user folder unless
+    `launcher-v2.sqlite` and `dlc_signature` from the real one are copied in, and
+    Career Profile is unavailable.
 
 ## Unreleased native preview
 
