@@ -82,6 +82,8 @@ No pocket available: attack the top `hoi4_front_plan` axis with the strike armie
 
 - `hoi4_army_front` fails in very flat desert where the game shows no highlight: use
   `hoi4_army_move` into the enemy state as a direct attack order instead.
+- `hoi4_army_motorization {army, level}`: 0/1/2; level shown in `hoi4_armies` (motorization).
+- `hoi4_army_create` folds every unassigned division standing in the state into the new army.
 - `hoi4_army_move` replaces the army's battle plan with a manual order (planning is lost).
 - `hoi4_naval_invasion` needs convoys and naval superiority; its receipt says
   `landing_verified:false`, so check the map/army after it starts.
@@ -103,6 +105,14 @@ These came from failed training wars; they are general, not tied to one country.
   operations point at them, and defence protects one's own.
 - **Reinforcements take time.** Moving divisions by sea or across a continent takes weeks to months; decide in the
   first days of a war, not when the front stalls.
+- **Motorize supply far from railways.** An army fighting beyond the railheads (colonies, deserts,
+  mountains, deep advances) gets far more supply when its hubs use trucks:
+  `hoi4_army_motorization {army, level:2}` (seen live: 29% -> 41% supply and rising organisation in nine
+  game days). It spends trucks (about 40 per hub per level), so keep a truck production line running.
+  Set it on day one of such a war, not after the attack stalls.
+- **Read the scenario's own rules.** Missions, timers and war-ending conditions of the country's focus
+  tree and decisions decide what "winning" means (a mission timer can end a war as a loss even while
+  advancing); check them before planning and plan the operation around them.
 - **Construction is slow.** Buildings finish long after a short war; in a war of months spend factories on the
   economy and production, not on front-line infrastructure or supply hubs.
 - **Never idle.** Every army has an order every tick; every stalled offensive is re-planned, every idle army gets a
