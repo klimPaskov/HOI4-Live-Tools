@@ -844,6 +844,15 @@ impl Commands for MacClock {
                     .map(|c| c.actions.receipt_exists(id))
                     .unwrap_or(false)
             });
+        // Real campaigns never pause: an action (not the clock tool, not the peace screens) that
+        // leaves the game newly paused is undone with the game's own pause key (Ethiopia run 11:
+        // the game stood paused for 100 s after a plan-runner tick with a focus and a front).
+        let guard_pause = !journaled
+            && arguments.get("request_id").is_some()
+            && name != "hoi4_time"
+            && !name.starts_with("hoi4_peace")
+            && process.identity() == self.process.identity();
+        let was_paused = if guard_pause { self.paused_now() } else { None };
         let result = (if journaled {
             Ok(())
         } else {
@@ -857,6 +866,12 @@ impl Commands for MacClock {
         if MAP_TOOLS.contains(&name) && process.identity() == self.process.identity() {
             let _ = screenmap::restore_zoom(self.process.as_ref(), &*self.keys);
         }
+        if was_paused == Some(false) {
+            let _ = ui::close_menu(self.process.as_ref(), &*self.keys);
+            if self.paused_now() == Some(true) {
+                let _ = self.keys.press(Key::Pause);
+            }
+        }
         result
     }
 }
@@ -864,6 +879,15 @@ impl MacClock {
     /// Army orders need the political map with no panel over it: a run left the map in naval
     /// mode with the diplomacy panel open and every army order failed until both were cleared
     /// by hand (Ethiopia run 10). F1 is the game's own political map-mode key.
+    /// The game's paused flag, read like the clock tool reads it (None when unreadable).
+    fn paused_now(&self) -> Option<bool> {
+        let mut control = self.state.lock().ok()?;
+        control
+            .guard
+            .observe(self.process.as_ref())
+            .ok()
+            .map(|s| s.paused)
+    }
     fn army_screen_ready(&self, process: &dyn Process, name: &str) -> Result<()> {
         let army_tool = name.starts_with("hoi4_army_") || name == "hoi4_division_disband";
         if !army_tool || process.identity() != self.process.identity() {
@@ -5139,6 +5163,41 @@ impl MacClock {
         allowed(args, &["paused", "speed", "request_id", "lease_token"])?;
         let id = string(args, "request_id")?;
         let token = string(args, "lease_token")?;
+        // Both targets in one call (players write {"paused":false,"speed":3}): the speed goes
+        // first under `<id>-speed`, then the pause state under the id itself.
+        if let (Some(paused), Some(speed)) = (args.get("paused"), args.get("speed")) {
+            let paused = paused
+                .as_bool()
+                .ok_or_else(|| Error::new("invalid_arguments", "Paused must be a boolean"))?;
+            let speed = speed
+                .as_u64()
+                .filter(|v| *v <= 4)
+                .ok_or_else(|| Error::new("invalid_arguments", "Speed must be integer 0..4"))?
+                as u8;
+            let epoch = guard.epoch.clone();
+            let mut backend = ClockBackend {
+                process,
+                keys: &self.keys,
+                guard,
+                authority,
+                token,
+            };
+            let first = journal.execute(
+                &format!("{id}-speed"),
+                &epoch,
+                Action::SetSpeed(speed),
+                &mut backend,
+                Duration::from_secs(10),
+            )?;
+            let receipt = journal.execute(
+                id,
+                &epoch,
+                Action::SetPaused(paused),
+                &mut backend,
+                Duration::from_secs(10),
+            )?;
+            return Ok(json!({"receipt":receipt,"speed_receipt":first}));
+        }
         let action = match (args.get("paused"), args.get("speed")) {
             (Some(v), None) => Action::SetPaused(
                 v.as_bool()
@@ -5153,7 +5212,7 @@ impl MacClock {
             _ => {
                 return Err(Error::new(
                     "invalid_arguments",
-                    "Supply exactly one clock target",
+                    "Supply a clock target: paused, speed or both",
                 ))
             }
         };
