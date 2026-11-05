@@ -1,149 +1,83 @@
-# Resume handoff — 23 October 2026
+# Resume handoff — 5 November 2026
 
-The user has resumed work. The selection checkpoint was published as `acd6f6e`
-with all nine CI jobs passing. A fresh owned Mac session now has stationary
-Find/camera evidence and a typed placement-readback foundation. Read
-[the current checkpoint](LINUX_RUST_HANDOFF.md) for subsequent changes. The historical pause snapshot below preserves the tested
-uncommitted state and its evidence; its old process has since exited with default
-settings unchanged. Never reconnect to that expired session or rerun its driver.
+The current, complete starting point. Older handoffs (`LINUX_RUST_HANDOFF.md`,
+`MAC_CONTINUATION_STATUS.md`, `HANDOFF_MAC.md`) are history.
 
-## Start here after the user resumes
+## Goal
 
-Read root `AGENTS.md`, this file, `LINUX_RUST_HANDOFF.md` and the campaign playbook.
-The user has authorized native macOS again; the old goal text saying to stop Mac
-tests is superseded. Linux, Windows and macOS remain required. Final campaign
-videos must come from native macOS at 1920×1080 or higher. Preserve Linux work,
-the legacy Python package and earlier failed campaigns. Do not control the shared
-Windows game.
+Recorded full HOI4 campaigns at 1920×1080 where an AI player reaches the goals:
+FAIR Germany, FAIR Nationalist China, META Poland (rules in
+`skills/hoi4-campaign-playbook/SKILL.md`). Native Rust MCP on macOS, Linux and
+Windows. Then update the public repo and write the Windows handoff
+(`WINDOWS_HANDOFF.md`).
 
-The current branch is `codex/linux-native-rust`. HEAD and the last published
-checkpoint are `416739b921b79c70be63240e798e99b55bb26936`. Its nine CI jobs passed.
-The new construction-selection implementation described below is **uncommitted
-and unpublished**. Do not reset or discard it. There are also 38 unrelated
-Python/package/test work-in-progress files; their private hash baseline must
-remain unchanged. Do not stage them incidentally.
+Order agreed with the user:
 
-## Latest result
+1. Every tool built and verified live (done for most tools on macOS, see below).
+2. Small war campaigns until the player plays real strategy and tactics
+   (encirclements, concentrated offensives, reserves). First: **Italy vs Ethiopia**.
+   It must succeed fully before moving on, then vary the training (defence,
+   multi-front, rivers, counter-attacks, naval).
+3. The full campaigns: Germany → China → Poland.
 
-One Luna player at medium reasoning passed the recorded native Mac selection
-test. One ordinary cursor move and left click selected `arms_factory` on the
-already-open construction panel. Typed same-attempt readback confirmed ordinary
-selection mode 1 and the original template, with the complete construction queue
-unchanged. `state_id: 64` bound the original own-state scope; the action did not
-select that state or place construction.
+The player is one **Sonnet 5.5** agent (user decision, 2 November; Haiku proved too
+weak). In the end Haiku should also manage full campaigns.
 
-The selection RPC took **240.087 ms**. The full 18-call driver took **1.503 s**,
-including one owned-app activation. There were no screenshots, clock calls,
-worker starts, observation pauses or input retries. The last gameplay readback
-was Germany, Normal, historical AI, paused at `1936.01.01.12`, speed 0. Research,
-Focus, production and the full queue remained unchanged.
+## Where things are
 
-The native recording finalized successfully: **1920×1108 H.264, 67.938333 s,
-1,999 frames**, containing a verified native 1920×1080 game client. Video
-metadata was checked; there was no additional visual review in this turn.
-This is component evidence. **No clean two-year Luna run or full Germany,
-Nationalist China or Poland campaign has been recorded.**
+| | State |
+|---|---|
+| `master` | v1.2.0: macOS native runtime (~120 tools, HOI4 1.19.4.1), Windows Python runtime, Linux native preview (1.19.3 only), Steam guards, release workflow |
+| Release v1.2.0 | Python zip, `hoi4-live-native` Linux x86_64 and macOS arm64, `SHA256SUMS.txt`, build attestations; kit pin in Agentic-HOI4-Modding moved to 1.2.0 |
+| Linux port (PR #10) | Tools compile and run on Linux through `GameInput`/`X11Input` and `xlayout`; refused until a Linux 1.19.4.1 address table ships ([LINUX_PORT.md](LINUX_PORT.md)) |
+| Tool verification | [LIVE_VERIFICATION_1_19_4.md](LIVE_VERIFICATION_1_19_4.md); index [TOOLS_MACOS.md](TOOLS_MACOS.md) |
+| War doctrine | `skills/hoi4-campaign-playbook/references/war-operating-loop.md` (procedure plus principles learned in live wars) |
 
-## Current implementation
+### Blocked: Linux 1.19.4.1
 
-- `native/src/construction/mac_ui/selection_state.rs` retains immutable original
-  process, campaign, own scope, catalog, target and complete queue facts. Fresh
-  selection readback does not revisit old UI controls or route caches. Mode 0
-  avoids the inactive pointer; mode 1 must be the exact ordinary template.
-  Unsupported modes and incomplete queue identity refuse explicitly.
-- `native/src/launch/macos/construction_select.rs` adds the default-off
-  `hoi4_construction_select` tool. A strict durable intent precedes all movement.
-  The original five-second action deadline and lease are never renewed. A
-  genuinely already-selected target uses no input. Otherwise one move/click
-  revalidates the original callback, geometry and fresh routing before down.
-  Possible-input failures remain uncertain and cannot be replayed or settled
-  by later UI state. Selection does not grant placement authority.
-- `construction/mac_ui/geometry.rs` keeps the original requested control and
-  rectangle through hover changes. `construction/mac_panel/routing.rs` checks
-  complete route membership, cursor correlation and exact target/gates without
-  claiming atomic delivery. Success still requires canonical game readback.
-- `platform/macos_input.rs` preallocates move/down/up events before posting.
-  The final guard follows allocation; release does not need allocation after
-  possible down. The new ordinary-click hook checks the OS cursor and route.
-- Registration, default-off configuration and focused tests are in
-  `launch/macos.rs`, `launch/macos/construction_select/tests.rs` and
-  `tests/support/mac_construction_selection_state.rs`. The existing opener's
-  bounded read-only recovery helper is shared with selection.
+Needs the Linux executable and the `.so` files beside it (ZIN's WSL copy:
+`/home/klim/games/hoi4/hoi4`, sha256 `36a69ea4…5da`, GNU build ID `2265e6e7…dc082`)
+copied to `~/Projects/_scratch/hoi4-linux-1.19.4.1/`. Then:
+`scripts/gen_linux_layout.py generate`, set `xlayout::LINUX_TABLE`, migrate the core
+Linux layouts 1.19.3 → 1.19.4.1 (same-platform, like macOS did), live checks in the
+Linux VM (game data can come from the macOS install).
 
-The existing Sol reviewer found the mouse allocation issue; it was corrected
-before final tests. The subsequent read-only review found no actionable defects.
-No helper competed for live input. All source files were frozen through the gate.
+### Open tool defects (macOS)
 
-## Validation and evidence
+MIO list rows (CSmoothListbox items unmapped), naval invasion landing province not
+read back (`landing_verified:false`), operatives, province buildings, automatic
+diplomatic responses, `army_split` mixing states, `army_move` slow from home,
+supply hubs (placement click hit a unit counter; low value in short wars).
 
-The current source passed all **1,611 Rust tests**, **956 Python tests with 37
-skips**, formatting, strict Clippy on host macOS plus Windows GNU and Linux
-x86_64/ARM64 musl targets, release build and the 28-tool offline MCP smoke.
-These are local checks; the new source has not been committed or tested in CI.
-Do not repeat broad checks without a new change or unresolved concern.
+## Ethiopia training so far
 
-Private evidence belongs outside Git. The existing private Mac evidence root
-contains `qualification-20261023-12` (called Q12 below). The local private
-`Q12/RESUME_HANDOFF.md` records absolute paths and process identities.
+Sonnet as Italy vs Ethiopia (runs w2–w4): no capitulation. Causes found and fixed
+or written into the playbook: fronts broken (fixed), supply 10–27% in the north,
+home divisions and air never brought in, slow pace. Research for run w5: two big
+armies (~24 + 22 divisions), aggressive dual offensive lines, all air over the front
+(fighters and CAS; rebase wings to Africa), advance hub to hub (captured hubs supply
+after about a week), Aussa flank after Tigray, Mussolini missions at ~150 and ~180
+days. Supply hubs are not worth building in this war (user).
 
-- `Q12/construction-selection008/`: validation logs, candidate binary,
-  typed-selection helper handoff and offline protocol output.
-- `Q12/construction-select001/`: frozen driver/manifest, closed grant,
-  original six-record journal prefix, saved prior config, calls, result and
-  completed recording. Never rerun this one-shot driver.
-- `Q12/construction-choice-geometry007/`: previous published geometry test,
-  reviewed history audit and 38-file preserved-work baseline.
-- `Q12/NEXT.json`: private continuation pointer.
+## Running a live game (macOS)
 
-The candidate's SHA-256 is
-`3ce35f50ff624a0945d7bd0d685a8cd4f2d07440b51461bbf9f60d563d54b519`.
-The frozen live manifest pins 270 source/binary/helper files. The tested input
-configuration added only `construction_selection: true`; the previous config
-was saved privately. That permission alone grants no input without a new lease.
+- Never start HOI4 while Steam or steamcmd runs; launch
+  `hoi4.app/Contents/MacOS/hoi4 -userdir=…` directly, copy `dlc_signature` and
+  `dlc_load.json` from `~/Documents/Paradox Interactive/Hearts of Iron IV` (10 DLCs),
+  force 1920×1080 in `pdx_settings.txt`. Without Steam a fresh user folder has no DLCs.
+- Memory access needs the task-port authorization (`security authorize -u
+  system.privilege.taskport`, about 10 hours; the user approves the dialog) and the
+  binary ad-hoc signed with `native/macos/debugger.entitlements`.
+- The game window must stay front-most during runs; other apps taking focus stop
+  input (`input_target_not_frontmost`).
+- Private harness (outside Git): `~/Projects/_scratch/hoi4-macos-native`
+  (`newgate.py`, `go3.sh`, `redeploy.sh`, `macplay.py`, `plan_loop.py`, briefs).
 
-## Stop state and next work
+## Rules that do not change
 
-Luna returned exclusive input ownership. The grant is closed, lease release
-verified, MCP exited on EOF with code 0, and the recorder exited successfully.
-No worker is active. The retained journal now has eight rows: all original six
-remain byte-exact, followed by the selection intent and Verified receipt.
-
-The exact task-owned game and supervisor still existed at handoff. The game was
-left paused; no new save, reload, quit, relaunch or settings restoration was
-performed. The original six-hour supervisor deadline remains **23 October 2026,
-13:33:28.834612 UTC**. Never renew it. After a later resume, inspect actual process
-creation/executable/parent identity before trusting any live state. If it has
-expired, inspect exit/restoration evidence before considering a new owned run.
-Do not adopt a replacement PID or restore settings while the owned game is live.
-
-After an explicit resume:
-
-1. Revalidate the worktree, private manifest and ownership. The selection result
-   includes complete player readback; a separate root-only fresh memory read
-   after Luna was **not** run because the user stopped work. Read only if the
-   original session remains valid; do not renew its lifetime or replay input.
-2. Finish public documentation and NOTICE for the selection adapter. Audit the
-   complete reachable history, stage only owned changes and publish the explicit
-   branch. Inspect CI for that exact new commit. No release/tag/downstream pin
-   update is authorized by this component result.
-3. Implement ordinary state targeting and construction placement with original
-   typed scope, complete queue-delta verification and durable receipts, then
-   integrate construction into mixed standing plans. Do not equate the existing
-   legacy construction action with verified new placement.
-4. Finish shortage repair, army/combat/naval-invasion automation, continuous
-   waits/digests and the remaining FAIR policy bindings. Complete the clean
-   two-year Luna gate, then full filmed Germany FAIR, China FAIR and Poland META
-   showcases. These remain part of the goal; small tests do not replace them.
-
-Use one Luna-medium player for live input and at most a small number of Sol 6.1
-or Luna helpers when useful. Keep reads fast and stationary, preserve failures,
-and avoid screenshots or cursor movement unless the actual action needs them.
-No cheats, console, memory writes, hidden intelligence or reload-to-undo.
-
-Suggested continuation prompt:
-
-> Resume the paused HOI4 Live Tools goal. Read docs/RESUME_HANDOFF.md and the
-> private Q12 handoff first. Preserve the uncommitted tested selection adapter
-> and all unrelated work. Revalidate current state, finish its publication, then
-> continue typed construction placement and mixed standing plans. Use one Luna
-> medium player, fast live reads and native macOS 1080p or higher for recordings.
+FAIR by default, META only for Poland; no console, save editing, memory writes,
+hidden enemy intelligence or reload-to-undo. Normal difficulty, historical AI,
+vanilla. Never touch the shared Windows game. Verify process ownership by
+creation identity, executable and user. Keep recordings, journals, saves and
+personal paths out of Git; audit full history before pushing. Commits carry no AI
+attribution.

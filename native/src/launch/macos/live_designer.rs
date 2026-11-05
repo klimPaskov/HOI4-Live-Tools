@@ -71,13 +71,14 @@ fn live_designer() {
 
 /// One-off cleanup helper: click the cancel button of the LAST conveyor card in the Recruit &
 /// Deploy list with ordinary clicks. Sends input; only run by the exclusive input owner.
+#[cfg(target_os = "macos")]
 #[test]
 #[ignore = "sends input"]
 fn live_cancel_last_conveyor() {
-    use crate::{gui_tree, memory::Reader, platform::macos_input::MacKeys};
+    use crate::{gui_tree, memory::Reader};
     let Some(p) = session() else { return };
     let process: std::sync::Arc<dyn platform::Process + Send + Sync> = std::sync::Arc::from(p);
-    let keys = MacKeys::bind_owned(process.clone()).expect("bind");
+    let keys = crate::platform::macos_input::MacKeys::bind_owned(process.clone()).expect("bind");
     fn find(r: &Reader<'_>, image: u64, o: u64, n: &str) -> crate::error::Result<Option<u64>> {
         for c in gui_tree::children(r, o)? {
             if gui_tree::name(r, c, image)?.as_deref() == Some(n) {
@@ -120,13 +121,14 @@ fn live_cancel_last_conveyor() {
 }
 
 /// Owner-only manual helper: HOI4_X/HOI4_Y game coordinates to click (HOI4_KEY=letter to press).
+#[cfg(target_os = "macos")]
 #[test]
 #[ignore = "sends input"]
 fn live_click() {
-    use crate::platform::macos_input::{Key, MacKeys};
+    use crate::platform::game_input::Key;
     let Some(p) = session() else { return };
     let process: std::sync::Arc<dyn platform::Process + Send + Sync> = std::sync::Arc::from(p);
-    let keys = MacKeys::bind_owned(process).expect("bind");
+    let keys = crate::platform::macos_input::MacKeys::bind_owned(process).expect("bind");
     if let Ok(k) = std::env::var("HOI4_KEY") {
         let key = match k.as_str() {
             "return" => Key::Return,

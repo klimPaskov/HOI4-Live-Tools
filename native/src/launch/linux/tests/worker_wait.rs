@@ -55,6 +55,7 @@ fn synthetic_owner(events: Arc<Events>) -> (Arc<Shared>, Receiver<()>, SyncSende
     let identity = capture_identity(std::process::id() as i32).unwrap();
     let (closing, _receiver) = mpsc::sync_channel(1);
     let shared = Arc::new(Shared {
+        managed: None,
         server: Server {
             process: Some(Box::new(NoGame {
                 entered: entered_tx,

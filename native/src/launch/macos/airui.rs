@@ -22,6 +22,7 @@ use crate::{
     game,
     gui_tree::{self, Rect},
     memory::Reader,
+    xlayout::{fld, img, Class},
 };
 
 pub(super) const GAME: (u32, u32) = (1920, 1080);
@@ -42,6 +43,31 @@ pub(super) const SLOT_STRATEGIC: u64 = 0x198;
 const SLOT_SELECTION: u64 = 0x200;
 const SELECTED_WINGS: u64 = 0x60;
 const STRATEGIC_ROOT: u64 = 0x490;
+/// Owners of the fields above (macOS 1.19.4.1 RTTI names and vtables; 0 where
+/// none was reviewed). Manager slots (`SLOT_*`) are passed to `navalui::view`
+/// as macOS keys.
+const ICON_MANAGER: Class = Class::new("CMapIconManagerImpl", 0);
+const ICON_ARRAY_SIZE: Class = Class::new("CMapIconManagerImpl.array.size", 0);
+const ICON: Class = Class::new("CAirBaseMapIcon", ICON_VTABLE);
+const IDLER: Class = Class::new("CInGameIdler", 0x35089d8);
+const GAME_GUI: Class = Class::new("idler.gui", 0);
+const POPUP: Class = Class::new("gui.popup", 0);
+const CONTAINER: Class = Class::new("CContainerWindow", 0x36ba978);
+const GRID_ITEM: Class = Class::new("grid.item", 0);
+const SELECTION_VIEW: Class = Class::new("air.selection.view", 0);
+const STRATEGIC_VIEW: Class = Class::new("air.strategic.view", 0);
+const WING: Class = Class::new("CAirWing", super::airread::WING_VTABLE);
+
+/// The map icon arrays: manager, first array, header stride, icon vtable.
+fn icon_arrays(r: &Reader<'_>, image: u64) -> Result<(u64, u64, u64, u64)> {
+    let abi = r.string_abi();
+    Ok((
+        r.u64(image + img(abi, ICON_GLOBAL)?)?,
+        fld(abi, &ICON_MANAGER, ICON_ARRAYS)?,
+        fld(abi, &ICON_ARRAY_SIZE, ICON_ARRAY_STRIDE)?,
+        image + img(abi, ICON_VTABLE)?,
+    ))
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub(super) struct BaseIcon {
@@ -60,33 +86,36 @@ impl BaseIcon {
 }
 /// Every air base icon the map currently shows (any country), with its bg rectangle.
 pub(super) fn base_icons(r: &Reader<'_>, image: u64) -> Result<Vec<BaseIcon>> {
-    nui::libcxx(r)?;
-    let manager = r.u64(image + ICON_GLOBAL)?;
+    let (manager, arrays, stride, vtable) = icon_arrays(r, image)?;
+    let abi = r.string_abi();
+    let (icon_container, icon_position) = (
+        fld(abi, &ICON, ICON_CONTAINER)?,
+        fld(abi, &ICON, ICON_POSITION)?,
+    );
     if manager == 0 {
         return Err(Error::new("invalid_gui", "Map icon manager unavailable"));
     }
     let mut out = Vec::new();
     for k in 0..ICON_TYPES {
-        let Ok((_, data, count)) = r.array_header(manager + ICON_ARRAYS + k * ICON_ARRAY_STRIDE)
-        else {
+        let Ok((_, data, count)) = r.array_header(manager + arrays + k * stride) else {
             continue;
         };
         if count == 0 || count > 4096 {
             continue;
         }
-        if r.u64(r.u64(data)?)? != image + ICON_VTABLE {
+        if r.u64(r.u64(data)?)? != vtable {
             continue;
         }
         for i in 0..count as u64 {
             let icon = r.u64(data + 8 * i)?;
-            let Some(container) = gui_tree::container(r, r.u64(icon + ICON_CONTAINER)?, image)?
+            let Some(container) = gui_tree::container(r, r.u64(icon + icon_container)?, image)?
             else {
                 continue;
             };
             if !gui_tree::visible(r, container)? {
                 continue;
             }
-            let raw = r.read(icon + ICON_POSITION, 12)?;
+            let raw = r.read(icon + icon_position, 12)?;
             let x = f64::from(f32::from_le_bytes(raw[0..4].try_into().unwrap()));
             let z = f64::from(f32::from_le_bytes(raw[8..12].try_into().unwrap()));
             let Some(bg) = gui_tree::child(r, image, container, "bg_btn")? else {
@@ -120,17 +149,19 @@ pub(super) fn clickable(p: (f64, f64)) -> bool {
 
 // ---- pop-up windows ----------------------------------------------------------------------------
 fn popup_root(r: &Reader<'_>, image: u64, wanted: &str) -> Result<Option<u64>> {
-    nui::libcxx(r)?;
+    let abi = r.string_abi();
     let idler = r.u64(image + game::layout(r).idler_global)?;
-    let gui = r.u64(idler + GUI_FROM_IDLER)?;
-    let (_, data, count) = r.array_header(gui + POPUP_LIST)?;
+    let gui = r.u64(idler + fld(abi, &IDLER, GUI_FROM_IDLER)?)?;
+    let (_, data, count) = r.array_header(gui + fld(abi, &GAME_GUI, POPUP_LIST)?)?;
+    let popup_root = fld(abi, &POPUP, POPUP_ROOT)?;
+    let container_base = fld(abi, &CONTAINER, CONTAINER_BASE)?;
     for index in 0..count.min(32) as u64 {
         let found = (|| -> Result<Option<u64>> {
             let window = r.u64(data + index * 8)?;
-            let Some(root) = gui_tree::container(r, r.u64(window + POPUP_ROOT)?, image)? else {
+            let Some(root) = gui_tree::container(r, r.u64(window + popup_root)?, image)? else {
                 return Ok(None);
             };
-            if gui_tree::name(r, root + CONTAINER_BASE, image)?.as_deref() != Some(wanted)
+            if gui_tree::name(r, root + container_base, image)?.as_deref() != Some(wanted)
                 || !gui_tree::visible(r, root)?
             {
                 return Ok(None);
@@ -167,8 +198,9 @@ pub(super) fn reorg_entries(r: &Reader<'_>, image: u64, side: &str) -> Result<Ve
     let window = nui::window_of(r, image, root, side)?;
     let grid = nui::child_of(r, image, window, "list")?;
     let mut out = Vec::new();
+    let item_container = fld(r.string_abi(), &GRID_ITEM, 0x10)?;
     for item in nui::grid_items(r, grid)?.into_iter().take(64) {
-        let Some(frame) = gui_tree::container(r, r.u64(item + 0x10)?, image)? else {
+        let Some(frame) = gui_tree::container(r, r.u64(item + item_container)?, image)? else {
             continue;
         };
         let count = nui::text_at(r, nui::child_of(r, image, frame, "count")?)?;
@@ -220,25 +252,29 @@ pub(super) fn stack_at(
     image: u64,
     pos: (f64, f64),
 ) -> Result<Option<Vec<StackItem>>> {
-    nui::libcxx(r)?;
-    let manager = r.u64(image + ICON_GLOBAL)?;
+    let (manager, arrays, stride, vtable) = icon_arrays(r, image)?;
+    let abi = r.string_abi();
+    let (icon_container, icon_position) = (
+        fld(abi, &ICON, ICON_CONTAINER)?,
+        fld(abi, &ICON, ICON_POSITION)?,
+    );
+    let item_container = fld(abi, &GRID_ITEM, 0x10)?;
     for k in 0..ICON_TYPES {
-        let Ok((_, data, count)) = r.array_header(manager + ICON_ARRAYS + k * ICON_ARRAY_STRIDE)
-        else {
+        let Ok((_, data, count)) = r.array_header(manager + arrays + k * stride) else {
             continue;
         };
-        if count == 0 || count > 4096 || r.u64(r.u64(data)?)? != image + ICON_VTABLE {
+        if count == 0 || count > 4096 || r.u64(r.u64(data)?)? != vtable {
             continue;
         }
         for i in 0..count as u64 {
             let icon = r.u64(data + 8 * i)?;
-            let raw = r.read(icon + ICON_POSITION, 12)?;
+            let raw = r.read(icon + icon_position, 12)?;
             let x = f64::from(f32::from_le_bytes(raw[0..4].try_into().unwrap()));
             let z = f64::from(f32::from_le_bytes(raw[8..12].try_into().unwrap()));
             if (x - pos.0).abs() >= 0.06 || (z - pos.1).abs() >= 0.06 {
                 continue;
             }
-            let Some(container) = gui_tree::container(r, r.u64(icon + ICON_CONTAINER)?, image)?
+            let Some(container) = gui_tree::container(r, r.u64(icon + icon_container)?, image)?
             else {
                 return Ok(None);
             };
@@ -247,7 +283,8 @@ pub(super) fn stack_at(
             };
             let mut out = Vec::new();
             for item in nui::grid_items(r, grid)? {
-                let Some(frame) = gui_tree::container(r, r.u64(item + 0x10)?, image)? else {
+                let Some(frame) = gui_tree::container(r, r.u64(item + item_container)?, image)?
+                else {
                     continue;
                 };
                 let bg = nui::child_of(r, image, frame, "count_bg")?;
@@ -273,18 +310,21 @@ pub(super) fn stack_at(
 /// live 26 October 2026: `Jagdgeschwader 132` after one row click, two names after a Shift click on
 /// a second entry of the base panel).
 pub(super) fn selected_wings(r: &Reader<'_>, image: u64) -> Result<Vec<String>> {
+    let abi = r.string_abi();
     let view = nui::view(r, image, SLOT_SELECTION)?;
-    let (_, data, count) = r.array_header(view + SELECTED_WINGS)?;
+    let (_, data, count) = r.array_header(view + fld(abi, &SELECTION_VIEW, SELECTED_WINGS)?)?;
     if count > 64 {
         return Err(Error::new("invalid_array", "Selection exceeds bound"));
     }
+    let wing_vtable = image + img(abi, super::airread::WING_VTABLE)?;
+    let wing_name = fld(abi, &WING, super::airread::WING_NAME)?;
     let mut out = Vec::new();
     for i in 0..count as u64 {
         let wing = r.u64(data + 8 * i)?;
-        if r.u64(wing)? != image + super::airread::WING_VTABLE {
+        if r.u64(wing)? != wing_vtable {
             return Err(Error::new("invalid_object", "Selected wing expected"));
         }
-        out.push(r.string_bounded(wing + super::airread::WING_NAME, 128)?);
+        out.push(r.string_bounded(wing + wing_name, 128)?);
     }
     Ok(out)
 }
@@ -315,7 +355,8 @@ pub(super) struct RegionView {
 }
 fn strategic_root(r: &Reader<'_>, image: u64) -> Result<Option<u64>> {
     let view = nui::view(r, image, SLOT_STRATEGIC)?;
-    let Some(root) = gui_tree::container(r, r.u64(view + STRATEGIC_ROOT)?, image)? else {
+    let root_at = fld(r.string_abi(), &STRATEGIC_VIEW, STRATEGIC_ROOT)?;
+    let Some(root) = gui_tree::container(r, r.u64(view + root_at)?, image)? else {
         return Ok(None);
     };
     Ok(gui_tree::visible(r, root)?.then_some(root))

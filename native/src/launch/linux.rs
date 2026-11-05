@@ -5,7 +5,7 @@ use crate::{
     platform::{
         self, capture_identity,
         x11_close::{CloseDelivery, CloseDispatch, X11WindowClose},
-        Identity, Session,
+        Identity, Process, Session,
     },
     protocol::Server,
 };
@@ -303,6 +303,25 @@ pub fn bind_input(directory: &Path, config: &Path) -> Result<()> {
         return Err(Error::new("input_binding_failed", reply.to_string()));
     }
     eprintln!("Owned ordinary clock input bound; campaign acceptance remains unverified");
+    Ok(())
+}
+/// The owned game window for the management tools (the full macOS tool set on
+/// Linux): X11 window id, its exact WM_CLASS bytes and fixed client size. The run
+/// directory's input.json names the controller and player as on macOS.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ManagementBinding {
+    window: u32,
+    window_class: String,
+    client: [u16; 2],
+}
+pub fn bind_management(directory: &Path, config: &Path) -> Result<()> {
+    let binding: Value = json_read(config)?;
+    let reply = request(directory, json!({"op":"bind_management","binding":binding}))?;
+    if reply.get("bound") != Some(&json!(true)) {
+        return Err(Error::new("input_binding_failed", reply.to_string()));
+    }
+    eprintln!("Management tools bound to the owned game window");
     Ok(())
 }
 pub fn close(directory: &Path) -> Result<()> {
@@ -885,6 +904,8 @@ struct Shared {
     commands: RwLock<Option<Arc<dyn crate::protocol::Commands>>>,
     display: Option<Display>,
     directory: PathBuf,
+    /// The same owned reader as `server.process`, shared with the management tools.
+    managed: Option<Arc<dyn Process + Send + Sync>>,
 }
 impl Shared {
     fn retire_reads(&self) {
@@ -972,6 +993,50 @@ fn service_client(stream: UnixStream, shared: Arc<Shared>) {
                 let capabilities = crate::protocol::Commands::capabilities(&service);
                 *commands = Some(Arc::new(service));
                 Ok(json!({"bound":true,"capabilities":capabilities}))
+            }
+            Some("bind_management") => {
+                let _reads = shared
+                    .reads
+                    .read()
+                    .map_err(|_| Error::new("ownership_changed", "Read gate poisoned"))?;
+                if !shared.accepting_reads.load(Ordering::Acquire) {
+                    return Err(Error::new("session_closed", "Owned game is exiting"));
+                }
+                crate::xlayout::require_linux(&shared.endpoint.session.build_id)?;
+                let mut commands = shared
+                    .commands
+                    .write()
+                    .map_err(|_| Error::new("input_unavailable", "Input binding lock poisoned"))?;
+                if commands.is_some() {
+                    return Err(Error::new(
+                        "input_already_bound",
+                        "Never replace an active input binding",
+                    ));
+                }
+                let process = shared.managed.clone().ok_or_else(|| {
+                    Error::new("input_unavailable", "Owned process reader required")
+                })?;
+                let display = shared.display.as_ref().ok_or_else(|| {
+                    Error::new("input_unavailable", "Owned display binding required")
+                })?;
+                let binding: ManagementBinding = serde_json::from_value(request["binding"].clone())
+                    .map_err(|e| Error::new("invalid_input_binding", e.to_string()))?;
+                let input = crate::platform::x11::X11Input::open_owned(
+                    process.clone(),
+                    display.number,
+                    &display.server,
+                    &display.xauthority,
+                    binding.window,
+                    binding.window_class.as_bytes(),
+                    binding.client,
+                )?;
+                let service = crate::launch::macos::MacClock::bind_with_input(
+                    process,
+                    &shared.directory,
+                    Arc::new(input),
+                )?;
+                *commands = Some(Arc::new(service));
+                Ok(json!({"bound":true,"management":true}))
             }
             Some("close") | Some("close_window") => {
                 let kind = if request.get("op") == Some(&json!("close_window")) {
@@ -1492,10 +1557,13 @@ pub fn serve(path: &Path) -> Result<()> {
         }
         None => platform::open(&directory.join("session.json")),
     };
-    let (process, unavailable) = match opened {
-        Ok(process) => (Some(process), None),
+    let (managed, unavailable) = match opened {
+        Ok(process) => (Some(Arc::<dyn Process + Send + Sync>::from(process)), None),
         Err(error) => (None, Some(error)),
     };
+    let process = managed
+        .clone()
+        .map(|p| Box::new(p) as Box<dyn Process + Send + Sync>);
     if let Some(profile) = &fex_config {
         profile.verify()?;
     }
@@ -1521,6 +1589,7 @@ pub fn serve(path: &Path) -> Result<()> {
         commands: RwLock::new(None),
         display: Some(config.display.clone()),
         directory: directory.to_path_buf(),
+        managed,
     });
     eprintln!("Owned Linux supervisor ready; optional input requires an explicit binding");
     run_owner(listener, socket_meta, directory, child, shared, receiver)

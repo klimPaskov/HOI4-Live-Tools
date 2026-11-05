@@ -21,8 +21,9 @@ use crate::{
     error::{Error, Result},
     game,
     gui_tree::{self, Rect},
-    memory::{Reader, StringAbi},
+    memory::Reader,
     platform::Process,
+    xlayout::{self, fld, img},
 };
 use serde_json::{json, Map, Value};
 
@@ -50,54 +51,116 @@ const GRID_ITEMS: u64 = 0x190;
 const ITEM_CONTAINER: u64 = 0x10;
 const TEXT: u64 = 0x100;
 const BUTTON_TEXT: u64 = 0x160;
-
-pub(super) fn libcxx(r: &Reader<'_>) -> Result<()> {
-    match r.string_abi() {
-        StringAbi::LibCxx => Ok(()),
-        StringAbi::LibStdCxx => Err(Error::new(
-            "capability_unavailable",
-            "Naval input is reviewed for the macOS build only",
-        )),
+/// Owners of the fields above (macOS 1.19.4.1 RTTI names and vtables; 0 when no
+/// vtable is reviewed).
+const IDLER: xlayout::Class = xlayout::Class::new("CInGameIdler", 0x35089d8);
+const MANAGER_CLASS: xlayout::Class = xlayout::Class::new("idler.manager", 0);
+const BOTTOM_BAR: xlayout::Class = xlayout::Class::new("CFleetsBottomBar", 0);
+const NAVIES_VIEW: xlayout::Class = xlayout::Class::new("CNaviesView", 0);
+const LEADER_WINDOW: xlayout::Class = xlayout::Class::new("CNavyLeaderWindow", 0);
+const ENTRY: xlayout::Class = xlayout::Class::new("CTaskForceViewEntry", 0);
+const TASK_FORCE: xlayout::Class = xlayout::Class::new("CTaskForce", 0x351f208);
+const REGION_VIEW: xlayout::Class = xlayout::Class::new("CCountryNavalRegionView", 0);
+const EDIT_BOX: xlayout::Class = xlayout::Class::new("CEditBox", 0x36bc6a0);
+const SHOWN: xlayout::Class = xlayout::Class::new("CInstantTextObject", SHOWN_VTABLE);
+const GRID: xlayout::Class = xlayout::Class::new("CStandardGridBox", 0x36cca80);
+const GRID_ITEM: xlayout::Class = xlayout::Class::new("grid.item", 0);
+const TEXT_BOX: xlayout::Class = xlayout::Class::new("gui.text", 0);
+const BUTTON: xlayout::Class = xlayout::Class::new("gui.button", 0);
+const CONTAINER: xlayout::Class = xlayout::Class::new("CContainerWindow", 0x36ba978);
+/// Field of a view in the interface manager slot `slot`.
+fn view_class(slot: u64) -> xlayout::Class {
+    match slot {
+        SLOT_BOTTOM => BOTTOM_BAR,
+        SLOT_NAVIES => NAVIES_VIEW,
+        REGION_VIEW_SLOT => REGION_VIEW,
+        _ => xlayout::Class::new("idler.manager.view", 0),
     }
 }
+fn item_window(r: &Reader<'_>, item: u64) -> Result<u64> {
+    r.u64(item + fld(r.string_abi(), &GRID_ITEM, ITEM_CONTAINER)?)
+}
 pub(super) fn view(r: &Reader<'_>, image: u64, slot: u64) -> Result<u64> {
-    libcxx(r)?;
+    let abi = r.string_abi();
     let idler = r.u64(image + game::layout(r).idler_global)?;
-    let view = r.u64(r.u64(idler + MANAGER)? + slot)?;
+    let manager = r.u64(idler + fld(abi, &IDLER, MANAGER)?)?;
+    let view = r.u64(manager + fld(abi, &MANAGER_CLASS, slot)?)?;
     if view == 0 {
         return Err(Error::new("invalid_gui", "Naval view unavailable"));
     }
     Ok(view)
 }
-fn root_at(r: &Reader<'_>, image: u64, view: u64, field: u64) -> Result<u64> {
-    gui_tree::container(r, r.u64(view + field)?, image)?
+fn root_at(
+    r: &Reader<'_>,
+    image: u64,
+    view: u64,
+    class: &xlayout::Class,
+    field: u64,
+) -> Result<u64> {
+    gui_tree::container(r, r.u64(view + fld(r.string_abi(), class, field)?)?, image)?
         .ok_or_else(|| Error::new("invalid_gui", "Naval window unavailable"))
 }
 /// Named windows of the fleet panel view.
 pub(super) fn panel(r: &Reader<'_>, image: u64) -> Result<u64> {
-    root_at(r, image, view(r, image, SLOT_NAVIES)?, NV_WINDOW)
+    root_at(
+        r,
+        image,
+        view(r, image, SLOT_NAVIES)?,
+        &NAVIES_VIEW,
+        NV_WINDOW,
+    )
 }
 pub(super) fn leader_root(r: &Reader<'_>, image: u64) -> Result<u64> {
-    let window = r.u64(view(r, image, SLOT_NAVIES)? + NV_LEADER_WINDOW)?;
-    gui_tree::container(r, r.u64(window + LEADER_ROOT)?, image)?
-        .ok_or_else(|| Error::new("invalid_gui", "Navy leader window unavailable"))
+    let abi = r.string_abi();
+    let window = r.u64(view(r, image, SLOT_NAVIES)? + fld(abi, &NAVIES_VIEW, NV_LEADER_WINDOW)?)?;
+    gui_tree::container(
+        r,
+        r.u64(window + fld(abi, &LEADER_WINDOW, LEADER_ROOT)?)?,
+        image,
+    )?
+    .ok_or_else(|| Error::new("invalid_gui", "Navy leader window unavailable"))
 }
 pub(super) fn action_bar(r: &Reader<'_>, image: u64) -> Result<u64> {
-    root_at(r, image, view(r, image, SLOT_NAVIES)?, NV_ACTION)
+    root_at(
+        r,
+        image,
+        view(r, image, SLOT_NAVIES)?,
+        &NAVIES_VIEW,
+        NV_ACTION,
+    )
 }
 pub(super) fn target_bar(r: &Reader<'_>, image: u64) -> Result<u64> {
-    root_at(r, image, view(r, image, SLOT_NAVIES)?, NV_TARGET)
+    root_at(
+        r,
+        image,
+        view(r, image, SLOT_NAVIES)?,
+        &NAVIES_VIEW,
+        NV_TARGET,
+    )
 }
 pub(super) fn tool_bar(r: &Reader<'_>, image: u64) -> Result<u64> {
-    root_at(r, image, view(r, image, SLOT_NAVIES)?, NV_TOOLBAR)
+    root_at(
+        r,
+        image,
+        view(r, image, SLOT_NAVIES)?,
+        &NAVIES_VIEW,
+        NV_TOOLBAR,
+    )
 }
 pub(super) fn bottom_bar(r: &Reader<'_>, image: u64) -> Result<u64> {
-    root_at(r, image, view(r, image, SLOT_BOTTOM)?, BOTTOM_ROOT)
+    root_at(
+        r,
+        image,
+        view(r, image, SLOT_BOTTOM)?,
+        &BOTTOM_BAR,
+        BOTTOM_ROOT,
+    )
 }
 /// Windows of the displayed task force entries, in panel order.
 pub(super) fn entry_windows(r: &Reader<'_>, image: u64) -> Result<Vec<u64>> {
+    let abi = r.string_abi();
     let v = view(r, image, SLOT_NAVIES)?;
-    let (_, data, count) = r.array_header(v + NV_ENTRIES)?;
+    let (_, data, count) = r.array_header(v + fld(abi, &NAVIES_VIEW, NV_ENTRIES)?)?;
     if count > 64 {
         return Err(Error::new(
             "invalid_array",
@@ -107,28 +170,31 @@ pub(super) fn entry_windows(r: &Reader<'_>, image: u64) -> Result<Vec<u64>> {
     let mut out = Vec::new();
     for i in 0..count as u64 {
         let entry = r.u64(data + i * 8)?;
-        if let Some(w) = gui_tree::container(r, r.u64(entry + ENTRY_WINDOW)?, image)? {
+        let window = r.u64(entry + fld(abi, &ENTRY, ENTRY_WINDOW)?)?;
+        if let Some(w) = gui_tree::container(r, window, image)? {
             out.push(w);
         }
     }
     Ok(out)
 }
 pub(super) fn grid_items(r: &Reader<'_>, grid: u64) -> Result<Vec<u64>> {
-    let (_, data, count) = r.array_header(grid + GRID_ITEMS)?;
+    let (_, data, count) = r.array_header(grid + fld(r.string_abi(), &GRID, GRID_ITEMS)?)?;
     if count > 256 {
         return Err(Error::new("invalid_gui", "Grid item list exceeds bound"));
     }
     (0..count as u64).map(|i| r.u64(data + i * 8)).collect()
 }
 pub(super) fn text_at(r: &Reader<'_>, widget: u64) -> Result<String> {
-    Ok(super::special_projects::plain(
-        &r.string_bounded(widget + TEXT, 256)?,
-    ))
+    Ok(super::special_projects::plain(&r.string_bounded(
+        widget + fld(r.string_abi(), &TEXT_BOX, TEXT)?,
+        256,
+    )?))
 }
 pub(super) fn label_at(r: &Reader<'_>, button: u64) -> Result<String> {
-    Ok(super::special_projects::plain(
-        &r.string_bounded(button + BUTTON_TEXT, 160)?,
-    ))
+    Ok(super::special_projects::plain(&r.string_bounded(
+        button + fld(r.string_abi(), &BUTTON, BUTTON_TEXT)?,
+        160,
+    )?))
 }
 pub(super) fn child_of(r: &Reader<'_>, image: u64, parent: u64, name: &str) -> Result<u64> {
     gui_tree::child(r, image, parent, name)?
@@ -153,17 +219,21 @@ const EDIT_SHOWN: u64 = 0x190;
 const SHOWN_VTABLE: u64 = 0x36c04b8;
 const SHOWN_TEXT: u64 = 0x178;
 pub(super) fn edit_text(r: &Reader<'_>, image: u64, widget: u64) -> Result<String> {
-    let typed = super::special_projects::plain(&r.string_bounded(widget + EDIT_TEXT, 160)?);
+    let abi = r.string_abi();
+    let typed = super::special_projects::plain(
+        &r.string_bounded(widget + fld(abi, &EDIT_BOX, EDIT_TEXT)?, 160)?,
+    );
     if !typed.is_empty() {
         return Ok(typed);
     }
-    let shown = r.u64(widget + EDIT_SHOWN)?;
-    if shown == 0 || r.u64(shown)? != image + SHOWN_VTABLE {
+    let shown = r.u64(widget + fld(abi, &EDIT_BOX, EDIT_SHOWN)?)?;
+    if shown == 0 || r.u64(shown)? != image + img(abi, SHOWN_VTABLE)? {
         return Ok(typed);
     }
-    Ok(super::special_projects::plain(
-        &r.string_bounded(shown + SHOWN_TEXT, 160)?,
-    ))
+    Ok(super::special_projects::plain(&r.string_bounded(
+        shown + fld(abi, &SHOWN, SHOWN_TEXT)?,
+        160,
+    )?))
 }
 /// Whether the Strategic Navy map mode is on (its fleet bar is shown only there).
 pub(super) fn navy_mode(r: &Reader<'_>, image: u64) -> Result<bool> {
@@ -183,7 +253,7 @@ pub(super) fn header(r: &Reader<'_>, image: u64) -> Result<Option<u64>> {
     let Some(item) = grid_items(r, grid)?.first().copied() else {
         return Ok(None);
     };
-    gui_tree::container(r, r.u64(item + ITEM_CONTAINER)?, image)
+    gui_tree::container(r, item_window(r, item)?, image)
 }
 /// Name of the fleet the open panel shows.
 pub(super) fn panel_fleet(r: &Reader<'_>, image: u64) -> Result<Option<String>> {
@@ -212,7 +282,7 @@ pub(super) fn cards(r: &Reader<'_>, image: u64) -> Result<Vec<Card>> {
     let grid = child_of(r, image, centering, "fleets_box")?;
     let mut out = Vec::new();
     for item in grid_items(r, grid)? {
-        let Some(window) = gui_tree::container(r, r.u64(item + ITEM_CONTAINER)?, image)? else {
+        let Some(window) = gui_tree::container(r, item_window(r, item)?, image)? else {
             continue;
         };
         let frame = child_of(r, image, window, "portrait_frame")?;
@@ -235,8 +305,9 @@ pub(super) struct Entry {
 }
 /// Task force entries of the open panel with their select button state.
 pub(super) fn entries(r: &Reader<'_>, image: u64) -> Result<Vec<Entry>> {
+    let abi = r.string_abi();
     let v = view(r, image, SLOT_NAVIES)?;
-    let (_, tf_data, tf_count) = r.array_header(v + NV_TASK_FORCES)?;
+    let (_, tf_data, tf_count) = r.array_header(v + fld(abi, &NAVIES_VIEW, NV_TASK_FORCES)?)?;
     if tf_count > 64 {
         return Err(Error::new("invalid_array", "Task force list exceeds bound"));
     }
@@ -255,7 +326,7 @@ pub(super) fn entries(r: &Reader<'_>, image: u64) -> Result<Vec<Entry>> {
     let mut out = Vec::new();
     for (index, window) in shown.into_iter().enumerate() {
         let tf = r.u64(tf_data + 8 * index as u64)?;
-        let name = r.string_bounded(tf + TF_NAME, 128)?;
+        let name = r.string_bounded(tf + fld(abi, &TASK_FORCE, TF_NAME)?, 128)?;
         let select = child_of(r, image, window, "select_btn")?;
         let rect = gui_tree::rect_unclipped(r, image, select, GAME)?;
         let label = label_at(r, select)?;
@@ -292,7 +363,8 @@ pub(super) fn bar_button(r: &Reader<'_>, image: u64, name: &str) -> Result<(Rect
 /// The naval region view (opened by a left click on a sea region): (name, close button).
 pub(super) fn region_view(r: &Reader<'_>, image: u64) -> Result<Option<(String, Rect)>> {
     let view = view(r, image, REGION_VIEW_SLOT)?;
-    let Some(root) = gui_tree::container(r, r.u64(view + REGION_ROOT)?, image)? else {
+    let root_field = fld(r.string_abi(), &REGION_VIEW, REGION_ROOT)?;
+    let Some(root) = gui_tree::container(r, r.u64(view + root_field)?, image)? else {
         return Ok(None);
     };
     if !gui_tree::visible(r, root)? {
@@ -321,7 +393,7 @@ pub(super) fn leader_rows(r: &Reader<'_>, image: u64) -> Result<Vec<Admiral>> {
     let grid = child_of(r, image, list, "leaders_grid")?;
     let mut out = Vec::new();
     for item in grid_items(r, grid)?.into_iter().take(256) {
-        let Some(frame) = gui_tree::container(r, r.u64(item + ITEM_CONTAINER)?, image)? else {
+        let Some(frame) = gui_tree::container(r, item_window(r, item)?, image)? else {
             continue;
         };
         let (Some(name), Some(icon)) = (
@@ -386,7 +458,7 @@ fn printable(s: &str) -> bool {
 fn dump_widget(r: &Reader<'_>, image: u64, pointer: u64, depth: usize) -> Result<Value> {
     let object = gui_tree::container(r, pointer, image)?;
     let base = match object {
-        Some(o) => o + 0x30,
+        Some(o) => o + fld(r.string_abi(), &CONTAINER, 0x30)?,
         None => pointer,
     };
     let name = gui_tree::name(r, base, image)?;
@@ -459,7 +531,7 @@ pub(super) fn dump(process: &dyn Process, args: &Map<String, Value>) -> Result<V
                         })
                 };
                 let (slot, field) = (parse(parts.next())?, parse(parts.next())?);
-                root_at(r, image, view(r, image, slot)?, field)?
+                root_at(r, image, view(r, image, slot)?, &view_class(slot), field)?
             }
             "entry" => *entry_windows(r, image)?
                 .get(index)
@@ -474,7 +546,7 @@ pub(super) fn dump(process: &dyn Process, args: &Map<String, Value>) -> Result<V
         if args.get("items").and_then(Value::as_bool).unwrap_or(false) {
             let mut out = Vec::new();
             for item in grid_items(r, base)? {
-                let frame = r.u64(item + ITEM_CONTAINER)?;
+                let frame = item_window(r, item)?;
                 out.push(dump_widget(r, image, frame_base(r, image, frame)?, depth)?);
             }
             return Ok(Value::Array(out));

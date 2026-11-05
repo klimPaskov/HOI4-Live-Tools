@@ -14,7 +14,7 @@ use crate::{
     input_lease::InputAuthority,
     memory::Reader,
     platform::{
-        macos_input::{Key, MacKeys},
+        game_input::{GameInput, Key},
         Identity, Process,
     },
     production_lines::control_snapshot,
@@ -208,7 +208,7 @@ impl Journals {
     pub(super) fn attempt(
         &mut self,
         process: &(dyn Process + Send + Sync),
-        keys: &MacKeys,
+        keys: &dyn GameInput,
         authority: &InputAuthority,
         token: &str,
         attempt: &Attempt,
@@ -531,16 +531,16 @@ impl step::UnresolvedInputs for Cleared<'_> {
         Ok(())
     }
 }
-struct MacBackend<'a, 'p> {
+struct MacBackend<'a> {
     process: &'a (dyn Process + Send + Sync),
-    keys: &'a MacKeys<'p>,
+    keys: &'a dyn GameInput,
     scope: &'a Scope,
     original: &'a Canonical,
     until: Instant,
     /// Dispatch entry only, never evidence of mouse-down or server delivery.
     dispatch_called: bool,
 }
-impl step::Backend for MacBackend<'_, '_> {
+impl step::Backend for MacBackend<'_> {
     type Candidate = Button;
     fn observe(&mut self, target: &Target, until: Instant) -> Result<State> {
         let phase = if self.dispatch_called {

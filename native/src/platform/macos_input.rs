@@ -79,93 +79,8 @@ const RIGHT_MOUSE_UP: u32 = 4;
 const RIGHT_MOUSE_DRAGGED: u32 = 7;
 const RIGHT_BUTTON: u32 = 1;
 
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub struct Point {
-    pub x: f64,
-    pub y: f64,
-}
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub struct Rect {
-    pub origin: Point,
-    pub size: Point,
-}
-
-/// Stationary game keys used by the clock adapter (macOS virtual key codes).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Key {
-    /// Space toggles pause.
-    Pause,
-    /// Keypad plus raises game speed.
-    Faster,
-    /// Keypad minus lowers game speed.
-    Slower,
-    /// Escape closes the current panel.
-    Escape,
-    /// Return confirms (e.g. the Find view).
-    Return,
-    /// An ordinary letter hotkey, `a`..=`z`.
-    Letter(char),
-}
-impl Key {
-    fn code(self) -> u16 {
-        // ANSI virtual key codes indexed a..z.
-        const LETTERS: [u16; 26] = [
-            0, 11, 8, 2, 14, 3, 5, 4, 34, 38, 40, 37, 46, 45, 31, 35, 12, 15, 1, 17, 32, 9, 13, 7,
-            16, 6,
-        ];
-        match self {
-            Self::Pause => 49,
-            Self::Faster => 69,
-            Self::Slower => 78,
-            Self::Escape => 53,
-            Self::Return => 36,
-            Self::Letter(c) => LETTERS[(c as u8 - b'a') as usize],
-        }
-    }
-    /// Only lowercase ASCII letters are ordinary hotkeys here.
-    pub fn letter(c: char) -> Result<Self> {
-        if c.is_ascii_lowercase() {
-            Ok(Self::Letter(c))
-        } else {
-            Err(Error::new("invalid_arguments", "Unsupported hotkey"))
-        }
-    }
-}
-
-fn find_digit_code(digit: char) -> Result<u16> {
-    const DIGITS: [u16; 10] = [29, 18, 19, 20, 21, 23, 22, 26, 28, 25];
-    if !digit.is_ascii_digit() {
-        return Err(Error::new(
-            "invalid_arguments",
-            "Only an ordinary ASCII decimal digit is accepted",
-        ));
-    }
-    Ok(DIGITS[(digit as u8 - b'0') as usize])
-}
-
-/// One capture of the owned game's client area: BGRA pixels at `scale`
-/// physical pixels per game pixel.
-pub struct Capture {
-    pub width: usize,
-    pub height: usize,
-    pub stride: usize,
-    pub scale: f64,
-    pub data: Vec<u8>,
-}
-impl Capture {
-    /// (r, g, b) at a game-logical pixel, if inside the capture.
-    pub fn rgb(&self, x: f64, y: f64) -> Option<(u8, u8, u8)> {
-        let px = (x * self.scale) as usize;
-        let py = (y * self.scale) as usize;
-        if px >= self.width || py >= self.height {
-            return None;
-        }
-        let o = py * self.stride + px * 4;
-        Some((self.data[o + 2], self.data[o + 1], self.data[o]))
-    }
-}
+use super::game_input::{find_digit_code, GameInput};
+pub use super::game_input::{Capture, Key, Point, Rect};
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct Window {
     id: u32,
@@ -1640,5 +1555,81 @@ mod find_digit_tests {
         for c in ['f', '\n', ' ', '４', 'é'] {
             assert_eq!(find_digit_code(c).unwrap_err().code, "invalid_arguments");
         }
+    }
+}
+
+impl GameInput for MacKeys<'_> {
+    fn capture(&self, game: (u32, u32)) -> Result<Capture> {
+        MacKeys::capture(self, game)
+    }
+    fn preflight(&self) -> Result<()> {
+        MacKeys::preflight(self)
+    }
+    fn confirm_input_idle(&self) -> Result<()> {
+        MacKeys::confirm_input_idle(self)
+    }
+    fn click(&self, game: (u32, u32), x: f64, y: f64) -> Result<Point> {
+        MacKeys::click(self, game, x, y)
+    }
+    fn click_checked(
+        &self,
+        game: (u32, u32),
+        x: f64,
+        y: f64,
+        before_down: &dyn Fn() -> Result<()>,
+    ) -> Result<Point> {
+        MacKeys::click_checked(self, game, x, y, before_down)
+    }
+    fn confirm_cursor_at(&self, game: (u32, u32), x: f64, y: f64) -> Result<()> {
+        MacKeys::confirm_cursor_at(self, game, x, y)
+    }
+    fn drag(&self, game: (u32, u32), from: (f64, f64), to: (f64, f64)) -> Result<()> {
+        MacKeys::drag(self, game, from, to)
+    }
+    fn drag_checked(
+        &self,
+        game: (u32, u32),
+        from: (f64, f64),
+        to: (f64, f64),
+        before_down: &dyn Fn() -> Result<()>,
+    ) -> Result<()> {
+        MacKeys::drag_checked(self, game, from, to, before_down)
+    }
+    fn shift_click(&self, game: (u32, u32), x: f64, y: f64) -> Result<Point> {
+        MacKeys::shift_click(self, game, x, y)
+    }
+    fn right_click(&self, game: (u32, u32), x: f64, y: f64) -> Result<Point> {
+        MacKeys::right_click(self, game, x, y)
+    }
+    fn right_drag(&self, game: (u32, u32), from: (f64, f64), to: (f64, f64)) -> Result<()> {
+        MacKeys::right_drag(self, game, from, to)
+    }
+    fn scroll(&self, game: (u32, u32), at: (f64, f64), pixels: i32) -> Result<()> {
+        MacKeys::scroll(self, game, at, pixels)
+    }
+    fn press_code(&self, code: u16) -> Result<()> {
+        MacKeys::press_code(self, code)
+    }
+    fn press_shifted(&self, code: u16) -> Result<()> {
+        MacKeys::press_shifted(self, code)
+    }
+    fn press_control(&self, code: u16) -> Result<()> {
+        MacKeys::press_control(self, code)
+    }
+    fn press(&self, key: Key) -> Result<()> {
+        MacKeys::press(self, key)
+    }
+    fn press_once(&self, key: Key) -> key_once::Dispatch {
+        MacKeys::press_once(self, key)
+    }
+    fn press_digit_once(&self, digit: char) -> key_once::Dispatch {
+        MacKeys::press_digit_once(self, digit)
+    }
+    fn guarded<'a>(
+        &'a self,
+        process: &'a (dyn Process + Send + Sync),
+        check: &'a (dyn Fn() -> Result<()> + Send + Sync),
+    ) -> Result<Box<dyn GameInput + 'a>> {
+        Ok(Box::new(MacKeys::guarded(self, process, check)?))
     }
 }

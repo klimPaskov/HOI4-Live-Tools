@@ -26,7 +26,7 @@ use crate::{
     economy,
     error::{Error, Result},
     memory::Reader,
-    platform::{macos_input::MacKeys, Process},
+    platform::{game_input::GameInput, Process},
 };
 use serde_json::{json, Value};
 use std::{thread, time::Duration};
@@ -48,7 +48,6 @@ const F2: u16 = 120;
 
 pub(super) fn own_fleets(process: &dyn Process) -> Result<Vec<Fleet>> {
     read(process, |r, image| {
-        super::fleetmem::require_libcxx(r)?;
         let (country, _) = economy::own_production(r, image)?;
         naval::fleets(r, image, country)
     })
@@ -266,14 +265,14 @@ pub(super) fn region_present_now(
 }
 
 // ---- driving the navy UI ---------------------------------------------------------------------
-pub(super) fn click_at(keys: &MacKeys, x: f64, y: f64) -> Result<()> {
+pub(super) fn click_at(keys: &dyn GameInput, x: f64, y: f64) -> Result<()> {
     keys.click(GAME, x, y).map(|_| ())
 }
 fn pause(ms: u64) {
     thread::sleep(Duration::from_millis(ms));
 }
 /// Switch to the Strategic Navy map mode.
-pub(super) fn enter_navy_mode(process: &dyn Process, keys: &MacKeys) -> Result<()> {
+pub(super) fn enter_navy_mode(process: &dyn Process, keys: &dyn GameInput) -> Result<()> {
     if !read(process, nui::navy_mode)? {
         keys.press_code(F2)?;
         wait(process, "strategic navy map mode", nui::navy_mode)?;
@@ -282,7 +281,7 @@ pub(super) fn enter_navy_mode(process: &dyn Process, keys: &MacKeys) -> Result<(
     Ok(())
 }
 /// Back to the default map mode.
-pub(super) fn leave_navy_mode(process: &dyn Process, keys: &MacKeys) -> Result<()> {
+pub(super) fn leave_navy_mode(process: &dyn Process, keys: &dyn GameInput) -> Result<()> {
     if read(process, nui::navy_mode)? {
         keys.press_code(F1)?;
         wait(process, "default map mode", |r, i| {
@@ -291,7 +290,7 @@ pub(super) fn leave_navy_mode(process: &dyn Process, keys: &MacKeys) -> Result<(
     }
     Ok(())
 }
-pub(super) fn close_region_view(process: &dyn Process, keys: &MacKeys) -> Result<()> {
+pub(super) fn close_region_view(process: &dyn Process, keys: &dyn GameInput) -> Result<()> {
     for attempt in 0..2 {
         if read(process, nui::region_view)?.is_none() {
             return Ok(());
@@ -315,7 +314,7 @@ pub(super) fn close_region_view(process: &dyn Process, keys: &MacKeys) -> Result
     Ok(())
 }
 /// Deselect every task force and close the fleet panel.
-fn close_panel(process: &dyn Process, keys: &MacKeys) -> Result<()> {
+fn close_panel(process: &dyn Process, keys: &dyn GameInput) -> Result<()> {
     for _ in 0..8 {
         if !read(process, nui::panel_open)? {
             return Ok(());
@@ -345,14 +344,14 @@ fn close_panel(process: &dyn Process, keys: &MacKeys) -> Result<()> {
     Ok(())
 }
 /// Leave the navy UI tidy (best effort; errors after the real work must not hide its result).
-pub(super) fn release(process: &dyn Process, keys: &MacKeys) {
+pub(super) fn release(process: &dyn Process, keys: &dyn GameInput) {
     let _ = close_region_view(process, keys);
     let _ = close_panel(process, keys);
     let _ = leave_navy_mode(process, keys);
 }
 pub(super) fn select_fleet(
     process: &dyn Process,
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     name: &str,
     order: &[String],
 ) -> Result<()> {
@@ -396,7 +395,11 @@ pub(super) fn select_fleet(
         "No fleet card opened the wanted fleet panel",
     ))
 }
-pub(super) fn select_task_force(process: &dyn Process, keys: &MacKeys, name: &str) -> Result<()> {
+pub(super) fn select_task_force(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    name: &str,
+) -> Result<()> {
     for _ in 0..14 {
         let entries = settled(process, "task force entries", nui::entries)?;
         // A selected task force is the only one shown; deselect it before selecting another.
@@ -451,7 +454,7 @@ pub(super) fn select_task_force(process: &dyn Process, keys: &MacKeys, name: &st
 /// Give the task force its mission with the game's mission button.
 pub(super) fn set_mission(
     process: &dyn Process,
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     plan: &MissionPlan,
 ) -> Result<Value> {
     clear_notices(process, keys)?;
@@ -477,7 +480,6 @@ pub(super) fn set_mission(
         let tf = plan.task_force.clone();
         let code = plan.code;
         wait(process, "mission set", move |r, i| {
-            super::fleetmem::require_libcxx(r)?;
             let (country, _) = economy::own_production(r, i)?;
             Ok(naval::fleets(r, i, country)?
                 .iter()
@@ -529,7 +531,7 @@ pub(super) const PROBE_LIMIT: usize = 36;
 /// Left clicks only open and close views: nothing is ordered here.
 pub(super) fn find_region_point(
     process: &dyn Process,
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     state: i32,
     region: &str,
 ) -> Result<((f64, f64), Vec<String>)> {
@@ -572,7 +574,11 @@ pub(super) fn find_region_point(
     ))
 }
 /// Add `plan.region` to the fleet's area (or remove it) with a right click.
-pub(super) fn region_op(process: &dyn Process, keys: &MacKeys, plan: &RegionPlan) -> Result<Value> {
+pub(super) fn region_op(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    plan: &RegionPlan,
+) -> Result<Value> {
     clear_notices(process, keys)?;
     enter_navy_mode(process, keys)?;
     let result = (|| -> Result<Value> {
@@ -599,7 +605,6 @@ pub(super) fn region_op(process: &dyn Process, keys: &MacKeys, plan: &RegionPlan
         let region = plan.region.clone();
         let remove = plan.remove;
         wait(process, "fleet area changed", move |r, i| {
-            super::fleetmem::require_libcxx(r)?;
             let (country, _) = economy::own_production(r, i)?;
             Ok(naval::fleets(r, i, country)?
                 .iter()
@@ -696,7 +701,7 @@ pub(super) fn settle_admiral(
     }
 }
 /// Open the fleet panel's commander list and read it (nothing is assigned).
-fn open_leader_list(process: &dyn Process, keys: &MacKeys) -> Result<()> {
+fn open_leader_list(process: &dyn Process, keys: &dyn GameInput) -> Result<()> {
     // The portrait slot of the header ("Click to assign.") is the frame of the portrait.
     let frame = settled(process, "commander slot", |r, i| {
         let header = nui::header(r, i)?
@@ -714,7 +719,7 @@ fn open_leader_list(process: &dyn Process, keys: &MacKeys) -> Result<()> {
     pause(400);
     Ok(())
 }
-fn close_leader_list(process: &dyn Process, keys: &MacKeys) {
+fn close_leader_list(process: &dyn Process, keys: &dyn GameInput) {
     if read(process, |r, i| Ok(nui::leader_open(r, i).unwrap_or(false))).unwrap_or(false) {
         if let Ok(rect) = settled(process, "commander close", |r, i| {
             nui::leader_button(r, i, "close_button")
@@ -730,7 +735,7 @@ fn close_leader_list(process: &dyn Process, keys: &MacKeys) {
 /// Names and skills of the admirals the list offers for this fleet (assigns nothing).
 pub(super) fn list_admirals(
     process: &dyn Process,
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     fleet: &str,
     order: &[String],
 ) -> Result<Vec<nui::Admiral>> {
@@ -751,7 +756,7 @@ pub(super) fn list_admirals(
 /// Put `plan.admiral` in command of the fleet (or unassign) from the fleet panel's list.
 pub(super) fn assign_admiral(
     process: &dyn Process,
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     plan: &AdmiralPlan,
 ) -> Result<Value> {
     clear_notices(process, keys)?;
@@ -769,7 +774,6 @@ pub(super) fn assign_admiral(
             super::ui::accept_command(process, keys)?;
             let fleet = plan.fleet.clone();
             wait(process, "admiral unassigned", move |r, i| {
-                super::fleetmem::require_libcxx(r)?;
                 let (country, _) = economy::own_production(r, i)?;
                 Ok(naval::fleets(r, i, country)?
                     .iter()
@@ -828,7 +832,6 @@ pub(super) fn assign_admiral(
         let fleet = plan.fleet.clone();
         let want = wanted.to_string();
         wait(process, "admiral assigned", move |r, i| {
-            super::fleetmem::require_libcxx(r)?;
             let (country, _) = economy::own_production(r, i)?;
             Ok(naval::fleets(r, i, country)?.iter().any(|f| {
                 same_name(&f.name, &fleet)
@@ -932,7 +935,7 @@ pub(super) fn settle_create(fleets: &[Fleet], plan: &CreatePlan) -> super::settl
 /// Select the task force, then the bottom bar's "+" card founds a new fleet from it.
 pub(super) fn create_fleet(
     process: &dyn Process,
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     plan: &CreatePlan,
 ) -> Result<Value> {
     clear_notices(process, keys)?;
@@ -954,7 +957,6 @@ pub(super) fn create_fleet(
         let tf = plan.task_force.clone();
         let from = plan.from_fleet.clone();
         wait(process, "new fleet", move |r, i| {
-            super::fleetmem::require_libcxx(r)?;
             let (country, _) = economy::own_production(r, i)?;
             let fleets = naval::fleets(r, i, country)?;
             Ok(fleets.len() == before + 1

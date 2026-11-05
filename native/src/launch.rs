@@ -6,7 +6,7 @@ use crate::error::Result;
 use std::path::Path;
 #[cfg(target_os = "linux")]
 mod linux;
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 pub mod macos;
 pub fn serve(config: &Path) -> Result<()> {
     #[cfg(target_os = "linux")]
@@ -62,6 +62,20 @@ pub fn close_window(directory: &Path, config: &Path) -> Result<()> {
         Err(Error::new(
             "platform_unavailable",
             "Owned window shutdown is not verified on this platform",
+        ))
+    }
+}
+pub fn bind_management(directory: &Path, config: &Path) -> Result<()> {
+    #[cfg(target_os = "linux")]
+    {
+        linux::bind_management(directory, config)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = (directory, config);
+        Err(Error::new(
+            "platform_unavailable",
+            "The management binding is Linux-only; macOS uses --mac-input",
         ))
     }
 }

@@ -13,7 +13,6 @@
 use super::{
     action_fence,
     journal::{GameJournal, Outcome},
-    navalui as nui,
     ui::{read, wait},
 };
 use crate::{
@@ -23,7 +22,8 @@ use crate::{
     gui_tree::{self, Rect},
     input_lease::InputAuthority,
     memory::Reader,
-    platform::{macos_input::MacKeys, Process},
+    platform::{game_input::GameInput, Process},
+    xlayout::{self, fld, img},
 };
 use serde::{de::DeserializeOwned, Serialize};
 use serde_json::{json, Value};
@@ -40,13 +40,24 @@ const GUI_FROM_IDLER: u64 = 0x4c0;
 const POPUP_LIST: u64 = 0xa70;
 const POPUP_ROOT: u64 = 0x490;
 const CONTAINER_BASE: u64 = 0x30;
+const TEXT: u64 = 0x100;
+const TOPBAR_SLOT: u64 = 0x188;
+const TOPBAR_ROOT: u64 = 0x68;
+/// Owners of the fields above (macOS 1.19.4.1 RTTI names and vtables; 0 where
+/// the owning class has no reviewed vtable).
+const IDLER: xlayout::Class = xlayout::Class::new("CInGameIdler", 0x35089d8);
+const GAME_GUI: xlayout::Class = xlayout::Class::new("idler.gui", 0);
+const IFACE_MANAGER: xlayout::Class = xlayout::Class::new("idler.manager", 0);
+const CONTAINER: xlayout::Class = xlayout::Class::new("CContainerWindow", 0x36ba978);
+const TOPBAR: xlayout::Class = xlayout::Class::new("manager.topbar", 0);
+const TEXT_BOX: xlayout::Class = xlayout::Class::new("gui.text", 0);
 /// Prefix of every description: nothing here has been seen working on a live game yet.
 pub(super) const UNVALIDATED: &str = "UNVALIDATED (no live test yet): ";
 
 /// What every dispatcher needs; borrowed from the controller state in `MacClock::call`.
 pub(super) struct Env<'a> {
     pub process: &'a (dyn Process + Send + Sync),
-    pub keys: &'a MacKeys<'static>,
+    pub keys: &'a dyn GameInput,
     pub guard: &'a mut super::Guard,
     pub authority: &'a InputAuthority,
     pub actions: &'a mut GameJournal,
@@ -61,7 +72,7 @@ pub(super) struct Request<'a> {
 }
 pub(super) type PlanFn<'a, P> = &'a dyn Fn(&dyn Process) -> Result<P>;
 pub(super) type SettleFn<'a, P> = &'a dyn Fn(&dyn Process, Option<&P>) -> Result<Outcome>;
-pub(super) type DispatchFn<'a, P> = &'a dyn Fn(&dyn Process, &MacKeys<'_>, &P) -> Result<Value>;
+pub(super) type DispatchFn<'a, P> = &'a dyn Fn(&dyn Process, &dyn GameInput, &P) -> Result<Value>;
 /// Run one journaled action. `plan` reads the world and refuses before any input; on a retry of
 /// an unresolved request id no plan exists (`None`) and nothing is ever dispatched again.
 /// `settle` is a pure rule over fresh reads; `dispatch` drives the ordinary UI once.
@@ -203,18 +214,18 @@ fn plausible(p: u64) -> bool {
 }
 /// The interface manager object.
 pub(super) fn manager(r: &Reader<'_>, image: u64) -> Result<u64> {
-    nui::libcxx(r)?;
     let idler = r.u64(image + game::layout(r).idler_global)?;
-    r.u64(idler + MANAGER)
+    r.u64(idler + fld(r.string_abi(), &IDLER, MANAGER)?)
 }
-/// A view of the interface manager by its class vtable (image offset): the first manager slot
-/// whose object starts with that vtable.
+/// A view of the interface manager by its class vtable (macOS image offset, resolved for this
+/// build): the first manager slot whose object starts with that vtable.
 pub(super) fn find_view(r: &Reader<'_>, image: u64, vtable: u64) -> Result<Option<u64>> {
     let manager = manager(r, image)?;
+    let want = image + img(r.string_abi(), vtable)?;
     let slots = r.read(manager, 0x400)?;
     for chunk in slots.chunks_exact(8) {
         let p = u64::from_le_bytes(chunk.try_into().unwrap());
-        if plausible(p) && r.u64(p).is_ok_and(|first| first == image + vtable) {
+        if plausible(p) && r.u64(p).is_ok_and(|first| first == want) {
             return Ok(Some(p));
         }
     }
@@ -228,7 +239,7 @@ pub(super) fn find_window(
     object: u64,
     wanted: &str,
 ) -> Result<Option<u64>> {
-    nui::libcxx(r)?;
+    let base = fld(r.string_abi(), &CONTAINER, CONTAINER_BASE)?;
     const SPAN: u64 = 0x8000;
     const CHUNK: u64 = 0x1000;
     let mut offset = CONTAINER_BASE;
@@ -243,8 +254,7 @@ pub(super) fn find_window(
                 let Ok(Some(window)) = gui_tree::container(r, p, image) else {
                     continue;
                 };
-                if matches!(gui_tree::name(r, window + CONTAINER_BASE, image), Ok(Some(n)) if n == wanted)
-                {
+                if matches!(gui_tree::name(r, window + base, image), Ok(Some(n)) if n == wanted) {
                     return Ok(Some(window));
                 }
             }
@@ -298,8 +308,9 @@ pub(super) fn rect_deep(
 /// A top bar widget by name (the top bar view is interface manager slot +0x188, root +0x68, the
 /// same route `ui.rs` uses for the player flag): rectangle when it is shown and on screen.
 pub(super) fn topbar_button(r: &Reader<'_>, image: u64, name: &str) -> Result<Rect> {
-    let topbar = r.u64(manager(r, image)? + 0x188)?;
-    let root = gui_tree::container(r, r.u64(topbar + 0x68)?, image)?
+    let abi = r.string_abi();
+    let topbar = r.u64(manager(r, image)? + fld(abi, &IFACE_MANAGER, TOPBAR_SLOT)?)?;
+    let root = gui_tree::container(r, r.u64(topbar + fld(abi, &TOPBAR, TOPBAR_ROOT)?)?, image)?
         .ok_or_else(|| Error::new("invalid_gui", "Top bar root unavailable"))?;
     let widget = find_deep(r, image, root, name, 6)?.ok_or_else(|| {
         Error::new(
@@ -317,11 +328,12 @@ pub(super) fn topbar_button(r: &Reader<'_>, image: u64, name: &str) -> Result<Re
 }
 /// Long text of an instant text box (descriptions exceed the 256 characters `text_at` accepts).
 pub(super) fn long_text(r: &Reader<'_>, widget: u64) -> Result<String> {
-    Ok(super::special_projects::plain(
-        &r.string_bounded(widget + 0x100, 2000)?,
-    ))
+    Ok(super::special_projects::plain(&r.string_bounded(
+        widget + fld(r.string_abi(), &TEXT_BOX, TEXT)?,
+        2000,
+    )?))
 }
-pub(super) fn click(keys: &MacKeys<'_>, rect: Rect) -> Result<()> {
+pub(super) fn click(keys: &dyn GameInput, rect: Rect) -> Result<()> {
     let (x, y) = rect.center();
     keys.click(GAME, x, y).map(|_| ())
 }
@@ -336,9 +348,27 @@ pub(super) const CONFIRM_VTABLES: [u64; 5] =
 pub(super) const DIPLOMACY_VTABLES: [u64; 5] =
     [0x365b4d0, 0x365b5f8, 0x365b720, 0x365b848, 0x365b970];
 
+/// RTTI class of a pop-up vtable (the owner of its root field).
+fn popup_class(vtable: u64) -> xlayout::Class {
+    let name = match vtable {
+        0x363b690 => "CAcceptCommandDialog",
+        0x363b9d8 => "CConfirmCancelNavyActivityDialog",
+        0x367fd40 => "CDefaultConfirmationPopUpWindow",
+        0x358ff80 => "CGenericDefaultConfirmationPopUpWindow",
+        0x3661350 => "CDismantleFactionDialog",
+        0x365b4d0 => "CDiplomacyPopupWindowBase",
+        0x365b5f8 => "CStandardDiplomacyPopup",
+        0x365b720 => "CScriptedGUIDiplomacyPopup",
+        0x365b848 => "CIncomingLendLeaseDiplomacyPopup",
+        0x365b970 => "CForeignManpowerDiplomacyPopup",
+        _ => "popup.window",
+    };
+    xlayout::Class::new(name, vtable)
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub(super) struct Popup {
-    /// Class vtable as an image offset.
+    /// Class vtable as a macOS image offset (the key in `kinds`).
     pub kind: u64,
     /// Root container object.
     pub root: u64,
@@ -347,18 +377,23 @@ pub(super) struct Popup {
 }
 /// Shown pop-ups whose class is in `kinds`, in list order.
 pub(super) fn popups(r: &Reader<'_>, image: u64, kinds: &[u64]) -> Result<Vec<Popup>> {
-    nui::libcxx(r)?;
+    let abi = r.string_abi();
     let idler = r.u64(image + game::layout(r).idler_global)?;
-    let gui = r.u64(idler + GUI_FROM_IDLER)?;
-    let (_, data, count) = r.array_header(gui + POPUP_LIST)?;
+    let gui = r.u64(idler + fld(abi, &IDLER, GUI_FROM_IDLER)?)?;
+    let (_, data, count) = r.array_header(gui + fld(abi, &GAME_GUI, POPUP_LIST)?)?;
+    let mut wanted = Vec::with_capacity(kinds.len());
+    for kind in kinds {
+        wanted.push((image + img(abi, *kind)?, *kind));
+    }
     let mut out = Vec::new();
     for index in 0..count.min(32) {
         let window = r.u64(data + index as u64 * 8)?;
-        let kind = r.u64(window)?.wrapping_sub(image);
-        if !kinds.contains(&kind) {
+        let vtable = r.u64(window)?;
+        let Some(&(_, kind)) = wanted.iter().find(|(vt, _)| *vt == vtable) else {
             continue;
-        }
-        let Some(root) = gui_tree::container(r, r.u64(window + POPUP_ROOT)?, image)? else {
+        };
+        let root_at = fld(abi, &popup_class(kind), POPUP_ROOT)?;
+        let Some(root) = gui_tree::container(r, r.u64(window + root_at)?, image)? else {
             continue;
         };
         if gui_tree::visible(r, root)? {
@@ -372,7 +407,7 @@ pub(super) fn popups(r: &Reader<'_>, image: u64, kinds: &[u64]) -> Result<Vec<Po
 /// are ever answered, so a diplomacy proposal can never be accepted by accident.
 pub(super) fn answer_confirmation(
     process: &dyn Process,
-    keys: &MacKeys<'_>,
+    keys: &dyn GameInput,
     accept: bool,
 ) -> Result<bool> {
     let button = if accept {

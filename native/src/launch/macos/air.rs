@@ -9,14 +9,16 @@ use crate::{
     error::{Error, Result},
     game,
     gui_tree::{self, Rect},
-    memory::{Reader, StringAbi},
+    memory::Reader,
     platform::{
-        macos_input::{Key, MacKeys},
+        game_input::{GameInput, Key},
         Process,
     },
+    xlayout::{fld, img, Class},
 };
 use serde_json::{json, Value};
 
+#[derive(Clone, Copy)]
 struct Ui {
     manager: u64,
     overview: u64,
@@ -51,6 +53,37 @@ const MACOS: Ui = Ui {
     icon_sprite: 0xd8,
     sprite_frame: 0x34,
 };
+/// Owners of the fields above (macOS 1.19.4.1 RTTI names and vtables; 0 where
+/// none was reviewed).
+const IDLER: Class = Class::new("CInGameIdler", 0x35089d8);
+const MANAGER: Class = Class::new("idler.manager", 0);
+const OVERVIEW_VIEW: Class = Class::new("air.overview.view", 0);
+const SELECTION_VIEW: Class = Class::new("air.selection.view", 0);
+const CONTAINER: Class = Class::new("CContainerWindow", 0x36ba978);
+const GRID: Class = Class::new("CStandardGridBox", 0x36cca80);
+const GRID_ITEM: Class = Class::new("grid.item", 0);
+const TEXT_BOX: Class = Class::new("gui.text", 0);
+const ICON: Class = Class::new("CIcon", 0x36b6880);
+const SPRITE: Class = Class::new("CSprite", 0x36cc528);
+impl Ui {
+    /// The macOS keys translated for this build (identity on macOS).
+    fn resolve(&self, abi: crate::memory::StringAbi) -> Result<Self> {
+        Ok(Self {
+            manager: fld(abi, &IDLER, self.manager)?,
+            overview: fld(abi, &MANAGER, self.overview)?,
+            overview_root: fld(abi, &OVERVIEW_VIEW, self.overview_root)?,
+            selection: fld(abi, &MANAGER, self.selection)?,
+            selection_root: fld(abi, &SELECTION_VIEW, self.selection_root)?,
+            container_vtable: img(abi, self.container_vtable)?,
+            container_base: fld(abi, &CONTAINER, self.container_base)?,
+            grid_items: fld(abi, &GRID, self.grid_items)?,
+            item_container: fld(abi, &GRID_ITEM, self.item_container)?,
+            text: fld(abi, &TEXT_BOX, self.text)?,
+            icon_sprite: fld(abi, &ICON, self.icon_sprite)?,
+            sprite_frame: fld(abi, &SPRITE, self.sprite_frame)?,
+        })
+    }
+}
 const GAME: (u32, u32) = (1920, 1080);
 /// Visible band of the overview's wing rows.
 // 1.19.4.1: the overview list runs down to the "Active in N strategic areas" footer at
@@ -78,15 +111,10 @@ fn mission_name(frame: i32) -> Option<&'static str> {
     MISSIONS.iter().find(|(_, f)| *f == frame).map(|(n, _)| *n)
 }
 
-fn ui(r: &Reader<'_>) -> Result<&'static Ui> {
-    match r.string_abi() {
-        StringAbi::LibCxx => Ok(&MACOS),
-        StringAbi::LibStdCxx => Err(Error::new(
-            "capability_unavailable",
-            "Air input is not reviewed for this build",
-        )),
-    }
+fn ui(r: &Reader<'_>) -> Result<Ui> {
+    MACOS.resolve(r.string_abi())
 }
+/// `slot` and `root` are already translated (fields of `ui(r)`).
 pub(super) fn view_root(r: &Reader<'_>, image: u64, slot: u64, root: u64) -> Result<u64> {
     let u = ui(r)?;
     let idler = r.u64(image + game::layout(r).idler_global)?;
@@ -234,7 +262,7 @@ pub(super) fn mission_buttons(r: &Reader<'_>, image: u64) -> Result<Vec<(i32, Re
     }
     Ok(out)
 }
-pub(super) fn deselect(process: &dyn Process, keys: &MacKeys) -> Result<()> {
+pub(super) fn deselect(process: &dyn Process, keys: &dyn GameInput) -> Result<()> {
     if read(process, selection_open)? {
         let rect = settled(process, "air toolbar", |r, i| {
             toolbar_button(r, i, "btn_close")
@@ -247,7 +275,7 @@ pub(super) fn deselect(process: &dyn Process, keys: &MacKeys) -> Result<()> {
     }
     Ok(())
 }
-pub(super) fn open_overview(process: &dyn Process, keys: &MacKeys) -> Result<()> {
+pub(super) fn open_overview(process: &dyn Process, keys: &dyn GameInput) -> Result<()> {
     clear_notices(process, keys)?;
     deselect(process, keys)?;
     if !read(process, overview_open)? {
@@ -265,7 +293,7 @@ fn wing_json(w: &Wing) -> Value {
 }
 
 /// Own air wings with base, region and missions (opens the air overview).
-pub(super) fn list(process: &dyn Process, keys: &MacKeys) -> Result<Value> {
+pub(super) fn list(process: &dyn Process, keys: &dyn GameInput) -> Result<Value> {
     open_overview(process, keys)?;
     let found = settled(process, "air wings", wings)?;
     Ok(
@@ -277,7 +305,7 @@ pub(super) fn list(process: &dyn Process, keys: &MacKeys) -> Result<Value> {
 /// view, one click); returns the row as it was before the click.
 pub(super) fn select_wing(
     process: &dyn Process,
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     name: &str,
 ) -> Result<Option<Wing>> {
     open_overview(process, keys)?;
@@ -322,7 +350,7 @@ pub(super) fn select_wing(
 /// Give wing `name` mission `mission` over the region containing `state`.
 pub(super) fn assign(
     process: &dyn Process,
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     name: &str,
     mission: &str,
     state: i32,

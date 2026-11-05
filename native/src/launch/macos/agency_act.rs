@@ -32,7 +32,8 @@ use crate::{
     error::{Error, Result},
     gui_tree,
     memory::Reader,
-    platform::{macos_input::MacKeys, Process},
+    platform::{game_input::GameInput, Process},
+    xlayout::{fld, Class},
 };
 use serde_json::{json, Value};
 use std::{cell::RefCell, thread, time::Duration};
@@ -156,9 +157,15 @@ fn refusal(r: Option<(&'static str, String)>) -> std::result::Result<(), Fail> {
 /// +0x188, root +0x68). The game hides it when the agency feature is not active (La Resistance
 /// not enabled: seen live on 1.19.4.1, 31 October 2026, where Shift+W then opens nothing).
 fn agency_button_shown(r: &Reader<'_>, i: u64) -> Result<Option<bool>> {
+    const IDLER: Class = Class::new("CInGameIdler", 0x35089d8);
+    const MANAGER: Class = Class::new("idler.manager", 0);
+    const TOP_BAR: Class = Class::new("CTopBar", 0x3697918);
+    let abi = r.string_abi();
     let idler = r.u64(i + crate::game::layout(r).idler_global)?;
-    let topbar = r.u64(r.u64(idler + 0x670)? + 0x188)?;
-    let Some(root) = gui_tree::container(r, r.u64(topbar + 0x68)?, i)? else {
+    let manager = r.u64(idler + fld(abi, &IDLER, 0x670)?)?;
+    let topbar = r.u64(manager + fld(abi, &MANAGER, 0x188)?)?;
+    let root = r.u64(topbar + fld(abi, &TOP_BAR, 0x68)?)?;
+    let Some(root) = gui_tree::container(r, root, i)? else {
         return Ok(None);
     };
     match pk::find(r, i, root, "intel_agency_button", 4)? {
@@ -167,7 +174,7 @@ fn agency_button_shown(r: &Reader<'_>, i: u64) -> Result<Option<bool>> {
     }
 }
 
-fn open_agency(process: &dyn Process, keys: &MacKeys<'_>) -> Result<()> {
+fn open_agency(process: &dyn Process, keys: &dyn GameInput) -> Result<()> {
     if pk::open_now(process, &pk::AGENCY_VIEW) {
         return Ok(());
     }
@@ -186,7 +193,7 @@ fn open_agency(process: &dyn Process, keys: &MacKeys<'_>) -> Result<()> {
 }
 /// Close a pop-up window with its close button (these windows have no
 /// Escape shortcut in their `.gui` definition).
-fn close_with(process: &dyn Process, keys: &MacKeys<'_>, class: &pk::Class, button: &str) {
+fn close_with(process: &dyn Process, keys: &dyn GameInput, class: &pk::Class, button: &str) {
     if !pk::open_now(process, class) {
         return;
     }
@@ -200,7 +207,7 @@ fn close_with(process: &dyn Process, keys: &MacKeys<'_>, class: &pk::Class, butt
         });
     }
 }
-fn leave(process: &dyn Process, keys: &MacKeys<'_>) {
+fn leave(process: &dyn Process, keys: &dyn GameInput) {
     close_with(process, keys, &pk::AGENCY_LOGO, "btn_close");
     close_with(process, keys, &pk::AGENCY_UPGRADES, "btn_close");
     if pk::open_now(process, &pk::OPERATIVE_RECRUIT) {
@@ -222,7 +229,7 @@ fn live_branches(process: &dyn Process) -> Result<intelligence::Live> {
 
 // ---------------------------------------------------------------- creation
 
-fn create(process: &dyn Process, keys: &MacKeys<'_>) -> Driven {
+fn create(process: &dyn Process, keys: &dyn GameInput) -> Driven {
     clear_notices(process, keys)?;
     let result: Driven = (|| {
         open_agency(process, keys)?;
@@ -319,7 +326,7 @@ struct Names {
     upgrade: Option<String>,
 }
 
-fn upgrade(process: &dyn Process, keys: &MacKeys<'_>, names: &Names) -> Driven {
+fn upgrade(process: &dyn Process, keys: &dyn GameInput, names: &Names) -> Driven {
     clear_notices(process, keys)?;
     let result: Driven = (|| {
         open_agency(process, keys)?;
@@ -465,7 +472,7 @@ pub(super) fn recruit_refusal(slots: &[Slot]) -> Option<(&'static str, String)> 
     None
 }
 
-fn recruit(process: &dyn Process, keys: &MacKeys<'_>, index: usize) -> Driven {
+fn recruit(process: &dyn Process, keys: &dyn GameInput, index: usize) -> Driven {
     clear_notices(process, keys)?;
     let result: Driven = (|| {
         open_agency(process, keys)?;
@@ -669,7 +676,7 @@ fn target_state(process: &dyn Process, tag: &str) -> Result<i32> {
 
 fn assign(
     process: &dyn Process,
-    keys: &MacKeys<'_>,
+    keys: &dyn GameInput,
     plan: &AssignPlan,
     state: Option<i32>,
 ) -> Driven {
@@ -775,7 +782,7 @@ pub(super) fn call(
     name: &str,
     args: &serde_json::Map<String, Value>,
     process: &(dyn Process + Send + Sync),
-    keys: &MacKeys<'static>,
+    keys: &dyn GameInput,
     guard: &mut Guard,
     authority: &InputAuthority,
     actions: &mut super::journal::GameJournal,

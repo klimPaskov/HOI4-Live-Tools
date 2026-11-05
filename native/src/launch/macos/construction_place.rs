@@ -10,7 +10,7 @@ use crate::{
     actions::Epoch,
     construction::mac_ui::{self, PlacementAnchor, PlacementDelta},
     error::{Error, Result},
-    platform::macos_input::MacKeys,
+    platform::game_input::GameInput,
 };
 use serde_json::{json, Value};
 use std::{
@@ -162,7 +162,7 @@ struct Live<'a, 'b> {
     anchor: &'a PlacementAnchor,
     point: &'a point::Anchor,
     fence: &'a Fence<'b>,
-    keys: &'a MacKeys<'b>,
+    keys: &'a dyn GameInput,
     route: std::sync::Mutex<Value>,
 }
 impl Live<'_, '_> {
@@ -269,7 +269,7 @@ pub(super) fn run(
     epoch: &Epoch,
     journal: &mut GameJournal,
     fence: &Fence<'_>,
-    keys: &MacKeys<'_>,
+    keys: &dyn GameInput,
 ) -> Result<Value> {
     let action = request.action();
     if let Some(receipt) = journal.strict_receipt(request.id, epoch, &action)? {

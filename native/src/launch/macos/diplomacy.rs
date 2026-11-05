@@ -10,11 +10,12 @@ use crate::{
     error::{Error, Result},
     game,
     gui_tree::{self, Rect},
-    memory::{Reader, StringAbi},
+    memory::Reader,
     platform::{
-        macos_input::{Key, MacKeys},
+        game_input::{GameInput, Key},
         Process,
     },
+    xlayout::{fld, img, Class},
 };
 use serde_json::{json, Value};
 
@@ -59,15 +60,40 @@ const MACOS: Ui = Ui {
 const GAME: (u32, u32) = (1920, 1080);
 /// Frame number of the diplomacy rows' `accept_icon` (1 decline, 2 accept).
 const ICON_FRAME: u64 = 0x184;
+/// Owners of the fields above (macOS 1.19.4.1 RTTI names and vtables). The
+/// interface manager, the action controller, grid items and text widgets have
+/// no reviewed class yet; their Linux offsets need an anchor function. The
+/// view class is named after the diplomacy view the comments describe.
+const IDLER: Class = Class::new("CInGameIdler", 0x35089d8);
+const MANAGER: Class = Class::new("idler.manager", 0);
+const VIEW: Class = Class::new("CCountryDiplomacyView", 0x364aa18);
+const ACTION_GLUE: Class = Class::new("diplomacy.action_controller", 0);
+const CONTAINER: Class = Class::new("CContainerWindow", 0x36ba978);
+const GRID: Class = Class::new("CStandardGridBox", 0x36cca80);
+const GRID_ITEM: Class = Class::new("grid.item", 0);
+const TEXT_BOX: Class = Class::new("gui.text", 0);
+const ICON: Class = Class::new("CIcon", 0x36b6880);
 
-fn ui(r: &Reader<'_>) -> Result<&'static Ui> {
-    match r.string_abi() {
-        StringAbi::LibCxx => Ok(&MACOS),
-        StringAbi::LibStdCxx => Err(Error::new(
-            "capability_unavailable",
-            "Diplomacy input is not reviewed for this build",
-        )),
-    }
+/// The layout for this build (macOS values translated through xlayout).
+fn ui(r: &Reader<'_>) -> Result<Ui> {
+    let abi = r.string_abi();
+    let m = &MACOS;
+    Ok(Ui {
+        manager: fld(abi, &IDLER, m.manager)?,
+        view: fld(abi, &MANAGER, m.view)?,
+        view_root: fld(abi, &VIEW, m.view_root)?,
+        shown_tag: fld(abi, &VIEW, m.shown_tag)?,
+        action_glue: fld(abi, &VIEW, m.action_glue)?,
+        info_window: fld(abi, &ACTION_GLUE, m.info_window)?,
+        grid_items: fld(abi, &GRID, m.grid_items)?,
+        item_container: fld(abi, &GRID_ITEM, m.item_container)?,
+        text: fld(abi, &TEXT_BOX, m.text)?,
+        container_vtable: img(abi, m.container_vtable)?,
+        container_base: fld(abi, &CONTAINER, m.container_base)?,
+        type_row: m.type_row,
+        state_row: m.state_row,
+        visible_state_rows: m.visible_state_rows,
+    })
 }
 fn view(r: &Reader<'_>, image: u64) -> Result<u64> {
     let u = ui(r)?;
@@ -209,10 +235,12 @@ fn rows(r: &Reader<'_>, image: u64) -> Result<Vec<Row>> {
         // 2 is the green check on Italy's non-aggression pact, 1 the red
         // cross on Poland's and on Italy's invitation to a faction).
         let (ai_refuses, ai_accepts) = match gui_tree::child(r, image, frame, "accept_icon")? {
-            Some(icon) if gui_tree::shown(r, icon)? => match r.i32(icon + ICON_FRAME)? {
-                2 => (false, true),
-                _ => (true, false),
-            },
+            Some(icon) if gui_tree::shown(r, icon)? => {
+                match r.i32(icon + fld(r.string_abi(), &ICON, ICON_FRAME)?)? {
+                    2 => (false, true),
+                    _ => (true, false),
+                }
+            }
             _ => (false, false),
         };
         out.push(Row {
@@ -291,14 +319,15 @@ fn grid_scroll(r: &Reader<'_>, image: u64, grid: &str) -> Result<f64> {
         dialog(r, image)?.ok_or_else(|| Error::new("input_readback_failed", "Dialog closed"))?;
     let g = find(r, image, window, grid, 0)?
         .ok_or_else(|| Error::new("gui_target_unavailable", "Dialog list not found"))?;
-    let value = f32::from_bits(r.i32(g + GRID_SCROLL)? as u32);
+    let scroll = fld(r.string_abi(), &GRID, GRID_SCROLL)?;
+    let value = f32::from_bits(r.i32(g + scroll)? as u32);
     if !value.is_finite() || value.abs() > 100_000.0 {
         return Err(Error::new("invalid_gui", "List scroll position unreadable"));
     }
     Ok(f64::from(value))
 }
 
-fn cancel_dialog(process: &dyn Process, keys: &MacKeys) {
+fn cancel_dialog(process: &dyn Process, keys: &dyn GameInput) {
     if let Ok((rect, true)) = read(process, |r, i| dialog_button(r, i, "cancel_button")) {
         let (x, y) = rect.center();
         let _ = keys.click(GAME, x, y);
@@ -307,7 +336,7 @@ fn cancel_dialog(process: &dyn Process, keys: &MacKeys) {
 }
 
 /// Point the diplomacy view at the owner of state `state`.
-fn show(process: &dyn Process, keys: &MacKeys, state: i32) -> Result<i32> {
+fn show(process: &dyn Process, keys: &dyn GameInput, state: i32) -> Result<i32> {
     let (owner, own) = read(process, |r, i| {
         Ok((state_owner(r, i, state)?, player_tag(r, i)?))
     })?;
@@ -364,7 +393,7 @@ pub(super) fn target_tag(process: &dyn Process, target: &Target) -> Result<Strin
 /// Point the diplomacy view at the target; returns its tag text. A country
 /// is reached through one of its states (the first ones by id); the next
 /// state is tried when the map click lands on another owner.
-fn show_target(process: &dyn Process, keys: &MacKeys, target: &Target) -> Result<String> {
+fn show_target(process: &dyn Process, keys: &dyn GameInput, target: &Target) -> Result<String> {
     match target {
         Target::State(state) => {
             let owner = show(process, keys, *state)?;
@@ -411,7 +440,11 @@ fn row_json(row: &Row) -> Value {
 }
 
 /// Diplomatic actions offered toward the target.
-pub(super) fn actions(process: &dyn Process, keys: &MacKeys, target: &Target) -> Result<Value> {
+pub(super) fn actions(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    target: &Target,
+) -> Result<Value> {
     clear_notices(process, keys)?;
     let tag = show_target(process, keys, target)?;
     let found = settled(process, "diplomatic actions", rows)?;
@@ -423,7 +456,7 @@ pub(super) fn actions(process: &dyn Process, keys: &MacKeys, target: &Target) ->
 }
 fn click_and_check(
     process: &dyn Process,
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     at: (f64, f64),
     stage: &str,
     check: impl Fn(&Reader<'_>, u64) -> Result<bool>,
@@ -432,7 +465,12 @@ fn click_and_check(
     wait(process, stage, check)
 }
 /// War-goal dialog: choose the type, then the states, by their rows.
-fn war_goal(process: &dyn Process, keys: &MacKeys, kind: &str, states: &[String]) -> Result<()> {
+fn war_goal(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    kind: &str,
+    states: &[String],
+) -> Result<()> {
     let mut info = json!({});
     war_goal_choose(process, keys, kind, states, &mut info)
 }
@@ -440,7 +478,7 @@ fn war_goal(process: &dyn Process, keys: &MacKeys, kind: &str, states: &[String]
 /// `info["states_offered"]`.
 fn war_goal_choose(
     process: &dyn Process,
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     kind: &str,
     states: &[String],
     info: &mut Value,
@@ -610,7 +648,7 @@ fn disabled_hint(key: Option<&str>) -> &'static str {
 /// Open the view on the target and choose the row `action` names.
 fn locate(
     process: &dyn Process,
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     target: &Target,
     action: &str,
 ) -> Result<(
@@ -638,7 +676,7 @@ fn locate(
 /// All typed refusals that need no input beyond opening the view.
 pub(super) fn plan(
     process: &dyn Process,
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     target: &Target,
     action: &str,
     try_anyway: bool,
@@ -716,7 +754,7 @@ fn rows_differ(a: &[Row], b: &[Row]) -> bool {
 /// game (the Send click, or the row click of an action without a dialog).
 pub(super) fn execute(
     process: &dyn Process,
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     plan: &Plan,
     kind: Option<&str>,
     states: &[String],
@@ -852,7 +890,7 @@ pub(super) fn execute(
 /// when given; the dialog is always cancelled.
 pub(super) fn preview(
     process: &dyn Process,
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     target: &Target,
     action: &str,
     kind: Option<&str>,

@@ -9,11 +9,12 @@ use crate::{
     error::{Error, Result},
     game,
     gui_tree::{self, Rect},
-    memory::{Reader, StringAbi},
+    memory::Reader,
     platform::{
-        macos_input::{Capture, MacKeys},
+        game_input::{Capture, GameInput},
         Process,
     },
+    xlayout::{fld, img, Class},
 };
 use serde_json::{json, Value};
 
@@ -33,6 +34,9 @@ struct Ui {
     grid_slot: u64,
     icon_position: u64,
     text: u64,
+    manager: u64,
+    peace_view: u64,
+    peace_window: u64,
 }
 /// macOS Mach-O 089EA519, mapped live on 18 October 2026 from the event
 /// germany_mefo_bills.3: the options grid's local position (215, -1) and slot
@@ -55,17 +59,57 @@ const MACOS: Ui = Ui {
     // eventwindow.gui sits at +0xfc; grid position +0x70 and slot +0xd4 unchanged).
     icon_position: 0xfc,
     text: 0x100,
+    manager: 0x670,
+    peace_view: 0x240,
+    peace_window: 0x43a0,
 };
+/// Owners of the fields above (macOS 1.19.4.1 RTTI names and vtables). The
+/// GUI object at idler+0x4c0, the interface manager, grid items and text
+/// widgets have no reviewed class yet; their Linux offsets need an anchor
+/// function.
+const IDLER: Class = Class::new("CInGameIdler", 0x35089d8);
+const GAME_GUI: Class = Class::new("idler.gui", 0);
+const MANAGER: Class = Class::new("idler.manager", 0);
+const EVENT_WINDOW: Class = Class::new("CEventWindow", 0x35e5c88);
+const EVENT: Class = Class::new("CEvent", 0x34fbb48);
+const CONTAINER: Class = Class::new("CContainerWindow", 0x36ba978);
+const GRID: Class = Class::new("CStandardGridBox", 0x36cca80);
+const GRID_ITEM: Class = Class::new("grid.item", 0);
+const ICON: Class = Class::new("CIcon", 0x36b6880);
+const TEXT_BOX: Class = Class::new("gui.text", 0);
+const PEACE: Class = Class::new("CPeaceConferenceWindow", 0x362a5b8);
 const GAME: (u32, u32) = (1920, 1080);
 
-fn ui(r: &Reader<'_>) -> Result<&'static Ui> {
-    match r.string_abi() {
-        StringAbi::LibCxx => Ok(&MACOS),
-        StringAbi::LibStdCxx => Err(Error::new(
-            "capability_unavailable",
-            "Event input is not reviewed for this build",
-        )),
-    }
+/// The layout for this build (macOS values translated through xlayout).
+fn ui(r: &Reader<'_>) -> Result<Ui> {
+    let abi = r.string_abi();
+    let m = &MACOS;
+    Ok(Ui {
+        gui: fld(abi, &IDLER, m.gui)?,
+        popups: fld(abi, &GAME_GUI, m.popups)?,
+        event_window_vtable: img(abi, m.event_window_vtable)?,
+        root: fld(abi, &EVENT_WINDOW, m.root)?,
+        event: fld(abi, &EVENT_WINDOW, m.event)?,
+        event_id: fld(abi, &EVENT, m.event_id)?,
+        container_vtable: img(abi, m.container_vtable)?,
+        container_base: fld(abi, &CONTAINER, m.container_base)?,
+        grid_items: fld(abi, &GRID, m.grid_items)?,
+        item_container: fld(abi, &GRID_ITEM, m.item_container)?,
+        grid_position: fld(abi, &GRID, m.grid_position)?,
+        grid_slot: fld(abi, &GRID, m.grid_slot)?,
+        icon_position: fld(abi, &ICON, m.icon_position)?,
+        text: fld(abi, &TEXT_BOX, m.text)?,
+        manager: fld(abi, &IDLER, m.manager)?,
+        peace_view: fld(abi, &MANAGER, m.peace_view)?,
+        peace_window: fld(abi, &PEACE, m.peace_window)?,
+    })
+}
+/// The peace conference window object (null while none was opened).
+fn peace_window(r: &Reader<'_>, image: u64) -> Result<u64> {
+    let u = ui(r)?;
+    let idler = r.u64(image + game::layout(r).idler_global)?;
+    let view = r.u64(r.u64(idler + u.manager)? + u.peace_view)?;
+    r.u64(view + u.peace_window)
 }
 /// GUI-object base of a container given its object pointer.
 fn base_of(r: &Reader<'_>, image: u64, object: u64) -> Result<u64> {
@@ -297,10 +341,7 @@ fn dark_bands_with(
 /// holds CPeaceConferenceWindow, whose window is at +0x3da0; macOS 089EA519,
 /// found live on 18 October 2026 while closed).
 fn peace_conference_open(r: &Reader<'_>, image: u64) -> Result<bool> {
-    ui(r)?;
-    let idler = r.u64(image + game::layout(r).idler_global)?;
-    let view = r.u64(r.u64(idler + 0x670)? + 0x240)?;
-    let window = r.u64(view + 0x43a0)?;
+    let window = peace_window(r, image)?;
     // After a conference ends the window pointer is cleared (read_bound seen
     // live on 26 Oct 2026 when the Treaty of Luxembourg window was closed).
     if window < 0x10000 {
@@ -318,9 +359,7 @@ pub(super) fn peace_root(r: &Reader<'_>, image: u64) -> Result<Option<u64>> {
     if !peace_conference_open(r, image)? {
         return Ok(None);
     }
-    let idler = r.u64(image + game::layout(r).idler_global)?;
-    let view = r.u64(r.u64(idler + 0x670)? + 0x240)?;
-    let window = r.u64(view + 0x43a0)?;
+    let window = peace_window(r, image)?;
     gui_tree::container(r, base_of(r, image, window)?, image)
 }
 /// The peace conference window's own texts while it is open (the player's
@@ -337,9 +376,8 @@ pub(super) fn peace_status(process: &dyn Process) -> Result<Value> {
             "validated_route":false}));
     }
     let texts = read(process, |r, image| {
-        let idler = r.u64(image + game::layout(r).idler_global)?;
-        let view = r.u64(r.u64(idler + 0x670)? + 0x240)?;
-        let window = r.u64(view + 0x43a0)?;
+        let window = peace_window(r, image)?;
+        let text_at = ui(r)?.text;
         let Some(root) = gui_tree::container(r, base_of(r, image, window)?, image)? else {
             return Ok(json!({}));
         };
@@ -353,7 +391,7 @@ pub(super) fn peace_status(process: &dyn Process) -> Result<Value> {
             "remainingturns_text",
         ] {
             if let Some(t) = find(r, image, root, name, 0)? {
-                let text = r.string_bounded(t + 0x100, 256)?;
+                let text = r.string_bounded(t + text_at, 256)?;
                 let clean: String = text
                     .chars()
                     .filter(|c| !c.is_control())
@@ -392,7 +430,12 @@ pub(super) fn is_open(process: &dyn Process, id: &str) -> Result<bool> {
 }
 
 /// Choose option `option` (0-based) of the open event `id`.
-pub(super) fn choose(process: &dyn Process, keys: &MacKeys, id: &str, option: usize) -> Result<()> {
+pub(super) fn choose(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    id: &str,
+    option: usize,
+) -> Result<()> {
     close_menu(process, keys)?;
     // A notice (a finished focus) can be drawn over the event window.
     let _ = super::ui::dismiss_notices(process, keys);
@@ -461,6 +504,7 @@ pub(super) fn choose(process: &dyn Process, keys: &MacKeys, id: &str, option: us
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::memory::StringAbi;
     #[test]
     fn missing_peace_window_read_does_not_authorize_plan_progress() {
         struct MissingPeace;

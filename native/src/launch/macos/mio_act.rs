@@ -29,7 +29,8 @@ use crate::{
     error::{Error, Result},
     gui_tree,
     memory::Reader,
-    platform::{macos_input::MacKeys, Process},
+    platform::{game_input::GameInput, Process},
+    xlayout::{fld, img, Class},
 };
 use serde_json::{json, Value};
 use std::{cell::RefCell, thread, time::Duration};
@@ -200,7 +201,7 @@ fn deep_all(
             deep_all(r, image, inner, wanted, depth - 1, budget, out)?;
         } else {
             let mut grids = Vec::new();
-            if r.u64(child)? == image + 0x36cca80 {
+            if r.u64(child)? == image + img(r.string_abi(), 0x36cca80)? {
                 grids.push(child);
             }
             for grid in grids {
@@ -208,7 +209,8 @@ fn deep_all(
                     // A grid item's own window carries the template name (the politics view's
                     // research_production slots are industrial_org_entry items, 1.19.4.1).
                     if pk::container_name(r, image, item.frame)?.as_deref() == Some(wanted) {
-                        out.push(item.frame + 0x30);
+                        const CONTAINER: Class = Class::new("CContainerWindow", 0x36ba978);
+                        out.push(item.frame + fld(r.string_abi(), &CONTAINER, 0x30)?);
                         continue;
                     }
                     deep_all(r, image, item.frame, wanted, depth - 1, budget, out)?;
@@ -258,7 +260,7 @@ fn refusal(r: Option<(&'static str, String)>) -> std::result::Result<(), Fail> {
 
 fn open_system(
     process: &dyn Process,
-    keys: &MacKeys<'_>,
+    keys: &dyn GameInput,
     slot: usize,
 ) -> std::result::Result<(), Fail> {
     clear_notices(process, keys)?;
@@ -281,7 +283,7 @@ fn open_system(
     Ok(())
 }
 
-fn open_roster(process: &dyn Process, keys: &MacKeys<'_>, slot: usize) -> Result<()> {
+fn open_roster(process: &dyn Process, keys: &dyn GameInput, slot: usize) -> Result<()> {
     pk::click(process, keys, "organisation slot", |r, i| {
         let entry = *org_entries(r, i)?.get(slot).ok_or_else(|| {
             Error::new("slot_unknown", "Organisation slot left the politics view")
@@ -354,7 +356,7 @@ fn require_row(process: &dyn Process, display: &str) -> std::result::Result<(), 
 
 fn open_detail(
     process: &dyn Process,
-    keys: &MacKeys<'_>,
+    keys: &dyn GameInput,
     display: &str,
 ) -> std::result::Result<(), Fail> {
     require_row(process, display)?;
@@ -368,7 +370,7 @@ fn open_detail(
     Ok(())
 }
 
-fn leave(process: &dyn Process, keys: &MacKeys<'_>) {
+fn leave(process: &dyn Process, keys: &dyn GameInput) {
     for class in [&pk::MIO_POLICY, &pk::MIO_DETAIL, &pk::MIO_LIST] {
         if pk::open_now(process, class) {
             let clicked = pk::click(process, keys, "close window", |r, i| {
@@ -395,7 +397,7 @@ fn political_power(process: &dyn Process) -> Option<f64> {
 
 // ------------------------------------------------------------- design team
 
-fn design_team(process: &dyn Process, keys: &MacKeys<'_>, display: &str, slot: usize) -> Driven {
+fn design_team(process: &dyn Process, keys: &dyn GameInput, display: &str, slot: usize) -> Driven {
     let result: Driven = (|| {
         open_system(process, keys, slot)?;
         open_roster(process, keys, slot)?;
@@ -425,7 +427,7 @@ fn design_team(process: &dyn Process, keys: &MacKeys<'_>, display: &str, slot: u
 
 fn policy(
     process: &dyn Process,
-    keys: &MacKeys<'_>,
+    keys: &dyn GameInput,
     display: &str,
     slot: usize,
     policy_name: &str,
@@ -575,7 +577,7 @@ pub(super) fn trait_refusal(
 
 fn mio_trait(
     process: &dyn Process,
-    keys: &MacKeys<'_>,
+    keys: &dyn GameInput,
     display: &str,
     slot: usize,
     index: Option<usize>,
@@ -646,7 +648,7 @@ pub(super) fn call(
     name: &str,
     args: &serde_json::Map<String, Value>,
     process: &(dyn Process + Send + Sync),
-    keys: &MacKeys<'static>,
+    keys: &dyn GameInput,
     guard: &mut Guard,
     authority: &InputAuthority,
     actions: &mut super::journal::GameJournal,

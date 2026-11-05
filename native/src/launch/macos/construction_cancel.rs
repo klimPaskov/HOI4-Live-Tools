@@ -13,8 +13,8 @@ use crate::{
     },
     error::{Error, Result},
     platform::{
+        game_input::{GameInput, Key},
         key_once::Dispatch as KeyDispatch,
-        macos_input::{Key, MacKeys},
     },
 };
 use serde_json::{json, Value};
@@ -140,7 +140,7 @@ struct Live<'a, 'b> {
     ui: Option<&'a CancelAnchor>,
     fence: &'a Fence<'b>,
     // Retain unguarded keys for platform checks; recursive guarded checks refuse.
-    keys: &'a MacKeys<'b>,
+    keys: &'a dyn GameInput,
 }
 impl Live<'_, '_> {
     fn readback(&self) -> Result<ClearSelectionReadback> {
@@ -216,7 +216,7 @@ pub(super) fn run(
     epoch: &Epoch,
     journal: &mut GameJournal,
     fence: &Fence<'_>,
-    keys: &MacKeys<'_>,
+    keys: &dyn GameInput,
 ) -> Result<Value> {
     let action = request.action();
     if let Some(receipt) = historical_receipt(&request, epoch, journal)? {

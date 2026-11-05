@@ -43,6 +43,7 @@ use crate::{
     game,
     memory::Reader,
     platform::Process,
+    xlayout::{fld, Class},
 };
 use serde_json::{json, Map, Value};
 use std::{path::Path, time::Instant};
@@ -58,6 +59,21 @@ const STATUS_STRIDE: usize = 0xa0;
 const FOLDER_STRIDE: usize = 0x50;
 const TRACK_STRIDE: usize = 0x60;
 const REDUCTION_STRIDE: usize = 0x38;
+/// Owners of the fields read below (macOS 1.19.4.1 RTTI names; vtable 0 where
+/// none was reviewed) and the record sizes of the arrays.
+const GAME_STATE: Class = Class::new("CCurrentGameState", 0x35044e8);
+const COUNTRY: Class = Class::new("CCountry", 0x357e388);
+const DOCTRINE_SYSTEM: Class = Class::new("NDoctrines::CDoctrineSystem", 0);
+const DOCTRINE_STATUS: Class = Class::new("NDoctrines::CCountryDoctrineStatus", 0);
+const DOCTRINE_STATUS_SIZE: Class = Class::new("NDoctrines::CCountryDoctrineStatus.size", 0);
+const FOLDER: Class = Class::new("NDoctrines::CFolderStatus", 0);
+const FOLDER_SIZE: Class = Class::new("NDoctrines::CFolderStatus.size", 0);
+const TRACK: Class = Class::new("NDoctrines::CTrackStatus", 0);
+const TRACK_SIZE: Class = Class::new("NDoctrines::CTrackStatus.size", 0);
+const DOCTRINE_TEMPLATE: Class = Class::new("NDoctrines::CDoctrineTemplate", 0);
+const REDUCTION: Class = Class::new("NDoctrines::STemporaryCostReduction", 0);
+const REDUCTION_SIZE: Class = Class::new("NDoctrines::STemporaryCostReduction.size", 0);
+const EXPERIENCE_STATUS: Class = Class::new("CCountryExperienceStatus", 0);
 const FOLDER_LIMIT: usize = 8;
 const TRACK_LIMIT: usize = 16;
 const REDUCTION_LIMIT: usize = 32;
@@ -256,29 +272,34 @@ pub(super) fn catalog(dir: &Path) -> std::sync::Arc<Catalog> {
 
 fn template(r: &Reader<'_>, address: u64, mangled: &str) -> Result<RawTemplate> {
     mgmt::expect_type(r, address, mangled)?;
-    let head = r.read(address, 0x20)?;
-    let name_key = mgmt::text(r, address + 0x20, 128)?
+    let abi = r.string_abi();
+    let f = |offset: u64| fld(abi, &DOCTRINE_TEMPLATE, offset).map(|o| o as usize);
+    let (cost, kind) = (f(0x18)?, f(0x1c)?);
+    let head = r.read(address, cost.max(kind) + 4)?;
+    let name_key = mgmt::text(r, address + f(0x20)? as u64, 128)?
         .ok_or_else(|| Error::new("invalid_string", "Doctrine template name unreadable"))?;
     Ok(RawTemplate {
         name_key,
-        xp_cost: mgmt::i32_at(&head, 0x18),
-        xp_type: mgmt::i32_at(&head, 0x1c),
+        xp_cost: mgmt::i32_at(&head, cost),
+        xp_type: mgmt::i32_at(&head, kind),
     })
 }
 
 pub(super) fn snapshot(r: &Reader<'_>, image: u64) -> Result<Snapshot> {
     let own = mgmt::own(r, image)?;
-    let system = mgmt::pointer(r, own.gs + SYSTEM)?;
+    let abi = r.string_abi();
+    let system = mgmt::pointer(r, own.gs + fld(abi, &GAME_STATE, SYSTEM)?)?;
     mgmt::expect_type(r, system, SYSTEM_TYPE)?;
-    let (_, data, size) = r.array_header(system + 8)?;
+    let (_, data, size) = r.array_header(system + fld(abi, &DOCTRINE_SYSTEM, 8)?)?;
     if own.index as usize >= size {
         return Err(Error::new(
             "invalid_array",
             "Own doctrine status outside the country array",
         ));
     }
-    let status = data + own.index as u64 * STATUS_STRIDE as u64;
-    let experience = mgmt::pointer(r, own.country + EXPERIENCE)?;
+    let stride = fld(abi, &DOCTRINE_STATUS_SIZE, STATUS_STRIDE as u64)?;
+    let status = data + own.index as u64 * stride;
+    let experience = mgmt::pointer(r, own.country + fld(abi, &COUNTRY, EXPERIENCE)?)?;
     read_status_at(r, status, own.index, experience)
 }
 
@@ -292,63 +313,78 @@ pub(super) fn read_status_at(
     experience: u64,
 ) -> Result<Snapshot> {
     mgmt::expect_type(r, status, STATUS_TYPE)?;
-    let head = r.read(status, STATUS_STRIDE)?;
-    if mgmt::i32_at(&head, 8) != index {
+    let abi = r.string_abi();
+    let st = |offset: u64| fld(abi, &DOCTRINE_STATUS, offset);
+    let folder = |offset: u64| fld(abi, &FOLDER, offset).map(|o| o as usize);
+    let track = |offset: u64| fld(abi, &TRACK, offset).map(|o| o as usize);
+    let reduction = |offset: u64| fld(abi, &REDUCTION, offset).map(|o| o as usize);
+    let status_size = fld(abi, &DOCTRINE_STATUS_SIZE, STATUS_STRIDE as u64)? as usize;
+    let folder_size = fld(abi, &FOLDER_SIZE, FOLDER_STRIDE as u64)? as usize;
+    let track_size = fld(abi, &TRACK_SIZE, TRACK_STRIDE as u64)? as usize;
+    let reduction_size = fld(abi, &REDUCTION_SIZE, REDUCTION_STRIDE as u64)? as usize;
+    let (folder_owner, folder_template) = (folder(0x30)?, folder(8)?);
+    let (folder_grand, folder_tracks) = (folder(0x10)?, folder(0x18)? as u64);
+    let (track_status, track_folder, track_sub) = (track(0x50)?, track(0x58)?, track(8)?);
+    let (track_flag, track_mastery, track_banked) = (track(0x10)?, track(0x18)?, track(0x20)?);
+    let (red_name, red_uses) = (reduction(0x10)? as u64, reduction(8)?);
+    let (red_value, red_folder) = (reduction(0x28)?, reduction(0x30)?);
+    let head = r.read(status, status_size)?;
+    if mgmt::i32_at(&head, st(8)? as usize) != index {
         return Err(Error::new(
             "invalid_array",
             "Doctrine status country index mismatch",
         ));
     }
-    let (_, folder_data, folder_count) = r.array_header(status + 0x10)?;
+    let (_, folder_data, folder_count) = r.array_header(status + st(0x10)?)?;
     if folder_count > FOLDER_LIMIT {
         return Err(Error::new("invalid_array", "Implausible doctrine folders"));
     }
     let folder_bytes = if folder_count == 0 {
         Vec::new()
     } else {
-        r.read(folder_data, folder_count * FOLDER_STRIDE)?
+        r.read(folder_data, folder_count * folder_size)?
     };
     let mut folders = Vec::new();
     for f in 0..folder_count {
-        let base = f * FOLDER_STRIDE;
+        let base = f * folder_size;
         let this = folder_data + base as u64;
-        if mgmt::u64_at(&folder_bytes, base + 0x30) != status {
+        if mgmt::u64_at(&folder_bytes, base + folder_owner) != status {
             return Err(Error::new("torn_read", "Folder status owner changed"));
         }
-        let template_ptr = mgmt::u64_at(&folder_bytes, base + 8);
-        let grand_ptr = mgmt::u64_at(&folder_bytes, base + 0x10);
+        let template_ptr = mgmt::u64_at(&folder_bytes, base + folder_template);
+        let grand_ptr = mgmt::u64_at(&folder_bytes, base + folder_grand);
         let grand = if grand_ptr == 0 {
             None
         } else {
             Some(template(r, grand_ptr, GRAND_TYPE)?)
         };
-        let (_, track_data, track_count) = r.array_header(this + 0x18)?;
+        let (_, track_data, track_count) = r.array_header(this + folder_tracks)?;
         if track_count > TRACK_LIMIT {
             return Err(Error::new("invalid_array", "Implausible doctrine tracks"));
         }
         let track_bytes = if track_count == 0 {
             Vec::new()
         } else {
-            r.read(track_data, track_count * TRACK_STRIDE)?
+            r.read(track_data, track_count * track_size)?
         };
         let mut tracks = Vec::new();
         for t in 0..track_count {
-            let tb = t * TRACK_STRIDE;
-            if mgmt::u64_at(&track_bytes, tb + 0x50) != status
-                || mgmt::u64_at(&track_bytes, tb + 0x58) != this
+            let tb = t * track_size;
+            if mgmt::u64_at(&track_bytes, tb + track_status) != status
+                || mgmt::u64_at(&track_bytes, tb + track_folder) != this
             {
                 return Err(Error::new("torn_read", "Track status owner changed"));
             }
-            let sub_ptr = mgmt::u64_at(&track_bytes, tb + 8);
+            let sub_ptr = mgmt::u64_at(&track_bytes, tb + track_sub);
             tracks.push(RawTrack {
                 subdoctrine: if sub_ptr == 0 {
                     None
                 } else {
                     Some(template(r, sub_ptr, SUB_TYPE)?)
                 },
-                flag: mgmt::i32_at(&track_bytes, tb + 0x10) != 0,
-                mastery: mgmt::i64_at(&track_bytes, tb + 0x18) as f64 / XP_SCALE,
-                banked: mgmt::i64_at(&track_bytes, tb + 0x20) as f64 / XP_SCALE,
+                flag: mgmt::i32_at(&track_bytes, tb + track_flag) != 0,
+                mastery: mgmt::i64_at(&track_bytes, tb + track_mastery) as f64 / XP_SCALE,
+                banked: mgmt::i64_at(&track_bytes, tb + track_banked) as f64 / XP_SCALE,
             });
         }
         folders.push(RawFolder {
@@ -357,31 +393,36 @@ pub(super) fn read_status_at(
             tracks,
         });
     }
-    let (_, red_data, red_count) = r.array_header(status + 0x40)?;
+    let (_, red_data, red_count) = r.array_header(status + st(0x40)?)?;
     if red_count > REDUCTION_LIMIT {
         return Err(Error::new("invalid_array", "Implausible cost reductions"));
     }
     let red_bytes = if red_count == 0 {
         Vec::new()
     } else {
-        r.read(red_data, red_count * REDUCTION_STRIDE)?
+        r.read(red_data, red_count * reduction_size)?
     };
     let mut reductions = Vec::new();
     for i in 0..red_count {
-        let base = i * REDUCTION_STRIDE;
+        let base = i * reduction_size;
         reductions.push(RawReduction {
-            name: mgmt::text(r, red_data + base as u64 + 0x10, 128)?.unwrap_or_default(),
-            uses_left: mgmt::i32_at(&red_bytes, base + 8),
-            reduction: -(mgmt::i64_at(&red_bytes, base + 0x28) as f64) / FIXED_SCALE,
-            folder_template: mgmt::u64_at(&red_bytes, base + 0x30),
+            name: mgmt::text(r, red_data + base as u64 + red_name, 128)?.unwrap_or_default(),
+            uses_left: mgmt::i32_at(&red_bytes, base + red_uses),
+            reduction: -(mgmt::i64_at(&red_bytes, base + red_value) as f64) / FIXED_SCALE,
+            folder_template: mgmt::u64_at(&red_bytes, base + red_folder),
         });
     }
-    let (_, _, bonus_count) = r.array_header(status + 0x58)?;
+    let (_, _, bonus_count) = r.array_header(status + st(0x58)?)?;
     mgmt::expect_type(r, experience, EXPERIENCE_TYPE)?;
-    let xp = r.read(experience, 0x48)?;
-    let xp = [0x10, 0x28, 0x40].map(|o| mgmt::i64_at(&xp, o) as f64 / XP_SCALE);
+    // army, navy, air
+    let mut xp_at = [0usize; 3];
+    for (slot, mac) in xp_at.iter_mut().zip([0x10, 0x28, 0x40]) {
+        *slot = fld(abi, &EXPERIENCE_STATUS, mac)? as usize;
+    }
+    let xp = r.read(experience, xp_at.iter().max().copied().unwrap_or(0) + 8)?;
+    let xp = xp_at.map(|o| mgmt::i64_at(&xp, o) as f64 / XP_SCALE);
     // Re-read the status header: a changed folder array means a torn bracket.
-    if r.read(status, STATUS_STRIDE)? != head {
+    if r.read(status, status_size)? != head {
         return Err(Error::new("torn_read", "Doctrine status changed"));
     }
     Ok(Snapshot {

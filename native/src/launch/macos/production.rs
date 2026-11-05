@@ -10,13 +10,15 @@ use crate::{
     gui_tree::{self, Rect},
     memory::{Reader, StringAbi},
     platform::{
-        macos_input::{Key, MacKeys},
+        game_input::{GameInput, Key},
         Process,
     },
     production_lines::{self, OwnLine},
+    xlayout::{fld, img, Class},
 };
 
 /// Production UI joins of one inspected build.
+#[derive(Clone, Copy)]
 struct Ui {
     manager: u64,
     view: u64,
@@ -50,6 +52,40 @@ const MACOS: Ui = Ui {
     variant_type: 0x3e0,
     type_key: 0x10,
 };
+/// Owners of the fields above (macOS 1.19.4.1 RTTI names and vtables; 0 where
+/// none was reviewed).
+const IDLER: Class = Class::new("CInGameIdler", 0x35089d8);
+const MANAGER: Class = Class::new("idler.manager", 0);
+const VIEW: Class = Class::new("production.view", 0);
+const ROW: Class = Class::new("CProductionLineMilitaryItem", 0x3686b08);
+const GRID: Class = Class::new("CStandardGridBox", 0x36cca80);
+const GRID_ITEM: Class = Class::new("grid.item", 0);
+const SELECTION: Class = Class::new("production.selection.window", 0);
+const SELECTION_ROW: Class = Class::new("production.selection.row", 0);
+const VARIANT: Class = Class::new("CEquipmentVariant", 0x357d1b8);
+const EQUIPMENT_TYPE: Class = Class::new("CEquipmentType", 0x357bad8);
+/// Design id of an equipment variant.
+const VARIANT_ID: u64 = 0xc;
+impl Ui {
+    /// The macOS keys translated for this build (identity on macOS).
+    fn resolve(&self, abi: StringAbi) -> Result<Self> {
+        Ok(Self {
+            manager: fld(abi, &IDLER, self.manager)?,
+            view: fld(abi, &MANAGER, self.view)?,
+            view_root: fld(abi, &VIEW, self.view_root)?,
+            military_row_vtable: img(abi, self.military_row_vtable)?,
+            naval_row_vtable: img(abi, self.naval_row_vtable)?,
+            row_handle: fld(abi, &ROW, self.row_handle)?,
+            row_container: fld(abi, &GRID_ITEM, self.row_container)?,
+            grid_items: fld(abi, &GRID, self.grid_items)?,
+            selection_military: fld(abi, &VIEW, self.selection_military)?,
+            selection_root: fld(abi, &SELECTION, self.selection_root)?,
+            selection_row_variant: fld(abi, &SELECTION_ROW, self.selection_row_variant)?,
+            variant_type: fld(abi, &VARIANT, self.variant_type)?,
+            type_key: fld(abi, &EQUIPMENT_TYPE, self.type_key)?,
+        })
+    }
+}
 const GAME: (u32, u32) = (1920, 1080);
 /// Production line list area (rows fully inside are clickable).
 const LIST: (i32, i32) = (360, 1040);
@@ -86,18 +122,13 @@ fn naval_offered(r: &Reader<'_>, image: u64) -> Result<Vec<String>> {
     Ok(out)
 }
 
-fn ui(r: &Reader<'_>) -> Result<&'static Ui> {
-    match r.string_abi() {
-        StringAbi::LibCxx => Ok(&MACOS),
-        StringAbi::LibStdCxx => Err(Error::new(
-            "capability_unavailable",
-            "Production input is not reviewed for this build",
-        )),
-    }
+fn ui(r: &Reader<'_>) -> Result<Ui> {
+    MACOS.resolve(r.string_abi())
 }
 fn view(r: &Reader<'_>, image: u64) -> Result<u64> {
     let idler = r.u64(image + game::layout(r).idler_global)?;
-    r.u64(r.u64(idler + ui(r)?.manager)? + ui(r)?.view)
+    let u = ui(r)?;
+    r.u64(r.u64(idler + u.manager)? + u.view)
 }
 fn root(r: &Reader<'_>, image: u64) -> Result<u64> {
     gui_tree::container(r, r.u64(view(r, image)? + ui(r)?.view_root)?, image)?
@@ -152,6 +183,7 @@ fn selection_row(
     design: Option<i32>,
 ) -> Result<Option<Rect>> {
     let u = ui(r)?;
+    let variant_id = fld(r.string_abi(), &VARIANT, VARIANT_ID)?;
     let (_, root) = selection(r, image)?;
     for row in displayed_rows(r, image, root)? {
         let variant = r.u64(row + u.selection_row_variant)?;
@@ -162,7 +194,7 @@ fn selection_row(
         if kind == 0 || r.string_bounded(kind + u.type_key, 128)? != key {
             continue;
         }
-        if design.is_some_and(|id| r.i32(variant + 0xc).ok() != Some(id)) {
+        if design.is_some_and(|id| r.i32(variant + variant_id).ok() != Some(id)) {
             continue;
         }
         let Some(frame) = gui_tree::container(r, r.u64(row + u.row_container)?, image)? else {
@@ -231,27 +263,27 @@ pub(super) fn lines(process: &dyn Process) -> Result<Vec<OwnLine>> {
     read(process, production_lines::own_lines)
 }
 
-pub(super) fn ensure_open(process: &dyn Process, keys: &MacKeys) -> Result<()> {
+pub(super) fn ensure_open(process: &dyn Process, keys: &dyn GameInput) -> Result<()> {
     if !read(process, open)? {
         keys.press(Key::letter('y')?)?;
         wait(process, "open production", open)?;
     }
     Ok(())
 }
-fn click(process: &dyn Process, keys: &MacKeys, rect: Rect) -> Result<()> {
+fn click(process: &dyn Process, keys: &dyn GameInput, rect: Rect) -> Result<()> {
     clear_notices(process, keys)?;
     let (x, y) = rect.center();
     keys.click(GAME, x, y).map(|_| ())
 }
 
 /// Bring the row's +/- buttons inside the list area by scrolling the list.
-pub(super) fn reveal(process: &dyn Process, keys: &MacKeys, handle: u64) -> Result<()> {
+pub(super) fn reveal(process: &dyn Process, keys: &dyn GameInput, handle: u64) -> Result<()> {
     reveal_named(process, keys, handle, "factories_add_1x", i32::MAX)
 }
 /// Bring the named row button of the line inside the list area and return its rectangle.
 pub(super) fn reveal_named(
     process: &dyn Process,
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     handle: u64,
     name: &str,
     min_visible: i32,
@@ -281,7 +313,7 @@ pub(super) fn reveal_named(
 }
 
 /// Adjust the line's requested factories to `target` with single +/- clicks.
-fn adjust(process: &dyn Process, keys: &MacKeys, handle: u64, target: i32) -> Result<()> {
+fn adjust(process: &dyn Process, keys: &dyn GameInput, handle: u64, target: i32) -> Result<()> {
     for _ in 0..120 {
         let current = lines(process)?
             .into_iter()
@@ -318,7 +350,7 @@ fn adjust(process: &dyn Process, keys: &MacKeys, handle: u64, target: i32) -> Re
 /// Add one line for base equipment `key` and set it to `factories`.
 pub(super) fn add(
     process: &dyn Process,
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     key: &str,
     factories: i32,
     design: Option<i32>,
@@ -441,7 +473,7 @@ pub(super) fn add(
 /// Set an existing line (by collection index and its equipment key) to `factories`.
 pub(super) fn set(
     process: &dyn Process,
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     index: usize,
     key: &str,
     factories: i32,

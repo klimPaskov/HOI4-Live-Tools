@@ -19,7 +19,7 @@ use crate::{
     error::{Error, Result},
     gui_tree::Rect,
     platform::{
-        macos_input::{Key, MacKeys},
+        game_input::{GameInput, Key},
         Process,
     },
 };
@@ -415,7 +415,7 @@ fn experience_label(kind: &str) -> &'static str {
 /// space is typed only after focus is proven, since a stray Space would toggle the pause.
 pub(super) fn type_name(
     process: &dyn Process,
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     point: (f64, f64),
     name: &str,
     current: &dyn Fn(&crate::memory::Reader<'_>, u64) -> Result<String>,
@@ -433,10 +433,10 @@ pub(super) fn type_name(
     }
     keys.click(dui::GAME, point.0, point.1)?;
     thread::sleep(Duration::from_millis(250));
-    keys.press_code(119)?; // End
+    keys.press_code(crate::platform::game_input::vk::END)?; // End
     let mut length = have.chars().count();
     if length > 0 {
-        keys.press_code(51)?;
+        keys.press_code(crate::platform::game_input::vk::DELETE)?;
         length -= 1;
         wait(process, "name box focused", |r, i| {
             Ok(current(r, i)?.chars().count() == length)
@@ -450,7 +450,7 @@ pub(super) fn type_name(
         have = text()?;
     }
     while length > 0 {
-        keys.press_code(51)?;
+        keys.press_code(crate::platform::game_input::vk::DELETE)?;
         length -= 1;
         wait(process, "name erased", |r, i| {
             Ok(current(r, i)?.chars().count() == length)
@@ -460,7 +460,7 @@ pub(super) fn type_name(
     // forward-delete whatever is left after it until the box is empty.
     let mut rest = text()?.chars().count();
     while rest > 0 {
-        keys.press_code(117)?; // Forward Delete
+        keys.press_code(crate::platform::game_input::vk::FORWARD_DELETE)?; // Forward Delete
         rest -= 1;
         wait(process, "name erased", |r, i| {
             Ok(current(r, i)?.chars().count() == rest)
@@ -492,7 +492,7 @@ fn upgrade_name_point(s: &dui::UpgradeState) -> (f64, f64) {
     (x - 250.0, y + 36.0)
 }
 /// Step one upgrade row to `target` with single clicks, each verified from the level text.
-fn set_level(process: &dyn Process, keys: &MacKeys, window: &str, target: i64) -> Result<()> {
+fn set_level(process: &dyn Process, keys: &dyn GameInput, window: &str, target: i64) -> Result<()> {
     for _ in 0..(MAX_LEVEL * 2 + 4) {
         let s = read(process, upgrade)?;
         let row = s
@@ -567,7 +567,7 @@ fn draft_module(s: &dui::ModuleState, slot: &str) -> Option<String> {
         .map(|(_, m)| m.clone())
 }
 /// Back out of the module selector to the main window.
-fn selector_close(process: &dyn Process, keys: &MacKeys) -> Result<()> {
+fn selector_close(process: &dyn Process, keys: &dyn GameInput) -> Result<()> {
     for _ in 0..3 {
         let s = read(process, module)?;
         let Some(sel) = s.selector else { return Ok(()) };
@@ -582,7 +582,11 @@ fn selector_close(process: &dyn Process, keys: &MacKeys) -> Result<()> {
 }
 /// Modules the selector lists for `slot`, by category: opens the slot, clicks each category,
 /// reads, backs out. Leaves the selector closed.
-pub(super) fn scan_slot(process: &dyn Process, keys: &MacKeys, slot: &str) -> Result<Vec<Value>> {
+pub(super) fn scan_slot(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    slot: &str,
+) -> Result<Vec<Value>> {
     let s = read(process, module)?;
     let button = slot_button(&s, slot)?;
     dui::click_rect(keys, button)?;
@@ -647,7 +651,7 @@ fn entry_json(e: &dui::EntryView) -> Value {
 /// Put `module` into `slot` (None empties it) through the selector, verified from the draft.
 fn set_slot(
     process: &dyn Process,
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     slot: &str,
     module_key: Option<&str>,
 ) -> Result<()> {
@@ -787,7 +791,7 @@ pub(super) fn options_listing(process: &dyn Process, kind: &str) -> Result<Value
 }
 pub(super) fn options(
     process: &dyn Process,
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     kind: &str,
     base: &BaseRef,
     slot: Option<&str>,
@@ -804,7 +808,7 @@ pub(super) fn options(
 #[allow(clippy::too_many_arguments)]
 fn options_run(
     process: &dyn Process,
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     kind: &str,
     design: &Design,
     id: i32,
@@ -1040,7 +1044,7 @@ pub(super) fn plan(input: &Input, c: &Catalogue, request_id: &str, retry: bool) 
 /// Drive the designer to the planned design and Save. Cleans the screen up on every path.
 pub(super) fn apply(
     process: &dyn Process,
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     plan: &Planned,
     kind: &str,
 ) -> Result<Value> {
@@ -1051,7 +1055,12 @@ pub(super) fn apply(
 fn mismatch(what: &str, detail: String) -> Error {
     Error::new("input_readback_failed", format!("{what}: {detail}"))
 }
-fn apply_inner(process: &dyn Process, keys: &MacKeys, plan: &Planned, kind: &str) -> Result<Value> {
+fn apply_inner(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    plan: &Planned,
+    kind: &str,
+) -> Result<Value> {
     let opened = dui::open_for(process, keys, plan.base_id, kind)?;
     if plan.modules_designer != (opened != Kind::Upgrade) {
         return Err(Error::new(
@@ -1068,7 +1077,7 @@ fn apply_inner(process: &dyn Process, keys: &MacKeys, plan: &Planned, kind: &str
         _ => apply_modules(process, keys, plan, "ship"),
     }
 }
-fn apply_upgrade(process: &dyn Process, keys: &MacKeys, plan: &Planned) -> Result<Value> {
+fn apply_upgrade(process: &dyn Process, keys: &dyn GameInput, plan: &Planned) -> Result<Value> {
     let s = read(process, upgrade)?;
     let base_id = read(process, |r, i| {
         let s = upgrade(r, i)?;
@@ -1182,7 +1191,7 @@ fn check_affordable(
 }
 fn apply_modules(
     process: &dyn Process,
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     plan: &Planned,
     kind: &str,
 ) -> Result<Value> {
@@ -1313,7 +1322,7 @@ pub(super) fn obsolete_flag(process: &dyn Process, id: i32) -> Result<Option<boo
 }
 pub(super) fn obsolete_apply(
     process: &dyn Process,
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     d: &Design,
     want: bool,
 ) -> Result<Value> {
@@ -1324,7 +1333,12 @@ pub(super) fn obsolete_apply(
         let located = dui::locate(process, keys, id, kind, !want)?;
         dui::click_obsolete(process, keys, id, want)?;
         wait(process, "obsolete flag", |r, _| {
-            Ok((r.i32(d.variant.address + fleetmem::VARIANT_OBSOLETE)? & 0xff != 0) == want)
+            let obsolete = crate::xlayout::fld(
+                r.string_abi(),
+                &fleetmem::VARIANT,
+                fleetmem::VARIANT_OBSOLETE,
+            )?;
+            Ok((r.i32(d.variant.address + obsolete)? & 0xff != 0) == want)
         })?;
         if located.outdated_ticked {
             dui::untick_outdated(process, keys)?;
@@ -1428,7 +1442,7 @@ pub(super) fn settle_set_production(all: &[Design], change: &LineChange) -> Verd
 }
 pub(super) fn set_production_apply(
     process: &dyn Process,
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     change: &LineChange,
 ) -> Result<Value> {
     let result = (|| -> Result<Value> {

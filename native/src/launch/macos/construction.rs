@@ -11,12 +11,14 @@ use crate::{
     gui_tree::{self, Rect},
     memory::{Reader, StringAbi},
     platform::{
-        macos_input::{Key, MacKeys},
+        game_input::{GameInput, Key},
         Process,
     },
+    xlayout::{fld, img, Class},
 };
 use std::{thread, time::Duration};
 
+#[derive(Clone, Copy)]
 struct Ui {
     manager: u64,
     view: u64,
@@ -45,6 +47,32 @@ const MACOS: Ui = Ui {
     selected_template: 0x3b8,
     selection_mode: 0x3c0,
 };
+/// Owners of the fields above (macOS 1.19.4.1 RTTI names and vtables; 0 where
+/// none was reviewed).
+const IDLER: Class = Class::new("CInGameIdler", 0x35089d8);
+const MANAGER: Class = Class::new("idler.manager", 0);
+const VIEW: Class = Class::new("construction.view", 0);
+const GRID: Class = Class::new("CStandardGridBox", 0x36cca80);
+const GRID_ITEM: Class = Class::new("grid.item", 0);
+const ITEM: Class = Class::new("CCountryConstructionViewBuildingItem", 0x3647398);
+const TEMPLATE: Class = Class::new("CBuildingTemplate", 0x352fa88);
+impl Ui {
+    /// The macOS keys translated for this build (identity on macOS).
+    fn resolve(&self, abi: StringAbi) -> Result<Self> {
+        Ok(Self {
+            manager: fld(abi, &IDLER, self.manager)?,
+            view: fld(abi, &MANAGER, self.view)?,
+            view_root: fld(abi, &VIEW, self.view_root)?,
+            grid_items: fld(abi, &GRID, self.grid_items)?,
+            item_vtable: img(abi, self.item_vtable)?,
+            item_container: fld(abi, &GRID_ITEM, self.item_container)?,
+            item_template: fld(abi, &ITEM, self.item_template)?,
+            template_key: fld(abi, &TEMPLATE, self.template_key)?,
+            selected_template: fld(abi, &MANAGER, self.selected_template)?,
+            selection_mode: fld(abi, &MANAGER, self.selection_mode)?,
+        })
+    }
+}
 const GAME: (u32, u32) = (1920, 1080);
 const GRIDS: [(&str, &str); 4] = [
     ("possible_state_constructions", "non_shared_item_grid"),
@@ -53,14 +81,8 @@ const GRIDS: [(&str, &str); 4] = [
     ("possible_facility_constructions", "facility_item_grid"),
 ];
 
-fn ui(r: &Reader<'_>) -> Result<&'static Ui> {
-    match r.string_abi() {
-        StringAbi::LibCxx => Ok(&MACOS),
-        StringAbi::LibStdCxx => Err(Error::new(
-            "capability_unavailable",
-            "Construction input is not reviewed for this build",
-        )),
-    }
+fn ui(r: &Reader<'_>) -> Result<Ui> {
+    MACOS.resolve(r.string_abi())
 }
 fn manager(r: &Reader<'_>, image: u64) -> Result<u64> {
     let idler = r.u64(image + game::layout(r).idler_global)?;
@@ -146,7 +168,7 @@ pub(super) fn queued(process: &dyn Process, key: &str, state: i32) -> Result<i64
     }
     Ok(observed.summary.in_state)
 }
-pub(super) fn leave(process: &dyn Process, keys: &MacKeys) {
+pub(super) fn leave(process: &dyn Process, keys: &dyn GameInput) {
     // Switch placement mode off: Escape closes the selection, then the
     // panel; each Escape is given time to act so none reaches the game menu.
     super::ui::dismiss(process, keys, |r, i| {
@@ -188,7 +210,7 @@ fn no_slot_or_not_allowed(key: &str, state: i32) -> Error {
 /// Queue `count` more of building `key` in own state `state`.
 pub(super) fn add(
     process: &dyn Process,
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     key: &str,
     state: i32,
     count: i64,

@@ -30,7 +30,7 @@ pub struct Options {
     pub shortcut: bool,
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 struct Scope {
     anchors: [u64; 3],
@@ -74,7 +74,7 @@ struct Opener {
     shortcut: Option<shortcut::Observation>,
 }
 pub(crate) struct Observation {
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     scope: Scope,
     context: game::ClockContext,
     managed_mode: i32,
@@ -389,7 +389,7 @@ fn observe(process: &dyn Process, options: Options) -> Result<Observation> {
         ));
     }
     Ok(Observation {
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
         scope: Scope {
             anchors: context.anchors,
             registry,
@@ -454,7 +454,7 @@ pub fn snapshot_with_options(process: &dyn Process, options: Options) -> Result<
     )
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 pub(crate) fn observe_open(process: &dyn Process) -> Result<Observation> {
     observe(
         process,
@@ -465,12 +465,12 @@ pub(crate) fn observe_open(process: &dyn Process) -> Result<Observation> {
     )
 }
 /// No opener or shortcut payload is requested for placement preparation.
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 pub(crate) fn observe_placement(process: &dyn Process) -> Result<Observation> {
     observe(process, Options::default())
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 impl Observation {
     /// Typed current-panel facts only, not modal or map-route authority.
     pub(crate) fn placement_edges(&self, base: u64) -> Result<Vec<(u64, u64)>> {

@@ -23,7 +23,7 @@ use crate::{
     daily_worker,
     error::{Error, Result},
     game,
-    platform::{macos_input::MacKeys, Process},
+    platform::{game_input::GameInput, Process},
 };
 use serde_json::{json, Value};
 use std::{
@@ -381,7 +381,7 @@ impl Drop for DateStop {
 pub(super) struct Live {
     pub(super) shared: Arc<Shared>,
     pub(super) process: Arc<dyn Process + Send + Sync>,
-    pub(super) keys: Arc<MacKeys<'static>>,
+    pub(super) keys: Arc<dyn GameInput>,
     pub(super) control: Arc<Mutex<Control>>,
     pub(super) retained: Arc<Mutex<Retained>>,
     pub(super) blocked: Arc<AtomicBool>,

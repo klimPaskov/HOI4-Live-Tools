@@ -32,7 +32,7 @@ use crate::{
     economy,
     error::{Error, Result},
     gui_tree::{self, Rect},
-    platform::{macos_input::MacKeys, Process},
+    platform::{game_input::GameInput, Process},
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
@@ -341,7 +341,7 @@ fn wait_fleets(process: &dyn Process, stage: &str, ok: impl Fn(&[Fleet]) -> bool
         Ok(ok(&super::naval::fleets(r, i, country)?))
     })
 }
-fn press_toolbar(process: &dyn Process, keys: &MacKeys<'_>, op: Op) -> Result<()> {
+fn press_toolbar(process: &dyn Process, keys: &dyn GameInput, op: Op) -> Result<()> {
     let name = op
         .button()
         .ok_or_else(|| Error::new("invalid_arguments", "No toolbar button"))?;
@@ -358,7 +358,7 @@ fn press_toolbar(process: &dyn Process, keys: &MacKeys<'_>, op: Op) -> Result<()
     kit::click(keys, rect)
 }
 /// Make sure no task force of the open panel is selected (a selected entry shows "Back").
-fn deselect_all(process: &dyn Process, keys: &MacKeys<'_>) -> Result<()> {
+fn deselect_all(process: &dyn Process, keys: &dyn GameInput) -> Result<()> {
     for _ in 0..6 {
         let entries = settled(process, "task force entries", nui::entries)?;
         let Some(selected) = entries.iter().find(|e| e.selected) else {
@@ -375,7 +375,7 @@ fn deselect_all(process: &dyn Process, keys: &MacKeys<'_>) -> Result<()> {
 }
 fn with_navy_ui<T>(
     process: &dyn Process,
-    keys: &MacKeys<'_>,
+    keys: &dyn GameInput,
     f: impl FnOnce() -> Result<T>,
 ) -> Result<T> {
     clear_notices(process, keys)?;
@@ -398,7 +398,7 @@ fn summary(fleets: &[Fleet]) -> Value {
 }
 pub(super) fn drive(
     process: &dyn Process,
-    keys: &MacKeys<'_>,
+    keys: &dyn GameInput,
     plan: &Plan,
     drag: bool,
 ) -> Result<Value> {

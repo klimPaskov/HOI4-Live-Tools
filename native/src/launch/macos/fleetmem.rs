@@ -7,6 +7,7 @@ use crate::{
     error::{Error, Result},
     game,
     memory::{Reader, StringAbi},
+    xlayout::{self, fld, img},
 };
 use serde_json::{json, Map, Value};
 
@@ -38,6 +39,22 @@ pub(super) const STATE_ID: u64 = 0x40;
 pub(super) const REGION_TEMPLATE: u64 = 0x20;
 pub(super) const TEMPLATE_NAME: u64 = 0x20;
 pub(super) const TEMPLATE_KEY: u64 = 0x38;
+
+/// Owners of the fields above (macOS 1.19.4.1 RTTI names and vtables; 0 when
+/// the class has no reviewed vtable).
+pub(super) const VARIANT: xlayout::Class = xlayout::Class::new("CEquipmentVariant", VARIANT_VTABLE);
+pub(super) const EQUIPMENT_TYPE: xlayout::Class = xlayout::Class::new("CEquipmentType", 0x357bad8);
+pub(super) const TYPE_SLOT: xlayout::Class = xlayout::Class::new("CEquipmentType.slot", 0);
+pub(super) const TYPE_SLOT_SIZE: xlayout::Class =
+    xlayout::Class::new("CEquipmentType.slot.size", 0);
+pub(super) const MODULE: xlayout::Class = xlayout::Class::new("CEquipmentModule", 0x357ccd8);
+pub(super) const UPGRADE: xlayout::Class = xlayout::Class::new("CEquipmentUpgrade", 0);
+pub(super) const PROVINCE: xlayout::Class = xlayout::Class::new("CProvince", 0x357f020);
+pub(super) const STATE: xlayout::Class = xlayout::Class::new("CState", 0x357f410);
+pub(super) const REGION: xlayout::Class = xlayout::Class::new("CStrategicRegion", 0);
+pub(super) const REGION_TEMPLATE_CLASS: xlayout::Class =
+    xlayout::Class::new("CStrategicRegion.template", 0);
+pub(super) const GAME_STATE: xlayout::Class = xlayout::Class::new("CCurrentGameState", 0x35044e8);
 
 /// Variant stat offsets (fixed point /100000). Derived as the equipment type's
 /// stat offsets minus 0x30; 168 default-variant values matched the vanilla
@@ -78,6 +95,8 @@ pub(super) const STATS: [(&str, u64); 33] = [
     ("build_cost_ic", 0x358),
 ];
 
+/// Refusal kept for the naval and design modules that still read macOS-only
+/// offsets; the reads in this module go through `xlayout`.
 pub(super) fn require_libcxx(r: &Reader<'_>) -> Result<()> {
     match r.string_abi() {
         StringAbi::LibCxx => Ok(()),
@@ -98,7 +117,7 @@ pub(super) fn fixed_at(r: &Reader<'_>, address: u64) -> Result<f64> {
     Ok(round3(fixed(r.i32(address)?)))
 }
 pub(super) fn is_object(r: &Reader<'_>, address: u64, vtable: u64, image: u64) -> Result<bool> {
-    Ok(address != 0 && r.u64(address)? == image + vtable)
+    Ok(address != 0 && r.u64(address)? == image + img(r.string_abi(), vtable)?)
 }
 pub(super) fn expect(
     r: &Reader<'_>,
@@ -143,35 +162,38 @@ pub(super) struct Variant {
 }
 pub(super) fn variant(r: &Reader<'_>, image: u64, address: u64) -> Result<Variant> {
     expect(r, address, VARIANT_VTABLE, image, "Equipment variant")?;
-    let kind = r.u64(address + VARIANT_TYPE)?;
+    let abi = r.string_abi();
+    let v = |offset: u64| fld(abi, &VARIANT, offset);
+    let kind = r.u64(address + v(VARIANT_TYPE)?)?;
     let type_key = if kind == 0 {
         String::new()
     } else {
-        r.string_bounded(kind + TYPE_KEY, 128)?
+        r.string_bounded(kind + fld(abi, &EQUIPMENT_TYPE, TYPE_KEY)?, 128)?
     };
-    let parent = r.u64(address + VARIANT_PARENT)?;
+    let parent = r.u64(address + v(VARIANT_PARENT)?)?;
     let parent_id = if parent == 0 {
         None
     } else {
-        Some(r.i32(parent + VARIANT_ID)?)
+        Some(r.i32(parent + v(VARIANT_ID)?)?)
     };
     Ok(Variant {
         address,
-        id: r.i32(address + VARIANT_ID)?,
-        name: r.string_bounded(address + VARIANT_NAME, 128)?,
-        class_suffix: r.string_bounded(address + VARIANT_CLASS_SUFFIX, 128)?,
+        id: r.i32(address + v(VARIANT_ID)?)?,
+        name: r.string_bounded(address + v(VARIANT_NAME)?, 128)?,
+        class_suffix: r.string_bounded(address + v(VARIANT_CLASS_SUFFIX)?, 128)?,
         type_key,
         parent_id,
-        manpower: r.i32(address + VARIANT_MANPOWER)?,
-        max_strength: fixed_at(r, address + VARIANT_MAX_STRENGTH)?,
-        obsolete: r.i32(address + VARIANT_OBSOLETE)? & 0xff != 0,
+        manpower: r.i32(address + v(VARIANT_MANPOWER)?)?,
+        max_strength: fixed_at(r, address + v(VARIANT_MAX_STRENGTH)?)?,
+        obsolete: r.i32(address + v(VARIANT_OBSOLETE)?)? & 0xff != 0,
     })
 }
 /// Non-zero stats of a variant keyed by stat name.
 pub(super) fn stats(r: &Reader<'_>, variant: u64) -> Result<Map<String, Value>> {
     let mut out = Map::new();
+    let abi = r.string_abi();
     for (name, offset) in STATS {
-        let value = fixed_at(r, variant + offset)?;
+        let value = fixed_at(r, variant + fld(abi, &VARIANT, offset)?)?;
         if value != 0.0 {
             out.insert(name.to_string(), json!(value));
         }
@@ -180,27 +202,12 @@ pub(super) fn stats(r: &Reader<'_>, variant: u64) -> Result<Map<String, Value>> 
 }
 /// (slot name, module key) pairs of a variant's chosen modules.
 pub(super) fn modules(r: &Reader<'_>, variant: u64) -> Result<Vec<(String, String)>> {
-    let (_, data, count) = r.array_header(variant + VARIANT_MODULES)?;
+    let abi = r.string_abi();
+    let (_, data, count) = r.array_header(variant + fld(abi, &VARIANT, VARIANT_MODULES)?)?;
     if count > 64 {
         return Err(Error::new("invalid_array", "Module list exceeds bound"));
     }
-    let kind = r.u64(variant + VARIANT_TYPE)?;
-    let (_, slots, slot_count) = if kind == 0 {
-        (Vec::new(), 0, 0)
-    } else {
-        r.array_header(kind + TYPE_SLOTS)?
-    };
-    if slot_count > 64 {
-        return Err(Error::new("invalid_array", "Slot list exceeds bound"));
-    }
-    let mut table = Vec::new();
-    for index in 0..slot_count as u64 {
-        let slot = slots + index * SLOT_STRIDE;
-        table.push((
-            r.i32(slot + SLOT_ID)?,
-            r.string_bounded(slot + SLOT_NAME, 128)?,
-        ));
-    }
+    let table = type_slots(r, variant)?;
     let mut out = Vec::new();
     for index in 0..count as u64 {
         let entry = r.read(data + index * 16, 16)?;
@@ -214,7 +221,7 @@ pub(super) fn modules(r: &Reader<'_>, variant: u64) -> Result<Vec<(String, Strin
         let key = if module == 0 {
             String::new()
         } else {
-            r.string_bounded(module + MODULE_KEY, 128)?
+            r.string_bounded(module + fld(abi, &MODULE, MODULE_KEY)?, 128)?
         };
         out.push((slot, key));
     }
@@ -232,25 +239,32 @@ pub(super) fn place(r: &Reader<'_>, province: u64) -> Result<Option<Place>> {
     if province == 0 {
         return Ok(None);
     }
-    let state = r.u64(province + PROVINCE_STATE)?;
-    let region = r.u64(province + PROVINCE_REGION)?;
+    let abi = r.string_abi();
+    let state = r.u64(province + fld(abi, &PROVINCE, PROVINCE_STATE)?)?;
+    let region = r.u64(province + fld(abi, &PROVINCE, PROVINCE_REGION)?)?;
     Ok(Some(Place {
-        province: r.i32(province + PROVINCE_ID)?,
+        province: r.i32(province + fld(abi, &PROVINCE, PROVINCE_ID)?)?,
         state: if state == 0 {
             None
         } else {
-            Some(r.i32(state + STATE_ID)?)
+            Some(r.i32(state + fld(abi, &STATE, STATE_ID)?)?)
         },
         region: if region == 0 {
             None
         } else {
-            let template = r.u64(region + REGION_TEMPLATE)?;
+            let template = r.u64(region + fld(abi, &REGION, REGION_TEMPLATE)?)?;
             if template == 0 {
                 None
             } else {
                 Some((
-                    r.string_bounded(template + TEMPLATE_KEY, 64)?,
-                    r.string_bounded(template + TEMPLATE_NAME, 128)?,
+                    r.string_bounded(
+                        template + fld(abi, &REGION_TEMPLATE_CLASS, TEMPLATE_KEY)?,
+                        64,
+                    )?,
+                    r.string_bounded(
+                        template + fld(abi, &REGION_TEMPLATE_CLASS, TEMPLATE_NAME)?,
+                        128,
+                    )?,
                 ))
             }
         },
@@ -266,11 +280,22 @@ pub(super) fn place_json(place: &Option<Place>) -> Value {
 }
 
 /// Image-relative GS offsets of the per-country strategic managers.
+/// (Fields of the game state; the managers' own table fields are tagged with
+/// [`AIR_MANAGER`] and [`NAVY_MANAGER`].)
 pub(super) const GS_AIR_MANAGER: u64 = 0x630;
 pub(super) const GS_NAVY_MANAGER: u64 = 0x638;
 /// Per-country-index pointer table inside both managers.
 pub(super) const AIR_BY_COUNTRY: u64 = 0x30;
 pub(super) const NAVY_BY_COUNTRY: u64 = 0x8;
+pub(super) const AIR_MANAGER: xlayout::Class = xlayout::Class::new("gs.air_manager", 0);
+pub(super) const NAVY_MANAGER: xlayout::Class = xlayout::Class::new("gs.navy_manager", 0);
+fn manager_class(manager_field: u64) -> xlayout::Class {
+    if manager_field == GS_AIR_MANAGER {
+        AIR_MANAGER
+    } else {
+        NAVY_MANAGER
+    }
+}
 /// The own entry of a strategic manager's per-country table: GS tag -> country
 /// index -> pointer (index 1 for the German campaign).
 pub(super) fn own_strategic(
@@ -290,8 +315,10 @@ pub(super) fn own_strategic(
         ));
     }
     let index = r.i32(index_data + 4 * tag as u64)?;
-    let manager = r.u64(gs + manager_field)?;
-    let (_, table, count) = r.array_header(manager + table_field)?;
+    let abi = r.string_abi();
+    let manager = r.u64(gs + fld(abi, &GAME_STATE, manager_field)?)?;
+    let (_, table, count) =
+        r.array_header(manager + fld(abi, &manager_class(manager_field), table_field)?)?;
     if index < 0 || index as usize >= count {
         return Err(Error::new(
             "player_unavailable",
@@ -308,21 +335,22 @@ pub(super) fn own_strategic(
 /// (slot id, slot name) table of a variant's equipment type (module slots; empty for
 /// equipment without modules).
 pub(super) fn type_slots(r: &Reader<'_>, variant: u64) -> Result<Vec<(i32, String)>> {
-    let kind = r.u64(variant + VARIANT_TYPE)?;
+    let abi = r.string_abi();
+    let kind = r.u64(variant + fld(abi, &VARIANT, VARIANT_TYPE)?)?;
     if kind == 0 {
         return Ok(Vec::new());
     }
-    let (_, slots, count) = r.array_header(kind + TYPE_SLOTS)?;
+    let (_, slots, count) = r.array_header(kind + fld(abi, &EQUIPMENT_TYPE, TYPE_SLOTS)?)?;
     if count > 64 {
         return Err(Error::new("invalid_array", "Slot list exceeds bound"));
     }
+    let stride = fld(abi, &TYPE_SLOT_SIZE, SLOT_STRIDE)?;
+    let id = fld(abi, &TYPE_SLOT, SLOT_ID)?;
+    let name = fld(abi, &TYPE_SLOT, SLOT_NAME)?;
     let mut out = Vec::new();
     for index in 0..count as u64 {
-        let slot = slots + index * SLOT_STRIDE;
-        out.push((
-            r.i32(slot + SLOT_ID)?,
-            r.string_bounded(slot + SLOT_NAME, 128)?,
-        ));
+        let slot = slots + index * stride;
+        out.push((r.i32(slot + id)?, r.string_bounded(slot + name, 128)?));
     }
     Ok(out)
 }
@@ -333,7 +361,8 @@ pub(super) fn type_slots(r: &Reader<'_>, variant: u64) -> Result<Vec<(i32, Strin
 /// three zero entries.
 pub(super) const VARIANT_UPGRADES: u64 = 0x60;
 pub(super) fn upgrades(r: &Reader<'_>, variant: u64) -> Result<Vec<(String, i32)>> {
-    let (_, data, count) = r.array_header(variant + VARIANT_UPGRADES)?;
+    let abi = r.string_abi();
+    let (_, data, count) = r.array_header(variant + fld(abi, &VARIANT, VARIANT_UPGRADES)?)?;
     if count > 32 {
         return Err(Error::new("invalid_array", "Upgrade list exceeds bound"));
     }
@@ -345,7 +374,10 @@ pub(super) fn upgrades(r: &Reader<'_>, variant: u64) -> Result<Vec<(String, i32)
         if upgrade == 0 {
             continue;
         }
-        out.push((r.string_bounded(upgrade + 0x10, 96)?, level));
+        out.push((
+            r.string_bounded(upgrade + fld(abi, &UPGRADE, 0x10)?, 96)?,
+            level,
+        ));
     }
     Ok(out)
 }

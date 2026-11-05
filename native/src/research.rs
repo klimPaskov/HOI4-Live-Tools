@@ -234,7 +234,7 @@ fn observe(
     value["freshness"] = json!({"observed_unix_ms":SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),"elapsed_ms":start.elapsed().as_secs_f64()*1000.0,"read_calls":r.calls.get()+end_calls as u64,"read_bytes":r.bytes.get()+end_bytes});
     Ok((value, context))
 }
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 /// Own slot assignments (technology key per slot) and the complete researched
 /// set, validated page by page from one reader. Caller owns the process bracket.
 pub(crate) fn assignments(

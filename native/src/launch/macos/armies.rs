@@ -7,15 +7,17 @@ use crate::{
     error::{Error, Result},
     game,
     gui_tree::{self, Rect},
-    memory::{Reader, StringAbi},
+    memory::Reader,
     platform::{
-        macos_input::{Capture, Key, MacKeys},
+        game_input::{Capture, GameInput, Key},
         Process,
     },
+    xlayout::{self, fld, img},
 };
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
 
+#[derive(Clone, Copy)]
 struct Ui {
     country_divisions: u64,
     division_vtable: u64,
@@ -45,6 +47,10 @@ struct Ui {
     leader_name: u64,
     container_vtable: u64,
     army_group: u64,
+    /// Division movement target province id (the field `heading_for` uses).
+    heading_for: u64,
+    /// CContainerWindow's embedded container.
+    container_base: u64,
 }
 /// macOS Mach-O 089EA519, mapped live on 18 October 2026 (Germany test run):
 /// a box selection set the idler's selection size (+0x540) to 7 and the
@@ -86,7 +92,26 @@ const MACOS: Ui = Ui {
     // card's group handle is the army group's +0x8. Mapped live on
     // 18 October 2026 after grouping Army 7 and Army 8.
     army_group: 0x1b0,
+    heading_for: 0x2ac,
+    container_base: 0x30,
 };
+/// Owners of the fields above (macOS 1.19.4.1 RTTI names and vtables; 0 where
+/// the owning class has no reviewed vtable).
+const COUNTRY: xlayout::Class = xlayout::Class::new("CCountry", 0x357e388);
+const DIVISION: xlayout::Class = xlayout::Class::new("CArmy", 0x34ace60);
+const GROUP: xlayout::Class = xlayout::Class::new("orders.group", 0);
+const LEADER: xlayout::Class = xlayout::Class::new("unit.leader", 0);
+const IDLER: xlayout::Class = xlayout::Class::new("CInGameIdler", 0x35089d8);
+const IFACE_MANAGER: xlayout::Class = xlayout::Class::new("idler.manager", 0);
+const LEADER_VIEW: xlayout::Class = xlayout::Class::new("CLeaderGroupView", 0x3670a20);
+const PORTRAIT: xlayout::Class = xlayout::Class::new("leader_group.portrait", 0);
+const ORDER: xlayout::Class = xlayout::Class::new("COrderInstance", 0x3512bf0);
+const ARMIES_VIEW: xlayout::Class = xlayout::Class::new("CArmiesView", 0);
+const LEADER_WINDOW: xlayout::Class = xlayout::Class::new("CArmyLeaderWindow", 0);
+const GRID: xlayout::Class = xlayout::Class::new("CStandardGridBox", 0x36cca80);
+const GRID_ITEM: xlayout::Class = xlayout::Class::new("grid.item", 0);
+const TEXT_BOX: xlayout::Class = xlayout::Class::new("gui.text", 0);
+const CONTAINER: xlayout::Class = xlayout::Class::new("CContainerWindow", 0x36ba978);
 /// The army panel's commander portrait ("Click to assign") while an army is
 /// selected, and the commander list's visible row band; portraits are drawn
 /// 90 px tall from the bottom of their texture rectangle.
@@ -97,14 +122,48 @@ const PORTRAIT_DRAWN: i32 = 90;
 const PROMOTE_LEADER_CP_COST: f64 = 40.0;
 const GAME: (u32, u32) = (1920, 1080);
 
-fn ui(r: &Reader<'_>) -> Result<&'static Ui> {
-    match r.string_abi() {
-        StringAbi::LibCxx => Ok(&MACOS),
-        StringAbi::LibStdCxx => Err(Error::new(
-            "capability_unavailable",
-            "Army input is not reviewed for this build",
-        )),
-    }
+/// The layout for this build: the macOS values resolved through the per-build
+/// tables (unchanged on macOS).
+fn ui(r: &Reader<'_>) -> Result<Ui> {
+    let abi = r.string_abi();
+    let m = &MACOS;
+    let f = |class: &xlayout::Class, mac: u64| fld(abi, class, mac);
+    Ok(Ui {
+        country_divisions: f(&COUNTRY, m.country_divisions)?,
+        division_vtable: img(abi, m.division_vtable)?,
+        division_group: f(&DIVISION, m.division_group)?,
+        division_handle: f(&DIVISION, m.division_handle)?,
+        group_name: f(&GROUP, m.group_name)?,
+        selection_size: f(&IDLER, m.selection_size)?,
+        manager: f(&IDLER, m.manager)?,
+        leader_view_vtable: img(abi, m.leader_view_vtable)?,
+        leader_view: f(&IFACE_MANAGER, m.leader_view)?,
+        leader_portraits: f(&LEADER_VIEW, m.leader_portraits)?,
+        portrait_window: f(&PORTRAIT, m.portrait_window)?,
+        portrait_group: f(&PORTRAIT, m.portrait_group)?,
+        group_handle: f(&GROUP, m.group_handle)?,
+        group_orders: f(&GROUP, m.group_orders)?,
+        division_location: f(&DIVISION, m.division_location)?,
+        // Province id: the per-build province layout.
+        province_id: crate::construction::layout(r).province_id,
+        order_vtable: img(abi, m.order_vtable)?,
+        order_children: [
+            f(&ORDER, m.order_children[0])?,
+            f(&ORDER, m.order_children[1])?,
+        ],
+        armies_view: f(&IFACE_MANAGER, m.armies_view)?,
+        leader_window: f(&ARMIES_VIEW, m.leader_window)?,
+        leader_window_root: f(&LEADER_WINDOW, m.leader_window_root)?,
+        grid_items: f(&GRID, m.grid_items)?,
+        item_container: f(&GRID_ITEM, m.item_container)?,
+        text: f(&TEXT_BOX, m.text)?,
+        group_leader: f(&GROUP, m.group_leader)?,
+        leader_name: f(&LEADER, m.leader_name)?,
+        container_vtable: img(abi, m.container_vtable)?,
+        army_group: f(&GROUP, m.army_group)?,
+        heading_for: f(&DIVISION, m.heading_for)?,
+        container_base: f(&CONTAINER, m.container_base)?,
+    })
 }
 fn own_country(r: &Reader<'_>, image: u64) -> Result<u64> {
     let g = game::layout(r);
@@ -525,7 +584,7 @@ const ASSIGN_BOXES: [((f64, f64), (f64, f64)); 7] = [
     ((420.0, 190.0), (1640.0, 980.0)),
     ((640.0, 300.0), (1300.0, 980.0)),
 ];
-pub(super) fn assign(process: &dyn Process, keys: &MacKeys, plan: &AssignPlan) -> Result<()> {
+pub(super) fn assign(process: &dyn Process, keys: &dyn GameInput, plan: &AssignPlan) -> Result<()> {
     let army = match &plan.mode {
         AssignMode::CreateNew => return create(process, keys, plan.state, false),
         AssignMode::Absorb { army } => army,
@@ -727,7 +786,7 @@ fn new_card(r: &Reader<'_>, image: u64, leftmost: bool) -> Result<Rect> {
 /// Create an army from own divisions around state `state`.
 pub(super) fn create(
     process: &dyn Process,
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     state: i32,
     absorb: bool,
 ) -> Result<()> {
@@ -914,7 +973,7 @@ fn card_rect(r: &Reader<'_>, image: u64, army: &str, name: &str) -> Result<Rect>
 
 /// Select exactly `army` with its card: the selection must hold all of its
 /// divisions, not a selection left over from before.
-pub(super) fn select_army(process: &dyn Process, keys: &MacKeys, army: &str) -> Result<Rect> {
+pub(super) fn select_army(process: &dyn Process, keys: &dyn GameInput, army: &str) -> Result<Rect> {
     let size = read(process, |r, i| {
         let group = group_named(r, i, army)?;
         Ok(membership(r, i)?.values().filter(|g| **g == group).count() as u64)
@@ -934,7 +993,7 @@ pub(super) fn select_army(process: &dyn Process, keys: &MacKeys, army: &str) -> 
 /// divisions now belong to the target's group.
 pub(super) fn merge(
     process: &dyn Process,
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     source: &str,
     target: &str,
 ) -> Result<()> {
@@ -1183,7 +1242,12 @@ fn front_point_province(
             da.total_cmp(&db)
         }))
 }
-pub(super) fn front(process: &dyn Process, keys: &MacKeys, army: &str, state: i32) -> Result<()> {
+pub(super) fn front(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    army: &str,
+    state: i32,
+) -> Result<()> {
     clear_notices(process, keys)?;
     let own = read(process, own_states)?;
     if own.contains(&state) {
@@ -1264,7 +1328,12 @@ pub(super) fn executing(r: &Reader<'_>, image: u64, army: &str) -> Result<bool> 
 }
 /// Execute (`run`) or stop the battle plan of `army` with the card's play or
 /// stop button. Verified by the card's execute animation turning on or off.
-pub(super) fn execute(process: &dyn Process, keys: &MacKeys, army: &str, run: bool) -> Result<()> {
+pub(super) fn execute(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    army: &str,
+    run: bool,
+) -> Result<()> {
     clear_notices(process, keys)?;
     if read(process, |r, i| orders(r, i, army))? == 0 {
         return Err(Error::new(
@@ -1353,7 +1422,7 @@ pub(super) fn plan_nodes(r: &Reader<'_>, image: u64, army: &str) -> Result<usize
 /// Verified by new battle-plan order nodes on the army.
 pub(super) fn offensive(
     process: &dyn Process,
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     game_dir: &std::path::Path,
     army: &str,
     state: i32,
@@ -1403,7 +1472,7 @@ pub(super) fn heading_for(
             continue;
         }
         total += 1;
-        if wanted.contains(&r.i32(division + 0x2ac)?) {
+        if wanted.contains(&r.i32(division + u.heading_for)?) {
             heading += 1;
         }
     }
@@ -1433,7 +1502,7 @@ pub(super) fn divisions_heading_for(
             continue;
         }
         listed += 1;
-        if wanted.contains(&r.i32(division + 0x2ac)?) {
+        if wanted.contains(&r.i32(division + u.heading_for)?) {
             heading += 1;
         }
     }
@@ -1443,14 +1512,14 @@ pub(super) fn divisions_heading_for(
 /// selection holds exactly `expected` divisions; refuses with `selection_mismatch` otherwise.
 /// Back to the default map mode (F1, mapmodes_interface.gui): in the air map mode left by the
 /// air tools the division counters are hidden and a box selection picks nothing.
-fn default_map_mode(keys: &MacKeys) -> Result<()> {
-    keys.press_code(122)?;
+fn default_map_mode(keys: &dyn GameInput) -> Result<()> {
+    keys.press_code(crate::platform::game_input::vk::F1)?;
     std::thread::sleep(std::time::Duration::from_millis(250));
     Ok(())
 }
 pub(super) fn box_select_exact(
     process: &dyn Process,
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     state: i32,
     expected: usize,
 ) -> Result<()> {
@@ -1475,7 +1544,12 @@ pub(super) fn box_select_exact(
 /// its card, Find view centres the state, one right click). A plain move order
 /// attacks whatever stands in the target province; battle plans are replaced
 /// by manual control for these divisions.
-pub(super) fn move_to(process: &dyn Process, keys: &MacKeys, army: &str, state: i32) -> Result<()> {
+pub(super) fn move_to(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    army: &str,
+    state: i32,
+) -> Result<()> {
     clear_notices(process, keys)?;
     let card = read(process, |r, i| card_rect(r, i, army, "portrait_btn"))?;
     let (x, y) = card.center();
@@ -1504,7 +1578,7 @@ fn leader_root(r: &Reader<'_>, image: u64) -> Result<u64> {
     if r.u64(root)? != image + u.container_vtable {
         return Err(Error::new("invalid_gui", "Commander list window required"));
     }
-    gui_tree::container(r, root + 0x30, image)?
+    gui_tree::container(r, root + u.container_base, image)?
         .ok_or_else(|| Error::new("invalid_gui", "Commander list window required"))
 }
 pub(super) fn leader_list_open(r: &Reader<'_>, image: u64) -> Result<bool> {
@@ -1557,7 +1631,7 @@ pub(super) fn leader_entries(
         let item = r.u64(data + index * 8)?;
         let entry = r.u64(item + u.item_container)?;
         let base = if r.u64(entry)? == image + u.container_vtable {
-            entry + 0x30
+            entry + u.container_base
         } else {
             entry
         };
@@ -1612,7 +1686,7 @@ pub(super) fn promote_enabled(r: &Reader<'_>, image: u64, general: &str) -> Resu
             let item = r.u64(data + index * 8)?;
             let entry = r.u64(item + u.item_container)?;
             let base = if r.u64(entry)? == image + u.container_vtable {
-                entry + 0x30
+                entry + u.container_base
             } else {
                 entry
             };
@@ -1638,7 +1712,7 @@ pub(super) fn promote_enabled(r: &Reader<'_>, image: u64, general: &str) -> Resu
 /// Verified when the army's commander is that general.
 pub(super) fn assign_commander(
     process: &dyn Process,
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     army: &str,
     general: &str,
 ) -> Result<()> {
@@ -1661,7 +1735,7 @@ pub(super) fn assign_commander(
 }
 fn assign_commander_once(
     process: &dyn Process,
-    keys: &MacKeys,
+    keys: &dyn GameInput,
     army: &str,
     general: &str,
     allow_promote: bool,
@@ -1830,7 +1904,11 @@ fn assign_commander_once(
 /// Group own armies `names` into a new army group: the first army's card,
 /// the others' cards with Shift, then the new-army-group card. Verified when
 /// all of them belong to one army group that did not exist before.
-pub(super) fn create_group(process: &dyn Process, keys: &MacKeys, names: &[String]) -> Result<()> {
+pub(super) fn create_group(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    names: &[String],
+) -> Result<()> {
     clear_notices(process, keys)?;
     let u = &MACOS;
     let before = read(process, army_groups)?;
@@ -1875,7 +1953,12 @@ const PANEL_ROWS: usize = 19;
 /// Split the first `count` divisions of `army` (list order) into a new army:
 /// the army's card, the first row, Shift on row `count`, then the new-army
 /// card. Verified by a new army holding exactly those divisions.
-pub(super) fn split(process: &dyn Process, keys: &MacKeys, army: &str, count: usize) -> Result<()> {
+pub(super) fn split(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    army: &str,
+    count: usize,
+) -> Result<()> {
     if count == 0 || count > PANEL_ROWS {
         return Err(Error::new(
             "invalid_arguments",

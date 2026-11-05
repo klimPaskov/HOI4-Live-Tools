@@ -6,7 +6,9 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 // Portable ordering/cleanup tests exercise the same strict key sequence used
 // by macOS. Other native input adapters keep their existing delivery contracts.
-#[cfg(any(target_os = "macos", test))]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+pub mod game_input;
+#[cfg(any(target_os = "macos", target_os = "linux", test))]
 pub(crate) mod key_once;
 #[cfg(any(target_os = "macos", test))]
 pub(crate) mod mouse_occlusion;

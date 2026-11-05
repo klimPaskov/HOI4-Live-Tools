@@ -1,5 +1,5 @@
 use super::*;
-use crate::memory::ReadMemory;
+use crate::memory::{ReadMemory, StringAbi};
 use std::cell::{Cell, RefCell};
 
 #[test]

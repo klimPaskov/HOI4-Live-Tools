@@ -462,7 +462,7 @@ impl Producer {
     }
     /// Current own Focus evidence without publication, sequence allocation or
     /// fsync. The coherent observer checks scope before following own payload.
-    #[cfg(any(target_os = "macos", all(test, unix)))]
+    #[cfg(any(target_os = "macos", target_os = "linux", all(test, unix)))]
     pub(crate) fn probe_focus(
         &self,
         process: &dyn Process,

@@ -20,7 +20,9 @@ use x11rb::{
     utils::RawFdContainer,
 };
 
+mod input;
 mod pointer;
+pub use input::X11Input;
 mod text;
 pub use pointer::{LeftClick, PointerDelivery, PointerDispatch, PointerDisplay};
 

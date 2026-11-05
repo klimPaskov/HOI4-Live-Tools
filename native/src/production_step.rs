@@ -462,7 +462,7 @@ impl Journal {
         }
         result
     }
-    #[cfg(any(target_os = "macos", all(test, unix)))]
+    #[cfg(any(target_os = "macos", target_os = "linux", all(test, unix)))]
     pub(crate) fn check_owner(&mut self, epoch: &Epoch) -> Result<()> {
         self.check_storage()?;
         if self.records.values().any(|r| r.target.epoch() != epoch) {
@@ -474,7 +474,7 @@ impl Journal {
         }
         Ok(())
     }
-    #[cfg(any(target_os = "macos", all(test, unix)))]
+    #[cfg(any(target_os = "macos", target_os = "linux", all(test, unix)))]
     pub(crate) fn unresolved(&self) -> bool {
         self.poisoned
             || self

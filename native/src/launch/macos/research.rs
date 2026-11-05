@@ -8,12 +8,13 @@ use crate::{
     error::{Error, Result},
     game,
     gui_tree::{self, Rect},
-    memory::{Reader, StringAbi},
+    memory::Reader,
     platform::{
-        macos_input::{Key, MacKeys},
+        game_input::{GameInput, Key},
         Process,
     },
     research,
+    xlayout::{self, fld, img},
 };
 use std::collections::BTreeSet;
 
@@ -62,14 +63,42 @@ const MACOS: Ui = Ui {
 };
 const GAME: (u32, u32) = (1920, 1080);
 
-fn ui(r: &Reader<'_>) -> Result<&'static Ui> {
-    match r.string_abi() {
-        StringAbi::LibCxx => Ok(&MACOS),
-        StringAbi::LibStdCxx => Err(Error::new(
-            "capability_unavailable",
-            "Research input is not reviewed for this build",
-        )),
-    }
+/// Owners of the [`MACOS`] fields (macOS 1.19.4.1 RTTI names and vtables; 0
+/// when no vtable is reviewed).
+const IDLER: xlayout::Class = xlayout::Class::new("CInGameIdler", 0x35089d8);
+const MANAGER: xlayout::Class = xlayout::Class::new("idler.manager", 0);
+const VIEW: xlayout::Class = xlayout::Class::new("research.view", 0);
+const TREE_VIEW: xlayout::Class = xlayout::Class::new("research.tree_view", 0);
+const GRID: xlayout::Class = xlayout::Class::new("CStandardGridBox", 0x36cca80);
+const GRID_ITEM: xlayout::Class = xlayout::Class::new("grid.item", 0);
+const TECH_ITEM: xlayout::Class = xlayout::Class::new("CTechnologyTreeTechItem", 0x3633588);
+const TECHNOLOGY: xlayout::Class = xlayout::Class::new("CTechnology", 0);
+const TEMPLATE: xlayout::Class = xlayout::Class::new("CTechnology.template", 0);
+const INFO: xlayout::Class = xlayout::Class::new("CTechnologyInfoWindow", 0x3632080);
+
+/// The research joins of the running build ([`MACOS`] translated by `xlayout`).
+fn ui(r: &Reader<'_>) -> Result<Ui> {
+    let abi = r.string_abi();
+    let m = &MACOS;
+    Ok(Ui {
+        manager: fld(abi, &IDLER, m.manager)?,
+        technology_view: fld(abi, &MANAGER, m.technology_view)?,
+        tree_view: fld(abi, &MANAGER, m.tree_view)?,
+        view_root: fld(abi, &VIEW, m.view_root)?,
+        grid_vtable: img(abi, m.grid_vtable)?,
+        grid_items: fld(abi, &GRID, m.grid_items)?,
+        slot_item_vtable: img(abi, m.slot_item_vtable)?,
+        item_container: fld(abi, &GRID_ITEM, m.item_container)?,
+        tech_item_vtable: img(abi, m.tech_item_vtable)?,
+        tech_item_technology: fld(abi, &TECH_ITEM, m.tech_item_technology)?,
+        technology_template: fld(abi, &TECHNOLOGY, m.technology_template)?,
+        template_key: fld(abi, &TEMPLATE, m.template_key)?,
+        info_windows: fld(abi, &TREE_VIEW, m.info_windows)?,
+        info_vtable: img(abi, m.info_vtable)?,
+        info_container: fld(abi, &INFO, m.info_container)?,
+        info_technology: fld(abi, &INFO, m.info_technology)?,
+        info_research: fld(abi, &INFO, m.info_research)?,
+    })
 }
 
 fn root(r: &Reader<'_>, image: u64, view: u64) -> Result<u64> {
@@ -295,9 +324,13 @@ pub(super) fn check(before: &Assignments, key: &str, slot: usize) -> Result<()> 
 }
 
 /// Ordinary input sequence. The caller has journaled intent and holds the lease.
-pub(super) fn start(process: &dyn Process, keys: &MacKeys, key: &str, slot: usize) -> Result<()> {
+pub(super) fn start(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    key: &str,
+    slot: usize,
+) -> Result<()> {
     let image = process.image_base();
-    let u = &MACOS;
     let click = |rect: Rect| {
         clear_notices(process, keys)?;
         let (x, y) = rect.center();
@@ -310,7 +343,9 @@ pub(super) fn start(process: &dyn Process, keys: &MacKeys, key: &str, slot: usiz
             break;
         }
         keys.press(Key::Escape)?;
-        let closed = wait(process, "close tree", |r, i| Ok(!open(r, i, u.tree_view)?));
+        let closed = wait(process, "close tree", |r, i| {
+            Ok(!open(r, i, ui(r)?.tree_view)?)
+        });
         if closed.is_err() && attempt == 2 {
             return closed;
         }
@@ -318,11 +353,11 @@ pub(super) fn start(process: &dyn Process, keys: &MacKeys, key: &str, slot: usiz
     if !read(process, |r, i| open(r, i, ui(r)?.technology_view))? {
         keys.press(Key::letter('w')?)?;
         wait(process, "open research panel", |r, i| {
-            open(r, i, u.technology_view)
+            open(r, i, ui(r)?.technology_view)
         })?;
     }
     click(settled(process, "slot", |r, _| slot_rect(r, image, slot))?)?;
-    wait(process, "open tree", |r, i| open(r, i, u.tree_view))?;
+    wait(process, "open tree", |r, i| open(r, i, ui(r)?.tree_view))?;
     let matches = read(process, |r, i| tiles(r, i, key))?;
     if matches.is_empty() {
         return Err(Error::new(
@@ -367,7 +402,7 @@ pub(super) fn start(process: &dyn Process, keys: &MacKeys, key: &str, slot: usiz
         if in_view(&tile) {
             break;
         }
-        if !read(process, |r, i| open(r, i, u.tree_view))? {
+        if !read(process, |r, i| open(r, i, ui(r)?.tree_view))? {
             return Err(Error::new(
                 "input_readback_failed",
                 "Technology tree closed",
@@ -394,7 +429,7 @@ pub(super) fn start(process: &dyn Process, keys: &MacKeys, key: &str, slot: usiz
             .ok_or_else(|| Error::new("input_readback_failed", "Technology detail closed"))
     })?;
     if disabled {
-        dismiss(process, keys, |r, i| Ok(!open(r, i, u.tree_view)?));
+        dismiss(process, keys, |r, i| Ok(!open(r, i, ui(r)?.tree_view)?));
         return Err(Error::new(
             "invalid_target",
             "The game disables Research for this technology (missing prerequisite or exclusive choice)",

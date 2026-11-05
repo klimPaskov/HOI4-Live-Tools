@@ -1,0 +1,10 @@
+{
+ "CCurrentGameState": {"context": ["0x372b040"], "_source": "game.rs MACOS gs_global"},
+ "CInGameIdler": {"context": ["0x372afc0"], "_source": "game.rs MACOS idler_global"},
+ "idler.manager": {"via": {"parent": "CInGameIdler", "offset": "0x670"}, "_source": "country_status.rs MANAGER (idler + 0x670)"},
+ "CAgencyUpgradeDatabase": {"context": ["0x3704b10"], "_source": "intelligence.rs UPGRADE_DB"},
+ "NIndustrialOrganisation::COrganisationDatabase": {"context": ["0x3705890"], "_source": "mios.rs ORGANISATION_DB"},
+ "CStrategicResourceDatabase": {"context": ["0x37058c0"], "_source": "resources.rs RESOURCE_DB_GLOBAL"},
+ "NProject::CSpecializationDatabase": {"context": ["0x3705fe0"], "_source": "special_projects.rs SPEC_DB_GLOBAL"},
+ "CMapIconManagerImpl": {"context": ["0x372c530"], "_source": "airui.rs ICON_GLOBAL"}
+}

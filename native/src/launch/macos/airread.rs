@@ -10,11 +10,12 @@
 //! superiority, training 2048 = frame 12 - 1 of the mission toolbar); no
 //! German wing had a mission to compare; validated against own orders on 26 October 2026.
 use super::air::MISSIONS;
-use super::fleetmem::{self, expect, pointers, require_libcxx, AIR_BY_COUNTRY, GS_AIR_MANAGER};
+use super::fleetmem::{self, expect, pointers, AIR_BY_COUNTRY, GS_AIR_MANAGER};
 use crate::{
     error::{Error, Result},
     memory::Reader,
     platform::Process,
+    xlayout::{self, fld},
 };
 use serde_json::{json, Map, Value};
 use std::{collections::BTreeMap, path::Path};
@@ -49,6 +50,12 @@ const REGION_FILE: u64 = 0x40;
 /// -> null, air superiority over North-West Germany -> pointer, Hold -> null again); the mission mask
 /// at +0x98 and the province list at +0xc0 stay stale after a Hold, so only the pointer counts.
 const WING_REGION_PTR: u64 = 0xb8;
+/// Owners of the fields above (macOS 1.19.4.1 RTTI names and vtables).
+const STRATEGIC_AIR: xlayout::Class = xlayout::Class::new("CStrategicAir", STRATEGIC_AIR_VTABLE);
+const BASE: xlayout::Class = xlayout::Class::new("CAirBase", BASE_VTABLE);
+const CONTAINER: xlayout::Class = xlayout::Class::new("CCountryAirContainer", CONTAINER_VTABLE);
+const POOL: xlayout::Class = xlayout::Class::new("CAirWingPool", POOL_VTABLE);
+pub(super) const WING: xlayout::Class = xlayout::Class::new("CAirWing", WING_VTABLE);
 /// Aircraft capacity of one air base level.
 const CAPACITY_PER_LEVEL: i32 = 200;
 
@@ -80,7 +87,9 @@ pub(super) struct Base {
 
 fn wing(r: &Reader<'_>, image: u64, address: u64, base: &Base) -> Result<Wing> {
     expect(r, address, WING_VTABLE, image, "Air wing")?;
-    let variants = pointers(r, address + WING_VARIANTS, 8)?;
+    let abi = r.string_abi();
+    let w = |offset: u64| fld(abi, &WING, offset);
+    let variants = pointers(r, address + w(WING_VARIANTS)?, 8)?;
     let (variant, equipment) = match variants.first() {
         Some(v) if *v != 0 => {
             let v = fleetmem::variant(r, image, *v)?;
@@ -88,31 +97,43 @@ fn wing(r: &Reader<'_>, image: u64, address: u64, base: &Base) -> Result<Wing> {
         }
         _ => (String::new(), String::new()),
     };
-    let (region_id, region_name) = match r.u64(address + WING_REGION_PTR)? {
+    let (region_id, region_name) = match r.u64(address + w(WING_REGION_PTR)?)? {
         0 => (0, None),
         region => {
-            let template = r.u64(region + fleetmem::REGION_TEMPLATE)?;
+            let template =
+                r.u64(region + fld(abi, &fleetmem::REGION, fleetmem::REGION_TEMPLATE)?)?;
             let name = if template == 0 {
                 None
             } else {
-                Some(r.string_bounded(template + fleetmem::TEMPLATE_NAME, 128)?)
+                Some(r.string_bounded(
+                    template
+                        + fld(
+                            abi,
+                            &fleetmem::REGION_TEMPLATE_CLASS,
+                            fleetmem::TEMPLATE_NAME,
+                        )?,
+                    128,
+                )?)
             };
-            (r.i32(region + REGION_FILE)?, name)
+            (
+                r.i32(region + fld(abi, &fleetmem::REGION, REGION_FILE)?)?,
+                name,
+            )
         }
     };
     Ok(Wing {
         region_id,
         region_name,
-        name: r.string_bounded(address + WING_NAME, 128)?,
-        unit: r.string_bounded(address + WING_UNIT, 64)?,
+        name: r.string_bounded(address + w(WING_NAME)?, 128)?,
+        unit: r.string_bounded(address + w(WING_UNIT)?, 64)?,
         equipment,
         variant,
-        planes: r.i32(address + WING_PLANES)?,
-        manpower: r.i32(address + WING_MANPOWER)?,
-        mission_mask: r.i32(address + WING_MISSIONS)?,
+        planes: r.i32(address + w(WING_PLANES)?)?,
+        manpower: r.i32(address + w(WING_MANPOWER)?)?,
+        mission_mask: r.i32(address + w(WING_MISSIONS)?)?,
         base_id: base.id,
         base_state: base.state,
-        transfer_base_id: r.i32(address + WING_TRANSFER_BASE)?,
+        transfer_base_id: r.i32(address + w(WING_TRANSFER_BASE)?)?,
     })
 }
 /// Own air bases and the wings stationed at each, from `strategic`.
@@ -122,40 +143,42 @@ pub(super) fn bases_and_wings(
     strategic: u64,
 ) -> Result<(Vec<Base>, Vec<Wing>)> {
     expect(r, strategic, STRATEGIC_AIR_VTABLE, image, "Strategic air")?;
+    let abi = r.string_abi();
+    let f = |class: &xlayout::Class, offset: u64| fld(abi, class, offset);
     let mut bases = Vec::new();
     let mut wings = Vec::new();
-    for b in pointers(r, strategic + SA_BASES, 128)? {
+    for b in pointers(r, strategic + f(&STRATEGIC_AIR, SA_BASES)?, 128)? {
         expect(r, b, BASE_VTABLE, image, "Air base")?;
-        let state = r.u64(b + BASE_STATE)?;
-        let province = r.u64(b + BASE_PROVINCE)?;
+        let state = r.u64(b + f(&BASE, BASE_STATE)?)?;
+        let province = r.u64(b + f(&BASE, BASE_PROVINCE)?)?;
         let region_id = if province == 0 {
             None
         } else {
-            match r.u64(province + fleetmem::PROVINCE_REGION)? {
+            match r.u64(province + f(&fleetmem::PROVINCE, fleetmem::PROVINCE_REGION)?)? {
                 0 => None,
-                region => Some(r.i32(region + REGION_FILE)?),
+                region => Some(r.i32(region + f(&fleetmem::REGION, REGION_FILE)?)?),
             }
         };
         let base = Base {
             region_id,
-            id: r.i32(b + BASE_ID)?,
+            id: r.i32(b + f(&BASE, BASE_ID)?)?,
             state: if state == 0 {
                 None
             } else {
-                Some(r.i32(state + fleetmem::STATE_ID)?)
+                Some(r.i32(state + f(&fleetmem::STATE, fleetmem::STATE_ID)?)?)
             },
             province: if province == 0 {
                 0
             } else {
-                r.i32(province + fleetmem::PROVINCE_ID)?
+                r.i32(province + f(&fleetmem::PROVINCE, fleetmem::PROVINCE_ID)?)?
             },
-            capacity: r.i32(b + BASE_CAPACITY)?,
+            capacity: r.i32(b + f(&BASE, BASE_CAPACITY)?)?,
         };
-        for container in pointers(r, b + BASE_CONTAINERS, 4)? {
+        for container in pointers(r, b + f(&BASE, BASE_CONTAINERS)?, 4)? {
             expect(r, container, CONTAINER_VTABLE, image, "Air container")?;
-            for pool in pointers(r, container + CONTAINER_POOLS, 32)? {
+            for pool in pointers(r, container + f(&CONTAINER, CONTAINER_POOLS)?, 32)? {
                 expect(r, pool, POOL_VTABLE, image, "Air wing pool")?;
-                for w in pointers(r, pool + POOL_WINGS, 64)? {
+                for w in pointers(r, pool + f(&POOL, POOL_WINGS)?, 64)? {
                     wings.push(wing(r, image, w, &base)?);
                 }
             }
@@ -241,7 +264,6 @@ pub(super) fn tool(process: &dyn Process, args: &Map<String, Value>) -> Result<V
         return Err(Error::new("invalid_arguments", "Invalid wing filter"));
     }
     let (bases, wings) = super::ui::read(process, |r, image| {
-        require_libcxx(r)?;
         let own = fleetmem::own_strategic(r, image, GS_AIR_MANAGER, AIR_BY_COUNTRY)?;
         bases_and_wings(r, image, own)
     })?;

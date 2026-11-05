@@ -7,11 +7,15 @@ use crate::{
     error::{Error, Result},
     game,
     memory::Reader,
+    xlayout::{self, fld},
 };
 
 const GAME: (f64, f64) = (1920.0, 1080.0);
 /// Height of the map plane used for province points (the camera look-at height).
 const GROUND: f64 = 9.5;
+/// Owners of the camera fields (macOS 1.19.4.1; no reviewed camera vtable).
+const IDLER: xlayout::Class = xlayout::Class::new("CInGameIdler", 0x35089d8);
+const CAMERA: xlayout::Class = xlayout::Class::new("idler.camera", 0);
 
 fn floats<const N: usize>(r: &Reader<'_>, at: u64) -> Result<[f64; N]> {
     let bytes = r.read(at, 4 * N)?;
@@ -32,9 +36,10 @@ fn floats<const N: usize>(r: &Reader<'_>, at: u64) -> Result<[f64; N]> {
 /// Screen point (game pixels) of map point (x, z), or None behind the camera.
 pub(super) fn to_screen(r: &Reader<'_>, image: u64, x: f64, z: f64) -> Result<Option<(f64, f64)>> {
     let idler = r.u64(image + game::layout(r).idler_global)?;
-    let camera = r.u64(idler + 0x718)?;
-    let proj: [f64; 16] = floats(r, camera + 0x110)?;
-    let view: [f64; 16] = floats(r, camera + 0xd0)?;
+    let abi = r.string_abi();
+    let camera = r.u64(idler + fld(abi, &IDLER, 0x718)?)?;
+    let proj: [f64; 16] = floats(r, camera + fld(abi, &CAMERA, 0x110)?)?;
+    let view: [f64; 16] = floats(r, camera + fld(abi, &CAMERA, 0xd0)?)?;
     Ok(project(&proj, &view, x, z))
 }
 

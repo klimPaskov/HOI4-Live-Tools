@@ -67,11 +67,75 @@ const MACOS: Layout = Layout {
 pub(crate) fn layout(r: &Reader<'_>) -> Result<&'static Layout> {
     match r.string_abi() {
         StringAbi::LibCxx => Ok(&MACOS),
-        StringAbi::LibStdCxx => Err(Error::new(
-            "capability_unavailable",
-            "GUI rectangles are not reviewed for this build",
-        )),
+        StringAbi::LibStdCxx => linux(),
     }
+}
+
+/// The macOS layout translated through the generated Linux table; every entry
+/// must be mapped or the widget tree is unavailable on this build.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+fn linux() -> Result<&'static Layout> {
+    use crate::xlayout::{fld, img, Class};
+    use std::sync::OnceLock;
+    const CONTAINER: Class = Class::new("CContainerWindow", 0x36ba978);
+    const GUI_OBJECT: Class = Class::new("gui.object", 0);
+    const GUI_TYPE: Class = Class::new("gui.type", 0);
+    const SPRITE: Class = Class::new("CSprite", 0x36cc528);
+    const SPRITE_TYPE: Class = Class::new("gui.sprite_type", 0);
+    const TEXT_SPRITE: Class = Class::new("gui.text_sprite", 0x36cee08);
+    const BUTTON: Class = Class::new("CButtonStandard", 0x36b9738);
+    fn translate() -> Result<Layout> {
+        let a = StringAbi::LibStdCxx;
+        let m = &MACOS;
+        let renderers = m
+            .renderers
+            .iter()
+            .map(|(vt, off)| {
+                let name = match *vt {
+                    0x36b6880 => "CIcon",
+                    0x36b9738 => "CButtonStandard",
+                    _ => "CCheckBox",
+                };
+                Ok((img(a, *vt)?, fld(a, &Class::new(name, *vt), *off)?))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let sprites = m
+            .sprite_vtables
+            .iter()
+            .map(|vt| img(a, *vt))
+            .collect::<Result<Vec<_>>>()?;
+        Ok(Layout {
+            container_vtable: img(a, m.container_vtable)?,
+            container_base: fld(a, &CONTAINER, m.container_base)?,
+            widget_type: fld(a, &GUI_OBJECT, m.widget_type)?,
+            type_name: fld(a, &GUI_TYPE, m.type_name)?,
+            children: fld(a, &CONTAINER, m.children)?,
+            visibility: fld(a, &CONTAINER, m.visibility)?,
+            visible_bit: m.visible_bit,
+            renderers: Box::leak(renderers.into_boxed_slice()),
+            sprite_vtables: Box::leak(sprites.into_boxed_slice()),
+            text_sprite_vtable: img(a, m.text_sprite_vtable)?,
+            text_sprite_size: fld(a, &TEXT_SPRITE, m.text_sprite_size)?,
+            sprite_translation: fld(a, &SPRITE, m.sprite_translation)?,
+            sprite_type: fld(a, &SPRITE, m.sprite_type)?,
+            sprite_size: fld(a, &SPRITE_TYPE, m.sprite_size)?,
+            sprite_frames: fld(a, &SPRITE_TYPE, m.sprite_frames)?,
+            button_state: fld(a, &BUTTON, m.button_state)?,
+            widget_flags: fld(a, &GUI_OBJECT, m.widget_flags)?,
+        })
+    }
+    static LINUX: OnceLock<std::result::Result<Layout, Error>> = OnceLock::new();
+    LINUX
+        .get_or_init(translate)
+        .as_ref()
+        .map_err(|e| Error::new(e.code, e.message.clone()))
+}
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+fn linux() -> Result<&'static Layout> {
+    Err(Error::new(
+        "capability_unavailable",
+        "GUI rectangles are not reviewed for this build",
+    ))
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

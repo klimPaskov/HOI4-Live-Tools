@@ -9,7 +9,7 @@ use crate::{
     actions::Epoch,
     construction::mac_ui::{self, Observation, SelectionAnchor},
     error::{Error, Result},
-    platform::macos_input::MacKeys,
+    platform::game_input::GameInput,
 };
 use serde_json::{json, Value};
 use std::{
@@ -59,7 +59,7 @@ struct Live<'a, 'b> {
     fence: &'a Fence<'b>,
     // Always retain the original unguarded keys for idle/cursor observations;
     // calling them on a view guarded by this same closure would recurse.
-    keys: &'a MacKeys<'b>,
+    keys: &'a dyn GameInput,
 }
 impl Live<'_, '_> {
     fn observe_same_choice(&self, require_route: bool) -> Result<()> {
@@ -148,7 +148,7 @@ pub(super) fn run(
     epoch: &Epoch,
     journal: &mut GameJournal,
     fence: &Fence<'_>,
-    keys: &MacKeys<'_>,
+    keys: &dyn GameInput,
 ) -> Result<Value> {
     let action = request.action();
     if let Some(receipt) = journal.strict_receipt(request.id, epoch, &action)? {
