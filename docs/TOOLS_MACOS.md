@@ -46,7 +46,7 @@ Descriptions are the tools' own text; see `PLAYBOOK_TOOL_GAPS.md` for validation
 - `hoi4_mio_trait` (A): UNVALIDATED (no live test yet): queue a trait of an organisation's trait tree:
 - `hoi4_mios` (R): Military-industrial organisations and designers for the own country, read-only (no input, no lease, never pauses).
 - `hoi4_research_extras` (R): Own research bonuses that the research panel only shows as tooltips, read from game memory (no input, no lease, never pauses):
-- `hoi4_research_start` (A): Start an own technology in an empty research slot with ordinary input (research panel, slot, folder tab, tile, Research), each click located from the live GUI and each stage verified from memory;
+- `hoi4_research_start` (A): Start an own technology in a research slot (an empty one, or a busy one with replace:true, which switches that slot to this technology) with ordinary input (research panel, slot, folder tab, tile, Research), each click located from the live GUI and each stage 
 - `hoi4_special_project_assign` (A): Put a scientist and/or a project into one own research facility with ordinary input:
 - `hoi4_special_project_recruit` (A): Recruit one scientist the Recruit Scientist window offers (names under recruitable.candidates of hoi4_special_projects) for political power (25/50/75/100 by how many scientists are idle).
 - `hoi4_special_project_stop` (A): Stop the running project of one own facility:
@@ -81,6 +81,7 @@ Descriptions are the tools' own text; see `PLAYBOOK_TOOL_GAPS.md` for validation
 - `hoi4_army_assign_plan` (R): Pure read:
 - `hoi4_army_commander` (A): Assign a general (exact name as listed by hoi4_commanders) to an own army, or a field marshal to an own army group (use the army group's name), from the panel's commander list.
 - `hoi4_army_create` (A): (optional absorb_existing:
+- `hoi4_army_detach` (A): Move chosen divisions out of an army:
 - `hoi4_army_front` (A): Give an own army a front-line order along the border nearest a state:
 - `hoi4_army_group_create` (A): Group two or more own armies into a new army group (army cards with Shift, then the new-army-group card).
 - `hoi4_army_merge` (A): Move every division of army `source` into army `target` with the game's own controls:

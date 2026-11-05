@@ -572,7 +572,7 @@ impl Commands for MacClock {
                 {"properties":{"op":{"const":"renew"},"lease_token":{"type":"string"},"seconds":{"type":"integer","minimum":30,"maximum":900}},"required":["op","lease_token"],"additionalProperties":false},
                 {"properties":{"op":{"const":"release"},"lease_token":{"type":"string"}},"required":["op","lease_token"],"additionalProperties":false},
                 {"properties":{"op":{"const":"status"}},"required":["op"],"additionalProperties":false}]}}),
-            json!({"name":"hoi4_research_start","description":"Start an own technology in an empty research slot with ordinary input (research panel, slot, folder tab, tile, Research), each click located from the live GUI and each stage verified from memory; succeeds only when the slot holds the technology. Refuses researched (code already_researched), already-assigned or busy-slot targets before any input. A tile scrolled out of view is refused. Stable request_id; an unresolved dispatch is settled only by retrying its own request_id.","inputSchema":{"type":"object","properties":{"technology":{"type":"string","maxLength":128},"slot":{"type":"integer","minimum":0,"maximum":15},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["technology","slot","request_id","lease_token"],"additionalProperties":false}}),
+            json!({"name":"hoi4_research_start","description":"Start an own technology in a research slot (an empty one, or a busy one with replace:true, which switches that slot to this technology) with ordinary input (research panel, slot, folder tab, tile, Research), each click located from the live GUI and each stage verified from memory; succeeds only when the slot holds the technology. Refuses researched (code already_researched), already-assigned or busy-slot targets before any input. A tile scrolled out of view is refused. Stable request_id; an unresolved dispatch is settled only by retrying its own request_id.","inputSchema":{"type":"object","properties":{"technology":{"type":"string","maxLength":128},"slot":{"type":"integer","minimum":0,"maximum":15},"replace":{"type":"boolean"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["technology","slot","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_focus_start","description":"Start an own national focus with ordinary input (politics panel, focus button, drag-panning the tree until the node is in view, the node, Start), each target located from the live GUI and each stage verified from memory; succeeds only when own focus progress names the focus as active. Refuses completed or already-active focuses, or any while another focus is active, before input. Typed errors: focus_not_available (the detail window opened but the game disables Start: requirements unmet or an exclusive focus taken; Start was not clicked), focus_detail_not_opened (the node click was sent, no detail window read; re-observe before retrying), ui_blocked (names the notice pop-up classes and open events still shown). Stable request_id; an unresolved dispatch is settled only by retrying its own request_id.","inputSchema":{"type":"object","properties":{"focus":{"type":"string","maxLength":128},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["focus","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_production_add","description":"Add one own military or naval production line for a base equipment type (e.g. infantry_equipment, artillery_equipment, light_tank_equipment, fighter_equipment) with ordinary input: production panel, category button, the design in the selection window, then +/- until the line requests the given factories. Verified from the own line collection. Refuses equipment with no producible design. Optional `design` (a design id from hoi4_designs / hoi4_design_create, same equipment type) picks that exact variant in the selection window instead of the first listed one. Ship hulls (ship_hull_*) and convoys (convoy_*) are added through the naval category; see hoi4_naval_production_options.","inputSchema":{"type":"object","properties":{"equipment":{"type":"string","maxLength":128},"factories":{"type":"integer","minimum":1,"maximum":150},"design":{"type":"integer","minimum":1},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["equipment","factories","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_production_set","description":"factories 0 removes the line (its close button). Set the requested factories of an own production line, addressed by its entry_index and equipment_id from hoi4_production_lines, with the line's ordinary +/- buttons; each click is verified from memory. 0 keeps the line with no factories.","inputSchema":{"type":"object","properties":{"line":{"type":"integer","minimum":0,"maximum":2047},"equipment":{"type":"string","maxLength":128},"factories":{"type":"integer","minimum":0,"maximum":150},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["line","equipment","factories","request_id","lease_token"],"additionalProperties":false}}),
@@ -632,6 +632,7 @@ impl Commands for MacClock {
             json!({"name":"hoi4_air_regions","description":"Own wings and air bases grouped by strategic air region, read from memory and the game's map files (no input, never pauses): per region its name, own wings assigned (aircraft, type, missions, base state), aircraft total and the own air bases inside with capacity, aircraft stationed and free capacity; plus the wings that have no region. Enemy presence is not in memory: use hoi4_air_region_probe for the regions that matter.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}}),
             json!({"name":"hoi4_army_group_create","description":"Group two or more own armies into a new army group (army cards with Shift, then the new-army-group card). Give it a field marshal with hoi4_army_commander using the army group's name. Verified when all the armies belong to one new army group.","inputSchema":{"type":"object","properties":{"armies":{"type":"array","items":{"type":"string"},"minItems":2,"maxItems":12},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["armies","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_army_motorization","description":"Set an army's supply motorization: 0 none, 1 partial, 2 full. The supply hubs the army draws from then use trucks (about 40 per level per hub) to carry supply much farther into roadless land; it costs trucks from the stockpile (keep truck production running) and fuels nothing. With the game's ordinary control: the army's card selects it, then the motorization button on its badge is clicked until the level is reached, each click verified from memory. Read the current level in hoi4_armies (motorization). Refused before input with army_unknown or invalid_arguments.","inputSchema":{"type":"object","properties":{"army":{"type":"string","maxLength":128},"level":{"type":"integer","minimum":0,"maximum":2},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","level","request_id","lease_token"],"additionalProperties":false}}),
+            json!({"name":"hoi4_army_detach","description":"Move chosen divisions out of an army: `divisions` are ids as hoi4_armies / hoi4_supply list them (hoi4_supply shows each division's template, equipment fill, strength and supply, so you can pick weak or strong ones). Without `into` they form one new army; with `into` they join that own army. Uses the game's controls one division at a time (the army's card, the division's row in its list, then the new-army card or a right click on the target's card), each move verified from division membership. Use it to pull weak units (irregulars, cavalry, low equipment) out of a strike army into a rear army, or to send fresh divisions forward. Refused before input when a division is not in the army or the army would be emptied (use hoi4_army_merge).","inputSchema":{"type":"object","properties":{"army":{"type":"string","maxLength":128},"divisions":{"type":"array","items":{"type":"string","maxLength":32},"minItems":1,"maxItems":18},"into":{"type":"string","maxLength":128},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","divisions","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_army_merge","description":"Move every division of army `source` into army `target` with the game's own controls: a left click on the source's card selects exactly its divisions, a right click on the target's card transfers them (the empty source army disappears). Use it to fold many small armies into a few full ones (24 divisions each, one general each). Refused before input when either army is unknown, they are the same, or the merged army would exceed 24 divisions (split first). Verified from division membership.","inputSchema":{"type":"object","properties":{"source":{"type":"string"},"target":{"type":"string"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["source","target","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_army_split","description":"Split the first N divisions (list order, N 1..19) of an own army into a new army: the army's card, the panel's first row, Shift on row N, then the new-army card. Use it to bring an oversized army (more than 24 divisions) under its general's cap. Verified by a new army holding exactly those divisions.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"count":{"type":"integer","minimum":1,"maximum":19},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","count","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_state_slots","description":"Free building slots of own states (unlocked, max, used, free) read from each state's view (Find view centres the state, one click opens it). Use it to choose where a factory can still be queued before hoi4_construction_add. Changes nothing in the game; up to 12 states per call.","inputSchema":{"type":"object","properties":{"state_ids":{"type":"array","items":{"type":"integer","minimum":1,"maximum":4095},"minItems":1,"maxItems":12},"lease_token":{"type":"string"}},"required":["state_ids","lease_token"],"additionalProperties":false}}),
@@ -756,6 +757,7 @@ impl Commands for MacClock {
                     | "hoi4_army_split"
                     | "hoi4_army_merge"
                     | "hoi4_army_motorization"
+                    | "hoi4_army_detach"
                     | "hoi4_state_slots"
                     | "hoi4_air_wings"
                     | "hoi4_air_mission"
@@ -782,7 +784,9 @@ impl Commands for MacClock {
         json!({"transport":"ordinary macOS CGEvent keys to the front-most owned window","actions":["set_paused","set_speed","research_start","focus_start","production_add","production_set","construction_add","politics_options","politics_choose","decisions_list","decision_take","train","deploy_locations","army_create","army_assign","army_front","army_plan","army_offensive","event_choose","diplomacy","diplomacy_act","army_commander","army_group_create","army_split","template_create","template_edit","template_rename","template_delete","template_options","design_options","design_create","design_obsolete","design_set_production","state_slots","air_wings","air_mission","plan_run"],"lease":"exclusive configured controller","input_profile":{"name":"macos_cocoa_absolute_1920x1080_v1","checked_at_bind":true,"rechecked_before_each_input":true,"diagnostic_alone_authorizes_input":false},"construction_panel":{"enabled":self.construction_panel,"qualification_only":true,"ordinary_key":"t","live_delivery_verified":false,"input_retry":false},"construction_selection":{"enabled":self.construction_selection,"qualification_only":true,"ordinary_clicks_max":1,"input_retry":false,"placement":false},"construction_placement":{"enabled":self.construction_placement,"qualification_only":true,"ordinary_clicks_max":1,"full_picker_verified":false,"atomic_event_verified":false},"construction_cancellation":{"enabled":self.construction_cancellation,"qualification_only":true,"ordinary_key":"escape","ordinary_key_presses_max":1,"input_retry":false,"worker":false},"construction_find_open":{"enabled":self.construction_find_open,"qualification_only":true,"transport":"ordinary_left_click","ordinary_clicks_max":1,"cursor_moves_max":1,"ordinary_key_presses":0,"input_retry":false,"worker":false},"construction_navigation":{"enabled":self.construction_navigation,"qualification_only":true,"already_open_only":true,"input_retry":false,"placement":false},"daily_governor":self.daily.capabilities(),"native_posting":false,"full_campaign_acceptance":false})
     }
     fn call(&self, process: &dyn Process, name: &str, arguments: &Value) -> Result<Value> {
-        let result = self.call_inner(process, name, arguments);
+        let result = self
+            .call_inner(process, name, arguments)
+            .and_then(not_applied_is_error);
         // Map actions zoom in to aim (Find, border clicks); give the player and the viewer the
         // strategic view back afterwards. Best effort: never changes the tool's result.
         if MAP_TOOLS.contains(&name) && process.identity() == self.process.identity() {
@@ -791,8 +795,29 @@ impl Commands for MacClock {
         result
     }
 }
+/// A settled receipt whose target did not happen (NotApplied) or happened only in part
+/// (Diverged) is a failure for the caller, never a success with a buried status (seen live:
+/// an army_commander retry settled with no general and was read as success).
+fn not_applied_is_error(value: Value) -> Result<Value> {
+    let status = value["receipt"]["status"].as_str().unwrap_or("");
+    let code = match status {
+        "NotApplied" => "action_not_applied",
+        "Diverged" => "action_diverged",
+        _ => return Ok(value),
+    };
+    let detail = value["receipt"]["detail"].to_string();
+    Err(Error::new(
+        code,
+        format!(
+            "The action did not reach its target ({status}); game state now: {detail}. \
+             Read the state again and send a corrected action with a NEW request_id \
+             (this id stays settled)."
+        ),
+    ))
+}
 /// Tools that move the map camera; the camera is zoomed back out after them.
 const MAP_TOOLS: &[&str] = &[
+    "hoi4_army_detach",
     "hoi4_army_create",
     "hoi4_army_assign",
     "hoi4_army_front",
@@ -2101,7 +2126,14 @@ impl MacClock {
             return Ok(json!({"receipt":receipt}));
         }
         if name == "hoi4_research_start" {
-            allowed(args, &["technology", "slot", "request_id", "lease_token"])?;
+            allowed(
+                args,
+                &["technology", "slot", "replace", "request_id", "lease_token"],
+            )?;
+            let replace = args
+                .get("replace")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
             let key = string(args, "technology")?;
             if key.is_empty()
                 || key.len() > 128
@@ -2139,7 +2171,7 @@ impl MacClock {
             if actions.receipt_exists(id) {
                 // A retry only settles or replays its receipt; it never refuses on new state.
             } else {
-                research::check(&before, key, slot)?;
+                research::check(&before, key, slot, replace)?;
                 bounded_keys.preflight()?;
             }
             let keys = &bounded_keys;
@@ -3807,6 +3839,80 @@ impl MacClock {
             authority.authorize(token, &epoch)?;
             self.keys.preflight()?;
             return stateslots::read_states(process, &self.keys, &ids);
+        }
+        if name == "hoi4_army_detach" {
+            allowed(
+                args,
+                &["army", "divisions", "into", "request_id", "lease_token"],
+            )?;
+            let army = string(args, "army")?;
+            let into = args.get("into").and_then(Value::as_str);
+            for v in std::iter::once(army).chain(into) {
+                if v.is_empty() || v.len() > 128 || v.chars().any(char::is_control) {
+                    return Err(Error::new("invalid_arguments", "Invalid army name"));
+                }
+            }
+            if into == Some(army) {
+                return Err(Error::new("invalid_arguments", "into is the same army"));
+            }
+            let ids: Vec<String> = args
+                .get("divisions")
+                .and_then(Value::as_array)
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|v| v.as_str().map(str::to_string))
+                        .collect()
+                })
+                .filter(|v: &Vec<String>| !v.is_empty() && v.len() <= 18)
+                .ok_or_else(|| Error::new("invalid_arguments", "divisions: 1..18 division ids"))?;
+            let id = string(args, "request_id")?;
+            let token = string(args, "lease_token")?;
+            let epoch = guard.observe(process)?.epoch;
+            authority.authorize(token, &epoch)?;
+            if !actions.receipt_exists(id) {
+                self.keys.preflight()?;
+            }
+            let action = json!({"kind":"army_detach","army":army,"divisions":ids,"into":into});
+            let keys = &self.keys;
+            let moved_to = std::cell::RefCell::new(into.map(str::to_string));
+            let mut settle = || {
+                let view = armies::armies(process)?;
+                let army_of = |d: &str| -> Option<String> {
+                    view["armies"]
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .find_map(|a| {
+                            a["divisions"]
+                                .as_array()
+                                .is_some_and(|v| v.iter().any(|x| x.as_str() == Some(d)))
+                                .then(|| a["army"].as_str().unwrap_or("").to_string())
+                        })
+                };
+                let now: Vec<Option<String>> = ids.iter().map(|d| army_of(d)).collect();
+                let detail = json!({"army":army,"divisions":ids,"now_in":now});
+                let all_out = now.iter().all(|a| a.as_deref().is_some_and(|a| a != army));
+                let same = now.windows(2).all(|w| w[0] == w[1]);
+                let target_ok = moved_to
+                    .borrow()
+                    .as_deref()
+                    .is_none_or(|t| now.first().and_then(|a| a.as_deref()) == Some(t));
+                Ok(if all_out && same && target_ok {
+                    journal::Outcome::Reached(detail)
+                } else if now.iter().all(|a| a.as_deref() == Some(army)) {
+                    journal::Outcome::Unchanged(detail)
+                } else {
+                    journal::Outcome::Diverged(detail)
+                })
+            };
+            let mut dispatch = || {
+                authority.authorize(token, &epoch)?;
+                let name = armies::detach(process, keys, army, &ids, into)?;
+                *moved_to.borrow_mut() = Some(name);
+                Ok(())
+            };
+            let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
+            return Ok(json!({"receipt":receipt}));
         }
         if name == "hoi4_army_motorization" {
             allowed(args, &["army", "level", "request_id", "lease_token"])?;

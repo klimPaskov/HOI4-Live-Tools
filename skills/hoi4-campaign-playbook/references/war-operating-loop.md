@@ -84,6 +84,11 @@ No pocket available: attack the top `hoi4_front_plan` axis with the strike armie
   `hoi4_army_move` into the enemy state as a direct attack order instead.
 - `hoi4_army_motorization {army, level}`: 0/1/2; level shown in `hoi4_armies` (motorization).
 - `hoi4_army_create` folds every unassigned division standing in the state into the new army.
+- `hoi4_army_detach {army, divisions:[ids], into?}`: move chosen divisions (ids and their template, equipment
+  fill and supply from `hoi4_supply`) into a new army or an existing one: weak units to the rear, fresh ones forward.
+- Equipment: `macplay sitrep` lists divisions short of an equipment type; losses of artillery and support equipment
+  need their own production lines, not only infantry equipment.
+- `hoi4_research_start {..., replace:true}` switches a busy research slot.
 - `hoi4_army_move` replaces the army's battle plan with a manual order (planning is lost).
 - `hoi4_naval_invasion` needs convoys and naval superiority; its receipt says
   `landing_verified:false`, so check the map/army after it starts.

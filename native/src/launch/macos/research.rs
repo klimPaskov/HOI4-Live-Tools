@@ -286,7 +286,9 @@ pub(super) fn settle(
             && s.as_deref() == Some(key)
             && before.get(i).cloned().flatten().as_deref() != Some(key)
     });
-    if target.is_none() && before.get(slot).cloned().flatten().is_none() && !newly_elsewhere {
+    // Nothing new anywhere and the slot still shows what it showed before (empty, or the
+    // technology a replace meant to switch away from).
+    if target == before.get(slot).cloned().flatten() && !newly_elsewhere {
         Settled::Unchanged
     } else {
         Settled::Unknown
@@ -300,7 +302,7 @@ pub(super) fn assignments(process: &dyn Process) -> Result<Assignments> {
 }
 
 /// Refusals that need no input: unknown/finished/assigned technology, busy slot.
-pub(super) fn check(before: &Assignments, key: &str, slot: usize) -> Result<()> {
+pub(super) fn check(before: &Assignments, key: &str, slot: usize, replace: bool) -> Result<()> {
     if before.completed.contains(key) {
         return Err(Error::new(
             "already_researched",
@@ -318,7 +320,11 @@ pub(super) fn check(before: &Assignments, key: &str, slot: usize) -> Result<()> 
     }
     match before.slots.get(slot) {
         None => Err(Error::new("invalid_arguments", "Slot outside own slots")),
-        Some(Some(_)) => Err(Error::new("invalid_target", "Research slot is busy")),
+        Some(Some(_)) if replace => Ok(()),
+        Some(Some(_)) => Err(Error::new(
+            "invalid_target",
+            "Research slot is busy (pass replace:true to switch it to this technology)",
+        )),
         Some(None) => Ok(()),
     }
 }
@@ -438,12 +444,30 @@ pub(super) fn start(
     // Arms Against Tyranny: a plain click on Research opens the Military Industrial
     // Organization chooser for technologies an organisation can take; Shift+Click researches
     // with the suggested organisation at once (the button's tooltip, 1.19.4.1).
+    let was_busy = read(process, |r, base| {
+        Ok(research::assignments(r, base)?
+            .0
+            .get(slot)
+            .cloned()
+            .flatten()
+            .is_some())
+    })?;
     let (x, y) = button.center();
     keys.shift_click(GAME, x, y)?;
-    wait(process, "start research", |r, base| {
+    let started = |r: &Reader<'_>, base: u64| {
         let (slots, _) = research::assignments(r, base)?;
         Ok(slots.get(slot).and_then(|s| s.as_deref()) == Some(key))
-    })
+    };
+    if was_busy {
+        // Switching a busy slot asks "Are you sure you want to research X instead of Y with
+        // N% progress?"; OK accepts it (Return, the dialog's default button). Seen live
+        // 5 November 2026.
+        std::thread::sleep(std::time::Duration::from_millis(700));
+        if !read(process, started)? {
+            keys.press(Key::Return)?;
+        }
+    }
+    wait(process, "start research", started)
 }
 
 #[cfg(test)]
@@ -496,18 +520,27 @@ mod tests {
     #[test]
     fn refusals_need_no_input() {
         let s = state(&[None, Some("radio")], &["infantry_weapons"]);
-        assert!(check(&s, "support_weapons", 0).is_ok());
-        let done = check(&s, "infantry_weapons", 0).unwrap_err();
+        assert!(check(&s, "support_weapons", 0, false).is_ok());
+        let done = check(&s, "infantry_weapons", 0, false).unwrap_err();
         assert_eq!(done.code, "already_researched");
         assert!(done.message.contains("infantry_weapons"));
-        assert_eq!(check(&s, "radio", 0).unwrap_err().code, "invalid_target");
         assert_eq!(
-            check(&s, "support_weapons", 1).unwrap_err().code,
+            check(&s, "radio", 0, false).unwrap_err().code,
             "invalid_target"
         );
         assert_eq!(
-            check(&s, "support_weapons", 2).unwrap_err().code,
+            check(&s, "support_weapons", 1, false).unwrap_err().code,
+            "invalid_target"
+        );
+        assert_eq!(
+            check(&s, "support_weapons", 2, false).unwrap_err().code,
             "invalid_arguments"
+        );
+        // replace: a busy slot may be switched; the other refusals stay.
+        assert!(check(&s, "support_weapons", 1, true).is_ok());
+        assert_eq!(
+            check(&s, "radio", 1, true).unwrap_err().code,
+            "invalid_target"
         );
     }
 }

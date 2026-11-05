@@ -1114,6 +1114,75 @@ pub(super) fn division_row(r: &Reader<'_>, image: u64, id: &str) -> Result<Rect>
         format!("Division {id} has no shown row in the army panel"),
     ))
 }
+/// Move the chosen divisions of `army` into `into` (an own army) or, without it, into one
+/// new army, one division at a time with the game's controls: the army's card opens its
+/// division list, a click on a division's row selects that division alone, then the new-army
+/// card (first one) or a right click on the target's card (the rest) moves it. Each move is
+/// verified from division membership. Returns the receiving army's name.
+pub(super) fn detach(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    army: &str,
+    ids: &[String],
+    into: Option<&str>,
+) -> Result<String> {
+    let source = read(process, |r, i| group_named(r, i, army))?;
+    let members = read(process, membership)?;
+    for id in ids {
+        if members.get(id) != Some(&source) {
+            return Err(Error::new(
+                "invalid_target",
+                format!("Division {id} is not in {army} (ids as hoi4_armies lists them)"),
+            ));
+        }
+    }
+    if ids.len() >= members.values().filter(|g| **g == source).count() {
+        return Err(Error::new(
+            "invalid_target",
+            "That would empty the army; use hoi4_army_merge to move a whole army",
+        ));
+    }
+    let mut dest: Option<String> = into.map(str::to_string);
+    for id in ids {
+        clear_notices(process, keys)?;
+        select_army(process, keys, army)?;
+        let row = settled(process, "division row", |r, i| division_row(r, i, id))?;
+        let (x, y) = row.center();
+        keys.click(GAME, x, y)?;
+        wait(process, "division selected", |r, i| {
+            Ok(selection_size(r, i)? & 0xffff_ffff == 1)
+        })?;
+        match &dest {
+            Some(name) => {
+                let target = read(process, |r, i| group_named(r, i, name))?;
+                let card = read(process, |r, i| card_rect(r, i, name, "portrait_btn"))?;
+                let (cx, cy) = card.center();
+                keys.right_click(GAME, cx, cy)?;
+                wait(process, "division moved", |r, i| {
+                    Ok(membership(r, i)?.get(id) == Some(&target))
+                })?;
+            }
+            None => {
+                let groups_before: BTreeSet<u64> =
+                    read(process, membership)?.values().copied().collect();
+                let card = settled(process, "new army card", |r, i| new_card(r, i, false))?;
+                let (cx, cy) = card.center();
+                keys.click(GAME, cx, cy)?;
+                wait(process, "new army", |r, i| {
+                    Ok(membership(r, i)?
+                        .get(id)
+                        .is_some_and(|g| *g != 0 && !groups_before.contains(g)))
+                })?;
+                let name = read(process, |r, i| {
+                    let g = membership(r, i)?[id];
+                    army_name(r, g)
+                })?;
+                dest = Some(name);
+            }
+        }
+    }
+    dest.ok_or_else(|| Error::new("invalid_arguments", "No division given"))
+}
 /// Probe-only: rows of every division of `army` (select the army first).
 pub(super) fn debug_rows(process: &dyn Process, army: &str) -> Result<Value> {
     read(process, |r, i| {

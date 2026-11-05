@@ -198,6 +198,7 @@ pub(super) fn row_button(
         rows[names.iter().position(|n| n == name).unwrap()]
     } else {
         let mut found = None;
+        let mut shown = Vec::new();
         for &candidate in &rows {
             let Some(frame) = gui_tree::container(r, r.u64(candidate + u.row_container)?, image)?
             else {
@@ -206,15 +207,21 @@ pub(super) fn row_button(
             let Some(label) = gui_tree::child(r, image, frame, "name")? else {
                 continue;
             };
-            if r.string_bounded(label + u.text, 128)?.trim() == name {
+            let drawn = r.string_bounded(label + u.text, 128)?.trim().to_string();
+            if drawn == name {
                 found = Some(candidate);
                 break;
             }
+            shown.push(drawn);
         }
         found.ok_or_else(|| {
             Error::new(
-                "gui_target_unavailable",
-                "Template row not shown (decommissioned templates are hidden)",
+                "template_not_trainable",
+                format!(
+                    "Template {name} is decommissioned (hidden from the training list). Trainable \
+                     templates: {}. Nothing was queued.",
+                    shown.join(", ")
+                ),
             )
         })?
     };
@@ -563,7 +570,7 @@ pub(super) fn set_locations(
         .map_err(|_| {
             Error::new(
                 "input_readback_failed",
-                "No location was set (the state must be own and able to receive divisions)",
+                "No location was set: the game does not let these divisions deploy in that state (shown red on the deployment map, e.g. a colony or non-core state). Deploy in a core state (green), then move them by sea or land",
             )
         })?;
         done += 1;

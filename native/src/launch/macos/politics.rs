@@ -229,6 +229,19 @@ fn slot(
             let current = character_key(r, r.u64(item + u.advisor_character)?)?;
             return Ok((current, r.u64(item + u.advisor_button)?, Kind::Advisor));
         }
+        // Arms Against Tyranny: the research & production designers became Military
+        // Industrial Organizations; their slots are COpenRosterButtonForPoliticalScreen.
+        let vt = r.u64(item)?.wrapping_sub(image);
+        let abi = r.string_abi();
+        if vt == crate::xlayout::img(abi, 0x362e210)? || vt == crate::xlayout::img(abi, 0x362e238)?
+        {
+            return Err(Error::new(
+                "use_mio_tools",
+                "This slot holds a Military Industrial Organization (Arms Against Tyranny), not an \
+                 advisor: read them with hoi4_mios and assign or change them with hoi4_mio_* tools \
+                 (hoi4_mio_design_team, hoi4_mio_policy, hoi4_mio_trait). Nothing was clicked.",
+            ));
+        }
         if r.u64(item)? != image + u.slot_vtable {
             return Err(Error::new(
                 "invalid_gui",
