@@ -1198,3 +1198,36 @@ pub(super) fn close_panels(process: &dyn Process, keys: &dyn GameInput) -> Resul
     super::ui::close_menu(process, keys)?;
     Ok(first)
 }
+
+/// The national focus tree (manager slot 0x130). Its search box keeps keyboard focus while the
+/// tree is open, so hotkeys (T for construction, Space for pause) become search text (Ethiopia
+/// continuation, 6 Nov 2026: "t" in the search box, a pause that never happened).
+const FOCUS_TREE_SLOT: u64 = 0x130;
+
+fn focus_tree_open(r: &Reader<'_>, image: u64) -> Result<bool> {
+    let idler = r.u64(image + game::layout(r).idler_global)?;
+    let view = r.u64(r.u64(idler + MANAGER)? + FOCUS_TREE_SLOT)?;
+    if !plausible(view) {
+        return Ok(false);
+    }
+    match gui_tree::container(r, r.u64(view + VIEW_ROOT)?, image)? {
+        Some(root) => gui_tree::visible(r, root),
+        None => Ok(false),
+    }
+}
+
+/// Close an open focus tree (Escape leaves the search box, then closes the tree); a game menu
+/// opened by a spare Escape is closed again.
+pub(super) fn close_focus_tree(process: &dyn Process, keys: &dyn GameInput) -> Result<()> {
+    if !read(process, focus_tree_open)? {
+        return Ok(());
+    }
+    for _ in 0..3 {
+        keys.press(crate::platform::game_input::Key::Escape)?;
+        std::thread::sleep(std::time::Duration::from_millis(250));
+        if !read(process, focus_tree_open)? {
+            break;
+        }
+    }
+    super::ui::close_menu(process, keys)
+}

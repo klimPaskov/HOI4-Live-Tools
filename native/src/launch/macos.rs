@@ -404,6 +404,8 @@ impl ClockBackend<'_> {
         let Some(key) = Self::plan(action, &before) else {
             return Ok(true);
         };
+        // An open focus tree's search box would take the key as text.
+        let _ = panelkit::close_focus_tree(self.process, self.keys);
         self.keys.press(key)?;
         let deadline = Instant::now() + Duration::from_secs(2);
         loop {

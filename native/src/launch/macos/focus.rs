@@ -348,7 +348,11 @@ pub(super) fn start(
     until: Instant,
 ) -> Result<()> {
     let mut trace = Trace::new();
-    start_inner(process, keys, key, until, &mut trace, None).map_err(|error| trace.failure(error))
+    let result = start_inner(process, keys, key, until, &mut trace, None)
+        .map_err(|error| trace.failure(error));
+    // Never leave the tree open: its search box swallows every later hotkey.
+    let _ = super::panelkit::close_focus_tree(process, keys);
+    result
 }
 pub(super) fn start_bound(
     process: &(dyn Process + Send + Sync),
@@ -358,8 +362,10 @@ pub(super) fn start_bound(
     expected: &own_focus::AssignmentSnapshot,
 ) -> Result<()> {
     let mut trace = Trace::new();
-    start_inner(process, keys, key, until, &mut trace, Some(expected))
-        .map_err(|error| trace.failure(error))
+    let result = start_inner(process, keys, key, until, &mut trace, Some(expected))
+        .map_err(|error| trace.failure(error));
+    let _ = super::panelkit::close_focus_tree(process, keys);
+    result
 }
 fn start_inner(
     process: &(dyn Process + Send + Sync),

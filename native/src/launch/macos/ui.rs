@@ -187,6 +187,7 @@ fn blocked_error(count: usize, shown: &[u64], events: &[String]) -> Error {
 /// covering pop-up's body).
 pub(super) fn clear_notices(process: &dyn Process, keys: &dyn GameInput) -> Result<usize> {
     close_menu(process, keys)?;
+    let _ = super::panelkit::close_focus_tree(process, keys);
     close_state_view(process, keys)?;
     // A construction panel left open turns later map clicks into placements.
     super::construction::leave(process, keys);
