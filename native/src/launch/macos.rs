@@ -450,8 +450,23 @@ fn string<'a>(args: &'a serde_json::Map<String, Value>, name: &str) -> Result<&'
         .ok_or_else(|| Error::new("invalid_arguments", format!("{name} must be a string")))
 }
 fn allowed(args: &serde_json::Map<String, Value>, keys: &[&str]) -> Result<()> {
-    if args.keys().any(|v| !keys.contains(&v.as_str())) {
-        return Err(Error::new("invalid_arguments", "Unexpected input argument"));
+    // A request id or lease token on a read is harmless: players add them by habit and a
+    // refusal only costs a call (Ethiopia continuation, 6 Nov 2026).
+    if let Some(bad) = args
+        .keys()
+        .find(|v| !keys.contains(&v.as_str()) && *v != "request_id" && *v != "lease_token")
+    {
+        return Err(Error::new(
+            "invalid_arguments",
+            format!(
+                "Unexpected input argument {bad:?}; this tool takes: {}",
+                keys.iter()
+                    .filter(|k| !matches!(**k, "request_id" | "lease_token"))
+                    .copied()
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+        ));
     }
     Ok(())
 }
