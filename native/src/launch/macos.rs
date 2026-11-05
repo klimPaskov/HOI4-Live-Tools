@@ -8,6 +8,7 @@ mod air;
 mod airact;
 mod airread;
 mod airui;
+mod alerts;
 mod armies;
 mod commanders;
 mod construction;
@@ -470,6 +471,7 @@ pub fn read_only_call(process: &dyn Process, name: &str) -> Result<Value> {
         n if n.starts_with("dbg_country:") => occupation::debug_country(process, &n[12..]),
         "dbg_states" => occupation::debug_states(process),
         "hoi4_war_stats" => war_stats::stats(process, &serde_json::Map::new()),
+        "hoi4_alerts" => alerts::alerts(process),
         "hoi4_war_stats_all" => {
             let mut args = serde_json::Map::new();
             args.insert("all".into(), json!(true));
@@ -486,6 +488,10 @@ pub fn read_only_call(process: &dyn Process, name: &str) -> Result<Value> {
             }
             occupation::occupation(process, &mapdata::game_dir(exe)?, &args)
         }
+        n if n.starts_with("dbg_owner:") => panelkit::debug_owner(process, &n[10..]),
+        n if n.starts_with("dbg_deep:") => panelkit::debug_deep(process, &n[9..]),
+        n if n.starts_with("dbg_widget:") => panelkit::debug_widget_anywhere(process, &n[11..]),
+        "dbg_alerts" => panelkit::debug_alerts(process),
         "dbg_camera" => ui::read(process, |r, i| {
             Ok(json!({"height": screenmap::camera_height(r, i)?}))
         }),
@@ -556,6 +562,7 @@ impl Commands for MacClock {
             diplomacy_state::countries_tool(),
             occupation::tool(),
             war_stats::tool(),
+            alerts::tool(),
             json!({"name":"hoi4_peace_status","description":"Read-only: whether the peace conference window is open and, when it is, the texts it shows (current player, score, bidding phase, turns left). Without a conference it returns the route an ordinary player takes (actions list, states on the conference map, End turn). NOT validated live while a conference is open (no war was fought in the qualification game); no peace action tool exists yet.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}}),
             trade::tool(),
             trade::set_tool(),
@@ -736,6 +743,7 @@ impl Commands for MacClock {
                     | "hoi4_states"
                     | "hoi4_wars"
                     | "hoi4_war_stats"
+                    | "hoi4_alerts"
                     | "hoi4_occupation"
                     | "hoi4_war_risk"
                     | "hoi4_save"
@@ -1086,6 +1094,10 @@ impl MacClock {
                 json!({"country":tag,"would_join":joiners,"borders_not_held":weak,
                 "declare_would_be_refused":!weak.is_empty()}),
             );
+        }
+        if name == "hoi4_alerts" {
+            allowed(args, &[])?;
+            return alerts::alerts(process);
         }
         if name == "hoi4_war_stats" {
             allowed(args, &["all"])?;

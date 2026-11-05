@@ -274,7 +274,7 @@ pub(crate) fn rect_unclipped(
     } else if l.sprite_vtables.iter().any(|vt| image + vt == renderer) {
         let kind = pointer(r.u64(sprite + l.sprite_type)?)?;
         let frames = r.i32(kind + l.sprite_frames)?;
-        if !(1..=64).contains(&frames) {
+        if !(1..=128).contains(&frames) {
             return Err(Error::new(
                 "invalid_gui_geometry",
                 "Bounded frame count required",

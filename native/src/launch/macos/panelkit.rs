@@ -720,3 +720,185 @@ mod tests {
             .all(|c| (0x3480000..0x3800000).contains(&c.vtable)));
     }
 }
+
+/// Probe-only (`VTABLE_HEX`): interface-manager slots whose view holds objects of that class,
+/// directly or in an array one level down (slot, field, element count).
+pub(super) fn debug_owner(process: &dyn Process, spec: &str) -> Result<serde_json::Value> {
+    let vt = u64::from_str_radix(spec.trim_start_matches("0x"), 16)
+        .map_err(|_| Error::new("invalid_arguments", "VTABLE_HEX"))?;
+    read(process, |r, i| {
+        let want = i + vt;
+        let idler = r.u64(i + game::layout(r).idler_global)?;
+        let manager = r.u64(idler + MANAGER)?;
+        let slots = r.read(manager, MANAGER_SCAN)?;
+        let mut hits = Vec::new();
+        for (si, c) in slots.chunks_exact(8).enumerate() {
+            let view = u64::from_le_bytes(c.try_into().unwrap());
+            if !plausible(view) {
+                continue;
+            }
+            let Ok(body) = r.read(view, 0x6000) else {
+                continue;
+            };
+            for (fi, d) in body.chunks_exact(8).enumerate() {
+                let q = u64::from_le_bytes(d.try_into().unwrap());
+                if !plausible(q) {
+                    continue;
+                }
+                if r.u64(q).ok() == Some(want) {
+                    hits.push(serde_json::json!({"slot": format!("{:#x}", si * 8), "field": format!("{:#x}", fi * 8), "depth": 1}));
+                    continue;
+                }
+                if let Ok(inner) = r.read(q, 0x200) {
+                    let n = inner
+                        .chunks_exact(8)
+                        .filter(|e| {
+                            let o = u64::from_le_bytes((*e).try_into().unwrap());
+                            plausible(o) && r.u64(o).ok() == Some(want)
+                        })
+                        .count();
+                    if n > 0 {
+                        hits.push(serde_json::json!({"slot": format!("{:#x}", si * 8), "field": format!("{:#x}", fi * 8), "depth": 2, "count": n}));
+                    }
+                }
+            }
+        }
+        Ok(serde_json::json!({"hits": hits}))
+    })
+}
+
+/// Probe-only (`SLOT_HEX:VTABLE_HEX`): three-level search from one manager slot's view for
+/// objects of a class; returns the field paths.
+pub(super) fn debug_deep(process: &dyn Process, spec: &str) -> Result<serde_json::Value> {
+    let (slot, vt) = spec
+        .split_once(':')
+        .and_then(|(a, b)| {
+            Some((
+                u64::from_str_radix(a.trim_start_matches("0x"), 16).ok()?,
+                u64::from_str_radix(b.trim_start_matches("0x"), 16).ok()?,
+            ))
+        })
+        .ok_or_else(|| Error::new("invalid_arguments", "SLOT_HEX:VTABLE_HEX"))?;
+    read(process, |r, i| {
+        let want = i + vt;
+        let idler = r.u64(i + game::layout(r).idler_global)?;
+        let view = r.u64(r.u64(idler + MANAGER)? + slot)?;
+        let words = |p: u64, n: usize| -> Vec<u64> {
+            r.read(p, n)
+                .map(|b| {
+                    b.chunks_exact(8)
+                        .map(|c| u64::from_le_bytes(c.try_into().unwrap()))
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
+        let mut hits = Vec::new();
+        for (a, p1) in words(view, 0x2000).into_iter().enumerate() {
+            if !plausible(p1) {
+                continue;
+            }
+            for (b, p2) in words(p1, 0x400).into_iter().enumerate() {
+                if !plausible(p2) {
+                    continue;
+                }
+                if r.u64(p2).ok() == Some(want) {
+                    hits.push(format!("+{:#x} -> +{:#x}", a * 8, b * 8));
+                    continue;
+                }
+                for (c, p3) in words(p2, 0x100).into_iter().enumerate() {
+                    if plausible(p3) && r.u64(p3).ok() == Some(want) {
+                        hits.push(format!("+{:#x} -> +{:#x} -> +{:#x}", a * 8, b * 8, c * 8));
+                    }
+                }
+            }
+            if hits.len() > 40 {
+                break;
+            }
+        }
+        Ok(serde_json::json!({"hits": hits}))
+    })
+}
+
+/// Probe-only (`WIDGET_NAME`): manager slots whose view root contains a widget of that name
+/// (root offset tried: VIEW_ROOT and the fallbacks), with the first match's rectangle.
+pub(super) fn debug_widget_anywhere(
+    process: &dyn Process,
+    name: &str,
+) -> Result<serde_json::Value> {
+    read(process, |r, i| {
+        let idler = r.u64(i + game::layout(r).idler_global)?;
+        let manager = r.u64(idler + MANAGER)?;
+        let slots = r.read(manager, MANAGER_SCAN)?;
+        let mut hits = Vec::new();
+        for (si, c) in slots.chunks_exact(8).enumerate() {
+            let view = u64::from_le_bytes(c.try_into().unwrap());
+            if !plausible(view) {
+                continue;
+            }
+            for off in [
+                VIEW_ROOT, 0x68, 0x50, 0x60, 0x70, 0x78, 0x430, 0x20, 0x28, 0x30, 0x8, 0x10, 0x18,
+            ] {
+                let Ok(p) = r.u64(view + off) else { continue };
+                if !plausible(p) {
+                    continue;
+                }
+                let Ok(Some(root)) = gui_tree::container(r, p, i) else {
+                    continue;
+                };
+                if let Ok(Some(w)) = find(r, i, root, name, 6) {
+                    let rect = gui_tree::rect(r, i, w, GAME)
+                        .map(|x| [x.x, x.y, x.w, x.h])
+                        .ok();
+                    hits.push(serde_json::json!({"slot": format!("{:#x}", si * 8), "root_at": format!("{off:#x}"), "rect": rect, "root": format!("{root:#x}")}));
+                    break;
+                }
+            }
+        }
+        Ok(serde_json::json!({"hits": hits}))
+    })
+}
+
+/// Probe-only: every global alert icon in the top bar (manager +0x188, root +0x68): the icon
+/// widget's sprite words, to find the shown frame.
+pub(super) fn debug_alerts(process: &dyn Process) -> Result<serde_json::Value> {
+    read(process, |r, i| {
+        let idler = r.u64(i + game::layout(r).idler_global)?;
+        let view = r.u64(r.u64(idler + MANAGER)? + 0x188)?;
+        let root = gui_tree::container(r, r.u64(view + 0x68)?, i)?
+            .ok_or_else(|| Error::new("invalid_gui", "top bar root"))?;
+        let mut stack = vec![(root, 0u32)];
+        let mut out = Vec::new();
+        while let Some((obj, depth)) = stack.pop() {
+            for child in gui_tree::children(r, obj)? {
+                let name = gui_tree::name(r, child, i)?.unwrap_or_default();
+                if name == "global_alerticon_window" {
+                    if let Some(win) = gui_tree::container(r, child, i)? {
+                        if let Some(icon) = gui_tree::child(r, i, win, "icon")? {
+                            let primary = r.u64(icon)?.wrapping_sub(i);
+                            let sprite = r.u64(icon + 0xe0).unwrap_or(0);
+                            let words: Vec<String> = r
+                                .read(sprite, 0xc0)
+                                .map(|b| {
+                                    b.chunks_exact(4)
+                                        .map(|c| {
+                                            format!(
+                                                "{:x}",
+                                                u32::from_le_bytes(c.try_into().unwrap())
+                                            )
+                                        })
+                                        .collect()
+                                })
+                                .unwrap_or_default();
+                            out.push(serde_json::json!({"shown": gui_tree::shown(r, icon).unwrap_or(false), "icon_vt": format!("{primary:#x}"), "sprite": words.join(" ")}));
+                        }
+                    }
+                } else if depth < 6 {
+                    if let Ok(Some(inner)) = gui_tree::container(r, child, i) {
+                        stack.push((inner, depth + 1));
+                    }
+                }
+            }
+        }
+        Ok(serde_json::json!({"count": out.len(), "alerts": out}))
+    })
+}

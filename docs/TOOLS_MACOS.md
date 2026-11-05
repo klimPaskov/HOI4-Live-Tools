@@ -138,6 +138,7 @@ Descriptions are the tools' own text; see `PLAYBOOK_TOOL_GAPS.md` for validation
 
 - `hoi4_agency_create` (A): UNVALIDATED (no live test yet): create the intelligence agency with ordinary input:
 - `hoi4_agency_upgrade` (A): Start an agency upgrade:
+- `hoi4_alerts` (R): Read-only:
 - `hoi4_auto_import` (A): HOI4 1.19.4 Automatic Importing (Trade view):
 - `hoi4_occupation` (R): Read-only (memory, no input, no pause):
 - `hoi4_operative_assign` (A): UNVALIDATED (no live test yet): send a recruited operative (`operative` = 0-based position among the recruited ones on the operative bar) on a mission:
