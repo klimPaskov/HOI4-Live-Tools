@@ -43,6 +43,45 @@ pub(super) fn to_screen(r: &Reader<'_>, image: u64, x: f64, z: f64) -> Result<Op
     Ok(project(&proj, &view, x, z))
 }
 
+/// Camera eye height above the map (larger = zoomed out).
+pub(super) fn camera_height(r: &Reader<'_>, image: u64) -> Result<f64> {
+    let idler = r.u64(image + game::layout(r).idler_global)?;
+    let abi = r.string_abi();
+    let camera = r.u64(idler + fld(abi, &IDLER, 0x718)?)?;
+    let view: [f64; 16] = floats(r, camera + fld(abi, &CAMERA, 0xd0)?)?;
+    Ok(view[13])
+}
+
+/// Zoomed in closer than this, the camera is brought back out after a map action.
+const CLOSE: f64 = 500.0;
+/// Strategic view height (the game starts at 800; 50 is fully in, 3000 fully out).
+const STRATEGIC: f64 = 750.0;
+/// Scroll the map camera back out to the strategic height when an action left it close in.
+pub(super) fn restore_zoom(
+    process: &dyn crate::platform::Process,
+    keys: &dyn crate::platform::game_input::GameInput,
+) -> Result<()> {
+    let height = |p: &dyn crate::platform::Process| super::ui::read(p, camera_height);
+    let mut h = height(process)?;
+    if h >= CLOSE {
+        return Ok(());
+    }
+    let mut step = -240;
+    for _ in 0..16 {
+        if h >= STRATEGIC {
+            break;
+        }
+        keys.scroll(super::panelkit::GAME, (960.0, 540.0), step)?;
+        std::thread::sleep(std::time::Duration::from_millis(180));
+        let now = height(process)?;
+        if now < h {
+            step = -step; // wrong direction for this input backend
+        }
+        h = now;
+    }
+    Ok(())
+}
+
 pub(super) fn project(proj: &[f64; 16], view: &[f64; 16], x: f64, z: f64) -> Option<(f64, f64)> {
     let (tx, ty) = (proj[0], proj[5]);
     if tx <= 0.0 || ty <= 0.0 {

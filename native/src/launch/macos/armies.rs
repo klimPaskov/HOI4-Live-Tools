@@ -1050,6 +1050,85 @@ pub(super) fn set_motorization(
     Ok(())
 }
 
+/// The army panel's division rows: CArmiesView keeps two CArmyDivisionListView objects
+/// (+0x4a0, +0x4a8); each keeps its CArmyDivisionView rows in an array at +0xe0, and a row
+/// names its division by the id words at +0x10/+0x14 (mapped live 5 November 2026).
+const DIVISION_LISTS: [u64; 2] = [0x4a0, 0x4a8];
+const LIST_ROWS: u64 = 0xe0;
+const ROW_TYPE_WORD: u64 = 0x10;
+const ROW_VTABLE: u64 = 0x363d658;
+const DIVISION_LIST: xlayout::Class = xlayout::Class::new("CArmyDivisionListView", 0x363d5c0);
+const DIVISION_ROW: xlayout::Class = xlayout::Class::new("CArmyDivisionView", 0x363d658);
+const ROW_ROOTS: [u64; 6] = [0x20, 0x28, 0x30, 0x8, 0x10, 0x18];
+
+/// Screen rectangle of the shown panel row of division `id` ("type:token" as hoi4_armies).
+pub(super) fn division_row(r: &Reader<'_>, image: u64, id: &str) -> Result<Rect> {
+    let abi = r.string_abi();
+    let u = ui(r)?;
+    let (t, k) = id
+        .split_once(':')
+        .and_then(|(a, b)| {
+            Some((
+                u32::from_str_radix(a, 16).ok()?,
+                u32::from_str_radix(b, 16).ok()?,
+            ))
+        })
+        .ok_or_else(|| Error::new("invalid_arguments", "division id must be TYPE:TOKEN (hex)"))?;
+    let idler = r.u64(image + game::layout(r).idler_global)?;
+    let view = r.u64(r.u64(idler + u.manager)? + fld(abi, &IFACE_MANAGER, ARMIES_VIEW_SLOT)?)?;
+    let row_vt = image + img(abi, ROW_VTABLE)?;
+    let word = fld(abi, &DIVISION_ROW, ROW_TYPE_WORD)?;
+    for list_at in DIVISION_LISTS {
+        let list = r.u64(view + fld(abi, &ARMIES_VIEW, list_at)?)?;
+        if list == 0 {
+            continue;
+        }
+        let (_, data, count) = r.array_header(list + fld(abi, &DIVISION_LIST, LIST_ROWS)?)?;
+        for n in 0..count.min(64) as u64 {
+            let row = r.u64(data + n * 8)?;
+            if r.u64(row)? != row_vt
+                || r.i32(row + word)? as u32 != t
+                || r.i32(row + word + 4)? as u32 != k
+            {
+                continue;
+            }
+            for at in ROW_ROOTS {
+                let Ok(p) = r.u64(row + fld(abi, &DIVISION_ROW, at)?) else {
+                    continue;
+                };
+                if let Ok(Some(root)) = gui_tree::container(r, p, image) {
+                    if gui_tree::visible(r, root)? {
+                        // The row's background button is its click target (army_division_view).
+                        if let Some(bg) = super::panelkit::find(r, image, root, "btn_bg", 1)? {
+                            if gui_tree::shown(r, bg)? {
+                                return gui_tree::rect(r, image, bg, GAME);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    Err(Error::new(
+        "gui_target_unavailable",
+        format!("Division {id} has no shown row in the army panel"),
+    ))
+}
+/// Probe-only: rows of every division of `army` (select the army first).
+pub(super) fn debug_rows(process: &dyn Process, army: &str) -> Result<Value> {
+    read(process, |r, i| {
+        let group = group_named(r, i, army)?;
+        let ids: Vec<String> = membership(r, i)?
+            .into_iter()
+            .filter(|(_, g)| *g == group)
+            .map(|(d, _)| d)
+            .collect();
+        Ok(json!(ids
+            .iter()
+            .map(|id| json!({"id": id, "row": division_row(r, i, id).map(|x| [x.x, x.y, x.w, x.h]).map_err(|e| e.message)}))
+            .collect::<Vec<_>>()))
+    })
+}
 /// Own army groups (from the own armies).
 fn army_groups(r: &Reader<'_>, image: u64) -> Result<BTreeSet<u64>> {
     let u = ui(r)?;

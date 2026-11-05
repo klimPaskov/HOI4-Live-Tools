@@ -462,6 +462,10 @@ pub fn read_only_call(process: &dyn Process, name: &str) -> Result<Value> {
         "hoi4_economy_detail" => economy_detail::detail(process),
         // Probe-only (macprobe): raw bytes of an own army object, for mapping fields.
         n if n.starts_with("dbg_army_bytes:") => armies::debug_bytes(process, &n[15..]),
+        n if n.starts_with("dbg_rows:") => armies::debug_rows(process, &n[9..]),
+        "dbg_camera" => ui::read(process, |r, i| {
+            Ok(json!({"height": screenmap::camera_height(r, i)?}))
+        }),
         _ => Err(Error::new(
             "capability_unavailable",
             "Unknown read-only tool",
@@ -778,6 +782,33 @@ impl Commands for MacClock {
         json!({"transport":"ordinary macOS CGEvent keys to the front-most owned window","actions":["set_paused","set_speed","research_start","focus_start","production_add","production_set","construction_add","politics_options","politics_choose","decisions_list","decision_take","train","deploy_locations","army_create","army_assign","army_front","army_plan","army_offensive","event_choose","diplomacy","diplomacy_act","army_commander","army_group_create","army_split","template_create","template_edit","template_rename","template_delete","template_options","design_options","design_create","design_obsolete","design_set_production","state_slots","air_wings","air_mission","plan_run"],"lease":"exclusive configured controller","input_profile":{"name":"macos_cocoa_absolute_1920x1080_v1","checked_at_bind":true,"rechecked_before_each_input":true,"diagnostic_alone_authorizes_input":false},"construction_panel":{"enabled":self.construction_panel,"qualification_only":true,"ordinary_key":"t","live_delivery_verified":false,"input_retry":false},"construction_selection":{"enabled":self.construction_selection,"qualification_only":true,"ordinary_clicks_max":1,"input_retry":false,"placement":false},"construction_placement":{"enabled":self.construction_placement,"qualification_only":true,"ordinary_clicks_max":1,"full_picker_verified":false,"atomic_event_verified":false},"construction_cancellation":{"enabled":self.construction_cancellation,"qualification_only":true,"ordinary_key":"escape","ordinary_key_presses_max":1,"input_retry":false,"worker":false},"construction_find_open":{"enabled":self.construction_find_open,"qualification_only":true,"transport":"ordinary_left_click","ordinary_clicks_max":1,"cursor_moves_max":1,"ordinary_key_presses":0,"input_retry":false,"worker":false},"construction_navigation":{"enabled":self.construction_navigation,"qualification_only":true,"already_open_only":true,"input_retry":false,"placement":false},"daily_governor":self.daily.capabilities(),"native_posting":false,"full_campaign_acceptance":false})
     }
     fn call(&self, process: &dyn Process, name: &str, arguments: &Value) -> Result<Value> {
+        let result = self.call_inner(process, name, arguments);
+        // Map actions zoom in to aim (Find, border clicks); give the player and the viewer the
+        // strategic view back afterwards. Best effort: never changes the tool's result.
+        if MAP_TOOLS.contains(&name) && process.identity() == self.process.identity() {
+            let _ = screenmap::restore_zoom(self.process.as_ref(), &*self.keys);
+        }
+        result
+    }
+}
+/// Tools that move the map camera; the camera is zoomed back out after them.
+const MAP_TOOLS: &[&str] = &[
+    "hoi4_army_create",
+    "hoi4_army_assign",
+    "hoi4_army_front",
+    "hoi4_army_offensive",
+    "hoi4_army_move",
+    "hoi4_army_split",
+    "hoi4_army_merge",
+    "hoi4_construction_add",
+    "hoi4_fleet_region",
+    "hoi4_naval_invasion",
+    "hoi4_air_mission",
+    "hoi4_air_rebase",
+    "hoi4_peace_take",
+];
+impl MacClock {
+    fn call_inner(&self, process: &dyn Process, name: &str, arguments: &Value) -> Result<Value> {
         if process.identity() != self.process.identity() {
             return Err(Error::new(
                 "ownership_changed",
