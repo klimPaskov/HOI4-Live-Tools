@@ -196,7 +196,7 @@ fn iso(raw: i32) -> Option<String> {
     None
 }
 
-fn date_json(raw: i32) -> Value {
+pub(super) fn date_json(raw: i32) -> Value {
     if raw == NO_DATE {
         return json!({"raw":raw,"iso":null,"none":true});
     }
@@ -268,17 +268,17 @@ struct Goal {
     kind: Option<String>,
 }
 
-struct World {
-    gs: u64,
-    player_tag: i32,
-    player_country: u64,
+pub(super) struct World {
+    pub(super) gs: u64,
+    pub(super) player_tag: i32,
+    pub(super) player_country: u64,
     /// tag index -> country pointer
-    country_of: BTreeMap<i32, u64>,
+    pub(super) country_of: BTreeMap<i32, u64>,
     /// country pointer -> tag index
-    tag_of: HashMap<u64, i32>,
+    pub(super) tag_of: HashMap<u64, i32>,
 }
 
-fn world(r: &Reader<'_>, image: u64) -> Result<World> {
+pub(super) fn world(r: &Reader<'_>, image: u64) -> Result<World> {
     let g = game::layout(r);
     let gs = r.u64(image + g.gs_global)?;
     let player_tag = r.i32(gs + g.player_tag)?;
@@ -503,7 +503,33 @@ fn all_war_holders(r: &Reader<'_>, image: u64, w: &World) -> Result<Holders> {
     Ok(out)
 }
 
-struct Names<'a> {
+/// One war relation of the world: its pointer, the countries holding it
+/// (pointer identity), the raw first/second party tag fields and the start.
+pub(super) struct WarRelation {
+    pub(super) ptr: u64,
+    pub(super) holders: Vec<i32>,
+    pub(super) a: i32,
+    pub(super) b: i32,
+    pub(super) start: i32,
+}
+
+/// Every war relation held by any country.
+pub(super) fn war_relations(r: &Reader<'_>, image: u64, w: &World) -> Result<Vec<WarRelation>> {
+    let abi = r.string_abi();
+    let mut out = Vec::new();
+    for (ptr, holders) in all_war_holders(r, image, w)? {
+        out.push(WarRelation {
+            ptr,
+            holders,
+            a: tag_index(r.i32(ptr + fld(abi, &RELATION, REL_A)?)?)?,
+            b: tag_index(r.i32(ptr + fld(abi, &RELATION, REL_B)?)?)?,
+            start: r.i32(ptr + fld(abi, &RELATION, REL_START)?)?,
+        });
+    }
+    Ok(out)
+}
+
+pub(super) struct Names<'a> {
     r: &'a Reader<'a>,
     image: u64,
     w: &'a World,
@@ -511,7 +537,7 @@ struct Names<'a> {
 }
 
 impl<'a> Names<'a> {
-    fn new(r: &'a Reader<'a>, image: u64, w: &'a World) -> Self {
+    pub(super) fn new(r: &'a Reader<'a>, image: u64, w: &'a World) -> Self {
         Self {
             r,
             image,
@@ -532,11 +558,11 @@ impl<'a> Names<'a> {
         self.cache.insert(tag, (code.clone(), name.clone()));
         (code, name)
     }
-    fn who(&mut self, tag: i32) -> Value {
+    pub(super) fn who(&mut self, tag: i32) -> Value {
         let (code, name) = self.entry(tag);
         json!({"tag":code,"name":name})
     }
-    fn code(&mut self, tag: i32) -> String {
+    pub(super) fn code(&mut self, tag: i32) -> String {
         self.entry(tag).0
     }
 }
