@@ -71,6 +71,7 @@ mod mios;
 mod naval;
 mod navalact;
 mod navalui;
+mod occupation;
 mod panelkit;
 mod politics;
 mod production;
@@ -93,6 +94,7 @@ mod testmem;
 mod ui;
 mod ui_action;
 mod units;
+mod war_stats;
 mod wars;
 use crate::{
     actions::{Action, Backend, Epoch, Journal, State},
@@ -464,6 +466,26 @@ pub fn read_only_call(process: &dyn Process, name: &str) -> Result<Value> {
         // Probe-only (macprobe): raw bytes of an own army object, for mapping fields.
         n if n.starts_with("dbg_army_bytes:") => armies::debug_bytes(process, &n[15..]),
         n if n.starts_with("dbg_rows:") => armies::debug_rows(process, &n[9..]),
+        n if n.starts_with("dbg_hex:") => occupation::debug_hex(process, &n[8..]),
+        n if n.starts_with("dbg_country:") => occupation::debug_country(process, &n[12..]),
+        "dbg_states" => occupation::debug_states(process),
+        "hoi4_war_stats" => war_stats::stats(process, &serde_json::Map::new()),
+        "hoi4_war_stats_all" => {
+            let mut args = serde_json::Map::new();
+            args.insert("all".into(), json!(true));
+            war_stats::stats(process, &args)
+        }
+        "hoi4_occupation" | "hoi4_occupation_all" => {
+            let exe = &process
+                .identity()
+                .ok_or_else(|| Error::new("map_data_unavailable", "Game identity unavailable"))?
+                .exe;
+            let mut args = serde_json::Map::new();
+            if name.ends_with("_all") {
+                args.insert("scope".into(), json!("all"));
+            }
+            occupation::occupation(process, &mapdata::game_dir(exe)?, &args)
+        }
         "dbg_camera" => ui::read(process, |r, i| {
             Ok(json!({"height": screenmap::camera_height(r, i)?}))
         }),
@@ -532,6 +554,8 @@ impl Commands for MacClock {
             country_status::tool(),
             diplomacy_state::tool(),
             diplomacy_state::countries_tool(),
+            occupation::tool(),
+            war_stats::tool(),
             json!({"name":"hoi4_peace_status","description":"Read-only: whether the peace conference window is open and, when it is, the texts it shows (current player, score, bidding phase, turns left). Without a conference it returns the route an ordinary player takes (actions list, states on the conference map, End turn). NOT validated live while a conference is open (no war was fought in the qualification game); no peace action tool exists yet.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}}),
             trade::tool(),
             trade::set_tool(),
@@ -711,6 +735,8 @@ impl Commands for MacClock {
                     | "hoi4_research_extras"
                     | "hoi4_states"
                     | "hoi4_wars"
+                    | "hoi4_war_stats"
+                    | "hoi4_occupation"
                     | "hoi4_war_risk"
                     | "hoi4_save"
                     | "hoi4_front_plan"
@@ -1060,6 +1086,18 @@ impl MacClock {
                 json!({"country":tag,"would_join":joiners,"borders_not_held":weak,
                 "declare_would_be_refused":!weak.is_empty()}),
             );
+        }
+        if name == "hoi4_war_stats" {
+            allowed(args, &["all"])?;
+            return war_stats::stats(process, args);
+        }
+        if name == "hoi4_occupation" {
+            allowed(args, &["scope", "limit"])?;
+            let exe = &process
+                .identity()
+                .ok_or_else(|| Error::new("map_data_unavailable", "Game identity unavailable"))?
+                .exe;
+            return occupation::occupation(process, &mapdata::game_dir(exe)?, args);
         }
         if name == "hoi4_wars" {
             allowed(args, &["enemies", "max_states"])?;
