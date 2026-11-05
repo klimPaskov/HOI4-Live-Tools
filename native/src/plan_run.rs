@@ -31,6 +31,8 @@
 //!   research_fallback_prefixes   ["infantry","support_"]: the catalogue fallback only takes keys starting with one
 //!   research_fallback_categories ["armor","air"]: ... or containing one (catalogue keys carry no category field,
 //!                          so a category is a word inside the key). With either list the fallback is restricted
+//!   research_fallback_exclude    words the fallback never takes (default ship, hull, naval, carrier, submarine,
+//!                          destroyer, cruiser, battleship, torpedo, convoy; [] allows everything)
 //!   focus_path             focus keys; the first not completed key the game accepts. A key the game blocks
 //!                          (focus_not_available, prerequisite, exclusive) is skipped for `skip_hours.focus_blocked`
 //!                          and the next key is tried at once; `focus_blocked:[key:reason]` is in the digest
@@ -52,7 +54,8 @@
 //!                          hoi4_states); states with no free slot are remembered full for
 //!                          `construction_full_days` (default 14) game days; free slots are read with
 //!                          hoi4_state_slots unless `construction_probe_slots` is false
-//!   construction_min_idle  idle civilian factories needed first (default 4)
+//!   construction_min_idle  idle civilian factories needed first (default 4), unless the queue
+//!                          is shorter than `construction_queue_depth` (default 3 projects)
 //!   construction_fallback_any_own_state  true: when every listed state is full, build in other own states
 //!                          (hoi4_states with the player tag); every tick's result names why
 //!                          nothing was queued in `construction`
@@ -167,7 +170,8 @@ struct ConState {
     queued_total: u64,
     last_queue: Option<GameHour>,
     baseline: Option<GameHour>,
-    /// the last tick queued a building: leave the next tick to armies and war
+    /// the last tick queued a building: leave the next tick to armies and war (the queue
+    /// depth keeps the factories busy meanwhile)
     yield_next: bool,
     /// this tick's digest line (None when the stage was not reached)
     digest: Option<String>,
@@ -467,10 +471,30 @@ pub fn tick(
             && plan["research_fallback"] != json!("priority_only");
         let prefixes = strings(plan, "research_fallback_prefixes");
         let categories = strings(plan, "research_fallback_categories");
+        // Words the fallback never takes (default: ships; a plan sets [] to allow them).
+        let exclude: Vec<String> = match plan.get("research_fallback_exclude") {
+            Some(v) if v.is_array() => strings(plan, "research_fallback_exclude"),
+            _ => [
+                "ship",
+                "hull",
+                "naval",
+                "carrier",
+                "submarine",
+                "destroyer",
+                "cruiser",
+                "battleship",
+                "torpedo",
+                "convoy",
+            ]
+            .iter()
+            .map(|s| s.to_string())
+            .collect(),
+        };
         let wanted = |tech: &str| {
-            (prefixes.is_empty() && categories.is_empty())
-                || prefixes.iter().any(|p| tech.starts_with(p.as_str()))
-                || categories.iter().any(|c| tech.contains(c.as_str()))
+            !exclude.iter().any(|x| tech.contains(x.as_str()))
+                && ((prefixes.is_empty() && categories.is_empty())
+                    || prefixes.iter().any(|p| tech.starts_with(p.as_str()))
+                    || categories.iter().any(|c| tech.contains(c.as_str())))
         };
         if fallback_on {
             let mut tried = 0;
@@ -1157,10 +1181,19 @@ fn construction_step(
             state.con.queued_total
         )
     };
-    if idle < min_idle {
+    // Keep the queue `construction_queue_depth` projects deep (default 3) so the factories
+    // never wait for the next tick when a project finishes; older servers do not report the
+    // queue and fall back to idle factories only.
+    let depth = plan["construction_queue_depth"]
+        .as_i64()
+        .unwrap_or(3)
+        .clamp(0, 20);
+    let in_queue = economy["construction_projects_queued"].as_i64();
+    let short = in_queue.map_or(0, |n| (depth - n).max(0));
+    if idle < min_idle && short == 0 {
         state.con.digest = Some(line(
             state,
-            "(not enough idle civilian factories)",
+            "(factories busy and the queue is full)",
             &queued,
             &skipped,
         ));
@@ -1321,7 +1354,7 @@ fn construction_step(
         let known_free = state.con.free.get(&id).map(|(f, _)| i64::from(*f));
         // Fill idle capacity in one action: each project takes at most 15 civilian
         // factories, so queue about idle/15 + 1 buildings (job count at least, 5 at most).
-        let want = want.max((idle / 15 + 1).min(5));
+        let want = want.max((idle / 15 + 1).min(5)).max(short.min(5));
         let count = want
             .min(state.con.cap.get(&id).copied().unwrap_or(want))
             .min(known_free.unwrap_or(want))
@@ -2694,6 +2727,43 @@ mod tests {
     }
 
     #[test]
+    fn a_short_queue_is_filled_even_with_every_factory_busy() {
+        // Ethiopia run 10: one project took all 12 factories; when it finished the runner
+        // queued the next one only on a later tick. A queue deeper than the pool avoids that.
+        struct Busy(Builder, i64);
+        impl Tools for Busy {
+            fn call(&self, name: &str, args: &Value) -> Result<Value> {
+                if name == "hoi4_economy" {
+                    return Ok(json!({"factory_trigger_count": {"military": 0},
+                        "civilian_factories_available_for_projects": 12, "civilian_factories_idle": 0,
+                        "construction_projects_queued": self.1, "player": "ITA"}));
+                }
+                self.0.call(name, args)
+            }
+        }
+        let mut b = Builder::new();
+        b.slots = [(4, 5)].into();
+        let plan = json!({"construction": [{"building": "industrial_complex", "states": [4]}]});
+        let short = Busy(b, 1);
+        let mut state = State::default();
+        let step = acted(tick(&mut state, &short, &plan, "l", START).unwrap());
+        assert!(
+            step.starts_with("construct industrial_complex 4: true"),
+            "{step}"
+        );
+        assert_eq!(*short.0.added.borrow(), vec![(4, 2)]);
+        let mut b = Builder::new();
+        b.slots = [(4, 5)].into();
+        let full = Busy(b, 3);
+        let mut state = State::default();
+        assert_eq!(
+            tick(&mut state, &full, &plan, "l", START).unwrap(),
+            Tick::Nothing
+        );
+        assert!(state.con.digest.clone().unwrap().contains("queue is full"));
+    }
+
+    #[test]
     fn a_failing_slot_read_is_not_fatal_and_a_blocked_add_pauses_every_state() {
         let mut b = Builder::new();
         b.probe_fails = true;
@@ -3419,7 +3489,7 @@ mod tests {
     }
 
     #[test]
-    fn the_default_fallback_still_takes_the_first_catalogue_tech_and_is_recorded() {
+    fn the_default_fallback_skips_ships_and_takes_the_first_land_tech() {
         let tools = fake(vec![
             ("hoi4_research", idle_research()),
             ("hoi4_technology_list", catalogue()),
@@ -3435,9 +3505,9 @@ mod tests {
         .unwrap();
         assert_eq!(
             step,
-            Tick::Acted("research naval_hull1 slot 0 (fallback)".into())
+            Tick::Acted("research infantry_weapons1 slot 0 (fallback)".into())
         );
-        assert_eq!(state.stages.fallback_used, ["naval_hull1"]);
+        assert_eq!(state.stages.fallback_used, ["infantry_weapons1"]);
         assert!(state
             .stages
             .research
@@ -3706,7 +3776,7 @@ mod tests {
         assert!(alarm.unwrap()["message"]
             .as_str()
             .unwrap()
-            .contains("naval_hull1"));
+            .contains("infantry_weapons1"));
         assert!(result["research"]
             .as_str()
             .unwrap()

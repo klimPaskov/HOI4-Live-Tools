@@ -1125,3 +1125,76 @@ pub(super) fn debug_alerts(process: &dyn Process) -> Result<serde_json::Value> {
         Ok(serde_json::json!({"count": out.len(), "alerts": out}))
     })
 }
+
+/// Probe-only: every interface-manager view slot with a GUI root, its name and visibility
+/// (maps which top-bar panels are open).
+pub(super) fn debug_views(process: &dyn Process) -> Result<serde_json::Value> {
+    read(process, |r, i| {
+        let idler = r.u64(i + game::layout(r).idler_global)?;
+        let manager = r.u64(idler + MANAGER)?;
+        let mut out = Vec::new();
+        for slot in (0..0x800u64).step_by(8) {
+            let Ok(view) = r.u64(manager + slot) else {
+                continue;
+            };
+            if !plausible(view) {
+                continue;
+            }
+            for off in [VIEW_ROOT, 0x20, 0x28, 0x30, 0x68, 0x70, 0x78, 0x80] {
+                let Ok(p) = r.u64(view + off) else { continue };
+                if !plausible(p) {
+                    continue;
+                }
+                if let Ok(Some(root)) = gui_tree::container(r, p, i) {
+                    out.push(serde_json::json!({"slot": format!("{slot:#x}"), "at": format!("{off:#x}"),
+                        "name": container_name(r, i, root).ok().flatten(), "visible": gui_tree::visible(r, root).ok(),
+                        "shown": gui_tree::shown(r, root).ok()}));
+                    break;
+                }
+            }
+        }
+        Ok(serde_json::json!(out))
+    })
+}
+
+/// Top-bar panels (interface-manager slots, root at +0x490; mapped live 5 November 2026):
+/// production through factions. An open one covers the map and swallows army clicks.
+const TOPBAR_PANELS: [u64; 19] = [
+    0xd8, 0xe0, 0xe8, 0xf0, 0xf8, 0x100, 0x108, 0x110, 0x118, 0x120, 0x128, 0x130, 0x138, 0x140,
+    0x148, 0x150, 0x158, 0x160, 0x168,
+];
+
+/// Names of the open top-bar panels (diplomacy, research, production, ...).
+pub(super) fn open_panels(r: &Reader<'_>, image: u64) -> Result<Vec<String>> {
+    let idler = r.u64(image + game::layout(r).idler_global)?;
+    let manager = r.u64(idler + MANAGER)?;
+    let mut open = Vec::new();
+    for slot in TOPBAR_PANELS {
+        let view = r.u64(manager + slot)?;
+        if !plausible(view) {
+            continue;
+        }
+        let Some(root) = gui_tree::container(r, r.u64(view + VIEW_ROOT)?, image)? else {
+            continue;
+        };
+        if gui_tree::visible(r, root)? {
+            open.push(container_name(r, image, root)?.unwrap_or_else(|| format!("{slot:#x}")));
+        }
+    }
+    Ok(open)
+}
+
+/// Close every open top-bar panel the way a player does (Escape closes the top one).
+pub(super) fn close_panels(process: &dyn Process, keys: &dyn GameInput) -> Result<Vec<String>> {
+    let first = read(process, open_panels)?;
+    for _ in 0..4 {
+        if read(process, open_panels)?.is_empty() {
+            break;
+        }
+        keys.press(crate::platform::game_input::Key::Escape)?;
+        std::thread::sleep(std::time::Duration::from_millis(250));
+    }
+    // An Escape with nothing left to close opens the game menu.
+    super::ui::close_menu(process, keys)?;
+    Ok(first)
+}

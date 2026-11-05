@@ -743,6 +743,42 @@ pub(super) fn check_create(view: &Value, state: i32, absorb: bool) -> Result<()>
         ),
     ))
 }
+/// Ids of the selected own divisions, or None when the selection holds anything else.
+/// The selection is a linked list in the idler: head at `selection_size - 0x10`, each node
+/// {object, prev, next}; mapped live 5 November 2026 (two selected divisions; a province
+/// selection reads CProvince objects instead).
+fn selected_divisions(r: &Reader<'_>, image: u64) -> Result<Option<Vec<String>>> {
+    let u = ui(r)?;
+    let idler = r.u64(image + game::layout(r).idler_global)?;
+    let count = selection_size(r, image)?;
+    let mut node = r.u64(idler + u.selection_size - 0x10)?;
+    let mut out = Vec::new();
+    for _ in 0..count.min(512) {
+        if node == 0 {
+            return Ok(None);
+        }
+        let object = r.u64(node)?;
+        if object == 0 || r.u64(object)? != image + u.division_vtable {
+            return Ok(None);
+        }
+        let handle = r.read(object + u.division_handle, 8)?;
+        out.push(format!(
+            "{:08x}:{:08x}",
+            u32::from_le_bytes(handle[..4].try_into().unwrap()),
+            u32::from_le_bytes(handle[4..].try_into().unwrap())
+        ));
+        node = r.u64(node + 0x10)?;
+    }
+    Ok((out.len() as u64 == count).then_some(out))
+}
+/// Every selected object is an own division that belongs to no army.
+fn selection_unassigned_only(r: &Reader<'_>, image: u64) -> Result<bool> {
+    let Some(ids) = selected_divisions(r, image)? else {
+        return Ok(false);
+    };
+    let groups = membership(r, image)?;
+    Ok(!ids.is_empty() && ids.iter().all(|id| groups.get(id) == Some(&0)))
+}
 pub(super) fn selection_size(r: &Reader<'_>, image: u64) -> Result<u64> {
     let idler = r.u64(image + game::layout(r).idler_global)?;
     // A 32-bit count: in 1.19.4 the next four bytes are no longer zero (a selection of 26 read
@@ -887,7 +923,12 @@ fn create_once(
             }
             // A part of a large state's unassigned divisions is fine when no army stands
             // there (seen live: a box held 5 of Eritrea's 18 with no army in the state).
-            let partial_ok = armies_here == 0 && held > 0 && held <= expected;
+            // With armies here too, a partial box is fine when the selection read back holds
+            // only unassigned divisions (Ethiopia run 10: 11 divisions spread over a state
+            // stayed outside every army because no box held all of them).
+            let partial_ok = held > 0
+                && held <= expected
+                && (armies_here == 0 || read(process, selection_unassigned_only).unwrap_or(false));
             if held != expected && !partial_ok {
                 // No box holds exactly the unassigned divisions here: a new army would also
                 // take divisions of neighbouring armies (seen live 1 November 2026: a create

@@ -496,6 +496,7 @@ pub fn read_only_call(process: &dyn Process, name: &str) -> Result<Value> {
         n if n.starts_with("dbg_widget_idler:") => panelkit::debug_widget_idler(process, &n[17..]),
         n if n.starts_with("dbg_image_save:") => panelkit::debug_image_save(process, &n[15..]),
         "dbg_popups" => panelkit::debug_popups(process),
+        "dbg_views" => panelkit::debug_views(process),
         n if n.starts_with("dbg_find_root:") => panelkit::debug_find_root(process, &n[14..]),
         n if n.starts_with("dbg_tree:") => panelkit::debug_tree(process, &n[9..]),
         n if n.starts_with("dbg_bytes:") => panelkit::debug_bytes(process, &n[10..]),
@@ -847,6 +848,7 @@ impl Commands for MacClock {
             Ok(())
         } else {
             army_names_exist(process, name, arguments)
+                .and_then(|()| self.army_screen_ready(process, name))
         })
         .and_then(|()| self.call_inner(process, name, arguments))
         .and_then(not_applied_is_error);
@@ -856,6 +858,22 @@ impl Commands for MacClock {
             let _ = screenmap::restore_zoom(self.process.as_ref(), &*self.keys);
         }
         result
+    }
+}
+impl MacClock {
+    /// Army orders need the political map with no panel over it: a run left the map in naval
+    /// mode with the diplomacy panel open and every army order failed until both were cleared
+    /// by hand (Ethiopia run 10). F1 is the game's own political map-mode key.
+    fn army_screen_ready(&self, process: &dyn Process, name: &str) -> Result<()> {
+        let army_tool = name.starts_with("hoi4_army_") || name == "hoi4_division_disband";
+        if !army_tool || process.identity() != self.process.identity() {
+            return Ok(());
+        }
+        let process = self.process.as_ref();
+        panelkit::close_panels(process, &*self.keys)?;
+        self.keys.press_code(122)?;
+        std::thread::sleep(std::time::Duration::from_millis(150));
+        Ok(())
     }
 }
 /// Army names are checked before anything is journaled: a typo used to become an uncertain
