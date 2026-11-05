@@ -135,6 +135,37 @@ impl<'a> Reader<'a> {
         }
         String::from_utf8(bytes).map_err(|_| Error::new("invalid_string", "Invalid UTF-8"))
     }
+    /// A libstdc++ `std::wstring` (four-byte code points; pointer, length, then a 16-byte buffer
+    /// that holds up to three characters inline), at most `limit` characters.
+    pub fn wstring_bounded(&self, a: u64, limit: usize) -> Result<String> {
+        if self.abi != StringAbi::LibStdCxx || limit > 1024 {
+            return Err(Error::new(
+                "invalid_string",
+                "Wide strings are read only on the libstdc++ layout",
+            ));
+        }
+        let header = self.read(a, 32)?;
+        let ptr = u64::from_le_bytes(header[..8].try_into().unwrap());
+        let size = u64::from_le_bytes(header[8..16].try_into().unwrap());
+        if size > limit as u64 || ptr % 4 != 0 || (ptr == a + 16 && size > 3) {
+            return Err(Error::new("invalid_string", "Invalid bounded wide string"));
+        }
+        let bytes = if ptr == a + 16 {
+            header[16..16 + 4 * size as usize].to_vec()
+        } else if size == 0 {
+            Vec::new()
+        } else {
+            self.read(ptr, 4 * size as usize)?
+        };
+        if self.read(a, 32)? != header {
+            return Err(Error::new("torn_read", "String header changed"));
+        }
+        bytes
+            .chunks_exact(4)
+            .map(|c| char::from_u32(u32::from_le_bytes(c.try_into().unwrap())))
+            .collect::<Option<String>>()
+            .ok_or_else(|| Error::new("invalid_string", "Invalid UTF-32"))
+    }
     fn libcxx_string(&self, a: u64, limit: usize) -> Result<String> {
         let header = self.read(a, 24)?;
         let bytes = if header[0] & 1 == 0 {
@@ -345,6 +376,48 @@ mod tests {
     fn empty_array_is_known_empty() {
         let f = array(0, 0, false);
         assert!(Reader::new(&f).pointer_array(0x10000).unwrap().is_empty());
+    }
+    fn wide(text: &str, inline: bool) -> Fake {
+        let mut data = vec![0; 128];
+        let chars: Vec<u8> = text
+            .chars()
+            .flat_map(|c| (c as u32).to_le_bytes())
+            .collect();
+        let at = if inline { 0x10010u64 } else { 0x10040 };
+        data[..8].copy_from_slice(&at.to_le_bytes());
+        data[8..16].copy_from_slice(&(text.chars().count() as u64).to_le_bytes());
+        let start = (at - 0x10000) as usize;
+        data[start..start + chars.len()].copy_from_slice(&chars);
+        Fake {
+            data,
+            torn: false,
+            calls: Cell::new(0),
+        }
+    }
+    #[test]
+    fn libstdcxx_wide_strings_decode_inline_and_heap_and_refuse_libcxx() {
+        assert_eq!(
+            Reader::new(&wide("Kriegsmarine", false))
+                .wstring_bounded(0x10000, 160)
+                .unwrap(),
+            "Kriegsmarine"
+        );
+        assert_eq!(
+            Reader::new(&wide("Kö", true))
+                .wstring_bounded(0x10000, 160)
+                .unwrap(),
+            "Kö"
+        );
+        assert!(Reader::new(&wide("Kriegsmarine", false))
+            .wstring_bounded(0x10000, 4)
+            .is_err());
+        // Four characters do not fit the inline buffer.
+        assert!(Reader::new(&wide("Kiel", true))
+            .wstring_bounded(0x10000, 160)
+            .is_err());
+        assert!(Reader::new(&Cxx(wide("Kiel", false)))
+            .wstring_bounded(0x10000, 160)
+            .is_err());
     }
 }
 

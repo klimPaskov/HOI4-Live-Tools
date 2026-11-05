@@ -68,10 +68,10 @@ fn continuation_identity(r: &Reader<'_>, base: u64, own: ResearchContext) -> Res
     let [_, idler, _] = own.campaign.anchors;
     let registry = r.u64(idler + 0x4f8)?;
     pointer(registry)?;
-    exact(r, registry, base + 0x42736f8)?;
+    exact(r, registry, base + 0x4409f68)?;
     let manager = r.u64(idler + 0x6b8)?;
     pointer(manager)?;
-    if r.u64(manager + 0x180)? != idler || r.u64(base + 0x45778e0)? != registry {
+    if r.u64(manager + 0x180)? != idler || r.u64(base + 0x470e6d8)? != registry {
         return Err(refuse("Own continuation manager/input registry changed"));
     }
     if !matches!(r.i32(manager + 0x3d8)?, 2 | 5 | 6 | 23) {
@@ -81,8 +81,8 @@ fn continuation_identity(r: &Reader<'_>, base: u64, own: ResearchContext) -> Res
     let tree = r.u64(manager + 0xf8)?;
     pointer(view)?;
     pointer(tree)?;
-    exact(r, view, base + 0x424dc38)?;
-    exact(r, tree, base + 0x424de40)?;
+    exact(r, view, base + 0x43e3978)?;
+    exact(r, tree, base + 0x43e3b88)?;
     if r.u64(view + 0x2f0)? != idler
         || r.u64(tree + 0x2f0)? != idler
         || r.i32(tree + 0xe24)? != 6
@@ -118,7 +118,7 @@ fn continuation_identity(r: &Reader<'_>, base: u64, own: ResearchContext) -> Res
     identity_settled(r, base, facilities_parent, registry)?;
     let facilities = r.u64(view + 0x900)?;
     pointer(facilities)?;
-    exact(r, facilities, base + 0x42f2708)?;
+    exact(r, facilities, base + 0x4487c30)?;
     if r.u64(facilities + 0x68)? != idler || r.u64(facilities + 0x60)? != facilities_parent {
         return Err(refuse("Continuation facilities view owner changed"));
     }
@@ -264,10 +264,10 @@ fn retained(
     let [_, idler, _] = own.campaign.anchors;
     let registry = r.u64(idler + 0x4f8)?;
     pointer(registry)?;
-    exact(r, registry, base + 0x42736f8)?;
+    exact(r, registry, base + 0x4409f68)?;
     let manager = r.u64(idler + 0x6b8)?;
     pointer(manager)?;
-    if r.u64(manager + 0x180)? != idler || r.u64(base + 0x45778e0)? != registry {
+    if r.u64(manager + 0x180)? != idler || r.u64(base + 0x470e6d8)? != registry {
         return Err(refuse("Own destination manager/input registry changed"));
     }
     let view = r.u64(manager + 0xf0)?;
@@ -275,8 +275,8 @@ fn retained(
     for p in [view, tree] {
         pointer(p)?;
     }
-    exact(r, view, base + 0x424dc38)?;
-    exact(r, tree, base + 0x424de40)?;
+    exact(r, view, base + 0x43e3978)?;
+    exact(r, tree, base + 0x43e3b88)?;
     if r.u64(view + 0x2f0)? != idler || r.u64(tree + 0x2f0)? != idler || r.i32(tree + 0xe24)? != 6 {
         return Err(refuse("Own destination Research views changed"));
     }
@@ -308,7 +308,7 @@ fn retained(
         crate::category_ui::closing_selection(r, base, tree, roots[1], registry)?;
     let production_view = r.u64(manager + 0xd8)?;
     pointer(production_view)?;
-    exact(r, production_view, base + 0x4314180)?;
+    exact(r, production_view, base + 0x44a9ea8)?;
     if r.u64(production_view + 0x2f0)? != idler {
         return Err(refuse("Destination source production view owner changed"));
     }
@@ -434,7 +434,7 @@ mod tests {
             self.put(p, &v.to_le_bytes());
         }
         fn window(&mut self, p: u64, shown: bool) {
-            self.word(p, BASE + 0x4347d58);
+            self.word(p, BASE + 0x44de2b0);
             self.word(p + 0x98, REG);
             self.put(p + 0xa5, &[if shown { 8 } else { 0 }]);
             self.number(p + 0xeb0, 0);
@@ -464,14 +464,14 @@ mod tests {
         fn ready(mode: i32) -> Self {
             let mut f = Self::default();
             f.word(IDLER + 0x4f8, REG);
-            f.word(REG, BASE + 0x42736f8);
+            f.word(REG, BASE + 0x4409f68);
             f.word(IDLER + 0x6b8, MANAGER);
             f.word(MANAGER + 0x180, IDLER);
-            f.word(BASE + 0x45778e0, REG);
+            f.word(BASE + 0x470e6d8, REG);
             f.word(MANAGER + 0xf0, VIEW);
             f.word(MANAGER + 0xf8, TREE);
-            f.word(VIEW, BASE + 0x424dc38);
-            f.word(TREE, BASE + 0x424de40);
+            f.word(VIEW, BASE + 0x43e3978);
+            f.word(TREE, BASE + 0x43e3b88);
             f.word(VIEW + 0x2f0, IDLER);
             f.word(TREE + 0x2f0, IDLER);
             f.number(TREE + 0xe24, 6);
@@ -483,7 +483,7 @@ mod tests {
             f.word(TREE + 0x2f8, TROOT);
             f.word(VIEW + 0x910, PARENT);
             f.word(VIEW + 0x900, FACILITIES);
-            f.word(FACILITIES, BASE + 0x42f2708);
+            f.word(FACILITIES, BASE + 0x4487c30);
             f.word(FACILITIES + 0x68, IDLER);
             f.word(FACILITIES + 0x60, PARENT);
             f.word(FACILITIES + 0x70, FROOT);
@@ -496,7 +496,7 @@ mod tests {
             f.array(TREE + 0xd90, 0, 0);
             f.number(TREE + 0xe10, 0);
             f.word(MANAGER + 0xd8, PVIEW);
-            f.word(PVIEW, BASE + 0x4314180);
+            f.word(PVIEW, BASE + 0x44a9ea8);
             f.word(PVIEW + 0x2f0, IDLER);
             f.word(PVIEW + 0x2f8, PROOT);
             f.window(PROOT, mode == 2);
@@ -642,7 +642,7 @@ mod tests {
             (PVIEW + 0x2f0, IDLER + 8),
             (PROOT + 0x98, REG + 8),
             (MANAGER + 0x180, IDLER + 8),
-            (BASE + 0x45778e0, REG + 8),
+            (BASE + 0x470e6d8, REG + 8),
             (TREE + 0xe08, SLOT1 + 8),
         ] {
             let mut f = Fixture::ready(2);
@@ -744,7 +744,7 @@ mod tests {
             (TREE + 0x2f0, IDLER + 8),
             (ROOT + 0x98, REG + 8),
             (MANAGER + 0x180, IDLER + 8),
-            (BASE + 0x45778e0, REG + 8),
+            (BASE + 0x470e6d8, REG + 8),
         ] {
             let mut f = Fixture::ready(6);
             f.word(address, value);

@@ -109,7 +109,7 @@ impl Fake {
         self.put(p, &vec![0; n]);
     }
     fn window(&mut self, p: u64, shown: bool) {
-        self.word(p, BASE + 0x4347d58);
+        self.word(p, BASE + 0x44de2b0);
         self.word(p + 0x98, REG);
         self.put(p + 0xa5, &[if shown { 8 } else { 0 }]);
         self.number(p + 0xeb0, 0);
@@ -122,16 +122,16 @@ impl Fake {
         f.put(IDLER + 0x8f0, &[0]);
         f.put(IDLER + 0x5b2, &[1]);
         f.word(IDLER + 0x7b0, SETTINGS);
-        f.word(SETTINGS, BASE + 0x431a2f0);
+        f.word(SETTINGS, BASE + 0x44b0210);
         f.word(SETTINGS + 0x30, IDLER);
         f.word(SETTINGS + 0x550, 0);
         f.word(MANAGER + 0x218, MENU);
-        f.word(MENU, BASE + 0x425bf80);
+        f.word(MENU, BASE + 0x43f2360);
         f.word(MENU + 0x19a0, IDLER);
         f.word(MENU + 0x19a8, MANAGER);
         f.word(MENU + 0x19b0, 0);
         f.word(MENU + 0x19c8, OVERVIEW);
-        f.word(OVERVIEW, BASE + 0x4300540);
+        f.word(OVERVIEW, BASE + 0x4495be0);
         f.word(OVERVIEW + 0x1078, IDLER);
         f.word(OVERVIEW + 0x1080, 0);
         f.word(MANAGER + 0x248, 0);
@@ -139,7 +139,7 @@ impl Fake {
     }
     fn callback() -> Self {
         let mut f = Self::default();
-        f.word(BUTTON + 0x80, BASE + 0x4347488);
+        f.word(BUTTON + 0x80, BASE + 0x44dd8d0);
         f.word(BUTTON + 0xa0, 0);
         f.number(BUTTON + 0x98, 1);
         f.word(BUTTON + 0x88, LINK);
@@ -147,7 +147,7 @@ impl Fake {
         f.zero(LINK, 0x19);
         f.word(LINK, TOPBAR + 0xdb0);
         f.zero(TOPBAR + 0xdb0, 0x288);
-        f.word(TOPBAR + 0xdb0, BASE + 0x426c518);
+        f.word(TOPBAR + 0xdb0, BASE + 0x4402d18);
         f.word(TOPBAR + 0xdb0 + 8, CAPTURE);
         f.word(TOPBAR + 0xdb0 + 0x18, BASE + 0x1886560);
         f.word(TOPBAR + 0xdb0 + 0x20, BASE + 0x1886530);
@@ -178,7 +178,7 @@ impl Fake {
     fn opener() -> Self {
         let mut f = Self::callback();
         f.word(MANAGER + 0x188, TOPBAR);
-        f.word(TOPBAR, BASE + 0x426c3d0);
+        f.word(TOPBAR, BASE + 0x4402bc0);
         f.word(TOPBAR + 0x68, IDLER);
         f.word(TOPBAR + 0x70, MANAGER);
         f.word(TOPBAR + 0x78, ROOT);
@@ -200,7 +200,7 @@ impl Fake {
         f.window(p, true);
         f.named(p, false, "production_button", BUTTON, 0xd10000);
         f.word(TOPBAR + 0x4dc0, BUTTON);
-        f.word(BUTTON, BASE + 0x43470c8);
+        f.word(BUTTON, BASE + 0x44dd4f0);
         f.word(BUTTON + 0x68, REG);
         f.number(BUTTON + 0x74, 0x800);
         f.number(BUTTON + 0xac, 0);
@@ -322,7 +322,7 @@ fn engine_materialized_visibility_transitions_and_unknown_auxiliary_block() {
 }
 #[test]
 fn first_void_tuple_is_distinct_from_equipment_and_construction_members() {
-    for member in [0x186d0d0, 0x186d470, 0x17e0c60] {
+    for member in [0x186d0d0, 0x186d470, 0x18aafe0] {
         let mut f = Fake::callback();
         f.word(CAPTURE, BASE + member);
         let v = callback(&Reader::new(&f), BASE, TOPBAR, BUTTON, &mut Vec::new()).unwrap();
@@ -429,7 +429,7 @@ fn reviewed_named_parent_position_gate_is_supported_and_pinned() {
     let gate = 0xe00000;
     f.word(BUTTON + 0x1a8, gate);
     f.word(ROOT + 0x30000 + 0xe78, gate);
-    f.word(gate, BASE + 0x43484f0);
+    f.word(gate, BASE + 0x44dea58);
     f.put(gate + 0x128, &[1]);
     let mut scope = Vec::new();
     let v = opener(

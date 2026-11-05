@@ -1,10 +1,14 @@
 [package]
 name = "hoi4-live-native"
-version = "1.2.0"
+version = "1.3.0"
 edition = "2021"
 rust-version = "1.86"
 license = "Apache-2.0 AND MIT"
 description = "Owned-process native MCP foundation for HOI4 Live Tools"
+
+[features]
+# Development only: reload the Linux address table from HOI4_LIVE_DEV_TABLE (never in releases).
+dev-table = []
 
 [dependencies]
 fs2 = "0.4"

@@ -56,11 +56,11 @@ fn inactive_unknown_and_omitted_selection_never_follow_template_or_catalog() {
         } else {
             assert!(s["active"].is_null());
         }
-        production_not_read(&f, &[MANAGER + 0x3e8, BASE + 0x439f400, DB, TEMPLATE]);
+        production_not_read(&f, &[MANAGER + 0x3e8, BASE + 0x4535360, DB, TEMPLATE]);
     }
     let f = selected(1);
     snapshot(&f).unwrap();
-    production_not_read(&f, &[MANAGER + 0x3f0, MANAGER + 0x3e8, BASE + 0x439f400]);
+    production_not_read(&f, &[MANAGER + 0x3f0, MANAGER + 0x3e8, BASE + 0x4535360]);
 }
 
 #[test]
@@ -72,9 +72,9 @@ fn selection_membership_type_validity_ordinal_and_key_fail_closed() {
     for (address, value) in [
         (MANAGER + 0x3e8, 0),
         (MANAGER + 0x3e8, TEMPLATE + 1),
-        (BASE + 0x439f400, DB + 1),
-        (DB, BASE + 0x41b3ee0),
-        (TEMPLATE, BASE + 0x41b49d0),
+        (BASE + 0x4535360, DB + 1),
+        (DB, BASE + 0x43484b0),
+        (TEMPLATE, BASE + 0x4348fa0),
         (LIST + 8, SENTINEL),
     ] {
         let mut f = selected(1);
@@ -125,7 +125,7 @@ fn selection_final_witnesses_reject_changes_even_on_empty_page() {
     for (address, size) in [
         (MANAGER + 0x3f0, 4),
         (MANAGER + 0x3e8, 8),
-        (BASE + 0x439f400, 8),
+        (BASE + 0x4535360, 8),
         (DB, 8),
         (DB + 0x40, 16),
         (LIST, 24),

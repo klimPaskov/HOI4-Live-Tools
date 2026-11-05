@@ -292,10 +292,7 @@ fn connect_pointer<'a>(
     }
     let server = &controls.connection.stream().server;
     verify_display_server(server)?;
-    let socket = super::super::connect_socket_until(
-        Path::new(&format!("/tmp/.X11-unix/X{}", transport.display)),
-        until,
-    )?;
+    let socket = super::super::connect_display(transport.display, Some(until))?;
     verify_display_peer(&socket, server)?;
     let (stream, (family, address)) = DefaultStream::from_unix_stream(socket).map_err(xerror)?;
     if family != x11rb_protocol::xauth::Family::LOCAL {

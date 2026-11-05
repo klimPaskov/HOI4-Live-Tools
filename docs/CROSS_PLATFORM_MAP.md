@@ -212,10 +212,26 @@ also write single-vote results. Negative displacements are dropped.
 **`--check-table T [--keys K]`** checks a table against the `xlayout` parser
 rules. With a keys file it also reports coverage.
 
-The smoke run mapped the macOS 1.19.4.1 binary against the 1.19.3 ELF. It is
-cross-version, so its values are not valid and its numbers only show that the
-pipeline runs end to end. On a same-version pair, expect field coverage nearer
-the 1.19.3 validation above.
+Two passes then complete the table:
+
+- Monotone check and gap fill (on by default, `--no-fill` turns it off). Within one class, offsets
+  must keep their order; a pair that does not is dropped. A missing key whose two neighbours carry
+  the same shift gets that shift (`bracketed`), as does one beside a single neighbour whose shift a
+  low vote confirms (`low-consistent`). The coverage report names the rule for every filled key.
+- `--live scripts/data/xlayout-live-1.19.4.1.json` applies the entries checked in the running game.
+  Every live entry carries its evidence (what was read, and which tool ran through it); an entry
+  without evidence is refused. A live value wins over a static one, and the generator lists each
+  override.
+
+The shipped Linux 1.19.4.1 table was built this way from the macOS 1.19.4.1 Mach-O and the
+Linux 1.19.4.1 ELF:
+
+```
+scripts/gen_linux_layout.py generate MACHO ELF --hints scripts/data/xlayout-hints-1.19.4.1.json   --live scripts/data/xlayout-live-1.19.4.1.json
+```
+
+`scripts/linux_build_migrate.py OLD_ELF NEW_ELF` moves the core Linux modules' own addresses and
+class-wide fields from one Linux build to the next (used for 1.19.3 to 1.19.4.1).
 
 ## Running
 

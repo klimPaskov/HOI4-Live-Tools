@@ -13,20 +13,20 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 fn point_source(r: &Reader<'_>, base: u64, receiver: u64) -> Result<Value> {
     let unavailable = |reason| json!({"getter_source_layout_verified":false,"reason":reason});
-    if receiver == 0 || r.u64(receiver)? != base + 0x435cee0 {
+    if receiver == 0 || r.u64(receiver)? != base + 0x44f2f38 {
         return Ok(unavailable("receiver_layout_unavailable"));
     }
     // Constructor-proved CPdxMouse primary +c8 tail-calls the packed point
     // wrapper. Its incoming byte arguments are overwritten, not returned.
-    if r.u64(base + 0x435cee0 + 0xc8)? != base + 0x2fad780 {
+    if r.u64(base + 0x44f2f38 + 0xc8)? != base + 0x3119a20 {
         return Ok(unavailable("receiver_getter_unavailable"));
     }
     // SDL_DYNAMIC_API can replace this implementation. Never infer globals
     // from the initial ELF relocation or invoke its lazy initializer.
-    if r.u64(base + 0x4391098)? != base + 0x301a3a0 {
+    if r.u64(base + 0x4527008)? != base + 0x3186960 {
         return Ok(unavailable("builtin_point_source_unavailable"));
     }
-    let point = [r.i32(base + 0x463b960)?, r.i32(base + 0x463b964)?];
+    let point = [r.i32(base + 0x47d2940)?, r.i32(base + 0x47d2944)?];
     if point.iter().any(|v| v.unsigned_abs() > 1_000_000) {
         return Err(Error::new(
             "invalid_gui_geometry",
@@ -49,19 +49,19 @@ fn source_pointer(pointer: u64) -> Result<u64> {
 }
 fn source_window(r: &Reader<'_>, base: u64, dimensions: &[i32]) -> Result<Value> {
     let unavailable = |reason| json!({"association_available":false,"reason":reason,"owned_os_window_verified":false});
-    let video = r.u64(base + 0x463bbf8)?;
+    let video = r.u64(base + 0x47d2bd8)?;
     if video == 0 {
         return Ok(unavailable("active_video_unavailable"));
     }
     source_pointer(video)?;
     // Nonpolymorphic SDL objects: independently recovered constructor callback
     // fingerprint, not an RTTI name or a guessed layout for another driver.
-    for (offset, function) in [(0x48, 0x307d430), (0x58, 0x307e0d0), (0x228, 0x30f5d30)] {
+    for (offset, function) in [(0x48, 0x31e99f0), (0x58, 0x307e0d0), (0x228, 0x32622f0)] {
         if r.u64(video + offset)? != base + function {
             return Ok(unavailable("x11_driver_layout_unavailable"));
         }
     }
-    let window = r.u64(base + 0x463b958)?;
+    let window = r.u64(base + 0x47d2938)?;
     if window == 0 {
         return Ok(unavailable("input_window_focus_unavailable"));
     }
@@ -123,7 +123,7 @@ fn source_window(r: &Reader<'_>, base: u64, dimensions: &[i32]) -> Result<Value>
             "Bounded native input window ID required",
         ));
     }
-    let relative = [r.i32(base + 0x463b984)?, r.i32(base + 0x463b988)?];
+    let relative = [r.i32(base + 0x47d2964)?, r.i32(base + 0x47d2968)?];
     Ok(
         json!({"association_available":true,"association_scope":"builtin input focus and reciprocal X11 driver registry","native_window_id":xid,"window_dimensions":size,"graphics_dimensions_match":size==dimensions[..2],"relative_mode_raw":relative,"normal_absolute_mode":relative==[0,0],"owned_os_window_verified":false,"client_origin_verified":false,"fresh_event_verified":false}),
     )
@@ -193,9 +193,9 @@ fn input_geometry_from_reader_with_source(
             "Optional source-point observation requires the reviewed Mac layout",
         ));
     }
-    let gs = r.u64(base + 0x44086a8)?;
-    let idler = r.u64(base + 0x44085f8)?;
-    if r.u64(gs)? != base + 0x42c7598 || r.u64(idler)? != base + 0x42c9a88 {
+    let gs = r.u64(base + 0x459e9f0)?;
+    let idler = r.u64(base + 0x459e908)?;
+    if r.u64(gs)? != base + 0x445e068 || r.u64(idler)? != base + 0x4460048 {
         return Err(Error::new("campaign_unavailable", "In-game GUI required"));
     }
     // CGameGui's constructor calls CGui at offset zero, then installs its own
@@ -203,14 +203,14 @@ fn input_geometry_from_reader_with_source(
     // CGui stores CGraphics at +b8; the game-derived graphics constructor
     // installs CGameGraphics, also published by the graphics global setter.
     let gui = r.u64(idler + 0x4f8)?;
-    let graphics = r.u64(base + 0x4577890)?;
-    if r.u64(gui)? != base + 0x42736f8 {
+    let graphics = r.u64(base + 0x470e688)?;
+    if r.u64(gui)? != base + 0x4409f68 {
         return Err(Error::new(
             "gui_unavailable",
             "Exact primary CGameGui required",
         ));
     }
-    if r.u64(graphics)? != base + 0x42417f8 {
+    if r.u64(graphics)? != base + 0x43d7220 {
         return Err(Error::new(
             "gui_unavailable",
             "Exact primary CGameGraphics required",
@@ -292,15 +292,15 @@ fn input_geometry_from_reader_with_source(
         source_point["logical_cache_equivalent"] = json!(logical == point);
         source_point["window_association"] = source_window(r, base, &dims)?;
     }
-    if r.u64(base + 0x44086a8)? != gs
-        || r.u64(base + 0x44085f8)? != idler
-        || r.u64(gs)? != base + 0x42c7598
-        || r.u64(idler)? != base + 0x42c9a88
+    if r.u64(base + 0x459e9f0)? != gs
+        || r.u64(base + 0x459e908)? != idler
+        || r.u64(gs)? != base + 0x445e068
+        || r.u64(idler)? != base + 0x4460048
         || r.u64(idler + 0x4f8)? != gui
-        || r.u64(base + 0x4577890)? != graphics
-        || r.u64(gui)? != base + 0x42736f8
+        || r.u64(base + 0x470e688)? != graphics
+        || r.u64(gui)? != base + 0x4409f68
         || r.u64(gui + 0xb8)? != graphics
-        || r.u64(graphics)? != base + 0x42417f8
+        || r.u64(graphics)? != base + 0x43d7220
         || r.read(graphics + 0x40, 8)? != pointer
         || r.read(graphics + 0x178, 16)? != dimensions
         || r.read(graphics + 0x1d0, 16)? != scales

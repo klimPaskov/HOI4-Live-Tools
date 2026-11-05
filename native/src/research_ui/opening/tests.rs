@@ -33,13 +33,13 @@ impl Fixture {
         let mut f = Self::default();
         f.word(IDLER + 0x4f8, REG);
         f.word(IDLER + 0x6b8, MANAGER);
-        f.word(REG, BASE + 0x42736f8);
+        f.word(REG, BASE + 0x4409f68);
         f.word(MANAGER + 0x180, IDLER);
-        f.word(BASE + 0x45778e0, REG);
+        f.word(BASE + 0x470e6d8, REG);
         f.word(MANAGER + 0xf0, VIEW);
         f.word(MANAGER + 0xf8, TREE);
-        f.word(VIEW, BASE + 0x424dc38);
-        f.word(TREE, BASE + 0x424de40);
+        f.word(VIEW, BASE + 0x43e3978);
+        f.word(TREE, BASE + 0x43e3b88);
         f.word(VIEW + 0x2f0, IDLER);
         f.word(TREE + 0x2f0, IDLER);
         f.number(TREE + 0xe24, 6);
@@ -47,7 +47,7 @@ impl Fixture {
         f.number(TREE + 0xe20, 1);
         f.number(STATUS + 0x138, 1);
         f.word(VIEW + 0x2f8, ROOT);
-        f.word(ROOT, BASE + 0x4347d58);
+        f.word(ROOT, BASE + 0x44de2b0);
         f.word(ROOT + 0x98, REG);
         f.put(ROOT + 0xa5, &[if shown { 8 } else { 0 }]);
         f.number(ROOT + 0xeb0, states[0]);
@@ -159,7 +159,7 @@ fn unknown_animation_foreign_owner_and_wrong_type_never_become_pending_readiness
         (ROOT + 0x98, REG + 8),
         (MANAGER + 0x180, IDLER + 8),
         (VIEW + 0x2f0, IDLER + 8),
-        (BASE + 0x45778e0, REG + 8),
+        (BASE + 0x470e6d8, REG + 8),
         (TREE + 0x2f0, IDLER + 8),
     ] {
         let mut f = Fixture::new([1, 0], true);
@@ -167,7 +167,7 @@ fn unknown_animation_foreign_owner_and_wrong_type_never_become_pending_readiness
         assert_eq!(f.sample().err().unwrap().code, "research_precondition");
     }
     let mut f = Fixture::new([1, 0], true);
-    f.word(ROOT, BASE + 0x42f2708);
+    f.word(ROOT, BASE + 0x4487c30);
     assert_eq!(f.sample().err().unwrap().code, "invalid_gui_type");
     let mut f = Fixture::new([0, 0], true);
     f.number(TREE + 0xe20, 2);

@@ -18,17 +18,17 @@ pub(crate) struct CanonicalFolders {
 /// Existing independently recovered category database traversal, without a
 /// dependency on materialized GUI roots. The reserved singleton has no payload.
 pub(crate) fn canonical_folders(r: &Reader<'_>, base: u64) -> Result<CanonicalFolders> {
-    let database = r.u64(base + 0x439f450)?;
-    exact(r, database, base + 0x42110c8)?;
+    let database = r.u64(base + 0x45353b0)?;
+    exact(r, database, base + 0x43a5fc0)?;
     let folders = array(r, database + 0xa8, 128)?;
-    let sentinel = r.u64(base + 0x43a40e0)?;
-    exact(r, sentinel, base + 0x42113f0)?;
+    let sentinel = r.u64(base + 0x453a120)?;
+    exact(r, sentinel, base + 0x43a63d0)?;
     if folders.first().copied() != Some(sentinel) {
         return Err(refuse("Reserved category singleton join"));
     }
     let mut ids = std::collections::BTreeSet::new();
     for pointer in folders.into_iter().skip(1) {
-        exact(r, pointer, base + 0x42112c0)?;
+        exact(r, pointer, base + 0x43a6290)?;
         let key = r.string_bounded(pointer + 8, 256)?;
         if key.is_empty() || key.chars().any(char::is_control) || !ids.insert(key) {
             return Err(refuse("Malformed canonical category key"));
@@ -37,7 +37,7 @@ pub(crate) fn canonical_folders(r: &Reader<'_>, base: u64) -> Result<CanonicalFo
     Ok(CanonicalFolders { database, ids })
 }
 fn container(r: &Reader<'_>, base: u64, p: u64, registry: u64) -> Result<()> {
-    exact(r, p, base + 0x4347d58)?;
+    exact(r, p, base + 0x44de2b0)?;
     if r.u64(p + 0x98)? != registry {
         return Err(refuse("Foreign category container registry"));
     }
@@ -152,9 +152,9 @@ fn observe_inner(
     if key.is_empty() || key.len() > 256 || key.chars().any(char::is_control) {
         return Err(refuse("Invalid category key"));
     }
-    exact(r, tree, base + 0x424de40)?;
-    exact(r, registry, base + 0x42736f8)?;
-    exact(r, own_status, base + 0x42108f8)?;
+    exact(r, tree, base + 0x43e3b88)?;
+    exact(r, registry, base + 0x4409f68)?;
+    exact(r, own_status, base + 0x43a5750)?;
     let own_tag = r.i32(own_status + 0x138)?;
     let displayed = r.i32(tree + 0xe20)?;
     if own_tag <= 0
@@ -165,7 +165,7 @@ fn observe_inner(
         return Err(refuse("Own category context required"));
     }
     let slot = r.u64(tree + 0xe08)?;
-    exact(r, slot, base + 0x4210898)?;
+    exact(r, slot, base + 0x43a56f0)?;
     if r.u64(slot + 0x10)? != own_status {
         return Err(refuse("Foreign selected research slot"));
     }
@@ -217,8 +217,8 @@ fn observe_inner(
     }
     let table = r.u64(button)?;
     let (observer, encoding) = match table.checked_sub(base) {
-        Some(0x4346b10) => (0x4346ea8, "11CButtonDrag"),
-        Some(0x43470c8) => (0x4347488, "15CButtonStandard"),
+        Some(0x44dcf10) => (0x44dd2c8, "11CButtonDrag"),
+        Some(0x44dd4f0) => (0x44dd8d0, "15CButtonStandard"),
         _ => {
             out["reason"] = json!("unknown_control_layout");
             return Ok(out);
@@ -271,7 +271,7 @@ fn observe_inner(
         out["reason"] = json!("different_listener_target");
         return Ok(out);
     }
-    if r.u64(glue)? != base + 0x424e0a8
+    if r.u64(glue)? != base + 0x43e3df8
         || r.u64(glue + 0x38)? != base + 0x15a5710
         || r.u64(glue + 0x40)? != base + 0x15a56e0
         || r.u64(glue + 0x18)? != 0
@@ -297,7 +297,7 @@ fn observe_inner(
         return Ok(out);
     }
     let mut reuse = crate::node_reuse::Reuse::new(base, tree);
-    out["sprite_diagnostic"] = if table == base + 0x43470c8 {
+    out["sprite_diagnostic"] = if table == base + 0x44dd4f0 {
         let state = r.i32(button + 0xac)?;
         if !(0..=3).contains(&state) {
             return Err(refuse("Standard category state enum bound"));
@@ -353,16 +353,16 @@ mod tests {
             };
             let b = 0x10000;
             for (p, n, t) in [
-                (0x20000, 0xe30, 0x424de40),
-                (0x30000, 0xc00, 0x4347d58),
-                (0x40000, 0xc00, 0x4347d58),
-                (0x50000, 0xc00, 0x4347d58),
-                (0x60000, 0x160, 0x4346b10),
-                (0x70000, 0x200, 0x42108f8),
-                (0x80000, 0x200, 0x42736f8),
-                (0x90000, 0xc0, 0x42110c8),
-                (0xa0000, 0xd0, 0x42112c0),
-                (0xb0000, 0x30, 0x4210898),
+                (0x20000, 0xe30, 0x43e3b88),
+                (0x30000, 0xc00, 0x44de2b0),
+                (0x40000, 0xc00, 0x44de2b0),
+                (0x50000, 0xc00, 0x44de2b0),
+                (0x60000, 0x160, 0x44dcf10),
+                (0x70000, 0x200, 0x43a5750),
+                (0x80000, 0x200, 0x4409f68),
+                (0x90000, 0xc0, 0x43a5fc0),
+                (0xa0000, 0xd0, 0x43a6290),
+                (0xb0000, 0x30, 0x43a56f0),
             ] {
                 f.region(p, n);
                 f.word(p, b + t);
@@ -375,12 +375,12 @@ mod tests {
             for p in [0x30000, 0x40000, 0x50000] {
                 f.word(p + 0x98, 0x80000);
             }
-            f.word(b + 0x439f450, 0x90000);
+            f.word(b + 0x45353b0, 0x90000);
             f.array(0x900a8, 0xc0000, 2);
             f.word(0xc0000, 0xa2000);
             f.word(0xc0008, 0xa0000);
-            f.word(b + 0x43a40e0, 0xa2000);
-            f.word(0xa2000, b + 0x42113f0);
+            f.word(b + 0x453a120, 0xa2000);
+            f.word(0xa2000, b + 0x43a63d0);
             f.string(0xa0008, "industry_folder");
             f.array(0x30bb0, 0xc1000, 2);
             f.word(0xc1000, 0x40000);
@@ -402,13 +402,13 @@ mod tests {
             f.word(0xc7000, 0x60000);
             f.word(0x60068, 0x80000);
             f.word(0x60008, 0x50000);
-            f.word(0x60080, b + 0x4346ea8);
+            f.word(0x60080, b + 0x44dd2c8);
             f.word(0x60088, 0xd0000);
             f.word(0x60090, 0xd0000);
             f.put(0x60098, &1i32.to_le_bytes());
             f.region(0xd0000, 32);
             f.word(0xd0000, 0x20358);
-            f.word(0x20358, b + 0x424e0a8);
+            f.word(0x20358, b + 0x43e3df8);
             f.word(0x20380, 0xe0000);
             f.word(0x20390, b + 0x15a5710);
             f.word(0x20398, b + 0x15a56e0);
@@ -464,7 +464,7 @@ mod tests {
     }
     #[test]
     fn exact_drag_and_standard_associations() {
-        for (t, o) in [(0x4346b10, 0x4346ea8), (0x43470c8, 0x4347488)] {
+        for (t, o) in [(0x44dcf10, 0x44dd2c8), (0x44dd4f0, 0x44dd8d0)] {
             let mut f = Fixture::new();
             f.word(0x60000, 0x10000 + t);
             f.word(0x60080, 0x10000 + o);
@@ -513,7 +513,7 @@ mod tests {
     #[test]
     fn unknown_control_stops_before_owner_payload() {
         let mut f = Fixture::new();
-        f.word(0x60000, 0x10000 + 0x4347000);
+        f.word(0x60000, 0x10000 + 0x44dd428);
         assert_eq!(f.observe().unwrap()["reason"], "unknown_control_layout");
         assert!(!f.reads.borrow().contains_key(&0x60068));
     }
@@ -524,8 +524,8 @@ mod tests {
         assert!(!f.reads.borrow().contains_key(&0xa2008));
         for (a, v) in [
             (0xc0000, 0xa0000),
-            (0x10000 + 0x43a40e0, 0xa0000),
-            (0xa2000, 0x10000 + 0x4211420),
+            (0x10000 + 0x453a120, 0xa0000),
+            (0xa2000, 0x10000 + 0x43a6400),
         ] {
             let mut f = Fixture::new();
             f.word(a, v);
@@ -536,14 +536,14 @@ mod tests {
     #[test]
     fn singleton_final_witness_mutation_refuses() {
         let mut f = Fixture::new();
-        f.fault = Some((0x10000 + 0x43a40e0, 0xa2008u64.to_le_bytes().to_vec()));
+        f.fault = Some((0x10000 + 0x453a120, 0xa2008u64.to_le_bytes().to_vec()));
         assert_eq!(f.observe().unwrap_err().code, "torn_read");
     }
     #[test]
     fn foreign_selected_other_folder_refuses_before_target_control() {
         let mut f = Fixture::new();
         f.region(0xa1000, 0xd0);
-        f.word(0xa1000, 0x10000 + 0x42112c0);
+        f.word(0xa1000, 0x10000 + 0x43a6290);
         f.string(0xa1008, "electronics");
         f.array(0x900a8, 0xc0000, 3);
         f.word(0xc0010, 0xa1000);
@@ -552,7 +552,7 @@ mod tests {
         f.array(0x30bc8, 0xc2000, 3);
         f.string(0xc2040, "electronics");
         f.region(0x51000, 0xa0);
-        f.word(0x51000, 0x10000 + 0x4347d58);
+        f.word(0x51000, 0x10000 + 0x44de2b0);
         f.word(0x51098, 0x80008);
         f.array(0x20d78, 0xc6000, 2);
         f.word(0xc6008, 0x51000);
@@ -591,30 +591,30 @@ mod tests {
             let b = 0x10000;
             self.region(0xf0000, 0x1b0);
             self.word(0x60110, 0xf0000);
-            self.word(0xf0000, b + 0x4356e08);
+            self.word(0xf0000, b + 0x44ed1d8);
             self.word(0xf0138, 0x60000);
-            self.metadata(b + 0x4356e08, b + 0x4357900, b + 0x350a000, "7CSprite");
+            self.metadata(b + 0x44ed1d8, b + 0x44edcd0, b + 0x3682000, "7CSprite");
             self.region(0xf1000, 0x1f0);
             self.word(0xf0168, 0xf1000);
-            self.word(0xf1000, b + 0x4357160);
-            self.metadata(b + 0x4357160, b + 0x4357910, b + 0x350a100, "11CSpriteType");
+            self.word(0xf1000, b + 0x44ed530);
+            self.metadata(b + 0x44ed530, b + 0x44edce0, b + 0x3682100, "11CSpriteType");
             self.put(0xf0114, &1.0f32.to_le_bytes());
             for a in [0xf1090, 0xf1094, 0xf10a4, 0xf10a8] {
                 self.put(a, &1i32.to_le_bytes());
             }
             self.region(0xf2000, 0x500);
-            self.word(b + 0x4577890, 0xf2000);
-            self.word(0xf2000, b + 0x42417f8);
+            self.word(b + 0x470e688, 0xf2000);
+            self.word(0xf2000, b + 0x43d7220);
             self.word(0x800b8, 0xf2000);
-            self.word(0xf21f0, b + 0x43484f0);
-            self.word(0xf2350, b + 0x43484f0);
+            self.word(0xf21f0, b + 0x44dea58);
+            self.word(0xf2350, b + 0x44dea58);
             self.region(0x40e70, 16);
             self.word(0x40e70, 0xf3000);
             self.word(0x40e78, 0xf4000);
             self.region(0xf3000, 0x160);
             self.region(0xf4000, 0x160);
-            self.word(0xf3000, b + 0x43484f0);
-            self.word(0xf4000, b + 0x43484f0);
+            self.word(0xf3000, b + 0x44dea58);
+            self.word(0xf4000, b + 0x44dea58);
             self.word(0xf4108, 0xf3000);
             self.array(0xf30c0, 0xf5000, 1);
             self.word(0xf5000, 0xf4000);
@@ -638,8 +638,8 @@ mod tests {
     #[test]
     fn standard_geometry_has_no_borrowed_drag_fields() {
         let mut f = Fixture::new();
-        f.word(0x60000, 0x10000 + 0x43470c8);
-        f.word(0x60080, 0x10000 + 0x4347488);
+        f.word(0x60000, 0x10000 + 0x44dd4f0);
+        f.word(0x60080, 0x10000 + 0x44dd8d0);
         let v = f.geometry().unwrap();
         assert_eq!(
             v["sprite_diagnostic"]["reason"],
@@ -670,8 +670,8 @@ mod tests {
             (0xf0138, 0x60008u64.to_le_bytes().to_vec()),
             (0xf0114, 2.0f32.to_le_bytes().to_vec()),
             (
-                0x10000 + 0x4356e08 - 8,
-                (0x10000 + 0x4357920u64).to_le_bytes().to_vec(),
+                0x10000 + 0x44ed1d8 - 8,
+                (0x10000 + 0x44edd10u64).to_le_bytes().to_vec(),
             ),
         ] {
             let mut f = Fixture::new();
@@ -714,8 +714,8 @@ mod tests {
     impl Fixture {
         fn standard_sprite(&mut self) {
             self.sprite();
-            self.word(0x60000, 0x10000 + 0x43470c8);
-            self.word(0x60080, 0x10000 + 0x4347488);
+            self.word(0x60000, 0x10000 + 0x44dd4f0);
+            self.word(0x60080, 0x10000 + 0x44dd8d0);
             self.word(0x600e8, 0xf0000);
         }
     }
@@ -755,7 +755,7 @@ mod tests {
         assert!(!f.reads.borrow().contains_key(&0xf0168));
         let mut f = Fixture::new();
         f.standard_sprite();
-        f.word(0xf1000, 0x10000 + 0x4356e08);
+        f.word(0xf1000, 0x10000 + 0x44ed1d8);
         assert_eq!(
             f.geometry().unwrap()["sprite_diagnostic"]["reason"],
             "resource_layout_unavailable"

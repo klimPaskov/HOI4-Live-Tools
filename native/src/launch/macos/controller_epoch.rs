@@ -92,15 +92,21 @@ fn valid_playthrough(value: &str) -> bool {
 }
 fn validate(epoch: &Epoch, context: &ClockContext) -> Result<()> {
     let game = &epoch.game;
-    let timestamp = game.start_ticks.split_once('.');
-    let canonical_timestamp = timestamp.is_some_and(|(seconds, micros)| {
-        !seconds.is_empty()
-            && seconds.bytes().all(|b| b.is_ascii_digit())
-            && (seconds.len() == 1 || !seconds.starts_with('0'))
-            && seconds.parse::<u64>().is_ok()
-            && micros.len() == 6
-            && micros.bytes().all(|b| b.is_ascii_digit())
-    });
+    let canonical_number = |n: &str| {
+        !n.is_empty()
+            && n.bytes().all(|b| b.is_ascii_digit())
+            && (n.len() == 1 || !n.starts_with('0'))
+            && n.parse::<u64>().is_ok()
+    };
+    // macOS: "seconds.micros" start time; Linux: start time in clock ticks.
+    let canonical_timestamp = match game.start_ticks.split_once('.') {
+        Some((seconds, micros)) => {
+            canonical_number(seconds)
+                && micros.len() == 6
+                && micros.bytes().all(|b| b.is_ascii_digit())
+        }
+        None => cfg!(target_os = "linux") && canonical_number(&game.start_ticks),
+    };
     let campaign = epoch.campaign.split_once(':');
     if game.pid <= 0
         || game.start_ticks.len() > 32

@@ -21,10 +21,10 @@ pub(super) fn observe(
         return Err(invalid("Aligned search renderer required"));
     }
     let primary = r.u64(render)?;
-    if primary != base + 0x43593d8 && primary != base + 0x434cc68 {
+    if primary != base + 0x44ef818 && primary != base + 0x44e2ee8 {
         out["observed_table_rva"] = primary
             .checked_sub(base)
-            .filter(|v| (0x41adde0..0x436d9f8).contains(v))
+            .filter(|v| (0x4342540..0x45039f8).contains(v))
             .map(|v| json!(format!("0x{v:x}")))
             .unwrap_or(Value::Null);
         // Unknown renderer payload and table remain unread.
@@ -35,7 +35,7 @@ pub(super) fn observe(
     }
     witnesses.region(render, 0x240, "search_renderer");
     let mut reuse = Reuse::for_owned_focus(base);
-    if primary == base + 0x43593d8 {
+    if primary == base + 0x44ef818 {
         out = crate::info_research_button::text_raw(r, &mut reuse, render, container, registry)?;
         out["render_type_encoding"] = json!("11CTextSprite");
         out["available"] = out["raw_fields_available"].clone();

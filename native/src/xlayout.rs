@@ -79,7 +79,54 @@ impl Table {
             )
         })
     }
+    /// Development builds only: log an unmapped key to `HOI4_LIVE_DEV_MISSING`
+    /// and, while `<that path>.guess` exists, answer with the offset bracketed
+    /// by two mapped neighbours of the same class that share one delta.
+    #[cfg(feature = "dev-table")]
+    fn dev_missing(&self, class: &Class, mac: u64) -> Option<u64> {
+        use std::io::Write;
+        let log = std::env::var_os("HOI4_LIVE_DEV_MISSING")?;
+        let mut guess_flag = log.clone();
+        guess_flag.push(".guess");
+        let (mut lo, mut hi) = (None::<(u64, u64)>, None::<(u64, u64)>);
+        for ((name, k), v) in &self.fields {
+            if name == class.name {
+                if *k < mac && lo.is_none_or(|(a, _)| *k > a) {
+                    lo = Some((*k, *v));
+                }
+                if *k > mac && hi.is_none_or(|(a, _)| *k < a) {
+                    hi = Some((*k, *v));
+                }
+            }
+        }
+        let guess = match (lo, hi) {
+            (Some((a, x)), Some((b, y))) if x.wrapping_sub(a) == y.wrapping_sub(b) => {
+                Some(mac.wrapping_add(x.wrapping_sub(a)))
+            }
+            _ => None,
+        }
+        .filter(|_| std::path::Path::new(&guess_flag).exists());
+        if let Ok(mut f) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&log)
+        {
+            let _ = writeln!(
+                f,
+                "{} 0x{mac:x} {:?}",
+                class.name,
+                guess.map(|g| format!("0x{g:x}"))
+            );
+        }
+        guess
+    }
     fn field(&self, class: &Class, mac: u64) -> Result<u64> {
+        #[cfg(feature = "dev-table")]
+        if !self.fields.contains_key(&(class.name.to_string(), mac)) {
+            if let Some(guess) = self.dev_missing(class, mac) {
+                return Ok(guess);
+            }
+        }
         self.fields
             .get(&(class.name.to_string(), mac))
             .copied()
@@ -95,10 +142,42 @@ impl Table {
     }
 }
 
-/// Generated table for the Linux build, when one is shipped.
-const LINUX_TABLE: Option<&str> = None;
+/// Generated table for the Linux build (HOI4 1.19.4.1, GNU build ID 2265e6e7), from
+/// `scripts/gen_linux_layout.py generate` plus the reviewed hints and live corrections.
+const LINUX_TABLE: Option<&str> = Some(include_str!(
+    "../layouts/linux-2265e6e7c1f527bf4b1f2c4b4ca3efd4371dc082.json"
+));
+
+/// Development builds only (`--features dev-table`, never in releases): the
+/// table in `HOI4_LIVE_DEV_TABLE`, re-read when the file changes, so live
+/// mapping work does not need a new build and game launch per entry.
+#[cfg(feature = "dev-table")]
+fn dev_table() -> Option<Result<&'static Table>> {
+    use std::sync::Mutex;
+    static CACHE: Mutex<Option<(std::time::SystemTime, &'static Table)>> = Mutex::new(None);
+    let path = std::env::var_os("HOI4_LIVE_DEV_TABLE")?;
+    let modified = std::fs::metadata(&path).and_then(|m| m.modified()).ok()?;
+    let mut cache = CACHE.lock().ok()?;
+    if let Some((at, table)) = *cache {
+        if at == modified {
+            return Some(Ok(table));
+        }
+    }
+    let parsed = std::fs::read_to_string(&path)
+        .map_err(|e| Error::new("layout_invalid", e.to_string()))
+        .and_then(|text| Table::parse(&text));
+    Some(parsed.map(|table| {
+        let table: &'static Table = Box::leak(Box::new(table));
+        *cache = Some((modified, table));
+        table
+    }))
+}
 
 fn linux() -> Result<&'static Table> {
+    #[cfg(feature = "dev-table")]
+    if let Some(table) = dev_table() {
+        return table;
+    }
     static TABLE: OnceLock<std::result::Result<Table, String>> = OnceLock::new();
     TABLE
         .get_or_init(|| match LINUX_TABLE {
@@ -154,10 +233,14 @@ mod tests {
     }
 
     #[test]
-    fn linux_without_a_table_refuses() {
-        let e = img(StringAbi::LibStdCxx, 0x36511f0).unwrap_err();
+    fn shipped_linux_table_parses_and_refuses_unmapped_keys() {
+        let table = linux().unwrap();
+        assert_eq!(table.build_id, crate::game::BUILD_ID);
+        // The CCountryPoliticsView vtable is mapped; an address that is no key refuses.
+        assert!(img(StringAbi::LibStdCxx, 0x36511f0).is_ok());
+        let e = img(StringAbi::LibStdCxx, 0x8).unwrap_err();
         assert_eq!(e.code, "layout_unmapped");
-        let e = fld(StringAbi::LibStdCxx, &VIEW, 0x3958).unwrap_err();
+        let e = fld(StringAbi::LibStdCxx, &Class::new("no.such.class", 0), 0x8).unwrap_err();
         assert_eq!(e.code, "layout_unmapped");
     }
 

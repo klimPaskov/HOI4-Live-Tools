@@ -47,11 +47,12 @@ Save a private JSON configuration with these fields:
 | `display.server` | Actual `pid`, string `start_ticks`, absolute `exe`, numeric `uid` |
 | `display.xauthority` | Absolute private regular Xauthority file |
 | `settings_seed` | Optional absolute regular settings file, bounded to 1 MiB |
+| `dlc_signature_seed` | Optional absolute regular file copied to the new userdata as `dlc_signature` |
 | `renderer` | Optional `default`, `llvm_pipe` or `virpipe` |
 | `gpu_transport` | Optional private owned Unix socket; required for `virpipe` |
 | `fex` | Optional explicit ARM64 translator configuration described below; omitted for native launch |
 
-The settings seed is copied into new isolated userdata. The only game launch
+The settings seed and the DLC signature seed are copied into new isolated userdata. The only game launch
 argument is `-userdir=...`; the fresh playset enables no mods. Default user
 settings and playsets are never modified. Game output goes to a private file.
 
@@ -218,6 +219,20 @@ generated clients. A fresh recorded installed-game check subsequently verified
 one window-close request in 2.31 seconds, with actual exit code 0, no signal and
 no core dump. No signal fallback or replay occurred; previous nonzero signal-close
 incidents remain unexplained. See [the recorded result](CLAUSEWITZ_VALIDATION.md#recorded-receiver-and-window-close-check--13-october-2026).
+
+### Display notes (HOI4 1.19.4.1)
+
+- X11 connections use the display's pathname socket and fall back to the Linux abstract socket
+  (`@/tmp/.X11-unix/X<n>`) when the pathname is missing. Under WSLg `/tmp/.X11-unix` is read-only, so an
+  owned Xvfb is reached that way.
+- The management tools need a window manager that sets `_NET_ACTIVE_WINDOW` (openbox was used). Keep the
+  game window undecorated at the top left. A window partly off screen is still captured: the visible part
+  is read from the root window.
+- Under WSL2 the d3d12 renderer crashed when the map loaded; `llvm_pipe` works. With software rendering,
+  a settings seed that turns off terrain, water, trees, rivers, sky and building models keeps input
+  latency low. [LIVE_VERIFICATION_LINUX_1_19_4.md](LIVE_VERIFICATION_LINUX_1_19_4.md) records the setup.
+- On HOI4 1.19.4.1 use `--bind-management`. `--bind-input` (the 1.19.3 clock and research binding) refuses
+  with `legacy_binding_retired`.
 
 ## Ordinary clock input
 

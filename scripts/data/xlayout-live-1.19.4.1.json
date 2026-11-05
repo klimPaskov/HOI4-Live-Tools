@@ -1,0 +1,1529 @@
+{
+ "_about": "Entries measured on the running Linux HOI4 1.19.4.1 (GNU build ID 2265e6e7) where static mapping gave no value. Each names its live evidence. Applied by gen_linux_layout.py generate --live.",
+ "image": {
+  "0x36998b0": {
+   "elf": "0x44030b8",
+   "evidence": "19CConfirmDeleteUnits 'Delete task force' popup (live r13): vtable ELF 0x44030b8 (macOS 0x36998b0 by RTTI name), root default_confirmation_popup at +0x330"
+  },
+  "0x3680288": {
+   "elf": "0x43f9090",
+   "evidence": "31CIntelAgencyFinishedPopUpWindow 'Agency Created!' in the popup list (live r14): vtable ELF 0x43f9090 (macOS 0x3680288 by RTTI name), root research_finished_popup_window at +0x330"
+  },
+  "0x36424c8": {
+   "elf": "0x44a35c8",
+   "evidence": "17CBattlePlansTools vtable by RTTI name in both images (ELF 0x44a35c8, macOS 0x36424c8)"
+  }
+ },
+ "fields": {
+  "CAcceptCommandDialog": {
+   "0x488": {
+    "elf": "0x328",
+    "evidence": "20CAcceptCommandDialog derives from CPopUpWindow (ELF RTTI); every live CPopUpWindow keeps idler +0x328, root +0x330"
+   }
+  },
+  "CAgencyLogoSelectionWindow": {
+   "0x48": {
+    "elf": "0x50",
+    "evidence": "30CCountryIntelligenceAgencyView children (live r13, Create Agency clicked): 26CAgencyLogoSelectionWindow at +0x340 (24COperationOverviewWindow +0x348, 21CAgencyUpgradesWindow +0x350 = macOS +0x4a8), root name_logo_agency_selection_window at logo +0x50"
+   }
+  },
+  "CAgencyUpgrade": {
+   "0x10": {
+    "elf": "0x10",
+    "evidence": "key std::string 'upgrade_economy_civilian' at +0x10"
+   }
+  },
+  "CAgencyUpgradeBranch": {
+   "0x10": {
+    "elf": "0x10",
+    "evidence": "key std::string first member (table 0x30>0x38 is the +8 of this string)"
+   }
+  },
+  "CAgencyUpgradeDatabase": {
+   "0x70": {
+    "elf": "0x70",
+    "evidence": "agency upgrade DB +0x70 is the branch array (first entry TNullObject<CAgencyUpgradeBranch>, 6 entries)"
+   }
+  },
+  "CAirBaseMapIcon": {
+   "0x10": {
+    "elf": "0x10",
+    "evidence": "15CAirBaseMapIcon world position floats: matcher neighbours 0x28>0x28 and 0x6c>0x6c bracket them with no shift; container +0x10 seen live"
+   },
+   "0x48": {
+    "elf": "0x48",
+    "evidence": "15CAirBaseMapIcon world position floats: matcher neighbours 0x28>0x28 and 0x6c>0x6c bracket them with no shift; container +0x10 seen live"
+   },
+   "0x50": {
+    "elf": "0x50",
+    "evidence": "15CAirBaseMapIcon world position floats: matcher neighbours 0x28>0x28 and 0x6c>0x6c bracket them with no shift; container +0x10 seen live"
+   }
+  },
+  "CAirWing": {
+   "0x74": {
+    "elf": "0x74",
+    "evidence": "air wing (Jagdgeschwader 136): unit std::string 'light_plane' +0x338, name +0x968, planes 40 +0x74, manpower 960 +0x78"
+   },
+   "0x78": {
+    "elf": "0x78",
+    "evidence": "air wing (Jagdgeschwader 136): unit std::string 'light_plane' +0x338, name +0x968, planes 40 +0x74, manpower 960 +0x78"
+   },
+   "0x98": {
+    "elf": "0x98",
+    "evidence": "mission mask bracketed by 0x88>0x88 and 0x1a8>0x1b0 region; 0 on a standby wing"
+   },
+   "0xb8": {
+    "elf": "0xb8",
+    "evidence": "region pointer null on a standby wing, province list array right after at +0xc0 as on macOS; confirm after an air mission"
+   },
+   "0x320": {
+    "elf": "0x338",
+    "evidence": "air wing (Jagdgeschwader 136): unit std::string 'light_plane' +0x338, name +0x968, planes 40 +0x74, manpower 960 +0x78"
+   },
+   "0x938": {
+    "elf": "0x968",
+    "evidence": "air wing (Jagdgeschwader 136): unit std::string 'light_plane' +0x338, name +0x968, planes 40 +0x74, manpower 960 +0x78"
+   }
+  },
+  "CArmyLeader": {
+   "0x18": {
+    "elf": "0x18",
+    "evidence": "pointer to 19CUnitLeaderTemplate at +0x18"
+   },
+   "0x20": {
+    "elf": "0x20",
+    "evidence": "key std::string 'GER_august_von_mackensen' at +0x20"
+   },
+   "0x38": {
+    "elf": "0x40",
+    "evidence": "name std::string at +0x40 (key at +0x20)"
+   }
+  },
+  "CAutonomousState": {
+   "0x8": {
+    "elf": "0x8",
+    "evidence": "first field after the vtable, before the first mapped member 0x78>0x88"
+   }
+  },
+  "CBuilding": {
+   "0x1a8": {
+    "elf": "0x1b8",
+    "evidence": "building status: reviewed Linux construction layout building_status 0x1b8"
+   },
+   "0x1b0": {
+    "elf": "0x1c0",
+    "evidence": "building template: reviewed Linux construction layout building_template 0x1c0"
+   }
+  },
+  "CBuildingTemplate": {
+   "0x228": {
+    "elf": "0x248",
+    "evidence": "key std::string: reviewed Linux construction layout template_key 0x248, unchanged by the same-platform migration"
+   }
+  },
+  "CChangeGroupLeaderDialog": {
+   "0x488": {
+    "elf": "0x328",
+    "evidence": "24CChangeGroupLeaderDialog derives from CPopUpWindow (ELF RTTI); every live CPopUpWindow keeps idler +0x328, root +0x330"
+   }
+  },
+  "CChangeNavyLeaderDialog": {
+   "0x488": {
+    "elf": "0x328",
+    "evidence": "23CChangeNavyLeaderDialog derives from CPopUpWindow (ELF RTTI); every live CPopUpWindow keeps idler +0x328, root +0x330"
+   }
+  },
+  "CCharacter": {
+   "0x20": {
+    "elf": "0x20",
+    "evidence": "name std::string 'Adolf Friedrich of Mecklenburg' at +0x20"
+   },
+   "0x38": {
+    "elf": "0x40",
+    "evidence": "key std::string 'GER_adolf_friedrich_von_mecklenburg' at +0x40, after the name string at +0x20"
+   }
+  },
+  "CCheckBox": {
+   "0xa8": {
+    "elf": "0xb8",
+    "evidence": "static high: 9CCheckBox class-wide map, inside the +0x10 run 0x9c..0xd8"
+   }
+  },
+  "CCommandStructureLeaderView": {
+   "0x28": {
+    "elf": "0x28",
+    "evidence": "advisor slot button CButtonStandard at +0x28"
+   }
+  },
+  "CConfirmDeleteUnits": {
+   "0x490": {
+    "elf": "0x330",
+    "evidence": "19CConfirmDeleteUnits 'Delete task force' popup (live r13): vtable ELF 0x44030b8 (macOS 0x36998b0 by RTTI name), root default_confirmation_popup at +0x330"
+   }
+  },
+  "CConfirmationPopUpWindow": {
+   "0x488": {
+    "elf": "0x328",
+    "evidence": "24CConfirmationPopUpWindow derives from CPopUpWindow (ELF RTTI); every live CPopUpWindow keeps idler +0x328, root +0x330"
+   }
+  },
+  "CConsumerGoodsConsumer": {
+   "0x10": {
+    "elf": "0x10",
+    "evidence": "consumer goods factories 15 at +0x10, after the shared consumer fields +0x8/+0xc"
+   }
+  },
+  "CContainerWindow": {
+   "0x30": {
+    "elf": "0x30",
+    "evidence": "topbar root container (CTopBar+0x78): secondary 16CContainerWindow vtable at +0x30"
+   },
+   "0x95": {
+    "elf": "0xa5",
+    "evidence": "topbar root container (CTopBar+0x78): visibility byte +0xa5 = 8 (visible bit 8) on the shown topbar"
+   },
+   "0xe50": {
+    "elf": "0xa30",
+    "evidence": "topbar root container (CTopBar+0x78): children array at +0xa30 (65 entries, first 5CIcon)"
+   }
+  },
+  "CConvoys": {
+   "0x88": {
+    "elf": "0x88",
+    "evidence": "CConvoys (country+0x11c8) +0x88 = 200, with 200.00 fixed point at +0x80; only arrays and pointers before it"
+   }
+  },
+  "CCountry": {
+   "0x8": {
+    "elf": "0x8",
+    "evidence": "own country +8 = player tag id 1 (GER), the index used with gs+0x340"
+   },
+   "0x10": {
+    "elf": "0x10",
+    "evidence": "name std::string 'German Reich' at +0x10"
+   },
+   "0x550": {
+    "elf": "0x5a0",
+    "evidence": "embedded 9CModifier at country+0x5a0, inside the bracket 0x4a8>0x4e8 .. 0x908>0xa48"
+   }
+  },
+  "CCountryArmyOfficerCorpView": {
+   "0x488": {
+    "elf": "0x330",
+    "evidence": "27CCountryArmyOfficerCorpView derives from CCountryView (ELF RTTI); every live CCountryView keeps idler +0x330, root +0x338"
+   }
+  },
+  "CCountryCharacterSelectionItem": {
+   "0x28": {
+    "elf": "0x28",
+    "evidence": "advisor entry button +0x28, same layout as CCommandStructureLeaderView; hoi4_politics_options military_staff listed the advisors through it (live r10)"
+   }
+  },
+  "CCountryDeploymentView": {
+   "0x488": {
+    "elf": "0x330",
+    "evidence": "22CCountryDeploymentView derives from CCountryView (ELF RTTI); every live CCountryView keeps idler +0x330, root +0x338"
+   },
+   "0x490": {
+    "elf": "0x338",
+    "evidence": "view root: neighbours 0x498>0x340, 0x4a0>0x348"
+   }
+  },
+  "CCountryDiplomacyView": {
+   "0x488": {
+    "elf": "0x330",
+    "evidence": "21CCountryDiplomacyView derives from CCountryView (ELF RTTI); every live CCountryView keeps idler +0x330, root +0x338"
+   },
+   "0x1608": {
+    "elf": "0xf00",
+    "evidence": "shown tag: +0xf00 went 1 (GER) -> 10 when Poland's diplomacy view opened; neighbour 0x1620>0xf18 has the same -0x708"
+   },
+   "0x35e8": {
+    "elf": "0x2ce0",
+    "evidence": "justify dialog open toward LIT (live r13): 21CCountryDiplomacyView +0x2ce0 points at the 25CLegacyButtonObserverGlueI33CDiplomacyCountryActionControllerE whose +0x610 is the action info 16CContainerWindow (children declare_war, add_wargoal, stage_coup, generate_wargoal, ...)"
+   }
+  },
+  "CCountryExperienceStatus": {
+   "0x10": {
+    "elf": "0x10",
+    "evidence": "24CCountryExperienceStatus (country+0x1528) keeps the macOS layout (0x58>0x58); all values 0 at the 1936 start"
+   },
+   "0x28": {
+    "elf": "0x28",
+    "evidence": "24CCountryExperienceStatus (country+0x1528) keeps the macOS layout (0x58>0x58); all values 0 at the 1936 start"
+   },
+   "0x40": {
+    "elf": "0x40",
+    "evidence": "24CCountryExperienceStatus (country+0x1528) keeps the macOS layout (0x58>0x58); all values 0 at the 1936 start"
+   }
+  },
+  "CCountryIntelligenceAgencyView": {
+   "0x498": {
+    "elf": "0x340",
+    "evidence": "30CCountryIntelligenceAgencyView children (live r13, Create Agency clicked): 26CAgencyLogoSelectionWindow at +0x340 (24COperationOverviewWindow +0x348, 21CAgencyUpgradesWindow +0x350 = macOS +0x4a8), root name_logo_agency_selection_window at logo +0x50"
+   }
+  },
+  "CCountryPoliticsView": {
+   "0x3958": {
+    "elf": "0x2698",
+    "evidence": "20CCountryPoliticsView points at its N23NIndustrialOrganisation23COrganisationListWindowE first at +0x2698, then in every organisation slot record (stride 0x2f8; macOS 0x470), live r11"
+   }
+  },
+  "CDecision": {
+   "0x108": {
+    "elf": "0x118",
+    "evidence": "key std::string at +0x118 (DEBUG_MIO_SHOW_DEBUG_MIO_ARCHETYPES), the only string up to +0x160"
+   }
+  },
+  "CDiplomacyStatus": {
+   "0x50": {
+    "elf": "0x50",
+    "evidence": "war goal arrays: bracketed by 0x14>0x14 and 0x68>0x68"
+   },
+   "0x80": {
+    "elf": "0x80",
+    "evidence": "war goal array: bracketed by 0x68>0x68 and the arrays after it (delta 0)"
+   },
+   "0x98": {
+    "elf": "0x98",
+    "evidence": "war goal array: same bracket"
+   }
+  },
+  "CDivisionTemplateData": {
+   "0x8": {
+    "elf": "0x8",
+    "evidence": "division template (country+0x1b8 array): template data embedded at +0x18, name +0x20, grid array +0x68 (13 sub-units), support array +0x88 (2)"
+   },
+   "0x40": {
+    "elf": "0x50",
+    "evidence": "division template (country+0x1b8 array): template data embedded at +0x18, name +0x20, grid array +0x68 (13 sub-units), support array +0x88 (2)"
+   },
+   "0x58": {
+    "elf": "0x68",
+    "evidence": "between grid (0x50) and support (0x70) as on macOS; the static 0x48 contradicts both"
+   },
+   "0x60": {
+    "elf": "0x70",
+    "evidence": "division template (country+0x1b8 array): template data embedded at +0x18, name +0x20, grid array +0x68 (13 sub-units), support array +0x88 (2)"
+   }
+  },
+  "CEquipmentModule": {
+   "0x10": {
+    "elf": "0x10",
+    "evidence": "key std::string at +0x10 (as the equipment types and upgrades)"
+   }
+  },
+  "CEquipmentType": {
+   "0x10": {
+    "elf": "0x10",
+    "evidence": "key std::string at +0x10 (amphibious_mechanized_equipment_2)"
+   },
+   "0x60": {
+    "elf": "0x68",
+    "evidence": "equipment type module slots: inline records at type+0x68 (macOS 0x60), vtable repeats every 0x48, id +0x8, name std::string +0x28 ('turret_type_slot')"
+   }
+  },
+  "CEquipmentType.slot": {
+   "0x8": {
+    "elf": "0x8",
+    "evidence": "equipment type module slots: inline records at type+0x68 (macOS 0x60), vtable repeats every 0x48, id +0x8, name std::string +0x28 ('turret_type_slot')"
+   },
+   "0x28": {
+    "elf": "0x28",
+    "evidence": "equipment type module slots: inline records at type+0x68 (macOS 0x60), vtable repeats every 0x48, id +0x8, name std::string +0x28 ('turret_type_slot')"
+   }
+  },
+  "CEquipmentType.slot.size": {
+   "0x40": {
+    "elf": "0x48",
+    "evidence": "equipment type module slots: inline records at type+0x68 (macOS 0x60), vtable repeats every 0x48, id +0x8, name std::string +0x28 ('turret_type_slot')"
+   }
+  },
+  "CEquipmentUpgrade": {
+   "0x10": {
+    "elf": "0x10",
+    "evidence": "key std::string 'plane_gun_upgrade' at +0x10"
+   }
+  },
+  "CEquipmentVariant": {
+   "0xc": {
+    "elf": "0xc",
+    "evidence": "design id i32 before any std member (variant +0x8 = 70, +0xc = 1)"
+   },
+   "0x28": {
+    "elf": "0x28",
+    "evidence": "name std::string at +0x28 (empty SSO string pointing to +0x38 on a base variant), after the ints at +0x20"
+   },
+   "0x40": {
+    "elf": "0x48",
+    "evidence": "second std::string of the variant right after the name (+0x28): empty SSO string at +0x48"
+   },
+   "0x60": {
+    "elf": "0x70",
+    "evidence": "upgrade array after both variant strings (+0x10 zone 0x48..0x3e8)"
+   },
+   "0xa8": {
+    "elf": "0xb8",
+    "evidence": "after both variant strings (+0x10 shift); the matcher's single vote also gave 0xb8"
+   },
+   "0xf8": {
+    "elf": "0x108",
+    "evidence": "variant stat block +0x10 on libstdc++ (two std::strings before it): at +0x10 reliability 0.8/0.85/0.95, destroyer hull max strength 40, naval range 2500, build costs 3.48..1184.5; at +0 or +8 the values are inconsistent"
+   },
+   "0x100": {
+    "elf": "0x110",
+    "evidence": "variant stat block +0x10 on libstdc++ (two std::strings before it): at +0x10 reliability 0.8/0.85/0.95, destroyer hull max strength 40, naval range 2500, build costs 3.48..1184.5; at +0 or +8 the values are inconsistent"
+   },
+   "0x108": {
+    "elf": "0x118",
+    "evidence": "variant stat block +0x10 on libstdc++ (two std::strings before it): at +0x10 reliability 0.8/0.85/0.95, destroyer hull max strength 40, naval range 2500, build costs 3.48..1184.5; at +0 or +8 the values are inconsistent"
+   },
+   "0x110": {
+    "elf": "0x120",
+    "evidence": "variant stat block +0x10 on libstdc++ (two std::strings before it): at +0x10 reliability 0.8/0.85/0.95, destroyer hull max strength 40, naval range 2500, build costs 3.48..1184.5; at +0 or +8 the values are inconsistent"
+   },
+   "0x118": {
+    "elf": "0x128",
+    "evidence": "variant stat block +0x10 on libstdc++ (two std::strings before it): at +0x10 reliability 0.8/0.85/0.95, destroyer hull max strength 40, naval range 2500, build costs 3.48..1184.5; at +0 or +8 the values are inconsistent"
+   },
+   "0x188": {
+    "elf": "0x198",
+    "evidence": "variant stat block +0x10 on libstdc++ (two std::strings before it): at +0x10 reliability 0.8/0.85/0.95, destroyer hull max strength 40, naval range 2500, build costs 3.48..1184.5; at +0 or +8 the values are inconsistent"
+   },
+   "0x190": {
+    "elf": "0x1a0",
+    "evidence": "variant stat block +0x10 on libstdc++ (two std::strings before it): at +0x10 reliability 0.8/0.85/0.95, destroyer hull max strength 40, naval range 2500, build costs 3.48..1184.5; at +0 or +8 the values are inconsistent"
+   },
+   "0x198": {
+    "elf": "0x1a8",
+    "evidence": "variant stat block +0x10 on libstdc++ (two std::strings before it): at +0x10 reliability 0.8/0.85/0.95, destroyer hull max strength 40, naval range 2500, build costs 3.48..1184.5; at +0 or +8 the values are inconsistent"
+   },
+   "0x1a0": {
+    "elf": "0x1b0",
+    "evidence": "variant stat block +0x10 on libstdc++ (two std::strings before it): at +0x10 reliability 0.8/0.85/0.95, destroyer hull max strength 40, naval range 2500, build costs 3.48..1184.5; at +0 or +8 the values are inconsistent"
+   },
+   "0x1b8": {
+    "elf": "0x1c8",
+    "evidence": "variant stat block +0x10 on libstdc++ (two std::strings before it): at +0x10 reliability 0.8/0.85/0.95, destroyer hull max strength 40, naval range 2500, build costs 3.48..1184.5; at +0 or +8 the values are inconsistent"
+   },
+   "0x1c0": {
+    "elf": "0x1d0",
+    "evidence": "variant stat block +0x10 on libstdc++ (two std::strings before it): at +0x10 reliability 0.8/0.85/0.95, destroyer hull max strength 40, naval range 2500, build costs 3.48..1184.5; at +0 or +8 the values are inconsistent"
+   },
+   "0x1c8": {
+    "elf": "0x1d8",
+    "evidence": "variant stat block +0x10 on libstdc++ (two std::strings before it): at +0x10 reliability 0.8/0.85/0.95, destroyer hull max strength 40, naval range 2500, build costs 3.48..1184.5; at +0 or +8 the values are inconsistent"
+   },
+   "0x1d0": {
+    "elf": "0x1e0",
+    "evidence": "variant stat block +0x10 on libstdc++ (two std::strings before it): at +0x10 reliability 0.8/0.85/0.95, destroyer hull max strength 40, naval range 2500, build costs 3.48..1184.5; at +0 or +8 the values are inconsistent"
+   },
+   "0x1d8": {
+    "elf": "0x1e8",
+    "evidence": "variant stat block +0x10 on libstdc++ (two std::strings before it): at +0x10 reliability 0.8/0.85/0.95, destroyer hull max strength 40, naval range 2500, build costs 3.48..1184.5; at +0 or +8 the values are inconsistent"
+   },
+   "0x1e0": {
+    "elf": "0x1f0",
+    "evidence": "variant stat block +0x10 on libstdc++ (two std::strings before it): at +0x10 reliability 0.8/0.85/0.95, destroyer hull max strength 40, naval range 2500, build costs 3.48..1184.5; at +0 or +8 the values are inconsistent"
+   },
+   "0x1e8": {
+    "elf": "0x1f8",
+    "evidence": "variant stat block +0x10 on libstdc++ (two std::strings before it): at +0x10 reliability 0.8/0.85/0.95, destroyer hull max strength 40, naval range 2500, build costs 3.48..1184.5; at +0 or +8 the values are inconsistent"
+   },
+   "0x1f8": {
+    "elf": "0x208",
+    "evidence": "variant stat block +0x10 on libstdc++ (two std::strings before it): at +0x10 reliability 0.8/0.85/0.95, destroyer hull max strength 40, naval range 2500, build costs 3.48..1184.5; at +0 or +8 the values are inconsistent"
+   },
+   "0x200": {
+    "elf": "0x210",
+    "evidence": "variant stat block +0x10 on libstdc++ (two std::strings before it): at +0x10 reliability 0.8/0.85/0.95, destroyer hull max strength 40, naval range 2500, build costs 3.48..1184.5; at +0 or +8 the values are inconsistent"
+   },
+   "0x260": {
+    "elf": "0x270",
+    "evidence": "variant stat block +0x10 on libstdc++ (two std::strings before it): at +0x10 reliability 0.8/0.85/0.95, destroyer hull max strength 40, naval range 2500, build costs 3.48..1184.5; at +0 or +8 the values are inconsistent"
+   },
+   "0x268": {
+    "elf": "0x278",
+    "evidence": "variant stat block +0x10 on libstdc++ (two std::strings before it): at +0x10 reliability 0.8/0.85/0.95, destroyer hull max strength 40, naval range 2500, build costs 3.48..1184.5; at +0 or +8 the values are inconsistent"
+   },
+   "0x270": {
+    "elf": "0x280",
+    "evidence": "variant stat block +0x10 on libstdc++ (two std::strings before it): at +0x10 reliability 0.8/0.85/0.95, destroyer hull max strength 40, naval range 2500, build costs 3.48..1184.5; at +0 or +8 the values are inconsistent"
+   },
+   "0x278": {
+    "elf": "0x288",
+    "evidence": "variant stat block +0x10 on libstdc++ (two std::strings before it): at +0x10 reliability 0.8/0.85/0.95, destroyer hull max strength 40, naval range 2500, build costs 3.48..1184.5; at +0 or +8 the values are inconsistent"
+   },
+   "0x280": {
+    "elf": "0x290",
+    "evidence": "variant stat block +0x10 on libstdc++ (two std::strings before it): at +0x10 reliability 0.8/0.85/0.95, destroyer hull max strength 40, naval range 2500, build costs 3.48..1184.5; at +0 or +8 the values are inconsistent"
+   },
+   "0x290": {
+    "elf": "0x2a0",
+    "evidence": "variant stat block +0x10 on libstdc++ (two std::strings before it): at +0x10 reliability 0.8/0.85/0.95, destroyer hull max strength 40, naval range 2500, build costs 3.48..1184.5; at +0 or +8 the values are inconsistent"
+   },
+   "0x298": {
+    "elf": "0x2a8",
+    "evidence": "variant stat block +0x10 on libstdc++ (two std::strings before it): at +0x10 reliability 0.8/0.85/0.95, destroyer hull max strength 40, naval range 2500, build costs 3.48..1184.5; at +0 or +8 the values are inconsistent"
+   },
+   "0x2a0": {
+    "elf": "0x2b0",
+    "evidence": "variant stat block +0x10 on libstdc++ (two std::strings before it): at +0x10 reliability 0.8/0.85/0.95, destroyer hull max strength 40, naval range 2500, build costs 3.48..1184.5; at +0 or +8 the values are inconsistent"
+   },
+   "0x2d8": {
+    "elf": "0x2e8",
+    "evidence": "variant stat block +0x10 on libstdc++ (two std::strings before it): at +0x10 reliability 0.8/0.85/0.95, destroyer hull max strength 40, naval range 2500, build costs 3.48..1184.5; at +0 or +8 the values are inconsistent"
+   },
+   "0x2e0": {
+    "elf": "0x2f0",
+    "evidence": "variant stat block +0x10 on libstdc++ (two std::strings before it): at +0x10 reliability 0.8/0.85/0.95, destroyer hull max strength 40, naval range 2500, build costs 3.48..1184.5; at +0 or +8 the values are inconsistent"
+   },
+   "0x2e8": {
+    "elf": "0x2f8",
+    "evidence": "variant stat block +0x10 on libstdc++ (two std::strings before it): at +0x10 reliability 0.8/0.85/0.95, destroyer hull max strength 40, naval range 2500, build costs 3.48..1184.5; at +0 or +8 the values are inconsistent"
+   },
+   "0x2f0": {
+    "elf": "0x300",
+    "evidence": "variant stat block +0x10 on libstdc++ (two std::strings before it): at +0x10 reliability 0.8/0.85/0.95, destroyer hull max strength 40, naval range 2500, build costs 3.48..1184.5; at +0 or +8 the values are inconsistent"
+   },
+   "0x2f8": {
+    "elf": "0x308",
+    "evidence": "variant stat block +0x10 on libstdc++ (two std::strings before it): at +0x10 reliability 0.8/0.85/0.95, destroyer hull max strength 40, naval range 2500, build costs 3.48..1184.5; at +0 or +8 the values are inconsistent"
+   },
+   "0x318": {
+    "elf": "0x328",
+    "evidence": "variant stat block +0x10 on libstdc++ (two std::strings before it): at +0x10 reliability 0.8/0.85/0.95, destroyer hull max strength 40, naval range 2500, build costs 3.48..1184.5; at +0 or +8 the values are inconsistent"
+   },
+   "0x358": {
+    "elf": "0x368",
+    "evidence": "variant stat block +0x10 on libstdc++ (two std::strings before it): at +0x10 reliability 0.8/0.85/0.95, destroyer hull max strength 40, naval range 2500, build costs 3.48..1184.5; at +0 or +8 the values are inconsistent"
+   },
+   "0x3c0": {
+    "elf": "0x3d0",
+    "evidence": "build cost stat in the +0x10 zone between 0x358>0x368 and 0x3e0>0x3f0"
+   },
+   "0x3e0": {
+    "elf": "0x3f0",
+    "evidence": "variant type: reviewed Linux layout production_lines.variant_type 0x3f0, same-platform migration unchanged"
+   },
+   "0x3e8": {
+    "elf": "0x3f8",
+    "evidence": "parent variant pointer right after the type pointer (+0x3f0); null for a base design"
+   },
+   "0x410": {
+    "elf": "0x420",
+    "evidence": "variants of the technology status (+0x300): +0x420 manpower (ship hulls 250..1200, planes 20/40, tanks 2), +0x424 decommission byte (older hulls and chassis 1)"
+   },
+   "0x414": {
+    "elf": "0x424",
+    "evidence": "variants of the technology status (+0x300): +0x420 manpower (ship hulls 250..1200, planes 20/40, tanks 2), +0x424 decommission byte (older hulls and chassis 1)"
+   }
+  },
+  "CEvent": {
+   "0x18": {
+    "elf": "0x18",
+    "evidence": "event id std::string: matcher neighbour 0x30>0x38 is the +8 of this string; to confirm on a live event"
+   }
+  },
+  "CEventWindow": {
+   "0x28": {
+    "elf": "0x28",
+    "evidence": "12CEventWindow open in the popup list (live r13, March 1936): root 16CContainerWindow EventWindow at +0x28, 12CInGameIdler at +0x30, 6CEvent at +0x40 (static guesses +0x30/+0x48 were wrong)"
+   },
+   "0x40": {
+    "elf": "0x40",
+    "evidence": "12CEventWindow open in the popup list (live r13, March 1936): root 16CContainerWindow EventWindow at +0x28, 12CInGameIdler at +0x30, 6CEvent at +0x40 (static guesses +0x30/+0x48 were wrong)"
+   }
+  },
+  "CFleetsBottomBar": {
+   "0x910": {
+    "elf": "0x648",
+    "evidence": "16CFleetsBottomBar (manager +0x1c8): root CContainerWindow +0x648, followed by centering_box +0x650 as the macOS walk expects; to confirm with the fleet tools"
+   }
+  },
+  "CGenericDefaultConfirmationPopUpWindow": {
+   "0x488": {
+    "elf": "0x328",
+    "evidence": "38CGenericDefaultConfirmationPopUpWindow derives from CPopUpWindow (ELF RTTI); every live CPopUpWindow keeps idler +0x328, root +0x330"
+   }
+  },
+  "CIcon": {
+   "0x184": {
+    "elf": "0x194",
+    "evidence": "frame index: every mapped CIcon field from 0x48 to 0x154 is +0x10"
+   }
+  },
+  "CIdea": {
+   "0x18": {
+    "elf": "0x18",
+    "evidence": "key std::string at +0x18 (sour_loser, limited_exports)"
+   },
+   "0x6c": {
+    "elf": "0x7c",
+    "evidence": "idea modifier array: pointer +0x70 (table 0x60>0x70), so its i32 count at +0x7c"
+   }
+  },
+  "CIdeaResearchBonus": {
+   "0x10": {
+    "elf": "0x10",
+    "evidence": "category std::string at +0x10; matcher 0x28>0x30 shows the +8 right after it; no bonus instance at the 1936 start"
+   },
+   "0x30": {
+    "elf": "0x38",
+    "evidence": "category std::string at +0x10; matcher 0x28>0x30 shows the +8 right after it; no bonus instance at the 1936 start"
+   },
+   "0x38": {
+    "elf": "0x40",
+    "evidence": "category std::string at +0x10; matcher 0x28>0x30 shows the +8 right after it; no bonus instance at the 1936 start"
+   }
+  },
+  "CInGameMenu": {
+   "0x2a38": {
+    "elf": "0x1c30",
+    "evidence": "11CInGameMenu (manager +0x218): idler +0x1c20, menu CContainerWindow +0x1c30, 21CInGameMenuLoadWindow +0x1c38, 21CInGameMenuSaveWindow +0x1c40 (table 0x2a40>0x1c38)"
+   },
+   "0x2a48": {
+    "elf": "0x1c40",
+    "evidence": "11CInGameMenu (manager +0x218): idler +0x1c20, menu CContainerWindow +0x1c30, 21CInGameMenuLoadWindow +0x1c38, 21CInGameMenuSaveWindow +0x1c40 (table 0x2a40>0x1c38)"
+   }
+  },
+  "CIntelAgencyFinishedPopUpWindow": {
+   "0x490": {
+    "elf": "0x330",
+    "evidence": "31CIntelAgencyFinishedPopUpWindow 'Agency Created!' in the popup list (live r14): vtable ELF 0x43f9090 (macOS 0x3680288 by RTTI name), root research_finished_popup_window at +0x330"
+   }
+  },
+  "CIntelligenceAgency": {
+   "0x10": {
+    "elf": "0x10",
+    "evidence": "below the first mapped field 0x60>0x60 with delta 0"
+   }
+  },
+  "CLimitedUseTechBonus": {
+   "0x8": {
+    "elf": "0x8",
+    "evidence": "uses i32 before the name string at +0x10 (table 0x28>0x30 is the +8 of that string)"
+   },
+   "0x10": {
+    "elf": "0x10",
+    "evidence": "name std::string, first member after the uses field"
+   }
+  },
+  "CMapIconManagerImpl": {
+   "0x8": {
+    "elf": "0x8",
+    "evidence": "19CMapIconManagerImpl: per-type icon arrays from +0x8, one every 0x18 (768, 256, 160, ...)"
+   }
+  },
+  "CMapIconManagerImpl.array.size": {
+   "0x18": {
+    "elf": "0x18",
+    "evidence": "19CMapIconManagerImpl: per-type icon arrays from +0x8, one every 0x18 (768, 256, 160, ...)"
+   }
+  },
+  "CNationalFocusTreeItem": {
+   "0x20": {
+    "elf": "0x20",
+    "evidence": "14CNationalFocus pointer (GER_hegemony_over_europe) at +0x20, container +0x10"
+   }
+  },
+  "CNationalFocusView": {
+   "0x2d70": {
+    "elf": "0x2078",
+    "evidence": "open 18CNationalFocusView (manager +0x130): tree items array +0x2078 (385 entries), zoom float 1.0 at +0x213c; macOS minus 0xcf8 for both"
+   },
+   "0x2db8": {
+    "elf": "0x20c0",
+    "evidence": "panel list: same -0xcf8 as items and zoom; empty array with no panel open"
+   },
+   "0x2e10": {
+    "elf": "0x2118",
+    "evidence": "country override pointer: same -0xcf8 shift"
+   },
+   "0x2e34": {
+    "elf": "0x213c",
+    "evidence": "open 18CNationalFocusView (manager +0x130): tree items array +0x2078 (385 entries), zoom float 1.0 at +0x213c; macOS minus 0xcf8 for both"
+   }
+  },
+  "CNaviesView": {
+   "0x4ca8": {
+    "elf": "0x3368",
+    "evidence": "11CNaviesView members by RTTI and window name (Germany 1936, live r11): 17CNavyLeaderWindow pointer"
+   },
+   "0x7b00": {
+    "elf": "0x52c0",
+    "evidence": "11CNaviesView members by RTTI and window name (Germany 1936, live r11): naviesview_window"
+   },
+   "0x7b10": {
+    "elf": "0x52d0",
+    "evidence": "11CNaviesView members by RTTI and window name (Germany 1936, live r11): action_bar_window"
+   },
+   "0x7b18": {
+    "elf": "0x52d8",
+    "evidence": "11CNaviesView members by RTTI and window name (Germany 1936, live r11): target_bar_window"
+   },
+   "0x7cb8": {
+    "elf": "0x5478",
+    "evidence": "task force array of the open fleet panel, -0x2840 like the panel windows; hoi4_fleet_split, hoi4_fleet_reserve and hoi4_fleet_assign selected task forces through it (live r13)"
+   },
+   "0x7cd0": {
+    "elf": "0x5490",
+    "evidence": "11CNaviesView members by RTTI and window name (Germany 1936, live r11): tool_bar_window"
+   }
+  },
+  "CNavyLeader": {
+   "0x8": {
+    "elf": "0x8",
+    "evidence": "11CNavyLeader of the 7 German admirals (CCountryCharacters +0x88, live r13): handle +0x8 (69120000 8e010000..94010000), key GER_rolf_carls at +0x20, name 'Rolf Carls' at +0x40"
+   },
+   "0x38": {
+    "elf": "0x40",
+    "evidence": "11CNavyLeader of the 7 German admirals (CCountryCharacters +0x88, live r13): handle +0x8 (69120000 8e010000..94010000), key GER_rolf_carls at +0x20, name 'Rolf Carls' at +0x40"
+   }
+  },
+  "CPeaceSummaryPopUpWindow": {
+   "0x488": {
+    "elf": "0x328",
+    "evidence": "24CPeaceSummaryPopUpWindow derives from CPopUpWindow (ELF RTTI); every live CPopUpWindow keeps idler +0x328, root +0x330"
+   }
+  },
+  "CPoliticalIdeaItem": {
+   "0x20": {
+    "elf": "0x20",
+    "evidence": "ideas_grid items (CStandardGridBox +0x1a0) store 18CPoliticalIdeaItem by its secondary base (vtable = mapped 0x43f81d8): idea 5CIdea at +0x20, slot button CButtonStandard at +0x38"
+   },
+   "0x40": {
+    "elf": "0x38",
+    "evidence": "ideas_grid items (CStandardGridBox +0x1a0) store 18CPoliticalIdeaItem by its secondary base (vtable = mapped 0x43f81d8): idea 5CIdea at +0x20, slot button CButtonStandard at +0x38"
+   }
+  },
+  "CPoliticsIdeaCategoryEntry": {
+   "0x30": {
+    "elf": "0x30",
+    "evidence": "category pointer at +0x30 (-> 13CIdeaCategory 'government')"
+   }
+  },
+  "CProductionEquipmentWindow": {
+   "0xcf8": {
+    "elf": "0x8c0",
+    "evidence": "root CContainerWindow +0x8c0 after the idler +0x8b0 (same window as production.selection.window)"
+   },
+   "0xd00": {
+    "elf": "0x8c8",
+    "evidence": "26CProductionEquipmentWindow (production view +0x16b0/+0x16b8, live r15) holds 31CEquipmentUpgradeDesignerWindow at +0x8c8, right after its root +0x8c0 (macOS 0xcf8/0xd00)"
+   }
+  },
+  "CProductionLine": {
+   "0x14": {
+    "elf": "0x14",
+    "evidence": "military line (production status +0x58 array): +0x14 factories 10, +0x20 back-pointer to CProductionStatus, +0x58 cost records, +0x88 CEquipmentVariant"
+   },
+   "0x20": {
+    "elf": "0x20",
+    "evidence": "military line (production status +0x58 array): +0x14 factories 10, +0x20 back-pointer to CProductionStatus, +0x58 cost records, +0x88 CEquipmentVariant"
+   },
+   "0x58": {
+    "elf": "0x58",
+    "evidence": "military line (production status +0x58 array): +0x14 factories 10, +0x20 back-pointer to CProductionStatus, +0x58 cost records, +0x88 CEquipmentVariant"
+   },
+   "0x88": {
+    "elf": "0x88",
+    "evidence": "military line (production status +0x58 array): +0x14 factories 10, +0x20 back-pointer to CProductionStatus, +0x58 cost records, +0x88 CEquipmentVariant"
+   }
+  },
+  "CProductionLineMilitaryItem": {
+   "0x898": {
+    "elf": "0x5c0",
+    "evidence": "line handle bracketed by 0x890>0x5b8 and 0x8a0>0x5c8"
+   }
+  },
+  "CProductionResourceCost.size": {
+   "0x20": {
+    "elf": "0x20",
+    "evidence": "cost records repeat their 23CProductionResourceCost vtable every 0x20; resource +0x8, amount +0x10"
+   }
+  },
+  "CProductionStatus": {
+   "0x448": {
+    "elf": "0x448",
+    "evidence": "production status embedded consumers: 0x448 CConsumerGoodsConsumer, 0x460 CSpecialProjectsConsumer, 0x478 CLicensedProductionConsumer, 0x490 CTradeConsumer, 0x4a8 CContractPaymentConsumer (same as macOS)"
+   },
+   "0x460": {
+    "elf": "0x460",
+    "evidence": "production status embedded consumers: 0x448 CConsumerGoodsConsumer, 0x460 CSpecialProjectsConsumer, 0x478 CLicensedProductionConsumer, 0x490 CTradeConsumer, 0x4a8 CContractPaymentConsumer (same as macOS)"
+   },
+   "0x478": {
+    "elf": "0x478",
+    "evidence": "production status embedded consumers: 0x448 CConsumerGoodsConsumer, 0x460 CSpecialProjectsConsumer, 0x478 CLicensedProductionConsumer, 0x490 CTradeConsumer, 0x4a8 CContractPaymentConsumer (same as macOS)"
+   },
+   "0x490": {
+    "elf": "0x490",
+    "evidence": "production status embedded consumers: 0x448 CConsumerGoodsConsumer, 0x460 CSpecialProjectsConsumer, 0x478 CLicensedProductionConsumer, 0x490 CTradeConsumer, 0x4a8 CContractPaymentConsumer (same as macOS)"
+   },
+   "0x4a8": {
+    "elf": "0x4a8",
+    "evidence": "production status embedded consumers: 0x448 CConsumerGoodsConsumer, 0x460 CSpecialProjectsConsumer, 0x478 CLicensedProductionConsumer, 0x490 CTradeConsumer, 0x4a8 CContractPaymentConsumer (same as macOS)"
+   }
+  },
+  "CProvince": {
+   "0x9c": {
+    "elf": "0xa4",
+    "evidence": "province id: reviewed Linux construction layout province_id 0xa4 (live: province 6334 reads 6334)"
+   }
+  },
+  "CReassignFullOrdersGroupDialog": {
+   "0x490": {
+    "elf": "0x330",
+    "evidence": "30CReassignFullOrdersGroupDialog derives from CPopUpWindow (ELF RTTI): root +0x330"
+   }
+  },
+  "CReferencedDivisionTemplate": {
+   "0x18": {
+    "elf": "0x18",
+    "evidence": "division template (country+0x1b8 array): template data embedded at +0x18, name +0x20, grid array +0x68 (13 sub-units), support array +0x88 (2)"
+   },
+   "0x20": {
+    "elf": "0x20",
+    "evidence": "name std::string 'Infanterie-Division' at +0x20"
+   },
+   "0x58": {
+    "elf": "0x68",
+    "evidence": "division template (country+0x1b8 array): template data embedded at +0x18, name +0x20, grid array +0x68 (13 sub-units), support array +0x88 (2)"
+   },
+   "0x78": {
+    "elf": "0x88",
+    "evidence": "division template (country+0x1b8 array): template data embedded at +0x18, name +0x20, grid array +0x68 (13 sub-units), support array +0x88 (2)"
+   }
+  },
+  "CResearchFinishedPopUpWindow": {
+   "0x488": {
+    "elf": "0x328",
+    "evidence": "28CResearchFinishedPopUpWindow derives from CPopUpWindow (ELF RTTI); every live CPopUpWindow keeps idler +0x328, root +0x330"
+   }
+  },
+  "CScientistTrait": {
+   "0x90": {
+    "elf": "0x98",
+    "evidence": "15CScientistTrait name 'Nuclear Specialist' at +0x98, key at +0x18 (live r11)"
+   }
+  },
+  "CShip": {
+   "0x90": {
+    "elf": "0x90",
+    "evidence": "type key std::string 'heavy_cruiser' at +0x90 (ship Deutschland, name at +0x7f8)"
+   },
+   "0x7d0": {
+    "elf": "0x7f8",
+    "evidence": "name std::string between neighbours 0x7c8>0x7f0 and 0x7f0>0x820: it adds the +8"
+   }
+  },
+  "CSpecialProjectCapturedPopUpWindow": {
+   "0x488": {
+    "elf": "0x328",
+    "evidence": "34CSpecialProjectCapturedPopUpWindow derives from CPopUpWindow (ELF RTTI); every live CPopUpWindow keeps idler +0x328, root +0x330"
+   }
+  },
+  "CSpecialProjectFinishedPopUpWindow": {
+   "0x488": {
+    "elf": "0x328",
+    "evidence": "34CSpecialProjectFinishedPopUpWindow derives from CPopUpWindow (ELF RTTI); every live CPopUpWindow keeps idler +0x328, root +0x330"
+   }
+  },
+  "CStandardGridBox": {
+   "0x190": {
+    "elf": "0x1a0",
+    "evidence": "grid item array at +0x1a0 (6 slots in the government grid)"
+   },
+   "0x334": {
+    "elf": "0x344",
+    "evidence": "war-goal dialog grids (live r13): the y list-position float sits at +0x344 (states_grid -442, group_grid -368/-327) after x at +0x340, the same +0x10 shift as the item array 0x190->0x1a0; a five-state list could not scroll to show the step"
+   }
+  },
+  "CState": {
+   "0x40": {
+    "elf": "0x48",
+    "evidence": "state id: reviewed Linux construction layout state_id 0x48 (macOS 0x40), unchanged by the same-platform migration"
+   }
+  },
+  "CStrategicRegion": {
+   "0x20": {
+    "elf": "0x20",
+    "evidence": "pointer to 24CStrategicRegionTemplate at +0x20"
+   },
+   "0x40": {
+    "elf": "0x48",
+    "evidence": "region of province 6334 holds file id 8 at +0x48 (map/strategicregions/8-Eastern Germany.txt lists 6334)"
+   }
+  },
+  "CStrategicRegion.template": {
+   "0x20": {
+    "elf": "0x20",
+    "evidence": "display name std::string 'Eastern Germany' at +0x20"
+   },
+   "0x38": {
+    "elf": "0x40",
+    "evidence": "key std::string 'STRATEGICREGION_8' at +0x40"
+   }
+  },
+  "CStrategicResource": {
+   "0x8": {
+    "elf": "0x8",
+    "evidence": "resource database entries +8 hold the per-resource token ids the pools match"
+   }
+  },
+  "CSubUnitDefinition": {
+   "0x10": {
+    "elf": "0x10",
+    "evidence": "key std::string 'infantry' at +0x10 (template grid element)"
+   },
+   "0x48": {
+    "elf": "0x50",
+    "evidence": "infantry definition (template grid): width 2.0 +0x50, morale .3 +0x98, supply .06 +0xf0, suppression 1.5 +0xf8, org 60 +0x278, hp 25 +0x280, weight .5 +0x2b0, need array +0x310 (100 infantry_equipment), manpower 1000 +0x578, training 90 +0x588; shifts +8/+0x10/+0x20 by zone"
+   },
+   "0x88": {
+    "elf": "0x98",
+    "evidence": "infantry definition (template grid): width 2.0 +0x50, morale .3 +0x98, supply .06 +0xf0, suppression 1.5 +0xf8, org 60 +0x278, hp 25 +0x280, weight .5 +0x2b0, need array +0x310 (100 infantry_equipment), manpower 1000 +0x578, training 90 +0x588; shifts +8/+0x10/+0x20 by zone"
+   },
+   "0x90": {
+    "elf": "0xa0",
+    "evidence": "infantry definition (template grid): width 2.0 +0x50, morale .3 +0x98, supply .06 +0xf0, suppression 1.5 +0xf8, org 60 +0x278, hp 25 +0x280, weight .5 +0x2b0, need array +0x310 (100 infantry_equipment), manpower 1000 +0x578, training 90 +0x588; shifts +8/+0x10/+0x20 by zone"
+   },
+   "0x98": {
+    "elf": "0xa8",
+    "evidence": "infantry definition (template grid): width 2.0 +0x50, morale .3 +0x98, supply .06 +0xf0, suppression 1.5 +0xf8, org 60 +0x278, hp 25 +0x280, weight .5 +0x2b0, need array +0x310 (100 infantry_equipment), manpower 1000 +0x578, training 90 +0x588; shifts +8/+0x10/+0x20 by zone"
+   },
+   "0xa8": {
+    "elf": "0xb8",
+    "evidence": "infantry definition (template grid): width 2.0 +0x50, morale .3 +0x98, supply .06 +0xf0, suppression 1.5 +0xf8, org 60 +0x278, hp 25 +0x280, weight .5 +0x2b0, need array +0x310 (100 infantry_equipment), manpower 1000 +0x578, training 90 +0x588; shifts +8/+0x10/+0x20 by zone"
+   },
+   "0xb0": {
+    "elf": "0xc0",
+    "evidence": "infantry definition (template grid): width 2.0 +0x50, morale .3 +0x98, supply .06 +0xf0, suppression 1.5 +0xf8, org 60 +0x278, hp 25 +0x280, weight .5 +0x2b0, need array +0x310 (100 infantry_equipment), manpower 1000 +0x578, training 90 +0x588; shifts +8/+0x10/+0x20 by zone"
+   },
+   "0xb8": {
+    "elf": "0xc8",
+    "evidence": "infantry definition (template grid): width 2.0 +0x50, morale .3 +0x98, supply .06 +0xf0, suppression 1.5 +0xf8, org 60 +0x278, hp 25 +0x280, weight .5 +0x2b0, need array +0x310 (100 infantry_equipment), manpower 1000 +0x578, training 90 +0x588; shifts +8/+0x10/+0x20 by zone"
+   },
+   "0xe0": {
+    "elf": "0xf0",
+    "evidence": "infantry definition (template grid): width 2.0 +0x50, morale .3 +0x98, supply .06 +0xf0, suppression 1.5 +0xf8, org 60 +0x278, hp 25 +0x280, weight .5 +0x2b0, need array +0x310 (100 infantry_equipment), manpower 1000 +0x578, training 90 +0x588; shifts +8/+0x10/+0x20 by zone"
+   },
+   "0xe8": {
+    "elf": "0xf8",
+    "evidence": "infantry definition (template grid): width 2.0 +0x50, morale .3 +0x98, supply .06 +0xf0, suppression 1.5 +0xf8, org 60 +0x278, hp 25 +0x280, weight .5 +0x2b0, need array +0x310 (100 infantry_equipment), manpower 1000 +0x578, training 90 +0x588; shifts +8/+0x10/+0x20 by zone"
+   },
+   "0x208": {
+    "elf": "0x218",
+    "evidence": "infantry definition (template grid): width 2.0 +0x50, morale .3 +0x98, supply .06 +0xf0, suppression 1.5 +0xf8, org 60 +0x278, hp 25 +0x280, weight .5 +0x2b0, need array +0x310 (100 infantry_equipment), manpower 1000 +0x578, training 90 +0x588; shifts +8/+0x10/+0x20 by zone"
+   },
+   "0x268": {
+    "elf": "0x278",
+    "evidence": "infantry definition (template grid): width 2.0 +0x50, morale .3 +0x98, supply .06 +0xf0, suppression 1.5 +0xf8, org 60 +0x278, hp 25 +0x280, weight .5 +0x2b0, need array +0x310 (100 infantry_equipment), manpower 1000 +0x578, training 90 +0x588; shifts +8/+0x10/+0x20 by zone"
+   },
+   "0x270": {
+    "elf": "0x280",
+    "evidence": "infantry definition (template grid): width 2.0 +0x50, morale .3 +0x98, supply .06 +0xf0, suppression 1.5 +0xf8, org 60 +0x278, hp 25 +0x280, weight .5 +0x2b0, need array +0x310 (100 infantry_equipment), manpower 1000 +0x578, training 90 +0x588; shifts +8/+0x10/+0x20 by zone"
+   },
+   "0x280": {
+    "elf": "0x290",
+    "evidence": "infantry definition (template grid): width 2.0 +0x50, morale .3 +0x98, supply .06 +0xf0, suppression 1.5 +0xf8, org 60 +0x278, hp 25 +0x280, weight .5 +0x2b0, need array +0x310 (100 infantry_equipment), manpower 1000 +0x578, training 90 +0x588; shifts +8/+0x10/+0x20 by zone"
+   },
+   "0x288": {
+    "elf": "0x298",
+    "evidence": "infantry definition (template grid): width 2.0 +0x50, morale .3 +0x98, supply .06 +0xf0, suppression 1.5 +0xf8, org 60 +0x278, hp 25 +0x280, weight .5 +0x2b0, need array +0x310 (100 infantry_equipment), manpower 1000 +0x578, training 90 +0x588; shifts +8/+0x10/+0x20 by zone"
+   },
+   "0x2a0": {
+    "elf": "0x2b0",
+    "evidence": "infantry definition (template grid): width 2.0 +0x50, morale .3 +0x98, supply .06 +0xf0, suppression 1.5 +0xf8, org 60 +0x278, hp 25 +0x280, weight .5 +0x2b0, need array +0x310 (100 infantry_equipment), manpower 1000 +0x578, training 90 +0x588; shifts +8/+0x10/+0x20 by zone"
+   },
+   "0x300": {
+    "elf": "0x310",
+    "evidence": "infantry definition (template grid): width 2.0 +0x50, morale .3 +0x98, supply .06 +0xf0, suppression 1.5 +0xf8, org 60 +0x278, hp 25 +0x280, weight .5 +0x2b0, need array +0x310 (100 infantry_equipment), manpower 1000 +0x578, training 90 +0x588; shifts +8/+0x10/+0x20 by zone"
+   },
+   "0x558": {
+    "elf": "0x578",
+    "evidence": "infantry definition (template grid): width 2.0 +0x50, morale .3 +0x98, supply .06 +0xf0, suppression 1.5 +0xf8, org 60 +0x278, hp 25 +0x280, weight .5 +0x2b0, need array +0x310 (100 infantry_equipment), manpower 1000 +0x578, training 90 +0x588; shifts +8/+0x10/+0x20 by zone"
+   },
+   "0x568": {
+    "elf": "0x588",
+    "evidence": "infantry definition (template grid): width 2.0 +0x50, morale .3 +0x98, supply .06 +0xf0, suppression 1.5 +0xf8, org 60 +0x278, hp 25 +0x280, weight .5 +0x2b0, need array +0x310 (100 infantry_equipment), manpower 1000 +0x578, training 90 +0x588; shifts +8/+0x10/+0x20 by zone"
+   },
+   "0x56c": {
+    "elf": "0x58c",
+    "evidence": "infantry definition (template grid): width 2.0 +0x50, morale .3 +0x98, supply .06 +0xf0, suppression 1.5 +0xf8, org 60 +0x278, hp 25 +0x280, weight .5 +0x2b0, need array +0x310 (100 infantry_equipment), manpower 1000 +0x578, training 90 +0x588; shifts +8/+0x10/+0x20 by zone"
+   }
+  },
+  "CSurrenderedPopupWindow": {
+   "0x488": {
+    "elf": "0x328",
+    "evidence": "23CSurrenderedPopupWindow derives from CPopUpWindow (ELF RTTI); every live CPopUpWindow keeps idler +0x328, root +0x330"
+   }
+  },
+  "CTechnology": {
+   "0x160": {
+    "elf": "0x160",
+    "evidence": "template pointer at +0x160 (-> 19CTechnologyTemplate)"
+   }
+  },
+  "CTechnology.template": {
+   "0x8": {
+    "elf": "0x8",
+    "evidence": "technology +0x160 -> 19CTechnologyTemplate, key std::string 'early_ship_hull_light' at +0x8"
+   }
+  },
+  "CTechnologyStatus": {
+   "0x320": {
+    "elf": "0x8c0",
+    "evidence": "technology status (country+0xf38) +0x8c0 holds the 99 18CSubUnitDefinition entries (macOS notes: 99 definitions); no other array of them inside the object"
+   }
+  },
+  "CTradeOfferWindow": {
+   "0xd60": {
+    "elf": "0x928",
+    "evidence": "17CTradeOfferWindow (CCountryTradeView +0x1260) holds 16CContainerWindow tradeoffer_window at +0x928 (live r11; same -0x438 shift as CProductionEquipmentWindow 0xcf8->0x8c0)"
+   }
+  },
+  "CUnitLeaderTemplate": {
+   "0x8": {
+    "elf": "0x8",
+    "evidence": "trait array at +0x8 (3 entries for August von Mackensen)"
+   }
+  },
+  "CWarGoalType": {
+   "0x10": {
+    "elf": "0x10",
+    "evidence": "12CWarGoalType of the completed GER->LIT goal (8CWarGoal +0x40, live r14): key 'take_state' at +0x10"
+   }
+  },
+  "CWorldTensionPopUpWindow": {
+   "0x488": {
+    "elf": "0x328",
+    "evidence": "24CWorldTensionPopUpWindow derives from CPopUpWindow (ELF RTTI); every live CPopUpWindow keeps idler +0x328, root +0x330"
+   }
+  },
+  "CWorldThreat": {
+   "0x8": {
+    "elf": "0x8",
+    "evidence": "threat value; neighbour 0x10>0x10, no std member before it"
+   }
+  },
+  "NDoctrines::CCountryDoctrineStatus": {
+   "0x10": {
+    "elf": "0x10",
+    "evidence": "doctrine system (gs+0x3f8) +0x8: 440 inline N10NDoctrines22CCountryDoctrineStatusE: folder array (4 entries) at status +0x10"
+   }
+  },
+  "NDoctrines::CCountryDoctrineStatus.size": {
+   "0xa0": {
+    "elf": "0xa0",
+    "evidence": "doctrine system (gs+0x3f8) +0x8: 440 inline N10NDoctrines22CCountryDoctrineStatusE: vtable repeats every 0xa0"
+   }
+  },
+  "NDoctrines::CDoctrineTemplate": {
+   "0x18": {
+    "elf": "0x18",
+    "evidence": "cost i32 before the name std::string at +0x20 (doctrine records keep the macOS layout); checked by the tool's names"
+   },
+   "0x1c": {
+    "elf": "0x1c",
+    "evidence": "kind i32 before the name string"
+   },
+   "0x20": {
+    "elf": "0x20",
+    "evidence": "name std::string"
+   }
+  },
+  "NDoctrines::CFolderStatus.size": {
+   "0x50": {
+    "elf": "0x50",
+    "evidence": "folder records (status +0x10 array): N10NDoctrines13CFolderStatusE vtable every 0x50"
+   }
+  },
+  "NDoctrines::CTrackStatus": {
+   "0x50": {
+    "elf": "0x50",
+    "evidence": "track records keep the macOS layout (0x8..0x40 identical, stride 0x60)"
+   },
+   "0x58": {
+    "elf": "0x58",
+    "evidence": "track records keep the macOS layout (stride 0x60)"
+   }
+  },
+  "NDoctrines::CTrackStatus.size": {
+   "0x60": {
+    "elf": "0x60",
+    "evidence": "track records (folder +0x18 array): N10NDoctrines12CTrackStatusE vtable every 0x60"
+   }
+  },
+  "NDoctrines::STemporaryCostReduction": {
+   "0x8": {
+    "elf": "0x8",
+    "evidence": "uses i32 +0x8, name std::string +0x10, then value and folder template +8 on libstdc++ (record grows to 0x40); derived, no reduction exists at the 1936 start"
+   },
+   "0x10": {
+    "elf": "0x10",
+    "evidence": "uses i32 +0x8, name std::string +0x10, then value and folder template +8 on libstdc++ (record grows to 0x40); derived, no reduction exists at the 1936 start"
+   },
+   "0x28": {
+    "elf": "0x30",
+    "evidence": "uses i32 +0x8, name std::string +0x10, then value and folder template +8 on libstdc++ (record grows to 0x40); derived, no reduction exists at the 1936 start"
+   },
+   "0x30": {
+    "elf": "0x38",
+    "evidence": "uses i32 +0x8, name std::string +0x10, then value and folder template +8 on libstdc++ (record grows to 0x40); derived, no reduction exists at the 1936 start"
+   }
+  },
+  "NDoctrines::STemporaryCostReduction.size": {
+   "0x38": {
+    "elf": "0x40",
+    "evidence": "uses i32 +0x8, name std::string +0x10, then value and folder template +8 on libstdc++ (record grows to 0x40); derived, no reduction exists at the 1936 start"
+   }
+  },
+  "NFactions::CFaction": {
+   "0x18": {
+    "elf": "0x38",
+    "evidence": "name std::string 'Axis' at +0x38, members array at +0x58 (table 0x48>0x58)"
+   }
+  },
+  "NFactions::CTechnologySharingFaction": {
+   "0x48": {
+    "elf": "0x48",
+    "evidence": "pointer to N9NFactions8CFactionE at +0x48"
+   }
+  },
+  "NIndustrialOrganisation::COrganisationListWindow": {
+   "0xf0": {
+    "elf": "0xb0",
+    "evidence": "COrganisationListWindow holds 16CContainerWindow industrial_organisation_list_window at +0xb0 (live r11)"
+   }
+  },
+  "NProject::CProgramStatus": {
+   "0x60": {
+    "elf": "0x68",
+    "evidence": "libstdc++ _Rb_tree breakthrough map of N8NProject14CProgramStatusE (live r11, Germany 1936): header color +0x60, root +0x68, leftmost +0x70, rightmost +0x78, count 4 at +0x80; nodes color 0, parent 8, left 0x10, right 0x18, spec id i32 0x20 (22255..22258), value i32 0x24 (0/8000/3000/10000 = Physics 0, Naval 0.8, Air 0.3, Land 1 point on the Experimental Facilities tab)"
+   }
+  },
+  "NProject::CProject": {
+   "0x20": {
+    "elf": "0x20",
+    "evidence": "below the state machine pointer at +0x28 (table 0x28>0x28, delta 0)"
+   }
+  },
+  "NProject::CProject.size": {
+   "0x1b8": {
+    "elf": "0x1b8",
+    "evidence": "project pool (program status +0x18): CProject records at +0x10 repeat their vtable every 0x1b8"
+   }
+  },
+  "NProject::CProjectPool": {
+   "0x10": {
+    "elf": "0x10",
+    "evidence": "project pool (program status +0x18): CProject records at +0x10 repeat their vtable every 0x1b8"
+   }
+  },
+  "NProject::CProjectStateMachine": {
+   "0x8": {
+    "elf": "0x8",
+    "evidence": "current state pointer (N8NProject22CPrototypeProjectStateE) at +0x8"
+   },
+   "0x8c": {
+    "elf": "0x74",
+    "evidence": "N8NProject20CProjectStateMachineE of the 48 pooled projects (live r11, Germany 1936): gain pairs such as 15/20, 10/15, 5/10 at +0x74/+0x78 (gain min)"
+   },
+   "0x90": {
+    "elf": "0x78",
+    "evidence": "N8NProject20CProjectStateMachineE of the 48 pooled projects (live r11, Germany 1936): gain pairs such as 15/20, 10/15, 5/10 at +0x74/+0x78 (gain max)"
+   },
+   "0x94": {
+    "elf": "0x7c",
+    "evidence": "Flamethrower Tank running in facility 3499 (live r11, 5 March 1936): machine +0x74/+0x78 = 15/25 gain, +0x7c = 18 matches the card's progress bar, +0x80 = 1 matches its one iteration medal"
+   },
+   "0x98": {
+    "elf": "0x80",
+    "evidence": "Flamethrower Tank running in facility 3499 (live r11, 5 March 1936): machine +0x74/+0x78 = 15/25 gain, +0x7c = 18 matches the card's progress bar, +0x80 = 1 matches its one iteration medal"
+   }
+  },
+  "NProject::CProjectTemplate": {
+   "0x208": {
+    "elf": "0x230",
+    "evidence": "key std::string 'sp_air_bouncing_bomb' at +0x230 of the template a project points to (+0x20 minus 0x10)"
+   }
+  },
+  "NProject::CSpecializationDatabase": {
+   "0x58": {
+    "elf": "0x58",
+    "evidence": "+0x58 is the 4-entry array of N8NProject23CSpecializationTemplateE"
+   }
+  },
+  "NProject::NUi::CRecruitScientistWindow": {
+   "0x20": {
+    "elf": "0x28",
+    "evidence": "root at +0x28 like the sibling CScientistRoster; hoi4_special_project_recruit recruited Karl Reiter through it (live r15)"
+   }
+  },
+  "NProject::NUi::CScientistRoster": {
+   "0x20": {
+    "elf": "0x28",
+    "evidence": "N8NProject3NUi16CScientistRosterE (facilities tab +0x80) holds 16CContainerWindow scientist_roster_window at +0x28 (live r11)"
+   }
+  },
+  "air.overview.view": {
+   "0x490": {
+    "elf": "0x338",
+    "evidence": "manager slot 0x158 holds 24CCountryMilitaryOverview (CCountryView): root +0x338"
+   }
+  },
+  "air.selection.view": {
+   "0x28": {
+    "elf": "0x30",
+    "evidence": "manager slot 0x200 N15NAirSelectionUI17CAirSelectionViewE: root CContainerWindow at +0x30"
+   },
+   "0x60": {
+    "elf": "0x68",
+    "evidence": "selected wings array right after the controller pointers: +0x68 (allocator +0x78), same +8 as the root"
+   }
+  },
+  "breakthrough.map_node": {
+   "0x0": {
+    "elf": "0x10",
+    "evidence": "libstdc++ _Rb_tree breakthrough map of N8NProject14CProgramStatusE (live r11, Germany 1936): header color +0x60, root +0x68, leftmost +0x70, rightmost +0x78, count 4 at +0x80; nodes color 0, parent 8, left 0x10, right 0x18, spec id i32 0x20 (22255..22258), value i32 0x24 (0/8000/3000/10000 = Physics 0, Naval 0.8, Air 0.3, Land 1 point on the Experimental Facilities tab)"
+   },
+   "0x8": {
+    "elf": "0x18",
+    "evidence": "libstdc++ _Rb_tree breakthrough map of N8NProject14CProgramStatusE (live r11, Germany 1936): header color +0x60, root +0x68, leftmost +0x70, rightmost +0x78, count 4 at +0x80; nodes color 0, parent 8, left 0x10, right 0x18, spec id i32 0x20 (22255..22258), value i32 0x24 (0/8000/3000/10000 = Physics 0, Naval 0.8, Air 0.3, Land 1 point on the Experimental Facilities tab)"
+   },
+   "0x18": {
+    "elf": "0x1c",
+    "evidence": "libstdc++ _Rb_tree breakthrough map of N8NProject14CProgramStatusE (live r11, Germany 1936): header color +0x60, root +0x68, leftmost +0x70, rightmost +0x78, count 4 at +0x80; nodes color 0, parent 8, left 0x10, right 0x18, spec id i32 0x20 (22255..22258), value i32 0x24 (0/8000/3000/10000 = Physics 0, Naval 0.8, Air 0.3, Land 1 point on the Experimental Facilities tab) (u64 read whose high dword is the key)"
+   },
+   "0x20": {
+    "elf": "0x24",
+    "evidence": "libstdc++ _Rb_tree breakthrough map of N8NProject14CProgramStatusE (live r11, Germany 1936): header color +0x60, root +0x68, leftmost +0x70, rightmost +0x78, count 4 at +0x80; nodes color 0, parent 8, left 0x10, right 0x18, spec id i32 0x20 (22255..22258), value i32 0x24 (0/8000/3000/10000 = Physics 0, Naval 0.8, Air 0.3, Land 1 point on the Experimental Facilities tab)"
+   }
+  },
+  "characters.recruit_pool": {
+   "0x8": {
+    "elf": "0x8",
+    "evidence": "scientist recruit pool embedded at 18CCountryCharacters +0x100, its array of 4 10CScientist at pool +0x8 (characters +0x108, live r11); hoi4_special_project_recruit used it (live r15)"
+   }
+  },
+  "civilian.consumer": {
+   "0x8": {
+    "elf": "0x8",
+    "evidence": "production status embedded consumers: 0x448 CConsumerGoodsConsumer, 0x460 CSpecialProjectsConsumer, 0x478 CLicensedProductionConsumer, 0x490 CTradeConsumer, 0x4a8 CContractPaymentConsumer (same as macOS); base fields +0x8 = 0 and +0xc = 35 (consumer goods) / 20"
+   },
+   "0xc": {
+    "elf": "0xc",
+    "evidence": "production status embedded consumers: 0x448 CConsumerGoodsConsumer, 0x460 CSpecialProjectsConsumer, 0x478 CLicensedProductionConsumer, 0x490 CTradeConsumer, 0x4a8 CContractPaymentConsumer (same as macOS)"
+   }
+  },
+  "deployment.template_row": {
+   "0x10": {
+    "elf": "0x10",
+    "evidence": "row container pointer at +0x10, as grid items (grid.item 0x10>0x10)"
+   }
+  },
+  "deployment.template_window": {
+   "0xcb0": {
+    "elf": "0x870",
+    "evidence": "template rows: with the Recruit & Deploy view open, +0x870 holds the 5 26CDivisionTemplateNamedItem rows (the matcher's single vote also gave 0x870)"
+   },
+   "0xd20": {
+    "elf": "0x8e8",
+    "evidence": "root CContainerWindow right after the idler pointer (+0x8e0, table 0xd18>0x8e0)"
+   }
+  },
+  "diplomacy.action_controller": {
+   "0x8d8": {
+    "elf": "0x610",
+    "evidence": "justify dialog open toward LIT (live r13): 21CCountryDiplomacyView +0x2ce0 points at the 25CLegacyButtonObserverGlueI33CDiplomacyCountryActionControllerE whose +0x610 is the action info 16CContainerWindow (children declare_war, add_wargoal, stage_coup, generate_wargoal, ...)"
+   }
+  },
+  "diplomacy.relation": {
+   "0xc": {
+    "elf": "0xc",
+    "evidence": "relation record from CDiplomacyStatus (country+0xf60)+0x20: +0xc GER tag 1, +0x10 partner tag 30, +0x20 start = today, +0x38 end = NO_DATE 43808760, same as macOS"
+   },
+   "0x10": {
+    "elf": "0x10",
+    "evidence": "relation record from CDiplomacyStatus (country+0xf60)+0x20: +0xc GER tag 1, +0x10 partner tag 30, +0x20 start = today, +0x38 end = NO_DATE 43808760, same as macOS"
+   },
+   "0x20": {
+    "elf": "0x20",
+    "evidence": "relation record from CDiplomacyStatus (country+0xf60)+0x20: +0xc GER tag 1, +0x10 partner tag 30, +0x20 start = today, +0x38 end = NO_DATE 43808760, same as macOS"
+   },
+   "0x38": {
+    "elf": "0x38",
+    "evidence": "relation record from CDiplomacyStatus (country+0xf60)+0x20: +0xc GER tag 1, +0x10 partner tag 30, +0x20 start = today, +0x38 end = NO_DATE 43808760, same as macOS"
+   },
+   "0x50": {
+    "elf": "0x50",
+    "evidence": "relation record: CGameDate members at +0x18/+0x30 as on macOS, so the autonomy pointer after them keeps +0x50"
+   }
+  },
+  "division.pool": {
+   "0x10": {
+    "elf": "0x10",
+    "evidence": "division (country+0x290 array): equipment pool +0x350 {type*, u32 slot, u32 flag, i64 amount} 3 records of 0x18; held variants +0x368 {variant*, i64} records of 0x10 (same shapes as macOS)"
+   }
+  },
+  "division.pool.size": {
+   "0x18": {
+    "elf": "0x18",
+    "evidence": "division (country+0x290 array): equipment pool +0x350 {type*, u32 slot, u32 flag, i64 amount} 3 records of 0x18; held variants +0x368 {variant*, i64} records of 0x10 (same shapes as macOS)"
+   }
+  },
+  "division.variant": {
+   "0x8": {
+    "elf": "0x8",
+    "evidence": "division (country+0x290 array): equipment pool +0x350 {type*, u32 slot, u32 flag, i64 amount} 3 records of 0x18; held variants +0x368 {variant*, i64} records of 0x10 (same shapes as macOS)"
+   }
+  },
+  "division.variant.size": {
+   "0x10": {
+    "elf": "0x10",
+    "evidence": "division (country+0x290 array): equipment pool +0x350 {type*, u32 slot, u32 flag, i64 amount} 3 records of 0x18; held variants +0x368 {variant*, i64} records of 0x10 (same shapes as macOS)"
+   }
+  },
+  "division_template": {
+   "0x20": {
+    "elf": "0x20",
+    "evidence": "template name std::string at +0x20 ('Infanterie-Division')"
+   }
+  },
+  "find.result_row": {
+   "0x458": {
+    "elf": "0x2e8",
+    "evidence": "highlighted 22CSearchableGridBoxItem (find view +0x980 after searching '64') holds its 6CState at +0x2e8"
+   }
+  },
+  "gs.air_manager": {
+   "0x30": {
+    "elf": "0x30",
+    "evidence": "CStrategicAirManager (gs+0x680) +0x30 is the 440-entry per-country array"
+   }
+  },
+  "gs.navy_manager": {
+   "0x8": {
+    "elf": "0x8",
+    "evidence": "CStrategicNavyManager (gs+0x688) +0x8 is the 440-entry per-country array"
+   }
+  },
+  "gui.object": {
+   "0x50": {
+    "elf": "0x60",
+    "evidence": "widget type pointer: topbar child CIcon +0x60 -> 9CIconType named 'background'"
+   },
+   "0x65": {
+    "elf": "0x75",
+    "evidence": "widget flags byte: CButtonStandard/CIcon/CEditBox/CDropDownBox all map 0x65>0x75"
+   }
+  },
+  "gui.popup": {
+   "0x490": {
+    "elf": "0x330",
+    "evidence": "popup root: every CPopUpWindow-derived window keeps its root container at +0x330 (ELF RTTI chains, viewroots.py; live CReassignFullOrdersGroupDialog +0x330)"
+   }
+  },
+  "gui.sprite_type": {
+   "0x78": {
+    "elf": "0x90",
+    "evidence": "11CSpriteType frames at +0x90 (GFX_observer_flag_overlay 2, others 1)"
+   },
+   "0x8c": {
+    "elf": "0xa4",
+    "evidence": "11CSpriteType texture size at +0xa4 (GFX_pol_power_icon 27x27, observer flag overlay 72x30)"
+   }
+  },
+  "gui.type": {
+   "0x28": {
+    "elf": "0x28",
+    "evidence": "type name std::string at +0x28 of 9CIconType ('background')"
+   }
+  },
+  "idea.category": {
+   "0x10": {
+    "elf": "0x10",
+    "evidence": "26CPoliticsIdeaCategoryEntry +0x30 -> 13CIdeaCategory, key std::string 'government' at +0x10"
+   }
+  },
+  "idler.gui": {
+   "0x140": {
+    "elf": "0x160",
+    "evidence": "CGameGui root-window array: +0x160 holds 261 CContainerWindow entries; neighbour 0xf8>0x118 has the same +0x20"
+   },
+   "0xa70": {
+    "elf": "0x7c0",
+    "evidence": "CGameGui+0x7c0 is the popup array (held CPlaneTypeSelectionWindow); matcher chain 0xa70..0xaa0 -0x2b0"
+   }
+  },
+  "idler.manager": {
+   "0x3b8": {
+    "elf": "0x3e8",
+    "evidence": "selected building template: macOS notes put Linux 0x30 above macOS; live manager +0x3e8 holds TNullObject<CBuildingTemplate> with nothing selected"
+   },
+   "0x3c0": {
+    "elf": "0x3f0",
+    "evidence": "selection mode right after the selected template (same 0x30 shift)"
+   }
+  },
+  "leader.trait.size": {
+   "0x20": {
+    "elf": "0x28",
+    "evidence": "19CUnitLeaderTemplate +0x8 trait records: names at k*0x28 (old_guard, thorough_planner, organisational_leader); libstdc++ string 32 + 8"
+   }
+  },
+  "manager.air_region_view": {
+   "0x490": {
+    "elf": "0x330",
+    "evidence": "manager slot 0x198 holds 17CStrategicAirView (CPopUpWindow): root +0x330"
+   }
+  },
+  "manager.diplomacy_view": {
+   "0x490": {
+    "elf": "0x338",
+    "evidence": "manager slot 0x110 holds 21CCountryDiplomacyView (CCountryView): root +0x338"
+   }
+  },
+  "manager.find_view": {
+   "0xd50": {
+    "elf": "0x920",
+    "evidence": "9CFindView (manager +0x190): idler +0x920, window CContainerWindow +0x928, CEditBox +0x930, query std::string +0x938"
+   },
+   "0xd58": {
+    "elf": "0x928",
+    "evidence": "9CFindView (manager +0x190): idler +0x920, window CContainerWindow +0x928, CEditBox +0x930, query std::string +0x938"
+   },
+   "0xd68": {
+    "elf": "0x938",
+    "evidence": "9CFindView (manager +0x190): idler +0x920, window CContainerWindow +0x928, CEditBox +0x930, query std::string +0x938"
+   },
+   "0xda8": {
+    "elf": "0x980",
+    "evidence": "highlighted result row: same 0x28 gap after the query string as on macOS; to confirm with hoi4_state_slots"
+   }
+  },
+  "manager.state_view": {
+   "0x490": {
+    "elf": "0x338",
+    "evidence": "manager slot 0xc8 holds 17CCountryStateView (CCountryView): root +0x338"
+   }
+  },
+  "modifier.entry.size": {
+   "0x10": {
+    "elf": "0x10",
+    "evidence": "country CModifier (+0x5a0) entry array at +0x10: {i32 id, pad, i64 value} records of 16 bytes (ids 9, 15, 18, 30)"
+   }
+  },
+  "orders.group": {
+   "0x160": {
+    "elf": "0x160",
+    "evidence": "name std::string between neighbours 0x148>0x148 and 0x180>0x188 (the +8 is this string); to confirm after army_create"
+   }
+  },
+  "production.selection.row": {
+   "0x10": {
+    "elf": "0x10",
+    "evidence": "equipments_grid rows (28CProductionInfoEquipmentItem) of the open equipment selection: variant pointer +0x918, container +0x10"
+   },
+   "0xd50": {
+    "elf": "0x918",
+    "evidence": "equipments_grid rows (28CProductionInfoEquipmentItem) of the open equipment selection: variant pointer +0x918, container +0x10"
+   }
+  },
+  "production.selection.window": {
+   "0xcf8": {
+    "elf": "0x8c0",
+    "evidence": "26CProductionEquipmentWindow: idler +0x8b0, root CContainerWindow +0x8c0 (same -0x438 as the template deployment window)"
+   }
+  },
+  "production.selection_row": {
+   "0x10": {
+    "elf": "0x10",
+    "evidence": "equipments_grid rows (28CProductionInfoEquipmentItem) of the open equipment selection: variant pointer +0x918, container +0x10"
+   },
+   "0xd50": {
+    "elf": "0x918",
+    "evidence": "equipments_grid rows (28CProductionInfoEquipmentItem) of the open equipment selection: variant pointer +0x918, container +0x10"
+   }
+  },
+  "scientist.skill_level": {
+   "0x0": {
+    "elf": "0x0",
+    "evidence": "10CScientist skill levels (CScientist +0x100, 4 entries) of 17 German scientists (live r11): stride 0x20, spec id i32 +0, level i32 +0x18 (Heisenberg physics 2, Thiessen 1)"
+   },
+   "0x18": {
+    "elf": "0x18",
+    "evidence": "10CScientist skill levels (CScientist +0x100, 4 entries) of 17 German scientists (live r11): stride 0x20, spec id i32 +0, level i32 +0x18 (Heisenberg physics 2, Thiessen 1)"
+   }
+  },
+  "scientist.skill_level.size": {
+   "0x20": {
+    "elf": "0x20",
+    "evidence": "10CScientist skill levels (CScientist +0x100, 4 entries) of 17 German scientists (live r11): stride 0x20, spec id i32 +0, level i32 +0x18 (Heisenberg physics 2, Thiessen 1)"
+   }
+  },
+  "spec.template": {
+   "0x8": {
+    "elf": "0x8",
+    "evidence": "i32 id right after the vtable; strings start at +0x30"
+   }
+  },
+  "state.slot_item": {
+   "0x28": {
+    "elf": "0x28",
+    "evidence": "building slot items keep container +0x10 and the state view +0x20 as on macOS, +0x28 next; hoi4_state_slots read the slots through it (live r10)"
+   }
+  },
+  "subunit.need": {
+   "0x8": {
+    "elf": "0x8",
+    "evidence": "need record {CEquipmentType*, i64 amount}: amount 100.0 at +0x8"
+   }
+  },
+  "subunit.need.size": {
+   "0x10": {
+    "elf": "0x10",
+    "evidence": "16-byte {type*, i64} need records"
+   }
+  },
+  "supply_flow.size": {
+   "0x10": {
+    "elf": "0x10",
+    "evidence": "flow records {u16 node, u16 link, pad, i64 flow}, POD"
+   }
+  },
+  "supply_province": {
+   "0x0": {
+    "elf": "0x0",
+    "evidence": "supply system (gs+0x3d0): province records at +0x130 (13414) repeat their flow array header at +0x30 every 0xd8 (39/39 checked); POD records, same as macOS"
+   },
+   "0x8": {
+    "elf": "0x8",
+    "evidence": "supply system (gs+0x3d0): province records at +0x130 (13414) repeat their flow array header at +0x30 every 0xd8 (39/39 checked); POD records, same as macOS"
+   },
+   "0x30": {
+    "elf": "0x30",
+    "evidence": "supply system (gs+0x3d0): province records at +0x130 (13414) repeat their flow array header at +0x30 every 0xd8 (39/39 checked); POD records, same as macOS"
+   }
+  },
+  "supply_province.size": {
+   "0xd8": {
+    "elf": "0xd8",
+    "evidence": "supply system (gs+0x3d0): province records at +0x130 (13414) repeat their flow array header at +0x30 every 0xd8 (39/39 checked); POD records, same as macOS"
+   }
+  },
+  "supply_state.size": {
+   "0x28": {
+    "elf": "0x28",
+    "evidence": "state records at +0x28 (1082 entries) of 0x28 bytes, POD"
+   }
+  },
+  "unit.leader": {
+   "0x38": {
+    "elf": "0x40",
+    "evidence": "11CArmyLeader: key std::string at +0x20 (GER_august_von_mackensen), name at +0x40 (August von Mackensen)"
+   }
+  }
+ }
+}

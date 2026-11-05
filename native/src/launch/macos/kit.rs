@@ -341,9 +341,11 @@ pub(super) fn click(keys: &dyn GameInput, rect: Rect) -> Result<()> {
 // ---- pop-ups ------------------------------------------------------------------------------------
 /// Confirmation dialogs with `accept_button` and `decline_button` that a fleet or faction action may
 /// raise: `CAcceptCommandDialog`, `CConfirmCancelNavyActivityDialog`, `CDefaultConfirmationPopUpWindow`,
-/// `CGenericDefaultConfirmationPopUpWindow`, `CDismantleFactionDialog` (vtables from the RTTI map).
-pub(super) const CONFIRM_VTABLES: [u64; 5] =
-    [0x363b690, 0x363b9d8, 0x367fd40, 0x358ff80, 0x3661350];
+/// `CGenericDefaultConfirmationPopUpWindow`, `CDismantleFactionDialog`, `CConfirmDeleteUnits`
+/// ("Delete task force", seen on Linux 5 November 2026) (vtables from the RTTI map).
+pub(super) const CONFIRM_VTABLES: [u64; 6] = [
+    0x363b690, 0x363b9d8, 0x367fd40, 0x358ff80, 0x3661350, 0x36998b0,
+];
 /// Diplomacy proposal pop-ups: base, standard, scripted, incoming lend-lease, foreign manpower.
 pub(super) const DIPLOMACY_VTABLES: [u64; 5] =
     [0x365b4d0, 0x365b5f8, 0x365b720, 0x365b848, 0x365b970];
@@ -356,6 +358,7 @@ fn popup_class(vtable: u64) -> xlayout::Class {
         0x367fd40 => "CDefaultConfirmationPopUpWindow",
         0x358ff80 => "CGenericDefaultConfirmationPopUpWindow",
         0x3661350 => "CDismantleFactionDialog",
+        0x36998b0 => "CConfirmDeleteUnits",
         0x365b4d0 => "CDiplomacyPopupWindowBase",
         0x365b5f8 => "CStandardDiplomacyPopup",
         0x365b720 => "CScriptedGUIDiplomacyPopup",
@@ -425,14 +428,20 @@ pub(super) fn answer_confirmation(
         }
         Ok(None)
     };
-    let deadline = Instant::now() + Duration::from_millis(1500);
+    let deadline = Instant::now() + Duration::from_millis(2500);
     loop {
+        // A dialog that has just appeared can report its button before the game lays it out (the
+        // Linux "Delete task force" OK read at the top-left of the screen); click only a rectangle
+        // that reads the same twice.
         if let Some(rect) = read(process, find)? {
-            click(keys, rect)?;
-            wait(process, "confirmation closed", |r, i| {
-                Ok(find(r, i)?.is_none())
-            })?;
-            return Ok(true);
+            std::thread::sleep(Duration::from_millis(300));
+            if read(process, find)? == Some(rect) {
+                click(keys, rect)?;
+                wait(process, "confirmation closed", |r, i| {
+                    Ok(find(r, i)?.is_none())
+                })?;
+                return Ok(true);
+            }
         }
         if Instant::now() >= deadline {
             return Ok(false);

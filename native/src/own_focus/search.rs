@@ -32,7 +32,7 @@ fn exact_search_type(
     if observed != base + table_rva {
         let observed = observed
             .checked_sub(base)
-            .filter(|rva| (0x41adde0..0x436d9f8).contains(rva))
+            .filter(|rva| (0x4342540..0x45039f8).contains(rva))
             .map(|rva| format!("0x{rva:x}"))
             .unwrap_or_else(|| "outside_verified_table_section".into());
         return Err(Error::new(
@@ -72,7 +72,7 @@ pub(super) fn observe(
     unique(&current)?;
     let mut own_items = BTreeMap::new();
     for item in current {
-        exact_search_type(r, base, item, 0x4249b90, "current_item")?;
+        exact_search_type(r, base, item, 0x43df668, "current_item")?;
         if r.u64(item + 0x2b0)? != view {
             return Err(Error::new(
                 "foreign_focus_scope",
