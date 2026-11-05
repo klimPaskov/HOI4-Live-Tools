@@ -608,9 +608,8 @@ pub(super) fn assign(process: &dyn Process, keys: &dyn GameInput, plan: &AssignP
         }
         if pass == 1 {
             find_state(process, keys, plan.state)?;
-            keys.scroll(GAME, (960.0, 540.0), -240)?;
-            std::thread::sleep(std::time::Duration::from_millis(200));
-            keys.scroll(GAME, (960.0, 540.0), -240)?;
+            // Both wheel steps in one flick: one smooth zoom-out.
+            keys.scroll_burst(GAME, (960.0, 540.0), -240, 2)?;
             std::thread::sleep(std::time::Duration::from_millis(500));
         }
         for (k, (from, to)) in ASSIGN_BOXES.into_iter().enumerate() {
@@ -1566,15 +1565,22 @@ pub(super) fn front(
     find_state(process, keys, state)?;
     std::thread::sleep(std::time::Duration::from_millis(500));
     if let Some((x, z)) = near {
-        for _ in 0..4 {
-            match read(process, |r, i| super::screenmap::to_screen(r, i, x, z))? {
-                Some((sx, sy)) if (520.0..1500.0).contains(&sx) && (160.0..800.0).contains(&sy) => {
-                    break
-                }
-                _ => {
-                    keys.scroll(GAME, (960.0, 540.0), -240)?;
-                    std::thread::sleep(std::time::Duration::from_millis(400));
-                }
+        // Zoom out (at most four wheel steps, as before) until the point lies in the usable
+        // area: the steps it needs, sized from its screen offset, go in one smooth flick.
+        let mut left = 4;
+        for _ in 0..2 {
+            let events = match read(process, |r, i| super::screenmap::to_screen(r, i, x, z))? {
+                Some(p) => super::glide::zoom_out_events(p, (520.0, 160.0, 1500.0, 800.0), left),
+                None => left.min(2),
+            };
+            if events == 0 {
+                break;
+            }
+            keys.scroll_burst(GAME, (960.0, 540.0), -240, events)?;
+            std::thread::sleep(std::time::Duration::from_millis(400));
+            left -= events;
+            if left == 0 {
+                break;
             }
         }
     }
@@ -2063,7 +2069,7 @@ fn assign_commander_once(
             .find(|(n, _)| n.to_lowercase() == wanted)
             .map(|(_, rect)| rect))
     };
-    let Some(mut rect) = settled(process, "commander list", find)? else {
+    let Some(rect) = settled(process, "commander list", find)? else {
         let names: Vec<String> = read(process, leader_rows)?
             .into_iter()
             .map(|(n, _)| n)
@@ -2080,41 +2086,45 @@ fn assign_commander_once(
         ));
     };
     let band = read(process, |r, i| Ok(leader_band(r, i)))?;
-    for _ in 0..40 {
-        let bottom = rect.y + rect.h;
-        let top = bottom - PORTRAIT_DRAWN;
-        if top >= band.0 && bottom <= band.1 {
-            break;
-        }
-        // The list can flicker shut while the game rebuilds it; give it a moment,
-        // then open it again from the commander slot.
-        let mut open = false;
-        for attempt in 0..8 {
-            if read(process, |r, i| Ok(leader_list_open(r, i).unwrap_or(false)))? {
-                open = true;
-                break;
+    // The drawn portrait (the row's lower part) glides into the list band in one movement.
+    let drawn = |rect: &Rect| {
+        let bottom = f64::from(rect.y + rect.h);
+        (bottom - f64::from(PORTRAIT_DRAWN), bottom)
+    };
+    let outcome = super::glide::glide(
+        process,
+        keys,
+        &super::glide::Glide {
+            at: (960.0, 560.0),
+            pixels: 240,
+            band: (f64::from(band.0), f64::from(band.1)),
+            search: 0,
+        },
+        || {
+            // The list can flicker shut while the game rebuilds it; give it a moment,
+            // then open it again from the commander slot.
+            for attempt in 0..8 {
+                if read(process, |r, i| Ok(leader_list_open(r, i).unwrap_or(false)))? {
+                    return Ok(());
+                }
+                std::thread::sleep(std::time::Duration::from_millis(250));
+                if attempt == 4 {
+                    keys.click(GAME, COMMANDER_SLOT.0, COMMANDER_SLOT.1)?;
+                }
             }
-            std::thread::sleep(std::time::Duration::from_millis(250));
-            if attempt == 4 {
-                keys.click(GAME, COMMANDER_SLOT.0, COMMANDER_SLOT.1)?;
-            }
-        }
-        if !open {
-            return Err(Error::new(
+            Err(Error::new(
                 "input_readback_failed",
                 format!("Commander list closed while bringing the row into view (row {rect:?}, list band {band:?})"),
-            ));
-        }
-        let pixels = if top < band.0 { 240 } else { -240 };
-        keys.scroll(GAME, (960.0, 560.0), pixels)?;
-        std::thread::sleep(std::time::Duration::from_millis(150));
-        let moved = read(process, find)?
-            .ok_or_else(|| Error::new("gui_target_unavailable", "General left the list"))?;
-        // The first or last row cannot scroll further: keep it when its middle is shown.
-        if moved == rect {
-            break;
-        }
-        rect = moved;
+            ))
+        },
+        |r, i| Ok(find(r, i)?.map(|x| drawn(&x))),
+    )?;
+    // The first or last row cannot scroll further: it is kept when its middle is shown.
+    if outcome == super::glide::Glided::Unknown {
+        return Err(Error::new(
+            "gui_target_unavailable",
+            "General left the list",
+        ));
     }
     let rect = settled(process, "general row", |r, i| {
         find(r, i)?.ok_or_else(|| Error::new("gui_target_unavailable", "General left the list"))

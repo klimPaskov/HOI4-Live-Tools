@@ -1475,8 +1475,8 @@ pub(super) fn set_production_apply(
                 .map(|x| (x.id, x.shown))
                 .collect::<Vec<_>>())
         });
-        let mut last_y: Option<i32> = None;
-        for _ in 0..40 {
+        let mut glided = false;
+        loop {
             let list = read(process, dui::rows)?;
             let Some(row) = list.iter().find(|x| x.id == change.design && x.shown) else {
                 let offered: Vec<String> = list
@@ -1529,24 +1529,31 @@ pub(super) fn set_production_apply(
                     "route":"Y (Production) -> the line's equipment picture -> the design's row in the list that opens"}),
                 );
             }
-            if last_y == Some(button.y) {
+            if glided {
                 return Err(Error::new(
                     "gui_target_unavailable",
                     "The design row cannot be scrolled into view",
                 ));
             }
-            last_y = Some(button.y);
-            keys.scroll(
-                dui::GAME,
-                (780.0, 700.0),
-                if button.y < 170 { 240 } else { -240 },
+            glided = true;
+            // One glide brings the row into the list (only while the list is open).
+            let design = change.design;
+            dui::glide_button(
+                process,
+                keys,
+                if change.naval {
+                    "naval_button"
+                } else {
+                    "tank_button"
+                },
+                move |r, i| {
+                    Ok(dui::rows(r, i)?
+                        .into_iter()
+                        .find(|x| x.id == design && x.shown)
+                        .and_then(|x| x.equipment_button))
+                },
             )?;
-            thread::sleep(Duration::from_millis(250));
         }
-        Err(Error::new(
-            "gui_target_unavailable",
-            "The design row did not scroll into view",
-        ))
     })();
     dui::leave(process, keys);
     result

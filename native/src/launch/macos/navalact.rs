@@ -426,8 +426,25 @@ pub(super) fn select_task_force(
         }
         let (top, bottom) = (250, 1000);
         if entry.select.y < top || entry.select.y + entry.select.h > bottom {
-            let pixels = if entry.select.y < top { 240 } else { -240 };
-            keys.scroll(GAME, (200.0, 600.0), pixels)?;
+            // One glide brings the entry into the panel's list, then it is looked at afresh.
+            let want = name.to_string();
+            super::glide::glide(
+                process,
+                keys,
+                &super::glide::Glide {
+                    at: (200.0, 600.0),
+                    pixels: 240,
+                    band: (f64::from(top), f64::from(bottom)),
+                    search: 0,
+                },
+                || Ok(()),
+                move |r, i| {
+                    Ok(nui::entries(r, i)?
+                        .iter()
+                        .find(|e| same_name(&e.name, &want))
+                        .map(|e| super::glide::span_y(&e.select)))
+                },
+            )?;
             pause(250);
             continue;
         }
@@ -786,7 +803,7 @@ pub(super) fn assign_admiral(
                 .into_iter()
                 .find(|a| same_name(&a.name, wanted)))
         };
-        let Some(mut row) = settled(process, "admiral list", find)? else {
+        let Some(_) = settled(process, "admiral list", find)? else {
             let names: Vec<String> = read(process, nui::leader_rows)?
                 .into_iter()
                 .map(|a| a.name)
@@ -797,19 +814,35 @@ pub(super) fn assign_admiral(
             ));
         };
         let band = read(process, nui::leader_band)?;
-        for _ in 0..40 {
-            let bottom = row.icon.y + row.icon.h;
-            let top = bottom - nui::PORTRAIT_DRAWN;
-            if top >= band.0 && bottom <= band.1 {
-                break;
-            }
-            if !read(process, |r, i| Ok(nui::leader_open(r, i).unwrap_or(false)))? {
-                return Err(Error::new("input_readback_failed", "Commander list closed"));
-            }
-            keys.scroll(GAME, (960.0, 560.0), if top < band.0 { 240 } else { -240 })?;
-            pause(250);
-            row = read(process, find)?
-                .ok_or_else(|| Error::new("gui_target_unavailable", "The admiral left the list"))?;
+        // The drawn portrait (the row's lower part) glides into the list band in one movement.
+        let outcome = super::glide::glide(
+            process,
+            keys,
+            &super::glide::Glide {
+                at: (960.0, 560.0),
+                pixels: 240,
+                band: (f64::from(band.0), f64::from(band.1)),
+                search: 0,
+            },
+            || {
+                if read(process, |r, i| Ok(nui::leader_open(r, i).unwrap_or(false)))? {
+                    Ok(())
+                } else {
+                    Err(Error::new("input_readback_failed", "Commander list closed"))
+                }
+            },
+            |r, i| {
+                Ok(find(r, i)?.map(|a| {
+                    let bottom = f64::from(a.icon.y + a.icon.h);
+                    (bottom - f64::from(nui::PORTRAIT_DRAWN), bottom)
+                }))
+            },
+        )?;
+        if outcome == super::glide::Glided::Unknown {
+            return Err(Error::new(
+                "gui_target_unavailable",
+                "The admiral left the list",
+            ));
         }
         let row = settled(process, "admiral row", |r, i| {
             find(r, i)?
