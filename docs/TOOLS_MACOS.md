@@ -84,6 +84,7 @@ Descriptions are the tools' own text; see `PLAYBOOK_TOOL_GAPS.md` for validation
 - `hoi4_army_front` (A): Give an own army a front-line order along the border nearest a state:
 - `hoi4_army_group_create` (A): Group two or more own armies into a new army group (army cards with Shift, then the new-army-group card).
 - `hoi4_army_merge` (A): Move every division of army `source` into army `target` with the game's own controls:
+- `hoi4_army_motorization` (A): Set an army's supply motorization:
 - `hoi4_army_move` (A): Order an own army to move to the centre of a state with one right click (army card, Find view, right click);
 - `hoi4_army_offensive` (A): Draw an offensive line for an own army that already holds a front line, into a target state:
 - `hoi4_army_plan` (A): Execute or stop an own army's battle plan with the army card's play or stop button.
