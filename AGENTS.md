@@ -1,12 +1,13 @@
 # Codex instructions
 
-The latest user direction is [docs/LINUX_RUST_HANDOFF.md](docs/LINUX_RUST_HANDOFF.md).
-Latest steering (22 October): the user has explicitly authorized switching back
-to macOS. Preserve the Linux validation and continue native Mac testing. Final
-campaign videos must be filmed from native macOS HOI4 at 1920x1080 or higher.
-Use one Luna player at medium reasoning for live gates. Expand the Clausewitz-based
-Rust runtime across Linux, Windows and macOS, preserving the legacy Python
-package and earlier failed campaigns while migrating.
+The current starting point is [docs/RESUME_HANDOFF.md](docs/RESUME_HANDOFF.md)
+(5 November 2026): goal, state, blockers, the agreed order (small war campaigns
+starting with Italy vs Ethiopia, then Germany, China, Poland) and how to run a
+live game. Final campaign videos must be filmed from native macOS HOI4 at
+1920x1080 or higher. Live play uses one Sonnet 5.5 player with exclusive input
+ownership (user decision, 2 November; Haiku later). Expand the Rust runtime
+across Linux, Windows and macOS, preserving the legacy Python package and
+earlier failed campaigns.
 
 For the preserved Mac history, read [docs/HANDOFF_MAC.md](docs/HANDOFF_MAC.md).
 It records setup, status, ordered work, acceptance and the first prompt for that
@@ -20,9 +21,9 @@ For campaign strategy and FAIR/META rules, read
 - Work autonomously; never ask questions. Preserve unrelated changes and explain
   concrete external blockers. Do not launch/control the shared Windows game for
   the Mac continuation; it is reserved for separate mod testing.
-- Builder: gpt-6-astra. During Mac live acceptance, delegate to one gpt-6-luna
-  player at medium reasoning with exclusive input ownership. Offline helpers may
-  investigate independently, but never compete for the game or shared files.
+- During live play, one player agent has exclusive input ownership. Offline
+  helpers may investigate independently, but never compete for the game or
+  shared files.
 - Support Windows **and** macOS. Keep Python 3.9+ and stdio MCP. Put native APIs
   behind `hoi4_live/platform/`; no WinDLL/WinRT eager imports in portable code.
   stdout is protocol JSON only; logs go to stderr/files. Use capability errors,
@@ -66,7 +67,7 @@ For campaign strategy and FAIR/META rules, read
   `keybinds/00_keybinds.txt` and `interface/*.gui` (1.19.4 moved Find to Ctrl+F).
 - Run `python -m unittest discover -s tests -v` after meaningful changes, plus
   targeted protocol/import/backend checks. Offline tests are not live evidence.
-  Acceptance is a clean two-year Luna run, then the full recorded Germany and
+  Acceptance is a clean two-year player run, then the full recorded Germany and
   Nationalist China campaigns specified in the handoff. Log actual failures.
 - Keep recordings, calls.jsonl, journals, dumps, saves, credentials, private mod
   data and personal paths outside Git. Audit **full reachable history** of every
