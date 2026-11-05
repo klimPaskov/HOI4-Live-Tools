@@ -60,6 +60,9 @@ pub struct Receipt {
 pub enum Outcome {
     Reached(Value),
     Unchanged(Value),
+    /// A fresh read proves the action's target does not exist (e.g. no army with that name),
+    /// so no input could have acted on it: settles even an unresolved retry as NotApplied.
+    TargetAbsent(Value),
     Diverged(Value),
     Unknown,
 }
@@ -428,6 +431,7 @@ impl GameJournal {
             // an unresolved retry until original baselines are durable.
             let mut retry_settle = || match settle()? {
                 reached @ Outcome::Reached(_) => Ok(reached),
+                absent @ Outcome::TargetAbsent(_) => Ok(absent),
                 unchanged @ Outcome::Unchanged(_) if retry_unchanged => Ok(unchanged),
                 _ => Ok(Outcome::Unknown),
             };
@@ -490,7 +494,7 @@ impl GameJournal {
     ) -> Result<Receipt> {
         let (status, detail) = match settle()? {
             Outcome::Reached(v) => (Status::Verified, v),
-            Outcome::Unchanged(v) => (Status::NotApplied, v),
+            Outcome::Unchanged(v) | Outcome::TargetAbsent(v) => (Status::NotApplied, v),
             Outcome::Diverged(v) => (Status::Diverged, v),
             Outcome::Unknown => {
                 return Err(Error::new(

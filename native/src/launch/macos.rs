@@ -4307,7 +4307,7 @@ impl MacClock {
                     Ok(v) => v,
                     // No such army: nothing can have moved (settles a journal a typo left open).
                     Err(e) if e.code == "invalid_target" => {
-                        return Ok(journal::Outcome::Unchanged(
+                        return Ok(journal::Outcome::TargetAbsent(
                             json!({"army":army,"state_id":state,"error":e.message}),
                         ))
                     }
