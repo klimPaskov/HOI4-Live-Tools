@@ -562,19 +562,34 @@ fn release(process: &dyn Process, keys: &dyn GameInput, entered: bool) {
 fn base_point(process: &dyn Process, keys: &dyn GameInput, state: i32) -> Result<(f64, f64)> {
     let pos = base_position(process, state)?;
     find_state(process, keys, state)?;
-    for step in 0..8 {
+    // At most eight zoom-out wheel steps in all, as before, but sized and sent as one flick.
+    let mut left: u32 = 8;
+    loop {
         let found = settled(process, "air base icon", |r, i| {
-            Ok(airui::icon_at(&airui::base_icons(r, i)?, pos).cloned())
+            Ok(airui::icon_at(&airui::base_icons(r, i)?, pos).map(|icon| icon.center()))
         })?;
-        if let Some(icon) = found {
-            let p = icon.center();
-            if airui::clickable(p) {
-                return Ok(p);
-            }
+        if let Some(p) = found.filter(|p| airui::clickable(*p)) {
+            return Ok(p);
         }
-        // The base lies off the usable map area: zoom out one notch around the screen centre.
-        let _ = step;
-        keys.scroll(GAME, (960.0, 540.0), -240)?;
+        if left == 0 {
+            break;
+        }
+        // No icon drawn: where the base projects on screen.
+        let at = found.or_else(|| {
+            read(process, |r, i| {
+                super::screenmap::to_screen(r, i, pos.0, pos.1)
+            })
+            .ok()
+            .flatten()
+        });
+        // The base lies off the usable map area: zoom out around the screen centre by the
+        // steps its offset needs (one when it sits in a toolbar corner or is not projected).
+        let events = at
+            .map(|p| super::glide::zoom_out_events(p, (660.0, 160.0, 1740.0, 960.0), left))
+            .unwrap_or(0)
+            .clamp(1, left);
+        keys.scroll_burst(GAME, (960.0, 540.0), -240, events)?;
+        left -= events;
         pause(450);
     }
     Err(Error::new(

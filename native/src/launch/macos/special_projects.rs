@@ -1494,7 +1494,7 @@ pub(super) fn assign(process: &dyn Process, keys: &dyn GameInput, plan: &Plan) -
                         )
                     })
             };
-            let mut entry = settled(process, "project entry", find_entry).map_err(|e| {
+            let entry = settled(process, "project entry", find_entry).map_err(|e| {
                 if e.code == "gui_target_unavailable" {
                     let offered = read(process, |r, i| {
                         Ok(project_entries(r, i)?
@@ -1535,21 +1535,20 @@ pub(super) fn assign(process: &dyn Process, keys: &dyn GameInput, plan: &Plan) -
                     ),
                 ));
             }
-            for _ in 0..20 {
-                if entry.select.y >= PROJECT_BAND.0
-                    && entry.select.y + entry.select.h <= PROJECT_BAND.1
-                {
-                    break;
-                }
-                let pixels = if entry.select.y < PROJECT_BAND.0 {
-                    240
-                } else {
-                    -240
-                };
-                keys.scroll(GAME, (885.0, 500.0), pixels)?;
-                thread::sleep(Duration::from_millis(150));
-                entry = read(process, find_entry)?;
-            }
+            // One glide brings the entry into the project band (the entry read errors once the
+            // facility window no longer lists it, which stops the glide).
+            super::glide::glide(
+                process,
+                keys,
+                &super::glide::Glide {
+                    at: (885.0, 500.0),
+                    pixels: 240,
+                    band: (f64::from(PROJECT_BAND.0), f64::from(PROJECT_BAND.1)),
+                    search: 0,
+                },
+                || Ok(()),
+                |r, i| Ok(Some(super::glide::span_y(&find_entry(r, i)?.select))),
+            )?;
             let entry = settled(process, "project entry", find_entry)?;
             let (x, y) = entry.select.center();
             keys.click(GAME, x, y)?;
@@ -1592,7 +1591,7 @@ fn pick_scientist(process: &dyn Process, keys: &dyn GameInput, name: &str) -> Re
             .find(|(n, _)| n.to_lowercase() == wanted)
             .map(|(_, rect)| rect))
     };
-    let Some(mut rect) = settled(process, "scientist row", find)? else {
+    let Some(rect) = settled(process, "scientist row", find)? else {
         let listed = read(process, roster_names)?;
         return Err(Error::new(
             "scientist_not_offered",
@@ -1603,15 +1602,25 @@ fn pick_scientist(process: &dyn Process, keys: &dyn GameInput, name: &str) -> Re
         ));
     };
     let band = read(process, |r, i| Ok(roster_band(r, i)))?;
-    for _ in 0..30 {
-        if rect.y >= band.0 && rect.y + rect.h <= band.1 {
-            break;
+    if !(rect.y >= band.0 && rect.y + rect.h <= band.1) {
+        let outcome = super::glide::glide(
+            process,
+            keys,
+            &super::glide::Glide {
+                at: (640.0, f64::from(band.0 + 120)),
+                pixels: 240,
+                band: (f64::from(band.0), f64::from(band.1)),
+                search: 0,
+            },
+            || Ok(()),
+            |r, i| Ok(find(r, i)?.map(|x| super::glide::span_y(&x))),
+        )?;
+        if outcome == super::glide::Glided::Unknown {
+            return Err(Error::new(
+                "gui_target_unavailable",
+                "Scientist left the list",
+            ));
         }
-        let pixels = if rect.y < band.0 { 240 } else { -240 };
-        keys.scroll(GAME, (640.0, f64::from(band.0 + 120)), pixels)?;
-        thread::sleep(Duration::from_millis(120));
-        rect = read(process, find)?
-            .ok_or_else(|| Error::new("gui_target_unavailable", "Scientist left the list"))?;
     }
     let rect = settled(process, "scientist row", |r, i| {
         find(r, i)?.ok_or_else(|| Error::new("gui_target_unavailable", "Scientist left the list"))

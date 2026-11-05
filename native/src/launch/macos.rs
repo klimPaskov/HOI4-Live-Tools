@@ -42,6 +42,7 @@ mod fleetops;
 #[cfg_attr(target_os = "linux", allow(dead_code, unused_imports))]
 mod focus;
 mod front_plan;
+mod glide;
 mod peace;
 mod trade;
 #[cfg(target_os = "macos")]

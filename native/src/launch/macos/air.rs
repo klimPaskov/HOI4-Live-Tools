@@ -315,24 +315,32 @@ pub(super) fn select_wing(
             .find(|w| w.name == name)
             .and_then(|w| w.rect))
     };
-    let mut rect = settled(process, "air wing row", find)?
+    settled(process, "air wing row", find)?
         .ok_or_else(|| Error::new("invalid_target", "No own air wing with this name"))?;
-    for _ in 0..40 {
-        if rect.y >= ROWS.0 && rect.y + rect.h <= ROWS.1 {
-            break;
-        }
-        if !read(process, overview_open)? {
-            return Err(Error::new("input_readback_failed", "Air overview closed"));
-        }
-        let pixels = if rect.y < ROWS.0 { 240 } else { -240 };
-        keys.scroll(GAME, (260.0, 650.0), pixels)?;
-        std::thread::sleep(std::time::Duration::from_millis(150));
-        let moved = read(process, find)?
-            .ok_or_else(|| Error::new("gui_target_unavailable", "Air wing left the list"))?;
-        if moved == rect {
-            break;
-        }
-        rect = moved;
+    // One glide brings the row into the list band (only while the overview is open).
+    let outcome = super::glide::glide(
+        process,
+        keys,
+        &super::glide::Glide {
+            at: (260.0, 650.0),
+            pixels: 240,
+            band: (f64::from(ROWS.0), f64::from(ROWS.1)),
+            search: 0,
+        },
+        || {
+            if read(process, overview_open)? {
+                Ok(())
+            } else {
+                Err(Error::new("input_readback_failed", "Air overview closed"))
+            }
+        },
+        |r, i| Ok(find(r, i)?.map(|x| super::glide::span_y(&x))),
+    )?;
+    if outcome == super::glide::Glided::Unknown {
+        return Err(Error::new(
+            "gui_target_unavailable",
+            "Air wing left the list",
+        ));
     }
     let rect = settled(process, "air wing row", |r, i| {
         find(r, i)?

@@ -400,23 +400,34 @@ pub(super) fn start(
             icon
         }
     };
-    // Later technologies sit below the visible part of a folder; scroll the
+    // Later technologies sit below the visible part of a folder; glide the
     // tree (only while it is open) until the tile is inside the tree area.
     let in_view = |t: &Rect| t.y >= 140 && t.y + t.h <= 1040;
-    for _ in 0..30 {
-        let tile = read(process, |r, i| gui_tree::rect_unclipped(r, i, icon, GAME))?;
-        if in_view(&tile) {
-            break;
-        }
-        if !read(process, |r, i| open(r, i, ui(r)?.tree_view))? {
-            return Err(Error::new(
-                "input_readback_failed",
-                "Technology tree closed",
-            ));
-        }
-        let pixels = if tile.y < 140 { 240 } else { -240 };
-        keys.scroll(GAME, (1700.0, 600.0), pixels)?;
-    }
+    super::glide::glide(
+        process,
+        keys,
+        &super::glide::Glide {
+            at: (1700.0, 600.0),
+            pixels: 240,
+            band: (140.0, 1040.0),
+            search: 0,
+        },
+        || {
+            if read(process, |r, i| open(r, i, ui(r)?.tree_view))? {
+                Ok(())
+            } else {
+                Err(Error::new(
+                    "input_readback_failed",
+                    "Technology tree closed",
+                ))
+            }
+        },
+        |r, i| {
+            Ok(Some(super::glide::span_y(&gui_tree::rect_unclipped(
+                r, i, icon, GAME,
+            )?)))
+        },
+    )?;
     let tile = settled(process, "tile", |r, i| {
         gui_tree::rect_unclipped(r, i, icon, GAME)
     })?;

@@ -536,32 +536,39 @@ fn war_goal_choose(
             // event moves it one 15 px tick whatever its size: go to the top
             // (the position stops changing) so that row 0 sits at the first
             // slot; the position read there is the reference for every offset.
-            let mut top = read(process, |r, i| grid_scroll(r, i, "additionals_grid"))?;
-            for _ in 0..60 {
-                keys.scroll(GAME, (x0 + u.state_row.0, y0 + u.state_row.1 + 90.0), 40)?;
-                let now = read(process, |r, i| grid_scroll(r, i, "additionals_grid"))?;
-                if (now - top).abs() < 0.5 {
-                    break;
-                }
-                top = now;
-            }
+            // One probe event shows whether it still moves; the rest goes in quick bursts.
+            let top = super::glide::glide_to_end(
+                process,
+                keys,
+                (x0 + u.state_row.0, y0 + u.state_row.1 + 90.0),
+                40,
+                || Ok(()),
+                |r, i| grid_scroll(r, i, "additionals_grid"),
+            )?;
             baseline = Some(top);
         }
         let base_scroll = baseline.unwrap_or(0.0);
-        let mut at = None;
-        let mut seen = String::new();
-        for _ in 0..48 {
-            let now = read(process, |r, i| grid_scroll(r, i, "additionals_grid"))?;
-            let y = y0 + u.state_row.1 + slot * index as f64 - (now - base_scroll);
-            seen = format!("row at y={y:.0}, visible {band_lo:.0}..{band_hi:.0}");
-            if y >= band_lo && y <= band_hi {
-                at = Some((x0 + u.state_row.0, y));
-                break;
-            }
-            // positive wheel moves the list down (towards the top)
-            let wheel = if y > band_hi { -40 } else { 40 };
-            keys.scroll(GAME, (x0 + u.state_row.0, (band_lo + band_hi) / 2.0), wheel)?;
-        }
+        let row_y = |r: &Reader<'_>, i: u64| -> Result<f64> {
+            let now = grid_scroll(r, i, "additionals_grid")?;
+            Ok(y0 + u.state_row.1 + slot * index as f64 - (now - base_scroll))
+        };
+        // One glide (a wheel event moves one 15 px tick; positive wheel moves the list down,
+        // towards the top) brings the row into the visible band.
+        super::glide::glide(
+            process,
+            keys,
+            &super::glide::Glide {
+                at: (x0 + u.state_row.0, (band_lo + band_hi) / 2.0),
+                pixels: 40,
+                band: (band_lo, band_hi),
+                search: 0,
+            },
+            || Ok(()),
+            |r, i| row_y(r, i).map(|y| Some((y, y))),
+        )?;
+        let y = read(process, row_y)?;
+        let seen = format!("row at y={y:.0}, visible {band_lo:.0}..{band_hi:.0}");
+        let at = (y >= band_lo && y <= band_hi).then_some((x0 + u.state_row.0, y));
         let at = at.ok_or_else(|| {
             Error::new(
                 "gui_target_unavailable",
