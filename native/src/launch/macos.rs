@@ -460,6 +460,8 @@ pub fn read_only_call(process: &dyn Process, name: &str) -> Result<Value> {
         "hoi4_industry" => resources::industry(process),
         "hoi4_supply" => supply::report(process, 0.7),
         "hoi4_economy_detail" => economy_detail::detail(process),
+        // Probe-only (macprobe): raw bytes of an own army object, for mapping fields.
+        n if n.starts_with("dbg_army_bytes:") => armies::debug_bytes(process, &n[15..]),
         _ => Err(Error::new(
             "capability_unavailable",
             "Unknown read-only tool",
@@ -625,6 +627,7 @@ impl Commands for MacClock {
             json!({"name":"hoi4_air_region_probe","description":"What the player's air map shows for one strategic air region: Find view centres `state_id`, a left click on the region opens the game's region window, which is read (region name, active aircraft by type for us and the enemy: fighters, bombers, close air support, anti-air guns; detection and efficiency percentages) and closed again. Orders nothing; moves the cursor and clicks, so it needs the input lease. Only what the air map displays; no hidden enemy information.","inputSchema":{"type":"object","properties":{"state_id":{"type":"integer","minimum":1,"maximum":4095},"lease_token":{"type":"string"}},"required":["state_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_air_regions","description":"Own wings and air bases grouped by strategic air region, read from memory and the game's map files (no input, never pauses): per region its name, own wings assigned (aircraft, type, missions, base state), aircraft total and the own air bases inside with capacity, aircraft stationed and free capacity; plus the wings that have no region. Enemy presence is not in memory: use hoi4_air_region_probe for the regions that matter.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}}),
             json!({"name":"hoi4_army_group_create","description":"Group two or more own armies into a new army group (army cards with Shift, then the new-army-group card). Give it a field marshal with hoi4_army_commander using the army group's name. Verified when all the armies belong to one new army group.","inputSchema":{"type":"object","properties":{"armies":{"type":"array","items":{"type":"string"},"minItems":2,"maxItems":12},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["armies","request_id","lease_token"],"additionalProperties":false}}),
+            json!({"name":"hoi4_army_motorization","description":"Set an army's supply motorization: 0 none, 1 partial, 2 full. The supply hubs the army draws from then use trucks (about 40 per level per hub) to carry supply much farther into roadless land; it costs trucks from the stockpile (keep truck production running) and fuels nothing. With the game's ordinary control: the army's card selects it, then the motorization button on its badge is clicked until the level is reached, each click verified from memory. Read the current level in hoi4_armies (motorization). Refused before input with army_unknown or invalid_arguments.","inputSchema":{"type":"object","properties":{"army":{"type":"string","maxLength":128},"level":{"type":"integer","minimum":0,"maximum":2},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","level","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_army_merge","description":"Move every division of army `source` into army `target` with the game's own controls: a left click on the source's card selects exactly its divisions, a right click on the target's card transfers them (the empty source army disappears). Use it to fold many small armies into a few full ones (24 divisions each, one general each). Refused before input when either army is unknown, they are the same, or the merged army would exceed 24 divisions (split first). Verified from division membership.","inputSchema":{"type":"object","properties":{"source":{"type":"string"},"target":{"type":"string"},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["source","target","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_army_split","description":"Split the first N divisions (list order, N 1..19) of an own army into a new army: the army's card, the panel's first row, Shift on row N, then the new-army card. Use it to bring an oversized army (more than 24 divisions) under its general's cap. Verified by a new army holding exactly those divisions.","inputSchema":{"type":"object","properties":{"army":{"type":"string"},"count":{"type":"integer","minimum":1,"maximum":19},"request_id":{"type":"string"},"lease_token":{"type":"string"}},"required":["army","count","request_id","lease_token"],"additionalProperties":false}}),
             json!({"name":"hoi4_state_slots","description":"Free building slots of own states (unlocked, max, used, free) read from each state's view (Find view centres the state, one click opens it). Use it to choose where a factory can still be queued before hoi4_construction_add. Changes nothing in the game; up to 12 states per call.","inputSchema":{"type":"object","properties":{"state_ids":{"type":"array","items":{"type":"integer","minimum":1,"maximum":4095},"minItems":1,"maxItems":12},"lease_token":{"type":"string"}},"required":["state_ids","lease_token"],"additionalProperties":false}}),
@@ -748,6 +751,7 @@ impl Commands for MacClock {
                     | "hoi4_army_group_create"
                     | "hoi4_army_split"
                     | "hoi4_army_merge"
+                    | "hoi4_army_motorization"
                     | "hoi4_state_slots"
                     | "hoi4_air_wings"
                     | "hoi4_air_mission"
@@ -3772,6 +3776,49 @@ impl Commands for MacClock {
             authority.authorize(token, &epoch)?;
             self.keys.preflight()?;
             return stateslots::read_states(process, &self.keys, &ids);
+        }
+        if name == "hoi4_army_motorization" {
+            allowed(args, &["army", "level", "request_id", "lease_token"])?;
+            let army = string(args, "army")?;
+            if army.is_empty() || army.len() > 128 || army.chars().any(char::is_control) {
+                return Err(Error::new("invalid_arguments", "Invalid army name"));
+            }
+            let level = args
+                .get("level")
+                .and_then(Value::as_u64)
+                .filter(|v| *v <= 2)
+                .ok_or_else(|| Error::new("invalid_arguments", "level must be 0, 1 or 2"))?
+                as u32;
+            let id = string(args, "request_id")?;
+            let token = string(args, "lease_token")?;
+            let epoch = guard.observe(process)?.epoch;
+            authority.authorize(token, &epoch)?;
+            if !actions.receipt_exists(id) {
+                ui::read(process, |r, i| armies::motorization(r, i, army)).map_err(|_| {
+                    Error::new(
+                        "army_unknown",
+                        "No own army has this name (see hoi4_armies)",
+                    )
+                })?;
+                self.keys.preflight()?;
+            }
+            let action = json!({"kind":"army_motorization","army":army,"level":level});
+            let keys = &self.keys;
+            let mut settle = || {
+                let now = ui::read(process, |r, i| armies::motorization(r, i, army))?;
+                let body = json!({"army":army,"motorization":now});
+                Ok(if now == level {
+                    journal::Outcome::Reached(body)
+                } else {
+                    journal::Outcome::Diverged(body)
+                })
+            };
+            let mut dispatch = || {
+                authority.authorize(token, &epoch)?;
+                armies::set_motorization(process, keys, army, level)
+            };
+            let receipt = actions.execute(id, &epoch, action, &mut settle, &mut dispatch)?;
+            return Ok(json!({"receipt":receipt}));
         }
         if name == "hoi4_army_merge" {
             allowed(args, &["source", "target", "request_id", "lease_token"])?;

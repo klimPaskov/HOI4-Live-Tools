@@ -99,14 +99,14 @@ const MACOS: Ui = Ui {
 /// the owning class has no reviewed vtable).
 const COUNTRY: xlayout::Class = xlayout::Class::new("CCountry", 0x357e388);
 const DIVISION: xlayout::Class = xlayout::Class::new("CArmy", 0x34ace60);
-const GROUP: xlayout::Class = xlayout::Class::new("orders.group", 0);
+const GROUP: xlayout::Class = xlayout::Class::new("COrdersGroup", 0x3516b78);
 const LEADER: xlayout::Class = xlayout::Class::new("unit.leader", 0);
 const IDLER: xlayout::Class = xlayout::Class::new("CInGameIdler", 0x35089d8);
 const IFACE_MANAGER: xlayout::Class = xlayout::Class::new("idler.manager", 0);
 const LEADER_VIEW: xlayout::Class = xlayout::Class::new("CLeaderGroupView", 0x3670a20);
 const PORTRAIT: xlayout::Class = xlayout::Class::new("leader_group.portrait", 0);
 const ORDER: xlayout::Class = xlayout::Class::new("COrderInstance", 0x3512bf0);
-const ARMIES_VIEW: xlayout::Class = xlayout::Class::new("CArmiesView", 0);
+const ARMIES_VIEW: xlayout::Class = xlayout::Class::new("CArmiesView", 0x363d530);
 const LEADER_WINDOW: xlayout::Class = xlayout::Class::new("CArmyLeaderWindow", 0);
 const GRID: xlayout::Class = xlayout::Class::new("CStandardGridBox", 0x36cca80);
 const GRID_ITEM: xlayout::Class = xlayout::Class::new("grid.item", 0);
@@ -356,7 +356,8 @@ pub(super) fn armies(process: &dyn Process) -> Result<Value> {
                 Ok(
                     json!({"army":name,"army_group":army_group,"commander":commander,"battle_plan_orders":orders,
                     "plan_executing":executing,"division_count":ids.len(),"divisions":ids,
-                    "states":standing,"main_state":main_state}),
+                    "states":standing,"main_state":main_state,
+                    "motorization":(r.i32(group + fld(r.string_abi(), &GROUP, MOTORIZATION)?)? as u32) & 0xff}),
                 )
             })
             .collect::<Result<Vec<_>>>()?;
@@ -783,8 +784,48 @@ fn new_card(r: &Reader<'_>, image: u64, leftmost: bool) -> Result<Rect> {
     gui_tree::rect(r, image, button, GAME)
 }
 
-/// Create an army from own divisions around state `state`.
+/// Create an army from own divisions around state `state`, then fold the state's
+/// remaining unassigned divisions into it: one box rarely holds all of a large state's
+/// divisions (seen live 5 November 2026: Eritrea needed one create and four assigns).
 pub(super) fn create(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    state: i32,
+    absorb: bool,
+) -> Result<()> {
+    let names_before: BTreeSet<String> = armies(process)
+        .ok()
+        .map(|view| army_names(&view))
+        .unwrap_or_default();
+    create_once(process, keys, state, absorb)?;
+    if absorb {
+        return Ok(());
+    }
+    // Best effort: the army exists; a fold that cannot be done safely leaves the rest
+    // unassigned for hoi4_army_assign, never fails the create.
+    for _ in 0..6 {
+        let Ok(view) = armies(process) else { break };
+        let Some(name) = army_names(&view).difference(&names_before).next().cloned() else {
+            break;
+        };
+        let Ok(plan) = plan_assign(&view, state, Some(&name), 24) else {
+            break;
+        };
+        if plan.unassigned == 0 || plan.take == 0 || assign(process, keys, &plan).is_err() {
+            break;
+        }
+    }
+    Ok(())
+}
+fn army_names(view: &Value) -> BTreeSet<String> {
+    view["armies"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|a| a["army"].as_str().map(str::to_string))
+        .collect()
+}
+fn create_once(
     process: &dyn Process,
     keys: &dyn GameInput,
     state: i32,
@@ -904,6 +945,109 @@ pub(super) fn create(
              re-read hoi4_armies before trying again (the divisions may have moved or been assigned)",
         )
     })
+}
+
+/// Probe-only: hex words of an own army object (`NAME` or `NAME:LEN`).
+pub(super) fn debug_bytes(process: &dyn Process, spec: &str) -> Result<Value> {
+    let (army, len) = match spec.rsplit_once(':') {
+        Some((a, n)) if n.parse::<usize>().is_ok() => (a, n.parse::<usize>().unwrap()),
+        _ => (spec, 0x400),
+    };
+    read(process, |r, i| {
+        let group = group_named(r, i, army)?;
+        let bytes = r.read(group, len.min(0x2000))?;
+        let words: Vec<String> = bytes
+            .chunks(8)
+            .map(|c| {
+                let mut w = [0u8; 8];
+                w[..c.len()].copy_from_slice(c);
+                format!("{:016x}", u64::from_le_bytes(w))
+            })
+            .collect();
+        Ok(json!({"army": army, "words": words}))
+    })
+}
+/// Supply-hub motorization of an army (0 none, 1 partial, 2 full): hubs it draws from use
+/// trucks to reach farther. Field mapped live on 5 November 2026 (army +0x38 cycled 0->1->2->0
+/// with each click on the badge's motorization button).
+const MOTORIZATION: u64 = 0x38;
+/// The selected army's badge: CArmiesView (interface manager +0x1d8) keeps the badges of the
+/// selection in an array at +0x488; a badge holds its root at +0x20 and the army's group
+/// handle at +0x1f8 (mapped live 5 November 2026).
+const ARMIES_VIEW_SLOT: u64 = 0x1d8;
+const BADGES: u64 = 0x488;
+const BADGE_ROOT: u64 = 0x20;
+const BADGE_HANDLE: u64 = 0x1f8;
+const BADGE_VTABLE: u64 = 0x363d598;
+const BADGE: xlayout::Class = xlayout::Class::new("CArmyBadgeView", 0x363d598);
+
+pub(super) fn motorization(r: &Reader<'_>, image: u64, army: &str) -> Result<u32> {
+    let group = group_named(r, image, army)?;
+    Ok((r.i32(group + fld(r.string_abi(), &GROUP, MOTORIZATION)?)? as u32) & 0xff)
+}
+
+/// The motorization button on the badge of `army`, which must be the only selected army.
+fn motorization_button(r: &Reader<'_>, image: u64, army: &str) -> Result<Rect> {
+    let abi = r.string_abi();
+    let u = ui(r)?;
+    let handle = r.u64(group_named(r, image, army)? + u.group_handle)?;
+    let idler = r.u64(image + game::layout(r).idler_global)?;
+    let manager = r.u64(idler + u.manager)?;
+    let view = r.u64(manager + fld(abi, &IFACE_MANAGER, ARMIES_VIEW_SLOT)?)?;
+    if r.u64(view)? != image + img(abi, ARMIES_VIEW.vtable)? {
+        return Err(Error::new("invalid_gui", "Exact armies view required"));
+    }
+    let (_, data, count) = r.array_header(view + fld(abi, &ARMIES_VIEW, BADGES)?)?;
+    for k in 0..count.min(8) as u64 {
+        let badge = r.u64(data + k * 8)?;
+        if r.u64(badge)? != image + img(abi, BADGE_VTABLE)?
+            || r.u64(badge + fld(abi, &BADGE, BADGE_HANDLE)?)? != handle
+        {
+            continue;
+        }
+        let root = gui_tree::container(r, r.u64(badge + fld(abi, &BADGE, BADGE_ROOT)?)?, image)?
+            .ok_or_else(|| Error::new("invalid_gui", "Army badge window required"))?;
+        let button = super::panelkit::find(r, image, root, "army_motorization_priority_button", 6)?
+            .ok_or_else(|| Error::new("gui_target_unavailable", "Motorization button not found"))?;
+        if !gui_tree::shown(r, button)? {
+            return Err(Error::new(
+                "gui_target_unavailable",
+                "Motorization button not shown",
+            ));
+        }
+        return gui_tree::rect(r, image, button, GAME);
+    }
+    Err(Error::new(
+        "gui_target_unavailable",
+        format!("No badge for {army} is shown after selecting it"),
+    ))
+}
+
+/// Set the supply motorization level of `army` with the badge's ordinary toggle button
+/// (each click advances 0 -> 1 -> 2 -> 0); every click is verified from memory.
+pub(super) fn set_motorization(
+    process: &dyn Process,
+    keys: &dyn GameInput,
+    army: &str,
+    level: u32,
+) -> Result<()> {
+    let now = read(process, |r, i| motorization(r, i, army))?;
+    if now == level {
+        return Ok(());
+    }
+    clear_notices(process, keys)?;
+    select_army(process, keys, army)?;
+    let clicks = (level + 3 - now) % 3;
+    for step in 1..=clicks {
+        let button = read(process, |r, i| motorization_button(r, i, army))?;
+        let (x, y) = button.center();
+        keys.click(GAME, x, y)?;
+        let want = (now + step) % 3;
+        wait(process, "motorization level", |r, i| {
+            Ok(motorization(r, i, army)? == want)
+        })?;
+    }
+    Ok(())
 }
 
 /// Own army groups (from the own armies).
@@ -1080,10 +1224,16 @@ fn highlighted_near(
     anchor: (f64, f64),
     patch: i32,
 ) -> Vec<(f64, f64)> {
+    // Front-line drawing tints the whole map dark blue, so "changed" alone matches almost
+    // everything (seen live 5 November 2026: no front found around Bale). The valid fronts
+    // are bright dashes in the army's colour (e.g. (161,194,112)); the tinted map stays dark
+    // and blue-dominant (about (30,55,90)).
     let changed = |x: f64, y: f64| match (plain.rgb(x, y), drawing.rgb(x, y)) {
         (Some(a), Some(b)) => {
             let d = |p: u8, q: u8| (i32::from(p) - i32::from(q)).abs();
-            d(a.0, b.0) + d(a.1, b.1) + d(a.2, b.2) > 90
+            let bright = b.0.max(b.1) >= 130;
+            let not_blue = b.2 < b.0.max(b.1);
+            d(a.0, b.0) + d(a.1, b.1) + d(a.2, b.2) > 90 && bright && not_blue
         }
         _ => false,
     };
