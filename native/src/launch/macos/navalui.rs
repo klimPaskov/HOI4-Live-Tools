@@ -218,11 +218,21 @@ const EDIT_TEXT: u64 = 0x3c8;
 const EDIT_SHOWN: u64 = 0x190;
 const SHOWN_VTABLE: u64 = 0x36c04b8;
 const SHOWN_TEXT: u64 = 0x178;
+/// The Linux build keeps no UTF-8 copy of an edit box's text: only the editor's UTF-32
+/// `std::wstring` at +0xb0, the buffer the Linux focus search box reads ("Kriegsmarine" in
+/// `fleet_name`, live on 5 November 2026).
+const LINUX_EDIT_WIDE: u64 = 0xb0;
+/// Text typed into a `CEditBox` (`widget` is the box object); `mac_text` is its macOS UTF-8 copy.
+pub(super) fn typed_text(r: &Reader<'_>, widget: u64, mac_text: u64) -> Result<String> {
+    let abi = r.string_abi();
+    if abi == crate::memory::StringAbi::LibStdCxx {
+        return r.wstring_bounded(widget + LINUX_EDIT_WIDE, 160);
+    }
+    r.string_bounded(widget + fld(abi, &EDIT_BOX, mac_text)?, 160)
+}
 pub(super) fn edit_text(r: &Reader<'_>, image: u64, widget: u64) -> Result<String> {
     let abi = r.string_abi();
-    let typed = super::special_projects::plain(
-        &r.string_bounded(widget + fld(abi, &EDIT_BOX, EDIT_TEXT)?, 160)?,
-    );
+    let typed = super::special_projects::plain(&typed_text(r, widget, EDIT_TEXT)?);
     if !typed.is_empty() {
         return Ok(typed);
     }

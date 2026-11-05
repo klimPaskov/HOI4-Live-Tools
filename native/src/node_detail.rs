@@ -28,7 +28,7 @@ pub(crate) fn observe(
 ) -> Result<Value> {
     let base = reuse.base();
     let gui = r.u64(item + 0x10)?;
-    exact(r, gui, base + 0x4347d58)?;
+    exact(r, gui, base + 0x44de2b0)?;
     if r.u64(gui + 0x98)? != registry {
         return Err(Error::new(
             "invalid_gui_owner",
@@ -39,7 +39,7 @@ pub(crate) fn observe(
     let button = *buttons
         .first()
         .ok_or_else(|| Error::new("gui_unavailable", "Detail control unavailable"))?;
-    exact(r, button, base + 0x4346b10)?;
+    exact(r, button, base + 0x44dcf10)?;
     if r.u64(button + 0x68)? != registry || r.u64(button + 8)? != technology {
         return Err(Error::new(
             "invalid_gui_owner",
@@ -59,8 +59,8 @@ pub(crate) fn sprite_diagnostic(
     registry: u64,
 ) -> Result<Value> {
     let base = reuse.base();
-    exact(r, gui, base + 0x4347d58)?;
-    exact(r, button, base + 0x4346b10)?;
+    exact(r, gui, base + 0x44de2b0)?;
+    exact(r, button, base + 0x44dcf10)?;
     if r.u64(gui + 0x98)? != registry || r.u64(button + 0x68)? != registry {
         return Err(Error::new(
             "invalid_gui_owner",
@@ -80,8 +80,8 @@ pub(crate) fn standard_sprite_diagnostic(
     registry: u64,
 ) -> Result<Value> {
     let base = reuse.base();
-    exact(r, gui, base + 0x4347d58)?;
-    exact(r, button, base + 0x43470c8)?;
+    exact(r, gui, base + 0x44de2b0)?;
+    exact(r, button, base + 0x44dd4f0)?;
     if r.u64(gui + 0x98)? != registry || r.u64(button + 0x68)? != registry {
         return Err(Error::new(
             "invalid_gui_owner",
@@ -102,7 +102,7 @@ fn sprite_render_diagnostic(
 ) -> Result<Value> {
     let base = reuse.base();
     let mut out = json!({"render_type_encoding":reuse.nullable_type(r,render)?,"field_layout_verified":false,"client_rectangle_available":false,"input_authorized":false,"effective_routing_verified":false});
-    if render == 0 || r.u64(render)? != base + 0x4356e08 {
+    if render == 0 || r.u64(render)? != base + 0x44ed1d8 {
         out["reason"] = json!("renderer_layout_unavailable");
         return Ok(out);
     }
@@ -118,7 +118,7 @@ fn sprite_render_diagnostic(
     }
     let resource = r.u64(render + 0x168)?;
     out["resource_type_encoding"] = reuse.nullable_type(r, resource)?;
-    if resource == 0 || r.u64(resource)? != base + 0x4357160 {
+    if resource == 0 || r.u64(resource)? != base + 0x44ed530 {
         out["reason"] = json!("resource_layout_unavailable");
         return Ok(out);
     }

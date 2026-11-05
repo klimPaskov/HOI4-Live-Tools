@@ -561,11 +561,13 @@ transient Linux `exec` link disappearance. Only executable-link `NotFound` is
 retried within the original two-second deadline; success requires two matching
 path/device/inode observations. Permission errors and ownership changes refuse.
 
-The only live-tested game layout is Linux x86_64:
+The only live-tested game layout is Linux x86_64 HOI4 1.19.4.1:
 
-- GNU build ID: `a4971c9e8ac9a6f2487dea109e01f9839ee59db7`.
-- SHA-256: `56fc2945cdbf2475a316db3285eb3458ae5d577db149db6dfdba6f004de3a88a`.
-- Own-country observations have been exercised in Germany. Other builds refuse.
+- GNU build ID: `2265e6e7c1f527bf4b1f2c4b4ca3efd4371dc082`.
+- SHA-256: `36a69ea446df3903baa0d1b2dec1331cfd2fe16eacee482d84cc36e5b6f9b5da`.
+- The management toolset was exercised in Germany
+  ([live verification](../docs/LIVE_VERIFICATION_LINUX_1_19_4.md)). Other builds, including 1.19.3,
+  refuse.
 
 The diagnostic `--session OWNED_RUN_MANIFEST` path accepts these recorded facts:
 

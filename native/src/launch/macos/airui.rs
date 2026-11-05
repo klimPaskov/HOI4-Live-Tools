@@ -74,6 +74,9 @@ pub(super) struct BaseIcon {
     pub x: f64,
     pub z: f64,
     pub rect: Rect,
+    /// The large strategic-air-mode button (`bg_strat_btn`) is shown, not the small default-map
+    /// one (`bg_btn`). The Linux build draws the small icon in the default map mode too.
+    pub strategic: bool,
 }
 impl BaseIcon {
     /// Screen point of the base circle.
@@ -124,7 +127,16 @@ pub(super) fn base_icons(r: &Reader<'_>, image: u64) -> Result<Vec<BaseIcon>> {
             let Ok(rect) = gui_tree::rect_unclipped(r, image, bg, GAME) else {
                 continue;
             };
-            out.push(BaseIcon { x, z, rect });
+            let strategic = match gui_tree::child(r, image, container, "bg_strat_btn")? {
+                Some(button) => gui_tree::shown(r, button)?,
+                None => true,
+            };
+            out.push(BaseIcon {
+                x,
+                z,
+                rect,
+                strategic,
+            });
         }
         break;
     }
@@ -420,6 +432,7 @@ mod tests {
                     w: 189,
                     h: 30,
                 },
+                strategic: true,
             },
             BaseIcon {
                 x: 2975.56,
@@ -430,6 +443,7 @@ mod tests {
                     w: 189,
                     h: 30,
                 },
+                strategic: true,
             },
         ];
         let hit = icon_at(&icons, (3024.78, 1565.1)).unwrap();

@@ -64,8 +64,10 @@ fn read_agency(r: &Reader<'_>, i: u64) -> Result<AgencyGui> {
     let before = pk::need(r, i, root, "before_creation_panel", 2)?;
     let created = !gui_tree::shown(r, before)?;
     let (creating, creation_button_enabled) = match gui_tree::container(r, before, i)? {
+        // The creation progress bar is drawn before creation too, showing the cost (5 factories,
+        // 30 days; Linux live, 5 November 2026); only the cancel button tells creation is running.
         Some(panel) if !created => (
-            pk::shown(r, i, panel, "creation_progressbar", 2)?,
+            pk::shown(r, i, panel, "cancel_creation_button", 2)?,
             match pk::find(r, i, panel, "creation_button", 2)? {
                 Some(button) => gui_tree::shown(r, button)? && !gui_tree::disabled(r, button)?,
                 None => false,

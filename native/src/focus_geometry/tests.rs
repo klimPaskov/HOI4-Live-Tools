@@ -44,8 +44,8 @@ impl Fixture {
         self.word(data, child);
     }
     fn metadata(&mut self, table: u64, index: u64, name: &str) {
-        let info = BASE + 0x435a000 + index * 0x100;
-        let text = BASE + 0x3510000 + index * 0x100;
+        let info = BASE + 0x44f0440 + index * 0x100;
+        let text = BASE + 0x3688000 + index * 0x100;
         self.word(BASE + table - 16, 0);
         self.word(BASE + table - 8, info);
         self.zero(info, 16);
@@ -55,7 +55,7 @@ impl Fixture {
     }
     fn position(&mut self, p: u64) {
         self.zero(p, 0x160);
-        self.word(p, BASE + 0x43484f0);
+        self.word(p, BASE + 0x44dea58);
         self.unit(p);
     }
     fn unit(&mut self, p: u64) {
@@ -83,24 +83,24 @@ impl Fixture {
             f.zero(a, n);
         }
         for (a, t) in [
-            (REG, 0x42736f8),
-            (GRAPH, 0x42417f8),
-            (WINDOW, 0x4347d58),
-            (BUTTON, 0x43470c8),
-            (RENDER, 0x4356e08),
-            (RESOURCE, 0x4357160),
+            (REG, 0x4409f68),
+            (GRAPH, 0x43d7220),
+            (WINDOW, 0x44de2b0),
+            (BUTTON, 0x44dd4f0),
+            (RENDER, 0x44ed1d8),
+            (RESOURCE, 0x44ed530),
         ] {
             f.word(a, BASE + t);
         }
         for (t, i, name) in [
-            (0x4356e08, 0, "7CSprite"),
-            (0x4357160, 1, "11CSpriteType"),
-            (0x43484f0, 2, "11C2dPosition"),
-            (0x43593d8, 3, "11CTextSprite"),
+            (0x44ed1d8, 0, "7CSprite"),
+            (0x44ed530, 1, "11CSpriteType"),
+            (0x44dea58, 2, "11C2dPosition"),
+            (0x44ef818, 3, "11CTextSprite"),
         ] {
             f.metadata(t, i, name);
         }
-        f.word(BASE + 0x4577890, GRAPH);
+        f.word(BASE + 0x470e688, GRAPH);
         f.word(REG + 0xb8, GRAPH);
         f.position(GRAPH + 0x1f0);
         f.position(GRAPH + 0x350);
@@ -148,7 +148,7 @@ impl Fixture {
             WINDOW,
             BUTTON,
             REG,
-            BASE + 0x4356e08,
+            BASE + 0x44ed1d8,
             RENDER,
         )?;
         witnesses.finish()?;
@@ -220,7 +220,7 @@ fn detached_and_unknown_ancestor_produce_explicit_refusal_without_foreign_payloa
         let mut f = Fixture::new(GRAPH + 0x1f0);
         if unknown {
             f.word(RENDER + 0x108, 0x90000);
-            f.word(0x90000, BASE + 0x43593d8);
+            f.word(0x90000, BASE + 0x44ef818);
         } else {
             f.word(RENDER + 0x108, 0);
         }
@@ -304,7 +304,7 @@ fn rooted_graph_parent_and_membership_mutations_still_discard_the_whole_observat
 fn large_focus_position(root: u64) -> Fixture {
     let mut f = Fixture::new(root);
     let ancestor = 0x90000;
-    f.metadata(0x43484f0, 2, "17C2dPositionObject");
+    f.metadata(0x44dea58, 2, "17C2dPositionObject");
     // Recorded container counts: initial1, E78 nine, E70 one => total11.
     f.zero(0xa0100, 9 * 8);
     f.word(0xa0100 + 4 * 8, RENDER);
@@ -436,7 +436,7 @@ fn focus_position_policy_does_not_expand_other_classes_or_owned_container_positi
             f.number(P0 + 0xcc, 4687);
             f.word(P0 + 0xc0, 0xbeef0000);
         } else {
-            f.word(0x90000, BASE + 0x4356e08); // known common ancestor, not position
+            f.word(0x90000, BASE + 0x44ed1d8); // known common ancestor, not position
         }
         let g = f.observe_policy(true).unwrap();
         assert_eq!(g["parent_chain"]["status"], "unavailable_policy_bound");
@@ -449,7 +449,7 @@ fn focus_position_policy_unknown_cycle_detached_and_torn_fields_still_refuse() {
     for case in 0..3 {
         let mut f = large_focus_position(GRAPH + 0x1f0);
         match case {
-            0 => f.word(0x90000, BASE + 0x43593d8),
+            0 => f.word(0x90000, BASE + 0x44ef818),
             1 => f.word(0x90108, P1),
             _ => f.word(0x90108, 0),
         }

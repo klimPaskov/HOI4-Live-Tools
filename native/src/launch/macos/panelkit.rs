@@ -243,8 +243,12 @@ pub(super) fn locate(r: &Reader<'_>, image: u64, class: &Class) -> Result<Option
 /// at +0x4a8 with its root at +0x50 (mapped live 1 November 2026).
 /// The organisation list hangs off the politics view at +0x3958 (also referenced from each
 /// later organisation slot record, stride 0x470) with its root at +0xf0.
+/// The logo (name) window that Create Agency opens sits just before the upgrades window: Linux
+/// +0x340 next to +0x350, root +0x50 (live 5 November 2026); the macOS +0x498/+0x48 follow the
+/// same neighbourhood and are trusted only through the root name check.
 const CHILD_WINDOWS: &[(Class, Class, u64, u64)] = &[
     (AGENCY_UPGRADES, AGENCY_VIEW, 0x4a8, 0x50),
+    (AGENCY_LOGO, AGENCY_VIEW, 0x498, 0x48),
     (MIO_LIST, POLITICS_VIEW, 0x3958, 0xf0),
 ];
 

@@ -171,8 +171,8 @@ fn read_edges(
 ) -> Result<(Edges, i32)> {
     let [_, idler, db] = scope.anchors;
     let registry = link(r, idler + 0x4f8, original.map(|old| old.registry))?;
-    exact(r, registry, base + 0x42736f8)?;
-    if r.u64(base + 0x45778e0)? != registry {
+    exact(r, registry, base + 0x4409f68)?;
+    if r.u64(base + 0x470e6d8)? != registry {
         return Err(changed(
             "Research transit input registry is not the original own registry",
         ));
@@ -189,8 +189,8 @@ fn read_edges(
     }
     let view = link(r, manager + 0xf0, original.map(|old| old.view))?;
     let tree = link(r, manager + 0xf8, original.map(|old| old.tree))?;
-    exact(r, view, base + 0x424dc38)?;
-    exact(r, tree, base + 0x424de40)?;
+    exact(r, view, base + 0x43e3978)?;
+    exact(r, tree, base + 0x43e3b88)?;
     if r.u64(view + 0x2f0)? != idler
         || r.u64(tree + 0x2f0)? != idler
         || r.i32(tree + 0xe24)? != 6
@@ -212,7 +212,7 @@ fn read_edges(
     let facilities_parent = link(r, view + 0x910, original.map(|old| old.facilities_parent))?;
     closing::settled_named(r, base, facilities_parent, registry, "facilities_parent")?;
     let facilities = link(r, view + 0x900, original.map(|old| old.roots[2]))?;
-    exact(r, facilities, base + 0x42f2708)?;
+    exact(r, facilities, base + 0x4487c30)?;
     if r.u64(facilities + 0x68)? != idler || r.u64(facilities + 0x60)? != facilities_parent {
         return Err(changed(
             "Original Research transit facilities ownership changed",
@@ -282,7 +282,7 @@ fn read_edges(
 fn model_links(r: &Reader<'_>, base: u64, scope: &Scope, edges: &Edges) -> Result<()> {
     let mut current = BTreeSet::new();
     for slot in &edges.slots.pointers {
-        exact(r, *slot, base + 0x4210898)?;
+        exact(r, *slot, base + 0x43a56f0)?;
         if r.u64(slot + 0x10)? != scope.own_status {
             return Err(changed("Original Research transit slot owner changed"));
         }
@@ -304,7 +304,7 @@ fn model_links(r: &Reader<'_>, base: u64, scope: &Scope, edges: &Edges) -> Resul
         let ordinal = *ordinals.get(&technology).ok_or_else(|| {
             changed("Research transit technology is outside original own membership")
         })?;
-        exact(r, technology, base + 0x42107f8)?;
+        exact(r, technology, base + 0x43a5650)?;
         if r.u64(technology + 0x158)? != scope.own_status {
             return Err(changed(
                 "Original Research transit technology owner changed",
@@ -324,7 +324,7 @@ fn no_visible_info(r: &Reader<'_>, base: u64, idler: u64, tree: u64, registry: u
     let mut containers = BTreeSet::new();
     for info in array(r, tree + 0xdc0, 64)? {
         pointer(info)?;
-        exact(r, info, base + 0x430bbf0)?;
+        exact(r, info, base + 0x44a17b0)?;
         if !unique.insert(info) || r.u64(info + 0xa78)? != idler || r.u64(info + 0xa80)? != tree {
             return Err(changed("Unique own Research transit Info owner required"));
         }
@@ -486,7 +486,7 @@ fn boundary(
     let image = process.image_base();
     pointer(image)?;
     if image
-        .checked_add(0x45778e8)
+        .checked_add(0x470e6e0)
         .is_none_or(|end| end > 0x7fff_ffff_0000)
     {
         return Err(refused("Research transit image range exceeds bound"));

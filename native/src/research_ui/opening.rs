@@ -96,8 +96,8 @@ fn from_reader(
     }
     pointer(registry)?;
     pointer(manager)?;
-    exact(r, registry, base + 0x42736f8)?;
-    if r.u64(manager + 0x180)? != idler || r.u64(base + 0x45778e0)? != registry {
+    exact(r, registry, base + 0x4409f68)?;
+    if r.u64(manager + 0x180)? != idler || r.u64(base + 0x470e6d8)? != registry {
         return Err(refuse("Opening manager/input registry owner changed"));
     }
     let view = r.u64(manager + 0xf0)?;
@@ -110,8 +110,8 @@ fn from_reader(
     }
     pointer(view)?;
     pointer(tree)?;
-    exact(r, view, base + 0x424dc38)?;
-    exact(r, tree, base + 0x424de40)?;
+    exact(r, view, base + 0x43e3978)?;
+    exact(r, tree, base + 0x43e3b88)?;
     if r.u64(view + 0x2f0)? != idler
         || r.u64(tree + 0x2f0)? != idler
         || r.i32(tree + 0xe24)? != 6
@@ -125,7 +125,7 @@ fn from_reader(
     }
     let root = r.u64(view + 0x2f8)?;
     pointer(root)?;
-    exact(r, root, base + 0x4347d58)?;
+    exact(r, root, base + 0x44de2b0)?;
     if r.u64(root + 0x98)? != registry {
         return Err(refuse("Own Research opening root registry changed"));
     }

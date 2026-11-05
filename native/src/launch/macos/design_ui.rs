@@ -75,6 +75,9 @@ const EDV_EDIT_TEXT: u64 = 0x3c8;
 /// box's state: text at +0x3c8 (tank), +0x3d8 (plane) and +0x3e8 (ship), mapped live on
 /// 1 November 2026; extra fields such as the screen size (1920, 1080) come before it.
 fn edit_text(r: &Reader<'_>, edit_box: u64) -> Result<String> {
+    if r.string_abi() == crate::memory::StringAbi::LibStdCxx {
+        return super::navalui::typed_text(r, edit_box, EDV_EDIT_TEXT);
+    }
     let first = fld(r.string_abi(), &EDIT_BOX, EDV_EDIT_TEXT)?;
     for text in (first..=first + 0x30).step_by(8) {
         if r.u64(edit_box + text - 8)? == 0xffff_ffff {
@@ -435,7 +438,7 @@ pub(super) fn upgrade_state(r: &Reader<'_>, image: u64) -> Result<UpgradeState> 
     let _ = UDV_COST;
     Ok(UpgradeState {
         title: text_of(r, image, root, "equipment_variant_label").unwrap_or_default(),
-        name: r.string_bounded(edit + fld(abi, &EDIT_BOX, UDW_EDIT_TEXT)?, 160)?,
+        name: super::navalui::typed_text(r, edit, UDW_EDIT_TEXT)?,
         experience: first_number(&text_of(r, image, root, "experience")?),
         save_cost: first_number(save_label.trim_start_matches(|c: char| !c.is_ascii_digit())),
         save_label,
@@ -516,15 +519,16 @@ fn entry_kind(r: &Reader<'_>, image: u64, item: u64) -> Result<Option<EntryKind>
 }
 /// RTTI class name of an object from its vtable (typeinfo at vtable-8, name at typeinfo+8).
 fn rtti_name(r: &Reader<'_>, vtable: u64, image: u64) -> Option<String> {
-    if !(image..image + 0x400_0000).contains(&vtable) {
+    let span = image..image + crate::gui_tree::IMAGE_SPAN;
+    if !span.contains(&vtable) {
         return None;
     }
     let info = r.u64(vtable - 8).ok()?;
-    if !(image..image + 0x400_0000).contains(&info) {
+    if !span.contains(&info) {
         return None;
     }
     let name = r.u64(info + 8).ok()? & 0x7fff_ffff_ffff_ffff;
-    if !(image..image + 0x400_0000).contains(&name) {
+    if !span.contains(&name) {
         return None;
     }
     let bytes = r.read(name, 64).ok()?;

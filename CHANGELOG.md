@@ -1,5 +1,50 @@
 # Changelog
 
+## 1.3.0 - 2026-11-05
+
+The native Linux runtime gets the macOS management toolset on HOI4 1.19.4.1:
+
+- `hoi4-live-native` for Linux x86_64 now accepts only HOI4 1.19.4.1 (GNU build ID `2265e6e7...`) and
+  binds about 120 tools with `--bind-management`. 104 of them were run live against the Linux game,
+  including a declared war ([Linux live verification](docs/LIVE_VERIFICATION_LINUX_1_19_4.md)).
+- The macOS build gets the fixes found on Linux (air mode detection, the intelligence agency,
+  "Delete task force" and "Agency Created!" pop-ups, stable confirmation clicks).
+- The Windows Python package is unchanged apart from its version.
+
+### Native runtime (Linux)
+
+- Linux accepts HOI4 1.19.4.1 x86_64 (GNU build ID `2265e6e7...`) and no longer 1.19.3.
+  `--bind-management` binds the full management toolset (about 120 tools) to the owned X11 window.
+  `--bind-input`, the 1.19.3 clock and research binding, refuses with `legacy_binding_retired`.
+- The tools read the game through `native/layouts/linux-2265e6e7c1f527bf4b1f2c4b4ca3efd4371dc082.json`,
+  generated from the macOS build by `scripts/gen_linux_layout.py` (now with a monotone check, a
+  bracketed gap fill and `--live`) plus 305 entries checked in the running game, each with its
+  evidence (`scripts/data/xlayout-live-1.19.4.1.json`). The core Linux readers moved from 1.19.3 with
+  `scripts/linux_build_migrate.py`.
+- Live verification on Linux: 104 tools run against the game, including a declared war with fronts,
+  offensives and battle plans, air, navy, special projects, the intelligence agency, events and the
+  plan runner ([record](docs/LIVE_VERIFICATION_LINUX_1_19_4.md)). Peace conferences and operatives
+  were not reached on Linux. The older Linux-only GUI diagnostics written for 1.19.3 refuse on
+  1.19.4.1.
+- Linux differences fixed: view and popup roots, the fleet panel, navy leaders, trade offers, MIO and
+  scientist windows, special-project state machines and the libstdc++ breakthrough map, diplomacy
+  action dialogs, event windows, and edit boxes (their text is read from the editor's UTF-32
+  `std::wstring`).
+- X11 input: modifiers are held 150 ms around a key or click and presses last 60 ms; wheel scrolling
+  (one notch per 120 pixels) is verified. Captures of a window partly off screen read the visible
+  part from the root window. X11 connections fall back to the abstract socket (WSLg). The launcher
+  can seed `dlc_signature`.
+
+### Native runtime (both platforms)
+
+- Strategic air mode is detected from the large air base button; the region probe clicks off the
+  capital's star.
+- The agency's creation state comes from its cancel button, and Create Agency's logo window is found
+  through the agency view. "Delete task force" (`CConfirmDeleteUnits`) is confirmed and "Agency
+  Created!" is dismissed as a notice. Confirmation buttons are clicked only once their position is
+  stable.
+- Fleet region names go through the layout table, and the breakthrough value is read as an i32.
+
 ## 1.2.0 - 2026-11-02
 
 HOI4 1.19.4.1. The Windows runtime gets the 1.19.4.1 fixes below. The native runtime ships for the

@@ -50,25 +50,25 @@ fn named(f: &mut Fixture, window: u64, children: bool, name: &str, value: u64) {
 }
 fn window(f: &mut Fixture, p: u64, shown: bool) {
     f.region(p, 0xf00);
-    f.word(p, BASE + 0x4347d58);
+    f.word(p, BASE + 0x44de2b0);
     f.word(p + 0x98, REG);
     f.put(p + 0xa5, &[if shown { 8 } else { 0 }]);
 }
 fn control(f: &mut Fixture, button: u64, owner: u64, choice: bool) {
     f.region(button, 0x208);
-    f.word(button, BASE + 0x43470c8);
+    f.word(button, BASE + 0x44dd4f0);
     f.word(button + 0x68, REG);
     f.number(button + 0x74, 0x800);
     f.number(button + 0xac, 2);
-    f.word(button + 0x80, BASE + 0x4347488);
+    f.word(button + 0x80, BASE + 0x44dd8d0);
     let link = button + 0x3000;
     f.word(button + 0x88, link);
     f.word(button + 0x90, link);
     f.number(button + 0x98, 1);
     let (off, primary, manager, invoker, member) = if choice {
-        (0x28, 0x43104c0, 0x297df40, 0x297df10, 0x296f810)
+        (0x28, 0x44a6130, 0x297df40, 0x297df10, 0x2ac88c0)
     } else {
-        (0x21f0, 0x426c518, 0x1886560, 0x1886530, 0x186d470)
+        (0x21f0, 0x4402d18, 0x1886560, 0x1886530, 0x186d470)
     };
     let glue = owner + off;
     f.region(glue, 0x288);
@@ -90,8 +90,8 @@ fn control(f: &mut Fixture, button: u64, owner: u64, choice: bool) {
 fn controls_fixture() -> Fixture {
     let mut f = fixture();
     f.region(REG, 0x240);
-    f.word(REG, BASE + 0x42736f8);
-    f.word(BASE + 0x45778e0, REG);
+    f.word(REG, BASE + 0x4409f68);
+    f.word(BASE + 0x470e6d8, REG);
     f.word(0x324f8, REG);
     f.region(MAN, 0x500);
     f.word(0x326b8, MAN);
@@ -100,11 +100,11 @@ fn controls_fixture() -> Fixture {
     f.word(MAN + 0x150, PANEL);
     f.word(MAN + 0x188, TOP);
     f.region(PANEL, 0x340);
-    f.word(PANEL, BASE + 0x43101d8);
+    f.word(PANEL, BASE + 0x44a5e20);
     f.word(PANEL + 0x2f0, 0x32000);
     f.word(PANEL + 0x2f8, CONSTRUCTION_ROOT);
     f.region(TOP, 0x5000);
-    f.word(TOP, BASE + 0x426c3d0);
+    f.word(TOP, BASE + 0x4402bc0);
     f.word(TOP + 0x68, 0x32000);
     f.word(TOP + 0x70, MAN);
     f.word(TOP + 0x78, ROOT);
@@ -127,7 +127,7 @@ fn controls_fixture() -> Fixture {
     f.array(PANEL + 0x320, ITEMS, 1);
     f.word(ITEMS, ITEM);
     f.region(ITEM, 0x300);
-    f.word(ITEM, BASE + 0x43100f8);
+    f.word(ITEM, BASE + 0x44a5d40);
     f.word(ITEM + 0x20, TEMPLATE);
     f.word(ITEM + 0x10, CW);
     f.number(TEMPLATE + 0x2b8, 1);
@@ -137,23 +137,23 @@ fn controls_fixture() -> Fixture {
     f.word(MAN + 0x128, POLITICS);
     f.word(MAN + 0x130, FOCUS);
     f.region(FOCUS, 0x1200);
-    f.word(FOCUS, BASE + 0x4249c70);
+    f.word(FOCUS, BASE + 0x43df748);
     f.word(FOCUS + 0x2f0, 0x32000);
     f.word(FOCUS + 0x2f8, FROOT);
     f.word(FOCUS + 0x11d8, 0x20000);
     f.region(POLITICS, 0x300);
-    f.word(POLITICS, BASE + 0x42546e8);
+    f.word(POLITICS, BASE + 0x43ea4f8);
     f.word(POLITICS + 0x2f0, 0x32000);
     f.word(POLITICS + 0x38, MAN);
     f.word(POLITICS + 0x2f8, PROOT);
     f.word(MAN + 0xf0, RESEARCH);
     f.region(RESEARCH, 0x300);
-    f.word(RESEARCH, BASE + 0x424dc38);
+    f.word(RESEARCH, BASE + 0x43e3978);
     f.word(RESEARCH + 0x2f0, 0x32000);
     f.word(RESEARCH + 0x2f8, RROOT);
     f.word(MAN + 0xf8, TREE);
     f.region(TREE, 0xe28);
-    f.word(TREE, BASE + 0x424de40);
+    f.word(TREE, BASE + 0x43e3b88);
     f.word(TREE + 0x2f0, 0x32000);
     f.word(TREE + 0x2f8, TROOT);
     f.number(TREE + 0xe20, 1);
@@ -170,8 +170,8 @@ fn observe(f: &Fixture) -> Result<serde_json::Value> {
 fn geometry_fixture() -> Fixture {
     let mut f = controls_fixture();
     f.region(GRAPHICS, 0x200);
-    f.word(GRAPHICS, BASE + 0x42417f8);
-    f.word(BASE + 0x4577890, GRAPHICS);
+    f.word(GRAPHICS, BASE + 0x43d7220);
+    f.word(BASE + 0x470e688, GRAPHICS);
     f.word(REG + 0xb8, GRAPHICS);
     for (i, n) in [512, 288, 2560, 1440].into_iter().enumerate() {
         f.number(GRAPHICS + 0x178 + i as u64 * 4, n);
@@ -184,8 +184,8 @@ fn geometry_fixture() -> Fixture {
 
 fn metadata(f: &mut Fixture, object: u64, primary: u64, name: &str) {
     let primary = BASE + primary;
-    let info = BASE + 0x435a800;
-    let string = BASE + 0x3516000;
+    let info = BASE + 0x44f0c40;
+    let string = BASE + 0x368e000;
     f.word(object, primary);
     f.word(primary - 16, 0);
     f.word(primary - 8, info);
@@ -228,14 +228,14 @@ fn combined_optional_geometry_uses_one_process_bracket_and_final_witness_set() {
 #[test]
 fn unreviewed_control_and_renderer_types_never_reach_typed_payload() {
     let mut f = controls_fixture();
-    metadata(&mut f, OPEN, 0x4346220, "7CButton");
+    metadata(&mut f, OPEN, 0x44dc5d8, "7CButton");
     let v = observe(&f).unwrap();
     assert_eq!(v["opener"]["control_type_encoding"], "7CButton");
     assert_eq!(v["opener"]["available"], false);
     production_not_read(&f, &[OPEN + 0x68, OPEN + 0x74, OPEN + 0x80, OPEN + 0x1a8]);
     let mut f = geometry_fixture();
     f.word(OPEN + 0xe8, 0x370000);
-    metadata(&mut f, 0x370000, 0x434c5b0, "22CUnsupportedTestSprite");
+    metadata(&mut f, 0x370000, 0x44e2820, "22CUnsupportedTestSprite");
     let v = observe_controls(&f, "infrastructure", true).unwrap();
     assert_eq!(
         v["opener"]["render_diagnostic"]["reason"],
@@ -244,7 +244,7 @@ fn unreviewed_control_and_renderer_types_never_reach_typed_payload() {
     production_not_read(&f, &[0x370138, 0x370160]);
     let mut f = geometry_fixture();
     f.word(OPEN + 0xe8, 0x370000);
-    metadata(&mut f, 0x370000, 0x4356e08, "7CSprite");
+    metadata(&mut f, 0x370000, 0x44ed1d8, "7CSprite");
     f.word(0x370138, CHOOSE);
     assert_eq!(
         observe_controls(&f, "infrastructure", true)
@@ -260,7 +260,7 @@ fn choice_coverage_duplicates_and_catalog_corruption_are_not_hidden_by_requested
     let mut f = controls_fixture();
     f.array(PANEL + 0x320, ITEMS, 2);
     f.word(ITEMS + 8, ITEM + 0x1000);
-    f.word(ITEM + 0x1000, BASE + 0x43100f9);
+    f.word(ITEM + 0x1000, BASE + 0x44a5d41);
     let v = observe(&f).unwrap();
     assert_eq!(v["choice"]["available"], true);
     assert_eq!(v["choice"]["complete_choice_coverage"], false);
@@ -274,7 +274,7 @@ fn choice_coverage_duplicates_and_catalog_corruption_are_not_hidden_by_requested
             ITEM + 0x1000
         };
         f.word(ITEMS + 8, second);
-        f.word(second, BASE + 0x43100f8);
+        f.word(second, BASE + 0x44a5d40);
         f.word(second + 0x20, TEMPLATE);
         assert_eq!(observe(&f).unwrap_err().code, "invalid_construction");
     }
@@ -319,7 +319,7 @@ fn combined_named_bindings_selection_and_complete_scoped_blockers_without_queue_
             0x80000,
             OPEN + 0xe8,
             CHOOSE + 0xe8,
-            BASE + 0x4577890,
+            BASE + 0x470e688,
             OTHER + 0x248,
         ],
     );
@@ -377,7 +377,7 @@ fn listeners_require_exact_singleton_full_tuple_and_receiver() {
         for (a, v) in [
             (button + 0xa0, 0xdead0000),
             (button + 0x3000, 0xdead0000),
-            (button + 0x80, BASE + 0x4347489),
+            (button + 0x80, BASE + 0x44dd8d1),
         ] {
             let mut f = controls_fixture();
             f.word(a, v);
@@ -457,7 +457,7 @@ fn every_consumed_ui_identity_callback_scalar_and_name_is_finally_witnessed() {
     let baseline = controls_fixture();
     observe(&baseline).unwrap();
     for (a, n) in [
-        (BASE + 0x45778e0, 8),
+        (BASE + 0x470e6d8, 8),
         (REG + 0x150, 1),
         (REG + 0x158, 8),
         (MAN + 0x3d8, 4),

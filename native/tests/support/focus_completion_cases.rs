@@ -10,7 +10,7 @@ fn fixture() -> Fake {
     f.int(GS + 0x460, 60_759_371);
     f.word(CO + 0x1348, PROGRESS);
     f.region(PROGRESS, 0x50);
-    f.word(PROGRESS, 0x4202638);
+    f.word(PROGRESS, 0x4397508);
     f.word(PROGRESS + 8, CO);
     f.array(PROGRESS + 0x40, DATA, &[F]);
     // Poison the upstream field: this build's completion predicate uses +0x40.
@@ -22,7 +22,7 @@ fn read(f: &Fake, offset: usize, limit: usize) -> Result<serde_json::Value> {
 }
 fn add_second(f: &mut Fake) {
     f.region(SECOND, 0x168);
-    f.word(SECOND, 0x42024d0);
+    f.word(SECOND, 0x43973a0);
     f.word(SECOND + 0x160, TREE);
     f.string(SECOND + 0x18, "GER_alpha");
     f.array(TREE + 0x30, 0x212000, &[F, SECOND]);
@@ -113,7 +113,7 @@ fn validates_unreturned_members_and_duplicate_keys_before_pagination() {
 #[test]
 fn completion_membership_and_owner_witnesses_refuse_torn_reads() {
     for address in [
-        0x44086a8,
+        0x459e9f0,
         GS + 0x460,
         GS + 0x518,
         CO + 0x1348,
@@ -134,9 +134,9 @@ fn completion_membership_and_owner_witnesses_refuse_torn_reads() {
 #[test]
 fn completion_requires_canonical_primary_types_and_tag() {
     for (address, bad, code) in [
-        (PROGRESS, 0x4202639, "invalid_focus_type"),
-        (F, 0x42024d1, "invalid_focus_type"),
-        (TREE, 0x4202411, "invalid_focus_type"),
+        (PROGRESS, 0x4397509, "invalid_focus_type"),
+        (F, 0x43973a1, "invalid_focus_type"),
+        (TREE, 0x43972e1, "invalid_focus_type"),
         (CO + 8, 2, "invalid_focus_owner"),
     ] {
         let mut f = fixture();
@@ -182,7 +182,7 @@ fn coherent_progress_covers_more_than_one_public_page_in_one_observation() {
     for index in 0..105u64 {
         let pointer = 0x500000 + index * 0x200;
         f.region(pointer, 0x168);
-        f.word(pointer, 0x42024d0);
+        f.word(pointer, 0x43973a0);
         f.word(pointer + 0x160, TREE);
         f.string(pointer + 0x18, &format!("GER_f{index:03}"));
         members.push(pointer);

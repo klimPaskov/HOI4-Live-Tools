@@ -5,7 +5,7 @@
 //! binding and final witnesses. `Possible` never means a positive hit; an
 //! `Unsupported` or error must never be converted into `Rejected`.
 
-use super as basis;
+use crate::gui::macos::hit_envelope as basis;
 pub use basis::{Common, GeometryError};
 use basis::{MAX_CANVAS, MAX_COORDINATE, MAX_DIMENSION, MAX_LOCAL_SCALE, MAX_TILES};
 

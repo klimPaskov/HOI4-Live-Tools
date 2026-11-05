@@ -7,7 +7,7 @@ pub(super) fn local(r: &Reader<'_>, base: u64, window: u64, registry: u64) -> Re
     if window == 0 {
         return Ok(json!({"materialized":false,"settled_visible":null}));
     }
-    exact(r, window, base + 0x4347d58)?;
+    exact(r, window, base + 0x44de2b0)?;
     if r.u64(window + 0x98)? != registry {
         return Err(invalid(
             "Construction container belongs to another registry",
@@ -56,7 +56,7 @@ fn callback(
     identity: &mut Option<scope::Callback>,
 ) -> Result<Value> {
     let mut out = json!({"verified":false,"reason":"observer_layout_unavailable"});
-    if r.u64(button + 0x80)? != base + 0x4347488 {
+    if r.u64(button + 0x80)? != base + 0x44dd8d0 {
         return Ok(out);
     }
     if r.u64(button + 0xa0)? != 0 {
@@ -87,8 +87,8 @@ fn callback(
         return Err(invalid("Construction listener endpoints disagree"));
     }
     let (offset, primary, manager, invoker, member) = match kind {
-        Kind::Opener => (0x21f0, 0x426c518, 0x1886560, 0x1886530, 0x186d470),
-        Kind::Choice => (0x28, 0x43104c0, 0x297df40, 0x297df10, 0x296f810),
+        Kind::Opener => (0x21f0, 0x4402d18, 0x1886560, 0x1886530, 0x186d470),
+        Kind::Choice => (0x28, 0x44a6130, 0x297df40, 0x297df10, 0x2ac88c0),
     };
     let glue = owner + offset;
     if count != 1 || target != glue || removed {
@@ -155,12 +155,12 @@ pub(super) fn control(
     pointer(button)?;
     let mut reuse = Reuse::new(base, 0); // Ordinary hierarchy bounds, not Focus's exception.
     let primary = r.u64(button)?;
-    out["control_type_encoding"] = if primary == base + 0x43470c8 {
+    out["control_type_encoding"] = if primary == base + 0x44dd4f0 {
         json!("15CButtonStandard")
     } else {
         metadata(r, &mut reuse, button)?
     };
-    if primary != base + 0x43470c8 {
+    if primary != base + 0x44dd4f0 {
         return Ok(out);
     }
     if r.u64(button + 0x68)? != registry {
@@ -200,7 +200,7 @@ pub(super) fn control(
         pointer(renderer)?;
         let primary = r.u64(renderer)?;
         out["renderer_type_encoding"] = metadata(r, &mut reuse, renderer)?;
-        if ![0x4356e08, 0x43593d8, 0x434b370]
+        if ![0x44ed1d8, 0x44ef818, 0x44e15e0]
             .iter()
             .any(|p| primary == base + p)
         {

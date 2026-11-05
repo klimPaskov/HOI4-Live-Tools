@@ -22,9 +22,9 @@ builds and previews mod content.
 
 | You want to… | Use | Platform | Maturity |
 | --- | --- | --- | --- |
-| Test mods and try agent play today | **`hoi4-live-tools-1.2.0.zip`** from the [1.2.0 release](https://github.com/klimPaskov/HOI4-Live-Tools/releases/latest) (Python) | Windows 10/11 | Stable release |
-| Agent play with the full management toolset | **`hoi4-live-native-1.2.0-macos-arm64.tar.gz`** ([native downloads](#native-downloads)) | macOS on Apple silicon, Steam HOI4 1.19.4.1 | Experimental |
-| The native runtime on Linux | **`hoi4-live-native-1.2.0-linux-x86_64.tar.gz`** ([native downloads](#native-downloads)) | Linux x86_64, HOI4 **1.19.3 only** | Experimental |
+| Test mods and try agent play today | **`hoi4-live-tools-1.3.0.zip`** from the [1.3.0 release](https://github.com/klimPaskov/HOI4-Live-Tools/releases/latest) (Python) | Windows 10/11 | Stable release |
+| Agent play with the full management toolset | **`hoi4-live-native-1.3.0-macos-arm64.tar.gz`** ([native downloads](#native-downloads)) | macOS on Apple silicon, Steam HOI4 1.19.4.1 | Experimental |
+| Agent play on Linux | **`hoi4-live-native-1.3.0-linux-x86_64.tar.gz`** ([native downloads](#native-downloads)) | Linux x86_64, HOI4 1.19.4.1 | Experimental |
 
 The Windows native game adapter is unfinished. An internal read-only foundation
 is available for development; see [the Windows port](docs/WINDOWS_HANDOFF.md).
@@ -37,7 +37,7 @@ are below.
 You need Windows 10 or 11, HOI4 from Steam (windowed or borderless, UI scale 1),
 Python 3.9 or newer, and the Windows English OCR component. FFmpeg is optional.
 
-1. Download `hoi4-live-tools-1.2.0.zip` from the
+1. Download `hoi4-live-tools-1.3.0.zip` from the
    [latest release](https://github.com/klimPaskov/HOI4-Live-Tools/releases/latest)
    and unpack it anywhere.
 2. In that folder, run:
@@ -85,8 +85,8 @@ GitHub build attestations, so nothing needs to be built from source:
 
 ```sh
 sha256sum -c SHA256SUMS.txt --ignore-missing      # macOS: shasum -a 256 -c
-gh attestation verify hoi4-live-native-1.2.0-linux-x86_64.tar.gz --repo klimPaskov/HOI4-Live-Tools
-tar -xzf hoi4-live-native-1.2.0-linux-x86_64.tar.gz
+gh attestation verify hoi4-live-native-1.3.0-linux-x86_64.tar.gz --repo klimPaskov/HOI4-Live-Tools
+tar -xzf hoi4-live-native-1.3.0-linux-x86_64.tar.gz
 ```
 
 The macOS binary is ad-hoc signed with `debugger.entitlements` (included). Memory
@@ -98,32 +98,27 @@ client, `steamwebhelper` or `steamcmd` runs (on WSL the Windows host is checked 
 and no Steam variable or overlay reaches the game. The native Linux launcher also
 gives the game an empty private `HOME`.
 
-The macOS and Linux builds do not have the same tools. macOS has the full management
-toolset (about 120 tools: armies, fronts and encirclement planning, air, navy and
-naval invasions, designers, doctrine, intelligence, peace conferences, decisions,
-events and the plan runner; see [the macOS tool index](docs/TOOLS_MACOS.md)).
-Linux has about 30 tools for telemetry, focus, research, production and construction.
+The macOS and Linux builds have the same management toolset (about 120 tools: armies,
+fronts and encirclement planning, air, navy and naval invasions, designers, doctrine,
+intelligence, peace conferences, decisions, events and the plan runner; see
+[the tool index](docs/TOOLS_MACOS.md)) on HOI4 1.19.4.1.
 
 ### Linux
 
-The tested native Linux game is HOI4 1.19.3 x86_64 (1.19.4 is not yet validated on Linux;
-the build gate refuses an unknown build). The
+The tested native Linux game is HOI4 1.19.4.1 x86_64 (GNU build ID `2265e6e7...`); the
+build gate refuses any other build, including 1.19.3. The
 [owned launcher](docs/OWNED_LINUX_LAUNCHER.md) verifies process ownership and never
-takes over an unrelated game. Recorded tests cover:
+takes over an unrelated game. `--bind-management` binds the full management toolset to
+the owned X11 window. The tools read the game through a per-build address table
+(`native/layouts/`), generated from the macOS build and checked live
+([Linux port](docs/LINUX_PORT.md)).
 
-- Structured country, Research, Focus, production and construction reads.
-- Verified clock control, Research and Focus assignments, natural Research
-  refill, and durable daily plans that preserve completed work across restart.
-- One-factory changes on an existing own production line, panel transitions,
-  per-day budgets and completed-plan restart without repeated input.
-- Construction-panel selection, state search, and verified arms-factory and
-  dockyard placement in owned states.
-
-The combined production/Research worker remains an opt-in preview with an
-unfinished advancing-time acceptance gate. Provincial buildings, new production
-lines, bulk allocation and combat control remain open. An internal durable
-Research-navigation adapter now passes offline Linux fixtures; it has no public
-command or mixed-worker permission and still needs its own live qualification.
+[Live verification on Linux](docs/LIVE_VERIFICATION_LINUX_1_19_4.md) records 104 tools run
+against the game (economy, research, focus, politics, trade, armies and fronts in a war,
+air, navy, special projects, the intelligence agency, events, diplomacy and the plan
+runner), the refusals reached for the rest, and the fixes the Linux build needed. Peace
+conferences and the operative tools were not reached on Linux. The older Linux-only GUI
+diagnostics written for 1.19.3 refuse on 1.19.4.1.
 
 ARM64 Linux through FEX has verified own-state reads and lower-level stationary
 Research keys at 1080p. Its pinned Rust input adapter remains disabled by default:
@@ -230,7 +225,7 @@ and cannot be reached by campaign automation.
 | --- | --- | --- |
 | Python / Windows (1.2.0) | Mod-testing tools and recorded play attempts | Clean campaign acceptance |
 | Python / macOS | Platform work and limited diagnostic play | Reliable live acceptance |
-| Rust / Linux | Owned launch, fast state reads, time, research, Focus, daily plans, one-factory production changes, construction panel, map search and state-building placement | Provincial placement, economy, army and naval control; campaign acceptance |
+| Rust / Linux | Owned 1080p runs on 1.19.4.1: 104 live-tested tools of the management toolset, including a declared war with fronts, offensives and plans | Peace conferences, operatives, the two-year acceptance run and campaigns ([live verification](docs/LIVE_VERIFICATION_LINUX_1_19_4.md)) |
 | Rust / macOS | Owned 1080p runs on 1.19.4.1: about 120 live-tested tools (economy, armies and fronts, air, navy, invasions, designers, doctrine, intelligence, peace conferences, plan runner) and short training wars | Open defects in [live verification](docs/LIVE_VERIFICATION_1_19_4.md), the two-year acceptance run and campaigns |
 | Rust / Windows | Portable protocol and dormant owned-reader fixtures | Native game adapter, input and live tests |
 

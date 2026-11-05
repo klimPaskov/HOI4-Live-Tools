@@ -65,10 +65,10 @@ impl Fixture {
             fault_reads: Cell::new(0),
         };
         let base = 0x10000;
-        f.word(base + 0x44086a8, 0x30000);
-        f.word(base + 0x44085f8, 0x32000);
-        f.word(base + 0x439f450, 0x36000);
-        f.word(base + 0x43f3eb8, 0x37000);
+        f.word(base + 0x459e9f0, 0x30000);
+        f.word(base + 0x459e908, 0x32000);
+        f.word(base + 0x45353b0, 0x36000);
+        f.word(base + 0x458a088, 0x37000);
         for (a, n) in [
             (0x30000, 0x700),
             (0x32000, 0x700),
@@ -78,8 +78,8 @@ impl Fixture {
         ] {
             f.region(a, n);
         }
-        f.word(0x30000, base + 0x42c7598);
-        f.word(0x32000, base + 0x42c9a88);
+        f.word(0x30000, base + 0x445e068);
+        f.word(0x32000, base + 0x4460048);
         f.number(0x30460, 60759371);
         f.number(0x304b4, 4);
         f.number(0x30518, 1);
@@ -164,25 +164,25 @@ impl Process for Fixture {
 }
 impl Fixture {
     fn economy(&mut self) {
-        self.object(0x20000, "CCountry", 0x10000 + 0x41fafb0);
+        self.object(0x20000, "CCountry", 0x10000 + 0x438fe10);
         self.number(0x20008, 1);
         self.region(0x40000, 0x400);
         self.region(0x41000, 0x100);
         self.word(0x20f40, 0x40000);
         self.word(0x20f68, 0x41000);
-        self.word(0x40000, 0x10000 + 0x42066f8);
-        self.word(0x40290, 0x20000);
-        self.word(0x41000, 0x10000 + 0x4202e30);
+        self.word(0x40000, 0x10000 + 0x439b308);
+        self.word(0x402a8, 0x20000);
+        self.word(0x41000, 0x10000 + 0x4397cf0);
         self.word(0x410c8, 0x20000);
         for (off, raw) in [
-            (0x2b8, 1_099_999i64),
-            (0x318, 599_999),
-            (0x378, 2_099_999),
-            (0x390, 350_000),
+            (0x2d0, 1_099_999i64),
+            (0x330, 599_999),
+            (0x390, 2_099_999),
+            (0x3a8, 350_000),
         ] {
             self.put(0x40000 + off, &raw.to_le_bytes());
         }
-        for (off, n) in [(0x2f8, 1), (0x300, 2), (0x3b8, 3), (0x3c0, 4), (0x3b0, 5)] {
+        for (off, n) in [(0x310, 1), (0x318, 2), (0x3d0, 3), (0x3d8, 4), (0x3c8, 5)] {
             self.number(0x40000 + off, n);
         }
         self.put(0x410e0, &(-150_001i64).to_le_bytes());
@@ -218,21 +218,21 @@ fn own_tag_primary_and_owner_guards_precede_payload() {
         (0x30518, 0, "player_unavailable", 0x39004),
         (
             0x20000,
-            0x10000 + 0x41fafb8,
+            0x10000 + 0x438fe18,
             "invalid_economy_type",
             0x20f40,
         ),
         (0x20008, 2, "invalid_economy_owner", 0x20f40),
         (
             0x40000,
-            0x10000 + 0x4206780,
+            0x10000 + 0x439b390,
             "invalid_economy_type",
-            0x40290,
+            0x402a8,
         ),
-        (0x40290, 0x20008, "invalid_economy_owner", 0x402b8),
+        (0x402a8, 0x20008, "invalid_economy_owner", 0x402d0),
         (
             0x41000,
-            0x10000 + 0x4202e38,
+            0x10000 + 0x4397cf8,
             "invalid_economy_type",
             0x410c8,
         ),
@@ -258,17 +258,17 @@ fn economy_all_joins_and_values_are_final_witnesses() {
         (0x20f40, 8),
         (0x20f68, 8),
         (0x20008, 4),
-        (0x40290, 8),
+        (0x402a8, 8),
         (0x410c8, 8),
-        (0x402b8, 8),
-        (0x40318, 8),
-        (0x40378, 8),
-        (0x402f8, 4),
-        (0x40300, 4),
-        (0x403b8, 4),
-        (0x403c0, 4),
+        (0x402d0, 8),
+        (0x40330, 8),
         (0x40390, 8),
-        (0x403b0, 4),
+        (0x40310, 4),
+        (0x40318, 4),
+        (0x403d0, 4),
+        (0x403d8, 4),
+        (0x403a8, 8),
+        (0x403c8, 4),
         (0x410e0, 8),
     ] {
         let mut f = Fixture::new();
@@ -285,12 +285,12 @@ fn economy_all_joins_and_values_are_final_witnesses() {
 #[test]
 fn economy_policy_and_negative_factory_results_refuse() {
     for (a, n, width) in [
-        (0x402b8, -1i64, 8),
-        (0x40390, 100_000_000_001, 8),
+        (0x402d0, -1i64, 8),
+        (0x403a8, 100_000_000_001, 8),
         (0x410e0, i64::MIN, 8),
-        (0x402f8, -1, 4),
-        (0x403c0, 1_000_001, 4),
-        (0x402f8, 11, 4),
+        (0x40310, -1, 4),
+        (0x403d8, 1_000_001, 4),
+        (0x40310, 11, 4),
     ] {
         let mut f = Fixture::new();
         f.economy();
@@ -309,7 +309,7 @@ fn economy_policy_and_negative_factory_results_refuse() {
 fn project_only_clamps_and_fixed_boundaries_remain_checked() {
     let mut f = Fixture::new();
     f.economy();
-    f.put(0x40390, &3_000_000i64.to_le_bytes());
+    f.put(0x403a8, &3_000_000i64.to_le_bytes());
     assert_eq!(
         hoi4_live_native::economy::snapshot(&f).unwrap()
             ["civilian_factories_available_for_projects"],
@@ -389,9 +389,9 @@ fn production_fixture() -> Fixture {
     f.array(0x40058, 0x70000, 3);
     f.region(0x70000, 24);
     for (index, p, table, handle) in [
-        (0, 0x80000, 0x42ede08, 0xffff000100000038u64),
-        (1, 0x81000, 0x42edf88, 0xffff000100000039u64),
-        (2, 0x82000, 0x42ede08, 0x0000000200000038u64),
+        (0, 0x80000, 0x4483480, 0xffff000100000038u64),
+        (1, 0x81000, 0x4483600, 0xffff000100000039u64),
+        (2, 0x82000, 0x4483480, 0x0000000200000038u64),
     ] {
         f.region(p, 0xf8);
         f.word(0x70000 + index * 8, p);
@@ -460,7 +460,7 @@ fn production_lines_preserve_full_string_handles_distinct_counters_and_own_conte
     ] {
         assert_eq!(v[flag], false);
     }
-    production_not_read(&f, &[0x10000 + 0x439f440, 0xdead0000, 0xbeef0000]);
+    production_not_read(&f, &[0x10000 + 0x45353a0, 0xdead0000, 0xbeef0000]);
 }
 #[test]
 fn production_lines_foreign_owner_refuses_before_handle_counter_and_equipment() {
@@ -488,7 +488,7 @@ fn production_lines_foreign_owner_refuses_before_handle_counter_and_equipment() 
         production_not_read(&f, &[0x40058, 0x80000]);
     }
     let mut f = production_fixture();
-    f.word(0x40290, 0xdead0000);
+    f.word(0x402a8, 0xdead0000);
     assert_eq!(
         hoi4_live_native::production_lines::snapshot(&f)
             .unwrap_err()
@@ -550,9 +550,9 @@ fn production_lines_duplicate_full_handles_and_wrong_kind_refuse_before_counters
 }
 fn unknown_production(f: &mut Fixture, secondary: bool) {
     let base = 0x10000;
-    let table = base + 0x4320000;
-    let info = base + 0x435a000;
-    let name = base + 0x350a000;
+    let table = base + 0x44b6028;
+    let info = base + 0x44f0440;
+    let name = base + 0x3682000;
     f.array(0x40058, 0x70000, 4);
     f.word(0x70018, 0x90000);
     f.word(0x90000, table);
@@ -629,10 +629,10 @@ fn production_lines_all_collection_owner_handle_counter_and_roots_are_witnessed(
         (0x80018, 4),
         (0x800e8, 4),
         (0x20f40, 8),
-        (0x40290, 8),
+        (0x402a8, 8),
         (0x20008, 4),
-        (0x10000 + 0x44086a8, 8),
-        (0x10000 + 0x44085f8, 8),
+        (0x10000 + 0x459e9f0, 8),
+        (0x10000 + 0x459e908, 8),
         (0x60000, 36),
     ] {
         let mut f = production_fixture();
@@ -680,7 +680,7 @@ fn production_lines_identical_members_relocation_and_process_context_change_refu
         "torn_read"
     );
     let mut f = production_fixture();
-    f.word(0x20000, 0x10000 + 0x41fafb8);
+    f.word(0x20000, 0x10000 + 0x438fe18);
     assert_eq!(
         hoi4_live_native::production_lines::snapshot(&f)
             .unwrap_err()
@@ -747,7 +747,7 @@ fn production_lines_protocol_is_read_only_no_foreign_or_action_arguments() {
 fn production_lines_maximum_page_with_long_metadata_fits_owned_mcp_wire_bound() {
     let mut f = production_fixture();
     unknown_production(&mut f, false);
-    f.put(0x10000 + 0x350a000, &[b'A'; 127]);
+    f.put(0x10000 + 0x3682000, &[b'A'; 127]);
     for offset in [0x14, 0x18, 0xe8] {
         f.number(0x80000 + offset, i32::MIN);
     }
@@ -844,7 +844,7 @@ fn production_lines_paging_never_skips_outside_page_guards_or_witnesses() {
     let mut changed = vec![0; 128];
     let name = b"21CGeneratedChangedLine";
     changed[..name.len()].copy_from_slice(name);
-    f.fault = Some((0x10000 + 0x350a000, 1, changed));
+    f.fault = Some((0x10000 + 0x3682000, 1, changed));
     assert_eq!(
         hoi4_live_native::production_lines::page(&f, 0, 1)
             .unwrap_err()
@@ -881,7 +881,7 @@ fn production_lines_default_page_is_compact_with_fresh_nonpersistent_collection_
         let line = 0x80000 + index * 0x1000;
         f.region(line, 0xf8);
         f.word(0x70000 + index * 8, line);
-        f.word(line, 0x10000 + 0x42ede08);
+        f.word(line, 0x10000 + 0x4483480);
         f.word(line + 0x20, 0x40000);
         f.word(line + 8, ((index + 1) << 32) | 0x38);
     }
