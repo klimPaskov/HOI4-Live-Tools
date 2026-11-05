@@ -784,9 +784,24 @@ impl Commands for MacClock {
         json!({"transport":"ordinary macOS CGEvent keys to the front-most owned window","actions":["set_paused","set_speed","research_start","focus_start","production_add","production_set","construction_add","politics_options","politics_choose","decisions_list","decision_take","train","deploy_locations","army_create","army_assign","army_front","army_plan","army_offensive","event_choose","diplomacy","diplomacy_act","army_commander","army_group_create","army_split","template_create","template_edit","template_rename","template_delete","template_options","design_options","design_create","design_obsolete","design_set_production","state_slots","air_wings","air_mission","plan_run"],"lease":"exclusive configured controller","input_profile":{"name":"macos_cocoa_absolute_1920x1080_v1","checked_at_bind":true,"rechecked_before_each_input":true,"diagnostic_alone_authorizes_input":false},"construction_panel":{"enabled":self.construction_panel,"qualification_only":true,"ordinary_key":"t","live_delivery_verified":false,"input_retry":false},"construction_selection":{"enabled":self.construction_selection,"qualification_only":true,"ordinary_clicks_max":1,"input_retry":false,"placement":false},"construction_placement":{"enabled":self.construction_placement,"qualification_only":true,"ordinary_clicks_max":1,"full_picker_verified":false,"atomic_event_verified":false},"construction_cancellation":{"enabled":self.construction_cancellation,"qualification_only":true,"ordinary_key":"escape","ordinary_key_presses_max":1,"input_retry":false,"worker":false},"construction_find_open":{"enabled":self.construction_find_open,"qualification_only":true,"transport":"ordinary_left_click","ordinary_clicks_max":1,"cursor_moves_max":1,"ordinary_key_presses":0,"input_retry":false,"worker":false},"construction_navigation":{"enabled":self.construction_navigation,"qualification_only":true,"already_open_only":true,"input_retry":false,"placement":false},"daily_governor":self.daily.capabilities(),"native_posting":false,"full_campaign_acceptance":false})
     }
     fn call(&self, process: &dyn Process, name: &str, arguments: &Value) -> Result<Value> {
-        let result = self
-            .call_inner(process, name, arguments)
-            .and_then(not_applied_is_error);
+        // A request_id already in the journal is a settlement of an earlier dispatch: let it
+        // through so a typo's open journal can still be settled.
+        let journaled = arguments
+            .get("request_id")
+            .and_then(Value::as_str)
+            .is_some_and(|id| {
+                self.state
+                    .lock()
+                    .map(|c| c.actions.receipt_exists(id))
+                    .unwrap_or(false)
+            });
+        let result = (if journaled {
+            Ok(())
+        } else {
+            army_names_exist(process, name, arguments)
+        })
+        .and_then(|()| self.call_inner(process, name, arguments))
+        .and_then(not_applied_is_error);
         // Map actions zoom in to aim (Find, border clicks); give the player and the viewer the
         // strategic view back afterwards. Best effort: never changes the tool's result.
         if MAP_TOOLS.contains(&name) && process.identity() == self.process.identity() {
@@ -794,6 +809,56 @@ impl Commands for MacClock {
         }
         result
     }
+}
+/// Army names are checked before anything is journaled: a typo used to become an uncertain
+/// dispatch that blocked every later action (seen live: "Army 1 1 ").
+fn army_names_exist(process: &dyn Process, name: &str, arguments: &Value) -> Result<()> {
+    if !name.starts_with("hoi4_army_")
+        || matches!(name, "hoi4_army_create" | "hoi4_army_assign_plan")
+    {
+        return Ok(());
+    }
+    let wanted: Vec<&str> = ["army", "source", "target", "into"]
+        .iter()
+        .filter_map(|k| arguments.get(*k).and_then(Value::as_str))
+        .chain(
+            arguments
+                .get("armies")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str),
+        )
+        .collect();
+    if wanted.is_empty() {
+        return Ok(());
+    }
+    let view = armies::armies(process)?;
+    let mut names: Vec<String> = view["armies"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|a| a["army"].as_str().map(str::to_string))
+        .collect();
+    names.extend(
+        view["army_groups"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|g| g["army_group"].as_str().map(str::to_string)),
+    );
+    for w in wanted {
+        if !names.iter().any(|n| n == w) {
+            return Err(Error::new(
+                "army_unknown",
+                format!(
+                    "No own army or army group is named {w:?}; nothing was done. Names: {}",
+                    names.join(", ")
+                ),
+            ));
+        }
+    }
+    Ok(())
 }
 /// A settled receipt whose target did not happen (NotApplied) or happened only in part
 /// (Diverged) is a failure for the caller, never a success with a buried status (seen live:
@@ -4237,7 +4302,16 @@ impl MacClock {
             let headings_before =
                 ui::read(process, |r, i| armies::headings(r, i, army)).unwrap_or_default();
             let mut settle = || {
-                let (now, total) = heading()?;
+                let (now, total) = match heading() {
+                    Ok(v) => v,
+                    // No such army: nothing can have moved (settles a journal a typo left open).
+                    Err(e) if e.code == "invalid_target" => {
+                        return Ok(journal::Outcome::Unchanged(
+                            json!({"army":army,"state_id":state,"error":e.message}),
+                        ))
+                    }
+                    Err(e) => return Err(e),
+                };
                 let after = ui::read(process, |r, i| armies::headings(r, i, army))?;
                 let started = after.len() == headings_before.len()
                     && after
