@@ -102,6 +102,24 @@ No pocket available: attack the top `hoi4_front_plan` axis with the strike armie
 - Peace: `hoi4_peace_options`, `hoi4_peace_take {"states":[ids]}`, `hoi4_peace_submit`,
   `hoi4_peace_exit`.
 
+## 5b. Let the plan runner carry routine fighting
+
+At speed 3 a game month passes in under two wall minutes; a player making a few tool calls a
+minute cannot re-issue every stalled attack (Ethiopia runs 9-11). The plan's `war` object makes
+the runner do it, and the player decides strategy:
+
+- `"war": {"enemies": ["ETH"], "axes": [[835, 271], [843, 271, 840]], "theatre": [550, 559]}`:
+  every army of `min_army`+ divisions standing in a `theatre` state (or in enemy land) follows the
+  axis whose next enemy-held state is nearest: front line, offensive line, execute.
+- `"stall_days": 8`: an ordered army without progress gets a direct `hoi4_army_move` into its
+  target (battle plans in roadless mountains may never advance; direct moves did).
+- `"rest_below": 12, "resume_above": 30` (absolute organisation; a rested infantry division reads
+  about 45): an exhausted army stops its plan and attacks again when it recovers.
+- `"motorization": 2`: every driven army's supply hubs use trucks.
+- `"reserve": ["Army 2"]`: armies only the player commands. Executing plans are never touched.
+- `"disband": {"templates": [...], "max": N}`: divisions of weak templates standing in own states
+  outside the theatre are disbanded so their equipment refills the front.
+
 ## 6. Principles learned in live play (apply to any war)
 
 These came from failed training wars; they are general, not tied to one country.

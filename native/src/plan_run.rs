@@ -933,7 +933,9 @@ pub fn tick(
                 } else if why.contains("selection_mismatch") {
                     20 * DAY
                 } else {
-                    2 * DAY
+                    // a box that selects nothing does not fix itself in two days (live
+                    // 6 Nov 2026: Somaliland retried every tick and starved the war stage)
+                    10 * DAY
                 },
             );
             return Ok(Tick::Acted(format!("army_create state {id}: {ok} {why}")));
@@ -1074,14 +1076,31 @@ fn disband_step(
         .chain(list(&plan["war"], "theatre").iter())
         .filter_map(Value::as_i64)
         .collect();
+    // Only divisions standing in own states are candidates: an army fighting in enemy land
+    // is never thinned (live 6 Nov 2026: Army 1 in Hararghe was picked).
+    let me = text(&tools.call("hoi4_overview", &json!({}))?["player"]).to_string();
+    let own: HashSet<i64> = list(&tools.call("hoi4_states", &json!({"query": me}))?, "states")
+        .iter()
+        .filter(|row| text(&row["owner"]) == me && text(&row["controller"]) == me)
+        .filter_map(|row| row["state_id"].as_i64())
+        .collect();
     let supply = tools.call("hoi4_supply", &json!({}))?;
+    // Armies with any division outside the candidate states are left whole.
+    let mut fighting: HashSet<String> = HashSet::new();
+    for d in list(&supply, "divisions") {
+        if let (Some(army), Some(at)) = (d["army"].as_str(), d["state_id"].as_i64()) {
+            if keep.contains(&at) || !own.contains(&at) {
+                fighting.insert(army.to_string());
+            }
+        }
+    }
     let mut by_army: Vec<(String, Vec<String>)> = Vec::new();
     for d in list(&supply, "divisions") {
         let (Some(army), Some(id)) = (d["army"].as_str(), d["id"].as_str()) else {
             continue;
         };
         if !templates.iter().any(|t| t == text(&d["template"]))
-            || d["state_id"].as_i64().is_some_and(|s| keep.contains(&s))
+            || fighting.contains(army)
             || state.skipped(now, "disband", army)
         {
             continue;
@@ -3459,6 +3478,7 @@ mod tests {
 
     #[test]
     fn weak_templates_outside_the_theatre_are_disbanded_one_army_at_a_time() {
+        // Army 9 fights in enemy land (835) and Army 1 stands in the theatre: both are kept.
         struct D(RefCell<Vec<(String, Value)>>);
         impl Tools for D {
             fn call(&self, name: &str, args: &Value) -> Result<Value> {
@@ -3468,7 +3488,14 @@ mod tests {
                     "hoi4_focus_completed" => Ok(json!({"active_key": "f"})),
                     "hoi4_economy" => Ok(json!({"factory_trigger_count": {"military": 0},
                         "civilian_factories_available_for_projects": 0})),
+                    "hoi4_overview" => Ok(json!({"player": "ITA"})),
+                    "hoi4_states" => Ok(json!({"states": [
+                        {"state_id": 158, "owner": "ITA", "controller": "ITA"},
+                        {"state_id": 160, "owner": "ITA", "controller": "ITA"},
+                        {"state_id": 550, "owner": "ITA", "controller": "ITA"}]})),
                     "hoi4_supply" => Ok(json!({"divisions": [
+                        {"army": "Army 9", "id": "x", "template": "Camicie Nere", "state_id": 835},
+                        {"army": "Army 9", "id": "y", "template": "Camicie Nere", "state_id": 160},
                         {"army": "Army 4", "id": "a", "template": "Camicie Nere", "state_id": 158},
                         {"army": "Army 4", "id": "b", "template": "Divisione di Fanteria", "state_id": 158},
                         {"army": "Army 1", "id": "c", "template": "Camicie Nere", "state_id": 550},
