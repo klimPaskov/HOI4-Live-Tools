@@ -4231,14 +4231,27 @@ impl MacClock {
             }
             let action = json!({"kind":"army_move","army":army,"state_id":state});
             let keys = &self.keys;
+            // A move by sea or a long route first heads for the embarkation port or the next
+            // leg, not the target state (seen live: home divisions sailed while the receipt said
+            // NotApplied). New headings on the divisions count as the move having started.
+            let headings_before =
+                ui::read(process, |r, i| armies::headings(r, i, army)).unwrap_or_default();
             let mut settle = || {
                 let (now, total) = heading()?;
-                let detail =
-                    json!({"army":army,"state_id":state,"divisions_heading":now,"divisions":total});
-                Ok(if retry {
-                    journal::Outcome::Diverged(detail)
-                } else if now > 0 {
+                let after = ui::read(process, |r, i| armies::headings(r, i, army))?;
+                let started = after.len() == headings_before.len()
+                    && after
+                        .iter()
+                        .zip(&headings_before)
+                        .filter(|(a, b)| **a != 0 && a != b)
+                        .count()
+                        > 0;
+                let detail = json!({"army":army,"state_id":state,"divisions_heading":now,"divisions":total,
+                    "under_way_by_other_route":now == 0 && started});
+                Ok(if now > 0 || started {
                     journal::Outcome::Reached(detail)
+                } else if retry {
+                    journal::Outcome::Diverged(detail)
                 } else {
                     journal::Outcome::Unchanged(detail)
                 })

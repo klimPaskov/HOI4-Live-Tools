@@ -1753,6 +1753,21 @@ pub(super) fn offensive(
 /// Divisions of `army` whose movement target (province id at +0x2ac of the
 /// division, mapped live on 24 July 1941 by diffing a right-click move order)
 /// lies in the provinces `wanted`, and the army's division count.
+/// Each division's current heading (province id, 0 when standing) for army `army`.
+pub(super) fn headings(r: &Reader<'_>, image: u64, army: &str) -> Result<Vec<i32>> {
+    let u = ui(r)?;
+    let group = group_named(r, image, army)?;
+    let country = own_country(r, image)?;
+    let (_, data, count) = r.array_header(country + u.country_divisions)?;
+    let mut out = Vec::new();
+    for index in 0..count.min(4096) as u64 {
+        let division = r.u64(data + index * 8)?;
+        if r.u64(division + u.division_group)? == group {
+            out.push(r.i32(division + u.heading_for)?);
+        }
+    }
+    Ok(out)
+}
 pub(super) fn heading_for(
     r: &Reader<'_>,
     image: u64,
