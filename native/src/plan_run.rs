@@ -61,7 +61,16 @@
 //!                          nothing was queued in `construction`
 //!   war                    {"enemies":["FRA"],"min_army":6,"per_target":2,"reserve":["Army 9"],"cooldown_hours":12}
 //!                          send armies at the nearest enemy-held states (own states held by an enemy first):
-//!                          step into the state, draw front and offensive lines, execute the plan
+//!                          step into the state, draw front and offensive lines, execute the plan.
+//!                          Optional: "axes":[[842,843,271],[835,271]] ordered targets (an army follows the
+//!                          axis whose next enemy-held state is nearest); "theatre":[550,559] own states an
+//!                          army must stand in to be driven (armies in enemy land always are);
+//!                          "stall_days":8 without progress -> direct hoi4_army_move into the target;
+//!                          "rest_below":12 / "resume_above":30 army organisation (absolute) to stop and
+//!                          resume the plan ("rest":false turns it off); "motorization":2 sets every driven
+//!                          army's supply trucks once
+//!   disband                {"templates":["Camicie Nere"],"keep_states":[ids],"max":N} disband divisions of these
+//!                          templates outside keep_states and war.theatre, one army per tick
 //!   armies                 {"max":24,"min_for_general":8,"generals":["Name",..]} keep every division in an
 //!                          army of at most `max`: create armies where divisions stand unassigned (folding in
 //!                          standing armies when the game refuses and "absorb" is true), split oversized ones, and give the next
@@ -117,6 +126,14 @@ pub struct State {
     war_assign: HashMap<String, i32>,
     war_stage: HashMap<String, u8>,
     war_cool: HashMap<String, GameHour>,
+    /// per army: (target, main state, game hour) of the last progress seen
+    war_since: HashMap<String, (i32, Option<i32>, GameHour)>,
+    /// armies on direct move orders (their battle plan did not advance)
+    war_move: HashSet<String>,
+    /// armies resting (plan stopped for organisation)
+    war_rest: HashSet<String>,
+    /// divisions disbanded by the `disband` stage
+    disbanded: u64,
     /// Refusals per politics pick (index): each refusal doubles the wait.
     pol_fails: HashMap<usize, u32>,
     /// Political power when a pick was last refused: it is not tried again until the
@@ -194,6 +211,10 @@ impl Default for State {
             war_assign: HashMap::new(),
             war_stage: HashMap::new(),
             war_cool: HashMap::new(),
+            war_since: HashMap::new(),
+            war_move: HashSet::new(),
+            war_rest: HashSet::new(),
+            disbanded: 0,
             pol_fails: HashMap::new(),
             pol_pp_at_fail: HashMap::new(),
             centers: HashMap::new(),
@@ -1020,7 +1041,75 @@ pub fn tick(
             return Ok(Tick::Acted(step));
         }
     }
+    if plan["disband"].is_object() {
+        if let Some(step) = disband_step(state, tools, plan, lease, now)? {
+            return Ok(Tick::Acted(step));
+        }
+    }
     Ok(Tick::Nothing)
+}
+
+/// `disband`: {"templates":["Camicie Nere",..],"keep_states":[ids],"max":N}: divisions of these
+/// templates in an army, standing outside `keep_states` (default: war.theatre), are disbanded
+/// one army at a time so their men and equipment refill the fighting armies (Ethiopia run 10:
+/// disbanding home divisions took the African armies from 30% to 100% equipment).
+fn disband_step(
+    state: &mut State,
+    tools: &dyn Tools,
+    plan: &Value,
+    lease: &str,
+    now: GameHour,
+) -> Result<Option<String>> {
+    let cfg = &plan["disband"];
+    let templates = strings(cfg, "templates");
+    if templates.is_empty() {
+        return Ok(None);
+    }
+    let max = cfg["max"].as_u64().unwrap_or(u64::MAX);
+    if state.disbanded >= max || state.skipped(now, "disband", "all") {
+        return Ok(None);
+    }
+    let keep: HashSet<i64> = list(cfg, "keep_states")
+        .iter()
+        .chain(list(&plan["war"], "theatre").iter())
+        .filter_map(Value::as_i64)
+        .collect();
+    let supply = tools.call("hoi4_supply", &json!({}))?;
+    let mut by_army: Vec<(String, Vec<String>)> = Vec::new();
+    for d in list(&supply, "divisions") {
+        let (Some(army), Some(id)) = (d["army"].as_str(), d["id"].as_str()) else {
+            continue;
+        };
+        if !templates.iter().any(|t| t == text(&d["template"]))
+            || d["state_id"].as_i64().is_some_and(|s| keep.contains(&s))
+            || state.skipped(now, "disband", army)
+        {
+            continue;
+        }
+        match by_army.iter_mut().find(|(a, _)| a == army) {
+            Some((_, ids)) => ids.push(id.to_string()),
+            None => by_army.push((army.to_string(), vec![id.to_string()])),
+        }
+    }
+    let Some((army, mut ids)) = by_army.into_iter().next() else {
+        state.skip(now, "disband", "all", 7 * DAY);
+        return Ok(None);
+    };
+    ids.truncate((max - state.disbanded).min(24) as usize);
+    let count = ids.len();
+    let (ok, why) = state.act(
+        tools,
+        lease,
+        "hoi4_division_disband",
+        json!({"army": army, "divisions": ids}),
+        "db",
+    )?;
+    if ok {
+        state.disbanded += count as u64;
+    } else {
+        state.skip(now, "disband", &army, 3 * DAY);
+    }
+    Ok(Some(format!("disband {count} from {army}: {ok} {why}")))
 }
 
 /// Buildings that share a state's building slots: one state is "full" for all.
@@ -1656,22 +1745,87 @@ fn war_step(
     for target in state.war_assign.values() {
         *load.entry(*target).or_default() += 1;
     }
+    // Axes: ordered state lists ([[842,843,271],[835,271]]); an army follows the axis whose
+    // next enemy-held state is nearest to it. Without axes: the nearest enemy-held state.
+    let axes: Vec<Vec<i32>> = list(cfg, "axes")
+        .iter()
+        .map(|axis| {
+            axis.as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|v| v.as_i64().map(|v| v as i32))
+                .collect()
+        })
+        .filter(|axis: &Vec<i32>| !axis.is_empty())
+        .collect();
+    // Theatre: own states armies must stand in to be driven (armies in enemy land always are);
+    // keeps home armies that can never reach the war out of it.
+    let theatre: HashSet<i32> = list(cfg, "theatre")
+        .iter()
+        .filter_map(|v| v.as_i64().map(|v| v as i32))
+        .collect();
+    let mine_ids: HashSet<i32> = list(&mine, "states")
+        .iter()
+        .filter(|row| text(&row["owner"]) == me)
+        .filter_map(|row| row["state_id"].as_i64().map(|v| v as i32))
+        .collect();
+    let stall: GameHour = cfg["stall_days"].as_i64().unwrap_or(8) * DAY;
+    let rest_below = cfg["rest_below"].as_f64().unwrap_or(12.0);
+    let resume_above = cfg["resume_above"].as_f64().unwrap_or(30.0);
+    // Organisation per army (absolute: a rested infantry division reads about 45).
+    let condition: HashMap<String, f64> = if cfg["rest"] == json!(false) {
+        HashMap::new()
+    } else {
+        tools
+            .call("hoi4_supply", &json!({}))
+            .ok()
+            .map(|supply| {
+                list(&supply, "armies")
+                    .iter()
+                    .filter_map(|a| {
+                        Some((
+                            text(&a["army"]).to_string(),
+                            a["organisation_mean"].as_f64()?,
+                        ))
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
     for army in list(&roster, "armies") {
         let name = text(&army["army"]).to_string();
+        let here = army["main_state"].as_i64().map(|s| s as i32);
+        let in_theatre = theatre.is_empty()
+            || here.is_some_and(|s| theatre.contains(&s) || !mine_ids.contains(&s));
         if army["division_count"].as_u64().unwrap_or(0) < min_army
             || reserve.contains(&name)
+            || !in_theatre
             || state.war_cool.get(&name).is_some_and(|until| *until > now)
         {
             continue;
         }
-        let here = army["main_state"].as_i64().map(|s| s as i32);
+        // Trucks for the army's supply hubs (far from railways supply needs them).
+        if let Some(level) = cfg["motorization"].as_u64() {
+            if army["motorization"].as_u64().unwrap_or(0) < level
+                && !state.skipped(now, "motor", &name)
+            {
+                let (ok, why) = state.act(
+                    tools,
+                    lease,
+                    "hoi4_army_motorization",
+                    json!({"army": name, "level": level}),
+                    "wz",
+                )?;
+                state.skip(now, "motor", &name, if ok { 30 * DAY } else { 3 * DAY });
+                return Ok(Some(format!(
+                    "war motorization {name} level {level}: {ok} {why}"
+                )));
+            }
+        }
         let position = here.and_then(|s| state.centers.get(&s).copied());
+        let open = |id: i32| targets.iter().any(|x| x.0 == id);
         // Keep the current target while it is still held by an enemy.
-        let mut target = state
-            .war_assign
-            .get(&name)
-            .copied()
-            .filter(|t| targets.iter().any(|x| x.0 == *t));
+        let mut target = state.war_assign.get(&name).copied().filter(|t| open(*t));
         if target.is_none() {
             if let Some(old) = state.war_assign.remove(&name) {
                 if let Some(n) = load.get_mut(&old) {
@@ -1679,16 +1833,29 @@ fn war_step(
                 }
             }
             state.war_stage.remove(&name);
-            let best = targets
+            state.war_move.remove(&name);
+            state.war_since.remove(&name);
+            let distance = |id: i32| -> Option<f64> {
+                let (x, z) = state.centers.get(&id).copied()?;
+                Some(position.map_or(0.0, |(px, pz)| ((x - px).powi(2) + (z - pz).powi(2)).sqrt()))
+            };
+            let from_axes: Vec<(i32, f64)> = axes
                 .iter()
-                .filter(|(id, _)| load.get(id).copied().unwrap_or(0) < per_target)
-                .filter_map(|(id, liberate)| {
-                    let (x, z) = state.centers.get(id).copied()?;
-                    let d = position
-                        .map_or(0.0, |(px, pz)| ((x - px).powi(2) + (z - pz).powi(2)).sqrt());
-                    Some((*id, if *liberate { d * 0.5 } else { d }))
-                })
-                .min_by(|a, b| a.1.total_cmp(&b.1));
+                .filter_map(|axis| axis.iter().copied().find(|id| open(*id)))
+                .filter_map(|id| Some((id, distance(id)?)))
+                .collect();
+            let best = if !from_axes.is_empty() {
+                from_axes.into_iter().min_by(|a, b| a.1.total_cmp(&b.1))
+            } else {
+                targets
+                    .iter()
+                    .filter(|(id, _)| load.get(id).copied().unwrap_or(0) < per_target)
+                    .filter_map(|(id, liberate)| {
+                        let d = distance(*id)?;
+                        Some((*id, if *liberate { d * 0.5 } else { d }))
+                    })
+                    .min_by(|a, b| a.1.total_cmp(&b.1))
+            };
             if let Some((id, _)) = best {
                 state.war_assign.insert(name.clone(), id);
                 *load.entry(id).or_default() += 1;
@@ -1700,6 +1867,83 @@ fn war_step(
         let stage = state.war_stage.get(&name).copied().unwrap_or(0);
         let executing = army["plan_executing"] == json!(true);
         let standing_in_target = here == Some(target);
+        let org = condition.get(&name).copied();
+        // Progress: the army's main state changes, or the target changes. Reset on either.
+        let since = match state.war_since.get(&name) {
+            Some((t, h, at)) if *t == target && *h == here => *at,
+            _ => {
+                state.war_since.insert(name.clone(), (target, here, now));
+                now
+            }
+        };
+        // Exhausted: stop the plan and let organisation come back, then attack again.
+        if let Some(org) = org {
+            if org < rest_below && executing && !state.war_rest.contains(&name) {
+                let (ok, why) = state.act(
+                    tools,
+                    lease,
+                    "hoi4_army_plan",
+                    json!({"army": name, "execute": false}),
+                    "wr",
+                )?;
+                if ok {
+                    state.war_rest.insert(name.clone());
+                }
+                state.war_cool.insert(name.clone(), now + cooldown);
+                return Ok(Some(format!(
+                    "war rest {name} (organisation {org:.0}): {ok} {why}"
+                )));
+            }
+            if state.war_rest.contains(&name) {
+                if org < resume_above {
+                    continue;
+                }
+                state.war_rest.remove(&name);
+                state.war_since.insert(name.clone(), (target, here, now));
+                let (tool, args, label) = if state.war_move.contains(&name) {
+                    (
+                        "hoi4_army_move",
+                        json!({"army": name, "state_id": target}),
+                        "resume move",
+                    )
+                } else {
+                    (
+                        "hoi4_army_plan",
+                        json!({"army": name, "execute": true}),
+                        "resume",
+                    )
+                };
+                let (ok, why) = state.act(tools, lease, tool, args, "wr")?;
+                state.war_cool.insert(name.clone(), now + cooldown);
+                return Ok(Some(format!(
+                    "war {label} {name} -> state {target} (organisation {org:.0}): {ok} {why}"
+                )));
+            }
+        }
+        // Stalled: no progress for `stall_days` while ordered. Direct moves into the target
+        // advance where battle plans do not (seen in Ethiopia: a plan that never left the
+        // start state; moves took Bale and Sidamo).
+        let ordered = executing || stage >= 3 || state.war_move.contains(&name);
+        if ordered && !standing_in_target && now - since >= stall {
+            let (ok, why) = state.act(
+                tools,
+                lease,
+                "hoi4_army_move",
+                json!({"army": name, "state_id": target}),
+                "wm",
+            )?;
+            state.war_move.insert(name.clone());
+            state.war_since.insert(name.clone(), (target, here, now));
+            state.war_cool.insert(name.clone(), now + cooldown);
+            return Ok(Some(format!(
+                "war stalled {name} {} days -> move to state {target}: {ok} {why}",
+                (now - since) / DAY
+            )));
+        }
+        if state.war_move.contains(&name) {
+            // Moving: wait for progress (the stall check above re-issues the move).
+            continue;
+        }
         let (tool, args, label, next_stage) = if liberate {
             if standing_in_target {
                 state.war_cool.insert(name.clone(), now + cooldown * 3);
@@ -1733,13 +1977,16 @@ fn war_step(
                 3,
             )
         } else {
-            state.war_cool.insert(name.clone(), now + cooldown * 3);
+            state.war_cool.insert(name.clone(), now + cooldown);
             continue;
         };
         let (ok, why) = state.act(tools, lease, tool, args, "wr")?;
         if ok {
             state.war_stage.insert(name.clone(), next_stage);
             state.war_cool.insert(name.clone(), now + WAR_STAGE_PAUSE);
+            if next_stage == 3 {
+                state.war_since.insert(name.clone(), (target, here, now));
+            }
             return Ok(Some(format!("war {label} {name} -> state {target}: ok")));
         }
         // No foothold for a front line yet: step into the state first.
@@ -1751,6 +1998,10 @@ fn war_step(
                 json!({"army": name, "state_id": target}),
                 "wm",
             )?;
+            if ok {
+                state.war_move.insert(name.clone());
+                state.war_since.insert(name.clone(), (target, here, now));
+            }
             state.war_cool.insert(name.clone(), now + cooldown);
             return Ok(Some(format!(
                 "war move {name} -> state {target}: {ok} {why2} (front: {why})"
@@ -2083,7 +2334,7 @@ mod tests {
         assert_eq!(war_mission("small_plane_naval_bomber_airframe_1"), None);
     }
     use super::*;
-    use std::cell::RefCell;
+    use std::cell::{Cell, RefCell};
 
     const START: GameHour = 1_000_000;
 
@@ -3146,6 +3397,201 @@ mod tests {
         assert!(matches!(&second, Tick::Acted(s) if s.starts_with("war offensive")));
         let third = tick(&mut state, &w, &war_plan(), "l", later + 3).unwrap();
         assert!(matches!(&third, Tick::Acted(s) if s.starts_with("war execute")));
+    }
+
+    /// A war with a configurable army (executing flag, main state) and organisation.
+    struct War2 {
+        executing: Cell<bool>,
+        org: Cell<f64>,
+        calls: RefCell<Vec<(String, Value)>>,
+    }
+    impl War2 {
+        fn new() -> Self {
+            Self {
+                executing: Cell::new(false),
+                org: Cell::new(40.0),
+                calls: RefCell::new(vec![]),
+            }
+        }
+        fn last(&self) -> (String, Value) {
+            self.calls
+                .borrow()
+                .iter()
+                .rev()
+                .find(|(n, _)| n.starts_with("hoi4_army_"))
+                .cloned()
+                .unwrap()
+        }
+    }
+    impl Tools for War2 {
+        fn call(&self, name: &str, args: &Value) -> Result<Value> {
+            self.calls
+                .borrow_mut()
+                .push((name.to_string(), args.clone()));
+            match name {
+                "hoi4_research" => Ok(json!({"slots": [{"researching": "a"}]})),
+                "hoi4_focus_completed" => Ok(json!({"active_key": "f"})),
+                "hoi4_economy" => Ok(json!({"factory_trigger_count": {"military": 0},
+                    "civilian_factories_available_for_projects": 0})),
+                "hoi4_overview" => Ok(json!({"player": "GER"})),
+                "hoi4_states" => match args["query"].as_str().unwrap() {
+                    "GER" => Ok(json!({"states": [
+                        {"state_id": 42, "owner": "GER", "controller": "GER", "x": 0.0, "z": 0.0},
+                        {"state_id": 7, "owner": "GER", "controller": "GER", "x": 500.0, "z": 0.0}]})),
+                    "FRA" => Ok(json!({"states": [
+                        {"state_id": 28, "owner": "FRA", "controller": "FRA", "x": 10.0, "z": 10.0},
+                        {"state_id": 18, "owner": "FRA", "controller": "FRA", "x": 50.0, "z": 50.0}]})),
+                    other => panic!("unexpected query {other}"),
+                },
+                "hoi4_armies" => Ok(json!({"unassigned_by_state": [], "armies": [
+                    {"army": "Army 1", "division_count": 10, "main_state": 42,
+                     "battle_plan_orders": 0, "plan_executing": self.executing.get(), "commander": "X"}]})),
+                "hoi4_supply" => {
+                    Ok(json!({"armies": [{"army": "Army 1", "organisation_mean": self.org.get()}]}))
+                }
+                _ if args.get("request_id").is_some() => {
+                    Ok(json!({"receipt": {"status": "Verified"}}))
+                }
+                _ => Ok(json!({})),
+            }
+        }
+    }
+
+    #[test]
+    fn weak_templates_outside_the_theatre_are_disbanded_one_army_at_a_time() {
+        struct D(RefCell<Vec<(String, Value)>>);
+        impl Tools for D {
+            fn call(&self, name: &str, args: &Value) -> Result<Value> {
+                self.0.borrow_mut().push((name.to_string(), args.clone()));
+                match name {
+                    "hoi4_research" => Ok(json!({"slots": [{"researching": "a"}]})),
+                    "hoi4_focus_completed" => Ok(json!({"active_key": "f"})),
+                    "hoi4_economy" => Ok(json!({"factory_trigger_count": {"military": 0},
+                        "civilian_factories_available_for_projects": 0})),
+                    "hoi4_supply" => Ok(json!({"divisions": [
+                        {"army": "Army 4", "id": "a", "template": "Camicie Nere", "state_id": 158},
+                        {"army": "Army 4", "id": "b", "template": "Divisione di Fanteria", "state_id": 158},
+                        {"army": "Army 1", "id": "c", "template": "Camicie Nere", "state_id": 550},
+                        {"army": "Army 5", "id": "d", "template": "Camicie Nere", "state_id": 160}]})),
+                    _ if args.get("request_id").is_some() => {
+                        Ok(json!({"receipt": {"status": "Verified"}}))
+                    }
+                    _ => Ok(json!({})),
+                }
+            }
+        }
+        let d = D(RefCell::new(vec![]));
+        let plan = json!({"disband": {"templates": ["Camicie Nere"], "max": 1},
+            "war": {"enabled": false, "theatre": [550]}});
+        let mut state = State::default();
+        let step = tick(&mut state, &d, &plan, "l", START).unwrap();
+        assert!(
+            matches!(&step, Tick::Acted(s) if s.starts_with("disband 1 from Army 4")),
+            "{step:?}"
+        );
+        let (_, args) =
+            d.0.borrow()
+                .iter()
+                .rev()
+                .find(|(n, _)| n == "hoi4_division_disband")
+                .cloned()
+                .unwrap();
+        assert_eq!(args["divisions"], json!(["a"]));
+        // max reached: nothing more
+        assert_eq!(
+            tick(&mut state, &d, &plan, "l", START + DAY).unwrap(),
+            Tick::Nothing
+        );
+    }
+
+    #[test]
+    fn an_axis_beats_the_nearest_state() {
+        let w = War2::new();
+        let plan = json!({"war": {"enemies": ["FRA"], "axes": [[18, 28]]}});
+        let mut state = State::default();
+        let step = tick(&mut state, &w, &plan, "l", START).unwrap();
+        assert!(
+            matches!(&step, Tick::Acted(s) if s.starts_with("war front Army 1 -> state 18")),
+            "{step:?}"
+        );
+    }
+
+    #[test]
+    fn armies_outside_the_theatre_are_left_alone() {
+        let w = War2::new();
+        let plan = json!({"war": {"enemies": ["FRA"], "theatre": [7]}});
+        let mut state = State::default();
+        assert_eq!(
+            tick(&mut state, &w, &plan, "l", START).unwrap(),
+            Tick::Nothing
+        );
+        assert!(!w
+            .calls
+            .borrow()
+            .iter()
+            .any(|(n, _)| n.starts_with("hoi4_army_")));
+    }
+
+    #[test]
+    fn a_stalled_plan_becomes_a_direct_move_into_the_target() {
+        let w = War2::new();
+        let plan = json!({"war": {"enemies": ["FRA"], "stall_days": 8}});
+        let mut state = State::default();
+        let mut now = START;
+        for _ in 0..3 {
+            tick(&mut state, &w, &plan, "l", now).unwrap();
+            now += 3;
+        }
+        assert_eq!(w.last().0, "hoi4_army_plan");
+        w.executing.set(true);
+        // planning and fighting, no progress: nothing for a week
+        now += 13;
+        tick(&mut state, &w, &plan, "l", now).unwrap();
+        assert_eq!(w.last().0, "hoi4_army_plan");
+        now += 7 * DAY;
+        assert_eq!(
+            tick(&mut state, &w, &plan, "l", now).unwrap(),
+            Tick::Nothing
+        );
+        now += 2 * DAY;
+        let step = tick(&mut state, &w, &plan, "l", now).unwrap();
+        assert!(
+            matches!(&step, Tick::Acted(s) if s.starts_with("war stalled Army 1")),
+            "{step:?}"
+        );
+        let (name, args) = w.last();
+        assert_eq!(
+            (name.as_str(), &args["state_id"]),
+            ("hoi4_army_move", &json!(28))
+        );
+    }
+
+    #[test]
+    fn an_exhausted_army_rests_and_attacks_again() {
+        let w = War2::new();
+        w.executing.set(true);
+        w.org.set(8.0);
+        let plan = json!({"war": {"enemies": ["FRA"]}});
+        let mut state = State::default();
+        let step = tick(&mut state, &w, &plan, "l", START).unwrap();
+        assert!(
+            matches!(&step, Tick::Acted(s) if s.starts_with("war rest Army 1")),
+            "{step:?}"
+        );
+        assert_eq!(w.last().1["execute"], json!(false));
+        w.executing.set(false);
+        w.org.set(20.0);
+        assert_eq!(
+            tick(&mut state, &w, &plan, "l", START + DAY).unwrap(),
+            Tick::Nothing
+        );
+        w.org.set(35.0);
+        let step = tick(&mut state, &w, &plan, "l", START + 2 * DAY).unwrap();
+        assert!(
+            matches!(&step, Tick::Acted(s) if s.starts_with("war resume Army 1")),
+            "{step:?}"
+        );
+        assert_eq!(w.last().1["execute"], json!(true));
     }
 
     #[test]
