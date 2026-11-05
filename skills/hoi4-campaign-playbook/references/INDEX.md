@@ -11,6 +11,8 @@ Tags: `[V]` game file, `[W]` wiki, `[L]` seen in a live run, `[H]` heuristic.
 | Which tech/doctrine next, special projects, MIOs | research-doctrines-projects.md |
 | Designing divisions, factory counts per equipment, training | templates-equipment-production.md |
 | Low supply, rails, hubs, army structure, garrisons | supply-logistics-deployment.md |
+| Which divisions to keep, disband or train; armies by role, generals, field marshals, occupation law | army-organisation.md |
+| Fighting a war tick by tick (fronts, encirclement, game alerts) | war-operating-loop.md |
 | Planning a war, encirclement, air/naval, invasion, peace conference | war-air-naval-peace.md |
 | Advisors, decisions, diplomacy, factions, espionage, formables | politics-diplomacy-espionage.md |
 | Germany / Nationalist China / Poland dated plan + checkpoints | germany-fair.md / china-fair.md / poland-meta.md |

@@ -68,8 +68,9 @@ No pocket available: attack the top `hoi4_front_plan` axis with the strike armie
 5. Use what the enemy gives you: an enemy salient (an enemy-held state sticking into your
    line) is a pocket for you; check `hoi4_encirclement_candidates` every week even in defence.
 
-## 4. Every war tick (every 3-5 game days, speed 2 in war)
+## 4. Every war tick (every 3-5 game days, speed 3, never paused)
 
+0. `hoi4_alerts` : the game's own alert row; each alert names the tool that fixes it.
 1. Answer events at once (`hoi4_events`, `hoi4_event_choose`): an open event blocks every action.
 2. `hoi4_wars` : new occupied or threatened own states, uncovered borders -> fix first.
 3. `hoi4_armies` : armies without plans, unassigned divisions (fold them, `hoi4_army_assign`).
@@ -89,6 +90,12 @@ No pocket available: attack the top `hoi4_front_plan` axis with the strike armie
 - Equipment: `macplay sitrep` lists divisions short of an equipment type; losses of artillery and support equipment
   need their own production lines, not only infantry equipment.
 - `hoi4_research_start {..., replace:true}` switches a busy research slot.
+- `hoi4_division_disband {army, divisions:[ids]}`: disband useless divisions (all of an army's ids
+  disband the army); men and equipment return to the pool. See army-organisation.md.
+- `hoi4_map_mode {mode}`: supply before an offensive, resistance/compliance for occupied land, air
+  for superiority; back to `political` before army orders.
+- `hoi4_occupation_law {law}`: default occupation law (verified); `hoi4_occupation` reads it.
+- At the end of a war, `hoi4_war_stats`: own losses must be far below the enemy's.
 - `hoi4_army_move` replaces the army's battle plan with a manual order (planning is lost).
 - `hoi4_naval_invasion` needs convoys and naval superiority; its receipt says
   `landing_verified:false`, so check the map/army after it starts.
