@@ -1354,7 +1354,9 @@ fn construction_step(
         let known_free = state.con.free.get(&id).map(|(f, _)| i64::from(*f));
         // Fill idle capacity in one action: each project takes at most 15 civilian
         // factories, so queue about idle/15 + 1 buildings (job count at least, 5 at most).
-        let want = want.max((idle / 15 + 1).min(5)).max(short.min(5));
+        // A short queue alone adds one building per line: a line of n buildings still works
+        // through them one at a time, so lines (not buildings) keep the factories busy.
+        let want = want.max((idle / 15 + 1).min(5));
         let count = want
             .min(state.con.cap.get(&id).copied().unwrap_or(want))
             .min(known_free.unwrap_or(want))
@@ -2751,7 +2753,7 @@ mod tests {
             step.starts_with("construct industrial_complex 4: true"),
             "{step}"
         );
-        assert_eq!(*short.0.added.borrow(), vec![(4, 2)]);
+        assert_eq!(*short.0.added.borrow(), vec![(4, 1)]);
         let mut b = Builder::new();
         b.slots = [(4, 5)].into();
         let full = Busy(b, 3);
