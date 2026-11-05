@@ -208,12 +208,69 @@ fn no_slot_or_not_allowed(key: &str, state: i32) -> Error {
 }
 
 /// Queue `count` more of building `key` in own state `state`.
+/// Buildings placed on one province (the panel's province grid): a click must land on a
+/// province the game allows, so the state centre is not enough.
+pub(super) const PROVINCE_BUILDINGS: [&str; 4] =
+    ["supply_node", "naval_base", "bunker", "coastal_bunker"];
+
+/// Screen points to click for a building: the given province, or for province buildings every
+/// province of the state that projects on screen (centre first), or the screen centre.
+fn aim_points(
+    process: &dyn Process,
+    key: &str,
+    state: i32,
+    province: Option<i32>,
+) -> Result<Vec<(f64, f64)>> {
+    let wants_province = province.is_some() || PROVINCE_BUILDINGS.contains(&key);
+    if !wants_province {
+        return Ok(vec![(960.0, 540.0)]);
+    }
+    let dir = process
+        .identity()
+        .and_then(|i| super::mapdata::game_dir(&i.exe).ok())
+        .ok_or_else(|| Error::new("map_data_unavailable", "Game install not found"))?;
+    let positions = super::mapdata::positions(&dir)?;
+    let provinces = match province {
+        Some(p) => vec![p],
+        None => super::mapdata::state_provinces(&dir, state)?,
+    };
+    let mut points: Vec<(f64, f64)> = Vec::new();
+    for p in provinces {
+        let Some(&(x, z)) = positions.get(&p) else {
+            continue;
+        };
+        if let Some(point) = read(process, |r, i| super::screenmap::to_screen(r, i, x, z))? {
+            // keep clear of the top bar, the panels on the left and the map controls
+            if (380.0..1800.0).contains(&point.0) && (90.0..1000.0).contains(&point.1) {
+                points.push(point);
+            }
+        }
+    }
+    if points.is_empty() {
+        return Err(Error::new(
+            "invalid_target",
+            match province {
+                Some(p) => format!("Province {p} is not on screen after centring state {state} (is it in that state?)"),
+                None => format!("No province of state {state} projects on screen"),
+            },
+        ));
+    }
+    // nearest to the screen centre first
+    points.sort_by(|a, b| {
+        let d = |p: &(f64, f64)| (p.0 - 960.0).powi(2) + (p.1 - 540.0).powi(2);
+        d(a).total_cmp(&d(b))
+    });
+    points.truncate(10);
+    Ok(points)
+}
+
 pub(super) fn add(
     process: &dyn Process,
     keys: &dyn GameInput,
     key: &str,
     state: i32,
     count: i64,
+    province: Option<i32>,
 ) -> Result<()> {
     clear_notices(process, keys)?;
     let start = queued(process, key, state)?;
@@ -253,6 +310,10 @@ pub(super) fn add(
     .map_err(|e| select_failed(e, key))?;
     let result = (|| {
         find_state(process, keys, state)?;
+        // let the camera settle before projecting provinces
+        thread::sleep(Duration::from_millis(350));
+        let points = aim_points(process, key, state, province)?;
+        let mut point = 0;
         for click in 0..count.min(20) {
             if click > 0 {
                 // A click right after a placement was ignored by 1.19.4 (gate1194, 1 Nov 2026):
@@ -266,17 +327,29 @@ pub(super) fn add(
                 ));
             }
             let before = queued(process, key, state)?;
-            super::ui::dismiss_notices(process, keys)?;
-            keys.click(GAME, 960.0, 540.0)?;
-            let deadline = std::time::Instant::now() + Duration::from_secs(3);
+            // Province buildings: try the next province when a click is refused.
             loop {
-                if queued(process, key, state)? > before {
+                super::ui::dismiss_notices(process, keys)?;
+                let (x, y) = points[point];
+                keys.click(GAME, x, y)?;
+                let wait_for = if points.len() > 1 { 1200 } else { 3000 };
+                let deadline = std::time::Instant::now() + Duration::from_millis(wait_for);
+                let grew = loop {
+                    if queued(process, key, state)? > before {
+                        break true;
+                    }
+                    if std::time::Instant::now() >= deadline {
+                        break false;
+                    }
+                    thread::sleep(Duration::from_millis(40));
+                };
+                if grew {
                     break;
                 }
-                if std::time::Instant::now() >= deadline {
+                point += 1;
+                if point >= points.len() || read(process, selection)?.1.as_deref() != Some(key) {
                     return Err(no_slot_or_not_allowed(key, state));
                 }
-                thread::sleep(Duration::from_millis(40));
             }
             if queued(process, key, state)? >= start + count {
                 return Ok(());

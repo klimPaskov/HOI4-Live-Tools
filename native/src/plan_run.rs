@@ -67,7 +67,8 @@
 //!                          army must stand in to be driven (armies in enemy land always are);
 //!                          "stall_days":8 without progress -> direct hoi4_army_move into the target;
 //!                          "rest_below":12 / "resume_above":30 army organisation (absolute) to stop and
-//!                          resume the plan ("rest":false turns it off); "motorization":2 sets every driven
+//!                          resume the plan ("rest":false turns it off); "supply_floor":25 an army below this
+//!                          supply percent rests too; "rest_max_days":20 resumes anyway; "motorization":2 sets every driven
 //!                          army's supply trucks once
 //!   disband                {"templates":["Camicie Nere"],"keep_states":[ids],"max":N} disband divisions of these
 //!                          templates outside keep_states and war.theatre, one army per tick
@@ -130,8 +131,8 @@ pub struct State {
     war_since: HashMap<String, (i32, Option<i32>, GameHour)>,
     /// armies on direct move orders (their battle plan did not advance)
     war_move: HashSet<String>,
-    /// armies resting (plan stopped for organisation)
-    war_rest: HashSet<String>,
+    /// armies resting (plan stopped for organisation or supply) since a game hour
+    war_rest: HashMap<String, GameHour>,
     /// divisions disbanded by the `disband` stage
     disbanded: u64,
     /// Refusals per politics pick (index): each refusal doubles the wait.
@@ -213,7 +214,7 @@ impl Default for State {
             war_cool: HashMap::new(),
             war_since: HashMap::new(),
             war_move: HashSet::new(),
-            war_rest: HashSet::new(),
+            war_rest: HashMap::new(),
             disbanded: 0,
             pol_fails: HashMap::new(),
             pol_pp_at_fail: HashMap::new(),
@@ -1792,7 +1793,9 @@ fn war_step(
     let rest_below = cfg["rest_below"].as_f64().unwrap_or(12.0);
     let resume_above = cfg["resume_above"].as_f64().unwrap_or(30.0);
     // Organisation per army (absolute: a rested infantry division reads about 45).
-    let condition: HashMap<String, f64> = if cfg["rest"] == json!(false) {
+    let supply_floor = cfg["supply_floor"].as_f64().unwrap_or(25.0);
+    let rest_max: GameHour = cfg["rest_max_days"].as_i64().unwrap_or(20) * DAY;
+    let condition: HashMap<String, (f64, f64)> = if cfg["rest"] == json!(false) {
         HashMap::new()
     } else {
         tools
@@ -1804,7 +1807,10 @@ fn war_step(
                     .filter_map(|a| {
                         Some((
                             text(&a["army"]).to_string(),
-                            a["organisation_mean"].as_f64()?,
+                            (
+                                a["organisation_mean"].as_f64()?,
+                                a["supply_percent_mean"].as_f64().unwrap_or(100.0),
+                            ),
                         ))
                     })
                     .collect()
@@ -1895,9 +1901,11 @@ fn war_step(
                 now
             }
         };
-        // Exhausted: stop the plan and let organisation come back, then attack again.
-        if let Some(org) = org {
-            if org < rest_below && executing && !state.war_rest.contains(&name) {
+        // Exhausted (organisation) or starving (supply): stop the plan, attack again when it
+        // recovers or after `rest_max_days` (supply where the army stands may never recover).
+        if let Some((org, supply)) = org {
+            let starving = supply < supply_floor;
+            if (org < rest_below || starving) && executing && !state.war_rest.contains_key(&name) {
                 let (ok, why) = state.act(
                     tools,
                     lease,
@@ -1906,15 +1914,16 @@ fn war_step(
                     "wr",
                 )?;
                 if ok {
-                    state.war_rest.insert(name.clone());
+                    state.war_rest.insert(name.clone(), now);
                 }
                 state.war_cool.insert(name.clone(), now + cooldown);
                 return Ok(Some(format!(
-                    "war rest {name} (organisation {org:.0}): {ok} {why}"
+                    "war rest {name} (organisation {org:.0}, supply {supply:.0}%): {ok} {why}"
                 )));
             }
-            if state.war_rest.contains(&name) {
-                if org < resume_above {
+            if let Some(&since_rest) = state.war_rest.get(&name) {
+                let recovered = org >= resume_above && !starving;
+                if !recovered && now - since_rest < rest_max {
                     continue;
                 }
                 state.war_rest.remove(&name);
@@ -1935,7 +1944,7 @@ fn war_step(
                 let (ok, why) = state.act(tools, lease, tool, args, "wr")?;
                 state.war_cool.insert(name.clone(), now + cooldown);
                 return Ok(Some(format!(
-                    "war {label} {name} -> state {target} (organisation {org:.0}): {ok} {why}"
+                    "war {label} {name} -> state {target} (organisation {org:.0}, supply {supply:.0}%): {ok} {why}"
                 )));
             }
         }
@@ -3422,6 +3431,7 @@ mod tests {
     struct War2 {
         executing: Cell<bool>,
         org: Cell<f64>,
+        supply: Cell<f64>,
         calls: RefCell<Vec<(String, Value)>>,
     }
     impl War2 {
@@ -3429,6 +3439,7 @@ mod tests {
             Self {
                 executing: Cell::new(false),
                 org: Cell::new(40.0),
+                supply: Cell::new(80.0),
                 calls: RefCell::new(vec![]),
             }
         }
@@ -3465,9 +3476,10 @@ mod tests {
                 "hoi4_armies" => Ok(json!({"unassigned_by_state": [], "armies": [
                     {"army": "Army 1", "division_count": 10, "main_state": 42,
                      "battle_plan_orders": 0, "plan_executing": self.executing.get(), "commander": "X"}]})),
-                "hoi4_supply" => {
-                    Ok(json!({"armies": [{"army": "Army 1", "organisation_mean": self.org.get()}]}))
-                }
+                "hoi4_supply" => Ok(
+                    json!({"armies": [{"army": "Army 1", "organisation_mean": self.org.get(),
+                        "supply_percent_mean": self.supply.get()}]}),
+                ),
                 _ if args.get("request_id").is_some() => {
                     Ok(json!({"receipt": {"status": "Verified"}}))
                 }
@@ -3528,6 +3540,30 @@ mod tests {
         assert_eq!(
             tick(&mut state, &d, &plan, "l", START + DAY).unwrap(),
             Tick::Nothing
+        );
+    }
+
+    #[test]
+    fn a_starving_army_rests_and_attacks_again_after_the_longest_rest() {
+        let w = War2::new();
+        w.executing.set(true);
+        w.supply.set(15.0);
+        let plan = json!({"war": {"enemies": ["FRA"], "rest_max_days": 10}});
+        let mut state = State::default();
+        let step = tick(&mut state, &w, &plan, "l", START).unwrap();
+        assert!(
+            matches!(&step, Tick::Acted(s) if s.starts_with("war rest Army 1") && s.contains("supply 15%")),
+            "{step:?}"
+        );
+        w.executing.set(false);
+        assert_eq!(
+            tick(&mut state, &w, &plan, "l", START + 5 * DAY).unwrap(),
+            Tick::Nothing
+        );
+        let step = tick(&mut state, &w, &plan, "l", START + 11 * DAY).unwrap();
+        assert!(
+            matches!(&step, Tick::Acted(s) if s.starts_with("war resume Army 1")),
+            "{step:?}"
         );
     }
 
