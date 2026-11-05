@@ -533,8 +533,23 @@ fn enter_air_mode(process: &dyn Process, keys: &dyn GameInput) -> Result<bool> {
     if read(process, icons_shown)? {
         return Ok(false);
     }
+    if read(process, |r, i| {
+        Ok(airui::base_icons(r, i)
+            .map(|v| v.is_empty())
+            .unwrap_or(true))
+    })? {
+        // Already in air mode but too far out to show icons.
+        let _ = super::screenmap::zoom_in_to_strategic(process, keys);
+        if read(process, icons_shown)? {
+            return Ok(false);
+        }
+    }
     keys.press_code(F3)?;
-    wait(process, "strategic air map mode", icons_shown)?;
+    if wait(process, "strategic air map mode", icons_shown).is_err() {
+        // Far out, the game draws no air base icons: come in to the strategic height.
+        super::screenmap::zoom_in_to_strategic(process, keys)?;
+        wait(process, "strategic air map mode", icons_shown)?;
+    }
     pause(300);
     Ok(true)
 }

@@ -1964,8 +1964,27 @@ pub(super) fn move_to(
     keys.click(GAME, x, y)?;
     wait(process, "select army", |r, i| Ok(selection_size(r, i)? > 0))?;
     find_state(process, keys, state)?;
-    keys.right_click(GAME, 960.0, 540.0)?;
-    std::thread::sleep(std::time::Duration::from_millis(400));
+    let before = read(process, |r, i| headings(r, i, army))?;
+    // Map icons at the state's centre (air base, port, victory point) take a right click
+    // for themselves (seen live 10 Dec 2026: Tripoli's air base); try points around the
+    // centre until the divisions get a new heading.
+    const POINTS: [(f64, f64); 5] = [
+        (960.0, 540.0),
+        (900.0, 600.0),
+        (1020.0, 600.0),
+        (900.0, 480.0),
+        (1020.0, 480.0),
+    ];
+    for (x, y) in POINTS {
+        keys.right_click(GAME, x, y)?;
+        let deadline = std::time::Instant::now() + std::time::Duration::from_millis(700);
+        while std::time::Instant::now() < deadline {
+            if read(process, |r, i| headings(r, i, army))? != before {
+                return Ok(());
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+    }
     Ok(())
 }
 /// Name of the commander of `army`, if any.

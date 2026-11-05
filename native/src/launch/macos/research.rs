@@ -472,13 +472,38 @@ pub(super) fn start(
     if was_busy {
         // Switching a busy slot asks "Are you sure you want to research X instead of Y with
         // N% progress?"; OK accepts it (Return, the dialog's default button). Seen live
-        // 5 November 2026.
-        std::thread::sleep(std::time::Duration::from_millis(700));
-        if !read(process, started)? {
+        // 5 November 2026. Return is retried: an event or tooltip can take the first one.
+        for _ in 0..3 {
+            std::thread::sleep(std::time::Duration::from_millis(700));
+            if read(process, started)? {
+                break;
+            }
             keys.press(Key::Return)?;
         }
     }
-    wait(process, "start research", started)
+    let result = wait(process, "start research", started);
+    if result.is_err() {
+        // Never leave the confirmation open: it blocks every later click (run 9).
+        let _ = keys.press(Key::Escape);
+    }
+    // Leave the full-screen tree: map tools cannot work under it (run 9).
+    close_tree(process, keys);
+    result
+}
+
+/// Close the technology tree (and its detail window) when open.
+pub(super) fn close_tree(process: &dyn Process, keys: &dyn GameInput) {
+    for _ in 0..3 {
+        match read(process, |r, i| open(r, i, ui(r)?.tree_view)) {
+            Ok(true) => {
+                let _ = keys.press(Key::Escape);
+                let _ = wait(process, "close tree", |r, i| {
+                    Ok(!open(r, i, ui(r)?.tree_view)?)
+                });
+            }
+            _ => break,
+        }
+    }
 }
 
 #[cfg(test)]

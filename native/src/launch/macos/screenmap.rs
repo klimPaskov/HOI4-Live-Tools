@@ -90,6 +90,36 @@ pub(super) fn restore_zoom(
     Ok(())
 }
 
+/// Bring a far-out camera in to the strategic height in one swoop (map icons such as air
+/// bases are not drawn when the camera is far out). No-op when already at or below it.
+pub(super) fn zoom_in_to_strategic(
+    process: &dyn crate::platform::Process,
+    keys: &dyn crate::platform::game_input::GameInput,
+) -> Result<()> {
+    let height = |p: &dyn crate::platform::Process| super::ui::read(p, camera_height);
+    let h = height(process)?;
+    if h <= STRATEGIC * 1.1 {
+        return Ok(());
+    }
+    let events = |from: f64| {
+        ((from / STRATEGIC).ln() / 1.1f64.ln())
+            .ceil()
+            .clamp(1.0, 40.0) as u32
+    };
+    keys.scroll_burst(super::panelkit::GAME, (960.0, 540.0), 120, events(h))?;
+    let now = height(process)?;
+    if now > h + 1.0 {
+        // This input backend scrolls the other way: undo and swoop the right way.
+        keys.scroll_burst(
+            super::panelkit::GAME,
+            (960.0, 540.0),
+            -120,
+            events(now) + events(h),
+        )?;
+    }
+    Ok(())
+}
+
 pub(super) fn project(proj: &[f64; 16], view: &[f64; 16], x: f64, z: f64) -> Option<(f64, f64)> {
     let (tx, ty) = (proj[0], proj[5]);
     if tx <= 0.0 || ty <= 0.0 {
